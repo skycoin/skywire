@@ -99,10 +99,6 @@ func (c *CXOClient) RegisterTransportsV3(ctx context.Context, version string, en
 	return c.http.RegisterTransportsV3(ctx, version, entries...)
 }
 
-func (c *CXOClient) RegisterTransportsWithSync(ctx context.Context, entries ...*transport.SignedEntry) ([]*transport.Entry, error) {
-	return c.http.RegisterTransportsWithSync(ctx, entries...)
-}
-
 func (c *CXOClient) DeleteTransport(ctx context.Context, id uuid.UUID) error {
 	return c.http.DeleteTransport(ctx, id)
 }

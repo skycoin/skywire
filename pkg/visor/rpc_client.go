@@ -673,19 +673,6 @@ func (rc *rpcClient) GetCalculateRoutes() (bool, error) {
 	return enabled, err
 }
 
-// SetSyncTPDData sets the sync_tpd_data from visor transport config
-func (rc *rpcClient) SetSyncTPDData(enabled bool) error {
-	err := rc.Call("SetSyncTPDData", &enabled, &struct{}{})
-	return err
-}
-
-// GetSyncTPDData gets the sync_tpd_data from visor transport config
-func (rc *rpcClient) GetSyncTPDData() (bool, error) {
-	var enabled bool
-	err := rc.Call("GetSyncTPDData", &struct{}{}, &enabled)
-	return enabled, err
-}
-
 // SetPersistentTransports sets the persistent_transports from visor routing config
 func (rc *rpcClient) SetPersistentTransports(pts []transport.PersistentTransports) error {
 	err := rc.Call("SetPersistentTransports", &pts, &struct{}{})

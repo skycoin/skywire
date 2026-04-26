@@ -212,15 +212,3 @@ func (v *Visor) SetCalculateRoutes(enabled bool) error {
 func (v *Visor) GetCalculateRoutes() (bool, error) {
 	return v.conf.GetCalculateRoutes(), nil
 }
-
-// SetSyncTPDData sets sync_tpd_data transport config of visor
-func (v *Visor) SetSyncTPDData(enabled bool) error {
-	// Update transport manager's TPD sync setting
-	v.tpM.SetSyncTPDData(enabled)
-	return v.conf.UpdateSyncTPDData(enabled)
-}
-
-// GetSyncTPDData gets sync_tpd_data transport config of visor
-func (v *Visor) GetSyncTPDData() (bool, error) {
-	return v.conf.GetSyncTPDData(), nil
-}

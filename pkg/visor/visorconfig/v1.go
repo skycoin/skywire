@@ -185,10 +185,6 @@ type Transport struct {
 	LogStore              *LogStore       `json:"log_store"`
 	StcprPort             int             `json:"stcpr_port"`
 	SudphPort             int             `json:"sudph_port"`
-	// SyncTPDData enables syncing all transport discovery data on transport re-registration.
-	// When enabled, the visor receives the full TPD dataset in the registration response
-	// for use in local route calculation.
-	SyncTPDData bool `json:"sync_tpd_data,omitempty"`
 	// CXOFeedPK is the public key of the TPD's CXO feed for transport data.
 	// When set and DMSG is available, the visor subscribes to the feed for
 	// push-based transport updates instead of HTTP polling.
@@ -497,22 +493,6 @@ func (v1 *V1) GetCalculateRoutes() bool {
 	v1.mu.RLock()
 	defer v1.mu.RUnlock()
 	return v1.Routing.CalculateRoutes
-}
-
-// UpdateSyncTPDData updates sync_tpd_data in transport config
-func (v1 *V1) UpdateSyncTPDData(enabled bool) error {
-	v1.mu.Lock()
-	v1.Transport.SyncTPDData = enabled
-	v1.mu.Unlock()
-
-	return v1.flush(v1)
-}
-
-// GetSyncTPDData gets sync_tpd_data from transport config
-func (v1 *V1) GetSyncTPDData() bool {
-	v1.mu.RLock()
-	defer v1.mu.RUnlock()
-	return v1.Transport.SyncTPDData
 }
 
 // AddAppConfig add new config to apps if name was not same

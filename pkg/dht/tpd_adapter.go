@@ -34,15 +34,6 @@ func (d *TPDAdapter) RegisterTransports(ctx context.Context, entries ...*transpo
 	return d.putEntries(ctx, entries)
 }
 
-// RegisterTransportsWithSync registers transports and returns all known entries.
-// The DHT doesn't support atomic sync — returns nil for the synced entries.
-func (d *TPDAdapter) RegisterTransportsWithSync(ctx context.Context, entries ...*transport.SignedEntry) ([]*transport.Entry, error) {
-	if err := d.putEntries(ctx, entries); err != nil {
-		return nil, err
-	}
-	return nil, nil
-}
-
 // RegisterTransportsV3 publishes bare-entry transports to the DHT.
 // Since the DHT stores a single list per visor target, both v2 and v3
 // callers end up writing the same shape — we just wrap in SignedEntry
@@ -164,12 +155,6 @@ func (h *HybridTPDClient) RegisterTransportsV3(ctx context.Context, version stri
 		h.log.WithError(err).Debug("DHT RegisterTransportsV3 failed")
 	}
 	return h.http.RegisterTransportsV3(ctx, version, entries...)
-}
-
-// RegisterTransportsWithSync writes to both, returns HTTP sync data.
-func (h *HybridTPDClient) RegisterTransportsWithSync(ctx context.Context, entries ...*transport.SignedEntry) ([]*transport.Entry, error) {
-	_ = h.dht.RegisterTransports(ctx, entries...) //nolint:errcheck
-	return h.http.RegisterTransportsWithSync(ctx, entries...)
 }
 
 // GetTransportByID tries HTTP (DHT can't efficiently look up by ID).

@@ -89,10 +89,6 @@ type Manager struct {
 	routeChecker   RouteChecker
 	routeCheckerMu sync.RWMutex
 
-	// syncTPDData enables syncing all TPD data on transport re-registration
-	syncTPDData   bool
-	syncTPDDataMu sync.RWMutex
-
 	// tpdCache stores the cached transport discovery data for local route calculation
 	tpdCache   []*Entry
 	tpdCacheMu sync.RWMutex
@@ -380,18 +376,6 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 
 	tm.Logger.Debugf("Re-registering %d transports with discovery", len(entries))
 
-	// Check if TPD sync is enabled
-	if tm.GetSyncTPDData() {
-		allEntries, err := tm.Conf.DiscoveryClient.RegisterTransportsWithSync(ctx, entries...)
-		if err != nil {
-			tm.Logger.WithError(err).Warn("Failed to re-register transports with sync")
-		} else {
-			tm.Logger.Debugf("Successfully re-registered %d transports, synced %d TPD entries", len(entries), len(allEntries))
-			tm.SetTPDCache(allEntries)
-		}
-		return
-	}
-
 	// Prefer v3 (bare entries, no per-entry signatures) since it's
 	// smaller on the wire and the DiscoveryClient will fall back to the
 	// legacy v2 path if the TPD doesn't yet have the v3 endpoint.
@@ -575,21 +559,6 @@ func (tm *Manager) hasActiveRoutes(tpID uuid.UUID) bool {
 		return false
 	}
 	return rc(tpID)
-}
-
-// SetSyncTPDData enables or disables syncing TPD data on transport re-registration.
-func (tm *Manager) SetSyncTPDData(enabled bool) {
-	tm.syncTPDDataMu.Lock()
-	defer tm.syncTPDDataMu.Unlock()
-	tm.syncTPDData = enabled
-	tm.Logger.Infof("SetSyncTPDData: %v", enabled)
-}
-
-// GetSyncTPDData returns whether TPD sync is enabled.
-func (tm *Manager) GetSyncTPDData() bool {
-	tm.syncTPDDataMu.RLock()
-	defer tm.syncTPDDataMu.RUnlock()
-	return tm.syncTPDData
 }
 
 // SetTPDCache updates the cached TPD data for local route calculation.

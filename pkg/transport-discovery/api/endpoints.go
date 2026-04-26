@@ -102,17 +102,6 @@ func (api *API) registerTransportV3(w http.ResponseWriter, r *http.Request) {
 		api.log(r).WithError(err).Debug("Failed to record heartbeat from v3 transport registration")
 	}
 
-	if r.URL.Query().Get("sync") == "true" {
-		allEntries, err := api.store.GetAllTransports(r.Context(), false)
-		if err != nil {
-			api.log(r).WithError(err).Error("Error getting all transports for sync")
-			api.writeError(w, r, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusCreated, allEntries)
-		return
-	}
-
 	// v3 response is the plain entry list — same shape as /v3/transports/edge:
 	// and the DHT value — rather than the SignedEntry list v2 echoes back.
 	out := make([]*transport.Entry, 0, len(signed))
@@ -196,19 +185,6 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		if err := api.store.RecordHeartbeat(r.Context(), pk, entryVersion); err != nil {
 			api.log(r).WithError(err).Debug("Failed to record heartbeat from transport registration")
 		}
-	}
-
-	// Check if sync=true query param is set - return all transports for local route calculation
-	syncParam := r.URL.Query().Get("sync")
-	if syncParam == "true" {
-		allEntries, err := api.store.GetAllTransports(r.Context(), false)
-		if err != nil {
-			api.log(r).WithError(err).Error("Error getting all transports for sync")
-			api.writeError(w, r, err)
-			return
-		}
-		httputil.WriteJSON(w, r, http.StatusCreated, allEntries)
-		return
 	}
 
 	httputil.WriteJSON(w, r, http.StatusCreated, entries)
