@@ -52,7 +52,7 @@ The bandwidth considered for this pool excludes same-LAN transports (where both 
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* [1)](#Version) **Minimum skywire [version](#Version) v1.3.43** - Cutoff April 23rd 2026
+* [1)](#Version) **Minimum skywire [version](#Version) v1.3.47** - Cutoff May 9th 2026
 
 * [2)](#Uptime) **75% [uptime](#Uptime) per day** minimum is required to be eligible to receive rewards
 
@@ -163,6 +163,12 @@ Rewards Cutoff date for updating 04-23-2026
 Requirement established 04-09-2026
 
 Rewards Cutoff date for updating 04-23-2026
+
+**Reward eligibility after 05-09-2026 requires Skywire v1.3.47**
+
+Requirement established 04-25-2026
+
+Rewards Cutoff date for updating 05-09-2026
 
 ### Uptime
 
