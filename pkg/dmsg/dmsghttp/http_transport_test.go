@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 func TestHTTPTransport_RoundTrip(t *testing.T) {

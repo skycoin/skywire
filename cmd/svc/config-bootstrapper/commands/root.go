@@ -15,14 +15,14 @@ import (
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/config-bootstrapper/api"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/calvin"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/metricsutil"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/svcmode"
 )
 

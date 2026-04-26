@@ -13,8 +13,8 @@ import (
 	"github.com/bitfield/script"
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 

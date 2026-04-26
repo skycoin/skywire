@@ -14,12 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	"github.com/skycoin/skywire/pkg/cxo/node/transport"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Publisher distributes a KV dataset to CXO subscribers over DMSG.

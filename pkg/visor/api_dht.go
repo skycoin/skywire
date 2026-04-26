@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // DHTStatus contains status information about the DHT node.

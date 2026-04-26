@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // EntryMirror publishes discovery entries to the DHT on behalf of

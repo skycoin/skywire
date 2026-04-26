@@ -6,12 +6,12 @@ import (
 	"net"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 

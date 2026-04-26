@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 )
 

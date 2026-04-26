@@ -9,7 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 // IDSize is the byte length of a NodeID (256 bits).
