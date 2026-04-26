@@ -185,7 +185,7 @@ func init() {
 var routeCmd = &cobra.Command{
 	Use:   "route",
 	Short: "View and set rules",
-	Long:  "\n    View and set routing rules",
+	Long:  "View and set routing rules",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -210,7 +210,7 @@ var routeCmd = &cobra.Command{
 var rmRuleCmd = &cobra.Command{
 	Use:   "rm [route-id]",
 	Short: "Remove routing rule",
-	Long:  "\n    Remove routing rule\n    Use --all to remove all routing rules",
+	Long:  "Remove routing rule.\nUse --all to remove all routing rules.",
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -254,13 +254,12 @@ var rmRuleCmd = &cobra.Command{
 var addRuleCmd = &cobra.Command{
 	Use:   "add ( app | fwd | intfwd )",
 	Short: "Add routing rule",
-	Long:  "\n    Add routing rule",
 }
 
 var appRuleCmd = &cobra.Command{
-	Use:   "a",
-	Short: "Add app/consume routing rule",
-	Long:  "\n    Add app/consume routing rule",
+	Use:     "app",
+	Aliases: []string{"a"},
+	Short:   "Add app/consume routing rule",
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if rID == "" {
 			internal.PrintFatalError(cmd.Flags(), errors.New("missing route id flag value -i --rid"))
@@ -303,9 +302,9 @@ var appRuleCmd = &cobra.Command{
 }
 
 var fwdRuleCmd = &cobra.Command{
-	Use:   "c",
-	Short: "Add forward routing rule",
-	Long:  "\n    Add forward routing rule",
+	Use:     "fwd",
+	Aliases: []string{"c"},
+	Short:   "Add forward routing rule",
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if rID == "" {
 			internal.PrintFatalError(cmd.Flags(), errors.New("missing route id flag value -i --rid"))
@@ -356,9 +355,9 @@ var fwdRuleCmd = &cobra.Command{
 }
 
 var intFwdRuleCmd = &cobra.Command{
-	Use:   "b",
-	Short: "Add intermediary forward routing rule",
-	Long:  "\n    Add intermediary forward routing rule",
+	Use:     "intfwd",
+	Aliases: []string{"b"},
+	Short:   "Add intermediary forward routing rule",
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if rID == "" {
 			internal.PrintFatalError(cmd.Flags(), errors.New("missing route id flag value -i --rid"))
@@ -507,7 +506,7 @@ func parseUint(cmdFlags *pflag.FlagSet, name, v string, bitSize int) uint64 {
 var groupsCmd = &cobra.Command{
 	Use:   "groups",
 	Short: "List active route groups",
-	Long:  "\n    List active route groups with their consume and forward rules",
+	Long:  "List active route groups with their consume and forward rules",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -518,7 +517,7 @@ var groupsCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get route groups: %w", err))
 		}
 		if len(rgs) == 0 {
-			fmt.Println("No active route groups")
+			internal.PrintOutput(cmd.Flags(), rgs, "No active route groups\n")
 			return
 		}
 

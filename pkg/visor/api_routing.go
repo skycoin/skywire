@@ -83,6 +83,16 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 				info.FwdNextTpID = fwdSummary.ForwardFields.NextTID.String()
 			}
 
+			descFields := consumeSummary.ConsumeFields.RouteDescriptor
+			desc := routing.NewRouteDescriptor(descFields.SrcPK, descFields.DstPK, descFields.SrcPort, descFields.DstPort)
+			if rgHops := v.router.RouteGroupHops(desc); len(rgHops) > 0 {
+				hops := make([]RouteHopInfo, len(rgHops))
+				for i, h := range rgHops {
+					hops[i] = RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
+				}
+				info.Hops = hops
+			}
+
 			rgs = append(rgs, info)
 		}()
 	}

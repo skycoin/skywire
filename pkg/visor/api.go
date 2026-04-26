@@ -242,7 +242,35 @@ type API interface {
 	DmsgSetMinSessions(n int) error
 	AddHypervisor(pk cipher.PubKey) error
 	CheckAREntry(pk string) ([]string, error)
-	TransportRPCCall(remotePK cipher.PubKey, method string) (json.RawMessage, error)
+	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
+	HVListVisors() ([]HVVisorEntry, error)
+	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
+	HVStartApp(pk cipher.PubKey, appName string) error
+	HVStopApp(pk cipher.PubKey, appName string) error
+	HVSetMinHops(pk cipher.PubKey, hops uint16) error
+	HVSetRewardAddress(pk cipher.PubKey, addr string) (string, error)
+	HVRemoveTransport(pk cipher.PubKey, tid uuid.UUID) error
+	HVRemoveRoutingRule(pk cipher.PubKey, key routing.RouteID) error
+	HVAddTransport(pk, remote cipher.PubKey, tpType, label string, timeout time.Duration) (*TransportSummary, error)
+	HVSetPublicAutoconnect(pk cipher.PubKey, enable bool) error
+	HVSetMuxRoutes(pk cipher.PubKey, n int) error
+	HVSetCalculateRoutes(pk cipher.PubKey, enable bool) error
+	HVReload(pk cipher.PubKey) error
+	HVShutdown(pk cipher.PubKey) error
+	HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error)
+	HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error)
+	HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error)
+	HVLogsSince(pk cipher.PubKey, since time.Time, appName string) ([]string, error)
+	HVSetAutoStart(pk cipher.PubKey, appName string, autostart bool) error
+	HVEmbeddedProxies(pk cipher.PubKey) (*EmbeddedProxiesStatus, error)
+	HVSetEmbeddedProxyEnabled(pk cipher.PubKey, kind string, enable bool) error
+	HVSetEmbeddedProxyUpstream(pk cipher.PubKey, kind, addr string) error
+	HVListTCPPorts(pk cipher.PubKey) ([]int, error)
+	HVRegisterTCPPort(pk cipher.PubKey, port int) error
+	HVDeregisterTCPPort(pk cipher.PubKey, port int) error
+	HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error)
+	HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error
+	HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error
 	DHTSync(remotePK string, salt string) (int, error)
 	DHTGetAll(salt string) (string, error)
 
@@ -355,6 +383,7 @@ type Summary struct {
 	Health               *HealthInfo                      `json:"health"`
 	Uptime               float64                          `json:"uptime"`
 	Routes               []routingRuleResp                `json:"routes"`
+	RouteGroups          []RouteGroupInfo                 `json:"route_groups,omitempty"`
 	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
 	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
 	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead

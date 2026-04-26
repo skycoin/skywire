@@ -21,6 +21,10 @@ var RootCmd = &cobra.Command{
 	Use:   "rg",
 	Short: "Route group management",
 	Long:  "View active route groups, their associated apps, and live traffic stats.",
+	Run: func(cmd *cobra.Command, args []string) {
+		// Default to listing route groups when no subcommand given
+		listCmd.Run(cmd, args)
+	},
 }
 
 func init() {

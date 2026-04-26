@@ -87,7 +87,10 @@ reconnecting to any that drop" — recommended for RSN / TPS visors.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Updated dmsg.sessions_count = %d (runtime + persisted)\n\n", setSessionsCount)
+		isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		if !isJSON {
+			fmt.Printf("Updated dmsg.sessions_count = %d (runtime + persisted)\n\n", setSessionsCount)
+		}
 		printConnectAllResult(cmd, result)
 	},
 }
