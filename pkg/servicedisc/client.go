@@ -16,11 +16,11 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/pkg/httpauth"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httpauthclient"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/netutil"
 )
 
 // ErrVisorUnreachable is returned when visor is not reachable
@@ -98,11 +98,11 @@ func (c *HTTPClient) addr(path, serviceType, version, country string, quantity i
 
 var (
 	authClientMu sync.Mutex
-	authClient   *httpauth.Client // Singleton: there should be only one instance per PK.
+	authClient   *httpauthclient.Client // Singleton: there should be only one instance per PK.
 )
 
-// Auth returns the internal httpauth.Client
-func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
+// Auth returns the internal httpauthclient.Client
+func (c *HTTPClient) Auth(ctx context.Context) (*httpauthclient.Client, error) {
 	authClientMu.Lock()
 	defer authClientMu.Unlock()
 
@@ -111,7 +111,7 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauth.Client, error) {
 		return auth, nil
 	}
 
-	auth, err := httpauth.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK, c.client, c.clientPublicIP, c.mLog)
+	auth, err := httpauthclient.NewClient(ctx, c.conf.DiscAddr, c.conf.PK, c.conf.SK, c.client, c.clientPublicIP, c.mLog)
 	if err != nil {
 		return nil, err
 	}

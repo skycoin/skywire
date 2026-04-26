@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/pkg/httpauth"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/httputil"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httpauthclient"
+	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -26,7 +26,7 @@ type JSONError struct {
 // apiClient implements Client for discovery API.
 type apiClient struct {
 	log    *logging.Logger
-	client *httpauth.Client
+	client *httpauthclient.Client
 	key    cipher.PubKey
 	sec    cipher.SecKey
 }
@@ -38,7 +38,7 @@ type apiClient struct {
 // * SW-Nonce:  The nonce for that public key
 // * SW-Sig:    The signature of the payload + the nonce
 func NewHTTP(addr string, key cipher.PubKey, sec cipher.SecKey, httpC *http.Client, clientPublicIP string, mLogger *logging.MasterLogger) (transport.DiscoveryClient, error) {
-	client, err := httpauth.NewClient(context.Background(), addr, key, sec, httpC, clientPublicIP, mLogger)
+	client, err := httpauthclient.NewClient(context.Background(), addr, key, sec, httpC, clientPublicIP, mLogger)
 	if err != nil {
 		return nil, fmt.Errorf("transport discovery httpauth: %w", err)
 	}

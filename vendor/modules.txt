@@ -669,7 +669,7 @@ github.com/orandin/lumberjackrus
 # github.com/oschwald/geoip2-golang/v2 v2.1.0
 ## explicit; go 1.24.0
 github.com/oschwald/geoip2-golang/v2
-# github.com/oschwald/maxminddb-golang/v2 v2.1.1
+# github.com/oschwald/maxminddb-golang/v2 v2.2.0
 ## explicit; go 1.24.0
 github.com/oschwald/maxminddb-golang/v2
 github.com/oschwald/maxminddb-golang/v2/internal/decoder
@@ -777,7 +777,7 @@ github.com/sirupsen/logrus/hooks/syslog
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.6-0.20260401142608-a27afbb0b33b
+# github.com/skycoin/skycoin v0.28.6-0.20260426211126-776152b2fdb8
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -824,11 +824,14 @@ github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo
 github.com/skycoin/skycoin/src/skycoin-web/src/gui
 github.com/skycoin/skycoin/src/transaction
 github.com/skycoin/skycoin/src/util/apputil
+github.com/skycoin/skycoin/src/util/buildinfo
+github.com/skycoin/skycoin/src/util/calvin
 github.com/skycoin/skycoin/src/util/certutil
 github.com/skycoin/skycoin/src/util/droplet
 github.com/skycoin/skycoin/src/util/elapse
 github.com/skycoin/skycoin/src/util/fee
 github.com/skycoin/skycoin/src/util/file
+github.com/skycoin/skycoin/src/util/flags
 github.com/skycoin/skycoin/src/util/gziphandler
 github.com/skycoin/skycoin/src/util/http
 github.com/skycoin/skycoin/src/util/iputil

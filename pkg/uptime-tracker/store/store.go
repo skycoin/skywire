@@ -5,8 +5,8 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/geo"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/geo"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 const (

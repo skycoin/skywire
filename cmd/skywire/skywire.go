@@ -6,7 +6,7 @@ package main
 
 import (
 	"github.com/skycoin/skywire/cmd/skywire/commands"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/flags"
+	"github.com/skycoin/skywire/pkg/flags"
 )
 
 func init() {

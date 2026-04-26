@@ -14,9 +14,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/httpauth"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skywire-utilities/pkg/logging"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/httpauthclient"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var (
@@ -87,7 +87,7 @@ func authHandler(next http.Handler) http.Handler {
 	log := logging.MustGetLogger("utclient")
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(
 		func(w http.ResponseWriter, _ *http.Request) {
-			if err := json.NewEncoder(w).Encode(&httpauth.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {
+			if err := json.NewEncoder(w).Encode(&httpauthclient.NextNonceResponse{Edge: testPubKey, NextNonce: 1}); err != nil {
 				log.WithError(err).Error("Failed to encode nonce response")
 			}
 		},
