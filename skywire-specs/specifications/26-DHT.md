@@ -130,7 +130,7 @@ The DHT provides adapter types that implement the same interfaces as the central
 | Adapter | Interface | Salt | Description |
 |---|---|---|---|
 | `DiscAdapter` | `disc.APIClient` | `dmsg` | DMSG discovery entries |
-| `TPDAdapter` | `transport.DiscoveryClient` | `tp` | Transport entries |
+| `TPDAdapter` | `transport.DiscoveryClient` | `tp` | Transport entries: `[{r: remote_pk, t: type, l: latency_ms, b: cumulative_bw_bytes}]` (live snapshot only; daily history lives in the visor's CXO feed) |
 | `SvcAdapter` | — | `svc:<type>` | Service records |
 | `AddrAdapter` | — | `addr` | Address resolver records |
 

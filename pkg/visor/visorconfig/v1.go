@@ -35,6 +35,10 @@ type V1 struct {
 	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher           `json:"launcher"`
 
+	// Stats configures the visor-local telemetry store. Nil/zero
+	// values use defaults; Disabled=true skips the store entirely.
+	Stats *Stats `json:"stats,omitempty"`
+
 	SurveyWhitelist     []cipher.PubKey `json:"survey_whitelist"`
 	UserSurveyWhitelist []cipher.PubKey `json:"user_survey_whitelist,omitempty"` // user-added keys, preserved across config refresh
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
@@ -73,6 +77,25 @@ type UIServer struct {
 	DmsgPort      uint16          `json:"dmsg_port"`      // DMSG port to serve on (default: 81, 0 to disable)
 	DmsgWhitelist []cipher.PubKey `json:"dmsg_whitelist"` // Keys allowed to access via DMSG
 	SurveyDir     string          `json:"survey_dir"`     // Directory with visor surveys for IP-based grouping
+}
+
+// Stats configures the visor-local telemetry store. Defaults are
+// applied lazily when the field is nil or any individual sub-field
+// is its zero value, so dropping the entire block from a config is
+// safe.
+type Stats struct {
+	// Path is the absolute path to the bbolt file. Empty = "<local_path>/stats.db".
+	Path string `json:"path,omitempty"`
+	// SampleInterval is the sampler tick (e.g. "1m"). Empty = 1m.
+	SampleInterval Duration `json:"sample_interval,omitempty"`
+	// RetentionDays caps bbolt history. 0 = 30 days.
+	RetentionDays int `json:"retention_days,omitempty"`
+	// CXOPublishWindow caps the rolling window the CXO publisher
+	// exposes (in days). 0 = 7. Must be ≤ RetentionDays.
+	CXOPublishWindow int `json:"cxo_publish_window,omitempty"`
+	// Disabled, when true, skips the entire telemetry store and
+	// associated /stats/* endpoints + CXO publisher.
+	Disabled bool `json:"disabled,omitempty"`
 }
 
 // LogServer configures the dmsghttp log server's optional localhost endpoint.
@@ -185,14 +208,6 @@ type Transport struct {
 	LogStore              *LogStore       `json:"log_store"`
 	StcprPort             int             `json:"stcpr_port"`
 	SudphPort             int             `json:"sudph_port"`
-	// SyncTPDData enables syncing all transport discovery data on transport re-registration.
-	// When enabled, the visor receives the full TPD dataset in the registration response
-	// for use in local route calculation.
-	SyncTPDData bool `json:"sync_tpd_data,omitempty"`
-	// CXOFeedPK is the public key of the TPD's CXO feed for transport data.
-	// When set and DMSG is available, the visor subscribes to the feed for
-	// push-based transport updates instead of HTTP polling.
-	CXOFeedPK string `json:"cxo_feed_pk,omitempty"`
 	// ARTransportLimit controls address resolver registration for privacy:
 	//   0 (default): stay registered indefinitely
 	//   N > 0: deregister from AR after N transports are established
@@ -497,22 +512,6 @@ func (v1 *V1) GetCalculateRoutes() bool {
 	v1.mu.RLock()
 	defer v1.mu.RUnlock()
 	return v1.Routing.CalculateRoutes
-}
-
-// UpdateSyncTPDData updates sync_tpd_data in transport config
-func (v1 *V1) UpdateSyncTPDData(enabled bool) error {
-	v1.mu.Lock()
-	v1.Transport.SyncTPDData = enabled
-	v1.mu.Unlock()
-
-	return v1.flush(v1)
-}
-
-// GetSyncTPDData gets sync_tpd_data from transport config
-func (v1 *V1) GetSyncTPDData() bool {
-	v1.mu.RLock()
-	defer v1.mu.RUnlock()
-	return v1.Transport.SyncTPDData
 }
 
 // AddAppConfig add new config to apps if name was not same

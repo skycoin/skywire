@@ -187,8 +187,6 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
 	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
-	genConfigCmd.Flags().BoolVar(&enableSyncTPDData, "sync-tpd-data", scriptExecBool("${SYNCTPDDATA:-false}"), "enable transport discovery data sync (bandwidth/latency)")
-	gHiddenFlags = append(gHiddenFlags, "sync-tpd-data")
 
 	// Routing flags
 	msg = "add route setup node PKs"
@@ -930,9 +928,8 @@ func configureTransports() {
 			Location:         tpLogPath,
 			RotationInterval: visorconfig.DefaultLogRotationInterval,
 		},
-		SudphPort:   sudphPort,
-		StcprPort:   stcprPort,
-		SyncTPDData: enableSyncTPDData,
+		SudphPort: sudphPort,
+		StcprPort: stcprPort,
 	}
 }
 

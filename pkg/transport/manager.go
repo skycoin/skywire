@@ -89,10 +89,6 @@ type Manager struct {
 	routeChecker   RouteChecker
 	routeCheckerMu sync.RWMutex
 
-	// syncTPDData enables syncing all TPD data on transport re-registration
-	syncTPDData   bool
-	syncTPDDataMu sync.RWMutex
-
 	// tpdCache stores the cached transport discovery data for local route calculation
 	tpdCache   []*Entry
 	tpdCacheMu sync.RWMutex
@@ -347,65 +343,31 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 		return
 	}
 
+	// Bandwidth and latency are no longer carried in re-registration
+	// — visors publish those on their own CXO telemetry feed
+	// (pkg/cxo/treestore) and serve them via HTTP-over-DMSG. TPD
+	// becomes a pull-side aggregator. Re-registration is purely a
+	// liveness signal for the bare transport list now.
 	tm.mx.RLock()
-	entries := make([]*SignedEntry, 0, len(tm.tps))
+	bareEntries := make([]*Entry, 0, len(tm.tps))
 	for _, tp := range tm.tps {
 		if tp.IsClosed() {
 			continue
 		}
-		// Create signed entry for re-registration with latency stats, current bandwidth, and version
-		stats := tp.GetLatencyStats()
-		var latencyData *LatencyData
-		if stats.Avg > 0 {
-			// Convert milliseconds to microseconds
-			latencyData = &LatencyData{
-				Min: int64(stats.Min * 1000),
-				Max: int64(stats.Max * 1000),
-				Avg: int64(stats.Avg * 1000),
-			}
-		}
-		se := &SignedEntry{
-			Entry:     &tp.Entry,
-			Latency:   latencyData,
-			Bandwidth: tp.GetBandwidth(),
-			Version:   tm.Conf.Version,
-		}
-		entries = append(entries, se)
+		bareEntries = append(bareEntries, &tp.Entry)
 	}
 	tm.mx.RUnlock()
 
-	if len(entries) == 0 {
+	if len(bareEntries) == 0 {
 		return
 	}
 
-	tm.Logger.Debugf("Re-registering %d transports with discovery", len(entries))
+	tm.Logger.Debugf("Re-registering %d transports with discovery", len(bareEntries))
 
-	// Check if TPD sync is enabled
-	if tm.GetSyncTPDData() {
-		allEntries, err := tm.Conf.DiscoveryClient.RegisterTransportsWithSync(ctx, entries...)
-		if err != nil {
-			tm.Logger.WithError(err).Warn("Failed to re-register transports with sync")
-		} else {
-			tm.Logger.Debugf("Successfully re-registered %d transports, synced %d TPD entries", len(entries), len(allEntries))
-			tm.SetTPDCache(allEntries)
-		}
-		return
-	}
-
-	// Prefer v3 (bare entries, no per-entry signatures) since it's
-	// smaller on the wire and the DiscoveryClient will fall back to the
-	// legacy v2 path if the TPD doesn't yet have the v3 endpoint.
-	bareEntries := make([]*Entry, 0, len(entries))
-	for _, se := range entries {
-		if se.Entry != nil {
-			bareEntries = append(bareEntries, se.Entry)
-		}
-	}
-	err := tm.Conf.DiscoveryClient.RegisterTransportsV3(ctx, tm.Conf.Version, bareEntries...)
-	if err != nil {
+	if err := tm.Conf.DiscoveryClient.RegisterTransportsV3(ctx, tm.Conf.Version, bareEntries...); err != nil {
 		tm.Logger.WithError(err).Warn("Failed to re-register transports with discovery")
 	} else {
-		tm.Logger.Debugf("Successfully re-registered %d transports", len(entries))
+		tm.Logger.Debugf("Successfully re-registered %d transports", len(bareEntries))
 	}
 }
 
@@ -575,21 +537,6 @@ func (tm *Manager) hasActiveRoutes(tpID uuid.UUID) bool {
 		return false
 	}
 	return rc(tpID)
-}
-
-// SetSyncTPDData enables or disables syncing TPD data on transport re-registration.
-func (tm *Manager) SetSyncTPDData(enabled bool) {
-	tm.syncTPDDataMu.Lock()
-	defer tm.syncTPDDataMu.Unlock()
-	tm.syncTPDData = enabled
-	tm.Logger.Infof("SetSyncTPDData: %v", enabled)
-}
-
-// GetSyncTPDData returns whether TPD sync is enabled.
-func (tm *Manager) GetSyncTPDData() bool {
-	tm.syncTPDDataMu.RLock()
-	defer tm.syncTPDDataMu.RUnlock()
-	return tm.syncTPDData
 }
 
 // SetTPDCache updates the cached TPD data for local route calculation.

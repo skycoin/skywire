@@ -138,8 +138,6 @@ type API interface {
 	SetMinHops(uint16) error
 	SetCalculateRoutes(enabled bool) error
 	GetCalculateRoutes() (bool, error)
-	SetSyncTPDData(enabled bool) error
-	GetSyncTPDData() (bool, error)
 
 	RegisterTCPPort(localPort int) error
 	DeregisterTCPPort(localPort int) error
