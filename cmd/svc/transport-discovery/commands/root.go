@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/api"
+	"github.com/skycoin/skywire/pkg/transport-discovery/cxoaggregator"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
@@ -341,8 +342,21 @@ Example:
 		}
 		defer h.Close()
 
-		// CXO subscriber wiring (TPD aggregates per-visor telemetry
-		// feeds) is set up below once the redis store is constructed.
+		// CXO subscriber wiring: TPD subscribes to each known visor's
+		// TreeStore feed and mirrors received bandwidth telemetry
+		// into redis. Source for "known visors" is the TPD's own
+		// transport registry (edges of all known transports).
+		if enableCXO && h.DmsgClient != nil {
+			source := &transportEdgeSource{store: s}
+			agg := cxoaggregator.New(h.DmsgClient, source, s, cxoaggregator.Config{
+				Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
+			})
+			agg.Run(ctx)
+			defer agg.Close() //nolint:errcheck
+			logger.Info("CXO aggregator running: subscribing to per-visor stats feeds")
+		} else if enableCXO {
+			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator disabled")
+		}
 
 		// Wire DHT entry mirroring: every transport registration is
 		// also published to the DHT under each edge visor's PK.
@@ -379,4 +393,33 @@ func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
+}
+
+// transportEdgeSource adapts the TPD's transport store to the
+// cxoaggregator.VisorSource contract. The "known visors" set is the
+// union of edges across all currently-registered transports — same
+// signal /metric and the rest of the TPD already use to enumerate
+// visors. We dedupe across both edges of each transport.
+type transportEdgeSource struct {
+	store store.TransportStore
+}
+
+func (t *transportEdgeSource) KnownVisors(ctx context.Context) ([]cipher.PubKey, error) {
+	entries, err := t.store.GetAllTransports(ctx, false)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[cipher.PubKey]struct{}, 2*len(entries))
+	for _, e := range entries {
+		if e == nil {
+			continue
+		}
+		seen[e.Edges[0]] = struct{}{}
+		seen[e.Edges[1]] = struct{}{}
+	}
+	out := make([]cipher.PubKey, 0, len(seen))
+	for pk := range seen {
+		out = append(out, pk)
+	}
+	return out, nil
 }

@@ -144,6 +144,13 @@ func (s *memoryStore) Close() {
 
 }
 
+// UpdateBandwidth is a no-op for the in-memory store; bandwidth
+// aggregation is a redis-backed concern and the memory store is only
+// used by tests of higher-level handlers that don't exercise it.
+func (s *memoryStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
+	return nil
+}
+
 // GetTransportBandwidth returns empty slice for memory store (no bandwidth tracking).
 func (s *memoryStore) GetTransportBandwidth(_ context.Context, _ uuid.UUID, _ string, _ int) ([]BandwidthAggregation, error) {
 	return []BandwidthAggregation{}, nil

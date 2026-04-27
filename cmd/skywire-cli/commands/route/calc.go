@@ -226,6 +226,9 @@ func (s *memoryStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]i
 func (s *memoryStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
 	return s.entries, nil
 }
+func (s *memoryStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64) error {
+	return nil
+}
 func (s *memoryStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]store.BandwidthAggregation, error) {
 	return nil, nil
 }
