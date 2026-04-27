@@ -114,6 +114,7 @@ type API interface {
 	SetIsPublic(isPublic bool) error
 	GetIsPublic() bool
 	GetRuntimeConfig() ([]byte, error)
+	GetConfigPath() (string, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error
 	PublicAutoconnectStatus() (bool, error)
