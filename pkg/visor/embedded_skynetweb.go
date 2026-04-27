@@ -194,7 +194,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		mux := d.skynetMux
 		stream, err := mux.Dial(remote)
 		if err == nil {
-			d.log.WithField("remote", remote.String()[:16]+"...").
+			d.log.WithField("remote", remote.String()).
 				WithField("port", port).
 				Debug("Skynet: using direct transport (no route)")
 			conn := &vstreamConn{VStream: stream}
