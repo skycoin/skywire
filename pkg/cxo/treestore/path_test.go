@@ -12,7 +12,7 @@ func TestSplitPath(t *testing.T) {
 		{"a", []string{"a"}, false},
 		{"a/b", []string{"a", "b"}, false},
 		{"a/b/c", []string{"a", "b", "c"}, false},
-		{"/a", nil, true},   // empty leading segment
+		{"/a", nil, true},            // empty leading segment
 		{"a/", []string{"a"}, false}, // single trailing slash tolerated for prefix-style use
 		{"a//b", nil, true},          // empty middle segment
 	}

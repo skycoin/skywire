@@ -63,7 +63,10 @@ func OpenStore(path string) (*Store, error) {
 			if err := meta.Put(keySchemaVersion, vbuf); err != nil {
 				return err
 			}
-			tbuf, _ := time.Now().UTC().MarshalBinary()
+			tbuf, mErr := time.Now().UTC().MarshalBinary()
+			if mErr != nil {
+				return mErr
+			}
 			return meta.Put(keyCreatedAt, tbuf)
 		}
 		got := binary.BigEndian.Uint64(raw)
@@ -151,7 +154,7 @@ func (s *Store) MarkTierSlot(tier string, date time.Time, slot int) error {
 	return s.markSlot(bucketTiers, tier, date, slot)
 }
 
-// MarkServiceSlot is the per-service analogue of MarkTierSlot.
+// MarkServiceSlot is the per-service analog of MarkTierSlot.
 func (s *Store) MarkServiceSlot(service string, date time.Time, slot int) error {
 	return s.markSlot(bucketServices, service, date, slot)
 }
@@ -183,7 +186,7 @@ func (s *Store) TierBitmap(tier string, date time.Time) ([]byte, error) {
 	return s.getBitmap(bucketTiers, tier, date)
 }
 
-// ServiceBitmap is the per-service analogue of TierBitmap.
+// ServiceBitmap is the per-service analog of TierBitmap.
 func (s *Store) ServiceBitmap(service string, date time.Time) ([]byte, error) {
 	return s.getBitmap(bucketServices, service, date)
 }
@@ -211,7 +214,7 @@ func (s *Store) TierDates(tier string) ([]string, error) {
 	return s.listDates(bucketTiers, tier)
 }
 
-// ServiceDates is the per-service analogue of TierDates.
+// ServiceDates is the per-service analog of TierDates.
 func (s *Store) ServiceDates(service string) ([]string, error) {
 	return s.listDates(bucketServices, service)
 }
@@ -238,7 +241,7 @@ func (s *Store) TierNames() ([]string, error) {
 	return s.listNames(bucketTiers)
 }
 
-// ServiceNames is the per-service analogue of TierNames.
+// ServiceNames is the per-service analog of TierNames.
 func (s *Store) ServiceNames() ([]string, error) {
 	return s.listNames(bucketServices)
 }

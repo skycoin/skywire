@@ -28,7 +28,7 @@ func newTrackerFixture(t *testing.T) *trackerFixture {
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	t.Cleanup(func() { store.Close() })
+	t.Cleanup(func() { _ = store.Close() })
 
 	f := &trackerFixture{t: t, store: store}
 	f.tracker = NewTracker(store, Probes{
@@ -96,7 +96,10 @@ func TestTrackerDayBoundaryAnchorsNewBaseline(t *testing.T) {
 	f.transports[0].RecvBytes = 1500
 	f.tracker.sample(day2)
 
-	rec, _ := f.store.GetTransportRecord(id)
+	rec, err := f.store.GetTransportRecord(id)
+	if err != nil {
+		t.Fatalf("GetTransportRecord: %v", err)
+	}
 	if len(rec.Daily) != 2 {
 		t.Fatalf("expected 2 daily rows after midnight crossing, got %d (%+v)", len(rec.Daily), rec.Daily)
 	}
@@ -120,10 +123,22 @@ func TestTrackerMarksTierAndServiceBitmaps(t *testing.T) {
 
 	f.tracker.sample(day)
 
-	processBM, _ := f.store.TierBitmap("process", day)
-	dmsgBM, _ := f.store.TierBitmap("dmsg", day)
-	skynetBM, _ := f.store.TierBitmap("skynet", day)
-	vpnBM, _ := f.store.ServiceBitmap("vpn-server", day)
+	processBM, err := f.store.TierBitmap("process", day)
+	if err != nil {
+		t.Fatalf("TierBitmap process: %v", err)
+	}
+	dmsgBM, err := f.store.TierBitmap("dmsg", day)
+	if err != nil {
+		t.Fatalf("TierBitmap dmsg: %v", err)
+	}
+	skynetBM, err := f.store.TierBitmap("skynet", day)
+	if err != nil {
+		t.Fatalf("TierBitmap skynet: %v", err)
+	}
+	vpnBM, err := f.store.ServiceBitmap("vpn-server", day)
+	if err != nil {
+		t.Fatalf("ServiceBitmap vpn-server: %v", err)
+	}
 
 	if !GetSlot(processBM, 6) || !GetSlot(dmsgBM, 6) {
 		t.Fatal("process and dmsg should be marked online for slot 6")
@@ -166,11 +181,17 @@ func TestRetentionTrimsDailyAndBitmaps(t *testing.T) {
 
 	f.tracker.runRetention(now)
 
-	got, _ := f.store.GetTransportRecord(id)
+	got, err := f.store.GetTransportRecord(id)
+	if err != nil {
+		t.Fatalf("GetTransportRecord: %v", err)
+	}
 	if len(got.Daily) > 31 { // 30 days of retention + today
 		t.Fatalf("daily rows after retention = %d, want ≤31", len(got.Daily))
 	}
-	dates, _ := f.store.TierDates("process")
+	dates, err := f.store.TierDates("process")
+	if err != nil {
+		t.Fatalf("TierDates: %v", err)
+	}
 	if len(dates) != 1 {
 		t.Fatalf("tier dates after retention = %v, want only the recent one", dates)
 	}

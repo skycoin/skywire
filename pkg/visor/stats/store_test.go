@@ -15,7 +15,7 @@ func newTestStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 
@@ -32,7 +32,7 @@ func TestStoreOpenIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second open: %v", err)
 	}
-	s2.Close()
+	_ = s2.Close()
 }
 
 func TestPutGetTransportRecord(t *testing.T) {
@@ -92,7 +92,10 @@ func TestMarkAndReadTierSlot(t *testing.T) {
 	if err := s.MarkTierSlot("dmsg", day, 0); err != nil {
 		t.Fatalf("MarkTierSlot (slot 0): %v", err)
 	}
-	bm, _ = s.TierBitmap("dmsg", day)
+	bm, err = s.TierBitmap("dmsg", day)
+	if err != nil {
+		t.Fatalf("TierBitmap: %v", err)
+	}
 	if !GetSlot(bm, 0) || !GetSlot(bm, 150) {
 		t.Fatal("OR-merge failed; expected slot 0 and 150 set")
 	}
@@ -155,8 +158,14 @@ func TestTierAndServiceNamesAreSeparate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tiers, _ := s.TierNames()
-	svcs, _ := s.ServiceNames()
+	tiers, err := s.TierNames()
+	if err != nil {
+		t.Fatalf("TierNames: %v", err)
+	}
+	svcs, err := s.ServiceNames()
+	if err != nil {
+		t.Fatalf("ServiceNames: %v", err)
+	}
 	if len(tiers) != 1 || tiers[0] != "dmsg" {
 		t.Fatalf("tiers = %v, want [dmsg]", tiers)
 	}

@@ -267,4 +267,3 @@ func (r *RPCClientRoot) Last(
 	}
 	return &x, nil
 }
-

@@ -55,8 +55,8 @@ func TestMemNodePutDescentThroughLeafFails(t *testing.T) {
 
 func TestMemNodeDeletePrunesEmptyParents(t *testing.T) {
 	root := newMemNode()
-	_ = putAt(root, []string{"a", "b", "c"}, []byte("v"))
-	_ = putAt(root, []string{"a", "b", "d"}, []byte("w"))
+	mustPutAt(t, root, []string{"a", "b", "c"}, []byte("v"))
+	mustPutAt(t, root, []string{"a", "b", "d"}, []byte("w"))
 
 	// Delete one leaf — parent still has the other, no pruning.
 	if !deleteAt(root, []string{"a", "b", "c"}) {
@@ -77,9 +77,9 @@ func TestMemNodeDeletePrunesEmptyParents(t *testing.T) {
 
 func TestMemNodePruneAt(t *testing.T) {
 	root := newMemNode()
-	_ = putAt(root, []string{"keep", "x"}, []byte("k"))
-	_ = putAt(root, []string{"drop", "x"}, []byte("d"))
-	_ = putAt(root, []string{"drop", "y"}, []byte("e"))
+	mustPutAt(t, root, []string{"keep", "x"}, []byte("k"))
+	mustPutAt(t, root, []string{"drop", "x"}, []byte("d"))
+	mustPutAt(t, root, []string{"drop", "y"}, []byte("e"))
 
 	if !pruneAt(root, []string{"drop"}) {
 		t.Fatal("pruneAt should return true")
@@ -94,9 +94,9 @@ func TestMemNodePruneAt(t *testing.T) {
 
 func TestMemNodeWalkLeavesSorted(t *testing.T) {
 	root := newMemNode()
-	_ = putAt(root, []string{"b", "y"}, []byte("by"))
-	_ = putAt(root, []string{"a", "z"}, []byte("az"))
-	_ = putAt(root, []string{"a", "x"}, []byte("ax"))
+	mustPutAt(t, root, []string{"b", "y"}, []byte("by"))
+	mustPutAt(t, root, []string{"a", "z"}, []byte("az"))
+	mustPutAt(t, root, []string{"a", "x"}, []byte("ax"))
 
 	var visits []string
 	walkLeaves(root, "", func(p string, _ []byte) bool {
@@ -114,12 +114,21 @@ func TestMemNodeWalkLeavesSorted(t *testing.T) {
 
 func TestSortedNamesIsStable(t *testing.T) {
 	root := newMemNode()
-	_ = putAt(root, []string{"z"}, []byte("v"))
-	_ = putAt(root, []string{"a"}, []byte("v"))
-	_ = putAt(root, []string{"m"}, []byte("v"))
+	mustPutAt(t, root, []string{"z"}, []byte("v"))
+	mustPutAt(t, root, []string{"a"}, []byte("v"))
+	mustPutAt(t, root, []string{"m"}, []byte("v"))
 	got := sortedNames(root)
 	want := []string{"a", "m", "z"}
 	if !equalSlice(got, want) {
 		t.Errorf("sortedNames = %v, want %v", got, want)
+	}
+}
+
+// mustPutAt is a fatal-on-error wrapper so test setup failures
+// surface immediately instead of being silently dropped.
+func mustPutAt(t *testing.T, root *memNode, segs []string, value []byte) {
+	t.Helper()
+	if err := putAt(root, segs, value); err != nil {
+		t.Fatalf("putAt %v: %v", segs, err)
 	}
 }

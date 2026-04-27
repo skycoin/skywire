@@ -54,18 +54,18 @@ func (s *recordingSink) snapshot() (map[string][]byte, []string) {
 	return puts, dels
 }
 
-func newTrackerWithSink(t *testing.T, sink Sink, retention, publishWindow int) *Tracker {
+func newTrackerWithSink(t *testing.T, sink Sink, publishWindow int) *Tracker {
 	t.Helper()
 	store, err := OpenStore(filepath.Join(t.TempDir(), "stats.db"))
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	t.Cleanup(func() { store.Close() })
+	t.Cleanup(func() { _ = store.Close() })
 
 	probes := Probes{}
 	tr := NewTracker(store, probes, Config{
 		SampleInterval:    time.Minute,
-		RetentionDays:     retention,
+		RetentionDays:     30,
 		PublishWindowDays: publishWindow,
 	})
 	tr.SetSink(sink)
@@ -74,7 +74,7 @@ func newTrackerWithSink(t *testing.T, sink Sink, retention, publishWindow int) *
 
 func TestSinkReceivesTransportPutsOnSample(t *testing.T) {
 	sink := newRecordingSink()
-	tr := newTrackerWithSink(t, sink, 30, 7)
+	tr := newTrackerWithSink(t, sink, 7)
 	id := uuid.New()
 	day := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 
@@ -100,7 +100,7 @@ func TestSinkReceivesTransportPutsOnSample(t *testing.T) {
 
 func TestSinkReceivesTierAndServiceBitmaps(t *testing.T) {
 	sink := newRecordingSink()
-	tr := newTrackerWithSink(t, sink, 30, 7)
+	tr := newTrackerWithSink(t, sink, 7)
 	day := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 	tr.probes.TierStates = func() map[string]bool {
 		return map[string]bool{"process": true, "dmsg": true, "skynet": false}
@@ -127,7 +127,7 @@ func TestSinkReceivesTierAndServiceBitmaps(t *testing.T) {
 
 func TestSinkPrunedAtPublishWindowBoundary(t *testing.T) {
 	sink := newRecordingSink()
-	tr := newTrackerWithSink(t, sink, 30, 7)
+	tr := newTrackerWithSink(t, sink, 7)
 	now := time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC)
 
 	// Seed bbolt with an in-window date and an out-of-window date
@@ -179,7 +179,7 @@ func TestSinkDeletedOnBboltRetentionDrop(t *testing.T) {
 	// recovery; the publish-window prune wouldn't have caught it
 	// because the visor wasn't running each midnight.)
 	sink := newRecordingSink()
-	tr := newTrackerWithSink(t, sink, 30, 7)
+	tr := newTrackerWithSink(t, sink, 7)
 	now := time.Date(2026, 4, 27, 0, 0, 0, 0, time.UTC)
 	id := uuid.New()
 	rec := &TransportRecord{
@@ -225,7 +225,7 @@ func TestHydrateSinkPushesInWindowOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	now := time.Date(2026, 4, 27, 12, 0, 0, 0, time.UTC)
 	if err := store.MarkTierSlot("dmsg", now.AddDate(0, 0, -2), 0); err != nil {

@@ -152,7 +152,7 @@ func HydrateSink(store *Store, sink Sink, publishWindowDays int, now time.Time) 
 	return pushed, nil
 }
 
-// Path builders. Centralised so the sink consumers and the publisher
+// Path builders. Centralized so the sink consumers and the publisher
 // always agree on the wire shape.
 
 func currentTransportPath(id string) string {

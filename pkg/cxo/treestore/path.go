@@ -24,9 +24,7 @@ func SplitPath(path string) ([]string, error) {
 	if path == "" {
 		return nil, nil
 	}
-	if strings.HasSuffix(path, "/") {
-		path = path[:len(path)-1]
-	}
+	path = strings.TrimSuffix(path, "/")
 	if path == "" {
 		// The original was just "/" — also valid, equivalent to root.
 		return nil, nil

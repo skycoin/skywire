@@ -143,7 +143,7 @@ func New(dmsgC *dmsg.Client, sink BandwidthSink, conf Config) (*Aggregator, erro
 }
 
 // Run starts the reconcile loop. Returns immediately; the loop
-// continues until ctx is cancelled or Close is called. Idempotent.
+// continues until ctx is canceled or Close is called. Idempotent.
 func (a *Aggregator) Run(ctx context.Context) {
 	a.mu.Lock()
 	if a.cancel != nil {

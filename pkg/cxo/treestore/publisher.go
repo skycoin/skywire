@@ -326,7 +326,7 @@ func (p *Publisher) Flush() error {
 func (p *Publisher) Close() error {
 	var firstErr error
 	p.stopOnce.Do(func() {
-		// Best-effort flush before signalling stop.
+		// Best-effort flush before signaling stop.
 		firstErr = p.Flush()
 		close(p.done)
 		if p.ownsNode && p.cxoNode != nil {
@@ -649,4 +649,3 @@ type PathConflictError struct {
 func (e *PathConflictError) Error() string {
 	return "treestore: path " + e.Path + " conflicts with existing " + e.Existing
 }
-

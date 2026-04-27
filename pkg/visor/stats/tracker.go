@@ -142,7 +142,7 @@ func (t *Tracker) Store() *Store {
 }
 
 // Run starts the sampler. Returns immediately; sampling continues
-// until ctx is cancelled or Close is called. Idempotent: a second
+// until ctx is canceled or Close is called. Idempotent: a second
 // Run on the same tracker is a no-op.
 func (t *Tracker) Run(ctx context.Context) {
 	t.mu.Lock()
@@ -260,7 +260,7 @@ func (t *Tracker) mirrorTierBitmap(tier string, now time.Time) {
 	t.sinkPut(tierBitmapPath(tier, now.UTC().Format(dateFmt)), bm)
 }
 
-// mirrorServiceBitmap is the per-service analogue of mirrorTierBitmap.
+// mirrorServiceBitmap is the per-service analog of mirrorTierBitmap.
 func (t *Tracker) mirrorServiceBitmap(svc string, now time.Time) {
 	bm, err := t.store.ServiceBitmap(svc, now)
 	if err != nil {
@@ -279,7 +279,7 @@ func (t *Tracker) sinkPut(path string, value []byte) {
 	sink.Put(path, value)
 }
 
-// sinkDelete is the per-key delete analogue of sinkPut.
+// sinkDelete is the per-key delete analog of sinkPut.
 func (t *Tracker) sinkDelete(path string) {
 	t.mu.Lock()
 	sink := t.sink
@@ -468,9 +468,16 @@ func (t *Tracker) sinkPruneOutsidePublishWindow(now time.Time) {
 		}
 	}
 
-	tiers, _ := t.store.TierNames()
+	tiers, err := t.store.TierNames()
+	if err != nil {
+		t.log.WithError(err).Warn("Stats: enumerate tiers for publish-window prune failed")
+	}
 	for _, tier := range tiers {
-		dates, _ := t.store.TierDates(tier)
+		dates, dErr := t.store.TierDates(tier)
+		if dErr != nil {
+			t.log.WithError(dErr).WithField("tier", tier).Debug("Stats: TierDates failed during prune")
+			continue
+		}
 		for _, d := range dates {
 			if d < publishCutoff {
 				t.sinkDelete(tierBitmapPath(tier, d))
@@ -478,9 +485,16 @@ func (t *Tracker) sinkPruneOutsidePublishWindow(now time.Time) {
 		}
 	}
 
-	services, _ := t.store.ServiceNames()
+	services, err := t.store.ServiceNames()
+	if err != nil {
+		t.log.WithError(err).Warn("Stats: enumerate services for publish-window prune failed")
+	}
 	for _, svc := range services {
-		dates, _ := t.store.ServiceDates(svc)
+		dates, dErr := t.store.ServiceDates(svc)
+		if dErr != nil {
+			t.log.WithError(dErr).WithField("service", svc).Debug("Stats: ServiceDates failed during prune")
+			continue
+		}
 		for _, d := range dates {
 			if d < publishCutoff {
 				t.sinkDelete(serviceBitmapPath(svc, d))

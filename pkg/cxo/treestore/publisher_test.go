@@ -29,7 +29,7 @@ func nopNode(t *testing.T) *node.Node {
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)
 	}
-	t.Cleanup(func() { n.Close() }) //nolint:errcheck
+	t.Cleanup(func() { _ = n.Close() })
 	return n
 }
 
@@ -41,7 +41,7 @@ func newTestPublisher(t *testing.T) (*Publisher, cipher.SecKey) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	t.Cleanup(func() { p.Close() }) //nolint:errcheck
+	t.Cleanup(func() { _ = p.Close() })
 	return p, sk
 }
 
@@ -267,8 +267,13 @@ func TestPublisherConcurrentPutsAreSafe(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			path, _ := JoinPath("g", "k", string(rune('a'+i%26)))
-			_ = p.Put(path, []byte{byte(i)})
+			path, jErr := JoinPath("g", "k", string(rune('a'+i%26)))
+			if jErr != nil {
+				return
+			}
+			if err := p.Put(path, []byte{byte(i)}); err != nil {
+				return
+			}
 		}(i)
 	}
 	wg.Wait()
