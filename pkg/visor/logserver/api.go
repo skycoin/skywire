@@ -72,6 +72,7 @@ type API struct {
 	healthStatsProvider HealthStatsProvider
 	serviceLister       ServiceLister
 	forwardedPortLister ForwardedPortLister
+	statsReader         StatsReader  // visor-local telemetry store, set via SetStatsReader
 	websiteHandler      http.Handler // optional: serves unmatched routes (custom website)
 }
 
@@ -164,6 +165,10 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 	authRoute.GET("/debug/pprof/trace", gin.WrapF(pprof.Trace))
 	authRoute.GET("/debug/pprof/:name", gin.WrapH(http.HandlerFunc(pprof.Index)))
 
+	// /stats/* (auth'd) — visor-local telemetry store. Handlers
+	// degrade to 503 when SetStatsReader hasn't been called.
+	api.registerStatsRoutes(authRoute)
+
 	// isWhitelisted checks if the current request is from a whitelisted PK
 	// without blocking. Used by the landing page to show/hide auth'd links.
 	isWhitelisted := func(c *gin.Context) bool {
@@ -193,6 +198,12 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 			links = append(links, `<a href="/node-info/checksum">/node-info/checksum</a> - survey checksum`)
 			links = append(links, `<a href="/visor.log">/visor.log</a> - visor debug log`)
 			links = append(links, `<a href="/debug/pprof/">/debug/pprof/</a> - runtime profiling`)
+			if api.statsReader != nil {
+				links = append(links, `<a href="/stats/transports">/stats/transports</a> - live transport snapshot`)
+				links = append(links, `<a href="/stats/transports/history">/stats/transports/history</a> - daily transport rollups (?since=&until=&id=)`)
+				links = append(links, `<a href="/stats/uptime">/stats/uptime</a> - three-tier uptime bitmaps`)
+				links = append(links, `<a href="/stats/services">/stats/services</a> - per-service uptime bitmaps`)
+			}
 			// List transport log files
 			if entries, err := os.ReadDir(tpLogPath); err == nil {
 				for _, e := range entries {

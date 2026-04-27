@@ -60,9 +60,6 @@ const envfileLinux = `#
 #-- Add transport setup public keys
 #TPSETUPPKS('')
 
-#--	Enable transport discovery data sync (bandwidth/latency)
-#SYNCTPDDATA=true
-
 ### Ports ###############################################################
 #	Note: when generating a test deployment config (-t / TESTENV=true),
 #	all ports are automatically offset by +10000 to allow prod and test
@@ -259,9 +256,6 @@ const envfileWindows = `#
 
 #--	Add transport setup public keys
 #$TPSETUPPKS=@('')
-
-#--	Enable transport discovery data sync (bandwidth/latency)
-#$SYNCTPDDATA=$true
 
 ### Ports ###############################################################
 
