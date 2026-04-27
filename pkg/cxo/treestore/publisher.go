@@ -376,25 +376,21 @@ func (p *Publisher) runLoop() {
 }
 
 func (p *Publisher) publishIfDirty() error {
+	// The publish path walks the in-memory tree (encodeNode) and
+	// must do so under p.mu, since concurrent Put / Delete /
+	// PrunePrefix mutate the same memNode maps. The CXO encode/Save
+	// work is in-memory and bounded; for the visor stats workload
+	// (1-min sample cadence, hundreds of entries max) the
+	// lock-hold time is well under a millisecond.
 	p.mu.Lock()
+	defer p.mu.Unlock()
 	if !p.dirty {
-		p.mu.Unlock()
 		return nil
 	}
-	// Snapshot the in-memory tree under the lock so the encoding
-	// goroutine sees a consistent view. Since memNode is not
-	// concurrently mutated outside p.mu, walking it under the lock
-	// is sufficient — we don't need a deep copy.
-	rootSnap := p.root
-	p.mu.Unlock()
-
-	if err := p.publishRoot(rootSnap); err != nil {
+	if err := p.publishRoot(p.root); err != nil {
 		return err
 	}
-
-	p.mu.Lock()
 	p.dirty = false
-	p.mu.Unlock()
 	return nil
 }
 
