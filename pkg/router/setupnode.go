@@ -12,8 +12,10 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -46,15 +48,59 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	}
 	masterLogger := logging.NewMasterLogger()
 	packageLogger := masterLogger.PackageLogger("node:disc")
-	// Connect to dmsg network.
-	dmsgDisc := disc.NewHTTP(conf.Dmsg.Discovery, &http.Client{}, packageLogger)
-	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
-	dmsgC := dmsg.NewClient(conf.PK, conf.SK, dmsgDisc, dmsgConf)
+
 	type setupNodeKey struct{}
 	ctx := context.WithValue(context.Background(), setupNodeKey{}, true)
+
+	// Pick the dmsg-discovery URL and the HTTP client used to query it.
+	// Mirrors the visor bootstrap (pkg/visor/init_dmsg.go) so the RSN
+	// can talk to dmsg-discovery over DMSG when configured to.
+	//
+	//   - If conf.Dmsg.DiscoveryDmsg is set AND we have static seed
+	//     servers (conf.Dmsg.Servers), bring up a direct dmsg client
+	//     against the seeds, wrap it as a dmsghttp transport, and use
+	//     that as the http.Client for the real disc.NewHTTP. The seed
+	//     servers break the chicken-and-egg of "need DMSG to query
+	//     dmsg-discovery via DMSG."
+	//   - Otherwise: plain HTTP, same as before.
+	discURL := conf.Dmsg.Discovery
+	httpC := &http.Client{}
+	if conf.Dmsg.DiscoveryDmsg != "" && len(conf.Dmsg.Servers) > 0 {
+		seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKsFromConf(conf)...)
+		entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
+		dClient := direct.NewClient(entries, masterLogger.PackageLogger("rsn:dmsg_http:direct_client"))
+
+		dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx,
+			masterLogger.PackageLogger("rsn:dmsg_http:dmsgDC"),
+			conf.PK, conf.SK, dClient, dmsg.DefaultConfig())
+		if err != nil {
+			log.WithError(err).Warn("DMSG-HTTP bootstrap failed, falling back to plain HTTP for dmsg-discovery")
+		} else {
+			httpC = &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
+			discURL = conf.Dmsg.DiscoveryDmsg
+			log.Info("Using DMSG-HTTP for dmsg-discovery")
+			// closeDmsgDC will run when the setup node shuts down via
+			// its context cancellation; we don't track this in a close
+			// stack here because Node.Stop is not exposed and the
+			// process exits when ctx is cancelled.
+			_ = closeDmsgDC
+		}
+	} else if discURL == "" && conf.Dmsg.DiscoveryDmsg != "" {
+		// DMSG URL set but no seed servers — try plain HTTP against
+		// the dmsg URL anyway. dmsg URLs don't work over plain HTTP,
+		// so this will fail at first request, but that's the same
+		// failure mode as before this change.
+		discURL = conf.Dmsg.DiscoveryDmsg
+		log.Warn("DiscoveryDmsg set but no seed servers in conf.Dmsg.Servers; cannot bootstrap dmsg-http")
+	}
+
+	dmsgDisc := disc.NewHTTP(discURL, httpC, packageLogger)
+	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
+	dmsgC := dmsg.NewClient(conf.PK, conf.SK, dmsgDisc, dmsgConf)
 	go dmsgC.Serve(ctx)
 
 	log.WithField("local_pk", conf.PK).WithField("dmsg_conf", conf.Dmsg).
+		WithField("disc_url", discURL).
 		Info("Connecting to the dmsg network.")
 	<-dmsgC.Ready()
 	log.Info("Connected!")
@@ -75,6 +121,39 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	}
 
 	return node, nil
+}
+
+// dmsgServicePKsFromConf extracts the public keys embedded in the
+// setup-node's dmsg:// service URLs. These are added to the static
+// seed entries built from conf.Dmsg.Servers so the bootstrap dmsg
+// client can resolve them without HTTP discovery — same trick the
+// visor uses in dmsgServicePKs() (pkg/visor/init_dmsg.go).
+func dmsgServicePKsFromConf(conf *SetupConfig) cipher.PubKeys {
+	candidates := []string{conf.Dmsg.DiscoveryDmsg}
+	// TPD URL: dmsg-aware via scheme; AR URL: same. The setup-node's
+	// other discovery URLs are HTTP-only today, but adding their dmsg
+	// counterparts here is harmless and forward-compatible.
+	if t := conf.TransportDiscovery; strings.HasPrefix(t, "dmsg://") {
+		candidates = append(candidates, t)
+	}
+	if conf.Transport != nil {
+		if a := conf.Transport.AddressResolver; strings.HasPrefix(a, "dmsg://") {
+			candidates = append(candidates, a)
+		}
+	}
+
+	var pks cipher.PubKeys
+	for _, raw := range candidates {
+		if !strings.HasPrefix(raw, "dmsg://") {
+			continue
+		}
+		var addr dmsg.Addr
+		if err := addr.Set(raw[len("dmsg://"):]); err != nil {
+			continue
+		}
+		pks = append(pks, addr.PK)
+	}
+	return pks
 }
 
 // InitCascade initializes the cascade builder with a transport manager.
