@@ -151,6 +151,13 @@ func (r *RPC) GetRuntimeConfig(_ *struct{}, out *[]byte) (err error) {
 	return err
 }
 
+// GetConfigPath returns the filesystem path the visor loaded its config from.
+func (r *RPC) GetConfigPath(_ *struct{}, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "GetConfigPath", nil)(out, &err)
+	*out, err = r.visor.GetConfigPath()
+	return err
+}
+
 // RemoteVisors return connected remote visors
 func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoteVisor", nil)(out, &err)
