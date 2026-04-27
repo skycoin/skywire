@@ -116,6 +116,13 @@ func NewTracker(store *Store, probes Probes, conf Config) *Tracker {
 	}
 }
 
+// Store returns the underlying bbolt-backed store. Exposed so HTTP
+// handlers and the CXO publisher can read snapshots without going
+// through the tracker (which is sample-loop-only).
+func (t *Tracker) Store() *Store {
+	return t.store
+}
+
 // Run starts the sampler. Returns immediately; sampling continues
 // until ctx is cancelled or Close is called. Idempotent: a second
 // Run on the same tracker is a no-op.

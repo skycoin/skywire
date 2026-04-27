@@ -55,6 +55,19 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	v.pushCloseStack("stats", func() error {
 		return tracker.Close()
 	})
+
+	// Wire the store into the log server so /stats/* handlers can
+	// read it. The log server was constructed earlier in initDmsg
+	// (well before this module runs), so the handle is guaranteed to
+	// exist by now; nil-checking it keeps the code defensive against
+	// future init-order changes.
+	v.initLock.RLock()
+	lsAPI := v.logServer.api
+	v.initLock.RUnlock()
+	if lsAPI != nil {
+		lsAPI.SetStatsReader(tracker.Store())
+	}
+
 	log.WithField("path", path).Info("Stats: telemetry store running")
 	return nil
 }
