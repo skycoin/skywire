@@ -808,16 +808,6 @@ func (mc *mockRPCClient) GetCalculateRoutes() (bool, error) {
 	return false, nil
 }
 
-// SetSyncTPDData implements API
-func (mc *mockRPCClient) SetSyncTPDData(_ bool) error {
-	return nil
-}
-
-// GetSyncTPDData implements API
-func (mc *mockRPCClient) GetSyncTPDData() (bool, error) {
-	return false, nil
-}
-
 // SetPersistentTransports implements API
 func (mc *mockRPCClient) SetPersistentTransports(_ []transport.PersistentTransports) error {
 	return nil

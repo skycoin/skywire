@@ -46,6 +46,10 @@ Every visor serves an HTTP API on DMSG port 80:
 | `/visor.log` | Survey whitelist | Visor debug log file |
 | `/debug/pprof/*` | Survey whitelist | Go runtime profiling |
 | `/transport_logs/*` | Survey whitelist | Transport bandwidth CSV files |
+| `/stats/transports` | Survey whitelist | Live snapshot of all current transports (id, edges, type, current bw/latency) |
+| `/stats/transports/history` | Survey whitelist | Daily transport rollups; query `since`, `until`, optional `id` filter |
+| `/stats/uptime` | Survey whitelist | Three-tier uptime bitmaps (`process`, `dmsg`, `skynet`), 288-char per day; query `since` |
+| `/stats/services` | Survey whitelist | Per-service uptime bitmaps in the same format; query `since` |
 | `/` | None | Landing page with links to available endpoints |
 
 The landing page shows forwarded port links when `ShowOnLanding` is true.

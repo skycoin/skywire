@@ -32,12 +32,16 @@ func (s *redisStore) visorAllKey() string {
 	return fmt.Sprintf("%s:bw:visor:all", serviceName)
 }
 
-// updateBandwidth calculates the bandwidth delta and updates per-transport and
+// UpdateBandwidth calculates the bandwidth delta and updates per-transport and
 // per-visor aggregation hashes in Redis. Sent and recv are tracked separately
 // per-reporter so the metrics API can reconstruct accurate per-edge bandwidth.
 // The prev snapshot is keyed per-reporter to avoid cross-contamination when both
 // edges of a transport register independently.
-func (s *redisStore) updateBandwidth(ctx context.Context, transportID string,
+//
+// Called by the CXO aggregator when a visor's TreeStore feed reports a fresh
+// transports/<id>/current snapshot. The visor passes its cumulative counters;
+// this method handles the per-reporter delta arithmetic.
+func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 	reporterPK cipher.PubKey, currentSent, currentRecv uint64) error {
 
 	now := time.Now().UTC()

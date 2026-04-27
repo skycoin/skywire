@@ -57,6 +57,10 @@ func (m *mockStore) GetAllTransports(context.Context, bool) ([]*transport.Entry,
 }
 func (m *mockStore) Close() {}
 
+func (m *mockStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
+	return nil
+}
+
 func (m *mockStore) GetTransportBandwidth(_ context.Context, _ uuid.UUID, _ string, _ int) ([]tpdstore.BandwidthAggregation, error) {
 	return []tpdstore.BandwidthAggregation{}, nil
 }
