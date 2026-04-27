@@ -208,10 +208,6 @@ type Transport struct {
 	LogStore              *LogStore       `json:"log_store"`
 	StcprPort             int             `json:"stcpr_port"`
 	SudphPort             int             `json:"sudph_port"`
-	// CXOFeedPK is the public key of the TPD's CXO feed for transport data.
-	// When set and DMSG is available, the visor subscribes to the feed for
-	// push-based transport updates instead of HTTP polling.
-	CXOFeedPK string `json:"cxo_feed_pk,omitempty"`
 	// ARTransportLimit controls address resolver registration for privacy:
 	//   0 (default): stay registered indefinitely
 	//   N > 0: deregister from AR after N transports are established

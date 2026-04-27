@@ -91,7 +91,6 @@ func (api *API) registerTransportV3(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, sEntry := range signed {
-		api.publishTransportToCXO(sEntry.Entry)
 		if err := api.store.RecordTransportHeartbeat(r.Context(), sEntry.Entry.ID, string(sEntry.Entry.Type)); err != nil {
 			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
 		}
@@ -162,7 +161,6 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 	var entryVersion string
 	touchedEdges := make(map[cipher.PubKey]struct{})
 	for _, entry := range entries {
-		api.publishTransportToCXO(entry.Entry)
 		if api.dhtMirror != nil {
 			for _, edgePK := range entry.Entry.Edges {
 				touchedEdges[edgePK] = struct{}{}
@@ -441,8 +439,6 @@ func (api *API) deleteTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remove from CXO feed
-	api.unpublishTransportFromCXO(id.String())
 	api.mirrorEdges(r.Context(), touchedEdges)
 
 	w.WriteHeader(http.StatusOK)
@@ -501,7 +497,6 @@ func (api *API) deleteTransportsBatch(w http.ResponseWriter, r *http.Request) {
 		for _, edgePK := range entry.Edges {
 			touchedEdges[edgePK] = struct{}{}
 		}
-		api.unpublishTransportFromCXO(id.String())
 		deleted++
 	}
 	api.mirrorEdges(r.Context(), touchedEdges)
@@ -571,7 +566,6 @@ func (api *API) deregisterTransport(w http.ResponseWriter, r *http.Request) {
 			api.writeError(w, r, err)
 			continue
 		}
-		api.unpublishTransportFromCXO(id.String())
 	}
 	api.mirrorEdges(r.Context(), touchedEdges)
 

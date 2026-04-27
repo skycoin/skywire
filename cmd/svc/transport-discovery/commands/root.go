@@ -19,7 +19,6 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/cxo/publisher"
 	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -342,24 +341,8 @@ Example:
 		}
 		defer h.Close()
 
-		// Initialize CXO publisher for transport data distribution.
-		// Reuses the same bootstrap dmsg client managed by svcmode;
-		// will be nil when running in ModeHTTP so CXO is gated on
-		// dmsg being active.
-		if enableCXO && h.DmsgClient != nil {
-			cxoConf := publisher.DefaultConfig()
-			cxoConf.Logger = logging.MustGetLogger("cxo-tpd")
-			cxoPub, err := publisher.New(h.DmsgClient, sk, cxoConf)
-			if err != nil {
-				logger.WithError(err).Error("Failed to start CXO publisher, continuing without it")
-			} else {
-				tpdAPI.SetCXOPublisher(cxoPub)
-				logger.Infof("CXO transport feed enabled: %s", cxoPub.Feed())
-				defer cxoPub.Close() //nolint:errcheck,gosec
-			}
-		} else if enableCXO {
-			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); CXO disabled")
-		}
+		// CXO subscriber wiring (TPD aggregates per-visor telemetry
+		// feeds) is set up below once the redis store is constructed.
 
 		// Wire DHT entry mirroring: every transport registration is
 		// also published to the DHT under each edge visor's PK.
