@@ -2,22 +2,20 @@
 // `.dmsg` (and other configurable) domain suffixes. It exposes:
 //
 //   - a SOCKS5 proxy that intercepts hosts ending in the configured
-//     DomainSuffix and routes them to an internal HTTP bridge
-//   - the internal HTTP bridge, which translates HTTP requests into
-//     DMSG HTTP client requests
-//   - an optional raw TCP bridge, for tunneling non-HTTP protocols
-//     to a fixed DMSG address:port
+//     DomainSuffix and tunnels them directly as DMSG streams
+//   - a raw TCP bridge for fixed (pk, dmsgPort) → localhost mappings
+//
+// HTTP bridging was removed; raw TCP forwards bytes transparently and
+// works for HTTP, WebSockets, server-sent events, chunked transfers,
+// and any other protocol the dmsg target speaks. The previous HTTP
+// bridge added URL rewriting and per-target connection pooling but no
+// functional behavior that raw TCP doesn't already provide.
 //
 // The package accepts an externally-created *dmsg.Client so the
 // runtime can be embedded into either the standalone `skywire dmsg
 // web` command or a visor-hosted application (e.g. a resolver inside
 // skysocks-client). Neither mode owns the client; lifecycle belongs
 // to the caller.
-//
-// This is step 1 of moving .dmsg / .skynet browser support from a
-// standalone utility into the visor process: the CLI is reduced to a
-// config adapter over Run(), and a future visor app can call Run()
-// directly without spawning a separate process.
 package dmsgweb
 
 import (
@@ -26,21 +24,17 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/chen3feng/safecast"
 	"github.com/confiant-inc/go-socks5"
-	"github.com/gin-gonic/gin"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -53,22 +47,23 @@ const DefaultDomainSuffix = ".dmsg"
 // Config configures a dmsgweb runtime. Two operating modes:
 //
 //  1. ResolveAddr empty → SOCKS5 resolver mode. Any hostname ending
-//     in DomainSuffix is treated as <pk>.dmsg:<port> and bridged via
-//     a single HTTP proxy on WebPorts[0]. The SOCKS5 proxy on
-//     ProxyPort rewrites the dial target to localhost so curl /
-//     browsers can reach .dmsg sites transparently.
+//     in DomainSuffix is treated as <pk>.dmsg:<port> and tunneled
+//     directly as a DMSG stream. The SOCKS5 proxy on ProxyPort
+//     rewrites the dial target to localhost so curl/browsers reach
+//     .dmsg sites transparently.
 //
 //  2. ResolveAddr non-empty → fixed mapping mode. Each entry maps to
-//     WebPorts[i] and is served either as HTTP (default) or raw TCP
-//     (RawTCP[i] == true). The SOCKS5 proxy is disabled — callers
-//     point their client directly at 127.0.0.1:WebPorts[i].
+//     WebPorts[i] and is served as a raw TCP tunnel to (pk, dmsgPort).
+//     The SOCKS5 proxy is disabled — callers point their client
+//     directly at 127.0.0.1:WebPorts[i]. Raw TCP transparently carries
+//     HTTP, WebSockets, and any other protocol.
 type Config struct {
 	// DomainSuffix is the domain extension that the SOCKS5 resolver
 	// treats as DMSG (e.g. ".dmsg"). Defaults to DefaultDomainSuffix.
 	DomainSuffix string
 
-	// WebPorts are the HTTP listener ports. In mode 1 only WebPorts[0]
-	// is used; in mode 2 there is one listener per ResolveAddr entry.
+	// WebPorts are the localhost TCP listener ports. Used only in mode 2
+	// (fixed-mapping); ignored in SOCKS5 mode. One entry per ResolveAddr.
 	WebPorts []uint
 
 	// ProxyPort is the SOCKS5 proxy listener port. Zero disables the
@@ -85,13 +80,9 @@ type Config struct {
 	// Matches the existing `--addproxy` CLI flag.
 	UpstreamSOCKS string
 
-	// RawTCP controls per-ResolveAddr tunneling mode: false = HTTP,
-	// true = raw TCP. Length is normalised to match ResolveAddr.
-	RawTCP []bool
-
-	// Stats, when non-nil, is updated for every HTTP-bridge request.
-	// The visor layer allocates one per resolver lifetime so counters
-	// persist across Start/Stop cycles.
+	// Stats, when non-nil, is updated for every SOCKS5 dial. The visor
+	// layer allocates one per resolver lifetime so counters persist
+	// across Start/Stop cycles.
 	Stats *Stats
 }
 
@@ -154,20 +145,16 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 	}
 
 	// --- Fixed-mapping mode (--resolve) ---
+	// Each --resolve entry is exposed as a raw TCP listener that pipes
+	// bytes to the dmsg target. HTTP traffic works unchanged because
+	// the bytes are forwarded transparently; no URL rewriting needed.
 	if len(cfg.ResolveAddr) > 0 {
-		httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 		for i := range cfg.ResolveAddr {
 			wg.Add(1)
 			i := i
 			go func() {
 				defer wg.Done()
-				if cfg.RawTCP[i] {
-					if err := serveTCP(ctx, log, dmsgC, cfg, i); err != nil && !errors.Is(err, net.ErrClosed) {
-						errCh <- err
-					}
-					return
-				}
-				if err := serveHTTP(ctx, log, &httpC, cfg, i); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				if err := serveTCP(ctx, log, dmsgC, cfg, i); err != nil && !errors.Is(err, net.ErrClosed) {
 					errCh <- err
 				}
 			}()
@@ -210,13 +197,6 @@ func (c *tcpAddrConn) LocalAddr() net.Addr {
 func normalize(cfg Config) Config {
 	if cfg.DomainSuffix == "" {
 		cfg.DomainSuffix = DefaultDomainSuffix
-	}
-	// Normalise RawTCP to match ResolveAddr length so callers of
-	// RawTCP[i] are always safe.
-	if n := len(cfg.ResolveAddr); len(cfg.RawTCP) < n {
-		cfg.RawTCP = append(cfg.RawTCP, make([]bool, n-len(cfg.RawTCP))...)
-	} else if len(cfg.RawTCP) > n {
-		cfg.RawTCP = cfg.RawTCP[:n]
 	}
 	return cfg
 }
@@ -329,118 +309,6 @@ func (r *dmsgResolver) Resolve(ctx context.Context, name string) (context.Contex
 	// Always return 127.0.0.1 — prevents the library from doing a
 	// DNS lookup that would fail for .dmsg / .skynet / any custom TLD.
 	return ctx, net.ParseIP("127.0.0.1"), nil
-}
-
-// --- HTTP bridge ---
-
-func serveHTTP(ctx context.Context, log *logging.Logger, httpC *http.Client, cfg Config, idx int) error {
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.New()
-	r.Use(gin.Recovery())
-
-	r.Any("/*path", func(c *gin.Context) {
-		// Bound request body so a hostile client cannot balloon
-		// memory.
-		const maxBodySize = 10 << 20
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBodySize)
-
-		// Stats bookkeeping is no-op when cfg.Stats is nil.
-		var reqErr error
-		done := cfg.Stats.RecordRequest()
-		defer func() { done(reqErr) }()
-
-		urlStr := buildProxyURL(c, cfg, idx)
-		log.WithField("method", c.Request.Method).WithField("url", urlStr).Debug("HTTP bridge")
-		req, err := http.NewRequestWithContext(c.Request.Context(), c.Request.Method, urlStr, c.Request.Body)
-		if err != nil {
-			reqErr = err
-			c.String(http.StatusInternalServerError, "failed to build request")
-			return
-		}
-		for h, vs := range c.Request.Header {
-			for _, v := range vs {
-				req.Header.Add(h, v)
-			}
-		}
-		resp, err := httpC.Do(req)
-		if err != nil {
-			reqErr = err
-			c.String(http.StatusInternalServerError, "failed to reach dmsg target")
-			log.WithError(err).Debug("dmsg HTTP error")
-			return
-		}
-		defer ioutil.CloseQuietly(resp.Body, log)
-		for h, vs := range resp.Header {
-			for _, v := range vs {
-				c.Writer.Header().Add(h, v)
-			}
-		}
-		c.Status(resp.StatusCode)
-		if _, err := io.Copy(c.Writer, resp.Body); err != nil {
-			log.WithError(err).Debug("response copy failed")
-			// Copy errors after headers are written are common
-			// (client disconnect mid-stream) and don't warrant
-			// flagging the whole request as failed — leave reqErr nil.
-		}
-		// 5xx from the remote counts as a failure for the UI even
-		// though locally the bridge "succeeded". Stays below 4xx so
-		// simple 404s from the remote don't pollute the error rate.
-		if resp.StatusCode >= 500 {
-			reqErr = fmt.Errorf("remote status %d", resp.StatusCode)
-		}
-	})
-
-	port := cfg.WebPorts[0]
-	if idx >= 0 {
-		port = cfg.WebPorts[idx]
-	}
-	srv := &http.Server{
-		Addr:              fmt.Sprintf(":%d", port),
-		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,
-	}
-	log.WithField("port", port).Debug("Serving HTTP bridge")
-
-	// Context-driven shutdown; ListenAndServe returns ErrServerClosed
-	// once Shutdown is called, which Run() treats as a clean exit.
-	// We deliberately derive shutdownCtx from context.Background
-	// (not ctx) because ctx is already canceled when we get here —
-	// the whole point of a shutdown timeout is giving in-flight
-	// requests a brief grace period after cancellation.
-	go func() { //nolint:gosec // G118: intentional — shutdown must outlive parent ctx
-		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
-			log.WithError(err).Debug("HTTP shutdown error")
-		}
-	}()
-	return srv.ListenAndServe()
-}
-
-func buildProxyURL(c *gin.Context, cfg Config, idx int) string {
-	if idx >= 0 {
-		// Fixed-mapping mode — target is known.
-		t := cfg.ResolveAddr[idx]
-		q := ""
-		if c.Request.URL.RawQuery != "" {
-			q = "?" + c.Request.URL.RawQuery
-		}
-		return fmt.Sprintf("dmsg://%s:%d%s%s", t.PK.Hex(), t.Port, c.Param("path"), q)
-	}
-	// Resolver mode — derive target from Host header. The suffix is
-	// stripped so "somekey.dmsg:80" becomes "somekey".
-	hostParts := strings.Split(c.Request.Host, ":")
-	dmsgPort := "80"
-	if len(hostParts) > 1 {
-		dmsgPort = hostParts[1]
-	}
-	pkHost := strings.TrimSuffix(hostParts[0], cfg.DomainSuffix)
-	q := ""
-	if c.Request.URL.RawQuery != "" {
-		q = "?" + c.Request.URL.RawQuery
-	}
-	return fmt.Sprintf("dmsg://%s:%s%s%s", pkHost, dmsgPort, c.Param("path"), q)
 }
 
 // --- TCP bridge ---

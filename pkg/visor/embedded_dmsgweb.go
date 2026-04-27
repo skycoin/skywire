@@ -29,12 +29,9 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// Default listener ports — match `skywire dmsg web` defaults so the
-// two surfaces behave the same from a browser's perspective.
-const (
-	defaultDmsgWebProxyPort = 4445
-	defaultDmsgWebPort      = 8080
-)
+// Default SOCKS5 listener port — matches `skywire dmsg web` so the two
+// surfaces behave identically from a browser's perspective.
+const defaultDmsgWebProxyPort = 4445
 
 // EmbeddedDmsgWeb holds the runtime state for the visor-hosted
 // dmsgweb resolver. Safe for concurrent Start/Stop calls.
@@ -150,13 +147,11 @@ func (e *EmbeddedDmsgWeb) Upstream() string {
 func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	cfg := dmsgweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),
-		WebPorts:      []uint{uintOrDefault(e.cfg.WebPort, defaultDmsgWebPort)},
 		ProxyPort:     uintOrDefault(e.cfg.ProxyPort, defaultDmsgWebProxyPort),
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		Stats:         e.stats,
 	}
 	e.log.WithField("socks_port", cfg.ProxyPort).
-		WithField("web_port", cfg.WebPorts[0]).
 		WithField("domain", cfg.DomainSuffix).
 		Info("Serving dmsgweb resolver")
 	if err := dmsgweb.Run(ctx, e.log, e.dmsgC, cfg); err != nil && err != context.Canceled {
