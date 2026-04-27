@@ -179,7 +179,7 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 }
 
 // seedSinkFromStore copies the in-window slice of bbolt state into
-// the freshly-initialised publisher so cold subscribers see the full
+// the freshly-initialized publisher so cold subscribers see the full
 // rolling window from the first connect, not just data sampled after
 // the visor restarted.
 func seedSinkFromStore(store *stats.Store, sink stats.Sink, publishWindowDays int, log *logging.Logger) error {
@@ -330,4 +330,3 @@ func serviceStatesProbe(v *Visor) func() map[string]bool {
 		return states
 	}
 }
-

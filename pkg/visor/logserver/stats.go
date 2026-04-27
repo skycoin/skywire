@@ -50,13 +50,13 @@ func (api *API) SetStatsReader(r StatsReader) {
 // surfaces separate avoids dragging large daily arrays through the
 // "what's connected right now?" path.
 type statsTransportSnapshot struct {
-	ID        uuid.UUID            `json:"id"`
-	Edges     []string             `json:"edges"`
-	Type      string               `json:"type"`
-	Label     string               `json:"label,omitempty"`
-	FirstSeen time.Time            `json:"first_seen"`
-	LastSeen  time.Time            `json:"last_seen"`
-	Current   *stats.LiveSnapshot  `json:"current,omitempty"`
+	ID        uuid.UUID           `json:"id"`
+	Edges     []string            `json:"edges"`
+	Type      string              `json:"type"`
+	Label     string              `json:"label,omitempty"`
+	FirstSeen time.Time           `json:"first_seen"`
+	LastSeen  time.Time           `json:"last_seen"`
+	Current   *stats.LiveSnapshot `json:"current,omitempty"`
 }
 
 // statsTransportHistory is the response shape for

@@ -28,7 +28,11 @@ func newTrackerFixture(t *testing.T) *trackerFixture {
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	t.Cleanup(func() { _ = store.Close() })
+	t.Cleanup(func() {
+		if err := store.Close(); err != nil {
+			t.Logf("store.Close: %v", err)
+		}
+	})
 
 	f := &trackerFixture{t: t, store: store}
 	f.tracker = NewTracker(store, Probes{

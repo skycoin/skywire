@@ -29,7 +29,11 @@ func nopNode(t *testing.T) *node.Node {
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)
 	}
-	t.Cleanup(func() { _ = n.Close() })
+	t.Cleanup(func() {
+		if err := n.Close(); err != nil {
+			t.Logf("node.Close: %v", err)
+		}
+	})
 	return n
 }
 
@@ -41,7 +45,11 @@ func newTestPublisher(t *testing.T) (*Publisher, cipher.SecKey) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	t.Cleanup(func() { _ = p.Close() })
+	t.Cleanup(func() {
+		if err := p.Close(); err != nil {
+			t.Logf("publisher.Close: %v", err)
+		}
+	})
 	return p, sk
 }
 
@@ -271,7 +279,7 @@ func TestPublisherConcurrentPutsAreSafe(t *testing.T) {
 			if jErr != nil {
 				return
 			}
-			if err := p.Put(path, []byte{byte(i)}); err != nil {
+			if err := p.Put(path, []byte{byte(i & 0xff)}); err != nil { //nolint:gosec
 				return
 			}
 		}(i)

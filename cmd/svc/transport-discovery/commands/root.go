@@ -399,4 +399,3 @@ func Execute() {
 		log.Fatal("Failed to execute command: ", err)
 	}
 }
-

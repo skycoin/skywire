@@ -15,7 +15,11 @@ func newTestStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Logf("store.Close: %v", err)
+		}
+	})
 	return s
 }
 
@@ -32,7 +36,9 @@ func TestStoreOpenIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second open: %v", err)
 	}
-	_ = s2.Close()
+	if err := s2.Close(); err != nil {
+		t.Errorf("second close: %v", err)
+	}
 }
 
 func TestPutGetTransportRecord(t *testing.T) {
