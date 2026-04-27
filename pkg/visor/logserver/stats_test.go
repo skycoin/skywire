@@ -153,8 +153,8 @@ func TestStatsTransportsHistoryFiltersByRange(t *testing.T) {
 	id := uuid.New()
 	sr := &fakeStatsReader{
 		transports: []*stats.TransportRecord{{
-			ID:    id,
-			Type:  "stcpr",
+			ID:   id,
+			Type: "stcpr",
 			Daily: []stats.DailyRollup{
 				{Date: "2026-04-20", SentBytes: 100},
 				{Date: "2026-04-23", SentBytes: 200},

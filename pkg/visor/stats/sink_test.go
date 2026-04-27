@@ -143,7 +143,7 @@ func TestSinkPrunedAtPublishWindowBoundary(t *testing.T) {
 
 	// Seed bbolt with an in-window date and an out-of-window date
 	// for one tier and one service.
-	inWindow := now.AddDate(0, 0, -3)  // within 7-day window
+	inWindow := now.AddDate(0, 0, -3)   // within 7-day window
 	outWindow := now.AddDate(0, 0, -10) // beyond 7-day window
 	if err := tr.store.MarkTierSlot("dmsg", inWindow, 0); err != nil {
 		t.Fatal(err)
