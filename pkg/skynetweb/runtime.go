@@ -52,9 +52,9 @@ type SkynetDialer interface {
 
 // PerformHandshake runs the skynet client-side handshake on an
 // already-established connection: reads the server's ready byte,
-// sends ClientMsg{Port: port, RawTCP: true}, and returns an error if
-// the server replies with one. Exported so visor-layer adapters can
-// call it without re-implementing the protocol.
+// sends ClientMsg{Port: port}, and returns an error if the server
+// replies with one. Exported so visor-layer adapters can call it
+// without re-implementing the protocol.
 func PerformHandshake(conn net.Conn, port uint16) error {
 	// Server writes one byte when noise is fully established — wait
 	// for it so the first client write doesn't race the handshake.
@@ -63,7 +63,7 @@ func PerformHandshake(conn net.Conn, port uint16) error {
 		return fmt.Errorf("skynet handshake: read ready byte: %w", err)
 	}
 
-	req, err := json.Marshal(skynet.ClientMsg{Port: int(port), RawTCP: true})
+	req, err := json.Marshal(skynet.ClientMsg{Port: int(port)})
 	if err != nil {
 		return fmt.Errorf("skynet handshake: marshal request: %w", err)
 	}

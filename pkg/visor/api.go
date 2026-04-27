@@ -147,11 +147,8 @@ type API interface {
 	RegisterForwardedPort(p ForwardedPort) error
 	UpdateForwardedPort(p ForwardedPort) error
 	ListForwardedPorts() ([]ForwardedPort, error)
-	Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
-	Disconnect(id uuid.UUID) error
 	DisconnectRawTCP(id uuid.UUID) error
-	List() (map[uuid.UUID]*appnet.ForwardConn, error)
 	ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error)
 	DialPing(config PingConfig) error
 	Ping(config PingConfig) ([]time.Duration, error)

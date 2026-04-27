@@ -121,10 +121,7 @@ func (s *Server) handleConn(conn net.Conn) {
 		return
 	}
 
-	s.log.WithFields(logrus.Fields{
-		"port":    msg.Port,
-		"raw_tcp": msg.RawTCP,
-	}).Debug("Received forward request")
+	s.log.WithField("port", msg.Port).Debug("Received forward request")
 
 	// Check if port is allowed
 	s.mu.RLock()
@@ -141,11 +138,7 @@ func (s *Server) handleConn(conn net.Conn) {
 	s.sendError(wrappedConn, nil)
 
 	// Forward traffic
-	if msg.RawTCP {
-		s.forwardRawTCP(wrappedConn, fmt.Sprintf("127.0.0.1:%d", msg.Port))
-	} else {
-		s.forwardHTTP(wrappedConn, fmt.Sprintf("127.0.0.1:%d", msg.Port))
-	}
+	s.forwardRawTCP(wrappedConn, fmt.Sprintf("127.0.0.1:%d", msg.Port))
 }
 
 func (s *Server) sendError(conn net.Conn, sendErr error) {
@@ -200,70 +193,6 @@ func (s *Server) forwardRawTCP(remoteConn net.Conn, localAddr string) {
 	<-done
 
 	s.log.Debug("Raw TCP forwarding completed")
-}
-
-func (s *Server) forwardHTTP(remoteConn net.Conn, localAddr string) {
-	for {
-		select {
-		case <-s.closeCh:
-			return
-		default:
-		}
-
-		// Read request from remote with size limit
-		buf := make([]byte, MaxRequestSize)
-		n, err := remoteConn.Read(buf)
-		if err != nil {
-			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-				s.log.WithError(err).Debug("Failed to read from remote")
-			}
-			return
-		}
-
-		// Connect to local server and forward the data
-		localConn, err := net.Dial("tcp", localAddr)
-		if err != nil {
-			s.log.WithError(err).Error("Failed to dial local server")
-			// Send error indication back to remote so client knows the forward failed
-			errMsg := "HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\n\r\n"
-			_, _ = remoteConn.Write([]byte(errMsg)) //nolint:errcheck,gosec
-			return
-		}
-
-		// Send data to local
-		if _, err := localConn.Write(buf[:n]); err != nil {
-			s.log.WithError(err).Error("Failed to write to local")
-			_ = localConn.Close() //nolint:errcheck,gosec
-			return
-		}
-
-		// Read response from local with configurable timeout
-		respBuf := make([]byte, MaxResponseSize)
-		total := 0
-		for {
-			_ = localConn.SetReadDeadline(timeoutAfter(DefaultReadTimeout)) //nolint:errcheck,gosec
-			rn, err := localConn.Read(respBuf[total:])
-			if err != nil {
-				if !errors.Is(err, io.EOF) && !isTimeout(err) {
-					s.log.WithError(err).Debug("Failed to read from local")
-				}
-				break
-			}
-			total += rn
-			if total >= len(respBuf) {
-				s.log.Warn("Response exceeded maximum buffer size, truncating")
-				break
-			}
-		}
-		_ = localConn.Close() //nolint:errcheck,gosec
-
-		if total > 0 {
-			if _, err := remoteConn.Write(respBuf[:total]); err != nil {
-				s.log.WithError(err).Error("Failed to write response to remote")
-				return
-			}
-		}
-	}
 }
 
 // AddPort adds a port to the allowed list

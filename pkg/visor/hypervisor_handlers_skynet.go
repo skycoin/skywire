@@ -124,7 +124,7 @@ func (hv *Hypervisor) postUpdateForwardedPort() http.HandlerFunc {
 
 func (hv *Hypervisor) getSkynetForwards() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
-		fwds, err := ctx.API.List()
+		fwds, err := ctx.API.ListRawTCP()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -147,7 +147,7 @@ func (hv *Hypervisor) postSkynetConnect() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 			return
 		}
-		id, err := ctx.API.Connect(reqBody.RemotePK, reqBody.RemotePort, reqBody.LocalPort)
+		id, err := ctx.API.ConnectRawTCP(reqBody.RemotePK, reqBody.RemotePort, reqBody.LocalPort)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
@@ -175,7 +175,7 @@ func (hv *Hypervisor) postSkynetDisconnect() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("invalid UUID: %w", err))
 			return
 		}
-		if err := ctx.API.Disconnect(uid); err != nil {
+		if err := ctx.API.DisconnectRawTCP(uid); err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return
 		}

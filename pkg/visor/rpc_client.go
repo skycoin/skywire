@@ -781,30 +781,6 @@ func (rc *rpcClient) DMSGServers() ([]DMSGServerInfo, error) {
 	return out, err
 }
 
-// Connect calls Connect.
-func (rc *rpcClient) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
-	var out uuid.UUID
-	err := rc.Call("Connect", &ConnectIn{
-		RemotePK:   remotePK,
-		RemotePort: remotePort,
-		LocalPort:  localPort,
-	}, &out)
-	return out, err
-}
-
-// Disconnect calls Disconnect.
-func (rc *rpcClient) Disconnect(id uuid.UUID) error {
-	err := rc.Call("Disconnect", &id, &struct{}{})
-	return err
-}
-
-// List calls List.
-func (rc *rpcClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
-	var out map[uuid.UUID]*appnet.ForwardConn
-	err := rc.Call("List", &struct{}{}, &out)
-	return out, err
-}
-
 // ConnectRawTCP calls ConnectRawTCP.
 func (rc *rpcClient) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	var out uuid.UUID

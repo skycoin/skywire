@@ -19,74 +19,6 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// Connect implements API.
-func (v *Visor) Connect(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
-	ok := isPortAvailable(v.log, localPort)
-	if !ok {
-		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
-	}
-	connApp := appnet.Addr{
-		Net:    appnet.TypeSkynet,
-		PubKey: remotePK,
-		Port:   routing.Port(skyenv.SkyForwardingServerPort),
-	}
-	conn, err := appnet.Dial(connApp)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	remoteConn, err := appnet.WrapConn(conn)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-
-	cMsg := clientMsg{
-		Port: remotePort,
-	}
-
-	clientMsg, err := json.Marshal(cMsg)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	_, err = remoteConn.Write(clientMsg)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	v.log.Debugf("Msg sent %s", clientMsg)
-
-	buf := make([]byte, 32*1024)
-	n, err := remoteConn.Read(buf)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	var sReply serverReply
-	err = json.Unmarshal(buf[:n], &sReply)
-	if err != nil {
-		return uuid.UUID{}, err
-	}
-	v.log.Debugf("Received: %v", sReply)
-
-	if sReply.Error != nil {
-		sErr := *sReply.Error
-		v.log.WithError(fmt.Errorf("%s", sErr)).Error("Server closed with error")
-		return uuid.UUID{}, fmt.Errorf("%s", sErr)
-	}
-
-	forwardConn := appnet.NewForwardConn(v.log, remoteConn, remotePort, localPort)
-	forwardConn.Serve()
-	return forwardConn.ID, nil
-}
-
-// Disconnect implements API.
-func (v *Visor) Disconnect(id uuid.UUID) error {
-	forwardConn := appnet.GetForwardConn(id)
-	return forwardConn.Close()
-}
-
-// List implements API.
-func (v *Visor) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
-	return appnet.GetAllForwardConns(), nil
-}
-
 // ConnectRawTCP implements API. Establishes a raw TCP port forwarding connection over skywire.
 func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	ok := isPortAvailable(v.log, localPort)
@@ -108,10 +40,8 @@ func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int)
 	}
 
 	cMsg := clientMsg{
-		Port:   remotePort,
-		RawTCP: true,
+		Port: remotePort,
 	}
-
 	clientMsgBytes, err := json.Marshal(cMsg)
 	if err != nil {
 		return uuid.UUID{}, err
