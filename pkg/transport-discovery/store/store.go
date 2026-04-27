@@ -179,6 +179,10 @@ type TransportStore interface {
 	GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error)
 	GetNumberOfTransports(context.Context) (map[types.Type]int, error)
 	GetAllTransports(context.Context, bool) ([]*transport.Entry, error)
+	// Bandwidth ingest (called by the CXO aggregator with the
+	// reporter's cumulative counters; deltas are computed
+	// internally against the per-reporter previous snapshot).
+	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
 	// Bandwidth query methods (legacy)
 	GetTransportBandwidth(ctx context.Context, tpID uuid.UUID, period string, limit int) ([]BandwidthAggregation, error)
 	GetVisorBandwidth(ctx context.Context, pk cipher.PubKey, period string, limit int) ([]BandwidthAggregation, error)

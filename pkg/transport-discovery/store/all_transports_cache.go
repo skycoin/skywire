@@ -8,19 +8,16 @@ import (
 )
 
 // allTransportsCache memoizes the result of GetAllTransports and
-// getAllTransportsWithQoS for a short TTL. The plain variant is hit on
-// every register/deregister request with ?sync=true; the WithQoS
-// variant is hit on every metrics scrape (Prometheus / Victoria Metrics
-// pulling /metrics/network, /metrics/visors, etc.). Both do a Redis
-// SCAN over the full tp:* keyspace plus an MGET of every transport
-// key.
+// getAllTransportsWithQoS for a short TTL. The WithQoS variant is hit
+// on every metrics scrape (Prometheus / Victoria Metrics pulling
+// /metrics/network, /metrics/visors, etc.); both do a Redis SCAN over
+// the full tp:* keyspace plus an MGET of every transport key.
 //
 // The cache holds four slots: {selfTransports} × {withQoS}. Within the
 // TTL window, all callers of a given variant share the same snapshot.
 // There is no explicit invalidation; the snapshot can be up to TTL
 // stale, which matches the consistency model these callers already
-// accept (sync=true clients get fresh data via the DHT mirror; metrics
-// scrapers tolerate any sub-scrape-interval delay).
+// accept (metrics scrapers tolerate any sub-scrape-interval delay).
 type allTransportsCache struct {
 	mu  sync.RWMutex
 	ttl time.Duration

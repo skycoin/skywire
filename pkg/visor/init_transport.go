@@ -16,7 +16,6 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cxo/subscriber"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
@@ -218,11 +217,6 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if err != nil {
 		err := fmt.Errorf("failed to create transport discovery client: %w", err)
 		return err
-	}
-
-	// Wrap TPD client with CXO subscriber if DMSG is available and a CXO feed PK is configured
-	if v.conf.Transport.CXOFeedPK != "" && v.dmsgC != nil {
-		tpdC = wrapTPDWithCXO(ctx, v, tpdC, log)
 	}
 
 	var logS transport.LogStore
@@ -837,42 +831,6 @@ func reconcileTPD(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	return nil
-}
-
-// wrapTPDWithCXO creates a CXO subscriber for the TPD feed and wraps the
-// HTTP client with a CXO-aware client that checks the local cache first.
-func wrapTPDWithCXO(ctx context.Context, v *Visor, httpClient transport.DiscoveryClient, log *logging.Logger) transport.DiscoveryClient {
-	var feedPK cipher.PubKey
-	if err := feedPK.Set(v.conf.Transport.CXOFeedPK); err != nil {
-		log.WithError(err).Warn("Invalid CXO feed PK, continuing without CXO")
-		return httpClient
-	}
-
-	subConf := subscriber.DefaultConfig()
-	subConf.Logger = v.MasterLogger().PackageLogger("cxo-tpd-sub")
-
-	sub, err := subscriber.New(v.dmsgC, feedPK, subConf)
-	if err != nil {
-		log.WithError(err).Warn("Failed to create CXO subscriber, continuing without CXO")
-		return httpClient
-	}
-
-	// Connect to the TPD's CXO feed over DMSG
-	if err := sub.Connect(feedPK); err != nil {
-		log.WithError(err).Warn("Failed to connect to TPD CXO feed, continuing without CXO")
-		sub.Close() //nolint:errcheck,gosec
-		return httpClient
-	}
-
-	log.Infof("Connected to TPD CXO feed: %s", feedPK)
-
-	// Close subscriber when context is done
-	go func() {
-		<-ctx.Done()
-		sub.Close() //nolint:errcheck,gosec
-	}()
-
-	return tpdclient.NewCXOClient(httpClient, sub, v.MasterLogger().PackageLogger("tpd-cxo"))
 }
 
 func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transport.DiscoveryClient, error) {

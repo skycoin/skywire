@@ -40,6 +40,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
+	"github.com/skycoin/skywire/pkg/visor/stats"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/visor/visorinit"
 )
@@ -164,6 +165,13 @@ type Visor struct {
 
 	// DHT node (nil if dht.enable is false)
 	dhtNode *dht.Node
+
+	// Visor-local telemetry tracker (nil if Stats.Disabled).
+	// Owns the bbolt store at <local_path>/stats.db, samples
+	// transport bw/latency and tier/service uptime once a minute,
+	// and is read by the /stats/* HTTP handlers and the CXO
+	// publisher.
+	statsTracker *stats.Tracker
 
 	// Embedded DMSG Web resolver (nil if dmsg_web.enable is false).
 	// Provides a localhost SOCKS5 proxy that resolves .dmsg hosts.

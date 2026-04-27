@@ -99,20 +99,6 @@ func (r *RPC) DiscoverTransportByID(id *uuid.UUID, out *transport.Entry) (err er
 	return err
 }
 
-// SetSyncTPDData sets sync_tpd_data in visor's transport config
-func (r *RPC) SetSyncTPDData(enabled *bool, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetSyncTPDData", *enabled)(nil, &err)
-	err = r.visor.SetSyncTPDData(*enabled)
-	return
-}
-
-// GetSyncTPDData gets sync_tpd_data from visor's transport config
-func (r *RPC) GetSyncTPDData(_ *struct{}, out *bool) (err error) {
-	defer rpcutil.LogCall(r.log, "GetSyncTPDData", nil)(out, &err)
-	*out, err = r.visor.GetSyncTPDData()
-	return
-}
-
 // GetPersistentTransports gets persistent_transports from visor's routing config
 func (r *RPC) GetPersistentTransports(_ *struct{}, out *[]transport.PersistentTransports) (err error) {
 	defer rpcutil.LogCall(r.log, "GetPersistentTransports", nil)(out, &err)

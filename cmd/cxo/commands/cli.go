@@ -52,7 +52,6 @@ func init() {
 	cliCmd.AddCommand(connCmd)
 	cliCmd.AddCommand(rootObjCmd)
 	cliCmd.AddCommand(statCmd)
-	cliCmd.AddCommand(kvCmd)
 	cliCmd.AddCommand(stopCmd)
 }
 
