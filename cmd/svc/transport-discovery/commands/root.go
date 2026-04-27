@@ -19,7 +19,6 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/cxo/publisher"
 	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -29,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/api"
+	"github.com/skycoin/skywire/pkg/transport-discovery/cxoaggregator"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
@@ -342,23 +342,25 @@ Example:
 		}
 		defer h.Close()
 
-		// Initialize CXO publisher for transport data distribution.
-		// Reuses the same bootstrap dmsg client managed by svcmode;
-		// will be nil when running in ModeHTTP so CXO is gated on
-		// dmsg being active.
+		// CXO aggregator: visors dial in (using TPD's PK from
+		// Transport.DiscoveryDmsg), and the aggregator subscribes
+		// to each conn's remote PK as a feed. Reverse-dial means
+		// visor-restart / DMSG reconnect is handled by the visor's
+		// re-dial — TPD just accepts and re-subscribes on the next
+		// reconcile tick. No visor enumeration needed on TPD's side.
 		if enableCXO && h.DmsgClient != nil {
-			cxoConf := publisher.DefaultConfig()
-			cxoConf.Logger = logging.MustGetLogger("cxo-tpd")
-			cxoPub, err := publisher.New(h.DmsgClient, sk, cxoConf)
+			agg, err := cxoaggregator.New(h.DmsgClient, s, cxoaggregator.Config{
+				Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
+			})
 			if err != nil {
-				logger.WithError(err).Error("Failed to start CXO publisher, continuing without it")
+				logger.WithError(err).Error("Failed to start CXO aggregator, continuing without it")
 			} else {
-				tpdAPI.SetCXOPublisher(cxoPub)
-				logger.Infof("CXO transport feed enabled: %s", cxoPub.Feed())
-				defer cxoPub.Close() //nolint:errcheck,gosec
+				agg.Run(ctx)
+				defer agg.Close() //nolint:errcheck
+				logger.WithField("feed_pk", agg.FeedPK()).Info("CXO aggregator running: accepting inbound visor stats feeds")
 			}
 		} else if enableCXO {
-			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); CXO disabled")
+			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator disabled")
 		}
 
 		// Wire DHT entry mirroring: every transport registration is

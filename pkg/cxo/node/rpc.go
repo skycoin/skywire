@@ -34,7 +34,6 @@ func (r *rpcServer) Listen(address string) (err error) {
 	r.r.RegisterName("udp", &UDPRPC{r.n}) //nolint:errcheck,gosec
 
 	r.r.RegisterName("root", &RootRPC{r.n}) //nolint:errcheck,gosec
-	r.r.RegisterName("kv", newKVRPC(r.n))   //nolint:errcheck,gosec
 	r.r.RegisterName("dmsg", &DMSGRPC{r.n}) //nolint:errcheck,gosec
 
 	if r.l, err = net.Listen("tcp", address); err != nil {

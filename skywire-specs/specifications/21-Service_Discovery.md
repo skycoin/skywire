@@ -18,6 +18,8 @@ Each service entry includes:
 - Geographic location (country, region)
 - Service-specific metadata
 
+> **Note:** While a service is registered (`serviceUpdater.Start()` / `Stop()` in `pkg/app/appdisc/discovery_manager.go`), the visor's telemetry sampler sets the bit for the current 5-minute slot in a 288-bit-per-day bitmap under `services/<service-name>/<date>` — the same format the three-tier uptime model uses. This data is published on the visor's CXO feed and queryable via `GET /stats/services` over DMSG; see §07 Transport Management — Visor-Local Telemetry Store.
+
 ## Code Structure
 
 The code should be in the `skycoin/skywire-services` repository:

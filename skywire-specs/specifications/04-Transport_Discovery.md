@@ -38,25 +38,22 @@ If two nodes; **A** and **B** establish a *Transport* between them (where **A** 
 
 Transport status is determined by the re-registration mechanism rather than explicit status updates:
 
-- Visors re-register their transports every **90 seconds**
+- Visors re-register their transports every **90 seconds** via `POST /v3/transports/`
 - Transport entries have a TTL of **2 minutes**
 - A transport that is not re-registered within the TTL is considered *down* and expires from the registry
-- Re-registration includes updated bandwidth data (cumulative bytes sent/received)
+- Re-registration carries the bare entry (id, edges, type, label) — bandwidth and latency are no longer in the request body
 
 This approach simplifies the protocol and ensures transport status accurately reflects actual connectivity.
 
-**Reporting Transport Bandwidth:**
+**Bandwidth & Latency Aggregation:**
 
-Bandwidth data is reported automatically during transport re-registration. The `SignedEntry` includes:
+The Transport Discovery acts as an aggregator for bandwidth and latency data; visors no longer push these metrics. Each visor maintains its own bbolt-backed telemetry store (see *Visor-Local Telemetry Store* in §07 Transport Management) and exposes daily rollups through a CXO publisher feed plus a whitelisted HTTP endpoint over DMSG.
 
-```go
-type BandwidthData struct {
-    SentBytes uint64 // Total bytes sent (cumulative)
-    RecvBytes uint64 // Total bytes received (cumulative)
-}
-```
+The visor's CXO publisher uses the visor's own keypair, so the feed PK is identical to the visor's PK — there is no separate identity to discover. The TPD already knows every visor's PK from the transport registry and subscribes directly via the existing `pkg/cxo/subscriber` primitive. Subscribed updates land in the TPD's redis store; the existing `/metric`, `/bandwidth/*`, `/metrics/*` endpoints read from those tables.
 
-Each edge reports its own perspective. The Transport Discovery stores both reports and can verify consistency between edges.
+Subscription is open: the data carried on the feed (per-transport daily rollups, three-tier uptime bitmaps, per-service uptime bitmaps) matches the public sensitivity of `/metric` and DHT `tp` entries today. The whitelist on the visor's HTTP-over-DMSG `/stats/*` endpoints exists only to bound arbitrary-range historical queries (DoS protection), not to gate confidentiality.
+
+The TPD no longer persists bandwidth or latency from the deprecated `SignedEntry.Bandwidth` / `SignedEntry.Latency` fields on the v2 register endpoint. Old visors that still send those fields are silently accepted (the bare entry is processed; the wrapper data is dropped).
 
 **Obtaining Transports:**
 

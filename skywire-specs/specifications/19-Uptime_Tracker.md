@@ -11,6 +11,8 @@ Visors periodically send heartbeat updates to the Uptime Tracker to indicate the
 - **Version information**: The skywire version each visor is running
 - **IP address**: The public IP address of each visor
 
+> **Note:** The visor also maintains a richer **three-tier uptime model** locally (see §07 Transport Management — Visor-Local Telemetry Store), tracking three distinct online states — `process` (visor running), `dmsg` (DMSG-connected), `skynet` (≥2 live transports) — as 288-bit-per-day bitmaps in `<local_path>/stats.db` (one bit per 5-minute slot, the same format the Transport Discovery already uses for integrated uptime tracking). The central Uptime Tracker as described below conflates these into a single online/offline signal driven by HTTP heartbeats; the visor-local model is the source of truth, and the migration path is for the central service to subscribe to each visor's CXO feed (`tiers/<tier>/<date>` keys) the same way the Transport Discovery now does for bandwidth/latency.
+
 ## Code Structure
 
 The code should be in the `skycoin/skywire-services` repository:

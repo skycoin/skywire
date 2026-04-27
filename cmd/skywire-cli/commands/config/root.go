@@ -99,7 +99,6 @@ var (
 	snConfig                   bool
 	externalApps               bool
 	enableCalculateRoutes      bool
-	enableSyncTPDData          bool
 	isSkychatEnable            bool
 	skychatAddr                string
 	rewardSkyAddr              string

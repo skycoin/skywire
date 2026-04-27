@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -34,29 +33,13 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 		LastUpdate: now.Unix(),
 	}
 
-	// Handle latency if provided
-	if sEntry.Latency != nil {
-		data.LatencyMin = sEntry.Latency.Min
-		data.LatencyMax = sEntry.Latency.Max
-		data.LatencyAvg = sEntry.Latency.Avg
-	}
-
-	// Handle bandwidth if provided
-	if sEntry.Bandwidth != nil {
-		data.Bandwidth = sEntry.Bandwidth.SentBytes + sEntry.Bandwidth.RecvBytes
-
-		// Determine the reporting visor from auth context; fall back to edges[0]
-		reporterPK := httpauth.PKFromCtx(ctx)
-		if reporterPK.Null() {
-			reporterPK = entry.Edges[0]
-		}
-
-		// Update bandwidth aggregations
-		if err := s.updateBandwidth(ctx, entry.ID.String(), reporterPK,
-			sEntry.Bandwidth.SentBytes, sEntry.Bandwidth.RecvBytes); err != nil {
-			s.log.WithError(err).Warn("Failed to update bandwidth aggregation")
-		}
-	}
+	// SignedEntry.Latency / SignedEntry.Bandwidth used to be the
+	// channel by which visors pushed bw/latency telemetry to TPD. As
+	// of the visor-self-tracking-stats change, that path is gone:
+	// visors publish telemetry on their own CXO feeds and TPD
+	// subscribes via pkg/transport-discovery/cxoaggregator. The
+	// fields are still on the wire for old visors, but TPD ignores
+	// them — incoming values are not persisted into TransportData.
 
 	raw, err := json.Marshal(data)
 	if err != nil {
@@ -127,14 +110,8 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*tra
 			Label:      string(entry.Label),
 			LastUpdate: now.Unix(),
 		}
-		if sEntry.Latency != nil {
-			data.LatencyMin = sEntry.Latency.Min
-			data.LatencyMax = sEntry.Latency.Max
-			data.LatencyAvg = sEntry.Latency.Avg
-		}
-		if sEntry.Bandwidth != nil {
-			data.Bandwidth = sEntry.Bandwidth.SentBytes + sEntry.Bandwidth.RecvBytes
-		}
+		// bw/latency from SignedEntry no longer persisted — see
+		// RegisterTransport above.
 
 		raw, err := json.Marshal(data)
 		if err != nil {
