@@ -52,7 +52,7 @@ type LatencyStats struct {
 }
 ```
 
-`SetLatency(rttMs)` updates the average and maintains min/max. The transport manager reports latency to the Transport Discovery every 90 seconds during re-registration, as part of the `SignedEntry.Latency` field.
+`SetLatency(rttMs)` updates the average and maintains min/max. The transport manager no longer pushes latency to the Transport Discovery on re-registration; instead, the visor's local telemetry store samples `GetLatencyStats()` every minute (see §07 Transport Management — Visor-Local Telemetry Store) and the DHT publish loop carries the live `avg` value as the `l` field on the per-transport entry under the `tp` salt (see §26 DHT).
 
 ## Bandwidth Tracking
 
@@ -61,6 +61,9 @@ Bandwidth is tracked separately from latency, at the transport layer:
 - `logRecv(bytes)` on every `readPacket`
 - Only payload bytes are counted (7-byte header excluded)
 - Persisted to CSV files every 3 seconds via `logLoop`
-- Reported to Transport Discovery as `SignedEntry.Bandwidth`
+- Sampled into the visor's local telemetry store every minute as cumulative `sent_bytes` / `recv_bytes`; daily deltas are computed from a per-transport day-start baseline
+- The cumulative total (sent + recv) is also carried as the `b` field on the DHT `tp` entry for live snapshots
+
+The Transport Discovery acquires bandwidth and latency history by subscribing to each visor's CXO feed; it no longer receives this data via push.
 
 Transport-level ping/pong frames contribute minimally to bandwidth (~30 bytes/minute per transport).
