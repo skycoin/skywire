@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/stats"
@@ -90,8 +91,68 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		lsAPI.SetStatsReader(tracker.Store())
 	}
 
+	// If we have a publisher and we know the TPD's PK, kick off a
+	// goroutine that periodically dials it. ConnectPK is idempotent
+	// — alive conn = no-op, dropped = redial — so this single
+	// pattern handles both initial announce and reconnect-after-
+	// visor-or-dmsg-restart. TPD's aggregator sees the inbound conn
+	// and subscribes back to our feed (PK = our own PK).
+	if pub != nil {
+		if tpdPK, ok := tpdCXOPeer(v); ok {
+			go runAnnounceLoop(v.ctx, pub, tpdPK, log)
+		} else {
+			log.Debug("Stats: no Transport.DiscoveryDmsg PK; skipping CXO announce loop")
+		}
+	}
+
 	log.WithField("path", path).WithField("cxo", pub != nil).Info("Stats: telemetry store running")
 	return nil
+}
+
+// announceInterval is how often the visor pokes its CXO conn to the
+// TPD aggregator. Short enough that a recovered visor or recovered
+// TPD start exchanging telemetry within a minute; long enough to be
+// negligible overhead.
+const announceInterval = 30 * time.Second
+
+func runAnnounceLoop(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger) {
+	t := time.NewTicker(announceInterval)
+	defer t.Stop()
+	announceOnce(pub, tpdPK, log)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			announceOnce(pub, tpdPK, log)
+		}
+	}
+}
+
+func announceOnce(pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger) {
+	if err := pub.AnnounceTo(tpdPK); err != nil {
+		// Trace-level: this races with TPD start-up and DMSG
+		// readiness; transient failures are normal.
+		log.WithError(err).WithField("tpd_pk", tpdPK).Trace("Stats: CXO announce to TPD failed")
+	}
+}
+
+// tpdCXOPeer extracts the TPD's PK from the visor's Transport.DiscoveryDmsg
+// URL ("dmsg://<pk>:<port>"). Returns ok=false when the URL is empty
+// or unparseable; the caller treats that as "no announce target."
+func tpdCXOPeer(v *Visor) (cipher.PubKey, bool) {
+	raw := v.conf.Transport.DiscoveryDmsg
+	if raw == "" {
+		return cipher.PubKey{}, false
+	}
+	var u dmsgcurl.URL
+	if err := u.Fill(raw); err != nil {
+		return cipher.PubKey{}, false
+	}
+	if u.Scheme != "dmsg" {
+		return cipher.PubKey{}, false
+	}
+	return u.Addr.PK, true
 }
 
 // buildStatsPublisher constructs the visor's CXO publisher feed for

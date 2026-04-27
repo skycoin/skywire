@@ -1,24 +1,33 @@
-// Package cxoaggregator subscribes to per-visor TreeStore feeds and
-// mirrors received telemetry into the TPD's redis store.
+// Package cxoaggregator runs a CXO node on the Transport Discovery
+// that subscribes to per-visor TreeStore feeds and mirrors received
+// telemetry into the TPD's redis store.
 //
-// Visors publish per-transport bandwidth/latency under the path
-// scheme defined in pkg/visor/stats/sink.go:
+// Architecture: visors dial TPD's CXO listener (the visor knows
+// TPD's PK from Transport.DiscoveryDmsg) and the inbound conns drive
+// subscription. The aggregator does NOT enumerate visors and dial
+// out — that approach has trouble with reconnection (no clean signal
+// when a remote node restarts) and requires plumbing the full visor
+// list. Reverse-dial:
 //
-//	transports/<uuid>/current          → JSON LiveSnapshot
-//	transports/<uuid>/<YYYY-MM-DD>     → JSON DailyRollup
-//	tiers/<tier>/<YYYY-MM-DD>          → 36-byte bitmap
-//	services/<slug>/<YYYY-MM-DD>       → 36-byte bitmap
+//   - Visor brings up its publisher and periodically calls
+//     pub.AnnounceTo(tpdPK), which dials this aggregator's CXO node
+//     over DMSG. ConnectPK is idempotent — alive conn = no-op,
+//     dropped conn = redial.
+//   - Aggregator's reconcile loop walks Node.Connections(), and for
+//     each conn it isn't already subscribed to as a feed (where the
+//     feed PK == the conn's remote PK), calls conn.Subscribe.
+//   - When CXO finishes filling a Root from a subscribed feed,
+//     OnRootFilled fires; the aggregator walks the TreeStore tree,
+//     parses leaves, dispatches transports/<uuid>/current updates
+//     to BandwidthSink.
 //
-// The aggregator subscribes to each known visor's feed (PK is the
-// visor's own PK — one identity per node) and feeds the cumulative
-// counters in `current` snapshots into store.UpdateBandwidth, which
-// computes per-reporter deltas and updates the per-transport and
-// per-visor aggregations the legacy /metric, /bandwidth/*, and
-// /metrics/* endpoints already read from.
+// Visor restart is handled implicitly: visor reconnects to DMSG,
+// re-dials TPD, the new conn arrives at TPD, next reconcile
+// subscribes again. No staleness detection needed on TPD's side.
 //
-// Tier and service bitmap routing is left as a follow-up (the data
-// arrives and is held by each Subscriber's local cache; the only
-// thing missing is a write-through into TPD's redis uptime tables).
+// One CXO Node serves all subscriptions; visors with many feeds (or
+// future TPD-side re-publishing) share storage and goroutines
+// instead of paying a per-visor node cost.
 package cxoaggregator
 
 import (
@@ -29,19 +38,17 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	skycipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/node"
+	cxotransport "github.com/skycoin/skywire/pkg/cxo/node/transport"
+	"github.com/skycoin/skywire/pkg/cxo/skyobject"
+	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
-
-// VisorSource enumerates the set of visor PKs the aggregator should
-// subscribe to. The TPD's existing transport store satisfies this via
-// GetAllTransports + edge extraction.
-type VisorSource interface {
-	KnownVisors(ctx context.Context) ([]cipher.PubKey, error)
-}
 
 // BandwidthSink receives per-transport cumulative-counter updates.
 // The TPD's redis store satisfies this via UpdateBandwidth.
@@ -49,10 +56,9 @@ type BandwidthSink interface {
 	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
 }
 
-// liveSnapshot mirrors pkg/visor/stats.LiveSnapshot. We re-declare it
-// here (rather than importing pkg/visor/stats from a TPD-side
-// package) to keep the dependency direction one-way: visor → spec
-// → wire format → TPD-side parser. Any field rename would need to be
+// liveSnapshot mirrors pkg/visor/stats.LiveSnapshot. Re-declared on
+// the TPD side to keep the dependency direction one-way: visor →
+// spec → wire format → TPD-side parser. Field renames must be
 // reflected in both places.
 type liveSnapshot struct {
 	SentBytes    uint64    `json:"sent_bytes"`
@@ -65,52 +71,78 @@ type liveSnapshot struct {
 
 // Config configures the Aggregator.
 type Config struct {
-	// ReconcileInterval is how often the aggregator refreshes its
-	// subscription set against the VisorSource. Defaults to 60s.
+	// ReconcileInterval is how often the aggregator re-scans the
+	// CXO node's connection list and ensures each is subscribed to
+	// the remote PK's feed. Defaults to 30s — small enough that a
+	// fresh visor conn doesn't wait too long to see updates flow.
 	ReconcileInterval time.Duration
 	// Logger overrides the default tagged logger.
 	Logger *logging.Logger
+	// InMemoryDB / DataDir control the aggregator's CXO storage.
+	// Default is in-memory (subscribed object cache only — TPD's
+	// authoritative store is redis, the CXO cache exists just to
+	// satisfy CXO's filling protocol).
+	InMemoryDB bool
+	DataDir    string
 }
 
-// Aggregator subscribes to per-visor TreeStore feeds and mirrors
-// received bandwidth telemetry into the BandwidthSink.
+// Aggregator is the CXO subscriber side of the visor-stats data path.
+// It owns one CXO Node listening on DMSG; visors dial in, subscribe
+// happens per-conn during reconcile, and OnRootFilled walks the
+// TreeStore tree to feed BandwidthSink.
 type Aggregator struct {
-	dmsgC  *dmsg.Client
-	source VisorSource
-	sink   BandwidthSink
-	conf   Config
-	log    *logging.Logger
+	cxoNode *node.Node
+	sink    BandwidthSink
+	conf    Config
+	log     *logging.Logger
 
 	mu     sync.Mutex
-	subs   map[cipher.PubKey]*treestore.Subscriber
 	cancel context.CancelFunc
 	done   chan struct{}
 }
 
-// New constructs an Aggregator. The dmsg client is shared with the
-// rest of the TPD; subscribers each spin up their own CXO node
-// internally (this is the pattern the deleted flat subscriber used
-// too — a TPD-wide shared CXO node is a worthwhile follow-up
-// optimization).
-func New(dmsgC *dmsg.Client, source VisorSource, sink BandwidthSink, conf Config) *Aggregator {
+// New constructs an Aggregator. Sets up a CXO Node, enables DMSG so
+// remote visors can dial in, and wires OnRootFilled to walk
+// TreeStore Roots and dispatch to sink.
+func New(dmsgC *dmsg.Client, sink BandwidthSink, conf Config) (*Aggregator, error) {
 	if conf.ReconcileInterval <= 0 {
-		conf.ReconcileInterval = 60 * time.Second
+		conf.ReconcileInterval = 30 * time.Second
 	}
 	if conf.Logger == nil {
 		conf.Logger = logging.MustGetLogger("tpd-cxo-aggregator")
 	}
-	return &Aggregator{
-		dmsgC:  dmsgC,
-		source: source,
-		sink:   sink,
-		conf:   conf,
-		log:    conf.Logger,
-		subs:   make(map[cipher.PubKey]*treestore.Subscriber),
-		done:   make(chan struct{}),
+
+	cfg := node.NewConfig()
+	cfg.Config = skyobject.NewConfig()
+	cfg.Config.InMemoryDB = conf.InMemoryDB || conf.DataDir == ""
+	if conf.DataDir != "" {
+		cfg.Config.DataDir = conf.DataDir
 	}
+
+	cxoNode, err := node.NewNode(cfg)
+	if err != nil {
+		return nil, err
+	}
+	factory := cxotransport.NewDMSGFactory(dmsgC, cxotransport.DefaultCXOPort)
+	if err := cxoNode.EnableDMSG(factory); err != nil {
+		_ = cxoNode.Close() //nolint:errcheck
+		return nil, err
+	}
+
+	a := &Aggregator{
+		cxoNode: cxoNode,
+		sink:    sink,
+		conf:    conf,
+		log:     conf.Logger,
+		done:    make(chan struct{}),
+	}
+	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
+		a.handleRootFilled(r)
+	}
+	return a, nil
 }
 
-// Run starts the reconciliation loop. Returns immediately; the loop
+// Run starts the reconcile loop. Returns immediately; the loop
 // continues until ctx is cancelled or Close is called. Idempotent.
 func (a *Aggregator) Run(ctx context.Context) {
 	a.mu.Lock()
@@ -125,25 +157,26 @@ func (a *Aggregator) Run(ctx context.Context) {
 	go a.loop(loopCtx)
 }
 
-// Close stops the loop and tears down all subscriptions. Idempotent.
+// Close stops the loop and tears down the CXO node. Idempotent.
 func (a *Aggregator) Close() error {
 	a.mu.Lock()
 	cancel := a.cancel
 	a.cancel = nil
 	a.mu.Unlock()
-	if cancel == nil {
-		return nil
+	if cancel != nil {
+		cancel()
+		<-a.done
 	}
-	cancel()
-	<-a.done
+	return a.cxoNode.Close()
+}
 
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for pk, sub := range a.subs {
-		_ = sub.Close() //nolint:errcheck
-		delete(a.subs, pk)
-	}
-	return nil
+// FeedPK returns the aggregator's own PK — the value visors should
+// dial via dmsgT.ConnectPK to put a conn on this aggregator. In
+// practice this is the TPD deployment's PK and visors get it from
+// Transport.DiscoveryDmsg, but exposing it here makes wiring tests
+// straightforward.
+func (a *Aggregator) FeedPK() cipher.PubKey {
+	return cipher.PubKey(a.cxoNode.ID())
 }
 
 func (a *Aggregator) loop(ctx context.Context) {
@@ -151,102 +184,124 @@ func (a *Aggregator) loop(ctx context.Context) {
 	t := time.NewTicker(a.conf.ReconcileInterval)
 	defer t.Stop()
 
-	a.reconcile(ctx)
+	a.reconcile()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			a.reconcile(ctx)
+			a.reconcile()
 		}
 	}
 }
 
-// reconcile syncs the subscription set with the current known-visors
-// list. New PKs get a fresh Subscriber; vanished PKs get closed.
-func (a *Aggregator) reconcile(ctx context.Context) {
-	pks, err := a.source.KnownVisors(ctx)
-	if err != nil {
-		a.log.WithError(err).Warn("CXO aggregator: KnownVisors failed")
+// reconcile walks the current CXO conn set and subscribes to every
+// remote PK's feed that isn't already subscribed on its conn. Any
+// conn that has dropped since the last reconcile simply isn't in
+// the list anymore — no explicit cleanup needed.
+func (a *Aggregator) reconcile() {
+	for _, conn := range a.cxoNode.Connections() {
+		peerPK := conn.PeerID()
+		if peerPK == (skycipher.PubKey{}) {
+			// Conn handshake hasn't completed; skip until next tick.
+			continue
+		}
+		if alreadySubscribed(conn, peerPK) {
+			continue
+		}
+		if err := conn.Subscribe(peerPK); err != nil {
+			a.log.WithError(err).WithField("visor", cipher.PubKey(peerPK)).
+				Debug("CXO aggregator: Subscribe failed; will retry next reconcile")
+			continue
+		}
+		a.log.WithField("visor", cipher.PubKey(peerPK)).Debug("CXO aggregator: subscribed to visor feed")
+	}
+}
+
+// alreadySubscribed reports whether conn is already subscribed to
+// the given feed. Used to make reconcile idempotent — repeat ticks
+// don't keep stacking subscriptions.
+func alreadySubscribed(conn *node.Conn, feed skycipher.PubKey) bool {
+	for _, f := range conn.Feeds() {
+		if f == feed {
+			return true
+		}
+	}
+	return false
+}
+
+// handleRootFilled is the OnRootFilled callback — invoked when CXO
+// finishes filling a Root from a subscribed feed. r.Pub identifies
+// the visor whose feed produced this Root; we use it as the
+// reporter PK for any bandwidth dispatches.
+func (a *Aggregator) handleRootFilled(r *registry.Root) {
+	if r == nil || len(r.Refs) == 0 {
 		return
 	}
-
-	want := make(map[cipher.PubKey]struct{}, len(pks))
-	for _, pk := range pks {
-		want[pk] = struct{}{}
-	}
-
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	for pk := range a.subs {
-		if _, ok := want[pk]; !ok {
-			_ = a.subs[pk].Close() //nolint:errcheck
-			delete(a.subs, pk)
-		}
-	}
-	for pk := range want {
-		if _, exists := a.subs[pk]; exists {
-			continue
-		}
-		sub, err := a.subscribe(ctx, pk)
-		if err != nil {
-			a.log.WithError(err).WithField("visor", pk).
-				Debug("CXO aggregator: subscribe failed; will retry next reconcile")
-			continue
-		}
-		a.subs[pk] = sub
-	}
-}
-
-// subscribe builds a TreeStore subscriber for one visor and wires
-// its OnUpdate to the aggregator's writeback path.
-func (a *Aggregator) subscribe(_ context.Context, pk cipher.PubKey) (*treestore.Subscriber, error) {
-	sub, err := treestore.NewSubscriber(a.dmsgC, pk, treestore.SubConfig{
-		Logger:     a.log,
-		InMemoryDB: true,
-	})
+	pack, err := a.cxoNode.Container().Pack(r, treestore.Registry)
 	if err != nil {
-		return nil, err
+		a.log.WithError(err).Debug("CXO aggregator: get pack failed")
+		return
 	}
-	sub.OnUpdate(a.handleUpdates(pk))
-	if err := sub.Connect(pk); err != nil {
-		_ = sub.Close() //nolint:errcheck
-		return nil, err
+	var rootNode treestore.TreeNode
+	if err := r.Refs[0].Value(pack, &rootNode); err != nil {
+		a.log.WithError(err).Debug("CXO aggregator: decode root TreeNode failed")
+		return
 	}
-	return sub, nil
+	reporter := cipher.PubKey(r.Pub)
+	a.walkAndDispatch(pack, &rootNode, "", reporter)
 }
 
-// handleUpdates returns the OnUpdate callback bound to a specific
-// reporter PK. Each event's path is parsed; transport leaves with a
-// "current" suffix dispatch to the bandwidth sink.
-func (a *Aggregator) handleUpdates(reporterPK cipher.PubKey) treestore.UpdateCallback {
-	return func(events []treestore.UpdateEvent) {
-		for _, ev := range events {
-			if ev.Value == nil {
-				continue // delete events — nothing to write back
-			}
-			if id, ok := parseCurrentTransportPath(ev.Path); ok {
-				var snap liveSnapshot
-				if err := json.Unmarshal(ev.Value, &snap); err != nil {
-					a.log.WithError(err).WithField("path", ev.Path).
-						Debug("CXO aggregator: live snapshot decode failed")
-					continue
-				}
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				err := a.sink.UpdateBandwidth(ctx, id.String(), reporterPK, snap.SentBytes, snap.RecvBytes)
-				cancel()
-				if err != nil {
-					a.log.WithError(err).WithField("transport", id).
-						Debug("CXO aggregator: UpdateBandwidth failed")
-				}
-				continue
-			}
-			// Other paths (daily transport rollups, tier bitmaps,
-			// service bitmaps) are not yet routed to redis. The
-			// data is held by sub.Get/Walk and exposed when those
-			// follow-up writebacks land.
+// walkAndDispatch recursively descends a TreeStore tree and routes
+// recognized leaf paths to BandwidthSink. Unrecognized paths are
+// held in CXO's local cache and ignored — daily transport rollups,
+// tier bitmaps, and service bitmaps are received but not yet
+// dispatched anywhere; routing them to redis is a follow-up.
+func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, basePath string, reporter cipher.PubKey) {
+	count, err := n.Children.Len(pack)
+	if err != nil {
+		return
+	}
+	for i := 0; i < count; i++ {
+		var entry treestore.TreeEntry
+		if _, err := n.Children.ValueByIndex(pack, i, &entry); err != nil {
+			continue
 		}
+		fullPath := entry.Name
+		if basePath != "" {
+			fullPath = basePath + "/" + entry.Name
+		}
+		if len(entry.Leaf) > 0 {
+			a.dispatchLeaf(fullPath, entry.Leaf, reporter)
+			continue
+		}
+		if entry.Sub.Hash != (skycipher.SHA256{}) {
+			var sub treestore.TreeNode
+			if err := entry.Sub.Value(pack, &sub); err == nil {
+				a.walkAndDispatch(pack, &sub, fullPath, reporter)
+			}
+		}
+	}
+}
+
+// dispatchLeaf is the path → action dispatcher. Today it only
+// recognizes transports/<uuid>/current; tier and service bitmaps
+// arrive into the CXO cache but aren't yet written into TPD's redis
+// uptime tables.
+func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey) {
+	id, ok := parseCurrentTransportPath(path)
+	if !ok {
+		return
+	}
+	var snap liveSnapshot
+	if err := json.Unmarshal(leaf, &snap); err != nil {
+		a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: live snapshot decode failed")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, snap.SentBytes, snap.RecvBytes); err != nil {
+		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")
 	}
 }
 

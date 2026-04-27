@@ -169,6 +169,29 @@ func (p *Publisher) Feed() cipher.PubKey {
 	return p.pk
 }
 
+// AnnounceTo brings up (or refreshes) a CXO conn to peerPK over the
+// publisher's underlying DMSG transport. This is a "say hello" call:
+// it doesn't subscribe peerPK to anything, just establishes the
+// conn so the peer's CXO node can see this publisher and subscribe
+// to the publisher's feed in the reverse direction.
+//
+// Used by the visor-stats subsystem to dial the Transport Discovery
+// once at boot and on each reconcile tick — TPD's CXO subscriber
+// then sees the inbound conn and subscribes to the visor's feed
+// (PK = visor PK = the publisher feed). Idempotent: returns nil for
+// an existing live conn, redials if the previous conn has dropped.
+func (p *Publisher) AnnounceTo(peerPK cipher.PubKey) error {
+	if p.cxoNode == nil {
+		return errors.New("treestore: publisher has no cxo node")
+	}
+	dmsgT := p.cxoNode.DMSG()
+	if dmsgT == nil {
+		return errors.New("treestore: publisher has no dmsg transport")
+	}
+	_, err := dmsgT.ConnectPK(peerPK)
+	return err
+}
+
 // Put stores a value at the given path. The path is split on '/'
 // into segments; intermediate sub-nodes are created as needed.
 // Putting at a path currently held by a sub-tree (or vice versa)

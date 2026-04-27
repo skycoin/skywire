@@ -342,18 +342,23 @@ Example:
 		}
 		defer h.Close()
 
-		// CXO subscriber wiring: TPD subscribes to each known visor's
-		// TreeStore feed and mirrors received bandwidth telemetry
-		// into redis. Source for "known visors" is the TPD's own
-		// transport registry (edges of all known transports).
+		// CXO aggregator: visors dial in (using TPD's PK from
+		// Transport.DiscoveryDmsg), and the aggregator subscribes
+		// to each conn's remote PK as a feed. Reverse-dial means
+		// visor-restart / DMSG reconnect is handled by the visor's
+		// re-dial — TPD just accepts and re-subscribes on the next
+		// reconcile tick. No visor enumeration needed on TPD's side.
 		if enableCXO && h.DmsgClient != nil {
-			source := &transportEdgeSource{store: s}
-			agg := cxoaggregator.New(h.DmsgClient, source, s, cxoaggregator.Config{
+			agg, err := cxoaggregator.New(h.DmsgClient, s, cxoaggregator.Config{
 				Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
 			})
-			agg.Run(ctx)
-			defer agg.Close() //nolint:errcheck
-			logger.Info("CXO aggregator running: subscribing to per-visor stats feeds")
+			if err != nil {
+				logger.WithError(err).Error("Failed to start CXO aggregator, continuing without it")
+			} else {
+				agg.Run(ctx)
+				defer agg.Close() //nolint:errcheck
+				logger.WithField("feed_pk", agg.FeedPK()).Info("CXO aggregator running: accepting inbound visor stats feeds")
+			}
 		} else if enableCXO {
 			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator disabled")
 		}
@@ -395,31 +400,3 @@ func Execute() {
 	}
 }
 
-// transportEdgeSource adapts the TPD's transport store to the
-// cxoaggregator.VisorSource contract. The "known visors" set is the
-// union of edges across all currently-registered transports — same
-// signal /metric and the rest of the TPD already use to enumerate
-// visors. We dedupe across both edges of each transport.
-type transportEdgeSource struct {
-	store store.TransportStore
-}
-
-func (t *transportEdgeSource) KnownVisors(ctx context.Context) ([]cipher.PubKey, error) {
-	entries, err := t.store.GetAllTransports(ctx, false)
-	if err != nil {
-		return nil, err
-	}
-	seen := make(map[cipher.PubKey]struct{}, 2*len(entries))
-	for _, e := range entries {
-		if e == nil {
-			continue
-		}
-		seen[e.Edges[0]] = struct{}{}
-		seen[e.Edges[1]] = struct{}{}
-	}
-	out := make([]cipher.PubKey, 0, len(seen))
-	for pk := range seen {
-		out = append(out, pk)
-	}
-	return out, nil
-}
