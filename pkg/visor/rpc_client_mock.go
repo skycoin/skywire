@@ -879,21 +879,6 @@ func (mc *mockRPCClient) DMSGServers() ([]DMSGServerInfo, error) {
 	return []DMSGServerInfo{}, nil
 }
 
-// Connect implements API.
-func (mc *mockRPCClient) Connect(_ cipher.PubKey, _, _ int) (uuid.UUID, error) {
-	return uuid.UUID{}, nil
-}
-
-// Disconnect implements API.
-func (mc *mockRPCClient) Disconnect(_ uuid.UUID) error {
-	return nil
-}
-
-// List implements API.
-func (mc *mockRPCClient) List() (map[uuid.UUID]*appnet.ForwardConn, error) {
-	return nil, nil
-}
-
 // ConnectRawTCP implements API.
 func (mc *mockRPCClient) ConnectRawTCP(_ cipher.PubKey, _, _ int) (uuid.UUID, error) {
 	return uuid.UUID{}, nil
