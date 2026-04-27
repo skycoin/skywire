@@ -225,16 +225,23 @@ func dhtPublish(ctx context.Context, v *Visor, node *dht.Node, log *logging.Logg
 				Remote  cipher.PubKey `json:"r"`
 				Type    string        `json:"t"`
 				Latency float64       `json:"l,omitempty"`
+				// Bw is the live cumulative bandwidth (sent + recv
+				// bytes) for this transport. Live snapshot only; the
+				// historical daily series lives on the visor's CXO
+				// telemetry feed and HTTP /stats/* endpoints.
+				Bw uint64 `json:"b,omitempty"`
 			}
 			entries := make([]tpEntry, 0, len(tps))
 			for _, tp := range tps {
 				if tp.IsClosed() {
 					continue
 				}
+				bw := tp.GetBandwidth()
 				entries = append(entries, tpEntry{
 					Remote:  tp.Remote(),
 					Type:    string(tp.Type()),
 					Latency: tp.GetLatency(),
+					Bw:      bw.SentBytes + bw.RecvBytes,
 				})
 			}
 			data, err := json.Marshal(entries)

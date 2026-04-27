@@ -13,6 +13,7 @@ package stats
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -30,8 +31,14 @@ type Tracker struct {
 	probes   Probes
 	interval time.Duration
 	keep     time.Duration
+	// publishKeep caps how many trailing days' worth of paths are
+	// mirrored to the Sink. 0 means "match retention" (mirror
+	// everything). Typical use: store keeps 30 days, publisher
+	// exposes only 7.
+	publishKeep time.Duration
 
 	mu         sync.Mutex
+	sink       Sink
 	baselines  map[uuid.UUID]bandwidthBaseline
 	lastDay    string // YYYY-MM-DD UTC of the most recent sample
 	lastPruned time.Time
@@ -90,7 +97,12 @@ type bandwidthBaseline struct {
 type Config struct {
 	SampleInterval time.Duration // default 1m
 	RetentionDays  int           // default 30
-	Logger         *logging.Logger
+	// PublishWindowDays caps the number of trailing days mirrored
+	// to the Sink. 0 means "match RetentionDays" — the Sink sees
+	// every day the bbolt store keeps. Typical: 7 (publisher
+	// exposes one week, store retains 30 days).
+	PublishWindowDays int
+	Logger            *logging.Logger
 }
 
 // NewTracker constructs a Tracker but does not start the sample loop;
@@ -106,13 +118,19 @@ func NewTracker(store *Store, probes Probes, conf Config) *Tracker {
 	if conf.Logger == nil {
 		conf.Logger = logging.MustGetLogger("visor-stats")
 	}
+	publishKeep := time.Duration(conf.PublishWindowDays) * 24 * time.Hour
+	if conf.PublishWindowDays <= 0 {
+		publishKeep = time.Duration(conf.RetentionDays) * 24 * time.Hour
+	}
 	return &Tracker{
-		store:     store,
-		log:       conf.Logger,
-		probes:    probes,
-		interval:  conf.SampleInterval,
-		keep:      time.Duration(conf.RetentionDays) * 24 * time.Hour,
-		baselines: make(map[uuid.UUID]bandwidthBaseline),
+		store:       store,
+		log:         conf.Logger,
+		probes:      probes,
+		interval:    conf.SampleInterval,
+		keep:        time.Duration(conf.RetentionDays) * 24 * time.Hour,
+		publishKeep: publishKeep,
+		sink:        noopSink{},
+		baselines:   make(map[uuid.UUID]bandwidthBaseline),
 	}
 }
 
@@ -208,7 +226,9 @@ func (t *Tracker) sample(now time.Time) {
 			if err := t.store.MarkTierSlot(tier, utc, slot); err != nil {
 				t.log.WithError(err).WithField("tier", tier).
 					Debug("Failed to mark tier slot")
+				continue
 			}
+			t.mirrorTierBitmap(tier, utc)
 		}
 	}
 
@@ -220,9 +240,51 @@ func (t *Tracker) sample(now time.Time) {
 			if err := t.store.MarkServiceSlot(svc, utc, slot); err != nil {
 				t.log.WithError(err).WithField("service", svc).
 					Debug("Failed to mark service slot")
+				continue
 			}
+			t.mirrorServiceBitmap(svc, utc)
 		}
 	}
+}
+
+// mirrorTierBitmap pushes the post-write tier bitmap to the sink.
+// Called from sample after MarkTierSlot succeeds. Errors are logged
+// at debug level — sink mirroring is best-effort and must not block
+// the sampler.
+func (t *Tracker) mirrorTierBitmap(tier string, now time.Time) {
+	bm, err := t.store.TierBitmap(tier, now)
+	if err != nil {
+		t.log.WithError(err).WithField("tier", tier).Debug("Stats: tier bitmap read failed")
+		return
+	}
+	t.sinkPut(tierBitmapPath(tier, now.UTC().Format(dateFmt)), bm)
+}
+
+// mirrorServiceBitmap is the per-service analogue of mirrorTierBitmap.
+func (t *Tracker) mirrorServiceBitmap(svc string, now time.Time) {
+	bm, err := t.store.ServiceBitmap(svc, now)
+	if err != nil {
+		t.log.WithError(err).WithField("service", svc).Debug("Stats: service bitmap read failed")
+		return
+	}
+	t.sinkPut(serviceBitmapPath(svc, now.UTC().Format(dateFmt)), bm)
+}
+
+// sinkPut snapshots the sink under the lock and dispatches the put
+// outside it, so a slow sink doesn't pin the sample loop's mutex.
+func (t *Tracker) sinkPut(path string, value []byte) {
+	t.mu.Lock()
+	sink := t.sink
+	t.mu.Unlock()
+	sink.Put(path, value)
+}
+
+// sinkDelete is the per-key delete analogue of sinkPut.
+func (t *Tracker) sinkDelete(path string) {
+	t.mu.Lock()
+	sink := t.sink
+	t.mu.Unlock()
+	sink.Delete(path)
 }
 
 func (t *Tracker) recordTransport(tp TransportProbe, now time.Time, today string) error {
@@ -275,7 +337,21 @@ func (t *Tracker) recordTransport(tp TransportProbe, now time.Time, today string
 	mergeLatency(row, tp.LatencyMS)
 	row.Samples++
 
-	return t.store.PutTransportRecord(rec)
+	if err := t.store.PutTransportRecord(rec); err != nil {
+		return err
+	}
+
+	// Mirror to sink after the durable write succeeds. Use JSON for
+	// transport entries (matches the wire shape served by the
+	// /stats/transports/history HTTP endpoint).
+	idStr := tp.ID.String()
+	if data, err := json.Marshal(rec.Current); err == nil {
+		t.sinkPut(currentTransportPath(idStr), data)
+	}
+	if data, err := json.Marshal(row); err == nil {
+		t.sinkPut(dailyTransportPath(idStr, today), data)
+	}
+	return nil
 }
 
 // findOrAppendDaily returns a pointer to today's daily row, creating
@@ -314,6 +390,12 @@ func mergeLatency(row *DailyRollup, s LatencyTriple) {
 // trims daily rollups on each transport record. Called from the
 // sampler when it observes a UTC-day rollover, and once at startup
 // (via maybeRunStartupRetention) to catch up missed sweeps.
+//
+// Sink mirroring follows: anything pruned from the bbolt store is
+// deleted from the sink, and anything that's still in bbolt but
+// outside the (narrower) publish window is also sink-deleted so the
+// publisher's view stays bounded at the configured rolling-window
+// size even though the durable store keeps more.
 func (t *Tracker) runRetention(now time.Time) {
 	cutoff := now.Add(-t.keep)
 	if removed, err := t.store.PruneBitmaps(cutoff); err != nil {
@@ -329,23 +411,80 @@ func (t *Tracker) runRetention(now time.Time) {
 		return
 	}
 	for _, rec := range records {
+		// Sink-delete daily rows that are about to fall out of the
+		// bbolt store. (Sink already wouldn't have the ones outside
+		// the publish window — those were pruned at the previous
+		// midnight — but be defensive.)
+		droppedFromBolt := map[string]struct{}{}
 		trimmed := rec.Daily[:0]
 		for _, d := range rec.Daily {
-			if d.Date >= cutoffDate {
-				trimmed = append(trimmed, d)
+			if d.Date < cutoffDate {
+				droppedFromBolt[d.Date] = struct{}{}
+				continue
+			}
+			trimmed = append(trimmed, d)
+		}
+		for date := range droppedFromBolt {
+			t.sinkDelete(dailyTransportPath(rec.ID.String(), date))
+		}
+		if len(trimmed) != len(rec.Daily) {
+			rec.Daily = trimmed
+			if err := t.store.PutTransportRecord(rec); err != nil {
+				t.log.WithError(err).WithField("tp_id", rec.ID).
+					Warn("Retention: rewrite transport record failed")
 			}
 		}
-		if len(trimmed) == len(rec.Daily) {
-			continue
-		}
-		rec.Daily = trimmed
-		if err := t.store.PutTransportRecord(rec); err != nil {
-			t.log.WithError(err).WithField("tp_id", rec.ID).
-				Warn("Retention: rewrite transport record failed")
-		}
 	}
+
+	// Sink-prune dates that remain in bbolt but are outside the
+	// publish window — keeps the publisher's exposed dataset
+	// bounded at the configured rolling-window size.
+	t.sinkPruneOutsidePublishWindow(now)
 
 	t.mu.Lock()
 	t.lastPruned = now
 	t.mu.Unlock()
+}
+
+// sinkPruneOutsidePublishWindow walks the store and sink-deletes any
+// path whose date is older than now-publishKeep. Called from
+// runRetention after bbolt pruning.
+func (t *Tracker) sinkPruneOutsidePublishWindow(now time.Time) {
+	if t.publishKeep == 0 || t.publishKeep >= t.keep {
+		// No narrower window than retention — nothing to prune.
+		return
+	}
+	publishCutoff := now.Add(-t.publishKeep).UTC().Format(dateFmt)
+
+	records, err := t.store.AllTransportRecords()
+	if err != nil {
+		return
+	}
+	for _, rec := range records {
+		for _, d := range rec.Daily {
+			if d.Date < publishCutoff {
+				t.sinkDelete(dailyTransportPath(rec.ID.String(), d.Date))
+			}
+		}
+	}
+
+	tiers, _ := t.store.TierNames()
+	for _, tier := range tiers {
+		dates, _ := t.store.TierDates(tier)
+		for _, d := range dates {
+			if d < publishCutoff {
+				t.sinkDelete(tierBitmapPath(tier, d))
+			}
+		}
+	}
+
+	services, _ := t.store.ServiceNames()
+	for _, svc := range services {
+		dates, _ := t.store.ServiceDates(svc)
+		for _, d := range dates {
+			if d < publishCutoff {
+				t.sinkDelete(serviceBitmapPath(svc, d))
+			}
+		}
+	}
 }

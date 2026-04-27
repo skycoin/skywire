@@ -20,7 +20,10 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node"
+	cxotransport "github.com/skycoin/skywire/pkg/cxo/node/transport"
+	"github.com/skycoin/skywire/pkg/cxo/skyobject"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject/registry"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -31,9 +34,10 @@ import (
 type Publisher struct {
 	log *logging.Logger
 
-	cxoNode *node.Node
-	pk      cipher.PubKey
-	sk      cipher.SecKey
+	cxoNode  *node.Node
+	ownsNode bool // true when New constructed the node (NewWithDMSG path); Close should release it
+	pk       cipher.PubKey
+	sk       cipher.SecKey
 
 	mu   sync.Mutex
 	root *memNode
@@ -73,6 +77,47 @@ type Config struct {
 
 	// Logger overrides the default tag-based logger.
 	Logger *logging.Logger
+}
+
+// PubConfig configures NewWithDMSG. Mirrors the relevant CXO knobs
+// so callers don't need to reach into the lower-level node config
+// just to set a data directory.
+type PubConfig struct {
+	BatchWindow time.Duration   // see Config.BatchWindow
+	Logger      *logging.Logger // see Config.Logger
+	InMemoryDB  bool            // forwarded to skyobject.Config
+	DataDir     string          // forwarded to skyobject.Config (ignored if InMemoryDB)
+}
+
+// NewWithDMSG is a convenience wrapper around New: it constructs a
+// CXO node attached to dmsgC, enables DMSG transport, and hands back
+// a Publisher with the resulting node already wired. The Publisher
+// owns the node — Close releases both.
+func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publisher, error) {
+	cfg := node.NewConfig()
+	cfg.Config = skyobject.NewConfig()
+	cfg.Config.InMemoryDB = conf.InMemoryDB
+	if conf.DataDir != "" {
+		cfg.Config.DataDir = conf.DataDir
+	}
+
+	cxoNode, err := node.NewNode(cfg)
+	if err != nil {
+		return nil, err
+	}
+	factory := cxotransport.NewDMSGFactory(dmsgC, cxotransport.DefaultCXOPort)
+	if err := cxoNode.EnableDMSG(factory); err != nil {
+		_ = cxoNode.Close() //nolint:errcheck
+		return nil, err
+	}
+
+	p, err := New(cxoNode, sk, Config{BatchWindow: conf.BatchWindow, Logger: conf.Logger})
+	if err != nil {
+		_ = cxoNode.Close() //nolint:errcheck
+		return nil, err
+	}
+	p.ownsNode = true
+	return p, nil
 }
 
 // New constructs a Publisher backed by the given CXO node. The feed
@@ -253,13 +298,19 @@ func (p *Publisher) Flush() error {
 }
 
 // Close stops the publish loop. Pending changes are flushed before
-// returning. Idempotent.
+// returning. If the publisher owns its CXO node (NewWithDMSG path),
+// the node is also closed. Idempotent.
 func (p *Publisher) Close() error {
 	var firstErr error
 	p.stopOnce.Do(func() {
 		// Best-effort flush before signalling stop.
 		firstErr = p.Flush()
 		close(p.done)
+		if p.ownsNode && p.cxoNode != nil {
+			if err := p.cxoNode.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
 	})
 	return firstErr
 }

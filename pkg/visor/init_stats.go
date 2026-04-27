@@ -15,6 +15,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/stats"
@@ -24,6 +25,7 @@ import (
 const (
 	defaultStatsSampleInterval = time.Minute
 	defaultStatsRetentionDays  = 30
+	defaultCXOPublishWindow    = 7
 	skynetMinTransports        = 2 // matches "skynet online" semantics in §07
 )
 
@@ -40,20 +42,40 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		return fmt.Errorf("stats: open store at %s: %w", path, err)
 	}
 
+	publishWindow := publishWindowDays(conf)
 	tracker := stats.NewTracker(store, stats.Probes{
 		Transports:    transportsProbe(v),
 		TierStates:    tierStatesProbe(v),
 		ServiceStates: serviceStatesProbe(v),
 	}, stats.Config{
-		SampleInterval: sampleInterval(conf),
-		RetentionDays:  retentionDays(conf),
-		Logger:         log,
+		SampleInterval:    sampleInterval(conf),
+		RetentionDays:     retentionDays(conf),
+		PublishWindowDays: publishWindow,
+		Logger:            log,
 	})
+
+	// Try to bring up a CXO publisher. Failure is non-fatal — the
+	// store and HTTP /stats/* endpoints work without it; subscribers
+	// just don't get push updates. Publisher feed PK is the visor's
+	// own PK (one identity per node).
+	pub, sink := buildStatsPublisher(v, log)
+	if pub != nil {
+		if err := seedSinkFromStore(store, sink, publishWindow, log); err != nil {
+			log.WithError(err).Warn("Stats: hydrating CXO publisher from bbolt failed")
+		}
+		tracker.SetSink(sink)
+	}
 
 	tracker.Run(v.ctx)
 	v.statsTracker = tracker
 	v.pushCloseStack("stats", func() error {
-		return tracker.Close()
+		err := tracker.Close()
+		if pub != nil {
+			if perr := pub.Close(); perr != nil && err == nil {
+				err = perr
+			}
+		}
+		return err
 	})
 
 	// Wire the store into the log server so /stats/* handlers can
@@ -68,8 +90,63 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 		lsAPI.SetStatsReader(tracker.Store())
 	}
 
-	log.WithField("path", path).Info("Stats: telemetry store running")
+	log.WithField("path", path).WithField("cxo", pub != nil).Info("Stats: telemetry store running")
 	return nil
+}
+
+// buildStatsPublisher constructs the visor's CXO publisher feed for
+// telemetry. Returns (nil, nil) when DMSG isn't available — the rest
+// of the stats subsystem still runs, just without push.
+func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, stats.Sink) {
+	if v.dmsgC == nil {
+		log.Debug("Stats: dmsg client absent; CXO publisher not started")
+		return nil, nil
+	}
+	dataDir := filepath.Join(v.conf.LocalPath, "cxo-stats")
+	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
+		BatchWindow: 1 * time.Second,
+		Logger:      log,
+		DataDir:     dataDir,
+	})
+	if err != nil {
+		log.WithError(err).Warn("Stats: CXO publisher init failed; continuing without push")
+		return nil, nil
+	}
+	log.WithField("feed_pk", pub.Feed()).WithField("data_dir", dataDir).
+		Info("Stats: CXO publisher running")
+	return pub, &cxoSink{pub: pub, log: log}
+}
+
+// seedSinkFromStore copies the in-window slice of bbolt state into
+// the freshly-initialised publisher so cold subscribers see the full
+// rolling window from the first connect, not just data sampled after
+// the visor restarted.
+func seedSinkFromStore(store *stats.Store, sink stats.Sink, publishWindowDays int, log *logging.Logger) error {
+	pushed, err := stats.HydrateSink(store, sink, publishWindowDays, time.Now())
+	if err != nil {
+		return err
+	}
+	log.WithField("paths", pushed).Debug("Stats: hydrated CXO publisher from bbolt")
+	return nil
+}
+
+// cxoSink adapts a treestore.Publisher to the stats.Sink contract.
+// Errors are logged at debug level — sink mirroring is best-effort.
+type cxoSink struct {
+	pub *treestore.Publisher
+	log *logging.Logger
+}
+
+func (s *cxoSink) Put(path string, value []byte) {
+	if err := s.pub.Put(path, value); err != nil {
+		s.log.WithError(err).WithField("path", path).Debug("Stats: CXO Put failed")
+	}
+}
+
+func (s *cxoSink) Delete(path string) {
+	if err := s.pub.Delete(path); err != nil {
+		s.log.WithError(err).WithField("path", path).Debug("Stats: CXO Delete failed")
+	}
 }
 
 func statsPath(v *Visor, conf *visorconfig.Stats) string {
@@ -91,6 +168,13 @@ func retentionDays(conf *visorconfig.Stats) int {
 		return defaultStatsRetentionDays
 	}
 	return conf.RetentionDays
+}
+
+func publishWindowDays(conf *visorconfig.Stats) int {
+	if conf == nil || conf.CXOPublishWindow == 0 {
+		return defaultCXOPublishWindow
+	}
+	return conf.CXOPublishWindow
 }
 
 // transportsProbe returns a closure that snapshots the visor's live
