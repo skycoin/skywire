@@ -27,7 +27,6 @@ func init() {
 	proxyPort = cmdutil.SkyenvUint("${PROXYPORT:-4445}", dwcfg)
 	addProxy = cmdutil.SkyenvString("${ADDPROXY}", dwcfg)
 	resolveDmsgAddr = cmdutil.SkyenvStringSlice("${RESOLVEPK[@]}", dwcfg)
-	rawTCP = cmdutil.SkyenvBoolSlice("${RAWTCP[@]:-false}", dwcfg)
 	if os.Getenv("DMSGWEBSK") != "" {
 		sk.Set(os.Getenv("DMSGWEBSK")) //nolint
 	}
@@ -41,9 +40,8 @@ func init() {
 	RootCmd.Flags().UintVarP(&proxyPort, "socks", "q", proxyPort, "port to serve the socks5 proxy\033[0m\n\r")
 	RootCmd.Flags().StringVarP(&addProxy, "addproxy", "r", addProxy, "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)\033[0m\n\r")
 	RootCmd.Flags().UintSliceVarP(&webPort, "port", "p", webPort, "port(s) to serve the web application\033[0m\n\r")
-	RootCmd.Flags().StringSliceVarP(&resolveDmsgAddr, "resolve", "t", resolveDmsgAddr, "resolve the specified dmsg address:port on the local port & disable proxy\033[0m\n\r")
+	RootCmd.Flags().StringSliceVarP(&resolveDmsgAddr, "resolve", "t", resolveDmsgAddr, "resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy\033[0m\n\r")
 	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "connect to DMSG via proxy (i.e. '127.0.0.1:1080')\033[0m\n\r")
-	RootCmd.Flags().BoolSliceVarP(&rawTCP, "rt", "c", rawTCP, "proxy to local port as raw TCP, comma separated\033[0m\n\r")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
 	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file\033[0m\n\r")
@@ -120,13 +118,6 @@ dmsgweb conf file detected: ` + dwcfg
 			seenWebPort[item] = true
 		}
 
-		if len(rawTCP) < len(resolveDmsgAddr) {
-			for len(rawTCP) < len(resolveDmsgAddr) {
-				rawTCP = append(rawTCP, false)
-			}
-		} else if len(rawTCP) > len(resolveDmsgAddr) {
-			rawTCP = rawTCP[:len(resolveDmsgAddr)]
-		}
 		if len(webPort) == 0 {
 			dlog.Fatal("webPort is empty. Ensure at least one port is specified.")
 		}
@@ -186,7 +177,6 @@ dmsgweb conf file detected: ` + dwcfg
 			ProxyPort:     proxyPort,
 			ResolveAddr:   targets,
 			UpstreamSOCKS: addProxy,
-			RawTCP:        rawTCP,
 		}
 		if err := dmsgweb.Run(ctx, dlog, dmsgC, cfg); err != nil && err != context.Canceled {
 			dlog.WithError(err).Error("dmsgweb runtime stopped")
