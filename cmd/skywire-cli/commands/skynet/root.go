@@ -25,7 +25,6 @@ var (
 	remotePort    int
 	remotePk      string
 	localPort     int
-	rawTCP        bool
 	clientAppPort uint16
 	useInternal   bool
 	useExternal   bool
@@ -43,7 +42,6 @@ func init() {
 	startCmd.Flags().StringVarP(&remotePk, "pk", "k", "", "remote server public key")
 	startCmd.Flags().IntVarP(&remotePort, "remote", "r", 0, "remote port to forward")
 	startCmd.Flags().IntVarP(&localPort, "local", "l", 0, "local port to listen on")
-	startCmd.Flags().BoolVar(&rawTCP, "raw-tcp", false, "use raw TCP forwarding instead of HTTP")
 	startCmd.Flags().Uint16Var(&clientAppPort, "port", 0, "routing port for communication between app and visor")
 	startCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
@@ -115,10 +113,6 @@ var startCmd = &cobra.Command{
 			"--srv":    remotePk,
 			"--remote": fmt.Sprintf("%d", remotePort),
 			"--local":  fmt.Sprintf("%d", localPort),
-		}
-
-		if rawTCP {
-			arguments["--raw-tcp"] = "true"
 		}
 
 		if clientAppPort != 0 {
