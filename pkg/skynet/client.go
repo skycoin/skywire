@@ -20,7 +20,6 @@ type Client struct {
 	remotePK    cipher.PubKey
 	remotePort  int
 	localPort   int
-	rawTCP      bool
 	remoteConn  net.Conn
 	localLis    net.Listener
 	mu          sync.RWMutex
@@ -30,13 +29,12 @@ type Client struct {
 }
 
 // NewClient creates a new skynet client
-func NewClient(log logrus.FieldLogger, remotePK cipher.PubKey, remotePort, localPort int, rawTCP bool) *Client {
+func NewClient(log logrus.FieldLogger, remotePK cipher.PubKey, remotePort, localPort int) *Client {
 	return &Client{
 		log:        log,
 		remotePK:   remotePK,
 		remotePort: remotePort,
 		localPort:  localPort,
-		rawTCP:     rawTCP,
 		closeCh:    make(chan struct{}),
 	}
 }
@@ -55,10 +53,7 @@ func (c *Client) Connect(remoteConn net.Conn) error {
 	c.log.Debug("Received ready signal from server")
 
 	// Send connection request
-	msg := clientMsg{
-		Port:   c.remotePort,
-		RawTCP: c.rawTCP,
-	}
+	msg := clientMsg{Port: c.remotePort}
 
 	data, err := json.Marshal(msg)
 	if err != nil {
@@ -69,7 +64,7 @@ func (c *Client) Connect(remoteConn net.Conn) error {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 
-	c.log.Debugf("Sent connection request for port %d (raw_tcp=%v)", c.remotePort, c.rawTCP)
+	c.log.Debugf("Sent connection request for port %d", c.remotePort)
 
 	// Read response
 	buf := make([]byte, 32*1024)
@@ -93,7 +88,6 @@ func (c *Client) Connect(remoteConn net.Conn) error {
 
 // Serve starts accepting local connections and forwarding to remote
 func (c *Client) Serve() error {
-	// Listen on local port
 	addr := fmt.Sprintf("127.0.0.1:%d", c.localPort)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -106,38 +100,7 @@ func (c *Client) Serve() error {
 
 	c.log.Infof("Listening on %s, forwarding to remote port %d", addr, c.remotePort)
 
-	if c.rawTCP {
-		// For raw TCP, we forward bidirectionally on the existing connection
-		return c.forwardRawTCP()
-	}
-
-	// For HTTP mode, accept local connections and forward requests
-	for {
-		select {
-		case <-c.closeCh:
-			return nil
-		default:
-		}
-
-		conn, err := lis.Accept()
-		if err != nil {
-			select {
-			case <-c.closeCh:
-				return nil
-			default:
-				if !errors.Is(err, net.ErrClosed) {
-					c.log.WithError(err).Error("Failed to accept connection")
-				}
-				return err
-			}
-		}
-
-		c.activeConns.Add(1)
-		go func(localConn net.Conn) {
-			defer c.activeConns.Done()
-			c.handleLocalConn(localConn)
-		}(conn)
-	}
+	return c.forwardRawTCP()
 }
 
 func (c *Client) forwardRawTCP() error {
@@ -146,7 +109,6 @@ func (c *Client) forwardRawTCP() error {
 	localLis := c.localLis
 	c.mu.RUnlock()
 
-	// Accept one local connection and forward
 	conn, err := localLis.Accept()
 	if err != nil {
 		return err
@@ -173,7 +135,6 @@ func (c *Client) forwardRawTCP() error {
 		done <- struct{}{}
 	}()
 
-	// Wait for one direction to finish
 	select {
 	case <-done:
 	case <-c.closeCh:
@@ -181,54 +142,6 @@ func (c *Client) forwardRawTCP() error {
 
 	c.log.Debug("Raw TCP forwarding completed")
 	return nil
-}
-
-func (c *Client) handleLocalConn(localConn net.Conn) {
-	defer func() { _ = localConn.Close() }() //nolint:errcheck
-
-	c.mu.RLock()
-	remoteConn := c.remoteConn
-	c.mu.RUnlock()
-
-	// Read from local, forward to remote
-	buf := make([]byte, 32*1024)
-	n, err := localConn.Read(buf)
-	if err != nil {
-		if !errors.Is(err, io.EOF) {
-			c.log.WithError(err).Debug("Failed to read from local")
-		}
-		return
-	}
-
-	// Forward to remote
-	if _, err := remoteConn.Write(buf[:n]); err != nil {
-		c.log.WithError(err).Error("Failed to write to remote")
-		return
-	}
-
-	// Read response from remote
-	respBuf := make([]byte, 64*1024)
-	total := 0
-	for {
-		_ = remoteConn.SetReadDeadline(timeoutAfter(DefaultReadTimeout)) //nolint:errcheck,gosec
-		rn, err := remoteConn.Read(respBuf[total:])
-		if err != nil {
-			if !errors.Is(err, io.EOF) && !isTimeout(err) {
-				c.log.WithError(err).Debug("Failed to read from remote")
-			}
-			break
-		}
-		total += rn
-		if total >= len(respBuf) {
-			break
-		}
-	}
-
-	if total > 0 {
-		if _, err := localConn.Write(respBuf[:total]); err != nil {
-			c.log.WithError(err).Error("Failed to write response to local")
-		}
-	}
 }
 
 // Close stops the client
@@ -268,9 +181,4 @@ func (c *Client) RemotePort() int {
 // LocalPort returns the local port
 func (c *Client) LocalPort() int {
 	return c.localPort
-}
-
-// RawTCP returns whether using raw TCP mode
-func (c *Client) RawTCP() bool {
-	return c.rawTCP
 }
