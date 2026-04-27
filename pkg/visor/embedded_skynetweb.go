@@ -29,12 +29,9 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// Defaults — chosen to not clash with DmsgWeb's defaults (4445/8080)
-// so both resolvers can run side by side.
-const (
-	defaultSkynetWebProxyPort = 4446
-	defaultSkynetWebPort      = 8081
-)
+// Default SOCKS5 listener port — chosen so it doesn't clash with
+// dmsgweb's default (4445) and both resolvers can run side by side.
+const defaultSkynetWebProxyPort = 4446
 
 // EmbeddedSkynetWeb holds the runtime state for the visor-hosted
 // skynetweb resolver.

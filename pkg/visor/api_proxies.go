@@ -163,7 +163,6 @@ func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *Em
 		Enabled:       cfg.Enable,
 		DomainSuffix:  stringOrDefault(cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),
 		SocksAddr:     localSocksAddr(true, uintOrDefault(cfg.ProxyPort, defaultDmsgWebProxyPort)),
-		WebAddr:       localWebAddr(true, uintOrDefault(cfg.WebPort, defaultDmsgWebPort)),
 		UpstreamSOCKS: cfg.UpstreamSOCKS,
 	}
 	if runtime != nil {
@@ -218,22 +217,15 @@ func (v *Visor) autoStartSkynetWeb() {
 	}
 }
 
-// localSocksAddr / localWebAddr return the fully-qualified localhost
-// listener or empty when disabled. The render layer uses empty as a
-// signal to display "—".
+// localSocksAddr returns the fully-qualified localhost listener or
+// empty when disabled. The render layer uses empty as a signal to
+// display "—".
 //
 // Why condition on `enabled` even when ports are set: a user who
 // disabled a resolver via RPC but left the config untouched shouldn't
 // see its port advertised. Enabled reflects the current config, not
 // the live Running state, so it's the right signal here.
 func localSocksAddr(enabled bool, port uint) string {
-	if !enabled || port == 0 {
-		return ""
-	}
-	return fmt.Sprintf("127.0.0.1:%d", port)
-}
-
-func localWebAddr(enabled bool, port uint) string {
 	if !enabled || port == 0 {
 		return ""
 	}

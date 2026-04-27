@@ -7,19 +7,16 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"sync"
-	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -32,7 +29,6 @@ func init() {
 	dmsgPort = cmdutil.SkyenvUintSlice("${DMSGPORT[@]:-80}", dwscfg)
 	wl = cmdutil.SkyenvStringSlice("${WHITELISTPKS[@]}", dwscfg)
 	localPort = cmdutil.SkyenvUintSlice("${LOCALPORT[@]:-8086}", dwscfg)
-	rawTCP = cmdutil.SkyenvBoolSlice("${RAWTCP[@]:-false}", dwscfg)
 	if os.Getenv("DMSGWEBSRVSK") != "" {
 		sk.Set(os.Getenv("DMSGWEBSRVSK")) //nolint
 	}
@@ -52,12 +48,6 @@ func init() {
 		return ""
 	}())
 	srvCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", proxyAddr, "connect to DMSG via proxy (e.g., '127.0.0.1:1080')")
-	srvCmd.Flags().BoolSliceVarP(&rawTCP, "rt", "c", rawTCP, "proxy local port as raw TCP, comma separated"+func() string {
-		if len(rawTCP) > 0 {
-			return "\033[0m\n\r"
-		}
-		return ""
-	}())
 	srvCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
 	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
 	srvCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
@@ -68,8 +58,10 @@ func init() {
 
 var srvCmd = &cobra.Command{
 	Use:   "srv",
-	Short: "Serve HTTP or raw TCP from local port over DMSG",
-	Long: `DMSG web server - serve HTTP or raw TCP interface from local port over DMSG` + func() string {
+	Short: "Serve a local TCP port over DMSG",
+	Long: `DMSG web server - tunnel a local TCP port over DMSG. Bytes flow
+transparently, so HTTP, WebSockets, and any other TCP-based protocol
+the local service speaks all work unchanged.` + func() string {
 		if _, err := os.Stat(dwscfg); err == nil {
 			return "\n\t.dmsenv file detected: " + dwscfg
 		}
@@ -91,8 +83,8 @@ var srvCmd = &cobra.Command{
 			dlog.WithError(err).Fatal("Failed to read specified dmsghttp-config")
 		}
 
-		if len(localPort) != len(dmsgPort) || len(localPort) != len(rawTCP) {
-			dlog.Fatal("The number of local ports, DMSG ports, and raw TCP bools must be the same")
+		if len(localPort) != len(dmsgPort) {
+			dlog.Fatal("The number of local ports and DMSG ports must be the same")
 		}
 		pk, err = sk.PubKey()
 		if err != nil {
@@ -152,68 +144,28 @@ func server() {
 			dlog.Fatalf("Error listening on DMSG port %d: %v", dmsgPort[i], err)
 		}
 		wg.Add(1)
-		go func(ctx context.Context, localPort uint, rawTCP bool, listener net.Listener) {
+		go func(ctx context.Context, localPort uint, listener net.Listener) {
 			defer wg.Done()
 			defer listener.Close() //nolint
-
-			if rawTCP {
-				proxyTCPConnections(ctx, localPort, listener)
-			} else {
-				proxyHTTPConnections(ctx, localPort, listener)
-			}
-		}(ctx, localPort[i], rawTCP[i], lis)
+			proxyTCPConnections(ctx, localPort, listener)
+		}(ctx, localPort[i], lis)
 	}
 	wg.Wait()
 }
 
-func proxyHTTPConnections(ctx context.Context, localPort uint, listener net.Listener) {
-	router := gin.New()
-	router.Use(gin.Recovery())
-	router.Use(loggingMiddleware())
-
-	authRoute := router.Group("/")
-	if len(wlkeys) > 0 {
-		authRoute.Use(whitelistAuth(wlkeys))
-	}
-	authRoute.Any("/*path", func(c *gin.Context) {
-		targetURL := fmt.Sprintf("http://127.0.0.1:%d%s?%s", localPort, c.Request.URL.Path, c.Request.URL.RawQuery)
-		parsed, err := url.Parse(targetURL)
-		if err != nil {
-			dlog.Errorf("failed to parse target URL %q: %v", targetURL, err)
-			c.String(http.StatusInternalServerError, "Bad target URL")
-			return
-		}
-		proxy := httputil.ReverseProxy{Director: func(req *http.Request) {
-			req.URL = parsed
-			req.Host = req.URL.Host
-		}}
-		proxy.ServeHTTP(c.Writer, c.Request)
-	})
-
-	server := &http.Server{
-		Handler:           router,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		MaxHeaderBytes:    1 << 20,
-	}
-
-	// Graceful shutdown on context cancellation
-	go func() { //nolint:gosec
-		<-ctx.Done()
-		if err := server.Shutdown(context.Background()); err != nil {
-			dlog.Errorf("HTTP server shutdown error: %v", err)
-		}
-	}()
-
-	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-		dlog.Fatalf("HTTP server error: %v", err)
-	}
-}
-
 // maxTCPConns is the maximum number of concurrent TCP proxy connections.
 const maxTCPConns = 256
+
+// peerPK extracts the remote dmsg public key from an accepted listener
+// connection so the whitelist check can run before any local TCP dial.
+// Returns the zero PubKey if the connection isn't a dmsg.Stream — the
+// caller treats that as "not whitelisted" when wlkeys is non-empty.
+func peerPK(c net.Conn) cipher.PubKey {
+	if s, ok := c.(*dmsg.Stream); ok {
+		return s.RawRemoteAddr().PK
+	}
+	return cipher.PubKey{}
+}
 
 func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Listener) {
 	// To track active connections for cleanup
@@ -290,6 +242,26 @@ func proxyTCPConnections(ctx context.Context, localPort uint, listener net.Liste
 						dlog.WithError(err).Debug("Error closing dmsg connection")
 					}
 				}()
+
+				// PK whitelist enforcement. Non-dmsg conns and unknown
+				// PKs are rejected when a whitelist is configured.
+				if len(wlkeys) > 0 {
+					remotePK := peerPK(dmsgConn)
+					allowed := false
+					for _, pk := range wlkeys {
+						if pk == remotePK {
+							allowed = true
+							break
+						}
+					}
+					if !allowed {
+						dlog.WithField("remote_pk", remotePK.String()).Debug("Rejecting connection from non-whitelisted PK")
+						connMutex.Lock()
+						delete(activeConns, dmsgConn)
+						connMutex.Unlock()
+						return
+					}
+				}
 
 				localConn, err := net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", localPort))
 				if err != nil {
