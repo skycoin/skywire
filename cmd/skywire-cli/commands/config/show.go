@@ -39,20 +39,18 @@ Use --path to print just the config file path.`,
 	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		if showPath {
-			// Try RPC first to get the actual path the visor is using
+			// Ask the running visor for the path it actually loaded.
+			// Falls back to the default install path only when no visor
+			// is reachable (CLI invoked without a running visor).
 			rpcClient, err := clirpc.Client(cmd.Flags())
 			if err != nil {
-				// Fallback: print the default config path
 				fmt.Println(visorconfig.SkywireConfig())
 				return
 			}
-			// GetRuntimeConfig returns the full config; we parse it for the path
-			// But we don't actually have a path RPC. Use VisorConfigFile if available.
-			configPath := visorconfig.VisorConfigFile
-			if configPath == "" || configPath == visorconfig.Stdin {
+			configPath, err := rpcClient.GetConfigPath()
+			if err != nil || configPath == "" {
 				configPath = visorconfig.SkywireConfig()
 			}
-			_ = rpcClient // used to verify visor is running
 			fmt.Println(configPath)
 			return
 		}

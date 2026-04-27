@@ -524,6 +524,13 @@ func (rc *rpcClient) GetRuntimeConfig() ([]byte, error) {
 	return out, err
 }
 
+// GetConfigPath implements API.
+func (rc *rpcClient) GetConfigPath() (string, error) {
+	var out string
+	err := rc.Call("GetConfigPath", &struct{}{}, &out)
+	return out, err
+}
+
 // StartPublicAutoconnect implements API.
 func (rc *rpcClient) StartPublicAutoconnect() error {
 	return rc.Call("StartPublicAutoconnect", &struct{}{}, &struct{}{})

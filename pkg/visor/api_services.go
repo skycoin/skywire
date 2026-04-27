@@ -542,6 +542,13 @@ func (v *Visor) GetRuntimeConfig() ([]byte, error) {
 	return json.MarshalIndent(v.conf, "", "  ")
 }
 
+// GetConfigPath returns the filesystem path the visor loaded its config
+// from. Returns "stdin" when the config was read from stdin or supplied
+// via --config-arg; returns an empty string if the path was never set.
+func (v *Visor) GetConfigPath() (string, error) {
+	return visorconfig.VisorConfigFile, nil
+}
+
 // PublicAutoconnectStatus returns whether public autoconnect is currently running
 func (v *Visor) PublicAutoconnectStatus() (bool, error) {
 	return v.IsPublicAutoconnectRunning(), nil
