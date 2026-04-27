@@ -3,8 +3,6 @@
 package visor
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -346,7 +344,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		sendError(log, remoteConn, err)
 		return
 	}
-	log.Debugf("Received ClientMsg: port=%d raw_tcp=%v (raw JSON: %s)", cMsg.Port, cMsg.RawTCP, string(buf[:n]))
+	log.Debugf("Received ClientMsg: port=%d (raw JSON: %s)", cMsg.Port, string(buf[:n]))
 
 	// First check the service registry — this is the preferred path
 	// that dispatches directly to the handler without a localhost
@@ -355,7 +353,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	// user-managed forwarded ports).
 	if cMsg.Port > 0 && cMsg.Port <= 65535 {
 		if handler, ok := v.services.Get(uint16(cMsg.Port)); ok { //nolint:gosec
-			log.Debugf("Dispatching port %v via service registry (raw_tcp=%v)", cMsg.Port, cMsg.RawTCP)
+			log.Debugf("Dispatching port %v via service registry", cMsg.Port)
 			sendError(log, remoteConn, nil)
 			go func() {
 				defer func() {
@@ -386,7 +384,7 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		return
 	}
 
-	log.Debugf("Forwarding %s via localhost TCP (raw_tcp=%v)", lHost, cMsg.RawTCP)
+	log.Debugf("Forwarding %s via localhost TCP", lHost)
 
 	// send nil error to indicate to the remote connection that everything is ok
 	sendError(log, remoteConn, nil)
@@ -397,19 +395,8 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 				log.Errorf("Panic in forward handler: %v", r)
 			}
 		}()
-		forward(log, remoteConn, lHost, cMsg.RawTCP)
-	}()
-}
-
-// forward proxies data between remoteConn (the skywire connection) and a local server.
-// When rawTCP is true, it uses bidirectional io.Copy for raw TCP proxying.
-// When rawTCP is false, it reads HTTP requests and forwards them to the local server.
-func forward(log *logging.Logger, remoteConn net.Conn, lHost string, rawTCP bool) {
-	if rawTCP {
 		forwardRawTCP(log, remoteConn, lHost)
-		return
-	}
-	forwardHTTP(log, remoteConn, lHost)
+	}()
 }
 
 // forwardRawTCP does bidirectional raw TCP proxying using io.Copy
@@ -445,42 +432,6 @@ func forwardRawTCP(log *logging.Logger, remoteConn net.Conn, lHost string) {
 	<-done
 }
 
-// forwardHTTP reads HTTP requests from remoteConn and forwards them to the local server
-func forwardHTTP(log *logging.Logger, remoteConn net.Conn, lHost string) {
-	for {
-		buf := make([]byte, 32*1024)
-		n, err := remoteConn.Read(buf)
-		if err != nil {
-			log.WithError(err).Error("Failed to read packet")
-			closeConn(log, remoteConn)
-			return
-		}
-		req, err := http.ReadRequest(bufio.NewReader(bytes.NewBuffer(buf[:n])))
-		if err != nil {
-			log.WithError(err).Error("Failed to ReadRequest")
-			closeConn(log, remoteConn)
-			return
-		}
-		req.RequestURI = ""
-		req.URL.Scheme = "http"
-		req.URL.Host = lHost
-		client := http.Client{}
-		resp, err := client.Do(req) //nolint:gosec
-		if err != nil {
-			log.WithError(err).Error("Failed to Do req")
-			closeConn(log, remoteConn)
-			return
-		}
-		err = resp.Write(remoteConn)
-		resp.Body.Close() //nolint:errcheck,gosec
-		if err != nil {
-			log.WithError(err).Error("Failed to Write")
-			closeConn(log, remoteConn)
-			return
-		}
-	}
-}
-
 func sendError(log *logging.Logger, remoteConn net.Conn, sendErr error) {
 	var sReply serverReply
 	if sendErr != nil {
@@ -514,8 +465,7 @@ func closeConn(log *logging.Logger, conn net.Conn) {
 }
 
 type clientMsg struct {
-	Port   int  `json:"port"`
-	RawTCP bool `json:"raw_tcp,omitempty"`
+	Port int `json:"port"`
 }
 
 type serverReply struct {

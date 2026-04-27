@@ -33,8 +33,6 @@ var (
 	remotePort int
 	// localPort is the local port to listen on
 	localPort int
-	// rawTCP enables raw TCP forwarding instead of HTTP
-	rawTCP bool
 	// appPort is the routing port for the app
 	appPort uint16
 )
@@ -44,7 +42,6 @@ func init() {
 	RootCmd.Flags().StringVar(&srv, "srv", "", "remote server public key")
 	RootCmd.Flags().IntVar(&remotePort, "remote", 0, "remote port to forward")
 	RootCmd.Flags().IntVar(&localPort, "local", 0, "local port to listen on")
-	RootCmd.Flags().BoolVar(&rawTCP, "raw-tcp", false, "use raw TCP forwarding instead of HTTP")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
@@ -74,7 +71,6 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.StringVar(&srv, "srv", "", "remote server public key")
 		fs.IntVar(&remotePort, "remote", 0, "remote port")
 		fs.IntVar(&localPort, "local", 0, "local port")
-		fs.BoolVar(&rawTCP, "raw-tcp", false, "raw TCP mode")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
@@ -111,8 +107,8 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		return err
 	}
 
-	appCl.Log().Infof("Connecting to %s:%d, forwarding to localhost:%d (raw_tcp=%v)",
-		remotePK.Hex()[:16], remotePort, localPort, rawTCP)
+	appCl.Log().Infof("Connecting to %s:%d, forwarding to localhost:%d",
+		remotePK.Hex()[:16], remotePort, localPort)
 
 	// Set routing port if specified
 	if appPort != 0 {
@@ -139,7 +135,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	}
 
 	// Create client
-	client := skynet.NewClient(appCl.Log(), remotePK, remotePort, localPort, rawTCP)
+	client := skynet.NewClient(appCl.Log(), remotePK, remotePort, localPort)
 
 	// Connect (send request to server)
 	if err := client.Connect(conn); err != nil {

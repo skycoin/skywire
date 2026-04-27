@@ -601,8 +601,8 @@ func (v *Visor) Close() error {
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
 
-	// Cleanly close ongoing forward conns
-	for _, forwardConn := range appnet.GetAllForwardConns() {
+	// Cleanly close ongoing raw TCP forward conns
+	for _, forwardConn := range appnet.GetAllRawTCPForwardConns() {
 		err := forwardConn.Close()
 		if err != nil {
 			log.WithError(err).Warn("Forward conn stopped with unexpected result.")
