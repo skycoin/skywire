@@ -43,9 +43,10 @@ func init() {
 }
 
 var portCmd = &cobra.Command{
-	Use:   "port",
-	Short: "Manage forwarded ports",
-	Long:  "List, add, and remove ports forwarded over skynet and/or DMSG.",
+	Use:        "port",
+	Short:      "Manage forwarded ports (deprecated; use `cli serve`)",
+	Long:       "Deprecated. Use `skywire cli serve` instead.\n\nList, add, and remove ports forwarded over skynet and/or DMSG.",
+	Deprecated: "use `skywire cli serve` instead",
 }
 
 var portLsCmd = &cobra.Command{
