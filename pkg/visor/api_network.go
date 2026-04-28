@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"sync"
@@ -22,6 +23,38 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
+// buildReverseProxy returns a *httputil.ReverseProxy targeting the local
+// app at `target`. Behaviors beyond NewSingleHostReverseProxy:
+//
+//   - Host header is rewritten to the backend's host so apps that
+//     verify the Host header accept the request.
+//   - Origin header (when present) is rewritten to the backend's URL so
+//     WebSocket upgrades through the visor's port-80 reverse proxy
+//     pass same-origin checks. Without this, audioprism and any other
+//     app that rejects cross-origin WS handshakes silently fail their
+//     audio/data channel even though the WASM/HTML loaded fine.
+//   - ErrorHandler logs reverse-proxy and upgrade failures so the
+//     symptom isn't a silently broken WS connection.
+func buildReverseProxy(log *logging.Logger, target *url.URL) *httputil.ReverseProxy {
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(target)
+			r.Out.Host = target.Host
+			if r.In.Header.Get("Origin") != "" {
+				r.Out.Header.Set("Origin", target.Scheme+"://"+target.Host)
+			}
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			log.WithError(err).
+				WithField("path", r.URL.Path).
+				WithField("upgrade", r.Header.Get("Upgrade")).
+				Warn("port-80 reverse proxy: backend error")
+			w.WriteHeader(http.StatusBadGateway)
+		},
+	}
+	return proxy
+}
 
 // refreshWebsiteHandler (re)applies the right website handler to the
 // dmsghttp logserver based on current config + forwarded-port state.
@@ -76,7 +109,7 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 				return
 			}
 			log.WithField("addr", addr).Info("Reverse-proxying custom website (port 80)")
-			lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
+			lsAPI.SetWebsiteHandler(buildReverseProxy(log, target))
 			return
 		}
 	}
