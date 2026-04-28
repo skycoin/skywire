@@ -38,6 +38,13 @@ const (
 	defaultUDPPort          = "30178"
 	// UDPDelBindMessage is used as a deletebind packet on visor shutdown.
 	UDPDelBindMessage = "delBind"
+	// sudphReconnectInitialBackoff is the initial sleep before the first
+	// retry after a SUDPH connection to AR dies. Doubles on each failed
+	// attempt up to sudphReconnectMaxBackoff.
+	sudphReconnectInitialBackoff = 2 * time.Second
+	// sudphReconnectMaxBackoff caps the reconnect sleep so a long AR
+	// outage doesn't push the retry interval out indefinitely.
+	sudphReconnectMaxBackoff = 60 * time.Second
 )
 
 var (
@@ -333,40 +340,76 @@ func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 type Handshake func(net.Conn) (net.Conn, error)
 
 func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-chan RemoteVisor, error) {
-	log := c.log.WithField("func", "httpClient.BindSUDPR")
+	log := c.log.WithField("func", "httpClient.BindSUDPH")
 	if !c.isReady() {
-		log.Debug("BindSUDPR: Address resolver is not ready yet, waiting...")
+		log.Debug("BindSUDPH: Address resolver is not ready yet, waiting...")
 		<-c.ready
-		log.Debug("BindSUDPR: Address resolver became ready, binding")
+		log.Debug("BindSUDPH: Address resolver became ready, binding")
 	}
 
-	rAddr, err := net.ResolveUDPAddr("udp", c.remoteUDPAddr)
+	// First connect must succeed for the caller to consider SUDPH initialized;
+	// surface dial / handshake / register failure synchronously.
+	arConn, localAddresses, err := c.connectSUDPH(filter, hs)
 	if err != nil {
 		return nil, err
 	}
 
-	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
+	c.sudphArConn = arConn
+	c.sudphLocalAddr = localAddresses
+
+	// addrCh is the long-lived channel returned to the caller. It survives
+	// individual arConn instances; reconnects do not close it. It is closed
+	// exactly once, on shutdown, by serveSUDPHReconnect's defer.
+	addrCh := make(chan RemoteVisor, addrChSize)
+
+	// Single delBindSUDPH goroutine for the lifetime of the client. It
+	// blocks until c.closed fires, then writes the unbind packet on
+	// whichever arConn is current at that moment.
+	c.delBindSudphWg.Add(1)
+	go c.delBindSUDPHLoop()
+
+	go c.serveSUDPHReconnect(filter, hs, arConn, addrCh)
+
+	return addrCh, nil
+}
+
+// connectSUDPH establishes a fresh KCP+handshake session with the AR's UDP
+// listener and posts the initial register payload. Called once on initial
+// BindSUDPH and again on every reconnect attempt.
+//
+// The underlying packet listener (c.sudphConn) is created on the first call
+// and reused across reconnects so the local UDP port stays stable — both
+// for AR's record of our public address and for any remote visors that
+// already received our (PK, port) tuple via Resolve.
+func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (net.Conn, LocalAddresses, error) {
+	rAddr, err := net.ResolveUDPAddr("udp", c.remoteUDPAddr)
+	if err != nil {
+		return nil, LocalAddresses{}, err
+	}
+
+	if c.sudphConn == nil {
+		c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
+	}
 
 	_, localPort, err := net.SplitHostPort(c.sudphConn.LocalAddr().String())
 	if err != nil {
-		return nil, err
+		return nil, LocalAddresses{}, err
 	}
 
-	log.Debugf("SUDPH Local port: %v", localPort)
 	kcpConn, err := kcp.NewConn(c.remoteUDPAddr, nil, 0, 0, c.sudphConn)
 	if err != nil {
-		return nil, err
+		return nil, LocalAddresses{}, err
 	}
 	arConn, err := hs(kcpConn)
 	if err != nil {
 		kcpConn.Close() //nolint:errcheck,gosec
-		return nil, err
+		return nil, LocalAddresses{}, err
 	}
 
 	addresses, err := netutil.LocalAddresses()
 	if err != nil {
 		arConn.Close() //nolint:errcheck,gosec
-		return nil, err
+		return nil, LocalAddresses{}, err
 	}
 
 	localAddresses := LocalAddresses{
@@ -377,39 +420,102 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 	laData, err := json.Marshal(localAddresses)
 	if err != nil {
 		arConn.Close() //nolint:errcheck,gosec
-		return nil, err
+		return nil, LocalAddresses{}, err
 	}
 
 	if _, err := arConn.Write(laData); err != nil {
 		arConn.Close() //nolint:errcheck,gosec
-		return nil, err
+		return nil, LocalAddresses{}, err
 	}
 
-	// Store for re-registration
-	c.sudphArConn = arConn
-	c.sudphLocalAddr = localAddresses
+	return arConn, localAddresses, nil
+}
 
-	addrCh := c.readSUDPHMessages(arConn)
+// serveSUDPHReconnect runs the per-connection loops (heartbeat / re-register /
+// read-and-forward) over arConn and reconnects with backoff when the
+// connection dies. The supplied addrCh is held across reconnects so callers
+// see a single channel that survives transient AR outages, network blips,
+// or KCP session resets. Without this loop, any of those events would
+// silently exit the per-connection goroutines, leaving the visor unreachable
+// via SUDPH until it was restarted.
+func (c *httpClient) serveSUDPHReconnect(filter *pfilter.PacketFilter, hs Handshake, arConn net.Conn, addrCh chan<- RemoteVisor) {
+	defer close(addrCh)
 
-	go func() {
-		if err := c.keepSudphHeartbeatLoop(arConn); err != nil {
-			log.WithError(err).Errorf("Failed to send UDP heartbeat packet to address-resolver")
+	backoff := sudphReconnectInitialBackoff
+	for {
+		c.serveSUDPHConn(arConn, addrCh)
+
+		if c.isClosed() {
+			return
 		}
+
+		c.log.Warn("SUDPH connection to address-resolver lost, reconnecting...")
+		var newConn net.Conn
+		var newLocalAddrs LocalAddresses
+		for {
+			select {
+			case <-c.closed:
+				return
+			case <-time.After(backoff):
+			}
+			var err error
+			newConn, newLocalAddrs, err = c.connectSUDPH(filter, hs)
+			if err == nil {
+				break
+			}
+			c.log.WithError(err).Warn("SUDPH reconnect failed, will retry")
+			backoff *= 2
+			if backoff > sudphReconnectMaxBackoff {
+				backoff = sudphReconnectMaxBackoff
+			}
+		}
+		backoff = sudphReconnectInitialBackoff
+		arConn = newConn
+		c.sudphArConn = arConn
+		c.sudphLocalAddr = newLocalAddrs
+		c.log.Info("SUDPH reconnected to address-resolver")
+	}
+}
+
+// serveSUDPHConn runs the read / heartbeat / re-register loops on arConn
+// until any of them errors (connection dead) or the client is closed.
+// Returns once all three loops have exited.
+//
+// On the connection-dead path, the first loop to exit closes arConn so the
+// other two unblock quickly (read by EOF, write by broken-pipe). On the
+// clean-shutdown path (c.closed) we leave arConn open so delBindSUDPHLoop
+// can still write the unbind packet; Close() tears down the underlying
+// packet listener afterwards, which makes the read loop exit.
+func (c *httpClient) serveSUDPHConn(arConn net.Conn, addrCh chan<- RemoteVisor) {
+	var (
+		wg           sync.WaitGroup
+		closeOnce    sync.Once
+		closeOnError = func() {
+			if c.isClosed() {
+				return
+			}
+			closeOnce.Do(func() { _ = arConn.Close() }) //nolint:errcheck
+		}
+	)
+
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		c.readSUDPHIntoChan(arConn, addrCh)
+		closeOnError()
+	}()
+	go func() {
+		defer wg.Done()
+		_ = c.keepSudphHeartbeatLoop(arConn) //nolint:errcheck
+		closeOnError()
+	}()
+	go func() {
+		defer wg.Done()
+		_ = c.sudphReRegisterLoop(arConn) //nolint:errcheck
+		closeOnError()
 	}()
 
-	go func() {
-		if err := c.sudphReRegisterLoop(arConn); err != nil {
-			log.WithError(err).Errorf("Failed to re-register SUDPH with address-resolver")
-		}
-	}()
-
-	go func() {
-		if err := c.delBindSUDPH(arConn); err != nil {
-			log.WithError(err).Errorf("Failed to send UDP unbind packet to address-resolver")
-		}
-	}()
-
-	return addrCh, nil
+	wg.Wait()
 }
 
 func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
@@ -597,45 +703,52 @@ type RemoteVisor struct {
 	Addr string
 }
 
-func (c *httpClient) readSUDPHMessages(reader io.Reader) <-chan RemoteVisor {
-	addrCh := make(chan RemoteVisor, addrChSize)
+// readSUDPHIntoChan reads framed messages from arConn and forwards parsed
+// RemoteVisor entries onto out. Unlike the previous readSUDPHMessages it
+// does NOT close out — that channel is owned by serveSUDPHReconnect and
+// outlives individual arConn instances across reconnects.
+//
+// On c.closed, a watcher goroutine forces the blocked Read to return via
+// SetReadDeadline (a closed deadline is the only reliable way to interrupt
+// a blocked KCP/yamux Read mid-call without closing the underlying conn).
+func (c *httpClient) readSUDPHIntoChan(arConn net.Conn, out chan<- RemoteVisor) {
+	done := make(chan struct{})
+	defer close(done)
 
-	go func(addrCh chan<- RemoteVisor) {
-		defer func() {
-			close(addrCh)
-		}()
-
-		buf := make([]byte, 4096)
-
-		for {
-			select {
-			case <-c.closed:
-				return
-			default:
-				n, err := reader.Read(buf)
-				if err != nil {
-					if c.isClosed() {
-						c.log.Debugf("SUDPH conn closed on shutdown message: %v", err)
-						return
-					}
-					c.log.Errorf("Failed to read SUDPH message: %v", err)
-					return
-				}
-
-				c.log.Debugf("New SUDPH message: %v", string(buf[:n]))
-
-				var remote RemoteVisor
-				if err := json.Unmarshal(buf[:n], &remote); err != nil {
-					c.log.Errorf("Failed to read unmarshal message: %v", err)
-					continue
-				}
-
-				addrCh <- remote
-			}
+	go func() {
+		select {
+		case <-c.closed:
+			_ = arConn.SetReadDeadline(time.Unix(1, 0)) //nolint:errcheck
+		case <-done:
 		}
-	}(addrCh)
+	}()
 
-	return addrCh
+	buf := make([]byte, 4096)
+	for {
+		n, err := arConn.Read(buf)
+		if err != nil {
+			if c.isClosed() {
+				c.log.Debugf("SUDPH conn closed on shutdown: %v", err)
+			} else {
+				c.log.Debugf("SUDPH read error (will reconnect): %v", err)
+			}
+			return
+		}
+
+		c.log.Debugf("New SUDPH message: %v", string(buf[:n]))
+
+		var remote RemoteVisor
+		if err := json.Unmarshal(buf[:n], &remote); err != nil {
+			c.log.Errorf("Failed to unmarshal SUDPH message: %v", err)
+			continue
+		}
+
+		select {
+		case <-c.closed:
+			return
+		case out <- remote:
+		}
+	}
 }
 
 func (c *httpClient) Close() error {
@@ -649,10 +762,14 @@ func (c *httpClient) Close() error {
 		c.sudphConn = nil
 	}()
 
+	// Signal shutdown. delBindSUDPHLoop (if BindSUDPH was called) and the
+	// per-conn read/heartbeat/re-register loops watch this. delBindSudphWg
+	// has counter 1 if BindSUDPH ran, 0 otherwise — Wait returns
+	// immediately in the latter case.
+	close(c.closed)
+	c.delBindSudphWg.Wait()
+
 	if c.sudphConn != nil {
-		c.delBindSudphWg.Add(1)
-		close(c.closed)
-		c.delBindSudphWg.Wait()
 		if err := c.sudphConn.Close(); err != nil {
 			c.log.WithError(err).Errorf("Failed to close SUDPH")
 		}
@@ -671,17 +788,22 @@ func (c *httpClient) Close() error {
 	return nil
 }
 
-// Keep NAT mapping alive.
+// Keep NAT mapping alive. Returns on c.closed (clean shutdown) or the
+// first Write error (connection dead → caller will reconnect).
 func (c *httpClient) keepSudphHeartbeatLoop(w io.Writer) error {
 	for {
 		select {
 		case <-c.closed:
 			return nil
 		default:
-			if _, err := w.Write([]byte(UDPKeepHeartbeatMessage)); err != nil {
-				return err
-			}
-			time.Sleep(udpKeepHeartbeatInterval)
+		}
+		if _, err := w.Write([]byte(UDPKeepHeartbeatMessage)); err != nil {
+			return err
+		}
+		select {
+		case <-c.closed:
+			return nil
+		case <-time.After(udpKeepHeartbeatInterval):
 		}
 	}
 }
@@ -711,17 +833,25 @@ func (c *httpClient) sudphReRegisterLoop(w io.Writer) error {
 	}
 }
 
-// delBindSUDPH unbinds SUDPH entry in address resolver.
-func (c *httpClient) delBindSUDPH(w io.Writer) error {
-	// send unbind packet on shutdown
-	<-c.closed
+// delBindSUDPHLoop is the lifetime-of-client goroutine that sends the
+// unbind packet on shutdown. It blocks until c.closed fires, then writes
+// to whichever arConn is current at that moment (which may have been
+// rotated zero or more times by the reconnect loop). A write failure here
+// is non-fatal — if the conn is dead the entry will simply expire via
+// AR's TTL instead of being deleted explicitly.
+func (c *httpClient) delBindSUDPHLoop() {
 	defer c.delBindSudphWg.Done()
-	if _, err := w.Write([]byte(UDPDelBindMessage)); err != nil {
-		return err
-	}
-	c.log.WithField("func", "httpClient.delBindSUDPH").Debugf("Deleted bind pk: %v from Address resolver successfully", c.pk.String())
+	<-c.closed
 
-	return nil
+	arConn := c.sudphArConn
+	if arConn == nil {
+		return
+	}
+	if _, err := arConn.Write([]byte(UDPDelBindMessage)); err != nil {
+		c.log.WithError(err).Debugf("Failed to send UDP unbind packet (entry will TTL out): pk=%v", c.pk.String())
+		return
+	}
+	c.log.WithField("func", "httpClient.delBindSUDPHLoop").Debugf("Deleted bind pk: %v from Address resolver successfully", c.pk.String())
 }
 
 func (c *httpClient) isClosed() bool {
