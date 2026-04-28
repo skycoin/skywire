@@ -120,18 +120,16 @@ func (m *Manager) Add(peerPK cipher.PubKey) (*Pair, error) {
 		return p, nil
 	}
 
-	ports, err := ComputePairPorts(m.myPK, peerPK)
+	port, err := ComputePairPort(m.myPK, peerPK)
 	if err != nil {
 		return nil, fmt.Errorf("pairing: Add: %w", err)
 	}
 
 	rec := Record{
-		PeerPK:         peerPK,
-		MyPort:         ports.Publisher,
-		PeerPort:       ports.Publisher, // symmetric in the current scheme
-		SubscriberPort: ports.Subscriber,
-		Status:         StatusPending,
-		EstablishedAt:  time.Now().UTC(),
+		PeerPK:        peerPK,
+		Port:          port,
+		Status:        StatusPending,
+		EstablishedAt: time.Now().UTC(),
 	}
 	if err := m.store.Put(rec); err != nil {
 		return nil, fmt.Errorf("pairing: Add: persist: %w", err)

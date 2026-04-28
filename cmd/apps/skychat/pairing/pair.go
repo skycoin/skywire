@@ -1,25 +1,24 @@
 // Package pairing — cmd/apps/skychat/pairing/pair.go: a single chat
 // pair's runtime state.
 //
-// A Pair wraps two CXO TreeStore endpoints under one struct:
+// One CXO node per pair side, listening on the deterministic pair
+// port (ComputePairPort(my_pk, peer_pk)). The node hosts both roles:
 //
-//   - a Publisher exposing this side's outbox feed, with an allowlist
-//     of exactly the peer's PK. The peer is the only entity permitted
-//     to subscribe to and read this feed.
-//   - a Subscriber connected to the peer's outbox feed, dialing the
-//     same deterministic publisher port on the peer's PK.
+//   - Publisher: shares this side's outbox feed, with an allowlist of
+//     exactly the peer's PK. Only the peer may subscribe and read.
+//   - Subscriber: connected to the peer's outbox feed (same port,
+//     peer's PK as the feed identity). Receives messages from peer.
 //
-// Both run on dedicated CXO nodes attached to a shared dmsg.Client.
-// Within one visor, multiple pairs avoid DMSG-port collisions because
-// each pair's publisher port is derived from the unique (a, b) hash
-// and the subscriber port lives in a non-overlapping range
-// (see ports.go).
+// One node per pair (not two) keeps the DMSG port allocation simple
+// and matches the symmetric protocol: both ends listen on the same
+// port number, both ends dial the other at that port. The CXO node
+// multiplexes publisher and subscriber roles by feed PK.
 //
-// Lifecycle: Open creates the publisher (no subscriber yet) and is
-// the act of "I'm ready to receive from this peer." Connect dials the
-// peer's publisher and registers the inbound message callback. The
-// two are split because the pairing handshake (PR-3) sends an invite
-// after Open and only Connects after the peer's ack arrives.
+// Lifecycle: Open creates the publisher (ready to accept the peer's
+// subscribe) and constructs the subscriber attached to the publisher's
+// node. Connect dials the peer's node and registers the inbound
+// subscribe. Open + Connect are split so the pairing handshake (PR-5+)
+// can stage the publisher before the peer is known to be ready.
 package pairing
 
 import (
@@ -44,7 +43,7 @@ import (
 const MessagePathPrefix = "msgs"
 
 // Message is the on-the-wire form of a chat message inside a pair
-// feed. Body encryption (PR-5) wraps Text into a ciphertext field;
+// feed. Body encryption (PR-6) wraps Text into a ciphertext field;
 // for now Text is plaintext.
 type Message struct {
 	Text string    `json:"text"`
@@ -65,13 +64,11 @@ type Config struct {
 	// PeerPK is the chat partner.
 	PeerPK cipher.PubKey
 
-	// DmsgC is the shared DMSG client. Both publisher and subscriber
-	// CXO nodes attach to it.
+	// DmsgC is the shared DMSG client.
 	DmsgC *dmsg.Client
 
 	// DataDir is the per-visor parent directory for CXO state. Each
-	// Pair carves its own pub/<peer-pk-hex>/ and sub/<peer-pk-hex>/
-	// subtrees inside it.
+	// Pair carves its own pair/<peer-pk-hex>/ subtree inside it.
 	DataDir string
 
 	// Logger is optional; nil falls back to a tag-based default.
@@ -84,8 +81,8 @@ type Config struct {
 // Pair is one live chat pair. Safe for concurrent use after Open
 // returns; Send and Close may be called from any goroutine.
 type Pair struct {
-	cfg   Config
-	ports PairPorts
+	cfg  Config
+	port uint16
 
 	pub *treestore.Publisher
 	sub *treestore.Subscriber
@@ -100,11 +97,11 @@ type Pair struct {
 	log *logging.Logger
 }
 
-// Open constructs the pair's publisher with allowlist=[PeerPK] and
-// records the deterministic ports. The subscriber is created but not
-// yet connected — call Connect after the peer has acknowledged the
-// pair invite (PR-3) or immediately when both sides are known to be
-// ready.
+// Open constructs the pair's CXO node, brings up the publisher with
+// allowlist=[PeerPK], and prepares a subscriber attached to the same
+// node. The subscriber is not yet connected — call Connect after
+// the peer is known to be ready (or immediately when both sides are
+// brought up at once, e.g. in tests).
 func Open(cfg Config) (*Pair, error) {
 	if cfg.DmsgC == nil {
 		return nil, errors.New("pairing: Open: DmsgC required")
@@ -120,45 +117,45 @@ func Open(cfg Config) (*Pair, error) {
 		log = logging.MustGetLogger("skychat-pair")
 	}
 
-	ports, err := ComputePairPorts(cfg.MyPK, cfg.PeerPK)
+	port, err := ComputePairPort(cfg.MyPK, cfg.PeerPK)
 	if err != nil {
-		return nil, fmt.Errorf("pairing: Open: compute ports: %w", err)
+		return nil, fmt.Errorf("pairing: Open: compute port: %w", err)
 	}
 
 	peerHex := cfg.PeerPK.Hex()
 	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
 		BatchWindow:         cfg.BatchWindow,
 		Logger:              log,
-		DataDir:             filepath.Join(cfg.DataDir, "pub", peerHex),
-		DmsgPort:            ports.Publisher,
+		DataDir:             filepath.Join(cfg.DataDir, "pair", peerHex),
+		DmsgPort:            port,
 		SubscriberAllowlist: []cipher.PubKey{cfg.PeerPK},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pairing: Open: build publisher: %w", err)
 	}
 
-	sub, err := treestore.NewSubscriber(cfg.DmsgC, cfg.PeerPK, treestore.SubConfig{
-		Logger:   log,
-		DataDir:  filepath.Join(cfg.DataDir, "sub", peerHex),
-		DmsgPort: ports.Subscriber,
+	// Subscriber piggybacks on the publisher's CXO node. One node
+	// per pair side hosts both roles, addressed by feed PK.
+	sub, err := treestore.NewSubscriberOnNode(pub.Node(), cfg.PeerPK, treestore.SubConfig{
+		Logger: log,
 	})
 	if err != nil {
 		_ = pub.Close() //nolint:errcheck
-		return nil, fmt.Errorf("pairing: Open: build subscriber: %w", err)
+		return nil, fmt.Errorf("pairing: Open: attach subscriber: %w", err)
 	}
 	sub.SetPrefixes([]string{MessagePathPrefix})
 
-	p := &Pair{cfg: cfg, ports: ports, pub: pub, sub: sub, log: log}
+	p := &Pair{cfg: cfg, port: port, pub: pub, sub: sub, log: log}
 	sub.OnUpdate(p.onUpdate)
 	return p, nil
 }
 
-// Connect dials the peer's publisher and starts the subscribe
+// Connect dials the peer's CXO node and starts the subscribe
 // handshake. Idempotent: returns nil if already connected.
 //
-// Open + Connect are split so the pairing handshake (PR-3) can stage
-// the publisher before the peer is known to be ready, then activate
-// the inbound side once the peer's pair-ack arrives.
+// Open + Connect are split so the pairing handshake can stage the
+// publisher before the peer is known to be ready, then activate the
+// inbound side once the peer's pair-ack arrives.
 func (p *Pair) Connect() error {
 	if err := p.sub.Connect(p.cfg.PeerPK); err != nil {
 		return fmt.Errorf("pairing: Connect: %w", err)
@@ -166,11 +163,9 @@ func (p *Pair) Connect() error {
 	return nil
 }
 
-// Ports returns the publisher / subscriber DMSG ports this pair uses.
-// Persisted by the manager so a future restart resumes on the same
-// ports even if the deterministic computation later changes.
-func (p *Pair) Ports() PairPorts {
-	return p.ports
+// Port returns the deterministic DMSG port this pair uses on both sides.
+func (p *Pair) Port() uint16 {
+	return p.port
 }
 
 // PeerPK is a convenience accessor.
@@ -201,7 +196,8 @@ func (p *Pair) Send(text string) error {
 	return nil
 }
 
-// Close tears down both endpoints. Idempotent.
+// Close tears down the subscriber + publisher (and the underlying
+// CXO node, owned by the publisher). Idempotent.
 func (p *Pair) Close() error {
 	var firstErr error
 	if p.sub != nil {
@@ -230,7 +226,6 @@ func (p *Pair) onUpdate(events []treestore.UpdateEvent) {
 	}
 	for _, ev := range events {
 		if ev.Value == nil {
-			// Deletion — no inbound message to surface.
 			continue
 		}
 		var msg Message
