@@ -87,6 +87,15 @@ func init() {
 	RootCmd.Flags().IntVar(&persistTTLDays, "persist-ttl", 30, "days to keep persisted messages before sweep (0 disables)")
 	RootCmd.Flags().StringVar(&persistWhitelistFile, "persist-whitelist", "", "path to file with one peer PK per line; if set, only these peers are persisted")
 	RootCmd.Flags().IntVar(&persistSeedCount, "persist-seed", 50, "number of recent messages to seed new SSE clients with (0 disables)")
+
+	// Pairing flags. Off by default so the legacy plain-text DM path
+	// (used by the e2e CI tests) is unaffected. When --pair-enable is
+	// on, skychat dials the local visor's RPC and exposes the
+	// chat-pair feed manager over HTTP + the structured pair-invite
+	// / pair-ack protocol over the legacy direct path.
+	RootCmd.Flags().BoolVar(&pairEnable, "pair-enable", false, "enable per-partner CXO pair feeds (HTTP /pair endpoints + handshake)")
+	RootCmd.Flags().StringVar(&pairRPCAddr, "pair-rpc", "localhost:3435", "visor RPC address used by the pair manager")
+	RootCmd.Flags().DurationVar(&pairPollInterval, "pair-poll-interval", time.Second, "how often skychat drains the visor's pair-message inbox onto the SSE stream")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -134,6 +143,9 @@ func RunSkychat(ctx context.Context, args []string) error {
 		fs.IntVar(&persistTTLDays, "persist-ttl", 30, "days to keep persisted messages")
 		fs.StringVar(&persistWhitelistFile, "persist-whitelist", "", "whitelist file path")
 		fs.IntVar(&persistSeedCount, "persist-seed", 50, "messages to seed SSE clients with")
+		fs.BoolVar(&pairEnable, "pair-enable", false, "enable per-partner CXO pair feeds")
+		fs.StringVar(&pairRPCAddr, "pair-rpc", "localhost:3435", "visor RPC address for pair manager")
+		fs.DurationVar(&pairPollInterval, "pair-poll-interval", time.Second, "pair inbox poll interval")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -199,11 +211,16 @@ func RunSkychat(ctx context.Context, args []string) error {
 		go handleIPCSignal(ipcClient)
 	}
 
+	connectPairRPC()
+	startPairPoller(ctx)
+	defer stopPairPoller()
+
 	http.Handle("/", http.FileServer(getFileSystem()))
 	http.HandleFunc("/message", messageHandler(ctx))
 	http.HandleFunc("/sse", sseHandler)
 	http.HandleFunc("/history", historyHandler)
 	http.HandleFunc("/history/peers", historyPeersHandler)
+	registerPairHTTPHandlers(ctx)
 
 	url := ""
 	address := addr
@@ -305,6 +322,15 @@ func handleConn(conn net.Conn) {
 			delete(conns, raddr.PubKey)
 			connsMu.Unlock()
 			return
+		}
+
+		// First, try the pair-control envelope. Recognized types
+		// (pair-invite / pair-ack) are consumed here and not surfaced
+		// as chat messages; everything else falls through to the
+		// legacy plain-text path so the existing CI tests are
+		// unaffected.
+		if handlePairControlFrame(context.Background(), raddr.PubKey, buf[:n]) {
+			continue
 		}
 
 		text := string(buf[:n])
