@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -169,18 +170,30 @@ Usage:
 				tpLabel = transport.Label(conf.Transport.DefaultLabel)
 			}
 
+			// The setup-node's DMSG client is brought up inside
+			// router.NewNode (which already waits for ready before
+			// returning), so it's safe to use here for outbound
+			// dmsg-http requests to the discovery services.
+			snDmsgC := sn.DmsgClient()
+
 			var tpdC transport.DiscoveryClient
 			if conf.TransportDiscovery != "" {
-				var tpdErr error
-				tpdC, tpdErr = tpdclient.NewHTTP(
-					conf.TransportDiscovery,
-					conf.PK, conf.SK,
-					&http.Client{}, "",
-					mLog,
-				)
-				if tpdErr != nil {
-					log.WithError(tpdErr).Warn("Failed to create TPD client — using mock")
+				httpC, hcErr := getHTTPClient(ctx, snDmsgC, conf.TransportDiscovery)
+				if hcErr != nil {
+					log.WithError(hcErr).Warn("Failed to build TPD HTTP client — using mock")
 					tpdC = transport.NewDiscoveryMock()
+				} else {
+					var tpdErr error
+					tpdC, tpdErr = tpdclient.NewHTTP(
+						conf.TransportDiscovery,
+						conf.PK, conf.SK,
+						httpC, "",
+						mLog,
+					)
+					if tpdErr != nil {
+						log.WithError(tpdErr).Warn("Failed to create TPD client — using mock")
+						tpdC = transport.NewDiscoveryMock()
+					}
 				}
 			} else {
 				tpdC = transport.NewDiscoveryMock()
@@ -198,12 +211,17 @@ Usage:
 
 			var arC addrresolver.APIClient
 			if conf.Transport.AddressResolver != "" {
-				arC, _ = addrresolver.NewHTTP( //nolint:errcheck
-					conf.Transport.AddressResolver,
-					conf.PK, conf.SK,
-					&http.Client{}, "",
-					log, mLog,
-				)
+				httpC, hcErr := getHTTPClient(ctx, snDmsgC, conf.Transport.AddressResolver)
+				if hcErr != nil {
+					log.WithError(hcErr).Warn("Failed to build AR HTTP client — AR disabled")
+				} else {
+					arC, _ = addrresolver.NewHTTP( //nolint:errcheck
+						conf.Transport.AddressResolver,
+						conf.PK, conf.SK,
+						httpC, "",
+						log, mLog,
+					)
+				}
 			}
 
 			factory := network.ClientFactory{
@@ -376,5 +394,54 @@ var checkHealthCmd = &cobra.Command{
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
+	}
+}
+
+// getHTTPClient returns an *http.Client for the given service URL,
+// dispatching on URL scheme: dmsg:// URLs get a client backed by a
+// dmsghttp.HTTPTransport routed through snDmsgC, http(s):// URLs get
+// a plain http.Client.
+//
+// Mirrors the pattern in pkg/visor/init.go's getHTTPClient — same
+// scheme-aware handling so the setup-node can talk to TPD/AR over
+// either transport just like the visor does. The visor path also
+// PostEntry-warms the dmsg discovery; we skip that here because the
+// setup-node is a one-direction client (no inbound dmsg traffic the
+// service needs to route to it through delegated servers).
+func getHTTPClient(_ context.Context, snDmsgC *dmsg.Client, service string) (*http.Client, error) {
+	if service == "" {
+		return nil, fmt.Errorf("service URL is empty")
+	}
+
+	var serviceURL dmsgcurl.URL
+	if err := serviceURL.Fill(service); err != nil {
+		// Fill rejects malformed inputs but tolerates plain http(s)
+		// URLs without scheme — bare host:port paths fall through here.
+		// Treat any parse failure as "not a dmsg URL, use plain HTTP".
+		return plainHTTPClient(), nil
+	}
+
+	if serviceURL.Scheme != "dmsg" {
+		return plainHTTPClient(), nil
+	}
+
+	if snDmsgC == nil {
+		return nil, fmt.Errorf("dmsg URL %q requires a DMSG client; none available", service)
+	}
+
+	return &http.Client{
+		Transport: dmsghttp.MakeHTTPTransport(context.Background(), snDmsgC),
+	}, nil
+}
+
+// plainHTTPClient returns the http.Client previously hard-coded
+// in-line — kept as a small helper so the dmsg path can share the
+// same call site shape.
+func plainHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DisableKeepAlives: true,
+			IdleConnTimeout:   5 * time.Second,
+		},
 	}
 }
