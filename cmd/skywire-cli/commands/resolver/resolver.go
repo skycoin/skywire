@@ -19,9 +19,8 @@
 package cliresolver
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -39,7 +38,6 @@ const (
 )
 
 var (
-	resolverJSON       bool
 	resolverDmsgOnly   bool
 	resolverSkynetOnly bool
 	resolverUpstream   string
@@ -47,8 +45,6 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().BoolVar(&resolverJSON, "json", false, "emit raw JSON")
-
 	upCmd.Flags().BoolVar(&resolverDmsgOnly, "dmsg-only", false, "only enable the .dmsg resolver")
 	upCmd.Flags().BoolVar(&resolverSkynetOnly, "skynet-only", false, "only enable the .skynet resolver")
 	upCmd.Flags().StringVar(&resolverUpstream, "upstream", "", "upstream SOCKS5 for non-matching traffic (e.g. 127.0.0.1:1080)")
@@ -90,11 +86,7 @@ Examples:
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("EmbeddedProxies RPC failed: %w", err))
 		}
-		if resolverJSON {
-			_ = json.NewEncoder(os.Stdout).Encode(status) //nolint:errcheck,gosec
-			return
-		}
-		printResolverStatus(status)
+		internal.PrintOutput(cmd.Flags(), status, renderResolverStatus(status))
 	},
 }
 
@@ -157,14 +149,22 @@ different flags update the upstream.`,
 			}
 		}
 
-		fmt.Println("Resolver up.")
+		var msg strings.Builder
+		msg.WriteString("Resolver up.\n")
 		if resolverUpstream != "" {
-			fmt.Printf("  upstream: %s\n", resolverUpstream)
+			fmt.Fprintf(&msg, "  upstream: %s\n", resolverUpstream)
 		}
 		if wantDmsg && wantSkynet && !resolverNoChain {
-			fmt.Printf("  chain:    127.0.0.1:%d (dmsg) → 127.0.0.1:%d (skynet) → %s\n",
+			fmt.Fprintf(&msg, "  chain:    127.0.0.1:%d (dmsg) → 127.0.0.1:%d (skynet) → %s\n",
 				dmsgwebSOCKSPort, skynetwebSOCKSPort, dashIfEmpty(resolverUpstream))
 		}
+		internal.PrintOutput(cmd.Flags(), map[string]any{
+			"up":       true,
+			"dmsg":     wantDmsg,
+			"skynet":   wantSkynet,
+			"upstream": resolverUpstream,
+			"chained":  wantDmsg && wantSkynet && !resolverNoChain,
+		}, msg.String())
 	},
 }
 
@@ -190,16 +190,23 @@ turn off just one.`,
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("disable skynet resolver: %w", err))
 			}
 		}
-		fmt.Println("Resolver down.")
+		internal.PrintOutput(cmd.Flags(), map[string]any{
+			"down":   true,
+			"dmsg":   wantDmsg,
+			"skynet": wantSkynet,
+		}, "Resolver down.\n")
 	},
 }
 
-func printResolverStatus(s *visor.EmbeddedProxiesStatus) {
+// renderResolverStatus formats the status table for human display.
+// Returns the rendered string so PrintOutput can decide to print it
+// (text mode) or skip it in favor of raw JSON (--json mode).
+func renderResolverStatus(s *visor.EmbeddedProxiesStatus) string {
 	if s == nil || (s.DmsgWeb == nil && s.SkynetWeb == nil) {
-		fmt.Println("(no embedded resolvers configured)")
-		return
+		return "(no embedded resolvers configured)\n"
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	var buf strings.Builder
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "name\tenabled\trunning\tdomain\tsocks\tweb\tupstream\trequests\tactive\tfailures") //nolint:errcheck,gosec
 	fmt.Fprintln(w, "----\t-------\t-------\t------\t-----\t---\t--------\t--------\t------\t--------") //nolint:errcheck,gosec
 	row := func(name string, p *visor.EmbeddedProxyInfo) {
@@ -226,11 +233,12 @@ func printResolverStatus(s *visor.EmbeddedProxiesStatus) {
 	_ = w.Flush() //nolint:errcheck,gosec
 
 	if s.DmsgWeb != nil && s.DmsgWeb.Stats != nil && s.DmsgWeb.Stats.LastError != "" {
-		fmt.Printf("\ndmsgweb last error: %s\n", s.DmsgWeb.Stats.LastError)
+		fmt.Fprintf(&buf, "\ndmsgweb last error: %s\n", s.DmsgWeb.Stats.LastError)
 	}
 	if s.SkynetWeb != nil && s.SkynetWeb.Stats != nil && s.SkynetWeb.Stats.LastError != "" {
-		fmt.Printf("\nskynetweb last error: %s\n", s.SkynetWeb.Stats.LastError)
+		fmt.Fprintf(&buf, "\nskynetweb last error: %s\n", s.SkynetWeb.Stats.LastError)
 	}
+	return buf.String()
 }
 
 func dashIfEmpty(s string) string {
