@@ -24,13 +24,11 @@ import (
 // PairInfo is the public summary of a chat pair, returned by PairList
 // and used as the poll cursor for PairPoll.
 type PairInfo struct {
-	PeerPK         cipher.PubKey  `json:"peer_pk"`
-	Status         pairing.Status `json:"status"`
-	MyPort         uint16         `json:"my_port"`
-	PeerPort       uint16         `json:"peer_port"`
-	SubscriberPort uint16         `json:"subscriber_port"`
-	EstablishedAt  time.Time      `json:"established_at"`
-	LastMessageAt  time.Time      `json:"last_message_at,omitempty"`
+	PeerPK        cipher.PubKey  `json:"peer_pk"`
+	Status        pairing.Status `json:"status"`
+	Port          uint16         `json:"port"`
+	EstablishedAt time.Time      `json:"established_at"`
+	LastMessageAt time.Time      `json:"last_message_at,omitempty"`
 }
 
 // PairMessage is one inbound message delivered through the visor's
@@ -95,13 +93,11 @@ func (v *Visor) PairList() ([]PairInfo, error) {
 	out := make([]PairInfo, 0, len(records))
 	for _, r := range records {
 		out = append(out, PairInfo{
-			PeerPK:         r.PeerPK,
-			Status:         r.Status,
-			MyPort:         r.MyPort,
-			PeerPort:       r.PeerPort,
-			SubscriberPort: r.SubscriberPort,
-			EstablishedAt:  r.EstablishedAt,
-			LastMessageAt:  r.LastMessageAt,
+			PeerPK:        r.PeerPK,
+			Status:        r.Status,
+			Port:          r.Port,
+			EstablishedAt: r.EstablishedAt,
+			LastMessageAt: r.LastMessageAt,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

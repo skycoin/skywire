@@ -110,9 +110,15 @@ func (c *Conn) run() {
 	c.n.removeConn(c)
 
 	// Remove from transport cache and close the underlying connection.
+	// IsTCP() distinguishes TCP from UDP, but DMSG connections also
+	// have IsTCP()==false and don't have a UDP transport. Nil-check
+	// each so a DMSG-only node (NewWithDMSG path: TCP/UDP listeners
+	// disabled) doesn't panic when its conns close.
 	if c.IsTCP() {
-		c.n.tcp.closeConn(c.Address()) //nolint:errcheck,gosec
-	} else {
+		if c.n.tcp != nil {
+			c.n.tcp.closeConn(c.Address()) //nolint:errcheck,gosec
+		}
+	} else if c.n.udp != nil {
 		c.n.udp.closeConn(c.Address()) //nolint:errcheck,gosec
 	}
 

@@ -129,6 +129,13 @@ type PubConfig struct {
 // owns the node — Close releases both.
 func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publisher, error) {
 	cfg := node.NewConfig()
+	// Bind the CXO node's identity to the publisher's keypair so the
+	// node's handshake-advertised PK matches the feed PK. Otherwise
+	// the CXO node generates a random keypair and remote peers see a
+	// different PK than they expect from the feed metadata — which
+	// breaks any subscriber-allowlist that uses the feed PK as the
+	// gating identity (the per-pair-feed pattern relies on this).
+	cfg.SecKey = skycipher.SecKey(sk)
 	cfg.Config = skyobject.NewConfig()
 	cfg.Config.InMemoryDB = conf.InMemoryDB
 	if conf.DataDir != "" {
@@ -230,6 +237,16 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 // this PK.
 func (p *Publisher) Feed() cipher.PubKey {
 	return p.pk
+}
+
+// Node returns the underlying CXO node. Exposed so callers can
+// attach a Subscriber to the same node via NewSubscriberOnNode —
+// the per-pair-feed pattern uses one node per pair side, listening
+// on the deterministic pair port, hosting both the publisher's own
+// feed and a subscriber to the peer's feed. Mutating the returned
+// node directly is unsupported; treat it as read-only state.
+func (p *Publisher) Node() *node.Node {
+	return p.cxoNode
 }
 
 // SetAllowlist atomically replaces the subscriber allowlist. nil
