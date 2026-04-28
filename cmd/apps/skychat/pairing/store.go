@@ -49,22 +49,14 @@ type Record struct {
 	// PeerPK is the partner visor's public key.
 	PeerPK cipher.PubKey `json:"peer_pk"`
 
-	// MyPort is the DMSG port my outbox publisher listens on.
-	// Equal to the deterministic ComputePairPorts(myPK, peerPK).Publisher.
+	// Port is the DMSG port both sides use for this pair. Equal to
+	// ComputePairPort(myPK, peerPK). Each side's CXO node listens
+	// on this port and hosts both publisher (own feed) and
+	// subscriber (peer's feed) roles.
+	//
 	// Persisted (rather than recomputed every time) so a future
 	// reserved-port table change doesn't silently shift live pairs.
-	MyPort uint16 `json:"my_port"`
-
-	// PeerPort is the DMSG port the peer's outbox publisher listens on.
-	// Same value as MyPort under the current scheme — both ends share
-	// the deterministic publisher port — but stored separately so the
-	// schema can accommodate a future asymmetric variant without a
-	// migration.
-	PeerPort uint16 `json:"peer_port"`
-
-	// SubscriberPort is where my CXO subscriber's node binds its own
-	// listener. ComputePairPorts(myPK, peerPK).Subscriber.
-	SubscriberPort uint16 `json:"subscriber_port"`
+	Port uint16 `json:"port"`
 
 	Status        Status    `json:"status"`
 	EstablishedAt time.Time `json:"established_at"`

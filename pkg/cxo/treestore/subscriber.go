@@ -50,8 +50,9 @@ type UpdateCallback func(changes []UpdateEvent)
 type Subscriber struct {
 	log *logging.Logger
 
-	cxoNode *node.Node
-	feedPK  cipher.PubKey
+	cxoNode  *node.Node
+	ownsNode bool // when true, Close releases the node; false = caller owns
+	feedPK   cipher.PubKey
 
 	mu       sync.RWMutex
 	cache    map[string][]byte
@@ -96,6 +97,13 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 	if conf.DataDir != "" {
 		cfg.Config.DataDir = conf.DataDir
 	}
+	// We're DMSG-only — disable the CXO node's default TCP/UDP/RPC
+	// listeners (mirrors NewWithDMSG). Hardcoded ports otherwise
+	// mean two Subscribers in the same process collide on bind, which
+	// is the common case for per-pair-feed callers.
+	cfg.TCP.Listen = ""
+	cfg.UDP.Listen = ""
+	cfg.RPC = ""
 
 	cxoNode, err := node.NewNode(cfg)
 	if err != nil {
@@ -113,14 +121,50 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 	}
 
 	s := &Subscriber{
-		log:     conf.Logger,
-		cxoNode: cxoNode,
-		feedPK:  feedPK,
-		cache:   make(map[string][]byte),
+		log:      conf.Logger,
+		cxoNode:  cxoNode,
+		ownsNode: true,
+		feedPK:   feedPK,
+		cache:    make(map[string][]byte),
 	}
 
 	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
 		s.handleRootFilled(r)
+	}
+	return s, nil
+}
+
+// NewSubscriberOnNode attaches a Subscriber to an existing CXO node.
+// Caller retains ownership of the node — the Subscriber's Close does
+// NOT release it.
+//
+// Use case: per-pair feeds where one CXO node hosts both a publisher
+// (owning its own feed) AND a subscriber (to the peer's feed). Two
+// separate nodes don't work there because both would Listen on the
+// same deterministic pair port and collide.
+//
+// The OnRootFilled callback is set on the node's config — the existing
+// callback is preserved if the new subscription's feed PK doesn't
+// match the incoming Root, so multiple subscribers can coexist on the
+// same node by chaining handlers. Today only single-subscriber-per-node
+// is exercised; chaining is a future extension.
+func NewSubscriberOnNode(cxoNode *node.Node, feedPK cipher.PubKey, conf SubConfig) (*Subscriber, error) {
+	if conf.Logger == nil {
+		conf.Logger = logging.MustGetLogger("cxo-treestore-sub")
+	}
+	s := &Subscriber{
+		log:      conf.Logger,
+		cxoNode:  cxoNode,
+		ownsNode: false,
+		feedPK:   feedPK,
+		cache:    make(map[string][]byte),
+	}
+	prev := cxoNode.Config().OnRootFilled
+	cxoNode.Config().OnRootFilled = func(n *node.Node, r *registry.Root) {
+		s.handleRootFilled(r)
+		if prev != nil {
+			prev(n, r)
+		}
 	}
 	return s, nil
 }
@@ -212,7 +256,9 @@ func (s *Subscriber) OnUpdate(cb UpdateCallback) {
 	s.mu.Unlock()
 }
 
-// Close stops the subscriber and releases the embedded CXO node.
+// Close stops the subscriber. When the subscriber owns its CXO node
+// (the NewSubscriber path), the node is also released; in
+// NewSubscriberOnNode mode the caller retains ownership.
 // Idempotent.
 func (s *Subscriber) Close() error {
 	s.closeMu.Lock()
@@ -221,7 +267,9 @@ func (s *Subscriber) Close() error {
 		return s.closeErr
 	}
 	s.closed = true
-	s.closeErr = s.cxoNode.Close()
+	if s.ownsNode {
+		s.closeErr = s.cxoNode.Close()
+	}
 	return s.closeErr
 }
 

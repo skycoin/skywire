@@ -6,89 +6,72 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-func TestComputePairPortsSymmetric(t *testing.T) {
+func TestComputePairPortSymmetric(t *testing.T) {
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 
-	ab, err := ComputePairPorts(a, b)
+	ab, err := ComputePairPort(a, b)
 	if err != nil {
 		t.Fatalf("a,b: %v", err)
 	}
-	ba, err := ComputePairPorts(b, a)
+	ba, err := ComputePairPort(b, a)
 	if err != nil {
 		t.Fatalf("b,a: %v", err)
 	}
 	if ab != ba {
-		t.Fatalf("ports must be symmetric: ab=%+v ba=%+v", ab, ba)
+		t.Fatalf("ports must be symmetric: ab=%d ba=%d", ab, ba)
 	}
 }
 
-func TestComputePairPortsInRange(t *testing.T) {
+func TestComputePairPortInRange(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		a, _ := cipher.GenerateKeyPair()
 		b, _ := cipher.GenerateKeyPair()
-		pp, err := ComputePairPorts(a, b)
+		port, err := ComputePairPort(a, b)
 		if err != nil {
 			t.Fatalf("iter %d: %v", i, err)
 		}
-		if pp.Publisher < PubBase || pp.Publisher >= PubBase+PubSpan {
-			t.Errorf("iter %d: publisher port %d out of [%d, %d)", i, pp.Publisher, PubBase, PubBase+PubSpan)
-		}
-		if pp.Subscriber < SubBase || pp.Subscriber >= SubBase+PubSpan {
-			t.Errorf("iter %d: subscriber port %d out of [%d, %d)", i, pp.Subscriber, SubBase, SubBase+PubSpan)
-		}
-		if pp.Subscriber-pp.Publisher != PubSpan {
-			t.Errorf("iter %d: subscriber should be publisher+%d, got publisher=%d sub=%d", i, PubSpan, pp.Publisher, pp.Subscriber)
+		if port < PortBase || port >= PortBase+PortSpan {
+			t.Errorf("iter %d: port %d out of [%d, %d)", i, port, PortBase, PortBase+PortSpan)
 		}
 	}
 }
 
-func TestComputePairPortsAvoidsReserved(t *testing.T) {
+func TestComputePairPortAvoidsReserved(t *testing.T) {
 	// Synthesize a reserved set that includes the deterministic slot
-	// for a given pair, and verify publisherPort walks past it.
+	// for a given pair, and verify pairPort walks past it.
 	a, _ := cipher.GenerateKeyPair()
 	b, _ := cipher.GenerateKeyPair()
 
-	// First, find what the natural deterministic port would be.
-	natural, err := publisherPort(a, b, map[uint16]struct{}{})
+	natural, err := pairPort(a, b, map[uint16]struct{}{})
 	if err != nil {
 		t.Fatalf("baseline: %v", err)
 	}
-	// Now reserve that exact slot and re-compute.
 	reserved := map[uint16]struct{}{natural: {}}
-	walked, err := publisherPort(a, b, reserved)
+	walked, err := pairPort(a, b, reserved)
 	if err != nil {
 		t.Fatalf("with collision: %v", err)
 	}
 	if walked == natural {
 		t.Fatalf("expected walk past reserved port %d, still got %d", natural, walked)
 	}
-	// walked should be the next non-reserved slot in the span.
-	if walked < PubBase || walked >= PubBase+PubSpan {
-		t.Errorf("walked port %d out of pub range", walked)
+	if walked < PortBase || walked >= PortBase+PortSpan {
+		t.Errorf("walked port %d out of pair range", walked)
 	}
 }
 
-func TestComputePairPortsAvoidsRealReservedTable(t *testing.T) {
-	// Cross-check that no random pair lands on a port from the real
-	// reserved table. With 50 random pairs and 12 reserved ports out
-	// of 50000 slots, the probability of a hit is ~1.2% per pair, so
-	// across 50 iterations we expect >40% chance of at least one
-	// collision IF the avoidance code didn't work — running the test
-	// repeatedly with avoidance on should never report one.
+func TestComputePairPortAvoidsRealReservedTable(t *testing.T) {
+	// Sanity-check that random pairs don't land on a real reserved port.
 	reserved := ReservedPorts()
 	for i := 0; i < 200; i++ {
 		a, _ := cipher.GenerateKeyPair()
 		b, _ := cipher.GenerateKeyPair()
-		pp, err := ComputePairPorts(a, b)
+		port, err := ComputePairPort(a, b)
 		if err != nil {
 			t.Fatalf("iter %d: %v", i, err)
 		}
-		if _, hit := reserved[pp.Publisher]; hit {
-			t.Errorf("iter %d: publisher port %d landed on reserved", i, pp.Publisher)
-		}
-		if _, hit := reserved[pp.Subscriber]; hit {
-			t.Errorf("iter %d: subscriber port %d landed on reserved", i, pp.Subscriber)
+		if _, hit := reserved[port]; hit {
+			t.Errorf("iter %d: port %d landed on reserved", i, port)
 		}
 	}
 }
