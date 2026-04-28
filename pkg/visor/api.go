@@ -196,6 +196,14 @@ type API interface {
 	UnregisterCXOFeed(name string) error
 	ListCXOFeeds() []logserver.CXOFeedEntry
 
+	// Chat-pair feeds — per-partner CXO feeds with read-side
+	// allowlists. See pkg/visor/pairing.go.
+	PairAdd(peerPK cipher.PubKey) error
+	PairList() ([]PairInfo, error)
+	PairRemove(peerPK cipher.PubKey) error
+	PairSend(peerPK cipher.PubKey, text string) error
+	PairPoll(since time.Time) ([]PairMessage, error)
+
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
 	TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
