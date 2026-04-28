@@ -52,17 +52,33 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 		return
 	}
 
-	// Reverse-proxy mode: a forwarded port for 80 with proxy_addr.
-	if fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort)); fp != nil && fp.ProxyAddr != "" {
-		target, err := url.Parse("http://" + fp.ProxyAddr)
-		if err != nil {
-			log.WithError(err).Warn("Invalid forwarded port proxy_addr; clearing website handler")
-			lsAPI.SetWebsiteHandler(nil)
+	// Reverse-proxy mode: a forwarded port for 80 with proxy_addr (or
+	// local_port as a fallback). Port 80 is owned by the dmsghttp
+	// logserver — raw-TCP forwarding can't bind it, so the only way
+	// to expose a local service on the visor's port-80 face is the
+	// reverse proxy. If a user registers port 80 with --local-port
+	// instead of --proxy-addr, treat that as their intent and
+	// derive the proxy target from local_port; otherwise the entry
+	// would silently do nothing and the visor landing page would
+	// keep showing.
+	if fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort)); fp != nil {
+		addr := fp.ProxyAddr
+		if addr == "" && fp.LocalPort > 0 {
+			addr = fmt.Sprintf("127.0.0.1:%d", fp.LocalPort)
+			log.WithField("local_port", fp.LocalPort).
+				Info("Port 80 has --local-port but no --proxy-addr; using localhost:LocalPort as reverse-proxy target")
+		}
+		if addr != "" {
+			target, err := url.Parse("http://" + addr)
+			if err != nil {
+				log.WithError(err).Warn("Invalid forwarded port target; clearing website handler")
+				lsAPI.SetWebsiteHandler(nil)
+				return
+			}
+			log.WithField("addr", addr).Info("Reverse-proxying custom website (port 80)")
+			lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
 			return
 		}
-		log.WithField("addr", fp.ProxyAddr).Info("Reverse-proxying custom website (port 80)")
-		lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
-		return
 	}
 
 	// Default: clear the handler so the built-in landing page shows.
