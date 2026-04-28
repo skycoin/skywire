@@ -166,6 +166,27 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
+// stunRetryInterval is how often to retry STUN detection after the initial
+// probe failed with a transient error (NATError / NATUnknown / NATBlocked).
+// These results usually mean STUN servers were unreachable at the moment of
+// the probe — DNS hiccup, transient UDP egress drop, packet loss spike, or
+// the configured STUN servers being briefly down. A periodic retry recovers
+// SUDPH for visors whose network became healthy after boot, instead of
+// requiring a full visor restart.
+const stunRetryInterval = 5 * time.Minute
+
+// stunIsTransientFail reports whether a NAT type indicates a probe-side
+// failure (worth retrying) rather than a genuine NAT topology that blocks
+// SUDPH (NATSymmetric, NATSymmetricUDPFirewall — those don't retry).
+func stunIsTransientFail(t stun.NATType) bool {
+	switch t {
+	case stun.NATError, stun.NATUnknown, stun.NATBlocked:
+		return true
+	default:
+		return false
+	}
+}
+
 func initStunClient(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	sc := network.GetStunDetails(v.conf.StunServers, log)
@@ -173,7 +194,64 @@ func initStunClient(_ context.Context, v *Visor, log *logging.Logger) error {
 	v.stun.client = sc
 	v.initLock.Unlock()
 	v.stun.readyOnce.Do(func() { close(v.stun.ready) })
+
+	// If the initial probe failed transiently, schedule a background retry.
+	// On first successful probe the goroutine updates v.stun.client and
+	// lazily starts the SUDPH client (which initSudphClient skipped at boot).
+	if sc != nil && stunIsTransientFail(sc.NATType) {
+		go v.retryStunOnTransientFail(log)
+	}
+
 	return nil
+}
+
+// retryStunOnTransientFail periodically re-runs STUN detection until either
+// the visor shuts down or a probe returns a usable NAT type. On success it
+// installs the new StunDetails and starts the SUDPH transport client. Idle
+// when the initial probe was already successful.
+func (v *Visor) retryStunOnTransientFail(log *logging.Logger) {
+	ctx := v.ctx
+	if ctx == nil {
+		return
+	}
+
+	ticker := time.NewTicker(stunRetryInterval)
+	defer ticker.Stop()
+
+	log.Infof("STUN: scheduling background retry every %v after transient failure", stunRetryInterval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		sc := network.GetStunDetails(v.conf.StunServers, log)
+		if sc == nil || stunIsTransientFail(sc.NATType) {
+			continue
+		}
+
+		// Install the new result regardless of whether SUDPH ends up usable
+		// (NATSymmetric still gets recorded for telemetry / diagnostics).
+		v.initLock.Lock()
+		v.stun.client = sc
+		v.initLock.Unlock()
+		log.Infof("STUN: detection succeeded on retry, NAT type: %v, public IP: %v", sc.NATType.String(), sc.PublicIP.String())
+
+		// Symmetric NAT means STUN worked but SUDPH won't — stop retrying.
+		if sc.NATType == stun.NATSymmetric || sc.NATType == stun.NATSymmetricUDPFirewall {
+			log.Warnf("SUDPH transport wont be available as visor is under %v", sc.NATType.String())
+			return
+		}
+
+		// Lazy-start SUDPH now that STUN has classified a usable NAT.
+		// Mirrors the default branch of initSudphClient. tpM.InitClient is
+		// safe to call post-init: it locks, registers the client, runs it.
+		log.Info("STUN: lazy-starting SUDPH transport client now that STUN succeeded")
+		v.tpM.InitClient(ctx, types.SUDPH, v.conf.Transport.SudphPort)
+		return
+	}
 }
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -189,7 +267,10 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:
 			log.Warnf("SUDPH transport wont be available as visor is under %v", v.stun.client.NATType.String())
 		case stun.NATError, stun.NATUnknown, stun.NATBlocked:
-			log.Warnf("SUDPH transport wont be available: STUN detection failed (%v)", v.stun.client.NATType.String())
+			// Initial STUN probe failed transiently — initStunClient has
+			// scheduled a background retry that will lazy-start SUDPH if
+			// detection later succeeds.
+			log.Warnf("SUDPH transport wont be available yet: STUN detection failed (%v); will retry in background", v.stun.client.NATType.String())
 		default:
 			v.tpM.InitClient(ctx, types.SUDPH, v.conf.Transport.SudphPort)
 		}
