@@ -194,26 +194,19 @@ func (env *TestEnv) checkVisorDmsgEntry(visor string) bool {
 		Client    *dmsgClient `json:"client,omitempty"`
 		Timestamp int64       `json:"timestamp"`
 	}
-	cliOut := struct {
-		Output *dmsgEntry `json:"output,omitempty"`
-		Err    *string    `json:"error,omitempty"`
-	}{}
+	var entry dmsgEntry
 
-	if err := env.ExecJSON(cmd, &cliOut); err != nil {
+	if err := env.ExecJSON(cmd, &entry); err != nil {
 		env.logger.Warnf("VISOR DMSG ENTRY [%s]: mdisc query failed: %v", visor, err)
 		return false
 	}
-	if cliOut.Err != nil {
-		env.logger.Warnf("VISOR DMSG ENTRY [%s]: mdisc returned error: %s", visor, *cliOut.Err)
-		return false
-	}
-	if cliOut.Output == nil || cliOut.Output.Client == nil {
+	if entry.Client == nil {
 		env.logger.Warnf("VISOR DMSG ENTRY [%s]: no client entry in discovery", visor)
 		return false
 	}
-	delegated := cliOut.Output.Client.DelegatedServers
+	delegated := entry.Client.DelegatedServers
 	// Timestamp is nanoseconds since epoch — pass as the nsec arg, not sec.
-	age := time.Since(time.Unix(0, cliOut.Output.Timestamp)).Round(time.Second)
+	age := time.Since(time.Unix(0, entry.Timestamp)).Round(time.Second)
 	env.logger.Infof("VISOR DMSG ENTRY [%s]: %d delegated servers, entry age %v", visor, len(delegated), age)
 	for i, srv := range delegated {
 		env.logger.Infof("   [%d] %s", i, truncatePK(srv))
@@ -283,11 +276,9 @@ func (env *TestEnv) checkVisorTransports(visor string) {
 //
 // The CLI output matches []remoteResult in cmd/skywire-cli/commands/tp/tp.go:
 //
-//	{
-//	  "output": [
-//	    {"TargetPK": "...", "Transports": [...], "Error": ""}
-//	  ]
-//	}
+//	[
+//	  {"TargetPK": "...", "Transports": [...], "Error": ""}
+//	]
 func (env *TestEnv) checkVisorTransportsViaTPS(visor, pk string, localIDs map[string]bool) {
 	cmd := fmt.Sprintf("/release/skywire cli tp --remote %s --json", pk)
 	type remoteTP struct {
@@ -300,23 +291,16 @@ func (env *TestEnv) checkVisorTransportsViaTPS(visor, pk string, localIDs map[st
 		Transports []remoteTP `json:"Transports"`
 		Error      string     `json:"Error"`
 	}
-	cliOut := struct {
-		Output []remoteResult `json:"output,omitempty"`
-		Err    *string        `json:"error,omitempty"`
-	}{}
-	if err := env.ExecJSON(cmd, &cliOut); err != nil {
+	var results []remoteResult
+	if err := env.ExecJSON(cmd, &results); err != nil {
 		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query failed: %v", visor, err)
 		return
 	}
-	if cliOut.Err != nil {
-		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query error: %s", visor, *cliOut.Err)
-		return
-	}
-	if len(cliOut.Output) == 0 {
+	if len(results) == 0 {
 		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query returned no results", visor)
 		return
 	}
-	res := cliOut.Output[0]
+	res := results[0]
 	if res.Error != "" {
 		env.logger.Warnf("VISOR TRANSPORTS [%s]: TPS remote query for target reported error: %s", visor, res.Error)
 		return
@@ -450,22 +434,19 @@ func (env *TestEnv) checkDmsgServiceNode(label, pk string) bool {
 		Client    *dmsgClient `json:"client,omitempty"`
 		Timestamp int64       `json:"timestamp"`
 	}
-	cliOut := struct {
-		Output *dmsgEntry `json:"output,omitempty"`
-		Err    *string    `json:"error,omitempty"`
-	}{}
+	var entry dmsgEntry
 
-	if err := env.ExecJSON(cmd, &cliOut); err != nil {
+	if err := env.ExecJSON(cmd, &entry); err != nil {
 		env.logger.Warnf("%s DMSG ENTRY: query failed: %v", label, err)
 		return false
 	}
-	if cliOut.Err != nil || cliOut.Output == nil || cliOut.Output.Client == nil {
+	if entry.Client == nil {
 		env.logger.Warnf("%s DMSG ENTRY: no client entry in discovery", label)
 		return false
 	}
-	delegated := cliOut.Output.Client.DelegatedServers
+	delegated := entry.Client.DelegatedServers
 	// Timestamp is nanoseconds — pass as the nsec arg, not sec.
-	age := time.Since(time.Unix(0, cliOut.Output.Timestamp)).Round(time.Second)
+	age := time.Since(time.Unix(0, entry.Timestamp)).Round(time.Second)
 	env.logger.Infof("%s DMSG ENTRY: %d delegated servers, entry age %v", label, len(delegated), age)
 	return len(delegated) > 0
 }
