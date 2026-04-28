@@ -12,10 +12,19 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // DefaultCXOPort is the default DMSG port for CXO connections.
-const DefaultCXOPort = uint16(46)
+// Sourced from skyenv so the port allocation is visible in the same
+// table as DmsgHypervisorPort (46), DmsgTransportSetupPort (47), etc.
+//
+// Was previously the literal 46, which clashed with DmsgHypervisorPort:
+// whichever module called dmsgC.Listen first won, and on a hypervisor-
+// enabled visor the CXO publisher's Listen typically fired before the
+// hypervisor's, so hypervisor-RPC-over-DMSG silently failed with
+// "port already occupied" and remote visors stopped showing up.
+const DefaultCXOPort = skyenv.DmsgCXOPort
 
 // DMSGFactory creates and manages CXO connections over DMSG.
 // It implements the same interface as TCPFactory but uses DMSG
