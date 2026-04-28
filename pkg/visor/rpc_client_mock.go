@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -1071,6 +1072,15 @@ func (mc *mockRPCClient) SetDmsgSessionsCount(_ int) (*DmsgConnectAllResult, err
 func (mc *mockRPCClient) DmsgSessions() (*DmsgClientSessions, error) {
 	return &DmsgClientSessions{}, nil
 }
+
+// RegisterCXOFeed implements API.
+func (mc *mockRPCClient) RegisterCXOFeed(_ string, _ uint16, _ string) error { return nil }
+
+// UnregisterCXOFeed implements API.
+func (mc *mockRPCClient) UnregisterCXOFeed(_ string) error { return nil }
+
+// ListCXOFeeds implements API.
+func (mc *mockRPCClient) ListCXOFeeds() []logserver.CXOFeedEntry { return nil }
 
 // TPSStatus implements API.
 func (mc *mockRPCClient) TPSStatus() (*TPSStatus, error) {

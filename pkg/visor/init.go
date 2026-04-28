@@ -126,7 +126,8 @@ var (
 	// Kademlia DHT node
 	dhtMod vinit.Module
 	// Visor-local telemetry store (bbolt + sampler)
-	statsMod vinit.Module
+	statsMod        vinit.Module
+	cxoUserFeedsMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -193,8 +194,11 @@ func registerModules(logger *logging.MasterLogger) {
 	// pull-style and tolerate nil at probe time, so missing-but-still-
 	// initializing deps just yield "offline" for that subsystem.
 	statsMod = maker("stats", initStats, &tr, &dmsgC, &launch)
+	// User-feed registry depends on stats (it shares the logserver
+	// hookup) and dmsgC (each user feed gets its own dmsg listener).
+	cxoUserFeedsMod = maker("cxo_user_feeds", initCXOUserFeeds, &statsMod, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &dhtMod, &statsMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &dhtMod, &statsMod, &cxoUserFeedsMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
