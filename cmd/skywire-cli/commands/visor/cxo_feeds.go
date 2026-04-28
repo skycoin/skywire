@@ -11,10 +11,9 @@
 package clivisor
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -23,13 +22,9 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 )
 
-var (
-	cxoJSON            bool
-	cxoFeedDescription string
-)
+var cxoFeedDescription string
 
 func init() {
-	cxoFeedsCmd.Flags().BoolVar(&cxoJSON, "json", false, "emit raw JSON")
 	cxoFeedAddCmd.Flags().StringVarP(&cxoFeedDescription, "desc", "d", "", "human-readable description")
 	cxoFeedsCmd.AddCommand(cxoFeedAddCmd)
 	cxoFeedsCmd.AddCommand(cxoFeedRmCmd)
@@ -67,11 +62,8 @@ var cxoFeedLsCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		feeds := rpcClient.ListCXOFeeds()
-		if cxoJSON {
-			_ = json.NewEncoder(os.Stdout).Encode(feeds) //nolint:errcheck,gosec
-			return
-		}
-		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		var buf strings.Builder
+		w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "NAME\tDMSG PORT\tSYSTEM\tDESCRIPTION") //nolint:errcheck,gosec
 		for _, f := range feeds {
 			desc := f.Description
@@ -81,6 +73,7 @@ var cxoFeedLsCmd = &cobra.Command{
 			fmt.Fprintf(w, "%s\t%d\t%v\t%s\n", f.Name, f.DmsgPort, f.System, desc) //nolint:errcheck,gosec
 		}
 		w.Flush() //nolint:errcheck,gosec
+		internal.PrintOutput(cmd.Flags(), feeds, buf.String())
 	},
 }
 
@@ -104,7 +97,9 @@ setup, 50 system telemetry).`,
 		if err := rpcClient.RegisterCXOFeed(args[0], uint16(port), cxoFeedDescription); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RegisterCXOFeed failed: %w", err))
 		}
-		fmt.Printf("Feed %q registered on dmsg:%d\n", args[0], port)
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"name": args[0], "dmsg_port": port, "registered": true},
+			fmt.Sprintf("Feed %q registered on dmsg:%d\n", args[0], port))
 	},
 }
 
@@ -120,6 +115,8 @@ var cxoFeedRmCmd = &cobra.Command{
 		if err := rpcClient.UnregisterCXOFeed(args[0]); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("UnregisterCXOFeed failed: %w", err))
 		}
-		fmt.Printf("Feed %q removed\n", args[0])
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"name": args[0], "removed": true},
+			fmt.Sprintf("Feed %q removed\n", args[0]))
 	},
 }
