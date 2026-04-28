@@ -87,6 +87,11 @@ type PubConfig struct {
 	Logger      *logging.Logger // see Config.Logger
 	InMemoryDB  bool            // forwarded to skyobject.Config
 	DataDir     string          // forwarded to skyobject.Config (ignored if InMemoryDB)
+	// DmsgPort overrides the listener port; zero falls back to
+	// cxotransport.DefaultCXOPort. Multiple publishers under the same
+	// PK can coexist as long as they use distinct ports — useful for
+	// hosting independent CXO feeds on a single visor.
+	DmsgPort uint16
 }
 
 // NewWithDMSG is a convenience wrapper around New: it constructs a
@@ -100,12 +105,24 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 	if conf.DataDir != "" {
 		cfg.Config.DataDir = conf.DataDir
 	}
+	// We're DMSG-only — disable the CXO node's default TCP/UDP/RPC
+	// listeners. They default to :8870 / :8871 / "" respectively, and
+	// hardcoded ports mean two Publishers in the same process collide
+	// on bind. None of those listeners are reachable through DMSG
+	// anyway.
+	cfg.TCP.Listen = ""
+	cfg.UDP.Listen = ""
+	cfg.RPC = ""
 
 	cxoNode, err := node.NewNode(cfg)
 	if err != nil {
 		return nil, err
 	}
-	factory := cxotransport.NewDMSGFactory(dmsgC, cxotransport.DefaultCXOPort)
+	port := conf.DmsgPort
+	if port == 0 {
+		port = cxotransport.DefaultCXOPort
+	}
+	factory := cxotransport.NewDMSGFactory(dmsgC, port)
 	if err := cxoNode.EnableDMSG(factory); err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err
