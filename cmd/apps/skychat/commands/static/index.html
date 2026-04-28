@@ -224,6 +224,34 @@
       display: none;
     }
 
+    /* Per-recipient pair badge — shown when this contact is mirrored
+       as a CXO pair on the visor (/pair). Makes paired contacts
+       distinguishable in the sidebar without taking the main slot
+       from the unread badge. */
+    .pair-badge {
+      background: transparent;
+      color: var(--accent-orange);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      border: 1px solid var(--accent-orange);
+      padding: 1px 6px;
+      border-radius: 8px;
+      flex-shrink: 0;
+      margin-right: 6px;
+    }
+
+    .pair-badge.hidden {
+      display: none;
+    }
+
+    /* Inbound message arrived via the CXO pair feed (channel="pair"
+       in the SSE envelope). Subtle left accent so users can tell
+       CXO-delivered messages apart from the legacy direct path. */
+    .message-row.received.via-pair .message-bubble {
+      border-left: 2px solid var(--accent-orange);
+    }
+
     /* Chat Area */
     .chat-container {
       flex: 1;
@@ -666,6 +694,7 @@
         <div class="chat-header-pk" id="headerPk">-</div>
       </div>
       <div class="chat-header-actions">
+        <button id="pairToggleBtn" class="icon-btn hidden" onclick="app.togglePair()" title="Pair / unpair via CXO">&#x29B5;</button>
         <button class="icon-btn" onclick="app.copyPk()" title="Copy public key">&#x2398;</button>
         <button class="icon-btn" onclick="app.openSettings()" title="Contact settings">&#x2699;</button>
         <button class="icon-btn danger" onclick="app.deleteChat()" title="Delete chat">&#x2715;</button>
@@ -684,6 +713,7 @@
       <select id="networkSelect" class="network-select" title="Network type">
         <option value="skynet">Skynet</option>
         <option value="dmsg">DMSG</option>
+        <option value="cxo" id="cxoNetworkOption" class="hidden">CXO (paired)</option>
       </select>
       <input id="msgField" class="message-input" type="text" placeholder="Type a message..." />
       <button type="submit" class="send-btn">Send</button>
@@ -719,10 +749,13 @@
         this.messagesQuantity = {};
         this.messagesSeen = {};
         this.connected = false;
+        this.pairedSet = new Set();
+        this.pairAvailable = false;
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
         this._sseSubscribe();
+        this.syncPairedFromVisor();
       }
 
       showToast(message, type = 'success') {
@@ -747,6 +780,8 @@
         let image = localStorage.getItem(`i_${r}`) || 'p.png';
         const shortPk = r.substring(0, 8) + '...' + r.substring(r.length - 8);
 
+        const isPaired = this.pairedSet && this.pairedSet.has(r);
+
         const li = document.createElement('li');
         li.innerHTML = `
           <div class="recipient-item ${r === this.recipient ? 'active' : ''}" data-pk="${r}" onclick="app.selectRecipient('${r}')">
@@ -755,6 +790,7 @@
               <div class="recipient-pk">${shortPk}</div>
               <div class="recipient-preview">New conversation</div>
             </div>
+            <div class="pair-badge ${isPaired ? '' : 'hidden'}" title="Paired via CXO">CXO</div>
             <div class="unread-badge hidden">0</div>
           </div>`;
         document.getElementById('recipients').appendChild(li);
@@ -770,7 +806,8 @@
           document.getElementById('messages').innerHTML +=
             `<div class="date-divider"><span>${dateStr}</span></div>`;
         } else {
-          const rowClass = msg.from === 'me' ? 'sent' : 'received';
+          let rowClass = msg.from === 'me' ? 'sent' : 'received';
+          if (msg.viaPair) rowClass += ' via-pair';
           const time = msg.ts.toLocaleTimeString('en-US', {
             hour: '2-digit', minute: '2-digit', hour12: false
           });
@@ -817,7 +854,12 @@
 
         source.onmessage = (msg) => {
           const data = JSON.parse(msg.data);
-          const message = { ts: new Date(), from: this.processPk(data.sender), text: data.message };
+          const message = {
+            ts: new Date(),
+            from: this.processPk(data.sender),
+            text: data.message,
+            viaPair: data.channel === 'pair',
+          };
           this.addMsgToList(data.sender, message);
 
           const msgArea = document.getElementById('messages');
@@ -885,6 +927,119 @@
         this.messagesSeen[this.recipient] = this.messagesQuantity[this.recipient];
         this.saveSeenList();
         this.updateUnreadBadges();
+        this.refreshPairControls();
+      }
+
+      // refreshPairControls toggles the pair button + the CXO option
+      // in the network select based on whether pairing is available
+      // and whether the current recipient is paired.
+      refreshPairControls() {
+        const pairBtn = document.getElementById('pairToggleBtn');
+        const cxoOpt = document.getElementById('cxoNetworkOption');
+        const select = document.getElementById('networkSelect');
+        if (!this.pairAvailable) {
+          pairBtn.classList.add('hidden');
+          cxoOpt.classList.add('hidden');
+          if (select.value === 'cxo') select.value = 'skynet';
+          return;
+        }
+        pairBtn.classList.remove('hidden');
+        const isPaired = this.recipient && this.pairedSet && this.pairedSet.has(this.recipient);
+        pairBtn.title = isPaired ? 'Unpair via CXO' : 'Pair via CXO';
+        pairBtn.textContent = isPaired ? '✖' : '⦵';
+        if (isPaired) {
+          cxoOpt.classList.remove('hidden');
+        } else {
+          cxoOpt.classList.add('hidden');
+          if (select.value === 'cxo') select.value = 'skynet';
+        }
+      }
+
+      // togglePair flips the current recipient's CXO pair state via
+      // POST /pair (add) or DELETE /pair/<pk> (remove). The visor
+      // takes care of CXO publisher / subscriber lifecycle.
+      togglePair() {
+        if (!this.recipient || !this.pairAvailable) return;
+        const pk = this.recipient;
+        const isPaired = this.pairedSet && this.pairedSet.has(pk);
+
+        if (isPaired) {
+          if (!confirm('Stop pairing with this contact via CXO?')) return;
+          fetch(`/pair/${pk}`, { method: 'DELETE' })
+            .then(res => {
+              if (res.ok) {
+                this.pairedSet.delete(pk);
+                this._updatePairBadge(pk, false);
+                this.refreshPairControls();
+                this.showToast('Pair removed.');
+              } else {
+                res.text().then(t => this.showToast(`Unpair failed: ${t}`, 'error'));
+              }
+            })
+            .catch(e => this.showToast(e.message, 'error'));
+          return;
+        }
+
+        fetch('/pair', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ peer_pk: pk })
+        })
+          .then(res => {
+            if (res.ok) {
+              this.pairedSet.add(pk);
+              this._updatePairBadge(pk, true);
+              this.refreshPairControls();
+              this.showToast('Pair invite sent.');
+            } else {
+              res.text().then(t => this.showToast(`Pair failed: ${t}`, 'error'));
+            }
+          })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      _updatePairBadge(pk, isPaired) {
+        document.querySelectorAll('.recipient-item').forEach(item => {
+          if (item.dataset.pk !== pk) return;
+          const badge = item.querySelector('.pair-badge');
+          if (badge) badge.classList.toggle('hidden', !isPaired);
+        });
+      }
+
+      // syncPairedFromVisor pulls /pair on startup. A 503 means the
+      // visor was started without --pair-enable; we silently disable
+      // the pair UI in that case so legacy users see no change.
+      syncPairedFromVisor() {
+        this.pairedSet = new Set();
+        this.pairAvailable = false;
+        fetch('/pair')
+          .then(res => {
+            if (res.status === 404 || res.status === 503) {
+              return null; // pairing disabled — leave UI in legacy mode
+            }
+            if (!res.ok) throw new Error(`/pair returned ${res.status}`);
+            return res.json();
+          })
+          .then(pairs => {
+            if (!pairs) return;
+            this.pairAvailable = true;
+            (pairs || []).forEach(p => {
+              if (p && p.peer_pk) {
+                const pk = this.processPk(p.peer_pk);
+                this.pairedSet.add(pk);
+                if (!this.recipients.includes(pk)) {
+                  this._addRecipient(pk);
+                } else {
+                  this._updatePairBadge(pk, true);
+                }
+              }
+            });
+            this.refreshPairControls();
+          })
+          .catch(e => {
+            // Pairing endpoint not reachable — fall back to legacy UI.
+            console.debug('skychat pair sync skipped:', e.message);
+          });
       }
 
       updateUnreadBadges() {
@@ -917,14 +1072,27 @@
         const destination = this.recipient;
         const network = document.getElementById('networkSelect').value;
 
-        fetch('message', {
+        // CXO routes through /pair/<pk>/message instead of /message —
+        // a paired publisher must already exist (handled by Pair button
+        // / pair-invite handshake). Falls back to legacy if pairing
+        // isn't set up.
+        let url, body;
+        if (network === 'cxo') {
+          url = `/pair/${destination}/message`;
+          body = JSON.stringify({ text: msg });
+        } else {
+          url = 'message';
+          body = JSON.stringify({ recipient: destination, message: msg, network: network });
+        }
+
+        fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ recipient: destination, message: msg, network: network })
+          body: body
         })
           .then(res => {
             if (res.ok) {
-              const message = { ts: new Date(), from: 'me', text: msg };
+              const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo' };
               this.addMsgToList(destination, message);
               msgField.value = '';
 
@@ -997,6 +1165,14 @@
         delete this.messages[pk];
         delete this.messagesQuantity[pk];
         delete this.messagesSeen[pk];
+
+        // If this contact was paired via CXO, also revoke the pair
+        // server-side. Best-effort: deleteChat is a UI-local action,
+        // so a revoke failure shouldn't block the local cleanup.
+        if (this.pairedSet && this.pairedSet.has(pk)) {
+          this.pairedSet.delete(pk);
+          fetch(`/pair/${pk}`, { method: 'DELETE' }).catch(() => {});
+        }
 
         document.querySelectorAll('.recipient-item').forEach(item => {
           if (item.dataset.pk === pk) item.parentElement.remove();
