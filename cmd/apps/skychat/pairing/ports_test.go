@@ -31,14 +31,14 @@ func TestComputePairPortsInRange(t *testing.T) {
 		if err != nil {
 			t.Fatalf("iter %d: %v", i, err)
 		}
-		if pp.Publisher < pubBase || pp.Publisher >= pubBase+pubSpan {
-			t.Errorf("iter %d: publisher port %d out of [%d, %d)", i, pp.Publisher, pubBase, pubBase+pubSpan)
+		if pp.Publisher < PubBase || pp.Publisher >= PubBase+PubSpan {
+			t.Errorf("iter %d: publisher port %d out of [%d, %d)", i, pp.Publisher, PubBase, PubBase+PubSpan)
 		}
-		if pp.Subscriber < subBase || pp.Subscriber >= subBase+pubSpan {
-			t.Errorf("iter %d: subscriber port %d out of [%d, %d)", i, pp.Subscriber, subBase, subBase+pubSpan)
+		if pp.Subscriber < SubBase || pp.Subscriber >= SubBase+PubSpan {
+			t.Errorf("iter %d: subscriber port %d out of [%d, %d)", i, pp.Subscriber, SubBase, SubBase+PubSpan)
 		}
-		if pp.Subscriber-pp.Publisher != pubSpan {
-			t.Errorf("iter %d: subscriber should be publisher+%d, got publisher=%d sub=%d", i, pubSpan, pp.Publisher, pp.Subscriber)
+		if pp.Subscriber-pp.Publisher != PubSpan {
+			t.Errorf("iter %d: subscriber should be publisher+%d, got publisher=%d sub=%d", i, PubSpan, pp.Publisher, pp.Subscriber)
 		}
 	}
 }
@@ -64,7 +64,7 @@ func TestComputePairPortsAvoidsReserved(t *testing.T) {
 		t.Fatalf("expected walk past reserved port %d, still got %d", natural, walked)
 	}
 	// walked should be the next non-reserved slot in the span.
-	if walked < pubBase || walked >= pubBase+pubSpan {
+	if walked < PubBase || walked >= PubBase+PubSpan {
 		t.Errorf("walked port %d out of pub range", walked)
 	}
 }
