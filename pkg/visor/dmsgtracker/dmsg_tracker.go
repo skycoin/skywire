@@ -3,17 +3,43 @@ package dmsgtracker
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
+
+// isExpectedTrackerLookupErr classifies failures that happen during
+// normal operation: a peer that disappeared from discovery, or the
+// per-attempt deadline firing because we were already shutting down or
+// the network was slow. Loudly logging these spams the warn channel
+// without giving operators anything actionable.
+func isExpectedTrackerLookupErr(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if errors.Is(err, disc.ErrKeyNotFound) {
+		return true
+	}
+	// Fallback: dmsg discovery returns the error wrapped with a string
+	// path through net/http, so errors.Is won't catch every case.
+	msg := err.Error()
+	if strings.Contains(msg, "context canceled") ||
+		strings.Contains(msg, "context deadline exceeded") ||
+		strings.Contains(msg, "entry is not found") {
+		return true
+	}
+	return false
+}
 
 // Default values for DmsgTrackerManager
 const (
@@ -244,7 +270,15 @@ func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
 
 	dt, err := newDmsgTracker(dCtx, dtm.dc, pk)
 	if err != nil {
-		log.WithError(err).WithField("client_pk", pk).Warn("Failed to re-create dmsgtracker client.")
+		// "entry not found" + cancel/deadline are expected when a peer
+		// is offline or the tracker shuts down mid-lookup; downgrade to
+		// debug so the warn channel stays useful for real failures.
+		entry := log.WithError(err).WithField("client_pk", pk)
+		if isExpectedTrackerLookupErr(err) {
+			entry.Debug("Skipped dmsgtracker client (peer not in discovery or lookup canceled).")
+		} else {
+			entry.Warn("Failed to re-create dmsgtracker client.")
+		}
 		return
 	}
 	if dt != nil {

@@ -143,7 +143,10 @@ func (r *router) serveSetup() {
 
 		remotePK := conn.RawRemoteAddr().PK
 		if !r.SetupIsTrusted(remotePK) {
-			r.logger.Warnf("closing conn from untrusted setup node: %v", conn.Close())
+			closeErr := conn.Close()
+			r.logger.WithField("remote_pk", remotePK).
+				WithField("close_err", closeErr).
+				Warn("Closing conn from untrusted setup node")
 			continue
 		}
 
