@@ -42,16 +42,15 @@ Use --path to print just the config file path.`,
 			// Ask the running visor for the path it actually loaded.
 			// Falls back to the default install path only when no visor
 			// is reachable (CLI invoked without a running visor).
+			path := visorconfig.SkywireConfig()
 			rpcClient, err := clirpc.Client(cmd.Flags())
-			if err != nil {
-				fmt.Println(visorconfig.SkywireConfig())
-				return
+			if err == nil {
+				configPath, err := rpcClient.GetConfigPath()
+				if err == nil && configPath != "" {
+					path = configPath
+				}
 			}
-			configPath, err := rpcClient.GetConfigPath()
-			if err != nil || configPath == "" {
-				configPath = visorconfig.SkywireConfig()
-			}
-			fmt.Println(configPath)
+			internal.PrintOutput(cmd.Flags(), path, path+"\n")
 			return
 		}
 
@@ -74,11 +73,13 @@ Use --path to print just the config file path.`,
 
 		var v interface{}
 		if err := json.Unmarshal(configData, &v); err != nil {
-			fmt.Println(string(configData))
+			internal.PrintOutput(cmd.Flags(), string(configData), string(configData)+"\n")
 			return
 		}
 
-		// Apply jq filter if provided.
+		// Apply jq filter if provided. Collect results so --json emits a
+		// single array (when multiple) or the lone value, matching how
+		// jq itself behaves with -c off.
 		if len(args) > 0 && args[0] != "" {
 			query, err := gojq.Parse(args[0])
 			if err != nil {
@@ -88,6 +89,8 @@ Use --path to print just the config file path.`,
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("compile filter: %w", err))
 			}
+			var results []interface{}
+			var text string
 			iter := code.Run(v)
 			for {
 				result, ok := iter.Next()
@@ -98,8 +101,14 @@ Use --path to print just the config file path.`,
 					internal.PrintFatalError(cmd.Flags(), err)
 				}
 				out, _ := json.MarshalIndent(result, "", "  ") //nolint:errcheck
-				fmt.Println(string(out))
+				text += string(out) + "\n"
+				results = append(results, result)
 			}
+			var payload interface{} = results
+			if len(results) == 1 {
+				payload = results[0]
+			}
+			internal.PrintOutput(cmd.Flags(), payload, text)
 			return
 		}
 

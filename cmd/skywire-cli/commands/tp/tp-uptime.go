@@ -20,6 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -34,7 +35,6 @@ var (
 	tpUptimeVisors   []string
 	tpUptimeOnline   bool
 	tpUptimeType     string
-	tpUptimeJSON     bool
 	tpUptimeTimeout  time.Duration
 	tpUptimeCacheDir string
 	tpUptimeCacheAge int
@@ -56,7 +56,7 @@ func init() {
 	tpUptimeCmd.Flags().StringSliceVar(&tpUptimeVisors, "visors", nil, "filter to transports touching these visor PKs (comma-separated) — uses /metrics/uptime/visor/{pks}")
 	tpUptimeCmd.Flags().BoolVarP(&tpUptimeOnline, "on", "o", false, "only include currently online transports")
 	tpUptimeCmd.Flags().StringVarP(&tpUptimeType, "type", "t", "", "filter by transport type (stcpr / sudph / dmsg / stcp)")
-	tpUptimeCmd.Flags().BoolVar(&tpUptimeJSON, "json", false, "emit raw JSON")
+	tpUptimeCmd.Flags().Bool("json", false, "emit raw JSON")
 	tpUptimeCmd.Flags().DurationVar(&tpUptimeTimeout, "timeout", 30*time.Second, "HTTP timeout")
 	tpUptimeCmd.Flags().StringVar(&tpUptimeCacheDir, "cache-dir", defaultTpUptimeCacheDir(), "cache directory (\"\" disables)")
 	tpUptimeCmd.Flags().IntVar(&tpUptimeCacheAge, "cache-age", 5, "re-fetch if cache is older than N minutes (0 disables)")
@@ -101,11 +101,7 @@ transport type, or --json to dump raw JSON for piping.`,
 			if err := json.Unmarshal([]byte(raw), &nu); err != nil {
 				fatal(cmd, fmt.Errorf("parse /metrics/uptime: %w", err))
 			}
-			if tpUptimeJSON {
-				_ = json.NewEncoder(os.Stdout).Encode(nu) //nolint:errcheck,gosec
-				return
-			}
-			printNetworkUptime(nu)
+			internal.PrintOutput(cmd.Flags(), nu, formatNetworkUptime(nu))
 		case len(tpUptimeIDs) > 0:
 			ids, err := parseUUIDs(tpUptimeIDs)
 			if err != nil {
@@ -121,7 +117,7 @@ transport type, or --json to dump raw JSON for piping.`,
 			if err := json.Unmarshal([]byte(raw), &entries); err != nil {
 				fatal(cmd, fmt.Errorf("parse %s: %w", path, err))
 			}
-			emitTransports(filterTransports(entries), tpUptimeJSON)
+			emitTransports(cmd, filterTransports(entries))
 		case len(tpUptimeVisors) > 0:
 			pks, err := parsePubKeys(tpUptimeVisors)
 			if err != nil {
@@ -137,7 +133,7 @@ transport type, or --json to dump raw JSON for piping.`,
 			if err := json.Unmarshal([]byte(raw), &entries); err != nil {
 				fatal(cmd, fmt.Errorf("parse %s: %w", path, err))
 			}
-			emitTransports(filterTransports(entries), tpUptimeJSON)
+			emitTransports(cmd, filterTransports(entries))
 		default:
 			q := ""
 			if tpUptimeVersion != "" && tpUptimeVersion != "v1" {
@@ -148,7 +144,7 @@ transport type, or --json to dump raw JSON for piping.`,
 			if err := json.Unmarshal([]byte(raw), &entries); err != nil {
 				fatal(cmd, fmt.Errorf("parse /uptimes/transports: %w", err))
 			}
-			emitTransports(filterTransports(entries), tpUptimeJSON)
+			emitTransports(cmd, filterTransports(entries))
 		}
 	},
 }
@@ -201,11 +197,8 @@ func filterTransports(in []uptimestats.TransportSummary) []uptimestats.Transport
 	return out
 }
 
-func emitTransports(entries []uptimestats.TransportSummary, asJSON bool) {
-	if asJSON {
-		_ = json.NewEncoder(os.Stdout).Encode(entries) //nolint:errcheck,gosec
-		return
-	}
+func emitTransports(cmd *cobra.Command, entries []uptimestats.TransportSummary) {
+	var buf strings.Builder
 	for _, t := range entries {
 		state := "off"
 		if t.Online {
@@ -215,18 +208,20 @@ func emitTransports(entries []uptimestats.TransportSummary, asJSON bool) {
 		if typ == "" {
 			typ = "-"
 		}
-		fmt.Printf("%s %s %-6s %s <-> %s\n", state, t.ID, typ, t.EdgeA, t.EdgeB)
+		fmt.Fprintf(&buf, "%s %s %-6s %s <-> %s\n", state, t.ID, typ, t.EdgeA, t.EdgeB)
 	}
+	internal.PrintOutput(cmd.Flags(), entries, buf.String())
 }
 
-func printNetworkUptime(nu uptimestats.NetworkUptime) {
+func formatNetworkUptime(nu uptimestats.NetworkUptime) string {
+	var buf strings.Builder
 	pct := 0.0
 	if nu.TotalTransports > 0 {
 		pct = 100 * float64(nu.Online) / float64(nu.TotalTransports)
 	}
-	fmt.Printf("transports: %d total, %d online (%.1f%%)\n", nu.TotalTransports, nu.Online, pct)
+	fmt.Fprintf(&buf, "transports: %d total, %d online (%.1f%%)\n", nu.TotalTransports, nu.Online, pct)
 	if len(nu.ByType) > 0 {
-		fmt.Println("by type:")
+		buf.WriteString("by type:\n")
 		keys := make([]string, 0, len(nu.ByType))
 		for k := range nu.ByType {
 			keys = append(keys, k)
@@ -238,9 +233,10 @@ func printNetworkUptime(nu uptimestats.NetworkUptime) {
 			if b.Total > 0 {
 				typePct = 100 * float64(b.Online) / float64(b.Total)
 			}
-			fmt.Printf("  %-6s %5d / %5d online (%.1f%%)\n", k, b.Online, b.Total, typePct)
+			fmt.Fprintf(&buf, "  %-6s %5d / %5d online (%.1f%%)\n", k, b.Online, b.Total, typePct)
 		}
 	}
+	return buf.String()
 }
 
 func parseUUIDs(in []string) ([]uuid.UUID, error) {
