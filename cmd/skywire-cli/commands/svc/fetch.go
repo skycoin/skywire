@@ -3,7 +3,6 @@ package clisvc
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -46,15 +45,19 @@ func fetchViaVisorOrDirect(cmd *cobra.Command, service, path, directURL string) 
 	return clirpc.FetchServiceURL(cmd.Flags(), url)
 }
 
-func prettyJSON(data []byte) string {
+// emitPretty routes the response through cliutil.PrintOutput so that
+// --json yields the parsed value (no envelope, no pretty wrap), while
+// the human path still shows pretty-indented JSON.
+func emitPretty(cmd *cobra.Command, data []byte) {
 	var v interface{}
 	if json.Unmarshal(data, &v) == nil {
 		pretty, err := json.MarshalIndent(v, "", "  ")
 		if err == nil {
-			return string(pretty)
+			internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")
+			return
 		}
 	}
-	return string(data)
+	internal.PrintOutput(cmd.Flags(), string(data), string(data)+"\n")
 }
 
 // --- TPD subcommands ---
@@ -87,7 +90,7 @@ var tpdStatsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -99,7 +102,7 @@ var tpdVersionsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -111,7 +114,7 @@ var tpdPerKeyStatsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -130,7 +133,7 @@ var tpdVisorStatsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -152,7 +155,7 @@ var tpdBandwidthCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -171,7 +174,7 @@ var tpdBandwidthTpCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -190,7 +193,7 @@ var tpdVersionsPKCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -209,7 +212,7 @@ var tpdMetricsVisorCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -228,7 +231,7 @@ var tpdMetricsTpCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -256,7 +259,7 @@ var dmsgdAllServersCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -268,7 +271,7 @@ var dmsgdServerClientsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -287,7 +290,7 @@ var dmsgdServerClientsPKCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -302,7 +305,7 @@ var arCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }
 
@@ -319,6 +322,6 @@ var nmCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Println(prettyJSON(data))
+		emitPretty(cmd, data)
 	},
 }

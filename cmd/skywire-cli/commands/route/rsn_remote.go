@@ -64,9 +64,9 @@ visor's config.`,
 		var v interface{}
 		if err := json.Unmarshal(body, &v); err == nil {
 			pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
-			fmt.Println(string(pretty))
-		} else {
-			fmt.Println(string(body))
+			internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")
+			return
 		}
+		internal.PrintOutput(cmd.Flags(), string(body), string(body)+"\n")
 	},
 }
