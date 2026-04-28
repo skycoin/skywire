@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -1039,6 +1040,29 @@ func (rc *rpcClient) DmsgSessions() (*DmsgClientSessions, error) {
 		return nil, err
 	}
 	return &resp, nil
+}
+
+// RegisterCXOFeed implements API.
+func (rc *rpcClient) RegisterCXOFeed(name string, dmsgPort uint16, description string) error {
+	return rc.Call("RegisterCXOFeed", &RegisterCXOFeedRequest{
+		Name:        name,
+		DmsgPort:    dmsgPort,
+		Description: description,
+	}, &struct{}{})
+}
+
+// UnregisterCXOFeed implements API.
+func (rc *rpcClient) UnregisterCXOFeed(name string) error {
+	return rc.Call("UnregisterCXOFeed", &name, &struct{}{})
+}
+
+// ListCXOFeeds implements API.
+func (rc *rpcClient) ListCXOFeeds() []logserver.CXOFeedEntry {
+	var resp []logserver.CXOFeedEntry
+	if err := rc.Call("ListCXOFeeds", &struct{}{}, &resp); err != nil {
+		return nil
+	}
+	return resp
 }
 
 // TPSStatus returns the status of the embedded TPS.

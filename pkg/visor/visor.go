@@ -173,6 +173,13 @@ type Visor struct {
 	// publisher.
 	statsTracker *stats.Tracker
 
+	// User-registered CXO TreeStore feeds keyed by name. Each feed
+	// is its own dmsg listener on a distinct port; the system feed
+	// (telemetry) is published separately by initStats and shows up
+	// in ListCXOFeeds via systemCXOFeed below.
+	cxoUserFeeds   map[string]*cxoUserFeed
+	cxoUserFeedsMu sync.Mutex
+
 	// Embedded DMSG Web resolver (nil if dmsg_web.enable is false).
 	// Provides a localhost SOCKS5 proxy that resolves .dmsg hosts.
 	embeddedDmsgWeb *EmbeddedDmsgWeb

@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -188,6 +189,12 @@ type API interface {
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
 	DmsgSessions() (*DmsgClientSessions, error)
+
+	// CXO user feeds — visor-published TreeStore feeds beyond the
+	// always-on telemetry one. See pkg/visor/cxo_user_feeds.go.
+	RegisterCXOFeed(name string, dmsgPort uint16, description string) error
+	UnregisterCXOFeed(name string) error
+	ListCXOFeeds() []logserver.CXOFeedEntry
 
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
