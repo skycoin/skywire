@@ -12,9 +12,8 @@
 package clivisor
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -24,10 +23,8 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
-var proxiesJSON bool
-
 func init() {
-	proxiesCmd.Flags().BoolVar(&proxiesJSON, "json", false, "emit raw JSON")
+	proxiesCmd.Flags().Bool("json", false, "emit raw JSON")
 	proxiesCmd.AddCommand(proxiesSetCmd)
 	proxiesCmd.AddCommand(proxiesUpstreamCmd)
 	RootCmd.AddCommand(proxiesCmd)
@@ -50,11 +47,7 @@ Print the runtime state + cumulative stats of the visor-hosted
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("EmbeddedProxies RPC failed: %w", err))
 		}
-		if proxiesJSON {
-			_ = json.NewEncoder(os.Stdout).Encode(status) //nolint:errcheck,gosec
-			return
-		}
-		printProxies(status)
+		internal.PrintOutput(cmd.Flags(), status, formatProxies(status))
 	},
 }
 
@@ -90,7 +83,9 @@ reverts to the config's 'enable' flag. Use this to experiment with
 		if enable {
 			state = "enabled"
 		}
-		fmt.Printf("%s resolver %s\n", kind, state)
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"kind": kind, "enabled": enable},
+			fmt.Sprintf("%s resolver %s\n", kind, state))
 	},
 }
 
@@ -120,20 +115,24 @@ Example chain: browser → dmsgweb (.dmsg) → skynetweb (.skynet) → skysocks 
 		if err := rpcClient.SetEmbeddedProxyUpstream(kind, addr); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetEmbeddedProxyUpstream failed: %w", err))
 		}
+		var msg string
 		if addr == "" {
-			fmt.Printf("%s resolver upstream cleared (direct connect)\n", kind)
+			msg = fmt.Sprintf("%s resolver upstream cleared (direct connect)\n", kind)
 		} else {
-			fmt.Printf("%s resolver upstream set to %s\n", kind, addr)
+			msg = fmt.Sprintf("%s resolver upstream set to %s\n", kind, addr)
 		}
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"kind": kind, "upstream": addr},
+			msg)
 	},
 }
 
-func printProxies(s *visor.EmbeddedProxiesStatus) {
+func formatProxies(s *visor.EmbeddedProxiesStatus) string {
 	if s == nil || (s.DmsgWeb == nil && s.SkynetWeb == nil) {
-		fmt.Println("(no embedded proxies configured)")
-		return
+		return "(no embedded proxies configured)\n"
 	}
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	var buf strings.Builder
+	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "name\tenabled\trunning\tdomain\tsocks\tweb\tupstream\trequests\tactive\tfailures") //nolint:errcheck,gosec
 	fmt.Fprintln(w, "----\t-------\t-------\t------\t-----\t---\t--------\t--------\t------\t--------") //nolint:errcheck,gosec
 	row := func(name string, p *visor.EmbeddedProxyInfo) {
@@ -159,14 +158,13 @@ func printProxies(s *visor.EmbeddedProxiesStatus) {
 	row("skynetweb", s.SkynetWeb)
 	_ = w.Flush() //nolint:errcheck,gosec
 
-	// Last-error blurb below the table when any resolver has one —
-	// helpful for quick triage without going to --json.
 	if s.DmsgWeb != nil && s.DmsgWeb.Stats != nil && s.DmsgWeb.Stats.LastError != "" {
-		fmt.Printf("\ndmsgweb last error: %s\n", s.DmsgWeb.Stats.LastError)
+		fmt.Fprintf(&buf, "\ndmsgweb last error: %s\n", s.DmsgWeb.Stats.LastError)
 	}
 	if s.SkynetWeb != nil && s.SkynetWeb.Stats != nil && s.SkynetWeb.Stats.LastError != "" {
-		fmt.Printf("\nskynetweb last error: %s\n", s.SkynetWeb.Stats.LastError)
+		fmt.Fprintf(&buf, "\nskynetweb last error: %s\n", s.SkynetWeb.Stats.LastError)
 	}
+	return buf.String()
 }
 
 func dashIfEmpty(s string) string {
