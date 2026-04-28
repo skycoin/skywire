@@ -37,21 +37,21 @@ import (
 //   - ErrorHandler logs reverse-proxy and upgrade failures so the
 //     symptom isn't a silently broken WS connection.
 func buildReverseProxy(log *logging.Logger, target *url.URL) *httputil.ReverseProxy {
-	proxy := httputil.NewSingleHostReverseProxy(target)
-	origDirector := proxy.Director
-	proxy.Director = func(req *http.Request) {
-		origDirector(req)
-		req.Host = target.Host
-		if req.Header.Get("Origin") != "" {
-			req.Header.Set("Origin", target.Scheme+"://"+target.Host)
-		}
-	}
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.WithError(err).
-			WithField("path", r.URL.Path).
-			WithField("upgrade", r.Header.Get("Upgrade")).
-			Warn("port-80 reverse proxy: backend error")
-		w.WriteHeader(http.StatusBadGateway)
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(target)
+			r.Out.Host = target.Host
+			if r.In.Header.Get("Origin") != "" {
+				r.Out.Header.Set("Origin", target.Scheme+"://"+target.Host)
+			}
+		},
+		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			log.WithError(err).
+				WithField("path", r.URL.Path).
+				WithField("upgrade", r.Header.Get("Upgrade")).
+				Warn("port-80 reverse proxy: backend error")
+			w.WriteHeader(http.StatusBadGateway)
+		},
 	}
 	return proxy
 }
