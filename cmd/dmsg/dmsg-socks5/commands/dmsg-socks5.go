@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	socks5 "github.com/confiant-inc/go-socks5"
+	socks5 "github.com/armon/go-socks5"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"

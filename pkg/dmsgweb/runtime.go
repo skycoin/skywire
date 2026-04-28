@@ -29,8 +29,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/armon/go-socks5"
 	"github.com/chen3feng/safecast"
-	"github.com/confiant-inc/go-socks5"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -263,13 +263,19 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 	}
 	lisAddr := fmt.Sprintf("127.0.0.1:%d", cfg.ProxyPort)
 	log.WithField("addr", lisAddr).Debug("Serving SOCKS5 direct proxy")
+	// Open the listener ourselves so we can close it on ctx cancel —
+	// armon/go-socks5's Serve returns when the listener is closed.
+	lis, err := net.Listen("tcp", lisAddr)
+	if err != nil {
+		return fmt.Errorf("SOCKS5 listen: %w", err)
+	}
 	go func() {
 		<-ctx.Done()
-		srv.Close() //nolint:gosec
+		_ = lis.Close() //nolint:errcheck
 	}()
-	err = srv.ListenAndServe("tcp", lisAddr)
+	err = srv.Serve(lis)
 	if err != nil && !errors.Is(err, net.ErrClosed) {
-		return fmt.Errorf("SOCKS5 listen: %w", err)
+		return fmt.Errorf("SOCKS5 serve: %w", err)
 	}
 	return nil
 }

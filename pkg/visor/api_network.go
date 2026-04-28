@@ -6,18 +6,68 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http/httputil"
+	"net/url"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
+	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
+// refreshWebsiteHandler (re)applies the right website handler to the
+// dmsghttp logserver based on current config + forwarded-port state.
+// Called at startup AND on every register/update/deregister of port 80
+// so a runtime ProxyAddr change takes effect without a visor restart.
+//
+// Precedence: rewards UI (config-driven) > forwarded-port reverse proxy
+// (runtime-driven) > nil (default landing page).
+func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
+	v.initLock.RLock()
+	lsAPI := v.logServer.api
+	v.initLock.RUnlock()
+	if lsAPI == nil {
+		return // logserver not yet constructed
+	}
+
+	// Rewards UI wins when configured — it's a global on/off switch.
+	if rw := v.conf.Rewards; rw != nil && rw.Enable {
+		log.Info("Mounting reward system UI on port 80")
+		lsAPI.SetWebsiteHandler(clirewardsserver.ConfigureAndBuild(clirewardsserver.RewardConfig{
+			WorkDir:         rw.WorkDir,
+			WhitelistPKs:    rw.Whitelist,
+			CanonicalDomain: rw.CanonicalDomain,
+			SkycoinNode:     rw.SkycoinNode,
+			LoginNode:       rw.LoginNode,
+			DisableTpVizAPI: true,
+		}))
+		return
+	}
+
+	// Reverse-proxy mode: a forwarded port for 80 with proxy_addr.
+	if fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort)); fp != nil && fp.ProxyAddr != "" {
+		target, err := url.Parse("http://" + fp.ProxyAddr)
+		if err != nil {
+			log.WithError(err).Warn("Invalid forwarded port proxy_addr; clearing website handler")
+			lsAPI.SetWebsiteHandler(nil)
+			return
+		}
+		log.WithField("addr", fp.ProxyAddr).Info("Reverse-proxying custom website (port 80)")
+		lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
+		return
+	}
+
+	// Default: clear the handler so the built-in landing page shows.
+	lsAPI.SetWebsiteHandler(nil)
+}
 
 // ConnectRawTCP implements API. Establishes a raw TCP port forwarding connection over skywire.
 func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
@@ -113,7 +163,13 @@ func (v *Visor) DeregisterTCPPort(localPort int) error {
 	v.allowed.mu.Lock()
 	delete(v.allowed.ports, localPort)
 	v.allowed.mu.Unlock()
-	return v.forwardedPorts.Deregister(localPort)
+	if err := v.forwardedPorts.Deregister(localPort); err != nil {
+		return err
+	}
+	if localPort == int(visorconfig.DmsgHTTPPort) {
+		v.refreshWebsiteHandler(v.log)
+	}
+	return nil
 }
 
 // ListTCPPorts implements API (legacy — returns port numbers only).
@@ -152,6 +208,11 @@ func (v *Visor) RegisterForwardedPort(p ForwardedPort) error {
 	if p.DMSG {
 		v.startDmsgForwarder(p.Port, p.LocalPort)
 	}
+	// If this is the dmsghttp port (80) entry, refresh the logserver's
+	// website handler so a new ProxyAddr takes effect immediately.
+	if p.Port == int(visorconfig.DmsgHTTPPort) {
+		v.refreshWebsiteHandler(v.log)
+	}
 	return nil
 }
 
@@ -171,6 +232,9 @@ func (v *Visor) UpdateForwardedPort(p ForwardedPort) error {
 		delete(v.allowed.ports, p.Port)
 	}
 	v.allowed.mu.Unlock()
+	if p.Port == int(visorconfig.DmsgHTTPPort) {
+		v.refreshWebsiteHandler(v.log)
+	}
 	return nil
 }
 

@@ -285,7 +285,7 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 				if err != nil {
 					return
 				}
-				log.WithField("remote", stream.RemotePK().String()[:16]+"...").
+				log.WithField("remote", stream.RemotePK().String()).
 					Debug("Accepted direct skynet forwarding stream")
 				go func() {
 					defer func() {
