@@ -213,9 +213,6 @@ github.com/coder/websocket/internal/bpool
 github.com/coder/websocket/internal/errd
 github.com/coder/websocket/internal/util
 github.com/coder/websocket/internal/wsjs
-# github.com/confiant-inc/go-socks5 v0.0.0-20210816151940-c1124825b1d6
-## explicit
-github.com/confiant-inc/go-socks5
 # github.com/containerd/console v1.0.5
 ## explicit; go 1.13
 github.com/containerd/console

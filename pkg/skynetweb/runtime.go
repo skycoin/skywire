@@ -25,7 +25,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/confiant-inc/go-socks5"
+	"github.com/armon/go-socks5"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -207,12 +207,21 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 	lisAddr := fmt.Sprintf("127.0.0.1:%d", cfg.ProxyPort)
 	log.WithField("addr", lisAddr).Info("Serving skynetweb SOCKS5 proxy")
 
+	// Open the listener ourselves so we can close it on ctx cancel —
+	// armon/go-socks5's Serve returns when the listener is closed.
+	lis, err := net.Listen("tcp", lisAddr)
+	if err != nil {
+		return fmt.Errorf("SOCKS5 listen: %w", err)
+	}
 	go func() {
 		<-ctx.Done()
-		srv.Close() //nolint:gosec
+		_ = lis.Close() //nolint:errcheck
 	}()
 
-	return srv.ListenAndServe("tcp", lisAddr)
+	if err := srv.Serve(lis); err != nil && !errors.Is(err, net.ErrClosed) {
+		return fmt.Errorf("SOCKS5 serve: %w", err)
+	}
+	return nil
 }
 
 // tcpAddrConn wraps a net.Conn so that LocalAddr/RemoteAddr return
