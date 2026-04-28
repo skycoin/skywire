@@ -27,12 +27,10 @@ func sampleRecord(t *testing.T) Record {
 	t.Helper()
 	pk, _ := cipher.GenerateKeyPair()
 	return Record{
-		PeerPK:         pk,
-		MyPort:         12345,
-		PeerPort:       12345,
-		SubscriberPort: 37345,
-		Status:         StatusPending,
-		EstablishedAt:  time.Now().UTC().Truncate(time.Millisecond),
+		PeerPK:        pk,
+		Port:          12345,
+		Status:        StatusPending,
+		EstablishedAt: time.Now().UTC().Truncate(time.Millisecond),
 	}
 }
 
@@ -47,7 +45,7 @@ func TestStorePutGet(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("Get: ok=%v err=%v", ok, err)
 	}
-	if got.PeerPK != r.PeerPK || got.MyPort != r.MyPort || got.Status != r.Status {
+	if got.PeerPK != r.PeerPK || got.Port != r.Port || got.Status != r.Status {
 		t.Errorf("roundtrip mismatch: got %+v want %+v", got, r)
 	}
 }
@@ -115,8 +113,8 @@ func TestStoreSetStatus(t *testing.T) {
 		t.Errorf("status = %s, want active", got.Status)
 	}
 	// Other fields preserved.
-	if got.MyPort != r.MyPort {
-		t.Errorf("MyPort changed: got %d want %d", got.MyPort, r.MyPort)
+	if got.Port != r.Port {
+		t.Errorf("Port changed: got %d want %d", got.Port, r.Port)
 	}
 }
 
