@@ -81,12 +81,12 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey) (*VStream, error) {
 		return true
 	})
 	if targetTp == nil {
-		return nil, fmt.Errorf("vstream: no non-DMSG transport to %s", remotePK.String()[:8])
+		return nil, fmt.Errorf("vstream: no non-DMSG transport to %s", remotePK.String())
 	}
 
-	m.log.WithField("tp", targetTp.Entry.ID.String()[:8]).
+	m.log.WithField("tp", targetTp.Entry.ID.String()).
 		WithField("type", targetTp.Type()).
-		WithField("remote", remotePK.String()[:16]).
+		WithField("remote", remotePK.String()).
 		Debug("VStreamMux: dialing on transport")
 
 	return m.DialOnTransport(targetTp)
