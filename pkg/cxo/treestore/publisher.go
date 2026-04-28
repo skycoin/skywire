@@ -45,6 +45,13 @@ type Publisher struct {
 	// changes; cleared by the publish loop after a successful Save.
 	dirty bool
 
+	// allow gates which subscriber PKs may connect. nil-set means the
+	// allowlist is disabled (any subscriber is accepted). NewWithDMSG
+	// wires this state into the CXO node's OnSubscribeRemote hook
+	// pre-NewNode so SetAllowlist takes effect immediately and there
+	// is no window where the gate is unconfigured.
+	allow *allowState
+
 	batchWindow time.Duration
 	wakeup      chan struct{}
 	done        chan struct{}
@@ -77,6 +84,24 @@ type Config struct {
 
 	// Logger overrides the default tag-based logger.
 	Logger *logging.Logger
+
+	// SubscriberAllowlist, when non-nil, restricts which remote PKs
+	// may subscribe to the publisher's feed. nil means the gate is
+	// disabled (any subscriber accepted, the historical default). An
+	// empty non-nil slice means "no subscribers allowed yet" — useful
+	// when staging a feed before authorizing peers via SetAllowlist.
+	//
+	// Callers using New directly with their own CXO node are
+	// responsible for wiring the node's OnSubscribeRemote hook to
+	// consult Publisher.AllowsSubscriber. NewWithDMSG wires it
+	// automatically.
+	SubscriberAllowlist []cipher.PubKey
+
+	// sharedAllow is set internally by NewWithDMSG when it builds the
+	// allowState before constructing the CXO node, so the OnSubscribeRemote
+	// closure and the resulting Publisher share the same state. Not
+	// exported.
+	sharedAllow *allowState
 }
 
 // PubConfig configures NewWithDMSG. Mirrors the relevant CXO knobs
@@ -92,6 +117,10 @@ type PubConfig struct {
 	// PK can coexist as long as they use distinct ports — useful for
 	// hosting independent CXO feeds on a single visor.
 	DmsgPort uint16
+
+	// SubscriberAllowlist, when non-nil, gates the OnSubscribeRemote
+	// hook so only listed PKs may subscribe. See Config.SubscriberAllowlist.
+	SubscriberAllowlist []cipher.PubKey
 }
 
 // NewWithDMSG is a convenience wrapper around New: it constructs a
@@ -114,6 +143,13 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 	cfg.UDP.Listen = ""
 	cfg.RPC = ""
 
+	// Build the allowState before NewNode so the OnSubscribeRemote
+	// closure captures live state. Wired even when the allowlist is
+	// disabled (nil set) so SetAllowlist can later raise the gate
+	// without restarting the node.
+	allow := newAllowState(conf.SubscriberAllowlist)
+	cfg.OnSubscribeRemote = subscribeHook(allow)
+
 	cxoNode, err := node.NewNode(cfg)
 	if err != nil {
 		return nil, err
@@ -128,7 +164,11 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 		return nil, err
 	}
 
-	p, err := New(cxoNode, sk, Config{BatchWindow: conf.BatchWindow, Logger: conf.Logger})
+	p, err := New(cxoNode, sk, Config{
+		BatchWindow: conf.BatchWindow,
+		Logger:      conf.Logger,
+		sharedAllow: allow,
+	})
 	if err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err
@@ -166,12 +206,18 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		}
 	}
 
+	allow := conf.sharedAllow
+	if allow == nil {
+		allow = newAllowState(conf.SubscriberAllowlist)
+	}
+
 	p := &Publisher{
 		log:         conf.Logger,
 		cxoNode:     cxoNode,
 		pk:          pk,
 		sk:          sk,
 		root:        newMemNode(),
+		allow:       allow,
 		batchWindow: conf.BatchWindow,
 		wakeup:      make(chan struct{}, 1),
 		done:        make(chan struct{}),
@@ -184,6 +230,32 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 // this PK.
 func (p *Publisher) Feed() cipher.PubKey {
 	return p.pk
+}
+
+// SetAllowlist atomically replaces the subscriber allowlist. nil
+// disables the gate (any subscriber accepted). An empty non-nil
+// slice closes the gate to all subscribers — useful for staging a
+// feed before authorizing peers.
+//
+// Existing subscribers keep their connections; the change applies
+// to subsequent subscribe attempts.
+func (p *Publisher) SetAllowlist(pks []cipher.PubKey) {
+	p.allow.replace(pks)
+}
+
+// Allowlist returns a snapshot of the current allowed PKs. nil means
+// the gate is disabled (open to all).
+func (p *Publisher) Allowlist() []cipher.PubKey {
+	return p.allow.list()
+}
+
+// AllowsSubscriber reports whether a subscribe request from pk would
+// pass the gate. NewWithDMSG wires this into the underlying CXO
+// node's OnSubscribeRemote hook automatically. Callers using New
+// directly with their own CXO node should consult this method from
+// their own hook implementation.
+func (p *Publisher) AllowsSubscriber(pk cipher.PubKey) bool {
+	return p.allow.permits(pk)
 }
 
 // AnnounceTo brings up (or refreshes) a CXO conn to peerPK over the
