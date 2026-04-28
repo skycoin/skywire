@@ -266,6 +266,17 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&isProxyServerEnable, "serveproxy", scriptExecBool("${PROXYSERVER:-true}"), "autostart proxy server (default: true)")
 	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecArray("${PROXYSERVERWL[@]}"), "comma-separated list of public keys allowed to connect to proxy server (empty = allow all)")
 
+	// Embedded resolving-proxy flags. Browsers point a single SOCKS5
+	// at the dmsgweb listener and `.dmsg` / `.skynet` URLs resolve.
+	// When both are enabled, the runtime auto-chains dmsgweb's
+	// upstream → skynetweb so one entry covers both TLDs.
+	genConfigCmd.Flags().BoolVar(&enableDmsgWeb, "dmsgweb", scriptExecBool("${DMSGWEB:-false}"), "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445")
+	genConfigCmd.Flags().BoolVar(&enableSkynetWeb, "skynetweb", scriptExecBool("${SKYNETWEB:-false}"), "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
+	genConfigCmd.Flags().StringVar(&dmsgWebUpstreamSOCKS, "dmsgweb-upstream", scriptExecString("${DMSGWEBUPSTREAM}"), "upstream SOCKS5 for non-.dmsg traffic (e.g. 127.0.0.1:1080); empty + skynetweb on = auto-chain to skynetweb")
+	gHiddenFlags = append(gHiddenFlags, "dmsgweb-upstream")
+	genConfigCmd.Flags().StringVar(&skynetWebUpstreamSOCKS, "skynetweb-upstream", scriptExecString("${SKYNETWEBUPSTREAM}"), "upstream SOCKS5 for non-.skynet traffic (e.g. 127.0.0.1:1080)")
+	gHiddenFlags = append(gHiddenFlags, "skynetweb-upstream")
+
 	// Skychat flags
 	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat (default: true)")
 	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
@@ -562,6 +573,8 @@ var genConfigCmd = &cobra.Command{
 		configureHypervisor(log)
 
 		configureApps(log)
+
+		configureResolvingProxies()
 
 		applyOverrides()
 
@@ -1394,6 +1407,26 @@ func configureApps(log *logging.Logger) {
 	if (selectedOS == "win") || (selectedOS == "mac") {
 		if isHypervisor {
 			conf.Hypervisor.EnableAuth = true
+		}
+	}
+}
+
+// configureResolvingProxies populates the dmsg_web / skynet_web
+// blocks when --dmsgweb / --skynetweb is set. The visor auto-starts
+// each block at boot when Enable=true and (when both are enabled)
+// auto-chains dmsgweb → skynetweb so a browser pointed at port 4445
+// covers both .dmsg and .skynet traffic.
+func configureResolvingProxies() {
+	if enableDmsgWeb {
+		conf.DmsgWeb = &visorconfig.DmsgWebConfig{
+			Enable:        true,
+			UpstreamSOCKS: dmsgWebUpstreamSOCKS,
+		}
+	}
+	if enableSkynetWeb {
+		conf.SkynetWeb = &visorconfig.SkynetWebConfig{
+			Enable:        true,
+			UpstreamSOCKS: skynetWebUpstreamSOCKS,
 		}
 	}
 }
