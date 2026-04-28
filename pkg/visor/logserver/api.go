@@ -187,8 +187,15 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 		return false
 	}
 
-	// Landing page with links to available endpoints
+	// Landing page with links to available endpoints. When a custom
+	// websiteHandler is set (port 80 reverse-proxy or rewards UI), it
+	// serves the root path too — replacing the default landing page
+	// rather than only catching unmatched routes.
 	r.GET("/", func(c *gin.Context) {
+		if api.websiteHandler != nil {
+			api.websiteHandler.ServeHTTP(c.Writer, c.Request)
+			return
+		}
 		wl := isWhitelisted(c)
 		c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
 		var links []string

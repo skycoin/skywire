@@ -11,8 +11,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -22,7 +20,6 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
@@ -344,30 +341,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	lsAPI.SetServiceLister(v.services)
 	lsAPI.SetForwardedPortLister(v.forwardedPorts)
 
-	// Mount reward system UI on port 80 if configured.
-	if rw := v.conf.Rewards; rw != nil && rw.Enable {
-		logger.Info("Mounting reward system UI on port 80")
-		rewardHandler := clirewardsserver.ConfigureAndBuild(clirewardsserver.RewardConfig{
-			WorkDir:         rw.WorkDir,
-			WhitelistPKs:    rw.Whitelist,
-			CanonicalDomain: rw.CanonicalDomain,
-			SkycoinNode:     rw.SkycoinNode,
-			LoginNode:       rw.LoginNode,
-			DisableTpVizAPI: true, // prevent tp-viz from shadowing hypervisor API
-		})
-		lsAPI.SetWebsiteHandler(rewardHandler)
-	} else if fp := v.forwardedPorts.Get(int(visorconfig.DmsgHTTPPort)); fp != nil && fp.ProxyAddr != "" {
-		// If port 80 has a forwarded port entry with a proxy addr,
-		// reverse-proxy unmatched routes to the local service.
-		// This replaces the default landing page with custom content.
-		logger.WithField("addr", fp.ProxyAddr).Info("Reverse-proxying custom website (port forwarding)")
-		target, err := url.Parse("http://" + fp.ProxyAddr)
-		if err != nil {
-			logger.WithError(err).Warn("Invalid forwarded port proxy_addr")
-		} else {
-			lsAPI.SetWebsiteHandler(httputil.NewSingleHostReverseProxy(target))
-		}
-	}
+	// Mount the website handler for port 80 — rewards UI if configured,
+	// otherwise the forwarded-port reverse proxy if one is registered.
+	v.refreshWebsiteHandler(logger)
 
 	lis, err := dmsgC.Listen(visorconfig.DmsgHTTPPort)
 	if err != nil {
