@@ -171,14 +171,16 @@ Examples:
 		if err := rpcClient.RegisterForwardedPort(fp); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Serving port %d", port)
+		var msg strings.Builder
+		fmt.Fprintf(&msg, "Serving port %d", port)
 		if serveTo != "" {
-			fmt.Printf(" → %s", serveTo)
+			fmt.Fprintf(&msg, " → %s", serveTo)
 		}
 		if serveLabel != "" {
-			fmt.Printf(" (%s)", serveLabel)
+			fmt.Fprintf(&msg, " (%s)", serveLabel)
 		}
-		fmt.Println()
+		msg.WriteString("\n")
+		internal.PrintOutput(cmd.Flags(), fp, msg.String())
 	},
 }
 
@@ -198,7 +200,8 @@ var servePortRmCmd = &cobra.Command{
 		if err := rpcClient.DeregisterTCPPort(port); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Port %d removed\n", port)
+		internal.PrintOutput(cmd.Flags(), map[string]any{"port": port, "removed": true},
+			fmt.Sprintf("Port %d removed\n", port))
 	},
 }
 
