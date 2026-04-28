@@ -25,20 +25,15 @@ func Catch(cmdFlags *pflag.FlagSet, err error) {
 	}
 }
 
-// PrintFatalError prints errors for skywire-cli commands packages
+// PrintFatalError prints errors for skywire-cli commands packages.
+// In --json mode the JSON error is written to stderr (so success
+// output on stdout stays parseable), then the process exits 1.
 //
 //nolint:errcheck
 func PrintFatalError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
-		errJSON := CLIOutput{
-			Err: err.Error(),
-		}
-		b, err := json.MarshalIndent(errJSON, "", "  ")
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Print(string(b) + "\n")
+		writeJSONError(os.Stderr, err)
 		os.Exit(1)
 	}
 	log.Fatal(err)
@@ -54,20 +49,15 @@ func PrintRPCError(cmdFlags *pflag.FlagSet, err error) {
 	PrintError(cmdFlags, fmt.Errorf("Failed to connect to visor RPC or RPC method not found; is skywire running?: %v", err))
 }
 
-// PrintError prints errors for skywire-cli commands packages
+// PrintError prints errors for skywire-cli commands packages.
+// JSON mode writes to stderr; non-JSON path uses the package logger.
 //
 //nolint:errcheck
 func PrintError(cmdFlags *pflag.FlagSet, err error) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
-		errJSON := CLIOutput{
-			Err: err.Error(),
-		}
-		b, err := json.MarshalIndent(errJSON, "", "  ")
-		if err != nil {
-			fmt.Println(err)
-		}
-		fmt.Print(string(b) + "\n")
+		writeJSONError(os.Stderr, err)
+		return
 	}
 	log.Error(err)
 }
@@ -91,33 +81,60 @@ func ParseUUID(cmdFlags *pflag.FlagSet, name, v string) uuid.UUID {
 	return id
 }
 
-// CLIOutput is used to print the cli output in json
+// CLIOutput is the legacy success-envelope shape kept around so external
+// callers that imported the type don't break. New code should not
+// construct it; PrintOutput emits raw JSON values directly.
 type CLIOutput struct {
 	Output interface{} `json:"output,omitempty"`
 	Err    string      `json:"error,omitempty"`
 }
 
-// PrintOutput prints either the normal output or the json output as per the global `--json` flag
+// PrintOutput prints the value as raw JSON (no `{"output": ...}`
+// envelope) in --json mode, or the human text otherwise.
+//
+// Migrated from the legacy CLIOutput envelope: previously the JSON
+// path emitted `{"output": <value>}`, which forced every consumer
+// through `jq '.output...'`. Now consumers pipe `jq '...'` directly
+// against the value — matching gh, kubectl, and stripe.
+//
+// Errors continue to go through PrintFatalError / PrintError, which
+// emit `{"error": "..."}` to stderr — so a successful pipe sees only
+// values, and an interrupted pipe sees only errors.
 //
 //nolint:errcheck
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON {
-		if outputJSON != nil {
-			outputJSON := CLIOutput{
-				Output: outputJSON,
-			}
-			b, err := json.MarshalIndent(outputJSON, "", "  ")
-			if err != nil {
-				fmt.Println(err)
-			}
-			fmt.Print(string(b) + "\n")
+		if outputJSON == nil {
+			return
 		}
+		b, err := json.MarshalIndent(outputJSON, "", "  ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+		fmt.Print(string(b) + "\n")
 		return
 	}
 	if output != "" {
 		fmt.Print(output)
 	}
+}
+
+// writeJSONError emits a JSON-encoded error to w, matching the shape
+// `{"error": "..."}` and including a trailing newline.
+//
+//nolint:errcheck
+func writeJSONError(w *os.File, err error) {
+	errJSON := struct {
+		Err string `json:"error"`
+	}{Err: err.Error()}
+	b, mErr := json.MarshalIndent(errJSON, "", "  ")
+	if mErr != nil {
+		fmt.Fprintln(w, mErr)
+		return
+	}
+	fmt.Fprint(w, string(b)+"\n")
 }
 
 // GetData was a direct-HTTP fetch+cache helper that has been removed.
