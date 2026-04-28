@@ -2,8 +2,8 @@
 package clidmsg
 
 import (
-	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -37,11 +37,13 @@ var porterStatsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("DMSG Porter Status\n")
-		fmt.Printf("  Main client ports:  %d / 16384\n", s.MainPorts)
+		var buf strings.Builder
+		buf.WriteString("DMSG Porter Status\n")
+		fmt.Fprintf(&buf, "  Main client ports:  %d / 16384\n", s.MainPorts)
 		if s.RSNPorts > 0 {
-			fmt.Printf("  RSN client ports:   %d / 16384\n", s.RSNPorts)
+			fmt.Fprintf(&buf, "  RSN client ports:   %d / 16384\n", s.RSNPorts)
 		}
+		internal.PrintOutput(cmd.Flags(), s, buf.String())
 	},
 }
 
@@ -62,11 +64,13 @@ Well-known ports (listeners) are preserved.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Porter reset complete\n")
-		fmt.Printf("  Main: freed %d ports (%d remaining)\n", s.MainFreed, s.MainPorts)
+		var buf strings.Builder
+		buf.WriteString("Porter reset complete\n")
+		fmt.Fprintf(&buf, "  Main: freed %d ports (%d remaining)\n", s.MainFreed, s.MainPorts)
 		if s.RSNFreed > 0 || s.RSNPorts > 0 {
-			fmt.Printf("  RSN:  freed %d ports (%d remaining)\n", s.RSNFreed, s.RSNPorts)
+			fmt.Fprintf(&buf, "  RSN:  freed %d ports (%d remaining)\n", s.RSNFreed, s.RSNPorts)
 		}
+		internal.PrintOutput(cmd.Flags(), s, buf.String())
 	},
 }
 
@@ -87,8 +91,7 @@ Use this to investigate ephemeral port exhaustion root causes.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		pretty, _ := json.MarshalIndent(diag, "", "  ") //nolint:errcheck
-		fmt.Println(string(pretty))
+		internal.PrintOutput(cmd.Flags(), diag, fmt.Sprintf("%+v\n", diag))
 	},
 }
 
@@ -104,6 +107,8 @@ var reconnectCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Closed %d DMSG sessions. Reconnect loop will re-dial within 15s.\n", n)
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"closed": n},
+			fmt.Sprintf("Closed %d DMSG sessions. Reconnect loop will re-dial within 15s.\n", n))
 	},
 }

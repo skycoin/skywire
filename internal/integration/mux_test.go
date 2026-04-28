@@ -123,9 +123,7 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 		RecvBytes uint64 `json:"recv_bytes,omitempty"`
 		SentBytes uint64 `json:"sent_bytes,omitempty"`
 	}
-	var tpResult struct {
-		Output []tpWithBW `json:"output"`
-	}
+	var tpResult []tpWithBW
 	err = env.ExecJSON(
 		fmt.Sprintf("/release/skywire cli --rpc %s:3435 tp --json", visorC),
 		&tpResult,
@@ -133,7 +131,7 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 	require.NoError(t, err, "Failed to list transports after traffic")
 
 	var dmsgBytes, stcprBytes uint64
-	for _, tp := range tpResult.Output {
+	for _, tp := range tpResult {
 		if tp.RemotePK != serverPK {
 			continue
 		}
@@ -170,16 +168,14 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 
 	// Also verify on the server side
 	clientPK := env.visorPKs[visorC]
-	var serverResult struct {
-		Output []tpWithBW `json:"output"`
-	}
+	var serverResult []tpWithBW
 	err = env.ExecJSON(
 		fmt.Sprintf("/release/skywire cli --rpc %s:3435 tp --json", visorA),
 		&serverResult,
 	)
 	if err == nil {
 		var serverDmsgBW, serverStcprBW uint64
-		for _, tp := range serverResult.Output {
+		for _, tp := range serverResult {
 			if tp.RemotePK != clientPK {
 				continue
 			}
