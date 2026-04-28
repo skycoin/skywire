@@ -1430,7 +1430,7 @@ func writeConfigOutput(log *logging.Logger) {
 			log.WithError(err).Fatal("Failed to marshal config to indented JSON")
 		}
 		if snConfig {
-			jsonData, err = script.Echo(string(jsonData)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+			jsonData, err = script.Echo(string(jsonData)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: (.transport.discovery_dmsg // .transport.discovery), log_level: .log_level}").Bytes()
 			if err != nil {
 				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
 			}
@@ -1454,7 +1454,7 @@ func writeConfigOutput(log *logging.Logger) {
 		log.WithError(err).Fatal("Failed to marshal config to indented JSON")
 	}
 	if snConfig {
-		j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: .transport.discovery, log_level: .log_level}").Bytes()
+		j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: (.transport.discovery_dmsg // .transport.discovery), log_level: .log_level}").Bytes()
 		if err != nil {
 			log.Fatalf("Failed to convert config to setup-node config format: %v", err)
 		}
