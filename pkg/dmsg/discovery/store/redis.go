@@ -101,7 +101,17 @@ func (r *redisStore) SetEntry(ctx context.Context, entry *disc.Entry, timeout ti
 		log.WithError(err).Errorf("Failed to set entry in redis")
 		return disc.ErrUnexpected
 	}
-	r.cache.invalidate(entry.Static)
+	// Store the just-written entry in the cache. Previously this was
+	// cache.invalidate, which forced the next reader to round-trip
+	// Redis to refill the slot — pathological for hot PKs (dmsg-servers
+	// repost on every session count change at 5-15 Hz; their entry is
+	// also among the most-queried keys, so each post dropped the next
+	// hundred-or-so reads through to Redis). Since SetEntry has the
+	// canonical post-write value in hand and has just confirmed Redis
+	// accepted it, populating the cache directly is both correct and
+	// drastically more efficient. The cache TTL still bounds staleness
+	// for the case where a Redis-side TTL silently expires the key.
+	r.cache.set(entry.Static, entry)
 
 	if entry.Server != nil {
 		err = r.client.SAdd(ctx, "servers", entry.Static.Hex()).Err()
