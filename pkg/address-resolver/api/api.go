@@ -512,12 +512,16 @@ func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object
 }
 
 // sudphHandshakeTimeout is the per-connection deadline for completing the
-// SUDPH responder handshake. Legitimate clients complete the 3-frame
-// exchange in well under a second; the default handshake.Timeout of 10s
-// is needlessly generous for a public-facing UDP listener and lets
-// scanner / broken-client connections accumulate one goroutine and one
-// KCP session each for the full 10s.
-const sudphHandshakeTimeout = 3 * time.Second
+// SUDPH responder handshake. Legitimate clients on a healthy network
+// complete the 3-frame exchange in well under a second, but real visors
+// on slow / lossy links (high RTT + KCP retransmission) can take longer.
+// The default handshake.Timeout of 10s was needlessly generous for a
+// public-facing UDP listener and let scanner / broken-client connections
+// accumulate state for the full 10s; 3s was tight enough that legitimate
+// slow clients were timing out and never appearing in the AR. 5s is the
+// compromise: still shaves ~50% off the worst-case scanner waste vs. the
+// 10s default, while leaving enough budget for high-RTT real handshakes.
+const sudphHandshakeTimeout = 5 * time.Second
 
 // sudphMaxInFlightHandshakes caps the number of concurrent in-flight
 // SUDPH handshakes. Any new UDP connection arriving while this many
