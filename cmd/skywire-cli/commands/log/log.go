@@ -54,6 +54,7 @@ func init() {
 	logCmd.Flags().BoolVar(&runCleanup, "cleanup", true, "run cleanup after collection (remove old/invalid files)")
 	logCmd.Flags().StringVar(&backupDir, "backup-dir", "log_backups", "backup directory to also clean")
 	logCmd.Flags().IntVar(&maxAgeDays, "max-age", 7, "maximum age in days for files before deletion")
+	logCmd.Flags().StringVar(&pruneBelowVer, "prune-below-version", "", "during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43)")
 	logCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 }
 
@@ -244,13 +245,13 @@ var logCmd = &cobra.Command{
 			log.Info("Running cleanup...")
 
 			// Clean the collection directory (current working directory)
-			cleanupDirectory(log, ".", maxAgeDays)
+			cleanupDirectory(log, ".", maxAgeDays, pruneBelowVer)
 
 			// Also clean the backup directory if it exists
 			// Need to go back to original directory first
 			if err := os.Chdir(".."); err == nil {
 				if _, err := os.Stat(backupDir); err == nil {
-					cleanupDirectory(log, backupDir, maxAgeDays)
+					cleanupDirectory(log, backupDir, maxAgeDays, pruneBelowVer)
 				}
 			}
 
@@ -452,8 +453,10 @@ func (e *httpError) Error() string {
 	return fmt.Sprintf("http error: %d", e.Status)
 }
 
-// cleanupDirectory performs all cleanup operations on a directory
-func cleanupDirectory(log *logging.Logger, dir string, maxAgeDays int) {
+// cleanupDirectory performs all cleanup operations on a directory.
+// If minVersion is non-empty, surveys (node-info.json) whose skywire_version
+// is below it are also removed, regardless of age.
+func cleanupDirectory(log *logging.Logger, dir string, maxAgeDays int, minVersion string) {
 	log.Infof("Cleaning directory: %s", dir)
 
 	// Get list of subdirectories (each is a visor public key)
@@ -461,6 +464,16 @@ func cleanupDirectory(log *logging.Logger, dir string, maxAgeDays int) {
 	if err != nil {
 		log.WithError(err).Warnf("Failed to read directory %s", dir)
 		return
+	}
+
+	var minVer *version.Version
+	if minVersion != "" {
+		mv, err := version.NewVersion(minVersion)
+		if err != nil {
+			log.WithError(err).Warnf("Invalid --prune-below-version %q; skipping version prune", minVersion)
+		} else {
+			minVer = mv
+		}
 	}
 
 	var removedFiles, removedDirs int
@@ -504,6 +517,16 @@ func cleanupDirectory(log *logging.Logger, dir string, maxAgeDays int) {
 				} else if !isValidJSON(filePath) {
 					shouldRemove = true
 					reason = "invalid JSON"
+				}
+			}
+
+			// Min-version prune: surveys for visors below the current min-version
+			// are not eligible for rewards, so keeping them wastes disk and
+			// confuses downstream calculations.
+			if !shouldRemove && minVer != nil && file.Name() == "node-info.json" {
+				if surveyBelowVersion(filePath, minVer) {
+					shouldRemove = true
+					reason = "skywire_version below " + minVersion
 				}
 			}
 
@@ -559,6 +582,32 @@ func isValidJSON(filePath string) bool {
 	}
 	var js json.RawMessage
 	return json.Unmarshal(data, &js) == nil
+}
+
+// surveyBelowVersion reports whether the survey at filePath has a
+// skywire_version that parses cleanly and is strictly less than minVer.
+// Returns false on any parse failure so we don't delete on bad data.
+func surveyBelowVersion(filePath string, minVer *version.Version) bool {
+	data, err := os.ReadFile(filePath) //nolint:gosec
+	if err != nil {
+		return false
+	}
+	var s struct {
+		SkywireVersion string `json:"skywire_version"`
+	}
+	if err := json.Unmarshal(data, &s); err != nil || s.SkywireVersion == "" {
+		return false
+	}
+	// Strip any "-something" or "+something" build suffix
+	v := s.SkywireVersion
+	if idx := strings.IndexAny(v, "-+ "); idx > 0 {
+		v = v[:idx]
+	}
+	parsed, err := version.NewVersion(v)
+	if err != nil {
+		return false
+	}
+	return parsed.LessThan(minVer)
 }
 
 // containsErrorContent checks if a file contains HTTP error messages
