@@ -3,8 +3,6 @@ package clitp
 
 import (
 	"encoding/json"
-	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -32,9 +30,13 @@ transport discovery HTTP API.`,
 		}
 
 		// Try local DHT full node first.
-		result, err := rpcClient.DHTGetAll("tp")
-		if err == nil && result != "[]" && result != "" {
-			fmt.Fprintln(os.Stdout, result) //nolint:errcheck
+		if result, err := rpcClient.DHTGetAll("tp"); err == nil && result != "[]" && result != "" {
+			var v interface{}
+			if json.Unmarshal([]byte(result), &v) == nil {
+				internal.PrintOutput(cmd.Flags(), v, result+"\n")
+				return
+			}
+			internal.PrintOutput(cmd.Flags(), result, result+"\n")
 			return
 		}
 
@@ -47,9 +49,9 @@ transport discovery HTTP API.`,
 		var v interface{}
 		if json.Unmarshal(body, &v) == nil {
 			pretty, _ := json.MarshalIndent(v, "", "  ") //nolint:errcheck
-			fmt.Fprintln(os.Stdout, string(pretty))      //nolint:errcheck
-		} else {
-			fmt.Fprintln(os.Stdout, string(body)) //nolint:errcheck
+			internal.PrintOutput(cmd.Flags(), v, string(pretty)+"\n")
+			return
 		}
+		internal.PrintOutput(cmd.Flags(), string(body), string(body)+"\n")
 	},
 }

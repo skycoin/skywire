@@ -110,21 +110,12 @@ func (env *TestEnv) GatherContainersInfo() *TestEnv {
 }
 
 func (env *TestEnv) VisorAppLs(visor string) ([]AppState, error) {
-
-	cliOutput := struct {
-		Output []AppState `json:"output,omitempty"`
-		Err    *string    `json:"error,omitempty"`
-	}{}
-
+	var apps []AppState
 	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 app ls --json", visor)
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	if err := env.ExecJSON(cmd, &apps); err != nil {
 		return nil, err
 	}
-	if cliOutput.Err != nil {
-		return nil, errors.New(*cliOutput.Err)
-	}
-	return cliOutput.Output, nil
+	return apps, nil
 }
 
 // VerifyAppRunning checks if an app is running and fails the test if not.
@@ -318,12 +309,7 @@ func (env *TestEnv) StopAppBestEffort(app AppToRun) *TestEnv {
 }
 
 func (env *TestEnv) VisorAppStart(app AppToRun) (string, error) {
-
-	cliOutput := struct {
-		Output string  `json:"output,omitempty"`
-		Err    *string `json:"error,omitempty"`
-	}{}
-
+	var out string
 	launcherFlag := ""
 	if app.LauncherMode == "internal" {
 		launcherFlag = " --internal"
@@ -332,36 +318,22 @@ func (env *TestEnv) VisorAppStart(app AppToRun) (string, error) {
 	}
 
 	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 app start %s%s --json", app.VisorHostName, app.AppName, launcherFlag)
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	if err := env.ExecJSON(cmd, &out); err != nil {
 		return "", err
 	}
-	if cliOutput.Err != nil {
-		return "", errors.New(*cliOutput.Err)
-	}
-
-	err = env.waitForVisorApp(app)
-	if err != nil {
+	if err := env.waitForVisorApp(app); err != nil {
 		return "", err
 	}
-	return cliOutput.Output, nil
+	return out, nil
 }
 
 func (env *TestEnv) VisorAppStop(app AppToRun) (string, error) {
-	cliOutput := struct {
-		Output string  `json:"output,omitempty"`
-		Err    *string `json:"error,omitempty"`
-	}{}
-
+	var out string
 	cmd := fmt.Sprintf("/release/skywire cli visor --rpc %v:3435 app stop %s --json", app.VisorHostName, app.AppName)
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	if err := env.ExecJSON(cmd, &out); err != nil {
 		return "", err
 	}
-	if cliOutput.Err != nil {
-		return "", errors.New(*cliOutput.Err)
-	}
-	return cliOutput.Output, nil
+	return out, nil
 }
 
 func (env *TestEnv) VisorSetAppArg(t *testing.T, arg AppArg) *TestEnv {
@@ -398,38 +370,24 @@ func (env *TestEnv) VisorCHVPK(visor string) ([]string, error) {
 }
 
 func (env *TestEnv) VisorRouteLsRules(visor string) ([]RouteRule, error) {
-	cliOutput := struct {
-		Output []RouteRule `json:"output,omitempty"`
-		Err    *string     `json:"error,omitempty"`
-	}{}
+	var rules []RouteRule
 	cmd := fmt.Sprintf("/release/skywire cli route --rpc %v:3435 --json", visor)
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	if err := env.ExecJSON(cmd, &rules); err != nil {
 		return nil, err
 	}
-	if cliOutput.Err != nil {
-		return nil, errors.New(*cliOutput.Err)
-	}
-	if cliOutput.Output == nil {
+	if rules == nil {
 		return []RouteRule{}, nil
 	}
-	return cliOutput.Output, nil
+	return rules, nil
 }
 
 func (env *TestEnv) VisorRouteRule(visor string, routeID routing.RouteID) (*RouteRule, error) {
-	cliOutput := struct {
-		Output []RouteRule `json:"output,omitempty"`
-		Err    *string     `json:"error,omitempty"`
-	}{}
+	var rules []RouteRule
 	cmd := fmt.Sprintf("/release/skywire cli route --rpc %v:3435 rule %v --json", visor, routeID)
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	if err := env.ExecJSON(cmd, &rules); err != nil {
 		return nil, err
 	}
-	if cliOutput.Err != nil {
-		return nil, errors.New(*cliOutput.Err)
-	}
-	return &cliOutput.Output[0], nil
+	return &rules[0], nil
 }
 
 func (env *TestEnv) VisorRouteAddAppRule(visor, routeID, localPK, localPort, remotePK, remotePort string) (*RouteKey, error) {
@@ -448,19 +406,11 @@ func (env *TestEnv) VisorRouteAddIntFwdRule(visor, routeID, nextRouteID, nextTpI
 }
 
 func (env *TestEnv) visorRouteAddRule(cmd string) (*RouteKey, error) {
-
-	cliOutput := struct {
-		Output *RouteKey `json:"output,omitempty"`
-		Err    *string   `json:"error,omitempty"`
-	}{}
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	var key RouteKey
+	if err := env.ExecJSON(cmd, &key); err != nil {
 		return nil, err
 	}
-	if cliOutput.Err != nil {
-		return nil, errors.New(*cliOutput.Err)
-	}
-	return cliOutput.Output, nil
+	return &key, nil
 }
 
 func (env *TestEnv) VisorRouteRmRule(visor string, routeID routing.RouteID) (string, error) {
@@ -482,18 +432,11 @@ func (env *TestEnv) VisorStart(visor string) (string, error) {
 
 func (env *TestEnv) VisorTpType(visor string) ([]tptypes.Type, error) {
 	cmd := fmt.Sprintf("/release/skywire cli --rpc %v:3435 tp --tptypes --json", visor)
-	cliOutput := struct {
-		Output []tptypes.Type `json:"output,omitempty"`
-		Err    *string        `json:"error,omitempty"`
-	}{}
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	var types []tptypes.Type
+	if err := env.ExecJSON(cmd, &types); err != nil {
 		return []tptypes.Type{}, err
 	}
-	if cliOutput.Err != nil {
-		return []tptypes.Type{}, errors.New(*cliOutput.Err)
-	}
-	return cliOutput.Output, nil
+	return types, nil
 }
 
 func (env *TestEnv) VisorTpLs(visor string) ([]*skyvisor.TransportSummary, error) {
@@ -605,34 +548,20 @@ func (env *TestEnv) visorTpExec(cmd string) ([]*skyvisor.TransportSummary, error
 // list. Used for tp list / tp discover style commands where zero results is
 // a valid state.
 func (env *TestEnv) visorTpExecAllowEmpty(cmd string) ([]*skyvisor.TransportSummary, error) {
-	cliOutput := struct {
-		Output []*skyvisor.TransportSummary `json:"output,omitempty"`
-		Err    *string                      `json:"error,omitempty"`
-	}{}
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	var summaries []*skyvisor.TransportSummary
+	if err := env.ExecJSON(cmd, &summaries); err != nil {
 		return nil, err
 	}
-	if cliOutput.Err != nil {
-		return nil, errors.New(*cliOutput.Err)
-	}
-	return cliOutput.Output, nil
+	return summaries, nil
 }
 
 func (env *TestEnv) VPNList(visor string) ([]servicedisc.Service, error) {
 	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 list --sdurl http://service-discovery:9091 --json", visor)
-	cliOutput := struct {
-		Output []servicedisc.Service `json:"output,omitempty"`
-		Err    *string               `json:"error,omitempty"`
-	}{}
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	var services []servicedisc.Service
+	if err := env.ExecJSON(cmd, &services); err != nil {
 		return nil, err
 	}
-	if cliOutput.Err != nil {
-		return nil, errors.New(*cliOutput.Err)
-	}
-	return cliOutput.Output, nil
+	return services, nil
 }
 
 func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
@@ -677,13 +606,10 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		env.logger.Infof("VPN start attempt %d/%d for %s -> %s (timeout: %v)", attempt, maxRetries, app.VisorHostName, serverPk, vpnStartTimeout)
 
-		cliOutput := struct {
-			Output VPNStart `json:"output,omitempty"`
-			Err    *string  `json:"error,omitempty"`
-		}{}
+		var startResult VPNStart
 
 		// Use timeout version to prevent indefinite hangs
-		err := env.ExecJSONWithTimeout(cmd, &cliOutput, vpnStartTimeout)
+		err := env.ExecJSONWithTimeout(cmd, &startResult, vpnStartTimeout)
 		if err != nil {
 			lastErr = err
 			env.logger.WithError(err).Warnf("VPN start command failed on attempt %d", attempt)
@@ -709,8 +635,8 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 		// If successful, we're done
 		if err == nil {
 			env.logger.Infof("VPN client started successfully on attempt %d", attempt)
-			if cliOutput.Output.AppError != "" {
-				return cliOutput.Output.AppError, nil
+			if startResult.AppError != "" {
+				return startResult.AppError, nil
 			}
 			return "OK", nil
 		}
@@ -796,18 +722,11 @@ func (env *TestEnv) VPNStop(app AppToRun) (string, error) {
 
 func (env *TestEnv) VPNStatus(visor string) (*VPNStatus, error) {
 	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 status --json", visor)
-	cliOutput := struct {
-		Output VPNStatus `json:"output,omitempty"`
-		Err    *string   `json:"error,omitempty"`
-	}{}
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	var status VPNStatus
+	if err := env.ExecJSON(cmd, &status); err != nil {
 		return nil, err
 	}
-	if cliOutput.Err != nil {
-		return nil, errors.New(*cliOutput.Err)
-	}
-	return &cliOutput.Output, nil
+	return &status, nil
 }
 
 func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
@@ -980,33 +899,19 @@ func (env *TestEnv) ExecJSON(cmd string, output interface{}) error {
 	return err
 }
 func (env *TestEnv) ExecJSONReturnString(cmd string) (string, error) {
-	cliOutput := struct {
-		Output string  `json:"output,omitempty"`
-		Err    *string `json:"error,omitempty"`
-	}{}
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	var out string
+	if err := env.ExecJSON(cmd, &out); err != nil {
 		return "", err
 	}
-	if cliOutput.Err != nil {
-		return "", errors.New(*cliOutput.Err)
-	}
-	return cliOutput.Output, nil
+	return out, nil
 }
 
 func (env *TestEnv) ExecJSONReturnSlice(cmd string) ([]string, error) {
-	cliOutput := struct {
-		Output []string `json:"output,omitempty"`
-		Err    *string  `json:"error,omitempty"`
-	}{}
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	var out []string
+	if err := env.ExecJSON(cmd, &out); err != nil {
 		return []string{}, err
 	}
-	if cliOutput.Err != nil {
-		return []string{}, errors.New(*cliOutput.Err)
-	}
-	return cliOutput.Output, nil
+	return out, nil
 }
 
 func (env *TestEnv) ExecInContainerByName(cmd string, containerName string) (string, error) {
@@ -1311,21 +1216,16 @@ func (env *TestEnv) WaitForVisorDmsgReady(visor string, timeout time.Duration) e
 		type dmsgServer struct {
 			PK string `json:"pk"`
 		}
-		cliOutput := struct {
-			Output []dmsgServer `json:"output,omitempty"`
-			Err    *string      `json:"error,omitempty"`
-		}{}
+		var servers []dmsgServer
 
-		err := env.ExecJSON(cmd, &cliOutput)
-		if err == nil && cliOutput.Err == nil && len(cliOutput.Output) > 0 {
-			env.logger.Infof("Visor %s connected to %d DMSG servers", visor, len(cliOutput.Output))
+		err := env.ExecJSON(cmd, &servers)
+		if err == nil && len(servers) > 0 {
+			env.logger.Infof("Visor %s connected to %d DMSG servers", visor, len(servers))
 			return nil
 		}
 
 		if err != nil {
 			env.logger.Debugf("dmsg-servers query for %s failed: %v", visor, err)
-		} else if cliOutput.Err != nil {
-			env.logger.Debugf("dmsg-servers error for %s: %s", visor, *cliOutput.Err)
 		} else {
 			env.logger.Debugf("Visor %s has no DMSG servers connected yet", visor)
 		}
@@ -1427,26 +1327,17 @@ func (env *TestEnv) waitForDmsgDiscoveryEntryAfter(visor string, timeout time.Du
 			Timestamp int64       `json:"timestamp"`
 		}
 
-		cliOutput := struct {
-			Output *dmsgEntry `json:"output,omitempty"`
-			Err    *string    `json:"error,omitempty"`
-		}{}
+		var entry dmsgEntry
 
-		err := env.ExecJSON(cmd, &cliOutput)
+		err := env.ExecJSON(cmd, &entry)
 		if err != nil {
 			env.logger.Debugf("mdisc query for %s failed: %v", visor, err)
 			time.Sleep(checkInterval)
 			continue
 		}
 
-		if cliOutput.Err != nil {
-			env.logger.Debugf("mdisc error for %s: %s", visor, *cliOutput.Err)
-			time.Sleep(checkInterval)
-			continue
-		}
-
-		if cliOutput.Output != nil && cliOutput.Output.Client != nil && len(cliOutput.Output.Client.DelegatedServers) > 0 {
-			entryTime := time.Unix(cliOutput.Output.Timestamp, 0)
+		if entry.Client != nil && len(entry.Client.DelegatedServers) > 0 {
+			entryTime := time.Unix(entry.Timestamp, 0)
 			if !notBefore.IsZero() && entryTime.Before(notBefore) {
 				env.logger.Debugf("Visor %s has stale DMSG entry (timestamp %v < notBefore %v), waiting for fresh registration",
 					visor, entryTime.Format(time.RFC3339), notBefore.Format(time.RFC3339))
@@ -1454,7 +1345,7 @@ func (env *TestEnv) waitForDmsgDiscoveryEntryAfter(visor string, timeout time.Du
 				continue
 			}
 			env.logger.Infof("Visor %s registered in DMSG discovery with %d delegated servers (entry age: %v)",
-				visor, len(cliOutput.Output.Client.DelegatedServers), time.Since(entryTime).Round(time.Second))
+				visor, len(entry.Client.DelegatedServers), time.Since(entryTime).Round(time.Second))
 			return nil
 		}
 
@@ -1804,21 +1695,11 @@ type RouteFinderResult struct {
 func (env *TestEnv) QueryRouteFinder(srcPK, dstPK string) (*RouteFinderResult, error) {
 	cmd := fmt.Sprintf("/release/skywire cli route find %s %s --addr http://route-finder:9092 --json --timeout 10s", srcPK, dstPK)
 
-	cliOutput := struct {
-		Output *RouteFinderResult `json:"output,omitempty"`
-		Err    *string            `json:"error,omitempty"`
-	}{}
-
-	err := env.ExecJSON(cmd, &cliOutput)
-	if err != nil {
+	var result RouteFinderResult
+	if err := env.ExecJSON(cmd, &result); err != nil {
 		return nil, fmt.Errorf("route finder query failed: %w", err)
 	}
-
-	if cliOutput.Err != nil {
-		return nil, fmt.Errorf("route finder error: %s", *cliOutput.Err)
-	}
-
-	return cliOutput.Output, nil
+	return &result, nil
 }
 
 // DumpRouteFinderState queries and logs route finder results between visors
@@ -2095,15 +1976,13 @@ func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.D
 	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		var result struct {
-			Output []tpBW `json:"output"`
-		}
+		var tps []tpBW
 		err := env.ExecJSON(
 			fmt.Sprintf("/release/skywire cli --rpc %s:3435 tp --json", visor),
-			&result,
+			&tps,
 		)
 		if err == nil {
-			for _, tp := range result.Output {
+			for _, tp := range tps {
 				if tp.RemotePK == peerPK && (tp.RecvBytes+tp.SentBytes) > 0 {
 					return true
 				}

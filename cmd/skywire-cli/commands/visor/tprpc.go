@@ -4,7 +4,6 @@ package clivisor
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -63,6 +62,6 @@ Examples:
 		}
 
 		pretty, _ := json.MarshalIndent(result, "", "  ") //nolint:errcheck
-		fmt.Fprintln(os.Stdout, string(pretty))           //nolint:errcheck
+		internal.PrintOutput(cmd.Flags(), result, string(pretty)+"\n")
 	},
 }
