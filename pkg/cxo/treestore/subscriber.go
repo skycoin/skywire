@@ -68,6 +68,18 @@ type SubConfig struct {
 	Logger     *logging.Logger
 	InMemoryDB bool
 	DataDir    string
+
+	// DmsgPort overrides both the listen port (where this subscriber's
+	// CXO node accepts inbound connections, typically unused for
+	// subscribe-only flows) and the dial port (where Connect dials
+	// the publisher). Zero falls back to cxotransport.DefaultCXOPort,
+	// matching the system telemetry feed.
+	//
+	// Per-pair-feed callers set this to the pair's deterministic
+	// publisher port so the subscriber dials the right place; multiple
+	// subscribers on one visor must use distinct DmsgPort values to
+	// avoid a Listen collision.
+	DmsgPort uint16
 }
 
 // NewSubscriber creates a Subscriber that will receive updates from
@@ -90,7 +102,11 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 		return nil, err
 	}
 
-	factory := cxotransport.NewDMSGFactory(dmsgC, cxotransport.DefaultCXOPort)
+	port := conf.DmsgPort
+	if port == 0 {
+		port = cxotransport.DefaultCXOPort
+	}
+	factory := cxotransport.NewDMSGFactory(dmsgC, port)
 	if err := cxoNode.EnableDMSG(factory); err != nil {
 		_ = cxoNode.Close() //nolint:errcheck
 		return nil, err
