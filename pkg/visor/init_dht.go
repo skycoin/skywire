@@ -11,7 +11,6 @@ import (
 	"github.com/skycoin/skywire/pkg/dht"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/transport"
 )
 
 func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -180,13 +179,11 @@ func dhtPublishLoop(ctx context.Context, v *Visor, node *dht.Node, log *logging.
 	// above it (handles backwards clock skew + a peer that was last
 	// to receive our previous publish).
 	seq := uint64(time.Now().UnixNano())
-	for _, salt := range [][]byte{[]byte("dmsg"), []byte("tp")} {
-		queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		if got, err := node.Get(queryCtx, v.conf.PK, salt); err == nil && got != nil && got.Seq >= seq {
-			seq = got.Seq + 1
-		}
-		cancel()
+	queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	if got, err := node.Get(queryCtx, v.conf.PK, []byte("dmsg")); err == nil && got != nil && got.Seq >= seq {
+		seq = got.Seq + 1
 	}
+	cancel()
 
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
@@ -203,53 +200,41 @@ func dhtPublishLoop(ctx context.Context, v *Visor, node *dht.Node, log *logging.
 	}
 }
 
+// dhtPublish writes the visor's DMSG discovery entry to the DHT under
+// salt "dmsg".
+//
+// Transports are NOT published here — the TPDAdapter (wired into the
+// transport manager via NewHybridTPDClient) is the sole writer of salt
+// "tp". Two writers with different formats would race; the manager-
+// driven path already publishes on every register/heartbeat in the
+// canonical SignedEntry shape that GetTransportsByEdge reads back.
 func dhtPublish(ctx context.Context, v *Visor, node *dht.Node, log *logging.Logger, seq uint64) {
-	// Publish DMSG discovery entry.
-	if v.dClient != nil {
-		entry, err := v.dClient.Entry(ctx, v.conf.PK)
-		if err == nil && entry != nil {
-			data, err := json.Marshal(entry)
-			if err == nil && len(data) <= dht.MaxValueSize {
-				if err := node.Put(ctx, data, seq, []byte("dmsg")); err != nil {
-					log.WithError(err).Trace("DHT: publish DMSG entry failed")
-				}
-			}
-		}
+	// Use the dmsg client's own discovery view (via DiscEntry → HTTP
+	// discovery) rather than v.dClient. v.dClient is a direct.Client
+	// returning synthetic placeholder entries with no Signature — those
+	// are useful inside the visor for in-memory dialing but unsafe to
+	// hand to the rest of the network as authoritative state.
+	if v.dmsgC == nil {
+		return
 	}
-
-	// Publish transport list.
-	if v.tpM != nil {
-		tps := v.tpM.GetTransportsByLabels(transport.LabelSkycoin, transport.LabelAutomatic)
-		if len(tps) > 0 {
-			type tpEntry struct {
-				Remote  cipher.PubKey `json:"r"`
-				Type    string        `json:"t"`
-				Latency float64       `json:"l,omitempty"`
-				// Bw is the live cumulative bandwidth (sent + recv
-				// bytes) for this transport. Live snapshot only; the
-				// historical daily series lives on the visor's CXO
-				// telemetry feed and HTTP /stats/* endpoints.
-				Bw uint64 `json:"b,omitempty"`
-			}
-			entries := make([]tpEntry, 0, len(tps))
-			for _, tp := range tps {
-				if tp.IsClosed() {
-					continue
-				}
-				bw := tp.GetBandwidth()
-				entries = append(entries, tpEntry{
-					Remote:  tp.Remote(),
-					Type:    string(tp.Type()),
-					Latency: tp.GetLatency(),
-					Bw:      bw.SentBytes + bw.RecvBytes,
-				})
-			}
-			data, err := json.Marshal(entries)
-			if err == nil && len(data) <= dht.MaxValueSize {
-				if err := node.Put(ctx, data, seq, []byte("tp")); err != nil {
-					log.WithError(err).Trace("DHT: publish transports failed")
-				}
-			}
-		}
+	entry, err := v.dmsgC.DiscEntry(ctx, v.conf.PK)
+	if err != nil || entry == nil {
+		return
+	}
+	// Defense-in-depth: only publish a fully-formed signed entry. Even
+	// if a future caller wires in a different discovery source, the DHT
+	// can't reject malformed inner JSON on its own, so we filter here.
+	if entry.Static != v.conf.PK || entry.Signature == "" {
+		log.WithField("static_match", entry.Static == v.conf.PK).
+			WithField("has_signature", entry.Signature != "").
+			Debug("DHT: skipping publish of malformed self DMSG entry")
+		return
+	}
+	data, err := json.Marshal(entry)
+	if err != nil || len(data) > dht.MaxValueSize {
+		return
+	}
+	if err := node.Put(ctx, data, seq, []byte("dmsg")); err != nil {
+		log.WithError(err).Trace("DHT: publish DMSG entry failed")
 	}
 }
