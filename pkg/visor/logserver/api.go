@@ -62,6 +62,24 @@ type HealthStatsProvider interface {
 	GetNetworkTypes() []string
 }
 
+// CXOFeedEntry describes one CXO TreeStore feed published by the visor.
+// Subscribers connect to (visor PK, DmsgPort) over DMSG and request
+// the registered prefix, mirroring the data into their own subscriber.
+type CXOFeedEntry struct {
+	Name        string `json:"name"`
+	DmsgPort    uint16 `json:"dmsg_port"`
+	Description string `json:"description,omitempty"`
+	System      bool   `json:"system,omitempty"`
+}
+
+// CXOFeedsLister provides the list of CXO feeds the visor is publishing.
+// Returns the always-on system feed (stats/telemetry) plus any
+// user-registered feeds. Pure metadata — actual feed content is served
+// out-of-band over DMSG by treestore.Publisher.
+type CXOFeedsLister interface {
+	ListCXOFeeds() []CXOFeedEntry
+}
+
 // API register all the API endpoints.
 // It implements a net/http.Handler.
 type API struct {
@@ -72,6 +90,7 @@ type API struct {
 	healthStatsProvider HealthStatsProvider
 	serviceLister       ServiceLister
 	forwardedPortLister ForwardedPortLister
+	cxoFeedsLister      CXOFeedsLister
 	statsReader         StatsReader  // visor-local telemetry store, set via SetStatsReader
 	websiteHandler      http.Handler // optional: serves unmatched routes (custom website)
 }
@@ -133,6 +152,19 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 			return
 		}
 		c.JSON(http.StatusOK, api.serviceLister.ListPublic())
+	})
+
+	// CXO feed catalog — lists every feed (system + user-registered)
+	// that the visor publishes over DMSG. Subscribers fetch this once
+	// to discover names + ports, then connect their CXO subscriber to
+	// (this visor's PK, dmsg_port) and apply prefix filtering. Pure
+	// metadata, no auth required.
+	r.GET("/feeds", func(c *gin.Context) {
+		if api.cxoFeedsLister == nil {
+			c.JSON(http.StatusOK, []CXOFeedEntry{})
+			return
+		}
+		c.JSON(http.StatusOK, api.cxoFeedsLister.ListCXOFeeds())
 	})
 
 	// Transport log files (auth'd)
@@ -352,6 +384,12 @@ func (api *API) SetServiceLister(lister ServiceLister) {
 // SetForwardedPortLister sets the forwarded port provider for the landing page.
 func (api *API) SetForwardedPortLister(lister ForwardedPortLister) {
 	api.forwardedPortLister = lister
+}
+
+// SetCXOFeedsLister sets the CXO feed catalog provider. Called from
+// visor init after the user-feed registry is wired up.
+func (api *API) SetCXOFeedsLister(lister CXOFeedsLister) {
+	api.cxoFeedsLister = lister
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
