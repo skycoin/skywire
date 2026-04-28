@@ -132,6 +132,13 @@ func init() {
 		clipv.RootCmd,
 		clisvc.RootCmd,
 		cliutil.RootCmd,
+
+		// Top-level shortcuts: high-traffic verbs reachable without
+		// the `visor` middle word. Long forms keep working at
+		// `cli visor pk`, `cli visor info`, `cli visor halt`.
+		pkCmd,
+		statusCmd,
+		haltCmd,
 	)
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output as JSON")
