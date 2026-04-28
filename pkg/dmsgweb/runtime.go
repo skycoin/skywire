@@ -276,7 +276,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 
 // Context keys used by the SOCKS5 resolver ↔ Dial callback handshake.
 type (
-	dmsgResolverPortKey_t struct{} // set when .dmsg matched → value is the bridge port string
+	dmsgResolverPortKey_t struct{} // set when .dmsg matched → presence is the signal; value unused
 	dmsgOrigHostKey_t     struct{} // always set → original hostname before resolution
 )
 
@@ -304,7 +304,9 @@ func (r *dmsgResolver) Resolve(ctx context.Context, name string) (context.Contex
 	pattern := `\` + r.cfg.DomainSuffix + `(:[0-9]+)?$`
 	match, _ := regexp.MatchString(pattern, name) //nolint:errcheck
 	if match {
-		ctx = context.WithValue(ctx, dmsgResolverPortKey, fmt.Sprintf("%d", r.cfg.WebPorts[0]))
+		// The Dial callback only checks presence of this key to know
+		// "this is a .dmsg hostname" — the value is irrelevant.
+		ctx = context.WithValue(ctx, dmsgResolverPortKey, "match")
 	}
 	// Always return 127.0.0.1 — prevents the library from doing a
 	// DNS lookup that would fail for .dmsg / .skynet / any custom TLD.
