@@ -34,15 +34,13 @@ func init() {
 }
 
 var proxiesCmd = &cobra.Command{
-	Use:   "proxies",
-	Short: "Show embedded resolving-proxy status (dmsgweb, skynetweb)",
-	Long: `Print the runtime state + cumulative stats of the visor-hosted
-.dmsg / .skynet resolving proxies. Copy SocksAddr into a browser's
-SOCKS5 setting to browse the matched domain; paste WebAddr into curl
-for a direct smoke test.
+	Use:        "proxies",
+	Short:      "Show embedded resolving-proxy status (deprecated; use `cli resolver`)",
+	Deprecated: "use `skywire cli resolver` instead",
+	Long: `Deprecated. Use ` + "`skywire cli resolver`" + ` instead.
 
-Use "proxies set <kind> on|off" to toggle a resolver at runtime
-without editing the config file.`,
+Print the runtime state + cumulative stats of the visor-hosted
+.dmsg / .skynet resolving proxies.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
