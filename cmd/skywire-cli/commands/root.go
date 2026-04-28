@@ -19,12 +19,14 @@ import (
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
 	clipv "github.com/skycoin/skywire/cmd/skywire-cli/commands/pv"
+	cliresolver "github.com/skycoin/skywire/cmd/skywire-cli/commands/resolver"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
 	clirewards "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards"
 	clirg "github.com/skycoin/skywire/cmd/skywire-cli/commands/rg"
 	cliroute "github.com/skycoin/skywire/cmd/skywire-cli/commands/route"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	clisd "github.com/skycoin/skywire/cmd/skywire-cli/commands/sd"
+	cliserve "github.com/skycoin/skywire/cmd/skywire-cli/commands/serve"
 	cliskychat "github.com/skycoin/skywire/cmd/skywire-cli/commands/skychat"
 	cliskynet "github.com/skycoin/skywire/cmd/skywire-cli/commands/skynet"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
@@ -71,6 +73,8 @@ func init() {
 
 	clivisor.RootCmd.GroupID = groupVisor
 	cligotop.RootCmd.GroupID = groupVisor
+	cliresolver.RootCmd.GroupID = groupVisor
+	cliserve.RootCmd.GroupID = groupNet
 
 	clivpn.RootCmd.GroupID = groupApps
 	cliskysocksc.RootCmd.GroupID = groupApps
@@ -123,6 +127,8 @@ func init() {
 		clicompletion.RootCmd,
 		clilog.RootCmd,
 		cliskysocksc.RootCmd,
+		cliresolver.RootCmd,
+		cliserve.RootCmd,
 		clipv.RootCmd,
 		clisvc.RootCmd,
 		cliutil.RootCmd,
