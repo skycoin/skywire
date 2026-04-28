@@ -82,7 +82,7 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 			// closeDmsgDC will run when the setup node shuts down via
 			// its context cancellation; we don't track this in a close
 			// stack here because Node.Stop is not exposed and the
-			// process exits when ctx is cancelled.
+			// process exits when ctx is canceled.
 			_ = closeDmsgDC
 		}
 	} else if discURL == "" && conf.Dmsg.DiscoveryDmsg != "" {
