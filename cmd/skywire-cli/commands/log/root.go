@@ -32,6 +32,7 @@ var (
 	runCleanup     bool
 	backupDir      string
 	maxAgeDays     int
+	pruneBelowVer  string
 )
 
 // RootCmd is logCmd
