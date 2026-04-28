@@ -155,19 +155,17 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		WithField("domain", cfg.DomainSuffix).
 		Info("Serving skynetweb resolver")
 
-	// Dereference the mux pointer at serve time — the mux is set by
-	// initSkywireForwardConn which may finish after the skynetweb
-	// was constructed (runtime RPC toggle race).
-	var skyMux *transport.VStreamMux
-	if e.skynetMux != nil {
-		skyMux = *e.skynetMux
-	}
+	// Pass a pointer-to-pointer so the dialer can dereference the mux
+	// at *dial* time, not serve time. The mux is wired up by
+	// initSkywireForwardConn, which can finish after this serve loop
+	// starts (runtime RPC toggle race) — capturing once would lock the
+	// dialer into the route-based fallback even after the mux exists.
 	dialer := &routerSkynetDialer{
 		router:       e.router,
 		localPK:      e.localPK,
 		log:          e.log,
 		tpM:          e.tpM,
-		skynetMux:    skyMux,
+		skynetMuxPtr: e.skynetMux,
 		routeTimeout: time.Duration(e.cfg.RouteTimeout),
 	}
 	if err := skynetweb.Run(ctx, e.log, dialer, cfg); err != nil && err != context.Canceled {
@@ -181,20 +179,25 @@ type routerSkynetDialer struct {
 	router       router.Router
 	localPK      cipher.PubKey
 	log          *logging.Logger
-	tpM          *transport.Manager    // for direct transport dialing
-	skynetMux    *transport.VStreamMux // shared with forwarding server
-	routeTimeout time.Duration         // 0 = use DefaultRouteKeepAlive
-	nextPort     uint32                // ephemeral port counter for route fallback
+	tpM          *transport.Manager     // for direct transport dialing
+	skynetMuxPtr **transport.VStreamMux // shared with forwarding server; deref at dial time
+	routeTimeout time.Duration          // 0 = use DefaultRouteKeepAlive
+	nextPort     uint32                 // ephemeral port counter for route fallback
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
 	// Try direct transport first — no route setup needed, no RSN dependency.
 	// Uses the shared VStreamMux (same instance as the forwarding server).
-	if d.skynetMux != nil {
-		mux := d.skynetMux
+	// Dereference at dial time so we pick up a mux that finished
+	// initializing after this dialer was constructed.
+	var mux *transport.VStreamMux
+	if d.skynetMuxPtr != nil {
+		mux = *d.skynetMuxPtr
+	}
+	if mux != nil {
 		stream, err := mux.Dial(remote)
 		if err == nil {
-			d.log.WithField("remote", remote.String()[:16]+"...").
+			d.log.WithField("remote", remote.String()).
 				WithField("port", port).
 				Debug("Skynet: using direct transport (no route)")
 			conn := &vstreamConn{VStream: stream}

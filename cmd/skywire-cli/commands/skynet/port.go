@@ -66,11 +66,15 @@ var portLsCmd = &cobra.Command{
 		}
 		var buf strings.Builder
 		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "PORT\tLOCAL\tLABEL\tSKYNET\tDMSG\tLANDING\tDESCRIPTION") //nolint:errcheck
+		fmt.Fprintln(tw, "PORT\tLOCAL ADDR\tLABEL\tSKYNET\tDMSG\tLANDING\tDESCRIPTION") //nolint:errcheck
 		for _, p := range ports {
-			fmt.Fprintf(tw, "%d\t%d\t%s\t%v\t%v\t%v\t%s\n", //nolint:errcheck
+			localAddr := p.ProxyAddr
+			if localAddr == "" {
+				localAddr = fmt.Sprintf("localhost:%d", p.EffectiveLocalPort())
+			}
+			fmt.Fprintf(tw, "%d\t%s\t%s\t%v\t%v\t%v\t%s\n", //nolint:errcheck
 				p.Port,
-				p.EffectiveLocalPort(),
+				localAddr,
 				dashIfEmpty(p.Label),
 				p.Skynet,
 				p.DMSG,
