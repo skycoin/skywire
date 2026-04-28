@@ -39,6 +39,12 @@ const (
 	// DmsgGRPCPort is the DMSG port for gRPC services (remote gotop, stats, etc.)
 	DmsgGRPCPort uint16 = 49
 
+	// DmsgCXOPort is the DMSG port the visor's CXO TreeStore publisher
+	// listens on (and the TPD aggregator + other visors dial). Picked
+	// outside the 46–49 dmsg-RPC cluster so the CXO listener can't
+	// collide with DmsgHypervisorPort.
+	DmsgCXOPort uint16 = 50
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 
