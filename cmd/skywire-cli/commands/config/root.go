@@ -94,6 +94,10 @@ var (
 	enableProxyClientAutostart bool
 	isProxyServerEnable        bool
 	proxyServerWhitelist       string
+	enableDmsgWeb              bool
+	enableSkynetWeb            bool
+	dmsgWebUpstreamSOCKS       string
+	skynetWebUpstreamSOCKS     string
 	configServicePath          string
 	dmsgHTTPPath               string
 	snConfig                   bool
