@@ -9,16 +9,16 @@
 // Port plan:
 //
 //   - Publisher port (where Alice's pair-with-Bob feed listens, and
-//     where Bob's subscriber dials Alice): in [pubBase, pubBase+pubSpan).
+//     where Bob's subscriber dials Alice): in [PubBase, PubBase+PubSpan).
 //   - Subscriber port (where Alice's subscriber-to-Bob CXO node binds
 //     its inbound listener, since EnableDMSG always Listens): in
-//     [subBase, subBase+pubSpan), offset by pubSpan from the publisher.
+//     [SubBase, SubBase+PubSpan), offset by PubSpan from the publisher.
 //
 // The two ranges don't overlap, and they sit clear of the system DMSG
 // port table (everything <300 + reserved ranges around port 80 / 100 /
 // 136). Collisions with the reserved set are still possible at the
 // boundaries; ResolvePublisherPort walks forward to the next free
-// port in pubBase..pubBase+pubSpan and panics on full saturation
+// port in PubBase..PubBase+PubSpan and panics on full saturation
 // (50000 deterministic slots is far more than any realistic chat-pair
 // count, so saturation here is an indication of either a bug or a
 // hostile workload).
@@ -33,12 +33,13 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-// Port-allocation tunables. Public constants so unit tests can assert
-// against them and the design intent is documented.
+// Port-allocation tunables. Public constants so callers (e.g. the
+// visor's CXO user-feed registry, which needs to reject overlapping
+// port allocations) can validate against the same numbers.
 const (
-	pubBase uint16 = 10000
-	pubSpan uint16 = 25000
-	subBase uint16 = 35000
+	PubBase uint16 = 10000
+	PubSpan uint16 = 25000
+	SubBase uint16 = 35000
 )
 
 // ReservedPorts is the set of DMSG ports already bound by visor
@@ -77,7 +78,7 @@ type PairPorts struct {
 // ComputePairPorts(b, a). The caller must already have decided that
 // the pair should exist; ComputePairPorts has no side effects.
 //
-// Returns an error only when every port slot in pubBase..pubBase+pubSpan
+// Returns an error only when every port slot in PubBase..PubBase+PubSpan
 // is also in ReservedPorts (impossible with the current static
 // reserved table, but checked so future expansions of that table fail
 // loudly rather than infinite-loop).
@@ -88,7 +89,7 @@ func ComputePairPorts(a, b cipher.PubKey) (PairPorts, error) {
 	}
 	return PairPorts{
 		Publisher:  pub,
-		Subscriber: pub + pubSpan,
+		Subscriber: pub + PubSpan,
 	}, nil
 }
 
@@ -104,23 +105,23 @@ func publisherPort(a, b cipher.PubKey, reserved map[uint16]struct{}) (uint16, er
 	sum := h.Sum(nil)
 	// Use the first 4 bytes of the hash; mod into the publisher span.
 	raw := binary.BigEndian.Uint32(sum[:4])
-	candidate := pubBase + uint16(raw%uint32(pubSpan))
+	candidate := PubBase + uint16(raw%uint32(PubSpan))
 
 	// Walk forward through the publisher span until we find a non-
 	// reserved slot. Both ends must do the same walk for the result
 	// to stay symmetric.
-	for offset := uint16(0); offset < pubSpan; offset++ {
-		port := pubBase + ((candidate-pubBase)+offset)%pubSpan
+	for offset := uint16(0); offset < PubSpan; offset++ {
+		port := PubBase + ((candidate-PubBase)+offset)%PubSpan
 		if _, isReserved := reserved[port]; !isReserved {
 			// Also avoid the corresponding subscriber slot if it's
 			// reserved — keeps Pair.Open simple by guaranteeing both
 			// slots are free.
-			if _, subReserved := reserved[port+pubSpan]; !subReserved {
+			if _, subReserved := reserved[port+PubSpan]; !subReserved {
 				return port, nil
 			}
 		}
 	}
-	return 0, fmt.Errorf("pairing: no free publisher port in [%d, %d)", pubBase, pubBase+pubSpan)
+	return 0, fmt.Errorf("pairing: no free publisher port in [%d, %d)", PubBase, PubBase+PubSpan)
 }
 
 // orderedPair returns (a, b) sorted byte-lexicographically so the

@@ -1065,6 +1065,35 @@ func (rc *rpcClient) ListCXOFeeds() []logserver.CXOFeedEntry {
 	return resp
 }
 
+// PairAdd implements API.
+func (rc *rpcClient) PairAdd(peerPK cipher.PubKey) error {
+	return rc.Call("PairAdd", &PairAddRequest{PeerPK: peerPK}, &struct{}{})
+}
+
+// PairList implements API.
+func (rc *rpcClient) PairList() ([]PairInfo, error) {
+	var resp []PairInfo
+	err := rc.Call("PairList", &struct{}{}, &resp)
+	return resp, err
+}
+
+// PairRemove implements API.
+func (rc *rpcClient) PairRemove(peerPK cipher.PubKey) error {
+	return rc.Call("PairRemove", &peerPK, &struct{}{})
+}
+
+// PairSend implements API.
+func (rc *rpcClient) PairSend(peerPK cipher.PubKey, text string) error {
+	return rc.Call("PairSend", &PairSendRequest{PeerPK: peerPK, Text: text}, &struct{}{})
+}
+
+// PairPoll implements API.
+func (rc *rpcClient) PairPoll(since time.Time) ([]PairMessage, error) {
+	var resp []PairMessage
+	err := rc.Call("PairPoll", &PairPollRequest{Since: since}, &resp)
+	return resp, err
+}
+
 // TPSStatus returns the status of the embedded TPS.
 func (rc *rpcClient) TPSStatus() (*TPSStatus, error) {
 	var status TPSStatus
