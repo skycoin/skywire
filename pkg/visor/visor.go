@@ -180,6 +180,12 @@ type Visor struct {
 	cxoUserFeeds   map[string]*cxoUserFeed
 	cxoUserFeedsMu sync.Mutex
 
+	// pairing holds the chat-pair feed manager + bbolt store +
+	// inbound message ring. Populated by init_pairing.go after
+	// dmsgC is up. nil when pairing is disabled (dmsgC absent or
+	// init failed); RPC handlers surface ErrPairingDisabled.
+	pairing pairingState
+
 	// Embedded DMSG Web resolver (nil if dmsg_web.enable is false).
 	// Provides a localhost SOCKS5 proxy that resolves .dmsg hosts.
 	embeddedDmsgWeb *EmbeddedDmsgWeb

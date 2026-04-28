@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -85,6 +86,15 @@ func (v *Visor) RegisterCXOFeed(name string, dmsgPort uint16, description string
 	}
 	if used, ok := reservedDmsgPorts()[dmsgPort]; ok {
 		return fmt.Errorf("cxo feed: dmsg port %d reserved for %s", dmsgPort, used)
+	}
+	// Reject ports inside the chat-pair allocator's deterministic
+	// range. A user feed at a pair-publisher port would shadow some
+	// pair's outbox; at a pair-subscriber port it would collide with
+	// some subscriber's local listener. Both are silent, hard-to-
+	// debug failures for the affected pair, so reject up front.
+	if dmsgPort >= pairing.PubBase && dmsgPort < pairing.SubBase+pairing.PubSpan {
+		return fmt.Errorf("cxo feed: dmsg port %d reserved for chat-pair feeds (range [%d, %d))",
+			dmsgPort, pairing.PubBase, pairing.SubBase+pairing.PubSpan)
 	}
 	if v.dmsgC == nil {
 		return errors.New("cxo feed: dmsg client not available")
