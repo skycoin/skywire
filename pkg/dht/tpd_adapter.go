@@ -29,27 +29,38 @@ func NewTPDAdapter(node *Node, log *logging.Logger) *TPDAdapter {
 }
 
 // RegisterTransports publishes the given transport entries to the DHT.
-// All entries are stored as a list under the node's own PK.
+// All entries are stored as a list of bare transport.Entry under the
+// node's own PK. The SignedEntry wrapping that legacy callers pass
+// is unwrapped — under-PK DHT publication already authenticates the
+// writer at the DHT layer (BEP44-style signed value), so the
+// per-entry signatures the SignedEntry carries are redundant. Storing
+// bare entries also avoids a misleading all-zeros signatures field
+// on V3 publishes (which carry no signatures by design).
 func (d *TPDAdapter) RegisterTransports(ctx context.Context, entries ...*transport.SignedEntry) error {
-	return d.putEntries(ctx, entries)
+	bare := make([]*transport.Entry, 0, len(entries))
+	for _, se := range entries {
+		if se == nil || se.Entry == nil {
+			continue
+		}
+		bare = append(bare, se.Entry)
+	}
+	return d.putEntries(ctx, bare)
 }
 
 // RegisterTransportsV3 publishes bare-entry transports to the DHT.
-// Since the DHT stores a single list per visor target, both v2 and v3
-// callers end up writing the same shape — we just wrap in SignedEntry
-// internally for the existing putEntries path.
-func (d *TPDAdapter) RegisterTransportsV3(ctx context.Context, version string, entries ...*transport.Entry) error {
-	if len(entries) == 0 {
-		return nil
-	}
-	signed := make([]*transport.SignedEntry, 0, len(entries))
-	for _, e := range entries {
-		signed = append(signed, &transport.SignedEntry{Entry: e, Version: version})
-	}
-	return d.putEntries(ctx, signed)
+//
+// An empty entry list is meaningful: it overwrites any prior state
+// at this PK with a fresh sequence so readers stop seeing a stale
+// transport set after the visor's last transport went away. Without
+// this the DHT entry under our PK would persist indefinitely.
+func (d *TPDAdapter) RegisterTransportsV3(ctx context.Context, _ string, entries ...*transport.Entry) error {
+	return d.putEntries(ctx, entries)
 }
 
-func (d *TPDAdapter) putEntries(ctx context.Context, entries []*transport.SignedEntry) error {
+func (d *TPDAdapter) putEntries(ctx context.Context, entries []*transport.Entry) error {
+	// Marshal even when entries is empty — that produces "[]" which
+	// is exactly the cleanup payload we want for "I have no transports
+	// right now."
 	data, err := json.Marshal(entries)
 	if err != nil {
 		return fmt.Errorf("dht tpd: marshal: %w", err)
@@ -77,24 +88,36 @@ func (d *TPDAdapter) GetTransportByID(ctx context.Context, id uuid.UUID) (*trans
 }
 
 // GetTransportsByEdge returns all transports for a given visor PK.
+//
+// Decodes the new bare []*Entry shape produced by current writers.
+// Falls through to the legacy []*SignedEntry shape (which was the
+// publish format before this commit) so peers that haven't republished
+// since the upgrade still resolve. The fallback strips the wrapper so
+// callers always see []*Entry.
 func (d *TPDAdapter) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
 	item, err := d.node.Get(ctx, pk, tpSalt)
 	if err != nil {
 		return nil, err
 	}
 
+	// Try the canonical bare-entry shape first.
+	var entries []*transport.Entry
+	if err := json.Unmarshal(item.V, &entries); err == nil && (len(entries) == 0 || entries[0] != nil) {
+		return entries, nil
+	}
+
+	// Legacy: SignedEntry wrapper.
 	var signed []*transport.SignedEntry
 	if err := json.Unmarshal(item.V, &signed); err != nil {
 		return nil, fmt.Errorf("dht tpd: unmarshal: %w", err)
 	}
-
-	entries := make([]*transport.Entry, 0, len(signed))
+	out := make([]*transport.Entry, 0, len(signed))
 	for _, se := range signed {
-		if se.Entry != nil {
-			entries = append(entries, se.Entry)
+		if se != nil && se.Entry != nil {
+			out = append(out, se.Entry)
 		}
 	}
-	return entries, nil
+	return out, nil
 }
 
 // GetAllTransports is not efficiently supported by the DHT.
