@@ -390,7 +390,7 @@ var RootCmd = &cobra.Command{
 						return
 					}
 					dhtNodeRef.Store(dhtNode)
-					dhtLog.WithField("id", dhtNode.ID().String()[:16]).
+					dhtLog.WithField("id", dhtNode.ID().String()).
 						WithField("bootstrap_peers", len(bootstrapPKs)).
 						Info("DHT full node started on port 100")
 

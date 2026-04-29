@@ -76,13 +76,13 @@ func (s *TransportRPCServer) Serve() {
 
 		// Check whitelist.
 		if _, ok := s.whitelist[remotePK]; !ok {
-			s.log.WithField("remote_pk", remotePK.String()[:8]).
+			s.log.WithField("remote_pk", remotePK.String()).
 				Warn("Transport RPC rejected: PK not in whitelist")
 			stream.Close() //nolint:errcheck,gosec
 			continue
 		}
 
-		s.log.WithField("remote_pk", remotePK.String()[:8]).
+		s.log.WithField("remote_pk", remotePK.String()).
 			Debug("Transport RPC connection accepted")
 
 		go func() {

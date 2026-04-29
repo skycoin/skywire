@@ -108,7 +108,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	}
 
 	appCl.Log().Infof("Connecting to %s:%d, forwarding to localhost:%d",
-		remotePK.Hex()[:16], remotePort, localPort)
+		remotePK.Hex(), remotePort, localPort)
 
 	// Set routing port if specified
 	if appPort != 0 {
@@ -126,7 +126,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		Port:   routing.Port(skyenv.SkyForwardingServerPort),
 	}
 
-	appCl.Log().Infof("Dialing %s on port %d", remotePK.Hex()[:16], skyenv.SkyForwardingServerPort)
+	appCl.Log().Infof("Dialing %s on port %d", remotePK.Hex(), skyenv.SkyForwardingServerPort)
 
 	conn, err := appCl.Dial(connApp)
 	if err != nil {

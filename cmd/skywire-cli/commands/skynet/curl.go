@@ -62,7 +62,7 @@ Examples:
 			body = []byte(curlData)
 		}
 
-		fmt.Fprintf(os.Stderr, "Dialing %s:%d%s...\n", target.pk.String()[:8], target.port, target.path)
+		fmt.Fprintf(os.Stderr, "Dialing %s:%d%s...\n", target.pk.String(), target.port, target.path)
 
 		resp, err := rpcClient.SkynetHTTP(visor.SkynetHTTPRequest{
 			PK:     target.pk,

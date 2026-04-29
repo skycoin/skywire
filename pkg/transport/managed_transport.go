@@ -114,9 +114,9 @@ type LatencyStats struct {
 // NewManagedTransport creates a new ManagedTransport.
 func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 	aPK, bPK := conf.client.PK(), conf.RemotePK
-	log := logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
+	log := logging.MustGetLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()))
 	if conf.mlog != nil {
-		log = conf.mlog.PackageLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()[:6]))
+		log = conf.mlog.PackageLogger(fmt.Sprintf("tp:%s", conf.RemotePK.String()))
 	}
 	entry := MakeEntry(aPK, bPK, conf.client.Type(), conf.TransportLabel)
 	logEntry := MakeLogEntry(conf.LS, entry.ID, log)

@@ -276,7 +276,7 @@ func (c *Conn) sendLastRoot(pk cipher.PubKey) {
 	}
 
 	c.n.Printf("[WARN] [%s] sendLastRoot %s: %v (activeHead=%d)",
-		c.String(), pk.Hex()[:7], err, activeHead)
+		c.String(), pk.Hex(), err, activeHead)
 
 }
 
@@ -666,7 +666,7 @@ func (c *Conn) handle(seq uint32, m msg.Msg) (err error) {
 func (c *Conn) handleSub(seq uint32, sub *msg.Sub) (_ error) {
 
 	c.n.Debugf(MsgReceivePin, "[%s] handleSub %s",
-		c.String(), sub.Feed.Hex()[:7])
+		c.String(), sub.Feed.Hex())
 
 	// don't allow blank
 
@@ -712,7 +712,7 @@ func (c *Conn) handleSub(seq uint32, sub *msg.Sub) (_ error) {
 func (c *Conn) handleUnsub(seq uint32, unsub *msg.Unsub) (err error) { //nolint:unparam
 
 	c.n.Debugf(MsgReceivePin, "[%s] handleUnsub %s",
-		c.String(), unsub.Feed.Hex()[:7])
+		c.String(), unsub.Feed.Hex())
 
 	if unsub.Feed == (cipher.PubKey{}) {
 		return errors.New("invalid request Unsub blank feed") // fatal
@@ -743,7 +743,7 @@ func (c *Conn) handleRqList(seq uint32, rq *msg.RqList) (_ error) { //nolint:unp
 func (c *Conn) handleRoot(root *msg.Root) (_ error) {
 
 	c.n.Debugf(MsgReceivePin, "[%s] handleRoot %s/%d/%d",
-		c.String(), root.Feed.Hex()[:7], root.Nonce, root.Seq)
+		c.String(), root.Feed.Hex(), root.Nonce, root.Seq)
 
 	// check seq first (avoid verify-signature for old unwanted Root objects)
 
@@ -836,7 +836,7 @@ func (c *Conn) handleRqObject(seq uint32, rq *msg.RqObject) {
 func (c *Conn) handleRqPreview(seq uint32, rqp *msg.RqPreview) (_ error) {
 
 	c.n.Debugf(MsgReceivePin, "[%s] handleRqPreview %s", c.String(),
-		rqp.Feed.Hex()[:7])
+		rqp.Feed.Hex())
 
 	var r, err = c.n.c.LastRoot(rqp.Feed, c.n.c.ActiveHead(rqp.Feed))
 
@@ -861,7 +861,7 @@ func (c *Conn) handleRqPreview(seq uint32, rqp *msg.RqPreview) (_ error) {
 func (c *Conn) handleRqPeers(seq uint32, rqp *msg.RqPeers) error {
 
 	c.n.Debugf(MsgReceivePin, "[%s] handleRqPeers %s", c.String(),
-		rqp.Feed.Hex()[:7])
+		rqp.Feed.Hex())
 
 	s, ok := c.n.InSwarm(rqp.Feed)
 	if !ok {
@@ -872,7 +872,7 @@ func (c *Conn) handleRqPeers(seq uint32, rqp *msg.RqPeers) error {
 	peers := s.peersForExchange(c.PeerID())
 
 	c.n.Debugf(PEXPin, "sending info about %d peers of feed %s to peer %s, addr %s",
-		len(peers), rqp.Feed.Hex()[:8], c.PeerID().Hex()[:8], c.Address())
+		len(peers), rqp.Feed.Hex(), c.PeerID().Hex(), c.Address())
 
 	c.sendMsg(c.nextSeq(), seq, &msg.Peers{ //nolint:errcheck,gosec
 		Feed: rqp.Feed,

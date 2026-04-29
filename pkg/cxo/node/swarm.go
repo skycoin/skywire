@@ -226,7 +226,7 @@ func (s *Swarm) requestPeers() {
 
 		go func(c *Conn) {
 			s.node.Debugf(PEXPin, "requesting peers for feed %s, peer %s, addr %s",
-				s.feed.Hex()[:8], c.PeerID().Hex()[:8], c.Address())
+				s.feed.Hex(), c.PeerID().Hex(), c.Address())
 
 			defer wg.Done()
 
@@ -237,7 +237,7 @@ func (s *Swarm) requestPeers() {
 			resp, err := c.sendRequest(req)
 			if err != nil {
 				s.node.Errorf(err, "failed to send request for feed %s, peer %s, addr %s",
-					s.feed.Hex()[:8], c.PeerID().Hex()[:8], c.Address())
+					s.feed.Hex(), c.PeerID().Hex(), c.Address())
 				// Could track retry count per peer for backoff.
 				return
 			}
@@ -262,7 +262,7 @@ func (s *Swarm) requestPeers() {
 
 			if err != nil {
 				s.node.Errorf(err, "failed to request peers for feed %s, peer %s, addr %s",
-					s.feed.Hex()[:8], c.PeerID().Hex()[:8], c.Address())
+					s.feed.Hex(), c.PeerID().Hex(), c.Address())
 			}
 		}(conns[i])
 	}
@@ -283,11 +283,11 @@ func (s *Swarm) addPeers(peers []msg.PeerInfo) {
 	defer s.mu.Unlock()
 
 	s.node.Debugf(PEXPin, "adding %d peers for feed %s",
-		len(peers), s.feed.Hex()[:8])
+		len(peers), s.feed.Hex())
 
 	if s.cfg.MaxPeers > 0 && s.cfg.MaxPeers <= uint64(len(s.peers)) {
 		s.node.Debugf(PEXPin, "feed %s already have maximum number of peers",
-			s.feed.Hex()[:8])
+			s.feed.Hex())
 		return
 	}
 
@@ -299,7 +299,7 @@ func (s *Swarm) addPeers(peers []msg.PeerInfo) {
 		}
 		if err := s.validatePeer(pi.PubKey, pi.TCPAddr, pi.UDPAddr); err != nil {
 			s.node.Errorf(err, "failed to add peer %s for feed %s",
-				pi.PubKey.Hex()[:8], s.feed.Hex()[:8])
+				pi.PubKey.Hex(), s.feed.Hex())
 			continue
 		}
 		validPeers = append(validPeers, pi)
@@ -314,7 +314,7 @@ func (s *Swarm) addPeers(peers []msg.PeerInfo) {
 		rcap := s.cfg.MaxPeers - uint64(len(s.peers))
 		if uint64(len(peers)) > rcap {
 			s.node.Debugf(PEXPin, "capping number of peers to be added for feed %s to %d",
-				s.feed.Hex()[:8], rcap)
+				s.feed.Hex(), rcap)
 			peers = peers[:rcap]
 		}
 	}
@@ -325,18 +325,18 @@ func (s *Swarm) addPeers(peers []msg.PeerInfo) {
 		if ok {
 			// Existing peer — update last seen time and metadata
 			s.node.Debugf(PEXPin, "updating last seen time of peer %s for feed %s",
-				pi.PubKey.Hex()[:8], s.feed.Hex()[:8])
+				pi.PubKey.Hex(), s.feed.Hex())
 			p.seen()
 
 			if updated := p.update(pi); updated {
 				s.node.Debugf(PEXPin, "updating info about peer %s for feed %s",
-					pi.PubKey.Hex()[:8], s.feed.Hex()[:8])
+					pi.PubKey.Hex(), s.feed.Hex())
 				s.onPeerUpdated(p)
 			}
 		} else {
 			// New peer — add it
 			s.node.Debugf(PEXPin, "adding new peer %s for feed %s",
-				pi.PubKey.Hex()[:8], s.feed.Hex()[:8])
+				pi.PubKey.Hex(), s.feed.Hex())
 			p = msgToPeer(pi)
 			s.onPeerAdded(p)
 		}
@@ -368,7 +368,7 @@ func (s *Swarm) clearOldPeers() {
 	for _, p := range s.peers {
 		if now.Sub(p.LastSeen) > s.cfg.PeerExpirePeriod {
 			s.node.Debugf(PEXPin, "removing expired peer %s from feed %s",
-				p.PubKey.Hex()[:8], s.feed.Hex()[:8])
+				p.PubKey.Hex(), s.feed.Hex())
 
 			delete(s.peers, p.PubKey)
 			s.onPeerRemoved(p)
@@ -438,7 +438,7 @@ func (s *Swarm) createOutgoingConns(count uint64) {
 
 		go func(p Peer) {
 			s.node.Debugf(PEXPin, "connecting to peer %s, sharing feed %s",
-				p.PubKey.Hex()[:8], s.feed.Hex()[:8])
+				p.PubKey.Hex(), s.feed.Hex())
 
 			defer wg.Done()
 
@@ -450,11 +450,11 @@ func (s *Swarm) createOutgoingConns(count uint64) {
 			conn, err = s.node.TCP().Connect(p.TCPAddr)
 			if err != nil {
 				s.node.Errorf(err, "failed to connect to peer %s, sharing feed %s",
-					p.PubKey.Hex()[:8], s.feed.Hex()[:8])
+					p.PubKey.Hex(), s.feed.Hex())
 			} else {
 				if err = conn.Subscribe(s.feed); err != nil {
 					s.node.Errorf(err, "failed to subscribe for feed %s, shared by peer %s",
-						s.feed.Hex()[:8], p.PubKey.Hex()[:8])
+						s.feed.Hex(), p.PubKey.Hex())
 				}
 			}
 

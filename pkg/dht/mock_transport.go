@@ -40,7 +40,7 @@ func (t *mockTransport) Dial(ctx context.Context, pk cipher.PubKey) (io.ReadWrit
 	lis, ok := t.net.listeners[pk]
 	t.net.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("mock: no listener for %s", pk.String()[:8])
+		return nil, fmt.Errorf("mock: no listener for %s", pk.String())
 	}
 
 	// Create a pair of connected pipes.

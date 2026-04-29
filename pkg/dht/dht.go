@@ -166,7 +166,7 @@ func (n *Node) Put(ctx context.Context, value []byte, seq uint64, salt []byte) e
 	var putErrors int
 	for _, p := range closest {
 		if err := n.rpcPutValue(ctx, p, item); err != nil {
-			n.log.WithError(err).WithField("peer", p.PK.String()[:8]).Debug("PutValue failed")
+			n.log.WithError(err).WithField("peer", p.PK.String()).Debug("PutValue failed")
 			putErrors++
 		}
 	}
@@ -258,7 +258,7 @@ func (n *Node) dial(ctx context.Context, pk cipher.PubKey) (io.ReadWriteCloser, 
 	n.noDHTMu.RLock()
 	if t, ok := n.noDHT[pk]; ok && time.Since(t) < dhtNegCacheTTL {
 		n.noDHTMu.RUnlock()
-		return nil, fmt.Errorf("dht: peer %s cached as non-DHT", pk.String()[:8])
+		return nil, fmt.Errorf("dht: peer %s cached as non-DHT", pk.String())
 	}
 	n.noDHTMu.RUnlock()
 
@@ -568,7 +568,7 @@ func (n *Node) bootstrapOnce() int {
 		}
 		p := Peer{ID: NodeIDFromPubKey(pk), PK: pk}
 		if err := n.rpcPing(n.ctx, p); err != nil {
-			n.log.WithError(err).WithField("pk", pk.String()[:8]).Debug("Bootstrap ping failed")
+			n.log.WithError(err).WithField("pk", pk.String()).Debug("Bootstrap ping failed")
 			continue
 		}
 		n.rt.Update(p)
