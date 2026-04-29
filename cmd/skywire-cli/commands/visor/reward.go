@@ -87,11 +87,11 @@ func fetchAndDisplayReward(rpcClient visor.API, rewardDmsg, pk string) {
 		Method: "GET",
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to fetch reward data for %s: %v\n", pk[:16]+"...", err)
+		fmt.Fprintf(os.Stderr, "Failed to fetch reward data for %s: %v\n", pk, err)
 		return
 	}
 	if resp.StatusCode != 200 {
-		fmt.Fprintf(os.Stderr, "Reward system returned status %d for %s\n", resp.StatusCode, pk[:16]+"...")
+		fmt.Fprintf(os.Stderr, "Reward system returned status %d for %s\n", resp.StatusCode, pk)
 		return
 	}
 
@@ -113,14 +113,14 @@ func fetchAndDisplayReward(rpcClient visor.API, rewardDmsg, pk string) {
 	}
 
 	if err := json.Unmarshal(resp.Body, &result); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to parse reward data for %s: %v\n", pk[:16]+"...", err)
+		fmt.Fprintf(os.Stderr, "Failed to parse reward data for %s: %v\n", pk, err)
 		return
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintf(w, "Reward history for %s (%d days)\n\n", pk[:16]+"...", rewardDays) //nolint:errcheck,gosec
-	fmt.Fprintf(w, "DATE\tAMOUNT (SKY)\tSHARE (%%)\tSTATUS\tTXID\n")                 //nolint:errcheck,gosec
-	fmt.Fprintf(w, "----\t------------\t---------\t------\t----\n")                  //nolint:errcheck,gosec
+	fmt.Fprintf(w, "Reward history for %s (%d days)\n\n", pk, rewardDays) //nolint:errcheck,gosec
+	fmt.Fprintf(w, "DATE\tAMOUNT (SKY)\tSHARE (%%)\tSTATUS\tTXID\n")      //nolint:errcheck,gosec
+	fmt.Fprintf(w, "----\t------------\t---------\t------\t----\n")       //nolint:errcheck,gosec
 
 	var total float64
 	for _, day := range result.History {

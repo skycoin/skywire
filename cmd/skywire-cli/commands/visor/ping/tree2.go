@@ -1564,7 +1564,7 @@ func (m *pingTreeModel) runDmsgMode() {
 		m.setStatus(fmt.Sprintf("DMSG ping %d/%d", i+1, len(targets)))
 
 		entry := tuiTreeEntry{
-			tpID:     fmt.Sprintf("dmsg-%s", remotePK[:16]),
+			tpID:     fmt.Sprintf("dmsg-%s", remotePK),
 			tpType:   "dmsg",
 			remotePK: remotePK,
 			level:    1,

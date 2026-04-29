@@ -143,7 +143,7 @@ var (
 	ErrEmptyPeer      = errors.New("peer PK is empty")
 )
 
-// String returns a compact one-line representation of the message.
+// String returns a one-line representation of the message.
 func (m Message) String() string {
 	direction := "<-"
 	if m.Outgoing {
@@ -152,16 +152,9 @@ func (m Message) String() string {
 	return fmt.Sprintf("[%s] %s %s %q",
 		m.Timestamp.UTC().Format(time.RFC3339),
 		direction,
-		shortPK(m.Peer),
+		m.Peer,
 		truncate(m.Text, 60),
 	)
-}
-
-func shortPK(pk string) string {
-	if len(pk) < 16 {
-		return pk
-	}
-	return pk[:16] + "…"
 }
 
 func truncate(s string, n int) string {
