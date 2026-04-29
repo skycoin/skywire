@@ -67,6 +67,13 @@ type API struct {
 
 	dmsgAddr    string
 	DmsgServers []string
+
+	// publicUDPAddr is the externally-reachable host:port of the AR's
+	// SUDPH UDP listener. Empty when the operator hasn't configured one.
+	// Visors that reach this AR over dmsghttp use the value advertised in
+	// /health to dial SUDPH; without it those visors cannot register
+	// SUDPH at all (no host part to UDP-resolve from a dmsg:// PK URL).
+	publicUDPAddr string
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -76,6 +83,11 @@ type HealthCheckResponse struct {
 	StartedAt   time.Time       `json:"started_at"`
 	DmsgAddr    string          `json:"dmsg_address,omitempty"`
 	DmsgServers []string        `json:"dmsg_servers,omitempty"`
+	// UDPAddr is the externally-reachable host:port of this AR's SUDPH
+	// listener. Visors that connect over dmsghttp use this value to
+	// register SUDPH — without it the dmsg-only URL has no IP to dial.
+	// Omitted when the operator did not configure --public-udp-address.
+	UDPAddr string `json:"udp_address,omitempty"`
 }
 
 // ArData has all the visors that have registered with sudph or stcpr transport
@@ -89,9 +101,12 @@ type Error struct {
 	Error string `json:"error"`
 }
 
-// New creates a new api.
+// New creates a new api. publicUDPAddr is the externally-reachable
+// host:port of the AR's SUDPH UDP listener (e.g. "ar.example.com:30178");
+// pass empty when not configured — clients that reach the AR over
+// dmsghttp will then have no way to register SUDPH.
 func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
-	enableMetrics bool, m armetrics.Metrics, dmsgAddr string) *API {
+	enableMetrics bool, m armetrics.Metrics, dmsgAddr, publicUDPAddr string) *API {
 	api := &API{
 		log:                         log,
 		store:                       s,
@@ -102,6 +117,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 		closeC:                      make(chan struct{}),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
+		publicUDPAddr:               publicUDPAddr,
 	}
 
 	r := chi.NewRouter()
@@ -342,6 +358,7 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 		StartedAt:   a.startedAt,
 		DmsgAddr:    a.dmsgAddr,
 		DmsgServers: a.DmsgServers,
+		UDPAddr:     a.publicUDPAddr,
 	})
 }
 
