@@ -370,9 +370,18 @@ var RootCmd = &cobra.Command{
 					dhtNode := dht.New(dhtCfg, conf.PubKey, conf.SecKey, dhtTP, dhtLog)
 
 					// Set up persistence backend.
+					// Precedence (matches dht.NewBackendFromConfig): RedisAddr →
+					// PersistPath → in-memory. Visors auto-default PersistPath
+					// to <local>/dht.db (see pkg/visor/init_dht.go); the
+					// dmsg-server is environment-dependent (host vs container
+					// vs k8s) so we require it to be set explicitly. Empty
+					// RedisAddr + empty PersistPath = in-memory only, which is
+					// fine for development but loses state on every restart.
 					if conf.RedisAddr != "" {
 						dhtCfg.RedisAddr = conf.RedisAddr
 						dhtCfg.RedisPassword = os.Getenv("REDIS_PASSWORD")
+					} else if conf.PersistPath != "" {
+						dhtCfg.PersistPath = conf.PersistPath
 					}
 					backend, backendErr := dht.NewBackendFromConfig(&dhtCfg)
 					if backendErr != nil {

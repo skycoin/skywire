@@ -2,7 +2,7 @@
 
 This document describes deploying skywire services directly on the host using systemd.
 
-For Docker Compose deployment, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
+For Docker Compose deployment, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md). For Kubernetes notes (illustrative — no production K8s deployment exists today), see [KUBERNETES_DEPLOYMENT.md](KUBERNETES_DEPLOYMENT.md).
 
 (original documentation at: https://github.com/skycoin/skywire-deployment)
 
@@ -217,10 +217,13 @@ combined documentation can be found [here](https://github.com/skycoin/skywire/tr
 * [transport-discovery](#transport-discovery)
 * [dmsg-discovery](#dmsg-discovery)
 * [service-discovery](#service-discovery)
+* [dmsg-server](#dmsg-server) — only when `enable_dht: true` (recommended for production)
 
 #### Redis setup
 
 Redis setup simply entails installing redis and starting the service (which may now be called `valkey.service`).
+
+The same Redis instance can back every service above. The DHT full node embedded in dmsg-server uses the `dht:*` keyspace and reads back the `dht:*` entries that transport-discovery, dmsg-discovery, and service-discovery already write — there is no separate DHT-only Redis to configure.
 
 ### Postgres
 * ~[transport-discovery](#transport-discovery)~
@@ -381,6 +384,34 @@ __The port on which the dmsg server is running must be forwarded or otherwise ac
 
 The above "discovery" endpoint should be changed to match the endpoint of the dmsg discovery server referenced in the previous section.
 The default ports are shown.
+
+##### Optional: DHT full node
+
+Production deployments should also set:
+
+```
+	"enable_dht": true,
+	"redis_addr": "127.0.0.1:6379"
+```
+
+With these set, the dmsg-server runs a Kademlia DHT full node on dmsg port 100 alongside its normal relay duties. The DHT is the serving layer for `dht get <pk> <salt>` lookups from visors, and rehydrates from the same Redis used by transport-discovery / dmsg-discovery / service-discovery (which already write `dht:*` mirror keys). The dmsg-servers in the embedded `dmsg.Prod.DmsgServers` list bootstrap-ping each other automatically, so no extra peer config is needed.
+
+Pass the Redis password to the systemd unit via `Environment=REDIS_PASSWORD=…` (see `init/skywire-dmsg.service`). To wire the DHT-to-HTTP discovery pusher (so visor-published DHT entries flow back into the HTTP services), also set `TPD_URL` and `SD_URL` in the unit's environment.
+
+###### Persistence options
+
+The DHT backend is selected from the config in this order:
+
+1. **`redis_addr` set** → Redis. Recommended on the host that runs the discovery services' Redis, since the dmsg-server picks up the full disc-mirror dataset on startup.
+2. **`redis_addr` empty, `persist_path` set** → bbolt. The dmsg-server keeps its own DHT state in a single file. Useful for hosts that don't share a Redis with the primary deployment but should still survive restarts. Example:
+   ```
+   "enable_dht": true,
+   "persist_path": "/var/lib/skywire-dmsg/dht.db"
+   ```
+   Make sure the unit's user can write to that path (`StateDirectory=skywire-dmsg` in the systemd unit creates `/var/lib/skywire-dmsg` automatically). State stays local to this dmsg-server — disc-mirror data from the primary's Redis isn't visible here.
+3. **Both empty** → in-memory only. Works, but restarts start cold.
+
+Without `enable_dht`, the dmsg-server is a pure relay and visors fall back to HTTP discovery for everything.
 
 #### Run `dmsg-server`
 
