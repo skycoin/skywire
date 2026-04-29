@@ -101,7 +101,7 @@ var calcCmd = &cobra.Command{
 
 		// Try the visor RPC once for both srcPK fallback and min_hops default.
 		// Best-effort: if RPC isn't available we fall back to local config / 1.
-		rpcClient, _ := clirpc.Client(cmd.Flags())
+		rpcClient, _ := clirpc.Client(cmd.Flags()) //nolint:errcheck
 
 		if len(args) == 1 {
 			if rpcClient != nil {
