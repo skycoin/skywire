@@ -17,6 +17,7 @@ func init() {
 	dhtCmd.AddCommand(dhtPutCmd)
 	dhtCmd.AddCommand(dhtFullNodeCmd)
 	dhtCmd.AddCommand(dhtSyncCmd)
+	dhtCmd.AddCommand(dhtListCmd)
 	RootCmd.AddCommand(dhtCmd)
 }
 
@@ -169,5 +170,33 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		fmt.Printf("Synced %d items from DHT full node.\n", result)
+	},
+}
+
+var dhtListSalt string
+
+func init() {
+	dhtListCmd.Flags().StringVar(&dhtListSalt, "salt", "", "filter by namespace (dmsg, tp, svc); empty = all")
+}
+
+var dhtListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all DHT items stored locally",
+	Long: `Dump all DHT items stored by this visor's DHT node as JSON.
+
+Examples:
+  skywire cli visor dht list
+  skywire cli visor dht list --salt dmsg
+  skywire cli visor dht list --salt tp`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		data, err := rpcClient.DHTGetAll(dhtListSalt)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		fmt.Println(data)
 	},
 }
