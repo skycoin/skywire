@@ -398,7 +398,20 @@ With these set, the dmsg-server runs a Kademlia DHT full node on dmsg port 100 a
 
 Pass the Redis password to the systemd unit via `Environment=REDIS_PASSWORD=…` (see `init/skywire-dmsg.service`). To wire the DHT-to-HTTP discovery pusher (so visor-published DHT entries flow back into the HTTP services), also set `TPD_URL` and `SD_URL` in the unit's environment.
 
-Without `enable_dht`, the dmsg-server still works as a pure relay — visors will rely on HTTP discovery for everything. Without `redis_addr` (but `enable_dht: true`), the DHT runs in-memory only: it works but loses state on restart and won't serve disc-mirror data.
+###### Persistence options
+
+The DHT backend is selected from the config in this order:
+
+1. **`redis_addr` set** → Redis. Recommended on the host that runs the discovery services' Redis, since the dmsg-server picks up the full disc-mirror dataset on startup.
+2. **`redis_addr` empty, `persist_path` set** → bbolt. The dmsg-server keeps its own DHT state in a single file. Useful for hosts that don't share a Redis with the primary deployment but should still survive restarts. Example:
+   ```
+   "enable_dht": true,
+   "persist_path": "/var/lib/skywire-dmsg/dht.db"
+   ```
+   Make sure the unit's user can write to that path (`StateDirectory=skywire-dmsg` in the systemd unit creates `/var/lib/skywire-dmsg` automatically). State stays local to this dmsg-server — disc-mirror data from the primary's Redis isn't visible here.
+3. **Both empty** → in-memory only. Works, but restarts start cold.
+
+Without `enable_dht`, the dmsg-server is a pure relay and visors fall back to HTTP discovery for everything.
 
 #### Run `dmsg-server`
 

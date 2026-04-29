@@ -6,13 +6,18 @@
 #
 # DHT note: this secondary-host file does NOT include a redis container.
 # If these dmsg-servers are configured with `enable_dht: true` (see
-# DOCKER_DEPLOYMENT.md "DMSG Server DHT"), they need access to the
-# primary host's Redis. Two options:
+# DOCKER_DEPLOYMENT.md "DMSG Server DHT" / "Persistence options"),
+# you have three choices for DHT state:
 #   1. Point each config.json's `redis_addr` at the primary host's
-#      reachable Redis address and pass REDIS_PASSWORD here.
-#   2. Set `enable_dht: false` on these instances — they'll still serve
-#      dmsg traffic and join the bootstrap mesh once at least one of the
-#      cluster's dmsg-servers is reachable, but won't carry DHT state.
+#      reachable Redis address and pass REDIS_PASSWORD here. The
+#      dmsg-server will see the full disc-mirror dataset.
+#   2. Set `persist_path: "/etc/skywire/dmsg-server/dht.db"` in the
+#      config.json — bbolt persists across restarts inside the existing
+#      ./dmsg-server/dmsg-server-N/ host volume. State stays local to
+#      this dmsg-server (no disc-mirror data) but survives `docker
+#      compose down && up`.
+#   3. Leave both unset — DHT runs in-memory only. Works, but every
+#      restart starts cold.
 #
 # Usage:
 #   docker compose -f compose-dmsg-servers.yaml up -d

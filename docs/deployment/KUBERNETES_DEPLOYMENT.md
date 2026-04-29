@@ -280,6 +280,32 @@ The dmsg-server's `config.json` (stored in `dmsg-server-1-config` Secret) must i
 
 See [DOCKER_DEPLOYMENT.md "DMSG Server DHT"](DOCKER_DEPLOYMENT.md#dmsg-server-dht-optional-recommended-for-production) for what `enable_dht`, `redis_addr`, `TPD_URL`, and `SD_URL` actually do.
 
+### DHT persistence in K8s
+
+If `redis_addr` points at the cluster's Redis Service, the dmsg-server uses the same Redis-backed disc-mirror dataset as the other services and you're done — no extra volumes needed.
+
+If you want to run a dmsg-server StatefulSet without Redis access (e.g. a remote pool of relays in a separate cluster that can't reach the primary's Redis), use `persist_path` for bbolt persistence. The config Secret is mounted read-only, so the bbolt file needs its own writable PV:
+
+```yaml
+spec:
+  containers:
+    - name: dmsg-server
+      # ...
+      volumeMounts:
+        - { name: dmsg-config,    mountPath: /etc/skywire/dmsg-server, readOnly: true }
+        - { name: dmsg-state,     mountPath: /var/lib/skywire-dmsg }
+        - { name: services-config, mountPath: /etc/skywire }
+  volumeClaimTemplates:
+    - metadata: { name: dmsg-state }
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: { requests: { storage: 1Gi } }
+```
+
+Then set `"persist_path": "/var/lib/skywire-dmsg/dht.db"` in the config Secret. The pod's StatefulSet PVC survives pod restarts and rescheduling on the same node; cross-node moves require an RWX storage class or accept a cold start.
+
+If neither `redis_addr` nor `persist_path` is set, the DHT runs in-memory only — fine for ephemeral / development clusters but every pod restart starts cold.
+
 ## Ingress / TLS
 
 Standard Ingress per service, TLS via cert-manager:

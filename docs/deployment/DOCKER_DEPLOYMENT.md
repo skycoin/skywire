@@ -92,7 +92,7 @@ Update the `public_address` and `discovery` fields to match your deployment. Mou
 
 Setting `enable_dht: true` and `redis_addr` in the dmsg-server's `config.json` turns the process into a Kademlia DHT full node on dmsg port 100, in addition to its normal dmsg relay duties. This is the serving layer that makes `dht get <pk> <salt>` from a visor return real data instead of falling through to HTTP discovery.
 
-Example `config.json`:
+Example `config.json` for a dmsg-server colocated with the cluster's Redis (the primary host's compose):
 
 ```json
 {
@@ -110,12 +110,31 @@ Example `config.json`:
 
 For Docker Compose, the dmsg-server stanza must also pass `REDIS_PASSWORD`, `TPD_URL`, and `SD_URL` in its environment, and depend on `redis` and `dmsg-discovery`. The example in `compose.yaml` already does this.
 
-How the DHT serves data:
+How the DHT serves data when Redis is available:
 - `redis_addr` points the DHT full node at the same Redis used by transport-discovery, dmsg-discovery, and service-discovery. Those services already write a Kademlia-shaped mirror of every entry into Redis under `dht:*` keys (see `pkg/dht/mirror_redis.go`); the dmsg-server's DHT node rehydrates from those keys on startup.
 - The dmsg-servers form a bootstrap mesh by dialing each other's DHT port (over dmsg). The bootstrap PK list is built from the embedded `dmsg.Prod.DmsgServers`/`dmsg.Test.DmsgServers` list automatically, so visors and other dmsg-servers find each other without configuration.
 - `TPD_URL` and `SD_URL` enable the DHT-to-discovery pusher: when a visor publishes its own DHT entry directly (e.g. `tp` or `svc` salts), the dmsg-server forwards that write back into the HTTP discoveries so they stay consistent.
 
-Without `enable_dht`, the dmsg-server still works as a relay — visors just rely on HTTP discovery for everything. Without `redis_addr` (but `enable_dht: true`), the DHT runs in-memory only: it works but loses every entry on restart and won't serve the disc-mirror data.
+#### Persistence options for `enable_dht: true`
+
+The DHT backend is selected from the dmsg-server config in this order:
+
+1. **`redis_addr` set** → Redis backend. Recommended for the primary host where the discovery services already write to the same Redis. The dmsg-server gets the full disc-mirror dataset on startup and serves it to visors via Kademlia. Requires `REDIS_PASSWORD` in the container environment.
+2. **`redis_addr` empty, `persist_path` set** → bbolt backend. The dmsg-server keeps its own DHT state in a single file. State persists across restarts but the cluster's disc-mirror data (which lives in the primary Redis) is **not** reachable from this dmsg-server unless visor traffic happens to replicate it via Kademlia. Useful for off-host dmsg-servers that can't reach the primary's Redis but should still survive container restarts.
+3. **Both empty** → in-memory only. Works fine, but every restart starts cold and the disc-mirror dataset is unreachable.
+
+**Important Docker note for option 2 (bbolt):** the bbolt file path must point inside an existing volume mount, otherwise the file lives in the container's writable layer and is destroyed on `docker compose down && up`. The compose stanzas already mount `./dmsg-server/dmsg-server-N/` to `/etc/skywire/dmsg-server`, so the natural path is:
+
+```json
+{
+  "enable_dht": true,
+  "persist_path": "/etc/skywire/dmsg-server/dht.db"
+}
+```
+
+That puts the bbolt file next to `config.json` on the host (`./dmsg-server/dmsg-server-N/dht.db`) and survives container recreation. No additional volume needed.
+
+Without `enable_dht`, the dmsg-server works as a pure relay — visors rely on HTTP discovery for everything.
 
 ### Setup Node Configuration
 
