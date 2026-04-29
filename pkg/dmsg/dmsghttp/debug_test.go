@@ -43,8 +43,13 @@ func TestDebugMux_PprofEndpoints(t *testing.T) {
 	}
 }
 
-func TestWhitelistMiddleware_EmptyWhitelistAllowsAll(t *testing.T) {
+func TestWhitelistMiddleware_EmptyWhitelistDeniesAll(t *testing.T) {
+	// Empty whitelist must fail closed — pprof can pin CPU and
+	// expose process internals, so a misconfigured (or unconfigured)
+	// services file should never silently expose it.
+	innerCalled := false
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		innerCalled = true
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -54,7 +59,8 @@ func TestWhitelistMiddleware_EmptyWhitelistAllowsAll(t *testing.T) {
 	req.RemoteAddr = "somekey:1234"
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+	assert.False(t, innerCalled, "inner handler must not run when whitelist is empty")
 }
 
 func TestWhitelistMiddleware_AllowsWhitelistedPK(t *testing.T) {
@@ -132,16 +138,21 @@ func TestServeDebug_Integration(t *testing.T) {
 	<-dmsgC.Ready()
 	defer dmsgC.Close() //nolint:errcheck
 
+	// Generate the fetch client's keypair up front so we can whitelist it
+	// before ServeDebug starts. WhitelistMiddleware fails closed on an
+	// empty whitelist, so the fetch client must be in the allow list for
+	// the integration check below to receive a 200.
+	fetchPK, fetchSK := cipher.GenerateKeyPair()
+
 	// Serve debug on the client
 	log := logging.MustGetLogger("test-debug")
-	go dmsghttp.ServeDebug(ctx, dmsgC, log, nil) //nolint:errcheck
+	go dmsghttp.ServeDebug(ctx, dmsgC, log, []cipher.PubKey{fetchPK}) //nolint:errcheck
 
 	// Allow listener to start — CI runners (especially macOS) need more time
 	// for noise handshakes to complete across concurrent client sessions.
 	time.Sleep(2 * time.Second)
 
 	// Create a second client to access the debug interface
-	fetchPK, fetchSK := cipher.GenerateKeyPair()
 	fetchC := dmsg.NewClient(fetchPK, fetchSK, dc, &dmsg.Config{MinSessions: 1})
 	go fetchC.Serve(ctx) //nolint:errcheck
 	<-fetchC.Ready()
