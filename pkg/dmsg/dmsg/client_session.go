@@ -283,7 +283,16 @@ func (cs *ClientSession) serve() error {
 			// the root cause of the dmsg session rot seen in
 			// long-running visors (sessions decayed from 6 to 0
 			// as random bad peers triggered session kills).
-			cs.log.WithError(err).Debug("Stream handshake failed, continuing.")
+			//
+			// Include src/dst from the partially-populated stream so
+			// listener-miss diagnostics show the originator PK and
+			// the destination port. Fields default to zero values when
+			// the failure happens before prepareFields runs.
+			cs.log.WithError(err).
+				WithField("src_pk", dStr.rAddr.PK).
+				WithField("src_port", dStr.rAddr.Port).
+				WithField("dst_port", dStr.lAddr.Port).
+				Debug("Stream handshake failed, continuing.")
 			if closeErr := dStr.Close(); closeErr != nil {
 				cs.log.WithError(closeErr).
 					Debug("On handshakeResponder failure, close stream resulted in error.")
