@@ -2,7 +2,7 @@
 
 This document describes deploying skywire services directly on the host using systemd.
 
-For Docker Compose deployment, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md).
+For Docker Compose deployment, see [DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md). For Kubernetes notes (illustrative — no production K8s deployment exists today), see [KUBERNETES_DEPLOYMENT.md](KUBERNETES_DEPLOYMENT.md).
 
 (original documentation at: https://github.com/skycoin/skywire-deployment)
 

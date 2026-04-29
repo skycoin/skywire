@@ -2,6 +2,8 @@
 
 This document describes deploying skywire services using Docker Compose.
 
+For systemd / direct-on-host deployment see [DEPLOYMENT_SYSTEMD.md](DEPLOYMENT_SYSTEMD.md). For Kubernetes notes (illustrative — no production K8s deployment exists today) see [KUBERNETES_DEPLOYMENT.md](KUBERNETES_DEPLOYMENT.md).
+
 All services use the `skycoin/skywire:test` Docker image, which contains the unified skywire binary.
 
 ## Prerequisites
