@@ -201,6 +201,7 @@ type API interface {
 	PairAdd(peerPK cipher.PubKey) error
 	PairList() ([]PairInfo, error)
 	PairRemove(peerPK cipher.PubKey) error
+	PairMarkActive(peerPK cipher.PubKey) error
 	PairSend(peerPK cipher.PubKey, text string) error
 	PairPoll(since time.Time) ([]PairMessage, error)
 
