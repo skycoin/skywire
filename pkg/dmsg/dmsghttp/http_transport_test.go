@@ -2,8 +2,10 @@
 package dmsghttp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -18,6 +20,41 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// TestRewindBody pins the helper that the pooled-stream-failed retry
+// path relies on. http.NewRequest auto-sets req.GetBody for *bytes.Buffer
+// payloads (the form used by httpauth/AR clients), so a drained body
+// can be reset before the fresh-dial retry. The bug this guards against
+// is the AR re-registration warning "ContentLength=N with Body length 0":
+// the first req.Write to a stale pooled stream consumed the body, and
+// the retry sent zero bytes against the original ContentLength.
+func TestRewindBody(t *testing.T) {
+	t.Run("rewinds_drained_body", func(t *testing.T) {
+		const payload = `{"port":"30178","addresses":["10.0.0.1"]}`
+		req, err := http.NewRequest(http.MethodPost, "http://example.com", bytes.NewBufferString(payload))
+		require.NoError(t, err)
+		require.Equal(t, int64(len(payload)), req.ContentLength)
+
+		// Simulate req.Write consuming the body on a doomed pooled stream.
+		_, err = io.Copy(io.Discard, req.Body)
+		require.NoError(t, err)
+
+		require.NoError(t, rewindBody(req))
+
+		got, err := io.ReadAll(req.Body)
+		require.NoError(t, err)
+		assert.Equal(t, payload, string(got))
+		assert.Equal(t, int64(len(payload)), req.ContentLength,
+			"ContentLength must stay matched to the rewound body")
+	})
+
+	t.Run("nil_get_body_is_noop", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodGet, "http://example.com", nil)
+		require.NoError(t, err)
+		assert.Nil(t, req.GetBody)
+		assert.NoError(t, rewindBody(req))
+	})
+}
 
 func TestHTTPTransport_RoundTrip(t *testing.T) {
 	logging.SetLevel(logrus.WarnLevel)
