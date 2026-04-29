@@ -1089,12 +1089,8 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 				segmentHeight = 1
 			}
 			color := labelColors[pk]
-			shortPK := pk
-			if len(shortPK) > 8 {
-				shortPK = shortPK[:8] + "..."
-			}
 			sb.WriteString(fmt.Sprintf("<div style='position: absolute; left: %dpx; bottom: %dpx; width: %dpx; height: %dpx; background: %s;' title='%s: %s (%s)'></div>\n",
-				x, currentY, barWidth-1, segmentHeight, color, entry.Date, shortPK, formatBytesChart(bw)))
+				x, currentY, barWidth-1, segmentHeight, color, entry.Date, pk, formatBytesChart(bw)))
 			currentY += segmentHeight
 		}
 
@@ -1140,16 +1136,12 @@ func GenerateVisorBandwidthChartHTML(history []BandwidthHistoryEntry, chartWidth
 	}
 	sb.WriteString("</div>\n")
 
-	// Legend — show short PKs with total bandwidth
+	// Legend — show full PKs with total bandwidth
 	sb.WriteString("<div style='margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px 15px; font-size: 12px;'>\n")
 	for _, pk := range topVisors {
 		color := labelColors[pk]
-		shortPK := pk
-		if len(shortPK) > 16 {
-			shortPK = shortPK[:16] + "..."
-		}
-		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px; white-space: nowrap;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span>%s (%s)</span>\n",
-			color, html.EscapeString(shortPK), formatBytesChart(visorTotals[pk])))
+		sb.WriteString(fmt.Sprintf("<span style='display: inline-flex; align-items: center; gap: 4px;'><span style='display: inline-block; width: 12px; height: 12px; background: %s; flex-shrink: 0;'></span><span style='font-family: monospace; word-break: break-all;'>%s</span> (%s)</span>\n",
+			color, html.EscapeString(pk), formatBytesChart(visorTotals[pk])))
 	}
 	if hasOther {
 		var otherTotal uint64
@@ -1643,13 +1635,9 @@ func renderTPDVisorBandwidthChart(metrics []tpdTransportMetric) string {
 		for _, d := range dates {
 			data = append(data, fmt.Sprintf("%d", v.daily[d]))
 		}
-		shortPK := v.pk
-		if len(shortPK) > 12 {
-			shortPK = shortPK[:8] + "..."
-		}
 		color := colors[i%len(colors)]
 		datasets = append(datasets, fmt.Sprintf("{ label: '%s', data: [%s], backgroundColor: '%s' }",
-			shortPK, strings.Join(data, ","), color))
+			v.pk, strings.Join(data, ","), color))
 	}
 
 	l := "<canvas id='visor-bw-chart' width='800' height='400'></canvas>\n"
