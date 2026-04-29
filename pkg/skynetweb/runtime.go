@@ -166,7 +166,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				}
 
 				done := cfg.Stats.RecordRequest()
-				log.WithField("pk", target.pk.Hex()[:16]+"...").
+				log.WithField("pk", target.pk.Hex()).
 					WithField("port", target.port).
 					Debug("SOCKS5 → skynet direct")
 

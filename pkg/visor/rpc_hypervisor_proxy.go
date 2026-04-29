@@ -103,7 +103,7 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 			case <-done:
 			case <-time.After(10 * time.Second):
 				entry.Error = "timeout"
-				log.WithField("pk", pk.String()[:8]).Warn("HVListVisors: visor query timed out")
+				log.WithField("pk", pk.String()).Warn("HVListVisors: visor query timed out")
 			}
 			results[idx] = entry
 		}(i, e.pk, e.conn.API)
@@ -149,7 +149,7 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 			case sub := <-done:
 				subResults[idx] = sub
 			case <-time.After(10 * time.Second):
-				log.WithField("pk", hyperPK.String()[:8]).Warn("HVListVisors: sub-hypervisor query timed out")
+				log.WithField("pk", hyperPK.String()).Warn("HVListVisors: sub-hypervisor query timed out")
 			}
 		}(i, e.pk, e.conn.API)
 	}
@@ -238,7 +238,7 @@ func (v *Visor) hvDispatch(pk cipher.PubKey) (direct API, sub API, err error) {
 			// Skip this sub-hypervisor; it's slow or in a cycle.
 		}
 	}
-	return nil, nil, fmt.Errorf("visor %s not reachable", pk.String()[:8])
+	return nil, nil, fmt.Errorf("visor %s not reachable", pk.String())
 }
 
 // HVStartApp starts an app on the visor identified by pk.

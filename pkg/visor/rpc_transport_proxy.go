@@ -74,7 +74,7 @@ func DialTransportRPC(remotePK cipher.PubKey, tm *transport.Manager, log *loggin
 	stream, err := mux.Dial(remotePK)
 	if err != nil {
 		mux.Close() //nolint:errcheck,gosec
-		return nil, fmt.Errorf("transport rpc: dial %s: %w", remotePK.String()[:8], err)
+		return nil, fmt.Errorf("transport rpc: dial %s: %w", remotePK.String(), err)
 	}
 
 	return rpc.NewClient(stream), nil

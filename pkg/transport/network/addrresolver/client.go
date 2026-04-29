@@ -606,7 +606,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		if attempt > 0 {
-			c.log.Debugf("Retrying resolve for %s (attempt %d/%d) after %v", pk.String()[:8], attempt+1, maxRetries+1, delay)
+			c.log.Debugf("Retrying resolve for %s (attempt %d/%d) after %v", pk.String(), attempt+1, maxRetries+1, delay)
 			select {
 			case <-ctx.Done():
 				return VisorData{}, ctx.Err()
@@ -624,7 +624,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 
 		if status == http.StatusTooManyRequests {
 			resp.Body.Close() //nolint:errcheck,gosec
-			c.log.Warnf("Rate limited by address resolver on resolve for %s, retrying...", pk.String()[:8])
+			c.log.Warnf("Rate limited by address resolver on resolve for %s, retrying...", pk.String())
 			continue
 		}
 
@@ -655,7 +655,7 @@ func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey
 		return resolveResp, nil
 	}
 
-	return VisorData{}, fmt.Errorf("resolve for %s failed: rate limited after %d attempts", pk.String()[:8], maxRetries+1)
+	return VisorData{}, fmt.Errorf("resolve for %s failed: rate limited after %d attempts", pk.String(), maxRetries+1)
 }
 
 // Transports query available transports.

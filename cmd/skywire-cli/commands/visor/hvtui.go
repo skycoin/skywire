@@ -197,13 +197,13 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						setStatus("register fwd port failed: " + err.Error())
 						return
 					}
-					setStatus(fmt.Sprintf("forwarded port %d registered on %s", port, targetPK.String()[:8]))
+					setStatus(fmt.Sprintf("forwarded port %d registered on %s", port, targetPK.String()))
 					refresh()
 				}()
 			})
 			form.AddButton("Cancel", closeModal)
 			form.SetBorder(true).
-				SetTitle(" Register forwarded port on " + targetPK.String()[:8] + " ").
+				SetTitle(" Register forwarded port on " + targetPK.String() + " ").
 				SetTitleAlign(tview.AlignLeft)
 			showModal(form, 80, 24)
 		}
@@ -230,7 +230,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 			})
 			form.AddButton("Cancel", closeModal)
 			form.SetBorder(true).
-				SetTitle(" Add transport on " + targetPK.String()[:8] + " ").
+				SetTitle(" Add transport on " + targetPK.String() + " ").
 				SetTitleAlign(tview.AlignLeft)
 			showModal(form, 80, 11)
 		}
@@ -259,7 +259,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					stColor = tcell.ColorAqua
 				}
 				if e.ProxiedVia != nil {
-					st = "via " + e.ProxiedVia.String()[:8]
+					st = "via " + e.ProxiedVia.String()
 					stColor = tcell.ColorYellow
 				}
 				if e.Error != "" {
@@ -452,7 +452,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					if !ok {
 						return nil
 					}
-					showInputModal("Set min_hops on "+v.PK.String()[:8], "min_hops", "0", func(s string) {
+					showInputModal("Set min_hops on "+v.PK.String(), "min_hops", "0", func(s string) {
 						n, err := strconv.ParseUint(s, 10, 16)
 						if err != nil {
 							setStatus(fmt.Sprintf("min_hops: invalid number: %s", err))
@@ -463,7 +463,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								setStatus("set min_hops failed: " + err.Error())
 								return
 							}
-							setStatus(fmt.Sprintf("set min_hops=%d on %s", n, v.PK.String()[:8]))
+							setStatus(fmt.Sprintf("set min_hops=%d on %s", n, v.PK.String()))
 							refresh()
 						}()
 					})
@@ -473,13 +473,13 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					if !ok {
 						return nil
 					}
-					showInputModal("Set reward address on "+v.PK.String()[:8], "address", v.RewardAddress, func(s string) {
+					showInputModal("Set reward address on "+v.PK.String(), "address", v.RewardAddress, func(s string) {
 						go func() {
 							if _, err := rpcClient.HVSetRewardAddress(v.PK, s); err != nil {
 								setStatus("set reward failed: " + err.Error())
 								return
 							}
-							setStatus("reward address set on " + v.PK.String()[:8])
+							setStatus("reward address set on " + v.PK.String())
 							refresh()
 						}()
 					})
@@ -506,7 +506,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							labels[i] = fmt.Sprintf("[%-7s] %-22s port:%d", state, a.Name, a.Port)
 						}
 						app.QueueUpdateDraw(func() {
-							showListModal("Toggle app on "+v.PK.String()[:8], labels, func(idx int) {
+							showListModal("Toggle app on "+v.PK.String(), labels, func(idx int) {
 								a := apps[idx]
 								go func() {
 									var aerr error
@@ -519,7 +519,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 										setStatus(a.Name + ": " + aerr.Error())
 										return
 									}
-									setStatus("toggled " + a.Name + " on " + v.PK.String()[:8])
+									setStatus("toggled " + a.Name + " on " + v.PK.String())
 									refresh()
 								}()
 							})
@@ -549,14 +549,14 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							labels[i] = fmt.Sprintf("%-22s port:%d", a.Name, a.Port)
 						}
 						app.QueueUpdateDraw(func() {
-							showListModal("Stop app on "+v.PK.String()[:8], labels, func(idx int) {
+							showListModal("Stop app on "+v.PK.String(), labels, func(idx int) {
 								name := running[idx].Name
 								go func() {
 									if err := rpcClient.HVStopApp(v.PK, name); err != nil {
 										setStatus("stop " + name + " failed: " + err.Error())
 										return
 									}
-									setStatus("stopped " + name + " on " + v.PK.String()[:8])
+									setStatus("stopped " + name + " on " + v.PK.String())
 									refresh()
 								}()
 							})
@@ -578,13 +578,13 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						tps := sum.Overview.Transports
 						labels := make([]string, len(tps))
 						for i, tp := range tps {
-							short := tp.ID.String()[:8] + ".."
-							labels[i] = fmt.Sprintf("%s  %-6s  %s..  %s", short, strings.ToUpper(string(tp.Type)), tp.Remote.String()[:8], tp.Label)
+							short := tp.ID.String() + ".."
+							labels[i] = fmt.Sprintf("%s  %-6s  %s..  %s", short, strings.ToUpper(string(tp.Type)), tp.Remote.String(), tp.Label)
 						}
 						app.QueueUpdateDraw(func() {
-							showListModal("Delete transport on "+v.PK.String()[:8], labels, func(idx int) {
+							showListModal("Delete transport on "+v.PK.String(), labels, func(idx int) {
 								tp := tps[idx]
-								short := tp.ID.String()[:8] + ".."
+								short := tp.ID.String() + ".."
 								showConfirmModal("Confirm",
 									fmt.Sprintf("Delete transport %s (%s) ?", short, tp.Type),
 									func() {
@@ -593,7 +593,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 												setStatus("rm transport failed: " + err.Error())
 												return
 											}
-											setStatus("transport " + short + " removed on " + v.PK.String()[:8])
+											setStatus("transport " + short + " removed on " + v.PK.String())
 											refresh()
 										}()
 									})
@@ -616,7 +616,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						rgs := sum.RouteGroups
 						if len(rgs) == 0 {
 							app.QueueUpdateDraw(func() {
-								showInputModal("Delete rule by ID on "+v.PK.String()[:8],
+								showInputModal("Delete rule by ID on "+v.PK.String(),
 									"route ID", "", func(s string) {
 										n, err := strconv.ParseUint(s, 10, 32)
 										if err != nil {
@@ -639,11 +639,11 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						for i, rg := range rgs {
 							labels[i] = fmt.Sprintf("fwd=%d csm=%d  %s..:%d → %s..:%d",
 								rg.FwdRuleID, rg.ConsumeRuleID,
-								rg.Desc.SrcPK.String()[:8], rg.Desc.SrcPort,
-								rg.Desc.DstPK.String()[:8], rg.Desc.DstPort)
+								rg.Desc.SrcPK.String(), rg.Desc.SrcPort,
+								rg.Desc.DstPK.String(), rg.Desc.DstPort)
 						}
 						app.QueueUpdateDraw(func() {
-							showListModal("Delete route group on "+v.PK.String()[:8], labels, func(idx int) {
+							showListModal("Delete route group on "+v.PK.String(), labels, func(idx int) {
 								rg := rgs[idx]
 								showConfirmModal("Confirm",
 									fmt.Sprintf("Delete fwd rule %d and consume rule %d ?", rg.FwdRuleID, rg.ConsumeRuleID),
@@ -677,7 +677,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								return
 							}
 							setStatus(fmt.Sprintf("transport %s.. (%s) added on %s",
-								res.ID.String()[:8], tpType, v.PK.String()[:8]))
+								res.ID.String(), tpType, v.PK.String()))
 							refresh()
 						}()
 					})
@@ -698,14 +698,14 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						newVal := !current
 						app.QueueUpdateDraw(func() {
 							showConfirmModal("Toggle public_autoconnect",
-								fmt.Sprintf("Currently %v on %s. Set to %v?", current, v.PK.String()[:8], newVal),
+								fmt.Sprintf("Currently %v on %s. Set to %v?", current, v.PK.String(), newVal),
 								func() {
 									go func() {
 										if err := rpcClient.HVSetPublicAutoconnect(v.PK, newVal); err != nil {
 											setStatus("set autoconnect failed: " + err.Error())
 											return
 										}
-										setStatus(fmt.Sprintf("public_autoconnect=%v on %s", newVal, v.PK.String()[:8]))
+										setStatus(fmt.Sprintf("public_autoconnect=%v on %s", newVal, v.PK.String()))
 										refresh()
 									}()
 								})
@@ -717,7 +717,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					if !ok {
 						return nil
 					}
-					showInputModal("Set mux_routes on "+v.PK.String()[:8], "mux_routes (0 or 1 = single)", "1", func(s string) {
+					showInputModal("Set mux_routes on "+v.PK.String(), "mux_routes (0 or 1 = single)", "1", func(s string) {
 						n, err := strconv.Atoi(s)
 						if err != nil || n < 0 {
 							setStatus("mux_routes: invalid number")
@@ -728,7 +728,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								setStatus("set mux_routes failed: " + err.Error())
 								return
 							}
-							setStatus(fmt.Sprintf("mux_routes=%d on %s", n, v.PK.String()[:8]))
+							setStatus(fmt.Sprintf("mux_routes=%d on %s", n, v.PK.String()))
 							refresh()
 						}()
 					})
@@ -739,7 +739,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						return nil
 					}
 					m := tview.NewModal().
-						SetText(fmt.Sprintf("Local route calculation on %s\n(vs route-finder service)", v.PK.String()[:8])).
+						SetText(fmt.Sprintf("Local route calculation on %s\n(vs route-finder service)", v.PK.String())).
 						AddButtons([]string{"Enable", "Disable", "Cancel"}).
 						SetDoneFunc(func(_ int, label string) {
 							closeModal()
@@ -752,7 +752,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 									setStatus("set calculate_routes failed: " + err.Error())
 									return
 								}
-								setStatus(fmt.Sprintf("calculate_routes=%v on %s", enable, v.PK.String()[:8]))
+								setStatus(fmt.Sprintf("calculate_routes=%v on %s", enable, v.PK.String()))
 								refresh()
 							}()
 						})
@@ -765,14 +765,14 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						return nil
 					}
 					showConfirmModal("Reload visor",
-						fmt.Sprintf("Reload visor %s without restarting?", v.PK.String()[:8]),
+						fmt.Sprintf("Reload visor %s without restarting?", v.PK.String()),
 						func() {
 							go func() {
 								if err := rpcClient.HVReload(v.PK); err != nil {
 									setStatus("reload failed: " + err.Error())
 									return
 								}
-								setStatus("reload triggered on " + v.PK.String()[:8])
+								setStatus("reload triggered on " + v.PK.String())
 								refresh()
 							}()
 						})
@@ -783,14 +783,14 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						return nil
 					}
 					showConfirmModal("Shutdown visor",
-						fmt.Sprintf("SHUTDOWN visor %s? It will stop responding.", v.PK.String()[:8]),
+						fmt.Sprintf("SHUTDOWN visor %s? It will stop responding.", v.PK.String()),
 						func() {
 							go func() {
 								if err := rpcClient.HVShutdown(v.PK); err != nil {
 									setStatus("shutdown failed: " + err.Error())
 									return
 								}
-								setStatus("shutdown sent to " + v.PK.String()[:8])
+								setStatus("shutdown sent to " + v.PK.String())
 								refresh()
 							}()
 						})
@@ -808,7 +808,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							return
 						}
 						var sb strings.Builder
-						sb.WriteString(fmt.Sprintf("[yellow]Service health for %s[white]\n\n", v.PK.String()[:16]))
+						sb.WriteString(fmt.Sprintf("[yellow]Service health for %s[white]\n\n", v.PK.String()))
 						sb.WriteString(fmt.Sprintf("  %-22s %-9s %-7s %-12s %s\n", "SERVICE", "STATUS", "TP", "LATENCY", "VERSION"))
 						sb.WriteString("  ────────────────────────────────────────────────────────────────────────\n")
 						for _, e := range entries {
@@ -853,7 +853,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						return nil
 					}
 					showConfirmModal("DMSG connect-all",
-						fmt.Sprintf("Trigger DMSG connect-all on %s?", v.PK.String()[:8]),
+						fmt.Sprintf("Trigger DMSG connect-all on %s?", v.PK.String()),
 						func() {
 							go func() {
 								res, err := rpcClient.HVDmsgConnectAll(v.PK)
@@ -862,7 +862,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 									return
 								}
 								setStatus(fmt.Sprintf("connect-all on %s: total=%d already=%d new=%d failed=%d",
-									v.PK.String()[:8], res.Total, res.AlreadyConnected, res.NewlyConnected, len(res.Failed)))
+									v.PK.String(), res.Total, res.AlreadyConnected, res.NewlyConnected, len(res.Failed)))
 								refresh()
 							}()
 						})
@@ -872,7 +872,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 					if !ok {
 						return nil
 					}
-					showInputModal("Set DMSG sessions_count on "+v.PK.String()[:8], "sessions_count (0 = all)", "0", func(s string) {
+					showInputModal("Set DMSG sessions_count on "+v.PK.String(), "sessions_count (0 = all)", "0", func(s string) {
 						n, err := strconv.Atoi(s)
 						if err != nil || n < 0 {
 							setStatus("sessions_count: invalid number")
@@ -885,7 +885,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 								return
 							}
 							setStatus(fmt.Sprintf("sessions_count=%d on %s (total=%d already=%d new=%d fail=%d)",
-								n, v.PK.String()[:8], res.Total, res.AlreadyConnected, res.NewlyConnected, len(res.Failed)))
+								n, v.PK.String(), res.Total, res.AlreadyConnected, res.NewlyConnected, len(res.Failed)))
 							refresh()
 						}()
 					})
@@ -908,7 +908,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							labels[i] = a.Name
 						}
 						app.QueueUpdateDraw(func() {
-							showListModal("App logs on "+v.PK.String()[:8], labels, func(idx int) {
+							showListModal("App logs on "+v.PK.String(), labels, func(idx int) {
 								name := apps[idx].Name
 								go func() {
 									setStatus("Loading logs for " + name + "...")
@@ -967,7 +967,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							labels[i] = fmt.Sprintf("[autostart=%-3s] %s", as, a.Name)
 						}
 						app.QueueUpdateDraw(func() {
-							showListModal("Toggle autostart on "+v.PK.String()[:8], labels, func(idx int) {
+							showListModal("Toggle autostart on "+v.PK.String(), labels, func(idx int) {
 								a := apps[idx]
 								newVal := !a.AutoStart
 								go func() {
@@ -975,7 +975,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 										setStatus("set autostart failed: " + err.Error())
 										return
 									}
-									setStatus(fmt.Sprintf("%s autostart=%v on %s", a.Name, newVal, v.PK.String()[:8]))
+									setStatus(fmt.Sprintf("%s autostart=%v on %s", a.Name, newVal, v.PK.String()))
 									refresh()
 								}()
 							})
@@ -1021,7 +1021,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 						}
 						labels = append(labels, "[set upstream]", "[close]")
 						app.QueueUpdateDraw(func() {
-							showListModal("Resolving proxies on "+v.PK.String()[:8], labels, func(idx int) {
+							showListModal("Resolving proxies on "+v.PK.String(), labels, func(idx int) {
 								if idx >= len(active) {
 									if labels[idx] == "[set upstream]" {
 										app.QueueUpdateDraw(func() {
@@ -1099,7 +1099,7 @@ Select a visor to see detailed info. Press 'r' to refresh, 'q' to quit.`,
 							"[close]",
 						)
 						app.QueueUpdateDraw(func() {
-							showListModal("Ports on "+v.PK.String()[:8], labels, func(idx int) {
+							showListModal("Ports on "+v.PK.String(), labels, func(idx int) {
 								n := len(tcpPorts) + len(fwdPorts)
 								if idx < n {
 									return // selecting a row is read-only for now
