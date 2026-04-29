@@ -30,7 +30,7 @@ func isVisorUnreachableError(err error, remotePK string) bool {
 	errStr := err.Error()
 	// Only consider it unreachable if the error specifically mentions the remote PK
 	// and indicates a dial timeout or EOF
-	if strings.Contains(errStr, remotePK[:16]) || strings.Contains(errStr, remotePK) {
+	if strings.Contains(errStr, remotePK) {
 		if strings.Contains(errStr, "timeout") || strings.Contains(errStr, "EOF") {
 			return true
 		}

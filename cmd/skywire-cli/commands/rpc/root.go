@@ -156,7 +156,7 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	// Use the configured timeout for RPC calls
 	rpcCallTimeout := time.Duration(Timeout) * time.Second
 	// Use logger with dmsg address as tag for better identification
-	dmsgLogger := logging.MustGetLogger(fmt.Sprintf("dmsg://%s", VisorPK[:8]))
+	dmsgLogger := logging.MustGetLogger(fmt.Sprintf("dmsg://%s", VisorPK))
 	return visor.NewRPCClient(dmsgLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
 
