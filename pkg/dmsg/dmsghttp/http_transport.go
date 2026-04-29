@@ -119,6 +119,16 @@ func (t *HTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		ps.discard()
 		t.untrack(ps)
+		// req.Write on the dead pooled stream consumed req.Body. Without
+		// rewinding it the fresh-dial attempt below would send 0 body
+		// bytes against the original ContentLength, producing
+		// "http: ContentLength=N with Body length 0". Mirror
+		// net/http.Transport's retry behavior: rewind via GetBody when
+		// available. POSTs created with http.NewRequest(*bytes.Buffer
+		// |*bytes.Reader|*strings.Reader) get GetBody set automatically.
+		if err := rewindBody(req); err != nil {
+			return nil, err
+		}
 		// fall through to fresh dial
 	}
 
@@ -135,6 +145,24 @@ func (t *HTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	return resp, nil
+}
+
+// rewindBody resets req.Body to a fresh reader using req.GetBody, so a
+// retry can re-read the body after a failed write attempt. Returns an
+// error only if GetBody is set but produces an error; if GetBody is nil
+// (e.g. body is nil/NoBody or non-rewindable) the request is left
+// unchanged and the retry sends no body — which is fine for the only
+// requests that hit this path with no GetBody (auth nonce GETs etc).
+func rewindBody(req *http.Request) error {
+	if req.GetBody == nil {
+		return nil
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return err
+	}
+	req.Body = body
+	return nil
 }
 
 // do writes req to ps and reads back the response. The response body

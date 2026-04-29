@@ -39,6 +39,7 @@ const (
 var (
 	addr            string
 	udpAddr         string
+	publicUDPAddr   string
 	metricsAddr     string
 	redisURL        string
 	redisPoolSize   int
@@ -120,6 +121,7 @@ GET /security/nonces/{pk}
 func init() {
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9093", "address to bind to\n\r")
 	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH\n\r")
+	RootCmd.Flags().StringVar(&publicUDPAddr, "public-udp-address", "", "externally-reachable host:port advertised in /health for SUDPH (e.g. ar.example.com:30178)\n\rrequired for visors that reach this AR over dmsghttp; without it those visors cannot register SUDPH")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
@@ -252,7 +254,7 @@ Example:
 		}
 
 		enableMetrics := metricsAddr != ""
-		arAPI := api.New(logger, transportStore, nonceStore, enableMetrics, m, dmsgAddr)
+		arAPI := api.New(logger, transportStore, nonceStore, enableMetrics, m, dmsgAddr, publicUDPAddr)
 
 		udpListener, err := kcp.Listen(udpAddr)
 		if err != nil {
