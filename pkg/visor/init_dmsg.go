@@ -744,7 +744,7 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 			// Use DmsgPingViaServer to ping ourselves through this specific server
 			latencies, err := v.DmsgPingViaServer(conf, serverPK)
 			if err != nil {
-				log.WithError(err).WithField("server", serverPKStr[:16]+"...").Warn("Failed to measure server latency")
+				log.WithError(err).WithField("server", serverPKStr).Warn("Failed to measure server latency")
 				continue
 			}
 
@@ -761,7 +761,7 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 			v.dmsgLatency.mu.Unlock()
 
 			log.WithFields(logrus.Fields{
-				"server":  serverPKStr[:16] + "...",
+				"server":  serverPKStr,
 				"latency": avgLatency.Round(time.Millisecond),
 				"elapsed": time.Since(start).Round(time.Millisecond),
 			}).Info("Measured DMSG server latency")

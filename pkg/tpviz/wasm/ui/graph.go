@@ -463,14 +463,6 @@ func (o *RenderOptions) ShowNodeStatus(s NodeStatus) bool {
 
 // Helper functions
 
-// shortPK returns a shortened version of a public key
-func shortPK(pk string) string {
-	if len(pk) <= 8 {
-		return pk
-	}
-	return pk[:8]
-}
-
 // itoa converts int to string without fmt
 func itoa(i int) string {
 	if i == 0 {
