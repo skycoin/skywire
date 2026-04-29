@@ -57,7 +57,7 @@ visor's config.`,
 		url := fmt.Sprintf("dmsg://%s:80/stats", pk)
 		body, err := clirpc.FetchServiceURL(cmd.Flags(), url)
 		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to fetch RSN stats from %s: %w", pk[:16], err))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to fetch RSN stats from %s: %w", pk, err))
 		}
 
 		// Try to pretty-print JSON

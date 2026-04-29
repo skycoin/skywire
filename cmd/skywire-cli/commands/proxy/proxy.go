@@ -849,7 +849,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			if testVerbose {
-				fmt.Printf("Found %d transports for via visor %s\n", len(entries), viaVisor[:16]+"...")
+				fmt.Printf("Found %d transports for via visor %s\n", len(entries), viaVisor)
 			}
 
 			// Extract destination PKs (the "other" edge from each transport)
@@ -864,7 +864,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			if testVerbose {
-				fmt.Printf("Found %d unique destination visors via %s\n", len(viaDestinations), viaVisor[:16]+"...")
+				fmt.Printf("Found %d unique destination visors via %s\n", len(viaDestinations), viaVisor)
 			}
 		}
 
@@ -1001,7 +1001,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 			}
 
 			if testVerbose {
-				fmt.Printf("Testing %d destinations via %s\n", len(proxiesToTest), viaVisor[:16]+"...")
+				fmt.Printf("Testing %d destinations via %s\n", len(proxiesToTest), viaVisor)
 			}
 		} else {
 			// Fetch proxy servers from service discovery
@@ -1102,7 +1102,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		// Progress indicator
 		total := len(proxiesToTest)
 		if viaVisor != "" {
-			fmt.Printf("Testing %d destinations via %s (batch=%d, timeout=%ds)\n", total, viaVisor[:16]+"...", testBatchSize, testTimeout)
+			fmt.Printf("Testing %d destinations via %s (batch=%d, timeout=%ds)\n", total, viaVisor, testBatchSize, testTimeout)
 		} else {
 			fmt.Printf("Processing %d proxies (batch=%d, timeout=%ds)...\n", total, testBatchSize, testTimeout)
 		}
@@ -1615,15 +1615,15 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				successCount++
 			}
 			if testConnectOnly {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, r.Version, statusStr, latency) //nolint:errcheck,gosec
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", r.PublicKey, r.Country, r.Version, statusStr, latency) //nolint:errcheck,gosec
 			} else if viaVisor != "" {
 				via := "-"
 				if r.ViaVisor != "" {
-					via = r.ViaVisor[:8] + "..."
+					via = r.ViaVisor
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", via, statusStr, latency, bandwidth, proxyLoc, proxyIP) //nolint:errcheck,gosec
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.PublicKey, via, statusStr, latency, bandwidth, proxyLoc, proxyIP) //nolint:errcheck,gosec
 			} else {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.PublicKey[:16]+"...", r.Country, statusStr, latency, bandwidth, proxyLoc, proxyIP) //nolint:errcheck,gosec
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.PublicKey, r.Country, statusStr, latency, bandwidth, proxyLoc, proxyIP) //nolint:errcheck,gosec
 			}
 		}
 		w.Flush() //nolint:errcheck,gosec

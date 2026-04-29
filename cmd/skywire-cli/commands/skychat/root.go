@@ -80,7 +80,7 @@ var sendCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("server error (%d): %s", resp.StatusCode, errBody.String()))
 		}
 
-		internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("Message sent to %s via %s\n", recipient[:16]+"...", networkType))
+		internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("Message sent to %s via %s\n", recipient, networkType))
 	},
 }
 
@@ -121,12 +121,7 @@ var listenCmd = &cobra.Command{
 					continue
 				}
 
-				// Format and display the message
-				senderShort := msg.Sender
-				if len(senderShort) > 16 {
-					senderShort = senderShort[:16] + "..."
-				}
-				fmt.Printf("[%s] %s\n", senderShort, msg.Message)
+				fmt.Printf("[%s] %s\n", msg.Sender, msg.Message)
 			}
 		}
 

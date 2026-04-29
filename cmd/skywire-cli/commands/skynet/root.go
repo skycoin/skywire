@@ -142,11 +142,7 @@ var startCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start %s: %w", appName, err))
 		}
 
-		pkShort := remotePk
-		if len(pkShort) > 16 {
-			pkShort = pkShort[:16] + "..."
-		}
-		fmt.Printf("Starting %s -> %s:%d -> localhost:%d ", appName, pkShort, remotePort, localPort)
+		fmt.Printf("Starting %s -> %s:%d -> localhost:%d ", appName, remotePk, remotePort, localPort)
 
 		// Poll for app status until running, errored, or stopped
 		for {
@@ -320,11 +316,7 @@ Examples:
 				// Show connection info from args
 				for i, arg := range state.Args {
 					if arg == "--srv" && i+1 < len(state.Args) {
-						pk := state.Args[i+1]
-						if len(pk) > 16 {
-							pk = pk[:16] + "..."
-						}
-						_, err = fmt.Fprintf(w, "Server:\t%s\n", pk)
+						_, err = fmt.Fprintf(w, "Server:\t%s\n", state.Args[i+1])
 						internal.Catch(cmd.Flags(), err)
 					}
 					if arg == "--remote" && i+1 < len(state.Args) {

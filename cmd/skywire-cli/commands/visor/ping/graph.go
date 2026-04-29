@@ -539,7 +539,7 @@ var pingGraphCmd = &cobra.Command{
 								if ctx.Err() != nil {
 									return false, detail
 								}
-								fmt.Printf("    Server %s: error: %v\n", server[:16]+"...", err)
+								fmt.Printf("    Server %s: error: %v\n", server, err)
 							}
 						}
 					}
@@ -598,13 +598,13 @@ var pingGraphCmd = &cobra.Command{
 							hopLatencies[i] = hopLatencyMs
 							segmentLatency := hopLatencyMs - prevLatency
 							if i == 0 {
-								fmt.Printf("    Hop %d (%s): %.2f ms\n", i+1, hopPK[:8]+"...", hopLatencyMs)
+								fmt.Printf("    Hop %d (%s): %.2f ms\n", i+1, hopPK, hopLatencyMs)
 							} else {
-								fmt.Printf("    Hop %d (%s): %.2f ms (segment: +%.2f ms)\n", i+1, hopPK[:8]+"...", hopLatencyMs, segmentLatency)
+								fmt.Printf("    Hop %d (%s): %.2f ms (segment: +%.2f ms)\n", i+1, hopPK, hopLatencyMs, segmentLatency)
 							}
 							prevLatency = hopLatencyMs
 						} else {
-							fmt.Printf("    Hop %d (%s): failed\n", i+1, hopPK[:8]+"...")
+							fmt.Printf("    Hop %d (%s): failed\n", i+1, hopPK)
 						}
 					}
 					detail.hopLatencies = hopLatencies
@@ -1025,12 +1025,12 @@ func runTreeViewMode(
 	// Helper to get DMSG servers for a visor
 	getVisorDmsgServers := func(visorPK string) []string {
 		if !dmsgClientsLoaded {
-			fmt.Fprintf(os.Stderr, "DEBUG: DMSG clients not loaded, skipping DMSG pre-check for %s\n", visorPK[:16])
+			fmt.Fprintf(os.Stderr, "DEBUG: DMSG clients not loaded, skipping DMSG pre-check for %s\n", visorPK)
 			return nil
 		}
 		servers := visorDmsgServers[visorPK]
 		if len(servers) == 0 {
-			fmt.Fprintf(os.Stderr, "DEBUG: No DMSG servers found for visor %s\n", visorPK[:16])
+			fmt.Fprintf(os.Stderr, "DEBUG: No DMSG servers found for visor %s\n", visorPK)
 		}
 		return servers
 	}
@@ -1149,7 +1149,7 @@ func runTreeViewMode(
 		}
 		// Remove from local tracking
 		delete(localTpIDs, tpID)
-		fmt.Fprintf(os.Stderr, "Removed local transport %s\n", tpID[:16])
+		fmt.Fprintf(os.Stderr, "Removed local transport %s\n", tpID)
 		return nil
 	}
 
@@ -1179,7 +1179,7 @@ func runTreeViewMode(
 			return fmt.Errorf("timeout removing remote transport")
 		}
 
-		fmt.Fprintf(os.Stderr, "Requested removal of transport %s from remote visor %s\n", tpID[:16], remotePK[:16])
+		fmt.Fprintf(os.Stderr, "Requested removal of transport %s from remote visor %s\n", tpID, remotePK)
 		return nil
 	}
 
@@ -1349,7 +1349,7 @@ func runTreeViewMode(
 			var localPKObj cipher.PubKey
 			if err := remotePKObj.Set(remotePK); err == nil {
 				if err := localPKObj.Set(localPK); err == nil {
-					fmt.Printf("  Attempting to remake transport to %s...\n", remotePK[:16])
+					fmt.Printf("  Attempting to remake transport to %s...\n", remotePK)
 					newTp, err := rpcClient.TPSAddTransport(localPKObj, remotePKObj, tpType)
 					if err != nil {
 						fmt.Printf("  Failed to remake transport: %v\n", err)
@@ -2120,7 +2120,7 @@ func runTreeViewMode(
 		var dmsgServers []string
 		if graphDmsgPreCheck {
 			dmsgServers = getVisorDmsgServers(remotePK)
-			fmt.Fprintf(os.Stderr, "DEBUG: DMSG pre-check for %s, got %d servers\n", remotePK[:16], len(dmsgServers))
+			fmt.Fprintf(os.Stderr, "DEBUG: DMSG pre-check for %s, got %d servers\n", remotePK, len(dmsgServers))
 		}
 
 		// DMSG pings goroutine (sequential through servers, concurrent with route ping)
@@ -2297,7 +2297,7 @@ func runTreeViewMode(
 					} else if graphUseTPS {
 						localSideTps := getRemoteVisorTransports(localVisorPK)
 						if localSideTps != nil && !localSideTps[tpIDToVerify] {
-							fmt.Fprintf(os.Stderr, "Transport %s not found on local-side %s\n", tpIDToVerify[:16], localVisorPK[:16])
+							fmt.Fprintf(os.Stderr, "Transport %s not found on local-side %s\n", tpIDToVerify[:16], localVisorPK)
 							return false
 						}
 					}
@@ -2305,7 +2305,7 @@ func runTreeViewMode(
 					if graphUseTPS {
 						remoteTps := getRemoteVisorTransports(remoteVisorPK)
 						if remoteTps != nil && !remoteTps[tpIDToVerify] {
-							fmt.Fprintf(os.Stderr, "Transport %s not found on remote %s\n", tpIDToVerify[:16], remoteVisorPK[:16])
+							fmt.Fprintf(os.Stderr, "Transport %s not found on remote %s\n", tpIDToVerify[:16], remoteVisorPK)
 							return false
 						}
 					}
@@ -2832,7 +2832,7 @@ func runTreeViewMode(
 				if path, ok := visorPath[entry.parentPK]; ok && len(path) > 0 {
 					firstHopInfo = fmt.Sprintf(" (1st: %s)", path[0].tpID[:8])
 				}
-				textOut.WriteString(fmt.Sprintf("  %s via %s %s%s %s\n", entry.remotePK, entry.parentPK[:16], entry.tpID, firstHopInfo, latStr))
+				textOut.WriteString(fmt.Sprintf("  %s via %s %s%s %s\n", entry.remotePK, entry.parentPK, entry.tpID, firstHopInfo, latStr))
 			}
 		}
 
