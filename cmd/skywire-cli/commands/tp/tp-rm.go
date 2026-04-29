@@ -71,10 +71,10 @@ var rmTpCmd = &cobra.Command{
 					if err := rpcClient.TPSRemoveTransport(targetPK, tID); err != nil {
 						failCount++
 						errors = append(errors, fmt.Sprintf("%s: %v", tpIDStr, err))
-						logger.WithError(err).Warnf("Failed to remove transport %s on %s", tpIDStr, targetPK.String()[:16])
+						logger.WithError(err).Warnf("Failed to remove transport %s on %s", tpIDStr, targetPK.String())
 					} else {
 						successCount++
-						logger.Infof("Removed transport %s on %s", tpIDStr, targetPK.String()[:16])
+						logger.Infof("Removed transport %s on %s", tpIDStr, targetPK.String())
 					}
 				}
 

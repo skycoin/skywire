@@ -100,7 +100,7 @@ func (d *setupNodeDialer) Dial(
 		for _, sPK := range setupNodes {
 			// Try direct "setup" transport first.
 			if tp := FindDirectRSNTransport(sPK, d.tm); tp != nil {
-				log.WithField("rsn", sPK.String()[:8]).Debug("Using direct setup transport to RSN")
+				log.WithField("rsn", sPK.String()).Debug("Using direct setup transport to RSN")
 				rules, relayErr := d.dialViaTransport(ctx, log, tp, req)
 				if relayErr == nil {
 					return rules, sPK, nil
@@ -111,8 +111,8 @@ func (d *setupNodeDialer) Dial(
 			// Try relay through a neighbor.
 			tp, relayPK, relayErr := d.relayCache.FindRelayTransport(ctx, sPK, d.tm)
 			if relayErr == nil {
-				log.WithField("rsn", sPK.String()[:8]).
-					WithField("relay", relayPK.String()[:8]).
+				log.WithField("rsn", sPK.String()).
+					WithField("relay", relayPK.String()).
 					Debug("Trying relay to RSN via neighbor")
 				rules, relayErr := d.dialViaTransport(ctx, log, tp, req)
 				if relayErr == nil {
@@ -169,7 +169,7 @@ func (d *setupNodeDialer) dialViaTransport(
 		return routing.EdgeRules{}, fmt.Errorf("setup RPC mux not initialized")
 	}
 
-	log.WithField("remote", tp.Remote().String()[:8]).Debug("Dialing RSN via transport virtual stream")
+	log.WithField("remote", tp.Remote().String()).Debug("Dialing RSN via transport virtual stream")
 
 	stream, err := d.setupRPCMux.DialOnTransport(tp)
 	if err != nil {

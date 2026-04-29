@@ -67,7 +67,7 @@ func (d *DMSG) Listen() error {
 // ConnectPK connects to a remote CXO node over DMSG by public key.
 // If a connection already exists, returns the existing one.
 func (d *DMSG) ConnectPK(remotePK cipher.PubKey) (*Conn, error) {
-	d.n.Debugf(NewOutConnPin, "[dmsg:%s] connecting", remotePK.String()[:8])
+	d.n.Debugf(NewOutConnPin, "[dmsg:%s] connecting", remotePK.String())
 
 	// Check if connection already exists
 	if c := d.getConn(remotePK); c != nil {
@@ -83,7 +83,7 @@ func (d *DMSG) ConnectPK(remotePK cipher.PubKey) (*Conn, error) {
 	// Init connection (handshake, etc.)
 	c, err := d.n.initConn(fc, false)
 	if err != nil {
-		d.n.Errorf(err, "[dmsg:%s] failed to connect", remotePK.String()[:8])
+		d.n.Errorf(err, "[dmsg:%s] failed to connect", remotePK.String())
 		if !fc.IsClosed() {
 			fc.Close() //nolint:errcheck,gosec
 		}

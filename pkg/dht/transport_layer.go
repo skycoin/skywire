@@ -148,7 +148,7 @@ func (tl *TransportLayerDHT) Dial(ctx context.Context, pk cipher.PubKey) (io.Rea
 		}
 	}
 	if targetTp == nil {
-		return nil, fmt.Errorf("dht transport: no transport to %s", pk.String()[:8])
+		return nil, fmt.Errorf("dht transport: no transport to %s", pk.String())
 	}
 
 	streamID := tl.nextStreamID()

@@ -23,7 +23,7 @@ func (v *Visor) discoverLANDmsgServer() {
 	// Try saved LAN servers from config
 	if v.conf.Dmsg != nil && len(v.conf.Dmsg.LANServers) > 0 {
 		for _, entry := range v.conf.Dmsg.LANServers {
-			log.Infof("Trying saved LAN DMSG server: %s @ %s", entry.Static.String()[:16]+"...", entry.Server.Address)
+			log.Infof("Trying saved LAN DMSG server: %s @ %s", entry.Static.String(), entry.Server.Address)
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			err := v.dmsgC.EnsureSession(ctx, entry)
 			cancel()
@@ -50,7 +50,7 @@ func (v *Visor) SetLANDmsgServer(info LANDmsgServerInfo) error {
 		return nil
 	}
 
-	log.Infof("Hypervisor pushed LAN DMSG server: PK=%s Address=%s", info.PK.String()[:16]+"...", info.Address)
+	log.Infof("Hypervisor pushed LAN DMSG server: PK=%s Address=%s", info.PK.String(), info.Address)
 
 	lanEntry := &dmsgdisc.Entry{
 		Static: info.PK,
@@ -92,7 +92,7 @@ func (v *Visor) saveLANServerToConfig(info *LANDmsgServerInfo) {
 	}
 
 	v.conf.Dmsg.LANServers = []*dmsgdisc.Entry{entry}
-	log.Infof("Saved LAN DMSG server to config: %s @ %s", info.PK.String()[:16]+"...", info.Address)
+	log.Infof("Saved LAN DMSG server to config: %s @ %s", info.PK.String(), info.Address)
 
 	if err := v.conf.Flush(); err != nil {
 		log.WithError(err).Warn("Failed to persist config with LAN DMSG server")
