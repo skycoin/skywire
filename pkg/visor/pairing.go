@@ -71,7 +71,7 @@ func (v *Visor) PairAdd(peerPK cipher.PubKey) error {
 		// and Resume on a future restart (or a manual retry) will
 		// pick up the subscriber side once the peer is reachable.
 		v.log.WithError(err).
-			WithField("peer", peerPK.Hex()[:8]).
+			WithField("peer", peerPK.Hex()).
 			Debug("Pairing: subscriber Connect failed; pair record kept")
 	}
 	return nil
