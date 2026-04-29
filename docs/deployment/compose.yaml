@@ -78,6 +78,14 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     depends_on:
       - redis
+  # dmsg-server stanzas below run with `enable_dht: true` and
+  # `redis_addr: "redis:6379"` set in their config.json. With those, the
+  # process also runs a DHT full node on dmsg port 100 and rehydrates its
+  # store from Redis on every restart. REDIS_PASSWORD must be in the
+  # environment so the DHT backend can authenticate; TPD_URL / SD_URL let
+  # the DHT-to-discovery pusher mirror visor-published DHT entries back
+  # to the HTTP services. See DOCKER_DEPLOYMENT.md "DMSG Server DHT" for
+  # rationale and the trade-offs of disabling DHT.
   dmsg-server-1:
     container_name: dmsg-server-1
     image: "skycoin/skywire:test"
@@ -91,6 +99,13 @@ services:
       - http
       - --pprofaddr
       - :${DMSGSERVER_1_PPROF}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TPD_URL=http://${TPDISC_HOST}:${TPDISC_PORT}
+      - SD_URL=http://${SD_HOST}:${SD_PORT}
+    depends_on:
+      - redis
+      - dmsg-discovery
     volumes:
       - ./dmsg-server/dmsg-server-1/:/etc/skywire/dmsg-server
     ports:
@@ -109,6 +124,13 @@ services:
       - http
       - --pprofaddr
       - :${DMSGSERVER_6_PPROF}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TPD_URL=http://${TPDISC_HOST}:${TPDISC_PORT}
+      - SD_URL=http://${SD_HOST}:${SD_PORT}
+    depends_on:
+      - redis
+      - dmsg-discovery
     volumes:
       - ./dmsg-server/dmsg-server-6/:/etc/skywire/dmsg-server
     ports:
@@ -127,6 +149,13 @@ services:
       - http
       - --pprofaddr
       - :${DMSGSERVER_7_PPROF}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - TPD_URL=http://${TPDISC_HOST}:${TPDISC_PORT}
+      - SD_URL=http://${SD_HOST}:${SD_PORT}
+    depends_on:
+      - redis
+      - dmsg-discovery
     volumes:
       - ./dmsg-server/dmsg-server-7/:/etc/skywire/dmsg-server
     ports:
