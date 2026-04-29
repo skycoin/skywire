@@ -4,6 +4,16 @@
 # from the main deployment services. Pair with compose.yaml on the
 # primary host.
 #
+# DHT note: this secondary-host file does NOT include a redis container.
+# If these dmsg-servers are configured with `enable_dht: true` (see
+# DOCKER_DEPLOYMENT.md "DMSG Server DHT"), they need access to the
+# primary host's Redis. Two options:
+#   1. Point each config.json's `redis_addr` at the primary host's
+#      reachable Redis address and pass REDIS_PASSWORD here.
+#   2. Set `enable_dht: false` on these instances — they'll still serve
+#      dmsg traffic and join the bootstrap mesh once at least one of the
+#      cluster's dmsg-servers is reachable, but won't carry DHT state.
+#
 # Usage:
 #   docker compose -f compose-dmsg-servers.yaml up -d
 
@@ -14,6 +24,10 @@ services:
     restart: always
     environment:
       - GODEBUG=madvdontneed=1
+      # Uncomment if this dmsg-server's config.json sets enable_dht: true
+      # - REDIS_PASSWORD=
+      # - TPD_URL=http://tpd.example.com
+      # - SD_URL=http://sd.example.com
     command:
       - dmsg
       - server
@@ -30,6 +44,10 @@ services:
     restart: always
     environment:
       - GODEBUG=madvdontneed=1
+      # Uncomment if this dmsg-server's config.json sets enable_dht: true
+      # - REDIS_PASSWORD=
+      # - TPD_URL=http://tpd.example.com
+      # - SD_URL=http://sd.example.com
     command:
       - dmsg
       - server

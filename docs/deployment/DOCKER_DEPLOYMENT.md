@@ -30,7 +30,7 @@ The compose file defines the following services:
 | address-resolver | `svc ar` | 9093 (TCP), 30178 (UDP) | redis, dmsg-discovery | Resolves visor addresses for STCPR/SUDPH transports |
 | conf-service | `svc confbs` | configurable | none | Config bootstrap server for visor configuration |
 | dmsg-discovery | `dmsg disc` | 9090 | redis | DMSG discovery server |
-| dmsg-server | `dmsg server start` | 8080 (internal) | none | DMSG relay server |
+| dmsg-server | `dmsg server start` | 8080 (internal) | redis (if `enable_dht: true`) | DMSG relay server; optional DHT full node on dmsg port 100 |
 | network-monitor | `svc nm` | configurable | most services | Monitors network health and cleans stale entries |
 | route-finder | `svc rf` | 9092 | redis, dmsg-discovery, transport-discovery | Finds routes between visors |
 | service-discovery | `svc sd` | 9098 | redis, dmsg-discovery | Service discovery (VPN servers, etc.) |
@@ -85,6 +85,35 @@ skywire dmsg server config gen -o dmsg-server-config.json
 ```
 
 Update the `public_address` and `discovery` fields to match your deployment. Mount the config directory as a volume in the compose file.
+
+#### DMSG Server DHT (optional, recommended for production)
+
+Setting `enable_dht: true` and `redis_addr` in the dmsg-server's `config.json` turns the process into a Kademlia DHT full node on dmsg port 100, in addition to its normal dmsg relay duties. This is the serving layer that makes `dht get <pk> <salt>` from a visor return real data instead of falling through to HTTP discovery.
+
+Example `config.json`:
+
+```json
+{
+  "public_key": "0281a102c828...",
+  "secret_key": "...",
+  "discovery": "http://dmsg-discovery:9090",
+  "public_address": "192.0.2.10:30086",
+  "local_address": ":8080",
+  "health_endpoint_address": ":8082",
+  "max_sessions": 2048,
+  "enable_dht": true,
+  "redis_addr": "redis:6379"
+}
+```
+
+For Docker Compose, the dmsg-server stanza must also pass `REDIS_PASSWORD`, `TPD_URL`, and `SD_URL` in its environment, and depend on `redis` and `dmsg-discovery`. The example in `compose.yaml` already does this.
+
+How the DHT serves data:
+- `redis_addr` points the DHT full node at the same Redis used by transport-discovery, dmsg-discovery, and service-discovery. Those services already write a Kademlia-shaped mirror of every entry into Redis under `dht:*` keys (see `pkg/dht/mirror_redis.go`); the dmsg-server's DHT node rehydrates from those keys on startup.
+- The dmsg-servers form a bootstrap mesh by dialing each other's DHT port (over dmsg). The bootstrap PK list is built from the embedded `dmsg.Prod.DmsgServers`/`dmsg.Test.DmsgServers` list automatically, so visors and other dmsg-servers find each other without configuration.
+- `TPD_URL` and `SD_URL` enable the DHT-to-discovery pusher: when a visor publishes its own DHT entry directly (e.g. `tp` or `svc` salts), the dmsg-server forwards that write back into the HTTP discoveries so they stay consistent.
+
+Without `enable_dht`, the dmsg-server still works as a relay — visors just rely on HTTP discovery for everything. Without `redis_addr` (but `enable_dht: true`), the DHT runs in-memory only: it works but loses every entry on restart and won't serve the disc-mirror data.
 
 ### Setup Node Configuration
 

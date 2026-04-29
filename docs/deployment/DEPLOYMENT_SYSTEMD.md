@@ -217,10 +217,13 @@ combined documentation can be found [here](https://github.com/skycoin/skywire/tr
 * [transport-discovery](#transport-discovery)
 * [dmsg-discovery](#dmsg-discovery)
 * [service-discovery](#service-discovery)
+* [dmsg-server](#dmsg-server) — only when `enable_dht: true` (recommended for production)
 
 #### Redis setup
 
 Redis setup simply entails installing redis and starting the service (which may now be called `valkey.service`).
+
+The same Redis instance can back every service above. The DHT full node embedded in dmsg-server uses the `dht:*` keyspace and reads back the `dht:*` entries that transport-discovery, dmsg-discovery, and service-discovery already write — there is no separate DHT-only Redis to configure.
 
 ### Postgres
 * ~[transport-discovery](#transport-discovery)~
@@ -381,6 +384,21 @@ __The port on which the dmsg server is running must be forwarded or otherwise ac
 
 The above "discovery" endpoint should be changed to match the endpoint of the dmsg discovery server referenced in the previous section.
 The default ports are shown.
+
+##### Optional: DHT full node
+
+Production deployments should also set:
+
+```
+	"enable_dht": true,
+	"redis_addr": "127.0.0.1:6379"
+```
+
+With these set, the dmsg-server runs a Kademlia DHT full node on dmsg port 100 alongside its normal relay duties. The DHT is the serving layer for `dht get <pk> <salt>` lookups from visors, and rehydrates from the same Redis used by transport-discovery / dmsg-discovery / service-discovery (which already write `dht:*` mirror keys). The dmsg-servers in the embedded `dmsg.Prod.DmsgServers` list bootstrap-ping each other automatically, so no extra peer config is needed.
+
+Pass the Redis password to the systemd unit via `Environment=REDIS_PASSWORD=…` (see `init/skywire-dmsg.service`). To wire the DHT-to-HTTP discovery pusher (so visor-published DHT entries flow back into the HTTP services), also set `TPD_URL` and `SD_URL` in the unit's environment.
+
+Without `enable_dht`, the dmsg-server still works as a pure relay — visors will rely on HTTP discovery for everything. Without `redis_addr` (but `enable_dht: true`), the DHT runs in-memory only: it works but loses state on restart and won't serve disc-mirror data.
 
 #### Run `dmsg-server`
 
