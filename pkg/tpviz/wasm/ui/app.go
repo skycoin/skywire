@@ -1041,7 +1041,7 @@ func (a *App) localCreateTransport() {
 		return
 	}
 
-	a.updateLocalTPResult("success", "Created: "+strings.ToUpper(resp.Type)+" → "+resp.RemotePK[:16]+"...")
+	a.updateLocalTPResult("success", "Created: "+strings.ToUpper(resp.Type)+" → "+resp.RemotePK)
 
 	// Clear input after success
 	input := getElement("local-tp-remote-pk")
@@ -1195,7 +1195,7 @@ func (a *App) tpsAddTransport() {
 	resultEl.Get("classList").Call("remove", "tps-loading")
 	resultEl.Get("classList").Call("add", "tps-success")
 	resultEl.Set("innerHTML", "Created "+strings.ToUpper(resp.Type)+"<br>"+
-		resp.LocalPK[:12]+"... ↔ "+resp.RemotePK[:12]+"...")
+		resp.LocalPK+" ↔ "+resp.RemotePK)
 
 	// Add the new transport as an edge in the graph immediately (will be
 	// confirmed/replaced on the next data refresh cycle).
@@ -1283,7 +1283,7 @@ func (a *App) tpsRefreshTransports() {
 		html.WriteString("style=\"padding:1px 5px;font-size:0.65em;background:#e94560;color:#fff;border:none;border-radius:2px;cursor:pointer;\">✕</button>")
 		html.WriteString("</div>")
 		html.WriteString("<div style=\"font-size:0.7em;color:#aaa;margin-top:2px;word-break:break-all;\">")
-		html.WriteString(t.RemotePK[:20] + "...")
+		html.WriteString(t.RemotePK)
 		html.WriteString("</div></div>")
 	}
 	html.WriteString("</div>")
