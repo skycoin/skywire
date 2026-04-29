@@ -25,7 +25,6 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 var pairPollSince string
@@ -158,7 +157,7 @@ enough that it doesn't roll over between reads.`,
 		fmt.Fprintln(w, "TIMESTAMP\tPEER\tTEXT") //nolint:errcheck,gosec
 		for _, m := range msgs {
 			fmt.Fprintf(w, "%s\t%s\t%s\n", //nolint:errcheck,gosec
-				m.TS.UTC().Format(time.RFC3339Nano), m.PeerPK.Hex()[:16]+"...", m.Text)
+				m.TS.UTC().Format(time.RFC3339Nano), m.PeerPK.Hex(), m.Text)
 		}
 		w.Flush() //nolint:errcheck,gosec
 		internal.PrintOutput(cmd.Flags(), msgs, buf.String())
@@ -189,19 +188,11 @@ func listPairs(cmd *cobra.Command) {
 			last = p.LastMessageAt.UTC().Format(time.RFC3339)
 		}
 		fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n", //nolint:errcheck,gosec
-			truncatePK(p.PeerPK),
+			p.PeerPK.Hex(),
 			p.Status, p.Port,
 			p.EstablishedAt.UTC().Format(time.RFC3339),
 			last)
 	}
 	w.Flush() //nolint:errcheck,gosec
 	internal.PrintOutput(cmd.Flags(), pairs, buf.String())
-}
-
-func truncatePK(pk cipher.PubKey) string {
-	s := pk.Hex()
-	if len(s) > 16 {
-		return s[:16] + "..."
-	}
-	return s
 }

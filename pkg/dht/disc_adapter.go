@@ -150,11 +150,11 @@ func (d *DiscAdapter) SeedServers(ctx context.Context, pks []cipher.PubKey) {
 	for _, pk := range pks {
 		entry, err := d.Entry(ctx, pk)
 		if err != nil {
-			d.log.WithField("pk", pk.String()[:8]).WithError(err).Debug("Failed to seed server from DHT")
+			d.log.WithField("pk", pk.String()).WithError(err).Debug("Failed to seed server from DHT")
 			continue
 		}
 		if entry.Server != nil {
-			d.log.WithField("pk", pk.String()[:8]).Debug("Seeded DMSG server from DHT")
+			d.log.WithField("pk", pk.String()).Debug("Seeded DMSG server from DHT")
 		}
 	}
 }

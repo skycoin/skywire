@@ -69,7 +69,7 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 		}
 
 		if len(entries) == 0 {
-			fmt.Printf("No transports found for %s\n", targetPK.String()[:8])
+			fmt.Printf("No transports found for %s\n", targetPK.String())
 			return
 		}
 
@@ -84,7 +84,7 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 		}
 
 		if len(edgePKs) == 0 {
-			fmt.Printf("No edge keys found for %s (excluding self)\n", targetPK.String()[:8])
+			fmt.Printf("No edge keys found for %s (excluding self)\n", targetPK.String())
 			return
 		}
 
@@ -95,7 +95,7 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 		}
 
 		if edgeVerbose {
-			fmt.Printf("Found %d edges for %s, attempting to connect...\n", len(pksToConnect), targetPK.String()[:8])
+			fmt.Printf("Found %d edges for %s, attempting to connect...\n", len(pksToConnect), targetPK.String())
 		}
 
 		// Process in parallel batches
@@ -135,9 +135,9 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 
 				if edgeVerbose {
 					if res.success {
-						fmt.Printf("✓ %s (%s)\n", edgePK.String()[:8], res.tpType)
+						fmt.Printf("✓ %s (%s)\n", edgePK.String(), res.tpType)
 					} else {
-						fmt.Printf("✗ %s: %v\n", edgePK.String()[:8], res.err)
+						fmt.Printf("✗ %s: %v\n", edgePK.String(), res.err)
 					}
 				}
 			}(i, pk)
@@ -152,6 +152,6 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 				successCount++
 			}
 		}
-		fmt.Printf("\nConnected to %d/%d edges of %s\n", successCount, len(pksToConnect), targetPK.String()[:8])
+		fmt.Printf("\nConnected to %d/%d edges of %s\n", successCount, len(pksToConnect), targetPK.String())
 	},
 }

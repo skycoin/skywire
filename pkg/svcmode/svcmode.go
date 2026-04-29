@@ -368,7 +368,7 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 			dhtLog.WithError(err).Warn("DHT node failed to start")
 		} else {
 			h.DHTNode = dhtNode
-			dhtLog.WithField("id", dhtNode.ID().String()[:16]).
+			dhtLog.WithField("id", dhtNode.ID().String()).
 				WithField("bootstrap_peers", len(bootstrapPKs)).
 				Info("DHT full node started")
 		}

@@ -1773,12 +1773,11 @@ func (env *TestEnv) ExecJSONWithTimeout(cmd string, output interface{}, timeout 
 	return err
 }
 
-// truncatePK safely truncates a public key string for logging
+// truncatePK is a no-op identity left in place for compatibility with
+// existing call sites in this test file; PKs are emitted in full so
+// integration-test diagnostic logs stay greppable.
 func truncatePK(pk string) string {
-	if len(pk) < 16 {
-		return pk
-	}
-	return pk[:16] + "..."
+	return pk
 }
 
 // truncateID safely truncates an ID string for logging

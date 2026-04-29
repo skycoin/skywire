@@ -90,7 +90,7 @@ func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
 
 	resp, err := v.dhtNode.GetItemsFrom(ctx, targetPK, salt, 0, 0)
 	if err != nil {
-		return 0, fmt.Errorf("sync from %s: %w", targetPK.String()[:8], err)
+		return 0, fmt.Errorf("sync from %s: %w", targetPK.String(), err)
 	}
 
 	stored := 0

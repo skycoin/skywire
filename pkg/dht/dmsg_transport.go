@@ -47,7 +47,7 @@ func (t *DMSGTransport) Dial(ctx context.Context, pk cipher.PubKey) (io.ReadWrit
 		}
 	}
 
-	return nil, fmt.Errorf("dht dmsg dial %s: %w", pk.String()[:8], err)
+	return nil, fmt.Errorf("dht dmsg dial %s: %w", pk.String(), err)
 }
 
 // Listen starts accepting incoming DMSG streams on the DHT port.

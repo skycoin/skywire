@@ -156,7 +156,7 @@ var addTpCmd = &cobra.Command{
 
 				for i, pk := range pks {
 					if !isJSON {
-						fmt.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String()[:16]+"...", pk.String()[:16]+"...")
+						fmt.Printf("[%d/%d] Requesting transport on %s to %s via TPS...\n", i+1, len(pks), targetPK.String(), pk.String())
 					}
 
 					var tpResp *visor.TPSTransportResponse
@@ -166,7 +166,7 @@ var addTpCmd = &cobra.Command{
 						// Use embedded TPS only - if it fails, don't try external nodes
 						tpResp, tpErr = rpcClient.TPSAddTransport(targetPK, pk, tpType)
 						if tpErr == nil && !isJSON {
-							logger.Infof("Established %v transport on %s to %s via embedded TPS", tpType, targetPK.String()[:16], pk.String()[:16])
+							logger.Infof("Established %v transport on %s to %s via embedded TPS", tpType, targetPK.String(), pk.String())
 						}
 					} else {
 						// Embedded TPS not running - use external TPS nodes
@@ -190,13 +190,13 @@ var addTpCmd = &cobra.Command{
 						// Try each TPS node (already sorted by health, healthy first)
 						for _, tpsPK := range tpsNodes {
 							if !isJSON {
-								logger.Debugf("Trying TPS node %s", tpsPK.String()[:16])
+								logger.Debugf("Trying TPS node %s", tpsPK.String())
 							}
 
 							// Health check
 							if err := rpcClient.TPSExternalHealthCheck(tpsPK); err != nil {
 								if !isJSON {
-									logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String()[:16])
+									logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String())
 								}
 								continue
 							}
@@ -205,19 +205,19 @@ var addTpCmd = &cobra.Command{
 							tpResp, tpErr = rpcClient.TPSExternalAddTransport(tpsPK, targetPK, pk, tpType)
 							if tpErr == nil {
 								if !isJSON {
-									logger.Infof("Established %v transport on %s to %s via TPS %s", tpType, targetPK.String()[:16], pk.String()[:16], tpsPK.String()[:16])
+									logger.Infof("Established %v transport on %s to %s via TPS %s", tpType, targetPK.String(), pk.String(), tpsPK.String())
 								}
 								break
 							}
 							if !isJSON {
-								logger.WithError(tpErr).Debugf("TPS %s failed to add transport", tpsPK.String()[:16])
+								logger.WithError(tpErr).Debugf("TPS %s failed to add transport", tpsPK.String())
 							}
 						}
 					}
 
 					if tpErr != nil {
 						if !isJSON {
-							logger.WithError(tpErr).Errorf("Failed to establish transport on %s to %s", targetPK.String()[:16], pk.String()[:16])
+							logger.WithError(tpErr).Errorf("Failed to establish transport on %s to %s", targetPK.String(), pk.String())
 						}
 						failCount++
 						continue
@@ -233,7 +233,7 @@ var addTpCmd = &cobra.Command{
 				totalFail += failCount
 
 				if len(pks) > 1 && !isJSON {
-					fmt.Printf("Visor %s: %d/%d transports established\n", targetPK.String()[:16], successCount, len(pks))
+					fmt.Printf("Visor %s: %d/%d transports established\n", targetPK.String(), successCount, len(pks))
 				}
 			}
 
@@ -267,7 +267,7 @@ var addTpCmd = &cobra.Command{
 
 		for i, pk := range pks {
 			if len(pks) > 1 && !isJSON {
-				fmt.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String()[:16]+"...")
+				fmt.Printf("[%d/%d] Adding transport to %s...\n", i+1, len(pks), pk.String())
 			}
 
 			// Probe dmsg port 136 to check if route setup can reach the
@@ -278,7 +278,7 @@ var addTpCmd = &cobra.Command{
 				reachable, probeErr := rpcClient.DmsgProbe(pk, 136)
 				if probeErr == nil && !reachable {
 					if !isJSON {
-						logger.Warnf("Skipping %s: not reachable on dmsg port 136 (route setup will fail)", pk.String()[:16])
+						logger.Warnf("Skipping %s: not reachable on dmsg port 136 (route setup will fail)", pk.String())
 					}
 					failCount++
 					continue
