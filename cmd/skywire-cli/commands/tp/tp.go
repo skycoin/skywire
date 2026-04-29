@@ -159,21 +159,21 @@ var tpCmd = &cobra.Command{
 
 					// Try each TPS node (already sorted by health, healthy first)
 					for _, tpsPK := range tpsNodes {
-						logger.Debugf("Trying TPS node %s for target %s", tpsPK.String()[:16], targetPK.String()[:16])
+						logger.Debugf("Trying TPS node %s for target %s", tpsPK.String(), targetPK.String())
 
 						// Health check
 						if err := rpcClient.TPSExternalHealthCheck(tpsPK); err != nil {
-							logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String()[:16])
+							logger.WithError(err).Debugf("TPS %s health check failed", tpsPK.String())
 							continue
 						}
 
 						// Try to get transports via this TPS
 						tpsTransports, tpErr = rpcClient.TPSExternalGetTransports(tpsPK, targetPK)
 						if tpErr == nil {
-							logger.Debugf("Got transports from %s via TPS %s", targetPK.String()[:16], tpsPK.String()[:16])
+							logger.Debugf("Got transports from %s via TPS %s", targetPK.String(), tpsPK.String())
 							break
 						}
-						logger.WithError(tpErr).Debugf("TPS %s failed to get transports for %s", tpsPK.String()[:16], targetPK.String()[:16])
+						logger.WithError(tpErr).Debugf("TPS %s failed to get transports for %s", tpsPK.String(), targetPK.String())
 					}
 				}
 

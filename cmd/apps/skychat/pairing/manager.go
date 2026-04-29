@@ -210,7 +210,7 @@ func (m *Manager) Resume() (resumed int, err error) {
 		p, openErr := m.openPair(rec.PeerPK)
 		if openErr != nil {
 			m.log.WithError(openErr).
-				WithField("peer", rec.PeerPK.Hex()[:8]).
+				WithField("peer", rec.PeerPK.Hex()).
 				Warn("pairing: Resume: skip pair")
 			continue
 		}

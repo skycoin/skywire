@@ -46,7 +46,7 @@ func (rc *RSNRelayCache) Update(rsnPK cipher.PubKey, relayPeers []cipher.PubKey)
 	rc.mu.Lock()
 	defer rc.mu.Unlock()
 	rc.peers[rsnPK] = relayPeers
-	rc.log.WithField("rsn", rsnPK.String()[:8]).
+	rc.log.WithField("rsn", rsnPK.String()).
 		WithField("relay_peers", len(relayPeers)).
 		Debug("Updated RSN relay peer cache")
 }
@@ -67,7 +67,7 @@ func (rc *RSNRelayCache) FindRelayTransport(
 ) (*transport.ManagedTransport, cipher.PubKey, error) {
 	relayPeers := rc.Get(rsnPK)
 	if len(relayPeers) == 0 {
-		return nil, cipher.PubKey{}, fmt.Errorf("no cached relay peers for RSN %s", rsnPK.String()[:8])
+		return nil, cipher.PubKey{}, fmt.Errorf("no cached relay peers for RSN %s", rsnPK.String())
 	}
 
 	// Check if we directly transport any relay peer.

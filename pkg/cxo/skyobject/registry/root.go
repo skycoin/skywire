@@ -61,18 +61,18 @@ func (r *Root) Short() string {
 	}
 
 	return fmt.Sprintf("%s/%s/%d",
-		r.Pub.Hex()[:7],
+		r.Pub.Hex(),
 		short,
 		r.Seq)
 }
 
 // String implements fmt.Stringer interface.
 // The String method returns string like pub_key/nonce/seq:hash,
-// where the pub_key and the hash trimmed to first seven symbols
-// (hexadecimal encoding used)
+// where the pub_key is the full hex public key and the hash is
+// trimmed to first seven symbols (hexadecimal encoding used).
 func (r *Root) String() string {
 	return fmt.Sprintf("%s/%d/%d:%s",
-		r.Pub.Hex()[:7],
+		r.Pub.Hex(),
 		r.Nonce,
 		r.Seq,
 		r.Hash.Hex()[:7])

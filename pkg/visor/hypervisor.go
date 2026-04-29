@@ -288,7 +288,7 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 				}); err != nil {
 					hv.logger.WithError(err).Debug("Failed to push LAN DMSG server info to visor")
 				} else {
-					hv.logger.WithField("visor", addr.PK.String()[:16]+"...").
+					hv.logger.WithField("visor", addr.PK.String()).
 						Info("Pushed LAN DMSG server info to visor")
 				}
 			}()
