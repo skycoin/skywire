@@ -252,6 +252,79 @@
       border-left: 2px solid var(--accent-orange);
     }
 
+    /* Pending invites — distinct section above the recipient list. */
+    .invites-section {
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .invites-section.hidden {
+      display: none;
+    }
+
+    .invites-header {
+      padding: 10px 16px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--accent-orange);
+    }
+
+    .invite-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 16px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .invite-pk {
+      flex: 1;
+      min-width: 0;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 12px;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .invite-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    .invite-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .invite-btn.accept {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+    }
+
+    .invite-btn.accept:hover {
+      background: var(--accent-green);
+      color: white;
+    }
+
+    .invite-btn.decline {
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+
+    .invite-btn.decline:hover {
+      background: var(--accent-red);
+      color: white;
+    }
+
     /* Chat Area */
     .chat-container {
       flex: 1;
@@ -684,6 +757,10 @@
         <button type="submit" class="btn btn-icon" title="Add contact">+</button>
       </form>
     </div>
+    <div id="invitesSection" class="invites-section hidden">
+      <div class="invites-header">Pending Pair Invites</div>
+      <div id="invitesList"></div>
+    </div>
     <ul id="recipients" class="recipient-list"></ul>
   </aside>
 
@@ -751,6 +828,7 @@
         this.connected = false;
         this.pairedSet = new Set();
         this.pairAvailable = false;
+        this.pendingInvites = new Set();
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -854,6 +932,12 @@
 
         source.onmessage = (msg) => {
           const data = JSON.parse(msg.data);
+          // Pair-invite control envelope — handle separately so it
+          // doesn't get rendered as a chat message.
+          if (data.channel === 'pair-invite') {
+            this.handlePairInviteSSE(data);
+            return;
+          }
           const message = {
             ts: new Date(),
             from: this.processPk(data.sender),
@@ -1012,6 +1096,7 @@
       syncPairedFromVisor() {
         this.pairedSet = new Set();
         this.pairAvailable = false;
+        this.pendingInvites = new Set();
         fetch('/pair')
           .then(res => {
             if (res.status === 404 || res.status === 503) {
@@ -1035,11 +1120,119 @@
               }
             });
             this.refreshPairControls();
+            // Now seed any pending invites the visor was holding when
+            // we connected. SSE keeps this in sync after the initial
+            // load.
+            this.syncPendingInvites();
           })
           .catch(e => {
             // Pairing endpoint not reachable — fall back to legacy UI.
             console.debug('skychat pair sync skipped:', e.message);
           });
+      }
+
+      // syncPendingInvites refreshes the pending-invite list from the
+      // skychat backend.
+      syncPendingInvites() {
+        if (!this.pairAvailable) return;
+        fetch('/pair/invites')
+          .then(res => res.ok ? res.json() : [])
+          .then(invites => {
+            this.pendingInvites = new Set();
+            (invites || []).forEach(inv => {
+              if (inv && inv.peer_pk) {
+                this.pendingInvites.add(this.processPk(inv.peer_pk));
+              }
+            });
+            this.renderInvites();
+          })
+          .catch(e => console.debug('invite sync skipped:', e.message));
+      }
+
+      // renderInvites updates the sidebar pending-invites section.
+      renderInvites() {
+        const section = document.getElementById('invitesSection');
+        const list = document.getElementById('invitesList');
+        if (!this.pendingInvites || this.pendingInvites.size === 0) {
+          section.classList.add('hidden');
+          list.innerHTML = '';
+          return;
+        }
+        section.classList.remove('hidden');
+        list.innerHTML = '';
+        this.pendingInvites.forEach(pk => {
+          const shortPk = pk.substring(0, 8) + '...' + pk.substring(pk.length - 8);
+          const item = document.createElement('div');
+          item.className = 'invite-item';
+          item.innerHTML = `
+            <div class="invite-pk" title="${pk}">${shortPk}</div>
+            <div class="invite-actions">
+              <button class="invite-btn accept" onclick="app.acceptInvite('${pk}')" title="Accept pair invite">✓</button>
+              <button class="invite-btn decline" onclick="app.declineInvite('${pk}')" title="Decline pair invite">✕</button>
+            </div>`;
+          list.appendChild(item);
+        });
+      }
+
+      acceptInvite(pk) {
+        fetch(`/pair/invites/${pk}/accept`, { method: 'POST' })
+          .then(res => {
+            if (res.ok) {
+              this.pendingInvites.delete(pk);
+              this.pairedSet.add(pk);
+              if (!this.recipients.includes(pk)) {
+                this._addRecipient(pk);
+              } else {
+                this._updatePairBadge(pk, true);
+              }
+              this.renderInvites();
+              this.refreshPairControls();
+              this.showToast('Invite accepted.');
+            } else {
+              res.text().then(t => this.showToast(`Accept failed: ${t}`, 'error'));
+            }
+          })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      declineInvite(pk) {
+        fetch(`/pair/invites/${pk}/decline`, { method: 'POST' })
+          .then(res => {
+            if (res.ok) {
+              this.pendingInvites.delete(pk);
+              this.renderInvites();
+              this.showToast('Invite declined.');
+            } else {
+              res.text().then(t => this.showToast(`Decline failed: ${t}`, 'error'));
+            }
+          })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      // handlePairInviteSSE reacts to channel="pair-invite" envelopes.
+      // event="received" → add to pending; "accepted" → mark our
+      // initiated pair active; "declined" → drop our pending pair.
+      handlePairInviteSSE(data) {
+        const peer = this.processPk(data.peer);
+        if (data.event === 'received') {
+          this.pendingInvites.add(peer);
+          this.renderInvites();
+          this.showToast(`Pair invite from ${peer.substring(0,8)}...`);
+        } else if (data.event === 'accepted') {
+          this.pairedSet.add(peer);
+          if (!this.recipients.includes(peer)) {
+            this._addRecipient(peer);
+          } else {
+            this._updatePairBadge(peer, true);
+          }
+          this.refreshPairControls();
+          this.showToast(`Pair confirmed with ${peer.substring(0,8)}...`);
+        } else if (data.event === 'declined') {
+          this.pairedSet.delete(peer);
+          this._updatePairBadge(peer, false);
+          this.refreshPairControls();
+          this.showToast(`Pair declined by ${peer.substring(0,8)}...`, 'error');
+        }
       }
 
       updateUnreadBadges() {

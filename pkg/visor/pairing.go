@@ -117,6 +117,22 @@ func (v *Visor) PairRemove(peerPK cipher.PubKey) error {
 	return mgr.Remove(peerPK)
 }
 
+// PairMarkActive transitions a previously-added pair from
+// pending → active. Called by the initiator's skychat when the
+// peer's pair-ack arrives, signaling that both sides have
+// publishers up and the user-visible status should reflect a
+// confirmed pair.
+//
+// No-op if the record is already active. Returns an error when
+// pairing is disabled or no record exists for peerPK.
+func (v *Visor) PairMarkActive(peerPK cipher.PubKey) error {
+	mgr := v.pairManager()
+	if mgr == nil {
+		return ErrPairingDisabled
+	}
+	return mgr.MarkActive(peerPK)
+}
+
 // PairSend publishes one message to peerPK's pair feed. Returns
 // ErrNotFound if peerPK isn't a registered pair.
 func (v *Visor) PairSend(peerPK cipher.PubKey, text string) error {
