@@ -224,9 +224,6 @@ transport count, and other details. The local visor is shown first.`,
 		fmt.Fprintln(tw, "PK\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS") //nolint:errcheck
 		for _, e := range entries {
 			pk := e.PK.String()
-			if len(pk) > 10 {
-				pk = pk[:8] + ".."
-			}
 			status := "ok"
 			if e.IsLocal {
 				status = "local"
