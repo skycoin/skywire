@@ -147,7 +147,7 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 			// Same public IP - check cache first, then resolve if needed
 			cached, ok := sameLANCache[addr.PK]
 			if !ok {
-				c.log.Debugf("Remote visor %s shares same public IP, resolving LAN addresses", addr.PK.String()[:8])
+				c.log.Debugf("Remote visor %s shares same public IP, resolving LAN addresses", addr.PK.String())
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				visorData, err := c.ar.Resolve(ctx, string(c.netType), addr.PK)
 				cancel()

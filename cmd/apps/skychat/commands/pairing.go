@@ -303,14 +303,14 @@ func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 			// connection has dropped, the pair record is still
 			// good and the initiator can converge on next contact.
 			if err := sendPairControl(ctx, peer, pairTypeAck); err != nil {
-				appLog("Pairing: pair-ack to %s failed: %v", peer.Hex()[:8], err)
+				appLog("Pairing: pair-ack to %s failed: %v", peer.Hex(), err)
 			}
 			w.WriteHeader(http.StatusNoContent)
 
 		case "decline":
 			pendingDelete(peer)
 			if err := sendPairControl(ctx, peer, pairTypeDecline); err != nil {
-				appLog("Pairing: pair-decline to %s failed: %v", peer.Hex()[:8], err)
+				appLog("Pairing: pair-decline to %s failed: %v", peer.Hex(), err)
 			}
 			w.WriteHeader(http.StatusNoContent)
 
@@ -359,7 +359,7 @@ func pairRootHandler(ctx context.Context) http.HandlerFunc {
 			// can converge later with each calling PairAdd manually.
 			if err := sendPairControl(ctx, peer, pairTypeInvite); err != nil {
 				appLog("Pairing: pair-invite to %s failed: %v (record kept; peer can converge later)",
-					peer.Hex()[:8], err)
+					peer.Hex(), err)
 			}
 			w.WriteHeader(http.StatusNoContent)
 
@@ -448,7 +448,7 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 		// identity. The pair is NOT created here: the invite is
 		// stored as pending and surfaced to the UI, which calls
 		// /pair/invites/<pk>/accept when the user consents.
-		appLog("Pairing: pair-invite from %s (pending user consent)", peerPK.Hex()[:8])
+		appLog("Pairing: pair-invite from %s (pending user consent)", peerPK.Hex())
 		pendingPut(peerPK)
 		notifyInviteSSE(peerPK, "received")
 		return true
@@ -457,7 +457,7 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 		// Initiator side: the peer accepted our invite. Promote the
 		// pending pair record to active so the UI shows it as
 		// confirmed.
-		appLog("Pairing: pair-ack from %s — peer accepted", peerPK.Hex()[:8])
+		appLog("Pairing: pair-ack from %s — peer accepted", peerPK.Hex())
 		if err := pairRPC.PairMarkActive(peerPK); err != nil {
 			appLog("Pairing: PairMarkActive after ack failed: %v", err)
 		}
@@ -467,7 +467,7 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 	case pairTypeDecline:
 		// Initiator side: the peer declined our invite. Drop the
 		// pending pair record so it doesn't sit in pending forever.
-		appLog("Pairing: pair-decline from %s — peer declined", peerPK.Hex()[:8])
+		appLog("Pairing: pair-decline from %s — peer declined", peerPK.Hex())
 		if err := pairRPC.PairRemove(peerPK); err != nil {
 			appLog("Pairing: PairRemove after decline failed: %v", err)
 		}

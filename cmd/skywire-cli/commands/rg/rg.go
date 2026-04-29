@@ -60,7 +60,7 @@ var listCmd = &cobra.Command{
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "APP\tREMOTE\tPORTS\tLATENCY\tTX\tRX\tUP\tDOWN\tROUTES\tMUX") //nolint:errcheck,gosec
 		for _, r := range routes {
-			remote := r.Route.RemotePK.String()[:8] + ".."
+			remote := r.Route.RemotePK.String() + ".."
 			ports := fmt.Sprintf("%d:%d", r.Route.LocalPort, r.Route.RemotePort)
 			latency := "-"
 			if r.Route.Latency > 0 {
@@ -82,7 +82,7 @@ var listCmd = &cobra.Command{
 			// Show transport details for mux routes
 			if nRoutes > 1 {
 				for _, tp := range r.Route.Transports {
-					tpID := tp.ID.String()[:8] + ".."
+					tpID := tp.ID.String() + ".."
 					lat := "-"
 					if tp.Latency > 0 {
 						lat = fmt.Sprintf("%.0fms", tp.Latency)

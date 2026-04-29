@@ -117,7 +117,7 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Info("DHT: transport-layer sync enabled (route ID 0)")
 	}
 
-	log.WithField("id", node.ID().String()[:16]).
+	log.WithField("id", node.ID().String()).
 		WithField("bootstrap_peers", len(bootstrapPKs)).
 		WithField("full_node", fullNode).
 		Info("DHT node started")

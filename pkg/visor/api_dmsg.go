@@ -34,14 +34,14 @@ func (v *Visor) DialDmsgPing(pk cipher.PubKey) error {
 	preferredServer, err := v.GetPreferredDmsgServer(pk)
 	if err == nil && !preferredServer.Null() {
 		// Use the preferred server
-		v.log.WithField("server", preferredServer.String()[:16]+"...").
-			WithField("remote", pk.String()[:16]+"...").
+		v.log.WithField("server", preferredServer.String()).
+			WithField("remote", pk.String()).
 			Debug("Dialing DMSG ping via preferred server")
 		return v.DialDmsgPingViaServer(pk, preferredServer)
 	}
 
 	// Fall back to default dial (dmsg client will pick a server)
-	v.log.WithField("remote", pk.String()[:16]+"...").
+	v.log.WithField("remote", pk.String()).
 		Debug("Dialing DMSG ping via default server selection")
 
 	conn, err := v.dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: skyenv.DmsgPingPort})
@@ -105,7 +105,7 @@ func (v *Visor) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	v.log.WithField("remote", pk.String()[:16]+"...").
+	v.log.WithField("remote", pk.String()).
 		Debug("Dialing remote visor RPC over DMSG")
 
 	// Dial to the gRPC DMSG port on the remote visor
@@ -161,7 +161,7 @@ func (v *Visor) GetPreferredDmsgServer(remotePK cipher.PubKey) (cipher.PubKey, e
 	// ourServers is already sorted by latency (lowest first)
 	for _, server := range ourServers {
 		if remoteServerSet[server.PK] {
-			v.log.WithField("server", server.PK.String()[:16]+"...").
+			v.log.WithField("server", server.PK.String()).
 				WithField("latency", server.Latency).
 				Debug("Selected preferred DMSG server")
 			return server.PK, nil
@@ -210,7 +210,7 @@ func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 func (v *Visor) DmsgPingViaServer(conf PingConfig, serverPK cipher.PubKey) ([]time.Duration, error) {
 	// Dial the ping connection via the specific server
 	if err := v.DialDmsgPingViaServer(conf.PK, serverPK); err != nil {
-		return nil, fmt.Errorf("dial via server %s: %w", serverPK.String()[:16]+"...", err)
+		return nil, fmt.Errorf("dial via server %s: %w", serverPK.String(), err)
 	}
 
 	// Perform the ping
@@ -222,7 +222,7 @@ func (v *Visor) DmsgPingViaServer(conf PingConfig, serverPK cipher.PubKey) ([]ti
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("ping via server %s: %w", serverPK.String()[:16]+"...", err)
+		return nil, fmt.Errorf("ping via server %s: %w", serverPK.String(), err)
 	}
 
 	return latencies, nil
@@ -500,7 +500,7 @@ func (v *Visor) DmsgBandwidthTest(conf BandwidthTestConfig) (BandwidthResult, er
 func (v *Visor) IsDMSGClientReady() (bool, error) {
 	if v.isDTMReady() {
 		dmsgTracker, ok := v.dmsgTracker.manager.Get(v.conf.PK)
-		if ok && dmsgTracker.ServerPK.Hex()[:5] != "00000" {
+		if ok && dmsgTracker.ServerPK.Hex() != "00000" {
 			return true, nil
 		}
 	}

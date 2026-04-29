@@ -1139,7 +1139,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 						fmt.Printf("[RPC] Reconnection failed: %v\n", err)
 						result.Error = fmt.Sprintf("RPC reconnection failed: %v", err)
 						results[i] = result
-						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 						continue
 					}
 					rpcClient = newClient
@@ -1167,7 +1167,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					if reconnErr != nil {
 						result.Error = fmt.Sprintf("configure failed (reconnect failed): %v", err)
 						results[i] = result
-						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 						continue
 					}
 					rpcClient = newClient
@@ -1177,7 +1177,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				if err != nil {
 					result.Error = fmt.Sprintf("configure failed: %v", err)
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1193,7 +1193,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					if reconnErr != nil {
 						result.Error = fmt.Sprintf("start failed (reconnect failed): %v", err)
 						results[i] = result
-						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+						fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 						continue
 					}
 					rpcClient = newClient
@@ -1203,7 +1203,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				if err != nil {
 					result.Error = fmt.Sprintf("start failed: %v", err)
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1262,7 +1262,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 
 				if result.Error != "" {
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1276,7 +1276,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					}
 					result.Error = errMsg
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1289,7 +1289,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				if err != nil {
 					result.Error = fmt.Sprintf("SOCKS5 dialer: %v", err)
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1304,7 +1304,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				if err != nil {
 					result.Error = fmt.Sprintf("HTTP: %v", err)
 					results[i] = result
-					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String()[:8], result.Error)
+					fmt.Printf("[%d/%d] FAIL %s - %s\n", i+1, total, pxy.pk.String(), result.Error)
 					continue
 				}
 
@@ -1344,9 +1344,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 					if result.Bandwidth > 0 {
 						bwStr = fmt.Sprintf(" %.0fkbps", result.Bandwidth)
 					}
-					fmt.Printf("[%d/%d] OK %s - %.0fms%s%s%s\n", i+1, total, pxy.pk.String()[:8], result.Latency, locStr, ipStr, bwStr)
+					fmt.Printf("[%d/%d] OK %s - %.0fms%s%s%s\n", i+1, total, pxy.pk.String(), result.Latency, locStr, ipStr, bwStr)
 				} else {
-					fmt.Printf("[%d/%d] FAIL %s - HTTP %d\n", i+1, total, pxy.pk.String()[:8], resp.StatusCode)
+					fmt.Printf("[%d/%d] FAIL %s - HTTP %d\n", i+1, total, pxy.pk.String(), resp.StatusCode)
 				}
 			}
 
@@ -1558,9 +1558,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 							if result.Bandwidth > 0 {
 								bwStr = fmt.Sprintf(" %.1fkbps", result.Bandwidth)
 							}
-							fmt.Printf("[%d/%d] OK %s%s - %.0fms%s%s%s\n", current, total, pxy.pk.String()[:8], verStr, result.Latency, locStr, ipStr, bwStr)
+							fmt.Printf("[%d/%d] OK %s%s - %.0fms%s%s%s\n", current, total, pxy.pk.String(), verStr, result.Latency, locStr, ipStr, bwStr)
 						} else {
-							fmt.Printf("[%d/%d] FAIL %s%s - %s\n", current, total, pxy.pk.String()[:8], verStr, result.Error)
+							fmt.Printf("[%d/%d] FAIL %s%s - %s\n", current, total, pxy.pk.String(), verStr, result.Error)
 						}
 					}
 				}(i, p)
