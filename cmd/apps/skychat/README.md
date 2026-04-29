@@ -51,3 +51,31 @@ $ ./skywire-visor skywire2.json
 ```
 
 Chat interface will be available on ports `8001` and `8002`.
+
+## Per-pair private messaging (CXO)
+
+Skychat supports an opt-in pairing layer that mounts each
+conversation on its own CXO TreeStore feed with end-to-end
+ECDH+ChaCha20-Poly1305 encryption and a publisher-side allowlist.
+Compared to the legacy direct path, this gives:
+
+- Content privacy (subscribers see only ciphertext; bodies are
+  AEAD-sealed with an ECDH-derived key per pair).
+- Read-access control (only the partner's PK can subscribe).
+- Offline delivery (CXO replication catches the peer up when it
+  comes back online).
+
+Enable via flags:
+
+```
+skychat --pair-enable --pair-rpc localhost:3435
+```
+
+When enabled, the UI shows a "Pending Pair Invites" section above
+the contact list and a pair toggle button in the chat header.
+Incoming invites are consent-based — they wait for an explicit
+Accept or Decline.
+
+See [docs/skychat_pairing.md](../../../docs/skychat_pairing.md)
+for the full design, threat model, HTTP/SSE schema, and
+operational details.
