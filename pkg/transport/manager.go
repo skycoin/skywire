@@ -103,10 +103,6 @@ type Manager struct {
 	delQueueMu sync.Mutex
 	delNudge   chan struct{}
 
-	// dhtHandlesRegistration, when true, skips HTTP TPD re-registration
-	// because the DHT publish loop handles transport data distribution.
-	dhtHandlesRegistration bool
-
 	// arDeregistered tracks whether the visor has deregistered from AR
 	// due to ar_transport_limit being reached. Once true, it stays true
 	// until the visor restarts.
@@ -322,27 +318,7 @@ func (tm *Manager) flushDeletionQueue() {
 	}
 }
 
-// SetDHTHandlesRegistration tells the transport manager that the DHT is
-// handling transport publication. When true, HTTP re-registration with
-// the transport discovery is skipped, reducing load on the deployment server.
-func (tm *Manager) SetDHTHandlesRegistration(enabled bool) {
-	tm.mx.Lock()
-	defer tm.mx.Unlock()
-	tm.dhtHandlesRegistration = enabled
-	if enabled {
-		tm.Logger.Info("Transport registration via DHT — skipping TPD HTTP re-registration")
-	}
-}
-
 func (tm *Manager) reRegisterTransports(ctx context.Context) {
-	// Skip HTTP re-registration when DHT handles transport publishing.
-	tm.mx.RLock()
-	skip := tm.dhtHandlesRegistration
-	tm.mx.RUnlock()
-	if skip {
-		return
-	}
-
 	// Bandwidth and latency are no longer carried in re-registration
 	// — visors publish those on their own CXO telemetry feed
 	// (pkg/cxo/treestore) and serve them via HTTP-over-DMSG. TPD
@@ -354,14 +330,23 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 		if tp.IsClosed() {
 			continue
 		}
+		// Skip self-loop transports. They are diagnostic-only — both
+		// edges are the same PK so they never appear in real routes.
+		// Publishing them to TPD or the DHT would mislead other
+		// visors' pathfinders into considering them legitimate
+		// network state.
+		if tp.Entry.Edges[0] == tp.Entry.Edges[1] {
+			continue
+		}
 		bareEntries = append(bareEntries, &tp.Entry)
 	}
 	tm.mx.RUnlock()
 
-	if len(bareEntries) == 0 {
-		return
-	}
-
+	// Empty publish IS still useful: when our last real transport
+	// goes away, downstream readers (DHT entries, TPD aggregator)
+	// otherwise keep serving the previous stale list under our PK
+	// indefinitely. Republishing the empty list with a fresh sequence
+	// cleans them up.
 	tm.Logger.Debugf("Re-registering %d transports with discovery", len(bareEntries))
 
 	if err := tm.Conf.DiscoveryClient.RegisterTransportsV3(ctx, tm.Conf.Version, bareEntries...); err != nil {

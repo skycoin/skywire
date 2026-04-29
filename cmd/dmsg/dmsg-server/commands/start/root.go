@@ -162,7 +162,27 @@ var RootCmd = &cobra.Command{
 					AvailableSessions: conf.MaxSessions,
 				},
 			}
-			entries := direct.GetAllEntries(cipher.PubKeys{conf.PubKey}, []*disc.Entry{serverEntry})
+
+			// Build the direct client's static view: this server's own
+			// entry plus every peer dmsg-server from the embedded
+			// deployment list (excluding self). Without the peer entries
+			// the direct client could only resolve its own PK, so any
+			// outbound dmsg dial from this process — most importantly
+			// the DHT bootstrap pings and inter-server DHT replication
+			// over the dmsg DHT transport — failed with
+			// "entry of public key is not found", and every bootstrap
+			// peer wound up cached as non-DHT until restart. Mirrors
+			// the BootstrapDmsg helper that every other deployment
+			// service uses (pkg/cmdutil/dmsg_bootstrap.go).
+			servers := []*disc.Entry{serverEntry}
+			for i := range dmsg.Prod.DmsgServers {
+				peer := &dmsg.Prod.DmsgServers[i]
+				if peer.Static == conf.PubKey {
+					continue
+				}
+				servers = append(servers, peer)
+			}
+			entries := direct.GetAllEntries(cipher.PubKeys{conf.PubKey}, servers)
 			dClient := direct.NewClient(entries, log)
 
 			debugConfig := &dmsg.Config{
