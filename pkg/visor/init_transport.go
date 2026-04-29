@@ -18,7 +18,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -255,13 +254,12 @@ func (v *Visor) retryStunOnTransientFail(log *logging.Logger) {
 }
 
 func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	var serviceURL dmsgcurl.URL
-	_ = serviceURL.Fill(v.conf.Transport.AddressResolver) //nolint:errcheck
-	// don't start sudph if we are connection to AR via dmsghttp
-	if serviceURL.Scheme == "dmsg" {
-		log.Info("SUDPH transport wont be available under dmsghttp")
-		return nil
-	}
+	// Previously this short-circuited when AR was reached via dmsg
+	// because the dmsg URL host is a PK with no IP for SUDPH. The AR
+	// client now learns AR's public UDP address from /health
+	// (udp_address); when that field is missing, BindSUDPH returns a
+	// clear error and SUDPH simply stays unavailable for this AR. No
+	// reason to hard-skip up front.
 	if v.stun.client != nil {
 		switch v.stun.client.NATType {
 		case stun.NATSymmetric, stun.NATSymmetricUDPFirewall:

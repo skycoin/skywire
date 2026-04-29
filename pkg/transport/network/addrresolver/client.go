@@ -90,6 +90,7 @@ type httpClient struct {
 	pk             cipher.PubKey
 	sk             cipher.SecKey
 	remoteHTTPAddr string
+	remoteHTTPURL  *url.URL
 	remoteUDPAddr  string
 	sudphConn      net.PacketConn
 	sudphArConn    net.Conn
@@ -106,15 +107,25 @@ type httpClient struct {
 // * SW-Public: The specified public key.
 // * SW-Nonce:  The nonce for that public key.
 // * SW-Sig:    The signature of the payload + the nonce.
+//
+// When remoteAddr uses the dmsg:// scheme the URL host is a public key,
+// not an IP, so it cannot be UDP-resolved for SUDPH. In that case the
+// UDP target is left empty here and resolved from the AR's /health
+// (udp_address field) once the auth client is ready. ARs that don't
+// publish udp_address simply leave SUDPH unavailable to dmsg-only
+// callers — the same behavior as before this change.
 func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, log *logging.Logger, mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
 	}
 
-	remoteUDP := remoteURL.Host
-	if _, _, err := net.SplitHostPort(remoteUDP); err != nil {
-		remoteUDP = net.JoinHostPort(remoteUDP, defaultUDPPort)
+	var remoteUDP string
+	if remoteURL.Scheme != "dmsg" {
+		remoteUDP = remoteURL.Host
+		if _, _, err := net.SplitHostPort(remoteUDP); err != nil {
+			remoteUDP = net.JoinHostPort(remoteUDP, defaultUDPPort)
+		}
 	}
 
 	client := &httpClient{
@@ -123,6 +134,7 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.
 		pk:             pk,
 		sk:             sk,
 		remoteHTTPAddr: remoteAddr,
+		remoteHTTPURL:  remoteURL,
 		remoteUDPAddr:  remoteUDP,
 		clientPublicIP: clientPublicIP,
 		ready:          make(chan struct{}),
@@ -156,10 +168,69 @@ func (c *httpClient) initHTTPClient(httpC *http.Client) {
 		}
 	}
 
+	c.httpClient = httpAuthClient
+
+	// dmsg:// URL has no IP for SUDPH — pull AR's public UDP address
+	// from /health (set by --public-udp-address on the server). Best
+	// effort: a missing or unparseable value just leaves SUDPH unavailable
+	// for this AR, which is the pre-fix behavior.
+	if c.remoteHTTPURL != nil && c.remoteHTTPURL.Scheme == "dmsg" {
+		if udpAddr := c.fetchPublicUDPAddr(httpC); udpAddr != "" {
+			c.remoteUDPAddr = udpAddr
+			c.log.Debugf("Resolved AR UDP address via /health: %q", udpAddr)
+		} else {
+			c.log.Info("AR /health did not advertise udp_address; SUDPH unavailable for this AR")
+		}
+	}
+
 	c.log.Debug("Connected to address resolver. STCPR/SUDPH services are available.")
 
-	c.httpClient = httpAuthClient
 	close(c.ready)
+}
+
+// fetchPublicUDPAddr does a single unauthenticated GET /health using
+// the underlying HTTP client (which carries the dmsghttp transport)
+// and returns the udp_address advertised by the AR. Returns "" on any
+// failure — the caller treats that as "SUDPH not available via this AR".
+func (c *httpClient) fetchPublicUDPAddr(httpC *http.Client) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.remoteHTTPAddr+"/health", nil)
+	if err != nil {
+		c.log.WithError(err).Debug("Failed to build /health request for udp_address lookup")
+		return ""
+	}
+	resp, err := httpC.Do(req)
+	if err != nil {
+		c.log.WithError(err).Debug("Failed to GET /health for udp_address lookup")
+		return ""
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			c.log.WithError(cerr).Debug("Failed to close /health response body")
+		}
+	}()
+	if resp.StatusCode != http.StatusOK {
+		c.log.Debugf("/health returned status %d for udp_address lookup", resp.StatusCode)
+		return ""
+	}
+	var body struct {
+		UDPAddr string `json:"udp_address"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		c.log.WithError(err).Debug("Failed to decode /health for udp_address lookup")
+		return ""
+	}
+	udpAddr := strings.TrimSpace(body.UDPAddr)
+	if udpAddr == "" {
+		return ""
+	}
+	if _, _, err := net.SplitHostPort(udpAddr); err != nil {
+		// Allow "host" without port; default to AR's well-known SUDPH port.
+		udpAddr = net.JoinHostPort(udpAddr, defaultUDPPort)
+	}
+	return udpAddr
 }
 
 // Get performs a new GET request.
@@ -382,6 +453,11 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 // for AR's record of our public address and for any remote visors that
 // already received our (PK, port) tuple via Resolve.
 func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (net.Conn, LocalAddresses, error) {
+	if c.remoteUDPAddr == "" {
+		// dmsg-only AR with no udp_address in /health. Surface a clear
+		// reason so the visor log isn't a confusing UDP-resolve error.
+		return nil, LocalAddresses{}, errors.New("AR has no UDP address (dmsg-only AR did not advertise udp_address in /health); SUDPH unavailable")
+	}
 	rAddr, err := net.ResolveUDPAddr("udp", c.remoteUDPAddr)
 	if err != nil {
 		return nil, LocalAddresses{}, err
