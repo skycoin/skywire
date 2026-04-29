@@ -86,6 +86,17 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	c.log.Debug("Binding")
 	addrCh, err := c.ar.BindSUDPH(c.filter, c.makeBindHandshake())
 	if err != nil {
+		// BindSUDPH may fail when the AR has no UDP target (dmsg-only AR
+		// without a published udp_address). Release the listener so we
+		// don't leak the UDP port — keeping it open after a failed bind
+		// served no purpose and made later restarts noisier on shared
+		// hosts.
+		if closeErr := packetListener.Close(); closeErr != nil {
+			c.log.WithError(closeErr).Warn("Failed to close UDP listener after BindSUDPH error")
+		}
+		c.packetListener = nil
+		c.filter = nil
+		c.sudphVisorsConn = nil
 		return nil, err
 	}
 
