@@ -74,6 +74,12 @@ type Config struct {
 	RulesGCInterval  time.Duration
 	MinHops          uint16
 	MaxHops          uint16
+	// AwaitSetupListener, if non-nil, is used instead of opening a fresh
+	// listener on DmsgAwaitSetupPort. This lets callers reserve the port
+	// earlier in init (before the transport manager is ready) so peers
+	// dialing it during the router-init window don't hit "request has no
+	// associated listener" warnings.
+	AwaitSetupListener *dmsg.Listener
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -213,9 +219,13 @@ type router struct {
 func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (Router, error) {
 	config.SetDefaults()
 
-	sl, err := dmsgC.Listen(skyenv.DmsgAwaitSetupPort)
-	if err != nil {
-		return nil, err
+	sl := config.AwaitSetupListener
+	if sl == nil {
+		var err error
+		sl, err = dmsgC.Listen(skyenv.DmsgAwaitSetupPort)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	trustedVisors := make(map[cipher.PubKey]struct{})
