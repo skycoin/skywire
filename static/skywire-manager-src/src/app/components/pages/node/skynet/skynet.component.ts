@@ -42,6 +42,10 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   newDmsg = true;
   newShowLanding = true;
 
+  // Whitelist editor (inline, one row at a time)
+  editingWhitelistPort: number | null = null;
+  whitelistInput = '';
+
   // Reverse proxy
   forwards: ForwardEntry[] = [];
   forwardsLoading = true;
@@ -141,6 +145,53 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
       () => {},
       () => { this.snackbarService.showError('Failed to update'); this.loadPorts(); }
+    );
+  }
+
+  startEditWhitelist(fp: ForwardedPort) {
+    this.editingWhitelistPort = fp.port;
+    this.whitelistInput = (fp.whitelist || []).join(', ');
+  }
+
+  cancelEditWhitelist() {
+    this.editingWhitelistPort = null;
+    this.whitelistInput = '';
+  }
+
+  saveWhitelist(fp: ForwardedPort) {
+    const raw = (this.whitelistInput || '').trim();
+    let pks: string[] = [];
+    if (raw !== '') {
+      pks = raw.split(/[\s,]+/).map(s => s.trim()).filter(s => s.length > 0);
+      for (const pk of pks) {
+        if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
+          this.snackbarService.showError(`Invalid public key: ${pk}`);
+          return;
+        }
+      }
+    }
+    const updated = { ...fp, whitelist: pks };
+    this.nodeService.updateForwardedPort(this.nodeKey, updated).subscribe(
+      () => {
+        this.snackbarService.showDone(pks.length === 0
+          ? `Whitelist cleared on port ${fp.port}`
+          : `Whitelist set on port ${fp.port} (${pks.length} PK${pks.length === 1 ? '' : 's'})`);
+        this.cancelEditWhitelist();
+        this.loadPorts();
+      },
+      (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed to update whitelist'); }
+    );
+  }
+
+  clearWhitelist(fp: ForwardedPort) {
+    const updated = { ...fp, whitelist: [] };
+    this.nodeService.updateForwardedPort(this.nodeKey, updated).subscribe(
+      () => {
+        this.snackbarService.showDone(`Whitelist cleared on port ${fp.port}`);
+        this.cancelEditWhitelist();
+        this.loadPorts();
+      },
+      (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed to clear whitelist'); }
     );
   }
 

@@ -55,7 +55,7 @@ func init() {
 	servePortLsCmd.Flags().BoolVar(&serveJSON, "json", false, "emit raw JSON")
 	RootCmd.Flags().BoolVar(&serveJSON, "json", false, "emit raw JSON")
 
-	RootCmd.AddCommand(servePortCmd, servePortRmCmd, servePortLsCmd)
+	RootCmd.AddCommand(servePortCmd, servePortRmCmd, servePortLsCmd, serveWhitelistCmd)
 }
 
 // RootCmd is the `serve` command tree. The bare command (no
@@ -184,6 +184,91 @@ Examples:
 	},
 }
 
+// serveWhitelistCmd updates a registered port's PK whitelist in
+// place via UpdateForwardedPort, preserving every other field
+// (label, description, skynet/dmsg toggles, landing-page visibility).
+// Without this, changing a whitelist would require remove + re-add,
+// which interrupts active connections and loses metadata.
+var serveWhitelistCmd = &cobra.Command{
+	Use:   "whitelist <port> <pks-or-clear>",
+	Short: "Set/replace/clear the PK whitelist on an already-registered port",
+	Long: `Replace the PK whitelist for a registered forwarded port.
+
+The second argument is either a comma-separated list of public keys
+(replaces the whitelist with exactly those keys) or the literal word
+"clear" / "none" (removes the whitelist, returning the port to "open
+to all authenticated peers").
+
+Examples:
+  serve whitelist 8080 02abc...,03def...     # restrict to two PKs
+  serve whitelist 8080 clear                 # remove the whitelist
+  serve whitelist 80 02abc...                # restrict the website on port 80`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		port, err := strconv.Atoi(args[0])
+		if err != nil || port < 1 || port > 65535 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid port: %s", args[0]))
+		}
+
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		// Fetch the current entry so we update in place rather than
+		// reset every other field. Update with a partial would clobber
+		// label/desc/skynet/dmsg/landing-page metadata.
+		ports, err := rpcClient.ListForwardedPorts()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		var fp *visor.ForwardedPort
+		for i := range ports {
+			if ports[i].Port == port {
+				fp = &ports[i]
+				break
+			}
+		}
+		if fp == nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("port %d is not registered", port))
+		}
+
+		spec := strings.TrimSpace(args[1])
+		switch strings.ToLower(spec) {
+		case "clear", "none", "":
+			fp.Whitelist = nil
+		default:
+			var wl []cipher.PubKey
+			for _, pkStr := range strings.Split(spec, ",") {
+				pkStr = strings.TrimSpace(pkStr)
+				if pkStr == "" {
+					continue
+				}
+				var pk cipher.PubKey
+				if err := pk.Set(pkStr); err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid whitelist PK %q: %w", pkStr, err))
+				}
+				wl = append(wl, pk)
+			}
+			fp.Whitelist = wl
+		}
+
+		if err := rpcClient.UpdateForwardedPort(*fp); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		var msg strings.Builder
+		if len(fp.Whitelist) == 0 {
+			fmt.Fprintf(&msg, "Port %d whitelist cleared (open to all peers)\n", port)
+		} else {
+			fmt.Fprintf(&msg, "Port %d whitelist set to %d PK(s):\n", port, len(fp.Whitelist))
+			for _, pk := range fp.Whitelist {
+				fmt.Fprintf(&msg, "  %s\n", pk.Hex())
+			}
+		}
+		internal.PrintOutput(cmd.Flags(), fp, msg.String())
+	},
+}
+
 var servePortRmCmd = &cobra.Command{
 	Use:   "rm <port>",
 	Short: "Unregister a forwarded port",
@@ -250,16 +335,21 @@ func listForwardedPorts(cmd *cobra.Command) {
 	}
 	var buf strings.Builder
 	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "PORT\tTO\tLABEL\tSKYNET\tDMSG\tLANDING\tDESCRIPTION") //nolint:errcheck,gosec
+	fmt.Fprintln(tw, "PORT\tTO\tLABEL\tSKYNET\tDMSG\tLANDING\tWHITELIST\tDESCRIPTION") //nolint:errcheck,gosec
 	for _, p := range ports {
 		to := p.ProxyAddr
 		if to == "" {
 			to = fmt.Sprintf("localhost:%d", p.EffectiveLocalPort())
 		}
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%v\t%v\t%v\t%s\n", //nolint:errcheck,gosec
+		wl := "open"
+		if n := len(p.Whitelist); n > 0 {
+			wl = fmt.Sprintf("%d PK(s)", n)
+		}
+		fmt.Fprintf(tw, "%d\t%s\t%s\t%v\t%v\t%v\t%s\t%s\n", //nolint:errcheck,gosec
 			p.Port, to,
 			dashIfEmpty(p.Label),
 			p.Skynet, p.DMSG, p.ShowOnLanding,
+			wl,
 			dashIfEmpty(p.Description))
 	}
 	tw.Flush() //nolint:errcheck,gosec
