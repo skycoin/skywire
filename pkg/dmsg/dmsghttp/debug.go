@@ -33,16 +33,24 @@ func DebugMux() *http.ServeMux {
 
 // WhitelistMiddleware wraps an http.Handler with public-key-based access control.
 // When serving over dmsg, RemoteAddr is in the format "<pk>:<port>".
-// If whitelistedPKs is empty, all requests are allowed.
+//
+// An empty whitelist denies every request with 401. Pprof endpoints expose
+// process internals (heap, goroutine, cmdline) and let any allowed caller
+// pin CPU via /debug/pprof/profile, so fail-open on misconfiguration is
+// not acceptable. The stock production binary embeds a non-empty
+// deployment.Prod.SurveyWhitelist; only forks or SKYDEPLOY-overridden
+// services configs without a survey_whitelist field hit this path, and
+// for those denying access is the safe default.
 func WhitelistMiddleware(whitelistedPKs []cipher.PubKey, next http.Handler) http.Handler {
-	if len(whitelistedPKs) == 0 {
-		return next
-	}
 	allowed := make(map[string]struct{}, len(whitelistedPKs))
 	for _, pk := range whitelistedPKs {
 		allowed[pk.String()] = struct{}{}
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(allowed) == 0 {
+			http.Error(w, "401 Unauthorized", http.StatusUnauthorized)
+			return
+		}
 		remotePK, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil {
 			http.Error(w, "500 Internal Server Error", http.StatusInternalServerError)
@@ -59,7 +67,15 @@ func WhitelistMiddleware(whitelistedPKs []cipher.PubKey, next http.Handler) http
 // ServeDebug serves pprof endpoints over dmsg on DefaultDebugPort, gated by the
 // provided whitelist public keys. It blocks until the context is canceled or
 // an error occurs.
+//
+// An empty whitelist is logged at WARN and the middleware will reject every
+// request — see WhitelistMiddleware for rationale.
 func ServeDebug(ctx context.Context, dmsgC *dmsg.Client, log *logging.Logger, whitelistPKs []cipher.PubKey) error {
+	if len(whitelistPKs) == 0 {
+		log.Warn("ServeDebug: empty whitelist — pprof endpoint will reject all requests (set survey_whitelist in services config to allow callers)")
+	} else {
+		log.WithField("whitelisted_pks", len(whitelistPKs)).Info("ServeDebug: pprof access restricted to whitelisted PKs")
+	}
 	handler := WhitelistMiddleware(whitelistPKs, DebugMux())
 
 	lis, err := dmsgC.Listen(DefaultDebugPort)
