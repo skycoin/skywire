@@ -668,6 +668,15 @@ func (rc *rpcClient) SetMinHops(hops uint16) error {
 	return err
 }
 
+// GetMinHops returns the visor's configured routing.min_hops value.
+func (rc *rpcClient) GetMinHops() (uint16, error) {
+	var out uint16
+	if err := rc.Call("GetMinHops", &struct{}{}, &out); err != nil {
+		return 0, err
+	}
+	return out, nil
+}
+
 // SetCalculateRoutes sets the calculate_routes from visor routing config
 func (rc *rpcClient) SetCalculateRoutes(enabled bool) error {
 	err := rc.Call("SetCalculateRoutes", &enabled, &struct{}{})

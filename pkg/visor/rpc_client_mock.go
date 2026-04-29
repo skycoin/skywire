@@ -802,6 +802,11 @@ func (mc *mockRPCClient) SetMinHops(_ uint16) error {
 	return nil
 }
 
+// GetMinHops implements API
+func (mc *mockRPCClient) GetMinHops() (uint16, error) {
+	return 0, nil
+}
+
 // SetCalculateRoutes implements API
 func (mc *mockRPCClient) SetCalculateRoutes(_ bool) error {
 	return nil

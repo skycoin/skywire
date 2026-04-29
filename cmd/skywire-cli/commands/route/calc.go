@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -33,6 +34,7 @@ var (
 	tpdURL      string
 	calcMinHops uint16
 	calcMaxHops uint16
+	calcCount   int
 )
 
 func init() {
@@ -40,8 +42,9 @@ func init() {
 	calcCmd.Flags().BoolVar(&calcDisable, "disable", false, "disable local route calculation in visor")
 	calcCmd.Flags().DurationVarP(&calcTimeout, "timeout", "t", 30*time.Second, "request timeout")
 	calcCmd.Flags().StringVarP(&tpdURL, "tpd", "a", deployment.Prod.TransportDiscovery, "transport discovery URL")
-	calcCmd.Flags().Uint16VarP(&calcMinHops, "min", "n", 1, "minimum hops")
+	calcCmd.Flags().Uint16VarP(&calcMinHops, "min", "n", 0, "minimum hops (0 = use visor's routing.min_hops, fallback 1)")
 	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
+	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
 	clirpc.RegisterFetchFlags(calcCmd)
 }
 
@@ -96,12 +99,13 @@ var calcCmd = &cobra.Command{
 		// Calculate route with provided PKs
 		var srcPK, dstPK cipher.PubKey
 
+		// Try the visor RPC once for both srcPK fallback and min_hops default.
+		// Best-effort: if RPC isn't available we fall back to local config / 1.
+		rpcClient, _ := clirpc.Client(cmd.Flags())
+
 		if len(args) == 1 {
-			// Get local PK from visor or config
-			rpcClient, err := clirpc.Client(cmd.Flags())
-			if err == nil {
-				overview, err := rpcClient.Overview()
-				if err == nil {
+			if rpcClient != nil {
+				if overview, err := rpcClient.Overview(); err == nil {
 					srcPK = overview.PubKey
 				}
 			}
@@ -123,6 +127,27 @@ var calcCmd = &cobra.Command{
 			internal.Catch(cmd.Flags(), dstPK.Set(args[1]))
 		}
 
+		// Resolve min_hops: 0 means "ask the visor what it would use".
+		minHops := calcMinHops
+		if minHops == 0 {
+			if rpcClient != nil {
+				if n, err := rpcClient.GetMinHops(); err == nil {
+					minHops = n
+				}
+			}
+			if minHops == 0 {
+				minHops = 1
+			}
+		}
+
+		// 0 means "every route the BFS finds". GetRoute walks the slice
+		// returned by finder until it hits the cap, so a large sentinel
+		// is equivalent to "all".
+		count := calcCount
+		if count <= 0 {
+			count = math.MaxInt32
+		}
+
 		// Fetch all transports and calculate route
 		ctx, cancel := context.WithTimeout(context.Background(), calcTimeout)
 		defer cancel()
@@ -138,19 +163,36 @@ var calcCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to build graph: %w", err))
 		}
 
-		routes, err := graph.GetRoute(ctx, srcPK, dstPK, int(calcMinHops), int(calcMaxHops), 1)
+		routes, err := graph.GetRoute(ctx, srcPK, dstPK, int(minHops), int(calcMaxHops), count)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no route found: %w", err))
 		}
 
-		fwd := routes[0].Hops
-		rev := reverseHops(fwd)
-
-		output := fmt.Sprintf("forward: %v\nreverse: %v", fwd, rev)
-		internal.PrintOutput(cmd.Flags(), struct {
+		type routePair struct {
 			Forward []routing.Hop `json:"forward"`
 			Reverse []routing.Hop `json:"reverse"`
-		}{fwd, rev}, output)
+		}
+		pairs := make([]routePair, len(routes))
+		var textBuf strings.Builder
+		for i, r := range routes {
+			fwd := r.Hops
+			rev := reverseHops(fwd)
+			pairs[i] = routePair{Forward: fwd, Reverse: rev}
+			if i > 0 {
+				textBuf.WriteString("\n\n")
+			}
+			if calcCount != 1 {
+				fmt.Fprintf(&textBuf, "[%d/%d]\n", i+1, len(routes))
+			}
+			fmt.Fprintf(&textBuf, "forward: %v\nreverse: %v", fwd, rev)
+		}
+
+		// Preserve the single-route shape for back-compat when --count=1.
+		if calcCount == 1 && len(pairs) == 1 {
+			internal.PrintOutput(cmd.Flags(), pairs[0], textBuf.String())
+			return
+		}
+		internal.PrintOutput(cmd.Flags(), pairs, textBuf.String())
 	},
 }
 

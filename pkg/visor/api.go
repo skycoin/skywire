@@ -138,6 +138,7 @@ type API interface {
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error
+	GetMinHops() (uint16, error)
 	SetCalculateRoutes(enabled bool) error
 	GetCalculateRoutes() (bool, error)
 

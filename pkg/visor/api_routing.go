@@ -201,6 +201,14 @@ func (v *Visor) SetMinHops(in uint16) error {
 	return v.conf.UpdateMinHops(in)
 }
 
+// GetMinHops returns the visor's configured routing.min_hops value.
+func (v *Visor) GetMinHops() (uint16, error) {
+	if v.conf == nil || v.conf.Routing == nil {
+		return 0, nil
+	}
+	return v.conf.Routing.MinHops, nil
+}
+
 // SetCalculateRoutes sets calculate_routes routing config of visor
 func (v *Visor) SetCalculateRoutes(enabled bool) error {
 	// Update router's local route calculation setting
