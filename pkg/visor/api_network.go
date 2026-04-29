@@ -17,6 +17,7 @@ import (
 	clirewardsserver "github.com/skycoin/skywire/cmd/skywire-cli/commands/rewards/server"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -292,6 +293,23 @@ func (v *Visor) ListForwardedPorts() ([]ForwardedPort, error) {
 	return v.forwardedPorts.List(), nil
 }
 
+// isPeerAllowed reports whether the peer is allowed to access the given
+// forwarded port. The port is treated as open when there is no entry in
+// forwardedPorts (legacy compatibility) or when its Whitelist is empty;
+// otherwise the peer PK must appear in the list.
+func (v *Visor) isPeerAllowed(port int, pk cipher.PubKey) bool {
+	fp := v.forwardedPorts.Get(port)
+	if fp == nil || len(fp.Whitelist) == 0 {
+		return true
+	}
+	for _, wl := range fp.Whitelist {
+		if wl == pk {
+			return true
+		}
+	}
+	return false
+}
+
 func isPortAvailable(log *logging.Logger, port int) bool {
 	timeout := time.Second
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf(":%v", port), timeout)
@@ -466,6 +484,20 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 			}
 			go func() {
 				defer conn.Close() //nolint:errcheck
+				// Enforce per-port PK whitelist if one is set. The DMSG
+				// listener's RemoteAddr is dmsg.Addr — fail closed if
+				// the assertion fails on a whitelisted port.
+				if fp := v.forwardedPorts.Get(port); fp != nil && len(fp.Whitelist) > 0 {
+					a, ok := conn.RemoteAddr().(dmsg.Addr)
+					if !ok {
+						log.Warn("Rejected: cannot identify peer on whitelisted port")
+						return
+					}
+					if !v.isPeerAllowed(port, a.PK) {
+						log.WithField("peer", a.PK).Warn("Rejected: peer not in whitelist")
+						return
+					}
+				}
 				local, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", localPort))
 				if err != nil {
 					log.WithError(err).Debug("Failed to dial local port")

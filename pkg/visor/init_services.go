@@ -306,6 +306,21 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 	return nil
 }
 
+// remotePKFromForwardingConn extracts the remote visor PK from a conn
+// delivered through the skynet sky-forwarding path. Both delivery paths
+// (appnet-wrapped route conns and direct VStream conns) carry the PK;
+// this normalizes the access so callers don't need to switch on the
+// underlying type. Returns ok=false only if neither route works.
+func remotePKFromForwardingConn(c net.Conn) (cipher.PubKey, bool) {
+	if pkp, ok := c.(interface{ RemotePK() cipher.PubKey }); ok {
+		return pkp.RemotePK(), true
+	}
+	if a, ok := c.RemoteAddr().(appnet.Addr); ok {
+		return a.PubKey, true
+	}
+	return cipher.PubKey{}, false
+}
+
 // vstreamConn wraps a VStream to implement net.Conn.
 type vstreamConn struct {
 	*transport.VStream
@@ -375,6 +390,25 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		log.Errorf("Port :%v not registered", cMsg.Port)
 		sendError(log, remoteConn, fmt.Errorf("port :%v not registered", cMsg.Port))
 		return
+	}
+
+	// Enforce per-port PK whitelist if one is set on the forwarded port.
+	// Fail-closed when a whitelist is set but the peer PK can't be
+	// determined — the alternative would silently bypass the gate.
+	if fp := v.forwardedPorts.Get(cMsg.Port); fp != nil && len(fp.Whitelist) > 0 {
+		remotePK, pkOK := remotePKFromForwardingConn(remoteConn)
+		if !pkOK {
+			log.WithField("port", cMsg.Port).
+				Warn("Rejected: cannot identify peer on whitelisted port")
+			sendError(log, remoteConn, fmt.Errorf("port :%v: cannot verify peer", cMsg.Port))
+			return
+		}
+		if !v.isPeerAllowed(cMsg.Port, remotePK) {
+			log.WithField("peer", remotePK).WithField("port", cMsg.Port).
+				Warn("Rejected: peer not in whitelist")
+			sendError(log, remoteConn, fmt.Errorf("port :%v: not whitelisted", cMsg.Port))
+			return
+		}
 	}
 
 	ok = isPortAvailable(log, cMsg.Port)
