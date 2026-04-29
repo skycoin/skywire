@@ -107,10 +107,22 @@ func TestPairRoundTripOverDmsg(t *testing.T) {
 	require.NoError(t, pairB.Connect())
 
 	// A → B
-	require.NoError(t, pairA.Send("hello bob"))
+	const plaintextAB = "hello bob"
+	require.NoError(t, pairA.Send(plaintextAB))
+
+	// Snoop the publisher's local tree: the leaf bytes must be
+	// ciphertext (not the plaintext). Catches a regression where
+	// encryption gets accidentally bypassed and the leaf is the
+	// raw JSON.
+	pairA.pub.Walk(MessagePathPrefix, func(path string, value []byte) bool {
+		require.NotContains(t, string(value), plaintextAB,
+			"published leaf at %q must not contain plaintext", path)
+		return true
+	})
+
 	require.NoError(t, inboxB.waitFor(20*time.Second, func(msgs []testReceived) bool {
 		for _, m := range msgs {
-			if m.peer == pkA && m.text == "hello bob" {
+			if m.peer == pkA && m.text == plaintextAB {
 				return true
 			}
 		}

@@ -87,6 +87,11 @@ type Pair struct {
 	pub *treestore.Publisher
 	sub *treestore.Subscriber
 
+	// key is the ECDH-derived symmetric key for this pair. Both
+	// sides compute the same value from their own SK + the peer's
+	// PK. Derived once at Open and reused for every Send / decrypt.
+	key pairKey
+
 	// seq disambiguates messages with the same nanosecond timestamp.
 	// Per-pair scope so a sender posting in tight loops doesn't
 	// silently overwrite earlier leaves.
@@ -122,6 +127,14 @@ func Open(cfg Config) (*Pair, error) {
 		return nil, fmt.Errorf("pairing: Open: compute port: %w", err)
 	}
 
+	// Derive the pair's symmetric key now so a key-derivation
+	// failure (e.g. invalid peer PK) is reported up front, before
+	// we spin up any CXO nodes.
+	key, err := derivePairKey(cfg.MySK, cfg.PeerPK)
+	if err != nil {
+		return nil, fmt.Errorf("pairing: Open: %w", err)
+	}
+
 	peerHex := cfg.PeerPK.Hex()
 	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
 		BatchWindow:         cfg.BatchWindow,
@@ -145,7 +158,7 @@ func Open(cfg Config) (*Pair, error) {
 	}
 	sub.SetPrefixes([]string{MessagePathPrefix})
 
-	p := &Pair{cfg: cfg, port: port, pub: pub, sub: sub, log: log}
+	p := &Pair{cfg: cfg, port: port, pub: pub, sub: sub, key: key, log: log}
 	sub.OnUpdate(p.onUpdate)
 	return p, nil
 }
@@ -181,6 +194,11 @@ func (p *Pair) SetMessageHandler(h MessageHandler) {
 
 // Send publishes a message to this side's outbox feed. The peer's
 // subscriber will see it on the next CXO publish-batch cycle.
+//
+// The message body is sealed with the pair's ECDH-derived key
+// before being stored as the leaf value, so anyone who breaches
+// the publisher allowlist still cannot read message content.
+// The path itself (timestamp + seq) stays plaintext.
 func (p *Pair) Send(text string) error {
 	now := time.Now().UTC()
 	msg := Message{Text: text, TS: now}
@@ -188,9 +206,13 @@ func (p *Pair) Send(text string) error {
 	if err != nil {
 		return fmt.Errorf("pairing: Send: marshal: %w", err)
 	}
+	sealed, err := sealMessage(p.key, body)
+	if err != nil {
+		return fmt.Errorf("pairing: Send: %w", err)
+	}
 	seq := p.seq.Add(1)
 	path := MessagePathPrefix + "/" + strconv.FormatInt(now.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
-	if err := p.pub.Put(path, body); err != nil {
+	if err := p.pub.Put(path, sealed); err != nil {
 		return fmt.Errorf("pairing: Send: put %q: %w", path, err)
 	}
 	return nil
@@ -215,10 +237,13 @@ func (p *Pair) Close() error {
 	return firstErr
 }
 
-// onUpdate is the subscriber callback. Decodes each leaf as a Message
-// and dispatches via the registered handler. Tolerates non-msg leaves
-// (e.g. future typing indicators under a different prefix) by
-// silently ignoring decode failures.
+// onUpdate is the subscriber callback. Opens each leaf with the
+// pair's ECDH key and decodes the resulting plaintext as a Message,
+// then dispatches via the registered handler. Tolerates non-msg
+// leaves (e.g. future typing indicators under a different prefix)
+// or tampered/foreign ciphertexts by silently dropping them — a
+// failure here would surface as a noisy log without giving the
+// user any actionable signal.
 func (p *Pair) onUpdate(events []treestore.UpdateEvent) {
 	h := p.handler
 	if h == nil {
@@ -228,8 +253,15 @@ func (p *Pair) onUpdate(events []treestore.UpdateEvent) {
 		if ev.Value == nil {
 			continue
 		}
+		plaintext, err := openMessage(p.key, ev.Value)
+		if err != nil {
+			p.log.WithError(err).
+				WithField("path", ev.Path).
+				Debug("pairing: ignoring undecryptable leaf")
+			continue
+		}
 		var msg Message
-		if err := json.Unmarshal(ev.Value, &msg); err != nil {
+		if err := json.Unmarshal(plaintext, &msg); err != nil {
 			p.log.WithError(err).
 				WithField("path", ev.Path).
 				Debug("pairing: ignoring undecodable leaf")
