@@ -1091,6 +1091,9 @@ func (mc *mockRPCClient) PairList() ([]PairInfo, error) { return nil, nil }
 // PairRemove implements API.
 func (mc *mockRPCClient) PairRemove(_ cipher.PubKey) error { return nil }
 
+// PairMarkActive implements API.
+func (mc *mockRPCClient) PairMarkActive(_ cipher.PubKey) error { return nil }
+
 // PairSend implements API.
 func (mc *mockRPCClient) PairSend(_ cipher.PubKey, _ string) error { return nil }
 

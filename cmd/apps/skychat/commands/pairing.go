@@ -13,14 +13,17 @@
 // Handshake flow (Alice initiates with Bob):
 //
 //  1. Alice's UI: POST /pair {peer_pk: bob}
-//  2. Skychat: visor.PairAdd(bob); send {type:"pair-invite", from_pk:alice}
-//     to Bob via legacy direct dial.
-//  3. Bob's skychat handleConn: recognizes pair-invite, calls
-//     visor.PairAdd(alice) on his side; replies {type:"pair-ack",
-//     from_pk:bob} on the same legacy connection.
-//  4. Alice's skychat handleConn: recognizes pair-ack — both sides
-//     now have publishers up; CXO subscribers connect on the next
-//     publish-batch cycle.
+//  2. Alice's skychat: visor.PairAdd(bob) (status pending);
+//     send {type:"pair-invite"} to Bob via legacy direct dial.
+//  3. Bob's skychat handleConn: stores invite in pending set,
+//     pushes a channel="pair-invite" SSE event so the UI shows
+//     accept/decline buttons. NO automatic PairAdd on Bob's side.
+//  4. Bob accepts via UI → POST /pair/invites/<alice>/accept:
+//     visor.PairAdd(alice) + visor.PairMarkActive(alice); send
+//     {type:"pair-ack"} to alice. (Decline path sends
+//     {type:"pair-decline"} and drops the pending entry.)
+//  5. Alice's skychat handleConn: pair-ack → visor.PairMarkActive(bob);
+//     pair-decline → visor.PairRemove(bob). Both sides now in sync.
 //
 // Legacy plain-text DMs continue to work alongside the structured
 // envelope: handleConn first tries to JSON-decode each frame; on
@@ -36,6 +39,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -67,9 +71,77 @@ type pairMsg struct {
 }
 
 const (
-	pairTypeInvite = "pair-invite"
-	pairTypeAck    = "pair-ack"
+	pairTypeInvite  = "pair-invite"
+	pairTypeAck     = "pair-ack"
+	pairTypeDecline = "pair-decline"
 )
+
+// pendingInvite is one inbound pair-invite that the user hasn't yet
+// acted on. Stored in skychat memory only; lost on restart (a peer
+// can re-invite if the connection is re-established).
+type pendingInvite struct {
+	PeerPK     cipher.PubKey `json:"peer_pk"`
+	ReceivedAt time.Time     `json:"received_at"`
+}
+
+var (
+	pendingInvitesMu sync.Mutex
+	pendingInvites   = map[cipher.PubKey]pendingInvite{}
+)
+
+// pendingPut records a fresh invite. Idempotent — re-invites from the
+// same peer just bump the timestamp.
+func pendingPut(peerPK cipher.PubKey) {
+	pendingInvitesMu.Lock()
+	defer pendingInvitesMu.Unlock()
+	pendingInvites[peerPK] = pendingInvite{PeerPK: peerPK, ReceivedAt: time.Now().UTC()}
+}
+
+// pendingDelete drops a pending invite (called on accept/decline).
+func pendingDelete(peerPK cipher.PubKey) {
+	pendingInvitesMu.Lock()
+	delete(pendingInvites, peerPK)
+	pendingInvitesMu.Unlock()
+}
+
+// pendingHas reports whether peerPK has an outstanding invite.
+func pendingHas(peerPK cipher.PubKey) bool {
+	pendingInvitesMu.Lock()
+	_, ok := pendingInvites[peerPK]
+	pendingInvitesMu.Unlock()
+	return ok
+}
+
+// pendingList returns a snapshot copy of the pending set.
+func pendingList() []pendingInvite {
+	pendingInvitesMu.Lock()
+	defer pendingInvitesMu.Unlock()
+	out := make([]pendingInvite, 0, len(pendingInvites))
+	for _, inv := range pendingInvites {
+		out = append(out, inv)
+	}
+	return out
+}
+
+// notifyInviteSSE pushes a structured envelope onto clientCh so the
+// browser hears about new invites in real time. Drops if clientCh is
+// full so a slow SSE consumer doesn't block the handshake handler.
+func notifyInviteSSE(peerPK cipher.PubKey, kind string) {
+	envelope := map[string]string{
+		"channel": "pair-invite",
+		"event":   kind, // "received" | "accepted" | "declined"
+		"peer":    peerPK.Hex(),
+		"ts":      time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	body, err := json.Marshal(envelope)
+	if err != nil {
+		return
+	}
+	select {
+	case clientCh <- string(body):
+	default:
+	}
+}
 
 // connectPairRPC dials the local visor's RPC and stores the client
 // in pairRPC. Best-effort — a failure logs and disables pairing for
@@ -154,12 +226,102 @@ func stopPairPoller() {
 
 // registerPairHTTPHandlers wires the /pair endpoints onto mux.
 // No-op when --pair-enable is false.
+//
+// Pattern precedence: net/http picks the longest matching prefix, so
+// /pair/invites and /pair/invites/ shadow /pair/ for the invite
+// subtree. This lets the invite handlers be cleanly separate from
+// the per-pair item handler without parsing the path twice.
 func registerPairHTTPHandlers(ctx context.Context) {
 	if !pairEnable {
 		return
 	}
 	http.HandleFunc("/pair", pairRootHandler(ctx))
+	http.HandleFunc("/pair/invites", pairInvitesListHandler())
+	http.HandleFunc("/pair/invites/", pairInvitesItemHandler(ctx))
 	http.HandleFunc("/pair/", pairItemHandler(ctx))
+}
+
+// pairInvitesListHandler serves GET /pair/invites — current pending
+// invites.
+func pairInvitesListHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if pairRPC == nil {
+			http.Error(w, "pairing disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(pendingList()) //nolint:errcheck
+	}
+}
+
+// pairInvitesItemHandler serves POST /pair/invites/<pk>/accept and
+// POST /pair/invites/<pk>/decline.
+func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if pairRPC == nil {
+			http.Error(w, "pairing disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
+			return
+		}
+		// Path: /pair/invites/<pk>/<action>
+		rest := strings.TrimPrefix(r.URL.Path, "/pair/invites/")
+		segments := strings.SplitN(rest, "/", 2)
+		if len(segments) != 2 || segments[0] == "" || segments[1] == "" {
+			http.Error(w, "expected /pair/invites/<pk>/{accept,decline}", http.StatusBadRequest)
+			return
+		}
+		peer, err := parsePK(segments[0])
+		if err != nil {
+			http.Error(w, "invalid peer-pk: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !pendingHas(peer) {
+			http.Error(w, "no pending invite from this peer", http.StatusNotFound)
+			return
+		}
+
+		switch segments[1] {
+		case "accept":
+			// Create the local pair (status starts at pending; the
+			// initiator's PairMarkActive on receiving our ack will
+			// flip them, but on this side we'd want active too).
+			if err := pairRPC.PairAdd(peer); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// Mark our own side active immediately — the user
+			// just consented, so there's no further confirmation
+			// needed.
+			if err := pairRPC.PairMarkActive(peer); err != nil {
+				appLog("Pairing: PairMarkActive after accept failed: %v", err)
+			}
+			pendingDelete(peer)
+			// Best-effort ack to the initiator. If the legacy
+			// connection has dropped, the pair record is still
+			// good and the initiator can converge on next contact.
+			if err := sendPairControl(ctx, peer, pairTypeAck); err != nil {
+				appLog("Pairing: pair-ack to %s failed: %v", peer.Hex()[:8], err)
+			}
+			w.WriteHeader(http.StatusNoContent)
+
+		case "decline":
+			pendingDelete(peer)
+			if err := sendPairControl(ctx, peer, pairTypeDecline); err != nil {
+				appLog("Pairing: pair-decline to %s failed: %v", peer.Hex()[:8], err)
+			}
+			w.WriteHeader(http.StatusNoContent)
+
+		default:
+			http.Error(w, "expected /pair/invites/<pk>/{accept,decline}", http.StatusBadRequest)
+		}
+	}
 }
 
 // pairRootHandler serves POST /pair (add) and GET /pair (list).
@@ -287,20 +449,33 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 	case pairTypeInvite:
 		// The from_pk in the envelope is informational — we use the
 		// legacy connection's RemoteAddr.PubKey as the authoritative
-		// identity. Either way they should match.
-		appLog("Pairing: pair-invite from %s", peerPK.Hex()[:8])
-		if err := pairRPC.PairAdd(peerPK); err != nil {
-			appLog("Pairing: PairAdd from invite failed: %v", err)
-			return true
-		}
-		// Best-effort ack.
-		if err := sendPairControlOnExistingConn(peerPK, pairTypeAck); err != nil {
-			appLog("Pairing: pair-ack to %s failed: %v", peerPK.Hex()[:8], err)
-		}
+		// identity. The pair is NOT created here: the invite is
+		// stored as pending and surfaced to the UI, which calls
+		// /pair/invites/<pk>/accept when the user consents.
+		appLog("Pairing: pair-invite from %s (pending user consent)", peerPK.Hex()[:8])
+		pendingPut(peerPK)
+		notifyInviteSSE(peerPK, "received")
 		return true
 
 	case pairTypeAck:
-		appLog("Pairing: pair-ack from %s — both sides paired", peerPK.Hex()[:8])
+		// Initiator side: the peer accepted our invite. Promote the
+		// pending pair record to active so the UI shows it as
+		// confirmed.
+		appLog("Pairing: pair-ack from %s — peer accepted", peerPK.Hex()[:8])
+		if err := pairRPC.PairMarkActive(peerPK); err != nil {
+			appLog("Pairing: PairMarkActive after ack failed: %v", err)
+		}
+		notifyInviteSSE(peerPK, "accepted")
+		return true
+
+	case pairTypeDecline:
+		// Initiator side: the peer declined our invite. Drop the
+		// pending pair record so it doesn't sit in pending forever.
+		appLog("Pairing: pair-decline from %s — peer declined", peerPK.Hex()[:8])
+		if err := pairRPC.PairRemove(peerPK); err != nil {
+			appLog("Pairing: PairRemove after decline failed: %v", err)
+		}
+		notifyInviteSSE(peerPK, "declined")
 		return true
 	}
 	_ = ctx
@@ -317,24 +492,6 @@ func sendPairControl(ctx context.Context, peerPK cipher.PubKey, msgType string) 
 		return err
 	}
 	conn, err := dialOrReusePeerConn(ctx, peerPK)
-	if err != nil {
-		return err
-	}
-	_, err = conn.Write(body)
-	return err
-}
-
-// sendPairControlOnExistingConn writes a pair-control message on an
-// already-open conns[peerPK] entry, used from handleConn where we
-// already have the connection live.
-func sendPairControlOnExistingConn(peerPK cipher.PubKey, msgType string) error {
-	connsMu.Lock()
-	conn, ok := conns[peerPK]
-	connsMu.Unlock()
-	if !ok {
-		return errors.New("pairing: no live connection to peer")
-	}
-	body, err := json.Marshal(pairMsg{Type: msgType})
 	if err != nil {
 		return err
 	}
