@@ -151,16 +151,17 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	rConf := router.Config{
-		Logger:           logger,
-		MasterLogger:     v.MasterLogger(),
-		PubKey:           v.conf.PK,
-		SecKey:           v.conf.SK,
-		TransportManager: v.tpM,
-		RouteFinder:      rfClient,
-		RouteGroupDialer: rgDialer,
-		SetupNodes:       v.conf.EffectiveRouteSetupNodes(),
-		RulesGCInterval:  0, // 0 = DefaultRulesGCInterval (10s)
-		MinHops:          v.conf.Routing.MinHops,
+		Logger:             logger,
+		MasterLogger:       v.MasterLogger(),
+		PubKey:             v.conf.PK,
+		SecKey:             v.conf.SK,
+		TransportManager:   v.tpM,
+		RouteFinder:        rfClient,
+		RouteGroupDialer:   rgDialer,
+		SetupNodes:         v.conf.EffectiveRouteSetupNodes(),
+		RulesGCInterval:    0, // 0 = DefaultRulesGCInterval (10s)
+		MinHops:            v.conf.Routing.MinHops,
+		AwaitSetupListener: v.awaitSetupListener,
 	}
 
 	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
