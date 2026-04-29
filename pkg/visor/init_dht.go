@@ -105,18 +105,6 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Info("DHT: wired DMSG client lookup to local DHT store")
 	}
 
-	// Register transport-layer DHT handler so DHT messages can flow
-	// over skywire transports (route ID 0) without DMSG.
-	if v.tpM != nil {
-		tlDHT := dht.NewTransportLayerDHT(v.tpM, log)
-		v.tpM.SetDHTHandler(tlDHT.HandleDHTPacket)
-		// Add transport peers to the DHT routing table as they become
-		// reachable — this happens naturally via the DHT's own Ping RPC
-		// when the transport-layer transport is used for lookups.
-		node.AddTransport(tlDHT)
-		log.Info("DHT: transport-layer sync enabled (route ID 0)")
-	}
-
 	log.WithField("id", node.ID().String()).
 		WithField("bootstrap_peers", len(bootstrapPKs)).
 		WithField("full_node", fullNode).
@@ -127,8 +115,11 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		go dht.AdvertiseFullNode(ctx, node, log)
 	}
 
-	// Wrap discovery clients with DHT hybrid clients so reads try
-	// DHT first, fall back to HTTP. Writes go to both.
+	// Wrap the dmsg discovery client with a DHT hybrid client so reads try
+	// DHT first, fall back to HTTP. Writes go to both. The transport-
+	// discovery hybrid wrap happens in initDHTTransport once v.tpM is up
+	// (which is later than v.dmsgC, and we don't want to hold up DHT
+	// listener registration on it — see init_dht_transport.go).
 	discAdapter := dht.NewDiscAdapter(node, log)
 	discAdapter.PopulateServerCache()
 	v.initLock.Lock()
@@ -136,26 +127,11 @@ func initDHT(ctx context.Context, v *Visor, log *logging.Logger) error {
 		v.dClient = dht.NewHybridDiscClient(discAdapter, v.dClient, log)
 		log.Info("DMSG discovery: DHT-first reads enabled (HTTP fallback)")
 	}
-	if v.tpM != nil {
-		tpdAdapter := dht.NewTPDAdapter(node, log)
-		v.tpM.Conf.DiscoveryClient = dht.NewHybridTPDClient(tpdAdapter, v.tpM.Conf.DiscoveryClient, log)
-		log.Info("Transport discovery: DHT-first reads enabled (HTTP fallback)")
-	}
 	v.initLock.Unlock()
 
 	// Start background publish: mirror visor's entries to the DHT.
-	// Once the DHT has peers, tell the transport manager to skip
-	// HTTP re-registration — the DHT handles transport discovery.
 	go func() {
 		dhtPublishLoop(ctx, v, node, log)
-	}()
-	go func() {
-		// Wait for DHT to bootstrap before switching off HTTP registration.
-		// TODO: Re-enable once DiscoveryPusher (DHT → TPD) is verified
-		// working reliably. Currently premature — skipping TPD registration
-		// causes transports to disappear from the HTTP API even though
-		// they exist on the visor and in the DHT.
-		_ = node
 	}()
 
 	return nil
