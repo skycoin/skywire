@@ -60,6 +60,15 @@ func (r *RPC) PairRemove(peerPK *cipher.PubKey, _ *struct{}) (err error) {
 	return r.visor.PairRemove(*peerPK)
 }
 
+// PairMarkActive promotes a pending pair to active.
+func (r *RPC) PairMarkActive(peerPK *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "PairMarkActive", peerPK)(nil, &err)
+	if peerPK == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.PairMarkActive(*peerPK)
+}
+
 // PairSend publishes one message into the pair feed.
 func (r *RPC) PairSend(req *PairSendRequest, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "PairSend", req)(nil, &err)
