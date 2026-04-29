@@ -2,6 +2,8 @@
 
 This document describes deploying skywire services using Docker Compose.
 
+For systemd / direct-on-host deployment see [DEPLOYMENT_SYSTEMD.md](DEPLOYMENT_SYSTEMD.md). For Kubernetes notes (illustrative — no production K8s deployment exists today) see [KUBERNETES_DEPLOYMENT.md](KUBERNETES_DEPLOYMENT.md).
+
 All services use the `skycoin/skywire:test` Docker image, which contains the unified skywire binary.
 
 ## Prerequisites
@@ -30,7 +32,7 @@ The compose file defines the following services:
 | address-resolver | `svc ar` | 9093 (TCP), 30178 (UDP) | redis, dmsg-discovery | Resolves visor addresses for STCPR/SUDPH transports |
 | conf-service | `svc confbs` | configurable | none | Config bootstrap server for visor configuration |
 | dmsg-discovery | `dmsg disc` | 9090 | redis | DMSG discovery server |
-| dmsg-server | `dmsg server start` | 8080 (internal) | none | DMSG relay server |
+| dmsg-server | `dmsg server start` | 8080 (internal) | redis (if `enable_dht: true`) | DMSG relay server; optional DHT full node on dmsg port 100 |
 | network-monitor | `svc nm` | configurable | most services | Monitors network health and cleans stale entries |
 | route-finder | `svc rf` | 9092 | redis, dmsg-discovery, transport-discovery | Finds routes between visors |
 | service-discovery | `svc sd` | 9098 | redis, dmsg-discovery | Service discovery (VPN servers, etc.) |
@@ -85,6 +87,54 @@ skywire dmsg server config gen -o dmsg-server-config.json
 ```
 
 Update the `public_address` and `discovery` fields to match your deployment. Mount the config directory as a volume in the compose file.
+
+#### DMSG Server DHT (optional, recommended for production)
+
+Setting `enable_dht: true` and `redis_addr` in the dmsg-server's `config.json` turns the process into a Kademlia DHT full node on dmsg port 100, in addition to its normal dmsg relay duties. This is the serving layer that makes `dht get <pk> <salt>` from a visor return real data instead of falling through to HTTP discovery.
+
+Example `config.json` for a dmsg-server colocated with the cluster's Redis (the primary host's compose):
+
+```json
+{
+  "public_key": "0281a102c828...",
+  "secret_key": "...",
+  "discovery": "http://dmsg-discovery:9090",
+  "public_address": "192.0.2.10:30086",
+  "local_address": ":8080",
+  "health_endpoint_address": ":8082",
+  "max_sessions": 2048,
+  "enable_dht": true,
+  "redis_addr": "redis:6379"
+}
+```
+
+For Docker Compose, the dmsg-server stanza must also pass `REDIS_PASSWORD`, `TPD_URL`, and `SD_URL` in its environment, and depend on `redis` and `dmsg-discovery`. The example in `compose.yaml` already does this.
+
+How the DHT serves data when Redis is available:
+- `redis_addr` points the DHT full node at the same Redis used by transport-discovery, dmsg-discovery, and service-discovery. Those services already write a Kademlia-shaped mirror of every entry into Redis under `dht:*` keys (see `pkg/dht/mirror_redis.go`); the dmsg-server's DHT node rehydrates from those keys on startup.
+- The dmsg-servers form a bootstrap mesh by dialing each other's DHT port (over dmsg). The bootstrap PK list is built from the embedded `dmsg.Prod.DmsgServers`/`dmsg.Test.DmsgServers` list automatically, so visors and other dmsg-servers find each other without configuration.
+- `TPD_URL` and `SD_URL` enable the DHT-to-discovery pusher: when a visor publishes its own DHT entry directly (e.g. `tp` or `svc` salts), the dmsg-server forwards that write back into the HTTP discoveries so they stay consistent.
+
+#### Persistence options for `enable_dht: true`
+
+The DHT backend is selected from the dmsg-server config in this order:
+
+1. **`redis_addr` set** → Redis backend. Recommended for the primary host where the discovery services already write to the same Redis. The dmsg-server gets the full disc-mirror dataset on startup and serves it to visors via Kademlia. Requires `REDIS_PASSWORD` in the container environment.
+2. **`redis_addr` empty, `persist_path` set** → bbolt backend. The dmsg-server keeps its own DHT state in a single file. State persists across restarts but the cluster's disc-mirror data (which lives in the primary Redis) is **not** reachable from this dmsg-server unless visor traffic happens to replicate it via Kademlia. Useful for off-host dmsg-servers that can't reach the primary's Redis but should still survive container restarts.
+3. **Both empty** → in-memory only. Works fine, but every restart starts cold and the disc-mirror dataset is unreachable.
+
+**Important Docker note for option 2 (bbolt):** the bbolt file path must point inside an existing volume mount, otherwise the file lives in the container's writable layer and is destroyed on `docker compose down && up`. The compose stanzas already mount `./dmsg-server/dmsg-server-N/` to `/etc/skywire/dmsg-server`, so the natural path is:
+
+```json
+{
+  "enable_dht": true,
+  "persist_path": "/etc/skywire/dmsg-server/dht.db"
+}
+```
+
+That puts the bbolt file next to `config.json` on the host (`./dmsg-server/dmsg-server-N/dht.db`) and survives container recreation. No additional volume needed.
+
+Without `enable_dht`, the dmsg-server works as a pure relay — visors rely on HTTP discovery for everything.
 
 ### Setup Node Configuration
 
