@@ -1082,6 +1082,11 @@ func (rc *rpcClient) PairRemove(peerPK cipher.PubKey) error {
 	return rc.Call("PairRemove", &peerPK, &struct{}{})
 }
 
+// PairMarkActive implements API.
+func (rc *rpcClient) PairMarkActive(peerPK cipher.PubKey) error {
+	return rc.Call("PairMarkActive", &peerPK, &struct{}{})
+}
+
 // PairSend implements API.
 func (rc *rpcClient) PairSend(peerPK cipher.PubKey, text string) error {
 	return rc.Call("PairSend", &PairSendRequest{PeerPK: peerPK, Text: text}, &struct{}{})
