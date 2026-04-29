@@ -94,6 +94,43 @@
   max-width: 580px;
 }
 
+.edit-icon {
+  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+  margin-left: 4px;
+  opacity: 0.6;
+}
+
+.whitelist-edit-row td {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px 16px !important;
+}
+
+.whitelist-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.whitelist-help {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+.whitelist-input {
+  width: 100%;
+  max-width: 720px;
+}
+
+.whitelist-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 // Input styling for dark background
 :host ::ng-deep {
   .mat-mdc-text-field-wrapper {
