@@ -42,8 +42,8 @@ var (
 	addr      string
 	appCl     *app.Client
 	appLog    func(format string, args ...interface{}) // App logger function
-	clientCh  chan string
-	conns     map[cipher.PubKey]net.Conn // Chat connections
+	hub       *sseHub                                  // SSE broadcast registry; see sse.go-like helpers below
+	conns     map[cipher.PubKey]net.Conn               // Chat connections
 	connsMu   sync.Mutex
 	appPort   uint16
 	useSkynet bool
@@ -68,6 +68,60 @@ var (
 
 //go:embed static
 var embededFiles embed.FS
+
+// sseSubscriberBufSize is the per-client outbound message buffer
+// depth. A slow SSE client (or a stalled browser tab) drops messages
+// once its buffer is full rather than blocking the producer; missed
+// messages are recoverable from history (when persistence is on) or
+// just dropped (when off).
+const sseSubscriberBufSize = 64
+
+// sseHub fans messages out to every connected SSE client. The
+// previous implementation used a single unbuffered channel, which
+// meant exactly ONE consumer received each message — when more than
+// one tab was open, or a stale handler was leaked, every other tab
+// silently lost messages. The hub registers a per-client channel on
+// connect and broadcasts to all of them on each message.
+type sseHub struct {
+	mu      sync.Mutex
+	clients map[chan string]struct{}
+}
+
+func newSSEHub() *sseHub {
+	return &sseHub{clients: make(map[chan string]struct{})}
+}
+
+// subscribe registers a fresh client channel and returns it plus an
+// unsubscribe func the caller MUST invoke on shutdown. The channel
+// is buffered so a producer never blocks on a slow consumer.
+func (h *sseHub) subscribe() (<-chan string, func()) {
+	ch := make(chan string, sseSubscriberBufSize)
+	h.mu.Lock()
+	h.clients[ch] = struct{}{}
+	h.mu.Unlock()
+	return ch, func() {
+		h.mu.Lock()
+		if _, ok := h.clients[ch]; ok {
+			delete(h.clients, ch)
+			close(ch)
+		}
+		h.mu.Unlock()
+	}
+}
+
+// broadcast sends msg to every connected client. Drops to clients
+// whose buffer is full — bounded fan-out keeps a single stalled
+// client from holding back the whole stream.
+func (h *sseHub) broadcast(msg string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for ch := range h.clients {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
 
 func init() {
 	launcher.RegisterApp("skychat", RunSkychat)
@@ -180,8 +234,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		}
 	}
 
-	clientCh = make(chan string)
-	defer close(clientCh)
+	hub = newSSEHub()
 
 	port := appCl.Config().RoutingPort
 	if appPort != 0 {
@@ -349,12 +402,7 @@ func handleConn(conn net.Conn) {
 		if err != nil {
 			appLog("Failed to marshal json: %v", err)
 		}
-		select {
-		case clientCh <- string(clientMsg):
-			appCl.Log().Debugf("Received and sent to ui: %s", clientMsg)
-		default:
-			appCl.Log().Debugf("Received and trashed: %s", clientMsg)
-		}
+		hub.broadcast(string(clientMsg))
 	}
 }
 
@@ -465,6 +513,9 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
 
+	ch, unsubscribe := hub.subscribe()
+	defer unsubscribe()
+
 	// Seed the new SSE client with recent history if persistence is enabled.
 	if historyStore != nil && persistSeedCount > 0 {
 		recent, err := historyStore.ListRecent(persistSeedCount)
@@ -491,14 +542,18 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 
 	for {
 		select {
-		case msg, ok := <-clientCh:
+		case msg, ok := <-ch:
 			if !ok {
 				return
 			}
-			_, err := fmt.Fprintf(w, "data: %s\n\n", msg)
-			if err == nil {
-				f.Flush()
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", msg); err != nil {
+				// Client gone (write to a closed conn) — exit so the
+				// hub deregisters this subscriber and stops buffering
+				// messages it can't deliver.
+				appCl.Log().Debugf("SSE write failed, dropping subscriber: %v", err)
+				return
 			}
+			f.Flush()
 
 		case <-req.Context().Done():
 			appCl.Log().Debug("SSE connection was closed.")

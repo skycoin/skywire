@@ -123,9 +123,10 @@ func pendingList() []pendingInvite {
 	return out
 }
 
-// notifyInviteSSE pushes a structured envelope onto clientCh so the
-// browser hears about new invites in real time. Drops if clientCh is
-// full so a slow SSE consumer doesn't block the handshake handler.
+// notifyInviteSSE broadcasts a structured envelope to every connected
+// SSE client so the browser hears about new invites in real time.
+// The hub drops to per-client buffers internally if any consumer is
+// slow.
 func notifyInviteSSE(peerPK cipher.PubKey, kind string) {
 	envelope := map[string]string{
 		"channel": "pair-invite",
@@ -137,10 +138,7 @@ func notifyInviteSSE(peerPK cipher.PubKey, kind string) {
 	if err != nil {
 		return
 	}
-	select {
-	case clientCh <- string(body):
-	default:
-	}
+	hub.broadcast(string(body))
 }
 
 // connectPairRPC dials the local visor's RPC and stores the client
@@ -164,11 +162,12 @@ func connectPairRPC() {
 // startPairPoller bridges visor.PairPoll into the existing SSE
 // pipeline. Polls the visor at pairPollInterval, marshals each
 // message into the same JSON shape the SSE handler emits, and
-// pushes onto clientCh.
+// broadcasts via the hub.
 //
-// Drops if clientCh is full so a slow SSE client doesn't block the
-// poller. The visor's bounded inbox already protects against
-// unbounded growth of buffered messages.
+// The hub drops per-client when their buffer is full so a slow
+// SSE consumer doesn't block the poller. The visor's bounded
+// inbox already protects against unbounded growth of buffered
+// messages.
 func startPairPoller(parent context.Context) {
 	if !pairEnable || pairRPC == nil {
 		return
@@ -207,10 +206,7 @@ func startPairPoller(parent context.Context) {
 					appLog("Pairing: marshal SSE message: %v", err)
 					continue
 				}
-				select {
-				case clientCh <- string(body):
-				default:
-				}
+				hub.broadcast(string(body))
 			}
 		}
 	}()
