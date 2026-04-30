@@ -185,7 +185,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	// first ensure that this rg is not being wrapped with noise right now
 	if _, ok := r.rgsRaw[rules.Desc]; ok {
 		r.mx.Unlock()
-		r.logger.Warnf("Desc %s already reserved, skipping...", rules.Desc)
+		r.logger.Warnf("Desc %s already reserved, skipping...", &rules.Desc)
 		return nil, fmt.Errorf("noise route group with desc %s already being initialized", &rules.Desc)
 	}
 
