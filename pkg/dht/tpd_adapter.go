@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Salt for transport discovery entries in the DHT.
@@ -192,7 +193,7 @@ func (d *TPDAdapter) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 			}
 			return nil, err
 		}
-		entries, err := decodeTpItem(item.V)
+		entries, err := decodeTpItem(item.V, pk)
 		if err != nil {
 			return nil, fmt.Errorf("dht tpd: decode chunk %d: %w", i, err)
 		}
@@ -206,25 +207,132 @@ func (d *TPDAdapter) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 	return out, nil
 }
 
+// DecodeTpItem is the public wrapper around decodeTpItem for callers
+// outside this package (e.g. cmd/skywire-cli/commands/route/calc.go's
+// scan over all tp entries). srcPK is the visor PK whose entry this
+// is — used to fill in the source for compact shapes that don't
+// carry it explicitly.
+func DecodeTpItem(v []byte, srcPK cipher.PubKey) ([]*transport.Entry, error) {
+	return decodeTpItem(v, srcPK)
+}
+
 // decodeTpItem unmarshals one tp-chunk value into entries, accepting
-// the canonical bare shape and falling back to the legacy SignedEntry
-// wrapper.
-func decodeTpItem(v []byte) ([]*transport.Entry, error) {
+// any of the four shapes that coexist on the wire under the tp salt:
+//
+//  1. Bare:             []transport.Entry             (canonical)
+//  2. Signed:           []transport.SignedEntry       (legacy wrapper)
+//  3. Compact-array:    [{r, t, l}]                   (deployment mirrors)
+//  4. Compact-envelope: {s: <pk>, ts: [{r, t, l}]}    (recommended for size)
+//
+// srcPK is the visor PK whose tp entry this is — used as the source
+// for compact shapes that don't carry it (compact-array, compact-
+// envelope without `s`). Callers from GetTransportsByEdge always know
+// it because it's the lookup key.
+//
+// Compact entries are synthesized into transport.Entry with a
+// deterministic ID (transport.MakeTransportID(src, remote, type)).
+func decodeTpItem(v []byte, srcPK cipher.PubKey) ([]*transport.Entry, error) {
+	// Bare canonical.
 	var entries []*transport.Entry
 	if err := json.Unmarshal(v, &entries); err == nil && (len(entries) == 0 || entries[0] != nil) {
-		return entries, nil
-	}
-	var signed []*transport.SignedEntry
-	if err := json.Unmarshal(v, &signed); err != nil {
-		return nil, err
-	}
-	out := make([]*transport.Entry, 0, len(signed))
-	for _, se := range signed {
-		if se != nil && se.Entry != nil {
-			out = append(out, se.Entry)
+		// Distinguish bare from compact-array: both unmarshal into a
+		// slice, but compact-array produces zero-valued Edges. Bare
+		// always has populated Edges.
+		anyResolved := false
+		for _, e := range entries {
+			if e == nil {
+				continue
+			}
+			if !e.Edges[0].Null() && !e.Edges[1].Null() {
+				anyResolved = true
+				break
+			}
+		}
+		if anyResolved {
+			return entries, nil
 		}
 	}
-	return out, nil
+
+	// Signed wrapper.
+	var signed []*transport.SignedEntry
+	if err := json.Unmarshal(v, &signed); err == nil {
+		out := make([]*transport.Entry, 0, len(signed))
+		for _, se := range signed {
+			if se != nil && se.Entry != nil &&
+				!se.Entry.Edges[0].Null() && !se.Entry.Edges[1].Null() {
+				out = append(out, se.Entry)
+			}
+		}
+		if len(out) > 0 {
+			return out, nil
+		}
+	}
+
+	// Compact-envelope: explicit source PK in the value.
+	var env compactEnvelope
+	if json.Unmarshal(v, &env) == nil && env.Source != "" {
+		var pk cipher.PubKey
+		if err := pk.Set(env.Source); err == nil {
+			out := make([]*transport.Entry, 0, len(env.Transports))
+			for _, c := range env.Transports {
+				if e := compactToEntry(pk, c); e != nil {
+					out = append(out, e)
+				}
+			}
+			return out, nil
+		}
+	}
+
+	// Compact-array: source PK comes from the lookup key (srcPK).
+	var compact []compactTpEntry
+	if json.Unmarshal(v, &compact) == nil && len(compact) > 0 && srcPK != (cipher.PubKey{}) {
+		out := make([]*transport.Entry, 0, len(compact))
+		for _, c := range compact {
+			if e := compactToEntry(srcPK, c); e != nil {
+				out = append(out, e)
+			}
+		}
+		return out, nil
+	}
+
+	return nil, fmt.Errorf("dht tpd: value matches no known tp shape (bare/signed/compact-array/compact-envelope)")
+}
+
+// compactTpEntry is one row of the single-letter compact format that
+// some publishers emit under the tp salt: r=remote PK, t=transport
+// type, l=latency in ms.
+type compactTpEntry struct {
+	Remote  string  `json:"r"`
+	Type    string  `json:"t"`
+	Latency float64 `json:"l,omitempty"`
+}
+
+// compactEnvelope wraps a list of compact entries with their source
+// PK. The recommended publish format for size-conscious publishers:
+// one source PK per visor, not per transport, so hub edges fit
+// comfortably under MaxValueSize.
+type compactEnvelope struct {
+	Source     string           `json:"s"`
+	Transports []compactTpEntry `json:"ts"`
+}
+
+// compactToEntry synthesizes a transport.Entry from a compact row
+// plus a known source PK. Returns nil if the row is malformed.
+func compactToEntry(srcPK cipher.PubKey, c compactTpEntry) *transport.Entry {
+	if c.Remote == "" || c.Type == "" {
+		return nil
+	}
+	var rPK cipher.PubKey
+	if err := rPK.Set(c.Remote); err != nil {
+		return nil
+	}
+	tpType := tptypes.Type(c.Type)
+	return &transport.Entry{
+		ID:      transport.MakeTransportID(srcPK, rPK, tpType),
+		Edges:   transport.SortEdges(srcPK, rPK),
+		Type:    tpType,
+		Latency: c.Latency,
+	}
 }
 
 // GetAllTransports is not efficiently supported by the DHT.

@@ -304,130 +304,31 @@ func fetchAllTransportsFromDHT(rpcClient visor.API) ([]*transport.Entry, error) 
 	}
 
 	var entries []*transport.Entry
-	bare, signed, compact, unresolved := 0, 0, 0, 0
+	resolved, unresolved := 0, 0
 
 	for _, row := range rows {
-		// Try bare-entry format first.
-		var bareBatch []*transport.Entry
-		if json.Unmarshal(row.Value, &bareBatch) == nil && len(bareBatch) > 0 {
-			anyResolved := false
-			for _, e := range bareBatch {
-				if e == nil {
-					continue
-				}
-				if !e.Edges[0].Null() && !e.Edges[1].Null() {
-					entries = append(entries, e)
-					anyResolved = true
-					continue
-				}
-			}
-			if anyResolved {
-				bare++
-				continue
-			}
-		}
-
-		// Try SignedEntry format.
-		var signedBatch []*transport.SignedEntry
-		if json.Unmarshal(row.Value, &signedBatch) == nil && len(signedBatch) > 0 {
-			anyResolved := false
-			for _, se := range signedBatch {
-				if se == nil || se.Entry == nil {
-					continue
-				}
-				if !se.Entry.Edges[0].Null() && !se.Entry.Edges[1].Null() {
-					entries = append(entries, se.Entry)
-					anyResolved = true
-				}
-			}
-			if anyResolved {
-				signed++
-				continue
-			}
-		}
-
-		// Try compact-envelope format: {s: source_pk, ts: [{r,t,l}]}.
-		// This is the format publishers should adopt — explicit source
-		// PK in the value means consumers don't need cross-reference.
-		var envelope compactEnvelope
-		if json.Unmarshal(row.Value, &envelope) == nil && envelope.Source != "" {
-			var srcPK cipher.PubKey
-			if err := srcPK.Set(envelope.Source); err == nil {
-				for _, c := range envelope.Transports {
-					e := compactToEntry(srcPK, c)
-					if e != nil {
-						entries = append(entries, e)
-					}
-				}
-				compact++
-				continue
-			}
-		}
-
-		// Try bare-array compact format: [{r, t, l}]. Source PK is
-		// recovered via the dmsg-salt index when available.
-		var compactBatch []compactTpEntry
-		if json.Unmarshal(row.Value, &compactBatch) != nil {
-			continue
-		}
-		srcPK, ok := pkByTpTarget[row.Target]
-		if !ok {
+		// Compact-array shape needs a source PK; try the dmsg-salt
+		// index. Bare/signed/compact-envelope shapes carry the source
+		// internally, so we don't need a srcPK for them — but pass it
+		// anyway so DecodeTpItem can fall back if needed.
+		srcPK := pkByTpTarget[row.Target]
+		decoded, err := dht.DecodeTpItem(row.Value, srcPK)
+		if err != nil {
 			unresolved++
 			continue
 		}
-		for _, c := range compactBatch {
-			e := compactToEntry(srcPK, c)
-			if e != nil {
-				entries = append(entries, e)
-			}
+		if len(decoded) == 0 {
+			continue
 		}
-		compact++
+		entries = append(entries, decoded...)
+		resolved++
 	}
 
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("DHT tp salt empty or unparseable (rows=%d, bare=%d, signed=%d, compact=%d, unresolved=%d)",
-			len(rows), bare, signed, compact, unresolved)
+		return nil, fmt.Errorf("DHT tp salt empty or unparseable (rows=%d, resolved=%d, unresolved=%d)",
+			len(rows), resolved, unresolved)
 	}
 	return entries, nil
-}
-
-// compactTpEntry is the single-letter shape some publishers emit
-// under the tp salt. The struct is local to this CLI helper since
-// it's not used elsewhere.
-type compactTpEntry struct {
-	Remote  string  `json:"r"`
-	Type    string  `json:"t"`
-	Latency float64 `json:"l,omitempty"`
-}
-
-// compactEnvelope is the recommended publish format for compact
-// transport listings: explicit source PK plus a list of compact
-// per-transport rows. Solves the recoverability problem of bare
-// [{r,t,l}] arrays without blowing the per-entry budget at hub
-// edges (one source PK per visor, not per transport).
-type compactEnvelope struct {
-	Source     string           `json:"s"`
-	Transports []compactTpEntry `json:"ts"`
-}
-
-// compactToEntry synthesizes a transport.Entry from a compact row
-// and a known source PK. Returns nil if the row is malformed.
-func compactToEntry(srcPK cipher.PubKey, c compactTpEntry) *transport.Entry {
-	if c.Remote == "" || c.Type == "" {
-		return nil
-	}
-	var rPK cipher.PubKey
-	if err := rPK.Set(c.Remote); err != nil {
-		return nil
-	}
-	edges := transport.SortEdges(srcPK, rPK)
-	tpType := tptypes.Type(c.Type)
-	return &transport.Entry{
-		ID:      transport.MakeTransportID(srcPK, rPK, tpType),
-		Edges:   edges,
-		Type:    tpType,
-		Latency: c.Latency,
-	}
 }
 
 // buildTpTargetIndex walks the dmsg salt to build a hex(target) → PK
