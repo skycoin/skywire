@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -35,6 +36,7 @@ var (
 	calcMinHops uint16
 	calcMaxHops uint16
 	calcCount   int
+	calcSource  string
 )
 
 func init() {
@@ -45,6 +47,7 @@ func init() {
 	calcCmd.Flags().Uint16VarP(&calcMinHops, "min", "n", 0, "minimum hops (0 = use visor's routing.min_hops, fallback 1)")
 	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
 	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
+	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP), dht (visor's local DHT store), auto (DHT then TPD)")
 	clirpc.RegisterFetchFlags(calcCmd)
 }
 
@@ -152,9 +155,34 @@ var calcCmd = &cobra.Command{
 		ctx, cancel := context.WithTimeout(context.Background(), calcTimeout)
 		defer cancel()
 
-		entries, err := fetchAllTransports(ctx, cmd.Flags(), tpdURL)
+		var entries []*transport.Entry
+		var err error
+		switch strings.ToLower(calcSource) {
+		case "tpd":
+			entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
+		case "dht":
+			if rpcClient == nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--source dht requires a running visor (RPC unavailable)"))
+			}
+			entries, err = fetchAllTransportsFromDHT(rpcClient)
+		case "auto":
+			if rpcClient != nil {
+				entries, err = fetchAllTransportsFromDHT(rpcClient)
+				if err != nil || len(entries) < 10 {
+					// DHT had no useful data; fall back.
+					entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
+				}
+			} else {
+				entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
+			}
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|dht|auto", calcSource))
+		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if len(entries) == 0 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no transport entries available from %s", calcSource))
 		}
 
 		memStore := newMemoryStoreFromEntries(entries)
@@ -225,6 +253,62 @@ func fetchAllTransports(_ context.Context, cmdFlags *pflag.FlagSet, tpdAddr stri
 	var entries []*transport.Entry
 	if err := json.Unmarshal(body, &entries); err != nil {
 		return nil, err
+	}
+	return entries, nil
+}
+
+// fetchAllTransportsFromDHT pulls every "tp" salt entry from the local
+// DHT store and parses it as a list of transport.Entry. Two formats
+// coexist under this salt:
+//
+//   - The bare-entry format published by visors via TPDAdapter:
+//     []transport.Entry. We use these directly.
+//   - The compact format published by deployment-side discovery
+//     pushers: [{r, t, l, b}]. These omit the source PK (only
+//     present in the storage-key hash, not invertible) so we
+//     can't reconstruct edges from them. They're skipped.
+//
+// On a full node the bare-entry coverage is comprehensive; on a
+// non-full node the local store will be sparse and this function
+// will return only entries near the local node ID. For comparison
+// purposes against TPD HTTP, run on a full node after a reconcile
+// pass.
+func fetchAllTransportsFromDHT(rpcClient visor.API) ([]*transport.Entry, error) {
+	body, err := rpcClient.DHTGetAll("tp")
+	if err != nil {
+		return nil, fmt.Errorf("DHT GetAll(tp): %w", err)
+	}
+	// Each item is a JSON array. We try unmarshalling each as
+	// []transport.Entry first; if the inner objects don't have an
+	// `edges` field (compact format), the unmarshal will succeed
+	// but produce zero-value edges, which we filter out.
+	var raw []json.RawMessage
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		return nil, fmt.Errorf("parse DHT tp envelope: %w", err)
+	}
+	var entries []*transport.Entry
+	skipped := 0
+	for _, item := range raw {
+		var batch []*transport.Entry
+		if err := json.Unmarshal(item, &batch); err != nil {
+			skipped++
+			continue
+		}
+		for _, e := range batch {
+			if e == nil {
+				continue
+			}
+			// Compact-format entries unmarshal into Entry with both
+			// edges = zero; skip them.
+			if e.Edges[0].Null() && e.Edges[1].Null() {
+				skipped++
+				continue
+			}
+			entries = append(entries, e)
+		}
+	}
+	if skipped > 0 && len(entries) == 0 {
+		return nil, fmt.Errorf("DHT tp salt has %d items but none in bare-entry format (%d skipped); compact entries lack source PK and can't be used to build a graph", len(raw), skipped)
 	}
 	return entries, nil
 }

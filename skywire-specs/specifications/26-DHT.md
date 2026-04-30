@@ -205,6 +205,12 @@ The visor exposes the DHT via `skywire cli visor dht`:
 | `dht peers` | Dump every K-bucket peer (PK, NodeID, last-seen, bucket index) | All nodes — primary debugging tool for "is the DHT actually connected to anyone?" |
 | `dht reconcile <full-node-pk> [--salt s]` | Manually run a one-shot pull+push reconcile against a specific peer. Restricted to peers in `BootstrapPKs ∪ FindAdvertisedFullNodes` (signed full-node attestation required) | Full nodes — debugging cross-peer divergence or forcing convergence after a config change |
 
+`route calc` also gained a `--source tpd|dht|auto` flag (default `tpd`):
+
+- `tpd`: fetch `/all-transports` from the deployment TPD (current behavior).
+- `dht`: build the graph from the local DHT's `tp` salt entries via `DHTGetAll`. Only visor-published bare-entry format contributes — the deployment-pushed compact `[{r,t,l,b}]` format omits the source PK and is filtered out. Useful for diffing DHT coverage against TPD.
+- `auto`: try DHT first; fall back to TPD if DHT yielded fewer than 10 entries.
+
 ## Configuration
 
 ```json
