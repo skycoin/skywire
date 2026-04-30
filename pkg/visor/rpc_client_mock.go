@@ -1370,6 +1370,11 @@ func (mc *mockRPCClient) CheckAREntry(_ string) ([]string, error) {
 	return nil, nil
 }
 
+// ARSelfInfo implements API.
+func (mc *mockRPCClient) ARSelfInfo() (*ARSelfRegistration, error) {
+	return &ARSelfRegistration{}, nil
+}
+
 // DHTStatus implements API.
 func (mc *mockRPCClient) DHTStatus() (*DHTStatus, error) {
 	return &DHTStatus{Running: false}, nil

@@ -1523,3 +1523,12 @@ func (rc *rpcClient) CheckAREntry(pk string) ([]string, error) {
 	err := rc.Call("CheckAREntry", &pk, &resp)
 	return resp, err
 }
+
+// ARSelfInfo returns the visor's own AR registration.
+func (rc *rpcClient) ARSelfInfo() (*ARSelfRegistration, error) {
+	var resp ARSelfRegistration
+	if err := rc.Call("ARSelfInfo", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
