@@ -193,9 +193,29 @@ func (c *sudphClient) acceptAddresses(conn net.PacketConn, addrCh <-chan addrres
 }
 
 // Dial implements interface
+//
+// SUDPH dialing requires a working PacketFilter, which listen() sets up
+// in the goroutine spawned by Start(). If listen() failed (most
+// commonly because BindSUDPH found no UDP target on the address
+// resolver — a DMSG-only AR with no published udp_address), it nils
+// out c.filter and returns. The client stays attached to the network
+// manager and remains dialable. Without the guard below the next dial
+// panics on c.filter.NewConn (nil deref) and crashes the visor
+// process. Production stack:
+//
+//	pfilter.(*PacketFilter).NewConn(0x0, …)  sudph.go:dial
+//	(*sudphClient).dial → dialWithTimeout → resolvedClient.dialVisor
+//	→ ManagedTransport.Dial → saveTransportInternal goroutine
+//
+// Returning a clean error here lets the transport manager log
+// "SUDPH unavailable" and move on instead of taking the whole visor
+// down.
 func (c *sudphClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Transport, error) {
 	if c.isClosed() {
 		return nil, io.ErrClosedPipe
+	}
+	if c.filter == nil || c.packetListener == nil {
+		return nil, fmt.Errorf("SUDPH not available (listen failed; check address resolver UDP binding)")
 	}
 	// this will lookup visor address in address resolver and then dial that address
 	conn, err := c.dialVisor(ctx, rPK, c.dialWithTimeout)
@@ -241,6 +261,13 @@ func (c *sudphClient) dialWithTimeout(ctx context.Context, addr string) (net.Con
 // dial will send holepunch packet to the remote addr over UDP, and
 // return the connection
 func (c *sudphClient) dial(remoteAddr string) (net.Conn, error) {
+	if c.filter == nil {
+		// Listen() failed earlier and cleared c.filter. Dial() should
+		// have caught this, but a Close() on a parallel path could
+		// race. Bail safely instead of nil-deref'ing.
+		return nil, fmt.Errorf("SUDPH packet filter not initialized")
+	}
+
 	rAddr, err := net.ResolveUDPAddr("udp", remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("net.ResolveUDPAddr (remote): %w", err)
