@@ -673,6 +673,18 @@ func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_
 	s.log.Debugf("gRPC StreamAppLogs: subscribed app=%s include_router=%v min_level=%s",
 		req.AppName, req.IncludeRouter, level)
 
+	// Sentinel: tell the client the subscription is live so it can
+	// race-safely trigger downstream RPCs whose log output we want
+	// to capture. Sent BEFORE entering the dispatch loop so any
+	// activity from the moment the client sees this entry forward
+	// is guaranteed to reach the broadcaster.
+	if err := stream.Send(&AppLogEntry{
+		TimestampNs: time.Now().UnixNano(),
+		Subscribed:  true,
+	}); err != nil {
+		return err
+	}
+
 	for {
 		select {
 		case <-stream.Context().Done():

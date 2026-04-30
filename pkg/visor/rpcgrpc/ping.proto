@@ -199,6 +199,15 @@ message AppLogEntry {
   string module = 3;             // _module field (e.g. "router", "skysocks-client")
   string message = 4;            // formatted message text
   map<string, string> fields = 5; // remaining structured fields
+  // Subscribed is set on a sentinel entry the server sends
+  // immediately after it has registered the subscription with the
+  // broadcaster. Clients use this to know that any subsequent log
+  // activity will reach them — letting them gate downstream RPC
+  // calls (e.g. StartAppWithMode) on subscription readiness so the
+  // first ~50ms of setup logs aren't lost to the race between
+  // subscription handshake and the action that triggers them.
+  // The other fields are unused on the sentinel.
+  bool subscribed = 6;
 }
 
 // ProcessStat contains information about a running process

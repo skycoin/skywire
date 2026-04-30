@@ -1348,12 +1348,21 @@ func (x *AppLogStreamRequest) GetMinLevel() string {
 
 // AppLogEntry is one log line forwarded to the gRPC client.
 type AppLogEntry struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TimestampNs   int64                  `protobuf:"varint,1,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"`                                             // entry time as Unix nanoseconds
-	Level         string                 `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`                                                                             // "trace"|"debug"|"info"|"warn"|"error"|"fatal"|"panic"
-	Module        string                 `protobuf:"bytes,3,opt,name=module,proto3" json:"module,omitempty"`                                                                           // _module field (e.g. "router", "skysocks-client")
-	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`                                                                         // formatted message text
-	Fields        map[string]string      `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // remaining structured fields
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	TimestampNs int64                  `protobuf:"varint,1,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"`                                             // entry time as Unix nanoseconds
+	Level       string                 `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`                                                                             // "trace"|"debug"|"info"|"warn"|"error"|"fatal"|"panic"
+	Module      string                 `protobuf:"bytes,3,opt,name=module,proto3" json:"module,omitempty"`                                                                           // _module field (e.g. "router", "skysocks-client")
+	Message     string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`                                                                         // formatted message text
+	Fields      map[string]string      `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // remaining structured fields
+	// Subscribed is set on a sentinel entry the server sends
+	// immediately after it has registered the subscription with the
+	// broadcaster. Clients use this to know that any subsequent log
+	// activity will reach them — letting them gate downstream RPC
+	// calls (e.g. StartAppWithMode) on subscription readiness so the
+	// first ~50ms of setup logs aren't lost to the race between
+	// subscription handshake and the action that triggers them.
+	// The other fields are unused on the sentinel.
+	Subscribed    bool `protobuf:"varint,6,opt,name=subscribed,proto3" json:"subscribed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1421,6 +1430,13 @@ func (x *AppLogEntry) GetFields() map[string]string {
 		return x.Fields
 	}
 	return nil
+}
+
+func (x *AppLogEntry) GetSubscribed() bool {
+	if x != nil {
+		return x.Subscribed
+	}
+	return false
 }
 
 // ProcessStat contains information about a running process
@@ -1648,13 +1664,16 @@ const file_ping_proto_rawDesc = "" +
 	"\x13AppLogStreamRequest\x12\x19\n" +
 	"\bapp_name\x18\x01 \x01(\tR\aappName\x12%\n" +
 	"\x0einclude_router\x18\x02 \x01(\bR\rincludeRouter\x12\x1b\n" +
-	"\tmin_level\x18\x03 \x01(\tR\bminLevel\"\xed\x01\n" +
+	"\tmin_level\x18\x03 \x01(\tR\bminLevel\"\x8d\x02\n" +
 	"\vAppLogEntry\x12!\n" +
 	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12\x14\n" +
 	"\x05level\x18\x02 \x01(\tR\x05level\x12\x16\n" +
 	"\x06module\x18\x03 \x01(\tR\x06module\x12\x18\n" +
 	"\amessage\x18\x04 \x01(\tR\amessage\x128\n" +
-	"\x06fields\x18\x05 \x03(\v2 .rpcgrpc.AppLogEntry.FieldsEntryR\x06fields\x1a9\n" +
+	"\x06fields\x18\x05 \x03(\v2 .rpcgrpc.AppLogEntry.FieldsEntryR\x06fields\x12\x1e\n" +
+	"\n" +
+	"subscribed\x18\x06 \x01(\bR\n" +
+	"subscribed\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xce\x01\n" +

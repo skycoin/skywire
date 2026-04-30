@@ -323,7 +323,14 @@ type AppLogCallback func(entry *AppLogEntry)
 // StreamAppLogs subscribes to the visor's master logger and calls cb
 // for each entry that matches the filter. Blocks until ctx is canceled
 // or the stream errors. Used by 'proxy start --verbose'.
-func (c *PingClient) StreamAppLogs(ctx context.Context, appName string, includeRouter bool, minLevel string, cb AppLogCallback) error {
+//
+// If subscribed is non-nil, it is closed once the server confirms the
+// subscription is live (via the Subscribed sentinel entry). Callers
+// should wait on this channel before triggering downstream RPCs whose
+// log output they want to capture, so the first burst of activity
+// isn't lost to the subscription handshake. The sentinel itself is
+// not delivered to cb.
+func (c *PingClient) StreamAppLogs(ctx context.Context, appName string, includeRouter bool, minLevel string, subscribed chan<- struct{}, cb AppLogCallback) error {
 	stream, err := c.client.StreamAppLogs(ctx, &AppLogStreamRequest{
 		AppName:       appName,
 		IncludeRouter: includeRouter,
@@ -333,6 +340,7 @@ func (c *PingClient) StreamAppLogs(ctx context.Context, appName string, includeR
 		return fmt.Errorf("failed to start app log stream: %w", err)
 	}
 
+	signaled := false
 	for {
 		entry, err := stream.Recv()
 		if err == io.EOF {
@@ -340,6 +348,13 @@ func (c *PingClient) StreamAppLogs(ctx context.Context, appName string, includeR
 		}
 		if err != nil {
 			return fmt.Errorf("stream error: %w", err)
+		}
+		if entry.Subscribed && !signaled {
+			signaled = true
+			if subscribed != nil {
+				close(subscribed)
+			}
+			continue
 		}
 		cb(entry)
 	}

@@ -213,10 +213,11 @@ var startCmd = &cobra.Command{
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("verbose: gRPC dial failed: %w", err))
 			}
 			verboseDone = make(chan struct{})
+			subscribedCh := make(chan struct{})
 			go func() {
 				defer close(verboseDone)
 				defer grpcClient.Close() //nolint:errcheck,gosec
-				err := grpcClient.StreamAppLogs(ctx, clientName, false, startVerboseLevel, func(e *rpcgrpc.AppLogEntry) {
+				err := grpcClient.StreamAppLogs(ctx, clientName, false, startVerboseLevel, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
 					ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
 					module := e.Module
 					if module == "" {
@@ -228,6 +229,17 @@ var startCmd = &cobra.Command{
 					fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
 				}
 			}()
+			// Block briefly until the server confirms the subscription
+			// is live. Otherwise StartAppWithMode below races with the
+			// subscription handshake and we lose the first ~50ms of
+			// setup logs (route calculation, transport selection).
+			select {
+			case <-subscribedCh:
+			case <-time.After(2 * time.Second):
+				fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within 2s; proceeding anyway")
+			case <-ctx.Done():
+				return
+			}
 		}
 
 		if pk != "" {
