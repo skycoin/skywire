@@ -93,13 +93,20 @@ func (s *arSelfState) set(tpType string, d addrresolver.VisorData) {
 	s.entries[tpType] = d
 }
 
-func (s *arSelfState) clear(tpType string) {
+// clear removes the cached AR self-registration for one transport
+// type. Currently unreferenced in-tree but kept on the type for
+// symmetry with set() and to give callers a way to invalidate a
+// stale entry on tear-down.
+func (s *arSelfState) clear(tpType string) { //nolint:unused
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.entries, tpType)
 }
 
-func (s *arSelfState) snapshot() map[string]addrresolver.VisorData {
+// snapshot returns a copy of the AR self-registration map. Currently
+// unreferenced in-tree; intended for diagnostic dumps that walk all
+// configured transport types at once.
+func (s *arSelfState) snapshot() map[string]addrresolver.VisorData { //nolint:unused
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make(map[string]addrresolver.VisorData, len(s.entries))

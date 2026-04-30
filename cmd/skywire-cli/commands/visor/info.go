@@ -176,21 +176,21 @@ var summaryCmd = &cobra.Command{
 			summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 
 		outputJSON := struct {
-			PublicKey      string                     `json:"public_key"`
-			IsSymmetricNAT bool                       `json:"symmetric_nat"`
-			LocalIP        string                     `json:"local_ip"`
-			PublicIP       string                     `json:"public_ip"`
-			CountryCode    string                     `json:"country_code,omitempty"`
-			RegionName     string                     `json:"region_name,omitempty"`
-			CityName       string                     `json:"city_name,omitempty"`
-			DMSGServers    []visor.DMSGServerInfo     `json:"dmsg_servers"`
-			DmsgLatency    string                     `json:"dmsg_latency"`
-			VisorVersion   string                     `json:"visor_version"`
-			ConfigVersion  string                     `json:"config_version"`
-			UptimeTracker  string                     `json:"uptime_tracker"`
-			TimeOnline     float64                    `json:"time_online"`
-			BuildTag       string                     `json:"build_tag"`
-			ARRegistration *visor.ARSelfRegistration  `json:"ar_registration,omitempty"`
+			PublicKey      string                    `json:"public_key"`
+			IsSymmetricNAT bool                      `json:"symmetric_nat"`
+			LocalIP        string                    `json:"local_ip"`
+			PublicIP       string                    `json:"public_ip"`
+			CountryCode    string                    `json:"country_code,omitempty"`
+			RegionName     string                    `json:"region_name,omitempty"`
+			CityName       string                    `json:"city_name,omitempty"`
+			DMSGServers    []visor.DMSGServerInfo    `json:"dmsg_servers"`
+			DmsgLatency    string                    `json:"dmsg_latency"`
+			VisorVersion   string                    `json:"visor_version"`
+			ConfigVersion  string                    `json:"config_version"`
+			UptimeTracker  string                    `json:"uptime_tracker"`
+			TimeOnline     float64                   `json:"time_online"`
+			BuildTag       string                    `json:"build_tag"`
+			ARRegistration *visor.ARSelfRegistration `json:"ar_registration,omitempty"`
 		}{
 			PublicKey:      summary.Overview.PubKey.String(),
 			IsSymmetricNAT: summary.Overview.IsSymmetricNAT,
