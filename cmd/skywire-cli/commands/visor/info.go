@@ -150,24 +150,47 @@ var summaryCmd = &cobra.Command{
 			msg += "DHT: not running\n"
 		}
 
+		// AR registration: best-effort. A failure here means we'll skip the
+		// AR section in human output and emit nothing for it in JSON; the
+		// rest of the summary is still useful.
+		var arSelf *visor.ARSelfRegistration
+		if reg, err := rpcClient.ARSelfInfo(); err == nil {
+			arSelf = reg
+			if reg != nil && len(reg.Entries) > 0 {
+				msg += "AR Registration:\n"
+				for _, e := range reg.Entries {
+					addr := "(unknown)"
+					if e.RemoteAddr != "" && e.Port != "" {
+						addr = e.RemoteAddr + ":" + e.Port
+					} else if e.RemoteAddr != "" {
+						addr = e.RemoteAddr
+					}
+					msg += fmt.Sprintf("  %-6s %s\n", strings.ToUpper(e.Type), addr)
+				}
+			} else {
+				msg += "AR Registration: (none)\n"
+			}
+		}
+
 		msg += fmt.Sprintf("Visor Version: %s\nConfig Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 
 		outputJSON := struct {
-			PublicKey      string                 `json:"public_key"`
-			IsSymmetricNAT bool                   `json:"symmetric_nat"`
-			LocalIP        string                 `json:"local_ip"`
-			PublicIP       string                 `json:"public_ip"`
-			CountryCode    string                 `json:"country_code,omitempty"`
-			RegionName     string                 `json:"region_name,omitempty"`
-			CityName       string                 `json:"city_name,omitempty"`
-			DMSGServers    []visor.DMSGServerInfo `json:"dmsg_servers"`
-			DmsgLatency    string                 `json:"dmsg_latency"`
-			VisorVersion   string                 `json:"visor_version"`
-			ConfigVersion  string                 `json:"config_version"`
-			UptimeTracker  string                 `json:"uptime_tracker"`
-			TimeOnline     float64                `json:"time_online"`
-			BuildTag       string                 `json:"build_tag"`
+			PublicKey      string                     `json:"public_key"`
+			IsSymmetricNAT bool                       `json:"symmetric_nat"`
+			LocalIP        string                     `json:"local_ip"`
+			PublicIP       string                     `json:"public_ip"`
+			CountryCode    string                     `json:"country_code,omitempty"`
+			RegionName     string                     `json:"region_name,omitempty"`
+			CityName       string                     `json:"city_name,omitempty"`
+			DMSGServers    []visor.DMSGServerInfo     `json:"dmsg_servers"`
+			DmsgLatency    string                     `json:"dmsg_latency"`
+			VisorVersion   string                     `json:"visor_version"`
+			ConfigVersion  string                     `json:"config_version"`
+			UptimeTracker  string                     `json:"uptime_tracker"`
+			TimeOnline     float64                    `json:"time_online"`
+			BuildTag       string                     `json:"build_tag"`
+			ARRegistration *visor.ARSelfRegistration  `json:"ar_registration,omitempty"`
 		}{
 			PublicKey:      summary.Overview.PubKey.String(),
 			IsSymmetricNAT: summary.Overview.IsSymmetricNAT,
@@ -183,6 +206,7 @@ var summaryCmd = &cobra.Command{
 			UptimeTracker:  summary.Health.ServicesHealth,
 			TimeOnline:     summary.Uptime,
 			BuildTag:       summary.BuildTag,
+			ARRegistration: arSelf,
 		}
 		internal.PrintOutput(cmd.Flags(), outputJSON, msg)
 	},

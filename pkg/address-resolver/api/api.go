@@ -74,6 +74,26 @@ type API struct {
 	// /health to dial SUDPH; without it those visors cannot register
 	// SUDPH at all (no host part to UDP-resolve from a dmsg:// PK URL).
 	publicUDPAddr string
+
+	// dhtMirrorStcpr / dhtMirrorSudph mirror AR bind state to the DHT
+	// under salts "addr:stcpr" / "addr:sudph". Each writes the same
+	// addrresolver.VisorData payload that AR holds for that visor;
+	// readers (visors / DHT full nodes) get the same view they would
+	// from /resolve. Both are nil when the operator hasn't configured
+	// a Redis mirror, in which case the bind handlers behave exactly
+	// as before. Two mirrors instead of one keyed by (pk, transport)
+	// avoids a merge-races on every Bind/DelBind: each transport type
+	// owns its own DHT target.
+	dhtMirrorStcpr dhtMirror
+	dhtMirrorSudph dhtMirror
+}
+
+// dhtMirror is the subset of dht.RedisMirror used by AR. Anything that
+// can write a per-PK signed entry under a salt and tombstone it on
+// deletion fits.
+type dhtMirror interface {
+	Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
+	Delete(subjectPK cipher.PubKey)
 }
 
 // HealthCheckResponse is struct of /health endpoint
@@ -99,6 +119,80 @@ type ArData struct {
 // Error is the object returned to the client when there's an error.
 type Error struct {
 	Error string `json:"error"`
+}
+
+// SetDHTMirrors wires per-transport DHT mirrors. Stcpr and sudph are
+// independent — passing nil for either skips mirroring on that path.
+// Should be called once at startup before the listeners are accepting
+// traffic; concurrent calls are not supported.
+func (a *API) SetDHTMirrors(stcpr, sudph dhtMirror) {
+	a.dhtMirrorStcpr = stcpr
+	a.dhtMirrorSudph = sudph
+}
+
+func (a *API) mirrorSTCPR(pk cipher.PubKey, data *addrresolver.VisorData) {
+	if a.dhtMirrorStcpr == nil {
+		return
+	}
+	a.dhtMirrorStcpr.Mirror(pk, data, uint64(time.Now().UnixNano())) //nolint:gosec
+}
+
+func (a *API) mirrorSUDPH(pk cipher.PubKey, data *addrresolver.VisorData) {
+	if a.dhtMirrorSudph == nil {
+		return
+	}
+	a.dhtMirrorSudph.Mirror(pk, data, uint64(time.Now().UnixNano())) //nolint:gosec
+}
+
+// BackfillDHTMirror walks AR's existing STCPR and SUDPH bindings and
+// republishes each one through the configured mirrors so the DHT view
+// converges on whatever AR's redis store already holds, rather than
+// only ever reflecting binds that arrive after startup.
+//
+// Best-effort: a single Resolve failure logs and skips that PK; a
+// GetAll failure logs and skips that whole transport type. We do not
+// abort startup — AR continues serving HTTP either way, and live
+// Bind/DelBind traffic will gradually rebuild the mirror anyway.
+func (a *API) BackfillDHTMirror(ctx context.Context, log logrus.FieldLogger) {
+	if a.dhtMirrorStcpr == nil && a.dhtMirrorSudph == nil {
+		return
+	}
+	totals := map[types.Type]int{}
+	for _, netType := range []types.Type{types.STCPR, types.SUDPH} {
+		var mirror dhtMirror
+		switch netType {
+		case types.STCPR:
+			mirror = a.dhtMirrorStcpr
+		case types.SUDPH:
+			mirror = a.dhtMirrorSudph
+		}
+		if mirror == nil {
+			continue
+		}
+		pkStrs, err := a.store.GetAll(ctx, netType)
+		if err != nil {
+			log.WithError(err).WithField("type", netType).Warn("DHT backfill: GetAll failed")
+			continue
+		}
+		for _, pkStr := range pkStrs {
+			if ctx.Err() != nil {
+				return
+			}
+			var pk cipher.PubKey
+			if err := pk.Set(pkStr); err != nil {
+				continue
+			}
+			data, err := a.store.Resolve(ctx, netType, pk)
+			if err != nil {
+				continue
+			}
+			mirror.Mirror(pk, &data, uint64(time.Now().UnixNano())) //nolint:gosec
+			totals[netType]++
+		}
+	}
+	log.WithField("stcpr", totals[types.STCPR]).
+		WithField("sudph", totals[types.SUDPH]).
+		Info("DHT backfill complete")
 }
 
 // New creates a new api. publicUDPAddr is the externally-reachable
@@ -245,6 +339,8 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	a.mirrorSTCPR(pk, &visorData)
+
 	w.WriteHeader(http.StatusOK)
 	a.logger(r).Debugf("Bound %v to %v (STCPR)", pk, remoteAddr)
 }
@@ -267,6 +363,10 @@ func (a *API) delBind(w http.ResponseWriter, r *http.Request) {
 		a.logger(r).Errorf("Failed to delete bind PK (STCPR): %v", err)
 
 		return
+	}
+
+	if a.dhtMirrorStcpr != nil {
+		a.dhtMirrorStcpr.Delete(pk)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -445,6 +545,16 @@ func (a *API) deregister(w http.ResponseWriter, r *http.Request) {
 			a.log.WithFields(logrus.Fields{"PK": pk.Hex(), "Step": "Delete Bind"}).Error("Deregistration process interrupt.")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
+		}
+		switch netType {
+		case types.STCPR:
+			if a.dhtMirrorStcpr != nil {
+				a.dhtMirrorStcpr.Delete(pk)
+			}
+		case types.SUDPH:
+			if a.dhtMirrorSudph != nil {
+				a.dhtMirrorSudph.Delete(pk)
+			}
 		}
 	}
 
@@ -683,6 +793,8 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 		return
 	}
 
+	a.mirrorSUDPH(pk, &visorData)
+
 	a.log.Infof("Bound %v to %v (SUDPH)", pk, remoteAddr)
 
 	go func(pk cipher.PubKey, fromAddr string, conn net.Conn) {
@@ -710,6 +822,9 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 					a.log.Warnf("Failed to delete bind (SUDPH) in redis %v: %v", pk, err)
 					return
 				}
+				if a.dhtMirrorSudph != nil {
+					a.dhtMirrorSudph.Delete(pk)
+				}
 				a.log.Debugf("Deleted bind %v from %v (SUDPH)", pk, remoteAddr)
 				return
 			}
@@ -723,6 +838,7 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 				if err := a.store.Bind(context.Background(), types.SUDPH, pk, newVisorData); err != nil {
 					a.log.Warnf("Failed to re-bind (SUDPH) for %v: %v", pk, err)
 				} else {
+					a.mirrorSUDPH(pk, &newVisorData)
 					a.log.Debugf("Re-bound %v to %v (SUDPH)", pk, fromAddr)
 				}
 			}
