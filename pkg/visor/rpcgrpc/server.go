@@ -657,6 +657,11 @@ func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_
 		AppName:  req.AppName,
 		MinLevel: level,
 	}
+	// Wildcard: AppName "*" disables app-scoping for diagnostic
+	// purposes — useful for verifying the stream pipe itself.
+	if req.AppName == "*" {
+		filter.AppName = ""
+	}
 
 	const subBuffer = 512
 	ch, cancel := s.visor.SubscribeLogs(filter, subBuffer)

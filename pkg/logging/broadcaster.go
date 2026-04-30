@@ -140,7 +140,12 @@ func (s *subscription) matches(e *logrus.Entry) bool {
 		if module == s.filter.AppName {
 			return true
 		}
-		for _, k := range []string{"app", "app_name"} {
+		// The visor's various subsystems use different field names for
+		// the originating app: launcher uses "cmd", proc_manager uses
+		// "appName" / "app" / "app_name" depending on the call site,
+		// router rg-scoped logs use "app_name". Match any of them to
+		// catch the full lifecycle.
+		for _, k := range []string{"app", "app_name", "appName", "cmd"} {
 			if v, ok := e.Data[k]; ok {
 				if a, ok := v.(string); ok && a == s.filter.AppName {
 					return true
