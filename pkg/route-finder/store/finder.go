@@ -44,29 +44,37 @@ func (g *Graph) GetRoute(ctx context.Context, source, destination cipher.PubKey,
 	return routes, nil
 }
 
-// MaxBFSQueue caps the size of StreamRoutes' BFS queue as a memory
-// safety net. Dense graphs with high maxLen can grow the queue
-// exponentially; once it exceeds the cap, StreamRoutes stops adding
-// new neighbors but continues draining what it has. Set to 0 to
-// disable (use with caution).
-var MaxBFSQueue = 200000
+// DefaultMaxBFSQueue is the default per-call BFS queue cap when the
+// caller of StreamRoutesWithCap passes 0 / negative. Conservative
+// enough to fit comfortably on a CLI/visor without OOMing dense
+// networks at high --max.
+const DefaultMaxBFSQueue = 200000
 
 // StreamRoutes is the streaming form of GetRoute: it yields each valid path
 // as soon as the BFS finds it, by invoking onRoute. Returning false from
 // onRoute stops the search.
 //
+// Equivalent to StreamRoutesWithCap with the default queue cap.
+func (g *Graph) StreamRoutes(ctx context.Context, source, destination cipher.PubKey, minLen, maxLen int, onRoute func(routing.Route) bool) error {
+	return g.StreamRoutesWithCap(ctx, source, destination, minLen, maxLen, DefaultMaxBFSQueue, onRoute)
+}
+
+// StreamRoutesWithCap is StreamRoutes with an explicit per-call queue
+// cap. queueCap <= 0 means unbounded (use with caution; dense graphs at
+// high maxLen can OOM).
+//
 // BFS naturally explores by increasing hop length, so paths are emitted in
-// shortest-first order — no post-search sort is needed for the streaming
-// caller, and the caller can stop after collecting enough short paths
-// without paying for deeper exploration.
+// shortest-first order — no post-search sort is needed, and the caller
+// can stop after collecting enough short paths without paying for deeper
+// exploration.
 //
 // Memory: the working set is the BFS queue + the path being emitted; we
 // never accumulate every valid path. The queue itself is capped by
-// MaxBFSQueue, so even count=0 (unbounded) requests have a hard memory
+// queueCap, so even count=0 (unbounded) requests have a hard memory
 // ceiling. When the cap is hit, neighbor expansion is suppressed —
 // already-queued paths still drain and emit, but new branches are
-// dropped, so coverage degrades while the visor stays alive.
-func (g *Graph) StreamRoutes(ctx context.Context, source, destination cipher.PubKey, minLen, maxLen int, onRoute func(routing.Route) bool) error {
+// dropped, so coverage degrades while the process stays alive.
+func (g *Graph) StreamRoutesWithCap(ctx context.Context, source, destination cipher.PubKey, minLen, maxLen, queueCap int, onRoute func(routing.Route) bool) error {
 	sourceVertex, ok := g.graph[source]
 	if !ok {
 		return ErrNoRoute
@@ -132,7 +140,7 @@ func (g *Graph) StreamRoutes(ctx context.Context, source, destination cipher.Pub
 			// Memory safety: once the queue hits the cap, stop pushing
 			// new items but let the existing ones drain. The flag is
 			// sticky so we don't oscillate.
-			if MaxBFSQueue > 0 && len(queue) >= MaxBFSQueue {
+			if queueCap > 0 && len(queue) >= queueCap {
 				queueCapHit = true
 				break
 			}
@@ -151,7 +159,7 @@ func (g *Graph) StreamRoutes(ctx context.Context, source, destination cipher.Pub
 
 	if emitted == 0 {
 		if queueCapHit {
-			return fmt.Errorf("BFS queue cap (%d) hit before any route found; try lower --max", MaxBFSQueue)
+			return fmt.Errorf("BFS queue cap (%d) hit before any route found; try lower --max", queueCap)
 		}
 		return ErrRouteNotFound
 	}

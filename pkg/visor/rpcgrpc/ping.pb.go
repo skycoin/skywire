@@ -1461,7 +1461,11 @@ type CalcRoutesRequest struct {
 	// "dht" (visor's local DHT store), or "auto" (DHT then TPD fallback).
 	Source string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
 	// TpdUrl optionally overrides the default transport-discovery URL.
-	TpdUrl        string `protobuf:"bytes,7,opt,name=tpd_url,json=tpdUrl,proto3" json:"tpd_url,omitempty"`
+	TpdUrl string `protobuf:"bytes,7,opt,name=tpd_url,json=tpdUrl,proto3" json:"tpd_url,omitempty"`
+	// QueueCap caps the per-call BFS queue size on the server. 0 falls
+	// back to the route-finder package's DefaultMaxBFSQueue. Negative
+	// means unbounded (use with caution on dense graphs).
+	QueueCap      int32 `protobuf:"varint,8,opt,name=queue_cap,json=queueCap,proto3" json:"queue_cap,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1543,6 +1547,13 @@ func (x *CalcRoutesRequest) GetTpdUrl() string {
 		return x.TpdUrl
 	}
 	return ""
+}
+
+func (x *CalcRoutesRequest) GetQueueCap() int32 {
+	if x != nil {
+		return x.QueueCap
+	}
+	return 0
 }
 
 // CalcRoute is one path the BFS found. Hops are listed in forward order
@@ -1889,7 +1900,7 @@ const file_ping_proto_rawDesc = "" +
 	"subscribed\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbe\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdb\x01\n" +
 	"\x11CalcRoutesRequest\x12\x15\n" +
 	"\x06src_pk\x18\x01 \x01(\tR\x05srcPk\x12\x15\n" +
 	"\x06dst_pk\x18\x02 \x01(\tR\x05dstPk\x12\x19\n" +
@@ -1897,7 +1908,8 @@ const file_ping_proto_rawDesc = "" +
 	"\bmax_hops\x18\x04 \x01(\x05R\amaxHops\x12\x14\n" +
 	"\x05count\x18\x05 \x01(\x05R\x05count\x12\x16\n" +
 	"\x06source\x18\x06 \x01(\tR\x06source\x12\x17\n" +
-	"\atpd_url\x18\a \x01(\tR\x06tpdUrl\"1\n" +
+	"\atpd_url\x18\a \x01(\tR\x06tpdUrl\x12\x1b\n" +
+	"\tqueue_cap\x18\b \x01(\x05R\bqueueCap\"1\n" +
 	"\tCalcRoute\x12$\n" +
 	"\x04hops\x18\x01 \x03(\v2\x10.rpcgrpc.CalcHopR\x04hops\"B\n" +
 	"\aCalcHop\x12\x13\n" +

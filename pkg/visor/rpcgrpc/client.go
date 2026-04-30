@@ -333,10 +333,11 @@ type CalcRouteCallback func(route *CalcRoute) bool
 // server's BFS is exploring an unbounded result space.
 //
 // Source PK empty means "use the receiving visor's PK".
+// queueCap caps the server's BFS queue (0 = server default).
 func (c *PingClient) StreamCalcRoutes(
 	ctx context.Context,
 	srcPK, dstPK string,
-	minHops, maxHops, count int32,
+	minHops, maxHops, count, queueCap int32,
 	source, tpdURL string,
 	cb CalcRouteCallback,
 ) error {
@@ -344,13 +345,14 @@ func (c *PingClient) StreamCalcRoutes(
 	defer cancel()
 
 	stream, err := c.client.StreamCalcRoutes(streamCtx, &CalcRoutesRequest{
-		SrcPk:   srcPK,
-		DstPk:   dstPK,
-		MinHops: minHops,
-		MaxHops: maxHops,
-		Count:   count,
-		Source:  source,
-		TpdUrl:  tpdURL,
+		SrcPk:    srcPK,
+		DstPk:    dstPK,
+		MinHops:  minHops,
+		MaxHops:  maxHops,
+		Count:    count,
+		Source:   source,
+		TpdUrl:   tpdURL,
+		QueueCap: queueCap,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start calc routes stream: %w", err)

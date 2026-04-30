@@ -788,8 +788,12 @@ func (s *PingServer) StreamCalcRoutes(req *CalcRoutesRequest, stream PingService
 		return fmt.Errorf("build graph: %w", err)
 	}
 
+	queueCap := int(req.QueueCap)
+	if queueCap == 0 {
+		queueCap = routeFinder.DefaultMaxBFSQueue
+	}
 	sent := int32(0)
-	streamErr := graph.StreamRoutes(stream.Context(), srcPK, dstPK, minHops, maxHops, func(r routing.Route) bool {
+	streamErr := graph.StreamRoutesWithCap(stream.Context(), srcPK, dstPK, minHops, maxHops, queueCap, func(r routing.Route) bool {
 		out := &CalcRoute{Hops: make([]*CalcHop, 0, len(r.Hops))}
 		for _, h := range r.Hops {
 			out.Hops = append(out.Hops, &CalcHop{

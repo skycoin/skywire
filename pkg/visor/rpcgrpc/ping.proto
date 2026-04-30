@@ -238,6 +238,10 @@ message CalcRoutesRequest {
   string source = 6;
   // TpdUrl optionally overrides the default transport-discovery URL.
   string tpd_url = 7;
+  // QueueCap caps the per-call BFS queue size on the server. 0 falls
+  // back to the route-finder package's DefaultMaxBFSQueue. Negative
+  // means unbounded (use with caution on dense graphs).
+  int32 queue_cap = 8;
 }
 
 // CalcRoute is one path the BFS found. Hops are listed in forward order

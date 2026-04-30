@@ -32,14 +32,15 @@ import (
 )
 
 var (
-	calcEnable  bool
-	calcDisable bool
-	calcTimeout time.Duration
-	tpdURL      string
-	calcMinHops uint16
-	calcMaxHops uint16
-	calcCount   int
-	calcSource  string
+	calcEnable   bool
+	calcDisable  bool
+	calcTimeout  time.Duration
+	tpdURL       string
+	calcMinHops  uint16
+	calcMaxHops  uint16
+	calcCount    int
+	calcSource   string
+	calcQueueCap int
 )
 
 func init() {
@@ -51,6 +52,7 @@ func init() {
 	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
 	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
 	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP), dht (visor's local DHT store), auto (DHT then TPD)")
+	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
 	clirpc.RegisterFetchFlags(calcCmd)
 }
 
@@ -156,7 +158,7 @@ var calcCmd = &cobra.Command{
 		// path that can handle --count 0 (unbounded) on dense graphs
 		// without OOMing the CLI.
 		if rpcClient != nil && strings.ToLower(calcSource) != "dht" {
-			if err := streamRoutesViaGRPC(ctx, cmd, srcPK, dstPK, minHops, calcMaxHops, calcCount, calcSource, tpdURL); err == nil {
+			if err := streamRoutesViaGRPC(ctx, cmd, srcPK, dstPK, minHops, calcMaxHops, calcCount, calcQueueCap, calcSource, tpdURL); err == nil {
 				return
 			} else if !isFallbackEligible(err) {
 				internal.PrintFatalError(cmd.Flags(), err)
@@ -252,7 +254,7 @@ func streamRoutesViaGRPC(
 	cmd *cobra.Command,
 	srcPK, dstPK cipher.PubKey,
 	minHops, maxHops uint16,
-	count int,
+	count, queueCap int,
 	source, tpdU string,
 ) error {
 	grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
@@ -298,9 +300,10 @@ func streamRoutesViaGRPC(
 		ctx,
 		srcPK.String(),
 		dstPK.String(),
-		int32(minHops), //nolint:gosec
-		int32(maxHops), //nolint:gosec
-		int32(count),   //nolint:gosec
+		int32(minHops),  //nolint:gosec
+		int32(maxHops),  //nolint:gosec
+		int32(count),    //nolint:gosec
+		int32(queueCap), //nolint:gosec
 		source,
 		tpdU,
 		cb,
