@@ -2,6 +2,7 @@ package dht
 
 import (
 	"errors"
+	"sort"
 	"sync"
 	"time"
 
@@ -269,7 +270,11 @@ func (s *Store) Refresh(target NodeID) {
 
 // GetItems returns items matching the given salt filter and sequence threshold.
 // If salt is empty, all items are returned. Only items with Seq > sinceSeq
-// are included. Results are capped at limit (default 1000).
+// are included. Results are sorted by Seq ascending (with target key as a
+// stable tiebreaker for items with the same Seq) and capped at limit
+// (default 1000). The ascending sort makes Seq-based cursor pagination
+// safe: callers can advance sinceSeq to the highest Seq seen and the next
+// batch will return strictly later items without skipping anything.
 // Returns items, their storage target keys, and whether more items exist.
 func (s *Store) GetItems(salt string, sinceSeq uint64, limit int) ([]MutableItem, []NodeID, bool) {
 	if limit <= 0 {
@@ -278,8 +283,11 @@ func (s *Store) GetItems(salt string, sinceSeq uint64, limit int) ([]MutableItem
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var items []MutableItem
-	var targets []NodeID
+	type entry struct {
+		item   MutableItem
+		target NodeID
+	}
+	candidates := make([]entry, 0)
 	for target, si := range s.items {
 		if salt != "" && string(si.item.Salt) != salt {
 			continue
@@ -287,13 +295,44 @@ func (s *Store) GetItems(salt string, sinceSeq uint64, limit int) ([]MutableItem
 		if si.item.Seq <= sinceSeq {
 			continue
 		}
-		items = append(items, si.item)
-		targets = append(targets, target)
-		if len(items) >= limit+1 {
-			return items[:limit], targets[:limit], true // hasMore
-		}
+		candidates = append(candidates, entry{item: si.item, target: target})
 	}
-	return items, targets, false
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].item.Seq != candidates[j].item.Seq {
+			return candidates[i].item.Seq < candidates[j].item.Seq
+		}
+		// Stable order on Seq ties so paginated callers see a deterministic
+		// boundary if many items share a Seq value.
+		a, b := candidates[i].target, candidates[j].target
+		for k := range a {
+			if a[k] != b[k] {
+				return a[k] < b[k]
+			}
+		}
+		return false
+	})
+
+	hasMore := len(candidates) > limit
+	if hasMore {
+		// Don't split a Seq tie across batches: the cursor returned to the
+		// caller is the last item's Seq, and items with that same Seq in
+		// later batches would be filtered out by `Seq > sinceSeq`. Extend
+		// the batch to swallow the entire tie at the boundary.
+		end := limit
+		boundarySeq := candidates[end-1].item.Seq
+		for end < len(candidates) && candidates[end].item.Seq == boundarySeq {
+			end++
+		}
+		hasMore = end < len(candidates)
+		candidates = candidates[:end]
+	}
+	items := make([]MutableItem, len(candidates))
+	targets := make([]NodeID, len(candidates))
+	for i, c := range candidates {
+		items[i] = c.item
+		targets[i] = c.target
+	}
+	return items, targets, hasMore
 }
 
 // Len returns the number of stored items.

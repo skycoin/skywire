@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -503,10 +504,24 @@ func parseUint(cmdFlags *pflag.FlagSet, name, v string, bitSize int) uint64 {
 	return i
 }
 
+var (
+	groupsFilter string
+	groupsHops   bool
+)
+
+func init() {
+	groupsCmd.Flags().StringVar(&groupsFilter, "filter", "all",
+		"role filter: all | initiator | responder")
+	groupsCmd.Flags().BoolVar(&groupsHops, "hops", false,
+		"also print the full hop path for each route group")
+}
+
 var groupsCmd = &cobra.Command{
 	Use:   "groups",
 	Short: "List active route groups",
-	Long:  "List active route groups with their consume and forward rules",
+	Long: `List active route groups with their descriptor, rule IDs, and
+the role this visor played in setup (initiator = we dialed, responder =
+we accepted). Use --hops to also print the full forward path.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -516,6 +531,30 @@ var groupsCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get route groups: %w", err))
 		}
+
+		switch strings.ToLower(groupsFilter) {
+		case "", "all":
+		case "initiator":
+			filtered := rgs[:0]
+			for _, rg := range rgs {
+				if rg.Initiator {
+					filtered = append(filtered, rg)
+				}
+			}
+			rgs = filtered
+		case "responder":
+			filtered := rgs[:0]
+			for _, rg := range rgs {
+				if !rg.Initiator {
+					filtered = append(filtered, rg)
+				}
+			}
+			rgs = filtered
+		default:
+			internal.PrintFatalError(cmd.Flags(),
+				fmt.Errorf("invalid --filter %q; expected all|initiator|responder", groupsFilter))
+		}
+
 		if len(rgs) == 0 {
 			internal.PrintOutput(cmd.Flags(), rgs, "No active route groups\n")
 			return
@@ -523,22 +562,43 @@ var groupsCmd = &cobra.Command{
 
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
-		fmt.Fprintln(w, "index\tlocal_pk\tremote_pk\tlocal_port\tremote_port\tfwd_id\tconsume_id\ttransport") //nolint:errcheck
+		fmt.Fprintln(w, "index\trole\tlocal_pk\tremote_pk\tlocal_port\tremote_port\tfwd_id\tconsume_id\ttransport") //nolint:errcheck
 		for i, rg := range rgs {
 			tpID := rg.FwdNextTpID
 			if tpID == "" {
 				tpID = "-"
 			}
-			fmt.Fprintf(w, "%d\t%s\t%s\t%d\t%d\t%d\t%d\t%s\n", //nolint:errcheck
+			role := "responder"
+			if rg.Initiator {
+				role = "initiator"
+			}
+			// Local end is whichever side's the destination of the consume
+			// rule's descriptor — i.e., DstPK in the descriptor as stored.
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%s\n", //nolint:errcheck
 				i,
-				rg.Desc.SrcPK,
+				role,
 				rg.Desc.DstPK,
-				rg.Desc.SrcPort,
+				rg.Desc.SrcPK,
 				rg.Desc.DstPort,
+				rg.Desc.SrcPort,
 				rg.FwdRuleID,
 				rg.ConsumeRuleID,
 				tpID,
 			)
+			if groupsHops {
+				if len(rg.Hops) == 0 {
+					fmt.Fprintln(w, "    hops:\t(not recorded)") //nolint:errcheck
+					continue
+				}
+				for j, h := range rg.Hops {
+					tpType := h.TpType
+					if tpType == "" {
+						tpType = "?"
+					}
+					fmt.Fprintf(w, "    hop %d/%d:\t%s -> %s @ %s (%s)\n", //nolint:errcheck
+						j+1, len(rg.Hops), h.From, h.To, h.TpID, tpType)
+				}
+			}
 		}
 		internal.Catch(cmd.Flags(), w.Flush())
 		internal.PrintOutput(cmd.Flags(), rgs, b.String())
