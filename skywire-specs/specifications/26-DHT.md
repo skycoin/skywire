@@ -202,6 +202,8 @@ The visor exposes the DHT via `skywire cli visor dht`:
 | `dht list [--salt s] [--with-target]` | Dump local store as JSON. `--with-target` emits `{target, value}` so listings can be diffed against HTTP discoveries | Mainly full nodes — non-full nodes only hold items near their own ID |
 | `dht sync [<full-node-pk>] [--salt s]` | One-shot paginated pull from a remote full node into the local store. Pull-only, no push | All nodes — but most useful for full nodes that want to fast-forward without waiting for the periodic reconcile |
 | `dht full-node <on\|off>` | Toggle storage mode at runtime | Persistent toggle is via the `full_node` config flag |
+| `dht peers` | Dump every K-bucket peer (PK, NodeID, last-seen, bucket index) | All nodes — primary debugging tool for "is the DHT actually connected to anyone?" |
+| `dht reconcile <full-node-pk> [--salt s]` | Manually run a one-shot pull+push reconcile against a specific peer. Restricted to peers in `BootstrapPKs ∪ FindAdvertisedFullNodes` (signed full-node attestation required) | Full nodes — debugging cross-peer divergence or forcing convergence after a config change |
 
 ## Configuration
 
