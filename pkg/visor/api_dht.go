@@ -3,6 +3,7 @@ package visor
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
@@ -91,4 +92,60 @@ func (v *Visor) DHTGet(pk string, salt string) ([]byte, error) {
 		return nil, err
 	}
 	return item.V, nil
+}
+
+// DHTPeerInfo is one entry in the DHT routing-table dump.
+type DHTPeerInfo struct {
+	PK       cipher.PubKey `json:"pk"`
+	NodeID   string        `json:"node_id"`
+	LastSeen time.Time     `json:"last_seen"`
+	// Bucket is the index of the K-bucket holding this peer (= common
+	// prefix length with self_id, 0..255).
+	Bucket int `json:"bucket"`
+}
+
+// DHTPeers returns every peer currently in this node's routing table.
+// Useful for "is the DHT actually connected to anyone?" debugging that
+// `dht status` (which only shows the count) can't answer.
+func (v *Visor) DHTPeers() ([]DHTPeerInfo, error) {
+	if v.dhtNode == nil {
+		return nil, fmt.Errorf("DHT node not running")
+	}
+	rt := v.dhtNode.RoutingTable()
+	peers := rt.AllPeers()
+	out := make([]DHTPeerInfo, len(peers))
+	for i, p := range peers {
+		out[i] = DHTPeerInfo{
+			PK:       p.PK,
+			NodeID:   p.ID.String(),
+			LastSeen: p.LastSeen,
+			Bucket:   rt.BucketIndex(p.ID),
+		}
+	}
+	return out, nil
+}
+
+// DHTReconcile manually runs one pull+push reconcile pass against a
+// remote peer. Returns (pulled, pushed) item counts.
+//
+// Restricted to peers that the deployment trusts as full nodes
+// (BootstrapPKs ∪ FindAdvertisedFullNodes) because the receiver-side
+// PutMirror handler stores anything we push without distance/admission
+// gating. Pushing to a non-full-node would silently overflow its store.
+func (v *Visor) DHTReconcile(remotePK string, salt string) (int, int, error) {
+	if v.dhtNode == nil {
+		return 0, 0, fmt.Errorf("DHT node not running")
+	}
+	var targetPK cipher.PubKey
+	if err := targetPK.Set(remotePK); err != nil {
+		return 0, 0, fmt.Errorf("invalid PK: %w", err)
+	}
+
+	if !v.dhtNode.IsTrustedFullNode(targetPK) {
+		return 0, 0, fmt.Errorf("peer %s is not a known full node (not in bootstrap config and no fresh fullnode advert)", targetPK.String())
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	return v.dhtNode.Reconcile(ctx, targetPK, salt)
 }

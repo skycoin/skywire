@@ -63,16 +63,33 @@ func (d *SvcAdapter) Lookup(ctx context.Context, pk cipher.PubKey, serviceType s
 }
 
 // LookupAll retrieves the full service list for a visor PK.
+//
+// Accepts both shapes that historically appear under the svc salt:
+//
+//  1. The canonical shape this adapter writes: []servicedisc.Service.
+//  2. The legacy single-Service shape some older deployment SD builds
+//     wrote (one Service object, not wrapped in an array).
+//
+// Hardened to match autoconnect.fetchPubAddresses, which has tolerated
+// both shapes inline. Without this, any caller going through
+// LookupAll instead of reading the raw store loses the legacy entries
+// — the visor's service-discovery DHT path silently underreports.
 func (d *SvcAdapter) LookupAll(ctx context.Context, pk cipher.PubKey) ([]servicedisc.Service, error) {
 	item, err := d.node.Get(ctx, pk, svcSalt)
 	if err != nil {
 		return nil, err
 	}
+	// Try canonical list shape first.
 	var services []servicedisc.Service
-	if err := json.Unmarshal(item.V, &services); err != nil {
-		return nil, fmt.Errorf("dht svc: unmarshal: %w", err)
+	if err := json.Unmarshal(item.V, &services); err == nil {
+		return services, nil
 	}
-	return services, nil
+	// Fall back to single-object shape (legacy publishers).
+	var single servicedisc.Service
+	if err := json.Unmarshal(item.V, &single); err == nil {
+		return []servicedisc.Service{single}, nil
+	}
+	return nil, fmt.Errorf("dht svc: value matches neither []Service nor Service")
 }
 
 // Deregister clears the visor's service list by publishing an empty array
