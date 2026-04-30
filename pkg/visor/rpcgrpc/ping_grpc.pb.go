@@ -28,6 +28,7 @@ const (
 	PingService_GetSystemStats_FullMethodName          = "/rpcgrpc.PingService/GetSystemStats"
 	PingService_StreamRemoteSystemStats_FullMethodName = "/rpcgrpc.PingService/StreamRemoteSystemStats"
 	PingService_StreamAppLogs_FullMethodName           = "/rpcgrpc.PingService/StreamAppLogs"
+	PingService_StreamCalcRoutes_FullMethodName        = "/rpcgrpc.PingService/StreamCalcRoutes"
 )
 
 // PingServiceClient is the client API for PingService service.
@@ -57,6 +58,11 @@ type PingServiceClient interface {
 	// Used by 'skywire-cli proxy start --verbose' to surface what the visor is
 	// doing while spinning up an app's transports/routes.
 	StreamAppLogs(ctx context.Context, in *AppLogStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AppLogEntry], error)
+	// StreamCalcRoutes runs a route-finder BFS server-side and streams each
+	// valid route back as it's discovered. Lets the CLI display routes
+	// incrementally and avoids accumulating every result in memory before
+	// returning — important when count is large or unbounded.
+	StreamCalcRoutes(ctx context.Context, in *CalcRoutesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CalcRoute], error)
 }
 
 type pingServiceClient struct {
@@ -220,6 +226,25 @@ func (c *pingServiceClient) StreamAppLogs(ctx context.Context, in *AppLogStreamR
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamAppLogsClient = grpc.ServerStreamingClient[AppLogEntry]
 
+func (c *pingServiceClient) StreamCalcRoutes(ctx context.Context, in *CalcRoutesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CalcRoute], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[7], PingService_StreamCalcRoutes_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CalcRoutesRequest, CalcRoute]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamCalcRoutesClient = grpc.ServerStreamingClient[CalcRoute]
+
 // PingServiceServer is the server API for PingService service.
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility.
@@ -247,6 +272,11 @@ type PingServiceServer interface {
 	// Used by 'skywire-cli proxy start --verbose' to surface what the visor is
 	// doing while spinning up an app's transports/routes.
 	StreamAppLogs(*AppLogStreamRequest, grpc.ServerStreamingServer[AppLogEntry]) error
+	// StreamCalcRoutes runs a route-finder BFS server-side and streams each
+	// valid route back as it's discovered. Lets the CLI display routes
+	// incrementally and avoids accumulating every result in memory before
+	// returning — important when count is large or unbounded.
+	StreamCalcRoutes(*CalcRoutesRequest, grpc.ServerStreamingServer[CalcRoute]) error
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -283,6 +313,9 @@ func (UnimplementedPingServiceServer) StreamRemoteSystemStats(*RemoteSystemStats
 }
 func (UnimplementedPingServiceServer) StreamAppLogs(*AppLogStreamRequest, grpc.ServerStreamingServer[AppLogEntry]) error {
 	return status.Error(codes.Unimplemented, "method StreamAppLogs not implemented")
+}
+func (UnimplementedPingServiceServer) StreamCalcRoutes(*CalcRoutesRequest, grpc.ServerStreamingServer[CalcRoute]) error {
+	return status.Error(codes.Unimplemented, "method StreamCalcRoutes not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
 func (UnimplementedPingServiceServer) testEmbeddedByValue()                     {}
@@ -418,6 +451,17 @@ func _PingService_StreamAppLogs_Handler(srv interface{}, stream grpc.ServerStrea
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamAppLogsServer = grpc.ServerStreamingServer[AppLogEntry]
 
+func _PingService_StreamCalcRoutes_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(CalcRoutesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamCalcRoutes(m, &grpc.GenericServerStream[CalcRoutesRequest, CalcRoute]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamCalcRoutesServer = grpc.ServerStreamingServer[CalcRoute]
+
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -468,6 +512,11 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamAppLogs",
 			Handler:       _PingService_StreamAppLogs_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamCalcRoutes",
+			Handler:       _PingService_StreamCalcRoutes_Handler,
 			ServerStreams: true,
 		},
 	},

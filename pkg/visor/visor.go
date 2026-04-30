@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 	"github.com/toqueteos/webbrowser"
@@ -719,6 +720,57 @@ func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.En
 // tpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
+}
+
+// LocalPK returns this visor's public key. Used by gRPC handlers that need
+// to default the source PK on calc-route style requests.
+func (v *Visor) LocalPK() cipher.PubKey {
+	return v.conf.PK
+}
+
+// FetchAllTransportEntries pulls every transport from the configured TPD
+// client AND merges in the local transport manager's view. The TPD bulk
+// endpoint can lag behind reality (its cache is async-refreshed), so a
+// transport this visor has actively negotiated may not be present yet.
+// The local transport manager is authoritative for "what this visor can
+// actually dial right now"; merging avoids missed 1-hop routes in calc
+// responses while the BFS depth limit + streaming output bound memory.
+//
+// Dedup is by transport ID — TPD's view is preferred when it has a
+// matching entry (it carries label/QoS metadata the local view lacks).
+func (v *Visor) FetchAllTransportEntries(ctx context.Context) ([]*transport.Entry, error) {
+	tpD := v.tpDiscClient()
+	if tpD == nil {
+		return nil, errors.New("transport discovery client not available")
+	}
+	entries, err := tpD.GetAllTransports(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if v.tpM == nil {
+		return entries, nil
+	}
+
+	seen := make(map[uuid.UUID]struct{}, len(entries))
+	for _, e := range entries {
+		if e != nil {
+			seen[e.ID] = struct{}{}
+		}
+	}
+	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp == nil {
+			return true
+		}
+		if _, dup := seen[tp.Entry.ID]; dup {
+			return true
+		}
+		seen[tp.Entry.ID] = struct{}{}
+		entry := tp.Entry
+		entries = append(entries, &entry)
+		return true
+	})
+	return entries, nil
 }
 
 //go:embed static

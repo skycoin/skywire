@@ -1439,6 +1439,219 @@ func (x *AppLogEntry) GetSubscribed() bool {
 	return false
 }
 
+// CalcRoutesRequest configures server-side route calculation streaming.
+type CalcRoutesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// SrcPk is the source visor public key. Empty means use the receiving
+	// visor's own PK (the common case — calc routes from this visor).
+	SrcPk string `protobuf:"bytes,1,opt,name=src_pk,json=srcPk,proto3" json:"src_pk,omitempty"`
+	// DstPk is the destination visor public key. Required.
+	DstPk string `protobuf:"bytes,2,opt,name=dst_pk,json=dstPk,proto3" json:"dst_pk,omitempty"`
+	// MinHops is the minimum hop count. 0 falls back to the visor's
+	// routing.min_hops, then 1.
+	MinHops int32 `protobuf:"varint,3,opt,name=min_hops,json=minHops,proto3" json:"min_hops,omitempty"`
+	// MaxHops is the maximum hop count. 0 falls back to a safe default.
+	MaxHops int32 `protobuf:"varint,4,opt,name=max_hops,json=maxHops,proto3" json:"max_hops,omitempty"`
+	// Count caps how many routes to return. 0 means unbounded (the BFS
+	// runs until the search space is exhausted; the streaming wire
+	// protocol means the caller can still dump them as they arrive
+	// without buffering the whole set).
+	Count int32 `protobuf:"varint,5,opt,name=count,proto3" json:"count,omitempty"`
+	// Source selects the transport-graph data source. "tpd" (HTTP),
+	// "dht" (visor's local DHT store), or "auto" (DHT then TPD fallback).
+	Source string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	// TpdUrl optionally overrides the default transport-discovery URL.
+	TpdUrl        string `protobuf:"bytes,7,opt,name=tpd_url,json=tpdUrl,proto3" json:"tpd_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalcRoutesRequest) Reset() {
+	*x = CalcRoutesRequest{}
+	mi := &file_ping_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalcRoutesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalcRoutesRequest) ProtoMessage() {}
+
+func (x *CalcRoutesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalcRoutesRequest.ProtoReflect.Descriptor instead.
+func (*CalcRoutesRequest) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CalcRoutesRequest) GetSrcPk() string {
+	if x != nil {
+		return x.SrcPk
+	}
+	return ""
+}
+
+func (x *CalcRoutesRequest) GetDstPk() string {
+	if x != nil {
+		return x.DstPk
+	}
+	return ""
+}
+
+func (x *CalcRoutesRequest) GetMinHops() int32 {
+	if x != nil {
+		return x.MinHops
+	}
+	return 0
+}
+
+func (x *CalcRoutesRequest) GetMaxHops() int32 {
+	if x != nil {
+		return x.MaxHops
+	}
+	return 0
+}
+
+func (x *CalcRoutesRequest) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *CalcRoutesRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *CalcRoutesRequest) GetTpdUrl() string {
+	if x != nil {
+		return x.TpdUrl
+	}
+	return ""
+}
+
+// CalcRoute is one path the BFS found. Hops are listed in forward order
+// from src to dst; the caller can derive the reverse by mirroring.
+type CalcRoute struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hops          []*CalcHop             `protobuf:"bytes,1,rep,name=hops,proto3" json:"hops,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalcRoute) Reset() {
+	*x = CalcRoute{}
+	mi := &file_ping_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalcRoute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalcRoute) ProtoMessage() {}
+
+func (x *CalcRoute) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalcRoute.ProtoReflect.Descriptor instead.
+func (*CalcRoute) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *CalcRoute) GetHops() []*CalcHop {
+	if x != nil {
+		return x.Hops
+	}
+	return nil
+}
+
+// CalcHop is one edge in a route.
+type CalcHop struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TpId          string                 `protobuf:"bytes,1,opt,name=tp_id,json=tpId,proto3" json:"tp_id,omitempty"`
+	From          string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To            string                 `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalcHop) Reset() {
+	*x = CalcHop{}
+	mi := &file_ping_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalcHop) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalcHop) ProtoMessage() {}
+
+func (x *CalcHop) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalcHop.ProtoReflect.Descriptor instead.
+func (*CalcHop) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CalcHop) GetTpId() string {
+	if x != nil {
+		return x.TpId
+	}
+	return ""
+}
+
+func (x *CalcHop) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *CalcHop) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
 // ProcessStat contains information about a running process
 type ProcessStat struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1455,7 +1668,7 @@ type ProcessStat struct {
 
 func (x *ProcessStat) Reset() {
 	*x = ProcessStat{}
-	mi := &file_ping_proto_msgTypes[18]
+	mi := &file_ping_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1467,7 +1680,7 @@ func (x *ProcessStat) String() string {
 func (*ProcessStat) ProtoMessage() {}
 
 func (x *ProcessStat) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[18]
+	mi := &file_ping_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1480,7 +1693,7 @@ func (x *ProcessStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessStat.ProtoReflect.Descriptor instead.
 func (*ProcessStat) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{18}
+	return file_ping_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ProcessStat) GetPid() int32 {
@@ -1676,7 +1889,21 @@ const file_ping_proto_rawDesc = "" +
 	"subscribed\x1a9\n" +
 	"\vFieldsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xce\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbe\x01\n" +
+	"\x11CalcRoutesRequest\x12\x15\n" +
+	"\x06src_pk\x18\x01 \x01(\tR\x05srcPk\x12\x15\n" +
+	"\x06dst_pk\x18\x02 \x01(\tR\x05dstPk\x12\x19\n" +
+	"\bmin_hops\x18\x03 \x01(\x05R\aminHops\x12\x19\n" +
+	"\bmax_hops\x18\x04 \x01(\x05R\amaxHops\x12\x14\n" +
+	"\x05count\x18\x05 \x01(\x05R\x05count\x12\x16\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\x12\x17\n" +
+	"\atpd_url\x18\a \x01(\tR\x06tpdUrl\"1\n" +
+	"\tCalcRoute\x12$\n" +
+	"\x04hops\x18\x01 \x03(\v2\x10.rpcgrpc.CalcHopR\x04hops\"B\n" +
+	"\aCalcHop\x12\x13\n" +
+	"\x05tp_id\x18\x01 \x01(\tR\x04tpId\x12\x12\n" +
+	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x03 \x01(\tR\x02to\"\xce\x01\n" +
 	"\vProcessStat\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
@@ -1686,7 +1913,7 @@ const file_ping_proto_rawDesc = "" +
 	"\n" +
 	"memory_rss\x18\x05 \x01(\x04R\tmemoryRss\x12\x1a\n" +
 	"\busername\x18\x06 \x01(\tR\busername\x12\x16\n" +
-	"\x06status\x18\a \x01(\tR\x06status2\xaa\x05\n" +
+	"\x06status\x18\a \x01(\tR\x06status2\xf0\x05\n" +
 	"\vPingService\x129\n" +
 	"\n" +
 	"StreamPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12=\n" +
@@ -1697,7 +1924,8 @@ const file_ping_proto_rawDesc = "" +
 	"\x11StreamSystemStats\x12\x1b.rpcgrpc.SystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01\x12C\n" +
 	"\x0eGetSystemStats\x12\x1b.rpcgrpc.SystemStatsRequest\x1a\x14.rpcgrpc.SystemStats\x12T\n" +
 	"\x17StreamRemoteSystemStats\x12!.rpcgrpc.RemoteSystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01\x12E\n" +
-	"\rStreamAppLogs\x12\x1c.rpcgrpc.AppLogStreamRequest\x1a\x14.rpcgrpc.AppLogEntry0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
+	"\rStreamAppLogs\x12\x1c.rpcgrpc.AppLogStreamRequest\x1a\x14.rpcgrpc.AppLogEntry0\x01\x12D\n" +
+	"\x10StreamCalcRoutes\x12\x1a.rpcgrpc.CalcRoutesRequest\x1a\x12.rpcgrpc.CalcRoute0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
 
 var (
 	file_ping_proto_rawDescOnce sync.Once
@@ -1711,7 +1939,7 @@ func file_ping_proto_rawDescGZIP() []byte {
 	return file_ping_proto_rawDescData
 }
 
-var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_ping_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: rpcgrpc.PingRequest
 	(*PingResult)(nil),               // 1: rpcgrpc.PingResult
@@ -1731,8 +1959,11 @@ var file_ping_proto_goTypes = []any{
 	(*TempStat)(nil),                 // 15: rpcgrpc.TempStat
 	(*AppLogStreamRequest)(nil),      // 16: rpcgrpc.AppLogStreamRequest
 	(*AppLogEntry)(nil),              // 17: rpcgrpc.AppLogEntry
-	(*ProcessStat)(nil),              // 18: rpcgrpc.ProcessStat
-	nil,                              // 19: rpcgrpc.AppLogEntry.FieldsEntry
+	(*CalcRoutesRequest)(nil),        // 18: rpcgrpc.CalcRoutesRequest
+	(*CalcRoute)(nil),                // 19: rpcgrpc.CalcRoute
+	(*CalcHop)(nil),                  // 20: rpcgrpc.CalcHop
+	(*ProcessStat)(nil),              // 21: rpcgrpc.ProcessStat
+	nil,                              // 22: rpcgrpc.AppLogEntry.FieldsEntry
 }
 var file_ping_proto_depIdxs = []int32{
 	4,  // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
@@ -1745,31 +1976,34 @@ var file_ping_proto_depIdxs = []int32{
 	13, // 7: rpcgrpc.SystemStats.disks:type_name -> rpcgrpc.DiskStat
 	14, // 8: rpcgrpc.SystemStats.network:type_name -> rpcgrpc.NetworkStat
 	15, // 9: rpcgrpc.SystemStats.temps:type_name -> rpcgrpc.TempStat
-	18, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
-	19, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
-	0,  // 12: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
-	0,  // 13: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	5,  // 14: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	5,  // 15: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	2,  // 16: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
-	7,  // 17: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	7,  // 18: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	8,  // 19: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
-	16, // 20: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
-	1,  // 21: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1,  // 22: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	6,  // 23: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	6,  // 24: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	3,  // 25: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
-	9,  // 26: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 27: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 28: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
-	17, // 29: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
-	21, // [21:30] is the sub-list for method output_type
-	12, // [12:21] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	21, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
+	22, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
+	20, // 12: rpcgrpc.CalcRoute.hops:type_name -> rpcgrpc.CalcHop
+	0,  // 13: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
+	0,  // 14: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
+	5,  // 15: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	5,  // 16: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	2,  // 17: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
+	7,  // 18: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	7,  // 19: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	8,  // 20: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
+	16, // 21: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
+	18, // 22: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
+	1,  // 23: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1,  // 24: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6,  // 25: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6,  // 26: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3,  // 27: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	9,  // 28: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 29: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 30: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
+	17, // 31: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
+	19, // 32: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
+	23, // [23:33] is the sub-list for method output_type
+	13, // [13:23] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_ping_proto_init() }
@@ -1783,7 +2017,7 @@ func file_ping_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -320,6 +320,60 @@ func (c *PingClient) GetSystemStats(ctx context.Context, includeProcesses bool, 
 // AppLogCallback is called for each log entry received from the stream.
 type AppLogCallback func(entry *AppLogEntry)
 
+// CalcRouteCallback is called once per route received from
+// StreamCalcRoutes. Returning false stops further reception (the
+// underlying gRPC stream is canceled, signaling the server to stop
+// the BFS as well).
+type CalcRouteCallback func(route *CalcRoute) bool
+
+// StreamCalcRoutes runs a server-side route-finder BFS and invokes cb
+// for each path the server emits. count == 0 means "until exhausted";
+// the streaming wire shape lets the caller dump every route as it
+// arrives without buffering the whole set, which matters when the
+// server's BFS is exploring an unbounded result space.
+//
+// Source PK empty means "use the receiving visor's PK".
+func (c *PingClient) StreamCalcRoutes(
+	ctx context.Context,
+	srcPK, dstPK string,
+	minHops, maxHops, count int32,
+	source, tpdURL string,
+	cb CalcRouteCallback,
+) error {
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	stream, err := c.client.StreamCalcRoutes(streamCtx, &CalcRoutesRequest{
+		SrcPk:   srcPK,
+		DstPk:   dstPK,
+		MinHops: minHops,
+		MaxHops: maxHops,
+		Count:   count,
+		Source:  source,
+		TpdUrl:  tpdURL,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start calc routes stream: %w", err)
+	}
+
+	for {
+		route, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stream error: %w", err)
+		}
+		if !cb(route) {
+			// Cancel the stream context so the server-side BFS
+			// stops searching too — saves work on the visor when
+			// the user has seen enough.
+			cancel()
+			return nil
+		}
+	}
+}
+
 // StreamAppLogs subscribes to the visor's master logger and calls cb
 // for each entry that matches the filter. Blocks until ctx is canceled
 // or the stream errors. Used by 'proxy start --verbose'.
