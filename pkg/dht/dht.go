@@ -409,15 +409,23 @@ func (n *Node) rpcPutMirror(ctx context.Context, p Peer, item MutableItem, targe
 // key. Returns the count of items mirrored and the first call-level
 // error encountered (partial progress is reported as a return value).
 //
-// Used by both the manual `dht sync` RPC and the periodic full-node
-// pull loop (fullNodePullLoop) so they share identical semantics.
+// Used by the manual `dht sync` RPC. The full-node pull loop uses
+// Reconcile, which is SyncFrom plus a write-back phase.
 func (n *Node) SyncFrom(ctx context.Context, remotePK cipher.PubKey, salt string) (int, error) {
+	stored, _, err := n.syncFromCollect(ctx, remotePK, salt)
+	return stored, err
+}
+
+// syncFromCollect is SyncFrom that also returns the set of target keys
+// seen on the remote, for callers that need to compute a delta.
+func (n *Node) syncFromCollect(ctx context.Context, remotePK cipher.PubKey, salt string) (int, map[NodeID]struct{}, error) {
 	stored := 0
+	seen := make(map[NodeID]struct{})
 	var cursor uint64
 	for {
 		resp, err := n.GetItemsFrom(ctx, remotePK, salt, cursor, 0)
 		if err != nil {
-			return stored, err
+			return stored, seen, err
 		}
 		var maxSeq uint64
 		for i, item := range resp.Items {
@@ -425,12 +433,14 @@ func (n *Node) SyncFrom(ctx context.Context, remotePK cipher.PubKey, salt string
 			// have item.K = mirror's PK (not subject), so item.Target()
 			// would point to the wrong storage slot.
 			if i < len(resp.Targets) {
+				seen[resp.Targets[i]] = struct{}{}
 				n.store.PutMirror(resp.Targets[i], item)
 				stored++
 			} else {
 				// Old servers don't send targets — fall back to the
 				// item's own (possibly self-keyed) target.
 				if putErr := n.store.Put(item); putErr == nil {
+					seen[item.Target()] = struct{}{}
 					stored++
 				}
 			}
@@ -443,7 +453,71 @@ func (n *Node) SyncFrom(ctx context.Context, remotePK cipher.PubKey, salt string
 		}
 		cursor = maxSeq
 	}
-	return stored, nil
+	return stored, seen, nil
+}
+
+// reconcile pulls from a remote peer (like SyncFrom) and then pushes
+// back any items in our store that the remote didn't report. The push
+// phase is what makes full-node-to-full-node coverage actually
+// converge: with pull alone, each full node ends up with the union of
+// every other full node's data, but the source peers themselves never
+// see what they were missing.
+//
+// Lowercase by design: callers must verify that remotePK is a full
+// node before invoking, since the receiver-side PutMirror handler
+// stores anything we push without distance/admission gating. The only
+// in-tree caller (fullNodePullOnce) iterates BootstrapPKs, which the
+// deployment guarantees are DHT full nodes; other callers should
+// satisfy the same invariant.
+//
+// Returns (pulled, pushed) item counts plus any error from either
+// phase. Push errors are aggregated as debug logs and don't fail the
+// overall reconcile — best-effort.
+func (n *Node) reconcile(ctx context.Context, remotePK cipher.PubKey, salt string) (pulled, pushed int, err error) {
+	pulled, seen, err := n.syncFromCollect(ctx, remotePK, salt)
+	if err != nil {
+		return pulled, 0, err
+	}
+
+	// Push phase: paginate our local store and rpcPutMirror items
+	// whose target keys weren't returned by the peer. Pagination uses
+	// the same Seq cursor strategy as the pull phase to avoid the
+	// 1000-item GetItems batch cap.
+	peerID := NodeIDFromPubKey(remotePK)
+	peer := Peer{ID: peerID, PK: remotePK}
+	var cursor uint64
+	for {
+		items, targets, hasMore := n.store.GetItems(salt, cursor, 0)
+		if len(items) == 0 {
+			break
+		}
+		var maxSeq uint64
+		for i, item := range items {
+			// Don't push items the peer already gave us back to them.
+			if _, ok := seen[targets[i]]; ok {
+				if item.Seq > maxSeq {
+					maxSeq = item.Seq
+				}
+				continue
+			}
+			if pushErr := n.rpcPutMirror(ctx, peer, item, targets[i]); pushErr != nil {
+				n.log.WithError(pushErr).
+					WithField("peer", remotePK.String()).
+					Debug("Reconcile: rpcPutMirror failed")
+			} else {
+				pushed++
+			}
+			if item.Seq > maxSeq {
+				maxSeq = item.Seq
+			}
+		}
+		if !hasMore || maxSeq <= cursor {
+			break
+		}
+		cursor = maxSeq
+	}
+
+	return pulled, pushed, nil
 }
 
 // GetItemsFrom fetches a batch of items from a specific peer.
@@ -634,9 +708,11 @@ func (n *Node) bootstrapOnce() int {
 	return found
 }
 
-// fullNodePullLoop bulk-pulls the data set from each bootstrap peer at
-// startup, then re-pulls on a long interval to catch items that other
-// full nodes received via paths that didn't reach us.
+// fullNodePullLoop reconciles the data set with each bootstrap peer at
+// startup, then re-runs on a long interval. Each pass pulls items the
+// peer has that we don't AND pushes items we have that the peer
+// doesn't, so the bootstrap full nodes converge to the same content
+// over time instead of each keeping its own partial view.
 //
 // Failure mode: any individual peer call may fail (peer offline, slow,
 // non-DHT). Errors are logged at Debug and the loop moves on to the
@@ -669,11 +745,16 @@ func (n *Node) fullNodePullLoop() {
 	}
 }
 
-// fullNodePullOnce pulls from each bootstrap peer once, with a per-peer
-// timeout. The dial layer already skips peers in the noDHT negative
-// cache, so we just let SyncFrom return an error and move on.
+// fullNodePullOnce reconciles with each bootstrap peer once, with a
+// per-peer timeout. Reconcile pulls items we don't have from the peer
+// and pushes back items they don't have from us — so over time the
+// bootstrap full nodes converge to the same data set rather than each
+// keeping its own partial view forever. The dial layer already skips
+// peers in the noDHT negative cache, so we just let Reconcile return
+// an error and move on.
 func (n *Node) fullNodePullOnce(perPeerTimeout time.Duration) {
-	pulled := 0
+	totalPulled := 0
+	totalPushed := 0
 	tried := 0
 	for _, pk := range n.cfg.BootstrapPKs {
 		if pk == n.pk {
@@ -682,23 +763,26 @@ func (n *Node) fullNodePullOnce(perPeerTimeout time.Duration) {
 		tried++
 		ctx, cancel := context.WithTimeout(n.ctx, perPeerTimeout)
 		// Empty salt => all salts.
-		stored, err := n.SyncFrom(ctx, pk, "")
+		pulled, pushed, err := n.reconcile(ctx, pk, "")
 		cancel()
 		if err != nil {
 			n.log.WithError(err).WithField("peer", pk.String()).
-				Debug("Full-node pull from peer failed")
+				Debug("Full-node reconcile with peer failed")
 			continue
 		}
-		pulled += stored
+		totalPulled += pulled
+		totalPushed += pushed
 		n.log.WithField("peer", pk.String()).
-			WithField("items", stored).
-			Debug("Full-node pull from peer complete")
+			WithField("pulled", pulled).
+			WithField("pushed", pushed).
+			Debug("Full-node reconcile with peer complete")
 	}
 	if tried > 0 {
 		n.log.WithField("tried", tried).
-			WithField("pulled", pulled).
+			WithField("pulled", totalPulled).
+			WithField("pushed", totalPushed).
 			WithField("store_size", n.store.Len()).
-			Info("Full-node bulk pull pass complete")
+			Info("Full-node reconcile pass complete")
 	}
 }
 
