@@ -417,7 +417,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent")
 		internal.Catch(cmdFlags, err)
 	} else {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
 		internal.Catch(cmdFlags, err)
 	}
 
@@ -530,8 +530,8 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 				formatBytes(recvBytes), formatBytes(sentBytes))
 			internal.Catch(cmdFlags, err)
 		} else {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, latency)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
 			internal.Catch(cmdFlags, err)
 		}
 	}
