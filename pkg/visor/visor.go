@@ -167,6 +167,12 @@ type Visor struct {
 	// DHT node (nil if dht.enable is false)
 	dhtNode *dht.Node
 
+	// arSelf caches our own AR-side bind state (one entry per transport
+	// type, populated by the AR self-refresh loop). Used by ARSelfInfo
+	// to answer the CLI without round-tripping AR, and by the DHT
+	// self-publisher to advertise our own addr:* records.
+	arSelf arSelfState
+
 	// Visor-local telemetry tracker (nil if Stats.Disabled).
 	// Owns the bbolt store at <local_path>/stats.db, samples
 	// transport bw/latency and tier/service uptime once a minute,
@@ -443,6 +449,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		stun: stunState{
 			ready: make(chan struct{}),
 		},
+		arSelf: newARSelfState(),
 		ping: pingState{
 			conns: make(map[cipher.PubKey]ping),
 			mu:    new(sync.Mutex),
