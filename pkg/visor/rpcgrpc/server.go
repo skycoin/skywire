@@ -627,13 +627,21 @@ func (s *PingServer) GetSystemStats(ctx context.Context, req *SystemStatsRequest
 // StreamAppLogs subscribes to the visor's master logger and forwards
 // matching entries to the gRPC client. Used by 'proxy start --verbose'.
 //
-// Filtering: entries match when their _module starts with one of the
-// router/transport/route layers (when IncludeRouter is set) or when
-// the entry carries app=<AppName>. Levels strictly less severe than
-// the requested MinLevel are dropped on the server side.
+// Filtering: entries pass if _module == AppName, or app field ==
+// AppName, or app_name field == AppName. The visor's router/mux/setup
+// layers attach app_name=<n> to rg-scoped entries (see router.Config
+// .AppLookup wired in init_router.go), so this filter genuinely scopes
+// to one app's session — including layered events (route setup, mux
+// negotiation) that happen on behalf of the app, not just the app
+// process's own stdout. transport_manager and address_resolver
+// entries remain untagged because they are shared across apps.
 //
-// The subscription's per-stream buffer is bounded — bursts beyond it
-// are dropped and reported in the final entry's "_dropped" field.
+// IncludeRouter is retained on the wire for forward compatibility but
+// is currently ignored — the field-based filter already covers what
+// IncludeRouter=true used to attempt with much less noise.
+//
+// The subscription's per-stream buffer is bounded; bursts beyond it
+// are dropped and counted (cancel returns the count).
 func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_StreamAppLogsServer) error {
 	if req.AppName == "" {
 		return fmt.Errorf("app_name is required")
@@ -648,19 +656,6 @@ func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_
 	filter := logging.Filter{
 		AppName:  req.AppName,
 		MinLevel: level,
-	}
-	if req.IncludeRouter {
-		filter.Modules = []string{
-			"router",
-			"route_setup",
-			"transport",
-			"transport_manager",
-			"setup_node",
-			"mux_setup",
-			"address_resolver",
-			"app_launcher",
-			"appserver",
-		}
 	}
 
 	const subBuffer = 512

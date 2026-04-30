@@ -29,14 +29,24 @@ func NewBroadcaster() *Broadcaster {
 
 // Filter selects which entries reach a subscriber.
 //
+// AppName, when set, matches entries whose _module equals AppName
+// OR whose "app" or "app_name" field equals AppName. The launcher
+// and proc-manager tag their per-app calls with app_name=<n>, and
+// each app's stdout/stderr is field-tagged _module=<n> by the
+// proc-spawning code, so AppName-only mode picks up everything that
+// is genuinely scoped to the named app.
+//
 // Module is matched as a prefix on the _module field (e.g. "router"
 // matches "router", "router_setup", "router/foo"). Multiple modules
-// are OR'd together. Empty Modules means "all modules".
+// are OR'd together. Empty Modules means "no module-prefix match";
+// AppName is the only path to acceptance.
 //
-// AppName, when set, also matches entries whose "app" field equals
-// AppName, and entries whose _module equals AppName. Together with
-// Modules this is OR-merged: an entry passes if either the module
-// prefix or the app match fires.
+// AppName + Modules are OR-merged: an entry passes if either the
+// app match fires or one of the module prefixes matches. With
+// Modules non-empty the filter is a firehose for those modules —
+// the visor has no per-app tagging on router/transport/AR entries,
+// so prefix-matching them is "show me anything from layer X" rather
+// than "show me what layer X is doing for app Y".
 //
 // MinLevel is inclusive — entries strictly less severe than MinLevel
 // are dropped. logrus levels descend from Panic (0) to Trace (6), so
@@ -126,16 +136,16 @@ func (s *subscription) matches(e *logrus.Entry) bool {
 		}
 	}
 
-	app := ""
-	if v, ok := e.Data["app"]; ok {
-		if a, ok := v.(string); ok {
-			app = a
-		}
-	}
-
 	if s.filter.AppName != "" {
-		if app == s.filter.AppName || module == s.filter.AppName {
+		if module == s.filter.AppName {
 			return true
+		}
+		for _, k := range []string{"app", "app_name"} {
+			if v, ok := e.Data[k]; ok {
+				if a, ok := v.(string); ok && a == s.filter.AppName {
+					return true
+				}
+			}
 		}
 	}
 
