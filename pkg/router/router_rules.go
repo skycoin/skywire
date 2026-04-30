@@ -144,7 +144,11 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 				RemotePK:  rules.Desc.SrcPK(),
 				Initiator: false,
 			}
-			nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
+			// AcceptRoutes path: no opts available, so app_name comes
+			// from the port→app lookup if it resolves (the SrcPort on
+			// inbound rules is the dialing peer's port, not ours, so
+			// this is best-effort only).
+			nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "")
 			if err != nil {
 				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 				return

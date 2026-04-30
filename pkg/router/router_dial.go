@@ -138,7 +138,11 @@ func (r *router) DialRoutes(
 			Initiator: true,
 		}
 
-		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
+		appName := ""
+		if opts != nil {
+			appName = opts.AppName
+		}
+		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName)
 		if err != nil {
 			// Clean up saved rules on failure
 			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
@@ -233,7 +237,11 @@ func (r *router) setupPingRoute(
 		Initiator: true,
 	}
 
-	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
+	appName := ""
+	if opts != nil {
+		appName = opts.AppName
+	}
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName)
 	if err != nil {
 		// Clean up saved rules if route group setup fails
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
@@ -676,7 +684,7 @@ func (r *router) establishMuxRoutes(
 	forwardDesc routing.RouteDescriptor,
 	primaryTpID uuid.UUID,
 ) {
-	log := r.scopedLog(forwardDesc.SrcPort())
+	log := r.scopedLogForOpts(opts, forwardDesc.SrcPort())
 	muxCount := 1
 	if opts != nil && opts.MuxRoutes > 1 {
 		muxCount = opts.MuxRoutes

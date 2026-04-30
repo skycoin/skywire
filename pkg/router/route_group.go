@@ -178,6 +178,18 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 	return rg
 }
 
+// SetAppName attaches app_name=<n> as a logrus field on the route
+// group's logger. Used by the router-side rg saver so 'cli proxy
+// start --verbose' can scope rg-internal events (handshake, mux
+// enablement, transport churn) to the originating app's session.
+// No-op when name is empty.
+func (rg *RouteGroup) SetAppName(name string) {
+	if name == "" {
+		return
+	}
+	rg.logger = &logging.Logger{FieldLogger: rg.logger.WithField("app_name", name)}
+}
+
 // Read reads the next packet payload of a RouteGroup.
 // The Router, via transport.Manager, is responsible for reading incoming packets and pushing it
 // to the appropriate RouteGroup via (*RouteGroup).readCh.

@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -55,7 +56,8 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 		Initiator: false,
 	}
 
-	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
+	// IntroduceRules / accepted-route path: no app context to thread.
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "")
 	if err != nil {
 		// Clean up saved rules if route group setup fails
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
@@ -168,12 +170,17 @@ func (r *router) serveSetup() {
 // nolint: gocyclo
 //
 //gocyclo:ignore
-func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config) (*NoiseRouteGroup, error) {
+func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config, appName string) (*NoiseRouteGroup, error) {
 	// Check context before starting
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
-	log := r.scopedLog(rules.Desc.SrcPort())
+	var log *logging.Logger
+	if appName != "" {
+		log = r.logger.WithAppName(appName)
+	} else {
+		log = r.scopedLog(rules.Desc.SrcPort())
+	}
 	log.Debugf("Saving route group rules with desc: %s", &rules.Desc)
 
 	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
@@ -202,6 +209,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	}
 
 	rg := NewRouteGroup(DefaultRouteGroupConfig(), r.rt, rules.Desc, r.mLogger)
+	rg.SetAppName(appName)
 	rg.initiator = nsConf.Initiator
 	rg.appendRules(rules.Forward, rules.Reverse, tp)
 	// we put raw rg so it can be accessible to the router when handshake packets come in
