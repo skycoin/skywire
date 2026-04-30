@@ -34,6 +34,7 @@ import (
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 // proxyTestClient is a minimal interface for proxy testing
@@ -82,6 +83,8 @@ func init() {
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
 	startCmd.Flags().IntVar(&muxRoutes, "mux", 1, "parallel mux routes: 0=unlimited (every distinct path), 1=disabled (default), 2+=N routes")
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
+	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream visor debug logs scoped to this app's session; ctrl+c stops the proxy and exits")
+	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 	dep := getDeployment()
@@ -171,6 +174,11 @@ var startCmd = &cobra.Command{
 			}
 		}
 
+		// In --verbose mode the SignalContext-driven cleanup path needs
+		// to print after the streamer has flushed its last entries, so
+		// the os.Exit(1) is gated on a non-verbose run. Verbose mode
+		// instead returns from the Run func — letting the deferred
+		// rpcClient.Close + grpc.Close run cleanly.
 		var tCtxCancelFunc context.CancelFunc
 		tCtx := context.Background()
 		if startingTimeout != 0 {
@@ -183,10 +191,44 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
+			if startVerbose {
+				return // let the main goroutine exit gracefully
+			}
 			rpcClient.KillApp(clientName) //nolint:errcheck,gosec
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
+
+		// --verbose: open a gRPC log stream BEFORE StartAppWithMode so
+		// startup entries (route setup, transport probe, app spawn) are
+		// captured. The goroutine runs until ctx is canceled (SIGINT)
+		// or the visor closes the stream.
+		var verboseDone chan struct{}
+		if startVerbose {
+			if clientName == "" {
+				clientName = "skysocks-client"
+			}
+			grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("verbose: gRPC dial failed: %w", err))
+			}
+			verboseDone = make(chan struct{})
+			go func() {
+				defer close(verboseDone)
+				defer grpcClient.Close() //nolint:errcheck,gosec
+				err := grpcClient.StreamAppLogs(ctx, clientName, true, startVerboseLevel, func(e *rpcgrpc.AppLogEntry) {
+					ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
+					module := e.Module
+					if module == "" {
+						module = "-"
+					}
+					fmt.Fprintf(os.Stderr, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message)
+				})
+				if err != nil && ctx.Err() == nil {
+					fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
+				}
+			}()
+		}
 
 		if pk != "" {
 			err := pubkey.Set(pk)
@@ -252,6 +294,7 @@ var startCmd = &cobra.Command{
 		}
 
 		startProcess := true
+		appReachedRunning := false
 		for startProcess {
 			time.Sleep(time.Second * 1)
 			internal.PrintOutput(cmd.Flags(), nil, ".")
@@ -266,6 +309,7 @@ var startCmd = &cobra.Command{
 				if state.Name == stateName {
 					if state.Status == appserver.AppStatusRunning {
 						startProcess = false
+						appReachedRunning = true
 						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
 					}
 					if state.Status == appserver.AppStatusErrored {
@@ -293,6 +337,20 @@ var startCmd = &cobra.Command{
 						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nStopped! "+errMsg))
 					}
 				}
+			}
+		}
+
+		// --verbose: stay in the foreground, streaming logs until the
+		// user hits ctrl+c. Then stop the app cleanly and exit.
+		if startVerbose && appReachedRunning {
+			fmt.Fprintln(os.Stderr, "\n--- streaming visor logs (ctrl+c to stop the proxy and exit) ---")
+			<-ctx.Done()
+			fmt.Fprintln(os.Stderr, "\nstopping app...")
+			if err := rpcClient.StopApp(clientName); err != nil {
+				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+			}
+			if verboseDone != nil {
+				<-verboseDone
 			}
 		}
 	},

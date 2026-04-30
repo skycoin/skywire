@@ -8,6 +8,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -42,6 +43,10 @@ type VisorAPI interface {
 	GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error)
 	// DialDmsgRPC dials a remote visor's gRPC/RPC port over DMSG and returns the connection
 	DialDmsgRPC(pk cipher.PubKey) (net.Conn, error)
+	// SubscribeLogs returns a channel of logrus entries matching the
+	// filter; cancel() unsubscribes and returns the dropped count.
+	// Both may be nil (visor without a broadcaster wired up).
+	SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64)
 }
 
 // PingConf mirrors visor.PingConfig to avoid import cycles
@@ -617,6 +622,94 @@ func (s *PingServer) GetSystemStats(ctx context.Context, req *SystemStatsRequest
 	}
 
 	return stats, nil
+}
+
+// StreamAppLogs subscribes to the visor's master logger and forwards
+// matching entries to the gRPC client. Used by 'proxy start --verbose'.
+//
+// Filtering: entries match when their _module starts with one of the
+// router/transport/route layers (when IncludeRouter is set) or when
+// the entry carries app=<AppName>. Levels strictly less severe than
+// the requested MinLevel are dropped on the server side.
+//
+// The subscription's per-stream buffer is bounded — bursts beyond it
+// are dropped and reported in the final entry's "_dropped" field.
+func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_StreamAppLogsServer) error {
+	if req.AppName == "" {
+		return fmt.Errorf("app_name is required")
+	}
+
+	level, err := logging.LevelFromString(req.MinLevel)
+	if err != nil {
+		// Default to debug — verbose mode is the use case.
+		level = logrus.DebugLevel
+	}
+
+	filter := logging.Filter{
+		AppName:  req.AppName,
+		MinLevel: level,
+	}
+	if req.IncludeRouter {
+		filter.Modules = []string{
+			"router",
+			"route_setup",
+			"transport",
+			"transport_manager",
+			"setup_node",
+			"mux_setup",
+			"address_resolver",
+			"app_launcher",
+			"appserver",
+		}
+	}
+
+	const subBuffer = 512
+	ch, cancel := s.visor.SubscribeLogs(filter, subBuffer)
+	if ch == nil {
+		return fmt.Errorf("log broadcaster not available on this visor")
+	}
+	defer cancel()
+
+	s.log.Debugf("gRPC StreamAppLogs: subscribed app=%s include_router=%v min_level=%s",
+		req.AppName, req.IncludeRouter, level)
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case e, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if err := stream.Send(toAppLogEntry(e)); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// toAppLogEntry converts a logrus.Entry to the wire AppLogEntry. The
+// _module field, when present, is hoisted into Module; remaining
+// fields land in Fields as strings (best-effort fmt.Sprint).
+func toAppLogEntry(e *logrus.Entry) *AppLogEntry {
+	module := ""
+	fields := make(map[string]string, len(e.Data))
+	for k, v := range e.Data {
+		if k == "_module" {
+			if m, ok := v.(string); ok {
+				module = m
+				continue
+			}
+		}
+		fields[k] = fmt.Sprintf("%v", v)
+	}
+	return &AppLogEntry{
+		TimestampNs: e.Time.UnixNano(),
+		Level:       e.Level.String(),
+		Module:      module,
+		Message:     e.Message,
+		Fields:      fields,
+	}
 }
 
 // StreamRemoteSystemStats proxies system stats from a remote visor via DMSG.

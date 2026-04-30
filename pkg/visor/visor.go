@@ -82,6 +82,7 @@ type Visor struct {
 	conf     *visorconfig.V1
 	log      *logging.Logger
 	logstore logstore.Store
+	logBcast *logging.Broadcaster // fans entries out to gRPC StreamAppLogs subscribers
 
 	startedAt       time.Time
 	startupComplete chan struct{}
@@ -342,6 +343,13 @@ func run(conf *visorconfig.V1) error {
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	mLog.AddHook(hook)
 
+	// logBroadcaster fans out logrus entries to gRPC StreamAppLogs
+	// subscribers. Attached to both the package-default mLog and the
+	// config's MasterLogger so PackageLogger entries from anywhere in
+	// the visor end up visible.
+	logBroadcaster := logging.NewBroadcaster()
+	mLog.AddHook(logBroadcaster)
+
 	stopPProf := initPProf(mLog, pprofMode, pprofAddr)
 	defer stopPProf()
 
@@ -350,6 +358,7 @@ func run(conf *visorconfig.V1) error {
 	}
 
 	conf.MasterLogger().AddHook(hook)
+	conf.MasterLogger().AddHook(logBroadcaster)
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
@@ -402,6 +411,7 @@ func run(conf *visorconfig.V1) error {
 		cancel()
 	}
 	vis.SetLogstore(store)
+	vis.SetLogBroadcaster(logBroadcaster)
 	//	vis.uiAssets = uiAssets
 	if launchBrowser {
 		if conf.Hypervisor == nil {
@@ -686,6 +696,24 @@ func (v *Visor) isDTMReady() bool {
 // SetLogstore sets visor runtime logstore
 func (v *Visor) SetLogstore(store logstore.Store) {
 	v.logstore = store
+}
+
+// SetLogBroadcaster wires the visor with the master logger's
+// Broadcaster hook. Stored on the Visor so the gRPC adapter can
+// forward Subscribe calls through to it.
+func (v *Visor) SetLogBroadcaster(b *logging.Broadcaster) {
+	v.logBcast = b
+}
+
+// SubscribeLogs subscribes to log entries matching the filter.
+// Wraps the broadcaster so callers don't need a direct handle.
+// Returns nil channel + nil cancel when the broadcaster is not
+// installed (e.g. tests).
+func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+	if v.logBcast == nil {
+		return nil, func() uint64 { return 0 }
+	}
+	return v.logBcast.Subscribe(f, capacity)
 }
 
 // tpDiscClient is a convenience function to obtain transport discovery client.

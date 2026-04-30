@@ -30,6 +30,11 @@ service PingService {
   // StreamRemoteSystemStats proxies system stats from a remote visor via DMSG
   // The local visor dials the remote visor over DMSG and forwards the stats stream
   rpc StreamRemoteSystemStats(RemoteSystemStatsRequest) returns (stream SystemStats);
+
+  // StreamAppLogs streams visor log entries scoped to one app's session.
+  // Used by 'skywire-cli proxy start --verbose' to surface what the visor is
+  // doing while spinning up an app's transports/routes.
+  rpc StreamAppLogs(AppLogStreamRequest) returns (stream AppLogEntry);
 }
 
 message PingRequest {
@@ -171,6 +176,29 @@ message TempStat {
   double temperature = 2;     // Temperature in Celsius
   double high = 3;            // High threshold (if available)
   double critical = 4;        // Critical threshold (if available)
+}
+
+// AppLogStreamRequest configures app-scoped log streaming.
+message AppLogStreamRequest {
+  // AppName scopes the stream to entries originating from this app's
+  // module or carrying app=<name> as a logrus field. Required.
+  string app_name = 1;
+  // IncludeRouter also forwards entries from router/transport/route_setup
+  // modules — the layers that build mux routes for the app. Default false:
+  // app-only logs.
+  bool include_router = 2;
+  // MinLevel filters out lower-severity entries: trace|debug|info|warn|error.
+  // Default debug.
+  string min_level = 3;
+}
+
+// AppLogEntry is one log line forwarded to the gRPC client.
+message AppLogEntry {
+  int64 timestamp_ns = 1;        // entry time as Unix nanoseconds
+  string level = 2;              // "trace"|"debug"|"info"|"warn"|"error"|"fatal"|"panic"
+  string module = 3;             // _module field (e.g. "router", "skysocks-client")
+  string message = 4;            // formatted message text
+  map<string, string> fields = 5; // remaining structured fields
 }
 
 // ProcessStat contains information about a running process

@@ -317,6 +317,34 @@ func (c *PingClient) GetSystemStats(ctx context.Context, includeProcesses bool, 
 	return stats, nil
 }
 
+// AppLogCallback is called for each log entry received from the stream.
+type AppLogCallback func(entry *AppLogEntry)
+
+// StreamAppLogs subscribes to the visor's master logger and calls cb
+// for each entry that matches the filter. Blocks until ctx is canceled
+// or the stream errors. Used by 'proxy start --verbose'.
+func (c *PingClient) StreamAppLogs(ctx context.Context, appName string, includeRouter bool, minLevel string, cb AppLogCallback) error {
+	stream, err := c.client.StreamAppLogs(ctx, &AppLogStreamRequest{
+		AppName:       appName,
+		IncludeRouter: includeRouter,
+		MinLevel:      minLevel,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start app log stream: %w", err)
+	}
+
+	for {
+		entry, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stream error: %w", err)
+		}
+		cb(entry)
+	}
+}
+
 // StreamRemoteSystemStats streams system stats from a remote visor via DMSG.
 // The local visor proxies the connection to the remote visor using its DMSG client.
 func (c *PingClient) StreamRemoteSystemStats(ctx context.Context, remotePK string, updateInterval time.Duration, includeProcesses bool, processLimit int32, cb SystemStatsCallback) error {

@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 
@@ -305,6 +306,10 @@ func (a *visorPingAdapter) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey,
 
 func (a *visorPingAdapter) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) {
 	return a.v.GetRemoteDmsgServers(pk)
+}
+
+func (a *visorPingAdapter) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+	return a.v.SubscribeLogs(f, capacity)
 }
 
 func (a *visorPingAdapter) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
