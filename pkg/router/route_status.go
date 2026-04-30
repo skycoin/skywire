@@ -19,6 +19,11 @@ type RouteStatus struct {
 	LocalPort  routing.Port  `json:"local_port"`
 	RemotePort routing.Port  `json:"remote_port"`
 
+	// Initiator is true when this visor dialed the route (called
+	// router.DialRoutes). False when this visor accepted the route
+	// from a remote setup-node request.
+	Initiator bool `json:"initiator"`
+
 	// Status
 	Alive   bool          `json:"alive"`
 	Latency time.Duration `json:"latency_ns"`
@@ -32,6 +37,11 @@ type RouteStatus struct {
 	// Mux info
 	MuxEnabled bool             `json:"mux_enabled"`
 	Transports []RouteTransport `json:"transports"`
+
+	// Hops is the full forward path for this route group, populated from
+	// rg.forwardHops. Empty if the path wasn't recorded (older routes or
+	// the fallback reconstruction).
+	Hops []RouteHopInfo `json:"hops,omitempty"`
 }
 
 // RouteTransport describes one transport within a muxed route.
@@ -41,6 +51,9 @@ type RouteTransport struct {
 	RemotePK  cipher.PubKey   `json:"remote_pk"`
 	Latency   float64         `json:"latency_ms"`
 	FwdRuleID routing.RouteID `json:"fwd_rule_id"`
+	// RvsRuleID is the matching reverse (Consume) rule on this side.
+	// Paired by index with FwdRuleID.
+	RvsRuleID routing.RouteID `json:"rvs_rule_id"`
 }
 
 // ActiveRouteStatuses returns the status of all active route groups.
@@ -58,6 +71,7 @@ func (r *router) ActiveRouteStatuses() []RouteStatus {
 			RemotePK:          desc.SrcPK(),
 			LocalPort:         desc.DstPort(),
 			RemotePort:        desc.SrcPort(),
+			Initiator:         rg.Initiator(),
 			Alive:             nrg.IsAlive(),
 			Latency:           nrg.Latency(),
 			BandwidthSent:     nrg.BandwidthSent(),
@@ -65,6 +79,7 @@ func (r *router) ActiveRouteStatuses() []RouteStatus {
 			UploadSpeed:       nrg.UploadSpeed(),
 			DownloadSpeed:     nrg.DownloadSpeed(),
 			MuxEnabled:        rg.mux != nil,
+			Hops:              rg.RouteHopDetails(),
 		}
 
 		rg.mu.Lock()
@@ -80,6 +95,9 @@ func (r *router) ActiveRouteStatuses() []RouteStatus {
 			}
 			if i < len(rg.fwd) {
 				rt.FwdRuleID = rg.fwd[i].KeyRouteID()
+			}
+			if i < len(rg.rvs) {
+				rt.RvsRuleID = rg.rvs[i].KeyRouteID()
 			}
 			status.Transports = append(status.Transports, rt)
 		}

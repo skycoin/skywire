@@ -93,6 +93,13 @@ type RouteGroup struct {
 	// This is the full multi-hop route, not just local transports.
 	forwardHops []routing.Hop
 
+	// initiator is true when this visor dialed the remote end (called
+	// router.DialRoutes); false when this visor accepted the route via
+	// AcceptRoutes / saveRouteGroupRules from a setup-node request.
+	// Set once at construction in saveRouteGroupRules from nsConf.Initiator
+	// and never mutated afterwards.
+	initiator bool
+
 	// 'tps' is transports used for writing/forward rules.
 	// It should have the same number of elements as 'fwd'
 	// where each element corresponds with the adjacent element in 'fwd'.
@@ -475,6 +482,12 @@ func (rg *RouteGroup) SetForwardHops(hops []routing.Hop) {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()
 	rg.forwardHops = hops
+}
+
+// Initiator reports whether this visor dialed the remote end of the route
+// (true) or accepted the route from a setup-node request (false).
+func (rg *RouteGroup) Initiator() bool {
+	return rg.initiator
 }
 
 // RouteHopDetails returns detailed information about each hop in the route,
