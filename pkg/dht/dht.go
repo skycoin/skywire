@@ -501,6 +501,34 @@ func (n *Node) syncFromCollect(ctx context.Context, remotePK cipher.PubKey, salt
 	return stored, seen, nil
 }
 
+// IsTrustedFullNode reports whether remotePK is one of the peers we're
+// allowed to push items to: either a configured bootstrap PK or a peer
+// with a fresh signed FullNodeAdvert in our local store. Pushing to
+// anyone else risks overflowing their store via the unconditional
+// receiver-side PutMirror handler.
+func (n *Node) IsTrustedFullNode(remotePK cipher.PubKey) bool {
+	for _, pk := range n.cfg.BootstrapPKs {
+		if pk == remotePK {
+			return true
+		}
+	}
+	for _, pk := range FindAdvertisedFullNodes(n) {
+		if pk == remotePK {
+			return true
+		}
+	}
+	return false
+}
+
+// Reconcile is the exported wrapper around reconcile. Callers MUST
+// verify remotePK is a full node first (use IsTrustedFullNode); the
+// receiver-side PutMirror handler does not check distance or
+// admission, so pushing to a non-full-node overflows its store. The
+// visor's DHTReconcile RPC is the only intended external caller.
+func (n *Node) Reconcile(ctx context.Context, remotePK cipher.PubKey, salt string) (pulled, pushed int, err error) {
+	return n.reconcile(ctx, remotePK, salt)
+}
+
 // reconcile pulls from a remote peer (like SyncFrom) and then pushes
 // back any items in our store that the remote didn't report. The push
 // phase is what makes full-node-to-full-node coverage actually
@@ -508,12 +536,9 @@ func (n *Node) syncFromCollect(ctx context.Context, remotePK cipher.PubKey, salt
 // every other full node's data, but the source peers themselves never
 // see what they were missing.
 //
-// Lowercase by design: callers must verify that remotePK is a full
-// node before invoking, since the receiver-side PutMirror handler
-// stores anything we push without distance/admission gating. The only
-// in-tree caller (fullNodePullOnce) iterates BootstrapPKs, which the
-// deployment guarantees are DHT full nodes; other callers should
-// satisfy the same invariant.
+// Lowercase by design — see the Reconcile public wrapper for the
+// safety contract. The only in-tree caller (fullNodePullOnce)
+// iterates trusted full-node PKs already.
 //
 // Returns (pulled, pushed) item counts plus any error from either
 // phase. Push errors are aggregated as debug logs and don't fail the
