@@ -80,6 +80,12 @@ type Config struct {
 	// dialing it during the router-init window don't hit "request has no
 	// associated listener" warnings.
 	AwaitSetupListener *dmsg.Listener
+	// AppLookup, if set, resolves a routing.Port to the originating
+	// app name. Used to tag rg-scoped log entries with app_name=<n>
+	// so 'cli proxy start --verbose' can scope to a session. nil
+	// means no lookup is performed and entries are emitted untagged
+	// (the existing behavior).
+	AppLookup func(routing.Port) (string, bool)
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -213,6 +219,23 @@ type router struct {
 	muxMode            WeightMode       // default weight mode for new mux connections
 	lastRouteCalcTime  time.Duration    // last route calculation time (for local routes)
 	lastRouteCalcMu    sync.Mutex       // protects lastRouteCalcTime
+}
+
+// scopedLog returns a logger augmented with app_name=<n> when the
+// configured AppLookup resolves lPort to an app, otherwise the
+// router's bare logger. Callers use the returned logger for
+// rg-scoped entries so 'cli proxy start --verbose' can filter on
+// the field. Cheap on the no-lookup path (returns the bare logger
+// directly).
+func (r *router) scopedLog(lPort routing.Port) *logging.Logger {
+	if r.conf == nil || r.conf.AppLookup == nil {
+		return r.logger
+	}
+	name, ok := r.conf.AppLookup(lPort)
+	if !ok || name == "" {
+		return r.logger
+	}
+	return &logging.Logger{FieldLogger: r.logger.WithField("app_name", name)}
 }
 
 // New constructs a new Router.

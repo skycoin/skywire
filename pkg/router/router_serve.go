@@ -173,7 +173,8 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
 	}
-	r.logger.Debugf("Saving route group rules with desc: %s", &rules.Desc)
+	log := r.scopedLog(rules.Desc.SrcPort())
+	log.Debugf("Saving route group rules with desc: %s", &rules.Desc)
 
 	// When route group is wrapped with noise, it's put into `nrgs`. but before that,
 	// in the process of wrapping we still need to use this route group to handle
@@ -185,7 +186,7 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	// first ensure that this rg is not being wrapped with noise right now
 	if _, ok := r.rgsRaw[rules.Desc]; ok {
 		r.mx.Unlock()
-		r.logger.Warnf("Desc %s already reserved, skipping...", &rules.Desc)
+		log.Warnf("Desc %s already reserved, skipping...", &rules.Desc)
 		return nil, fmt.Errorf("noise route group with desc %s already being initialized", &rules.Desc)
 	}
 
@@ -209,10 +210,10 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 
 	if nsConf.Initiator {
 		if err := rg.sendHandshake(true); err != nil {
-			r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
+			log.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
 				&rules.Desc, err)
 			if err := rg.Close(); err != nil {
-				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+				log.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
 			// Clean up rgsRaw on failure to prevent blocking future connections
 			r.mx.Lock()
@@ -232,10 +233,10 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	case <-hsCtx.Done():
 		// Check if parent context was canceled (e.g., setup timeout)
 		if ctx.Err() != nil {
-			r.logger.Debugf("Route group setup canceled for %s: %v", &rules.Desc, ctx.Err())
+			log.Debugf("Route group setup canceled for %s: %v", &rules.Desc, ctx.Err())
 			// Clean up
 			if err := rg.Close(); err != nil {
-				r.logger.WithError(err).Warnf("Failed to close route group on context cancellation")
+				log.WithError(err).Warnf("Failed to close route group on context cancellation")
 			}
 			r.mx.Lock()
 			delete(r.rgsRaw, rules.Desc)
@@ -253,10 +254,10 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 
 	if !nsConf.Initiator {
 		if err := rg.sendHandshake(true); err != nil {
-			r.logger.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
+			log.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
 				&rules.Desc, err)
 			if err := rg.Close(); err != nil {
-				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+				log.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
 			// Clean up rgsRaw on failure to prevent blocking future connections
 			r.mx.Lock()
@@ -269,22 +270,22 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 
 	if ok && nrg != nil {
 		// if already functioning wrapped rg exists, we safely close it here
-		r.logger.Debugf("Noise route group with desc %s already exists, closing the old one and replacing...", &rules.Desc)
+		log.Debugf("Noise route group with desc %s already exists, closing the old one and replacing...", &rules.Desc)
 
 		if err := nrg.Close(); err != nil {
-			r.logger.Errorf("Error closing already existing noise route group: %v", err)
+			log.Errorf("Error closing already existing noise route group: %v", err)
 		}
 
-		r.logger.Debugf("Successfully closed old noise route group")
+		log.Debugf("Successfully closed old noise route group")
 	}
 
 	if rg.encrypt {
 		// wrapping rg with noise
 		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
-			r.logger.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
+			log.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
 			if err := rg.Close(); err != nil {
-				r.logger.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
+				log.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
 			// Clean up rgsRaw on failure to prevent blocking future connections
 			r.mx.Lock()
