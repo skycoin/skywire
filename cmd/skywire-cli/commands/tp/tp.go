@@ -408,16 +408,16 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 
 	if showMore && bwDays > 0 {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\trecv\tsent")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency\trecv\tsent")
 		internal.Catch(cmdFlags, err)
 	} else if showMore {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency")
 		internal.Catch(cmdFlags, err)
 	} else if bwDays > 0 {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\trecv\tsent")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent")
 		internal.Catch(cmdFlags, err)
 	} else {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency")
 		internal.Catch(cmdFlags, err)
 	}
 
@@ -430,6 +430,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		Version   string          `json:"version,omitempty"`
 		Country   string          `json:"country,omitempty"`
 		Services  string          `json:"services,omitempty"`
+		LatencyMS float64         `json:"latency_ms,omitempty"`
 		RecvBytes uint64          `json:"recv_bytes,omitempty"`
 		SentBytes uint64          `json:"sent_bytes,omitempty"`
 	}
@@ -507,34 +508,46 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 			Version:   version,
 			Country:   country,
 			Services:  services,
+			LatencyMS: tp.LatencyMS,
 			RecvBytes: recvBytes,
 			SentBytes: sentBytes,
 		}
 		outputTPS = append(outputTPS, oTP)
 
+		latency := formatLatencyMS(tp.LatencyMS)
 		if showMore && bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services,
-				formatBytes(recvBytes), formatBytes(sentBytes))
+				latency, formatBytes(recvBytes), formatBytes(sentBytes))
 			internal.Catch(cmdFlags, err)
 		} else if showMore {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services, latency)
 			internal.Catch(cmdFlags, err)
 		} else if bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label,
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, latency,
 				formatBytes(recvBytes), formatBytes(sentBytes))
 			internal.Catch(cmdFlags, err)
 		} else {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, latency)
 			internal.Catch(cmdFlags, err)
 		}
 	}
 
 	internal.Catch(cmdFlags, w.Flush())
 	internal.PrintOutput(cmdFlags, outputTPS, b.String())
+}
+
+// formatLatencyMS renders a transport-level latency value in ms;
+// "-" when unmeasured. Sister to formatLatency in tp-metrics.go,
+// which works on the store.TransportLatency aggregate type.
+func formatLatencyMS(ms float64) string {
+	if ms <= 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%.0fms", ms)
 }
 
 func sortTransports(tps ...*visor.TransportSummary) {
