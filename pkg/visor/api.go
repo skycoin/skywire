@@ -138,6 +138,7 @@ type API interface {
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error
+	GetMinHops() (uint16, error)
 	SetCalculateRoutes(enabled bool) error
 	GetCalculateRoutes() (bool, error)
 
@@ -285,6 +286,7 @@ type API interface {
 	HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error
 	DHTSync(remotePK string, salt string) (int, error)
 	DHTGetAll(salt string) (string, error)
+	DHTListWithTargets(salt string) (string, error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error

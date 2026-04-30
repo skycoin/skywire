@@ -35,13 +35,20 @@ func (v *Visor) RemoveRoutingRule(key routing.RouteID) error {
 	return nil
 }
 
-// RouteGroups implements API.
+// RouteGroups implements API. Returns one entry per active route group on
+// the visor, with the descriptor, hop path, and initiator flag.
+//
+// The previous implementation walked v.router.Rules() looking for Reverse
+// rules and then dereferenced the matching forward rule via NextRouteID().
+// Reverse (Consume) rules don't carry a NextRouteID, so the lookup always
+// failed and this function returned an empty list. We now drive directly
+// off the router's active route-group set (rgsNs) via ActiveRouteStatuses,
+// which already holds the descriptor, hops, and initiator flag.
 func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 	if v.router == nil {
 		return nil, nil
 	}
 
-	// Protect against panics from corrupt/race-condition rules
 	defer func() {
 		if r := recover(); r != nil {
 			rgs = nil
@@ -49,52 +56,33 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 		}
 	}()
 
-	rules := v.router.Rules()
-	for _, consumeRule := range rules {
-		func() {
-			defer func() { recover() }() //nolint:errcheck
-
-			if len(consumeRule) == 0 || consumeRule.Type() != routing.RuleReverse {
-				return
+	statuses := v.router.ActiveRouteStatuses()
+	rgs = make([]RouteGroupInfo, 0, len(statuses))
+	for _, s := range statuses {
+		info := RouteGroupInfo{
+			Desc: routing.RouteDescriptorFields{
+				DstPK:   s.LocalPK,
+				SrcPK:   s.RemotePK,
+				DstPort: s.LocalPort,
+				SrcPort: s.RemotePort,
+			},
+			Initiator: s.Initiator,
+		}
+		// Primary forward + reverse rules are the first entries in the
+		// mux transport set (mux secondaries follow at index 1+).
+		if len(s.Transports) > 0 {
+			info.FwdRuleID = s.Transports[0].FwdRuleID
+			info.ConsumeRuleID = s.Transports[0].RvsRuleID
+			info.FwdNextTpID = s.Transports[0].ID.String()
+		}
+		if len(s.Hops) > 0 {
+			hops := make([]RouteHopInfo, len(s.Hops))
+			for i, h := range s.Hops {
+				hops[i] = RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
 			}
-
-			consumeSummary := consumeRule.Summary()
-			if consumeSummary == nil || consumeSummary.ConsumeFields == nil {
-				return
-			}
-
-			fwdRID := consumeRule.NextRouteID()
-			fwdRule, err := v.router.Rule(fwdRID)
-			if err != nil || fwdRule == nil || len(fwdRule) == 0 {
-				return
-			}
-
-			fwdSummary := fwdRule.Summary()
-			if fwdSummary == nil {
-				return
-			}
-
-			info := RouteGroupInfo{
-				ConsumeRuleID: consumeSummary.KeyRouteID,
-				FwdRuleID:     fwdSummary.KeyRouteID,
-				Desc:          consumeSummary.ConsumeFields.RouteDescriptor,
-			}
-			if fwdSummary.ForwardFields != nil {
-				info.FwdNextTpID = fwdSummary.ForwardFields.NextTID.String()
-			}
-
-			descFields := consumeSummary.ConsumeFields.RouteDescriptor
-			desc := routing.NewRouteDescriptor(descFields.SrcPK, descFields.DstPK, descFields.SrcPort, descFields.DstPort)
-			if rgHops := v.router.RouteGroupHops(desc); len(rgHops) > 0 {
-				hops := make([]RouteHopInfo, len(rgHops))
-				for i, h := range rgHops {
-					hops[i] = RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
-				}
-				info.Hops = hops
-			}
-
-			rgs = append(rgs, info)
-		}()
+			info.Hops = hops
+		}
+		rgs = append(rgs, info)
 	}
 
 	return rgs, nil
@@ -199,6 +187,14 @@ func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID) error {
 func (v *Visor) SetMinHops(in uint16) error {
 	v.router.SetMinHop(in)
 	return v.conf.UpdateMinHops(in)
+}
+
+// GetMinHops returns the visor's configured routing.min_hops value.
+func (v *Visor) GetMinHops() (uint16, error) {
+	if v.conf == nil || v.conf.Routing == nil {
+		return 0, nil
+	}
+	return v.conf.Routing.MinHops, nil
 }
 
 // SetCalculateRoutes sets calculate_routes routing config of visor

@@ -173,10 +173,14 @@ Examples:
 	},
 }
 
-var dhtListSalt string
+var (
+	dhtListSalt       string
+	dhtListWithTarget bool
+)
 
 func init() {
 	dhtListCmd.Flags().StringVar(&dhtListSalt, "salt", "", "filter by namespace (dmsg, tp, svc); empty = all")
+	dhtListCmd.Flags().BoolVar(&dhtListWithTarget, "with-target", false, "emit {target, value} objects instead of bare values (for diffing against HTTP discoveries)")
 }
 
 var dhtListCmd = &cobra.Command{
@@ -184,16 +188,25 @@ var dhtListCmd = &cobra.Command{
 	Short: "List all DHT items stored locally",
 	Long: `Dump all DHT items stored by this visor's DHT node as JSON.
 
+With --with-target, each item is emitted as {"target": "<hex>", "value": ...}
+where target is the storage key (subject PK ⊕ salt hash). Useful when
+diffing against an HTTP discovery whose records are keyed by visor PK.
+
 Examples:
   skywire cli visor dht list
   skywire cli visor dht list --salt dmsg
-  skywire cli visor dht list --salt tp`,
+  skywire cli visor dht list --salt tp --with-target`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		data, err := rpcClient.DHTGetAll(dhtListSalt)
+		var data string
+		if dhtListWithTarget {
+			data, err = rpcClient.DHTListWithTargets(dhtListSalt)
+		} else {
+			data, err = rpcClient.DHTGetAll(dhtListSalt)
+		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}

@@ -7,21 +7,20 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/servicedisc"
 )
 
-// ServiceRecord is a DHT-native service advertisement.
-// It mirrors the essential fields from servicedisc.Service but is
-// independent of the HTTP service discovery types to avoid import cycles.
-type ServiceRecord struct {
-	PK      cipher.PubKey `json:"pk"`
-	Port    uint16        `json:"port"`
-	Type    string        `json:"type"`    // e.g., "vpn", "skysocks", "proxy"
-	Version string        `json:"version"` // visor version
-	Addr    string        `json:"addr,omitempty"`
-}
+// svcSalt is the DHT namespace for service-discovery records.
+//
+// Service-discovery (SD) writes one DHT entry per visor at this single salt;
+// the value is the full list of services that visor offers. This avoids the
+// overwrite hazard of the older per-type scheme (a visor running both vpn
+// and skysocks would write twice to the same target if the salt were
+// identical and only differed by an out-of-key Type field). See
+// pkg/service-discovery/api/api.go: dhtMirror documentation.
+var svcSalt = []byte("svc")
 
 // SvcAdapter publishes and queries service records via the DHT.
-// Salt format: "svc:" + serviceType (e.g., "svc:vpn", "svc:skysocks").
 type SvcAdapter struct {
 	node *Node
 	log  *logging.Logger
@@ -32,35 +31,54 @@ func NewSvcAdapter(node *Node, log *logging.Logger) *SvcAdapter {
 	return &SvcAdapter{node: node, log: log}
 }
 
-func svcSalt(serviceType string) []byte {
-	return []byte("svc:" + serviceType)
-}
-
-// Register publishes a service record to the DHT.
-func (d *SvcAdapter) Register(ctx context.Context, rec ServiceRecord, seq uint64) error {
-	data, err := json.Marshal(rec)
+// Register publishes the visor's full service list to the DHT.
+//
+// All of a visor's services live under one DHT target; callers must publish
+// the complete list (vpn + skysocks + visor + …) on every change. Passing
+// an empty slice clears the entry (see Deregister).
+func (d *SvcAdapter) Register(ctx context.Context, services []servicedisc.Service, seq uint64) error {
+	data, err := json.Marshal(services)
 	if err != nil {
 		return fmt.Errorf("dht svc: marshal: %w", err)
 	}
-	return d.node.Put(ctx, data, seq, svcSalt(rec.Type))
+	return d.node.Put(ctx, data, seq, svcSalt)
 }
 
-// Lookup retrieves a service record for a given PK and service type.
-func (d *SvcAdapter) Lookup(ctx context.Context, pk cipher.PubKey, serviceType string) (*ServiceRecord, error) {
-	item, err := d.node.Get(ctx, pk, svcSalt(serviceType))
+// Lookup retrieves a single service of the given type for a visor PK.
+//
+// Returns nil with no error if the visor has no service of that type
+// (the DHT entry exists but the type isn't in the list); returns the
+// underlying error if the DHT lookup itself fails.
+func (d *SvcAdapter) Lookup(ctx context.Context, pk cipher.PubKey, serviceType string) (*servicedisc.Service, error) {
+	services, err := d.LookupAll(ctx, pk)
 	if err != nil {
 		return nil, err
 	}
-	var rec ServiceRecord
-	if err := json.Unmarshal(item.V, &rec); err != nil {
-		return nil, fmt.Errorf("dht svc: unmarshal: %w", err)
+	for i := range services {
+		if services[i].Type == serviceType {
+			return &services[i], nil
+		}
 	}
-	return &rec, nil
+	return nil, nil
 }
 
-// Deregister removes a service record by publishing an empty tombstone.
-func (d *SvcAdapter) Deregister(ctx context.Context, serviceType string, seq uint64) error {
-	return d.node.Put(ctx, []byte("{}"), seq, svcSalt(serviceType))
+// LookupAll retrieves the full service list for a visor PK.
+func (d *SvcAdapter) LookupAll(ctx context.Context, pk cipher.PubKey) ([]servicedisc.Service, error) {
+	item, err := d.node.Get(ctx, pk, svcSalt)
+	if err != nil {
+		return nil, err
+	}
+	var services []servicedisc.Service
+	if err := json.Unmarshal(item.V, &services); err != nil {
+		return nil, fmt.Errorf("dht svc: unmarshal: %w", err)
+	}
+	return services, nil
+}
+
+// Deregister clears the visor's service list by publishing an empty array
+// at a fresh seq.
+func (d *SvcAdapter) Deregister(ctx context.Context, seq uint64) error {
+	return d.node.Put(ctx, []byte("[]"), seq, svcSalt)
 }
 
 // AddressRecord is a DHT-native address resolver entry.
