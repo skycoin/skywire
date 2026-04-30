@@ -163,6 +163,11 @@ type RouteGroupInfo struct {
 	FwdRuleID     routing.RouteID               `json:"fwd_rule_id"`
 	Desc          routing.RouteDescriptorFields `json:"desc"`
 	FwdNextTpID   string                        `json:"fwd_next_tp_id,omitempty"`
+	// Initiator is true when this visor dialed the remote end of the
+	// route, false when the route was accepted from a remote setup-node
+	// request. Distinguishes outbound proxy/VPN client connections from
+	// inbound listener connections.
+	Initiator bool `json:"initiator"`
 	// Hops is the stored forward route path (transport IDs, edges, types)
 	// for this route group, populated when the route group is active.
 	Hops []RouteHopInfo `json:"hops,omitempty"`

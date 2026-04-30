@@ -120,6 +120,21 @@ func (n *Node) Start(ctx context.Context) error {
 			defer n.wg.Done()
 			n.bootstrapLoop()
 		}()
+
+		// Full nodes also bulk-pull the data set from each bootstrap
+		// peer at startup and periodically thereafter, so that "full
+		// node" actually means "holds the network's data" rather than
+		// "would store it if anyone Put through me." Without this loop
+		// a freshly-restarted full node sat near-empty until passive
+		// peer Puts trickled in (observed in the field: ~87 items on a
+		// dev visor while a long-lived hub had ~3500).
+		if n.store.IsFullNode() {
+			n.wg.Add(1)
+			go func() {
+				defer n.wg.Done()
+				n.fullNodePullLoop()
+			}()
+		}
 	}
 
 	return nil
@@ -371,6 +386,51 @@ func (n *Node) rpcPutValue(ctx context.Context, p Peer, item MutableItem) error 
 	return nil
 }
 
+// rpcPutBatch sends many items+targets in a single RPC round-trip.
+// Returns a count of items the peer reported as stored, plus a count
+// of per-item errors (errors are only logged at debug; the call as a
+// whole succeeds if the RPC round-trip completed). The peer-side
+// MaxValueSize cap on the wire (4MB) is enforced by readMsg's
+// length-bounded check; chunk large pushes if you can hit that.
+func (n *Node) rpcPutBatch(ctx context.Context, p Peer, items []MutableItem, targets []NodeID) (stored int, errs int, err error) {
+	if len(items) == 0 {
+		return 0, 0, nil
+	}
+	ctx, cancel := rpcCtx(ctx)
+	defer cancel()
+
+	conn, err := n.dial(ctx, p.PK)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer conn.Close() //nolint:errcheck,gosec
+
+	req := PutBatchRequest{
+		SenderID: n.id,
+		SenderPK: n.pk,
+		Items:    items,
+		Targets:  targets,
+	}
+	var resp PutBatchResponse
+	if err := rpcCall(ctx, conn, methodPutBatch, req, &resp); err != nil {
+		return 0, 0, err
+	}
+	for i, ok := range resp.Stored {
+		if ok {
+			stored++
+		} else {
+			errs++
+			if i < len(resp.Errors) && resp.Errors[i] != "" {
+				n.log.WithField("peer", p.PK.String()).
+					WithField("err", resp.Errors[i]).
+					Debug("rpcPutBatch: item rejected")
+			}
+		}
+	}
+	n.rt.Update(Peer{ID: p.ID, PK: p.PK, LastSeen: time.Now()})
+	return stored, errs, nil
+}
+
 func (n *Node) rpcPutMirror(ctx context.Context, p Peer, item MutableItem, target NodeID) error {
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
@@ -387,6 +447,143 @@ func (n *Node) rpcPutMirror(ctx context.Context, p Peer, item MutableItem, targe
 		return err
 	}
 	return nil
+}
+
+// SyncFrom paginates GetItems from a single remote peer, mirroring each
+// returned item into the local store under its server-supplied target
+// key. Returns the count of items mirrored and the first call-level
+// error encountered (partial progress is reported as a return value).
+//
+// Used by the manual `dht sync` RPC. The full-node pull loop uses
+// Reconcile, which is SyncFrom plus a write-back phase.
+func (n *Node) SyncFrom(ctx context.Context, remotePK cipher.PubKey, salt string) (int, error) {
+	stored, _, err := n.syncFromCollect(ctx, remotePK, salt)
+	return stored, err
+}
+
+// syncFromCollect is SyncFrom that also returns the set of target keys
+// seen on the remote, for callers that need to compute a delta.
+func (n *Node) syncFromCollect(ctx context.Context, remotePK cipher.PubKey, salt string) (int, map[NodeID]struct{}, error) {
+	stored := 0
+	seen := make(map[NodeID]struct{})
+	var cursor uint64
+	for {
+		resp, err := n.GetItemsFrom(ctx, remotePK, salt, cursor, 0)
+		if err != nil {
+			return stored, seen, err
+		}
+		var maxSeq uint64
+		for i, item := range resp.Items {
+			// PutMirror with the server's target key. Mirrored items
+			// have item.K = mirror's PK (not subject), so item.Target()
+			// would point to the wrong storage slot.
+			if i < len(resp.Targets) {
+				seen[resp.Targets[i]] = struct{}{}
+				n.store.PutMirror(resp.Targets[i], item)
+				stored++
+			} else {
+				// Old servers don't send targets — fall back to the
+				// item's own (possibly self-keyed) target.
+				if putErr := n.store.Put(item); putErr == nil {
+					seen[item.Target()] = struct{}{}
+					stored++
+				}
+			}
+			if item.Seq > maxSeq {
+				maxSeq = item.Seq
+			}
+		}
+		if !resp.HasMore || len(resp.Items) == 0 || maxSeq <= cursor {
+			break
+		}
+		cursor = maxSeq
+	}
+	return stored, seen, nil
+}
+
+// reconcile pulls from a remote peer (like SyncFrom) and then pushes
+// back any items in our store that the remote didn't report. The push
+// phase is what makes full-node-to-full-node coverage actually
+// converge: with pull alone, each full node ends up with the union of
+// every other full node's data, but the source peers themselves never
+// see what they were missing.
+//
+// Lowercase by design: callers must verify that remotePK is a full
+// node before invoking, since the receiver-side PutMirror handler
+// stores anything we push without distance/admission gating. The only
+// in-tree caller (fullNodePullOnce) iterates BootstrapPKs, which the
+// deployment guarantees are DHT full nodes; other callers should
+// satisfy the same invariant.
+//
+// Returns (pulled, pushed) item counts plus any error from either
+// phase. Push errors are aggregated as debug logs and don't fail the
+// overall reconcile — best-effort.
+func (n *Node) reconcile(ctx context.Context, remotePK cipher.PubKey, salt string) (pulled, pushed int, err error) {
+	pulled, seen, err := n.syncFromCollect(ctx, remotePK, salt)
+	if err != nil {
+		return pulled, 0, err
+	}
+
+	// Push phase: paginate our local store and batch-push items whose
+	// target keys weren't returned by the peer. Pagination uses the
+	// same Seq cursor strategy as the pull phase to avoid the
+	// 1000-item GetItems batch cap. Within each store page we also
+	// chunk the wire payload so a single PutBatch never crosses the
+	// 4MB rpcCall size limit.
+	peerID := NodeIDFromPubKey(remotePK)
+	peer := Peer{ID: peerID, PK: remotePK}
+	const maxBatchBytes = 3 * 1024 * 1024 // headroom under readMsg's 4MB cap
+	var cursor uint64
+	for {
+		items, targets, hasMore := n.store.GetItems(salt, cursor, 0)
+		if len(items) == 0 {
+			break
+		}
+		var maxSeq uint64
+		batchItems := make([]MutableItem, 0, len(items))
+		batchTargets := make([]NodeID, 0, len(items))
+		batchBytes := 0
+		flush := func() {
+			if len(batchItems) == 0 {
+				return
+			}
+			stored, _, pushErr := n.rpcPutBatch(ctx, peer, batchItems, batchTargets)
+			if pushErr != nil {
+				n.log.WithError(pushErr).
+					WithField("peer", remotePK.String()).
+					Debug("Reconcile: rpcPutBatch failed")
+			}
+			pushed += stored
+			batchItems = batchItems[:0]
+			batchTargets = batchTargets[:0]
+			batchBytes = 0
+		}
+		for i, item := range items {
+			if item.Seq > maxSeq {
+				maxSeq = item.Seq
+			}
+			// Don't push items the peer already gave us back to them.
+			if _, ok := seen[targets[i]]; ok {
+				continue
+			}
+			// Estimate item wire size: V dominates, plus K (33), Sig (65),
+			// Salt, and target (32). Round generously to stay safe.
+			itemBytes := len(item.V) + len(item.Salt) + 200
+			if batchBytes+itemBytes > maxBatchBytes && len(batchItems) > 0 {
+				flush()
+			}
+			batchItems = append(batchItems, item)
+			batchTargets = append(batchTargets, targets[i])
+			batchBytes += itemBytes
+		}
+		flush()
+		if !hasMore || maxSeq <= cursor {
+			break
+		}
+		cursor = maxSeq
+	}
+
+	return pulled, pushed, nil
 }
 
 // GetItemsFrom fetches a batch of items from a specific peer.
@@ -520,6 +717,48 @@ func (n *Node) handleConn(conn io.ReadWriteCloser, remotePK cipher.PubKey) {
 		items, targets, hasMore := n.store.GetItems(req.Salt, req.SinceSeq, req.Limit)
 		resp := GetItemsResponse{Items: items, Targets: targets, HasMore: hasMore}
 		writeMsg(conn, methodGetItems, resp) //nolint:errcheck,gosec
+
+	case methodPutBatch:
+		var req PutBatchRequest
+		if json.Unmarshal(data, &req) != nil {
+			return
+		}
+		n.rt.Update(Peer{ID: req.SenderID, PK: req.SenderPK})
+		stored := make([]bool, len(req.Items))
+		errs := make([]string, len(req.Items))
+		for i := range req.Items {
+			var hasTarget bool
+			if i < len(req.Targets) && !req.Targets[i].IsZero() {
+				hasTarget = true
+			}
+			if hasTarget {
+				// PutMirror is void — verify happens inside; we
+				// can't distinguish accepted from rejected, but a
+				// fresh-or-newer item will always land. Treat as
+				// accepted to keep the wire shape simple.
+				n.store.PutMirror(req.Targets[i], req.Items[i])
+				stored[i] = true
+				continue
+			}
+			if putErr := n.store.Put(req.Items[i]); putErr != nil {
+				errs[i] = putErr.Error()
+			} else {
+				stored[i] = true
+			}
+		}
+		// Drop the all-empty error slice to keep small batches tiny.
+		var hasErr bool
+		for _, e := range errs {
+			if e != "" {
+				hasErr = true
+				break
+			}
+		}
+		resp := PutBatchResponse{Stored: stored}
+		if hasErr {
+			resp.Errors = errs
+		}
+		writeMsg(conn, methodPutBatch, resp) //nolint:errcheck,gosec
 	}
 }
 
@@ -575,6 +814,114 @@ func (n *Node) bootstrapOnce() int {
 		found++
 	}
 	return found
+}
+
+// fullNodePullLoop reconciles the data set with each bootstrap peer at
+// startup, then re-runs on a long interval. Each pass pulls items the
+// peer has that we don't AND pushes items we have that the peer
+// doesn't, so the bootstrap full nodes converge to the same content
+// over time instead of each keeping its own partial view.
+//
+// Failure mode: any individual peer call may fail (peer offline, slow,
+// non-DHT). Errors are logged at Debug and the loop moves on to the
+// next peer. The whole pass is "best effort" — we'd rather fill in
+// from one peer than block on a dead one.
+func (n *Node) fullNodePullLoop() {
+	const (
+		startupDelay   = 5 * time.Second
+		retryInterval  = 1 * time.Hour
+		perPeerTimeout = 5 * time.Minute
+	)
+
+	// Wait for bootstrap to ping at least once before our first pull;
+	// dialing a peer that hasn't been pinged yet adds extra noDHT-cache
+	// misses for no benefit.
+	select {
+	case <-n.ctx.Done():
+		return
+	case <-time.After(startupDelay):
+	}
+
+	for {
+		n.fullNodePullOnce(perPeerTimeout)
+
+		select {
+		case <-n.ctx.Done():
+			return
+		case <-time.After(retryInterval):
+		}
+	}
+}
+
+// fullNodePullOnce reconciles with bootstrap peers AND any peers
+// advertising themselves as full nodes (signed FullNodeAdvert in salt
+// "fullnode"), with a per-peer timeout. The signed advert is what
+// makes pushing to non-bootstrap peers safe: the peer explicitly
+// claims it accepts the full-node responsibility of storing arbitrary
+// mirror puts.
+//
+// Reconcile pulls items we don't have from the peer and pushes back
+// items they don't have from us, so over time the full nodes
+// converge. The dial layer already skips peers in the noDHT negative
+// cache, so we just let Reconcile return an error and move on.
+func (n *Node) fullNodePullOnce(perPeerTimeout time.Duration) {
+	// Bootstrap PKs first (deployment-trusted full nodes), then
+	// peer-advertised full nodes (signed advert verified by store
+	// signature check at insertion time, freshness re-checked here).
+	peers := make([]cipher.PubKey, 0, len(n.cfg.BootstrapPKs))
+	seen := make(map[cipher.PubKey]struct{})
+	for _, pk := range n.cfg.BootstrapPKs {
+		if pk == n.pk {
+			continue
+		}
+		if _, dup := seen[pk]; dup {
+			continue
+		}
+		seen[pk] = struct{}{}
+		peers = append(peers, pk)
+	}
+	advertised := FindAdvertisedFullNodes(n)
+	for _, pk := range advertised {
+		if pk == n.pk {
+			continue
+		}
+		if _, dup := seen[pk]; dup {
+			continue
+		}
+		seen[pk] = struct{}{}
+		peers = append(peers, pk)
+	}
+
+	totalPulled := 0
+	totalPushed := 0
+	tried := 0
+	for _, pk := range peers {
+		tried++
+		ctx, cancel := context.WithTimeout(n.ctx, perPeerTimeout)
+		// Empty salt => all salts.
+		pulled, pushed, err := n.reconcile(ctx, pk, "")
+		cancel()
+		if err != nil {
+			n.log.WithError(err).WithField("peer", pk.String()).
+				Debug("Full-node reconcile with peer failed")
+			continue
+		}
+		totalPulled += pulled
+		totalPushed += pushed
+		n.log.WithField("peer", pk.String()).
+			WithField("pulled", pulled).
+			WithField("pushed", pushed).
+			Debug("Full-node reconcile with peer complete")
+	}
+	if tried > 0 {
+		n.log.WithField("tried", tried).
+			WithField("bootstrap", len(n.cfg.BootstrapPKs)).
+			WithField("advertised", len(advertised)).
+			WithField("pulled", totalPulled).
+			WithField("pushed", totalPushed).
+			WithField("store_size", n.store.Len()).
+			Info("Full-node reconcile pass complete")
+	}
 }
 
 func (n *Node) maintenanceLoop() {

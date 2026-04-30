@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -14,7 +15,11 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 )
 
-var statusJSON bool
+var (
+	statusJSON   bool
+	statusFilter string
+	statusHops   bool
+)
 
 // RootCmd is the root command for route group operations.
 var RootCmd = &cobra.Command{
@@ -45,6 +50,29 @@ var listCmd = &cobra.Command{
 		routes, err := rpcClient.ActiveRoutes()
 		internal.Catch(cmd.Flags(), err)
 
+		switch strings.ToLower(statusFilter) {
+		case "", "all":
+		case "initiator":
+			filtered := routes[:0]
+			for _, r := range routes {
+				if r.Route.Initiator {
+					filtered = append(filtered, r)
+				}
+			}
+			routes = filtered
+		case "responder":
+			filtered := routes[:0]
+			for _, r := range routes {
+				if !r.Route.Initiator {
+					filtered = append(filtered, r)
+				}
+			}
+			routes = filtered
+		default:
+			internal.PrintFatalError(cmd.Flags(),
+				fmt.Errorf("invalid --filter %q; expected all|initiator|responder", statusFilter))
+		}
+
 		if statusJSON {
 			enc := json.NewEncoder(os.Stdout)
 			enc.SetIndent("", "  ")
@@ -58,7 +86,7 @@ var listCmd = &cobra.Command{
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "APP\tREMOTE\tPORTS\tLATENCY\tTX\tRX\tUP\tDOWN\tROUTES\tMUX") //nolint:errcheck,gosec
+		fmt.Fprintln(w, "APP\tROLE\tREMOTE\tPORTS\tLATENCY\tTX\tRX\tUP\tDOWN\tROUTES\tMUX") //nolint:errcheck,gosec
 		for _, r := range routes {
 			remote := r.Route.RemotePK.String() + ".."
 			ports := fmt.Sprintf("%d:%d", r.Route.LocalPort, r.Route.RemotePort)
@@ -75,9 +103,13 @@ var listCmd = &cobra.Command{
 			if r.Route.MuxEnabled {
 				mux = "yes"
 			}
+			role := "responder"
+			if r.Route.Initiator {
+				role = "initiator"
+			}
 
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", //nolint:errcheck,gosec
-				r.AppName, remote, ports, latency, tx, rx, up, down, nRoutes, mux)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n", //nolint:errcheck,gosec
+				r.AppName, role, remote, ports, latency, tx, rx, up, down, nRoutes, mux)
 
 			// Show transport details for mux routes
 			if nRoutes > 1 {
@@ -87,8 +119,24 @@ var listCmd = &cobra.Command{
 					if tp.Latency > 0 {
 						lat = fmt.Sprintf("%.0fms", tp.Latency)
 					}
-					fmt.Fprintf(w, "  └─\t%s\t%s\t%s\t\t\t\t\t%d\t\n", //nolint:errcheck,gosec
+					fmt.Fprintf(w, "  └─\t\t%s\t%s\t%s\t\t\t\t\t%d\t\n", //nolint:errcheck,gosec
 						tpID, tp.Type, lat, tp.FwdRuleID)
+				}
+			}
+
+			// Optionally show the full forward hop path.
+			if statusHops {
+				if len(r.Route.Hops) == 0 {
+					fmt.Fprintln(w, "    hops:\t(not recorded)") //nolint:errcheck,gosec
+					continue
+				}
+				for j, h := range r.Route.Hops {
+					tpType := h.TpType
+					if tpType == "" {
+						tpType = "?"
+					}
+					fmt.Fprintf(w, "  hop %d/%d:\t%s -> %s @ %s (%s)\n", //nolint:errcheck,gosec
+						j+1, len(r.Route.Hops), h.From, h.To, h.TpID, tpType)
 				}
 			}
 		}
@@ -98,6 +146,10 @@ var listCmd = &cobra.Command{
 
 func init() {
 	listCmd.Flags().BoolVar(&statusJSON, "json", false, "output as JSON")
+	listCmd.Flags().StringVar(&statusFilter, "filter", "all",
+		"role filter: all | initiator | responder")
+	listCmd.Flags().BoolVar(&statusHops, "hops", false,
+		"also print the full forward hop path for each route group")
 }
 
 func formatBytes(b uint64) string {

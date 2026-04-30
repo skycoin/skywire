@@ -18,6 +18,7 @@ const (
 	methodGetValue uint8 = 3
 	methodPutValue uint8 = 4
 	methodGetItems uint8 = 5
+	methodPutBatch uint8 = 6
 )
 
 // rpcTimeout is the deadline for a single RPC round-trip.
@@ -75,6 +76,30 @@ type PutValueRequest struct {
 type PutValueResponse struct {
 	Stored bool   `json:"stored"`
 	Error  string `json:"error,omitempty"`
+}
+
+// PutBatchRequest asks a peer to store many mutable items in one
+// round-trip. Items[i] and Targets[i] are paired: a non-zero target
+// stores under that key (PutMirror), zero falls back to the item's
+// own derived target (Put).
+//
+// Used by full-node reconcile to push hundreds of items per peer
+// without paying a fresh dmsg connection / noise handshake per item
+// (the per-item rpcPutMirror loop ran ~600ms × N items).
+type PutBatchRequest struct {
+	SenderID NodeID        `json:"sender_id"`
+	SenderPK cipher.PubKey `json:"sender_pk"`
+	Items    []MutableItem `json:"items"`
+	Targets  []NodeID      `json:"targets,omitempty"`
+}
+
+// PutBatchResponse reports per-item store outcomes. Stored[i] is true
+// if Items[i] was accepted (signature valid AND, for non-mirror puts,
+// monotonic seq satisfied). Errors short enough to share are surfaced
+// via Errors[i]; long errors are dropped to keep response size bounded.
+type PutBatchResponse struct {
+	Stored []bool   `json:"stored"`
+	Errors []string `json:"errors,omitempty"`
 }
 
 // GetItemsRequest asks a full node for a batch of stored items.
