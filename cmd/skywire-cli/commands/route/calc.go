@@ -3,6 +3,7 @@ package cliroute
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -18,6 +19,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dht"
 	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -258,59 +260,169 @@ func fetchAllTransports(_ context.Context, cmdFlags *pflag.FlagSet, tpdAddr stri
 }
 
 // fetchAllTransportsFromDHT pulls every "tp" salt entry from the local
-// DHT store and parses it as a list of transport.Entry. Two formats
+// DHT store and parses it as a list of transport.Entry. Three formats
 // coexist under this salt:
 //
-//   - The bare-entry format published by visors via TPDAdapter:
-//     []transport.Entry. We use these directly.
-//   - The compact format published by deployment-side discovery
-//     pushers: [{r, t, l, b}]. These omit the source PK (only
-//     present in the storage-key hash, not invertible) so we
-//     can't reconstruct edges from them. They're skipped.
+//  1. Bare entries (TPDAdapter): []transport.Entry — used directly.
+//  2. SignedEntries: []transport.SignedEntry — unwrap the .Entry.
+//  3. Compact entries: [{r, t, l}] — published by deployment-side
+//     mirrors, missing the source PK in the value. We recover the
+//     source PK by cross-referencing the tp entry's storage-target
+//     hash against the dmsg salt's index: every dmsg entry contains
+//     its publisher PK in `static`, and target = SHA256(pk || salt),
+//     so the dmsg salt is a known PK→target index for every visor
+//     that publishes both. Targets we can't resolve via that index
+//     are skipped.
+//
+// Synthetic transport IDs are generated for compact entries (the
+// tuple is deterministic, so re-running on the same data gives the
+// same IDs). Latency is preserved as Entry.Latency.
 //
 // On a full node the bare-entry coverage is comprehensive; on a
-// non-full node the local store will be sparse and this function
-// will return only entries near the local node ID. For comparison
-// purposes against TPD HTTP, run on a full node after a reconcile
-// pass.
+// non-full node the local store is sparse and this function will
+// return only entries near the local node ID. For comparison
+// against TPD HTTP, run on a full node after a reconcile pass.
 func fetchAllTransportsFromDHT(rpcClient visor.API) ([]*transport.Entry, error) {
-	body, err := rpcClient.DHTGetAll("tp")
+	tpBody, err := rpcClient.DHTListWithTargets("tp")
 	if err != nil {
-		return nil, fmt.Errorf("DHT GetAll(tp): %w", err)
+		return nil, fmt.Errorf("DHT ListWithTargets(tp): %w", err)
 	}
-	// Each item is a JSON array. We try unmarshalling each as
-	// []transport.Entry first; if the inner objects don't have an
-	// `edges` field (compact format), the unmarshal will succeed
-	// but produce zero-value edges, which we filter out.
-	var raw []json.RawMessage
-	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+	// Build the target→PK index from the dmsg salt.
+	pkByTpTarget, err := buildTpTargetIndex(rpcClient)
+	if err != nil {
+		// Non-fatal: we still have bare entries, just no compact recovery.
+		pkByTpTarget = nil
+	}
+
+	type targeted struct {
+		Target string          `json:"target"`
+		Value  json.RawMessage `json:"value"`
+	}
+	var rows []targeted
+	if err := json.Unmarshal([]byte(tpBody), &rows); err != nil {
 		return nil, fmt.Errorf("parse DHT tp envelope: %w", err)
 	}
+
 	var entries []*transport.Entry
-	skipped := 0
-	for _, item := range raw {
-		var batch []*transport.Entry
-		if err := json.Unmarshal(item, &batch); err != nil {
-			skipped++
-			continue
-		}
-		for _, e := range batch {
-			if e == nil {
+	bare, signed, compact, unresolved := 0, 0, 0, 0
+
+	for _, row := range rows {
+		// Try bare-entry format first.
+		var bareBatch []*transport.Entry
+		if json.Unmarshal(row.Value, &bareBatch) == nil && len(bareBatch) > 0 {
+			anyResolved := false
+			for _, e := range bareBatch {
+				if e == nil {
+					continue
+				}
+				if !e.Edges[0].Null() && !e.Edges[1].Null() {
+					entries = append(entries, e)
+					anyResolved = true
+					continue
+				}
+			}
+			if anyResolved {
+				bare++
 				continue
 			}
-			// Compact-format entries unmarshal into Entry with both
-			// edges = zero; skip them.
-			if e.Edges[0].Null() && e.Edges[1].Null() {
-				skipped++
+		}
+
+		// Try SignedEntry format.
+		var signedBatch []*transport.SignedEntry
+		if json.Unmarshal(row.Value, &signedBatch) == nil && len(signedBatch) > 0 {
+			anyResolved := false
+			for _, se := range signedBatch {
+				if se == nil || se.Entry == nil {
+					continue
+				}
+				if !se.Entry.Edges[0].Null() && !se.Entry.Edges[1].Null() {
+					entries = append(entries, se.Entry)
+					anyResolved = true
+				}
+			}
+			if anyResolved {
+				signed++
 				continue
+			}
+		}
+
+		// Try compact format. We need the source PK from the
+		// dmsg-salt index.
+		var compactBatch []compactTpEntry
+		if json.Unmarshal(row.Value, &compactBatch) != nil {
+			continue
+		}
+		srcPK, ok := pkByTpTarget[row.Target]
+		if !ok {
+			unresolved++
+			continue
+		}
+		for _, c := range compactBatch {
+			if c.Remote == "" || c.Type == "" {
+				continue
+			}
+			var rPK cipher.PubKey
+			if err := rPK.Set(c.Remote); err != nil {
+				continue
+			}
+			edges := transport.SortEdges(srcPK, rPK)
+			tpType := tptypes.Type(c.Type)
+			e := &transport.Entry{
+				ID:      transport.MakeTransportID(srcPK, rPK, tpType),
+				Edges:   edges,
+				Type:    tpType,
+				Latency: c.Latency,
 			}
 			entries = append(entries, e)
 		}
+		compact++
 	}
-	if skipped > 0 && len(entries) == 0 {
-		return nil, fmt.Errorf("DHT tp salt has %d items but none in bare-entry format (%d skipped); compact entries lack source PK and can't be used to build a graph", len(raw), skipped)
+
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("DHT tp salt empty or unparseable (rows=%d, bare=%d, signed=%d, compact=%d, unresolved=%d)",
+			len(rows), bare, signed, compact, unresolved)
 	}
 	return entries, nil
+}
+
+// compactTpEntry is the single-letter shape some publishers emit
+// under the tp salt. The struct is local to this CLI helper since
+// it's not used elsewhere.
+type compactTpEntry struct {
+	Remote  string  `json:"r"`
+	Type    string  `json:"t"`
+	Latency float64 `json:"l,omitempty"`
+}
+
+// buildTpTargetIndex walks the dmsg salt to build a hex(target) → PK
+// map suitable for resolving compact tp entries. Each dmsg entry
+// contains the publisher PK in its `static` field; we hash that PK
+// with the tp salt to compute the target where the visor's tp entry
+// would live. Returned map is keyed by hex-encoded target.
+func buildTpTargetIndex(rpcClient visor.API) (map[string]cipher.PubKey, error) {
+	dmsgBody, err := rpcClient.DHTGetAll("dmsg")
+	if err != nil {
+		return nil, fmt.Errorf("DHT GetAll(dmsg): %w", err)
+	}
+	var raw []struct {
+		Static string `json:"static"`
+	}
+	if err := json.Unmarshal([]byte(dmsgBody), &raw); err != nil {
+		return nil, fmt.Errorf("parse DHT dmsg envelope: %w", err)
+	}
+	out := make(map[string]cipher.PubKey, len(raw))
+	for _, e := range raw {
+		if e.Static == "" {
+			continue
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(e.Static); err != nil {
+			continue
+		}
+		target := dht.MutableItemTarget(pk, []byte("tp"))
+		out[hex.EncodeToString(target[:])] = pk
+	}
+	return out, nil
 }
 
 // memoryStore wraps fetched transports to implement store.Store for route-finder's Graph

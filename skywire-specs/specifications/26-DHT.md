@@ -208,7 +208,7 @@ The visor exposes the DHT via `skywire cli visor dht`:
 `route calc` also gained a `--source tpd|dht|auto` flag (default `tpd`):
 
 - `tpd`: fetch `/all-transports` from the deployment TPD (current behavior).
-- `dht`: build the graph from the local DHT's `tp` salt entries via `DHTGetAll`. Only visor-published bare-entry format contributes — the deployment-pushed compact `[{r,t,l,b}]` format omits the source PK and is filtered out. Useful for diffing DHT coverage against TPD.
+- `dht`: build the graph from the local DHT's `tp` salt entries via `DHTListWithTargets`. Three formats are supported: bare `[]transport.Entry` (visor-published), `[]transport.SignedEntry`, and the compact single-letter format `[{r,t,l}]` published by deployment-side mirrors. The compact format omits the source PK in the value, but it's recovered by cross-referencing the storage target hash against the `dmsg` salt's `static` field — every visor that publishes both salts has a known PK→target relationship via `target = SHA256(pk||salt)`. Synthetic transport IDs are generated for compact entries (deterministic from the `(srcPK, rPK, type)` tuple).
 - `auto`: try DHT first; fall back to TPD if DHT yielded fewer than 10 entries.
 
 ## Configuration
