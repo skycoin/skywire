@@ -668,6 +668,15 @@ func (rc *rpcClient) SetMinHops(hops uint16) error {
 	return err
 }
 
+// GetMinHops returns the visor's configured routing.min_hops value.
+func (rc *rpcClient) GetMinHops() (uint16, error) {
+	var out uint16
+	if err := rc.Call("GetMinHops", &struct{}{}, &out); err != nil {
+		return 0, err
+	}
+	return out, nil
+}
+
 // SetCalculateRoutes sets the calculate_routes from visor routing config
 func (rc *rpcClient) SetCalculateRoutes(enabled bool) error {
 	err := rc.Call("SetCalculateRoutes", &enabled, &struct{}{})
@@ -1282,6 +1291,16 @@ func (rc *rpcClient) DmsgReconnect() (int, error) {
 func (rc *rpcClient) DHTGetAll(salt string) (string, error) {
 	var resp string
 	if err := rc.Call("DHTGetAll", &salt, &resp); err != nil {
+		return "", err
+	}
+	return resp, nil
+}
+
+// DHTListWithTargets returns all DHT items matching a salt as JSON,
+// each annotated with its storage target key.
+func (rc *rpcClient) DHTListWithTargets(salt string) (string, error) {
+	var resp string
+	if err := rc.Call("DHTListWithTargets", &salt, &resp); err != nil {
 		return "", err
 	}
 	return resp, nil

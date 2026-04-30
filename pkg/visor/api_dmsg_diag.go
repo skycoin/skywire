@@ -66,6 +66,10 @@ func (v *Visor) DmsgReconnect() (int, error) {
 
 // DHTSync fetches items from a DHT full node and stores them locally.
 // If remotePK is empty, uses the first available bootstrap peer.
+//
+// Delegates pagination to dht.Node.SyncFrom, which is shared with the
+// node's own periodic full-node pull loop so they have identical
+// semantics.
 func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
 	if v.dhtNode == nil {
 		return 0, fmt.Errorf("DHT node not running")
@@ -85,53 +89,105 @@ func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
 		targetPK = fullNodes[0]
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	resp, err := v.dhtNode.GetItemsFrom(ctx, targetPK, salt, 0, 0)
+	stored, err := v.dhtNode.SyncFrom(ctx, targetPK, salt)
 	if err != nil {
+		if stored > 0 {
+			// Partial-progress: surface what we got rather than discarding.
+			v.log.WithError(err).WithField("stored", stored).
+				Warn("DHT sync: partial progress, remote call failed")
+			return stored, nil
+		}
 		return 0, fmt.Errorf("sync from %s: %w", targetPK.String(), err)
 	}
 
-	stored := 0
-	for i, item := range resp.Items {
-		// Use PutMirror with the explicit target key from the response.
-		// Mirrored items have item.K set to the mirror's PK (not the
-		// subject PK), so item.Target() returns the wrong key.
-		if i < len(resp.Targets) {
-			v.dhtNode.Store().PutMirror(resp.Targets[i], item)
-			stored++
-		} else {
-			// Fallback for old servers that don't send targets.
-			if putErr := v.dhtNode.Store().Put(item); putErr == nil {
-				stored++
-			}
-		}
-	}
-
-	v.log.WithField("received", len(resp.Items)).
-		WithField("stored", stored).
-		WithField("hasMore", resp.HasMore).
-		Info("DHT sync result")
+	v.log.WithField("stored", stored).Info("DHT sync result")
 
 	return stored, nil
 }
 
 // DHTGetAll returns all DHT items matching the given salt as a JSON string.
 // Requires the visor to have a DHT node (full or regular).
+//
+// Pages over the local store with a Seq cursor until exhausted so the
+// returned array reflects every matching item rather than just the first
+// 1000 (the default GetItems batch cap).
 func (v *Visor) DHTGetAll(salt string) (string, error) {
 	if v.dhtNode == nil {
 		return "", fmt.Errorf("DHT node not running")
 	}
-	items, _, _ := v.dhtNode.Store().GetItems(salt, 0, 0)
-	if len(items) == 0 {
+	results := make([]json.RawMessage, 0)
+	var cursor uint64
+	for {
+		items, _, hasMore := v.dhtNode.Store().GetItems(salt, cursor, 0)
+		if len(items) == 0 {
+			break
+		}
+		var maxSeq uint64
+		for _, item := range items {
+			results = append(results, json.RawMessage(item.V))
+			if item.Seq > maxSeq {
+				maxSeq = item.Seq
+			}
+		}
+		if !hasMore || maxSeq <= cursor {
+			break
+		}
+		cursor = maxSeq
+	}
+	if len(results) == 0 {
 		return "[]", nil
 	}
+	data, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal DHT items: %w", err)
+	}
+	return string(data), nil
+}
 
-	// Decode each item's value and collect into an array.
-	var results []json.RawMessage
-	for _, item := range items {
-		results = append(results, json.RawMessage(item.V))
+// DHTListWithTargets returns all DHT items matching the given salt as a JSON
+// array of {target, value} objects, where target is the hex-encoded storage
+// key (subject PK ⊕ salt hash) and value is the raw stored payload.
+//
+// Diff-friendly counterpart to DHTGetAll: callers comparing the DHT against
+// HTTP discoveries need to know which subject PK each value belongs to,
+// which the bare values do not always carry (e.g. a transport list under
+// salt "tp" is keyed by edge PK but the JSON array of transports does not
+// repeat the subject's own PK).
+func (v *Visor) DHTListWithTargets(salt string) (string, error) {
+	if v.dhtNode == nil {
+		return "", fmt.Errorf("DHT node not running")
+	}
+	type withTarget struct {
+		Target string          `json:"target"`
+		Value  json.RawMessage `json:"value"`
+	}
+	results := make([]withTarget, 0)
+	var cursor uint64
+	for {
+		items, targets, hasMore := v.dhtNode.Store().GetItems(salt, cursor, 0)
+		if len(items) == 0 {
+			break
+		}
+		var maxSeq uint64
+		for i, item := range items {
+			results = append(results, withTarget{
+				Target: targets[i].String(),
+				Value:  json.RawMessage(item.V),
+			})
+			if item.Seq > maxSeq {
+				maxSeq = item.Seq
+			}
+		}
+		if !hasMore || maxSeq <= cursor {
+			break
+		}
+		cursor = maxSeq
+	}
+	if len(results) == 0 {
+		return "[]", nil
 	}
 	data, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {
