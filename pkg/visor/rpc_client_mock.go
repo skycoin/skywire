@@ -1200,6 +1200,16 @@ func (mc *mockRPCClient) DHTSync(_ string, _ string) (int, error) {
 	return 0, fmt.Errorf("not supported in mock")
 }
 
+// DHTPeers implements API.
+func (mc *mockRPCClient) DHTPeers() ([]DHTPeerInfo, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// DHTReconcile implements API.
+func (mc *mockRPCClient) DHTReconcile(_ string, _ string) (int, int, error) {
+	return 0, 0, fmt.Errorf("not supported in mock")
+}
+
 // TransportRPCCall implements API.
 func (mc *mockRPCClient) TransportRPCCall(_ cipher.PubKey, _ string, _ json.RawMessage) (json.RawMessage, error) {
 	return nil, fmt.Errorf("not supported in mock")
