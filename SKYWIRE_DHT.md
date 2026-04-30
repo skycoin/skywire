@@ -2,7 +2,7 @@
 
 A comparison of Skywire's DHT (`pkg/dht/`) with prior-art Kademlia and DHT-adjacent designs, plus a discussion of where Skywire diverges, why, and what tradeoffs result.
 
-The companion document [26-DHT.md](./26-DHT.md) is the normative specification. This document is descriptive: it explains design choices in context.
+The companion document [skywire-specs/specifications/26-DHT.md](./skywire-specs/specifications/26-DHT.md) is the normative specification — it defines the design. This document is descriptive: it explains design choices in context against other DHTs.
 
 ## Capsule summary
 
@@ -14,7 +14,7 @@ The companion document [26-DHT.md](./26-DHT.md) is the normative specification. 
 | Identity | Visor's secp256k1 pubkey → `SHA256(pubkey)` for the 256-bit node ID |
 | Transport | DMSG streams (port 100), TCP-framed; falls back to skywire transports via `extraTransports` |
 | Wire encoding | JSON (length-prefixed, 5-byte header) |
-| Item value cap | 64 KiB |
+| Item value cap | 64 KiB; hub-edge `tp` lists chunked across `tp:0`, `tp:1`, … past the cap |
 | RPC max message | 4 MiB |
 | Storage tiers | Whitelisted (no eviction, no TTL), Trusted (same), Public (LRU + 2 h TTL + 50/PK rate limit) |
 | Full-node mode | Yes — opt-in storage of every item regardless of XOR distance |
@@ -196,16 +196,16 @@ This is an honest list, not a roadmap.
 
 1. **Full-node-to-full-node reconciliation is hourly and unidirectional per pass**. After the user-side puts an item that lands on full node A, full node B sees it the next hour at the earliest. Should be sub-minute for "live" data.
 2. **The receiver-side `PutMirror` admission is unconditional**. Pushed to a non-full-node, the receiver overflows its store. Fixed today by gating senders to bootstrap+advertised peers; if the gate ever leaks, no second line of defence.
-3. **CLI exposes the store but not the routing table**. There's no `skywire cli visor dht peers` to dump the K-buckets — debugging routing problems requires log-grepping.
+3. **CLI exposes routing-table contents** via `skywire cli visor dht peers` (every K-bucket peer with bucket index and last-seen) and **manual reconcile** via `skywire cli visor dht reconcile <full-node-pk>` for forcing a pull+push pass against a specific peer. Both are gated to trusted full nodes via `IsTrustedFullNode` (`BootstrapPKs ∪ FindAdvertisedFullNodes`).
 4. **The hybrid clients log "DHT miss → HTTP" at debug**. Operators don't have a hit-rate metric to know if the DHT is paying for itself.
 5. **No DHT-side metrics export** at all. Should plug into the visor's existing Prometheus surface.
-6. **`MaxValueSize = 64 KiB` is a single global cap**. A future need for larger payloads (e.g., transport history) requires either chunking or a new design.
-7. **The `dht.svc` salt has had multiple data-format mistakes** (single object vs. list of services). The autoconnect path handles both for compatibility, but every other reader needs to too.
+6. **`MaxValueSize = 64 KiB` is a single global cap, with publisher-side chunking only for the `tp` salt** (`tp:0`, `tp:1`, …, written by `TPDAdapter`). Other salts that grow past the cap (e.g., the `svc` salt's per-visor service lists, future transport history) need similar chunking added on their publishers.
+7. **The `dht.svc` salt has had multiple data-format mistakes** (single object vs. list of services). The autoconnect path handles both for compatibility, but every other reader needs to too. Similarly the `tp` salt now has four shapes coexisting on the wire — bare `[]Entry`, signed `[]SignedEntry`, compact-array `[{r,t,l}]`, compact-envelope `{s, ts}`. `route calc --source dht` accepts all four; reconciling the two compact shapes (only the envelope encodes source PK explicitly) is a publisher-side migration that's not yet complete.
 
 ## See also
 
-- [26-DHT.md](./26-DHT.md) — normative specification
-- [21-Service_Discovery.md](./21-Service_Discovery.md), [04-Transport_Discovery.md](./04-Transport_Discovery.md), [05-Messaging_System.md](./05-Messaging_System.md), [20-Address_Resolver.md](./20-Address_Resolver.md) — the centralized services the DHT is replacing
+- [skywire-specs/specifications/26-DHT.md](./skywire-specs/specifications/26-DHT.md) — normative specification
+- [skywire-specs/specifications/21-Service_Discovery.md](./skywire-specs/specifications/21-Service_Discovery.md), [04-Transport_Discovery.md](./skywire-specs/specifications/04-Transport_Discovery.md), [05-Messaging_System.md](./skywire-specs/specifications/05-Messaging_System.md), [20-Address_Resolver.md](./skywire-specs/specifications/20-Address_Resolver.md) — the centralized services the DHT is replacing
 - BEP44 — http://www.bittorrent.org/beps/bep_0044.html
 - Kademlia paper — https://pdos.csail.mit.edu/~petar/papers/maymounkov-kademlia-lncs.pdf
 - discv5 spec — https://github.com/ethereum/devp2p/blob/master/discv5/discv5.md
