@@ -802,6 +802,11 @@ func (mc *mockRPCClient) SetMinHops(_ uint16) error {
 	return nil
 }
 
+// GetMinHops implements API
+func (mc *mockRPCClient) GetMinHops() (uint16, error) {
+	return 0, nil
+}
+
 // SetCalculateRoutes implements API
 func (mc *mockRPCClient) SetCalculateRoutes(_ bool) error {
 	return nil
@@ -1182,6 +1187,11 @@ func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 
 // DHTGetAll implements API.
 func (mc *mockRPCClient) DHTGetAll(_ string) (string, error) {
+	return "[]", nil
+}
+
+// DHTListWithTargets implements API.
+func (mc *mockRPCClient) DHTListWithTargets(_ string) (string, error) {
 	return "[]", nil
 }
 

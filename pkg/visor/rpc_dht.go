@@ -50,6 +50,18 @@ func (r *RPC) DHTGetAll(salt *string, out *string) (err error) {
 	return nil
 }
 
+// DHTListWithTargets returns all DHT items matching a salt as JSON,
+// with each entry annotated with its storage target key.
+func (r *RPC) DHTListWithTargets(salt *string, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTListWithTargets", salt)(out, &err)
+	result, err := r.visor.DHTListWithTargets(*salt)
+	if err != nil {
+		return err
+	}
+	*out = result
+	return nil
+}
+
 // DHTSync syncs items from a DHT full node.
 func (r *RPC) DHTSync(req *DHTSyncRequest, out *int) (err error) {
 	defer rpcutil.LogCall(r.log, "DHTSync", req)(out, &err)

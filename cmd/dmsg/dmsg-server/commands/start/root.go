@@ -403,6 +403,14 @@ var RootCmd = &cobra.Command{
 						WithField("bootstrap_peers", len(bootstrapPKs)).
 						Info("DHT full node started on port 100")
 
+					// Advertise this DHT full node under salt "fullnode"
+					// so visor full nodes running fullNodePullLoop can
+					// discover us without relying on hardcoded bootstrap
+					// PKs. The advert is signed by conf.SecKey at PUT
+					// time; a stale advert (>30min old) is filtered out
+					// downstream by FindAdvertisedFullNodes.
+					go dht.AdvertiseFullNode(ctx, dhtNode, dhtLog)
+
 					// Mirror DHT writes back to HTTP discoveries so they
 					// stay in sync when visors publish directly to the DHT.
 					discEndpoints := map[string]string{

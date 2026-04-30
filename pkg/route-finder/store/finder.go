@@ -38,7 +38,14 @@ func (g *Graph) GetRoute(ctx context.Context, source, destination cipher.PubKey,
 		return nil, err
 	}
 
-	routes := make([]routing.Route, 0, number)
+	// Cap preallocated capacity to the number of paths the BFS actually
+	// found. Callers may pass a large sentinel (e.g., math.MaxInt32) to
+	// request "all routes"; pre-sizing to that would OOM the process.
+	cap := number
+	if len(paths) < cap {
+		cap = len(paths)
+	}
+	routes := make([]routing.Route, 0, cap)
 	for _, path := range paths {
 		if len(routes) == number {
 			break
