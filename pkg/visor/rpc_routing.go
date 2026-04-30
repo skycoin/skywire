@@ -69,6 +69,17 @@ func (r *RPC) SetMinHops(n *uint16, _ *struct{}) (err error) {
 	return
 }
 
+// GetMinHops returns the visor's configured routing.min_hops value.
+func (r *RPC) GetMinHops(_ *struct{}, out *uint16) (err error) {
+	defer rpcutil.LogCall(r.log, "GetMinHops", nil)(out, &err)
+	n, err := r.visor.GetMinHops()
+	if err != nil {
+		return err
+	}
+	*out = n
+	return nil
+}
+
 // SetCalculateRoutes sets calculate_routes in visor's routing config
 func (r *RPC) SetCalculateRoutes(enabled *bool, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetCalculateRoutes", *enabled)(nil, &err)
