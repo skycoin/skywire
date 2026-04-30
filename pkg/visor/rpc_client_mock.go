@@ -1190,6 +1190,11 @@ func (mc *mockRPCClient) DHTGetAll(_ string) (string, error) {
 	return "[]", nil
 }
 
+// DHTListWithTargets implements API.
+func (mc *mockRPCClient) DHTListWithTargets(_ string) (string, error) {
+	return "[]", nil
+}
+
 // DHTSync implements API.
 func (mc *mockRPCClient) DHTSync(_ string, _ string) (int, error) {
 	return 0, fmt.Errorf("not supported in mock")
