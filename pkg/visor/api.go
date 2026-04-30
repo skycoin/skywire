@@ -287,6 +287,8 @@ type API interface {
 	DHTSync(remotePK string, salt string) (int, error)
 	DHTGetAll(salt string) (string, error)
 	DHTListWithTargets(salt string) (string, error)
+	DHTPeers() ([]DHTPeerInfo, error)
+	DHTReconcile(remotePK string, salt string) (pulled, pushed int, err error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error
