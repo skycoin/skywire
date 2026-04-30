@@ -1316,6 +1316,25 @@ func (rc *rpcClient) DHTSync(remotePK string, salt string) (int, error) {
 	return resp, nil
 }
 
+// DHTPeers returns the routing-table contents.
+func (rc *rpcClient) DHTPeers() ([]DHTPeerInfo, error) {
+	var resp []DHTPeerInfo
+	if err := rc.Call("DHTPeers", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// DHTReconcile runs a one-shot reconcile against a remote full node.
+func (rc *rpcClient) DHTReconcile(remotePK string, salt string) (int, int, error) {
+	req := DHTSyncRequest{RemotePK: remotePK, Salt: salt}
+	var resp DHTReconcileResult
+	if err := rc.Call("DHTReconcile", &req, &resp); err != nil {
+		return 0, 0, err
+	}
+	return resp.Pulled, resp.Pushed, nil
+}
+
 // TransportRPCCall proxies an RPC call to a remote visor over a transport.
 // args is optional JSON-encoded RPC arguments.
 func (rc *rpcClient) TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error) {

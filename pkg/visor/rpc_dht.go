@@ -72,3 +72,32 @@ func (r *RPC) DHTSync(req *DHTSyncRequest, out *int) (err error) {
 	*out = n
 	return nil
 }
+
+// DHTPeers returns the routing-table contents (every K-bucket peer).
+func (r *RPC) DHTPeers(_ *struct{}, out *[]DHTPeerInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTPeers", nil)(out, &err)
+	peers, err := r.visor.DHTPeers()
+	if err != nil {
+		return err
+	}
+	*out = peers
+	return nil
+}
+
+// DHTReconcileResult carries pulled+pushed item counts from a reconcile.
+type DHTReconcileResult struct {
+	Pulled int `json:"pulled"`
+	Pushed int `json:"pushed"`
+}
+
+// DHTReconcile runs a one-shot reconcile against a remote full node.
+func (r *RPC) DHTReconcile(req *DHTSyncRequest, out *DHTReconcileResult) (err error) {
+	defer rpcutil.LogCall(r.log, "DHTReconcile", req)(out, &err)
+	pulled, pushed, err := r.visor.DHTReconcile(req.RemotePK, req.Salt)
+	if err != nil {
+		return err
+	}
+	out.Pulled = pulled
+	out.Pushed = pushed
+	return nil
+}

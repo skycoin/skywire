@@ -2,8 +2,12 @@
 package clivisor
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
+	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -18,6 +22,8 @@ func init() {
 	dhtCmd.AddCommand(dhtFullNodeCmd)
 	dhtCmd.AddCommand(dhtSyncCmd)
 	dhtCmd.AddCommand(dhtListCmd)
+	dhtCmd.AddCommand(dhtPeersCmd)
+	dhtCmd.AddCommand(dhtReconcileCmd)
 	RootCmd.AddCommand(dhtCmd)
 }
 
@@ -181,6 +187,94 @@ var (
 func init() {
 	dhtListCmd.Flags().StringVar(&dhtListSalt, "salt", "", "filter by namespace (dmsg, tp, svc); empty = all")
 	dhtListCmd.Flags().BoolVar(&dhtListWithTarget, "with-target", false, "emit {target, value} objects instead of bare values (for diffing against HTTP discoveries)")
+}
+
+var dhtPeersJSON bool
+
+func init() {
+	dhtPeersCmd.Flags().BoolVar(&dhtPeersJSON, "json", false, "emit raw JSON")
+}
+
+var dhtPeersCmd = &cobra.Command{
+	Use:   "peers",
+	Short: "Dump the DHT routing table (every K-bucket peer)",
+	Long: `List every peer currently in this node's K-bucket routing
+table. Useful for "is the DHT actually connected to anyone?" debugging
+that 'dht status' (which shows only the peer count) cannot answer.
+
+Output is sorted by bucket index then by last-seen (newest first).
+With --json, emits the raw JSON array.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		peers, err := rpcClient.DHTPeers()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if dhtPeersJSON {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			internal.Catch(cmd.Flags(), enc.Encode(peers))
+			return
+		}
+		if len(peers) == 0 {
+			fmt.Println("No peers in routing table.")
+			return
+		}
+		sort.SliceStable(peers, func(i, j int) bool {
+			if peers[i].Bucket != peers[j].Bucket {
+				return peers[i].Bucket < peers[j].Bucket
+			}
+			return peers[i].LastSeen.After(peers[j].LastSeen)
+		})
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "BUCKET\tPK\tNODE_ID\tLAST_SEEN") //nolint:errcheck
+		for _, p := range peers {
+			age := time.Since(p.LastSeen).Truncate(time.Second).String()
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s ago\n", //nolint:errcheck
+				p.Bucket, p.PK, p.NodeID, age)
+		}
+		w.Flush() //nolint:errcheck,gosec
+	},
+}
+
+var dhtReconcileSalt string
+
+func init() {
+	dhtReconcileCmd.Flags().StringVar(&dhtReconcileSalt, "salt", "", "filter by namespace (dmsg, tp, svc); empty = all")
+}
+
+var dhtReconcileCmd = &cobra.Command{
+	Use:   "reconcile <full-node-pk>",
+	Short: "One-shot pull+push reconcile against a remote full node",
+	Long: `Manually run one pull+push reconcile pass against a specific
+remote full node. The full-node pull loop already does this hourly
+against bootstrap and advertised full nodes; this command is for
+forcing convergence faster (e.g., after a config change) or for
+debugging cross-peer divergence.
+
+Restricted to peers in BootstrapPKs ∪ FindAdvertisedFullNodes — the
+receiver-side PutMirror handler stores any signed item we push without
+distance/admission gating, so pushing to a non-full-node would
+overflow its store.
+
+Examples:
+  skywire cli visor dht reconcile <pk>
+  skywire cli visor dht reconcile <pk> --salt tp`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		pulled, pushed, err := rpcClient.DHTReconcile(args[0], dhtReconcileSalt)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		fmt.Printf("Reconcile complete: pulled=%d pushed=%d\n", pulled, pushed)
+	},
 }
 
 var dhtListCmd = &cobra.Command{
