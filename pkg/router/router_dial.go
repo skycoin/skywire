@@ -37,7 +37,7 @@ func (r *router) DialRoutes(
 	opts *DialOptions,
 ) (net.Conn, error) {
 
-	log := r.scopedLog(lPort)
+	log := r.scopedLogForOpts(opts, lPort)
 
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK

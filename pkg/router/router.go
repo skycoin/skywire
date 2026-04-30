@@ -122,6 +122,13 @@ type DialOptions struct {
 	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
 	ExcludeDMSG         bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
 	KeepAlive           time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
+	// AppName is the originating app's name. Set by appnet's
+	// DialContextWithOptions when the caller threaded a context
+	// carrying it (RPCIngressGateway.Dial uses appnet.WithAppName).
+	// router-side: scopedLog prefers this over AppLookup-by-port,
+	// since DialRoutes is invoked with an ephemeral source port that
+	// isn't the app's registered SetAppPort value.
+	AppName string
 }
 
 // DefaultDialOptions returns default dial options.
@@ -235,7 +242,20 @@ func (r *router) scopedLog(lPort routing.Port) *logging.Logger {
 	if !ok || name == "" {
 		return r.logger
 	}
-	return &logging.Logger{FieldLogger: r.logger.WithField("app_name", name)}
+	return r.logger.WithAppName(name)
+}
+
+// scopedLogForOpts returns a logger augmented with app_name=<n> when
+// opts carries an AppName (set via the appnet.WithAppName context
+// path), falling back to the port-based scopedLog. Used in DialRoutes
+// where the lPort is an ephemeral port that doesn't resolve via
+// AppLookup, but the caller has already threaded the canonical name
+// through DialOptions.
+func (r *router) scopedLogForOpts(opts *DialOptions, lPort routing.Port) *logging.Logger {
+	if opts != nil && opts.AppName != "" {
+		return r.logger.WithAppName(opts.AppName)
+	}
+	return r.scopedLog(lPort)
 }
 
 // New constructs a new Router.

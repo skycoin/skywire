@@ -137,7 +137,17 @@ func (s *subscription) matches(e *logrus.Entry) bool {
 	}
 
 	if s.filter.AppName != "" {
-		if module == s.filter.AppName {
+		// _module conventions in the visor:
+		//   - <AppName>                       — app-internal package logger
+		//   - proc:<AppName>:<procKey>        — appserver Proc logger and stdout/stderr forwarder
+		//   - app:<AppName>                   — older app-side convention (treated as alias)
+		// Match either an exact equality or a known prefix that names
+		// the app explicitly, so app stdout (which carries
+		// _module=proc:<n>:<key>) reaches the subscriber.
+		if module == s.filter.AppName ||
+			strings.HasPrefix(module, "proc:"+s.filter.AppName+":") ||
+			strings.HasPrefix(module, "app:"+s.filter.AppName+":") ||
+			strings.HasPrefix(module, "app:"+s.filter.AppName) {
 			return true
 		}
 		// The visor's various subsystems use different field names for

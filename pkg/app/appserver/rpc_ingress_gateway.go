@@ -2,6 +2,7 @@
 package appserver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -121,7 +122,10 @@ func (r *RPCIngressGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error
 		return err
 	}
 
-	conn, err := appnet.Dial(*remote)
+	// Thread the calling app's name on the dial context so router-side
+	// log entries pick up app_name=<n> for 'cli proxy start --verbose'.
+	dialCtx := appnet.WithAppName(context.Background(), r.proc.conf.AppName)
+	conn, err := appnet.DialContext(dialCtx, *remote)
 	if err != nil {
 		free()
 		return err
