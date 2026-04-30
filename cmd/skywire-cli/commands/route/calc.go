@@ -216,6 +216,7 @@ var calcCmd = &cobra.Command{
 			}
 			fmt.Fprintf(&textBuf, "forward: %v\nreverse: %v", fwd, rev)
 		}
+		textBuf.WriteString("\n")
 
 		// Preserve the single-route shape for back-compat when --count=1.
 		if calcCount == 1 && len(pairs) == 1 {
