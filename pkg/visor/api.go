@@ -255,6 +255,7 @@ type API interface {
 	DmsgSetMinSessions(n int) error
 	AddHypervisor(pk cipher.PubKey) error
 	CheckAREntry(pk string) ([]string, error)
+	ARSelfInfo() (*ARSelfRegistration, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
 	HVListVisors() ([]HVVisorEntry, error)
 	HVVisorSummary(pk cipher.PubKey) (*Summary, error)

@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -255,6 +256,27 @@ Example:
 
 		enableMetrics := metricsAddr != ""
 		arAPI := api.New(logger, transportStore, nonceStore, enableMetrics, m, dmsgAddr, publicUDPAddr)
+
+		// Mirror AR bind state to the DHT under salts addr:stcpr / addr:sudph.
+		// Only enabled when this AR is backed by Redis — the dmsg-server DHT
+		// nodes read from the same Redis and serve the entries to visors via
+		// Kademlia. Memory-store deployments skip the mirror entirely.
+		if redisURL != "" {
+			redisHost := strings.TrimPrefix(redisURL, redisScheme)
+			redisPassword := storeconfig.RedisPassword()
+			stcprMirror, errSt := dht.NewRedisMirror(redisHost, redisPassword, 0, "addr:stcpr", pk, sk, logging.MustGetLogger("dht:addr-stcpr-mirror"))
+			sudphMirror, errSu := dht.NewRedisMirror(redisHost, redisPassword, 0, "addr:sudph", pk, sk, logging.MustGetLogger("dht:addr-sudph-mirror"))
+			switch {
+			case errSt != nil:
+				logger.WithError(errSt).Warn("DHT addr:stcpr mirror init failed — STCPR data won't be in DHT")
+			case errSu != nil:
+				logger.WithError(errSu).Warn("DHT addr:sudph mirror init failed — SUDPH data won't be in DHT")
+			default:
+				arAPI.SetDHTMirrors(stcprMirror, sudphMirror)
+				logger.Info("DHT address mirroring enabled (via Redis)")
+				go arAPI.BackfillDHTMirror(ctx, logger)
+			}
+		}
 
 		udpListener, err := kcp.Listen(udpAddr)
 		if err != nil {
