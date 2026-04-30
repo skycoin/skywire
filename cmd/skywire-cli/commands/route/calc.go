@@ -346,8 +346,26 @@ func fetchAllTransportsFromDHT(rpcClient visor.API) ([]*transport.Entry, error) 
 			}
 		}
 
-		// Try compact format. We need the source PK from the
-		// dmsg-salt index.
+		// Try compact-envelope format: {s: source_pk, ts: [{r,t,l}]}.
+		// This is the format publishers should adopt — explicit source
+		// PK in the value means consumers don't need cross-reference.
+		var envelope compactEnvelope
+		if json.Unmarshal(row.Value, &envelope) == nil && envelope.Source != "" {
+			var srcPK cipher.PubKey
+			if err := srcPK.Set(envelope.Source); err == nil {
+				for _, c := range envelope.Transports {
+					e := compactToEntry(srcPK, c)
+					if e != nil {
+						entries = append(entries, e)
+					}
+				}
+				compact++
+				continue
+			}
+		}
+
+		// Try bare-array compact format: [{r, t, l}]. Source PK is
+		// recovered via the dmsg-salt index when available.
 		var compactBatch []compactTpEntry
 		if json.Unmarshal(row.Value, &compactBatch) != nil {
 			continue
@@ -358,22 +376,10 @@ func fetchAllTransportsFromDHT(rpcClient visor.API) ([]*transport.Entry, error) 
 			continue
 		}
 		for _, c := range compactBatch {
-			if c.Remote == "" || c.Type == "" {
-				continue
+			e := compactToEntry(srcPK, c)
+			if e != nil {
+				entries = append(entries, e)
 			}
-			var rPK cipher.PubKey
-			if err := rPK.Set(c.Remote); err != nil {
-				continue
-			}
-			edges := transport.SortEdges(srcPK, rPK)
-			tpType := tptypes.Type(c.Type)
-			e := &transport.Entry{
-				ID:      transport.MakeTransportID(srcPK, rPK, tpType),
-				Edges:   edges,
-				Type:    tpType,
-				Latency: c.Latency,
-			}
-			entries = append(entries, e)
 		}
 		compact++
 	}
@@ -392,6 +398,36 @@ type compactTpEntry struct {
 	Remote  string  `json:"r"`
 	Type    string  `json:"t"`
 	Latency float64 `json:"l,omitempty"`
+}
+
+// compactEnvelope is the recommended publish format for compact
+// transport listings: explicit source PK plus a list of compact
+// per-transport rows. Solves the recoverability problem of bare
+// [{r,t,l}] arrays without blowing the per-entry budget at hub
+// edges (one source PK per visor, not per transport).
+type compactEnvelope struct {
+	Source     string           `json:"s"`
+	Transports []compactTpEntry `json:"ts"`
+}
+
+// compactToEntry synthesizes a transport.Entry from a compact row
+// and a known source PK. Returns nil if the row is malformed.
+func compactToEntry(srcPK cipher.PubKey, c compactTpEntry) *transport.Entry {
+	if c.Remote == "" || c.Type == "" {
+		return nil
+	}
+	var rPK cipher.PubKey
+	if err := rPK.Set(c.Remote); err != nil {
+		return nil
+	}
+	edges := transport.SortEdges(srcPK, rPK)
+	tpType := tptypes.Type(c.Type)
+	return &transport.Entry{
+		ID:      transport.MakeTransportID(srcPK, rPK, tpType),
+		Edges:   edges,
+		Type:    tpType,
+		Latency: c.Latency,
+	}
 }
 
 // buildTpTargetIndex walks the dmsg salt to build a hex(target) → PK

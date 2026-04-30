@@ -3,7 +3,9 @@ package dht
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,11 +18,34 @@ import (
 // Salt for transport discovery entries in the DHT.
 var tpSalt = []byte("tp")
 
+// tpChunkSize is the target number of transport.Entry items per DHT
+// item. Each entry serializes to ~250 bytes (UUID + 2 PKs in hex + a
+// few short strings); 200 entries fit in ~50 KB of JSON which leaves
+// headroom under the 64 KiB MaxValueSize cap. Hub edges with more
+// transports than this overflow into chunked salts ("tp:1", "tp:2"...).
+const tpChunkSize = 200
+
+// tpChunkSalt returns the salt name for the i-th tp chunk. Chunk 0 is
+// always the bare "tp" salt for backwards compatibility with consumers
+// that don't know about chunking.
+func tpChunkSalt(i int) []byte {
+	if i == 0 {
+		return tpSalt
+	}
+	return []byte(fmt.Sprintf("tp:%d", i))
+}
+
 // TPDAdapter implements transport.DiscoveryClient backed by the DHT.
-// Each visor publishes its own transport list under its PK with salt "tp".
+// Each visor publishes its own transport list under its PK with salt
+// "tp" (chunk 0). Hub edges with more than tpChunkSize transports
+// overflow into chunked salts "tp:1", "tp:2", ...
 type TPDAdapter struct {
 	node *Node
 	log  *logging.Logger
+	// prevChunkCount remembers how many tp chunks we wrote last time
+	// so the next publish can tombstone the now-unused chunks if the
+	// transport list shrinks.
+	prevChunkCount atomic.Int32
 }
 
 // NewTPDAdapter creates a transport discovery client backed by the DHT.
@@ -57,24 +82,78 @@ func (d *TPDAdapter) RegisterTransportsV3(ctx context.Context, _ string, entries
 	return d.putEntries(ctx, entries)
 }
 
+// previousChunkCount tracks how many tp chunk salts we wrote last time.
+// On shrink we need to clear the now-unused chunks to avoid stale data.
+// Per-adapter state — safe because there's exactly one TPDAdapter per
+// visor.
 func (d *TPDAdapter) putEntries(ctx context.Context, entries []*transport.Entry) error {
-	// Marshal even when entries is empty — that produces "[]" which
-	// is exactly the cleanup payload we want for "I have no transports
-	// right now."
-	data, err := json.Marshal(entries)
-	if err != nil {
-		return fmt.Errorf("dht tpd: marshal: %w", err)
-	}
-	if len(data) > MaxValueSize {
-		return fmt.Errorf("dht tpd: transport list too large (%d bytes, max %d)", len(data), MaxValueSize)
-	}
 	// Wall-clock nanoseconds as monotonic seq generator. Survives restarts
 	// (in-memory entry counts and bandwidth totals do not) and is virtually
 	// guaranteed to climb past whatever peers cached for our PK previously.
 	// On clock skew the DHT layer's per-peer rejection still keeps things
 	// safe — we'll catch up next tick.
-	seq := uint64(time.Now().UnixNano())
-	return d.node.Put(ctx, data, seq, tpSalt)
+	baseSeq := uint64(time.Now().UnixNano())
+
+	// Always publish at least one chunk (chunk 0 = "tp"). Empty entry
+	// list still goes through so a "I have no transports anymore"
+	// publish overwrites stale state.
+	chunks := chunkTpEntries(entries, tpChunkSize)
+	if len(chunks) == 0 {
+		chunks = [][]*transport.Entry{nil}
+	}
+
+	for i, chunk := range chunks {
+		data, err := json.Marshal(chunk)
+		if err != nil {
+			return fmt.Errorf("dht tpd: marshal chunk %d: %w", i, err)
+		}
+		if len(data) > MaxValueSize {
+			// Even a single 200-entry chunk shouldn't hit this — but
+			// if a future entry serialization grows, fail loudly
+			// rather than silently dropping.
+			return fmt.Errorf("dht tpd: chunk %d too large (%d bytes, max %d)", i, len(data), MaxValueSize)
+		}
+		// Each chunk gets a unique seq so the DHT's monotonic-seq
+		// check accepts them all in one pass. (baseSeq + i is fine —
+		// next register cycle starts from a fresh nanosecond clock.)
+		if err := d.node.Put(ctx, data, baseSeq+uint64(i), tpChunkSalt(i)); err != nil {
+			return fmt.Errorf("dht tpd: put chunk %d: %w", i, err)
+		}
+	}
+
+	// Tombstone any chunks we wrote in a previous, larger publish.
+	// Publishing an empty array advances the seq past the stale data
+	// so readers stop seeing it.
+	prev := int(d.prevChunkCount.Load())
+	for i := len(chunks); i < prev; i++ {
+		_ = d.node.Put(ctx, []byte("[]"), baseSeq+uint64(i), tpChunkSalt(i)) //nolint:errcheck
+	}
+	d.prevChunkCount.Store(int32(len(chunks))) //nolint:gosec
+
+	return nil
+}
+
+// chunkTpEntries splits entries into ~chunkSize-element groups so a
+// single DHT item never crosses MaxValueSize. Returns nil for an
+// empty input (caller decides whether to publish an empty chunk 0
+// for cleanup).
+func chunkTpEntries(entries []*transport.Entry, chunkSize int) [][]*transport.Entry {
+	if len(entries) == 0 {
+		return nil
+	}
+	if chunkSize <= 0 {
+		chunkSize = tpChunkSize
+	}
+	n := (len(entries) + chunkSize - 1) / chunkSize
+	chunks := make([][]*transport.Entry, 0, n)
+	for i := 0; i < len(entries); i += chunkSize {
+		end := i + chunkSize
+		if end > len(entries) {
+			end = len(entries)
+		}
+		chunks = append(chunks, entries[i:end])
+	}
+	return chunks
 }
 
 // GetTransportByID searches the DHT for a transport by ID.
@@ -89,27 +168,55 @@ func (d *TPDAdapter) GetTransportByID(ctx context.Context, id uuid.UUID) (*trans
 
 // GetTransportsByEdge returns all transports for a given visor PK.
 //
-// Decodes the new bare []*Entry shape produced by current writers.
-// Falls through to the legacy []*SignedEntry shape (which was the
-// publish format before this commit) so peers that haven't republished
-// since the upgrade still resolve. The fallback strips the wrapper so
-// callers always see []*Entry.
+// Reads chunk 0 (salt "tp") plus any chunked overflow salts ("tp:1",
+// "tp:2", ...) until one is missing. Decodes the bare []*Entry shape
+// produced by current writers; falls through to the legacy
+// []*SignedEntry shape so peers that haven't republished since the
+// chunking upgrade still resolve.
 func (d *TPDAdapter) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
-	item, err := d.node.Get(ctx, pk, tpSalt)
-	if err != nil {
-		return nil, err
+	var out []*transport.Entry
+	for i := 0; ; i++ {
+		item, err := d.node.Get(ctx, pk, tpChunkSalt(i))
+		if err != nil {
+			if i == 0 {
+				return nil, err
+			}
+			// Stopping at the first chunk-not-found is the cheap way
+			// to detect "no more chunks." A torn write (chunk 0 and 2
+			// present, 1 missing) would mean a partial publish — but
+			// our writer always writes chunks contiguously, and reads
+			// race with a writer at most one publish behind, so this
+			// is safe.
+			if errors.Is(err, ErrNotFound) {
+				break
+			}
+			return nil, err
+		}
+		entries, err := decodeTpItem(item.V)
+		if err != nil {
+			return nil, fmt.Errorf("dht tpd: decode chunk %d: %w", i, err)
+		}
+		out = append(out, entries...)
+		// An empty chunk means we hit a tombstone — older publishes
+		// had more chunks but the writer shrank. Stop reading further.
+		if len(entries) == 0 && i > 0 {
+			break
+		}
 	}
+	return out, nil
+}
 
-	// Try the canonical bare-entry shape first.
+// decodeTpItem unmarshals one tp-chunk value into entries, accepting
+// the canonical bare shape and falling back to the legacy SignedEntry
+// wrapper.
+func decodeTpItem(v []byte) ([]*transport.Entry, error) {
 	var entries []*transport.Entry
-	if err := json.Unmarshal(item.V, &entries); err == nil && (len(entries) == 0 || entries[0] != nil) {
+	if err := json.Unmarshal(v, &entries); err == nil && (len(entries) == 0 || entries[0] != nil) {
 		return entries, nil
 	}
-
-	// Legacy: SignedEntry wrapper.
 	var signed []*transport.SignedEntry
-	if err := json.Unmarshal(item.V, &signed); err != nil {
-		return nil, fmt.Errorf("dht tpd: unmarshal: %w", err)
+	if err := json.Unmarshal(v, &signed); err != nil {
+		return nil, err
 	}
 	out := make([]*transport.Entry, 0, len(signed))
 	for _, se := range signed {

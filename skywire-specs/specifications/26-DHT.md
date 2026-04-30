@@ -177,6 +177,12 @@ The DHT provides adapter types that implement the same interfaces as the central
 
 `HybridDiscClient` and `HybridTPDClient` (`pkg/dht/disc_hybrid.go`) wrap a DHT adapter with an HTTP fallback: reads try DHT first, fall back to HTTP on miss; writes go to both. Wired into the visor by `initDHT` (DMSG hybrid) and `initDHTTransport` (TPD hybrid). The visor's autoconnect path (`pkg/visor/autoconnect.go:fetchPubAddresses`) reads the `svc` salt directly.
 
+## Hub-edge chunking (`tp` salt)
+
+A single `tp` salt value holds the full transport list for one visor. With ~250 bytes per `transport.Entry` (UUID + two PKs in hex + a few short strings + JSON overhead) and `MaxValueSize = 64 KiB`, a hub edge with more than ~250 transports would silently fail to publish (the mirror's `payload exceeds MaxValueSize, dropping publish` log was the only signal).
+
+`TPDAdapter` chunks at a target of **200 entries per chunk**, leaving headroom for entry-size growth. Chunk 0 is always the bare `tp` salt for back-compat with consumers that don't know about chunking; chunks 1+ go to `tp:1`, `tp:2`, … readers iterate `GetTransportsByEdge` over `tp`, `tp:1`, … until one is missing or empty (the latter is a tombstone — when a writer's chunk count shrinks, it publishes `[]` to the now-unused chunk salts so readers stop seeing stale data).
+
 ## Entry Mirroring
 
 Deployment services (DMSG discovery, TPD, SD) mirror HTTP-received entries into the DHT so entries from old visors that don't dual-write are still available to DHT readers. The mirror signs the DHT item with the *service's* own key but stores it under the visor's target key (`SHA256(visor_pk || salt)`) using the `mirror_target` field. The entry's own application-level signature (e.g., `disc.Entry.Signature`) provides authenticity proof; the DHT signature provides distribution authenticity.
@@ -208,7 +214,12 @@ The visor exposes the DHT via `skywire cli visor dht`:
 `route calc` also gained a `--source tpd|dht|auto` flag (default `tpd`):
 
 - `tpd`: fetch `/all-transports` from the deployment TPD (current behavior).
-- `dht`: build the graph from the local DHT's `tp` salt entries via `DHTListWithTargets`. Three formats are supported: bare `[]transport.Entry` (visor-published), `[]transport.SignedEntry`, and the compact single-letter format `[{r,t,l}]` published by deployment-side mirrors. The compact format omits the source PK in the value, but it's recovered by cross-referencing the storage target hash against the `dmsg` salt's `static` field — every visor that publishes both salts has a known PK→target relationship via `target = SHA256(pk||salt)`. Synthetic transport IDs are generated for compact entries (deterministic from the `(srcPK, rPK, type)` tuple).
+- `dht`: build the graph from the local DHT's `tp` salt entries via `DHTListWithTargets`. Four shapes are supported:
+  - **Bare**: `[]transport.Entry` (the canonical visor-publish format from `TPDAdapter`)
+  - **Signed**: `[]transport.SignedEntry` (legacy; the wrapper is unwrapped)
+  - **Compact-envelope**: `{"s": <source pk>, "ts": [{"r","t","l"}]}` (recommended for size-conscious publishers — explicit source PK plus per-transport rows)
+  - **Compact-array**: `[{"r","t","l"}]` (legacy; source PK is recovered by cross-referencing the storage target hash against the `dmsg` salt's `static` field, since `target = SHA256(pk || salt)` and the same PK is used across both salts)
+  Synthetic transport IDs are generated for compact entries (deterministic from the `(srcPK, rPK, type)` tuple via `transport.MakeTransportID`).
 - `auto`: try DHT first; fall back to TPD if DHT yielded fewer than 10 entries.
 
 ## Configuration
