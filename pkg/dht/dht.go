@@ -386,6 +386,51 @@ func (n *Node) rpcPutValue(ctx context.Context, p Peer, item MutableItem) error 
 	return nil
 }
 
+// rpcPutBatch sends many items+targets in a single RPC round-trip.
+// Returns a count of items the peer reported as stored, plus a count
+// of per-item errors (errors are only logged at debug; the call as a
+// whole succeeds if the RPC round-trip completed). The peer-side
+// MaxValueSize cap on the wire (4MB) is enforced by readMsg's
+// length-bounded check; chunk large pushes if you can hit that.
+func (n *Node) rpcPutBatch(ctx context.Context, p Peer, items []MutableItem, targets []NodeID) (stored int, errs int, err error) {
+	if len(items) == 0 {
+		return 0, 0, nil
+	}
+	ctx, cancel := rpcCtx(ctx)
+	defer cancel()
+
+	conn, err := n.dial(ctx, p.PK)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer conn.Close() //nolint:errcheck,gosec
+
+	req := PutBatchRequest{
+		SenderID: n.id,
+		SenderPK: n.pk,
+		Items:    items,
+		Targets:  targets,
+	}
+	var resp PutBatchResponse
+	if err := rpcCall(ctx, conn, methodPutBatch, req, &resp); err != nil {
+		return 0, 0, err
+	}
+	for i, ok := range resp.Stored {
+		if ok {
+			stored++
+		} else {
+			errs++
+			if i < len(resp.Errors) && resp.Errors[i] != "" {
+				n.log.WithField("peer", p.PK.String()).
+					WithField("err", resp.Errors[i]).
+					Debug("rpcPutBatch: item rejected")
+			}
+		}
+	}
+	n.rt.Update(Peer{ID: p.ID, PK: p.PK, LastSeen: time.Now()})
+	return stored, errs, nil
+}
+
 func (n *Node) rpcPutMirror(ctx context.Context, p Peer, item MutableItem, target NodeID) error {
 	ctx, cancel := rpcCtx(ctx)
 	defer cancel()
@@ -479,12 +524,15 @@ func (n *Node) reconcile(ctx context.Context, remotePK cipher.PubKey, salt strin
 		return pulled, 0, err
 	}
 
-	// Push phase: paginate our local store and rpcPutMirror items
-	// whose target keys weren't returned by the peer. Pagination uses
-	// the same Seq cursor strategy as the pull phase to avoid the
-	// 1000-item GetItems batch cap.
+	// Push phase: paginate our local store and batch-push items whose
+	// target keys weren't returned by the peer. Pagination uses the
+	// same Seq cursor strategy as the pull phase to avoid the
+	// 1000-item GetItems batch cap. Within each store page we also
+	// chunk the wire payload so a single PutBatch never crosses the
+	// 4MB rpcCall size limit.
 	peerID := NodeIDFromPubKey(remotePK)
 	peer := Peer{ID: peerID, PK: remotePK}
+	const maxBatchBytes = 3 * 1024 * 1024 // headroom under readMsg's 4MB cap
 	var cursor uint64
 	for {
 		items, targets, hasMore := n.store.GetItems(salt, cursor, 0)
@@ -492,25 +540,43 @@ func (n *Node) reconcile(ctx context.Context, remotePK cipher.PubKey, salt strin
 			break
 		}
 		var maxSeq uint64
-		for i, item := range items {
-			// Don't push items the peer already gave us back to them.
-			if _, ok := seen[targets[i]]; ok {
-				if item.Seq > maxSeq {
-					maxSeq = item.Seq
-				}
-				continue
+		batchItems := make([]MutableItem, 0, len(items))
+		batchTargets := make([]NodeID, 0, len(items))
+		batchBytes := 0
+		flush := func() {
+			if len(batchItems) == 0 {
+				return
 			}
-			if pushErr := n.rpcPutMirror(ctx, peer, item, targets[i]); pushErr != nil {
+			stored, _, pushErr := n.rpcPutBatch(ctx, peer, batchItems, batchTargets)
+			if pushErr != nil {
 				n.log.WithError(pushErr).
 					WithField("peer", remotePK.String()).
-					Debug("Reconcile: rpcPutMirror failed")
-			} else {
-				pushed++
+					Debug("Reconcile: rpcPutBatch failed")
 			}
+			pushed += stored
+			batchItems = batchItems[:0]
+			batchTargets = batchTargets[:0]
+			batchBytes = 0
+		}
+		for i, item := range items {
 			if item.Seq > maxSeq {
 				maxSeq = item.Seq
 			}
+			// Don't push items the peer already gave us back to them.
+			if _, ok := seen[targets[i]]; ok {
+				continue
+			}
+			// Estimate item wire size: V dominates, plus K (33), Sig (65),
+			// Salt, and target (32). Round generously to stay safe.
+			itemBytes := len(item.V) + len(item.Salt) + 200
+			if batchBytes+itemBytes > maxBatchBytes && len(batchItems) > 0 {
+				flush()
+			}
+			batchItems = append(batchItems, item)
+			batchTargets = append(batchTargets, targets[i])
+			batchBytes += itemBytes
 		}
+		flush()
 		if !hasMore || maxSeq <= cursor {
 			break
 		}
@@ -651,6 +717,48 @@ func (n *Node) handleConn(conn io.ReadWriteCloser, remotePK cipher.PubKey) {
 		items, targets, hasMore := n.store.GetItems(req.Salt, req.SinceSeq, req.Limit)
 		resp := GetItemsResponse{Items: items, Targets: targets, HasMore: hasMore}
 		writeMsg(conn, methodGetItems, resp) //nolint:errcheck,gosec
+
+	case methodPutBatch:
+		var req PutBatchRequest
+		if json.Unmarshal(data, &req) != nil {
+			return
+		}
+		n.rt.Update(Peer{ID: req.SenderID, PK: req.SenderPK})
+		stored := make([]bool, len(req.Items))
+		errs := make([]string, len(req.Items))
+		for i := range req.Items {
+			var hasTarget bool
+			if i < len(req.Targets) && !req.Targets[i].IsZero() {
+				hasTarget = true
+			}
+			if hasTarget {
+				// PutMirror is void — verify happens inside; we
+				// can't distinguish accepted from rejected, but a
+				// fresh-or-newer item will always land. Treat as
+				// accepted to keep the wire shape simple.
+				n.store.PutMirror(req.Targets[i], req.Items[i])
+				stored[i] = true
+				continue
+			}
+			if putErr := n.store.Put(req.Items[i]); putErr != nil {
+				errs[i] = putErr.Error()
+			} else {
+				stored[i] = true
+			}
+		}
+		// Drop the all-empty error slice to keep small batches tiny.
+		var hasErr bool
+		for _, e := range errs {
+			if e != "" {
+				hasErr = true
+				break
+			}
+		}
+		resp := PutBatchResponse{Stored: stored}
+		if hasErr {
+			resp.Errors = errs
+		}
+		writeMsg(conn, methodPutBatch, resp) //nolint:errcheck,gosec
 	}
 }
 
@@ -745,21 +853,49 @@ func (n *Node) fullNodePullLoop() {
 	}
 }
 
-// fullNodePullOnce reconciles with each bootstrap peer once, with a
-// per-peer timeout. Reconcile pulls items we don't have from the peer
-// and pushes back items they don't have from us — so over time the
-// bootstrap full nodes converge to the same data set rather than each
-// keeping its own partial view forever. The dial layer already skips
-// peers in the noDHT negative cache, so we just let Reconcile return
-// an error and move on.
+// fullNodePullOnce reconciles with bootstrap peers AND any peers
+// advertising themselves as full nodes (signed FullNodeAdvert in salt
+// "fullnode"), with a per-peer timeout. The signed advert is what
+// makes pushing to non-bootstrap peers safe: the peer explicitly
+// claims it accepts the full-node responsibility of storing arbitrary
+// mirror puts.
+//
+// Reconcile pulls items we don't have from the peer and pushes back
+// items they don't have from us, so over time the full nodes
+// converge. The dial layer already skips peers in the noDHT negative
+// cache, so we just let Reconcile return an error and move on.
 func (n *Node) fullNodePullOnce(perPeerTimeout time.Duration) {
-	totalPulled := 0
-	totalPushed := 0
-	tried := 0
+	// Bootstrap PKs first (deployment-trusted full nodes), then
+	// peer-advertised full nodes (signed advert verified by store
+	// signature check at insertion time, freshness re-checked here).
+	peers := make([]cipher.PubKey, 0, len(n.cfg.BootstrapPKs))
+	seen := make(map[cipher.PubKey]struct{})
 	for _, pk := range n.cfg.BootstrapPKs {
 		if pk == n.pk {
 			continue
 		}
+		if _, dup := seen[pk]; dup {
+			continue
+		}
+		seen[pk] = struct{}{}
+		peers = append(peers, pk)
+	}
+	advertised := FindAdvertisedFullNodes(n)
+	for _, pk := range advertised {
+		if pk == n.pk {
+			continue
+		}
+		if _, dup := seen[pk]; dup {
+			continue
+		}
+		seen[pk] = struct{}{}
+		peers = append(peers, pk)
+	}
+
+	totalPulled := 0
+	totalPushed := 0
+	tried := 0
+	for _, pk := range peers {
 		tried++
 		ctx, cancel := context.WithTimeout(n.ctx, perPeerTimeout)
 		// Empty salt => all salts.
@@ -779,6 +915,8 @@ func (n *Node) fullNodePullOnce(perPeerTimeout time.Duration) {
 	}
 	if tried > 0 {
 		n.log.WithField("tried", tried).
+			WithField("bootstrap", len(n.cfg.BootstrapPKs)).
+			WithField("advertised", len(advertised)).
 			WithField("pulled", totalPulled).
 			WithField("pushed", totalPushed).
 			WithField("store_size", n.store.Len()).
