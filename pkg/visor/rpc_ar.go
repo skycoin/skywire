@@ -15,3 +15,14 @@ func (r *RPC) CheckAREntry(pk *string, out *[]string) (err error) {
 	*out = result
 	return nil
 }
+
+// ARSelfInfo returns the visor's own AR registration (STCPR + SUDPH).
+func (r *RPC) ARSelfInfo(_ *struct{}, out *ARSelfRegistration) (err error) {
+	defer rpcutil.LogCall(r.log, "ARSelfInfo", nil)(out, &err)
+	reg, err := r.visor.ARSelfInfo()
+	if err != nil {
+		return err
+	}
+	*out = *reg
+	return nil
+}
