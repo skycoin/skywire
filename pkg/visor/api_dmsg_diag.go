@@ -67,10 +67,9 @@ func (v *Visor) DmsgReconnect() (int, error) {
 // DHTSync fetches items from a DHT full node and stores them locally.
 // If remotePK is empty, uses the first available bootstrap peer.
 //
-// Paginates until the remote reports no more items: each batch advances
-// the sinceSeq cursor to the highest Seq seen so far, so a single CLI
-// invocation pulls the full inventory rather than just the first batch
-// (capped at 1000 server-side).
+// Delegates pagination to dht.Node.SyncFrom, which is shared with the
+// node's own periodic full-node pull loop so they have identical
+// semantics.
 func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
 	if v.dhtNode == nil {
 		return 0, fmt.Errorf("DHT node not running")
@@ -93,46 +92,15 @@ func (v *Visor) DHTSync(remotePK string, salt string) (int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	stored := 0
-	var cursor uint64
-	for {
-		resp, err := v.dhtNode.GetItemsFrom(ctx, targetPK, salt, cursor, 0)
-		if err != nil {
-			if stored > 0 {
-				// Partial-progress: surface what we got rather than discarding.
-				v.log.WithError(err).WithField("stored", stored).
-					Warn("DHT sync: partial progress, remote call failed")
-				return stored, nil
-			}
-			return 0, fmt.Errorf("sync from %s: %w", targetPK.String(), err)
+	stored, err := v.dhtNode.SyncFrom(ctx, targetPK, salt)
+	if err != nil {
+		if stored > 0 {
+			// Partial-progress: surface what we got rather than discarding.
+			v.log.WithError(err).WithField("stored", stored).
+				Warn("DHT sync: partial progress, remote call failed")
+			return stored, nil
 		}
-
-		var maxSeq uint64
-		for i, item := range resp.Items {
-			// Use PutMirror with the explicit target key from the response.
-			// Mirrored items have item.K set to the mirror's PK (not the
-			// subject PK), so item.Target() returns the wrong key.
-			if i < len(resp.Targets) {
-				v.dhtNode.Store().PutMirror(resp.Targets[i], item)
-				stored++
-			} else {
-				// Fallback for old servers that don't send targets.
-				if putErr := v.dhtNode.Store().Put(item); putErr == nil {
-					stored++
-				}
-			}
-			if item.Seq > maxSeq {
-				maxSeq = item.Seq
-			}
-		}
-
-		if !resp.HasMore || len(resp.Items) == 0 || maxSeq <= cursor {
-			// !HasMore: server says we have everything.
-			// no items: nothing came back, nothing more to do.
-			// maxSeq <= cursor: defensive — would loop forever otherwise.
-			break
-		}
-		cursor = maxSeq
+		return 0, fmt.Errorf("sync from %s: %w", targetPK.String(), err)
 	}
 
 	v.log.WithField("stored", stored).Info("DHT sync result")

@@ -120,6 +120,21 @@ func (n *Node) Start(ctx context.Context) error {
 			defer n.wg.Done()
 			n.bootstrapLoop()
 		}()
+
+		// Full nodes also bulk-pull the data set from each bootstrap
+		// peer at startup and periodically thereafter, so that "full
+		// node" actually means "holds the network's data" rather than
+		// "would store it if anyone Put through me." Without this loop
+		// a freshly-restarted full node sat near-empty until passive
+		// peer Puts trickled in (observed in the field: ~87 items on a
+		// dev visor while a long-lived hub had ~3500).
+		if n.store.IsFullNode() {
+			n.wg.Add(1)
+			go func() {
+				defer n.wg.Done()
+				n.fullNodePullLoop()
+			}()
+		}
 	}
 
 	return nil
@@ -389,6 +404,48 @@ func (n *Node) rpcPutMirror(ctx context.Context, p Peer, item MutableItem, targe
 	return nil
 }
 
+// SyncFrom paginates GetItems from a single remote peer, mirroring each
+// returned item into the local store under its server-supplied target
+// key. Returns the count of items mirrored and the first call-level
+// error encountered (partial progress is reported as a return value).
+//
+// Used by both the manual `dht sync` RPC and the periodic full-node
+// pull loop (fullNodePullLoop) so they share identical semantics.
+func (n *Node) SyncFrom(ctx context.Context, remotePK cipher.PubKey, salt string) (int, error) {
+	stored := 0
+	var cursor uint64
+	for {
+		resp, err := n.GetItemsFrom(ctx, remotePK, salt, cursor, 0)
+		if err != nil {
+			return stored, err
+		}
+		var maxSeq uint64
+		for i, item := range resp.Items {
+			// PutMirror with the server's target key. Mirrored items
+			// have item.K = mirror's PK (not subject), so item.Target()
+			// would point to the wrong storage slot.
+			if i < len(resp.Targets) {
+				n.store.PutMirror(resp.Targets[i], item)
+				stored++
+			} else {
+				// Old servers don't send targets — fall back to the
+				// item's own (possibly self-keyed) target.
+				if putErr := n.store.Put(item); putErr == nil {
+					stored++
+				}
+			}
+			if item.Seq > maxSeq {
+				maxSeq = item.Seq
+			}
+		}
+		if !resp.HasMore || len(resp.Items) == 0 || maxSeq <= cursor {
+			break
+		}
+		cursor = maxSeq
+	}
+	return stored, nil
+}
+
 // GetItemsFrom fetches a batch of items from a specific peer.
 // Used for bulk sync from a full node.
 func (n *Node) GetItemsFrom(ctx context.Context, pk cipher.PubKey, salt string, sinceSeq uint64, limit int) (*GetItemsResponse, error) {
@@ -575,6 +632,74 @@ func (n *Node) bootstrapOnce() int {
 		found++
 	}
 	return found
+}
+
+// fullNodePullLoop bulk-pulls the data set from each bootstrap peer at
+// startup, then re-pulls on a long interval to catch items that other
+// full nodes received via paths that didn't reach us.
+//
+// Failure mode: any individual peer call may fail (peer offline, slow,
+// non-DHT). Errors are logged at Debug and the loop moves on to the
+// next peer. The whole pass is "best effort" — we'd rather fill in
+// from one peer than block on a dead one.
+func (n *Node) fullNodePullLoop() {
+	const (
+		startupDelay   = 5 * time.Second
+		retryInterval  = 1 * time.Hour
+		perPeerTimeout = 5 * time.Minute
+	)
+
+	// Wait for bootstrap to ping at least once before our first pull;
+	// dialing a peer that hasn't been pinged yet adds extra noDHT-cache
+	// misses for no benefit.
+	select {
+	case <-n.ctx.Done():
+		return
+	case <-time.After(startupDelay):
+	}
+
+	for {
+		n.fullNodePullOnce(perPeerTimeout)
+
+		select {
+		case <-n.ctx.Done():
+			return
+		case <-time.After(retryInterval):
+		}
+	}
+}
+
+// fullNodePullOnce pulls from each bootstrap peer once, with a per-peer
+// timeout. The dial layer already skips peers in the noDHT negative
+// cache, so we just let SyncFrom return an error and move on.
+func (n *Node) fullNodePullOnce(perPeerTimeout time.Duration) {
+	pulled := 0
+	tried := 0
+	for _, pk := range n.cfg.BootstrapPKs {
+		if pk == n.pk {
+			continue
+		}
+		tried++
+		ctx, cancel := context.WithTimeout(n.ctx, perPeerTimeout)
+		// Empty salt => all salts.
+		stored, err := n.SyncFrom(ctx, pk, "")
+		cancel()
+		if err != nil {
+			n.log.WithError(err).WithField("peer", pk.String()).
+				Debug("Full-node pull from peer failed")
+			continue
+		}
+		pulled += stored
+		n.log.WithField("peer", pk.String()).
+			WithField("items", stored).
+			Debug("Full-node pull from peer complete")
+	}
+	if tried > 0 {
+		n.log.WithField("tried", tried).
+			WithField("pulled", pulled).
+			WithField("store_size", n.store.Len()).
+			Info("Full-node bulk pull pass complete")
+	}
 }
 
 func (n *Node) maintenanceLoop() {
