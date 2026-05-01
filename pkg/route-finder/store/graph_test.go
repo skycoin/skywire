@@ -61,6 +61,10 @@ func (m *mockStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey
 	return nil
 }
 
+func (m *mockStore) UpdateLatency(_ context.Context, _ string, _, _, _ float64) error {
+	return nil
+}
+
 func (m *mockStore) GetTransportBandwidth(_ context.Context, _ uuid.UUID, _ string, _ int) ([]tpdstore.BandwidthAggregation, error) {
 	return []tpdstore.BandwidthAggregation{}, nil
 }

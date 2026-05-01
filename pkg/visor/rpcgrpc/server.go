@@ -8,11 +8,18 @@ import (
 	"net"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport"
+	tpdstore "github.com/skycoin/skywire/pkg/transport-discovery/store"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // RouteHopInfo contains detailed information about a single hop in a route.
@@ -42,6 +49,17 @@ type VisorAPI interface {
 	GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error)
 	// DialDmsgRPC dials a remote visor's gRPC/RPC port over DMSG and returns the connection
 	DialDmsgRPC(pk cipher.PubKey) (net.Conn, error)
+	// SubscribeLogs returns a channel of logrus entries matching the
+	// filter; cancel() unsubscribes and returns the dropped count.
+	// Both may be nil (visor without a broadcaster wired up).
+	SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64)
+	// LocalPK returns the visor's own public key. Used by route-calc
+	// gRPC handlers that default the src PK to the local visor.
+	LocalPK() cipher.PubKey
+	// FetchAllTransportEntries pulls every transport entry from TPD via
+	// the visor's existing discovery client. The route-calc gRPC
+	// handler builds the BFS graph from this slice.
+	FetchAllTransportEntries(ctx context.Context) ([]*transport.Entry, error)
 }
 
 // PingConf mirrors visor.PingConfig to avoid import cycles
@@ -618,6 +636,287 @@ func (s *PingServer) GetSystemStats(ctx context.Context, req *SystemStatsRequest
 
 	return stats, nil
 }
+
+// StreamAppLogs subscribes to the visor's master logger and forwards
+// matching entries to the gRPC client. Used by 'proxy start --verbose'
+// and 'dmsg curl --verbose'.
+//
+// Filtering: AppName matches by _module exact equality OR app/app_name
+// field. Modules matches by _module prefix. The two are OR-merged; at
+// least one must be specified (AppName="*" enables wildcard mode for
+// diagnostics).
+//
+// The visor's router/mux/setup layers attach app_name=<n> to rg-scoped
+// entries (see router.Config.AppLookup), so AppName filtering scopes
+// to one app's session — including layered events that happen on
+// behalf of the app, not just app stdout.
+//
+// IncludeRouter is retained on the wire for forward compatibility but
+// is currently ignored — Modules is the explicit replacement.
+//
+// The subscription's per-stream buffer is bounded; bursts beyond it
+// are dropped and counted (cancel returns the count).
+func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_StreamAppLogsServer) error {
+	if req.AppName == "" && len(req.Modules) == 0 {
+		return fmt.Errorf("app_name or modules required")
+	}
+
+	level, err := logging.LevelFromString(req.MinLevel)
+	if err != nil {
+		// Default to debug — verbose mode is the use case.
+		level = logrus.DebugLevel
+	}
+
+	filter := logging.Filter{
+		AppName:  req.AppName,
+		Modules:  req.Modules,
+		MinLevel: level,
+	}
+	// Wildcard: AppName "*" disables app-scoping for diagnostic
+	// purposes — useful for verifying the stream pipe itself.
+	if req.AppName == "*" {
+		filter.AppName = ""
+	}
+
+	const subBuffer = 512
+	ch, cancel := s.visor.SubscribeLogs(filter, subBuffer)
+	if ch == nil {
+		return fmt.Errorf("log broadcaster not available on this visor")
+	}
+	defer cancel()
+
+	s.log.Debugf("gRPC StreamAppLogs: subscribed app=%s include_router=%v min_level=%s",
+		req.AppName, req.IncludeRouter, level)
+
+	// Sentinel: tell the client the subscription is live so it can
+	// race-safely trigger downstream RPCs whose log output we want
+	// to capture. Sent BEFORE entering the dispatch loop so any
+	// activity from the moment the client sees this entry forward
+	// is guaranteed to reach the broadcaster.
+	if err := stream.Send(&AppLogEntry{
+		TimestampNs: time.Now().UnixNano(),
+		Subscribed:  true,
+	}); err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case e, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			if err := stream.Send(toAppLogEntry(e)); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// toAppLogEntry converts a logrus.Entry to the wire AppLogEntry. The
+// _module field, when present, is hoisted into Module; remaining
+// fields land in Fields as strings (best-effort fmt.Sprint).
+func toAppLogEntry(e *logrus.Entry) *AppLogEntry {
+	module := ""
+	fields := make(map[string]string, len(e.Data))
+	for k, v := range e.Data {
+		if k == "_module" {
+			if m, ok := v.(string); ok {
+				module = m
+				continue
+			}
+		}
+		fields[k] = fmt.Sprintf("%v", v)
+	}
+	return &AppLogEntry{
+		TimestampNs: e.Time.UnixNano(),
+		Level:       e.Level.String(),
+		Module:      module,
+		Message:     e.Message,
+		Fields:      fields,
+	}
+}
+
+// StreamCalcRoutes runs a route-finder BFS server-side and streams each
+// valid path back to the caller as it's discovered. The streaming wire
+// shape lets callers consume routes incrementally — neither side has to
+// hold every result in memory at once, which matters for unbounded
+// requests on dense graphs.
+//
+// Source PK defaults to this visor's own. Max-hops defaults to a safe
+// 5 if zero. count == 0 means "until exhausted"; the server will keep
+// emitting until no more routes exist or the client disconnects.
+//
+// The route-finder package's StreamRoutes drives the search; the loop
+// here is just transport-graph fetch + protocol marshaling.
+func (s *PingServer) StreamCalcRoutes(req *CalcRoutesRequest, stream PingService_StreamCalcRoutesServer) error {
+	var dstPK cipher.PubKey
+	if err := dstPK.Set(req.DstPk); err != nil {
+		return fmt.Errorf("invalid dst_pk: %w", err)
+	}
+	srcPK := s.visor.LocalPK()
+	if req.SrcPk != "" {
+		if err := srcPK.Set(req.SrcPk); err != nil {
+			return fmt.Errorf("invalid src_pk: %w", err)
+		}
+	}
+
+	maxHops := int(req.MaxHops)
+	if maxHops <= 0 {
+		maxHops = 5
+	}
+	minHops := int(req.MinHops)
+	if minHops < 0 {
+		minHops = 0
+	}
+
+	// Fetch the transport graph. Only TPD is wired here — DHT-source
+	// support can land separately if the offline-DHT path is needed
+	// from the gRPC side. The CLI's local-fallback path still has it
+	// for visor-less use.
+	entries, err := s.visor.FetchAllTransportEntries(stream.Context())
+	if err != nil {
+		return fmt.Errorf("fetch transports: %w", err)
+	}
+	if len(entries) == 0 {
+		return fmt.Errorf("no transport entries available")
+	}
+
+	memStore := newCalcMemStore(entries)
+	graph, err := routeFinder.NewGraphWithDepth(stream.Context(), memStore, srcPK, maxHops)
+	if err != nil {
+		return fmt.Errorf("build graph: %w", err)
+	}
+
+	queueCap := int(req.QueueCap)
+	if queueCap == 0 {
+		queueCap = routeFinder.DefaultMaxBFSQueue
+	}
+	sent := int32(0)
+	streamErr := graph.StreamRoutesWithCap(stream.Context(), srcPK, dstPK, minHops, maxHops, queueCap, func(r routing.Route) bool {
+		out := &CalcRoute{Hops: make([]*CalcHop, 0, len(r.Hops))}
+		for _, h := range r.Hops {
+			out.Hops = append(out.Hops, &CalcHop{
+				TpId: h.TpID.String(),
+				From: h.From.String(),
+				To:   h.To.String(),
+			})
+		}
+		if err := stream.Send(out); err != nil {
+			s.log.WithError(err).Debug("StreamCalcRoutes: send failed; aborting search")
+			return false
+		}
+		sent++
+		if req.Count > 0 && sent >= req.Count {
+			return false
+		}
+		return true
+	})
+	// ErrRouteNotFound is informational: the search ran clean to
+	// completion without finding any matching path. Translate it to
+	// nil here when at least one route was sent (hop-length retries
+	// can hit ErrRouteNotFound after emitting valid paths).
+	if streamErr != nil && (sent == 0 || streamErr != routeFinder.ErrRouteNotFound) {
+		return streamErr
+	}
+	return nil
+}
+
+// calcMemStore is a tiny in-process store.Store impl for the route-finder
+// package. It only needs to answer GetTransportsByEdge during graph
+// construction — every other method is a stub.
+type calcMemStore struct {
+	byEdge map[cipher.PubKey][]*transport.Entry
+}
+
+func newCalcMemStore(entries []*transport.Entry) *calcMemStore {
+	byEdge := make(map[cipher.PubKey][]*transport.Entry)
+	for _, e := range entries {
+		if e == nil {
+			continue
+		}
+		byEdge[e.Edges[0]] = append(byEdge[e.Edges[0]], e)
+		if e.Edges[0] != e.Edges[1] {
+			byEdge[e.Edges[1]] = append(byEdge[e.Edges[1]], e)
+		}
+	}
+	return &calcMemStore{byEdge: byEdge}
+}
+
+func (s *calcMemStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	if tps, ok := s.byEdge[pk]; ok {
+		return tps, nil
+	}
+	return nil, tpdstore.ErrTransportNotFound
+}
+
+// Unused store.Store stubs.
+func (s *calcMemStore) RegisterTransport(context.Context, *transport.SignedEntry) error {
+	return nil
+}
+func (s *calcMemStore) RegisterTransportsBatch(context.Context, []*transport.SignedEntry) error {
+	return nil
+}
+func (s *calcMemStore) DeregisterTransport(context.Context, uuid.UUID) error { return nil }
+func (s *calcMemStore) GetTransportByID(context.Context, uuid.UUID) (*transport.Entry, error) {
+	return nil, tpdstore.ErrTransportNotFound
+}
+func (s *calcMemStore) GetNumberOfTransports(context.Context) (map[tptypes.Type]int, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetAllTransports(context.Context, bool) ([]*transport.Entry, error) {
+	return nil, nil
+}
+func (s *calcMemStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64) error {
+	return nil
+}
+func (s *calcMemStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
+	return nil
+}
+func (s *calcMemStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]tpdstore.BandwidthAggregation, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetVisorBandwidth(context.Context, cipher.PubKey, string, int) ([]tpdstore.BandwidthAggregation, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetAllVisorSummaries(context.Context, bool, bool) ([]tpdstore.VisorSummary, error) {
+	return nil, nil
+}
+func (s *calcMemStore) RecordHeartbeat(context.Context, cipher.PubKey, string) error { return nil }
+func (s *calcMemStore) GetDailyTimeline(context.Context, string, time.Time) map[string]string {
+	return nil
+}
+func (s *calcMemStore) RecordTransportHeartbeat(context.Context, uuid.UUID, string) error {
+	return nil
+}
+func (s *calcMemStore) GetTransportUptimeSummaries(context.Context, []uuid.UUID, bool, bool) ([]tpdstore.TransportUptimeSummary, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetTransportUptimeByVisor(context.Context, cipher.PubKey, bool, bool) ([]tpdstore.TransportUptimeSummary, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetTransportDailyTimeline(context.Context, string, time.Time) map[string]string {
+	return nil
+}
+func (s *calcMemStore) BackupAndCleanOldBandwidth(context.Context, string) error { return nil }
+func (s *calcMemStore) GetNetworkMetrics(context.Context, tpdstore.MetricsQuery) (*tpdstore.NetworkMetricResponse, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetVisorAggregateMetrics(context.Context, []cipher.PubKey, tpdstore.MetricsQuery) (map[string]*tpdstore.VisorMetricResponse, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetAllTransportMetrics(context.Context, tpdstore.MetricsQuery) ([]tpdstore.TransportMetric, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetTransportMetricsByIDs(context.Context, []uuid.UUID, tpdstore.MetricsQuery) ([]tpdstore.TransportMetric, error) {
+	return nil, nil
+}
+func (s *calcMemStore) GetTransportMetricsByVisors(context.Context, []cipher.PubKey, tpdstore.MetricsQuery) ([]tpdstore.TransportMetric, error) {
+	return nil, nil
+}
+func (s *calcMemStore) Close() {}
 
 // StreamRemoteSystemStats proxies system stats from a remote visor via DMSG.
 // The local visor dials the remote visor over DMSG and forwards the stats stream.

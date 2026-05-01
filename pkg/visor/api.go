@@ -132,6 +132,11 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	// RouteGroupMuxInfo returns per-mux-leg byte/packet/latency
+	// counters for every active route group tagged with the named
+	// app (skysocks-client, vpn-client, etc.). Empty slice when
+	// nothing is currently dialed via that app.
+	RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error)
 	ActiveRoutes() ([]AppRouteStatus, error)
 	AddMuxRoute(appName string, tpID uuid.UUID) error
 	RemoveMuxRoute(appName string, tpID uuid.UUID) error

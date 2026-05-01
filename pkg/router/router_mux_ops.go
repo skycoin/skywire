@@ -77,6 +77,7 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 
 	lPK := desc.DstPK()
 	rPK := desc.SrcPK()
+	log := r.scopedLog(desc.SrcPort())
 
 	// Build a route that uses this specific transport
 	opts := &DialOptions{
@@ -97,7 +98,7 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fwd, rev, err := r.fetchBestRoutes(ctx, lPK, rPK, opts)
+	fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
 	if err != nil {
 		return fmt.Errorf("failed to find route via transport: %w", err)
 	}
@@ -114,7 +115,7 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 		Reverse:   rev,
 	}
 
-	rules, _, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+	rules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
 	if err != nil {
 		return fmt.Errorf("route setup failed: %w", err)
 	}

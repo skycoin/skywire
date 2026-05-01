@@ -116,10 +116,12 @@ var (
 	testConnectOnly bool
 	testVersion     string
 	// existing transport flag
-	existingTpOnly   bool
-	forceLocalRoutes bool
-	muxRoutes        int
-	muxMode          string
+	existingTpOnly    bool
+	forceLocalRoutes  bool
+	muxRoutes         int
+	muxMode           string
+	startVerbose      bool
+	startVerboseLevel string
 	// multi-hop testing
 	viaVisor string
 	testEnv  bool
