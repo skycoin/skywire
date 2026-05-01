@@ -1282,15 +1282,22 @@ func (x *TempStat) GetCritical() float64 {
 type AppLogStreamRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// AppName scopes the stream to entries originating from this app's
-	// module or carrying app=<name> as a logrus field. Required.
+	// module or carrying app=<name> as a logrus field. Either AppName
+	// or Modules (or both) must be set.
 	AppName string `protobuf:"bytes,1,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`
-	// IncludeRouter also forwards entries from router/transport/route_setup
-	// modules — the layers that build mux routes for the app. Default false:
-	// app-only logs.
+	// IncludeRouter is retained on the wire for forward compatibility
+	// but is ignored — the app_name field tagging now covers what it
+	// used to do, and Modules below is the explicit path for non-app
+	// scoping (e.g. 'cli dmsg curl --verbose' picking up dmsg layers).
 	IncludeRouter bool `protobuf:"varint,2,opt,name=include_router,json=includeRouter,proto3" json:"include_router,omitempty"`
 	// MinLevel filters out lower-severity entries: trace|debug|info|warn|error.
 	// Default debug.
-	MinLevel      string `protobuf:"bytes,3,opt,name=min_level,json=minLevel,proto3" json:"min_level,omitempty"`
+	MinLevel string `protobuf:"bytes,3,opt,name=min_level,json=minLevel,proto3" json:"min_level,omitempty"`
+	// Modules filters by _module prefix, OR-merged with the AppName
+	// match. Use this when no app context exists — e.g. 'dmsg curl
+	// --verbose' sends ["dmsgC","dmsghttp","dmsg_grpc"]. Empty means
+	// "no module-prefix match"; AppName is then the only path.
+	Modules       []string `protobuf:"bytes,4,rep,name=modules,proto3" json:"modules,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1344,6 +1351,13 @@ func (x *AppLogStreamRequest) GetMinLevel() string {
 		return x.MinLevel
 	}
 	return ""
+}
+
+func (x *AppLogStreamRequest) GetModules() []string {
+	if x != nil {
+		return x.Modules
+	}
+	return nil
 }
 
 // AppLogEntry is one log line forwarded to the gRPC client.
@@ -1884,11 +1898,12 @@ const file_ping_proto_rawDesc = "" +
 	"sensor_key\x18\x01 \x01(\tR\tsensorKey\x12 \n" +
 	"\vtemperature\x18\x02 \x01(\x01R\vtemperature\x12\x12\n" +
 	"\x04high\x18\x03 \x01(\x01R\x04high\x12\x1a\n" +
-	"\bcritical\x18\x04 \x01(\x01R\bcritical\"t\n" +
+	"\bcritical\x18\x04 \x01(\x01R\bcritical\"\x8e\x01\n" +
 	"\x13AppLogStreamRequest\x12\x19\n" +
 	"\bapp_name\x18\x01 \x01(\tR\aappName\x12%\n" +
 	"\x0einclude_router\x18\x02 \x01(\bR\rincludeRouter\x12\x1b\n" +
-	"\tmin_level\x18\x03 \x01(\tR\bminLevel\"\x8d\x02\n" +
+	"\tmin_level\x18\x03 \x01(\tR\bminLevel\x12\x18\n" +
+	"\amodules\x18\x04 \x03(\tR\amodules\"\x8d\x02\n" +
 	"\vAppLogEntry\x12!\n" +
 	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12\x14\n" +
 	"\x05level\x18\x02 \x01(\tR\x05level\x12\x16\n" +

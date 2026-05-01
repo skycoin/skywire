@@ -24,15 +24,18 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 var (
-	curlData    string
-	curlOutput  string
-	curlAgent   string
-	curlTries   int
-	curlWait    int
-	curlReplace bool
+	curlData         string
+	curlOutput       string
+	curlAgent        string
+	curlTries        int
+	curlWait         int
+	curlReplace      bool
+	curlVerbose      bool
+	curlVerboseLevel string
 )
 
 func init() {
@@ -46,6 +49,8 @@ func init() {
 	curlCmd.Flags().IntVarP(&curlTries, "try", "t", 1, "download attempts (0 unlimits)")
 	curlCmd.Flags().IntVarP(&curlWait, "wait", "w", 0, "time to wait between attempts (seconds)")
 	curlCmd.Flags().StringVarP(&curlAgent, "agent", "a", "skywire-cli/"+buildinfo.Version(), "HTTP user agent")
+	curlCmd.Flags().BoolVarP(&curlVerbose, "verbose", "v", false, "stream visor's dmsg-layer logs to stderr while the request is in flight")
+	curlCmd.Flags().StringVar(&curlVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	if os.Getenv("DMSG_SK") != "" {
 		sk.Set(os.Getenv("DMSG_SK")) //nolint
 	}
@@ -129,6 +134,50 @@ func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, 
 		return fmt.Errorf("RPC connection failed; is skywire running?: %w", err)
 	}
 	defer rpcClient.Close() //nolint:errcheck
+
+	// --verbose: open a gRPC log stream filtered to dmsg-layer modules
+	// BEFORE the request fires so we capture the full DialStream lifecycle
+	// (lookup → server delegate → handshake → http roundtrip). The
+	// 'subscribed' sentinel ensures the subscription is live by the time
+	// we issue the RPC. Canceling ctx (SIGINT) tears the stream down.
+	var verboseDone chan struct{}
+	if curlVerbose {
+		grpcClient, gerr := rpcgrpc.NewPingClient(rpcAddr)
+		if gerr != nil {
+			return fmt.Errorf("verbose: gRPC dial failed: %w", gerr)
+		}
+		modules := []string{"dmsgC", "dmsghttp", "dmsg_grpc", "dmsg_disc", "dmsg_tracker"}
+		subscribedCh := make(chan struct{})
+		verboseDone = make(chan struct{})
+		go func() {
+			defer close(verboseDone)
+			defer grpcClient.Close() //nolint:errcheck,gosec
+			err := grpcClient.StreamAppLogs(ctx, "", false, curlVerboseLevel, modules, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
+				ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
+				module := e.Module
+				if module == "" {
+					module = "-"
+				}
+				fmt.Fprintf(os.Stderr, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message)
+			})
+			if err != nil && ctx.Err() == nil {
+				fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
+			}
+		}()
+		// Block briefly until the server confirms the subscription is live.
+		select {
+		case <-subscribedCh:
+		case <-time.After(2 * time.Second):
+			fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within 2s; proceeding anyway")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	defer func() {
+		if verboseDone != nil {
+			<-verboseDone
+		}
+	}()
 
 	// Prepare output
 	output := os.Stdout

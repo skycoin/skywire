@@ -187,15 +187,22 @@ message TempStat {
 // AppLogStreamRequest configures app-scoped log streaming.
 message AppLogStreamRequest {
   // AppName scopes the stream to entries originating from this app's
-  // module or carrying app=<name> as a logrus field. Required.
+  // module or carrying app=<name> as a logrus field. Either AppName
+  // or Modules (or both) must be set.
   string app_name = 1;
-  // IncludeRouter also forwards entries from router/transport/route_setup
-  // modules — the layers that build mux routes for the app. Default false:
-  // app-only logs.
+  // IncludeRouter is retained on the wire for forward compatibility
+  // but is ignored — the app_name field tagging now covers what it
+  // used to do, and Modules below is the explicit path for non-app
+  // scoping (e.g. 'cli dmsg curl --verbose' picking up dmsg layers).
   bool include_router = 2;
   // MinLevel filters out lower-severity entries: trace|debug|info|warn|error.
   // Default debug.
   string min_level = 3;
+  // Modules filters by _module prefix, OR-merged with the AppName
+  // match. Use this when no app context exists — e.g. 'dmsg curl
+  // --verbose' sends ["dmsgC","dmsghttp","dmsg_grpc"]. Empty means
+  // "no module-prefix match"; AppName is then the only path.
+  repeated string modules = 4;
 }
 
 // AppLogEntry is one log line forwarded to the gRPC client.

@@ -217,7 +217,7 @@ var startCmd = &cobra.Command{
 			go func() {
 				defer close(verboseDone)
 				defer grpcClient.Close() //nolint:errcheck,gosec
-				err := grpcClient.StreamAppLogs(ctx, clientName, false, startVerboseLevel, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
+				err := grpcClient.StreamAppLogs(ctx, clientName, false, startVerboseLevel, nil, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
 					ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
 					module := e.Module
 					if module == "" {

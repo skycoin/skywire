@@ -638,26 +638,27 @@ func (s *PingServer) GetSystemStats(ctx context.Context, req *SystemStatsRequest
 }
 
 // StreamAppLogs subscribes to the visor's master logger and forwards
-// matching entries to the gRPC client. Used by 'proxy start --verbose'.
+// matching entries to the gRPC client. Used by 'proxy start --verbose'
+// and 'dmsg curl --verbose'.
 //
-// Filtering: entries pass if _module == AppName, or app field ==
-// AppName, or app_name field == AppName. The visor's router/mux/setup
-// layers attach app_name=<n> to rg-scoped entries (see router.Config
-// .AppLookup wired in init_router.go), so this filter genuinely scopes
-// to one app's session — including layered events (route setup, mux
-// negotiation) that happen on behalf of the app, not just the app
-// process's own stdout. transport_manager and address_resolver
-// entries remain untagged because they are shared across apps.
+// Filtering: AppName matches by _module exact equality OR app/app_name
+// field. Modules matches by _module prefix. The two are OR-merged; at
+// least one must be specified (AppName="*" enables wildcard mode for
+// diagnostics).
+//
+// The visor's router/mux/setup layers attach app_name=<n> to rg-scoped
+// entries (see router.Config.AppLookup), so AppName filtering scopes
+// to one app's session — including layered events that happen on
+// behalf of the app, not just app stdout.
 //
 // IncludeRouter is retained on the wire for forward compatibility but
-// is currently ignored — the field-based filter already covers what
-// IncludeRouter=true used to attempt with much less noise.
+// is currently ignored — Modules is the explicit replacement.
 //
 // The subscription's per-stream buffer is bounded; bursts beyond it
 // are dropped and counted (cancel returns the count).
 func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_StreamAppLogsServer) error {
-	if req.AppName == "" {
-		return fmt.Errorf("app_name is required")
+	if req.AppName == "" && len(req.Modules) == 0 {
+		return fmt.Errorf("app_name or modules required")
 	}
 
 	level, err := logging.LevelFromString(req.MinLevel)
@@ -668,6 +669,7 @@ func (s *PingServer) StreamAppLogs(req *AppLogStreamRequest, stream PingService_
 
 	filter := logging.Filter{
 		AppName:  req.AppName,
+		Modules:  req.Modules,
 		MinLevel: level,
 	}
 	// Wildcard: AppName "*" disables app-scoping for diagnostic

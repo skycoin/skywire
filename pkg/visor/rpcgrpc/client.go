@@ -378,7 +378,10 @@ func (c *PingClient) StreamCalcRoutes(
 
 // StreamAppLogs subscribes to the visor's master logger and calls cb
 // for each entry that matches the filter. Blocks until ctx is canceled
-// or the stream errors. Used by 'proxy start --verbose'.
+// or the stream errors. Used by 'proxy start --verbose' (app-name
+// scoped) and 'dmsg curl --verbose' (module-prefix scoped).
+//
+// modules is OR-merged with appName; either or both must be non-empty.
 //
 // If subscribed is non-nil, it is closed once the server confirms the
 // subscription is live (via the Subscribed sentinel entry). Callers
@@ -386,11 +389,12 @@ func (c *PingClient) StreamCalcRoutes(
 // log output they want to capture, so the first burst of activity
 // isn't lost to the subscription handshake. The sentinel itself is
 // not delivered to cb.
-func (c *PingClient) StreamAppLogs(ctx context.Context, appName string, includeRouter bool, minLevel string, subscribed chan<- struct{}, cb AppLogCallback) error {
+func (c *PingClient) StreamAppLogs(ctx context.Context, appName string, includeRouter bool, minLevel string, modules []string, subscribed chan<- struct{}, cb AppLogCallback) error {
 	stream, err := c.client.StreamAppLogs(ctx, &AppLogStreamRequest{
 		AppName:       appName,
 		IncludeRouter: includeRouter,
 		MinLevel:      minLevel,
+		Modules:       modules,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start app log stream: %w", err)
