@@ -185,6 +185,19 @@ type Router interface {
 	// matching route group is found.
 	RouteGroupHops(desc routing.RouteDescriptor) []RouteHopInfo
 
+	// RouteGroupMuxInfo returns a snapshot of per-leg mux state for
+	// the rg matching desc (or its inversion). Returns false when no
+	// matching active rg is found. Used by 'cli proxy mux-info' to
+	// surface per-leg bandwidth + latency for diagnostic purposes.
+	RouteGroupMuxInfo(desc routing.RouteDescriptor) (MuxInfo, bool)
+
+	// RouteGroupMuxInfoForApp returns mux snapshots for every active
+	// rg whose source port maps (via AppLookup) to the named app.
+	// One app may have multiple rg's at once (e.g. each SOCKS5
+	// client connection to skysocks-client gets its own rg). Returns
+	// an empty slice if no rg's are active for the app.
+	RouteGroupMuxInfoForApp(appName string) []MuxInfo
+
 	// Routing table related methods
 	RoutesCount() int
 	Rules() []routing.Rule

@@ -84,6 +84,13 @@ type RouteGroup struct {
 	logger *logging.Logger
 	desc   routing.RouteDescriptor // describes the route group
 	rt     routing.Table
+	// appName is the originating app's name for the dialing side
+	// (skysocks-client, vpn-client, etc.). Empty for accept-side
+	// rg's where the app context isn't available locally. Set via
+	// SetAppName from saveRouteGroupRules. Used for app-scoped mux
+	// info lookups since the descriptor's SrcPort is ephemeral and
+	// doesn't resolve through procManager.AppByPort.
+	appName string
 
 	handshakeProcessed     chan struct{}
 	handshakeProcessedOnce sync.Once
@@ -179,15 +186,90 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 }
 
 // SetAppName attaches app_name=<n> as a logrus field on the route
-// group's logger. Used by the router-side rg saver so 'cli proxy
-// start --verbose' can scope rg-internal events (handshake, mux
-// enablement, transport churn) to the originating app's session.
+// group's logger AND records it on the rg for later lookups (mux
+// info by app, etc.). Used by the router-side rg saver so 'cli
+// proxy start --verbose' can scope rg-internal events to the
+// originating app's session.
 // No-op when name is empty.
 func (rg *RouteGroup) SetAppName(name string) {
 	if name == "" {
 		return
 	}
+	rg.appName = name
 	rg.logger = &logging.Logger{FieldLogger: rg.logger.WithField("app_name", name)}
+}
+
+// AppName returns the rg's stored app name (set via SetAppName).
+// Empty when the rg was created without app context (accept-side).
+func (rg *RouteGroup) AppName() string {
+	return rg.appName
+}
+
+// MuxInfo is a point-in-time snapshot of one route group's
+// multiplexing state — per-leg byte/packet counters plus the
+// transport identity each leg maps to. Returned by Router.MuxInfo
+// for 'cli proxy mux-info'.
+type MuxInfo struct {
+	// Desc identifies the route group.
+	Desc routing.RouteDescriptor
+	// MuxEnabled is false for non-mux'd rg's; the per-leg counters
+	// are still populated for the single transport in that case.
+	MuxEnabled bool
+	// SACKEnabled is true when the peers negotiated SACK retx.
+	SACKEnabled bool
+	// Legs is in tps[] order. One entry per active mux leg.
+	Legs []MuxLeg
+}
+
+// MuxLeg pairs the per-leg counters with the transport identity.
+// The transport's own Latency / SentBytes / RecvBytes counters are
+// the *transport-level* totals (across all rg's that share the
+// transport); the LegStats here are *rg-scoped* (only what this
+// rg sent through this leg).
+type MuxLeg struct {
+	LegStats
+	TransportID string `json:"transport_id"`
+	TpType      string `json:"tp_type"`
+	RemotePK    string `json:"remote_pk"`
+	// LatencyMS is the transport-level smoothed RTT in ms (the same
+	// value 'tp ls' shows). Zero when no measurement yet.
+	LatencyMS float64 `json:"latency_ms"`
+}
+
+// MuxStats returns a point-in-time snapshot of the rg's per-leg
+// counters paired with each leg's transport identity.
+func (rg *RouteGroup) MuxStats() MuxInfo {
+	info := MuxInfo{Desc: rg.desc}
+	rg.mu.Lock()
+	if rg.mux != nil {
+		info.MuxEnabled = true
+		info.SACKEnabled = rg.mux.sackEnabled
+	}
+	tpsCopy := append([]*transport.ManagedTransport(nil), rg.tps...)
+	rg.mu.Unlock()
+
+	var stats []LegStats
+	if rg.mux != nil {
+		stats = rg.mux.snapshotLegs()
+	}
+
+	info.Legs = make([]MuxLeg, 0, len(tpsCopy))
+	for i, tp := range tpsCopy {
+		leg := MuxLeg{}
+		if i < len(stats) {
+			leg.LegStats = stats[i]
+		} else {
+			leg.Index = i
+		}
+		if tp != nil {
+			leg.TransportID = tp.Entry.ID.String()
+			leg.TpType = string(tp.Entry.Type)
+			leg.RemotePK = tp.Remote().String()
+			leg.LatencyMS = tp.GetLatency()
+		}
+		info.Legs = append(info.Legs, leg)
+	}
+	return info
 }
 
 // Read reads the next packet payload of a RouteGroup.
@@ -225,14 +307,14 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	tp, rule, err := rg.nextTransport()
+	tp, rule, leg, err := rg.nextTransport()
 	if err != nil {
 		rg.mu.Unlock()
 		return 0, err
 	}
 	rg.mu.Unlock()
 
-	return rg.write(p, tp, rule)
+	return rg.write(p, tp, rule, leg)
 }
 
 // Close closes a RouteGroup.
@@ -366,7 +448,7 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 	}
 }
 
-func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule) (int, error) {
+func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule, leg int) (int, error) {
 	var packet routing.Packet
 	var err error
 	if rg.mux != nil {
@@ -395,6 +477,15 @@ func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule ro
 		}
 
 		atomic.StoreInt64(&rg.lastSent, time.Now().UnixNano())
+
+		// Per-mux-leg sent counter. The aggregate networkStats is
+		// already updated inside writePacket (and gates on packet
+		// type); this records the same packet against the specific
+		// leg that carried it so 'proxy mux-info' can show
+		// where bandwidth is going across the mux'd routes.
+		if rg.mux != nil && leg >= 0 {
+			rg.mux.recordSent(leg, uint64(packet.Size()))
+		}
 
 		return len(data), nil
 	}
@@ -440,16 +531,19 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 // multiple transports exist, uses latency-weighted selection. Falls back to
 // round-robin when latency data is unavailable, and to index 0 for single
 // transport (legacy behavior).
+// Returns the leg index (position in rg.tps) so the caller can record
+// per-leg byte counts after a successful write; -1 for the
+// single-transport / legacy path.
 // NOTE: not thread-safe, caller must hold rg.mu.
-func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule, error) {
+func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(rg.tps) == 0 {
-		return nil, nil, ErrNoTransports
+		return nil, nil, -1, ErrNoTransports
 	}
 	if len(rg.fwd) == 0 {
-		return nil, nil, ErrNoRules
+		return nil, nil, -1, ErrNoRules
 	}
 	if len(rg.tps) != len(rg.fwd) {
-		return nil, nil, ErrRuleTransportMismatch
+		return nil, nil, -1, ErrRuleTransportMismatch
 	}
 
 	if rg.mux != nil && len(rg.tps) > 1 {
@@ -457,9 +551,9 @@ func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule
 	}
 
 	if rg.tps[0] == nil {
-		return nil, nil, ErrBadTransport
+		return nil, nil, -1, ErrBadTransport
 	}
-	return rg.tps[0], rg.fwd[0], nil
+	return rg.tps[0], rg.fwd[0], 0, nil
 }
 
 // RouteHops returns the list of visor public keys that form the route path.
@@ -878,6 +972,11 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 			if remoteCaps&routing.CapMux != 0 {
 				sack := remoteCaps&routing.CapSACK != 0
 				rg.mux = newRouteMux(rg.logger, sack)
+				// rg.tps already has the primary transport at this
+				// point; size the leg counters to match. Subsequent
+				// AppendRoute calls (mux 2/N+) extend the slice via
+				// appendRules.
+				rg.mux.growLegs(len(rg.tps))
 				rg.logger.Debug("Route multiplexing enabled (both peers support CapMux)")
 				if sack {
 					rg.logger.Debug("SACK retransmission enabled (both peers support CapSACK)")
@@ -909,6 +1008,23 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 		return nil
 	}
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
+
+	// Per-mux-leg recv counter. We resolve the leg from the
+	// packet's route ID (which matches one of rg.rvs[].KeyRouteID,
+	// each leg has its own consume rule). The lookup is O(legs)
+	// but legs is small (typically 1-16) and this only runs for
+	// data packets after we've already paid for noise decryption.
+	if rg.mux != nil {
+		rg.mu.Lock()
+		rid := packet.RouteID()
+		for i, rule := range rg.rvs {
+			if rule != nil && rule.KeyRouteID() == rid {
+				rg.mux.recordRecv(i, uint64(packet.Size()))
+				break
+			}
+		}
+		rg.mu.Unlock()
+	}
 
 	if rg.mux != nil {
 		seq := packet.SequenceNumber()
@@ -1005,7 +1121,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 		}
 
 		rg.mu.Lock()
-		tp, rule, err := rg.nextTransport()
+		tp, rule, leg, err := rg.nextTransport()
 		rg.mu.Unlock()
 		if err != nil {
 			return err
@@ -1018,6 +1134,11 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 
 		if err := rg.writePacket(context.Background(), tp, retxPacket, rule.KeyRouteID()); err != nil {
 			rg.logger.WithError(err).Warnf("SACK: failed to retransmit seq %d", seq)
+		} else if leg >= 0 {
+			// Count retransmits against the leg that carried them
+			// (which may differ from the original send leg — the
+			// retx selector picks fresh, mirroring the data path).
+			rg.mux.recordSent(leg, uint64(retxPacket.Size()))
 		}
 	}
 	return nil
@@ -1243,6 +1364,10 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 	// Rebuild transport weights when transports change
 	if rg.mux != nil && len(rg.tps) > 1 {
 		rg.mux.rebuildWeights(rg.tps)
+	}
+	// Keep per-leg counters parallel to tps[].
+	if rg.mux != nil {
+		rg.mux.growLegs(len(rg.tps))
 	}
 }
 

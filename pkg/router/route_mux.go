@@ -2,12 +2,44 @@
 package router
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
+
+// LegStats is a snapshot of per-mux-leg traffic counters at a point
+// in time. One entry per active route in the rg's tps[] order.
+//
+// Counters are cumulative since route-group creation (atomic uint64);
+// callers wanting rates take two snapshots and divide by elapsed time.
+// Used by 'cli proxy mux-info' to show where bandwidth is going across
+// the mux'd routes — the missing piece for verifying that adding more
+// routes actually aggregates throughput rather than just trading share.
+type LegStats struct {
+	// Index in the rg's tps[] slice. Stable for the rg's lifetime
+	// (transports are appended, never re-ordered) so the index is
+	// also a stable identifier for runtime add/remove operations.
+	Index int
+	// SentBytes / SentPackets are what THIS leg carried outbound.
+	SentBytes   uint64
+	SentPackets uint64
+	// RecvBytes / RecvPackets are what THIS leg carried inbound.
+	// Resolved from the reverse-rule's KeyRouteID at packet-handle
+	// time, so it reflects what actually arrived on this transport,
+	// not what the peer said it sent.
+	RecvBytes   uint64
+	RecvPackets uint64
+}
+
+type legCounters struct {
+	sentBytes   uint64 // atomic
+	sentPackets uint64 // atomic
+	recvBytes   uint64 // atomic
+	recvPackets uint64 // atomic
+}
 
 // routeMux encapsulates route multiplexing state and logic.
 // It is composed into RouteGroup as an optional field (nil when mux is not negotiated).
@@ -30,6 +62,13 @@ type routeMux struct {
 	sackEnabled bool         // true when both peers advertised CapSACK
 	sackTracker *sackTracker // receiver: tracks received seqs for SACK generation
 	retxBuf     *retxBuffer  // sender: holds unACKed packets for retransmission
+
+	// Per-leg traffic counters parallel to the rg's tps[] / fwd[] /
+	// rvs[] slices. Mutated atomically. Read via Snapshot().
+	// legMu guards the slice itself (extended on AppendRoute), not
+	// the individual counters.
+	legMu sync.RWMutex
+	legs  []*legCounters
 }
 
 // newRouteMux creates a new routeMux instance with all sub-components initialized.
@@ -47,13 +86,15 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 
 // selectTransport picks the next transport/rule pair for sending.
 // Uses latency-weighted selection when data is available, falls back to round-robin.
+// Returns the index in tps[] alongside the tp/rule so the caller can
+// record per-leg byte counts after a successful write.
 // NOTE: not thread-safe, caller must hold the RouteGroup mu.
-func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule) (*transport.ManagedTransport, routing.Rule, error) {
+func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(tps) == 0 {
-		return nil, nil, ErrNoTransports
+		return nil, nil, -1, ErrNoTransports
 	}
 	if len(fwd) == 0 {
-		return nil, nil, ErrNoRules
+		return nil, nil, -1, ErrNoRules
 	}
 
 	// Use weighted selector if available
@@ -62,7 +103,7 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		if idx < len(tps) {
 			tp := tps[idx]
 			if tp != nil && !tp.IsClosed() {
-				return tp, fwd[idx], nil
+				return tp, fwd[idx], idx, nil
 			}
 		}
 	}
@@ -71,13 +112,74 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 	n := uint32(len(tps)) //nolint:gosec
 	start := atomic.AddUint32(&m.tpIndex, 1) - 1
 	for i := uint32(0); i < n; i++ {
-		idx := (start + i) % n
+		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]
 		if tp != nil && !tp.IsClosed() {
-			return tp, fwd[idx], nil
+			return tp, fwd[idx], idx, nil
 		}
 	}
-	return nil, nil, ErrNoSuitableTransport
+	return nil, nil, -1, ErrNoSuitableTransport
+}
+
+// growLegs extends the per-leg counter slice to cover at least n
+// legs. Called when transports are appended to the rg (initial setup
+// + AppendRoute). Idempotent — extending past the current size is a
+// no-op for legs that already exist.
+func (m *routeMux) growLegs(n int) {
+	m.legMu.Lock()
+	for len(m.legs) < n {
+		m.legs = append(m.legs, &legCounters{})
+	}
+	m.legMu.Unlock()
+}
+
+// recordSent atomically increments the sent-bytes/packets counters
+// for leg idx. Bounds-checked; out-of-range indices are silently
+// dropped (defensive: a leg can be removed between selectTransport
+// and the actual write returning).
+func (m *routeMux) recordSent(idx int, n uint64) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].sentBytes, n)
+		atomic.AddUint64(&m.legs[idx].sentPackets, 1)
+	}
+	m.legMu.RUnlock()
+}
+
+// recordRecv atomically increments the recv-bytes/packets counters
+// for leg idx. Same bounds-check semantics as recordSent.
+func (m *routeMux) recordRecv(idx int, n uint64) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].recvBytes, n)
+		atomic.AddUint64(&m.legs[idx].recvPackets, 1)
+	}
+	m.legMu.RUnlock()
+}
+
+// snapshotLegs returns a stable copy of the current per-leg counters.
+// Atomic loads, no locking against in-flight increments — the
+// snapshot is point-in-time and the underlying counters keep moving.
+func (m *routeMux) snapshotLegs() []LegStats {
+	m.legMu.RLock()
+	out := make([]LegStats, len(m.legs))
+	for i, c := range m.legs {
+		out[i] = LegStats{
+			Index:       i,
+			SentBytes:   atomic.LoadUint64(&c.sentBytes),
+			SentPackets: atomic.LoadUint64(&c.sentPackets),
+			RecvBytes:   atomic.LoadUint64(&c.recvBytes),
+			RecvPackets: atomic.LoadUint64(&c.recvPackets),
+		}
+	}
+	m.legMu.RUnlock()
+	return out
 }
 
 // wrapPayload creates a sequenced data packet and optionally stores it for retransmission.

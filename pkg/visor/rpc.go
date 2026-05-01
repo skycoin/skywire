@@ -178,6 +178,28 @@ type RouteGroupInfo struct {
 	// for this route group, populated when the route group is active.
 	Hops []RouteHopInfo `json:"hops,omitempty"`
 }
+
+// MuxRouteGroupInfo is one route-group's mux state plus per-leg
+// counters. Returned by RouteGroupMuxInfo for 'cli proxy mux-info'.
+type MuxRouteGroupInfo struct {
+	Desc        routing.RouteDescriptorFields `json:"desc"`
+	MuxEnabled  bool                          `json:"mux_enabled"`
+	SACKEnabled bool                          `json:"sack_enabled"`
+	Legs        []MuxLegInfo                  `json:"legs"`
+}
+
+// MuxLegInfo is one route in a mux'd group.
+type MuxLegInfo struct {
+	Index       int     `json:"index"`
+	TransportID string  `json:"transport_id"`
+	TpType      string  `json:"tp_type"`
+	RemotePK    string  `json:"remote_pk"`
+	LatencyMS   float64 `json:"latency_ms,omitempty"`
+	SentBytes   uint64  `json:"sent_bytes"`
+	SentPackets uint64  `json:"sent_packets"`
+	RecvBytes   uint64  `json:"recv_bytes"`
+	RecvPackets uint64  `json:"recv_packets"`
+}
 type FetchServiceDataIn struct {
 	Service string
 	Path    string
