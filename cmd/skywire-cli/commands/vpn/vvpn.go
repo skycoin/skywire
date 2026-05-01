@@ -27,7 +27,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 func init() {
@@ -115,36 +114,17 @@ var startCmd = &cobra.Command{
 		// --verbose: open a gRPC log stream BEFORE StartVPNClientWithMode
 		// so startup entries (route setup, transport probe, app spawn) are
 		// captured. Mirrors 'proxy start --verbose'.
-		var verboseDone chan struct{}
+		var verboseStream *clirpc.VerboseStream
 		if startVerbose {
-			grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
+			vs, err := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
+				AppName: stateName,
+				Level:   startVerboseLevel,
+			})
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("verbose: gRPC dial failed: %w", err))
+				internal.PrintFatalError(cmd.Flags(), err)
 			}
-			verboseDone = make(chan struct{})
-			subscribedCh := make(chan struct{})
-			go func() {
-				defer close(verboseDone)
-				defer grpcClient.Close() //nolint:errcheck,gosec
-				err := grpcClient.StreamAppLogs(ctx, stateName, false, startVerboseLevel, nil, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
-					ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
-					module := e.Module
-					if module == "" {
-						module = "-"
-					}
-					fmt.Fprintf(os.Stderr, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message)
-				})
-				if err != nil && ctx.Err() == nil {
-					fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
-				}
-			}()
-			// Block until subscription handshake completes so StartVPN's
-			// initial setup chatter isn't lost to the race.
-			select {
-			case <-subscribedCh:
-			case <-time.After(2 * time.Second):
-				fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within 2s; proceeding anyway")
-			case <-ctx.Done():
+			verboseStream = vs
+			if err := vs.WaitSubscribed(ctx, 2*time.Second); err != nil && ctx.Err() != nil {
 				return
 			}
 		}
@@ -214,8 +194,8 @@ var startCmd = &cobra.Command{
 			if err := rpcClient.StopApp(stateName); err != nil {
 				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
 			}
-			if verboseDone != nil {
-				<-verboseDone
+			if verboseStream != nil {
+				verboseStream.Close()
 			}
 		}
 	},

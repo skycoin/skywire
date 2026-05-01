@@ -18,7 +18,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
-	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 var (
@@ -80,41 +79,23 @@ Examples:
 		// route setup, mux setup, transport probe activity. Different
 		// from dmsg curl which scopes to dmsgC modules — skynet goes
 		// over routes, not direct dmsg.
-		var verboseDone chan struct{}
+		var verboseStream *clirpc.VerboseStream
 		if curlVerbose {
-			grpcClient, gerr := rpcgrpc.NewPingClient(clirpc.Addr)
-			if gerr != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("verbose: gRPC dial failed: %w", gerr))
+			vs, vErr := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
+				Modules: []string{"router", "route_setup", "setup_node", "mux_setup", "transport_manager", "skynet"},
+				Level:   curlVLevel,
+			})
+			if vErr != nil {
+				internal.PrintFatalError(cmd.Flags(), vErr)
 			}
-			modules := []string{"router", "route_setup", "setup_node", "mux_setup", "transport_manager", "skynet"}
-			subscribedCh := make(chan struct{})
-			verboseDone = make(chan struct{})
-			go func() {
-				defer close(verboseDone)
-				defer grpcClient.Close() //nolint:errcheck,gosec
-				err := grpcClient.StreamAppLogs(ctx, "", false, curlVLevel, modules, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
-					ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
-					module := e.Module
-					if module == "" {
-						module = "-"
-					}
-					fmt.Fprintf(os.Stderr, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message)
-				})
-				if err != nil && ctx.Err() == nil {
-					fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
-				}
-			}()
-			select {
-			case <-subscribedCh:
-			case <-time.After(2 * time.Second):
-				fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within 2s; proceeding anyway")
-			case <-ctx.Done():
+			verboseStream = vs
+			if err := vs.WaitSubscribed(ctx, 2*time.Second); err != nil && ctx.Err() != nil {
 				return
 			}
 		}
 		defer func() {
-			if verboseDone != nil {
-				<-verboseDone
+			if verboseStream != nil {
+				verboseStream.Close()
 			}
 		}()
 

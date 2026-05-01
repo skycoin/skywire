@@ -16,6 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -25,7 +26,6 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
-	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 var (
@@ -148,44 +148,25 @@ func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, 
 	// --verbose: open a gRPC log stream filtered to dmsg-layer modules
 	// BEFORE the request fires so we capture the full DialStream lifecycle
 	// (lookup → server delegate → handshake → http roundtrip). The
-	// 'subscribed' sentinel ensures the subscription is live by the time
-	// we issue the RPC. Canceling ctx (SIGINT) tears the stream down.
-	var verboseDone chan struct{}
+	// helper handles the subscribe-handshake race. Canceling ctx (SIGINT)
+	// tears the stream down.
+	var verboseStream *clirpc.VerboseStream
 	if curlVerbose {
-		grpcClient, gerr := rpcgrpc.NewPingClient(rpcAddr)
-		if gerr != nil {
-			return fmt.Errorf("verbose: gRPC dial failed: %w", gerr)
+		vs, vErr := clirpc.OpenVerbose(ctx, rpcAddr, clirpc.VerboseFilter{
+			Modules: []string{"dmsgC", "dmsghttp", "dmsg_grpc", "dmsg_disc", "dmsg_tracker"},
+			Level:   curlVerboseLevel,
+		})
+		if vErr != nil {
+			return vErr
 		}
-		modules := []string{"dmsgC", "dmsghttp", "dmsg_grpc", "dmsg_disc", "dmsg_tracker"}
-		subscribedCh := make(chan struct{})
-		verboseDone = make(chan struct{})
-		go func() {
-			defer close(verboseDone)
-			defer grpcClient.Close() //nolint:errcheck,gosec
-			err := grpcClient.StreamAppLogs(ctx, "", false, curlVerboseLevel, modules, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
-				ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
-				module := e.Module
-				if module == "" {
-					module = "-"
-				}
-				fmt.Fprintf(os.Stderr, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message)
-			})
-			if err != nil && ctx.Err() == nil {
-				fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
-			}
-		}()
-		// Block briefly until the server confirms the subscription is live.
-		select {
-		case <-subscribedCh:
-		case <-time.After(2 * time.Second):
-			fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within 2s; proceeding anyway")
-		case <-ctx.Done():
+		verboseStream = vs
+		if err := vs.WaitSubscribed(ctx, 2*time.Second); err != nil && ctx.Err() != nil {
 			return ctx.Err()
 		}
 	}
 	defer func() {
-		if verboseDone != nil {
-			<-verboseDone
+		if verboseStream != nil {
+			verboseStream.Close()
 		}
 	}()
 

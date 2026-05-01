@@ -34,7 +34,6 @@ import (
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
-	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 // proxyTestClient is a minimal interface for proxy testing
@@ -201,43 +200,24 @@ var startCmd = &cobra.Command{
 
 		// --verbose: open a gRPC log stream BEFORE StartAppWithMode so
 		// startup entries (route setup, transport probe, app spawn) are
-		// captured. The goroutine runs until ctx is canceled (SIGINT)
-		// or the visor closes the stream.
-		var verboseDone chan struct{}
+		// captured. Stream tears down when ctx cancels (SIGINT).
+		var verboseStream *clirpc.VerboseStream
 		if startVerbose {
 			if clientName == "" {
 				clientName = "skysocks-client"
 			}
-			grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
+			vs, err := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
+				AppName: clientName,
+				Level:   startVerboseLevel,
+			})
 			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("verbose: gRPC dial failed: %w", err))
+				internal.PrintFatalError(cmd.Flags(), err)
 			}
-			verboseDone = make(chan struct{})
-			subscribedCh := make(chan struct{})
-			go func() {
-				defer close(verboseDone)
-				defer grpcClient.Close() //nolint:errcheck,gosec
-				err := grpcClient.StreamAppLogs(ctx, clientName, false, startVerboseLevel, nil, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
-					ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
-					module := e.Module
-					if module == "" {
-						module = "-"
-					}
-					fmt.Fprintf(os.Stderr, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message)
-				})
-				if err != nil && ctx.Err() == nil {
-					fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
-				}
-			}()
-			// Block briefly until the server confirms the subscription
-			// is live. Otherwise StartAppWithMode below races with the
-			// subscription handshake and we lose the first ~50ms of
-			// setup logs (route calculation, transport selection).
-			select {
-			case <-subscribedCh:
-			case <-time.After(2 * time.Second):
-				fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within 2s; proceeding anyway")
-			case <-ctx.Done():
+			verboseStream = vs
+			// Block until the server confirms the subscription is live.
+			// Otherwise StartAppWithMode below races with the handshake
+			// and we lose the first ~50ms of setup logs.
+			if err := vs.WaitSubscribed(ctx, 2*time.Second); err != nil && ctx.Err() != nil {
 				return
 			}
 		}
@@ -377,8 +357,8 @@ var startCmd = &cobra.Command{
 			if err := rpcClient.StopApp(clientName); err != nil {
 				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
 			}
-			if verboseDone != nil {
-				<-verboseDone
+			if verboseStream != nil {
+				verboseStream.Close()
 			}
 		}
 	},
