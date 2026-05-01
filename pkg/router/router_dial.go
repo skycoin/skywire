@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -151,7 +150,7 @@ func (r *router) DialRoutes(
 				return nil, ctx.Err()
 			}
 			// Check if this is a "no suitable transport" error (stale TPD data)
-			if strings.Contains(err.Error(), "no suitable transport") || strings.Contains(err.Error(), "transport") {
+			if errors.Is(err, ErrNoSuitableTransport) {
 				if attempt < maxRetries {
 					log.WithError(err).Warnf("Route handshake failed due to transport issue (attempt %d/%d), querying route-finder for fresh route...", attempt, maxRetries)
 					continue

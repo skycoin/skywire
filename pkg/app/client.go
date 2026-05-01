@@ -2,11 +2,11 @@
 package app
 
 import (
+	"errors"
 	"io"
 	"net"
 	"net/rpc"
 	"os"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 
@@ -128,7 +128,7 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	if err != nil {
 		conn.freeConnMx.Unlock()
 
-		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			c.log.WithError(err).Error("Received unexpected error when closing conn.")
 		}
 
@@ -213,17 +213,17 @@ func (c *Client) Close() {
 
 	// Close everything.
 	for _, lis := range listeners {
-		if err := lis.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		if err := lis.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			c.log.WithError(err).Error("Error closing listener.")
 		}
 	}
 	for _, conn := range conns {
-		if err := conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		if err := conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			c.log.WithError(err).Error("Error closing conn.")
 		}
 	}
 	for _, v := range c.closers {
-		if err := v.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		if err := v.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			c.log.WithError(err).Error("Error closing closer.")
 		}
 	}

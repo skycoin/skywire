@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/rpc"
 	"net/url"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -68,7 +67,7 @@ func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 				time.Sleep(50 * time.Millisecond)
 				continue
 			}
-			if err == io.ErrClosedPipe || strings.Contains(err.Error(), "use of closed network connection") {
+			if err == io.ErrClosedPipe || errors.Is(err, net.ErrClosed) {
 				log.Debug("Cleanly stopped serving.")
 				return nil
 			}
@@ -124,7 +123,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 				continue
 			}
 			if err == io.ErrClosedPipe || err == dmsg.ErrEntityClosed ||
-				strings.Contains(err.Error(), "use of closed network connection") {
+				errors.Is(err, net.ErrClosed) {
 				log.Debug("Cleanly stopped serving.")
 				return nil
 			}
