@@ -134,6 +134,11 @@ type Visor struct {
 	// Rich port forwarding with metadata, whitelist, landing page integration
 	forwardedPorts *ForwardedPorts
 
+	// Persisted dmsg-server discovery entries — survives restarts so the
+	// bootstrap direct client uses the addresses last learned from
+	// dmsg-discovery, not the (potentially stale) addresses in skywire.json.
+	dmsgServersCache *DmsgServersCache
+
 	// DMSG listeners for forwarded ports (dmsg=true). Each entry is a
 	// cancel function that stops the listener goroutine.
 	dmsgFwdMu        sync.Mutex
@@ -442,6 +447,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 			mu:    new(sync.RWMutex),
 		},
 		forwardedPorts:   NewForwardedPorts(filepath.Join(conf.LocalPath, "forwarded_ports.json")),
+		dmsgServersCache: NewDmsgServersCache(filepath.Join(conf.LocalPath, "dmsg_servers.json")),
 		dmsgFwdListeners: make(map[int]context.CancelFunc),
 		dmsgTracker: dtmState{
 			ready: make(chan struct{}),
