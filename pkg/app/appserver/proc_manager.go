@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"os/exec"
-	"strings"
 	"sync"
 	"time"
 
@@ -459,7 +459,7 @@ func (m *procManager) ConnectionsSummary(appName string) ([]ConnectionSummary, e
 func (m *procManager) stopAll() {
 	for name, proc := range m.procs {
 		log := m.log.WithField("app_name", name)
-		if err := proc.Stop(); err != nil && !strings.Contains(err.Error(), "process already finished") {
+		if err := proc.Stop(); err != nil && !errors.Is(err, os.ErrProcessDone) {
 			log.WithError(err).Error("App stopped with unexpected error.")
 			continue
 		}
