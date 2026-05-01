@@ -124,7 +124,13 @@ func (r *RPCIngressGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error
 
 	// Thread the calling app's name on the dial context so router-side
 	// log entries pick up app_name=<n> for 'cli proxy start --verbose'.
-	dialCtx := appnet.WithAppName(context.Background(), r.proc.conf.AppName)
+	// r.proc may be nil in unit tests that exercise the gateway in
+	// isolation (see pkg/app/conn_test.go); fall back to "" then.
+	var appName string
+	if r.proc != nil {
+		appName = r.proc.conf.AppName
+	}
+	dialCtx := appnet.WithAppName(context.Background(), appName)
 	conn, err := appnet.DialContext(dialCtx, *remote)
 	if err != nil {
 		free()
