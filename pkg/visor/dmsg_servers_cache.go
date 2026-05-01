@@ -9,8 +9,8 @@
 //
 // Read order at startup:
 //
-//	1. cache file  (`<local_path>/dmsg_servers.json`)
-//	2. main config (`v.conf.Dmsg.Servers` — typically /opt/skywire/skywire.json)
+//  1. cache file  (`<local_path>/dmsg_servers.json`)
+//  2. main config (`v.conf.Dmsg.Servers` — typically /opt/skywire/skywire.json)
 //
 // The two are merged: for any PK present in the cache, the cached
 // entry wins; PKs only in the config are kept; PKs only in the cache
@@ -52,7 +52,7 @@ func NewDmsgServersCache(filePath string) *DmsgServersCache {
 		filePath: filePath,
 	}
 	if filePath != "" {
-		_ = c.load() // missing file or unreadable cache -> start empty
+		_ = c.load() //nolint:errcheck,gosec // missing file or unreadable cache -> start empty
 	}
 	return c
 }
