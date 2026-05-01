@@ -30,6 +30,11 @@ type API struct {
 	startedAt time.Time
 
 	services *deployment.Services
+	// servicesMu guards services.DmsgServers, which is refreshed in the
+	// background from dmsg-discovery so the served bootstrap list reflects
+	// the actual current addresses of each known dmsg-server PK rather
+	// than the addresses baked into services-config.json at build time.
+	servicesMu sync.RWMutex
 
 	dmsghttpConf   httputil.DMSGHTTPConf
 	dmsghttpConfTs time.Time
@@ -39,6 +44,10 @@ type API struct {
 
 	dmsgAddr string
 }
+
+// dmsgServersRefreshInterval is how often the bootstrap dmsg_servers list is
+// refreshed from dmsg-discovery. 5m matches the dmsghttp endpoint cache.
+const dmsgServersRefreshInterval = 5 * time.Minute
 
 // HealthCheckResponse is struct of /health endpoint
 type HealthCheckResponse struct {
@@ -113,6 +122,8 @@ func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
 
 	api.Handler = r
 
+	go api.refreshDmsgServersLoop()
+
 	return api
 }
 
@@ -121,6 +132,53 @@ func (a *API) Close() {
 	a.closeOnce.Do(func() {
 		close(a.closeC)
 	})
+}
+
+// refreshDmsgServersLoop refreshes services.DmsgServers from dmsg-discovery
+// at startup and then on a fixed interval. If dmsgd is unreachable or returns
+// no entries, the previous in-memory list is kept (which on first attempt is
+// the embedded list from services-config.json). This means the served
+// bootstrap list converges on the live state without ever falling back to a
+// stale-at-build-time response.
+func (a *API) refreshDmsgServersLoop() {
+	a.refreshDmsgServers()
+	t := time.NewTicker(dmsgServersRefreshInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-a.closeC:
+			return
+		case <-t.C:
+			a.refreshDmsgServers()
+		}
+	}
+}
+
+func (a *API) refreshDmsgServers() {
+	a.servicesMu.RLock()
+	dmsgdURL := a.services.DmsgDiscovery
+	a.servicesMu.RUnlock()
+	if dmsgdURL == "" {
+		return
+	}
+	live := fetchDMSGServers(dmsgdURL)
+	if len(live) == 0 {
+		// Either dmsgd unreachable or no servers registered — keep the
+		// previous list (embedded on first call, last-known-good after).
+		a.log.Debug("dmsg_servers refresh returned 0 entries; keeping previous list")
+		return
+	}
+	entries := make([]deployment.DmsgServerEntry, 0, len(live))
+	for _, s := range live {
+		var e deployment.DmsgServerEntry
+		e.Static = s.Static
+		e.Server.Address = s.Server.Address
+		entries = append(entries, e)
+	}
+	a.servicesMu.Lock()
+	a.services.DmsgServers = entries
+	a.servicesMu.Unlock()
+	a.log.WithField("count", len(entries)).Debug("dmsg_servers refreshed from dmsg-discovery")
 }
 
 func (a *API) logger(r *http.Request) logrus.FieldLogger {
@@ -138,7 +196,12 @@ func (a *API) health(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) config(w http.ResponseWriter, r *http.Request) {
-	a.writeJSON(w, r, http.StatusOK, a.services)
+	a.servicesMu.RLock()
+	// Snapshot under the lock so the JSON encoder doesn't see a torn
+	// state if refreshDmsgServers swaps the slice mid-encode.
+	resp := *a.services
+	a.servicesMu.RUnlock()
+	a.writeJSON(w, r, http.StatusOK, &resp)
 }
 
 func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
