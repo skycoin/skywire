@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
@@ -77,6 +78,15 @@ Example URLs:
 		if logLvl != "" {
 			if lvl, err := logging.LevelFromString(logLvl); err == nil {
 				logging.SetLevel(lvl)
+				// --loglvl=debug|trace implies --verbose unless the
+				// user explicitly opted out. Mirrors the standalone
+				// 'skywire dmsg curl' which prints dmsg-layer chatter
+				// at debug level natively — when the request is
+				// proxied through the visor, we want the same
+				// experience by default.
+				if !cmd.Flags().Changed("verbose") && lvl >= logrus.DebugLevel {
+					curlVerbose = true
+				}
 			}
 		}
 

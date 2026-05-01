@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	services "github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 func init() {
@@ -45,6 +46,8 @@ func init() {
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
+	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to vpn-client (app stdout + tagged router/mux/setup events); ctrl+c stops the vpn and exits")
+	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 }
 
 var startCmd = &cobra.Command{
@@ -89,8 +92,6 @@ var startCmd = &cobra.Command{
 			launcherMode = "external"
 		}
 
-		internal.Catch(cmd.Flags(), rpcClient.StartVPNClientWithMode(pubkey, launcherMode))
-		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		var tCtxCancelFunc context.CancelFunc
 		tCtx := context.Background()
 		if startingTimeout != 0 {
@@ -103,14 +104,63 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
+			if startVerbose {
+				return // let the main goroutine exit gracefully
+			}
 			rpcClient.KillApp("vpn-client") //nolint:errcheck,gosec
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
+
+		// --verbose: open a gRPC log stream BEFORE StartVPNClientWithMode
+		// so startup entries (route setup, transport probe, app spawn) are
+		// captured. Mirrors 'proxy start --verbose'.
+		var verboseDone chan struct{}
+		if startVerbose {
+			grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("verbose: gRPC dial failed: %w", err))
+			}
+			verboseDone = make(chan struct{})
+			subscribedCh := make(chan struct{})
+			go func() {
+				defer close(verboseDone)
+				defer grpcClient.Close() //nolint:errcheck,gosec
+				err := grpcClient.StreamAppLogs(ctx, stateName, false, startVerboseLevel, nil, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
+					ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
+					module := e.Module
+					if module == "" {
+						module = "-"
+					}
+					fmt.Fprintf(os.Stderr, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message)
+				})
+				if err != nil && ctx.Err() == nil {
+					fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
+				}
+			}()
+			// Block until subscription handshake completes so StartVPN's
+			// initial setup chatter isn't lost to the race.
+			select {
+			case <-subscribedCh:
+			case <-time.After(2 * time.Second):
+				fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within 2s; proceeding anyway")
+			case <-ctx.Done():
+				return
+			}
+		}
+
+		internal.Catch(cmd.Flags(), rpcClient.StartVPNClientWithMode(pubkey, launcherMode))
+		if !startVerbose {
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		}
+
 		startProcess := true
+		appReachedRunning := false
 		for startProcess {
 			time.Sleep(time.Second * 1)
-			internal.PrintOutput(cmd.Flags(), nil, ".")
+			if !startVerbose {
+				internal.PrintOutput(cmd.Flags(), nil, ".")
+			}
 			states, err := rpcClient.Apps()
 			internal.Catch(cmd.Flags(), err)
 
@@ -123,7 +173,10 @@ var startCmd = &cobra.Command{
 				if state.Name == stateName {
 					if state.Status == appserver.AppStatusRunning {
 						startProcess = false
-						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
+						appReachedRunning = true
+						if !startVerbose {
+							internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
+						}
 						// Query the configured geoip URL through the VPN to confirm
 						// the exit IP changed. The visor itself uses an embedded
 						// MaxMind database now; this is one of the few remaining
@@ -142,9 +195,27 @@ var startCmd = &cobra.Command{
 						out := output{
 							AppError: state.DetailedStatus,
 						}
-						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nError! > "+state.DetailedStatus))
+						leader := "\n"
+						if startVerbose {
+							leader = ""
+						}
+						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln(leader+"Error! > "+state.DetailedStatus))
 					}
 				}
+			}
+		}
+
+		// --verbose: stay in the foreground, streaming logs until the
+		// user hits ctrl+c. Then stop the app cleanly and exit.
+		if startVerbose && appReachedRunning {
+			fmt.Fprintln(os.Stderr, "--- vpn running; streaming logs (ctrl+c to stop) ---")
+			<-ctx.Done()
+			fmt.Fprintln(os.Stderr, "stopping app...")
+			if err := rpcClient.StopApp(stateName); err != nil {
+				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+			}
+			if verboseDone != nil {
+				<-verboseDone
 			}
 		}
 	},
