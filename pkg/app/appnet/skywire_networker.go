@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"net"
-	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -152,7 +151,7 @@ func (r *SkywireNetworker) ListenContext(ctx context.Context, addr Addr) (net.Li
 
 	if atomic.CompareAndSwapInt32(&r.isServing, 0, 1) {
 		go func() {
-			if err := r.serveRouteGroup(ctx); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+			if err := r.serveRouteGroup(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
 				r.log.WithError(err).Error("serveRouteGroup stopped unexpectedly.")
 			}
 		}()
@@ -171,7 +170,7 @@ func (r *SkywireNetworker) serveRouteGroup(ctx context.Context) error {
 		conn, err := r.r.AcceptRoutes(ctx)
 		if err != nil {
 			// Check if shutting down (context canceled or connection closed)
-			if ctx.Err() != nil || strings.Contains(err.Error(), "use of closed network connection") {
+			if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
 				log.WithError(err).Debug("Stopped accepting routes.")
 				return err
 			}

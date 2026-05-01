@@ -382,7 +382,7 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 			go func() {
 				dmsgGRPCLog.Infof("DMSG gRPC server listening on port %d (%d authorized PKs)", skyenv.DmsgGRPCPort, len(authorizedPKs))
 				if err := dmsgGRPCServer.Serve(authL); err != nil {
-					if !strings.Contains(err.Error(), "use of closed network connection") &&
+					if !errors.Is(err, net.ErrClosed) &&
 						!strings.Contains(err.Error(), "closed") {
 						dmsgGRPCLog.WithError(err).Error("DMSG gRPC server error")
 					}
@@ -429,7 +429,7 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	go func() {
 		grpcLog.Infof("CLI gRPC server listening on %s (multiplexed)", v.conf.CLIAddr)
 		if err := grpcServer.Serve(grpcL); err != nil {
-			if !strings.Contains(err.Error(), "use of closed network connection") &&
+			if !errors.Is(err, net.ErrClosed) &&
 				!strings.Contains(err.Error(), "mux: listener closed") {
 				grpcLog.WithError(err).Error("gRPC server error")
 			}
@@ -461,7 +461,7 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 			conn, err := rpcL.Accept()
 			if err != nil {
 				// Check if listener was closed (normal shutdown)
-				if strings.Contains(err.Error(), "use of closed network connection") ||
+				if errors.Is(err, net.ErrClosed) ||
 					strings.Contains(err.Error(), "mux: listener closed") {
 					rpcLog.Debug("CLI RPC listener closed")
 					return
@@ -516,7 +516,7 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 	// Start cmux - this must be called after setting up all listeners
 	go func() {
 		if err := mux.Serve(); err != nil {
-			if !strings.Contains(err.Error(), "use of closed network connection") &&
+			if !errors.Is(err, net.ErrClosed) &&
 				!strings.Contains(err.Error(), "mux: listener closed") {
 				v.log.WithError(err).Error("cmux serve error")
 			}

@@ -38,7 +38,7 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 			Op:     "accept",
 			Net:    "skynet",
 			Source: nil,
-			Err:    errors.New("use of closed network connection"),
+			Err:    net.ErrClosed,
 		}
 
 		return nil, err
