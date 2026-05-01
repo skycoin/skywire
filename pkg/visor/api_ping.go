@@ -623,7 +623,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 		cancel()
 		if err != nil {
 			v.StopSkysocksClients() //nolint:errcheck,gosec
-			if strings.Contains(err.Error(), "context deadline exceeded") {
+			if errors.Is(err, context.DeadlineExceeded) {
 				result.Status = "TIMEOUT"
 			} else {
 				result.Status = "FAIL"
