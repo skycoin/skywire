@@ -4,7 +4,6 @@ package dmsgctrl
 import (
 	"errors"
 	"net"
-	"strings"
 
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -23,7 +22,7 @@ func ServeListener(l net.Listener, chanLen int) <-chan *Control {
 		for {
 			conn, err := l.Accept()
 			if err != nil {
-				if errors.Is(err, dmsg.ErrEntityClosed) || strings.Contains(err.Error(), "use of closed") {
+				if errors.Is(err, dmsg.ErrEntityClosed) || errors.Is(err, net.ErrClosed) {
 					return
 				}
 				log.Warnf("Failed to accept dmsgctrl conn, continuing: %v", err)
