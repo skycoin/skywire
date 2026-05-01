@@ -112,8 +112,18 @@ Example URLs:
 	},
 }
 
-// curlViaVisor performs the curl request using the visor's dmsg client via RPC
-func curlViaVisor(cmd *cobra.Command, _ context.Context, log *logging.Logger, dmsgURL string) error {
+// curlViaVisor performs the curl request using the visor's dmsg client via RPC.
+//
+// net/rpc.Call is synchronous and ignores context, so a slow visor-side
+// dial — which is exactly what happens when the target DMSG peer is
+// unreachable, the visor sits in DialStream until its 15s server-side
+// HTTP timeout — would leave the CLI unresponsive to ctrl+c. We
+// dispatch the RPC in a goroutine and select against ctx.Done() so
+// SIGINT / per-attempt timeout cancels the wait promptly. The RPC
+// itself still runs to completion on the visor (we can't actually
+// abort net/rpc); ctrl+c just lets the CLI exit cleanly while the
+// visor side cleans itself up via its own timeout.
+func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, dmsgURL string) error {
 	rpcClient, err := rpcClient(cmd)
 	if err != nil {
 		return fmt.Errorf("RPC connection failed; is skywire running?: %w", err)
@@ -154,11 +164,34 @@ func curlViaVisor(cmd *cobra.Command, _ context.Context, log *logging.Logger, dm
 	var lastErr error
 	for i := 0; i < tries; i++ {
 		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(curlWait) * time.Second):
+			}
 			log.Debugf("Attempt %d/%d...", i+1, curlTries)
-			time.Sleep(time.Duration(curlWait) * time.Second)
 		}
 
-		resp, err := rpcClient.DmsgHTTP(req)
+		// Run the RPC in a goroutine so SIGINT / ctx cancellation
+		// can interrupt the wait. The visor's server-side handler
+		// has its own 15s HTTP timeout, so it returns regardless.
+		type result struct {
+			resp *visor.DmsgHTTPResponse
+			err  error
+		}
+		done := make(chan result, 1)
+		go func() {
+			resp, err := rpcClient.DmsgHTTP(req)
+			done <- result{resp, err}
+		}()
+
+		var resp *visor.DmsgHTTPResponse
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case r := <-done:
+			resp, err = r.resp, r.err
+		}
 		if err != nil {
 			lastErr = err
 			log.WithError(err).Debug("Request failed")
