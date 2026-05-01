@@ -88,6 +88,46 @@ func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 	return rgs, nil
 }
 
+// RouteGroupMuxInfo implements API. Returns per-mux-leg byte/packet/
+// latency counters for every active route group tagged with the
+// named app. The visor's router holds the rg's; we just transcribe
+// the internal MuxInfo into the wire-friendly visor-level shape.
+func (v *Visor) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
+	if v.router == nil {
+		return nil, nil
+	}
+	infos := v.router.RouteGroupMuxInfoForApp(appName)
+	out := make([]MuxRouteGroupInfo, 0, len(infos))
+	for _, info := range infos {
+		entry := MuxRouteGroupInfo{
+			Desc: routing.RouteDescriptorFields{
+				DstPK:   info.Desc.DstPK(),
+				SrcPK:   info.Desc.SrcPK(),
+				DstPort: info.Desc.DstPort(),
+				SrcPort: info.Desc.SrcPort(),
+			},
+			MuxEnabled:  info.MuxEnabled,
+			SACKEnabled: info.SACKEnabled,
+			Legs:        make([]MuxLegInfo, 0, len(info.Legs)),
+		}
+		for _, leg := range info.Legs {
+			entry.Legs = append(entry.Legs, MuxLegInfo{
+				Index:       leg.Index,
+				TransportID: leg.TransportID,
+				TpType:      leg.TpType,
+				RemotePK:    leg.RemotePK,
+				LatencyMS:   leg.LatencyMS,
+				SentBytes:   leg.SentBytes,
+				SentPackets: leg.SentPackets,
+				RecvBytes:   leg.RecvBytes,
+				RecvPackets: leg.RecvPackets,
+			})
+		}
+		out = append(out, entry)
+	}
+	return out, nil
+}
+
 // ActiveRoutes implements API.
 // Returns all active routes with their app associations and live stats.
 func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {

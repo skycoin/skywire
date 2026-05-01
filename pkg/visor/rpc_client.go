@@ -617,6 +617,13 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, err
 }
 
+// RouteGroupMuxInfo calls RouteGroupMuxInfo.
+func (rc *rpcClient) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
+	var infos []MuxRouteGroupInfo
+	err := rc.Call("RouteGroupMuxInfo", &appName, &infos)
+	return infos, err
+}
+
 // FetchServiceData calls FetchServiceData.
 func (rc *rpcClient) FetchServiceData(service, path string) ([]byte, error) {
 	var data []byte

@@ -46,6 +46,19 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	return err
 }
 
+// RouteGroupMuxInfo retrieves per-mux-leg counters for active rg's
+// tagged with the named app.
+func (r *RPC) RouteGroupMuxInfo(in *string, out *[]MuxRouteGroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "RouteGroupMuxInfo", in)(out, &err)
+	if in == nil {
+		empty := ""
+		in = &empty
+	}
+	infos, err := r.visor.RouteGroupMuxInfo(*in)
+	*out = infos
+	return err
+}
+
 // FetchServiceData proxies a GET request to a deployment service.
 func (r *RPC) FetchServiceData(in *FetchServiceDataIn, out *[]byte) (err error) {
 	defer rpcutil.LogCall(r.log, "FetchServiceData", in)(out, &err)

@@ -45,6 +45,8 @@ func init() {
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
+	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to vpn-client (app stdout + tagged router/mux/setup events); ctrl+c stops the vpn and exits")
+	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 }
 
 var startCmd = &cobra.Command{
@@ -89,8 +91,6 @@ var startCmd = &cobra.Command{
 			launcherMode = "external"
 		}
 
-		internal.Catch(cmd.Flags(), rpcClient.StartVPNClientWithMode(pubkey, launcherMode))
-		internal.PrintOutput(cmd.Flags(), nil, "Starting.")
 		var tCtxCancelFunc context.CancelFunc
 		tCtx := context.Background()
 		if startingTimeout != 0 {
@@ -103,14 +103,44 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
+			if startVerbose {
+				return // let the main goroutine exit gracefully
+			}
 			rpcClient.KillApp("vpn-client") //nolint:errcheck,gosec
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
+
+		// --verbose: open a gRPC log stream BEFORE StartVPNClientWithMode
+		// so startup entries (route setup, transport probe, app spawn) are
+		// captured. Mirrors 'proxy start --verbose'.
+		var verboseStream *clirpc.VerboseStream
+		if startVerbose {
+			vs, err := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
+				AppName: stateName,
+				Level:   startVerboseLevel,
+			})
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			verboseStream = vs
+			if err := vs.WaitSubscribed(ctx, 2*time.Second); err != nil && ctx.Err() != nil {
+				return
+			}
+		}
+
+		internal.Catch(cmd.Flags(), rpcClient.StartVPNClientWithMode(pubkey, launcherMode))
+		if !startVerbose {
+			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+		}
+
 		startProcess := true
+		appReachedRunning := false
 		for startProcess {
 			time.Sleep(time.Second * 1)
-			internal.PrintOutput(cmd.Flags(), nil, ".")
+			if !startVerbose {
+				internal.PrintOutput(cmd.Flags(), nil, ".")
+			}
 			states, err := rpcClient.Apps()
 			internal.Catch(cmd.Flags(), err)
 
@@ -123,7 +153,10 @@ var startCmd = &cobra.Command{
 				if state.Name == stateName {
 					if state.Status == appserver.AppStatusRunning {
 						startProcess = false
-						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
+						appReachedRunning = true
+						if !startVerbose {
+							internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
+						}
 						// Query the configured geoip URL through the VPN to confirm
 						// the exit IP changed. The visor itself uses an embedded
 						// MaxMind database now; this is one of the few remaining
@@ -142,9 +175,27 @@ var startCmd = &cobra.Command{
 						out := output{
 							AppError: state.DetailedStatus,
 						}
-						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nError! > "+state.DetailedStatus))
+						leader := "\n"
+						if startVerbose {
+							leader = ""
+						}
+						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln(leader+"Error! > "+state.DetailedStatus))
 					}
 				}
+			}
+		}
+
+		// --verbose: stay in the foreground, streaming logs until the
+		// user hits ctrl+c. Then stop the app cleanly and exit.
+		if startVerbose && appReachedRunning {
+			fmt.Fprintln(os.Stderr, "--- vpn running; streaming logs (ctrl+c to stop) ---")
+			<-ctx.Done()
+			fmt.Fprintln(os.Stderr, "stopping app...")
+			if err := rpcClient.StopApp(stateName); err != nil {
+				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+			}
+			if verboseStream != nil {
+				verboseStream.Close()
 			}
 		}
 	},

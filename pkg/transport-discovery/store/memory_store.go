@@ -151,6 +151,11 @@ func (s *memoryStore) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubK
 	return nil
 }
 
+// UpdateLatency is a no-op for the same reason as UpdateBandwidth.
+func (s *memoryStore) UpdateLatency(_ context.Context, _ string, _, _, _ float64) error {
+	return nil
+}
+
 // GetTransportBandwidth returns empty slice for memory store (no bandwidth tracking).
 func (s *memoryStore) GetTransportBandwidth(_ context.Context, _ uuid.UUID, _ string, _ int) ([]BandwidthAggregation, error) {
 	return []BandwidthAggregation{}, nil

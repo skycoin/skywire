@@ -187,6 +187,34 @@ func (_m *MockProcManager) GetAppPort(appName string) (routing.Port, error) {
 	return r0, r1
 }
 
+// AppByPort provides a mock function with given fields: p
+func (_m *MockProcManager) AppByPort(p routing.Port) (string, bool) {
+	ret := _m.Called(p)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AppByPort")
+	}
+
+	var r0 string
+	var r1 bool
+	if rf, ok := ret.Get(0).(func(routing.Port) (string, bool)); ok {
+		return rf(p)
+	}
+	if rf, ok := ret.Get(0).(func(routing.Port) string); ok {
+		r0 = rf(p)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	if rf, ok := ret.Get(1).(func(routing.Port) bool); ok {
+		r1 = rf(p)
+	} else {
+		r1 = ret.Bool(1)
+	}
+
+	return r0, r1
+}
+
 // ProcByName provides a mock function with given fields: appName
 func (_m *MockProcManager) ProcByName(appName string) (*Proc, bool) {
 	ret := _m.Called(appName)

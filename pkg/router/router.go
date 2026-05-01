@@ -80,6 +80,12 @@ type Config struct {
 	// dialing it during the router-init window don't hit "request has no
 	// associated listener" warnings.
 	AwaitSetupListener *dmsg.Listener
+	// AppLookup, if set, resolves a routing.Port to the originating
+	// app name. Used to tag rg-scoped log entries with app_name=<n>
+	// so 'cli proxy start --verbose' can scope to a session. nil
+	// means no lookup is performed and entries are emitted untagged
+	// (the existing behavior).
+	AppLookup func(routing.Port) (string, bool)
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -116,6 +122,13 @@ type DialOptions struct {
 	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
 	ExcludeDMSG         bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
 	KeepAlive           time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
+	// AppName is the originating app's name. Set by appnet's
+	// DialContextWithOptions when the caller threaded a context
+	// carrying it (RPCIngressGateway.Dial uses appnet.WithAppName).
+	// router-side: scopedLog prefers this over AppLookup-by-port,
+	// since DialRoutes is invoked with an ephemeral source port that
+	// isn't the app's registered SetAppPort value.
+	AppName string
 }
 
 // DefaultDialOptions returns default dial options.
@@ -172,6 +185,19 @@ type Router interface {
 	// matching route group is found.
 	RouteGroupHops(desc routing.RouteDescriptor) []RouteHopInfo
 
+	// RouteGroupMuxInfo returns a snapshot of per-leg mux state for
+	// the rg matching desc (or its inversion). Returns false when no
+	// matching active rg is found. Used by 'cli proxy mux-info' to
+	// surface per-leg bandwidth + latency for diagnostic purposes.
+	RouteGroupMuxInfo(desc routing.RouteDescriptor) (MuxInfo, bool)
+
+	// RouteGroupMuxInfoForApp returns mux snapshots for every active
+	// rg whose source port maps (via AppLookup) to the named app.
+	// One app may have multiple rg's at once (e.g. each SOCKS5
+	// client connection to skysocks-client gets its own rg). Returns
+	// an empty slice if no rg's are active for the app.
+	RouteGroupMuxInfoForApp(appName string) []MuxInfo
+
 	// Routing table related methods
 	RoutesCount() int
 	Rules() []routing.Rule
@@ -213,6 +239,36 @@ type router struct {
 	muxMode            WeightMode       // default weight mode for new mux connections
 	lastRouteCalcTime  time.Duration    // last route calculation time (for local routes)
 	lastRouteCalcMu    sync.Mutex       // protects lastRouteCalcTime
+}
+
+// scopedLog returns a logger augmented with app_name=<n> when the
+// configured AppLookup resolves lPort to an app, otherwise the
+// router's bare logger. Callers use the returned logger for
+// rg-scoped entries so 'cli proxy start --verbose' can filter on
+// the field. Cheap on the no-lookup path (returns the bare logger
+// directly).
+func (r *router) scopedLog(lPort routing.Port) *logging.Logger {
+	if r.conf == nil || r.conf.AppLookup == nil {
+		return r.logger
+	}
+	name, ok := r.conf.AppLookup(lPort)
+	if !ok || name == "" {
+		return r.logger
+	}
+	return r.logger.WithAppName(name)
+}
+
+// scopedLogForOpts returns a logger augmented with app_name=<n> when
+// opts carries an AppName (set via the appnet.WithAppName context
+// path), falling back to the port-based scopedLog. Used in DialRoutes
+// where the lPort is an ephemeral port that doesn't resolve via
+// AppLookup, but the caller has already threaded the canonical name
+// through DialOptions.
+func (r *router) scopedLogForOpts(opts *DialOptions, lPort routing.Port) *logging.Logger {
+	if opts != nil && opts.AppName != "" {
+		return r.logger.WithAppName(opts.AppName)
+	}
+	return r.scopedLog(lPort)
 }
 
 // New constructs a new Router.

@@ -7,12 +7,11 @@
 package rpcgrpc
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1279,6 +1278,405 @@ func (x *TempStat) GetCritical() float64 {
 	return 0
 }
 
+// AppLogStreamRequest configures app-scoped log streaming.
+type AppLogStreamRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// AppName scopes the stream to entries originating from this app's
+	// module or carrying app=<name> as a logrus field. Either AppName
+	// or Modules (or both) must be set.
+	AppName string `protobuf:"bytes,1,opt,name=app_name,json=appName,proto3" json:"app_name,omitempty"`
+	// IncludeRouter is retained on the wire for forward compatibility
+	// but is ignored — the app_name field tagging now covers what it
+	// used to do, and Modules below is the explicit path for non-app
+	// scoping (e.g. 'cli dmsg curl --verbose' picking up dmsg layers).
+	IncludeRouter bool `protobuf:"varint,2,opt,name=include_router,json=includeRouter,proto3" json:"include_router,omitempty"`
+	// MinLevel filters out lower-severity entries: trace|debug|info|warn|error.
+	// Default debug.
+	MinLevel string `protobuf:"bytes,3,opt,name=min_level,json=minLevel,proto3" json:"min_level,omitempty"`
+	// Modules filters by _module prefix, OR-merged with the AppName
+	// match. Use this when no app context exists — e.g. 'dmsg curl
+	// --verbose' sends ["dmsgC","dmsghttp","dmsg_grpc"]. Empty means
+	// "no module-prefix match"; AppName is then the only path.
+	Modules       []string `protobuf:"bytes,4,rep,name=modules,proto3" json:"modules,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppLogStreamRequest) Reset() {
+	*x = AppLogStreamRequest{}
+	mi := &file_ping_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppLogStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppLogStreamRequest) ProtoMessage() {}
+
+func (x *AppLogStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppLogStreamRequest.ProtoReflect.Descriptor instead.
+func (*AppLogStreamRequest) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *AppLogStreamRequest) GetAppName() string {
+	if x != nil {
+		return x.AppName
+	}
+	return ""
+}
+
+func (x *AppLogStreamRequest) GetIncludeRouter() bool {
+	if x != nil {
+		return x.IncludeRouter
+	}
+	return false
+}
+
+func (x *AppLogStreamRequest) GetMinLevel() string {
+	if x != nil {
+		return x.MinLevel
+	}
+	return ""
+}
+
+func (x *AppLogStreamRequest) GetModules() []string {
+	if x != nil {
+		return x.Modules
+	}
+	return nil
+}
+
+// AppLogEntry is one log line forwarded to the gRPC client.
+type AppLogEntry struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	TimestampNs int64                  `protobuf:"varint,1,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"`                                             // entry time as Unix nanoseconds
+	Level       string                 `protobuf:"bytes,2,opt,name=level,proto3" json:"level,omitempty"`                                                                             // "trace"|"debug"|"info"|"warn"|"error"|"fatal"|"panic"
+	Module      string                 `protobuf:"bytes,3,opt,name=module,proto3" json:"module,omitempty"`                                                                           // _module field (e.g. "router", "skysocks-client")
+	Message     string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`                                                                         // formatted message text
+	Fields      map[string]string      `protobuf:"bytes,5,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // remaining structured fields
+	// Subscribed is set on a sentinel entry the server sends
+	// immediately after it has registered the subscription with the
+	// broadcaster. Clients use this to know that any subsequent log
+	// activity will reach them — letting them gate downstream RPC
+	// calls (e.g. StartAppWithMode) on subscription readiness so the
+	// first ~50ms of setup logs aren't lost to the race between
+	// subscription handshake and the action that triggers them.
+	// The other fields are unused on the sentinel.
+	Subscribed    bool `protobuf:"varint,6,opt,name=subscribed,proto3" json:"subscribed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppLogEntry) Reset() {
+	*x = AppLogEntry{}
+	mi := &file_ping_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppLogEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppLogEntry) ProtoMessage() {}
+
+func (x *AppLogEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppLogEntry.ProtoReflect.Descriptor instead.
+func (*AppLogEntry) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *AppLogEntry) GetTimestampNs() int64 {
+	if x != nil {
+		return x.TimestampNs
+	}
+	return 0
+}
+
+func (x *AppLogEntry) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *AppLogEntry) GetModule() string {
+	if x != nil {
+		return x.Module
+	}
+	return ""
+}
+
+func (x *AppLogEntry) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *AppLogEntry) GetFields() map[string]string {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+func (x *AppLogEntry) GetSubscribed() bool {
+	if x != nil {
+		return x.Subscribed
+	}
+	return false
+}
+
+// CalcRoutesRequest configures server-side route calculation streaming.
+type CalcRoutesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// SrcPk is the source visor public key. Empty means use the receiving
+	// visor's own PK (the common case — calc routes from this visor).
+	SrcPk string `protobuf:"bytes,1,opt,name=src_pk,json=srcPk,proto3" json:"src_pk,omitempty"`
+	// DstPk is the destination visor public key. Required.
+	DstPk string `protobuf:"bytes,2,opt,name=dst_pk,json=dstPk,proto3" json:"dst_pk,omitempty"`
+	// MinHops is the minimum hop count. 0 falls back to the visor's
+	// routing.min_hops, then 1.
+	MinHops int32 `protobuf:"varint,3,opt,name=min_hops,json=minHops,proto3" json:"min_hops,omitempty"`
+	// MaxHops is the maximum hop count. 0 falls back to a safe default.
+	MaxHops int32 `protobuf:"varint,4,opt,name=max_hops,json=maxHops,proto3" json:"max_hops,omitempty"`
+	// Count caps how many routes to return. 0 means unbounded (the BFS
+	// runs until the search space is exhausted; the streaming wire
+	// protocol means the caller can still dump them as they arrive
+	// without buffering the whole set).
+	Count int32 `protobuf:"varint,5,opt,name=count,proto3" json:"count,omitempty"`
+	// Source selects the transport-graph data source. "tpd" (HTTP),
+	// "dht" (visor's local DHT store), or "auto" (DHT then TPD fallback).
+	Source string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
+	// TpdUrl optionally overrides the default transport-discovery URL.
+	TpdUrl string `protobuf:"bytes,7,opt,name=tpd_url,json=tpdUrl,proto3" json:"tpd_url,omitempty"`
+	// QueueCap caps the per-call BFS queue size on the server. 0 falls
+	// back to the route-finder package's DefaultMaxBFSQueue. Negative
+	// means unbounded (use with caution on dense graphs).
+	QueueCap      int32 `protobuf:"varint,8,opt,name=queue_cap,json=queueCap,proto3" json:"queue_cap,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalcRoutesRequest) Reset() {
+	*x = CalcRoutesRequest{}
+	mi := &file_ping_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalcRoutesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalcRoutesRequest) ProtoMessage() {}
+
+func (x *CalcRoutesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalcRoutesRequest.ProtoReflect.Descriptor instead.
+func (*CalcRoutesRequest) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *CalcRoutesRequest) GetSrcPk() string {
+	if x != nil {
+		return x.SrcPk
+	}
+	return ""
+}
+
+func (x *CalcRoutesRequest) GetDstPk() string {
+	if x != nil {
+		return x.DstPk
+	}
+	return ""
+}
+
+func (x *CalcRoutesRequest) GetMinHops() int32 {
+	if x != nil {
+		return x.MinHops
+	}
+	return 0
+}
+
+func (x *CalcRoutesRequest) GetMaxHops() int32 {
+	if x != nil {
+		return x.MaxHops
+	}
+	return 0
+}
+
+func (x *CalcRoutesRequest) GetCount() int32 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *CalcRoutesRequest) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *CalcRoutesRequest) GetTpdUrl() string {
+	if x != nil {
+		return x.TpdUrl
+	}
+	return ""
+}
+
+func (x *CalcRoutesRequest) GetQueueCap() int32 {
+	if x != nil {
+		return x.QueueCap
+	}
+	return 0
+}
+
+// CalcRoute is one path the BFS found. Hops are listed in forward order
+// from src to dst; the caller can derive the reverse by mirroring.
+type CalcRoute struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Hops          []*CalcHop             `protobuf:"bytes,1,rep,name=hops,proto3" json:"hops,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalcRoute) Reset() {
+	*x = CalcRoute{}
+	mi := &file_ping_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalcRoute) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalcRoute) ProtoMessage() {}
+
+func (x *CalcRoute) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalcRoute.ProtoReflect.Descriptor instead.
+func (*CalcRoute) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *CalcRoute) GetHops() []*CalcHop {
+	if x != nil {
+		return x.Hops
+	}
+	return nil
+}
+
+// CalcHop is one edge in a route.
+type CalcHop struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TpId          string                 `protobuf:"bytes,1,opt,name=tp_id,json=tpId,proto3" json:"tp_id,omitempty"`
+	From          string                 `protobuf:"bytes,2,opt,name=from,proto3" json:"from,omitempty"`
+	To            string                 `protobuf:"bytes,3,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CalcHop) Reset() {
+	*x = CalcHop{}
+	mi := &file_ping_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CalcHop) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CalcHop) ProtoMessage() {}
+
+func (x *CalcHop) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CalcHop.ProtoReflect.Descriptor instead.
+func (*CalcHop) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CalcHop) GetTpId() string {
+	if x != nil {
+		return x.TpId
+	}
+	return ""
+}
+
+func (x *CalcHop) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *CalcHop) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
 // ProcessStat contains information about a running process
 type ProcessStat struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1295,7 +1693,7 @@ type ProcessStat struct {
 
 func (x *ProcessStat) Reset() {
 	*x = ProcessStat{}
-	mi := &file_ping_proto_msgTypes[16]
+	mi := &file_ping_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1307,7 +1705,7 @@ func (x *ProcessStat) String() string {
 func (*ProcessStat) ProtoMessage() {}
 
 func (x *ProcessStat) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[16]
+	mi := &file_ping_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1320,7 +1718,7 @@ func (x *ProcessStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessStat.ProtoReflect.Descriptor instead.
 func (*ProcessStat) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{16}
+	return file_ping_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ProcessStat) GetPid() int32 {
@@ -1500,7 +1898,39 @@ const file_ping_proto_rawDesc = "" +
 	"sensor_key\x18\x01 \x01(\tR\tsensorKey\x12 \n" +
 	"\vtemperature\x18\x02 \x01(\x01R\vtemperature\x12\x12\n" +
 	"\x04high\x18\x03 \x01(\x01R\x04high\x12\x1a\n" +
-	"\bcritical\x18\x04 \x01(\x01R\bcritical\"\xce\x01\n" +
+	"\bcritical\x18\x04 \x01(\x01R\bcritical\"\x8e\x01\n" +
+	"\x13AppLogStreamRequest\x12\x19\n" +
+	"\bapp_name\x18\x01 \x01(\tR\aappName\x12%\n" +
+	"\x0einclude_router\x18\x02 \x01(\bR\rincludeRouter\x12\x1b\n" +
+	"\tmin_level\x18\x03 \x01(\tR\bminLevel\x12\x18\n" +
+	"\amodules\x18\x04 \x03(\tR\amodules\"\x8d\x02\n" +
+	"\vAppLogEntry\x12!\n" +
+	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12\x14\n" +
+	"\x05level\x18\x02 \x01(\tR\x05level\x12\x16\n" +
+	"\x06module\x18\x03 \x01(\tR\x06module\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x128\n" +
+	"\x06fields\x18\x05 \x03(\v2 .rpcgrpc.AppLogEntry.FieldsEntryR\x06fields\x12\x1e\n" +
+	"\n" +
+	"subscribed\x18\x06 \x01(\bR\n" +
+	"subscribed\x1a9\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdb\x01\n" +
+	"\x11CalcRoutesRequest\x12\x15\n" +
+	"\x06src_pk\x18\x01 \x01(\tR\x05srcPk\x12\x15\n" +
+	"\x06dst_pk\x18\x02 \x01(\tR\x05dstPk\x12\x19\n" +
+	"\bmin_hops\x18\x03 \x01(\x05R\aminHops\x12\x19\n" +
+	"\bmax_hops\x18\x04 \x01(\x05R\amaxHops\x12\x14\n" +
+	"\x05count\x18\x05 \x01(\x05R\x05count\x12\x16\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\x12\x17\n" +
+	"\atpd_url\x18\a \x01(\tR\x06tpdUrl\x12\x1b\n" +
+	"\tqueue_cap\x18\b \x01(\x05R\bqueueCap\"1\n" +
+	"\tCalcRoute\x12$\n" +
+	"\x04hops\x18\x01 \x03(\v2\x10.rpcgrpc.CalcHopR\x04hops\"B\n" +
+	"\aCalcHop\x12\x13\n" +
+	"\x05tp_id\x18\x01 \x01(\tR\x04tpId\x12\x12\n" +
+	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x03 \x01(\tR\x02to\"\xce\x01\n" +
 	"\vProcessStat\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
@@ -1510,7 +1940,7 @@ const file_ping_proto_rawDesc = "" +
 	"\n" +
 	"memory_rss\x18\x05 \x01(\x04R\tmemoryRss\x12\x1a\n" +
 	"\busername\x18\x06 \x01(\tR\busername\x12\x16\n" +
-	"\x06status\x18\a \x01(\tR\x06status2\xe3\x04\n" +
+	"\x06status\x18\a \x01(\tR\x06status2\xf0\x05\n" +
 	"\vPingService\x129\n" +
 	"\n" +
 	"StreamPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12=\n" +
@@ -1520,7 +1950,9 @@ const file_ping_proto_rawDesc = "" +
 	"\x14GetRemoteDmsgServers\x12\x1b.rpcgrpc.DmsgServersRequest\x1a\x1c.rpcgrpc.DmsgServersResponse\x12H\n" +
 	"\x11StreamSystemStats\x12\x1b.rpcgrpc.SystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01\x12C\n" +
 	"\x0eGetSystemStats\x12\x1b.rpcgrpc.SystemStatsRequest\x1a\x14.rpcgrpc.SystemStats\x12T\n" +
-	"\x17StreamRemoteSystemStats\x12!.rpcgrpc.RemoteSystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
+	"\x17StreamRemoteSystemStats\x12!.rpcgrpc.RemoteSystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01\x12E\n" +
+	"\rStreamAppLogs\x12\x1c.rpcgrpc.AppLogStreamRequest\x1a\x14.rpcgrpc.AppLogEntry0\x01\x12D\n" +
+	"\x10StreamCalcRoutes\x12\x1a.rpcgrpc.CalcRoutesRequest\x1a\x12.rpcgrpc.CalcRoute0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
 
 var (
 	file_ping_proto_rawDescOnce sync.Once
@@ -1534,7 +1966,7 @@ func file_ping_proto_rawDescGZIP() []byte {
 	return file_ping_proto_rawDescData
 }
 
-var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_ping_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: rpcgrpc.PingRequest
 	(*PingResult)(nil),               // 1: rpcgrpc.PingResult
@@ -1552,7 +1984,13 @@ var file_ping_proto_goTypes = []any{
 	(*DiskStat)(nil),                 // 13: rpcgrpc.DiskStat
 	(*NetworkStat)(nil),              // 14: rpcgrpc.NetworkStat
 	(*TempStat)(nil),                 // 15: rpcgrpc.TempStat
-	(*ProcessStat)(nil),              // 16: rpcgrpc.ProcessStat
+	(*AppLogStreamRequest)(nil),      // 16: rpcgrpc.AppLogStreamRequest
+	(*AppLogEntry)(nil),              // 17: rpcgrpc.AppLogEntry
+	(*CalcRoutesRequest)(nil),        // 18: rpcgrpc.CalcRoutesRequest
+	(*CalcRoute)(nil),                // 19: rpcgrpc.CalcRoute
+	(*CalcHop)(nil),                  // 20: rpcgrpc.CalcHop
+	(*ProcessStat)(nil),              // 21: rpcgrpc.ProcessStat
+	nil,                              // 22: rpcgrpc.AppLogEntry.FieldsEntry
 }
 var file_ping_proto_depIdxs = []int32{
 	4,  // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
@@ -1565,28 +2003,34 @@ var file_ping_proto_depIdxs = []int32{
 	13, // 7: rpcgrpc.SystemStats.disks:type_name -> rpcgrpc.DiskStat
 	14, // 8: rpcgrpc.SystemStats.network:type_name -> rpcgrpc.NetworkStat
 	15, // 9: rpcgrpc.SystemStats.temps:type_name -> rpcgrpc.TempStat
-	16, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
-	0,  // 11: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
-	0,  // 12: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	5,  // 13: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	5,  // 14: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	2,  // 15: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
-	7,  // 16: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	7,  // 17: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	8,  // 18: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
-	1,  // 19: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1,  // 20: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	6,  // 21: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	6,  // 22: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	3,  // 23: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
-	9,  // 24: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 25: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 26: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
-	19, // [19:27] is the sub-list for method output_type
-	11, // [11:19] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	21, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
+	22, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
+	20, // 12: rpcgrpc.CalcRoute.hops:type_name -> rpcgrpc.CalcHop
+	0,  // 13: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
+	0,  // 14: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
+	5,  // 15: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	5,  // 16: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	2,  // 17: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
+	7,  // 18: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	7,  // 19: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	8,  // 20: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
+	16, // 21: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
+	18, // 22: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
+	1,  // 23: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1,  // 24: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6,  // 25: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6,  // 26: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3,  // 27: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	9,  // 28: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 29: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 30: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
+	17, // 31: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
+	19, // 32: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
+	23, // [23:33] is the sub-list for method output_type
+	13, // [13:23] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_ping_proto_init() }
@@ -1600,7 +2044,7 @@ func file_ping_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

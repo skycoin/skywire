@@ -27,18 +27,20 @@ import (
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
-	calcEnable  bool
-	calcDisable bool
-	calcTimeout time.Duration
-	tpdURL      string
-	calcMinHops uint16
-	calcMaxHops uint16
-	calcCount   int
-	calcSource  string
+	calcEnable   bool
+	calcDisable  bool
+	calcTimeout  time.Duration
+	tpdURL       string
+	calcMinHops  uint16
+	calcMaxHops  uint16
+	calcCount    int
+	calcSource   string
+	calcQueueCap int
 )
 
 func init() {
@@ -50,6 +52,7 @@ func init() {
 	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
 	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
 	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP), dht (visor's local DHT store), auto (DHT then TPD)")
+	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
 	clirpc.RegisterFetchFlags(calcCmd)
 }
 
@@ -145,17 +148,32 @@ var calcCmd = &cobra.Command{
 			}
 		}
 
-		// 0 means "every route the BFS finds". GetRoute walks the slice
-		// returned by finder until it hits the cap, so a large sentinel
-		// is equivalent to "all".
+		ctx, cancel := context.WithTimeout(context.Background(), calcTimeout)
+		defer cancel()
+
+		// Prefer streaming via the local visor's gRPC endpoint when
+		// available. The server-side BFS emits each path as soon as
+		// it's found; the CLI prints them as they arrive without
+		// holding the full result set in memory. This is the only
+		// path that can handle --count 0 (unbounded) on dense graphs
+		// without OOMing the CLI.
+		if rpcClient != nil && strings.ToLower(calcSource) != "dht" {
+			if err := streamRoutesViaGRPC(ctx, cmd, srcPK, dstPK, minHops, calcMaxHops, calcCount, calcQueueCap, calcSource, tpdURL); err == nil {
+				return
+			} else if !isFallbackEligible(err) {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			// fallback to local compute below
+		}
+
+		// Local fallback path: bounded count only. The streaming path
+		// above is the right tool for unbounded; this branch is for
+		// offline use (no visor RPC) where memory pressure is on the
+		// caller's machine but they explicitly chose this mode.
 		count := calcCount
 		if count <= 0 {
 			count = math.MaxInt32
 		}
-
-		// Fetch all transports and calculate route
-		ctx, cancel := context.WithTimeout(context.Background(), calcTimeout)
-		defer cancel()
 
 		var entries []*transport.Entry
 		var err error
@@ -216,6 +234,7 @@ var calcCmd = &cobra.Command{
 			}
 			fmt.Fprintf(&textBuf, "forward: %v\nreverse: %v", fwd, rev)
 		}
+		textBuf.WriteString("\n")
 
 		// Preserve the single-route shape for back-compat when --count=1.
 		if calcCount == 1 && len(pairs) == 1 {
@@ -224,6 +243,128 @@ var calcCmd = &cobra.Command{
 		}
 		internal.PrintOutput(cmd.Flags(), pairs, textBuf.String())
 	},
+}
+
+// streamRoutesViaGRPC opens the visor's StreamCalcRoutes gRPC stream and
+// prints each route as it arrives. JSON mode collects routes into a slice
+// and emits one final array; text mode writes one route per arrival
+// directly to stdout (no full-result buffering, so --count 0 is safe).
+func streamRoutesViaGRPC(
+	ctx context.Context,
+	cmd *cobra.Command,
+	srcPK, dstPK cipher.PubKey,
+	minHops, maxHops uint16,
+	count, queueCap int,
+	source, tpdU string,
+) error {
+	grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
+	if err != nil {
+		return fmt.Errorf("grpc dial: %w", err)
+	}
+	defer grpcClient.Close() //nolint:errcheck,gosec
+
+	type routePair struct {
+		Forward []routing.Hop `json:"forward"`
+		Reverse []routing.Hop `json:"reverse"`
+	}
+	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+	var collected []routePair
+
+	emitted := 0
+	cb := func(r *rpcgrpc.CalcRoute) bool {
+		fwd, err := protoHopsToRouting(r.Hops)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "calc: skipping malformed route: %v\n", err)
+			return true
+		}
+		rev := reverseHops(fwd)
+		emitted++
+
+		if isJSON {
+			collected = append(collected, routePair{Forward: fwd, Reverse: rev})
+			return count == 0 || emitted < count
+		}
+
+		// Text streaming: print as it arrives.
+		if emitted > 1 {
+			fmt.Println()
+		}
+		if count != 1 {
+			fmt.Printf("[%d]\n", emitted)
+		}
+		fmt.Printf("forward: %v\nreverse: %v\n", fwd, rev)
+		return count == 0 || emitted < count
+	}
+
+	if err := grpcClient.StreamCalcRoutes(
+		ctx,
+		srcPK.String(),
+		dstPK.String(),
+		int32(minHops),  //nolint:gosec
+		int32(maxHops),  //nolint:gosec
+		int32(count),    //nolint:gosec
+		int32(queueCap), //nolint:gosec
+		source,
+		tpdU,
+		cb,
+	); err != nil {
+		if emitted == 0 {
+			return fmt.Errorf("no route found: %w", err)
+		}
+		// Some routes arrived before the stream errored; treat as success.
+		fmt.Fprintf(os.Stderr, "calc: stream ended early: %v\n", err)
+	}
+
+	if emitted == 0 {
+		return fmt.Errorf("no route found: %w", routeFinder.ErrRouteNotFound)
+	}
+	if isJSON {
+		// Single-route back-compat shape preserved when count=1.
+		if count == 1 && len(collected) == 1 {
+			out, _ := json.Marshal(collected[0]) //nolint:errcheck
+			fmt.Println(string(out))
+		} else {
+			out, _ := json.Marshal(collected) //nolint:errcheck
+			fmt.Println(string(out))
+		}
+	}
+	return nil
+}
+
+// protoHopsToRouting decodes the wire-form CalcHops back into the
+// routing.Hop shape used by the rest of the CLI's printing/JSON code.
+func protoHopsToRouting(hops []*rpcgrpc.CalcHop) ([]routing.Hop, error) {
+	out := make([]routing.Hop, 0, len(hops))
+	for _, h := range hops {
+		tpID, err := uuid.Parse(h.TpId)
+		if err != nil {
+			return nil, fmt.Errorf("tp_id: %w", err)
+		}
+		var from, to cipher.PubKey
+		if err := from.Set(h.From); err != nil {
+			return nil, fmt.Errorf("from: %w", err)
+		}
+		if err := to.Set(h.To); err != nil {
+			return nil, fmt.Errorf("to: %w", err)
+		}
+		out = append(out, routing.Hop{TpID: tpID, From: from, To: to})
+	}
+	return out, nil
+}
+
+// isFallbackEligible reports whether a gRPC-side calc error should
+// trigger the local fallback path. A connection error (gRPC server not
+// up, address invalid) is eligible; a logical error from the server
+// (no route, invalid PK) is final.
+func isFallbackEligible(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "grpc dial") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "no such host") ||
+		strings.Contains(msg, "transport: Error")
 }
 
 func findConfig() string {
@@ -402,6 +543,9 @@ func (s *memoryStore) GetAllTransports(context.Context, bool) ([]*transport.Entr
 	return s.entries, nil
 }
 func (s *memoryStore) UpdateBandwidth(context.Context, string, cipher.PubKey, uint64, uint64) error {
+	return nil
+}
+func (s *memoryStore) UpdateLatency(context.Context, string, float64, float64, float64) error {
 	return nil
 }
 func (s *memoryStore) GetTransportBandwidth(context.Context, uuid.UUID, string, int) ([]store.BandwidthAggregation, error) {

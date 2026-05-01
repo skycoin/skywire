@@ -28,6 +28,32 @@ var (
 	networkersMx sync.RWMutex
 )
 
+// appNameCtxKey is the context key used to thread the calling app's
+// name from RPCIngressGateway.Dial through appnet.DialContext into
+// SkywireNetworker.DialContextWithOptions, where it lands on
+// router.DialOptions.AppName so router-side log entries get tagged
+// for 'cli proxy start --verbose'.
+type appNameCtxKey struct{}
+
+// WithAppName returns a derived context that carries the given app
+// name. SkywireNetworker reads it via AppNameFromContext.
+func WithAppName(ctx context.Context, appName string) context.Context {
+	if appName == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, appNameCtxKey{}, appName)
+}
+
+// AppNameFromContext returns the app name stored on ctx by
+// WithAppName, or "" if none.
+func AppNameFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	v, _ := ctx.Value(appNameCtxKey{}).(string)
+	return v
+}
+
 // AddNetworker associates Networker with the `network`.
 func AddNetworker(t Type, n Networker) error {
 	networkersMx.Lock()

@@ -73,6 +73,12 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	if r.MuxRoutes > 1 && opts.MuxRoutes == 0 {
 		opts.MuxRoutes = r.MuxRoutes
 	}
+	// If the caller threaded an app name on the context (e.g.
+	// RPCIngressGateway.Dial), surface it on opts so router-side
+	// rg-scoped logs get tagged with app_name=<n>.
+	if opts.AppName == "" {
+		opts.AppName = AppNameFromContext(ctx)
+	}
 
 	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, opts)
 	if err != nil {

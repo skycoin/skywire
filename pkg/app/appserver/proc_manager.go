@@ -50,6 +50,12 @@ type ProcManager interface {
 	SetDetailedStatus(appName, status string) error
 	DetailedStatus(appName string) (string, error)
 	GetAppPort(appName string) (routing.Port, error)
+	// AppByPort is the inverse of GetAppPort: given a routing port,
+	// returns the app name registered for that port. Used by the
+	// router/setup-node layers to tag rg-scoped log entries with the
+	// originating app, so 'cli proxy start --verbose' can scope to a
+	// session.
+	AppByPort(p routing.Port) (string, bool)
 	ConnectionsSummary(appName string) ([]ConnectionSummary, error)
 	Addr() net.Addr
 }
@@ -422,6 +428,21 @@ func (m *procManager) GetAppPort(appName string) (routing.Port, error) {
 	}
 
 	return p.GetAppPort(), nil
+}
+
+// AppByPort returns the app name registered for routing.Port p, if any.
+// Linear scan over the proc map: small N (typically <10) and only
+// called on rg setup, so a reverse index isn't worth the extra
+// invariants.
+func (m *procManager) AppByPort(p routing.Port) (string, bool) {
+	m.mx.RLock()
+	defer m.mx.RUnlock()
+	for name, proc := range m.procs {
+		if proc != nil && proc.GetAppPort() == p {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // ConnectionsSummary gets connections info for the app `appName`.

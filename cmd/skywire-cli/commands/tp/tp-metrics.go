@@ -212,10 +212,13 @@ func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 
 func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 	type visorBW struct {
-		Sent       uint64 `json:"sent"`
-		Recv       uint64 `json:"recv"`
-		Bandwidth  uint64 `json:"bandwidth"`
-		Transports int    `json:"transports"`
+		Sent         uint64 `json:"sent"`
+		Recv         uint64 `json:"recv"`
+		Bandwidth    uint64 `json:"bandwidth"`
+		Transports   int    `json:"transports"`
+		LatencySumUS int64  `json:"-"` // running sum for averaging
+		LatencyN     int    `json:"-"`
+		LatencyAvgMS int64  `json:"latency_avg_ms,omitempty"`
 	}
 	byPK := make(map[string]*visorBW)
 
@@ -244,6 +247,10 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 			vbw.Sent += aToB
 			vbw.Recv += bToA
 			vbw.Bandwidth += tpBW
+			if m.Latency != nil && m.Latency.Avg > 0 {
+				vbw.LatencySumUS += m.Latency.Avg
+				vbw.LatencyN++
+			}
 		}
 
 		// Edge B sent b→a, received a→b
@@ -257,6 +264,16 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 			vbw.Sent += bToA
 			vbw.Recv += aToB
 			vbw.Bandwidth += tpBW
+			if m.Latency != nil && m.Latency.Avg > 0 {
+				vbw.LatencySumUS += m.Latency.Avg
+				vbw.LatencyN++
+			}
+		}
+	}
+
+	for _, vbw := range byPK {
+		if vbw.LatencyN > 0 {
+			vbw.LatencyAvgMS = (vbw.LatencySumUS / int64(vbw.LatencyN)) / 1000
 		}
 	}
 
@@ -283,12 +300,16 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 
 	var b bytes.Buffer
 	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
-	fmt.Fprintln(w, "public_key\ttransports\tsent\trecv\tbandwidth") //nolint:errcheck
+	fmt.Fprintln(w, "public_key\ttransports\tsent\trecv\tbandwidth\tavg_latency") //nolint:errcheck
 	for _, v := range sorted {
-		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\n", //nolint:errcheck
+		latStr := "-"
+		if v.BW.LatencyAvgMS > 0 {
+			latStr = fmt.Sprintf("%dms", v.BW.LatencyAvgMS)
+		}
+		fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%s\t%s\n", //nolint:errcheck
 			v.PK, v.BW.Transports,
 			formatBytes(v.BW.Sent), formatBytes(v.BW.Recv),
-			formatBytes(v.BW.Bandwidth))
+			formatBytes(v.BW.Bandwidth), latStr)
 	}
 	w.Flush() //nolint:errcheck,gosec
 

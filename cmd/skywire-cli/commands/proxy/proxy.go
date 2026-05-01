@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -79,8 +80,10 @@ func init() {
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 	startCmd.Flags().BoolVar(&existingTpOnly, "existing-tp", false, "only use existing transports, don't create new ones")
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
-	startCmd.Flags().IntVar(&muxRoutes, "mux", 0, "number of parallel mux routes (0=disabled, 2+=enabled)")
+	startCmd.Flags().IntVar(&muxRoutes, "mux", 1, "parallel mux routes: 0=unlimited (every distinct path), 1=disabled (default), 2+=N routes")
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
+	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
+	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 	dep := getDeployment()
@@ -144,9 +147,21 @@ var startCmd = &cobra.Command{
 			}
 		}
 
-		// If --mux flag is set, enable route multiplexing
-		if muxRoutes > 1 {
-			if err := rpcClient.SetMuxRoutes(muxRoutes); err != nil {
+		// If --mux flag is set, enable route multiplexing.
+		// 0 means "unlimited" — translate to a large sentinel that
+		// establishMuxRoutes (router_dial.go) iterates against; that
+		// loop already breaks on the first fetchBestRoutes error, so
+		// passing a high number stops naturally at the discoverable
+		// path count.
+		// 1 (default) means "no mux"; SetMuxRoutes is skipped so the
+		// router uses its existing single-route path.
+		// 2+ means N parallel routes, same as before.
+		muxArg := muxRoutes
+		if muxArg == 0 {
+			muxArg = math.MaxInt32
+		}
+		if muxArg > 1 {
+			if err := rpcClient.SetMuxRoutes(muxArg); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set mux routes: %w", err))
 			}
 		}
@@ -158,6 +173,11 @@ var startCmd = &cobra.Command{
 			}
 		}
 
+		// In --verbose mode the SignalContext-driven cleanup path needs
+		// to print after the streamer has flushed its last entries, so
+		// the os.Exit(1) is gated on a non-verbose run. Verbose mode
+		// instead returns from the Run func — letting the deferred
+		// rpcClient.Close + grpc.Close run cleanly.
 		var tCtxCancelFunc context.CancelFunc
 		tCtx := context.Background()
 		if startingTimeout != 0 {
@@ -170,10 +190,37 @@ var startCmd = &cobra.Command{
 			if tCtxCancelFunc != nil {
 				tCtxCancelFunc()
 			}
+			if startVerbose {
+				return // let the main goroutine exit gracefully
+			}
 			rpcClient.KillApp(clientName) //nolint:errcheck,gosec
 			fmt.Print("\nStopped!")
 			os.Exit(1)
 		}()
+
+		// --verbose: open a gRPC log stream BEFORE StartAppWithMode so
+		// startup entries (route setup, transport probe, app spawn) are
+		// captured. Stream tears down when ctx cancels (SIGINT).
+		var verboseStream *clirpc.VerboseStream
+		if startVerbose {
+			if clientName == "" {
+				clientName = "skysocks-client"
+			}
+			vs, err := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
+				AppName: clientName,
+				Level:   startVerboseLevel,
+			})
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			verboseStream = vs
+			// Block until the server confirms the subscription is live.
+			// Otherwise StartAppWithMode below races with the handshake
+			// and we lose the first ~50ms of setup logs.
+			if err := vs.WaitSubscribed(ctx, 2*time.Second); err != nil && ctx.Err() != nil {
+				return
+			}
+		}
 
 		if pk != "" {
 			err := pubkey.Set(pk)
@@ -229,19 +276,26 @@ var startCmd = &cobra.Command{
 				}
 			}
 			internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(clientName, getLauncherMode()))
-			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			if !startVerbose {
+				internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			}
 		} else {
 			if clientName == "" {
 				clientName = "skysocks-client"
 			}
 			internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(clientName, getLauncherMode()))
-			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			if !startVerbose {
+				internal.PrintOutput(cmd.Flags(), nil, "Starting.")
+			}
 		}
 
 		startProcess := true
+		appReachedRunning := false
 		for startProcess {
 			time.Sleep(time.Second * 1)
-			internal.PrintOutput(cmd.Flags(), nil, ".")
+			if !startVerbose {
+				internal.PrintOutput(cmd.Flags(), nil, ".")
+			}
 			states, err := rpcClient.Apps()
 			internal.Catch(cmd.Flags(), err)
 
@@ -253,14 +307,21 @@ var startCmd = &cobra.Command{
 				if state.Name == stateName {
 					if state.Status == appserver.AppStatusRunning {
 						startProcess = false
-						internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
+						appReachedRunning = true
+						if !startVerbose {
+							internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintln("\nRunning!"))
+						}
 					}
 					if state.Status == appserver.AppStatusErrored {
 						startProcess = false
 						out := output{
 							AppError: state.DetailedStatus,
 						}
-						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nError! > "+state.DetailedStatus))
+						leader := "\n"
+						if startVerbose {
+							leader = ""
+						}
+						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln(leader+"Error! > "+state.DetailedStatus))
 					}
 					if state.Status == appserver.AppStatusStopped {
 						startProcess = false
@@ -277,9 +338,27 @@ var startCmd = &cobra.Command{
 						out := output{
 							AppError: errMsg,
 						}
-						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln("\nStopped! "+errMsg))
+						leader := "\n"
+						if startVerbose {
+							leader = ""
+						}
+						internal.PrintOutput(cmd.Flags(), out, fmt.Sprintln(leader+"Stopped! "+errMsg))
 					}
 				}
+			}
+		}
+
+		// --verbose: stay in the foreground, streaming logs until the
+		// user hits ctrl+c. Then stop the app cleanly and exit.
+		if startVerbose && appReachedRunning {
+			fmt.Fprintln(os.Stderr, "--- app running; streaming logs (ctrl+c to stop) ---")
+			<-ctx.Done()
+			fmt.Fprintln(os.Stderr, "stopping app...")
+			if err := rpcClient.StopApp(clientName); err != nil {
+				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+			}
+			if verboseStream != nil {
+				verboseStream.Close()
 			}
 		}
 	},
