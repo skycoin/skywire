@@ -70,6 +70,11 @@ type TransportSummary struct {
 	Log     *transport.LogEntry `json:"log,omitempty"`
 	IsSetup bool                `json:"is_setup"`
 	Label   transport.Label     `json:"label"`
+	// LatencyMS is the smoothed average inter-visor RTT for this
+	// transport in milliseconds, measured by transport-level
+	// ping/pong (or RSN-fallback for old peers). Zero means no
+	// measurement yet. Populated from tp.GetLatency().
+	LatencyMS float64 `json:"latency_ms,omitempty"`
 }
 type TransportLogEntry struct {
 	TpID      uuid.UUID `json:"tp_id"`
@@ -80,12 +85,13 @@ type TransportLogEntry struct {
 
 func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, includeLogs, isSetup bool) *TransportSummary {
 	summary := &TransportSummary{
-		ID:      tp.Entry.ID,
-		Local:   tm.Local(),
-		Remote:  tp.Remote(),
-		Type:    tp.Type(),
-		IsSetup: isSetup,
-		Label:   tp.Entry.Label,
+		ID:        tp.Entry.ID,
+		Local:     tm.Local(),
+		Remote:    tp.Remote(),
+		Type:      tp.Type(),
+		IsSetup:   isSetup,
+		Label:     tp.Entry.Label,
+		LatencyMS: tp.GetLatency(),
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
@@ -171,6 +177,28 @@ type RouteGroupInfo struct {
 	// Hops is the stored forward route path (transport IDs, edges, types)
 	// for this route group, populated when the route group is active.
 	Hops []RouteHopInfo `json:"hops,omitempty"`
+}
+
+// MuxRouteGroupInfo is one route-group's mux state plus per-leg
+// counters. Returned by RouteGroupMuxInfo for 'cli proxy mux-info'.
+type MuxRouteGroupInfo struct {
+	Desc        routing.RouteDescriptorFields `json:"desc"`
+	MuxEnabled  bool                          `json:"mux_enabled"`
+	SACKEnabled bool                          `json:"sack_enabled"`
+	Legs        []MuxLegInfo                  `json:"legs"`
+}
+
+// MuxLegInfo is one route in a mux'd group.
+type MuxLegInfo struct {
+	Index       int     `json:"index"`
+	TransportID string  `json:"transport_id"`
+	TpType      string  `json:"tp_type"`
+	RemotePK    string  `json:"remote_pk"`
+	LatencyMS   float64 `json:"latency_ms,omitempty"`
+	SentBytes   uint64  `json:"sent_bytes"`
+	SentPackets uint64  `json:"sent_packets"`
+	RecvBytes   uint64  `json:"recv_bytes"`
+	RecvPackets uint64  `json:"recv_packets"`
 }
 type FetchServiceDataIn struct {
 	Service string

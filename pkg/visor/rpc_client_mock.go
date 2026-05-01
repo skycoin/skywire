@@ -757,6 +757,11 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routeGroups, nil
 }
 
+// RouteGroupMuxInfo implements API.
+func (mc *mockRPCClient) RouteGroupMuxInfo(_ string) ([]MuxRouteGroupInfo, error) {
+	return nil, nil
+}
+
 // FetchServiceData implements API.
 func (mc *mockRPCClient) FetchServiceData(_, _ string) ([]byte, error) {
 	return nil, nil

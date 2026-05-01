@@ -162,6 +162,16 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		RulesGCInterval:    0, // 0 = DefaultRulesGCInterval (10s)
 		MinHops:            v.conf.Routing.MinHops,
 		AwaitSetupListener: v.awaitSetupListener,
+		// Tag rg-scoped log entries with the originating app's name so
+		// 'cli proxy start --verbose' can scope to a session. Resolved
+		// lazily via the proc manager — the manager owns the port↔app
+		// mapping and is the only authoritative source.
+		AppLookup: func(p routing.Port) (string, bool) {
+			if v.procM == nil {
+				return "", false
+			}
+			return v.procM.AppByPort(p)
+		},
 	}
 
 	routeSetupHooks := getRouteSetupHooks(ctx, v, log)

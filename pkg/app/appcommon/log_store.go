@@ -34,14 +34,25 @@ func NewProcLogger(conf ProcConfig, mLog *logging.MasterLogger) (appLog *logging
 	}
 
 	// Create isolated MasterLogger for this app instead of reusing shared one.
-	// This prevents hooks from one app affecting logs from other apps.
-	// We copy the essential settings (Out, Formatter, Level) from the parent logger
-	// to ensure consistent behavior.
+	// This prevents hooks from one app affecting logs from other apps —
+	// specifically the bbolt LogStore, which is per-app.
+	// We copy the essential settings (Out, Formatter, Level) from the parent
+	// logger to ensure consistent behavior, and re-attach the parent's
+	// existing hooks (e.g. the runtime logstore + the gRPC log Broadcaster
+	// used by 'cli proxy start --verbose') so cross-cutting observers see
+	// every app's logs. The per-app bbolt store is then layered on top —
+	// it's still scoped to this AppName via the bucket key, so isolation
+	// at the storage layer is preserved.
 	appLog = logging.NewMasterLogger()
 	appLog.SetLevel(mLog.GetLevel())
 	appLog.Logger.Out = mLog.Logger.Out
 	if mLog.Logger.Formatter != nil {
 		appLog.Logger.Formatter = mLog.Logger.Formatter
+	}
+	for _, hooks := range mLog.Logger.Hooks {
+		for _, h := range hooks {
+			appLog.Logger.AddHook(h)
+		}
 	}
 	appLog.Logger.AddHook(db)
 
