@@ -367,7 +367,7 @@ func (p *Proc) startInProcess() error {
 
 		<-p.appCtx.Done()
 
-		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		if err := p.conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			p.log.WithError(err).Warn("Closing proc conn returned unexpected error.")
 		}
 		p.rpcGW.cm.CloseAll()
@@ -440,7 +440,7 @@ func (p *Proc) startExternal() error {
 
 		p.waitErr = <-waitErrCh
 
-		if err := p.conn.Close(); err != nil && !strings.Contains(err.Error(), "use of closed network connection") {
+		if err := p.conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			p.log.WithError(err).Warn("Closing proc conn returned unexpected error.")
 		}
 		p.rpcGW.cm.CloseAll()

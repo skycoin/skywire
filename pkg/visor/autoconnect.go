@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -177,11 +176,11 @@ func (a *autoconnector) connectToVisors(
 }
 
 // isContextError returns true if the error is a context cancellation/deadline.
+// net/http and url.Error wrap context errors with %w, so errors.Is unwraps to
+// the original context.Canceled / context.DeadlineExceeded sentinel.
 func isContextError(err error) bool {
 	return errors.Is(err, context.Canceled) ||
-		errors.Is(err, context.DeadlineExceeded) ||
-		strings.Contains(err.Error(), "operation was canceled") ||
-		strings.Contains(err.Error(), "context canceled")
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 // Run implements Autoconnector interface
