@@ -30,6 +30,17 @@ service PingService {
   // StreamRemoteSystemStats proxies system stats from a remote visor via DMSG
   // The local visor dials the remote visor over DMSG and forwards the stats stream
   rpc StreamRemoteSystemStats(RemoteSystemStatsRequest) returns (stream SystemStats);
+
+  // StreamAppLogs streams visor log entries scoped to one app's session.
+  // Used by 'skywire-cli proxy start --verbose' to surface what the visor is
+  // doing while spinning up an app's transports/routes.
+  rpc StreamAppLogs(AppLogStreamRequest) returns (stream AppLogEntry);
+
+  // StreamCalcRoutes runs a route-finder BFS server-side and streams each
+  // valid route back as it's discovered. Lets the CLI display routes
+  // incrementally and avoids accumulating every result in memory before
+  // returning — important when count is large or unbounded.
+  rpc StreamCalcRoutes(CalcRoutesRequest) returns (stream CalcRoute);
 }
 
 message PingRequest {
@@ -171,6 +182,86 @@ message TempStat {
   double temperature = 2;     // Temperature in Celsius
   double high = 3;            // High threshold (if available)
   double critical = 4;        // Critical threshold (if available)
+}
+
+// AppLogStreamRequest configures app-scoped log streaming.
+message AppLogStreamRequest {
+  // AppName scopes the stream to entries originating from this app's
+  // module or carrying app=<name> as a logrus field. Either AppName
+  // or Modules (or both) must be set.
+  string app_name = 1;
+  // IncludeRouter is retained on the wire for forward compatibility
+  // but is ignored — the app_name field tagging now covers what it
+  // used to do, and Modules below is the explicit path for non-app
+  // scoping (e.g. 'cli dmsg curl --verbose' picking up dmsg layers).
+  bool include_router = 2;
+  // MinLevel filters out lower-severity entries: trace|debug|info|warn|error.
+  // Default debug.
+  string min_level = 3;
+  // Modules filters by _module prefix, OR-merged with the AppName
+  // match. Use this when no app context exists — e.g. 'dmsg curl
+  // --verbose' sends ["dmsgC","dmsghttp","dmsg_grpc"]. Empty means
+  // "no module-prefix match"; AppName is then the only path.
+  repeated string modules = 4;
+}
+
+// AppLogEntry is one log line forwarded to the gRPC client.
+message AppLogEntry {
+  int64 timestamp_ns = 1;        // entry time as Unix nanoseconds
+  string level = 2;              // "trace"|"debug"|"info"|"warn"|"error"|"fatal"|"panic"
+  string module = 3;             // _module field (e.g. "router", "skysocks-client")
+  string message = 4;            // formatted message text
+  map<string, string> fields = 5; // remaining structured fields
+  // Subscribed is set on a sentinel entry the server sends
+  // immediately after it has registered the subscription with the
+  // broadcaster. Clients use this to know that any subsequent log
+  // activity will reach them — letting them gate downstream RPC
+  // calls (e.g. StartAppWithMode) on subscription readiness so the
+  // first ~50ms of setup logs aren't lost to the race between
+  // subscription handshake and the action that triggers them.
+  // The other fields are unused on the sentinel.
+  bool subscribed = 6;
+}
+
+// CalcRoutesRequest configures server-side route calculation streaming.
+message CalcRoutesRequest {
+  // SrcPk is the source visor public key. Empty means use the receiving
+  // visor's own PK (the common case — calc routes from this visor).
+  string src_pk = 1;
+  // DstPk is the destination visor public key. Required.
+  string dst_pk = 2;
+  // MinHops is the minimum hop count. 0 falls back to the visor's
+  // routing.min_hops, then 1.
+  int32 min_hops = 3;
+  // MaxHops is the maximum hop count. 0 falls back to a safe default.
+  int32 max_hops = 4;
+  // Count caps how many routes to return. 0 means unbounded (the BFS
+  // runs until the search space is exhausted; the streaming wire
+  // protocol means the caller can still dump them as they arrive
+  // without buffering the whole set).
+  int32 count = 5;
+  // Source selects the transport-graph data source. "tpd" (HTTP),
+  // "dht" (visor's local DHT store), or "auto" (DHT then TPD fallback).
+  string source = 6;
+  // TpdUrl optionally overrides the default transport-discovery URL.
+  string tpd_url = 7;
+  // QueueCap caps the per-call BFS queue size on the server. 0 falls
+  // back to the route-finder package's DefaultMaxBFSQueue. Negative
+  // means unbounded (use with caution on dense graphs).
+  int32 queue_cap = 8;
+}
+
+// CalcRoute is one path the BFS found. Hops are listed in forward order
+// from src to dst; the caller can derive the reverse by mirroring.
+message CalcRoute {
+  repeated CalcHop hops = 1;
+}
+
+// CalcHop is one edge in a route.
+message CalcHop {
+  string tp_id = 1;
+  string from = 2;
+  string to = 3;
 }
 
 // ProcessStat contains information about a running process

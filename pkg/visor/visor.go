@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 	"github.com/toqueteos/webbrowser"
@@ -82,6 +83,7 @@ type Visor struct {
 	conf     *visorconfig.V1
 	log      *logging.Logger
 	logstore logstore.Store
+	logBcast *logging.Broadcaster // fans entries out to gRPC StreamAppLogs subscribers
 
 	startedAt       time.Time
 	startupComplete chan struct{}
@@ -342,6 +344,13 @@ func run(conf *visorconfig.V1) error {
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	mLog.AddHook(hook)
 
+	// logBroadcaster fans out logrus entries to gRPC StreamAppLogs
+	// subscribers. Attached to both the package-default mLog and the
+	// config's MasterLogger so PackageLogger entries from anywhere in
+	// the visor end up visible.
+	logBroadcaster := logging.NewBroadcaster()
+	mLog.AddHook(logBroadcaster)
+
 	stopPProf := initPProf(mLog, pprofMode, pprofAddr)
 	defer stopPProf()
 
@@ -350,6 +359,7 @@ func run(conf *visorconfig.V1) error {
 	}
 
 	conf.MasterLogger().AddHook(hook)
+	conf.MasterLogger().AddHook(logBroadcaster)
 
 	if disableHypervisorPKs {
 		conf.Hypervisors = []cipher.PubKey{}
@@ -402,6 +412,7 @@ func run(conf *visorconfig.V1) error {
 		cancel()
 	}
 	vis.SetLogstore(store)
+	vis.SetLogBroadcaster(logBroadcaster)
 	//	vis.uiAssets = uiAssets
 	if launchBrowser {
 		if conf.Hypervisor == nil {
@@ -688,9 +699,78 @@ func (v *Visor) SetLogstore(store logstore.Store) {
 	v.logstore = store
 }
 
+// SetLogBroadcaster wires the visor with the master logger's
+// Broadcaster hook. Stored on the Visor so the gRPC adapter can
+// forward Subscribe calls through to it.
+func (v *Visor) SetLogBroadcaster(b *logging.Broadcaster) {
+	v.logBcast = b
+}
+
+// SubscribeLogs subscribes to log entries matching the filter.
+// Wraps the broadcaster so callers don't need a direct handle.
+// Returns nil channel + nil cancel when the broadcaster is not
+// installed (e.g. tests).
+func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+	if v.logBcast == nil {
+		return nil, func() uint64 { return 0 }
+	}
+	return v.logBcast.Subscribe(f, capacity)
+}
+
 // tpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
+}
+
+// LocalPK returns this visor's public key. Used by gRPC handlers that need
+// to default the source PK on calc-route style requests.
+func (v *Visor) LocalPK() cipher.PubKey {
+	return v.conf.PK
+}
+
+// FetchAllTransportEntries pulls every transport from the configured TPD
+// client AND merges in the local transport manager's view. The TPD bulk
+// endpoint can lag behind reality (its cache is async-refreshed), so a
+// transport this visor has actively negotiated may not be present yet.
+// The local transport manager is authoritative for "what this visor can
+// actually dial right now"; merging avoids missed 1-hop routes in calc
+// responses while the BFS depth limit + streaming output bound memory.
+//
+// Dedup is by transport ID — TPD's view is preferred when it has a
+// matching entry (it carries label/QoS metadata the local view lacks).
+func (v *Visor) FetchAllTransportEntries(ctx context.Context) ([]*transport.Entry, error) {
+	tpD := v.tpDiscClient()
+	if tpD == nil {
+		return nil, errors.New("transport discovery client not available")
+	}
+	entries, err := tpD.GetAllTransports(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if v.tpM == nil {
+		return entries, nil
+	}
+
+	seen := make(map[uuid.UUID]struct{}, len(entries))
+	for _, e := range entries {
+		if e != nil {
+			seen[e.ID] = struct{}{}
+		}
+	}
+	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp == nil {
+			return true
+		}
+		if _, dup := seen[tp.Entry.ID]; dup {
+			return true
+		}
+		seen[tp.Entry.ID] = struct{}{}
+		entry := tp.Entry
+		entries = append(entries, &entry)
+		return true
+	})
+	return entries, nil
 }
 
 //go:embed static

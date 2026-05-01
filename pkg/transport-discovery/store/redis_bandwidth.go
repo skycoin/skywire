@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -102,6 +103,62 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 
 	_, err = pipe.Exec(ctx)
 	return err
+}
+
+// UpdateLatency stores the most recent latency snapshot for a transport
+// inside its TransportData blob. Called by the CXO aggregator when a
+// visor's TreeStore feed reports a fresh transports/<id>/current
+// snapshot. Latency is round-trip — both edges should converge on
+// similar values, so last-writer-wins keeps this lock-free.
+//
+// If the transport hasn't been registered (or its TTL'd out), the
+// snapshot is dropped. We intentionally do not fabricate a TransportData
+// blob from a latency report alone — registration is the only path that
+// knows the canonical edges/type.
+func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error {
+	if avgMS <= 0 {
+		return nil
+	}
+
+	id, err := uuid.Parse(transportID)
+	if err != nil {
+		return fmt.Errorf("invalid transport id %q: %w", transportID, err)
+	}
+
+	tpKey := s.transportKey(id)
+	raw, err := s.client.Get(ctx, tpKey).Result()
+	if errors.Is(err, redis.Nil) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	var data TransportData
+	if err := json.Unmarshal([]byte(raw), &data); err != nil {
+		return fmt.Errorf("decode TransportData: %w", err)
+	}
+
+	// ms → us, matching the TransportData latency field unit.
+	data.LatencyMin = int64(minMS * 1000)
+	data.LatencyMax = int64(maxMS * 1000)
+	data.LatencyAvg = int64(avgMS * 1000)
+	data.LastUpdate = time.Now().UTC().Unix()
+
+	updated, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	// Preserve the registration TTL — KEEPTTL is the obvious idiom but
+	// requires Redis 6+. Read TTL, fall back to the configured default
+	// if Redis returns -1 (no expiry) or -2 (key vanished between GET
+	// and TTL).
+	ttl, err := s.client.TTL(ctx, tpKey).Result()
+	if err != nil || ttl <= 0 {
+		ttl = s.ttl
+	}
+	return s.client.Set(ctx, tpKey, string(updated), ttl).Err()
 }
 
 // GetTransportBandwidth retrieves bandwidth aggregations for a transport.

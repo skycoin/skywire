@@ -14,6 +14,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -36,14 +37,16 @@ func (r *router) DialRoutes(
 	opts *DialOptions,
 ) (net.Conn, error) {
 
+	log := r.scopedLogForOpts(opts, lPort)
+
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK
-		r.logger.WithError(err).Error("Failed to dial routes.")
+		log.WithError(err).Error("Failed to dial routes.")
 		return nil, fmt.Errorf("failed to dial routes: %w", err)
 	}
 
 	if r.conf.MinHops == 0 {
-		r.logger.Error("Routing disabled. (minhop=0)")
+		log.Error("Routing disabled. (minhop=0)")
 		return nil, fmt.Errorf("routing disabled. (minhop=0)")
 	}
 
@@ -76,7 +79,7 @@ func (r *router) DialRoutes(
 		}
 		r.routeSetupHookMu.Unlock()
 	} else if useExistingOnly {
-		r.logger.Debug("UseExistingTpOnly is set, skipping transport creation hooks")
+		log.Debug("UseExistingTpOnly is set, skipping transport creation hooks")
 	}
 
 	// Retry route setup with fresh routes if it fails due to stale TPD data.
@@ -84,10 +87,10 @@ func (r *router) DialRoutes(
 	// so we query for fresh routes on each retry instead of retrying the same bad route.
 	const maxRetries = 3
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, lPK, rPK, opts)
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
 		if err != nil {
 			if attempt < maxRetries {
-				r.logger.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
+				log.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
 				continue
 			}
 			return nil, fmt.Errorf("route finder: %w", err)
@@ -104,13 +107,13 @@ func (r *router) DialRoutes(
 			Reverse:   reversePath,
 		}
 
-		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
 		if err != nil {
 			if attempt < maxRetries {
-				r.logger.WithError(err).Warnf("Route setup failed (attempt %d/%d), retrying with fresh route...", attempt, maxRetries)
+				log.WithError(err).Warnf("Route setup failed (attempt %d/%d), retrying with fresh route...", attempt, maxRetries)
 				continue
 			}
-			r.logger.WithError(err).Error("Error dialing route group")
+			log.WithError(err).Error("Error dialing route group")
 			return nil, err
 		}
 
@@ -121,10 +124,10 @@ func (r *router) DialRoutes(
 
 		if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
 			if attempt < maxRetries {
-				r.logger.WithError(err).Warnf("Saving routing rules failed (attempt %d/%d), retrying with fresh route...", attempt, maxRetries)
+				log.WithError(err).Warnf("Saving routing rules failed (attempt %d/%d), retrying with fresh route...", attempt, maxRetries)
 				continue
 			}
-			r.logger.WithError(err).Error("Error saving routing rules")
+			log.WithError(err).Error("Error saving routing rules")
 			return nil, err
 		}
 
@@ -135,7 +138,11 @@ func (r *router) DialRoutes(
 			Initiator: true,
 		}
 
-		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
+		appName := ""
+		if opts != nil {
+			appName = opts.AppName
+		}
+		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName)
 		if err != nil {
 			// Clean up saved rules on failure
 			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
@@ -146,7 +153,7 @@ func (r *router) DialRoutes(
 			// Check if this is a "no suitable transport" error (stale TPD data)
 			if strings.Contains(err.Error(), "no suitable transport") || strings.Contains(err.Error(), "transport") {
 				if attempt < maxRetries {
-					r.logger.WithError(err).Warnf("Route handshake failed due to transport issue (attempt %d/%d), querying route-finder for fresh route...", attempt, maxRetries)
+					log.WithError(err).Warnf("Route handshake failed due to transport issue (attempt %d/%d), querying route-finder for fresh route...", attempt, maxRetries)
 					continue
 				}
 			}
@@ -158,7 +165,7 @@ func (r *router) DialRoutes(
 
 		nrg.rg.startOffServiceLoops()
 
-		r.logger.Debugf("Created new routes to %s on port %d", rPK, lPort)
+		log.Debugf("Created new routes to %s on port %d", rPK, lPort)
 
 		// Establish additional mux routes if requested
 		r.establishMuxRoutes(ctx, nrg, opts, forwardDesc, rules.Forward.NextTransportID())
@@ -184,6 +191,7 @@ func (r *router) setupPingRoute(
 	rPK cipher.PubKey,
 	opts *DialOptions,
 ) (net.Conn, error) {
+	log := r.scopedLog(forwardDesc.SrcPort())
 	keepAlive := DefaultRouteKeepAlive
 	if opts != nil && opts.KeepAlive > 0 {
 		keepAlive = opts.KeepAlive
@@ -196,19 +204,19 @@ func (r *router) setupPingRoute(
 	}
 
 	// Debug: log route details before sending to setup node
-	r.logger.Debugf("setupPingRoute: Desc.SrcPK=%s, Desc.DstPK=%s", forwardDesc.SrcPK(), forwardDesc.DstPK())
+	log.Debugf("setupPingRoute: Desc.SrcPK=%s, Desc.DstPK=%s", forwardDesc.SrcPK(), forwardDesc.DstPK())
 	// Log all forward hops with their transport IDs
 	for i, hop := range forwardPath {
-		r.logger.Debugf("setupPingRoute: Forward[%d] TpID=%s From=%s To=%s", i, hop.TpID, hop.From, hop.To)
+		log.Debugf("setupPingRoute: Forward[%d] TpID=%s From=%s To=%s", i, hop.TpID, hop.From, hop.To)
 	}
 	// Log all reverse hops with their transport IDs
 	for i, hop := range reversePath {
-		r.logger.Debugf("setupPingRoute: Reverse[%d] TpID=%s From=%s To=%s", i, hop.TpID, hop.From, hop.To)
+		log.Debugf("setupPingRoute: Reverse[%d] TpID=%s From=%s To=%s", i, hop.TpID, hop.From, hop.To)
 	}
 
-	rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, req)
+	rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
 	if err != nil {
-		r.logger.WithError(err).Error("Error dialing ping route group")
+		log.WithError(err).Error("Error dialing ping route group")
 		return nil, err
 	}
 
@@ -218,7 +226,7 @@ func (r *router) setupPingRoute(
 	}
 
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
-		r.logger.WithError(err).Error("Error saving ping routing rules")
+		log.WithError(err).Error("Error saving ping routing rules")
 		return nil, err
 	}
 
@@ -229,7 +237,11 @@ func (r *router) setupPingRoute(
 		Initiator: true,
 	}
 
-	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
+	appName := ""
+	if opts != nil {
+		appName = opts.AppName
+	}
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName)
 	if err != nil {
 		// Clean up saved rules if route group setup fails
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
@@ -242,7 +254,7 @@ func (r *router) setupPingRoute(
 	nrg.rg.startOffServiceLoops()
 
 	lPort := forwardDesc.SrcPort()
-	r.logger.Debugf("Created new ping route to %s on port %d", rPK, lPort)
+	log.Debugf("Created new ping route to %s on port %d", rPK, lPort)
 
 	return nrg, nil
 }
@@ -259,9 +271,11 @@ func (r *router) PingRoute(
 	opts *DialOptions,
 ) (net.Conn, error) {
 
+	log := r.scopedLog(lPort)
+
 	if rPK.Null() {
 		err := ErrRemoteEmptyPK
-		r.logger.WithError(err).Error("Failed to dial ping route.")
+		log.WithError(err).Error("Failed to dial ping route.")
 		return nil, fmt.Errorf("failed to dial ping route: %w", err)
 	}
 
@@ -273,11 +287,11 @@ func (r *router) PingRoute(
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
 	// Debug: log what options we received
-	r.logger.Debugf("PingRoute opts: TransportID=%s, ForwardHops=%d, ReverseHops=%d", opts.TransportID, len(opts.ForwardHops), len(opts.ReverseHops))
+	log.Debugf("PingRoute opts: TransportID=%s, ForwardHops=%d, ReverseHops=%d", opts.TransportID, len(opts.ForwardHops), len(opts.ReverseHops))
 
 	// If full route is specified, use it directly without route calculation
 	if len(opts.ForwardHops) > 0 && len(opts.ReverseHops) > 0 {
-		r.logger.Debugf("Using specified %d-hop route to %s", len(opts.ForwardHops), rPK)
+		log.Debugf("Using specified %d-hop route to %s", len(opts.ForwardHops), rPK)
 		r.lastRouteCalcMu.Lock()
 		r.lastRouteCalcTime = 0 // No calculation needed
 		r.lastRouteCalcMu.Unlock()
@@ -286,7 +300,7 @@ func (r *router) PingRoute(
 
 	// If TransportID is specified, use it directly without route calculation (single hop)
 	if opts.TransportID != (uuid.UUID{}) {
-		r.logger.Debugf("Using specified transport %s for direct route to %s", opts.TransportID, rPK)
+		log.Debugf("Using specified transport %s for direct route to %s", opts.TransportID, rPK)
 		forwardPath := []routing.Hop{{TpID: opts.TransportID, From: lPK, To: rPK}}
 		reversePath := []routing.Hop{{TpID: opts.TransportID, From: rPK, To: lPK}}
 		r.lastRouteCalcMu.Lock()
@@ -298,11 +312,11 @@ func (r *router) PingRoute(
 	const maxRetries = 3
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, lPK, rPK, opts)
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
 		if err != nil {
 			lastErr = fmt.Errorf("route finder: %w", err)
 			if attempt < maxRetries {
-				r.logger.WithError(err).Warnf("Ping route finder failed (attempt %d/%d), retrying...", attempt, maxRetries)
+				log.WithError(err).Warnf("Ping route finder failed (attempt %d/%d), retrying...", attempt, maxRetries)
 				continue
 			}
 			return nil, lastErr
@@ -312,7 +326,7 @@ func (r *router) PingRoute(
 		if err != nil {
 			lastErr = err
 			if attempt < maxRetries {
-				r.logger.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
+				log.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
 				continue
 			}
 			return nil, lastErr
@@ -368,7 +382,10 @@ func (r *router) MeasureTransportLatency(ctx context.Context, remote cipher.PubK
 	return avg, nil
 }
 
-func (r *router) fetchBestRoutes(ctx context.Context, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+	if log == nil {
+		log = r.logger
+	}
 	if opts == nil {
 		opts = DefaultDialOptions() // nolint
 	}
@@ -379,22 +396,22 @@ func (r *router) fetchBestRoutes(ctx context.Context, src, dst cipher.PubKey, op
 	r.forceLocalRoutesMu.Unlock()
 
 	if forceLocal {
-		r.logger.Info("Calculating route locally (--local-route enabled)")
+		log.Info("Calculating route locally (--local-route enabled)")
 		calcStart := time.Now()
-		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst, opts)
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		calcTime := time.Since(calcStart)
 		r.lastRouteCalcMu.Lock()
 		r.lastRouteCalcTime = calcTime
 		r.lastRouteCalcMu.Unlock()
 		if localErr == nil {
-			r.logger.Infof("Local route calculated in %v: Forward=%v, Reverse=%v", calcTime, localFwd, localRev)
+			log.Infof("Local route calculated in %v: Forward=%v, Reverse=%v", calcTime, localFwd, localRev)
 		}
 		return localFwd, localRev, localErr
 	}
 
 	retries := opts.Retries
 
-	r.logger.Debugf("Requesting new routes from %s to %s", src, dst)
+	log.Debugf("Requesting new routes from %s to %s", src, dst)
 
 	timer := time.NewTimer(retryDuration)
 	defer timer.Stop()
@@ -413,26 +430,26 @@ fetchRoutesAgain:
 
 	if err == rfclient.ErrTransportNotFound {
 		// Try local route calculation - may find a local transport that's not yet in TPD
-		r.logger.Info("Route finder returned transport not found, attempting local route calculation...")
-		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst, opts)
+		log.Info("Route finder returned transport not found, attempting local route calculation...")
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		if localErr == nil {
-			r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+			log.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 			return localFwd, localRev, nil
 		}
-		r.logger.WithError(localErr).Debug("Local route calculation also failed")
+		log.WithError(localErr).Debug("Local route calculation also failed")
 		return nil, nil, err
 	}
 	// simple retries condition
 	if retries == 0 {
 		// Try local route calculation as fallback before giving up
-		r.logger.Info("Route finder exhausted retries, attempting local route calculation...")
-		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst, opts)
+		log.Info("Route finder exhausted retries, attempting local route calculation...")
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 		if localErr == nil {
-			r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+			log.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 			return localFwd, localRev, nil
 		}
-		r.logger.WithError(localErr).Warn("Local route calculation also failed")
-		r.logger.Errorf(ErrNoRouteFound.Error())
+		log.WithError(localErr).Warn("Local route calculation also failed")
+		log.Errorf(ErrNoRouteFound.Error())
 		return nil, nil, ErrNoRouteFound
 	}
 	if retries > 0 {
@@ -443,13 +460,13 @@ fetchRoutesAgain:
 		select {
 		case <-timer.C:
 			// Try local route calculation as fallback
-			r.logger.Info("Route finder timed out, attempting local route calculation...")
-			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, src, dst, opts)
+			log.Info("Route finder timed out, attempting local route calculation...")
+			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
 			if localErr == nil {
-				r.logger.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
+				log.Infof("Local route calculation succeeded: Forward=%v, Reverse=%v", localFwd, localRev)
 				return localFwd, localRev, nil
 			}
-			r.logger.WithError(localErr).Warn("Local route calculation also failed")
+			log.WithError(localErr).Warn("Local route calculation also failed")
 			return nil, nil, err
 		default:
 			time.Sleep(retryInterval)
@@ -457,7 +474,7 @@ fetchRoutesAgain:
 		}
 	}
 
-	r.logger.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
+	log.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
 
 	return paths[forward][0], paths[backward][0], nil
 }
@@ -465,7 +482,10 @@ fetchRoutesAgain:
 // calculateLocalRoutes attempts to calculate routes locally using the transport manager
 // and transport discovery data, without relying on the route finder service.
 // It supports 1-hop (direct), 2-hop routes, and self-ping (src == dst).
-func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+	if log == nil {
+		log = r.logger
+	}
 	dialOpts := opts
 	if r.tm == nil {
 		return nil, nil, errors.New("transport manager not available")
@@ -477,7 +497,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	}
 
 	isSelfPing := src == dst
-	r.logger.Debugf("Calculating route locally from %s to %s (self-ping=%v)", src, dst, isSelfPing)
+	log.Debugf("Calculating route locally from %s to %s (self-ping=%v)", src, dst, isSelfPing)
 
 	// Collect local transports
 	type localTp struct {
@@ -515,14 +535,14 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 			tptypes.TypePreference(tptypes.Type(localTps[j].tpType))
 	})
 
-	r.logger.Debugf("Found %d local transports", len(localTps))
+	log.Debugf("Found %d local transports", len(localTps))
 
 	// Check for direct (1-hop) route first
 	for _, tp := range localTps {
 		if tp.remotePK == dst {
 			// Skip DMSG transports for mux (DMSG is a relay, not suitable for multiplexing)
 			if dialOpts != nil && dialOpts.ExcludeDMSG && tp.tpType == "dmsg" {
-				r.logger.Debugf("Skipping DMSG transport %s (excluded for mux)", tp.id)
+				log.Debugf("Skipping DMSG transport %s (excluded for mux)", tp.id)
 				continue
 			}
 			// Skip excluded transport IDs (used by mux to get different transports)
@@ -536,10 +556,10 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 				}
 			}
 			if excluded {
-				r.logger.Debugf("Skipping excluded transport %s to destination", tp.id)
+				log.Debugf("Skipping excluded transport %s to destination", tp.id)
 				continue
 			}
-			r.logger.Debugf("Found direct transport to destination: %s (type=%s)", tp.id, tp.tpType)
+			log.Debugf("Found direct transport to destination: %s (type=%s)", tp.id, tp.tpType)
 			fwdHop := routing.Hop{TpID: tp.id, From: src, To: dst}
 			revHop := routing.Hop{TpID: tp.id, From: dst, To: src}
 			return []routing.Hop{fwdHop}, []routing.Hop{revHop}, nil
@@ -550,7 +570,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 	// This replaces N individual GetTransportsByEdge API calls with one bulk fetch
 	allEntries, err := dc.GetAllTransports(ctx)
 	if err != nil {
-		r.logger.WithError(err).Warn("Failed to fetch all transports for route calculation")
+		log.WithError(err).Warn("Failed to fetch all transports for route calculation")
 		return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", err)
 	}
 
@@ -577,12 +597,12 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 				tptypes.TypePreference(entries[j].Type)
 		})
 	}
-	r.logger.Debugf("Built transport cache with %d entries covering %d visors", len(allEntries), len(transportsByEdge))
+	log.Debugf("Built transport cache with %d entries covering %d visors", len(allEntries), len(transportsByEdge))
 
 	// For self-ping, try 2-hop route through any available transport partner
 	// This allows testing the full route setup even without a direct self-transport
 	if isSelfPing {
-		r.logger.Debug("Self-ping: looking for 2-hop loopback route through transport partner")
+		log.Debug("Self-ping: looking for 2-hop loopback route through transport partner")
 		for _, tp := range localTps {
 			intermediatePK := tp.remotePK
 			if intermediatePK == src {
@@ -603,7 +623,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 				}
 				remotePK := entry.RemoteEdge(intermediatePK)
 				if remotePK == src {
-					r.logger.Debugf("Found 2-hop self-ping route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
+					log.Debugf("Found 2-hop self-ping route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
 					// Build loopback route: src -> intermediate -> src
 					fwdHop1 := routing.Hop{TpID: tp.id, From: src, To: intermediatePK}
 					fwdHop2 := routing.Hop{TpID: entry.ID, From: intermediatePK, To: src}
@@ -637,7 +657,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, src, dst cipher.PubKe
 			// Check if this transport connects to our destination
 			remotePK := entry.RemoteEdge(intermediatePK)
 			if remotePK == dst {
-				r.logger.Debugf("Found 2-hop route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
+				log.Debugf("Found 2-hop route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
 
 				// Build forward route: src -> intermediate -> dst
 				fwdHop1 := routing.Hop{TpID: tp.id, From: src, To: intermediatePK}
@@ -664,6 +684,7 @@ func (r *router) establishMuxRoutes(
 	forwardDesc routing.RouteDescriptor,
 	primaryTpID uuid.UUID,
 ) {
+	log := r.scopedLogForOpts(opts, forwardDesc.SrcPort())
 	muxCount := 1
 	if opts != nil && opts.MuxRoutes > 1 {
 		muxCount = opts.MuxRoutes
@@ -680,7 +701,7 @@ func (r *router) establishMuxRoutes(
 	for _, tp := range nrg.rg.tps {
 		if tp != nil && tp.Entry.Type == tptypes.DMSG {
 			nrg.rg.mu.Unlock()
-			r.logger.Debug("Skipping mux setup: primary route contains a DMSG transport")
+			log.Debug("Skipping mux setup: primary route contains a DMSG transport")
 			return
 		}
 	}
@@ -701,9 +722,9 @@ func (r *router) establishMuxRoutes(
 			ExcludeDMSG:         true,
 		}
 
-		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, lPK, rPK, muxOpts)
+		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
-			r.logger.Debugf("Mux route %d/%d: no additional route found: %v", i+1, muxCount, err)
+			log.Debugf("Mux route %d/%d: no additional route found: %v", i+1, muxCount, err)
 			break
 		}
 
@@ -718,18 +739,18 @@ func (r *router) establishMuxRoutes(
 			Reverse:   muxRev,
 		}
 
-		muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, r.logger, r.dmsgC, r.conf.SetupNodes, muxReq)
+		muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, muxReq)
 		if err != nil {
-			r.logger.Debugf("Mux route %d/%d: setup failed: %v", i+1, muxCount, err)
+			log.Debugf("Mux route %d/%d: setup failed: %v", i+1, muxCount, err)
 			break
 		}
 
 		if err := r.appendRouteToGroup(nrg, muxRules); err != nil {
-			r.logger.Debugf("Mux route %d/%d: append failed: %v", i+1, muxCount, err)
+			log.Debugf("Mux route %d/%d: append failed: %v", i+1, muxCount, err)
 			break
 		}
 
 		excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
-		r.logger.Infof("Mux route %d/%d established via transport %s", i+1, muxCount, muxRules.Forward.NextTransportID())
+		log.Infof("Mux route %d/%d established via transport %s", i+1, muxCount, muxRules.Forward.NextTransportID())
 	}
 }

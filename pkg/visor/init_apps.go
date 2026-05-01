@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/vpn"
@@ -305,6 +307,18 @@ func (a *visorPingAdapter) GetDmsgPingServerPK(pk cipher.PubKey) (cipher.PubKey,
 
 func (a *visorPingAdapter) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) {
 	return a.v.GetRemoteDmsgServers(pk)
+}
+
+func (a *visorPingAdapter) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64) {
+	return a.v.SubscribeLogs(f, capacity)
+}
+
+func (a *visorPingAdapter) LocalPK() cipher.PubKey {
+	return a.v.LocalPK()
+}
+
+func (a *visorPingAdapter) FetchAllTransportEntries(ctx context.Context) ([]*transport.Entry, error) {
+	return a.v.FetchAllTransportEntries(ctx)
 }
 
 func (a *visorPingAdapter) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
