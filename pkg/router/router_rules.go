@@ -72,6 +72,49 @@ func (r *router) RouteGroupHops(desc routing.RouteDescriptor) []RouteHopInfo {
 	return nil
 }
 
+// RouteGroupMuxInfo implements Router. Tries desc and its inversion
+// in case the rg is keyed by the mirrored descriptor.
+func (r *router) RouteGroupMuxInfo(desc routing.RouteDescriptor) (MuxInfo, bool) {
+	if nrg, ok := r.noiseRouteGroup(desc); ok && nrg != nil && nrg.rg != nil {
+		return nrg.rg.MuxStats(), true
+	}
+	inv := desc.Invert()
+	if nrg, ok := r.noiseRouteGroup(inv); ok && nrg != nil && nrg.rg != nil {
+		return nrg.rg.MuxStats(), true
+	}
+	return MuxInfo{}, false
+}
+
+// RouteGroupMuxInfoForApp implements Router. Walks every active rg
+// and returns mux snapshots for the ones tagged with appName at
+// dial time (saveRouteGroupRules calls SetAppName from opts.AppName).
+// Empty slice when no rg's are tagged for the app — typically because
+// nothing is currently dialed via that app, or the rg's are still
+// initializing (the rgsRaw map; we only walk rgsNs since those are
+// the established sessions).
+func (r *router) RouteGroupMuxInfoForApp(appName string) []MuxInfo {
+	if appName == "" {
+		return nil
+	}
+	r.mx.Lock()
+	rgs := make([]*NoiseRouteGroup, 0, len(r.rgsNs))
+	for _, nrg := range r.rgsNs {
+		if nrg != nil && nrg.rg != nil {
+			rgs = append(rgs, nrg)
+		}
+	}
+	r.mx.Unlock()
+
+	out := make([]MuxInfo, 0, len(rgs))
+	for _, nrg := range rgs {
+		if nrg.rg.AppName() != appName {
+			continue
+		}
+		out = append(out, nrg.rg.MuxStats())
+	}
+	return out
+}
+
 func (r *router) initializingRouteGroup(desc routing.RouteDescriptor) (*RouteGroup, bool) {
 	r.mx.Lock()
 	defer r.mx.Unlock()
@@ -144,7 +187,11 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 				RemotePK:  rules.Desc.SrcPK(),
 				Initiator: false,
 			}
-			nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf)
+			// AcceptRoutes path: no opts available, so app_name comes
+			// from the port→app lookup if it resolves (the SrcPort on
+			// inbound rules is the dialing peer's port, not ours, so
+			// this is best-effort only).
+			nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "")
 			if err != nil {
 				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
 				return

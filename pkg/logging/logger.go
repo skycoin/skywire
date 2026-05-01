@@ -24,6 +24,17 @@ func (logger *Logger) WithTime(t time.Time) *logrus.Entry {
 	return logger.WithFields(logrus.Fields{}).WithTime(t)
 }
 
+// WithAppName returns a derived Logger that attaches app_name=<name>
+// to every entry. Empty name is a no-op (returns the receiver).
+// Used by router-side scoping so 'cli proxy start --verbose' can
+// match on the field.
+func (logger *Logger) WithAppName(name string) *Logger {
+	if name == "" {
+		return logger
+	}
+	return &Logger{FieldLogger: logger.WithField("app_name", name)}
+}
+
 // MasterLogger wraps logrus.Logger and is able to create new package-aware loggers
 type MasterLogger struct {
 	*logrus.Logger

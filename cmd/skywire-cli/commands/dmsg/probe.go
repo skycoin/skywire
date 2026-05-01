@@ -15,10 +15,16 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-var standalone bool
+var (
+	standalone        bool
+	probeVerbose      bool
+	probeVerboseLevel string
+)
 
 func init() {
 	probeCmd.Flags().BoolVarP(&standalone, "standalone", "s", false, "use a standalone dmsg client (no running visor needed)")
+	probeCmd.Flags().BoolVarP(&probeVerbose, "verbose", "v", false, "stream visor's dmsg-layer logs to stderr while probing")
+	probeCmd.Flags().StringVar(&probeVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	RootCmd.AddCommand(probeCmd)
 }
 
@@ -66,6 +72,22 @@ Examples:
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		// --verbose: subscribe to dmsg-layer logs for the duration of
+		// the probe so DialStream activity is visible in real time.
+		if probeVerbose {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			vs, vErr := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
+				Modules: []string{"dmsgC", "dmsg_grpc", "dmsg_disc", "dmsg_tracker"},
+				Level:   probeVerboseLevel,
+			})
+			if vErr != nil {
+				internal.PrintFatalError(cmd.Flags(), vErr)
+			}
+			_ = vs.WaitSubscribed(ctx, 2*time.Second) //nolint:errcheck
+			defer vs.Close()
 		}
 
 		start := time.Now()
