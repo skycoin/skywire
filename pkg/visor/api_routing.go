@@ -170,27 +170,28 @@ func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
 	return result, nil
 }
 
-// findRouteDescForApp finds the route descriptor for a running app by matching its port.
+// findRouteDescForApp finds an active route group's descriptor for
+// the named app. Uses the rg's stored appName (set via SetAppName at
+// dial time from opts.AppName) rather than matching by registered
+// app port — the rg's descriptor uses an ephemeral source port that
+// the procManager.GetAppPort lookup can't see.
+//
+// When multiple rg's are active for the same app (one per concurrent
+// SOCKS5 connection on skysocks-client, etc.), returns the first
+// one found. Picking the "right" one for a per-rg operation like
+// AddMuxRoute is ambiguous in that case; future work is to surface
+// the descriptor selection on the CLI for cases where it matters.
 func (v *Visor) findRouteDescForApp(appName string) (routing.RouteDescriptor, error) {
 	var desc routing.RouteDescriptor
 
-	if v.procM == nil {
-		return desc, errors.New("process manager not available")
+	if v.router == nil {
+		return desc, errors.New("router not available")
 	}
-	port, err := v.procM.GetAppPort(appName)
-	if err != nil {
-		return desc, fmt.Errorf("app %q not found or not running: %w", appName, err)
+	infos := v.router.RouteGroupMuxInfoForApp(appName)
+	if len(infos) == 0 {
+		return desc, fmt.Errorf("no active route group for app %q", appName)
 	}
-
-	// Find the route group whose local port matches the app's port
-	statuses := v.router.ActiveRouteStatuses()
-	for _, s := range statuses {
-		if s.LocalPort == port {
-			return routing.NewRouteDescriptor(s.RemotePK, s.LocalPK, s.RemotePort, s.LocalPort), nil
-		}
-	}
-
-	return desc, fmt.Errorf("no active route found for app %q on port %d", appName, port)
+	return infos[0].Desc, nil
 }
 
 // AddMuxRoute implements API.
