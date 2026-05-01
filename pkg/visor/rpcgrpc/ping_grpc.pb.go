@@ -8,7 +8,6 @@ package rpcgrpc
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -28,6 +27,8 @@ const (
 	PingService_StreamSystemStats_FullMethodName       = "/rpcgrpc.PingService/StreamSystemStats"
 	PingService_GetSystemStats_FullMethodName          = "/rpcgrpc.PingService/GetSystemStats"
 	PingService_StreamRemoteSystemStats_FullMethodName = "/rpcgrpc.PingService/StreamRemoteSystemStats"
+	PingService_StreamAppLogs_FullMethodName           = "/rpcgrpc.PingService/StreamAppLogs"
+	PingService_StreamCalcRoutes_FullMethodName        = "/rpcgrpc.PingService/StreamCalcRoutes"
 )
 
 // PingServiceClient is the client API for PingService service.
@@ -53,6 +54,15 @@ type PingServiceClient interface {
 	// StreamRemoteSystemStats proxies system stats from a remote visor via DMSG
 	// The local visor dials the remote visor over DMSG and forwards the stats stream
 	StreamRemoteSystemStats(ctx context.Context, in *RemoteSystemStatsRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SystemStats], error)
+	// StreamAppLogs streams visor log entries scoped to one app's session.
+	// Used by 'skywire-cli proxy start --verbose' to surface what the visor is
+	// doing while spinning up an app's transports/routes.
+	StreamAppLogs(ctx context.Context, in *AppLogStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AppLogEntry], error)
+	// StreamCalcRoutes runs a route-finder BFS server-side and streams each
+	// valid route back as it's discovered. Lets the CLI display routes
+	// incrementally and avoids accumulating every result in memory before
+	// returning — important when count is large or unbounded.
+	StreamCalcRoutes(ctx context.Context, in *CalcRoutesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CalcRoute], error)
 }
 
 type pingServiceClient struct {
@@ -197,6 +207,44 @@ func (c *pingServiceClient) StreamRemoteSystemStats(ctx context.Context, in *Rem
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamRemoteSystemStatsClient = grpc.ServerStreamingClient[SystemStats]
 
+func (c *pingServiceClient) StreamAppLogs(ctx context.Context, in *AppLogStreamRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[AppLogEntry], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[6], PingService_StreamAppLogs_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[AppLogStreamRequest, AppLogEntry]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamAppLogsClient = grpc.ServerStreamingClient[AppLogEntry]
+
+func (c *pingServiceClient) StreamCalcRoutes(ctx context.Context, in *CalcRoutesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CalcRoute], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[7], PingService_StreamCalcRoutes_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CalcRoutesRequest, CalcRoute]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamCalcRoutesClient = grpc.ServerStreamingClient[CalcRoute]
+
 // PingServiceServer is the server API for PingService service.
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility.
@@ -220,6 +268,15 @@ type PingServiceServer interface {
 	// StreamRemoteSystemStats proxies system stats from a remote visor via DMSG
 	// The local visor dials the remote visor over DMSG and forwards the stats stream
 	StreamRemoteSystemStats(*RemoteSystemStatsRequest, grpc.ServerStreamingServer[SystemStats]) error
+	// StreamAppLogs streams visor log entries scoped to one app's session.
+	// Used by 'skywire-cli proxy start --verbose' to surface what the visor is
+	// doing while spinning up an app's transports/routes.
+	StreamAppLogs(*AppLogStreamRequest, grpc.ServerStreamingServer[AppLogEntry]) error
+	// StreamCalcRoutes runs a route-finder BFS server-side and streams each
+	// valid route back as it's discovered. Lets the CLI display routes
+	// incrementally and avoids accumulating every result in memory before
+	// returning — important when count is large or unbounded.
+	StreamCalcRoutes(*CalcRoutesRequest, grpc.ServerStreamingServer[CalcRoute]) error
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -253,6 +310,12 @@ func (UnimplementedPingServiceServer) GetSystemStats(context.Context, *SystemSta
 }
 func (UnimplementedPingServiceServer) StreamRemoteSystemStats(*RemoteSystemStatsRequest, grpc.ServerStreamingServer[SystemStats]) error {
 	return status.Error(codes.Unimplemented, "method StreamRemoteSystemStats not implemented")
+}
+func (UnimplementedPingServiceServer) StreamAppLogs(*AppLogStreamRequest, grpc.ServerStreamingServer[AppLogEntry]) error {
+	return status.Error(codes.Unimplemented, "method StreamAppLogs not implemented")
+}
+func (UnimplementedPingServiceServer) StreamCalcRoutes(*CalcRoutesRequest, grpc.ServerStreamingServer[CalcRoute]) error {
+	return status.Error(codes.Unimplemented, "method StreamCalcRoutes not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
 func (UnimplementedPingServiceServer) testEmbeddedByValue()                     {}
@@ -377,6 +440,28 @@ func _PingService_StreamRemoteSystemStats_Handler(srv interface{}, stream grpc.S
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamRemoteSystemStatsServer = grpc.ServerStreamingServer[SystemStats]
 
+func _PingService_StreamAppLogs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(AppLogStreamRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamAppLogs(m, &grpc.GenericServerStream[AppLogStreamRequest, AppLogEntry]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamAppLogsServer = grpc.ServerStreamingServer[AppLogEntry]
+
+func _PingService_StreamCalcRoutes_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(CalcRoutesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamCalcRoutes(m, &grpc.GenericServerStream[CalcRoutesRequest, CalcRoute]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamCalcRoutesServer = grpc.ServerStreamingServer[CalcRoute]
+
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -422,6 +507,16 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamRemoteSystemStats",
 			Handler:       _PingService_StreamRemoteSystemStats_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamAppLogs",
+			Handler:       _PingService_StreamAppLogs_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamCalcRoutes",
+			Handler:       _PingService_StreamCalcRoutes_Handler,
 			ServerStreams: true,
 		},
 	},

@@ -2,6 +2,7 @@
 package clitp
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -41,6 +42,8 @@ var (
 	noRegister       bool
 	noProbe          bool
 	remoteVisorPKs   []string
+	addVerbose       bool
+	addVerboseLevel  string
 )
 
 func init() {
@@ -54,6 +57,8 @@ func init() {
 	addTpCmd.Flags().BoolVar(&noProbe, "no-probe", false, "skip dmsg port 136 reachability probe before adding transport")
 	addTpCmd.Flags().StringSliceVar(&remoteVisorPKs, "remote", nil, "request transport via TPS on remote visor(s) (comma-separated PKs)")
 	addTpCmd.Flags().StringVar(&stcpAddr, "addr", "", "remote address (ip:port) for stcp transport")
+	addTpCmd.Flags().BoolVarP(&addVerbose, "verbose", "v", false, "stream the visor's transport-layer logs (transport_manager, dmsgC, stcpr, sudph, address_resolver) while dialing")
+	addTpCmd.Flags().StringVar(&addVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	clirpc.RegisterFetchFlags(addTpCmd)
 }
 
@@ -93,6 +98,24 @@ var addTpCmd = &cobra.Command{
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		// --verbose: subscribe to transport-layer logs for the
+		// duration of this command. AddTransport routinely hangs in
+		// the underlying dial when a peer is unreachable; this lights
+		// up the actual handshake / AR / dmsg sequence in real time.
+		if addVerbose {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			vs, vErr := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
+				Modules: []string{"transport_manager", "dmsgC", "stcpr", "sudph", "address_resolver", "tp"},
+				Level:   addVerboseLevel,
+			})
+			if vErr != nil {
+				internal.PrintFatalError(cmd.Flags(), vErr)
+			}
+			_ = vs.WaitSubscribed(ctx, 2*time.Second) //nolint:errcheck
+			defer vs.Close()
 		}
 
 		// Collect public keys from args and -r flag

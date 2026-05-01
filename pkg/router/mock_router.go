@@ -375,6 +375,35 @@ func (_m *MockRouter) RouteGroupHops(_a0 routing.RouteDescriptor) []RouteHopInfo
 	return r0
 }
 
+// RouteGroupMuxInfo provides a mock function
+func (_m *MockRouter) RouteGroupMuxInfo(_a0 routing.RouteDescriptor) (MuxInfo, bool) {
+	ret := _m.Called(_a0)
+	var r0 MuxInfo
+	var r1 bool
+	if rf, ok := ret.Get(0).(func(routing.RouteDescriptor) (MuxInfo, bool)); ok {
+		return rf(_a0)
+	}
+	if ret.Get(0) != nil {
+		r0 = ret.Get(0).(MuxInfo)
+	}
+	if ret.Get(1) != nil {
+		r1 = ret.Get(1).(bool)
+	}
+	return r0, r1
+}
+
+// RouteGroupMuxInfoForApp provides a mock function
+func (_m *MockRouter) RouteGroupMuxInfoForApp(_a0 string) []MuxInfo {
+	ret := _m.Called(_a0)
+	var r0 []MuxInfo
+	if rf, ok := ret.Get(0).(func(string) []MuxInfo); ok {
+		r0 = rf(_a0)
+	} else if ret.Get(0) != nil {
+		r0 = ret.Get(0).([]MuxInfo)
+	}
+	return r0
+}
+
 // ActiveRouteStatuses provides a mock function with no fields
 func (_m *MockRouter) ActiveRouteStatuses() []RouteStatus {
 	ret := _m.Called()

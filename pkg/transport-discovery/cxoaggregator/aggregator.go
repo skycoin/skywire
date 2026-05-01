@@ -50,11 +50,21 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// BandwidthSink receives per-transport cumulative-counter updates.
-// The TPD's redis store satisfies this via UpdateBandwidth.
-type BandwidthSink interface {
+// Sink receives per-transport telemetry updates from visor TreeStore
+// feeds. The TPD's redis store satisfies this via UpdateBandwidth (per
+// reporter, cumulative counters) and UpdateLatency (per transport, RTT
+// min/max/avg in ms).
+type Sink interface {
 	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
+	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
 }
+
+// BandwidthSink is retained as an alias for callers that only need the
+// bandwidth half of the contract.
+//
+// Deprecated: use Sink. Kept so external embedders that implemented
+// BandwidthSink keep compiling until they migrate.
+type BandwidthSink = Sink
 
 // liveSnapshot mirrors pkg/visor/stats.LiveSnapshot. Re-declared on
 // the TPD side to keep the dependency direction one-way: visor →
@@ -92,7 +102,7 @@ type Config struct {
 // TreeStore tree to feed BandwidthSink.
 type Aggregator struct {
 	cxoNode *node.Node
-	sink    BandwidthSink
+	sink    Sink
 	conf    Config
 	log     *logging.Logger
 
@@ -104,7 +114,7 @@ type Aggregator struct {
 // New constructs an Aggregator. Sets up a CXO Node, enables DMSG so
 // remote visors can dial in, and wires OnRootFilled to walk
 // TreeStore Roots and dispatch to sink.
-func New(dmsgC *dmsg.Client, sink BandwidthSink, conf Config) (*Aggregator, error) {
+func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	if conf.ReconcileInterval <= 0 {
 		conf.ReconcileInterval = 30 * time.Second
 	}
@@ -302,6 +312,11 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 	defer cancel()
 	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, snap.SentBytes, snap.RecvBytes); err != nil {
 		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")
+	}
+	if snap.LatencyAvgMS > 0 {
+		if err := a.sink.UpdateLatency(ctx, id.String(), snap.LatencyMinMS, snap.LatencyMaxMS, snap.LatencyAvgMS); err != nil {
+			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateLatency failed")
+		}
 	}
 }
 

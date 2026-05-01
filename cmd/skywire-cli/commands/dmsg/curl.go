@@ -13,8 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -27,12 +29,14 @@ import (
 )
 
 var (
-	curlData    string
-	curlOutput  string
-	curlAgent   string
-	curlTries   int
-	curlWait    int
-	curlReplace bool
+	curlData         string
+	curlOutput       string
+	curlAgent        string
+	curlTries        int
+	curlWait         int
+	curlReplace      bool
+	curlVerbose      bool
+	curlVerboseLevel string
 )
 
 func init() {
@@ -46,6 +50,8 @@ func init() {
 	curlCmd.Flags().IntVarP(&curlTries, "try", "t", 1, "download attempts (0 unlimits)")
 	curlCmd.Flags().IntVarP(&curlWait, "wait", "w", 0, "time to wait between attempts (seconds)")
 	curlCmd.Flags().StringVarP(&curlAgent, "agent", "a", "skywire-cli/"+buildinfo.Version(), "HTTP user agent")
+	curlCmd.Flags().BoolVarP(&curlVerbose, "verbose", "v", false, "stream visor's dmsg-layer logs to stderr while the request is in flight")
+	curlCmd.Flags().StringVar(&curlVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	if os.Getenv("DMSG_SK") != "" {
 		sk.Set(os.Getenv("DMSG_SK")) //nolint
 	}
@@ -72,6 +78,15 @@ Example URLs:
 		if logLvl != "" {
 			if lvl, err := logging.LevelFromString(logLvl); err == nil {
 				logging.SetLevel(lvl)
+				// --loglvl=debug|trace implies --verbose unless the
+				// user explicitly opted out. Mirrors the standalone
+				// 'skywire dmsg curl' which prints dmsg-layer chatter
+				// at debug level natively — when the request is
+				// proxied through the visor, we want the same
+				// experience by default.
+				if !cmd.Flags().Changed("verbose") && lvl >= logrus.DebugLevel {
+					curlVerbose = true
+				}
 			}
 		}
 
@@ -112,13 +127,48 @@ Example URLs:
 	},
 }
 
-// curlViaVisor performs the curl request using the visor's dmsg client via RPC
-func curlViaVisor(cmd *cobra.Command, _ context.Context, log *logging.Logger, dmsgURL string) error {
+// curlViaVisor performs the curl request using the visor's dmsg client via RPC.
+//
+// net/rpc.Call is synchronous and ignores context, so a slow visor-side
+// dial — which is exactly what happens when the target DMSG peer is
+// unreachable, the visor sits in DialStream until its 15s server-side
+// HTTP timeout — would leave the CLI unresponsive to ctrl+c. We
+// dispatch the RPC in a goroutine and select against ctx.Done() so
+// SIGINT / per-attempt timeout cancels the wait promptly. The RPC
+// itself still runs to completion on the visor (we can't actually
+// abort net/rpc); ctrl+c just lets the CLI exit cleanly while the
+// visor side cleans itself up via its own timeout.
+func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, dmsgURL string) error {
 	rpcClient, err := rpcClient(cmd)
 	if err != nil {
 		return fmt.Errorf("RPC connection failed; is skywire running?: %w", err)
 	}
 	defer rpcClient.Close() //nolint:errcheck
+
+	// --verbose: open a gRPC log stream filtered to dmsg-layer modules
+	// BEFORE the request fires so we capture the full DialStream lifecycle
+	// (lookup → server delegate → handshake → http roundtrip). The
+	// helper handles the subscribe-handshake race. Canceling ctx (SIGINT)
+	// tears the stream down.
+	var verboseStream *clirpc.VerboseStream
+	if curlVerbose {
+		vs, vErr := clirpc.OpenVerbose(ctx, rpcAddr, clirpc.VerboseFilter{
+			Modules: []string{"dmsgC", "dmsghttp", "dmsg_grpc", "dmsg_disc", "dmsg_tracker"},
+			Level:   curlVerboseLevel,
+		})
+		if vErr != nil {
+			return vErr
+		}
+		verboseStream = vs
+		if err := vs.WaitSubscribed(ctx, 2*time.Second); err != nil && ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
+	defer func() {
+		if verboseStream != nil {
+			verboseStream.Close()
+		}
+	}()
 
 	// Prepare output
 	output := os.Stdout
@@ -154,11 +204,34 @@ func curlViaVisor(cmd *cobra.Command, _ context.Context, log *logging.Logger, dm
 	var lastErr error
 	for i := 0; i < tries; i++ {
 		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(curlWait) * time.Second):
+			}
 			log.Debugf("Attempt %d/%d...", i+1, curlTries)
-			time.Sleep(time.Duration(curlWait) * time.Second)
 		}
 
-		resp, err := rpcClient.DmsgHTTP(req)
+		// Run the RPC in a goroutine so SIGINT / ctx cancellation
+		// can interrupt the wait. The visor's server-side handler
+		// has its own 15s HTTP timeout, so it returns regardless.
+		type result struct {
+			resp *visor.DmsgHTTPResponse
+			err  error
+		}
+		done := make(chan result, 1)
+		go func() {
+			resp, err := rpcClient.DmsgHTTP(req)
+			done <- result{resp, err}
+		}()
+
+		var resp *visor.DmsgHTTPResponse
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case r := <-done:
+			resp, err = r.resp, r.err
+		}
 		if err != nil {
 			lastErr = err
 			log.WithError(err).Debug("Request failed")
