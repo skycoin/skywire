@@ -155,12 +155,12 @@ func (c *genericClient) acceptTransports(lis net.Listener) {
 	c.log.Debugf("listening on addr: %v", c.connListener.Addr())
 	for {
 		if err := c.acceptTransport(); err != nil {
-			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") || strings.Contains(err.Error(), "EOF") {
+			if errors.Is(err, io.EOF) || strings.Contains(err.Error(), "encrypt connection to") {
 				c.log.Debugf("Ignoring likely scanner/dummy connection: %v", err)
 				continue // likely it's a dummy connection from service discovery or port scanner
 			}
 
-			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || strings.Contains(err.Error(), "use of closed network connection")) {
+			if c.isClosed() && (errors.Is(err, io.ErrClosedPipe) || errors.Is(err, net.ErrClosed)) {
 				c.log.Debug("Cleanly stopped serving.")
 				return
 			}
