@@ -39,7 +39,16 @@ import (
 
 func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	var keys cipher.PubKeys
-	servers := shuffleServers(v.conf.Dmsg.Servers)
+	// Prefer entries the visor has previously learned from dmsg-discovery
+	// (cached on disk in <local_path>/dmsg_servers.json) over the addresses
+	// in skywire.json — those can be months stale if a server has rotated
+	// IP since the config was generated. The cache is written by the
+	// background refresh loop in initDmsg.
+	configured := v.conf.Dmsg.Servers
+	if v.dmsgServersCache != nil {
+		configured = v.dmsgServersCache.MergePreferringCache(configured)
+	}
+	servers := shuffleServers(configured)
 
 	if len(servers) == 0 {
 		return nil
@@ -189,7 +198,55 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// Start periodic config refresh for dynamic key sets
 	go v.startConfigRefresh(ctx) //nolint:errcheck,gosec
 
+	// Refresh the on-disk dmsg-servers cache from dmsg-discovery so the
+	// next bootstrap uses the live addresses, not whatever's in
+	// skywire.json. Uses a separate disc.HTTP client (the dmsg.Client
+	// doesn't expose its inner discovery client).
+	if v.dmsgServersCache != nil && discURL != "" {
+		go v.refreshDmsgServersCacheLoop(ctx, discURL, httpC)
+	}
+
 	return nil
+}
+
+// dmsgServersCacheRefreshInterval is how often the cache is refreshed
+// from dmsg-discovery once dmsgC is up. 5m is short enough that the
+// cache converges on the live state within a few minutes of a server
+// rotating its address, long enough that the refresh isn't a load
+// concern on dmsgd.
+const dmsgServersCacheRefreshInterval = 5 * time.Minute
+
+// refreshDmsgServersCacheLoop runs until ctx is canceled, refreshing
+// v.dmsgServersCache from dmsg-discovery's all_servers endpoint at a
+// fixed interval. Empty refreshes (dmsgd unreachable, no entries) are
+// skipped — DmsgServersCache.Replace treats empty input as a no-op so
+// a transient outage doesn't wipe the cache.
+func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string, httpC *http.Client) {
+	cacheLog := v.MasterLogger().PackageLogger("dmsg_servers_cache")
+	dc := dmsgdisc.NewHTTP(discURL, httpC, cacheLog)
+	refresh := func() {
+		entries, err := dc.AllServers(ctx)
+		if err != nil {
+			cacheLog.WithError(err).Debug("Skipping cache refresh (dmsgd error)")
+			return
+		}
+		if err := v.dmsgServersCache.Replace(entries); err != nil {
+			cacheLog.WithError(err).Warn("Failed to write dmsg-servers cache file")
+			return
+		}
+		cacheLog.WithField("count", len(entries)).Debug("dmsg-servers cache refreshed")
+	}
+	refresh()
+	t := time.NewTicker(dmsgServersCacheRefreshInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			refresh()
+		}
+	}
 }
 
 // dmsgServicePKs extracts public keys from dmsg:// URLs in the visor config.
