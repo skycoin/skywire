@@ -487,7 +487,8 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 				// Enforce per-port PK whitelist if one is set. The DMSG
 				// listener's RemoteAddr is dmsg.Addr — fail closed if
 				// the assertion fails on a whitelisted port.
-				if fp := v.forwardedPorts.Get(port); fp != nil && len(fp.Whitelist) > 0 {
+				fp := v.forwardedPorts.Get(port)
+				if fp != nil && len(fp.Whitelist) > 0 {
 					a, ok := conn.RemoteAddr().(dmsg.Addr)
 					if !ok {
 						log.Warn("Rejected: cannot identify peer on whitelisted port")
@@ -498,7 +499,15 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 						return
 					}
 				}
-				local, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", localPort))
+				// ProxyAddr wins when set so users can forward to an arbitrary
+				// IP:port instead of localhost:localPort. The localPort fallback
+				// preserves behavior for existing entries that predate ProxyAddr
+				// for non-port-80 forwards.
+				target := fmt.Sprintf("localhost:%d", localPort)
+				if fp != nil && fp.ProxyAddr != "" {
+					target = fp.ProxyAddr
+				}
+				local, err := net.Dial("tcp", target)
 				if err != nil {
 					log.WithError(err).Debug("Failed to dial local port")
 					return
