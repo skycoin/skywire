@@ -2,28 +2,37 @@
 package skynet
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 var (
-	curlData   string
-	curlOutput string
+	curlData    string
+	curlOutput  string
+	curlVerbose bool
+	curlVLevel  string
 )
 
 func init() {
 	curlCmd.Flags().StringVarP(&curlData, "data", "d", "", "HTTP POST data")
 	curlCmd.Flags().StringVarP(&curlOutput, "out", "o", "", "output file path")
+	curlCmd.Flags().BoolVarP(&curlVerbose, "verbose", "v", false, "stream visor's router/transport logs to stderr while the request is in flight")
+	curlCmd.Flags().StringVar(&curlVLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	RootCmd.AddCommand(curlCmd)
 }
 
@@ -62,15 +71,79 @@ Examples:
 			body = []byte(curlData)
 		}
 
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logging.MustGetLogger("skynet-curl"))
+		defer cancel()
+
+		// --verbose: subscribe to the visor's router/transport layer
+		// logs BEFORE issuing the RPC. The skynet stack reuses the
+		// same router as proxy/vpn, so the same module set surfaces
+		// route setup, mux setup, transport probe activity. Different
+		// from dmsg curl which scopes to dmsgC modules — skynet goes
+		// over routes, not direct dmsg.
+		var verboseDone chan struct{}
+		if curlVerbose {
+			grpcClient, gerr := rpcgrpc.NewPingClient(clirpc.Addr)
+			if gerr != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("verbose: gRPC dial failed: %w", gerr))
+			}
+			modules := []string{"router", "route_setup", "setup_node", "mux_setup", "transport_manager", "skynet"}
+			subscribedCh := make(chan struct{})
+			verboseDone = make(chan struct{})
+			go func() {
+				defer close(verboseDone)
+				defer grpcClient.Close() //nolint:errcheck,gosec
+				err := grpcClient.StreamAppLogs(ctx, "", false, curlVLevel, modules, subscribedCh, func(e *rpcgrpc.AppLogEntry) {
+					ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
+					module := e.Module
+					if module == "" {
+						module = "-"
+					}
+					fmt.Fprintf(os.Stderr, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message)
+				})
+				if err != nil && ctx.Err() == nil {
+					fmt.Fprintf(os.Stderr, "verbose stream ended: %v\n", err)
+				}
+			}()
+			select {
+			case <-subscribedCh:
+			case <-time.After(2 * time.Second):
+				fmt.Fprintln(os.Stderr, "verbose: subscription not confirmed within 2s; proceeding anyway")
+			case <-ctx.Done():
+				return
+			}
+		}
+		defer func() {
+			if verboseDone != nil {
+				<-verboseDone
+			}
+		}()
+
 		fmt.Fprintf(os.Stderr, "Dialing %s:%d%s...\n", target.pk.String(), target.port, target.path)
 
-		resp, err := rpcClient.SkynetHTTP(visor.SkynetHTTPRequest{
-			PK:     target.pk,
-			Port:   target.port,
-			Path:   target.path,
-			Method: method,
-			Body:   body,
-		})
+		// Run RPC in a goroutine so SIGINT can interrupt the wait
+		// (net/rpc.Call ignores context); same pattern as dmsg curl.
+		type result struct {
+			resp *visor.SkynetHTTPResponse
+			err  error
+		}
+		done := make(chan result, 1)
+		go func() {
+			r, e := rpcClient.SkynetHTTP(visor.SkynetHTTPRequest{
+				PK:     target.pk,
+				Port:   target.port,
+				Path:   target.path,
+				Method: method,
+				Body:   body,
+			})
+			done <- result{r, e}
+		}()
+		var resp *visor.SkynetHTTPResponse
+		select {
+		case <-ctx.Done():
+			internal.PrintFatalError(cmd.Flags(), ctx.Err())
+		case r := <-done:
+			resp, err = r.resp, r.err
+		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("skynet request failed: %w", err))
 		}
