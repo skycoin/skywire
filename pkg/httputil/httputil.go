@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -38,7 +40,7 @@ func WriteJSON(w http.ResponseWriter, r *http.Request, code int, v interface{}) 
 	if err, ok := v.(error); ok {
 		v = map[string]interface{}{"error": err.Error()}
 	}
-	if err := json.NewEncoder(w).Encode(v); err != nil {
+	if err := enc.Encode(v); err != nil {
 		// Check if it's an I/O error (client disconnect, timeout, etc.)
 		if isIOError(err) {
 			log.WithError(err).Debug("Failed to write JSON response (client likely disconnected)")
@@ -50,22 +52,36 @@ func WriteJSON(w http.ResponseWriter, r *http.Request, code int, v interface{}) 
 }
 
 // isIOError checks if an error is related to I/O (network issues, timeouts, etc.)
+// — anything that means "the response can't be written", not "the data is wrong".
 func isIOError(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Check for common I/O error patterns
-	errStr := err.Error()
-	if strings.Contains(errStr, "i/o timeout") ||
-		strings.Contains(errStr, "connection reset") ||
-		strings.Contains(errStr, "broken pipe") ||
-		strings.Contains(errStr, "use of closed network connection") {
+	// Sentinel errors with stable identities. Covers:
+	//   - net.ErrClosed:           "use of closed network connection"
+	//   - io.ErrClosedPipe:        "io: read/write on closed pipe"
+	//   - io.ErrShortWrite:        "short write" — wrapped by http.timeoutWriter
+	//                              when a write deadline expires mid-response
+	//   - os.ErrDeadlineExceeded:  any deadline-exceeded error (write timeouts,
+	//                              context deadline propagated through)
+	if errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, io.ErrClosedPipe) ||
+		errors.Is(err, io.ErrShortWrite) ||
+		errors.Is(err, os.ErrDeadlineExceeded) {
 		return true
 	}
-	// Check for net.Error (timeout or temporary)
+	// net.Error timeout — covers any net package timeout type that doesn't
+	// satisfy errors.Is(_, os.ErrDeadlineExceeded).
 	var netErr net.Error
-	if ok := errors.As(err, &netErr); ok {
-		return netErr.Timeout()
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	// String-match fallback for syscall errors that have no clean Go sentinel
+	// (kernel-side errno wrappings that surface as descriptive strings).
+	errStr := err.Error()
+	if strings.Contains(errStr, "broken pipe") ||
+		strings.Contains(errStr, "connection reset") {
+		return true
 	}
 	return false
 }
