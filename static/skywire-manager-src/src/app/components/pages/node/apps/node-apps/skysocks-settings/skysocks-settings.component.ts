@@ -1,5 +1,5 @@
 import { Component, OnInit, ViewChild, OnDestroy, ElementRef, Inject } from '@angular/core';
-import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
+import { UntypedFormBuilder, UntypedFormGroup, AbstractControl, ValidationErrors } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 
@@ -63,24 +63,25 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.form = this.formBuilder.group({
-      password: [''],
-      passwordConfirmation: ['', this.validatePasswords.bind(this)],
+      whitelist: ['', this.validateWhitelist.bind(this)],
       netifc: [''],
     });
 
-    this.formSubscription = this.form.get('password').valueChanges.subscribe(() => {
-      this.form.get('passwordConfirmation').updateValueAndValidity();
-    });
-
-    // Get the current values saved on the visor, if returned by the API.
+    // Pre-fill whitelist + netifc from the running app's arg list.
+    // The app's whitelist arg is "--whitelist <csv>" — surfaced here
+    // as a textarea so users can edit and re-submit.
     if (this.data.args && this.data.args.length > 0) {
       for (let i = 0; i < this.data.args.length; i++) {
-        const arg = this.data.args[i];
-        if ((arg as string).toLowerCase().includes('-secure')) {
-          this.secureMode = (arg as string).toLowerCase().includes('true');
+        const arg = (this.data.args[i] as string) || '';
+        const lower = arg.toLowerCase();
+        if (lower.includes('-secure')) {
+          this.secureMode = lower.includes('true');
         }
-        if ((arg as string).toLowerCase().includes('-netifc') && i < this.data.args.length - 1) {
+        if (lower.includes('-netifc') && i < this.data.args.length - 1) {
           this.form.get('netifc').setValue(this.data.args[i + 1]);
+        }
+        if (lower.includes('-whitelist') && i < this.data.args.length - 1) {
+          this.form.get('whitelist').setValue(this.data.args[i + 1]);
         }
       }
     }
@@ -89,7 +90,9 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy() {
-    this.formSubscription.unsubscribe();
+    if (this.formSubscription) {
+      this.formSubscription.unsubscribe();
+    }
     if (this.operationSubscription) {
       this.operationSubscription.unsubscribe();
     }
@@ -117,10 +120,10 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    // Ask for confirmation.
-
-    const confirmationMsg = this.form.get('password').value ?
-      'apps.vpn-socks-server-settings.change-passowrd-confirmation' : 'apps.vpn-socks-server-settings.remove-passowrd-confirmation';
+    const wl = this.normalizedWhitelist();
+    const confirmationMsg = wl
+      ? 'apps.vpn-socks-server-settings.set-whitelist-confirmation'
+      : 'apps.vpn-socks-server-settings.clear-whitelist-confirmation';
 
     const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationMsg);
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
@@ -132,11 +135,11 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
   private continueSavingChanges() {
     this.button.showLoading();
 
-    const data = { passcode: this.form.get('password').value };
-    // The "secure" value is only for the VPN app.
+    const data: any = { whitelist: this.normalizedWhitelist() };
+    // The "secure" value and netifc are only for vpn-server.
     if (this.configuringVpn) {
-      data['secure'] = this.secureMode;
-      data['netifc'] = this.form.get('netifc').value;
+      data.secure = this.secureMode;
+      data.netifc = this.form.get('netifc').value;
     }
 
     this.operationSubscription = this.appsService.changeAppSettings(
@@ -148,6 +151,19 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
       next: this.onSuccess.bind(this),
       error: this.onError.bind(this)
     });
+  }
+
+  /**
+   * Returns the whitelist value as a comma-separated string of public
+   * keys with whitespace squashed. Empty string when the field is
+   * blank — this clears the whitelist server-side.
+   */
+  private normalizedWhitelist(): string {
+    const raw = (this.form.get('whitelist').value || '').trim();
+    if (raw === '') {
+      return '';
+    }
+    return raw.split(/[\s,]+/).filter((s: string) => s.length > 0).join(',');
   }
 
   private onSuccess() {
@@ -163,12 +179,17 @@ export class SkysocksSettingsComponent implements OnInit, OnDestroy {
     this.snackbarService.showError(err);
   }
 
-  private validatePasswords() {
-    if (this.form) {
-      return this.form.get('password').value !== this.form.get('passwordConfirmation').value
-        ? { invalid: true } : null;
-    } else {
-      return null;
+  private validateWhitelist(control: AbstractControl): ValidationErrors | null {
+    const raw = (control && (control.value || '') as string).trim();
+    if (raw === '') {
+      return null; // empty = clear whitelist
     }
+    for (const pk of raw.split(/[\s,]+/)) {
+      if (pk === '') { continue; }
+      if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
+        return { invalid: true };
+      }
+    }
+    return null;
   }
 }

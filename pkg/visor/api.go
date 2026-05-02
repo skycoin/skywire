@@ -72,7 +72,7 @@ type API interface {
 	SetAppError(appName, stateErr string) error
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
-	SetAppPassword(appName, password string) error
+	SetAppWhitelist(appName, whitelist string) error
 	SetAppPK(appName string, pk cipher.PubKey) error
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppAddress(appName string, address string) error
@@ -153,7 +153,7 @@ type API interface {
 	RegisterForwardedPort(p ForwardedPort) error
 	UpdateForwardedPort(p ForwardedPort) error
 	ListForwardedPorts() ([]ForwardedPort, error)
-	ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
+	ConnectRawTCP(network string, remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	DisconnectRawTCP(id uuid.UUID) error
 	ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error)
 	DialPing(config PingConfig) error

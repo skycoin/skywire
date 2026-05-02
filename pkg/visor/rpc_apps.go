@@ -141,11 +141,11 @@ func (r *RPC) SetAutoStart(in *SetAutoStartIn, _ *struct{}) (err error) {
 	return r.visor.SetAutoStart(in.AppName, in.AutoStart)
 }
 
-// SetAppPassword sets password for the app.
-func (r *RPC) SetAppPassword(in *SetAppPasswordIn, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "SetAppPassword", in)(nil, &err)
+// SetAppWhitelist sets the connection whitelist for skysocks / vpn-server.
+func (r *RPC) SetAppWhitelist(in *SetAppWhitelistIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppWhitelist", in)(nil, &err)
 
-	return r.visor.SetAppPassword(in.AppName, in.Password)
+	return r.visor.SetAppWhitelist(in.AppName, in.Whitelist)
 }
 
 // SetAppNetworkInterface sets network interface for the app.

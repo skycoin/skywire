@@ -127,6 +127,60 @@ button:focus {
   }
 }
 
+// Material 21 mat-select on the dark node-detail panes:
+//   - Closed trigger (.mat-mdc-select-min-line / -value) inherits
+//     a dark color that matches the dark page bg → unreadable.
+//   - Open panel (.mat-mdc-select-panel) has the same problem on
+//     options (.mdc-list-item__primary-text), with a transparent
+//     surface that also reads dark.
+//
+// Match the rest of the page (dark surface, light text) for both
+// surfaces. Closed trigger fix is global because it's a page-wide
+// problem; panel fix is opt-in via panelClass="skynet-select-panel".
+
+// Closed trigger value text — applies anywhere the select is on a dark
+// surface in this app.
+.mat-mdc-select-value,
+.mat-mdc-select-min-line,
+.mat-mdc-select-placeholder,
+.mat-mdc-select-arrow {
+  color: rgba(255, 255, 255, 0.87) !important;
+}
+
+// Open panel — opt-in via panelClass since it renders in a CDK overlay
+// outside the component tree.
+.cdk-overlay-pane .skynet-select-panel.mdc-menu-surface,
+.cdk-overlay-pane .skynet-select-panel.mat-mdc-select-panel,
+.mat-mdc-select-panel.skynet-select-panel {
+  background-color: #1f2533 !important;
+
+  --mat-app-surface: #1f2533;
+  --mdc-theme-surface: #1f2533;
+  --mat-mdc-select-panel-background-color: #1f2533;
+  --mdc-list-list-item-label-text-color: rgba(255, 255, 255, 0.87);
+  --mdc-list-list-item-hover-label-text-color: #ffffff;
+  --mdc-list-list-item-focus-label-text-color: #ffffff;
+  --mdc-list-list-item-hover-state-layer-color: rgba(255, 255, 255, 0.08);
+  --mdc-list-list-item-focus-state-layer-color: rgba(255, 255, 255, 0.12);
+  --mat-option-label-text-color: rgba(255, 255, 255, 0.87);
+  --mat-option-selected-state-label-text-color: #ffffff;
+
+  // Belt-and-braces: override rendered styles directly in case
+  // the custom-property channel gets stripped by a future upgrade.
+  .mat-mdc-option,
+  .mat-mdc-option .mdc-list-item__primary-text,
+  .mdc-list-item__primary-text {
+    color: rgba(255, 255, 255, 0.87) !important;
+  }
+
+  .mat-mdc-option:hover:not(.mdc-list-item--disabled),
+  .mat-mdc-option.mat-mdc-option-active,
+  .mat-mdc-option.mdc-list-item--selected {
+    background-color: rgba(255, 255, 255, 0.08) !important;
+    color: #ffffff !important;
+  }
+}
+
 .grey-button-background:hover {
   background-color: rgba(0,0,0,0.05) !important;
 }
