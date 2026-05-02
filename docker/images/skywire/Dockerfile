@@ -15,13 +15,18 @@ ENV CGO_ENABLED=${CGO_ENABLED} \
 
 COPY . /src
 
+# Use proxy.golang.org first, fall back to `direct` for any module
+# the proxy doesn't have (e.g. a brand-new commit not yet mirrored).
+# Pure `GOPROXY=direct` makes every module — including stable upstream
+# deps like `gopkg.in/yaml.v3` — depend on `gopkg.in`'s redirect server,
+# which has flaked the build (`gopkg.in i/o timeout`) before.
 RUN apk add --no-cache git && \
     if [ -n "$commit" ]; then \
         if [ "$image_tag" = "integration" ]; then \
             apk add --no-cache build-base && \
-            CGO_ENABLED=1 GOPROXY=direct go install -ldflags="-w -s" -race github.com/skycoin/skywire@${commit}; \
+            CGO_ENABLED=1 GOPROXY=https://proxy.golang.org,direct go install -ldflags="-w -s" -race github.com/skycoin/skywire@${commit}; \
         else \
-            GOPROXY=direct go install -ldflags="-w -s" github.com/skycoin/skywire@${commit}; \
+            GOPROXY=https://proxy.golang.org,direct go install -ldflags="-w -s" github.com/skycoin/skywire@${commit}; \
         fi; \
     else \
         cd /src && \
