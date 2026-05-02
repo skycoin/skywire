@@ -569,11 +569,11 @@ func (rc *rpcClient) SetMuxMode(mode string) error {
 	return rc.Call("SetMuxMode", &mode, &struct{}{})
 }
 
-// AddMuxRoute adds a transport-disjoint leg to the app's active rg.
+// AddMuxRoute adds a leg over tpID to the app's active rg.
 // srcPort = 0 picks the only matching rg, or errors with the
 // candidate list when more than one is active for the app.
-func (rc *rpcClient) AddMuxRoute(appName string, srcPort uint16) error {
-	return rc.Call("AddMuxRoute", &MuxRouteInput{AppName: appName, SrcPort: srcPort}, &struct{}{})
+func (rc *rpcClient) AddMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
+	return rc.Call("AddMuxRoute", &MuxRouteInput{AppName: appName, TransportID: tpID, SrcPort: srcPort}, &struct{}{})
 }
 
 // RemoveMuxRoute drops the leg over tpID from the app's active rg.

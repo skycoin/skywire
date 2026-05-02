@@ -60,19 +60,22 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	return nil
 }
 
-// AddMuxRoute adds a transport-disjoint leg to an existing mux'd
-// route group. Mirrors the dial-time setup in establishMuxRoutes:
-// excludes every transport already in the group and asks the route
-// finder for any other path. No transport-id argument — picking a
-// specific transport rarely gives real path diversity (two direct
-// transports to the same peer share the physical link), and "find
-// me another disjoint path" is what runtime mux-add usually means.
+// AddMuxRouteByTransport adds a leg over the named transport to an
+// existing mux'd route group. Pre-release semantics:
 //
-// For the "I want a leg through THIS specific intermediate" case,
-// the caller should compute the full path off-router (e.g. via the
-// route-calc CLI) and dial with opts.ForwardHops; that path doesn't
-// route through this entry.
-func (r *router) AddMuxRoute(desc routing.RouteDescriptor) error {
+//   - tpID must not already be a leg in the rg (rejects the obvious
+//     duplicate; the route finder otherwise loves to re-pick the same
+//     first hop).
+//   - tpID must go directly to the peer (tp.Remote() == rPK). The
+//     1-hop route is built from the user's pick; we don't ask the
+//     finder to extend a pinned first hop into a multi-hop path.
+//
+// Multi-hop (transport-to-intermediate) is deferred — callers who
+// need it should compute the path off-router via 'route calc' and
+// pass it through a future hops-list form. "Auto pick a disjoint
+// leg" is also deferred until the route finder honors
+// ExcludeTransportIDs in the multi-hop branch.
+func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error {
 	r.mx.Lock()
 	nrg, ok := r.rgsNs[desc]
 	r.mx.Unlock()
@@ -88,34 +91,36 @@ func (r *router) AddMuxRoute(desc routing.RouteDescriptor) error {
 	rPK := desc.SrcPK()
 	log := r.scopedLog(desc.SrcPort())
 
-	// Snapshot the rg's current transports so the route finder
-	// excludes them — that's what gives a transport-disjoint leg.
+	// Reject if this transport is already a leg in the rg. The
+	// finder used to silently re-pick the rg's primary first-hop;
+	// surfacing the duplication explicitly stops that mistake at
+	// the API boundary instead of letting it land as a "leg added"
+	// that does nothing for path diversity.
 	nrg.rg.mu.Lock()
-	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.tps))
-	for _, tp := range nrg.rg.tps {
-		if tp != nil {
-			excludeIDs = append(excludeIDs, tp.Entry.ID)
+	for i, existing := range nrg.rg.tps {
+		if existing != nil && existing.Entry.ID == tpID {
+			nrg.rg.mu.Unlock()
+			return fmt.Errorf("transport %s is already leg %d in this route group", tpID, i)
 		}
 	}
 	nrg.rg.mu.Unlock()
 
+	tp := r.tm.Transport(tpID)
+	if tp == nil {
+		return fmt.Errorf("transport %s not found", tpID)
+	}
+
+	// Direct-to-peer only for now; multi-hop is deferred.
+	tpRemote := tp.Remote()
+	if tpRemote != rPK {
+		return fmt.Errorf("transport %s goes to %s, not direct to peer %s; multi-hop add-mux is deferred", tpID, tpRemote, rPK)
+	}
+
+	fwd := []routing.Hop{{TpID: tpID, From: lPK, To: rPK}}
+	rev := []routing.Hop{{TpID: tpID, From: rPK, To: lPK}}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	opts := &DialOptions{
-		MinForwardRts:       1,
-		MaxForwardRts:       1,
-		MinConsumeRts:       1,
-		MaxConsumeRts:       1,
-		Retries:             1,
-		ExcludeTransportIDs: excludeIDs,
-		ExcludeDMSG:         true,
-	}
-
-	fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
-	if err != nil {
-		return fmt.Errorf("no disjoint route available: %w", err)
-	}
 
 	keepAlive := DefaultRouteKeepAlive
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, desc.DstPort(), desc.SrcPort())
@@ -135,7 +140,6 @@ func (r *router) AddMuxRoute(desc routing.RouteDescriptor) error {
 		return fmt.Errorf("append route failed: %w", err)
 	}
 
-	tpID := rules.Forward.NextTransportID()
 	r.logger.Infof("Added mux route via transport %s to route group %s", tpID, desc.String())
 	return nil
 }

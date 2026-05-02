@@ -177,7 +177,7 @@ type Router interface {
 	SetMuxMode(WeightMode)
 	GetLastRouteCalcTime() time.Duration
 	ActiveRouteStatuses() []RouteStatus
-	AddMuxRoute(desc routing.RouteDescriptor) error
+	AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 	RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 
 	// RouteGroupHops returns the stored forward route hops for the route group

@@ -8,9 +8,14 @@
 // Workflow:
 //
 //	skywire cli proxy mux-info                # see current legs
-//	skywire cli proxy mux-add                 # add a disjoint leg
-//	skywire cli proxy mux-rm  <tp-id>         # drop a leg
+//	skywire cli proxy mux-add  <tp-id>        # add a leg over tp-id
+//	skywire cli proxy mux-rm   <tp-id>        # drop the leg over tp-id
 //	skywire cli proxy mux-mode auto|equal     # change scheduler
+//
+// mux-add takes the transport explicitly. The visor refuses
+// duplicates (a tp-id that's already a leg) and currently requires
+// the transport to go directly to the peer; multi-hop and "find me
+// a disjoint leg automatically" are deferred to a later pass.
 //
 // When the named app has multiple concurrent rg's (e.g. one per
 // active SOCKS5 client connection on skysocks-client), use --rg
@@ -48,42 +53,46 @@ func init() {
 }
 
 var muxAddCmd = &cobra.Command{
-	Use:   "mux-add",
-	Short: "Add a transport-disjoint leg to an active proxy session's mux'd rg",
-	Long: `Add a mux leg over a transport that the rg isn't already using.
+	Use:   "mux-add <tp-id>",
+	Short: "Add a leg over <tp-id> to an active proxy session's mux'd rg",
+	Long: `Add a mux leg routed over the named transport.
 
-The visor asks the route finder for any path between this visor and
-the rg's peer that doesn't reuse a transport already in the group;
-the new leg is appended and the mux scheduler starts selecting it
-according to the current mode.
+The transport must already exist locally ('skywire cli tp ls') and
+must go directly to the rg's peer. The visor refuses if the tp-id
+is already a leg in the rg — adding the same first hop twice was
+the silent failure the previous (route-finder-driven) version was
+prone to.
 
-No transport-id argument: pinning a specific transport rarely yields
-real path diversity (two direct transports to the same peer share the
-physical link). For the "I want a leg through THIS specific
-intermediate" case, compute the route off-router via 'route calc'
-and dial it as a separate session.
+Multi-hop transports (going to an intermediate, not the peer) and
+"find me a disjoint leg automatically" are deferred to a later pass;
+for now the user picks the leg explicitly.
 
 When the app has multiple concurrent rg's, pass --rg <src-port> to
 target one of them; otherwise the visor errors with the candidate
 list.
 
 Example:
-  skywire cli proxy mux-info        # see current legs + rg src_port
-  skywire cli proxy mux-add         # add another disjoint leg
-  skywire cli proxy mux-info        # confirm it appeared`,
-	Args:                  cobra.NoArgs,
+  skywire cli proxy mux-info                            # see current legs + rg src_port
+  skywire cli tp ls                                     # find a different tp to the peer
+  skywire cli proxy mux-add 55d43098-bae7-029e-bd8e-b228f7208930
+  skywire cli proxy mux-info                            # confirm it appeared`,
+	Args:                  cobra.ExactArgs(1),
 	DisableFlagsInUseLine: true,
-	Run: func(cmd *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, args []string) {
+		tpID, err := uuid.Parse(args[0])
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid transport id %q: %w", args[0], err))
+		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
-		if err := rpcClient.AddMuxRoute(muxOpsApp, muxOpsSrcPort); err != nil {
+		if err := rpcClient.AddMuxRoute(muxOpsApp, tpID, muxOpsSrcPort); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("AddMuxRoute: %w", err))
 		}
-		fmt.Printf("added disjoint mux leg on app=%s\n", muxOpsApp)
+		fmt.Printf("added mux leg via transport %s on app=%s\n", tpID, muxOpsApp)
 	},
 }
 

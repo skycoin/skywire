@@ -138,7 +138,7 @@ type API interface {
 	// nothing is currently dialed via that app.
 	RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error)
 	ActiveRoutes() ([]AppRouteStatus, error)
-	AddMuxRoute(appName string, srcPort uint16) error
+	AddMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
 	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
