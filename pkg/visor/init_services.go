@@ -384,7 +384,6 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 
 	// Legacy path: check if port is registered for localhost TCP
 	// forwarding (user-managed ports via RegisterTCPPort / CLI).
-	lHost := fmt.Sprintf("localhost:%v", cMsg.Port)
 	ok := isPortRegistered(cMsg.Port, v)
 	if !ok {
 		log.Errorf("Port :%v not registered", cMsg.Port)
@@ -392,10 +391,19 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		return
 	}
 
+	// ProxyAddr wins when set so users can forward to an arbitrary
+	// IP:port instead of localhost:port. Default falls back to
+	// localhost:cMsg.Port for entries that don't override the target.
+	lHost := fmt.Sprintf("localhost:%v", cMsg.Port)
+	fp := v.forwardedPorts.Get(cMsg.Port)
+	if fp != nil && fp.ProxyAddr != "" {
+		lHost = fp.ProxyAddr
+	}
+
 	// Enforce per-port PK whitelist if one is set on the forwarded port.
 	// Fail-closed when a whitelist is set but the peer PK can't be
 	// determined — the alternative would silently bypass the gate.
-	if fp := v.forwardedPorts.Get(cMsg.Port); fp != nil && len(fp.Whitelist) > 0 {
+	if fp != nil && len(fp.Whitelist) > 0 {
 		remotePK, pkOK := remotePKFromForwardingConn(remoteConn)
 		if !pkOK {
 			log.WithField("port", cMsg.Port).
@@ -411,11 +419,16 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 		}
 	}
 
-	ok = isPortAvailable(log, cMsg.Port)
-	if ok {
-		log.Errorf("Failed to dial port %v", cMsg.Port)
-		sendError(log, remoteConn, fmt.Errorf("failed to dial port %v", cMsg.Port))
-		return
+	// Skip the local-listener check when ProxyAddr points elsewhere —
+	// the target host:port may not even be on this machine. The dial in
+	// forwardRawTCP will surface a real failure to the peer.
+	if fp == nil || fp.ProxyAddr == "" {
+		ok = isPortAvailable(log, cMsg.Port)
+		if ok {
+			log.Errorf("Failed to dial port %v", cMsg.Port)
+			sendError(log, remoteConn, fmt.Errorf("failed to dial port %v", cMsg.Port))
+			return
+		}
 	}
 
 	log.Debugf("Forwarding %s via localhost TCP", lHost)
