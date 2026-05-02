@@ -51,14 +51,18 @@ each arch you want to support.
 
 `skywire.nix` defaults to building from the **local working tree**
 (handy for iterating on a branch). To build a tagged release from
-upstream instead, pass `rev` and `version`:
+upstream instead, override `rev` and `version` when calling it from
+the flake (the parameter for an explicit src tree is `srcOverride`,
+to dodge a `pkgs.src` callPackage auto-bind collision in nixpkgs):
 
-    nix build .#skywire \
-      --argstr rev v1.3.50 --argstr version 1.3.50
+    pkgs.callPackage ./skywire.nix {
+      rev     = "v1.3.50";
+      version = "1.3.50";
+    }
 
 The first such build will fail with the expected `hash` for
-`fetchFromGitHub`; copy it into the call in `flake.nix` (or pass
-`--argstr hash …` if invoking the file directly).
+`fetchFromGitHub`; copy it into the `hash = lib.fakeHash` line in
+`skywire.nix`.
 
 ## Visor app discovery
 

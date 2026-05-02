@@ -6,7 +6,12 @@
   runtimeShell,
   rev ? null,
   version ? "1.3.50",
-  src ? null,
+  # Renamed from `src` because callPackage auto-binding hits the
+  # nixpkgs `pkgs.src` throw alias (renamed to
+  # `simple-revision-control` in 2025-11) before applying our
+  # default — eval fails with a confusing "src has been renamed"
+  # error. Picking a non-colliding name avoids the autobind.
+  srcOverride ? null,
 }:
 
 # skywire — static musl source build of the merged binary.
@@ -40,8 +45,8 @@
 
 let
   selfSrc =
-    if src != null
-    then src
+    if srcOverride != null
+    then srcOverride
     else if rev != null
     then
       fetchFromGitHub {
@@ -91,12 +96,17 @@ pkgsStatic.buildGoModule {
   # external linker only fires when cgo is in play.
   env.CGO_ENABLED = "1";
 
+  # buildGoModule already passes `-buildid=` by default; supplying
+  # it here would just produce a warning. Keep the rest: -s/-w
+  # strip the symbol table, -linkmode external + -extldflags
+  # -static is what musl-gcc-driven static linking needs, and the
+  # -X injections populate the same buildinfo vars the upstream
+  # Makefile sets.
   ldflags = [
     "-s"
     "-w"
     "-linkmode" "external"
     "-extldflags" "-static"
-    "-buildid="
     "-X" "github.com/skycoin/skywire/pkg/buildinfo.version=v${version}"
     "-X" "github.com/skycoin/skywire/pkg/visor.BuildTag=nix_static"
   ];
