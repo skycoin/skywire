@@ -154,11 +154,19 @@ func (mt *ManagedTransport) GetLatencyStats() LatencyStats {
 
 // SetLatency sets the average inter-visor ping latency in milliseconds.
 // For backwards compatibility; prefer SetLatencyStats for full statistics.
+//
+// A non-positive sample is dropped: ns-resolution timestamps can produce
+// rttMs == 0 on a sub-microsecond loopback, and a 0 here would clobber
+// Avg and (via the `latencyMs < Min` branch) Min, leaving Max as the only
+// surviving field. Round-trip time is strictly positive in any real
+// measurement, so treating 0 as "no sample" is correct.
 func (mt *ManagedTransport) SetLatency(latencyMs float64) {
+	if latencyMs <= 0 {
+		return
+	}
 	mt.latencyMx.Lock()
 	defer mt.latencyMx.Unlock()
 	mt.latencyStats.Avg = latencyMs
-	// If min/max not set, initialize them
 	if mt.latencyStats.Min == 0 || latencyMs < mt.latencyStats.Min {
 		mt.latencyStats.Min = latencyMs
 	}
@@ -167,8 +175,14 @@ func (mt *ManagedTransport) SetLatency(latencyMs float64) {
 	}
 }
 
-// SetLatencyStats sets the full latency statistics.
+// SetLatencyStats sets the full latency statistics. A snapshot with any
+// non-positive field is rejected: a partial measurement (e.g. all five
+// pings timed out except one that returned in <1µs) would otherwise
+// overwrite a previously good record with a zero in min or max.
 func (mt *ManagedTransport) SetLatencyStats(stats LatencyStats) {
+	if stats.Min <= 0 || stats.Max <= 0 || stats.Avg <= 0 {
+		return
+	}
 	mt.latencyMx.Lock()
 	defer mt.latencyMx.Unlock()
 	mt.latencyStats = stats
@@ -395,8 +409,8 @@ func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
 	}
 	sentAt := int64(binary.BigEndian.Uint64(payload[:8])) //nolint:gosec
 	rttMs := float64(time.Now().UnixNano()-sentAt) / 1e6
-	if rttMs < 0 {
-		return // clock skew or corrupted timestamp
+	if rttMs <= 0 {
+		return // clock skew, corrupted timestamp, or sub-µs RTT we can't represent
 	}
 	mt.SetLatency(rttMs)
 	mt.log.WithField("rtt_ms", fmt.Sprintf("%.2f", rttMs)).Trace("Transport ping RTT")

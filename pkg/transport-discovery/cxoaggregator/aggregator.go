@@ -359,7 +359,11 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 	if err := a.sink.UpdateBandwidth(ctx, id.String(), reporter, snap.SentBytes, snap.RecvBytes); err != nil {
 		a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateBandwidth failed")
 	}
-	if snap.LatencyAvgMS > 0 {
+	// Both edges of a transport publish their own snapshot, and TPD's
+	// store is last-writer-wins. Require all three fields to be > 0 so
+	// a partial-zero snapshot from an edge whose probe never completed
+	// can't clobber a good record written by the other edge.
+	if snap.LatencyMinMS > 0 && snap.LatencyMaxMS > 0 && snap.LatencyAvgMS > 0 {
 		if err := a.sink.UpdateLatency(ctx, id.String(), snap.LatencyMinMS, snap.LatencyMaxMS, snap.LatencyAvgMS); err != nil {
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateLatency failed")
 		}
