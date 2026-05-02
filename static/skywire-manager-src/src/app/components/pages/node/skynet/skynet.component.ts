@@ -20,6 +20,7 @@ interface ForwardedPort {
 
 interface ForwardEntry {
   id: string;
+  network: string;
   remotePK: string;
   remotePort: number;
   localPort: number;
@@ -41,6 +42,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   newProxyAddr = '';
   newLabel = '';
   newDesc = '';
+  newWhitelist = '';
   newSkynet = true;
   newDmsg = true;
   newShowLanding = true;
@@ -52,6 +54,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   // Reverse proxy
   forwards: ForwardEntry[] = [];
   forwardsLoading = true;
+  connectNetwork = 'skynet';
   connectPK = '';
   connectRemotePort = '';
   connectLocalPort = '';
@@ -99,6 +102,17 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     }
     const localPort = this.newLocalPort ? parseInt(this.newLocalPort, 10) : 0;
     const proxyAddr = (this.newProxyAddr || '').trim();
+    let whitelist: string[] = [];
+    const wlRaw = (this.newWhitelist || '').trim();
+    if (wlRaw !== '') {
+      whitelist = wlRaw.split(/[\s,]+/).map(s => s.trim()).filter(s => s.length > 0);
+      for (const pk of whitelist) {
+        if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
+          this.snackbarService.showError(`Invalid public key in whitelist: ${pk}`);
+          return;
+        }
+      }
+    }
     const fp: any = {
       port,
       local_port: localPort || undefined,
@@ -108,6 +122,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
       show_on_landing: this.newShowLanding,
       skynet: this.newSkynet,
       dmsg: this.newDmsg,
+      whitelist: whitelist.length > 0 ? whitelist : undefined,
     };
     this.nodeService.registerForwardedPort(this.nodeKey, fp).subscribe(
       () => {
@@ -116,6 +131,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.newProxyAddr = '';
         this.newLabel = '';
         this.newDesc = '';
+        this.newWhitelist = '';
         this.snackbarService.showDone(`Port ${port} forwarded`);
         this.loadPorts();
       },
@@ -209,7 +225,11 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         if (data) {
           for (const [id, fwd] of Object.entries(data as Record<string, any>)) {
             this.forwards.push({
-              id, remotePK: fwd.remote_pk || '', remotePort: fwd.remote_port || 0, localPort: fwd.local_port || 0,
+              id,
+              network: fwd.network || 'skynet',
+              remotePK: fwd.remote_pk || '',
+              remotePort: fwd.remote_port || 0,
+              localPort: fwd.local_port || 0,
             });
           }
         }
@@ -225,10 +245,14 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     if (!this.connectPK || this.connectPK.length !== 66) { this.snackbarService.showError('Enter a valid public key'); return; }
     if (isNaN(rPort) || rPort < 1) { this.snackbarService.showError('Enter a valid remote port'); return; }
     if (isNaN(lPort) || lPort < 1) { this.snackbarService.showError('Enter a valid local port'); return; }
-    this.nodeService.skynetConnect(this.nodeKey, this.connectPK, rPort, lPort).subscribe(
+    if (this.connectNetwork !== 'skynet' && this.connectNetwork !== 'dmsg') {
+      this.snackbarService.showError('Network must be skynet or dmsg');
+      return;
+    }
+    this.nodeService.skynetConnect(this.nodeKey, this.connectNetwork, this.connectPK, rPort, lPort).subscribe(
       () => {
         this.connectPK = ''; this.connectRemotePort = ''; this.connectLocalPort = '';
-        this.snackbarService.showDone(`Connected: remote ${rPort} → localhost:${lPort}`);
+        this.snackbarService.showDone(`Connected via ${this.connectNetwork}: remote ${rPort} → localhost:${lPort}`);
         this.loadForwards();
       },
       (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed'); }
