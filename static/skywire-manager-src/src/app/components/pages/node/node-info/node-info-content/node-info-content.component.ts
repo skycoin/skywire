@@ -228,27 +228,20 @@ return { type: type, count: count }
   }
 
   /**
-   * Toggles public visor status.
+   * Toggles public visor status. The earlier confirmation dialog
+   * was redundant — this is a reversible boolean and the snackbar
+   * confirms the change.
    */
   changePublicConfig() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(
-      this.dialog,
-      this.isPublic ? 'node.details.transports-info.public-disable-confirmation' : 'node.details.transports-info.public-enable-confirmation'
-    );
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      this.publicToggleSubscription = this.apiService.put(`visors/${this.node.localPk}/public`, { is_public: !this.isPublic }).subscribe(() => {
-        confirmationDialog.close();
-        this.snackbarService.showDone(
-          this.isPublic ? 'node.details.transports-info.public-disable-done' : 'node.details.transports-info.public-enable-done'
-        );
-        this.isPublic = !this.isPublic;
-      }, (err: OperationError) => {
-        err = processServiceError(err);
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      });
+    const next = !this.isPublic;
+    this.publicToggleSubscription = this.apiService.put(`visors/${this.node.localPk}/public`, { is_public: next }).subscribe(() => {
+      this.isPublic = next;
+      this.snackbarService.showDone(
+        next ? 'node.details.transports-info.public-enable-done' : 'node.details.transports-info.public-disable-done'
+      );
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
     });
   }
 
@@ -277,29 +270,20 @@ return { type: type, count: count }
 
   /**
    * Enables or disables the transport.public_autoconnect setting.
+   * Reversible boolean — flip + snackbar, no modal.
    */
   changeTransportsConfig() {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(
-      this.dialog,
-      this.node.autoconnectTransports ? 'node.details.transports-info.disable-confirmation' : 'node.details.transports-info.enable-confirmation'
-    );
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      const operation = this.transportService.changeAutoconnectSetting(this.node.localPk, !this.node.autoconnectTransports);
-      this.autoconnectSubscription = operation.subscribe(() => {
-        confirmationDialog.close();
-        this.snackbarService.showDone(
-          this.node.autoconnectTransports ? 'node.details.transports-info.disable-done' : 'node.details.transports-info.enable-done'
-        );
-
-        NodeComponent.refreshCurrentDisplayedData();
-      }, (err: OperationError) => {
-        err = processServiceError(err);
-
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      });
+    const next = !this.node.autoconnectTransports;
+    this.autoconnectSubscription = this.transportService.changeAutoconnectSetting(
+      this.node.localPk, next,
+    ).subscribe(() => {
+      this.snackbarService.showDone(
+        next ? 'node.details.transports-info.enable-done' : 'node.details.transports-info.disable-done'
+      );
+      NodeComponent.refreshCurrentDisplayedData();
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
     });
   }
 }

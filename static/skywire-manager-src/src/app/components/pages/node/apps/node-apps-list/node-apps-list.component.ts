@@ -425,7 +425,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    */
   changeAutostartOfSelected(autostart: boolean) {
     const elementsToChange: string[] = [];
-    // Ignore all elements shich already have the desired settings applied.
+    // Ignore all elements which already have the desired settings applied.
     this.selections.forEach((val, key) => {
       if (val) {
         if ((autostart && !this.appsMap.get(key).autostart) || (!autostart && this.appsMap.get(key).autostart)) {
@@ -433,17 +433,13 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         }
       }
     });
+    if (elementsToChange.length === 0) {
+      return;
+    }
 
-    // Ask for confirmation.
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(
-      this.dialog, autostart ? 'apps.enable-autostart-selected-confirmation' : 'apps.disable-autostart-selected-confirmation'
-    );
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      this.changeAppsValRecursively(elementsToChange, true, autostart, confirmationDialog);
-    });
+    // No confirmation modal — autostart is reversible and the
+    // snackbar confirms each completed batch.
+    this.changeAppsValRecursively(elementsToChange, true, autostart, null);
   }
 
   /**
@@ -509,21 +505,13 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Changes the autostart setting of a specific app.
+   * Changes the autostart setting of a specific app. Reversible —
+   * flip + snackbar, no modal.
    */
   changeAppAutostart(app: Application): void {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(
-      this.dialog, app.autostart ? 'apps.disable-autostart-confirmation' : 'apps.enable-autostart-confirmation'
+    this.changeSingleAppVal(
+      this.startChangingAppAutostart(app.name, !app.autostart),
     );
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      this.changeSingleAppVal(
-        this.startChangingAppAutostart(app.name, !app.autostart),
-        confirmationDialog
-      );
-    });
   }
 
   /**

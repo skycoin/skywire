@@ -552,86 +552,57 @@ export class TransportListComponent implements OnDestroy {
       return;
     }
 
-    let confirmationText = 'transports.';
-    if (transports.length === 1) {
+    // No confirmation modal — toggling whether a transport gets
+    // re-created on visor restart is reversible (just toggle back),
+    // and dialog spam on every star-click was the main complaint.
+    // Errors still surface via snackbar.
+    this.persistentTransportSubscription = this.transportService.getPersistentTransports(this.nodePK).subscribe((list: any[]) => {
+      const dataToUse = list ? list : [];
+      let nothingToDo: boolean;
+
+      const transportsMap: Map<string, Transport> = new Map<string, Transport>();
+      transports.forEach(t => transportsMap.set(this.getPersistentTransportID(t.remotePk, t.type), t));
+
       if (makePersistent) {
-        confirmationText += 'make-persistent-confirmation';
-      } else {
-        confirmationText += 'make' + (transports[0].notFound ? '-offline' : '') + '-non-persistent-confirmation';
-      }
-    } else {
-      confirmationText += makePersistent ? 'make-selected-persistent-confirmation' : 'make-selected-non-persistent-confirmation';
-    }
-
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationText);
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      this.persistentTransportSubscription = this.transportService.getPersistentTransports(this.nodePK).subscribe((list: any[]) => {
-        const dataToUse = list ? list : [];
-        let nothingToDo: boolean;
-
-        const transportsMap: Map<string, Transport> = new Map<string, Transport>();
-        transports.forEach(t => transportsMap.set(this.getPersistentTransportID(t.remotePk, t.type), t));
-
-        if (makePersistent) {
-          // Remove al transports that already are persistent.
-          dataToUse.forEach(tp => {
-            if (transportsMap.has(this.getPersistentTransportID(tp.pk, tp.type))) {
-              transportsMap.delete(this.getPersistentTransportID(tp.pk, tp.type));
-            }
-          });
-
-          nothingToDo = transportsMap.size === 0;
-
-          // Add the new transports to the persistent transports list.
-          if (!nothingToDo) {
-            transportsMap.forEach(t => {
-              dataToUse.push({
-                pk: t.remotePk,
-                type: t.type,
-              });
-            });
+        dataToUse.forEach(tp => {
+          if (transportsMap.has(this.getPersistentTransportID(tp.pk, tp.type))) {
+            transportsMap.delete(this.getPersistentTransportID(tp.pk, tp.type));
           }
-        } else {
-          nothingToDo = true;
-          // Remove all selected transports.
-          for (let i = 0; i < dataToUse.length; i++) {
-            if (transportsMap.has(this.getPersistentTransportID(dataToUse[i].pk, dataToUse[i].type))) {
-              dataToUse.splice(i, 1);
-              nothingToDo = false;
-              i--;
-            }
-          }
-        }
-
+        });
+        nothingToDo = transportsMap.size === 0;
         if (!nothingToDo) {
-          // Update the list.
-          this.persistentTransportSubscription = this.transportService.savePersistentTransportsData(
-            NodeComponent.getCurrentNodeKey(),
-            dataToUse
-          ).subscribe(() => {
-            confirmationDialog.close();
-            // Make the parent page reload the data.
-            NodeComponent.refreshCurrentDisplayedData();
-            this.snackbarService.showDone('transports.changes-made');
-          }, (err: OperationError) => {
-            err = processServiceError(err);
-            confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-          });
-        } else {
-          // The persistent transport list already has or not (as needed) the transport.
-          confirmationDialog.close();
-          this.snackbarService.showDone('transports.no-changes-needed');
-
-          // Make the parent page reload the data, to make sure the UI shows the correct values.
-          NodeComponent.refreshCurrentDisplayedData();
+          transportsMap.forEach(t => dataToUse.push({ pk: t.remotePk, type: t.type }));
         }
+      } else {
+        nothingToDo = true;
+        for (let i = 0; i < dataToUse.length; i++) {
+          if (transportsMap.has(this.getPersistentTransportID(dataToUse[i].pk, dataToUse[i].type))) {
+            dataToUse.splice(i, 1);
+            nothingToDo = false;
+            i--;
+          }
+        }
+      }
+
+      if (nothingToDo) {
+        this.snackbarService.showDone('transports.no-changes-needed');
+        NodeComponent.refreshCurrentDisplayedData();
+        return;
+      }
+
+      this.persistentTransportSubscription = this.transportService.savePersistentTransportsData(
+        NodeComponent.getCurrentNodeKey(),
+        dataToUse,
+      ).subscribe(() => {
+        NodeComponent.refreshCurrentDisplayedData();
+        this.snackbarService.showDone('transports.changes-made');
       }, (err: OperationError) => {
         err = processServiceError(err);
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+        this.snackbarService.showError(err);
       });
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
     });
   }
 
