@@ -114,12 +114,22 @@ func (c *Conn) run() {
 	// have IsTCP()==false and don't have a UDP transport. Nil-check
 	// each so a DMSG-only node (NewWithDMSG path: TCP/UDP listeners
 	// disabled) doesn't panic when its conns close.
+	//
+	// DMSG cleanup runs unconditionally for any node that has a DMSG
+	// transport: closeConn is a no-op if c isn't in the DMSG cache,
+	// and without this, a DMSG-only node never evicted dead conns —
+	// turning a single tpd restart into "this publisher's AnnounceTo
+	// returns the dead cached conn forever" until the publisher
+	// itself restarted.
 	if c.IsTCP() {
 		if c.n.tcp != nil {
 			c.n.tcp.closeConn(c.Address()) //nolint:errcheck,gosec
 		}
 	} else if c.n.udp != nil {
 		c.n.udp.closeConn(c.Address()) //nolint:errcheck,gosec
+	}
+	if c.n.dmsg != nil {
+		c.n.dmsg.closeConn(c)
 	}
 
 	// Determine which error to report.
