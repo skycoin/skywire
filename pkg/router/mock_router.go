@@ -351,9 +351,9 @@ func (_m *MockRouter) SetMuxMode(_a0 WeightMode) {
 	_m.Called(_a0)
 }
 
-// AddMuxRouteByTransport provides a mock function
-func (_m *MockRouter) AddMuxRouteByTransport(_a0 routing.RouteDescriptor, _a1 uuid.UUID) error {
-	ret := _m.Called(_a0, _a1)
+// AddMuxRouteByHops provides a mock function
+func (_m *MockRouter) AddMuxRouteByHops(_a0 routing.RouteDescriptor, _a1, _a2 []routing.Hop) error {
+	ret := _m.Called(_a0, _a1, _a2)
 	return ret.Error(0)
 }
 
