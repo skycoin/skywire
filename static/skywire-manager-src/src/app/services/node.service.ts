@@ -529,11 +529,13 @@ return {
   }
 
   /**
-   * Creates a skynet forward: maps remote_pk:remote_port to localhost:local_port.
+   * Creates a skynet/dmsg forward: maps remote_pk:remote_port (over the
+   * named network) to localhost:local_port. Network is "skynet" (default;
+   * empty string treated as skynet) or "dmsg".
    */
-  skynetConnect(nodeKey: string, remotePK: string, remotePort: number, localPort: number): Observable<any> {
+  skynetConnect(nodeKey: string, network: string, remotePK: string, remotePort: number, localPort: number): Observable<any> {
     return this.apiService.post(`visors/${nodeKey}/skynet-forwards/connect`, {
-      remote_pk: remotePK, remote_port: remotePort, local_port: localPort
+      network, remote_pk: remotePK, remote_port: remotePort, local_port: localPort
     });
   }
 

@@ -2,7 +2,6 @@ package config
 
 import (
 	"bytes"
-	"encoding/base64"
 	"log"
 	"text/template"
 
@@ -74,11 +73,12 @@ func DefaultPublicVisorConfig() *visorconfig.V1 {
 		SessionsCount: 1,
 	}
 
-	passcode := base64.StdEncoding.EncodeToString(cipher.RandByte(8))
 	conf.Launcher = &visorconfig.Launcher{
 		Apps: []appserver.AppConfig{
 			{Name: "skychat", Port: 1, AutoStart: true, Args: []string{}},
-			{Name: "skysocks", Port: 3, AutoStart: true, Args: []string{"-passcode", passcode}},
+			// skysocks server now gates connections via --whitelist (PKs);
+			// leave it open by default so the seeded config keeps working.
+			{Name: "skysocks", Port: 3, AutoStart: true, Args: []string{}},
 		},
 		BinPath: "./apps",
 	}
