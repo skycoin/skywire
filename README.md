@@ -131,6 +131,7 @@ Table of Contents
   - [Linux Packages](#linux-packages)
     - [Debian packages](#debian-packages)
     - [Arch Linux AUR packages](#arch-linux-aur-packages)
+    - [NixOS / Nix flake](#nixos--nix-flake)
   - [Docker](#docker)
   - [How to create a GitHub release](#how-to-create-a-github-release)
   - [Dependency Graph](#dependency-graph)
@@ -1063,6 +1064,32 @@ Build the skywire Arch Linux package from git sources to the latest commits on t
 ```
 yay --mflags " -p git.PKGBUILD " -S skywire
 ```
+
+### NixOS / Nix flake
+
+Two derivations under [`nix/`](/nix/) — same flavors as the AUR
+packages: `skywire` (source build, static-musl, mirrors
+`make build-static`) and `skywire-bin` (the upstream release
+tarball).
+
+From a checkout:
+```
+cd nix
+nix build .#skywire        # source, static musl
+nix build .#skywire-bin    # prebuilt tarball
+nix run   .#skywire -- --bv
+```
+
+Or as a flake input from elsewhere:
+```nix
+inputs.skywire.url = "github:skycoin/skywire?dir=nix";
+# ...
+environment.systemPackages = [ skywire.packages.${system}.skywire ];
+```
+
+See [`nix/README.md`](/nix/README.md) for the per-arch hash-fill
+flow on `skywire-bin`, the visor's `--apps-dir` integration, and
+the static-binary sanity check.
 
 ## Docker
 
