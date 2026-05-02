@@ -271,11 +271,7 @@ Example:
 		}
 		defer h.Close()
 
-		// Expose the dmsg client to the API for visor reachability probes.
-		if h.DmsgClient != nil {
-			sdAPI.DmsgClient = h.DmsgClient
-			log.Info("DMSG client available for visor reachability probes")
-		}
+		// (Visor reachability probe gate removed — see api.go.)
 
 		// Wire DHT entry mirroring: every service registration is
 		// also published to the DHT under the visor's PK.
