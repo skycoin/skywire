@@ -105,6 +105,13 @@
             <mat-label>Description</mat-label>
             <input matInput [(ngModel)]="newDesc" placeholder="Optional description">
           </mat-form-field>
+          <mat-form-field appearance="outline" class="field-lg">
+            <mat-label>Whitelist (optional)</mat-label>
+            <textarea matInput rows="2" [(ngModel)]="newWhitelist"
+                      placeholder="02abc..., 03def... (empty = open to all)"></textarea>
+          </mat-form-field>
+        </div>
+        <div class="add-row">
           <mat-checkbox [(ngModel)]="newSkynet" color="primary">Skynet</mat-checkbox>
           <mat-checkbox [(ngModel)]="newDmsg" color="primary">DMSG</mat-checkbox>
           <mat-checkbox [(ngModel)]="newShowLanding" color="primary">Show on landing page</mat-checkbox>
@@ -115,6 +122,9 @@
         <p class="section-desc">
           Target Address overrides Local Port — set it to forward to a host:port elsewhere
           on the LAN (e.g. <code>192.168.1.20:5432</code>) instead of localhost.
+          Whitelist accepts comma- or whitespace-separated 66-char hex public keys;
+          leave empty to allow all authenticated peers (you can edit the whitelist
+          per-row later, on the table above).
         </p>
       </div>
     </div>
@@ -124,7 +134,9 @@
   <div class="section">
     <h4 class="section-title">Reverse Proxy</h4>
     <p class="section-desc">
-      Map a remote visor's skynet port to a local port.
+      Map a remote visor's port to a local port. The Network selector picks the
+      transport: <code>skynet</code> goes through the routing layer; <code>dmsg</code>
+      opens a direct DMSG stream. A single forward uses one network at a time.
     </p>
 
     <div *ngIf="forwardsLoading" class="text-center py-2">
@@ -134,12 +146,14 @@
     <div *ngIf="!forwardsLoading">
       <table class="data-table" *ngIf="forwards.length > 0">
         <tr>
+          <th>Network</th>
           <th>Remote PK</th>
           <th>Remote Port</th>
           <th>Local Port</th>
           <th></th>
         </tr>
         <tr *ngFor="let fwd of forwards">
+          <td class="mono">{{ fwd.network || 'skynet' }}</td>
           <td class="mono small">{{ fwd.remotePK }}</td>
           <td class="mono">{{ fwd.remotePort }}</td>
           <td class="mono">{{ fwd.localPort }}</td>
@@ -153,6 +167,13 @@
       <p *ngIf="forwards.length === 0" class="empty-msg">No active reverse proxies.</p>
 
       <div class="add-row">
+        <mat-form-field appearance="outline" class="field-sm">
+          <mat-label>Network</mat-label>
+          <mat-select [(ngModel)]="connectNetwork" panelClass="skynet-select-panel">
+            <mat-option value="skynet">skynet</mat-option>
+            <mat-option value="dmsg">dmsg</mat-option>
+          </mat-select>
+        </mat-form-field>
         <mat-form-field appearance="outline" class="field-pk">
           <mat-label>Remote Public Key</mat-label>
           <input matInput [(ngModel)]="connectPK" placeholder="02abc...">

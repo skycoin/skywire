@@ -6,31 +6,19 @@
   <form [formGroup]="form">
     <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
       <div class="field-container">
-        <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-server-settings.new-password' | translate }}</label>
-        <input
-          id="password"
-          type="password"
-          formControlName="password"
-          maxlength="100"
+        <label class="field-label" for="whitelist">{{ 'apps.vpn-socks-server-settings.whitelist' | translate }}</label>
+        <textarea
+          id="whitelist"
+          formControlName="whitelist"
+          rows="3"
           #firstInput
           matInput
-          >
+          placeholder="02abc..., 03def..."
+          ></textarea>
       </div>
-    </mat-form-field>
-    <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
-      <div class="field-container">
-        <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-server-settings.repeat-password' | translate }}</label>
-        <input
-          id="passwordConfirmation"
-          type="password"
-          formControlName="passwordConfirmation"
-          maxlength="100"
-          #firstInput
-          matInput
-          >
-      </div>
+      <mat-hint>{{ 'apps.vpn-socks-server-settings.whitelist-help' | translate }}</mat-hint>
       <mat-error>
-        <span>{{ 'apps.vpn-socks-server-settings.passwords-not-match' | translate }}</span>
+        <span>{{ 'apps.vpn-socks-server-settings.whitelist-invalid-pk' | translate }}</span>
       </mat-error>
     </mat-form-field>
     @if (configuringVpn) {
