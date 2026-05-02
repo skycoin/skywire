@@ -21,7 +21,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -30,7 +29,6 @@ import (
 	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/service-discovery/store"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -79,14 +77,6 @@ type API struct {
 	startedAt                   time.Time
 	dmsgAddr                    string
 	DmsgServers                 []string
-	DmsgClient                  *dmsg.Client // set after svcmode.Start; used for visor dmsg reachability probes
-
-	// probeCache caches recent successful dmsg probes so that multiple
-	// service registrations from the same visor within a short window
-	// don't each trigger a separate probe. Key: PK hex, Value: time of
-	// last successful probe.
-	probeCacheMu sync.Mutex
-	probeCache   map[string]time.Time
 
 	// uptimes caches are refreshed every uptimesCacheDelay.
 	uptimesCache   []store.VisorSummary
@@ -177,7 +167,6 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 		startedAt:                   time.Now(),
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
-		probeCache:                  make(map[string]time.Time),
 	}
 	return api
 }
@@ -429,47 +418,18 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 			a.writeError(w, r, http.StatusForbidden, servicedisc.ErrVisorUnreachable.Error())
 			return
 		}
-
-		// Probe the visor on dmsg port 136 to confirm it's reachable
-		// for route setup. The noise handshake completing confirms the
-		// visor is alive and routable — the visor's router will close
-		// the stream immediately (SD PK is not a whitelisted setup
-		// node) but the handshake success is all we need.
-		//
-		// The SD's direct client doesn't have visor entries in its
-		// local discovery, so every probe falls back to
-		// dialViaConnectedServers which tries servers sequentially.
-		// Budget 15s: enough for 2-3 server attempts at 5s each.
-		// The SD connects to all 6 servers, so there is guaranteed
-		// to be a shared server with any visor on the network.
-		//
-		// Cache successful probes for 5 minutes so the 90s heartbeat
-		// doesn't re-probe every time. Failed probes are cached for
-		// 30s to allow quick retry.
-		if a.DmsgClient != nil {
-			pkHex := se.Addr.PubKey().Hex()
-			needsProbe := true
-
-			a.probeCacheMu.Lock()
-			if last, ok := a.probeCache[pkHex]; ok && time.Since(last) < 5*time.Minute {
-				needsProbe = false
-			}
-			a.probeCacheMu.Unlock()
-
-			if needsProbe {
-				probeCtx, probeCancel := context.WithTimeout(context.Background(), 15*time.Second)
-				reachable := a.DmsgClient.Probe(probeCtx, se.Addr.PubKey(), skyenv.DmsgAwaitSetupPort)
-				probeCancel()
-				if !reachable {
-					a.log.WithField("pk", se.Addr.PubKey()).Warn("Public visor registration rejected: not reachable on dmsg port 136")
-					a.writeError(w, r, http.StatusForbidden, "visor not reachable on dmsg for route setup")
-					return
-				}
-				a.probeCacheMu.Lock()
-				a.probeCache[pkHex] = time.Now()
-				a.probeCacheMu.Unlock()
-			}
-		}
+		// The previous dmsg-port-136 probe gate has been removed: it
+		// rejected registrations whenever the noise handshake didn't
+		// complete inside the 15s budget, which made every transient
+		// flake (SD's own dmsg sessions warming up after restart, a
+		// slow delegated server, a visor briefly between sessions)
+		// look like an unreachable visor. Combined with the visor's
+		// retrier whitelist on ErrVisorUnreachable, that turned a
+		// momentary probe failure into "this visor never appears in
+		// SD again until it restarts." The IP-public check above
+		// already enforces the WAN-reachability invariant SD cares
+		// about; route-setup failures are caught by the route
+		// finder, where they belong.
 	}
 
 	// Combined service update + heartbeat in a single Redis pipeline.
