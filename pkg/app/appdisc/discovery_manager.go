@@ -54,13 +54,18 @@ func (u *serviceUpdater) Start() {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is stored in u.cancel and called in Stop()
 	u.cancel = cancel
 
-	// Initial registration
+	// Best-effort initial registration. A failure here used to return
+	// early without starting the heartbeat loop, permanently disabling
+	// re-registration for the rest of the visor's lifetime — which
+	// turned a single transient SD failure (probe timeout, SD restart,
+	// dmsg flake) into "this visor never appears in service-discovery
+	// until it is restarted." Always start the heartbeat: it retries
+	// every ServiceDiscUpdateInterval (90s), which is exactly the
+	// recovery mechanism callers expect.
 	if err := u.client.Register(ctx); err != nil {
-		u.log.WithError(err).Error("Failed to register service")
-		return
+		u.log.WithError(err).Warn("Initial service discovery registration failed; will retry via heartbeat")
 	}
 
-	// Start heartbeat loop
 	u.wg.Add(1)
 	go u.heartbeatLoop(ctx)
 }
