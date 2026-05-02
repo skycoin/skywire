@@ -293,6 +293,16 @@ type BindRequest struct {
 type LocalAddresses struct {
 	Port      string   `json:"port"`
 	Addresses []string `json:"addresses"`
+	// PublicIP is the visor's STUN- or dmsg-derived public IP, if known.
+	// AR uses this to override the observed source IP when the latter is
+	// non-public (e.g., a visor running on the same Docker host as AR
+	// reaches it via hairpin SNAT, so AR's UDP socket sees the docker
+	// bridge gateway IP — 172.x.y.z — instead of the visor's actual public
+	// IP). Old visors that don't set this field leave AR's behavior
+	// unchanged: AR falls back to the observed source IP, which is
+	// correct for any visor whose path to AR is not NAT'd into a private
+	// space. Empty string means "let AR decide."
+	PublicIP string `json:"public_ip,omitempty"`
 }
 
 func (c *httpClient) Addresses(_ context.Context) string {
@@ -354,6 +364,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	localAddresses := LocalAddresses{
 		Addresses: addresses,
 		Port:      port,
+		PublicIP:  c.LocalPublicIP(),
 	}
 	log.Debugf("Address resolver binding with: %v", addresses)
 	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
@@ -491,6 +502,7 @@ func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (n
 	localAddresses := LocalAddresses{
 		Addresses: addresses,
 		Port:      localPort,
+		PublicIP:  c.LocalPublicIP(),
 	}
 
 	laData, err := json.Marshal(localAddresses)
