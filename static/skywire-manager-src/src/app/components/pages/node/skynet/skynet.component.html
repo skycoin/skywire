@@ -15,7 +15,7 @@
       <table class="data-table" *ngIf="ports.length > 0">
         <tr>
           <th>Port</th>
-          <th>Local</th>
+          <th>Target</th>
           <th>Label</th>
           <th>Skynet</th>
           <th>DMSG</th>
@@ -26,7 +26,7 @@
         <ng-container *ngFor="let fp of ports">
           <tr>
             <td class="mono">{{ fp.port }}</td>
-            <td class="mono">{{ fp.local_port || fp.port }}</td>
+            <td class="mono">{{ fp.proxy_addr || ('localhost:' + (fp.local_port || fp.port)) }}</td>
             <td>{{ fp.label || '-' }}</td>
             <td>
               <mat-checkbox [checked]="fp.skynet" (change)="toggleSkynet(fp)" color="primary"></mat-checkbox>
@@ -92,15 +92,19 @@
             <input matInput [(ngModel)]="newLocalPort" placeholder="3000" type="number">
           </mat-form-field>
           <mat-form-field appearance="outline" class="field-md">
+            <mat-label>Target Address</mat-label>
+            <input matInput [(ngModel)]="newProxyAddr" placeholder="192.168.1.20:5432">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="field-md">
             <mat-label>Label</mat-label>
             <input matInput [(ngModel)]="newLabel" placeholder="My Service">
           </mat-form-field>
+        </div>
+        <div class="add-row">
           <mat-form-field appearance="outline" class="field-lg">
             <mat-label>Description</mat-label>
             <input matInput [(ngModel)]="newDesc" placeholder="Optional description">
           </mat-form-field>
-        </div>
-        <div class="add-row">
           <mat-checkbox [(ngModel)]="newSkynet" color="primary">Skynet</mat-checkbox>
           <mat-checkbox [(ngModel)]="newDmsg" color="primary">DMSG</mat-checkbox>
           <mat-checkbox [(ngModel)]="newShowLanding" color="primary">Show on landing page</mat-checkbox>
@@ -108,6 +112,10 @@
             <mat-icon>add</mat-icon> Forward
           </button>
         </div>
+        <p class="section-desc">
+          Target Address overrides Local Port — set it to forward to a host:port elsewhere
+          on the LAN (e.g. <code>192.168.1.20:5432</code>) instead of localhost.
+        </p>
       </div>
     </div>
   </div>

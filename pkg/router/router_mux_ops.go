@@ -60,10 +60,24 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	return nil
 }
 
-// AddMuxRouteByTransport adds a new mux route to an existing route group,
-// using the specified transport for the first hop. The route is established
-// via the embedded setup node.
-func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error {
+// AddMuxRouteByHops adds a leg over the caller-supplied route to an
+// existing mux'd route group. The hop lists have the same shape as
+// 'cli route calc' emits (forward = lPK → ... → rPK, reverse = rPK
+// → ... → lPK). The router does not consult the route finder; the
+// caller is responsible for path selection.
+//
+// Sanity gates:
+//   - fwd and rev must be non-empty and end at the right peer.
+//   - The forward path must start with a transport this visor owns
+//     (since this visor is the entry point).
+//   - The first transport must not already be a leg in the rg —
+//     two legs sharing the same first hop bottleneck on that link
+//     and don't give the diversity mux exists for.
+//
+// Deeper duplication checks (full path equality across intermediate
+// hops) are out of scope: the local visor only sees its own first
+// hop after Dial completes, so checking past hop 0 is best-effort.
+func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error {
 	r.mx.Lock()
 	nrg, ok := r.rgsNs[desc]
 	r.mx.Unlock()
@@ -79,34 +93,39 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 	rPK := desc.SrcPK()
 	log := r.scopedLog(desc.SrcPort())
 
-	// Build a route that uses this specific transport
-	opts := &DialOptions{
-		MinForwardRts: 1,
-		MaxForwardRts: 1,
-		MinConsumeRts: 1,
-		MaxConsumeRts: 1,
-		Retries:       1,
-		ExcludeDMSG:   true,
+	if len(fwd) == 0 || len(rev) == 0 {
+		return errors.New("empty forward or reverse path")
+	}
+	if fwd[0].From != lPK {
+		return fmt.Errorf("forward path must start at this visor (%s), got %s", lPK, fwd[0].From)
+	}
+	if fwd[len(fwd)-1].To != rPK {
+		return fmt.Errorf("forward path must end at peer (%s), got %s", rPK, fwd[len(fwd)-1].To)
 	}
 
-	// Verify the transport exists
+	tpID := fwd[0].TpID
 	tp := r.tm.Transport(tpID)
 	if tp == nil {
-		return fmt.Errorf("transport %s not found", tpID)
+		return fmt.Errorf("first-hop transport %s not found locally", tpID)
 	}
+
+	// Reject if the new leg starts on a transport that's already a
+	// leg in the rg. The finder used to silently re-pick the rg's
+	// existing first hop, defeating mux; refusing here surfaces the
+	// duplication at the API boundary.
+	nrg.rg.mu.Lock()
+	for i, existing := range nrg.rg.tps {
+		if existing != nil && existing.Entry.ID == tpID {
+			nrg.rg.mu.Unlock()
+			return fmt.Errorf("transport %s is already leg %d in this route group", tpID, i)
+		}
+	}
+	nrg.rg.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
-	if err != nil {
-		return fmt.Errorf("failed to find route via transport: %w", err)
-	}
-
 	keepAlive := DefaultRouteKeepAlive
-	if opts != nil && opts.KeepAlive > 0 {
-		keepAlive = opts.KeepAlive
-	}
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, desc.DstPort(), desc.SrcPort())
 	req := routing.BidirectionalRoute{
 		Desc:      forwardDesc,
@@ -124,7 +143,7 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 		return fmt.Errorf("append route failed: %w", err)
 	}
 
-	r.logger.Infof("Added mux route via transport %s to route group %s", tpID, desc.String())
+	r.logger.Infof("Added mux route via %d-hop path (first tp=%s) to route group %s", len(fwd), tpID, desc.String())
 	return nil
 }
 

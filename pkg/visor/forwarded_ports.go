@@ -45,6 +45,16 @@ func (fp *ForwardedPort) EffectiveLocalPort() int {
 	return fp.Port
 }
 
+// DialTarget returns the address that incoming forwarded connections
+// should be proxied to. ProxyAddr wins when set ("host:port" or
+// "ip:port"); otherwise it falls back to localhost:EffectiveLocalPort.
+func (fp *ForwardedPort) DialTarget() string {
+	if fp.ProxyAddr != "" {
+		return fp.ProxyAddr
+	}
+	return fmt.Sprintf("localhost:%d", fp.EffectiveLocalPort())
+}
+
 // ForwardedPorts is a thread-safe collection of forwarded port definitions.
 type ForwardedPorts struct {
 	mu       sync.RWMutex
