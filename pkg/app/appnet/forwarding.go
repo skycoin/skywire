@@ -19,11 +19,15 @@ var (
 	rawTCPForwardConnsMu sync.Mutex
 )
 
-// RawTCPForwardConn handles raw TCP port forwarding over skywire
+// RawTCPForwardConn handles raw TCP port forwarding over skywire.
+// Network identifies the underlying transport ("skynet" or "dmsg")
+// so the listing surfaces it back to clients; empty is treated as
+// skynet for back-compat with older entries.
 type RawTCPForwardConn struct {
-	ID         uuid.UUID
-	LocalPort  int
-	RemotePort int
+	ID         uuid.UUID `json:"id"`
+	Network    string    `json:"network"`
+	LocalPort  int       `json:"local_port"`
+	RemotePort int       `json:"remote_port"`
 	remoteConn net.Conn
 	listener   net.Listener
 	closeOnce  sync.Once
@@ -59,15 +63,22 @@ func RemoveRawTCPForwardConn(id uuid.UUID) {
 	delete(rawTCPForwardConns, id)
 }
 
-// NewRawTCPForwardConn creates a new raw TCP forwarding connection
-func NewRawTCPForwardConn(log *logging.Logger, remoteConn net.Conn, remotePort, localPort int) (*RawTCPForwardConn, error) {
+// NewRawTCPForwardConn creates a new raw TCP forwarding connection.
+// network labels the underlying transport ("skynet" or "dmsg") so
+// the listing surfaces it; empty defaults to "skynet" for callers
+// that don't pass it.
+func NewRawTCPForwardConn(log *logging.Logger, network string, remoteConn net.Conn, remotePort, localPort int) (*RawTCPForwardConn, error) {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", localPort))
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on port %v: %w", localPort, err)
 	}
 
+	if network == "" {
+		network = "skynet"
+	}
 	fwd := &RawTCPForwardConn{
 		ID:         uuid.New(),
+		Network:    network,
 		LocalPort:  localPort,
 		RemotePort: remotePort,
 		remoteConn: remoteConn,

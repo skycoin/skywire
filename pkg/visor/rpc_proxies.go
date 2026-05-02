@@ -14,7 +14,7 @@ import (
 func (r *RPC) ConnectRawTCP(in *ConnectIn, out *uuid.UUID) (err error) {
 	defer rpcutil.LogCall(r.log, "ConnectRawTCP", in)(out, &err)
 
-	id, err := r.visor.ConnectRawTCP(in.RemotePK, in.RemotePort, in.LocalPort)
+	id, err := r.visor.ConnectRawTCP(in.Network, in.RemotePK, in.RemotePort, in.LocalPort)
 	*out = id
 	return err
 }

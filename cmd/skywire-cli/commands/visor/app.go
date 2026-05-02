@@ -48,7 +48,7 @@ func init() {
 		setAppAutostartCmd,
 		setAppKillswitchCmd,
 		setAppSecureCmd,
-		setAppPasscodeCmd,
+		setAppWhitelistCmd,
 		setAppNetworkInterfaceCmd,
 	)
 	registerAppCmd.Flags().StringVarP(&appName, "appname", "a", "", "name of the app")
@@ -286,21 +286,24 @@ var setAppSecureCmd = &cobra.Command{
 	},
 }
 
-var setAppPasscodeCmd = &cobra.Command{
-	Use:   "passcode <name> <passcode>",
-	Short: "Set app passcode",
-	Long:  "\n  Set app passcode.\n\r\n\r  \"remove\" is a special arg to remove the passcode",
-	Args:  cobra.MinimumNArgs(2),
+var setAppWhitelistCmd = &cobra.Command{
+	Use:   "whitelist <name> <pks>",
+	Short: "Set app connection whitelist (skysocks / vpn-server)",
+	Long: `Set the comma-separated public-key whitelist that gates incoming
+connections to skysocks or vpn-server. Empty / "remove" / "none"
+clears the whitelist (open to all authenticated peers).`,
+	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		passcode := args[1]
-		if args[1] == "remove" {
-			passcode = ""
+		whitelist := args[1]
+		switch whitelist {
+		case "remove", "none", "clear":
+			whitelist = ""
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		internal.Catch(cmd.Flags(), rpcClient.SetAppPassword(args[0], passcode))
+		internal.Catch(cmd.Flags(), rpcClient.SetAppWhitelist(args[0], whitelist))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }

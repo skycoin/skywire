@@ -393,8 +393,8 @@ func (mc *mockRPCClient) SetAutoStart(appName string, autostart bool) error {
 	})
 }
 
-// SetAppPassword implements API.
-func (mc *mockRPCClient) SetAppPassword(string, string) error {
+// SetAppWhitelist implements API.
+func (mc *mockRPCClient) SetAppWhitelist(string, string) error {
 	return mc.do(true, func() error {
 		const socksName = "skysocks"
 
@@ -408,7 +408,7 @@ func (mc *mockRPCClient) SetAppPassword(string, string) error {
 	})
 }
 
-// SetAppPassword implements API.
+// SetAppNetworkInterface implements API.
 func (mc *mockRPCClient) SetAppNetworkInterface(string, string) error {
 	return mc.do(true, func() error {
 		const vpnServerName = "vpn-server"
@@ -884,7 +884,7 @@ func (mc *mockRPCClient) DMSGServers() ([]DMSGServerInfo, error) {
 }
 
 // ConnectRawTCP implements API.
-func (mc *mockRPCClient) ConnectRawTCP(_ cipher.PubKey, _, _ int) (uuid.UUID, error) {
+func (mc *mockRPCClient) ConnectRawTCP(_ string, _ cipher.PubKey, _, _ int) (uuid.UUID, error) {
 	return uuid.UUID{}, nil
 }
 

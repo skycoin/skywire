@@ -552,15 +552,15 @@
     "vpn-socks-server-settings": {
       "socks-title": "Skysocks Settings",
       "vpn-title": "VPN-Server Settings",
-      "new-password": "New password (Leave empty to remove the password)",
-      "repeat-password": "Repeat password",
+      "whitelist": "Allowed peers (public keys)",
+      "whitelist-help": "Comma- or whitespace-separated public keys. Empty = open to all authenticated peers.",
+      "whitelist-invalid-pk": "One or more entries is not a valid 66-character hex public key.",
       "netifc": "Default network interface (optional)",
-      "passwords-not-match": "Passwords do not match.",
       "secure-mode-check": "Use secure mode",
       "secure-mode-info": "When active, the server doesn't allow client/server SSH and doesn't allow any traffic from VPN clients to the server local network.",
       "save": "Save",
-      "remove-passowrd-confirmation": "You left the password field empty. Are you sure you want to remove the password?",
-      "change-passowrd-confirmation": "Are you sure you want to change the password?",
+      "set-whitelist-confirmation": "Apply this whitelist to the server? Only the listed peers will be able to connect.",
+      "clear-whitelist-confirmation": "The whitelist is empty. The server will accept connections from any authenticated peer. Continue?",
       "changes-made": "The changes have been made."
     },
     "vpn-socks-client-settings": {
