@@ -20,6 +20,7 @@ interface ForwardedPort {
 
 interface ForwardEntry {
   id: string;
+  network: string;
   remotePK: string;
   remotePort: number;
   localPort: number;
@@ -52,6 +53,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   // Reverse proxy
   forwards: ForwardEntry[] = [];
   forwardsLoading = true;
+  connectNetwork = 'skynet';
   connectPK = '';
   connectRemotePort = '';
   connectLocalPort = '';
@@ -209,7 +211,11 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         if (data) {
           for (const [id, fwd] of Object.entries(data as Record<string, any>)) {
             this.forwards.push({
-              id, remotePK: fwd.remote_pk || '', remotePort: fwd.remote_port || 0, localPort: fwd.local_port || 0,
+              id,
+              network: fwd.network || 'skynet',
+              remotePK: fwd.remote_pk || '',
+              remotePort: fwd.remote_port || 0,
+              localPort: fwd.local_port || 0,
             });
           }
         }
@@ -225,10 +231,14 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     if (!this.connectPK || this.connectPK.length !== 66) { this.snackbarService.showError('Enter a valid public key'); return; }
     if (isNaN(rPort) || rPort < 1) { this.snackbarService.showError('Enter a valid remote port'); return; }
     if (isNaN(lPort) || lPort < 1) { this.snackbarService.showError('Enter a valid local port'); return; }
-    this.nodeService.skynetConnect(this.nodeKey, this.connectPK, rPort, lPort).subscribe(
+    if (this.connectNetwork !== 'skynet' && this.connectNetwork !== 'dmsg') {
+      this.snackbarService.showError('Network must be skynet or dmsg');
+      return;
+    }
+    this.nodeService.skynetConnect(this.nodeKey, this.connectNetwork, this.connectPK, rPort, lPort).subscribe(
       () => {
         this.connectPK = ''; this.connectRemotePort = ''; this.connectLocalPort = '';
-        this.snackbarService.showDone(`Connected: remote ${rPort} → localhost:${lPort}`);
+        this.snackbarService.showDone(`Connected via ${this.connectNetwork}: remote ${rPort} → localhost:${lPort}`);
         this.loadForwards();
       },
       (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed'); }
