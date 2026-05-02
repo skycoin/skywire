@@ -1,0 +1,61 @@
+on:
+  pull_request:
+    paths:
+      - 'nix/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor/**'
+      - 'skywire.go'
+      - 'cmd/**'
+      - 'pkg/**'
+      - 'internal/**'
+      - '.github/workflows/nix.yml'
+  push:
+    branches:
+      - develop
+    paths:
+      - 'nix/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor/**'
+      - 'skywire.go'
+      - 'cmd/**'
+      - 'pkg/**'
+      - 'internal/**'
+      - '.github/workflows/nix.yml'
+
+name: Nix
+
+jobs:
+  build-source:
+    name: Build skywire (static musl)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+            accept-flake-config = true
+
+      # Free shared Nix cache; speeds up consecutive runs from cold
+      # to warm by populating /nix/store from previous runs of this
+      # workflow (across branches/PRs).
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+
+      # Build the source-only target. skywire-bin is intentionally
+      # skipped here — it wants per-arch sha256s for upstream
+      # release tarballs; until those land in nix/flake.nix it
+      # would always fail. A separate workflow can validate it once
+      # release-time hashes are populated.
+      - name: nix build .#skywire
+        working-directory: nix
+        run: nix build .#skywire --print-build-logs
+
+      - name: smoke-test the binary
+        working-directory: nix
+        run: |
+          ./result/bin/skywire --bv
+          ./result/bin/skywire-cli --help >/dev/null
+          ./result/bin/skywire-visor --help >/dev/null
