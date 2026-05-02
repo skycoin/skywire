@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Fail loudly so a missing local image (e.g., docker_build.sh failed
+# upstream) doesn't get masked as a successful push.
+set -eo pipefail
 
 tag="$1"
 
@@ -24,6 +27,10 @@ echo "Pushing to $registry using tag: $tag"
 commit_sha="$(git rev-parse --short HEAD 2>/dev/null || echo "")"
 
 for c in "${images_arr[@]}"; do
+  if ! docker image inspect "$registry"/"$c":"$tag" >/dev/null 2>&1; then
+    echo "No local image $registry/$c:$tag — upstream build likely failed; aborting push." >&2
+    exit 1
+  fi
   docker push "$registry"/"$c":"$tag"
   if [ -n "$commit_sha" ]; then
     docker tag "$registry"/"$c":"$tag" "$registry"/"$c":"$commit_sha"
