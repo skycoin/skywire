@@ -3,6 +3,7 @@ package clivisor
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"sort"
 	"strings"
@@ -159,12 +160,7 @@ var summaryCmd = &cobra.Command{
 			if reg != nil && len(reg.Entries) > 0 {
 				msg += "AR Registration:\n"
 				for _, e := range reg.Entries {
-					addr := "(unknown)"
-					if e.RemoteAddr != "" && e.Port != "" {
-						addr = e.RemoteAddr + ":" + e.Port
-					} else if e.RemoteAddr != "" {
-						addr = e.RemoteAddr
-					}
+					addr := formatARAddr(e)
 					msg += fmt.Sprintf("  %-6s %s\n", strings.ToUpper(e.Type), addr)
 				}
 			} else {
@@ -373,4 +369,39 @@ var runtimeStatsCmd = &cobra.Command{
 
 		internal.PrintOutput(cmd.Flags(), stats, msg)
 	},
+}
+
+// formatARAddr renders one AR self-registration entry.
+//
+// SUDPH and STCPR populate the two address fields differently:
+//   - STCPR: RemoteAddr is just the IP, Port is the listen port —
+//     join them with ':' to get a dialable host:port.
+//   - SUDPH: RemoteAddr is the NAT-mapped public ip:port observed
+//     by STUN, Port is the local listen port. They typically agree
+//     when the NAT preserves the port; they diverge under symmetric
+//     or port-rewriting NAT and that divergence is worth seeing.
+//
+// The previous formatter just appended ":port" unconditionally and
+// produced "ip:port:port" for SUDPH whenever RemoteAddr already
+// carried a port.
+func formatARAddr(e visor.ARSelfEntry) string {
+	if e.RemoteAddr == "" && e.Port == "" {
+		return "(unknown)"
+	}
+	if e.RemoteAddr == "" {
+		return e.Port
+	}
+	host, mapped, splitErr := net.SplitHostPort(e.RemoteAddr)
+	if splitErr != nil {
+		// RemoteAddr has no port; fall back to the legacy join.
+		if e.Port != "" {
+			return e.RemoteAddr + ":" + e.Port
+		}
+		return e.RemoteAddr
+	}
+	if e.Port == "" || e.Port == mapped {
+		return e.RemoteAddr
+	}
+	// NAT-mapped port differs from the visor's listen port — surface both.
+	return fmt.Sprintf("%s (listen :%s)", net.JoinHostPort(host, mapped), e.Port)
 }
