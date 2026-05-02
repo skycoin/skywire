@@ -32,7 +32,7 @@ func init() {
 	portAddCmd.Flags().BoolVar(&portSkynet, "skynet", true, "forward over skynet")
 	portAddCmd.Flags().BoolVar(&portDmsg, "dmsg", true, "forward over DMSG")
 	portAddCmd.Flags().BoolVar(&portShowLanding, "landing", true, "show link on visor landing page")
-	portAddCmd.Flags().StringVar(&portProxyAddr, "proxy-addr", "", "reverse proxy to local address (e.g. 127.0.0.1:3000); for port 80 this replaces the landing page")
+	portAddCmd.Flags().StringVar(&portProxyAddr, "proxy-addr", "", "forward to this address (host:port) instead of localhost:<local-port>; on port 80 it also replaces the landing page via reverse proxy")
 	portAddCmd.Flags().IntVar(&portLocalPort, "local-port", 0, "local TCP port to forward (default: same as skynet/dmsg port)")
 	portAddCmd.Flags().StringVar(&portWhitelist, "whitelist", "", "comma-separated PKs allowed to access this port (empty = allow all)")
 
