@@ -671,6 +671,7 @@
     "id": "ID",
     "remote-node": "Remote",
     "type": "Type",
+    "latency": "Latency",
     "create": "Create transport",
     "make-persistent-confirmation": "Are you sure you want to make the transport persistent?",
     "make-non-persistent-confirmation": "Are you sure you want to make the transport non-persistent?",

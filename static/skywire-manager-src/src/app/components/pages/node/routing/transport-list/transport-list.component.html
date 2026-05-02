@@ -128,6 +128,12 @@
             <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           }
         </th>
+        <th class="sortable-column" (click)="dataSorter.changeSortingOrder(latencySortData)">
+          {{ 'transports.latency' | translate }}
+          @if (dataSorter.currentSortingColumn === latencySortData) {
+            <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+          }
+        </th>
         <th class="actions"></th>
       </tr>
       <!-- Values. -->
@@ -200,6 +206,21 @@
           @if (transport.notFound) {
             <td>
               {{ 'transports.offline' | translate }}
+            </td>
+          }
+          @if (transport.notFound) {
+            <td>
+              {{ 'transports.offline' | translate }}
+            </td>
+          }
+          @if (!!!transport.notFound) {
+            <td>
+              @if (transport.latencyMs && transport.latencyMs > 0) {
+                {{ transport.latencyMs | number:'1.0-0' }} ms
+              }
+              @if (!transport.latencyMs || transport.latencyMs === 0) {
+                <span class="transparent-50">-</span>
+              }
             </td>
           }
           @if (transport.notFound) {
@@ -313,6 +334,20 @@
                 <span class="title">{{ 'common.downloaded' | translate }}</span>:
                 @if (!!!transport.notFound) {
                   {{ transport.recv | autoScale }}
+                }
+                @if (transport.notFound) {
+                  {{ 'transports.offline' | translate }}
+                }
+              </div>
+              <div class="list-row">
+                <span class="title">{{ 'transports.latency' | translate }}</span>:
+                @if (!!!transport.notFound) {
+                  @if (transport.latencyMs && transport.latencyMs > 0) {
+                    {{ transport.latencyMs | number:'1.0-0' }} ms
+                  }
+                  @if (!transport.latencyMs || transport.latencyMs === 0) {
+                    -
+                  }
                 }
                 @if (transport.notFound) {
                   {{ 'transports.offline' | translate }}

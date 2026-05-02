@@ -47,6 +47,7 @@ export class TransportListComponent implements OnDestroy {
   typeSortData = new SortingColumn(['type'], 'transports.type', SortingModes.Text);
   uploadedSortData = new SortingColumn(['sent'], 'common.uploaded', SortingModes.NumberReversed);
   downloadedSortData = new SortingColumn(['recv'], 'common.downloaded', SortingModes.NumberReversed);
+  latencySortData = new SortingColumn(['latencyMs'], 'transports.latency', SortingModes.Number);
 
   private dataSortedSubscription: Subscription;
   private dataFiltererSubscription: Subscription;
@@ -212,6 +213,7 @@ export class TransportListComponent implements OnDestroy {
       this.typeSortData,
       this.uploadedSortData,
       this.downloadedSortData,
+      this.latencySortData,
     ];
     this.dataSorter = new DataSorter(this.dialog, this.translateService, this.storageService, sortableColumns, 1, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
