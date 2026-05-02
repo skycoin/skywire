@@ -8,6 +8,8 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 
 interface ForwardedPort {
   port: number;
+  local_port?: number;
+  proxy_addr?: string;
   label: string;
   description: string;
   show_on_landing: boolean;
@@ -36,6 +38,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   // New port form
   newPort = '';
   newLocalPort = '';
+  newProxyAddr = '';
   newLabel = '';
   newDesc = '';
   newSkynet = true;
@@ -95,9 +98,11 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
       return;
     }
     const localPort = this.newLocalPort ? parseInt(this.newLocalPort, 10) : 0;
+    const proxyAddr = (this.newProxyAddr || '').trim();
     const fp: any = {
       port,
       local_port: localPort || undefined,
+      proxy_addr: proxyAddr || undefined,
       label: this.newLabel,
       description: this.newDesc,
       show_on_landing: this.newShowLanding,
@@ -108,6 +113,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
       () => {
         this.newPort = '';
         this.newLocalPort = '';
+        this.newProxyAddr = '';
         this.newLabel = '';
         this.newDesc = '';
         this.snackbarService.showDone(`Port ${port} forwarded`);
