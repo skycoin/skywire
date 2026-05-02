@@ -127,6 +127,25 @@ button:focus {
   }
 }
 
+// Default Material panel falls back to the page background when used
+// on the dark node-detail panes — text in mat-options ends up dark on
+// dark and is unreadable. Force a light surface with dark text on any
+// select that opts in via panelClass="skynet-select-panel".
+.cdk-overlay-pane .mat-mdc-select-panel.skynet-select-panel,
+.mat-mdc-select-panel.skynet-select-panel {
+  background-color: #ffffff !important;
+
+  .mat-mdc-option,
+  .mdc-list-item__primary-text {
+    color: rgba(0, 0, 0, 0.87) !important;
+  }
+
+  .mat-mdc-option:hover:not(.mdc-list-item--disabled),
+  .mat-mdc-option.mat-mdc-option-active {
+    background-color: rgba(0, 0, 0, 0.04) !important;
+  }
+}
+
 .grey-button-background:hover {
   background-color: rgba(0,0,0,0.05) !important;
 }

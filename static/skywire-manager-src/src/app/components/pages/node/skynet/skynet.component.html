@@ -105,6 +105,13 @@
             <mat-label>Description</mat-label>
             <input matInput [(ngModel)]="newDesc" placeholder="Optional description">
           </mat-form-field>
+          <mat-form-field appearance="outline" class="field-lg">
+            <mat-label>Whitelist (optional)</mat-label>
+            <textarea matInput rows="2" [(ngModel)]="newWhitelist"
+                      placeholder="02abc..., 03def... (empty = open to all)"></textarea>
+          </mat-form-field>
+        </div>
+        <div class="add-row">
           <mat-checkbox [(ngModel)]="newSkynet" color="primary">Skynet</mat-checkbox>
           <mat-checkbox [(ngModel)]="newDmsg" color="primary">DMSG</mat-checkbox>
           <mat-checkbox [(ngModel)]="newShowLanding" color="primary">Show on landing page</mat-checkbox>
@@ -115,6 +122,9 @@
         <p class="section-desc">
           Target Address overrides Local Port — set it to forward to a host:port elsewhere
           on the LAN (e.g. <code>192.168.1.20:5432</code>) instead of localhost.
+          Whitelist accepts comma- or whitespace-separated 66-char hex public keys;
+          leave empty to allow all authenticated peers (you can edit the whitelist
+          per-row later, on the table above).
         </p>
       </div>
     </div>
@@ -159,7 +169,7 @@
       <div class="add-row">
         <mat-form-field appearance="outline" class="field-sm">
           <mat-label>Network</mat-label>
-          <mat-select [(ngModel)]="connectNetwork">
+          <mat-select [(ngModel)]="connectNetwork" panelClass="skynet-select-panel">
             <mat-option value="skynet">skynet</mat-option>
             <mat-option value="dmsg">dmsg</mat-option>
           </mat-select>

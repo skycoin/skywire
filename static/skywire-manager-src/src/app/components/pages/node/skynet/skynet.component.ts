@@ -42,6 +42,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   newProxyAddr = '';
   newLabel = '';
   newDesc = '';
+  newWhitelist = '';
   newSkynet = true;
   newDmsg = true;
   newShowLanding = true;
@@ -101,6 +102,17 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     }
     const localPort = this.newLocalPort ? parseInt(this.newLocalPort, 10) : 0;
     const proxyAddr = (this.newProxyAddr || '').trim();
+    let whitelist: string[] = [];
+    const wlRaw = (this.newWhitelist || '').trim();
+    if (wlRaw !== '') {
+      whitelist = wlRaw.split(/[\s,]+/).map(s => s.trim()).filter(s => s.length > 0);
+      for (const pk of whitelist) {
+        if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
+          this.snackbarService.showError(`Invalid public key in whitelist: ${pk}`);
+          return;
+        }
+      }
+    }
     const fp: any = {
       port,
       local_port: localPort || undefined,
@@ -110,6 +122,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
       show_on_landing: this.newShowLanding,
       skynet: this.newSkynet,
       dmsg: this.newDmsg,
+      whitelist: whitelist.length > 0 ? whitelist : undefined,
     };
     this.nodeService.registerForwardedPort(this.nodeKey, fp).subscribe(
       () => {
@@ -118,6 +131,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.newProxyAddr = '';
         this.newLabel = '';
         this.newDesc = '';
+        this.newWhitelist = '';
         this.snackbarService.showDone(`Port ${port} forwarded`);
         this.loadPorts();
       },
