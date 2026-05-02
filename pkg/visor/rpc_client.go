@@ -569,14 +569,17 @@ func (rc *rpcClient) SetMuxMode(mode string) error {
 	return rc.Call("SetMuxMode", &mode, &struct{}{})
 }
 
-// AddMuxRoute adds a mux route to an app's active connection.
-func (rc *rpcClient) AddMuxRoute(appName string, tpID uuid.UUID) error {
-	return rc.Call("AddMuxRoute", &MuxRouteInput{AppName: appName, TransportID: tpID}, &struct{}{})
+// AddMuxRoute adds a transport-disjoint leg to the app's active rg.
+// srcPort = 0 picks the only matching rg, or errors with the
+// candidate list when more than one is active for the app.
+func (rc *rpcClient) AddMuxRoute(appName string, srcPort uint16) error {
+	return rc.Call("AddMuxRoute", &MuxRouteInput{AppName: appName, SrcPort: srcPort}, &struct{}{})
 }
 
-// RemoveMuxRoute removes a mux route from an app's active connection.
-func (rc *rpcClient) RemoveMuxRoute(appName string, tpID uuid.UUID) error {
-	return rc.Call("RemoveMuxRoute", &MuxRouteInput{AppName: appName, TransportID: tpID}, &struct{}{})
+// RemoveMuxRoute drops the leg over tpID from the app's active rg.
+// srcPort disambiguates as in AddMuxRoute.
+func (rc *rpcClient) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
+	return rc.Call("RemoveMuxRoute", &MuxRouteInput{AppName: appName, TransportID: tpID, SrcPort: srcPort}, &struct{}{})
 }
 
 // ActiveRoutes returns all active routes with app associations and live stats.

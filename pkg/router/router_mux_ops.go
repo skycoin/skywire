@@ -60,10 +60,19 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	return nil
 }
 
-// AddMuxRouteByTransport adds a new mux route to an existing route group,
-// using the specified transport for the first hop. The route is established
-// via the embedded setup node.
-func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error {
+// AddMuxRoute adds a transport-disjoint leg to an existing mux'd
+// route group. Mirrors the dial-time setup in establishMuxRoutes:
+// excludes every transport already in the group and asks the route
+// finder for any other path. No transport-id argument — picking a
+// specific transport rarely gives real path diversity (two direct
+// transports to the same peer share the physical link), and "find
+// me another disjoint path" is what runtime mux-add usually means.
+//
+// For the "I want a leg through THIS specific intermediate" case,
+// the caller should compute the full path off-router (e.g. via the
+// route-calc CLI) and dial with opts.ForwardHops; that path doesn't
+// route through this entry.
+func (r *router) AddMuxRoute(desc routing.RouteDescriptor) error {
 	r.mx.Lock()
 	nrg, ok := r.rgsNs[desc]
 	r.mx.Unlock()
@@ -79,34 +88,36 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 	rPK := desc.SrcPK()
 	log := r.scopedLog(desc.SrcPort())
 
-	// Build a route that uses this specific transport
-	opts := &DialOptions{
-		MinForwardRts: 1,
-		MaxForwardRts: 1,
-		MinConsumeRts: 1,
-		MaxConsumeRts: 1,
-		Retries:       1,
-		ExcludeDMSG:   true,
+	// Snapshot the rg's current transports so the route finder
+	// excludes them — that's what gives a transport-disjoint leg.
+	nrg.rg.mu.Lock()
+	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.tps))
+	for _, tp := range nrg.rg.tps {
+		if tp != nil {
+			excludeIDs = append(excludeIDs, tp.Entry.ID)
+		}
 	}
-
-	// Verify the transport exists
-	tp := r.tm.Transport(tpID)
-	if tp == nil {
-		return fmt.Errorf("transport %s not found", tpID)
-	}
+	nrg.rg.mu.Unlock()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	opts := &DialOptions{
+		MinForwardRts:       1,
+		MaxForwardRts:       1,
+		MinConsumeRts:       1,
+		MaxConsumeRts:       1,
+		Retries:             1,
+		ExcludeTransportIDs: excludeIDs,
+		ExcludeDMSG:         true,
+	}
+
 	fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
 	if err != nil {
-		return fmt.Errorf("failed to find route via transport: %w", err)
+		return fmt.Errorf("no disjoint route available: %w", err)
 	}
 
 	keepAlive := DefaultRouteKeepAlive
-	if opts != nil && opts.KeepAlive > 0 {
-		keepAlive = opts.KeepAlive
-	}
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, desc.DstPort(), desc.SrcPort())
 	req := routing.BidirectionalRoute{
 		Desc:      forwardDesc,
@@ -124,6 +135,7 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 		return fmt.Errorf("append route failed: %w", err)
 	}
 
+	tpID := rules.Forward.NextTransportID()
 	r.logger.Infof("Added mux route via transport %s to route group %s", tpID, desc.String())
 	return nil
 }

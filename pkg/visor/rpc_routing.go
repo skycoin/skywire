@@ -141,11 +141,11 @@ func (r *RPC) ActiveRoutes(_ *struct{}, out *[]AppRouteStatus) (err error) {
 // AddMuxRoute adds a mux route to an app's active connection
 func (r *RPC) AddMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "AddMuxRoute", in)(nil, &err)
-	return r.visor.AddMuxRoute(in.AppName, in.TransportID)
+	return r.visor.AddMuxRoute(in.AppName, in.SrcPort)
 }
 
 // RemoveMuxRoute removes a mux route from an app's active connection
 func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoveMuxRoute", in)(nil, &err)
-	return r.visor.RemoveMuxRoute(in.AppName, in.TransportID)
+	return r.visor.RemoveMuxRoute(in.AppName, in.TransportID, in.SrcPort)
 }

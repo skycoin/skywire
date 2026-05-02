@@ -207,6 +207,11 @@ type FetchServiceDataIn struct {
 type MuxRouteInput struct {
 	AppName     string
 	TransportID uuid.UUID
+	// SrcPort disambiguates between concurrent rg's owned by the same
+	// app (one per concurrent SOCKS5 connection on skysocks-client,
+	// etc.). Zero means "auto-pick if exactly one rg is active for
+	// the app, error otherwise."
+	SrcPort uint16
 }
 type FilterServersIn struct {
 	Version string

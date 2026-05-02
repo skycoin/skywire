@@ -7,10 +7,15 @@
 //
 // Workflow:
 //
-//	skywire cli proxy mux-info               # see current legs
-//	skywire cli proxy mux-add <tp-id>        # bring up a new leg
-//	skywire cli proxy mux-rm  <tp-id>        # drop a leg
-//	skywire cli proxy mux-mode auto|equal    # change scheduler
+//	skywire cli proxy mux-info                # see current legs
+//	skywire cli proxy mux-add                 # add a disjoint leg
+//	skywire cli proxy mux-rm  <tp-id>         # drop a leg
+//	skywire cli proxy mux-mode auto|equal     # change scheduler
+//
+// When the named app has multiple concurrent rg's (e.g. one per
+// active SOCKS5 client connection on skysocks-client), use --rg
+// <src-port> to pick which one. 'mux-info' prints the src_port
+// for every rg so you can copy it across.
 //
 // Combined with 'mux-info --watch' in a second terminal, this gives
 // you the basic interactive loop for exploring mux behavior at
@@ -28,51 +33,57 @@ import (
 )
 
 var (
-	muxOpsApp string
+	muxOpsApp     string
+	muxOpsSrcPort uint16
 )
 
 func init() {
 	muxAddCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route group to modify")
+	muxAddCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
 	muxRmCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route group to modify")
+	muxRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
 	RootCmd.AddCommand(muxAddCmd)
 	RootCmd.AddCommand(muxRmCmd)
 	RootCmd.AddCommand(muxModeCmd)
 }
 
 var muxAddCmd = &cobra.Command{
-	Use:   "mux-add <tp-id>",
-	Short: "Add a leg to an active proxy session's mux'd route group",
-	Long: `Add a new mux leg routed via the specified transport.
+	Use:   "mux-add",
+	Short: "Add a transport-disjoint leg to an active proxy session's mux'd rg",
+	Long: `Add a mux leg over a transport that the rg isn't already using.
 
-The transport must already exist (see 'skywire cli tp ls' for the
-local transport set, or 'skywire cli tp all' for network-wide). The
-visor builds a route through that transport and appends it to the
-named app's active route group, after which the mux scheduler will
-start picking it according to the current mode.
+The visor asks the route finder for any path between this visor and
+the rg's peer that doesn't reuse a transport already in the group;
+the new leg is appended and the mux scheduler starts selecting it
+according to the current mode.
 
-Idempotent — adding a transport that's already a leg is a no-op.
+No transport-id argument: pinning a specific transport rarely yields
+real path diversity (two direct transports to the same peer share the
+physical link). For the "I want a leg through THIS specific
+intermediate" case, compute the route off-router via 'route calc'
+and dial it as a separate session.
+
+When the app has multiple concurrent rg's, pass --rg <src-port> to
+target one of them; otherwise the visor errors with the candidate
+list.
 
 Example:
-  skywire cli proxy mux-info        # see current legs
-  skywire cli proxy mux-add 55d43098-bae7-029e-bd8e-b228f7208930
+  skywire cli proxy mux-info        # see current legs + rg src_port
+  skywire cli proxy mux-add         # add another disjoint leg
   skywire cli proxy mux-info        # confirm it appeared`,
-	Args:                  cobra.ExactArgs(1),
+	Args:                  cobra.NoArgs,
 	DisableFlagsInUseLine: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		tpID, err := uuid.Parse(args[0])
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid transport id %q: %w", args[0], err))
-		}
+	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
-		if err := rpcClient.AddMuxRoute(muxOpsApp, tpID); err != nil {
+		if err := rpcClient.AddMuxRoute(muxOpsApp, muxOpsSrcPort); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("AddMuxRoute: %w", err))
 		}
-		fmt.Printf("added mux leg via transport %s on app=%s\n", tpID, muxOpsApp)
+		fmt.Printf("added disjoint mux leg on app=%s\n", muxOpsApp)
 	},
 }
 
@@ -85,6 +96,10 @@ The mux scheduler will stop selecting that leg immediately; in-flight
 packets already on it complete normally. Removing the last leg in a
 mux group leaves the group with the primary route only — to fully
 tear down the session, use 'proxy stop' instead.
+
+When the app has multiple concurrent rg's, pass --rg <src-port> to
+target one of them; otherwise the visor errors with the candidate
+list.
 
 Example:
   skywire cli proxy mux-info                            # find the leg
@@ -102,7 +117,7 @@ Example:
 		}
 		defer rpcClient.Close() //nolint:errcheck,gosec
 
-		if err := rpcClient.RemoveMuxRoute(muxOpsApp, tpID); err != nil {
+		if err := rpcClient.RemoveMuxRoute(muxOpsApp, tpID, muxOpsSrcPort); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RemoveMuxRoute: %w", err))
 		}
 		fmt.Printf("removed mux leg via transport %s on app=%s\n", tpID, muxOpsApp)

@@ -4,6 +4,7 @@ package visor
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -170,20 +171,21 @@ func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
 	return result, nil
 }
 
-// findRouteDescForApp finds an active route group's descriptor for
-// the named app. Uses the rg's stored appName (set via SetAppName at
-// dial time from opts.AppName) rather than matching by registered
-// app port — the rg's descriptor uses an ephemeral source port that
+// findRouteDescForApp resolves an active rg's descriptor for the
+// named app. Uses the rg's stored AppName tag (set via SetAppName
+// at dial time from opts.AppName) rather than registered-app-port
+// matching — the rg's descriptor uses an ephemeral source port that
 // the procManager.GetAppPort lookup can't see.
 //
-// When multiple rg's are active for the same app (one per concurrent
-// SOCKS5 connection on skysocks-client, etc.), returns the first
-// one found. Picking the "right" one for a per-rg operation like
-// AddMuxRoute is ambiguous in that case; future work is to surface
-// the descriptor selection on the CLI for cases where it matters.
-func (v *Visor) findRouteDescForApp(appName string) (routing.RouteDescriptor, error) {
+// srcPort disambiguates when multiple rg's are active for the same
+// app (one per concurrent SOCKS5 connection on skysocks-client, etc.):
+//
+//   - srcPort == 0 and exactly 1 rg matches → that rg.
+//   - srcPort == 0 and >1 rg matches → error listing all candidates,
+//     so the caller can pick.
+//   - srcPort != 0 → match the rg whose Desc.SrcPort equals srcPort.
+func (v *Visor) findRouteDescForApp(appName string, srcPort uint16) (routing.RouteDescriptor, error) {
 	var desc routing.RouteDescriptor
-
 	if v.router == nil {
 		return desc, errors.New("router not available")
 	}
@@ -191,36 +193,52 @@ func (v *Visor) findRouteDescForApp(appName string) (routing.RouteDescriptor, er
 	if len(infos) == 0 {
 		return desc, fmt.Errorf("no active route group for app %q", appName)
 	}
-	return infos[0].Desc, nil
+	if srcPort != 0 {
+		for _, info := range infos {
+			if uint16(info.Desc.SrcPort()) == srcPort { //nolint:gosec
+				return info.Desc, nil
+			}
+		}
+		return desc, fmt.Errorf("no rg for app %q with src_port=%d", appName, srcPort)
+	}
+	if len(infos) == 1 {
+		return infos[0].Desc, nil
+	}
+	// Ambiguous. Surface every candidate so the caller can pass --rg.
+	var b strings.Builder
+	fmt.Fprintf(&b, "app %q has %d active rg's; pass --rg <src_port>:\n", appName, len(infos))
+	for _, info := range infos {
+		fmt.Fprintf(&b, "  src_port=%d  remote=%s  port=%d\n",
+			info.Desc.SrcPort(), info.Desc.DstPK(), info.Desc.DstPort())
+	}
+	return desc, errors.New(strings.TrimRight(b.String(), "\n"))
 }
 
-// AddMuxRoute implements API.
-// Adds a new mux route to the specified app's active route group.
-func (v *Visor) AddMuxRoute(appName string, tpID uuid.UUID) error {
+// AddMuxRoute implements API. Adds a transport-disjoint leg to the
+// app's active rg; srcPort disambiguates when the app has multiple
+// concurrent rg's (use 0 to auto-pick when there's exactly one).
+func (v *Visor) AddMuxRoute(appName string, srcPort uint16) error {
 	if v.router == nil {
 		return errors.New("router not available")
 	}
-
-	desc, err := v.findRouteDescForApp(appName)
+	desc, err := v.findRouteDescForApp(appName, srcPort)
 	if err != nil {
 		return err
 	}
-
-	return v.router.AddMuxRouteByTransport(desc, tpID)
+	return v.router.AddMuxRoute(desc)
 }
 
-// RemoveMuxRoute implements API.
-// Removes a mux route using the specified transport from the app's route group.
-func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID) error {
+// RemoveMuxRoute implements API. Drops the leg over the given
+// transport from the app's active rg; srcPort disambiguates as in
+// AddMuxRoute.
+func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
 	if v.router == nil {
 		return errors.New("router not available")
 	}
-
-	desc, err := v.findRouteDescForApp(appName)
+	desc, err := v.findRouteDescForApp(appName, srcPort)
 	if err != nil {
 		return err
 	}
-
 	return v.router.RemoveMuxRouteByTransport(desc, tpID)
 }
 
