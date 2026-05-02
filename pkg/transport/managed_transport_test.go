@@ -163,3 +163,48 @@ func TestReadLoopDropsPacketOnFullChannel(t *testing.T) {
 		t.Fatal("readLoop did not exit after transport close")
 	}
 }
+
+// A 0 or negative sample must not overwrite the running stats — that
+// path was the source of the "TPD says min=0" production bug.
+func TestSetLatencyDropsNonPositive(t *testing.T) {
+	mt := &ManagedTransport{}
+	mt.SetLatency(15.5)
+	require.Equal(t, LatencyStats{Min: 15.5, Max: 15.5, Avg: 15.5}, mt.GetLatencyStats())
+
+	mt.SetLatency(0)
+	require.Equal(t, LatencyStats{Min: 15.5, Max: 15.5, Avg: 15.5}, mt.GetLatencyStats(),
+		"a 0 sample wiped the existing stats")
+
+	mt.SetLatency(-1)
+	require.Equal(t, LatencyStats{Min: 15.5, Max: 15.5, Avg: 15.5}, mt.GetLatencyStats(),
+		"a negative sample wiped the existing stats")
+
+	mt.SetLatency(8.2)
+	require.Equal(t, LatencyStats{Min: 8.2, Max: 15.5, Avg: 8.2}, mt.GetLatencyStats(),
+		"a valid sample after rejected ones must still update")
+}
+
+// SetLatencyStats must reject any partial-zero snapshot — otherwise a
+// MeasureLatency result with min=0 (e.g. a sub-µs ping included in
+// `measurements`) would replace a previously-good record.
+func TestSetLatencyStatsDropsPartialZero(t *testing.T) {
+	mt := &ManagedTransport{}
+	good := LatencyStats{Min: 10, Max: 30, Avg: 20}
+	mt.SetLatencyStats(good)
+	require.Equal(t, good, mt.GetLatencyStats())
+
+	for _, bad := range []LatencyStats{
+		{Min: 0, Max: 30, Avg: 20},
+		{Min: 10, Max: 0, Avg: 20},
+		{Min: 10, Max: 30, Avg: 0},
+		{Min: -1, Max: 30, Avg: 20},
+	} {
+		mt.SetLatencyStats(bad)
+		require.Equal(t, good, mt.GetLatencyStats(),
+			"partial-zero snapshot %+v overwrote good stats", bad)
+	}
+
+	better := LatencyStats{Min: 5, Max: 40, Avg: 18}
+	mt.SetLatencyStats(better)
+	require.Equal(t, better, mt.GetLatencyStats())
+}
