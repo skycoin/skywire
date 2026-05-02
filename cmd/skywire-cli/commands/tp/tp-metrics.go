@@ -43,16 +43,30 @@ func init() {
 }
 
 // verifiedBandwidth returns the bandwidth both edges agree on for a transport.
-// A→B verified = min(A.Sent, B.Recv), B→A verified = min(A.Recv, B.Sent)
+// A→B verified = min(A.Sent, B.Recv), B→A verified = min(A.Recv, B.Sent).
+//
+// An edge that reports {sent:0, recv:0} on a day is treated as
+// "hasn't reported yet" rather than "verified zero traffic." Without
+// that distinction the min() collapses every transport to 0 the
+// moment one side's daily record exists but is still empty (e.g.
+// freshly registered today, or only the remote side has checked in
+// so far). The downside is genuine zero-traffic days appear as
+// unverified single-edge readings, but those days are uninteresting
+// and the alternative — silently zeroing every transport whose two
+// edges report on different schedules — was producing "no bandwidth
+// data found" on visors that clearly have traffic.
 func verifiedBandwidth(m store.TransportMetric) (aToB, bToA uint64) {
 	for _, daily := range m.Daily {
-		if daily.A != nil && daily.B != nil {
+		aReported := daily.A != nil && (daily.A.Sent > 0 || daily.A.Recv > 0)
+		bReported := daily.B != nil && (daily.B.Sent > 0 || daily.B.Recv > 0)
+		switch {
+		case aReported && bReported:
 			aToB += minBW(daily.A.Sent, daily.B.Recv)
 			bToA += minBW(daily.A.Recv, daily.B.Sent)
-		} else if daily.A != nil {
+		case aReported:
 			aToB += daily.A.Sent
 			bToA += daily.A.Recv
-		} else if daily.B != nil {
+		case bReported:
 			aToB += daily.B.Recv
 			bToA += daily.B.Sent
 		}

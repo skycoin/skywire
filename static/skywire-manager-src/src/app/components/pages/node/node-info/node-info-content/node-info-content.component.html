@@ -104,11 +104,13 @@
         <span class="title">{{ 'node.details.rewards-info.rewards-address' | translate }} </span>
         @if (node.rewardsAddress) {
           <app-copy-to-clipboard-text class="text-with-right-margin" text="{{ node.rewardsAddress }}"></app-copy-to-clipboard-text>
-          <a [href]="'https://explorer.skycoin.com/app/address/' + node.rewardsAddress" target="_blank" rel="noreferrer nofollow noopener">
-            <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">
-              open_in_browser
-            </mat-icon>
-          </a>
+          @if (!rewardsAddressIsXpub) {
+            <a [href]="'https://explorer.skycoin.com/app/address/' + node.rewardsAddress" target="_blank" rel="noreferrer nofollow noopener">
+              <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">
+                open_in_browser
+              </mat-icon>
+            </a>
+          }
         }
         @if (!node.rewardsAddress) {
           {{ 'node.details.rewards-info.not-registered' | translate }}
