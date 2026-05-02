@@ -306,13 +306,26 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !netutil.IsPublicIP(net.ParseIP(remoteAddr)) {
-		// the ip of the visor is either private(because of proxy/loadbalancer) or ipv6
-		err := fmt.Sprintf("Cannot bind %v to %v (STCPR). Invalid IP address in request: %v", pk, remoteAddr, localAddresses)
-		a.logger(r).Errorf(err)
-		a.writeJSON(w, r, http.StatusBadRequest, &Error{
-			Error: err,
-		})
-		return
+		// Observed source IP is non-public — typically because the visor
+		// shares a host with AR and reaches it via hairpin SNAT through
+		// a Docker bridge (e.g., 172.x.y.z) rather than its real public
+		// IP. If the visor declared a known-public PublicIP in the bind
+		// payload, trust that instead; rejecting the bind would lose all
+		// AR coverage for that visor's STCPR. Visors that don't declare
+		// (older clients, or genuinely-misconfigured proxy/IPv6 traffic)
+		// still hit the original reject below.
+		if localAddresses.PublicIP != "" && netutil.IsPublicIP(net.ParseIP(localAddresses.PublicIP)) {
+			a.logger(r).Infof("STCPR: observed %v non-public; using declared PublicIP %v for %v",
+				remoteAddr, localAddresses.PublicIP, pk)
+			remoteAddr = localAddresses.PublicIP
+		} else {
+			err := fmt.Sprintf("Cannot bind %v to %v (STCPR). Invalid IP address in request: %v", pk, remoteAddr, localAddresses)
+			a.logger(r).Errorf(err)
+			a.writeJSON(w, r, http.StatusBadRequest, &Error{
+				Error: err,
+			})
+			return
+		}
 	}
 
 	if !a.hasAddress(remoteAddr, localAddresses) {
@@ -780,8 +793,28 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 		return
 	}
 
+	// Override the observed UDP source when it's non-public AND the visor
+	// declared a known-public PublicIP. The hairpin-SNAT case (visor and
+	// AR on the same Docker host) rewrites BOTH the source IP (to the
+	// docker bridge gateway) and the source port (to a kernel-chosen
+	// ephemeral) — neither is reachable from external peers. Use the
+	// visor's listen port (LocalAddresses.Port), which IS the externally-
+	// reachable UDP port. Visors with public observed sources (the
+	// common case, including legitimate NAT'd visors that need
+	// hole-punching to retain the NAT-mapped source port) keep the
+	// observed value unchanged.
+	effectiveRemoteAddr := remoteAddr
+	if host, _, err := net.SplitHostPort(remoteAddr); err == nil && !netutil.IsPublicIP(net.ParseIP(host)) {
+		if localAddresses.PublicIP != "" && localAddresses.Port != "" &&
+			netutil.IsPublicIP(net.ParseIP(localAddresses.PublicIP)) {
+			effectiveRemoteAddr = net.JoinHostPort(localAddresses.PublicIP, localAddresses.Port)
+			a.log.Infof("SUDPH: observed %v non-public; using declared %v for %v",
+				remoteAddr, effectiveRemoteAddr, pk)
+		}
+	}
+
 	visorData := addrresolver.VisorData{
-		RemoteAddr:     remoteAddr,
+		RemoteAddr:     effectiveRemoteAddr,
 		LocalAddresses: localAddresses,
 	}
 
