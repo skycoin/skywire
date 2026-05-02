@@ -9,49 +9,10 @@ name: Test
 
 jobs:
   linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          fetch-tags: true
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.26.1'
-          cache: true
-          cache-dependency-path: go.sum
-
-      - uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.11.4
-
-      - name: Install Dependencies
-        shell: bash
-        run: make install-shellcheck
-
-      - name: Lint Shell Scripts
-        run: make lint-shell
-
-      - name: Check Format and Run Tests
-        run: make check
-
-      - name: Setup SSH Key, Build and Run E2E
-        shell: bash
-        run: |
-          set -e
-          sudo ./ci_scripts/create-ip-aliases.sh
-          make e2e-build
-          make e2e-run
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
-
-      - name: Test E2E
-        run: make e2e-test
-
-      - name: Clean E2E
-        run: make e2e-stop
+    uses: mrpalide/ci-runner/.github/workflows/skywire-linux-test.yml@main
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
 
   darwin:
     runs-on: macos-latest
