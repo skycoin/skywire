@@ -6,6 +6,82 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.50
+
+### Mux & per-transport latency
+-   tpd+visor: per-transport latency end-to-end; bandwidth + latency reach TPD via the discovery API and surface in `tp ls`. `--mux 0` now means *unlimited* (use every available transport-disjoint route). [#2401](https://github.com/skycoin/skywire/pull/2401)
+-   Per-mux-leg byte counters + `proxy mux-info` (one row per leg with sent/recv bytes/packets and latency); `--watch` for top-style refresh. Part of [#2401](https://github.com/skycoin/skywire/pull/2401)
+-   Runtime mux reconfiguration: `proxy mux-add` (caller-supplied route, piped from `route calc --json`), `proxy mux-rm <tp-id>`, `proxy mux-mode auto|equal`. `--rg <src-port>` disambiguates when an app has multiple concurrent rg's. [#2405](https://github.com/skycoin/skywire/pull/2405)
+
+### Forwarded ports
+-   `--proxy-addr` (a.k.a. `serve --to host:port`) now honored on every forwarded port, not just port 80 — exposes a service running anywhere on the LAN over `.skynet`/`.dmsg`. Hypervisor UI gains a "Target Address" input on the add-port form. [#2405](https://github.com/skycoin/skywire/pull/2405)
+-   Per-port PK whitelist enforced on raw-TCP skynet and DMSG forwarders. [#2395](https://github.com/skycoin/skywire/pull/2395)
+-   `serve whitelist` subcommand for in-place whitelist updates; "WHITELIST" column in `serve ls`. [#2394](https://github.com/skycoin/skywire/pull/2394)
+-   Port-80 reverse proxy: honor `--local-port` when `--proxy-addr` is empty [#2371](https://github.com/skycoin/skywire/pull/2371); fix WebSocket upgrade on the proxied path [#2377](https://github.com/skycoin/skywire/pull/2377).
+-   `cli skynet port {add,ls,rm}` renamed to `cli serve {add,ls,rm}`; the old commands stay as deprecated shims. [#2373](https://github.com/skycoin/skywire/pull/2373)
+-   Move `DefaultCXOPort` off 46 to stop colliding with `DmsgHypervisorPort`. [#2367](https://github.com/skycoin/skywire/pull/2367)
+
+### Routing & route-finder
+-   `cli route calc` returns multiple routes (streamed via gRPC) and respects the visor's `routing.min_hops`. [#2397](https://github.com/skycoin/skywire/pull/2397)
+
+### DHT / address mirror
+-   DHT mirror to HTTP discoveries with `addr` and `self_publish` payloads; one signing writer per tp salt. [#2399](https://github.com/skycoin/skywire/pull/2399)
+-   Spec audit + comparison doc; `cli dht peers/reconcile/source` for inspecting DHT state. [#2398](https://github.com/skycoin/skywire/pull/2398)
+-   Publish a real signed DMSG entry on the DHT path. [#2365](https://github.com/skycoin/skywire/pull/2365)
+-   Fix DHT seq + self-probe endpoint. [#2351](https://github.com/skycoin/skywire/pull/2351)
+
+### DMSG / dmsg-servers
+-   `dmsg_servers`: embedded list refresh, live `confbs` response, visor-side disk cache. Bootstrap continues working with stale or unreachable `confbs`. [#2403](https://github.com/skycoin/skywire/pull/2403)
+-   dmsg-server: preload direct client with peer dmsg-server entries to skip first-message lookup miss. [#2390](https://github.com/skycoin/skywire/pull/2390)
+-   dmsgd: keep entry cache populated on `SetEntry` instead of invalidating. [#2382](https://github.com/skycoin/skywire/pull/2382)
+-   setup-node: dmsg-http for outbound TPD/AR clients. [#2362](https://github.com/skycoin/skywire/pull/2362)
+-   docs(deployment): dmsg-server DHT/Redis configuration. [#2392](https://github.com/skycoin/skywire/pull/2392)
+
+### SUDPH / STCPR
+-   sudph: reconnect on AR conn drop; retry STUN on transient failure; relax handshake to 5s. [#2372](https://github.com/skycoin/skywire/pull/2372)
+-   stcpr re-register body retry; allow dmsg-only visors to register SUDPH. [#2388](https://github.com/skycoin/skywire/pull/2388)
+-   sudph: nil-guard Dial when listen() failed. [#2400](https://github.com/skycoin/skywire/pull/2400)
+
+### Visor
+-   Self-tracking telemetry + TPD-as-aggregator via CXO TreeStore. [#2359](https://github.com/skycoin/skywire/pull/2359)
+-   geoip: visor uses embedded MMDB instead of querying `ip.skycoin.com`. [#2352](https://github.com/skycoin/skywire/pull/2352)
+-   Register DHT + RSN await-setup listeners early in init. [#2396](https://github.com/skycoin/skywire/pull/2396)
+-   `--dmsgweb` / `--skynetweb` gen flags for proxy auto-start. [#2366](https://github.com/skycoin/skywire/pull/2366)
+-   User-publishable CXO feeds with `/feeds` discovery. [#2369](https://github.com/skycoin/skywire/pull/2369)
+-   `httputil`: fix `WriteJSON` panic on slow clients; sweep `err.Error()` string matches → `errors.Is`. [#2402](https://github.com/skycoin/skywire/pull/2402)
+
+### Skychat / pairing
+-   Consent-based pair-invite flow with accept/decline UI. [#2386](https://github.com/skycoin/skywire/pull/2386)
+-   ECDH + ChaCha20-Poly1305 body encryption on paired feeds. [#2385](https://github.com/skycoin/skywire/pull/2385)
+-   UI: pair toggle, CXO send, paired-contact sync. [#2384](https://github.com/skycoin/skywire/pull/2384)
+-   HTTP `/pair` endpoints + pair-invite/ack handshake over legacy. [#2383](https://github.com/skycoin/skywire/pull/2383)
+-   `cli visor pair tree` + end-to-end pair integration test. [#2381](https://github.com/skycoin/skywire/pull/2381)
+-   Visor: chat-pair feed manager + RPC surface. [#2380](https://github.com/skycoin/skywire/pull/2380)
+-   Pairing: per-pair feed primitives + bolt store. [#2379](https://github.com/skycoin/skywire/pull/2379)
+-   cxo/treestore: subscriber allowlist on `Publisher`. [#2378](https://github.com/skycoin/skywire/pull/2378)
+-   Fan SSE messages out to all clients (fix self-send drop). [#2389](https://github.com/skycoin/skywire/pull/2389)
+-   docs: skychat pairing design + regenerate goda graph. [#2387](https://github.com/skycoin/skywire/pull/2387)
+
+### CLI
+-   Top-level shortcuts for the high-traffic visor verbs. [#2374](https://github.com/skycoin/skywire/pull/2374)
+-   Drop the `{"output": ...}` JSON envelope; route JSON errors to stderr. [#2375](https://github.com/skycoin/skywire/pull/2375)
+-   Migrate remaining commands to `PrintOutput`; drop envelope from integration tests. [#2376](https://github.com/skycoin/skywire/pull/2376)
+-   Stop truncating public keys in logs / CLI output. [#2391](https://github.com/skycoin/skywire/pull/2391), [#2393](https://github.com/skycoin/skywire/pull/2393)
+-   Include PK on untrusted-setup-node reject; quiet expected dmsg-tracker miss. [#2368](https://github.com/skycoin/skywire/pull/2368)
+-   Ask the running visor for its config path instead of guessing. [#2361](https://github.com/skycoin/skywire/pull/2361)
+-   `rewards run` orchestrator, eliminate bash from the rewards cycle. [#2370](https://github.com/skycoin/skywire/pull/2370)
+-   socks5: switch from `confiant-inc` to `armon/go-socks5` (removes the 5s tunnel deadline). [#2364](https://github.com/skycoin/skywire/pull/2364)
+
+### Refactors
+-   Drop the HTTP bridge in `dmsgweb` and `skynet-fwd` entirely — TCP-only on both sides. [#2358](https://github.com/skycoin/skywire/pull/2358), [#2360](https://github.com/skycoin/skywire/pull/2360); follow-up resolver fix [#2363](https://github.com/skycoin/skywire/pull/2363).
+-   Flatten `pkg/skywire-utilities/pkg/*` into `pkg/*`. [#2356](https://github.com/skycoin/skywire/pull/2356)
+-   Flatten `pkg/routefinder/rfclient` to `pkg/rfclient`. [#2355](https://github.com/skycoin/skywire/pull/2355)
+-   Split visor `rpc.go` and `hypervisor.go` HTTP handlers by topic. [#2353](https://github.com/skycoin/skywire/pull/2353), [#2357](https://github.com/skycoin/skywire/pull/2357)
+-   Split tpd `redis_store.go` by topic. [#2354](https://github.com/skycoin/skywire/pull/2354)
+
+### Infra
+-   docker: propagate build failures from deploy scripts; use `proxy.golang.org`. [#2404](https://github.com/skycoin/skywire/pull/2404)
+
 ## 1.3.47
 
 ### Hypervisor TUI & multi-hypervisor management

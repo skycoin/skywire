@@ -172,7 +172,7 @@ $ go run github.com/skycoin/skywire@develop
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-v1.3.47
+v1.3.50
 built with go1.25.6
 
 Available Commands:
