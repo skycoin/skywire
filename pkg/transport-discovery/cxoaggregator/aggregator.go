@@ -146,8 +146,34 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 		log:     conf.Logger,
 		done:    make(chan struct{}),
 	}
+	// Wire all three Root-lifecycle callbacks. Together they make the
+	// CXO replication chain observable from tpd's logs:
+	//
+	//   - OnRootReceived: a Root payload arrived from the visor's
+	//     publisher. Logged at Debug. Lets us tell "Subscribe but no
+	//     data" (no OnRootReceived ever) from "data arrives but
+	//     can't be processed" (OnRootReceived fires but OnRootFilled
+	//     doesn't).
+	//   - OnRootFilled: the Root and ALL its referenced objects have
+	//     been replicated successfully — the aggregator can now walk
+	//     the tree. This is the existing dispatch trigger.
+	//   - OnFillingBreaks: replication of a Root's referenced objects
+	//     failed (timeout, peer drop, missing object). Logged at Warn
+	//     so it surfaces at the default log level — without this,
+	//     fill failures are silent.
+	cxoNode.Config().OnRootReceived = func(_ *node.Conn, r *registry.Root) error {
+		a.log.WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
+			Debug("CXO aggregator: root received")
+		return nil
+	}
 	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
+		a.log.WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
+			Debug("CXO aggregator: root filled")
 		a.handleRootFilled(r)
+	}
+	cxoNode.Config().OnFillingBreaks = func(_ *node.Node, r *registry.Root, reason error) {
+		a.log.WithError(reason).WithField("visor", cipher.PubKey(r.Pub)).WithField("seq", r.Nonce).
+			Warn("CXO aggregator: root filling broke")
 	}
 	return a, nil
 }
