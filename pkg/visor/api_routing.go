@@ -214,13 +214,17 @@ func (v *Visor) findRouteDescForApp(appName string, srcPort uint16) (routing.Rou
 	return desc, errors.New(strings.TrimRight(b.String(), "\n"))
 }
 
-// AddMuxRoute implements API. Adds a leg over the named transport
-// to the app's active rg; srcPort disambiguates when the app has
-// multiple concurrent rg's (use 0 to auto-pick when there's exactly
-// one). Caller picks the transport explicitly — auto-disjoint
-// selection is deferred until the route finder honors
-// ExcludeTransportIDs in the multi-hop branch.
-func (v *Visor) AddMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
+// AddMuxRoute implements API. Adds a leg over the caller-supplied
+// route to the app's active rg. The hop lists have the same shape
+// 'cli route calc' emits, so the natural workflow is
+//
+//	skywire cli route calc <peer-pk> --json | skywire cli proxy mux-add
+//
+// srcPort disambiguates when the app has multiple concurrent rg's
+// (use 0 to auto-pick when there's exactly one). Auto-pick a
+// disjoint route on the visor side is deferred — callers pick the
+// route explicitly for now.
+func (v *Visor) AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error {
 	if v.router == nil {
 		return errors.New("router not available")
 	}
@@ -228,7 +232,7 @@ func (v *Visor) AddMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) erro
 	if err != nil {
 		return err
 	}
-	return v.router.AddMuxRouteByTransport(desc, tpID)
+	return v.router.AddMuxRouteByHops(desc, fwd, rev)
 }
 
 // RemoveMuxRoute implements API. Drops the leg over the given

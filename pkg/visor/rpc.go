@@ -205,7 +205,13 @@ type FetchServiceDataIn struct {
 	Path    string
 }
 type MuxRouteInput struct {
-	AppName     string
+	AppName string
+	// Forward and Reverse are the caller-supplied hop lists for
+	// AddMuxRoute. Same shape 'cli route calc' emits. Empty for
+	// RemoveMuxRoute.
+	Forward []routing.Hop
+	Reverse []routing.Hop
+	// TransportID identifies the leg to remove; unused by AddMuxRoute.
 	TransportID uuid.UUID
 	// SrcPort disambiguates between concurrent rg's owned by the same
 	// app (one per concurrent SOCKS5 connection on skysocks-client,

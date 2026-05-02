@@ -569,11 +569,12 @@ func (rc *rpcClient) SetMuxMode(mode string) error {
 	return rc.Call("SetMuxMode", &mode, &struct{}{})
 }
 
-// AddMuxRoute adds a leg over tpID to the app's active rg.
-// srcPort = 0 picks the only matching rg, or errors with the
-// candidate list when more than one is active for the app.
-func (rc *rpcClient) AddMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
-	return rc.Call("AddMuxRoute", &MuxRouteInput{AppName: appName, TransportID: tpID, SrcPort: srcPort}, &struct{}{})
+// AddMuxRoute adds a leg to the app's active rg using the
+// caller-supplied forward/reverse hop lists (same shape 'cli route
+// calc' emits). srcPort = 0 picks the only matching rg, or errors
+// with the candidate list when more than one is active for the app.
+func (rc *rpcClient) AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error {
+	return rc.Call("AddMuxRoute", &MuxRouteInput{AppName: appName, Forward: fwd, Reverse: rev, SrcPort: srcPort}, &struct{}{})
 }
 
 // RemoveMuxRoute drops the leg over tpID from the app's active rg.

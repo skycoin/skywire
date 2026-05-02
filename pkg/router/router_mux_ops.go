@@ -60,22 +60,24 @@ func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRule
 	return nil
 }
 
-// AddMuxRouteByTransport adds a leg over the named transport to an
-// existing mux'd route group. Pre-release semantics:
+// AddMuxRouteByHops adds a leg over the caller-supplied route to an
+// existing mux'd route group. The hop lists have the same shape as
+// 'cli route calc' emits (forward = lPK → ... → rPK, reverse = rPK
+// → ... → lPK). The router does not consult the route finder; the
+// caller is responsible for path selection.
 //
-//   - tpID must not already be a leg in the rg (rejects the obvious
-//     duplicate; the route finder otherwise loves to re-pick the same
-//     first hop).
-//   - tpID must go directly to the peer (tp.Remote() == rPK). The
-//     1-hop route is built from the user's pick; we don't ask the
-//     finder to extend a pinned first hop into a multi-hop path.
+// Sanity gates:
+//   - fwd and rev must be non-empty and end at the right peer.
+//   - The forward path must start with a transport this visor owns
+//     (since this visor is the entry point).
+//   - The first transport must not already be a leg in the rg —
+//     two legs sharing the same first hop bottleneck on that link
+//     and don't give the diversity mux exists for.
 //
-// Multi-hop (transport-to-intermediate) is deferred — callers who
-// need it should compute the path off-router via 'route calc' and
-// pass it through a future hops-list form. "Auto pick a disjoint
-// leg" is also deferred until the route finder honors
-// ExcludeTransportIDs in the multi-hop branch.
-func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error {
+// Deeper duplication checks (full path equality across intermediate
+// hops) are out of scope: the local visor only sees its own first
+// hop after Dial completes, so checking past hop 0 is best-effort.
+func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error {
 	r.mx.Lock()
 	nrg, ok := r.rgsNs[desc]
 	r.mx.Unlock()
@@ -91,11 +93,26 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 	rPK := desc.SrcPK()
 	log := r.scopedLog(desc.SrcPort())
 
-	// Reject if this transport is already a leg in the rg. The
-	// finder used to silently re-pick the rg's primary first-hop;
-	// surfacing the duplication explicitly stops that mistake at
-	// the API boundary instead of letting it land as a "leg added"
-	// that does nothing for path diversity.
+	if len(fwd) == 0 || len(rev) == 0 {
+		return errors.New("empty forward or reverse path")
+	}
+	if fwd[0].From != lPK {
+		return fmt.Errorf("forward path must start at this visor (%s), got %s", lPK, fwd[0].From)
+	}
+	if fwd[len(fwd)-1].To != rPK {
+		return fmt.Errorf("forward path must end at peer (%s), got %s", rPK, fwd[len(fwd)-1].To)
+	}
+
+	tpID := fwd[0].TpID
+	tp := r.tm.Transport(tpID)
+	if tp == nil {
+		return fmt.Errorf("first-hop transport %s not found locally", tpID)
+	}
+
+	// Reject if the new leg starts on a transport that's already a
+	// leg in the rg. The finder used to silently re-pick the rg's
+	// existing first hop, defeating mux; refusing here surfaces the
+	// duplication at the API boundary.
 	nrg.rg.mu.Lock()
 	for i, existing := range nrg.rg.tps {
 		if existing != nil && existing.Entry.ID == tpID {
@@ -104,20 +121,6 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 		}
 	}
 	nrg.rg.mu.Unlock()
-
-	tp := r.tm.Transport(tpID)
-	if tp == nil {
-		return fmt.Errorf("transport %s not found", tpID)
-	}
-
-	// Direct-to-peer only for now; multi-hop is deferred.
-	tpRemote := tp.Remote()
-	if tpRemote != rPK {
-		return fmt.Errorf("transport %s goes to %s, not direct to peer %s; multi-hop add-mux is deferred", tpID, tpRemote, rPK)
-	}
-
-	fwd := []routing.Hop{{TpID: tpID, From: lPK, To: rPK}}
-	rev := []routing.Hop{{TpID: tpID, From: rPK, To: lPK}}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -140,7 +143,7 @@ func (r *router) AddMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.
 		return fmt.Errorf("append route failed: %w", err)
 	}
 
-	r.logger.Infof("Added mux route via transport %s to route group %s", tpID, desc.String())
+	r.logger.Infof("Added mux route via %d-hop path (first tp=%s) to route group %s", len(fwd), tpID, desc.String())
 	return nil
 }
 
