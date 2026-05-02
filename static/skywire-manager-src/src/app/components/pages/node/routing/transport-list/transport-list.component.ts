@@ -1,11 +1,11 @@
 import { Component, Input, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Observable, Subscription } from 'rxjs';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
+import { Observable, Subscription, delay, mergeMap, of } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
 import { Node, PersistentTransport, Transport } from '../../../../../app.datatypes';
-import { CreateTransportComponent } from './create-transport/create-transport.component';
 import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';
 import { AppConfig } from '../../../../../app.config';
@@ -189,6 +189,17 @@ export class TransportListComponent implements OnDestroy {
 
   labeledElementTypes = LabeledElementTypes;
 
+  // Inline add-transport form state. Replaces the previous modal
+  // create-transport dialog — same fields, same submit path, just
+  // anchored to the transport list page instead of opening a popup.
+  showAddForm = false;
+  addForm: UntypedFormGroup;
+  addingPersistent = false;
+  addAvailableTypes: string[] | null = null;
+  addBusy = false;
+  private addOperationSubscription: Subscription;
+  private addTypesSubscription: Subscription;
+
   private persistentTransportSubscription: Subscription;
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -204,7 +215,20 @@ export class TransportListComponent implements OnDestroy {
     private storageService: StorageService,
     private nodeService: NodeService,
     private cdr: ChangeDetectorRef,
+    private formBuilder: UntypedFormBuilder,
   ) {
+    // Build the add-transport form up front; populated with types
+    // when the user opens the inline form, not on every page load.
+    this.addForm = this.formBuilder.group({
+      remoteKey: ['', Validators.compose([
+        Validators.required,
+        Validators.minLength(66),
+        Validators.maxLength(66),
+        Validators.pattern('^[0-9a-fA-F]+$'),
+      ])],
+      label: [''],
+      type: ['', Validators.required],
+    });
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
       this.persistentSortData,
@@ -262,6 +286,12 @@ export class TransportListComponent implements OnDestroy {
 
     if (this.persistentTransportSubscription) {
       this.persistentTransportSubscription.unsubscribe();
+    }
+    if (this.addOperationSubscription) {
+      this.addOperationSubscription.unsubscribe();
+    }
+    if (this.addTypesSubscription) {
+      this.addTypesSubscription.unsubscribe();
     }
   }
 
@@ -325,10 +355,141 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Shows the transport creation modal window.
+   * Toggles the inline add-transport form. First open lazily fetches
+   * the supported transport types from the visor.
    */
-  create() {
-    CreateTransportComponent.openDialog(this.dialog);
+  toggleAddForm() {
+    this.showAddForm = !this.showAddForm;
+    if (this.showAddForm && this.addAvailableTypes === null) {
+      this.loadAddTypes();
+    }
+    if (!this.showAddForm) {
+      this.resetAddForm();
+    }
+  }
+
+  cancelAddForm() {
+    this.showAddForm = false;
+    this.resetAddForm();
+  }
+
+  setAddPersistent(event: any) {
+    this.addingPersistent = !!event.checked;
+  }
+
+  /**
+   * Submits the inline add-transport form. Mirrors the logic the
+   * old CreateTransportComponent dialog ran: optionally append the
+   * (pk, type) pair to the persistent-transports list, then create
+   * the transport, then save the label if one was provided.
+   */
+  submitAddForm() {
+    if (!this.addForm.valid || this.addBusy) {
+      return;
+    }
+    const newTransportPk: string = this.addForm.get('remoteKey').value;
+    const newTransportType: string = this.addForm.get('type').value;
+    const newTransportLabel: string = this.addForm.get('label').value;
+
+    this.addBusy = true;
+    if (this.addingPersistent) {
+      this.addOperationSubscription = this.transportService.getPersistentTransports(
+        NodeComponent.getCurrentNodeKey(),
+      ).subscribe((list: any[]) => {
+        const dataToUse = list ? list : [];
+        const alreadyPersistent = dataToUse.some((t: any) =>
+          t.pk.toUpperCase() === newTransportPk.toUpperCase()
+            && t.type.toUpperCase() === newTransportType.toUpperCase());
+        if (alreadyPersistent) {
+          this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, true);
+        } else {
+          dataToUse.push({ pk: newTransportPk, type: newTransportType });
+          this.addOperationSubscription = this.transportService.savePersistentTransportsData(
+            NodeComponent.getCurrentNodeKey(),
+            dataToUse,
+          ).subscribe(() => {
+            this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, true);
+          }, (err: OperationError) => this.onAddError(err));
+        }
+      }, (err: OperationError) => this.onAddError(err));
+    } else {
+      this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, false);
+    }
+  }
+
+  private doCreateTransport(remotePk: string, type: string, label: string, creatingAfterPersistent: boolean) {
+    this.addOperationSubscription = this.transportService.create(
+      NodeComponent.getCurrentNodeKey(),
+      remotePk,
+      type,
+    ).subscribe((response: any) => {
+      let errorSavingLabel = false;
+      if (label) {
+        if (response && response.id) {
+          this.storageService.saveLabel(response.id, label, LabeledElementTypes.Transport);
+        } else {
+          errorSavingLabel = true;
+        }
+      }
+      this.addBusy = false;
+      this.cancelAddForm();
+      NodeComponent.refreshCurrentDisplayedData();
+      if (!errorSavingLabel) {
+        this.snackbarService.showDone('transports.dialog.success');
+      } else {
+        this.snackbarService.showWarning('transports.dialog.success-without-label');
+      }
+    }, (err: OperationError) => {
+      if (creatingAfterPersistent) {
+        this.addBusy = false;
+        this.cancelAddForm();
+        NodeComponent.refreshCurrentDisplayedData();
+        this.snackbarService.showWarning('transports.dialog.only-persistent-created');
+      } else {
+        this.onAddError(err);
+      }
+    });
+  }
+
+  private onAddError(err: OperationError) {
+    this.addBusy = false;
+    err = processServiceError(err);
+    this.snackbarService.showError(err);
+  }
+
+  private resetAddForm() {
+    this.addForm.reset({ remoteKey: '', label: '', type: this.addAvailableTypes && this.addAvailableTypes[0] || '' });
+    this.addingPersistent = false;
+    this.addBusy = false;
+  }
+
+  /**
+   * Loads the list of available transport types into addAvailableTypes.
+   * Mirrors the dialog's loadData logic but without the retry loop —
+   * the inline form just shows an empty type list on failure and
+   * the user can retry by reopening it.
+   */
+  private loadAddTypes() {
+    this.addTypesSubscription = of(1).pipe(
+      delay(0),
+      mergeMap(() => this.transportService.types(NodeComponent.getCurrentNodeKey())),
+    ).subscribe((types: string[]) => {
+      types.sort((a, b) => {
+        if (a.toLowerCase() === 'stcp') { return 1; }
+        if (b.toLowerCase() === 'stcp') { return -1; }
+        return a.localeCompare(b);
+      });
+      let defaultIndex = types.findIndex(t => t.toLowerCase() === 'dmsg');
+      defaultIndex = defaultIndex !== -1 ? defaultIndex : 0;
+      this.addAvailableTypes = types;
+      this.addForm.get('type').setValue(types[defaultIndex] || '');
+      this.cdr.markForCheck();
+    }, (err: any) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
+      this.addAvailableTypes = [];
+      this.cdr.markForCheck();
+    });
   }
 
   /**
@@ -524,17 +685,26 @@ export class TransportListComponent implements OnDestroy {
 
     // Needed to prevent racing conditions.
     if (this.filteredTransports) {
-      // Calculate the pagination values.
-      const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.filteredTransports.length / maxElements);
-      if (this.currentPage > this.numberOfPages) {
-        this.currentPage = this.numberOfPages;
+      // Short list (routing-overview embed) keeps the slice — that
+      // surface only has room for a handful before the rest get
+      // collapsed behind a "view all" link. The full list page
+      // (/nodes/<pk>/transports) shows everything in one scroll;
+      // visors typically have 10s of transports, not 100s, so the
+      // paginator added clicks for nothing.
+      if (this.showShortList_) {
+        const maxElements = AppConfig.maxShortListElements;
+        this.numberOfPages = Math.ceil(this.filteredTransports.length / maxElements);
+        if (this.currentPage > this.numberOfPages) {
+          this.currentPage = this.numberOfPages;
+        }
+        const start = maxElements * (this.currentPage - 1);
+        const end = start + maxElements;
+        this.transportsToShow = this.filteredTransports.slice(start, end);
+      } else {
+        this.numberOfPages = 1;
+        this.currentPage = 1;
+        this.transportsToShow = this.filteredTransports.slice();
       }
-
-      // Limit the elements to show.
-      const start = maxElements * (this.currentPage - 1);
-      const end = start + maxElements;
-      this.transportsToShow = this.filteredTransports.slice(start, end);
 
       // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<string, boolean>();

@@ -34,3 +34,32 @@
 .offline {
   opacity: 0.35;
 }
+
+
+.inline-add-transport {
+  .add-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 8px;
+
+    mat-form-field {
+      flex: 1 1 220px;
+    }
+    .field-pk { flex: 2 1 360px; }
+    .field-md { flex: 1 1 180px; }
+    .field-sm { flex: 0 1 140px; }
+
+    button {
+      margin-left: auto;
+    }
+  }
+
+  .help-icon {
+    margin-left: 4px;
+    opacity: 0.6;
+    cursor: help;
+  }
+}
+
