@@ -116,6 +116,32 @@ func (d *DMSG) acceptConn(fc *transport.Connection) {
 	}
 }
 
+// closeConn removes the cached entry that matches the given conn.
+// Called from Conn.run() cleanup so a dead DMSG conn does not persist
+// in d.cs and short-circuit subsequent ConnectPK calls.
+//
+// Without this, when the *remote* CXO node restarts (and its old
+// per-conn state goes away) the local side's dmsg session survives
+// — but the cxo Conn on top is dead. ConnectPK's existing-conn
+// cache hit then returns the dead conn, the publisher's AnnounceTo
+// never re-handshakes, and from the remote aggregator's point of
+// view that publisher is silent forever (until the publisher itself
+// restarts). closeConn is the symmetric undo for addConn so the
+// cache stays consistent with the live conn set.
+//
+// Iterating to find c is fine: d.cs is bounded by peer count, and
+// this fires only on conn teardown — not in the hot path.
+func (d *DMSG) closeConn(c *Conn) {
+	d.mx.Lock()
+	defer d.mx.Unlock()
+	for pk, cached := range d.cs {
+		if cached == c {
+			delete(d.cs, pk)
+			return
+		}
+	}
+}
+
 // CloseConn closes a connection by remote public key.
 func (d *DMSG) CloseConn(pk cipher.PubKey) error {
 	d.mx.Lock()
