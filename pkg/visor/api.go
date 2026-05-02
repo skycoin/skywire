@@ -138,8 +138,8 @@ type API interface {
 	// nothing is currently dialed via that app.
 	RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error)
 	ActiveRoutes() ([]AppRouteStatus, error)
-	AddMuxRoute(appName string, tpID uuid.UUID) error
-	RemoveMuxRoute(appName string, tpID uuid.UUID) error
+	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
+	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
 	SetMinHops(uint16) error

@@ -9,11 +9,14 @@
 //	skynet port add <p> --local-port <l>  →  serve add <p> --to <l>
 //	skynet port rm <p>      →  serve rm <p>
 //
-// The single --to flag accepts either a full host:port (`127.0.0.1:9883`)
-// or just a port (`9883`, treated as `localhost:9883`). The visor side
-// chooses HTTP reverse-proxy vs raw TCP forwarding based on the
-// network port (port 80 → reverse proxy through the dmsghttp logserver;
-// everything else → raw TCP via the skynet/dmsg forwarders).
+// The single --to flag accepts either a full host:port (`127.0.0.1:9883`,
+// `192.168.1.20:5432`) or just a port (`9883`, treated as `localhost:9883`).
+// The visor side chooses HTTP reverse-proxy vs raw TCP forwarding based
+// on the network port (port 80 → reverse proxy through the dmsghttp
+// logserver; everything else → raw TCP via the skynet/dmsg forwarders).
+// On non-port-80 targets, host:port targets that resolve elsewhere on the
+// network forward there too — useful for exposing a LAN service via skynet
+// without running it on the visor host.
 //
 // The previous static-file helper is retained at `cli util serve`.
 package cliserve
@@ -77,7 +80,9 @@ Note:
   Port 80 is owned by the visor's dmsghttp landing-page server.
   --to N on port 80 wires up an HTTP reverse-proxy to localhost:N
   through the landing-page handler (visor's built-in routes still win).
-  For other ports --to is a raw TCP forwarding target.
+  For other ports, --to may be a port (localhost target) OR a full
+  host:port (e.g. 192.168.1.20:5432) to forward to a service elsewhere
+  on the LAN.
 
 The previous "skynet port ..." commands still work (deprecated).
 The static-file helper that used to be at "cli serve <dir>" moved
@@ -100,14 +105,16 @@ var servePortLsCmd = &cobra.Command{
 var servePortCmd = &cobra.Command{
 	Use:   "add <port>",
 	Short: "Register a forwarded port",
-	Long: `Expose a localhost target over the visor's .skynet / .dmsg
-network face on <port>.
+	Long: `Expose a target over the visor's .skynet / .dmsg
+network face on <port>. Target may be on this host (localhost) or
+elsewhere on the LAN.
 
 Examples:
-  serve add 8080 --to 8080
-  serve add 80 --to 127.0.0.1:9883
-  serve add 3000 --to 9000 --label "blog" --desc "static blog"
-  serve add 5432 --to 5432 --skynet --dmsg=false --landing=false`,
+  serve add 8080 --to 8080                        # localhost:8080
+  serve add 80 --to 127.0.0.1:9883                # reverse-proxy port 80 to local HTTP service
+  serve add 3000 --to 9000 --label "blog"
+  serve add 5432 --to 192.168.1.20:5432           # forward to a LAN service
+  serve add 8443 --to nas.local:443 --landing=false`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		port, err := strconv.Atoi(args[0])
@@ -124,27 +131,28 @@ Examples:
 			ShowOnLanding: serveLanding,
 		}
 
-		// Resolve --to into the right field. The visor's existing
-		// schema has two: ProxyAddr (HTTP reverse-proxy via the
-		// logserver, used for port 80) and LocalPort (raw TCP). We
-		// pick by the on-the-wire port: 80 = reverse-proxy, else
-		// raw TCP. --to accepts either "host:port" or just a port.
+		// Resolve --to into the right field. The visor schema has two
+		// targets: ProxyAddr (an arbitrary host:port — port 80 uses the
+		// HTTP reverse-proxy on the logserver, every other port uses
+		// raw TCP) and LocalPort (legacy localhost-only short form).
+		// --to accepts either "host:port" or just a port. We use
+		// ProxyAddr whenever the user specifies a host, and LocalPort
+		// when only a port is given.
 		if serveTo != "" {
 			host, p, err := splitTo(serveTo)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--to: %w", err))
 			}
-			if port == 80 {
+			switch {
+			case port == 80:
 				if host == "" {
 					host = "127.0.0.1"
 				}
 				fp.ProxyAddr = fmt.Sprintf("%s:%d", host, p)
-			} else {
-				if host != "" && host != "127.0.0.1" && host != "localhost" {
-					internal.PrintFatalError(cmd.Flags(),
-						fmt.Errorf("--to: raw TCP forwarding only supports localhost targets, got %q", host))
-				}
+			case host == "" || host == "localhost" || host == "127.0.0.1":
 				fp.LocalPort = p
+			default:
+				fp.ProxyAddr = fmt.Sprintf("%s:%d", host, p)
 			}
 		}
 

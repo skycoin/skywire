@@ -691,11 +691,11 @@ func (mc *mockRPCClient) ActiveRoutes() ([]AppRouteStatus, error) {
 	return nil, nil
 }
 
-func (mc *mockRPCClient) AddMuxRoute(_ string, _ uuid.UUID) error {
+func (mc *mockRPCClient) AddMuxRoute(_ string, _, _ []routing.Hop, _ uint16) error {
 	return nil
 }
 
-func (mc *mockRPCClient) RemoveMuxRoute(_ string, _ uuid.UUID) error {
+func (mc *mockRPCClient) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
 	return nil
 }
 

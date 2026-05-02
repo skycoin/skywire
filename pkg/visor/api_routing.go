@@ -4,6 +4,7 @@ package visor
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -170,56 +171,81 @@ func (v *Visor) ActiveRoutes() ([]AppRouteStatus, error) {
 	return result, nil
 }
 
-// findRouteDescForApp finds the route descriptor for a running app by matching its port.
-func (v *Visor) findRouteDescForApp(appName string) (routing.RouteDescriptor, error) {
+// findRouteDescForApp resolves an active rg's descriptor for the
+// named app. Uses the rg's stored AppName tag (set via SetAppName
+// at dial time from opts.AppName) rather than registered-app-port
+// matching — the rg's descriptor uses an ephemeral source port that
+// the procManager.GetAppPort lookup can't see.
+//
+// srcPort disambiguates when multiple rg's are active for the same
+// app (one per concurrent SOCKS5 connection on skysocks-client, etc.):
+//
+//   - srcPort == 0 and exactly 1 rg matches → that rg.
+//   - srcPort == 0 and >1 rg matches → error listing all candidates,
+//     so the caller can pick.
+//   - srcPort != 0 → match the rg whose Desc.SrcPort equals srcPort.
+func (v *Visor) findRouteDescForApp(appName string, srcPort uint16) (routing.RouteDescriptor, error) {
 	var desc routing.RouteDescriptor
-
-	if v.procM == nil {
-		return desc, errors.New("process manager not available")
+	if v.router == nil {
+		return desc, errors.New("router not available")
 	}
-	port, err := v.procM.GetAppPort(appName)
-	if err != nil {
-		return desc, fmt.Errorf("app %q not found or not running: %w", appName, err)
+	infos := v.router.RouteGroupMuxInfoForApp(appName)
+	if len(infos) == 0 {
+		return desc, fmt.Errorf("no active route group for app %q", appName)
 	}
-
-	// Find the route group whose local port matches the app's port
-	statuses := v.router.ActiveRouteStatuses()
-	for _, s := range statuses {
-		if s.LocalPort == port {
-			return routing.NewRouteDescriptor(s.RemotePK, s.LocalPK, s.RemotePort, s.LocalPort), nil
+	if srcPort != 0 {
+		for _, info := range infos {
+			if uint16(info.Desc.SrcPort()) == srcPort { //nolint:gosec
+				return info.Desc, nil
+			}
 		}
+		return desc, fmt.Errorf("no rg for app %q with src_port=%d", appName, srcPort)
 	}
-
-	return desc, fmt.Errorf("no active route found for app %q on port %d", appName, port)
+	if len(infos) == 1 {
+		return infos[0].Desc, nil
+	}
+	// Ambiguous. Surface every candidate so the caller can pass --rg.
+	var b strings.Builder
+	fmt.Fprintf(&b, "app %q has %d active rg's; pass --rg <src_port>:\n", appName, len(infos))
+	for _, info := range infos {
+		fmt.Fprintf(&b, "  src_port=%d  remote=%s  port=%d\n",
+			info.Desc.SrcPort(), info.Desc.DstPK(), info.Desc.DstPort())
+	}
+	return desc, errors.New(strings.TrimRight(b.String(), "\n"))
 }
 
-// AddMuxRoute implements API.
-// Adds a new mux route to the specified app's active route group.
-func (v *Visor) AddMuxRoute(appName string, tpID uuid.UUID) error {
+// AddMuxRoute implements API. Adds a leg over the caller-supplied
+// route to the app's active rg. The hop lists have the same shape
+// 'cli route calc' emits, so the natural workflow is
+//
+//	skywire cli route calc <peer-pk> --json | skywire cli proxy mux-add
+//
+// srcPort disambiguates when the app has multiple concurrent rg's
+// (use 0 to auto-pick when there's exactly one). Auto-pick a
+// disjoint route on the visor side is deferred — callers pick the
+// route explicitly for now.
+func (v *Visor) AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error {
 	if v.router == nil {
 		return errors.New("router not available")
 	}
-
-	desc, err := v.findRouteDescForApp(appName)
+	desc, err := v.findRouteDescForApp(appName, srcPort)
 	if err != nil {
 		return err
 	}
-
-	return v.router.AddMuxRouteByTransport(desc, tpID)
+	return v.router.AddMuxRouteByHops(desc, fwd, rev)
 }
 
-// RemoveMuxRoute implements API.
-// Removes a mux route using the specified transport from the app's route group.
-func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID) error {
+// RemoveMuxRoute implements API. Drops the leg over the given
+// transport from the app's active rg; srcPort disambiguates as in
+// AddMuxRoute.
+func (v *Visor) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
 	if v.router == nil {
 		return errors.New("router not available")
 	}
-
-	desc, err := v.findRouteDescForApp(appName)
+	desc, err := v.findRouteDescForApp(appName, srcPort)
 	if err != nil {
 		return err
 	}
-
 	return v.router.RemoveMuxRouteByTransport(desc, tpID)
 }
 
