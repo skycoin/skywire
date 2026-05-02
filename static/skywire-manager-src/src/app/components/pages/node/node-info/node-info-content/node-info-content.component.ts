@@ -55,6 +55,15 @@ export class NodeInfoContentComponent implements OnDestroy {
 
   @Input() trafficData: TrafficData;
 
+  // True when the configured reward "address" is actually a BIP44
+  // extended public key (xpub...) rather than a plain Skycoin
+  // address. The Skycoin block explorer doesn't take xpubs, so the
+  // template suppresses the explorer link in that case.
+  get rewardsAddressIsXpub(): boolean {
+    const addr = (this.node && this.node.rewardsAddress) || '';
+    return addr.startsWith('xpub');
+  }
+
   node: Node;
   timeOnline: ElapsedTime;
   transportStats: { total: number, byType: { type: string, count: number }[] } = { total: 0, byType: [] };
