@@ -151,6 +151,16 @@ func (r *RPC) GetRuntimeConfig(_ *struct{}, out *[]byte) (err error) {
 	return err
 }
 
+// RuntimeLogs returns the visor's accumulated runtime log buffer.
+// Used by the hypervisor UI's "view logs" action and the
+// `skywire cli visor logs` command.
+func (r *RPC) RuntimeLogs(_ *struct{}, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "RuntimeLogs", nil)(out, &err)
+	logs, err := r.visor.RuntimeLogs()
+	*out = logs
+	return err
+}
+
 // GetConfigPath returns the filesystem path the visor loaded its config from.
 func (r *RPC) GetConfigPath(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetConfigPath", nil)(out, &err)
