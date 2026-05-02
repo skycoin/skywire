@@ -80,10 +80,11 @@ pkgsStatic.buildGoModule {
   # upstream, replace with a real `vendorHash`.
   vendorHash = null;
 
-  # `cmd/skywire/skywire.go` is the merged-binary entrypoint; the
-  # repo root has no `package main`. Same target the AUR builds:
-  #   go install github.com/skycoin/skywire/cmd/skywire@v…
-  subPackages = [ "cmd/skywire" ];
+  # The repo root's `skywire.go` is the merged-binary entrypoint
+  # (skywire + skycoin subtrees); same target the upstream
+  # Makefile's `build-static` recipe builds with `go build .`.
+  # `cmd/skywire/` is a leaner skywire-only package not used here.
+  subPackages = [ "." ];
 
   # Static-link via musl + the same -extldflags '-static' the
   # upstream Makefile uses. CGO_ENABLED is forced on because the
