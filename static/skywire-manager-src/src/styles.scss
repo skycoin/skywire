@@ -127,22 +127,42 @@ button:focus {
   }
 }
 
-// Default Material panel falls back to the page background when used
-// on the dark node-detail panes — text in mat-options ends up dark on
-// dark and is unreadable. Force a light surface with dark text on any
-// select that opts in via panelClass="skynet-select-panel".
-.cdk-overlay-pane .mat-mdc-select-panel.skynet-select-panel,
+// Default Material 21 panel inherits page background + foreground via
+// CSS custom properties; on the dark node-detail panes that lands as
+// dark-on-dark and the options are unreadable. Force a readable light
+// panel for any select that opts in via panelClass="skynet-select-panel".
+//
+// Targets Material 21's MDC custom properties on the panel's surface
+// element (.mdc-menu-surface) — the older background-color/color
+// overrides don't reach the rendered MDC styles.
+.cdk-overlay-pane .skynet-select-panel.mdc-menu-surface,
+.cdk-overlay-pane .skynet-select-panel.mat-mdc-select-panel,
 .mat-mdc-select-panel.skynet-select-panel {
   background-color: #ffffff !important;
 
+  --mat-app-surface: #ffffff;
+  --mdc-theme-surface: #ffffff;
+  --mat-mdc-select-panel-background-color: #ffffff;
+  --mdc-list-list-item-label-text-color: rgba(0, 0, 0, 0.87);
+  --mdc-list-list-item-hover-label-text-color: rgba(0, 0, 0, 0.87);
+  --mdc-list-list-item-focus-label-text-color: rgba(0, 0, 0, 0.87);
+  --mdc-list-list-item-hover-state-layer-color: rgba(0, 0, 0, 0.06);
+  --mdc-list-list-item-focus-state-layer-color: rgba(0, 0, 0, 0.08);
+  --mat-option-label-text-color: rgba(0, 0, 0, 0.87);
+  --mat-option-selected-state-label-text-color: rgba(0, 0, 0, 0.87);
+
+  // Belt-and-braces: override the rendered styles directly in case
+  // a build pipeline strips the custom properties.
   .mat-mdc-option,
+  .mat-mdc-option .mdc-list-item__primary-text,
   .mdc-list-item__primary-text {
     color: rgba(0, 0, 0, 0.87) !important;
   }
 
   .mat-mdc-option:hover:not(.mdc-list-item--disabled),
-  .mat-mdc-option.mat-mdc-option-active {
-    background-color: rgba(0, 0, 0, 0.04) !important;
+  .mat-mdc-option.mat-mdc-option-active,
+  .mat-mdc-option.mdc-list-item--selected {
+    background-color: rgba(0, 0, 0, 0.06) !important;
   }
 }
 
