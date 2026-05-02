@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# Fail loudly: any non-zero exit (docker build, missing args, broken
+# pipe in a sub-pipeline) propagates to the caller. Without this,
+# `make docker-push-test` reports success after a failed build and
+# the workflow declares deploy "successful" while no image was pushed.
+set -eo pipefail
 trap "exit" INT
 
 ## Variables
