@@ -9,7 +9,20 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs { inherit system; };
+        # Skywire ships without an explicit LICENSE file (the AUR
+        # PKGBUILD tags it "license-free"), so Nix's policy treats
+        # it as unfree by default and refuses to build it without an
+        # opt-in. Whitelist exactly skywire + skywire-bin here so
+        # `nix build` works on a stock Nix installation without
+        # exporting NIXPKGS_ALLOW_UNFREE=1 / --impure.
+        pkgs = import nixpkgs {
+          inherit system;
+          config.allowUnfreePredicate = pkg:
+            builtins.elem (nixpkgs.lib.getName pkg) [
+              "skywire"
+              "skywire-bin"
+            ];
+        };
 
         # Pin the version once for both packages. Bump this when
         # cutting a new release — the source build picks the matching
