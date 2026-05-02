@@ -1258,6 +1258,14 @@ func (rg *RouteGroup) MeasureLatency(ctx context.Context, count int) (min, max, 
 		// Wait for pong with timeout
 		select {
 		case latencyMs := <-pongCh:
+			// Drop non-positive samples — a 0 here would seed min/max
+			// at 0 and produce a snapshot {min:0, max:X, avg:Y} that
+			// downstream consumers (TPD, /stats) treat as "no min
+			// measurement" and either reject or display misleadingly.
+			if latencyMs <= 0 {
+				rg.logger.Debugf("Ping %d/%d: dropped non-positive sample (%.6f ms)", i+1, count, latencyMs)
+				continue
+			}
 			measurements = append(measurements, latencyMs)
 			rg.logger.Debugf("Ping %d/%d: %.2f ms", i+1, count, latencyMs)
 		case <-time.After(timeout):

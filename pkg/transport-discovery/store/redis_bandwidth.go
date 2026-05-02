@@ -116,7 +116,10 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 // blob from a latency report alone — registration is the only path that
 // knows the canonical edges/type.
 func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error {
-	if avgMS <= 0 {
+	// Defense-in-depth alongside the aggregator gate: any non-positive
+	// field means the snapshot is partial, so reject the whole update
+	// rather than persist a zero in a single field.
+	if minMS <= 0 || maxMS <= 0 || avgMS <= 0 {
 		return nil
 	}
 
