@@ -136,6 +136,7 @@ func (hv *Hypervisor) getSkynetForwards() http.HandlerFunc {
 func (hv *Hypervisor) postSkynetConnect() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var reqBody struct {
+			Network    string        `json:"network"`
 			RemotePK   cipher.PubKey `json:"remote_pk"`
 			RemotePort int           `json:"remote_port"`
 			LocalPort  int           `json:"local_port"`
@@ -147,7 +148,7 @@ func (hv *Hypervisor) postSkynetConnect() http.HandlerFunc {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
 			return
 		}
-		id, err := ctx.API.ConnectRawTCP(reqBody.RemotePK, reqBody.RemotePort, reqBody.LocalPort)
+		id, err := ctx.API.ConnectRawTCP(reqBody.Network, reqBody.RemotePK, reqBody.RemotePort, reqBody.LocalPort)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 			return

@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -119,12 +120,35 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 	lsAPI.SetWebsiteHandler(nil)
 }
 
-// ConnectRawTCP implements API. Establishes a raw TCP port forwarding connection over skywire.
-func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
-	ok := isPortAvailable(v.log, localPort)
-	if !ok {
+// ConnectRawTCP implements API. Establishes a raw TCP port forwarding
+// connection over skywire. The network parameter selects the transport:
+//
+//   - "skynet" (default; empty string treated as skynet) — dials the
+//     remote visor's sky-forwarding server, handshakes the requested
+//     remote port, and pipes a local TCP listener to the resulting
+//     stream. Routes traverse the routing layer.
+//   - "dmsg"  — opens a DMSG stream directly to (remotePK, remotePort)
+//     and pipes a local TCP listener to it. Requires the remote visor
+//     to be running a DMSG forwarder for that port. Independent of
+//     the routing layer.
+//
+// Returns the forwarder's ID; pass to DisconnectRawTCP to tear down.
+func (v *Visor) ConnectRawTCP(network string, remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	if !isPortAvailable(v.log, localPort) {
 		return uuid.UUID{}, fmt.Errorf(":%v local port already in use", localPort)
 	}
+
+	switch network {
+	case "", "skynet":
+		return v.connectRawTCPSkynet(remotePK, remotePort, localPort)
+	case "dmsg":
+		return v.connectRawTCPDmsg(remotePK, remotePort, localPort)
+	default:
+		return uuid.UUID{}, fmt.Errorf("unsupported network %q (expected \"skynet\" or \"dmsg\")", network)
+	}
+}
+
+func (v *Visor) connectRawTCPSkynet(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	connApp := appnet.Addr{
 		Net:    appnet.TypeSkynet,
 		PubKey: remotePK,
@@ -139,15 +163,12 @@ func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int)
 		return uuid.UUID{}, err
 	}
 
-	cMsg := clientMsg{
-		Port: remotePort,
-	}
+	cMsg := clientMsg{Port: remotePort}
 	clientMsgBytes, err := json.Marshal(cMsg)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
-	_, err = remoteConn.Write(clientMsgBytes)
-	if err != nil {
+	if _, err = remoteConn.Write(clientMsgBytes); err != nil {
 		return uuid.UUID{}, err
 	}
 	v.log.Debugf("Raw TCP msg sent %s", clientMsgBytes)
@@ -158,8 +179,7 @@ func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int)
 		return uuid.UUID{}, err
 	}
 	var sReply serverReply
-	err = json.Unmarshal(buf[:n], &sReply)
-	if err != nil {
+	if err := json.Unmarshal(buf[:n], &sReply); err != nil {
 		return uuid.UUID{}, err
 	}
 	v.log.Debugf("Received: %v", sReply)
@@ -170,9 +190,31 @@ func (v *Visor) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int)
 		return uuid.UUID{}, fmt.Errorf("%s", sErr)
 	}
 
-	forwardConn, err := appnet.NewRawTCPForwardConn(v.log, remoteConn, remotePort, localPort)
+	forwardConn, err := appnet.NewRawTCPForwardConn(v.log, "skynet", remoteConn, remotePort, localPort)
 	if err != nil {
 		_ = remoteConn.Close() //nolint:errcheck
+		return uuid.UUID{}, err
+	}
+	forwardConn.Serve()
+	return forwardConn.ID, nil
+}
+
+func (v *Visor) connectRawTCPDmsg(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+	if v.dmsgC == nil {
+		return uuid.UUID{}, errors.New("dmsg client not available")
+	}
+	if remotePort < 1 || remotePort > 65535 {
+		return uuid.UUID{}, fmt.Errorf("invalid remote dmsg port %d", remotePort)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	stream, err := v.dmsgC.DialStream(ctx, dmsg.Addr{PK: remotePK, Port: uint16(remotePort)}) //nolint:gosec
+	if err != nil {
+		return uuid.UUID{}, fmt.Errorf("dial dmsg stream: %w", err)
+	}
+	forwardConn, err := appnet.NewRawTCPForwardConn(v.log, "dmsg", stream, remotePort, localPort)
+	if err != nil {
+		_ = stream.Close() //nolint:errcheck
 		return uuid.UUID{}, err
 	}
 	forwardConn.Serve()

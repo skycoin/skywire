@@ -293,38 +293,36 @@ func (v *Visor) SetAutoStart(appName string, autoStart bool) error {
 	return v.conf.UpdateAppAutostart(v.appL, appName, autoStart)
 }
 
-// SetAppPassword implements API.
-func (v *Visor) SetAppPassword(appName, password string) error {
+// SetAppWhitelist implements API. Updates the comma-separated PK
+// whitelist that gates incoming connections on skysocks / vpn-server.
+// Empty value means "open to all authenticated peers" — same
+// semantics as omitting the flag.
+//
+// Replaces the older SetAppPassword: the apps no longer recognize a
+// --passcode flag, so updating that arg was a silent no-op (or
+// worse, would prevent the app from starting if the flag definition
+// was tightened).
+func (v *Visor) SetAppWhitelist(appName, whitelist string) error {
 	// check app launcher availability
 	if v.appL == nil {
 		return ErrAppLauncherNotAvailable
 	}
-	allowedToChangePassword := func(appName string) bool {
-		allowedApps := map[string]struct{}{
-			skyenv.SkysocksName:  {},
-			skyenv.VPNClientName: {},
-			skyenv.VPNServerName: {},
-		}
-
-		_, ok := allowedApps[appName]
-		return ok
+	allowed := map[string]struct{}{
+		skyenv.SkysocksName:  {},
+		skyenv.VPNServerName: {},
+	}
+	if _, ok := allowed[appName]; !ok {
+		return fmt.Errorf("app %s does not support a connection whitelist", appName)
 	}
 
-	if !allowedToChangePassword(appName) {
-		return fmt.Errorf("app %s is not allowed to change password", appName)
-	}
+	v.log.Infof("Updating %s whitelist (%d chars)", appName, len(whitelist))
 
-	v.log.Infof("Changing %s password to %q", appName, password)
-
-	const (
-		passcodeArgName = "--passcode"
-	)
-	if err := v.conf.UpdateAppArg(v.appL, appName, passcodeArgName, password); err != nil {
+	const whitelistArgName = "--whitelist"
+	if err := v.conf.UpdateAppArg(v.appL, appName, whitelistArgName, whitelist); err != nil {
 		return err
 	}
 
-	v.log.Infof("Updated %v password", appName)
-
+	v.log.Infof("Updated %v whitelist", appName)
 	return nil
 }
 

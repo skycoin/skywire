@@ -322,11 +322,11 @@ func (rc *rpcClient) SetAutoStart(appName string, autostart bool) error {
 	}, &struct{}{})
 }
 
-// SetAppPassword calls SetAppPassword.
-func (rc *rpcClient) SetAppPassword(appName, password string) error {
-	return rc.Call("SetAppPassword", &SetAppPasswordIn{
-		AppName:  appName,
-		Password: password,
+// SetAppWhitelist calls SetAppWhitelist.
+func (rc *rpcClient) SetAppWhitelist(appName, whitelist string) error {
+	return rc.Call("SetAppWhitelist", &SetAppWhitelistIn{
+		AppName:   appName,
+		Whitelist: whitelist,
 	}, &struct{}{})
 }
 
@@ -796,10 +796,12 @@ func (rc *rpcClient) DMSGServers() ([]DMSGServerInfo, error) {
 	return out, err
 }
 
-// ConnectRawTCP calls ConnectRawTCP.
-func (rc *rpcClient) ConnectRawTCP(remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
+// ConnectRawTCP calls ConnectRawTCP. network is "skynet" (default;
+// empty string treated as skynet) or "dmsg".
+func (rc *rpcClient) ConnectRawTCP(network string, remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error) {
 	var out uuid.UUID
 	err := rc.Call("ConnectRawTCP", &ConnectIn{
+		Network:    network,
 		RemotePK:   remotePK,
 		RemotePort: remotePort,
 		LocalPort:  localPort,

@@ -123,9 +123,14 @@ type SetAutoStartIn struct {
 	AppName   string
 	AutoStart bool
 }
-type SetAppPasswordIn struct {
-	AppName  string
-	Password string
+
+// SetAppWhitelistIn carries a comma-separated list of public keys
+// allowed to connect to skysocks / vpn-server. Empty = open to all
+// authenticated peers. Replaces the prior SetAppPasswordIn — those
+// apps no longer accept a passcode flag.
+type SetAppWhitelistIn struct {
+	AppName   string
+	Whitelist string
 }
 type SetAppNetworkInterfaceIn struct {
 	AppName string
@@ -228,6 +233,9 @@ type DeregisterServiceIn struct {
 	ServiceType string
 }
 type ConnectIn struct {
+	// Network selects the underlying transport for the reverse proxy.
+	// "skynet" (default; empty string treated as skynet) or "dmsg".
+	Network    string
 	RemotePK   cipher.PubKey
 	RemotePort int
 	LocalPort  int
