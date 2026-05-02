@@ -33,11 +33,13 @@ package cxoaggregator
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sirupsen/logrus"
 	skycipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -127,6 +129,24 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	cfg.Config.InMemoryDB = conf.InMemoryDB || conf.DataDir == ""
 	if conf.DataDir != "" {
 		cfg.Config.DataDir = conf.DataDir
+	}
+
+	// Wire the cxo node's internal logger so its FillPin / MsgReceivePin
+	// / connection-handshake debug output goes to stderr (where docker
+	// logs reads it). Without this, cxo's "[fill] ..." and "[%s]
+	// handleSub %s" lines are silent regardless of tpd's --loglvl, and
+	// a fill failure / handshake mismatch is invisible. Debug is gated
+	// on the global logger level so prod runs at INFO get nothing extra.
+	cfg.Logger.Output = os.Stderr
+	cfg.Logger.Prefix = "[tpd-cxo-aggregator:node] "
+	if lvl := logging.GetLevel(); lvl == logrus.DebugLevel || lvl == logrus.TraceLevel {
+		cfg.Logger.Debug = true
+		// Filter to the pins that diagnose Subscribe → Root delivery →
+		// fill chains. ConnPin is loud-on-startup but only one-shot;
+		// MsgPin would be too chatty (every Root + every chunk request),
+		// so include only MsgReceivePin which captures the publisher
+		// side of subscribe/root receipt.
+		cfg.Logger.Pins = node.FillPin | node.ConnPin | node.MsgReceivePin
 	}
 
 	cxoNode, err := node.NewNode(cfg)
