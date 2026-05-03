@@ -115,7 +115,10 @@ func (v *Visor) ClearSkychatPassword(oldPassword string) error {
 			return errors.New("incorrect current skychat password")
 		}
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	// path is filepath.Join(v.conf.LocalPath, "skychat-password") —
+	// visor-controlled, not user input. The G703 path-traversal flag
+	// is a false positive in this context.
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) { //nolint:gosec
 		return err
 	}
 	// Re-launch skychat with --password-file = "" so it knows the

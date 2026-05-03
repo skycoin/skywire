@@ -54,12 +54,16 @@ func (hv *Hypervisor) putSkychatPassword() http.HandlerFunc {
 
 func (hv *Hypervisor) deleteSkychatPassword() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		// Accept the old password from either a JSON body or a
+		// query string — Angular's HttpClient DELETE doesn't
+		// naturally carry a body, so the hvui sends ?old_password=.
 		var rb struct {
 			OldPassword string `json:"old_password"`
 		}
-		// Body is optional — when no password is set the field is
-		// ignored anyway. Don't 400 on an empty body.
 		_ = httputil.ReadJSON(r, &rb) //nolint:errcheck
+		if rb.OldPassword == "" {
+			rb.OldPassword = r.URL.Query().Get("old_password")
+		}
 		if err := ctx.API.ClearSkychatPassword(rb.OldPassword); err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadRequest, err)
 			return

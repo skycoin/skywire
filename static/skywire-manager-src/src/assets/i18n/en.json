@@ -349,7 +349,25 @@
     "network": "Network",
     "message": "Message",
     "placeholder": "Type a message; Ctrl+Enter to send",
-    "send": "Send"
+    "send": "Send",
+    "password": {
+      "set": "Set password",
+      "change": "Change password",
+      "clear": "Remove",
+      "hide": "Hide",
+      "saved": "Skychat password updated",
+      "cleared": "Skychat password removed",
+      "old": "Current password",
+      "new": "New password",
+      "confirm": "Repeat new password",
+      "help-unset": "Skychat is currently unprotected. Set a password to require basic auth on the standalone :8001 surface; this hypervisor session always bypasses it.",
+      "help-set": "A password is set on skychat's standalone :8001 surface. Change or remove it here.",
+      "errors": {
+        "length": "Skychat password must be 6-64 characters",
+        "mismatch": "Passwords do not match",
+        "old-required": "Current password is required to remove the gate"
+      }
+    }
   },
 
   "network-view": {

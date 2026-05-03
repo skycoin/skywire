@@ -3,6 +3,7 @@ import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked, 
 import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
+import { ApiService } from 'src/app/services/api.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { environment } from 'src/environments/environment';
 
@@ -61,7 +62,21 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   private es: EventSource | null = null;
   private nodeSub: any;
 
+  // --- Password gate management state. ----------------------------
+  // Whether the password section is expanded.
+  pwOpen = false;
+  // Whether a password is currently set on the visor (drives copy /
+  // which fields are shown).
+  pwIsSet = false;
+  // Form fields. oldPassword is required when pwIsSet, ignored otherwise.
+  pwOld = '';
+  pwNew = '';
+  pwConfirm = '';
+  // In-flight indicator for the apply / clear action.
+  pwBusy = false;
+
   constructor(
+    private api: ApiService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
   ) {
@@ -75,6 +90,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       if (wasUnset) {
         this.connectSSE();
         this.tryLoadPeers();
+        this.refreshPasswordState();
       }
     });
     return super.ngOnInit();
@@ -212,5 +228,87 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (!this.logEl) { this.wasAtBottom = true; return; }
     const el = this.logEl.nativeElement;
     this.wasAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
+  }
+
+  // --- Password gate management ----------------------------------
+
+  togglePassword() {
+    this.pwOpen = !this.pwOpen;
+    if (this.pwOpen) {
+      this.refreshPasswordState();
+    } else {
+      this.resetPasswordForm();
+    }
+  }
+
+  private refreshPasswordState() {
+    if (!this.node) { return; }
+    this.api.get(`visors/${this.node.localPk}/skychat/password`).subscribe(
+      (resp: any) => {
+        this.pwIsSet = !!(resp && resp.set);
+        this.cdr.markForCheck();
+      },
+      () => { /* leave previous state — the form still works */ },
+    );
+  }
+
+  private resetPasswordForm() {
+    this.pwOld = '';
+    this.pwNew = '';
+    this.pwConfirm = '';
+  }
+
+  private validateNewPassword(): string | null {
+    if (this.pwNew.length < 6 || this.pwNew.length > 64) {
+      return 'skychat.password.errors.length';
+    }
+    if (this.pwNew !== this.pwConfirm) {
+      return 'skychat.password.errors.mismatch';
+    }
+    return null;
+  }
+
+  applyPassword() {
+    if (!this.node || this.pwBusy) { return; }
+    const err = this.validateNewPassword();
+    if (err) { this.snackbar.showError(err); return; }
+    this.pwBusy = true;
+    this.api.put(`visors/${this.node.localPk}/skychat/password`, {
+      old_password: this.pwIsSet ? this.pwOld : '',
+      new_password: this.pwNew,
+    }).subscribe(
+      () => {
+        this.pwBusy = false;
+        this.pwIsSet = true;
+        this.resetPasswordForm();
+        this.snackbar.showDone('skychat.password.saved');
+        this.cdr.markForCheck();
+      },
+      (e: any) => {
+        this.pwBusy = false;
+        this.snackbar.showError(e?.originalError?.error?.error || e?.message || String(e));
+        this.cdr.markForCheck();
+      },
+    );
+  }
+
+  clearPassword() {
+    if (!this.node || this.pwBusy || !this.pwIsSet) { return; }
+    if (!this.pwOld) { this.snackbar.showError('skychat.password.errors.old-required'); return; }
+    this.pwBusy = true;
+    this.api.delete(`visors/${this.node.localPk}/skychat/password?old_password=${encodeURIComponent(this.pwOld)}`).subscribe(
+      () => {
+        this.pwBusy = false;
+        this.pwIsSet = false;
+        this.resetPasswordForm();
+        this.snackbar.showDone('skychat.password.cleared');
+        this.cdr.markForCheck();
+      },
+      (e: any) => {
+        this.pwBusy = false;
+        this.snackbar.showError(e?.originalError?.error?.error || e?.message || String(e));
+        this.cdr.markForCheck();
+      },
+    );
   }
 }

@@ -22,6 +22,42 @@
   }
   .dot-green { background: #4caf50; }
   .dot-outline-gray { border: 1px solid rgba(255, 255, 255, 0.4); }
+
+  .sc-status-spacer { flex: 1 1 auto; }
+
+  .sc-password-toggle {
+    font-size: 12px;
+    line-height: 1.2;
+    .lock-icon { font-size: 16px; vertical-align: middle; margin-right: 4px; }
+  }
+}
+
+.sc-password {
+  margin: 8px 0 4px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: flex-end;
+
+  .sc-password-help {
+    flex: 1 1 100%;
+    font-size: 12px;
+    opacity: 0.75;
+    margin-bottom: 4px;
+  }
+
+  .field-pw { flex: 1 1 200px; min-width: 180px; }
+
+  .sc-password-actions {
+    flex: 1 1 100%;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
 }
 
 .sc-log {

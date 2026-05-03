@@ -12,7 +12,45 @@
         @if (!historyAvailable) {
           <span class="hint">· {{ 'skychat.no-history' | translate }}</span>
         }
+        <span class="sc-status-spacer"></span>
+        <button mat-button type="button" class="sc-password-toggle" (click)="togglePassword()">
+          <mat-icon class="lock-icon" [inline]="true">{{ pwIsSet ? 'lock' : 'lock_open' }}</mat-icon>
+          {{ (pwOpen ? 'skychat.password.hide' : (pwIsSet ? 'skychat.password.change' : 'skychat.password.set')) | translate }}
+        </button>
       </div>
+
+      <!-- Password panel (collapsible) -->
+      @if (pwOpen) {
+        <div class="sc-password">
+          <div class="sc-password-help">
+            {{ (pwIsSet ? 'skychat.password.help-set' : 'skychat.password.help-unset') | translate }}
+          </div>
+          @if (pwIsSet) {
+            <mat-form-field appearance="outline" class="field-pw">
+              <mat-label>{{ 'skychat.password.old' | translate }}</mat-label>
+              <input matInput type="password" [(ngModel)]="pwOld" maxlength="64">
+            </mat-form-field>
+          }
+          <mat-form-field appearance="outline" class="field-pw">
+            <mat-label>{{ 'skychat.password.new' | translate }}</mat-label>
+            <input matInput type="password" [(ngModel)]="pwNew" maxlength="64">
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="field-pw">
+            <mat-label>{{ 'skychat.password.confirm' | translate }}</mat-label>
+            <input matInput type="password" [(ngModel)]="pwConfirm" maxlength="64">
+          </mat-form-field>
+          <div class="sc-password-actions">
+            <button mat-raised-button color="primary" (click)="applyPassword()" [disabled]="pwBusy || !pwNew">
+              {{ (pwIsSet ? 'skychat.password.change' : 'skychat.password.set') | translate }}
+            </button>
+            @if (pwIsSet) {
+              <button mat-stroked-button color="warn" (click)="clearPassword()" [disabled]="pwBusy || !pwOld">
+                {{ 'skychat.password.clear' | translate }}
+              </button>
+            }
+          </div>
+        </div>
+      }
 
       <!-- Message log -->
       <div #logEl class="sc-log">
