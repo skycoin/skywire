@@ -518,6 +518,11 @@ func (rc *rpcClient) GetIsPublic() bool {
 	return out
 }
 
+// SetRuntimeConfig implements API.
+func (rc *rpcClient) SetRuntimeConfig(rawJSON []byte) error {
+	return rc.Call("SetRuntimeConfig", &rawJSON, &struct{}{})
+}
+
 // GetRuntimeConfig implements API.
 func (rc *rpcClient) GetRuntimeConfig() ([]byte, error) {
 	var out []byte

@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -276,5 +277,34 @@ func (hv *Hypervisor) getRuntimeConfig() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(configJSON) //nolint:errcheck,gosec
+	})
+}
+
+// putRuntimeConfig accepts a raw JSON body and forwards it to
+// SetRuntimeConfig on the target visor. The body is validated
+// server-side (strict JSON decode + SK/PK consistency); the visor
+// is NOT hot-reloaded — the caller must restart it for the change
+// to take effect. The response includes a "restart_required" flag
+// so the hvui can surface that to the operator.
+func (hv *Hypervisor) putRuntimeConfig() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if len(bytes.TrimSpace(body)) == 0 {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "empty body"})
+			return
+		}
+		if err := ctx.API.SetRuntimeConfig(body); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{
+			"saved":            true,
+			"restart_required": true,
+			"restart_hint":     "Visor must be restarted for the new config to take effect.",
+		})
 	})
 }

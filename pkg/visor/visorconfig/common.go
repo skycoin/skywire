@@ -56,6 +56,12 @@ func (c *Common) MasterLogger() *logging.MasterLogger {
 	return c.log
 }
 
+// Path returns the on-disk path the config was loaded from. Empty
+// when the config came from STDIN or was synthesized in-memory.
+func (c *Common) Path() string {
+	return c.path
+}
+
 // SetLogger sets logger.
 func (c *Common) SetLogger(log *logging.MasterLogger) {
 	c.log = log

@@ -648,6 +648,9 @@ func (mc *mockRPCClient) GetIsPublic() bool { return false }
 // GetRuntimeConfig implements API.
 func (mc *mockRPCClient) GetRuntimeConfig() ([]byte, error) { return []byte("{}"), nil }
 
+// SetRuntimeConfig implements API.
+func (mc *mockRPCClient) SetRuntimeConfig(_ []byte) error { return nil }
+
 // GetConfigPath implements API.
 func (mc *mockRPCClient) GetConfigPath() (string, error) { return "", nil }
 

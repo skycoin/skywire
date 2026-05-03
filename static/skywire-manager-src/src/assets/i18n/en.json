@@ -221,7 +221,10 @@
       },
       "config": {
         "view-button": "View Config",
-        "title": "Runtime Configuration"
+        "title": "Runtime Configuration",
+        "edit": "Edit",
+        "save": "Save",
+        "restart-hint": "Visor must be restarted for changes to take effect."
       },
       "tpviz": {
         "title": "Network Visualizer",

@@ -2,6 +2,8 @@
 package visor
 
 import (
+	"errors"
+
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
@@ -149,6 +151,17 @@ func (r *RPC) GetRuntimeConfig(_ *struct{}, out *[]byte) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRuntimeConfig", nil)(nil, &err)
 	*out, err = r.visor.GetRuntimeConfig()
 	return err
+}
+
+// SetRuntimeConfig validates rawJSON and writes it to the visor's
+// on-disk config file. Visor restart is required for the change to
+// take effect; this RPC does NOT trigger one.
+func (r *RPC) SetRuntimeConfig(rawJSON *[]byte, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetRuntimeConfig", nil)(nil, &err)
+	if rawJSON == nil {
+		return errors.New("nil runtime config payload")
+	}
+	return r.visor.SetRuntimeConfig(*rawJSON)
 }
 
 // RuntimeLogs returns the visor's accumulated runtime log buffer.

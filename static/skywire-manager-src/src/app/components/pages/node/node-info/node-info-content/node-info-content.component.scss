@@ -147,7 +147,8 @@
   text-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
 }
 
-// Raw config viewer
+// Raw config viewer (and editor textarea reuses the same styling
+// so the read/edit visual states stay aligned).
 .raw-config {
   margin-top: 10px;
   padding: 12px;
@@ -162,6 +163,52 @@
   overflow-y: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+textarea.raw-config.config-editor {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  white-space: pre;       // preserve leading spaces so JSON indents
+  word-break: normal;
+  outline: none;
+  caret-color: #fff;
+
+  &:focus { border-color: rgba(0, 212, 255, 0.6); }
+  &:disabled { opacity: 0.6; }
+}
+
+.config-actions {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  .config-restart-hint {
+    font-size: 0.85em;
+    margin-left: auto;
+  }
+  .config-save-msg {
+    color: rgba(76, 175, 80, 0.95);
+    font-size: 0.9em;
+  }
+}
+
+.config-error {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: rgba(229, 57, 53, 0.12);
+  border: 1px solid rgba(229, 57, 53, 0.35);
+  border-radius: 4px;
+  color: rgba(255, 200, 200, 0.95);
+  font-size: 0.85em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  .mat-icon { font-size: 16px; }
 }
 
 // Per-subsystem health lines (indented under the aggregate "Services" line).

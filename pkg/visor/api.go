@@ -122,6 +122,7 @@ type API interface {
 	SetIsPublic(isPublic bool) error
 	GetIsPublic() bool
 	GetRuntimeConfig() ([]byte, error)
+	SetRuntimeConfig(rawJSON []byte) error
 	GetConfigPath() (string, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error
