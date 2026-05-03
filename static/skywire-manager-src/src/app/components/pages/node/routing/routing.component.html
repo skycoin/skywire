@@ -1,10 +1,48 @@
-<app-transport-list
-  [node]="node"
-  [showShortList]="true">
-</app-transport-list>
+<!-- Router / Min hops control. Was on the Info tab; lives with the
+     rest of the routing surface now. -->
+@if (node) {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container overflow font-smaller">
+      <span class="section-title">{{ 'node.details.router-info.title' | translate }}</span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.router-info.min-hops' | translate }} </span>
+        {{ node.minHops }}
+        <button mat-icon-button class="inline-edit-btn" (click)="toggleRouterForm()">
+          <mat-icon [inline]="true">{{ showRouterForm ? 'close' : 'edit' }}</mat-icon>
+        </button>
+      </span>
+      @if (showRouterForm) {
+        <form [formGroup]="routerForm" (ngSubmit)="submitRouterConfig()" class="inline-form">
+          <mat-form-field appearance="outline" class="inline-form-field-sm">
+            <mat-label>{{ 'node.details.router-info.min-hops' | translate }}</mat-label>
+            <input matInput type="number" formControlName="min" min="0" max="999">
+          </mat-form-field>
+          <div class="inline-form-actions">
+            <button mat-raised-button color="primary" type="submit" [disabled]="!routerForm.valid">
+              {{ 'common.save' | translate }}
+            </button>
+            <button mat-button type="button" (click)="toggleRouterForm()">
+              {{ 'common.cancel' | translate }}
+            </button>
+          </div>
+        </form>
+      }
+    </div>
+  </div>
+}
 
 <app-route-list
   [routes]="routes"
   [showShortList]="true"
   [nodePK]="nodePK">
 </app-route-list>
+
+<!-- Traffic data — moved here from the right-bar on the visor
+     detail page so it sits with the rest of the routing surface
+     it actually summarizes. -->
+<div class="rounded-elevated-box mt-3 traffic-box">
+  <div class="box-internal-container">
+    <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
+    <app-charts [trafficData]="trafficData" class="d-flex flex-column justify-content-end mt-3"></app-charts>
+  </div>
+</div>

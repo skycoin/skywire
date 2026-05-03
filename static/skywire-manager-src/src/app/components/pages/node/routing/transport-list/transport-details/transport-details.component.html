@@ -35,5 +35,14 @@
     <div class="item">
       <span>{{ 'transports.details.data.downloaded' | translate }}</span> {{ data.recv | autoScale }}
     </div>
+    <div class="item">
+      <span>{{ 'transports.latency' | translate }}</span>
+      @if (data.latencyMs && data.latencyMs > 0) {
+        {{ data.latencyMs | number:'1.0-0' }} ms
+      }
+      @if (!data.latencyMs || data.latencyMs === 0) {
+        -
+      }
+    </div>
   </div>
 </app-dialog>
