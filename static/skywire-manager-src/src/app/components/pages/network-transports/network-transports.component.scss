@@ -26,16 +26,23 @@
       min-width: 0;
       padding: 0 12px !important;
       opacity: 0.6;
+      // Global .mat-mdc-button:not(:disabled) { color: $black } in
+      // styles.scss kicks in for inactive buttons, which renders as
+      // invisible black-on-dark — force white explicitly.
+      color: rgba(255, 255, 255, 0.85) !important;
       &.active {
         opacity: 1;
         background: rgba(33, 150, 243, 0.18) !important;
-        color: #fff;
+        color: #fff !important;
       }
+      .mat-icon { color: inherit; }
     }
   }
 
   .refresh-btn {
     margin-left: auto;
+    color: rgba(255, 255, 255, 0.85) !important;
+    .mat-icon { color: inherit; }
   }
 }
 
