@@ -43,6 +43,13 @@ type API interface {
 	Reload() error
 	Shutdown() error
 	RuntimeLogs() (string, error)
+	RuntimeLogsSince(since int64) (RuntimeLogsDelta, error)
+	HostStats() (*HostStatsInfo, error)
+	NetworkView() (*NetworkViewResponse, error)
+	SkychatPasswordIsSet() (bool, error)
+	SetSkychatPassword(oldPassword, newPassword string) error
+	ClearSkychatPassword(oldPassword string) error
+	SkychatLocalAddr() (string, error)
 	RemoteVisors() ([]string, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error
@@ -277,6 +284,7 @@ type API interface {
 	HVReload(pk cipher.PubKey) error
 	HVShutdown(pk cipher.PubKey) error
 	HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error)
+	HVDmsgSessions(pk cipher.PubKey) (*DmsgClientSessions, error)
 	HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error)
 	HVSetDmsgSessionsCount(pk cipher.PubKey, count int) (*DmsgConnectAllResult, error)
 	HVLogsSince(pk cipher.PubKey, since time.Time, appName string) ([]string, error)

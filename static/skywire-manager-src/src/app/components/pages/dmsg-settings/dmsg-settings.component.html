@@ -1,125 +1,114 @@
-<div class="row">
-  <div class="col-12">
-    <app-top-bar
-      [titleParts]="['nodes.dmsg-settings-title']"
-      [tabsData]="tabsData"
-      [selectedTabIndex]="3"
-      [showUpdateButton]="false"
-    ></app-top-bar>
-  </div>
+<div class="dmsg-tab-body">
+  @if (loading && !sessions) {
+    <div class="loading-row">
+      <mat-spinner [diameter]="16"></mat-spinner>
+      <span class="ml-2">{{ 'dmsg-settings.loading' | translate }}</span>
+    </div>
+  }
 
-  <div class="content col-12 mt-4.5">
-    @if (loading && !sessions) {
-      <div class="loading-row">
-        <mat-spinner [diameter]="16"></mat-spinner>
-        <span class="ml-2">{{ 'dmsg-settings.loading' | translate }}</span>
+  @if (error && !sessions) {
+    <div class="error-row">
+      <mat-icon>error_outline</mat-icon>
+      <span class="ml-2">{{ error }}</span>
+    </div>
+  }
+
+  @if (sessions) {
+    <!-- Summary line with last update -->
+    <div class="summary-line">
+      <mat-icon>hub</mat-icon>
+      <span class="ml-1">{{ 'dmsg-settings.summary' | translate }}</span>
+      @if (lastUpdated) {
+        <span class="last-updated">
+          — {{ 'dmsg-settings.last-updated' | translate }}: {{ lastUpdated | date: 'HH:mm:ss' }}
+        </span>
+      }
+    </div>
+
+    <!-- Action bar -->
+    <div class="actions mt-3">
+      <div class="action-group">
+        <button
+          mat-raised-button
+          color="primary"
+          (click)="connectAll()"
+          [disabled]="connectAllInFlight || setCountInFlight"
+        >
+          @if (connectAllInFlight) {
+            <mat-spinner [diameter]="14" class="d-inline-block mr-2"></mat-spinner>
+          }
+          {{ 'dmsg-settings.connect-all' | translate }}
+        </button>
       </div>
-    }
 
-    @if (error && !sessions) {
-      <div class="error-row">
-        <mat-icon>error_outline</mat-icon>
-        <span class="ml-2">{{ error }}</span>
+      <span class="divider">|</span>
+
+      <div class="action-group">
+        <label for="sessions-count">{{ 'dmsg-settings.sessions-count-label' | translate }}:</label>
+        <input
+          id="sessions-count"
+          type="number"
+          min="0"
+          max="99"
+          [(ngModel)]="sessionsCountInput"
+          [disabled]="setCountInFlight || connectAllInFlight"
+        />
+        <button
+          mat-raised-button
+          color="primary"
+          (click)="applySessionsCount()"
+          [disabled]="setCountInFlight || connectAllInFlight"
+        >
+          @if (setCountInFlight) {
+            <mat-spinner [diameter]="14" class="d-inline-block mr-2"></mat-spinner>
+          }
+          {{ 'dmsg-settings.apply-count' | translate }}
+        </button>
       </div>
-    }
+    </div>
 
-    @if (sessions) {
-      <!-- Summary line with last update -->
-      <div class="summary-line">
-        <mat-icon>hub</mat-icon>
-        <span class="ml-1">{{ 'dmsg-settings.summary' | translate }}</span>
-        @if (lastUpdated) {
-          <span class="last-updated">
-            — {{ 'dmsg-settings.last-updated' | translate }}: {{ lastUpdated | date: 'HH:mm:ss' }}
-          </span>
+    <!-- Most recent action result -->
+    @if (lastActionResult) {
+      <div class="action-result">
+        <span class="result-label">{{ lastActionLabel }}:</span>
+        {{ 'dmsg-settings.result-total' | translate }}
+        {{ lastActionResult.total }},
+        {{ 'dmsg-settings.result-already' | translate }}
+        {{ lastActionResult.already_connected }},
+        {{ 'dmsg-settings.result-new' | translate }}
+        {{ lastActionResult.newly_connected }}
+        @if (lastActionResult.failed && objectKeys(lastActionResult.failed).length > 0) {
+          <div class="result-failed">
+            {{ 'dmsg-settings.result-failed' | translate }}: {{ objectKeys(lastActionResult.failed).length }}
+          </div>
         }
       </div>
-
-      <!-- Action bar -->
-      <div class="actions mt-3">
-        <div class="action-group">
-          <button
-            mat-raised-button
-            color="primary"
-            (click)="connectAll()"
-            [disabled]="connectAllInFlight || setCountInFlight"
-          >
-            @if (connectAllInFlight) {
-              <mat-spinner [diameter]="14" class="d-inline-block mr-2"></mat-spinner>
-            }
-            {{ 'dmsg-settings.connect-all' | translate }}
-          </button>
-        </div>
-
-        <span class="divider">|</span>
-
-        <div class="action-group">
-          <label for="sessions-count">{{ 'dmsg-settings.sessions-count-label' | translate }}:</label>
-          <input
-            id="sessions-count"
-            type="number"
-            min="0"
-            max="99"
-            [(ngModel)]="sessionsCountInput"
-            [disabled]="setCountInFlight || connectAllInFlight"
-          />
-          <button
-            mat-raised-button
-            color="primary"
-            (click)="applySessionsCount()"
-            [disabled]="setCountInFlight || connectAllInFlight"
-          >
-            @if (setCountInFlight) {
-              <mat-spinner [diameter]="14" class="d-inline-block mr-2"></mat-spinner>
-            }
-            {{ 'dmsg-settings.apply-count' | translate }}
-          </button>
-        </div>
-      </div>
-
-      <!-- Most recent action result -->
-      @if (lastActionResult) {
-        <div class="action-result">
-          <span class="result-label">{{ lastActionLabel }}:</span>
-          {{ 'dmsg-settings.result-total' | translate }}
-          {{ lastActionResult.total }},
-          {{ 'dmsg-settings.result-already' | translate }}
-          {{ lastActionResult.already_connected }},
-          {{ 'dmsg-settings.result-new' | translate }}
-          {{ lastActionResult.newly_connected }}
-          @if (lastActionResult.failed && objectKeys(lastActionResult.failed).length > 0) {
-            <div class="result-failed">
-              {{ 'dmsg-settings.result-failed' | translate }}: {{ objectKeys(lastActionResult.failed).length }}
-            </div>
-          }
-        </div>
-      }
-
-      <!-- Per-client session lists -->
-      @for (client of clientList(); track trackByRole($index, client)) {
-        <div class="client-card">
-          <div class="client-header">
-            <span class="role">{{ roleLabel(client.role) }}</span>
-            <span class="count">{{ client.count }} {{ 'dmsg-settings.sessions' | translate }}</span>
-          </div>
-          <div class="client-pk">{{ client.pk }}</div>
-          @if (client.servers && client.servers.length > 0) {
-            <div class="server-list">
-              @for (server of client.servers; track trackByPk($index, server)) {
-                <div class="server">{{ server }}</div>
-              }
-            </div>
-          } @else {
-            <div class="empty">{{ 'dmsg-settings.no-sessions' | translate }}</div>
-          }
-        </div>
-      }
-
-      @if (clientList().length === 0) {
-        <div class="client-card missing">
-          <div class="empty">{{ 'dmsg-settings.no-clients' | translate }}</div>
-        </div>
-      }
     }
-  </div>
+
+    <!-- Per-client session lists -->
+    @for (client of clientList(); track trackByRole($index, client)) {
+      <div class="client-card">
+        <div class="client-header">
+          <span class="role">{{ roleLabel(client.role) }}</span>
+          <span class="count">{{ client.count }} {{ 'dmsg-settings.sessions' | translate }}</span>
+        </div>
+        <div class="client-pk">{{ client.pk }}</div>
+        @if (client.servers && client.servers.length > 0) {
+          <div class="server-list">
+            @for (server of client.servers; track trackByPk($index, server)) {
+              <div class="server">{{ server }}</div>
+            }
+          </div>
+        } @else {
+          <div class="empty">{{ 'dmsg-settings.no-sessions' | translate }}</div>
+        }
+      </div>
+    }
+
+    @if (clientList().length === 0) {
+      <div class="client-card missing">
+        <div class="empty">{{ 'dmsg-settings.no-clients' | translate }}</div>
+      </div>
+    }
+  }
 </div>

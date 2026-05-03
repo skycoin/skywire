@@ -406,18 +406,9 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       }
     });
 
-    if (startApps) {
-      this.changeAppsValRecursively(elementsToChange, false, startApps);
-    } else {
-      // Ask for confirmation if the apps are going to be stopped.
-      const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'apps.stop-selected-confirmation');
-
-      confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-        confirmationDialog.componentInstance.showProcessing();
-
-        this.changeAppsValRecursively(elementsToChange, false, startApps, confirmationDialog);
-      });
-    }
+    // No confirmation modal — start/stop are reversible (start the
+    // app again to undo a stop) and the snackbar reports completion.
+    this.changeAppsValRecursively(elementsToChange, false, startApps);
   }
 
   /**
@@ -425,7 +416,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    */
   changeAutostartOfSelected(autostart: boolean) {
     const elementsToChange: string[] = [];
-    // Ignore all elements shich already have the desired settings applied.
+    // Ignore all elements which already have the desired settings applied.
     this.selections.forEach((val, key) => {
       if (val) {
         if ((autostart && !this.appsMap.get(key).autostart) || (!autostart && this.appsMap.get(key).autostart)) {
@@ -433,17 +424,13 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         }
       }
     });
+    if (elementsToChange.length === 0) {
+      return;
+    }
 
-    // Ask for confirmation.
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(
-      this.dialog, autostart ? 'apps.enable-autostart-selected-confirmation' : 'apps.disable-autostart-selected-confirmation'
-    );
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      this.changeAppsValRecursively(elementsToChange, true, autostart, confirmationDialog);
-    });
+    // No confirmation modal — autostart is reversible and the
+    // snackbar confirms each completed batch.
+    this.changeAppsValRecursively(elementsToChange, true, autostart, null);
   }
 
   /**
@@ -486,44 +473,24 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Starts or stops a specific app.
+   * Starts or stops a specific app. No confirmation modal —
+   * reversible by starting/stopping again; snackbar reports it.
    */
   changeAppState(app: Application): void {
-    if (app.status === 0 || app.status === 2) {
-      this.changeSingleAppVal(
-        this.startChangingAppState(app.name, true)
-      );
-    } else {
-      // Ask for confirmation if the app is going to be stopped.
-      const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'apps.stop-confirmation');
-
-      confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-        confirmationDialog.componentInstance.showProcessing();
-
-        this.changeSingleAppVal(
-          this.startChangingAppState(app.name, false),
-          confirmationDialog
-        );
-      });
-    }
+    const wantStart = (app.status === 0 || app.status === 2);
+    this.changeSingleAppVal(
+      this.startChangingAppState(app.name, wantStart),
+    );
   }
 
   /**
-   * Changes the autostart setting of a specific app.
+   * Changes the autostart setting of a specific app. Reversible —
+   * flip + snackbar, no modal.
    */
   changeAppAutostart(app: Application): void {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(
-      this.dialog, app.autostart ? 'apps.disable-autostart-confirmation' : 'apps.enable-autostart-confirmation'
+    this.changeSingleAppVal(
+      this.startChangingAppAutostart(app.name, !app.autostart),
     );
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      this.changeSingleAppVal(
-        this.startChangingAppAutostart(app.name, !app.autostart),
-        confirmationDialog
-      );
-    });
   }
 
   /**

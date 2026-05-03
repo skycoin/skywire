@@ -1,11 +1,11 @@
 import { Component, Input, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
-import { Observable, Subscription } from 'rxjs';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
+import { Observable, Subscription, delay, mergeMap, of } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
 import { Node, PersistentTransport, Transport } from '../../../../../app.datatypes';
-import { CreateTransportComponent } from './create-transport/create-transport.component';
 import { TransportService } from '../../../../../services/transport.service';
 import { NodeComponent } from '../../node.component';
 import { AppConfig } from '../../../../../app.config';
@@ -47,6 +47,7 @@ export class TransportListComponent implements OnDestroy {
   typeSortData = new SortingColumn(['type'], 'transports.type', SortingModes.Text);
   uploadedSortData = new SortingColumn(['sent'], 'common.uploaded', SortingModes.NumberReversed);
   downloadedSortData = new SortingColumn(['recv'], 'common.downloaded', SortingModes.NumberReversed);
+  latencySortData = new SortingColumn(['latencyMs'], 'transports.latency', SortingModes.Number);
 
   private dataSortedSubscription: Subscription;
   private dataFiltererSubscription: Subscription;
@@ -188,6 +189,17 @@ export class TransportListComponent implements OnDestroy {
 
   labeledElementTypes = LabeledElementTypes;
 
+  // Inline add-transport form state. Replaces the previous modal
+  // create-transport dialog — same fields, same submit path, just
+  // anchored to the transport list page instead of opening a popup.
+  showAddForm = false;
+  addForm: UntypedFormGroup;
+  addingPersistent = false;
+  addAvailableTypes: string[] | null = null;
+  addBusy = false;
+  private addOperationSubscription: Subscription;
+  private addTypesSubscription: Subscription;
+
   private persistentTransportSubscription: Subscription;
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
@@ -203,7 +215,20 @@ export class TransportListComponent implements OnDestroy {
     private storageService: StorageService,
     private nodeService: NodeService,
     private cdr: ChangeDetectorRef,
+    private formBuilder: UntypedFormBuilder,
   ) {
+    // Build the add-transport form up front; populated with types
+    // when the user opens the inline form, not on every page load.
+    this.addForm = this.formBuilder.group({
+      remoteKey: ['', Validators.compose([
+        Validators.required,
+        Validators.minLength(66),
+        Validators.maxLength(66),
+        Validators.pattern('^[0-9a-fA-F]+$'),
+      ])],
+      label: [''],
+      type: ['', Validators.required],
+    });
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
       this.persistentSortData,
@@ -212,6 +237,7 @@ export class TransportListComponent implements OnDestroy {
       this.typeSortData,
       this.uploadedSortData,
       this.downloadedSortData,
+      this.latencySortData,
     ];
     this.dataSorter = new DataSorter(this.dialog, this.translateService, this.storageService, sortableColumns, 1, this.listId);
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
@@ -261,6 +287,12 @@ export class TransportListComponent implements OnDestroy {
     if (this.persistentTransportSubscription) {
       this.persistentTransportSubscription.unsubscribe();
     }
+    if (this.addOperationSubscription) {
+      this.addOperationSubscription.unsubscribe();
+    }
+    if (this.addTypesSubscription) {
+      this.addTypesSubscription.unsubscribe();
+    }
   }
 
   /**
@@ -302,31 +334,159 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Deletes the selected elements.
+   * Deletes the selected elements. No confirmation modal — feedback
+   * comes from the post-action snackbar; user can re-add the
+   * transport via the inline form if it was a misclick.
    */
   deleteSelected() {
-    // Ask for confirmation.
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'transports.delete-selected-confirmation');
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      const elementsToRemove: string[] = [];
-      this.selections.forEach((val, key) => {
-        if (val) {
-          elementsToRemove.push(key);
-        }
-      });
-
-      this.deleteRecursively(elementsToRemove, confirmationDialog);
+    const elementsToRemove: string[] = [];
+    this.selections.forEach((val, key) => {
+      if (val) {
+        elementsToRemove.push(key);
+      }
     });
+    if (elementsToRemove.length === 0) {
+      return;
+    }
+    this.deleteRecursively(elementsToRemove, null);
   }
 
   /**
-   * Shows the transport creation modal window.
+   * Toggles the inline add-transport form. First open lazily fetches
+   * the supported transport types from the visor.
    */
-  create() {
-    CreateTransportComponent.openDialog(this.dialog);
+  toggleAddForm() {
+    this.showAddForm = !this.showAddForm;
+    if (this.showAddForm && this.addAvailableTypes === null) {
+      this.loadAddTypes();
+    }
+    if (!this.showAddForm) {
+      this.resetAddForm();
+    }
+  }
+
+  cancelAddForm() {
+    this.showAddForm = false;
+    this.resetAddForm();
+  }
+
+  setAddPersistent(event: any) {
+    this.addingPersistent = !!event.checked;
+  }
+
+  /**
+   * Submits the inline add-transport form. Mirrors the logic the
+   * old CreateTransportComponent dialog ran: optionally append the
+   * (pk, type) pair to the persistent-transports list, then create
+   * the transport, then save the label if one was provided.
+   */
+  submitAddForm() {
+    if (!this.addForm.valid || this.addBusy) {
+      return;
+    }
+    const newTransportPk: string = this.addForm.get('remoteKey').value;
+    const newTransportType: string = this.addForm.get('type').value;
+    const newTransportLabel: string = this.addForm.get('label').value;
+
+    this.addBusy = true;
+    if (this.addingPersistent) {
+      this.addOperationSubscription = this.transportService.getPersistentTransports(
+        NodeComponent.getCurrentNodeKey(),
+      ).subscribe((list: any[]) => {
+        const dataToUse = list ? list : [];
+        const alreadyPersistent = dataToUse.some((t: any) =>
+          t.pk.toUpperCase() === newTransportPk.toUpperCase()
+            && t.type.toUpperCase() === newTransportType.toUpperCase());
+        if (alreadyPersistent) {
+          this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, true);
+        } else {
+          dataToUse.push({ pk: newTransportPk, type: newTransportType });
+          this.addOperationSubscription = this.transportService.savePersistentTransportsData(
+            NodeComponent.getCurrentNodeKey(),
+            dataToUse,
+          ).subscribe(() => {
+            this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, true);
+          }, (err: OperationError) => this.onAddError(err));
+        }
+      }, (err: OperationError) => this.onAddError(err));
+    } else {
+      this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, false);
+    }
+  }
+
+  private doCreateTransport(remotePk: string, type: string, label: string, creatingAfterPersistent: boolean) {
+    this.addOperationSubscription = this.transportService.create(
+      NodeComponent.getCurrentNodeKey(),
+      remotePk,
+      type,
+    ).subscribe((response: any) => {
+      let errorSavingLabel = false;
+      if (label) {
+        if (response && response.id) {
+          this.storageService.saveLabel(response.id, label, LabeledElementTypes.Transport);
+        } else {
+          errorSavingLabel = true;
+        }
+      }
+      this.addBusy = false;
+      this.cancelAddForm();
+      NodeComponent.refreshCurrentDisplayedData();
+      if (!errorSavingLabel) {
+        this.snackbarService.showDone('transports.dialog.success');
+      } else {
+        this.snackbarService.showWarning('transports.dialog.success-without-label');
+      }
+    }, (err: OperationError) => {
+      if (creatingAfterPersistent) {
+        this.addBusy = false;
+        this.cancelAddForm();
+        NodeComponent.refreshCurrentDisplayedData();
+        this.snackbarService.showWarning('transports.dialog.only-persistent-created');
+      } else {
+        this.onAddError(err);
+      }
+    });
+  }
+
+  private onAddError(err: OperationError) {
+    this.addBusy = false;
+    err = processServiceError(err);
+    this.snackbarService.showError(err);
+  }
+
+  private resetAddForm() {
+    this.addForm.reset({ remoteKey: '', label: '', type: this.addAvailableTypes && this.addAvailableTypes[0] || '' });
+    this.addingPersistent = false;
+    this.addBusy = false;
+  }
+
+  /**
+   * Loads the list of available transport types into addAvailableTypes.
+   * Mirrors the dialog's loadData logic but without the retry loop —
+   * the inline form just shows an empty type list on failure and
+   * the user can retry by reopening it.
+   */
+  private loadAddTypes() {
+    this.addTypesSubscription = of(1).pipe(
+      delay(0),
+      mergeMap(() => this.transportService.types(NodeComponent.getCurrentNodeKey())),
+    ).subscribe((types: string[]) => {
+      types.sort((a, b) => {
+        if (a.toLowerCase() === 'stcp') { return 1; }
+        if (b.toLowerCase() === 'stcp') { return -1; }
+        return a.localeCompare(b);
+      });
+      let defaultIndex = types.findIndex(t => t.toLowerCase() === 'dmsg');
+      defaultIndex = defaultIndex !== -1 ? defaultIndex : 0;
+      this.addAvailableTypes = types;
+      this.addForm.get('type').setValue(types[defaultIndex] || '');
+      this.cdr.markForCheck();
+    }, (err: any) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
+      this.addAvailableTypes = [];
+      this.cdr.markForCheck();
+    });
   }
 
   /**
@@ -389,86 +549,57 @@ export class TransportListComponent implements OnDestroy {
       return;
     }
 
-    let confirmationText = 'transports.';
-    if (transports.length === 1) {
+    // No confirmation modal — toggling whether a transport gets
+    // re-created on visor restart is reversible (just toggle back),
+    // and dialog spam on every star-click was the main complaint.
+    // Errors still surface via snackbar.
+    this.persistentTransportSubscription = this.transportService.getPersistentTransports(this.nodePK).subscribe((list: any[]) => {
+      const dataToUse = list ? list : [];
+      let nothingToDo: boolean;
+
+      const transportsMap: Map<string, Transport> = new Map<string, Transport>();
+      transports.forEach(t => transportsMap.set(this.getPersistentTransportID(t.remotePk, t.type), t));
+
       if (makePersistent) {
-        confirmationText += 'make-persistent-confirmation';
-      } else {
-        confirmationText += 'make' + (transports[0].notFound ? '-offline' : '') + '-non-persistent-confirmation';
-      }
-    } else {
-      confirmationText += makePersistent ? 'make-selected-persistent-confirmation' : 'make-selected-non-persistent-confirmation';
-    }
-
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationText);
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      this.persistentTransportSubscription = this.transportService.getPersistentTransports(this.nodePK).subscribe((list: any[]) => {
-        const dataToUse = list ? list : [];
-        let nothingToDo: boolean;
-
-        const transportsMap: Map<string, Transport> = new Map<string, Transport>();
-        transports.forEach(t => transportsMap.set(this.getPersistentTransportID(t.remotePk, t.type), t));
-
-        if (makePersistent) {
-          // Remove al transports that already are persistent.
-          dataToUse.forEach(tp => {
-            if (transportsMap.has(this.getPersistentTransportID(tp.pk, tp.type))) {
-              transportsMap.delete(this.getPersistentTransportID(tp.pk, tp.type));
-            }
-          });
-
-          nothingToDo = transportsMap.size === 0;
-
-          // Add the new transports to the persistent transports list.
-          if (!nothingToDo) {
-            transportsMap.forEach(t => {
-              dataToUse.push({
-                pk: t.remotePk,
-                type: t.type,
-              });
-            });
+        dataToUse.forEach(tp => {
+          if (transportsMap.has(this.getPersistentTransportID(tp.pk, tp.type))) {
+            transportsMap.delete(this.getPersistentTransportID(tp.pk, tp.type));
           }
-        } else {
-          nothingToDo = true;
-          // Remove all selected transports.
-          for (let i = 0; i < dataToUse.length; i++) {
-            if (transportsMap.has(this.getPersistentTransportID(dataToUse[i].pk, dataToUse[i].type))) {
-              dataToUse.splice(i, 1);
-              nothingToDo = false;
-              i--;
-            }
-          }
-        }
-
+        });
+        nothingToDo = transportsMap.size === 0;
         if (!nothingToDo) {
-          // Update the list.
-          this.persistentTransportSubscription = this.transportService.savePersistentTransportsData(
-            NodeComponent.getCurrentNodeKey(),
-            dataToUse
-          ).subscribe(() => {
-            confirmationDialog.close();
-            // Make the parent page reload the data.
-            NodeComponent.refreshCurrentDisplayedData();
-            this.snackbarService.showDone('transports.changes-made');
-          }, (err: OperationError) => {
-            err = processServiceError(err);
-            confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-          });
-        } else {
-          // The persistent transport list already has or not (as needed) the transport.
-          confirmationDialog.close();
-          this.snackbarService.showDone('transports.no-changes-needed');
-
-          // Make the parent page reload the data, to make sure the UI shows the correct values.
-          NodeComponent.refreshCurrentDisplayedData();
+          transportsMap.forEach(t => dataToUse.push({ pk: t.remotePk, type: t.type }));
         }
+      } else {
+        nothingToDo = true;
+        for (let i = 0; i < dataToUse.length; i++) {
+          if (transportsMap.has(this.getPersistentTransportID(dataToUse[i].pk, dataToUse[i].type))) {
+            dataToUse.splice(i, 1);
+            nothingToDo = false;
+            i--;
+          }
+        }
+      }
+
+      if (nothingToDo) {
+        this.snackbarService.showDone('transports.no-changes-needed');
+        NodeComponent.refreshCurrentDisplayedData();
+        return;
+      }
+
+      this.persistentTransportSubscription = this.transportService.savePersistentTransportsData(
+        NodeComponent.getCurrentNodeKey(),
+        dataToUse,
+      ).subscribe(() => {
+        NodeComponent.refreshCurrentDisplayedData();
+        this.snackbarService.showDone('transports.changes-made');
       }, (err: OperationError) => {
         err = processServiceError(err);
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+        this.snackbarService.showError(err);
       });
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
     });
   }
 
@@ -483,23 +614,17 @@ export class TransportListComponent implements OnDestroy {
    * Deletes a specific element.
    */
   delete(transport: Transport) {
-    const confirmationMsg = 'transports.delete-' + (transport.isPersistent ? 'persistent-' : '') + 'confirmation';
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationMsg);
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      // Start the operation and save it for posible cancellation.
-      this.operationSubscriptionsGroup.push(this.startDeleting(transport.id).subscribe(() => {
-        confirmationDialog.close();
-        // Make the parent page reload the data.
-        NodeComponent.refreshCurrentDisplayedData();
-        this.snackbarService.showDone('transports.deleted');
-      }, (err: OperationError) => {
-        err = processServiceError(err);
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      }));
-    });
+    // No confirmation modal. The action is destructive but
+    // reversible (re-create via the inline add-transport form);
+    // dialog spam was making bulk pruning of stale transports
+    // unworkable.
+    this.operationSubscriptionsGroup.push(this.startDeleting(transport.id).subscribe(() => {
+      NodeComponent.refreshCurrentDisplayedData();
+      this.snackbarService.showDone('transports.deleted');
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
+    }));
   }
 
   /**
@@ -522,17 +647,13 @@ export class TransportListComponent implements OnDestroy {
 
     // Needed to prevent racing conditions.
     if (this.filteredTransports) {
-      // Calculate the pagination values.
-      const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.filteredTransports.length / maxElements);
-      if (this.currentPage > this.numberOfPages) {
-        this.currentPage = this.numberOfPages;
-      }
-
-      // Limit the elements to show.
-      const start = maxElements * (this.currentPage - 1);
-      const end = start + maxElements;
-      this.transportsToShow = this.filteredTransports.slice(start, end);
+      // Pagination removed — the short-list embed is gone, and the
+      // dedicated Transports tab shows the full list in one scroll.
+      // Visors typically have 10s of transports, not 100s; the
+      // paginator added clicks for nothing.
+      this.numberOfPages = 1;
+      this.currentPage = 1;
+      this.transportsToShow = this.filteredTransports.slice();
 
       // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<string, boolean>();
@@ -574,16 +695,17 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Recursively deletes a list of elements.
-   * @param ids List with the IDs of the elements to delete.
-   * @param confirmationDialog Dialog used for requesting confirmation from the user.
+   * Recursively deletes a list of elements. confirmationDialog is
+   * optional — when called from the inline (no-modal) flow it's
+   * null and we fall back to a snackbar for completion / error.
    */
-  deleteRecursively(ids: string[], confirmationDialog: MatDialogRef<ConfirmationComponent, any>) {
+  deleteRecursively(ids: string[], confirmationDialog: MatDialogRef<ConfirmationComponent, any> | null) {
     this.operationSubscriptionsGroup.push(this.startDeleting(ids[ids.length - 1]).subscribe(() => {
       ids.pop();
       if (ids.length === 0) {
-        confirmationDialog.close();
-        // Make the parent page reload the data.
+        if (confirmationDialog) {
+          confirmationDialog.close();
+        }
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('transports.deleted');
       } else {
@@ -591,9 +713,12 @@ export class TransportListComponent implements OnDestroy {
       }
     }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
-
       err = processServiceError(err);
-      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      if (confirmationDialog) {
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      } else {
+        this.snackbarService.showError(err);
+      }
     }));
   }
 }

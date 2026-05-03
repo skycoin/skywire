@@ -462,7 +462,7 @@ export class StorageService {
       return node.ip;
     }
 
-    return node.localPk.substr(0, 8);
+    return node.localPk;
   }
 
   /**

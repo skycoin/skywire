@@ -1,5 +1,5 @@
 <!-- Header. -->
-<div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
+<div class="generic-title-container mt-4.5 d-flex">
   <div class="title">
     @if (showShortList_) {
       <span  class="uppercase">
@@ -51,15 +51,6 @@
         </div>
       </mat-menu>
     </div>
-    <!-- Upper paginator. -->
-    @if (!showShortList_ && numberOfPages > 1 && dataSource) {
-      <app-paginator
-        [currentPage]="currentPage"
-        [numberOfPages]="numberOfPages"
-        [linkParts]="['/nodes', nodePK, 'routes']"
-        [queryParams]="dataFilterer.currentUrlQueryParams">
-      </app-paginator>
-    }
   </div>
 </div>
 
@@ -73,7 +64,9 @@
       [ngClass]="{'d-lg-none d-xl-table': showShortList_}"
       cellspacing="0" cellpadding="0"
       >
-      <!-- Column names. -->
+      <!-- Column names. Mirrors `skywire cli visor route ls`:
+           id | type | local-port | remote-port | remote-pk |
+           next-route-id | next-transport-id | expire-at -->
       <tr>
         <th></th>
         <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
@@ -88,18 +81,17 @@
             <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           }
         </th>
-        <th class="sortable-column" (click)="dataSorter.changeSortingOrder(sourceSortData)">
-          {{ 'routes.source' | translate }}
-          @if (dataSorter.currentSortingColumn === sourceSortData) {
-            <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
-          }
-        </th>
+        <th>{{ 'routes.local-port' | translate }}</th>
+        <th>{{ 'routes.remote-port' | translate }}</th>
         <th class="sortable-column" (click)="dataSorter.changeSortingOrder(destinationSortData)">
-          {{ 'routes.destination' | translate }}
+          {{ 'routes.remote-pk' | translate }}
           @if (dataSorter.currentSortingColumn === destinationSortData) {
             <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           }
         </th>
+        <th>{{ 'routes.next-rid' | translate }}</th>
+        <th>{{ 'routes.next-tp' | translate }}</th>
+        <th>{{ 'routes.keep-alive' | translate }}</th>
         <th class="actions"></th>
       </tr>
       <!-- Values. -->
@@ -111,51 +103,84 @@
               (change)="changeSelection(route)">
             </mat-checkbox>
           </td>
-          <td>
-            {{ route.key }}
+          <td class="mono">{{ route.key }}</td>
+          <td>{{ getTypeName(route.type) }}</td>
+
+          <!-- local-port (src) -->
+          <td class="mono">
+            @if (route.appFields?.routeDescriptor) {
+              {{ route.appFields.routeDescriptor.srcPort }}
+            } @else if (route.forwardFields?.routeDescriptor) {
+              {{ route.forwardFields.routeDescriptor.srcPort }}
+            } @else {
+              <span class="transparent-50">-</span>
+            }
           </td>
-          <td>
-            {{ getTypeName(route.type) }}
+
+          <!-- remote-port (dst) -->
+          <td class="mono">
+            @if (route.appFields?.routeDescriptor) {
+              {{ route.appFields.routeDescriptor.dstPort }}
+            } @else if (route.forwardFields?.routeDescriptor) {
+              {{ route.forwardFields.routeDescriptor.dstPort }}
+            } @else {
+              <span class="transparent-50">-</span>
+            }
           </td>
-          <!-- Source and destination for app and forward routes. -->
-          @if (route.appFields || route.forwardFields) {
-            <td>
+
+          <!-- remote-pk -->
+          <td>
+            @if (route.appFields || route.forwardFields) {
               <app-labeled-element-text
-                [short]="true"
-                id="{{ route.src }}"
-                shortTextLength="7"
+                id="{{ route.dst }}"
                 (labelEdited)="refreshData()"
                 [elementType]="labeledElementTypes.Node">
               </app-labeled-element-text>
-            </td>
-            <td>
+            } @else {
+              <span class="transparent-50">-</span>
+            }
+          </td>
+
+          <!-- next-route-id -->
+          <td class="mono">
+            @if (route.forwardFields?.nextRid || route.forwardFields?.nextRid === 0) {
+              {{ route.forwardFields.nextRid }}
+            } @else if (route.intermediaryForwardFields?.nextRid || route.intermediaryForwardFields?.nextRid === 0) {
+              {{ route.intermediaryForwardFields.nextRid }}
+            } @else {
+              <span class="transparent-50">-</span>
+            }
+          </td>
+
+          <!-- next-transport-id -->
+          <td>
+            @if (route.forwardFields?.nextTid) {
               <app-labeled-element-text
-                [short]="true"
-                id="{{ route.dst }}"
-                shortTextLength="7"
-                (labelEdited)="refreshData()"
-                [elementType]="labeledElementTypes.Node">
-              </app-labeled-element-text>
-            </td>
-          }
-          <!-- Source and destination for intermediary forward routes. -->
-          @if ((!route.appFields && !route.forwardFields) && route.intermediaryForwardFields) {
-            <td>---</td>
-            <td>
-              <app-labeled-element-text
-                [short]="true"
-                id="{{ route.dst }}"
-                shortTextLength="5"
+                id="{{ route.forwardFields.nextTid }}"
                 (labelEdited)="refreshData()"
                 [elementType]="labeledElementTypes.Transport">
               </app-labeled-element-text>
-            </td>
-          }
-          <!-- Source and destination for special cases. -->
-          @if (!route.appFields && !route.forwardFields && !route.intermediaryForwardFields) {
-            <td>---</td>
-            <td>---</td>
-          }
+            } @else if (route.intermediaryForwardFields?.nextTid) {
+              <app-labeled-element-text
+                id="{{ route.intermediaryForwardFields.nextTid }}"
+                (labelEdited)="refreshData()"
+                [elementType]="labeledElementTypes.Transport">
+              </app-labeled-element-text>
+            } @else {
+              <span class="transparent-50">-</span>
+            }
+          </td>
+
+          <!-- keep-alive (server returns nanoseconds; render as
+               seconds with 1-decimal precision) -->
+          <td class="mono">
+            @if (route.ruleSummary?.keepAlive) {
+              {{ (route.ruleSummary.keepAlive / 1e9) | number:'1.0-1' }}s
+            } @else {
+              <span class="transparent-50">-</span>
+            }
+          </td>
+
           <td class="actions">
             <button
               (click)="details(route)"
@@ -221,18 +246,17 @@
                 <span class="title">{{ 'routes.type' | translate }}</span>:
                 {{ getTypeName(route.type) }}
               </div>
-              <!-- Source and destination for app and forward routes. -->
-              @if (route.appFields || route.forwardFields) {
+              @if (route.appFields?.routeDescriptor || route.forwardFields?.routeDescriptor) {
                 <div class="list-row long-content">
-                  <span class="title">{{ 'routes.source' | translate }}</span>:
-                  <app-labeled-element-text
-                    id="{{ route.src }}"
-                    (labelEdited)="refreshData()"
-                    [elementType]="labeledElementTypes.Node">
-                  </app-labeled-element-text>
+                  <span class="title">{{ 'routes.local-port' | translate }}</span>:
+                  {{ (route.appFields?.routeDescriptor || route.forwardFields?.routeDescriptor)?.srcPort }}
                 </div>
                 <div class="list-row long-content">
-                  <span class="title">{{ 'routes.destination' | translate }}</span>:
+                  <span class="title">{{ 'routes.remote-port' | translate }}</span>:
+                  {{ (route.appFields?.routeDescriptor || route.forwardFields?.routeDescriptor)?.dstPort }}
+                </div>
+                <div class="list-row long-content">
+                  <span class="title">{{ 'routes.remote-pk' | translate }}</span>:
                   <app-labeled-element-text
                     id="{{ route.dst }}"
                     (labelEdited)="refreshData()"
@@ -240,30 +264,24 @@
                   </app-labeled-element-text>
                 </div>
               }
-              <!-- Source and destination for intermediary forward routes. -->
-              @if ((!route.appFields && !route.forwardFields) && route.intermediaryForwardFields) {
+              @if (route.forwardFields?.nextTid || route.intermediaryForwardFields?.nextTid) {
                 <div class="list-row long-content">
-                  <span class="title">{{ 'routes.source' | translate }}</span>:
-                  ---
+                  <span class="title">{{ 'routes.next-rid' | translate }}</span>:
+                  {{ route.forwardFields?.nextRid ?? route.intermediaryForwardFields?.nextRid }}
                 </div>
                 <div class="list-row long-content">
-                  <span class="title">{{ 'routes.destination' | translate }}</span>:
+                  <span class="title">{{ 'routes.next-tp' | translate }}</span>:
                   <app-labeled-element-text
-                    id="{{ route.dst }}"
+                    id="{{ route.forwardFields?.nextTid || route.intermediaryForwardFields?.nextTid }}"
                     (labelEdited)="refreshData()"
                     [elementType]="labeledElementTypes.Transport">
                   </app-labeled-element-text>
                 </div>
               }
-              <!-- Source and destination for special cases. -->
-              @if (!route.appFields && !route.forwardFields && !route.intermediaryForwardFields) {
+              @if (route.ruleSummary?.keepAlive) {
                 <div class="list-row long-content">
-                  <span class="title">{{ 'routes.source' | translate }}</span>:
-                  ---
-                </div>
-                <div class="list-row long-content">
-                  <span class="title">{{ 'routes.destination' | translate }}</span>:
-                  ---
+                  <span class="title">{{ 'routes.keep-alive' | translate }}</span>:
+                  {{ (route.ruleSummary.keepAlive / 1e9) | number:'1.0-1' }}s
                 </div>
               }
             </div>
@@ -282,14 +300,6 @@
         </td></tr>
       }
     </table>
-    <!-- Link for accessing the full list. -->
-    @if (showShortList_ && numberOfPages > 1) {
-      <app-view-all-link
-        [numberOfElements]="filteredRoutes.length"
-        [linkParts]="['/nodes', nodePK, 'routes']"
-        [queryParams]="dataFilterer.currentUrlQueryParams"
-      ></app-view-all-link>
-    }
   </div></div>
 }
 
@@ -308,12 +318,3 @@
   </div>
 }
 
-<!-- Lower paginator. -->
-@if (!showShortList_ && numberOfPages > 1 && dataSource) {
-  <app-paginator
-    [currentPage]="currentPage"
-    [numberOfPages]="numberOfPages"
-    [linkParts]="['/nodes', nodePK, 'routes']"
-    [queryParams]="dataFilterer.currentUrlQueryParams">
-  </app-paginator>
-}

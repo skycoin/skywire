@@ -1,0 +1,135 @@
+<div class="row">
+  <div class="col-12">
+    <app-top-bar
+      [titleParts]="['nodes.network-title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="4"
+      [showUpdateButton]="false"
+    ></app-top-bar>
+  </div>
+
+  <div class="content col-12 mt-4.5">
+    @if (loading && entries.length === 0) {
+      <div class="loading-row">
+        <mat-spinner [diameter]="16"></mat-spinner>
+        <span class="ml-2">{{ 'network-view.loading' | translate }}</span>
+      </div>
+    }
+
+    @if (error && entries.length === 0) {
+      <div class="error-row">
+        <mat-icon>error_outline</mat-icon>
+        <span class="ml-2">{{ error }}</span>
+      </div>
+    }
+
+    @if (entries.length > 0) {
+      <div class="rounded-elevated-box mt-3">
+        <div class="box-internal-container">
+
+          <!-- Header: counts + last-updated stamp + filter controls -->
+          <div class="nv-header">
+            <div class="nv-totals">
+              <span><strong>{{ totals.all }}</strong> visors</span>
+              <span class="dot dot-green"></span><span>{{ totals.online }} online</span>
+              <span class="dot dot-red"></span><span>{{ totals.offline }} offline</span>
+              <span class="dot dot-outline-gray"></span><span>{{ totals.notInUT }} not in UT</span>
+            </div>
+            @if (lastUpdated) {
+              <div class="nv-fetched">
+                {{ 'network-view.last-updated' | translate }}: {{ lastUpdated | date:'mediumTime' }}
+              </div>
+            }
+            <button mat-icon-button class="nv-refresh-btn" (click)="refreshNow()" [matTooltip]="'network-view.refresh' | translate">
+              <mat-icon [inline]="true">refresh</mat-icon>
+            </button>
+          </div>
+
+          <!-- Inline filter bar (no dialog) -->
+          <div class="nv-filters">
+            <mat-form-field appearance="outline" class="field-md">
+              <mat-label>{{ 'network-view.search' | translate }}</mat-label>
+              <input matInput [(ngModel)]="searchTerm" (ngModelChange)="applyFilters()" placeholder="pk / country / version / service">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="field-sm">
+              <mat-label>{{ 'network-view.country' | translate }}</mat-label>
+              <input matInput [(ngModel)]="filterCountry" (ngModelChange)="applyFilters()" maxlength="2" placeholder="US">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="field-sm">
+              <mat-label>{{ 'network-view.version' | translate }}</mat-label>
+              <input matInput [(ngModel)]="filterVersion" (ngModelChange)="applyFilters()" placeholder="v1.3.50">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="field-sm">
+              <mat-label>{{ 'network-view.min-transports' | translate }}</mat-label>
+              <input matInput type="number" [(ngModel)]="filterMinTransports" (ngModelChange)="applyFilters()" min="0" placeholder="0">
+            </mat-form-field>
+            <mat-checkbox [(ngModel)]="showOnlineOnly" (ngModelChange)="applyFilters()" color="primary">
+              {{ 'network-view.online-only' | translate }}
+            </mat-checkbox>
+          </div>
+
+          <!-- Legend -->
+          <div class="nv-legend">
+            <span class="row-marker row-offline"></span>
+            <span>{{ 'network-view.legend.offline' | translate }}</span>
+            <span class="row-marker row-not-in-ut"></span>
+            <span>{{ 'network-view.legend.not-in-ut' | translate }}</span>
+            <span class="row-marker row-low-transports"></span>
+            <span>{{ 'network-view.legend.low-transports' | translate }}</span>
+          </div>
+
+          <!-- Table -->
+          <table class="responsive-table-translucid d-none d-md-table" cellspacing="0" cellpadding="0">
+            <tr>
+              <th>{{ 'network-view.col.pk' | translate }}</th>
+              <th>{{ 'network-view.col.country' | translate }}</th>
+              <th>{{ 'network-view.col.version' | translate }}</th>
+              <th>{{ 'network-view.col.services' | translate }}</th>
+              <th class="num">stcpr</th>
+              <th class="num">sudph</th>
+              <th class="num">dmsg</th>
+              <th class="num">stcp</th>
+              <th class="num">{{ 'network-view.col.total' | translate }}</th>
+              <th>{{ 'network-view.col.status' | translate }}</th>
+            </tr>
+            @for (e of filteredEntries; track e.pk) {
+              <tr [ngClass]="rowClass(e)">
+                <td class="mono small" [matTooltip]="e.pk">{{ e.pk }}</td>
+                <td>{{ e.country || '-' }}</td>
+                <td>{{ e.version || '-' }}</td>
+                <td>{{ e.services || '-' }}</td>
+                <td class="num">{{ e.stcpr }}</td>
+                <td class="num">{{ e.sudph }}</td>
+                <td class="num">{{ e.dmsg }}</td>
+                <td class="num">{{ e.stcp }}</td>
+                <td class="num"><strong>{{ e.total }}</strong></td>
+                <td>{{ e.ut_status || '-' }}</td>
+              </tr>
+            }
+          </table>
+
+          <!-- Small-screen card view -->
+          <div class="d-md-none nv-cards">
+            @for (e of filteredEntries; track e.pk) {
+              <div class="nv-card" [ngClass]="rowClass(e)">
+                <div class="nv-card-pk mono small" [matTooltip]="e.pk">{{ e.pk }}</div>
+                <div class="nv-card-meta">
+                  {{ e.country || '-' }} · {{ e.version || '-' }} · {{ e.services || '-' }}
+                </div>
+                <div class="nv-card-tps">
+                  stcpr {{ e.stcpr }} · sudph {{ e.sudph }} · dmsg {{ e.dmsg }} · stcp {{ e.stcp }}
+                  · <strong>total {{ e.total }}</strong>
+                  · {{ e.ut_status || '-' }}
+                </div>
+              </div>
+            }
+          </div>
+
+          @if (filteredEntries.length === 0) {
+            <p class="nv-empty">{{ 'network-view.empty' | translate }}</p>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>

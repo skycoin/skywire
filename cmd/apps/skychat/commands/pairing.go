@@ -231,10 +231,10 @@ func registerPairHTTPHandlers(ctx context.Context) {
 	if !pairEnable {
 		return
 	}
-	http.HandleFunc("/pair", pairRootHandler(ctx))
-	http.HandleFunc("/pair/invites", pairInvitesListHandler())
-	http.HandleFunc("/pair/invites/", pairInvitesItemHandler(ctx))
-	http.HandleFunc("/pair/", pairItemHandler(ctx))
+	http.HandleFunc("/pair", requireAuthFunc(pairRootHandler(ctx)))
+	http.HandleFunc("/pair/invites", requireAuthFunc(pairInvitesListHandler()))
+	http.HandleFunc("/pair/invites/", requireAuthFunc(pairInvitesItemHandler(ctx)))
+	http.HandleFunc("/pair/", requireAuthFunc(pairItemHandler(ctx)))
 }
 
 // pairInvitesListHandler serves GET /pair/invites — current pending

@@ -96,122 +96,7 @@
         }
       </span>
     </div>
-    <div class="separator"></div>
-    <!-- Rewards info section. -->
-    <div class="d-flex flex-column">
-      <span class="section-title">{{ 'node.details.rewards-info.title' | translate }}</span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.rewards-info.rewards-address' | translate }} </span>
-        @if (node.rewardsAddress) {
-          <app-copy-to-clipboard-text class="text-with-right-margin" text="{{ node.rewardsAddress }}"></app-copy-to-clipboard-text>
-          @if (!rewardsAddressIsXpub) {
-            <a [href]="'https://explorer.skycoin.com/app/address/' + node.rewardsAddress" target="_blank" rel="noreferrer nofollow noopener">
-              <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">
-                open_in_browser
-              </mat-icon>
-            </a>
-          }
-        }
-        @if (!node.rewardsAddress) {
-          {{ 'node.details.rewards-info.not-registered' | translate }}
-          <mat-icon [inline]="true" [matTooltip]="'node.details.rewards-info.not-registered-info' | translate">info</mat-icon>
-        }
-      </span>
-      <div class="config-button-container">
-        <app-button color="primary" (action)="changeRewardsAddressConfig()" [forDarkBackground]="true">
-          @if (node.rewardsAddress) {
-            {{ 'node.details.rewards-info.change-address-button' | translate }}
-          }
-          @if (!node.rewardsAddress) {
-            {{ 'node.details.rewards-info.set-address-button' | translate }}
-          }
-        </app-button>
-      </div>
-    </div>
-    <div class="separator"></div>
-    <!-- Transports info section. -->
-    <div class="d-flex flex-column">
-      <span class="section-title">{{ 'node.details.transports-info.title' | translate }}</span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.transports-info.total' | translate }} </span>
-        <span class="transport-stats">
-          <span class="transport-count">{{ transportStats.total }}</span>
-          @if (transportStats.byType.length > 0) {
-            (@for (stat of transportStats.byType; track stat; let last = $last) {
-            <span><span class="transport-type">{{ stat.type }}</span>: <span class="transport-count">{{ stat.count }}</span>@if (!last) {
-            <span>, </span>
-          }</span>
-          })
-        }
-      </span>
-    </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.transports-info.autoconnect' | translate }} </span>
-      {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'enabled' : 'disabled')) | translate }}
-      <mat-icon [inline]="true" [matTooltip]="'node.details.transports-info.autoconnect-info' | translate">info</mat-icon>
-    </span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="changeTransportsConfig()" [forDarkBackground]="true">
-        {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'disable' : 'enable') + '-button') | translate }}
-      </app-button>
-    </div>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.transports-info.is-public' | translate }} </span>
-      {{ ('node.details.transports-info.public-' + (isPublic ? 'enabled' : 'disabled')) | translate }}
-      <mat-icon [inline]="true" [matTooltip]="'node.details.transports-info.is-public-info' | translate">info</mat-icon>
-    </span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="changePublicConfig()" [forDarkBackground]="true">
-        {{ ('node.details.transports-info.public-' + (isPublic ? 'disable' : 'enable') + '-button') | translate }}
-      </app-button>
-    </div>
-  </div>
-  <div class="separator"></div>
-  <!-- Router info section. -->
-  <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.router-info.title' | translate }}</span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.router-info.min-hops' | translate }} </span>
-      {{ node.minHops }}
-    </span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="changeRouterConfig()" [forDarkBackground]="true">
-        {{ 'node.details.router-info.change-config-button' | translate }}
-      </app-button>
-    </div>
-  </div>
-  <div class="separator"></div>
-  <!-- Health info section. -->
-  <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.node-health.title' | translate }} </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.services' | translate }}</span>
-      <i [class]="nodeHealthClass"></i>
-      {{ nodeHealthText | translate }}
-    </span>
-    @if (node.health?.uptimeTrackerHealth) {
-      <span class="info-line sub-health">
-        <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
-        <i [class]="subHealthClass(node.health?.uptimeTrackerHealth)"></i>
-        {{ subHealthText(node.health?.uptimeTrackerHealth) | translate }}
-      </span>
-    }
-    @if (node.health?.autoconnectHealth) {
-      <span class="info-line sub-health">
-        <span class="title">{{ 'node.details.node-health.autoconnect' | translate }}</span>
-        <i [class]="subHealthClass(node.health?.autoconnectHealth)"></i>
-        {{ subHealthText(node.health?.autoconnectHealth) | translate }}
-      </span>
-    }
-    @if (node.health?.transportabilityHealth) {
-      <span class="info-line sub-health">
-        <span class="title">{{ 'node.details.node-health.transportability' | translate }}</span>
-        <i [class]="subHealthClass(node.health?.transportabilityHealth)"></i>
-        {{ subHealthText(node.health?.transportabilityHealth) | translate }}
-      </span>
-    }
-  </div>
-  <!-- Ports section (collapsible). -->
+    <!-- Ports section (collapsible). -->
   @if (ports.length > 0) {
     <div class="separator"></div>
     <div class="d-flex flex-column">
@@ -230,36 +115,16 @@
       }
     </div>
   }
-  <!-- Runtime config section. -->
+  <!-- Runtime config section (collapsible, mirrors Ports pattern). -->
   <div class="separator"></div>
   <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.config.title' | translate }}</span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="viewConfig()" [forDarkBackground]="true">
-        {{ 'node.details.config.view-button' | translate }}
-      </app-button>
-    </div>
-    @if (showRawConfig && rawConfig) {
+    <span class="section-title collapsible-header" (click)="onConfigToggle()" style="cursor: pointer;">
+      <mat-icon [inline]="true">{{ showConfigSection ? 'expand_more' : 'chevron_right' }}</mat-icon>
+      {{ 'node.details.config.title' | translate }}
+    </span>
+    @if (showConfigSection && rawConfig) {
       <pre class="raw-config">{{ rawConfig }}</pre>
     }
-  </div>
-  <!-- Transport Visualizer link (hypervisor only). -->
-  @if (node.isHypervisor) {
-    <div class="separator"></div>
-    <div class="d-flex flex-column">
-      <span class="section-title">{{ 'node.details.tpviz.title' | translate }}</span>
-      <div class="config-button-container">
-        <app-button color="primary" (action)="openTpViz()" [forDarkBackground]="true">
-          {{ 'node.details.tpviz.open' | translate }}
-        </app-button>
-      </div>
-    </div>
-  }
-  <div class="separator"></div>
-  <!-- Traffic info section. -->
-  <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
-    <app-charts [trafficData]="trafficData" class="d-flex flex-column justify-content-end mt-3"></app-charts>
   </div>
 </div>
 }

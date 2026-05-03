@@ -49,6 +49,14 @@ var (
 	useSkynet bool
 	useDmsg   bool
 
+	// Optional HTTP password gate. When --password-file points at a
+	// file containing a bcrypt hash, every HTTP endpoint requires
+	// matching basic auth (or the hypervisor's internal-proxy
+	// bypass token, see auth.go). Empty file or missing flag →
+	// no auth, current behavior.
+	passwordFile  string
+	internalToken string
+
 	// Persistence (Phase 1) — all off by default.
 	persistEnabled       bool
 	persistDBPath        string
@@ -125,10 +133,12 @@ func (h *sseHub) broadcast(msg string) {
 
 func init() {
 	launcher.RegisterApp("skychat", RunSkychat)
-	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind, put an * before the port if you want to be able to access outside localhost")
+	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind (default: localhost-only); use \"*:PORT\" to bind on all interfaces")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
 	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", true, "listen on dmsg network")
+	RootCmd.Flags().StringVar(&passwordFile, "password-file", "", "path to a file containing a bcrypt hash; when set, gates HTTP endpoints with basic auth")
+	RootCmd.Flags().StringVar(&internalToken, "internal-token", "", "shared secret used by the hypervisor's reverse proxy to bypass the password gate; managed automatically by the visor")
 
 	// Persistence flags (Phase 1). All default off; when --persist is set,
 	// the others fall back to conservative defaults.
@@ -188,6 +198,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
 		fs.BoolVar(&useDmsg, "dmsg", true, "listen on dmsg")
+		fs.StringVar(&passwordFile, "password-file", "", "path to bcrypt hash for HTTP basic auth")
+		fs.StringVar(&internalToken, "internal-token", "", "hypervisor proxy bypass token")
 		fs.BoolVar(&persistEnabled, "persist", false, "persist chat history to BoltDB")
 		fs.StringVar(&persistDBPath, "persist-db", "", "path to BoltDB file")
 		fs.IntVar(&persistMaxMsgSize, "persist-max-size", 4096, "max message size bytes")
@@ -268,11 +280,18 @@ func RunSkychat(ctx context.Context, args []string) error {
 	startPairPoller(ctx)
 	defer stopPairPoller()
 
-	http.Handle("/", http.FileServer(getFileSystem()))
-	http.HandleFunc("/message", messageHandler(ctx))
-	http.HandleFunc("/sse", sseHandler)
-	http.HandleFunc("/history", historyHandler)
-	http.HandleFunc("/history/peers", historyPeersHandler)
+	// Wire optional password protection. If passwordFile is empty or
+	// the file is missing, requireAuth* are no-ops.
+	if err := loadSkychatPassword(passwordFile); err != nil {
+		appLog("password file load: %v — continuing without auth", err)
+	}
+	setSkychatInternalToken(internalToken)
+
+	http.Handle("/", requireAuth(http.FileServer(getFileSystem())))
+	http.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
+	http.HandleFunc("/sse", requireAuthFunc(sseHandler))
+	http.HandleFunc("/history", requireAuthFunc(historyHandler))
+	http.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
 	registerPairHTTPHandlers(ctx)
 
 	url := ""

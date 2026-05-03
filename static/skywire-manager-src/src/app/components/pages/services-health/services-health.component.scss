@@ -98,3 +98,81 @@ code {
   font-family: monospace;
   font-size: 0.9em;
 }
+
+// Route Setup Node remote stats panel.
+.rsn-section {
+  .rsn-title {
+    font-size: 1em;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+    margin: 0 0 10px;
+  }
+
+  .rsn-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+  }
+
+  .rsn-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot-green { background: #4caf50; }
+    .dot-red { background: #f44336; }
+
+    .rsn-pk {
+      font-family: monospace;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.7);
+      word-break: break-all;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .rsn-rate {
+      font-weight: 600;
+      font-size: 13px;
+    }
+  }
+
+  .rsn-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 6px 16px;
+    font-size: 12px;
+
+    strong {
+      margin-left: 6px;
+      color: rgba(255, 255, 255, 0.95);
+    }
+  }
+
+  .rsn-failures {
+    margin-top: 8px;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+
+    .rsn-fail-pill {
+      background: rgba(229, 57, 53, 0.15);
+      border: 1px solid rgba(229, 57, 53, 0.35);
+      color: rgba(255, 200, 200, 0.95);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+  }
+}

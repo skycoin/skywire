@@ -4,7 +4,7 @@ import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
 import { Node } from '../app.datatypes';
-import { ApiService } from './api.service';
+import { ApiService, RequestOptions, ResponseTypes } from './api.service';
 
 /**
  * Known statuses the API returns in the health property of the visors.
@@ -147,6 +147,7 @@ return {
                 type: transport.type,
                 recv: transport.log ? transport.log.recv : 0,
                 sent: transport.log ? transport.log.sent : 0,
+                latencyMs: transport.latency_ms || 0,
               });
             });
           }
@@ -307,6 +308,7 @@ return {
               type: transport.type,
               recv: transport.log.recv,
               sent: transport.log.sent,
+              latencyMs: transport.latency_ms || 0,
             });
           });
         }
@@ -449,6 +451,45 @@ return {
    */
   getRuntimeLogs(nodeKey: string) {
     return this.apiService.get(`visors/${nodeKey}/runtime-logs`);
+  }
+
+  /**
+   * Diff-streaming variant of getRuntimeLogs. Pass the previous
+   * response's `latest` as `since` to receive only newly-arrived
+   * entries; pass 0 for the full buffer. Returns the visor's
+   * RuntimeLogsDelta shape: { entries, latest, dropped }.
+   */
+  getRuntimeLogsSince(nodeKey: string, since: number) {
+    return this.apiService.get(`visors/${nodeKey}/runtime-logs?since=${since}`);
+  }
+
+  /** Visor process Go-runtime stats (heap, GC, goroutines). */
+  getRuntimeStats(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/runtime-stats`);
+  }
+
+  /** Host system + visor process resource snapshot (CPU%, mem, disk, net). */
+  getHostStats(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/host-stats`);
+  }
+
+  /**
+   * Aggregated SD/TPD/UT network view — the same combined table
+   * `skywire cli sd` prints. Hypervisor-scope (no nodeKey arg);
+   * cached on the visor for 5min by default. Pass refresh=true to
+   * force the visor to re-aggregate immediately.
+   */
+  getNetworkView(refresh = false) {
+    const q = refresh ? '?refresh=true' : '';
+    return this.apiService.get(`network-view${q}`);
+  }
+
+  /**
+   * Embedded mainnet reward rules — same content `skywire cli
+   * reward rules` prints. Returned as raw markdown text.
+   */
+  getRewardRules() {
+    return this.apiService.get(`reward-rules`, new RequestOptions({ responseType: ResponseTypes.Text }));
   }
 
   /**

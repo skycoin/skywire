@@ -4,6 +4,8 @@
     <div class="col-12">
       <app-top-bar
         [titleParts]="titleParts"
+        [pageHeaderLabel]="headerLabel"
+        [pageHeaderIdentifier]="headerIdentifier"
         [tabsData]="tabsData"
         [selectedTabIndex]="selectedTabIndex"
         [secondsSinceLastUpdate]="secondsSinceLastUpdate"
@@ -17,17 +19,13 @@
       ></app-top-bar>
     </div>
     <div class="col-12">
-      <div [ngClass]="{'main-area': !showingInfo && !showingFullList, 'full-size-main-area': showingInfo || showingFullList}">
+      <!-- Right-bar / split-view is gone. The active tab content
+           is full-width; the visor's identity (label + PK) lives
+           in the top bar instead, persistent across tabs. -->
+      <div class="full-size-main-area">
         <div class="d-flex flex-column h-100">
-          <!-- Content of the subpage. -->
           <router-outlet></router-outlet>
         </div>
-      </div>
-      <!-- Right bar. -->
-      <div class="right-bar" [ngClass]="{'d-none': showingInfo || showingFullList}">
-        <ng-container *ngIf="!showingInfo && !showingFullList">
-          <app-node-info-content [nodeInfo]="node" [trafficData]="trafficData"></app-node-info-content>
-        </ng-container>
       </div>
     </div>
   </div>
@@ -38,6 +36,8 @@
     <div>
       <app-top-bar
         [titleParts]="titleParts"
+        [pageHeaderLabel]="headerLabel"
+        [pageHeaderIdentifier]="headerIdentifier"
         [tabsData]="tabsData"
         [selectedTabIndex]="selectedTabIndex"
         [showUpdateButton]="false"

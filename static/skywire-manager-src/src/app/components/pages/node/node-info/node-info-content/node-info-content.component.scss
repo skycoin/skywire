@@ -210,3 +210,63 @@
     font-weight: 600;
   }
 }
+
+
+// Inline edit + form helpers (replaces several modal dialogs).
+.inline-edit-btn {
+  margin-left: 4px;
+  height: 24px;
+  width: 24px;
+  line-height: 24px;
+  opacity: 0.7;
+  &:hover { opacity: 1; }
+}
+
+.toggle-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  .info-tip {
+    opacity: 0.5;
+    font-size: 16px;
+    cursor: help;
+  }
+}
+
+.inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+  margin-bottom: 6px;
+
+  .inline-form-field { width: 100%; }
+  .inline-form-field-sm { width: 120px; }
+  .inline-form-actions {
+    display: flex;
+    gap: 8px;
+  }
+}
+
+.collapsible-link {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  opacity: 0.8;
+  &:hover { opacity: 1; }
+}
+
+.reward-rules {
+  background: rgba(0, 0, 0, 0.25);
+  padding: 8px 10px;
+  margin: 6px 0;
+  font-size: 12px;
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
