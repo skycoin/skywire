@@ -98,6 +98,15 @@ export class TopBarComponent implements OnInit, OnDestroy {
    */
   @Input() titleParts: string[];
   /**
+   * When set, replaces the translated titleParts text with a structured
+   * "label + identifier" pair — used by the visor detail page so the
+   * visor's identity (label + PK) stays visible across every tab.
+   * label renders large in the title slot; identifier renders below
+   * it as a copy-to-clipboard text. Either can be empty.
+   */
+  @Input() pageHeaderLabel?: string;
+  @Input() pageHeaderIdentifier?: string;
+  /**
    * List with the tabs to show.
    */
   @Input() tabsData: TabButtonData[];

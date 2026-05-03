@@ -331,3 +331,34 @@ $top-bar-height: 56px;
     font-size: $font-size-smaller;
   }
 }
+
+
+// Page header (visor identity replaces title text). Used by the
+// node-detail page so the visor's label + PK persist on every tab.
+.page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+  gap: 2px;
+  min-width: 0;
+}
+.page-header-label {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+.page-header-id {
+  display: inline-block;
+  font-size: 12px;
+  opacity: 0.65;
+  font-family: monospace;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-header-label-mobile {
+  font-weight: 500;
+  font-size: 14px;
+}

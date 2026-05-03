@@ -90,7 +90,7 @@ const routes: Routes = [
         children: [
           {
             path: '',
-            redirectTo: 'routing',
+            redirectTo: 'info',
             pathMatch: 'full'
           },
           {

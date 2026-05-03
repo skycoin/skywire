@@ -55,12 +55,12 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   titleParts = [];
   tabsData: TabButtonData[] = [];
   selectedTabIndex = -1;
+  // Persistent visor identity rendered in the top bar — replaces
+  // the translated "Visor details" title so the user can always see
+  // which visor is loaded, on every tab.
+  headerLabel = '';
+  headerIdentifier = '';
 
-  /**
-   * Indicates if the subpage dedicated to show the node info (the same info shown in
-   * right bar on large screens) is being shown.
-   */
-  showingInfo = false;
   /**
    * Indicates if the currently displayed subpage is one dedicated to show a full list
    * of elements (true) or if it is one dedicated only to show a sumary (false).
@@ -185,6 +185,25 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     this.startGettingData(true);
   }
 
+  /**
+   * Populate the header label + identifier from the loaded node so
+   * the top bar always shows the visor's identity (replaces the
+   * old translated "Visor details" string). Falls back to a short
+   * PK if the user hasn't set a label.
+   */
+  private refreshHeader() {
+    if (!this.node) {
+      this.headerLabel = '';
+      this.headerIdentifier = '';
+      return;
+    }
+    const labelInfo = this.storageService.getLabelInfo(this.node.localPk);
+    this.headerLabel = (labelInfo && labelInfo.label)
+      ? labelInfo.label
+      : (this.node.label || (this.node.localPk ? this.node.localPk.slice(0, 8) + '…' : ''));
+    this.headerIdentifier = this.node.localPk || '';
+  }
+
   private updateTabBar() {
 
     // If showing one of the sumary pages (node info, transports or apps).
@@ -202,8 +221,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
         {
           icon: 'info',
           label: 'node.tabs.info',
-          // Hide the tab on large screens, as the info is shown on the right bar.
-          onlyIfLessThanLg: true,
+          // Info is now a real tab on every screen size — the right
+          // bar split-view that previously surfaced this content
+          // has been removed.
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'info'] : null,
         },
         {
@@ -234,11 +254,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       ];
 
       // Check the URL to find out which tab should be shown as selected.
-      this.selectedTabIndex = 1;
-      this.showingInfo = false;
-      if (this.lastUrl.includes('/info')) {
-        this.selectedTabIndex = 0;
-        this.showingInfo = true;
+      // Info is the default landing tab now (was Routing).
+      this.selectedTabIndex = 0;
+      if (this.lastUrl.includes('/routing')) {
+        this.selectedTabIndex = 1;
       }
       if (this.lastUrl.includes('/apps')) {
         this.selectedTabIndex = 2;
@@ -268,7 +287,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/apps-list'))) {
 
       this.showingFullList = true;
-      this.showingInfo = false;
       this.nodeActionsHelper = new NodeActionsHelper(this.injector, this.showingFullList);
       this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
       if (this.node) {
@@ -370,6 +388,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
             this.node = result.data;
             this.trafficData = result.trafficData;
             this.nodeLoaded = true;
+            this.refreshHeader();
           });
           console.log('[HV-DIAG] node assigned, instance:', this.instanceId, 'nodeLoaded:', this.nodeLoaded, 'node.localPk:', this.node?.localPk?.substring(0, 8), 'transports:', this.node?.transports?.length, 'routes:', this.node?.routes?.length);
           try {
