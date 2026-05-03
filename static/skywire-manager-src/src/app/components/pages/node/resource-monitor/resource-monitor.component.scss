@@ -1,0 +1,89 @@
+.resource-monitor {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+
+.rm-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+}
+
+.rm-toggle-icon {
+  font-size: 22px;
+}
+
+.rm-host-summary {
+  margin-left: auto;
+  opacity: 0.6;
+  font-size: 12px;
+}
+
+.rm-tabs {
+  display: flex;
+  gap: 16px;
+  margin: 8px 0 12px;
+  font-size: 13px;
+}
+
+.rm-tab {
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  opacity: 0.6;
+
+  &.active {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  &:hover {
+    opacity: 0.9;
+  }
+}
+
+.rm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.rm-cell {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 8px 10px;
+  min-height: 110px;
+  display: flex;
+  flex-direction: column;
+}
+
+.rm-cell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 2px;
+}
+
+.rm-cell-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  opacity: 0.7;
+  letter-spacing: 0.5px;
+}
+
+.rm-cell-value {
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.rm-cell-foot {
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.5;
+  font-variant-numeric: tabular-nums;
+}

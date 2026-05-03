@@ -99,6 +99,59 @@ func (hv *Hypervisor) putDmsgSessionsCount() http.HandlerFunc {
 	}
 }
 
+// --- Per-visor variants used by the hvui's per-visor DMSG tab. ---
+// withCtx + visorCtx hands us an API value that is either the local
+// visor (directly) or an rpcClient to a remote visor — either way,
+// calling DmsgSessions / DmsgConnectAll / SetDmsgSessionsCount on it
+// reaches the right backend. (The HVDmsg* dispatchers exist for the
+// nested-hypervisor case which doesn't apply to the hvui.)
+
+func (hv *Hypervisor) getVisorDmsgSessions() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		sessions, err := ctx.API.DmsgSessions()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		if sessions == nil {
+			httputil.WriteJSON(w, r, http.StatusOK, &DmsgClientSessions{})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, sessions)
+	})
+}
+
+func (hv *Hypervisor) postVisorDmsgConnectAll() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		result, err := ctx.API.DmsgConnectAll()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, result)
+	})
+}
+
+func (hv *Hypervisor) putVisorDmsgSessionsCount() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var req dmsgSessionsCountRequest
+		if err := httputil.ReadJSON(r, &req); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if req.Count < 0 {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "count must be >= 0"})
+			return
+		}
+		result, err := ctx.API.SetDmsgSessionsCount(req.Count)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, result)
+	})
+}
+
 func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
 	hv.mu.RLock()
 	pks := make([]cipher.PubKey, 0, len(hv.remoteVisors)+1)

@@ -1,0 +1,133 @@
+<div class="row">
+  <div class="col-12">
+    <app-top-bar
+      [titleParts]="['nodes.transports-title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="3"
+      [showUpdateButton]="false"
+    ></app-top-bar>
+  </div>
+
+  <div class="content col-12 mt-4.5">
+    <!-- Controls row: days selector, view toggle, refresh -->
+    <div class="controls">
+      <div class="control-group">
+        <span class="control-label">{{ 'network-transports.days' | translate }}:</span>
+        <button mat-button [class.active]="days === 1" (click)="setDays(1)">1d</button>
+        <button mat-button [class.active]="days === 7" (click)="setDays(7)">7d</button>
+        <button mat-button [class.active]="days === 30" (click)="setDays(30)">30d</button>
+      </div>
+      <div class="control-group">
+        <span class="control-label">{{ 'network-transports.view' | translate }}:</span>
+        <button mat-button [class.active]="viewMode === 'compact'" (click)="setViewMode('compact')">
+          <mat-icon [inline]="true">view_list</mat-icon>
+          {{ 'network-transports.view-compact' | translate }}
+        </button>
+        <button mat-button [class.active]="viewMode === 'tree'" (click)="setViewMode('tree')">
+          <mat-icon [inline]="true">account_tree</mat-icon>
+          {{ 'network-transports.view-tree' | translate }}
+        </button>
+      </div>
+      <button mat-stroked-button class="refresh-btn" (click)="refreshNow()" [disabled]="loading">
+        <mat-icon [inline]="true">refresh</mat-icon>
+        {{ 'network-transports.refresh' | translate }}
+      </button>
+    </div>
+
+    @if (loading && byTransport.length === 0 && byVisor.length === 0) {
+      <div class="loading-row">
+        <mat-spinner [diameter]="16"></mat-spinner>
+        <span class="ml-2">{{ 'network-transports.loading' | translate }}</span>
+      </div>
+    }
+
+    @if (error && byTransport.length === 0 && byVisor.length === 0) {
+      <div class="error-row">
+        <mat-icon>error_outline</mat-icon>
+        <span class="ml-2">{{ error }}</span>
+      </div>
+    }
+
+    @if (byTransport.length > 0 || byVisor.length > 0) {
+      <div class="summary-line">
+        <mat-icon>swap_horiz</mat-icon>
+        <span class="ml-1">
+          {{ 'network-transports.summary' | translate:{
+            transports: rawCount,
+            bandwidth: fmtBytes(networkBandwidth),
+            days: days
+          } }}
+        </span>
+        @if (lastUpdated) {
+          <span class="last-updated">
+            — {{ 'network-transports.last-updated' | translate }}: {{ lastUpdated | date: 'HH:mm:ss' }}
+          </span>
+        }
+      </div>
+
+      <!-- Compact: by-transport rows -->
+      @if (viewMode === 'compact') {
+        <table class="responsive-table-translucid mt-3 nt-compact">
+          <tr>
+            <th>{{ 'network-transports.tp-id' | translate }}</th>
+            <th>{{ 'network-transports.type' | translate }}</th>
+            <th>{{ 'network-transports.edge-a' | translate }}</th>
+            <th>{{ 'network-transports.edge-b' | translate }}</th>
+            <th class="num">{{ 'network-transports.sent' | translate }}</th>
+            <th class="num">{{ 'network-transports.recv' | translate }}</th>
+            <th class="num">{{ 'network-transports.total' | translate }}</th>
+            <th class="num">{{ 'network-transports.latency' | translate }}</th>
+          </tr>
+          @for (e of byTransport; track trackTpId($index, e)) {
+            <tr>
+              <td class="mono small">{{ e.id }}</td>
+              <td>{{ e.type }}</td>
+              <td class="mono small">{{ e.edge_a }}</td>
+              <td class="mono small">{{ e.edge_b }}</td>
+              <td class="num">{{ fmtBytes(e.sent) }}</td>
+              <td class="num">{{ fmtBytes(e.recv) }}</td>
+              <td class="num"><strong>{{ fmtBytes(e.bandwidth) }}</strong></td>
+              <td class="num" [matTooltip]="fmtLatencyFull(e.latency)">{{ fmtLatency(e.latency) }}</td>
+            </tr>
+          }
+        </table>
+      }
+
+      <!-- Tree: visor parent rows with their transports as children -->
+      @if (viewMode === 'tree') {
+        <div class="nt-tree mt-3">
+          @for (v of byVisor; track trackVisorPk($index, v)) {
+            <div class="nt-visor">
+              <div class="nt-visor-row" (click)="toggleVisor(v)">
+                <mat-icon [inline]="true" class="exp">{{ v.expanded ? 'expand_more' : 'chevron_right' }}</mat-icon>
+                <span class="nt-pk mono small">{{ v.pk }}</span>
+                <span class="nt-bw"><strong>{{ fmtBytes(v.bandwidth) }}</strong></span>
+                <span class="dim">↑ {{ fmtBytes(v.sent) }} ↓ {{ fmtBytes(v.recv) }}</span>
+                <span class="dim">· {{ v.transports.length }} tp</span>
+              </div>
+              @if (v.expanded) {
+                <div class="nt-children">
+                  @for (c of v.transports; track trackChildId($index, c); let last = $last) {
+                    <div class="nt-child">
+                      <span class="nt-prefix">{{ last ? '└──' : '├──' }}</span>
+                      <span class="nt-tp-id mono small">{{ c.id }}</span>
+                      <span class="nt-tp-type">{{ c.type }}</span>
+                      <span class="nt-arrow">→</span>
+                      <span class="nt-tp-remote mono small">{{ c.remote }}</span>
+                      <span class="dim">↑ {{ fmtBytes(c.sent) }}</span>
+                      <span class="dim">↓ {{ fmtBytes(c.recv) }}</span>
+                      <span><strong>{{ fmtBytes(c.bandwidth) }}</strong></span>
+                      @if (c.latency && c.latency.avg) {
+                        <span class="dim" [matTooltip]="fmtLatencyFull(c.latency)">{{ fmtLatency(c.latency) }}</span>
+                      }
+                    </div>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    }
+  </div>
+</div>

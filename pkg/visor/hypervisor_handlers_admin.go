@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +29,27 @@ func (hv *Hypervisor) shutdown() http.HandlerFunc {
 
 func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		// Diff-streaming mode: caller passes ?since=N to receive
+		// only entries with log_line > N. Returns the
+		// RuntimeLogsDelta JSON shape ({entries, latest, dropped}).
+		// When ?since is absent, the legacy full-buffer array shape
+		// is returned for back-compat with existing callers (curl,
+		// CLI clients without the cursor wired).
+		if sinceStr := r.URL.Query().Get("since"); sinceStr != "" {
+			since, parseErr := strconv.ParseInt(sinceStr, 10, 64)
+			if parseErr != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("invalid since: %w", parseErr))
+				return
+			}
+			delta, err := ctx.API.RuntimeLogsSince(since)
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+			httputil.WriteJSON(w, r, http.StatusOK, delta)
+			return
+		}
+
 		logs, err := ctx.API.RuntimeLogs()
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
@@ -215,6 +237,32 @@ func (hv *Hypervisor) putIsPublic() http.HandlerFunc {
 func (hv *Hypervisor) getIsPublic() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		httputil.WriteJSON(w, r, http.StatusOK, isPublicResp{ctx.API.GetIsPublic()})
+	})
+}
+
+// getRuntimeStats — Go-runtime metrics for the visor process.
+// Polled by the hypervisor UI's Resource Monitor "Process" tab.
+func (hv *Hypervisor) getRuntimeStats() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		stats, err := ctx.API.RuntimeStats()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, stats)
+	})
+}
+
+// getHostStats — psutil-style host metrics (CPU%, mem, disk, net,
+// visor process). Polled by the Resource Monitor "Host" tab.
+func (hv *Hypervisor) getHostStats() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		stats, err := ctx.API.HostStats()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, stats)
 	})
 }
 

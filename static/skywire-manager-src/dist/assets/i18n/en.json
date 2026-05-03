@@ -2,6 +2,7 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
+    "loading": "Loading…",
     "downloaded": "Downloaded",
     "uploaded": "Uploaded",
     "loading-error": "There was an error getting the data. Retrying...",
@@ -89,6 +90,20 @@
   "node": {
     "title": "Visor details",
     "not-found": "Visor not found.",
+    "resource-monitor": {
+      "title": "Resource monitor",
+      "tab-host": "Host",
+      "tab-process": "Process",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "disk": "Disk",
+      "net-rx": "Net rx",
+      "net-tx": "Net tx",
+      "threads": "Threads",
+      "heap": "Heap",
+      "goroutines": "Goroutines",
+      "gc": "GC rate"
+    },
     "logs" : {
       "title": "Runtime Logs",
       "no-logs": "No runtime logs were found for this visor.",
@@ -104,7 +119,10 @@
       "filter-warning": "Warning or more important",
       "filter-error": "Error or more important",
       "filter-faltal": "Faltal or more important",
-      "filter-panic": "Panic"
+      "filter-panic": "Panic",
+      "live-on": "Live (pause)",
+      "live-off": "Paused (live)",
+      "dropped": "Skipped {{ count }} older entries that aged out of the visor's runtime buffer."
     },
     "statuses": {
       "online": "Online",
@@ -156,7 +174,8 @@
         "not-registered-info": "You have not specified a Skycoin address for receiving rewards for this visor. If you want to register the visor for receiving rewards, press the \"Set address\" button and set a Skycoin address.",
         "open-in-explorer": "Open in blockchain explorer",
         "set-address-button": "Set address",
-        "change-address-button": "Change address"
+        "change-address-button": "Change address",
+        "show-rules": "Reward rules (embedded mainnet_rules.md)"
       },
       "transports-info": {
         "title": "Transport",
@@ -214,8 +233,12 @@
       "info": "Info",
       "apps": "Apps",
       "routing": "Routing",
+      "transports": "Transports",
       "rewards": "Rewards",
-      "skynet": "Skynet"
+      "skynet": "Skynet",
+      "resources": "Resources",
+      "chat": "Skychat",
+      "dmsg": "DMSG"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
@@ -244,7 +267,10 @@
     "title": "Visor list",
     "dmsg-title": "DMSG",
     "rewards-title": "Rewards",
-    "services-health-title": "Services health",
+    "services-health-title": "Deployment",
+    "network-title": "Network",
+    "resources-title": "Resources",
+    "transports-title": "Transports",
     "dmsg-settings-title": "DMSG settings",
     "reward-address": "Reward Address",
     "reward-total": "Week Total",
@@ -306,16 +332,121 @@
     }
   },
 
+  "network-transports": {
+    "loading": "Fetching transport metrics from TPD…",
+    "summary": "{{transports}} transports · {{bandwidth}} network bandwidth ({{days}} days)",
+    "last-updated": "last fetched",
+    "days": "Window",
+    "view": "View",
+    "view-compact": "Compact",
+    "view-tree": "Tree",
+    "refresh": "Refresh",
+    "tp-id": "Transport ID",
+    "type": "Type",
+    "edge-a": "Edge A",
+    "edge-b": "Edge B",
+    "sent": "Sent",
+    "recv": "Recv",
+    "total": "Total",
+    "latency": "Latency"
+  },
+
+  "multi-resources": {
+    "loading": "Polling visor host stats…",
+    "summary": "{{count}} visors",
+    "last-updated": "last sample",
+    "visor": "Visor",
+    "cpu": "CPU",
+    "mem": "Memory",
+    "disk": "Disk",
+    "tx": "TX",
+    "rx": "RX",
+    "proc-rss": "Process RSS"
+  },
+
   "services-health": {
-    "loading": "Checking services…",
-    "all-ok": "All services operational",
-    "degraded": "One or more services are degraded",
+    "loading": "Checking deployment services…",
+    "all-ok": "All deployment services operational",
+    "degraded": "One or more deployment services are degraded",
     "last-updated": "last checked",
     "service": "Service",
     "status": "Status",
     "latency": "Latency",
     "version": "Version",
-    "endpoint": "Endpoint"
+    "endpoint": "Endpoint",
+    "rsn-section": "Route Setup Nodes",
+    "rsn-empty": "No route setup nodes configured.",
+    "rsn-pk": "Public Key",
+    "rsn-success": "Successful",
+    "rsn-failed": "Failed",
+    "rsn-rate": "Success rate",
+    "rsn-latency-p50": "p50",
+    "rsn-latency-p95": "p95",
+    "rsn-latency-p99": "p99",
+    "rsn-active": "In flight",
+    "rsn-last-success": "Last success",
+    "rsn-last-failure": "Last failure",
+    "rsn-uptime": "Uptime",
+    "rsn-failure-reasons": "Top failure reasons",
+    "rsn-error": "Unreachable"
+  },
+
+  "skychat": {
+    "title": "Skychat",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "no-history": "history is disabled (--persist not set)",
+    "empty": "No messages yet — incoming chats from connected peers will appear here.",
+    "peers": "Peers",
+    "peers-empty": "No peers yet. Send a message or wait for an incoming chat.",
+    "to": "Recipient PK",
+    "network": "Network",
+    "message": "Message",
+    "placeholder": "Type a message; Ctrl+Enter to send",
+    "send": "Send",
+    "password": {
+      "set": "Set password",
+      "change": "Change password",
+      "clear": "Remove",
+      "hide": "Hide",
+      "saved": "Skychat password updated",
+      "cleared": "Skychat password removed",
+      "old": "Current password",
+      "new": "New password",
+      "confirm": "Repeat new password",
+      "help-unset": "Skychat is currently unprotected. Set a password to require basic auth on the standalone :8001 surface; this hypervisor session always bypasses it.",
+      "help-set": "A password is set on skychat's standalone :8001 surface. Change or remove it here.",
+      "errors": {
+        "length": "Skychat password must be 6-64 characters",
+        "mismatch": "Passwords do not match",
+        "old-required": "Current password is required to remove the gate"
+      }
+    }
+  },
+
+  "network-view": {
+    "loading": "Aggregating service-discovery, transport-discovery and uptime-tracker…",
+    "last-updated": "last fetched",
+    "empty": "No visors match the current filters.",
+    "search": "Search",
+    "country": "Country",
+    "version": "Version",
+    "min-transports": "Min tps",
+    "online-only": "Online only",
+    "refresh": "Refresh now",
+    "col": {
+      "pk": "PK",
+      "country": "Country",
+      "version": "Version",
+      "services": "Services",
+      "total": "Total",
+      "status": "UT"
+    },
+    "legend": {
+      "offline": "offline (UT)",
+      "not-in-ut": "not in UT",
+      "low-transports": "online but <2 stcpr/sudph"
+    }
   },
 
   "dmsg-settings": {
@@ -671,6 +802,7 @@
     "id": "ID",
     "remote-node": "Remote",
     "type": "Type",
+    "latency": "Latency",
     "create": "Create transport",
     "make-persistent-confirmation": "Are you sure you want to make the transport persistent?",
     "make-non-persistent-confirmation": "Are you sure you want to make the transport non-persistent?",
@@ -736,6 +868,12 @@
     "type": "Type",
     "source": "Source",
     "destination": "Destination",
+    "local-port": "Local port",
+    "remote-port": "Remote port",
+    "remote-pk": "Remote",
+    "next-rid": "Next RID",
+    "next-tp": "Next TP",
+    "keep-alive": "Keep-alive",
     "delete-confirmation": "Are you sure you want to delete the route?",
     "delete-selected-confirmation": "Are you sure you want to delete the selected routes?",
     "delete": "Delete route",

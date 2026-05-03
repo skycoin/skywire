@@ -39,10 +39,12 @@ export interface DmsgConnectAllResult {
 }
 
 /**
- * Client for the visor's dmsg settings endpoints:
- *   GET  /api/dmsg/sessions         — per-client session state
- *   POST /api/dmsg/connect-all      — one-shot "reach every server now"
- *   PUT  /api/dmsg/sessions-count   — persist sessions_count + connect-all
+ * Per-visor DMSG settings client. The hypervisor exposes
+ *   GET  /api/visors/<pk>/dmsg/sessions         — per-client session state
+ *   POST /api/visors/<pk>/dmsg/connect-all      — one-shot reach-every-server
+ *   PUT  /api/visors/<pk>/dmsg/sessions-count   — persist sessions_count + connect-all
+ * for the visor identified by pk (the local hypervisor's own visor or
+ * any remote visor reachable through the hypervisor RPC channel).
  */
 @Injectable({
   providedIn: 'root',
@@ -50,23 +52,21 @@ export interface DmsgConnectAllResult {
 export class DmsgSettingsService {
   constructor(private apiService: ApiService) {}
 
-  /** One-shot fetch of per-client session state. */
-  getSessions(): Observable<DmsgClientSessions> {
-    return this.apiService.get('dmsg/sessions') as Observable<DmsgClientSessions>;
+  getSessions(pk: string): Observable<DmsgClientSessions> {
+    return this.apiService.get(`visors/${pk}/dmsg/sessions`) as Observable<DmsgClientSessions>;
   }
 
-  /** One-shot action: open a dmsg session to every known server. */
-  connectAll(): Observable<DmsgConnectAllResult> {
-    return this.apiService.post('dmsg/connect-all') as Observable<DmsgConnectAllResult>;
+  connectAll(pk: string): Observable<DmsgConnectAllResult> {
+    return this.apiService.post(`visors/${pk}/dmsg/connect-all`) as Observable<DmsgConnectAllResult>;
   }
 
   /**
-   * Persist dmsg.sessions_count to the visor config file (so it survives
+   * Persist dmsg.sessions_count to the visor config (so it survives
    * restart) and trigger an immediate connect-all. A value of 0 means
    * "connect to every available dmsg server" — recommended for
    * visors hosting the embedded route or transport setup-node.
    */
-  setSessionsCount(count: number): Observable<DmsgConnectAllResult> {
-    return this.apiService.put('dmsg/sessions-count', { count }) as Observable<DmsgConnectAllResult>;
+  setSessionsCount(pk: string, count: number): Observable<DmsgConnectAllResult> {
+    return this.apiService.put(`visors/${pk}/dmsg/sessions-count`, { count }) as Observable<DmsgConnectAllResult>;
   }
 }

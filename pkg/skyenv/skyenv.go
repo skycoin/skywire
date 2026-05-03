@@ -45,6 +45,14 @@ const (
 	// collide with DmsgHypervisorPort.
 	DmsgCXOPort uint16 = 50
 
+	// DmsgTPDMetricsCXOPort is the DMSG port the TPD's CXO metrics-
+	// aggregate publisher listens on (and visors dial when they want
+	// to subscribe to the network-wide transport metrics feed).
+	// Distinct from DmsgCXOPort because TPD already runs its
+	// CXO aggregator there for inbound visor stats publishers; the
+	// metrics publisher is a separate feed in the opposite direction.
+	DmsgTPDMetricsCXOPort uint16 = 51
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 
@@ -84,8 +92,13 @@ const (
 	// SkychatPort is the dmsg port used by skychat
 	SkychatPort uint16 = 1
 
-	// SkychatAddr is the non-dmsg port used to access the skychat app on localhost
-	SkychatAddr = ":8001"
+	// SkychatAddr is the non-dmsg address skychat binds for its HTTP
+	// UI. Localhost-only by default since skychat is unauthenticated
+	// out of the box; the operator can opt into wider exposure with
+	// "*:8001" (the docker integration configs do this for inter-
+	// container reachability), and optional password protection is
+	// available via the hypervisor's Skychat password setting.
+	SkychatAddr = "127.0.0.1:8001"
 
 	// SkysocksName is the name of the skysocks app
 	SkysocksName = "skysocks"

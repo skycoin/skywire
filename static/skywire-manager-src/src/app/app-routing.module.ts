@@ -9,10 +9,15 @@ import { AuthGuardService } from './services/auth-guard.service';
 import { SettingsComponent } from './components/pages/settings/settings.component';
 import { RoutingComponent } from './components/pages/node/routing/routing.component';
 import { AppsComponent } from './components/pages/node/apps/apps.component';
+import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
+import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { NodeRewardsComponent } from './components/pages/node/rewards/node-rewards.component';
 import { ServicesHealthComponent } from './components/pages/services-health/services-health.component';
+import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
+import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
+import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
 import { DmsgSettingsComponent } from './components/pages/dmsg-settings/dmsg-settings.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
@@ -75,8 +80,23 @@ const routes: Routes = [
         component: ServicesHealthComponent
       },
       {
+        path: 'network',
+        component: NetworkViewComponent
+      },
+      {
+        path: 'resources',
+        component: MultiVisorResourcesComponent
+      },
+      {
+        path: 'transports',
+        component: NetworkTransportsComponent
+      },
+      // /nodes/dmsg-settings was the old home-level DMSG page (local
+      // visor only). DMSG is a per-visor tab now — bounce the legacy
+      // URL to the home node list rather than 404.
+      {
         path: 'dmsg-settings',
-        component: DmsgSettingsComponent
+        redirectTo: 'list/1'
       },
       {
         path: ':key',
@@ -84,7 +104,7 @@ const routes: Routes = [
         children: [
           {
             path: '',
-            redirectTo: 'routing',
+            redirectTo: 'info',
             pathMatch: 'full'
           },
           {
@@ -100,22 +120,35 @@ const routes: Routes = [
             component: AppsComponent
           },
           {
-            path: 'transports',
-            redirectTo: 'transports/1',
-            pathMatch: 'full'
+            path: 'resources',
+            component: NodeResourcesComponent
           },
           {
-            path: 'transports/:page',
+            path: 'chat',
+            component: SkychatComponent
+          },
+          {
+            path: 'dmsg',
+            component: DmsgSettingsComponent
+          },
+          {
+            path: 'transports',
             component: AllTransportsComponent
+          },
+          // Legacy paginated URLs — bounce to the new tab. Old
+          // bookmarks (/.../transports/1, /.../routes/1) keep working.
+          {
+            path: 'transports/:page',
+            redirectTo: 'transports'
           },
           {
             path: 'routes',
-            redirectTo: 'routes/1',
+            redirectTo: 'routing',
             pathMatch: 'full'
           },
           {
             path: 'routes/:page',
-            component: AllRoutesComponent
+            redirectTo: 'routing'
           },
           {
             path: 'rewards',

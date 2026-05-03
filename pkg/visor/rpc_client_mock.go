@@ -787,6 +787,33 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
 }
 
+// RuntimeLogsSince implements API.
+func (mc *mockRPCClient) RuntimeLogsSince(int64) (RuntimeLogsDelta, error) {
+	return RuntimeLogsDelta{}, nil
+}
+
+// HostStats implements API.
+func (mc *mockRPCClient) HostStats() (*HostStatsInfo, error) {
+	return &HostStatsInfo{}, nil
+}
+
+// NetworkView implements API.
+func (mc *mockRPCClient) NetworkView() (*NetworkViewResponse, error) {
+	return &NetworkViewResponse{}, nil
+}
+
+// SkychatPasswordIsSet implements API.
+func (mc *mockRPCClient) SkychatPasswordIsSet() (bool, error) { return false, nil }
+
+// SetSkychatPassword implements API.
+func (mc *mockRPCClient) SetSkychatPassword(string, string) error { return nil }
+
+// ClearSkychatPassword implements API.
+func (mc *mockRPCClient) ClearSkychatPassword(string) error { return nil }
+
+// SkychatLocalAddr implements API.
+func (mc *mockRPCClient) SkychatLocalAddr() (string, error) { return "127.0.0.1:8001", nil }
+
 // RuntimeLogs implements API.
 func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil
@@ -1292,6 +1319,11 @@ func (mc *mockRPCClient) HVShutdown(_ cipher.PubKey) error {
 
 // HVServiceHealth implements API.
 func (mc *mockRPCClient) HVServiceHealth(_ cipher.PubKey) ([]ServiceHealthEntry, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVDmsgSessions implements API.
+func (mc *mockRPCClient) HVDmsgSessions(_ cipher.PubKey) (*DmsgClientSessions, error) {
 	return nil, fmt.Errorf("not supported in mock")
 }
 

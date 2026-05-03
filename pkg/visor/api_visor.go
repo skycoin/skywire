@@ -384,3 +384,33 @@ func (v *Visor) RuntimeLogs() (string, error) {
 	builder.WriteString("]")
 	return builder.String(), nil
 }
+
+// RuntimeLogsDelta is the diff-streaming response shape: only the
+// entries newer than the caller's cursor, plus the new cursor and
+// a count of entries the caller missed because they aged out of
+// the ring buffer between calls (0 when keeping up).
+type RuntimeLogsDelta struct {
+	// Entries is the JSON-encoded log lines (each is one full JSON
+	// object, same shape returned by RuntimeLogs's array elements).
+	Entries []string `json:"entries"`
+	// Latest is the highest log_line currently buffered. Pass it as
+	// `since` on the next call to receive only newly-arrived entries.
+	Latest int64 `json:"latest"`
+	// Dropped tells the caller how many entries they missed since
+	// their last cursor (because the buffer wrapped past them).
+	// Zero when the caller is keeping up with the poll cadence.
+	Dropped int64 `json:"dropped"`
+}
+
+// RuntimeLogsSince returns only entries whose log_line is strictly
+// greater than since. Used for diff-based live tailing of the
+// runtime-logs buffer; pass the previous response's Latest as
+// `since` to fetch only the new entries since the last poll.
+func (v *Visor) RuntimeLogsSince(since int64) (RuntimeLogsDelta, error) {
+	logs, dropped, latest := v.logstore.GetLogsSince(since)
+	return RuntimeLogsDelta{
+		Entries: logs,
+		Latest:  latest,
+		Dropped: dropped,
+	}, nil
+}

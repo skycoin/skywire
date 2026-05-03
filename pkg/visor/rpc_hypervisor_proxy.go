@@ -404,6 +404,20 @@ func (v *Visor) HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, error) 
 	return sub.HVServiceHealth(pk)
 }
 
+// HVDmsgSessions returns the per-client dmsg sessions snapshot for
+// the visor identified by pk. Locally — short-circuits to the
+// in-process visor; remotely — forwards over the hypervisor proxy.
+func (v *Visor) HVDmsgSessions(pk cipher.PubKey) (*DmsgClientSessions, error) {
+	direct, sub, err := v.hvDispatch(pk)
+	if err != nil {
+		return nil, err
+	}
+	if direct != nil {
+		return direct.DmsgSessions()
+	}
+	return sub.HVDmsgSessions(pk)
+}
+
 // HVDmsgConnectAll triggers a one-shot connect-all on the visor identified by pk.
 func (v *Visor) HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error) {
 	direct, sub, err := v.hvDispatch(pk)

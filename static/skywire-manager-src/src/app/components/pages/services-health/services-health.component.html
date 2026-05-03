@@ -3,7 +3,7 @@
     <app-top-bar
       [titleParts]="['nodes.services-health-title']"
       [tabsData]="tabsData"
-      [selectedTabIndex]="2"
+      [selectedTabIndex]="6"
       [showUpdateButton]="false"
     ></app-top-bar>
   </div>
@@ -108,5 +108,83 @@
         }
       </div>
     }
+
+    <!-- Route Setup Node remote stats (fetched over DMSG). -->
+    <div class="rsn-section mt-4">
+      <h3 class="rsn-title">{{ 'services-health.rsn-section' | translate }}</h3>
+      @if (rsnLoading && rsnStats.length === 0) {
+        <div class="loading-row">
+          <mat-spinner [diameter]="14"></mat-spinner>
+          <span class="ml-2">…</span>
+        </div>
+      }
+      @if (!rsnLoading && rsnStats.length === 0) {
+        <div class="dim">{{ 'services-health.rsn-empty' | translate }}</div>
+      }
+      @for (rsn of rsnStats; track trackRSN($index, rsn)) {
+        <div class="rsn-card">
+          <div class="rsn-card-header">
+            <span class="dot" [ngClass]="rsn.snapshot ? 'dot-green' : 'dot-red'"></span>
+            <code class="rsn-pk mono small">{{ rsn.pk }}</code>
+            @if (rsn.snapshot) {
+              <span class="rsn-rate" [class]="successClass(rsn.snapshot)">
+                {{ rsn.snapshot.success_rate_pct | number: '1.0-1' }}%
+              </span>
+            }
+          </div>
+          @if (rsn.error) {
+            <div class="error-detail">{{ 'services-health.rsn-error' | translate }}: {{ rsn.error }}</div>
+          }
+          @if (rsn.snapshot) {
+            <div class="rsn-grid">
+              <div>
+                <span class="dim">{{ 'services-health.rsn-success' | translate }}:</span>
+                <strong>{{ rsn.snapshot.successful || 0 }}</strong>
+              </div>
+              <div>
+                <span class="dim">{{ 'services-health.rsn-failed' | translate }}:</span>
+                <strong>{{ rsn.snapshot.failed || 0 }}</strong>
+              </div>
+              <div>
+                <span class="dim">{{ 'services-health.rsn-active' | translate }}:</span>
+                <strong>{{ rsn.snapshot.active_requests || 0 }}</strong>
+              </div>
+              <div>
+                <span class="dim">{{ 'services-health.rsn-latency-p50' | translate }}:</span>
+                <strong>{{ rsn.snapshot.latency_ms?.p50_ms || 0 }} ms</strong>
+              </div>
+              <div>
+                <span class="dim">{{ 'services-health.rsn-latency-p95' | translate }}:</span>
+                <strong>{{ rsn.snapshot.latency_ms?.p95_ms || 0 }} ms</strong>
+              </div>
+              <div>
+                <span class="dim">{{ 'services-health.rsn-latency-p99' | translate }}:</span>
+                <strong>{{ rsn.snapshot.latency_ms?.p99_ms || 0 }} ms</strong>
+              </div>
+              @if (rsn.snapshot.last_success_at) {
+                <div>
+                  <span class="dim">{{ 'services-health.rsn-last-success' | translate }}:</span>
+                  <span>{{ rsn.snapshot.last_success_at | date: 'HH:mm:ss' }}</span>
+                </div>
+              }
+              @if (rsn.snapshot.last_failure_at) {
+                <div>
+                  <span class="dim">{{ 'services-health.rsn-last-failure' | translate }}:</span>
+                  <span>{{ rsn.snapshot.last_failure_at | date: 'HH:mm:ss' }}</span>
+                </div>
+              }
+            </div>
+            @if (topFailureReasons(rsn.snapshot).length > 0) {
+              <div class="rsn-failures">
+                <span class="dim">{{ 'services-health.rsn-failure-reasons' | translate }}:</span>
+                @for (f of topFailureReasons(rsn.snapshot); track f.reason; let last = $last) {
+                  <span class="rsn-fail-pill">{{ f.reason }} ({{ f.count }})</span>
+                }
+              </div>
+            }
+          }
+        </div>
+      }
+    </div>
   </div>
 </div>

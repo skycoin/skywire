@@ -4,6 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Observable, Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
+import { homeTabsData } from 'src/app/utils/home-tabs';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
@@ -44,40 +45,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
   ) {
     super();
 
-    // Data for populating the tab bar.
-    this.tabsData = [
-      {
-        icon: 'view_headline',
-        label: 'nodes.title',
-        linkParts: ['/nodes'],
-      },
-      {
-        icon: 'monetization_on',
-        label: 'nodes.rewards-title',
-        linkParts: ['/nodes', 'rewards'],
-      },
-      {
-        icon: 'health_and_safety',
-        label: 'nodes.services-health-title',
-        linkParts: ['/nodes', 'services-health'],
-      },
-      {
-        icon: 'hub',
-        label: 'nodes.dmsg-settings-title',
-        linkParts: ['/nodes', 'dmsg-settings'],
-      },
-      {
-        icon: 'bubble_chart',
-        label: 'node.details.tpviz.title',
-        linkParts: [],
-        externalUrl: '/tp-viz/',
-      },
-      {
-        icon: 'settings',
-        label: 'settings.title',
-        linkParts: ['/settings'],
-      }
-    ];
+    this.tabsData = homeTabsData();
 
     // Configure the options menu shown in the top bar.
     this.updateOptionsMenu();

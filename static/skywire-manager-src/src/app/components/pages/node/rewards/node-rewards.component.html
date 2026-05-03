@@ -1,3 +1,55 @@
+<!-- Reward address management — first because it gates everything
+     else on this tab (no address → no rewards). -->
+<div class="rounded-elevated-box mt-3">
+  <div class="box-internal-container overflow">
+    <span class="section-title">{{ 'node.details.rewards-info.title' | translate }}</span>
+    <span class="info-line">
+      <span class="title">{{ 'node.details.rewards-info.rewards-address' | translate }} </span>
+      @if (rewardsAddress) {
+        <app-copy-to-clipboard-text class="text-with-right-margin" text="{{ rewardsAddress }}"></app-copy-to-clipboard-text>
+        @if (!rewardsAddressIsXpub) {
+          <a [href]="'https://explorer.skycoin.com/app/address/' + rewardsAddress" target="_blank" rel="noreferrer nofollow noopener">
+            <mat-icon [inline]="true" class="link-icon transparent-button" [matTooltip]="'node.details.rewards-info.open-in-explorer' | translate">
+              open_in_browser
+            </mat-icon>
+          </a>
+        }
+      }
+      @if (!rewardsAddress) {
+        {{ 'node.details.rewards-info.not-registered' | translate }}
+        <mat-icon [inline]="true" [matTooltip]="'node.details.rewards-info.not-registered-info' | translate">info</mat-icon>
+      }
+      <button mat-icon-button class="inline-edit-btn" (click)="toggleRewardForm()" [matTooltip]="(rewardsAddress ? 'node.details.rewards-info.change-address-button' : 'node.details.rewards-info.set-address-button') | translate">
+        <mat-icon [inline]="true">{{ showRewardForm ? 'close' : 'edit' }}</mat-icon>
+      </button>
+    </span>
+    @if (showRewardForm) {
+      <form [formGroup]="rewardForm" (ngSubmit)="submitRewardAddress()" class="inline-form">
+        <mat-form-field appearance="outline" class="inline-form-field">
+          <mat-label>{{ 'node.details.rewards-info.rewards-address' | translate }}</mat-label>
+          <input matInput formControlName="address" maxlength="112" placeholder="2…">
+        </mat-form-field>
+        <div class="inline-form-actions">
+          <button mat-raised-button color="primary" type="submit" [disabled]="!rewardForm.valid">
+            {{ 'common.save' | translate }}
+          </button>
+          <button mat-button type="button" (click)="toggleRewardForm()">
+            {{ 'common.cancel' | translate }}
+          </button>
+        </div>
+      </form>
+    }
+    <span class="info-line collapsible-link" (click)="toggleRewardRules()">
+      <mat-icon [inline]="true">{{ showRewardRules ? 'expand_more' : 'chevron_right' }}</mat-icon>
+      {{ 'node.details.rewards-info.show-rules' | translate }}
+    </span>
+    @if (showRewardRules) {
+      <pre class="reward-rules">{{ rewardRules || ('common.loading' | translate) }}</pre>
+    }
+  </div>
+</div>
+
+<!-- Reward history (existing block — unchanged below). -->
 <div class="rounded-elevated-box mt-3">
   <div class="box-internal-container overflow">
     <!-- Header -->

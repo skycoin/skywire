@@ -231,6 +231,14 @@ type Visor struct {
 
 	// STCP PK table for runtime address injection (tp add -t stcp --addr)
 	stcpTable stcp.PKTable
+
+	// Lazy-initialized CXO subscriber for TPD's network-wide
+	// transport-metrics feed. Created on the first hvui-driven
+	// FetchTransportMetricsCXO call and kept alive thereafter; the
+	// hvui handler reads cached values via Subscriber.Get and falls
+	// back to HTTP /metrics when a path hasn't been published yet.
+	tpdMetricsSub   *tpdMetricsSubscriber
+	tpdMetricsSubMu sync.RWMutex
 }
 
 // pingState manages Skywire transport ping connections.
@@ -646,6 +654,11 @@ func (v *Visor) Close() error {
 
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
+
+	// Tear down lazy CXO subscribers (TPD metrics) before the
+	// closeStack runs, since they hold dmsg conns that closeStack
+	// also touches via the dmsg client shutdown.
+	v.closeTPDMetricsSubscriber()
 
 	// Cleanly close ongoing raw TCP forward conns
 	for _, forwardConn := range appnet.GetAllRawTCPForwardConns() {

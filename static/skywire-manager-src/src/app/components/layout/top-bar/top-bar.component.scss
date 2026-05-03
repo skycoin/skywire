@@ -58,12 +58,35 @@ $top-bar-height: 56px;
 
   .lower-container {
     display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 2px;
+
+    // Visual divider between tab groups (e.g. "this hypervisor"
+    // tabs vs network-wide tabs on the home top-bar). Inserted
+    // dynamically by top-bar.component.html when the `group`
+    // marker on TabButtonData changes between adjacent tabs.
+    .tab-group-separator {
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.2);
+      margin: 0 8px;
+      align-self: center;
+    }
+
+    // Each tab is wrapped in its own <div>. Force them to size by
+    // their content — without this, an unexplained gap can appear
+    // mid-strip on some viewports (likely a flex-item growth quirk).
+    > div {
+      flex: 0 0 auto;
+      min-width: 0;
+    }
 
     .tab-button {
       color: $white;
       border-radius: $mat-dialog-radius;
       opacity: 0.5;
-      margin-right: 2px;
+      margin-right: 0;
       text-decoration: none;
       height: $header-buttons-height;
       display: flex;
@@ -330,4 +353,35 @@ $top-bar-height: 56px;
   .bottom-line {
     font-size: $font-size-smaller;
   }
+}
+
+
+// Page header (visor identity replaces title text). Used by the
+// node-detail page so the visor's label + PK persist on every tab.
+.page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.1;
+  gap: 2px;
+  min-width: 0;
+}
+.page-header-label {
+  font-size: 18px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+.page-header-id {
+  display: inline-block;
+  font-size: 12px;
+  opacity: 0.65;
+  font-family: monospace;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.page-header-label-mobile {
+  font-weight: 500;
+  font-size: 14px;
 }
