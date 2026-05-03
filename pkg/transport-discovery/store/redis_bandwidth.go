@@ -106,15 +106,18 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 }
 
 // UpdateLatency stores the most recent latency snapshot for a transport
-// inside its TransportData blob. Called by the CXO aggregator when a
-// visor's TreeStore feed reports a fresh transports/<id>/current
-// snapshot. Latency is round-trip — both edges should converge on
-// similar values, so last-writer-wins keeps this lock-free.
+// in a dedicated key (transport-discovery:lat:<id>) with a 35-day TTL,
+// independent of the registration blob. Called by the CXO aggregator
+// when a visor's TreeStore feed reports a fresh transports/<id>/current
+// snapshot. Latency is round-trip — both edges converge on similar
+// values — so last-writer-wins keeps this lock-free.
 //
-// If the transport hasn't been registered (or its TTL'd out), the
-// snapshot is dropped. We intentionally do not fabricate a TransportData
-// blob from a latency report alone — registration is the only path that
-// knows the canonical edges/type.
+// Previously latency was a field inside the tp:<id> blob and inherited
+// the 5-minute registration TTL: any visor that paused re-registering
+// (TPD restart, network blip, normal churn) silently dropped its
+// latency from /metrics until the next CXO push, while bandwidth
+// (stored at bw:daily:*) survived. Co-locating with bandwidth's
+// retention window restores symmetry.
 func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error {
 	// Defense-in-depth alongside the aggregator gate: any non-positive
 	// field means the snapshot is partial, so reject the whole update
@@ -128,40 +131,34 @@ func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minM
 		return fmt.Errorf("invalid transport id %q: %w", transportID, err)
 	}
 
-	tpKey := s.transportKey(id)
-	raw, err := s.client.Get(ctx, tpKey).Result()
+	rec := LatencyRecord{
+		Min:       int64(minMS * 1000),
+		Max:       int64(maxMS * 1000),
+		Avg:       int64(avgMS * 1000),
+		UpdatedAt: time.Now().UTC().Unix(),
+	}
+	raw, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	return s.client.Set(ctx, s.latencyKey(id), string(raw), latencyTTL).Err()
+}
+
+// getLatencyRecord reads the durable latency snapshot for a transport,
+// returning (nil, nil) when no record exists.
+func (s *redisStore) getLatencyRecord(ctx context.Context, id uuid.UUID) (*LatencyRecord, error) {
+	raw, err := s.client.Get(ctx, s.latencyKey(id)).Result()
 	if errors.Is(err, redis.Nil) {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
-
-	var data TransportData
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		return fmt.Errorf("decode TransportData: %w", err)
+	var rec LatencyRecord
+	if err := json.Unmarshal([]byte(raw), &rec); err != nil {
+		return nil, fmt.Errorf("decode LatencyRecord: %w", err)
 	}
-
-	// ms → us, matching the TransportData latency field unit.
-	data.LatencyMin = int64(minMS * 1000)
-	data.LatencyMax = int64(maxMS * 1000)
-	data.LatencyAvg = int64(avgMS * 1000)
-	data.LastUpdate = time.Now().UTC().Unix()
-
-	updated, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-
-	// Preserve the registration TTL — KEEPTTL is the obvious idiom but
-	// requires Redis 6+. Read TTL, fall back to the configured default
-	// if Redis returns -1 (no expiry) or -2 (key vanished between GET
-	// and TTL).
-	ttl, err := s.client.TTL(ctx, tpKey).Result()
-	if err != nil || ttl <= 0 {
-		ttl = s.ttl
-	}
-	return s.client.Set(ctx, tpKey, string(updated), ttl).Err()
+	return &rec, nil
 }
 
 // GetTransportBandwidth retrieves bandwidth aggregations for a transport.

@@ -203,7 +203,15 @@ func (s *redisStore) GetTransportByID(ctx context.Context, id uuid.UUID) (*trans
 		return nil, err
 	}
 
-	return s.dataToEntry(data)
+	entry, err := s.dataToEntry(data)
+	if err != nil {
+		return nil, err
+	}
+	rec, _ := s.getLatencyRecord(ctx, id) //nolint:errcheck // best-effort overlay; entry stays usable without latency
+	if rec != nil && rec.Avg > 0 {
+		entry.Latency = float64(rec.Avg) / 1000.0
+	}
+	return entry, nil
 }
 
 func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
@@ -281,6 +289,7 @@ func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 		return nil, ErrTransportNotFound
 	}
 
+	s.hydrateDurableLatency(ctx, entries)
 	s.edgeCache.Put(pk, entries)
 	return entries, nil
 }
@@ -344,6 +353,12 @@ func (s *redisStore) GetAllTransports(ctx context.Context, selfTransports bool) 
 // Cached with the same TTL+slot scheme as GetAllTransports — metrics
 // scrapers (Prometheus / Victoria Metrics) hit these endpoints on a
 // regular cadence and were paying a full SCAN+MGET each time.
+//
+// Latency lives in dedicated lat:<id> keys (independent of the tp:<id>
+// registration TTL); after scanAllTransports populates entries from the
+// blobs we overlay the durable latency so aggregate-metric paths
+// (GetNetworkMetrics, GetVisorAggregateMetrics) see the same values
+// /metrics surfaces, including across registration churn.
 func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
 	if entries, ok := s.allTpsCache.Get(selfTransports, true); ok {
 		return entries, nil
@@ -352,8 +367,43 @@ func (s *redisStore) getAllTransportsWithQoS(ctx context.Context, selfTransports
 	if err != nil {
 		return nil, err
 	}
+	s.hydrateDurableLatency(ctx, entries)
 	s.allTpsCache.Put(selfTransports, true, entries)
 	return entries, nil
+}
+
+// hydrateDurableLatency overlays the persisted lat:<id> values onto
+// entry.Latency. Best-effort: a redis or decode error leaves the entry
+// at whatever scanAllTransports produced (which after the latency
+// move-out is 0 — the blob's lat_avg field is no longer written, but
+// remains in the schema for backwards-compatible decoding of older
+// payloads still present in redis).
+func (s *redisStore) hydrateDurableLatency(ctx context.Context, entries []*transport.Entry) {
+	if len(entries) == 0 {
+		return
+	}
+	keys := make([]string, len(entries))
+	for i, e := range entries {
+		keys[i] = s.latencyKey(e.ID)
+	}
+	vals, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return
+	}
+	for i, v := range vals {
+		raw, ok := v.(string)
+		if !ok || raw == "" {
+			continue
+		}
+		var rec LatencyRecord
+		if err := json.Unmarshal([]byte(raw), &rec); err != nil {
+			continue
+		}
+		if rec.Avg > 0 {
+			// Same us → ms conversion dataToEntry applies.
+			entries[i].Latency = float64(rec.Avg) / 1000.0
+		}
+	}
 }
 
 // scanAllTransports is the shared implementation for GetAllTransports and getAllTransportsWithQoS.
@@ -456,6 +506,10 @@ func (s *redisStore) maybeReapStaleTransports(stale []interface{}) {
 
 func (s *redisStore) transportKey(id uuid.UUID) string {
 	return fmt.Sprintf("%s:tp:%s", serviceName, id.String())
+}
+
+func (s *redisStore) latencyKey(id uuid.UUID) string {
+	return fmt.Sprintf("%s:lat:%s", serviceName, id.String())
 }
 
 func (s *redisStore) edgeKey(pk cipher.PubKey) string {
