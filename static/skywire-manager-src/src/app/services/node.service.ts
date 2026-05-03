@@ -474,6 +474,15 @@ return {
   }
 
   /**
+   * Aggregated SD/TPD/UT network view — the same combined table
+   * `skywire cli sd` prints. Hypervisor-scope (no nodeKey arg);
+   * cached on the visor for 30s so polling is cheap.
+   */
+  getNetworkView() {
+    return this.apiService.get(`network-view`);
+  }
+
+  /**
    * Removes the rewards address of the node.
    */
   deleteRewardsAddress(nodeKey: string) {

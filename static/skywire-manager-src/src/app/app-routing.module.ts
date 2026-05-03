@@ -13,6 +13,7 @@ import { AllTransportsComponent } from './components/pages/node/routing/all-tran
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { NodeRewardsComponent } from './components/pages/node/rewards/node-rewards.component';
 import { ServicesHealthComponent } from './components/pages/services-health/services-health.component';
+import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { DmsgSettingsComponent } from './components/pages/dmsg-settings/dmsg-settings.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
@@ -73,6 +74,10 @@ const routes: Routes = [
       {
         path: 'services-health',
         component: ServicesHealthComponent
+      },
+      {
+        path: 'network',
+        component: NetworkViewComponent
       },
       {
         path: 'dmsg-settings',

@@ -114,6 +114,20 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 	})
 }
 
+// getNetworkView surfaces the SD/TPD/UT-aggregated network table
+// the `cli sd` command prints. Hypervisor-scope (network-wide
+// view, not per-visor); cached on the visor side for 30s.
+func (hv *Hypervisor) getNetworkView() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		resp, err := hv.visor.NetworkView()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	}
+}
+
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Get DMSG stats first (uses its own lock internally)

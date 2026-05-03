@@ -684,6 +684,15 @@ func (rc *rpcClient) HostStats() (*HostStatsInfo, error) {
 	return &stats, nil
 }
 
+// NetworkView calls NetworkView.
+func (rc *rpcClient) NetworkView() (*NetworkViewResponse, error) {
+	var resp NetworkViewResponse
+	if err := rc.Call("NetworkView", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // RuntimeStats calls RuntimeStats.
 func (rc *rpcClient) RuntimeStats() (*RuntimeStatsInfo, error) {
 	var stats RuntimeStatsInfo

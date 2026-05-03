@@ -262,6 +262,7 @@
     "dmsg-title": "DMSG",
     "rewards-title": "Rewards",
     "services-health-title": "Services health",
+    "network-title": "Network",
     "dmsg-settings-title": "DMSG settings",
     "reward-address": "Reward Address",
     "reward-total": "Week Total",
@@ -333,6 +334,30 @@
     "latency": "Latency",
     "version": "Version",
     "endpoint": "Endpoint"
+  },
+
+  "network-view": {
+    "loading": "Aggregating service-discovery, transport-discovery and uptime-tracker…",
+    "last-updated": "last fetched",
+    "empty": "No visors match the current filters.",
+    "search": "Search",
+    "country": "Country",
+    "version": "Version",
+    "min-transports": "Min tps",
+    "online-only": "Online only",
+    "col": {
+      "pk": "PK",
+      "country": "Country",
+      "version": "Version",
+      "services": "Services",
+      "total": "Total",
+      "status": "UT"
+    },
+    "legend": {
+      "offline": "offline (UT)",
+      "not-in-ut": "not in UT",
+      "low-transports": "online but <2 stcpr/sudph"
+    }
   },
 
   "dmsg-settings": {

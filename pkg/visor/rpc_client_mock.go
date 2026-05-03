@@ -797,6 +797,11 @@ func (mc *mockRPCClient) HostStats() (*HostStatsInfo, error) {
 	return &HostStatsInfo{}, nil
 }
 
+// NetworkView implements API.
+func (mc *mockRPCClient) NetworkView() (*NetworkViewResponse, error) {
+	return &NetworkViewResponse{}, nil
+}
+
 // RuntimeLogs implements API.
 func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil

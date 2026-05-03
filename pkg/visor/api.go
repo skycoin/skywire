@@ -45,6 +45,7 @@ type API interface {
 	RuntimeLogs() (string, error)
 	RuntimeLogsSince(since int64) (RuntimeLogsDelta, error)
 	HostStats() (*HostStatsInfo, error)
+	NetworkView() (*NetworkViewResponse, error)
 	RemoteVisors() ([]string, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error

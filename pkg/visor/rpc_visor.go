@@ -183,6 +183,17 @@ func (r *RPC) HostStats(_ *struct{}, out *HostStatsInfo) (err error) {
 	return err
 }
 
+// NetworkView returns the SD/TPD/UT-aggregated network table that
+// `cli sd` prints. Backs the hypervisor UI's Network tab.
+func (r *RPC) NetworkView(_ *struct{}, out *NetworkViewResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "NetworkView", nil)(out, &err)
+	resp, err := r.visor.NetworkView()
+	if resp != nil {
+		*out = *resp
+	}
+	return err
+}
+
 // GetConfigPath returns the filesystem path the visor loaded its config from.
 func (r *RPC) GetConfigPath(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetConfigPath", nil)(out, &err)
