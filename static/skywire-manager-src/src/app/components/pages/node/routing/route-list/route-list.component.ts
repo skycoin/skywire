@@ -374,17 +374,12 @@ export class RouteListComponent implements OnDestroy {
 
     // Needed to prevent racing conditions.
     if (this.filteredRoutes) {
-      // Calculate the pagination values.
-      const maxElements = this.showShortList_ ? AppConfig.maxShortListElements : AppConfig.maxFullListElements;
-      this.numberOfPages = Math.ceil(this.filteredRoutes.length / maxElements);
-      if (this.currentPage > this.numberOfPages) {
-        this.currentPage = this.numberOfPages;
-      }
-
-      // Limit the elements to show.
-      const start = maxElements * (this.currentPage - 1);
-      const end = start + maxElements;
-      this.routesToShow = this.filteredRoutes.slice(start, end);
+      // Pagination removed — visors typically have a handful of
+      // routes; the paginator added clicks for nothing. The full
+      // routing surface shows everything in one scroll now.
+      this.numberOfPages = 1;
+      this.currentPage = 1;
+      this.routesToShow = this.filteredRoutes.slice();
 
       // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<number, boolean>();

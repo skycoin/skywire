@@ -1,4 +1,38 @@
 @if (node) {
+  <!-- Transports summary box (count + per-type breakdown + the
+       autoconnect / public-visor toggles). Was previously on the
+       Info tab; lives with the rest of the transport surface now. -->
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container overflow font-smaller">
+      <span class="section-title">{{ 'node.details.transports-info.title' | translate }}</span>
+      <span class="info-line">
+        <span class="title">{{ 'node.details.transports-info.total' | translate }} </span>
+        <span class="transport-stats">
+          <span class="transport-count">{{ transportStats.total }}</span>
+          @if (transportStats.byType.length > 0) {
+            (@for (stat of transportStats.byType; track stat; let last = $last) {
+              <span><span class="transport-type">{{ stat.type }}</span>: <span class="transport-count">{{ stat.count }}</span>@if (!last) {
+                <span>, </span>
+              }</span>
+            })
+          }
+        </span>
+      </span>
+      <span class="info-line toggle-line">
+        <span class="title">{{ 'node.details.transports-info.autoconnect' | translate }}</span>
+        <mat-slide-toggle color="primary" [checked]="!!node.autoconnectTransports" (change)="changeTransportsConfig()"></mat-slide-toggle>
+        <mat-icon [inline]="true" class="info-tip" [matTooltip]="'node.details.transports-info.autoconnect-info' | translate">info</mat-icon>
+      </span>
+      <span class="info-line toggle-line">
+        <span class="title">{{ 'node.details.transports-info.is-public' | translate }}</span>
+        <mat-slide-toggle color="primary" [checked]="!!isPublic" (change)="changePublicConfig()"></mat-slide-toggle>
+        <mat-icon [inline]="true" class="info-tip" [matTooltip]="'node.details.transports-info.is-public-info' | translate">info</mat-icon>
+      </span>
+    </div>
+  </div>
+
+  <!-- Full transport list. showShortList=false → no slicing, no
+       paginator (per the user's "no pagination" policy). -->
   <app-transport-list
     [node]="node"
     [showShortList]="false">

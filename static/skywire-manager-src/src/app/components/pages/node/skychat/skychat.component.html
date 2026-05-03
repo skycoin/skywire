@@ -1,11 +1,13 @@
 @if (node) {
   <div class="rounded-elevated-box mt-3 skychat-box">
-    <div class="box-internal-container">
+    <div class="box-internal-container sc-shell">
 
-      <!-- Status row -->
+      <!-- Status row spans the full width across the sidebar + chat. -->
       <div class="sc-status">
         <span class="dot" [ngClass]="connected ? 'dot-green' : 'dot-outline-gray'"></span>
-        <span class="status-text">{{ connected ? ('skychat.connected' | translate) : ('skychat.disconnected' | translate) }}</span>
+        <span class="status-text">{{ 'skychat.title' | translate }}</span>
+        <span class="status-sep">·</span>
+        <span class="status-conn">{{ connected ? ('skychat.connected' | translate) : ('skychat.disconnected' | translate) }}</span>
         @if (errorText) {
           <span class="error">· {{ errorText }}</span>
         }
@@ -19,7 +21,7 @@
         </button>
       </div>
 
-      <!-- Password panel (collapsible) -->
+      <!-- Password panel (collapsible, full width). -->
       @if (pwOpen) {
         <div class="sc-password">
           <div class="sc-password-help">
@@ -52,49 +54,70 @@
         </div>
       }
 
-      <!-- Message log -->
-      <div #logEl class="sc-log">
-        @if (messages.length === 0) {
-          <div class="sc-empty">{{ 'skychat.empty' | translate }}</div>
-        }
-        @for (m of messages; track $index) {
-          <div class="sc-msg" [ngClass]="m.direction">
-            <div class="sc-msg-meta">
-              <span class="peer mono small" (click)="pickRecipient(m.peer)" [matTooltip]="m.peer">
-                {{ m.direction === 'out' ? '→' : '←' }} {{ shortPK(m.peer) }}
-              </span>
-              <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
+      <!-- Two-column layout: peers sidebar + chat panel. -->
+      <div class="sc-body">
+        <!-- Peers sidebar (recent senders + the active recipient). -->
+        <aside class="sc-sidebar">
+          <div class="sc-sidebar-title">{{ 'skychat.peers' | translate }}</div>
+          @if (peers.length === 0) {
+            <div class="sc-sidebar-empty">{{ 'skychat.peers-empty' | translate }}</div>
+          }
+          @for (p of peers; track p) {
+            <div
+              class="sc-peer"
+              [ngClass]="{ 'active': toPK === p }"
+              (click)="pickRecipient(p)"
+              [matTooltip]="p">
+              <span class="peer-pk mono small">{{ shortPK(p) }}</span>
             </div>
-            <div class="sc-msg-text">{{ m.text }}</div>
-          </div>
-        }
-      </div>
+          }
+        </aside>
 
-      <!-- Composer -->
-      <div class="sc-composer">
-        <mat-form-field appearance="outline" class="field-pk">
-          <mat-label>{{ 'skychat.to' | translate }}</mat-label>
-          <input matInput [(ngModel)]="toPK" placeholder="02abc...">
-        </mat-form-field>
-        <mat-form-field appearance="outline" class="field-sm">
-          <mat-label>{{ 'skychat.network' | translate }}</mat-label>
-          <mat-select [(ngModel)]="network" panelClass="skynet-select-panel">
-            <mat-option value="skynet">skynet</mat-option>
-            <mat-option value="dmsg">dmsg</mat-option>
-          </mat-select>
-        </mat-form-field>
-      </div>
-      <div class="sc-composer">
-        <mat-form-field appearance="outline" class="field-msg">
-          <mat-label>{{ 'skychat.message' | translate }}</mat-label>
-          <textarea matInput rows="2" [(ngModel)]="message"
-                    (keydown.enter)="$event.ctrlKey && send()"
-                    [placeholder]="('skychat.placeholder' | translate)"></textarea>
-        </mat-form-field>
-        <button mat-raised-button color="primary" (click)="send()" [disabled]="sending || !message.trim() || !toPK.trim()">
-          <mat-icon>send</mat-icon>
-          {{ 'skychat.send' | translate }}
-        </button>
+        <!-- Chat panel: message log + composer. -->
+        <section class="sc-chat">
+          <div #logEl class="sc-log">
+            @if (messages.length === 0) {
+              <div class="sc-empty">{{ 'skychat.empty' | translate }}</div>
+            }
+            @for (m of messages; track $index) {
+              <div class="sc-msg" [ngClass]="m.direction">
+                <div class="sc-msg-meta">
+                  <span class="peer mono small" (click)="pickRecipient(m.peer)" [matTooltip]="m.peer">
+                    {{ m.direction === 'out' ? '→' : '←' }} {{ shortPK(m.peer) }}
+                  </span>
+                  <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
+                </div>
+                <div class="sc-msg-text">{{ m.text }}</div>
+              </div>
+            }
+          </div>
+
+          <div class="sc-composer">
+            <mat-form-field appearance="outline" class="field-pk">
+              <mat-label>{{ 'skychat.to' | translate }}</mat-label>
+              <input matInput [(ngModel)]="toPK" placeholder="02abc…">
+            </mat-form-field>
+            <mat-form-field appearance="outline" class="field-sm">
+              <mat-label>{{ 'skychat.network' | translate }}</mat-label>
+              <mat-select [(ngModel)]="network" panelClass="skynet-select-panel">
+                <mat-option value="skynet">skynet</mat-option>
+                <mat-option value="dmsg">dmsg</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+          <div class="sc-composer">
+            <mat-form-field appearance="outline" class="field-msg">
+              <mat-label>{{ 'skychat.message' | translate }}</mat-label>
+              <textarea matInput rows="2" [(ngModel)]="message"
+                        (keydown.enter)="$event.ctrlKey && send()"
+                        [placeholder]="('skychat.placeholder' | translate)"></textarea>
+            </mat-form-field>
+            <button mat-raised-button color="primary" class="send-btn" (click)="send()" [disabled]="sending || !message.trim() || !toPK.trim()">
+              <mat-icon>send</mat-icon>
+              {{ 'skychat.send' | translate }}
+            </button>
+          </div>
+        </section>
       </div>
     </div>
   </div>

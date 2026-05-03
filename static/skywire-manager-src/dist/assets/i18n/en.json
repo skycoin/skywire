@@ -233,10 +233,11 @@
       "info": "Info",
       "apps": "Apps",
       "routing": "Routing",
+      "transports": "Transports",
       "rewards": "Rewards",
       "skynet": "Skynet",
       "resources": "Resources",
-      "chat": "Chat"
+      "chat": "Skychat"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
@@ -341,10 +342,13 @@
   },
 
   "skychat": {
+    "title": "Skychat",
     "connected": "Connected",
     "disconnected": "Disconnected",
     "no-history": "history is disabled (--persist not set)",
     "empty": "No messages yet — incoming chats from connected peers will appear here.",
+    "peers": "Peers",
+    "peers-empty": "No peers yet. Send a message or wait for an incoming chat.",
     "to": "Recipient PK",
     "network": "Network",
     "message": "Message",

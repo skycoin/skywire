@@ -647,26 +647,13 @@ export class TransportListComponent implements OnDestroy {
 
     // Needed to prevent racing conditions.
     if (this.filteredTransports) {
-      // Short list (routing-overview embed) keeps the slice — that
-      // surface only has room for a handful before the rest get
-      // collapsed behind a "view all" link. The full list page
-      // (/nodes/<pk>/transports) shows everything in one scroll;
-      // visors typically have 10s of transports, not 100s, so the
+      // Pagination removed — the short-list embed is gone, and the
+      // dedicated Transports tab shows the full list in one scroll.
+      // Visors typically have 10s of transports, not 100s; the
       // paginator added clicks for nothing.
-      if (this.showShortList_) {
-        const maxElements = AppConfig.maxShortListElements;
-        this.numberOfPages = Math.ceil(this.filteredTransports.length / maxElements);
-        if (this.currentPage > this.numberOfPages) {
-          this.currentPage = this.numberOfPages;
-        }
-        const start = maxElements * (this.currentPage - 1);
-        const end = start + maxElements;
-        this.transportsToShow = this.filteredTransports.slice(start, end);
-      } else {
-        this.numberOfPages = 1;
-        this.currentPage = 1;
-        this.transportsToShow = this.filteredTransports.slice();
-      }
+      this.numberOfPages = 1;
+      this.currentPage = 1;
+      this.transportsToShow = this.filteredTransports.slice();
 
       // Create a map with the elements to show, as a helper.
       const currentElementsMap = new Map<string, boolean>();

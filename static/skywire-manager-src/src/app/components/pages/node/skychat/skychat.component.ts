@@ -75,6 +75,21 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // In-flight indicator for the apply / clear action.
   pwBusy = false;
 
+  // Distinct peers seen so far, in last-touched order. Drives the
+  // sidebar list. Recomputed lazily when messages change.
+  get peers(): string[] {
+    const seen: string[] = [];
+    const have = new Set<string>();
+    // Iterate newest-first so the most recently active peer is on top.
+    for (let i = this.messages.length - 1; i >= 0; i--) {
+      const pk = this.messages[i].peer;
+      if (!pk || have.has(pk)) { continue; }
+      have.add(pk);
+      seen.push(pk);
+    }
+    return seen;
+  }
+
   constructor(
     private api: ApiService,
     private snackbar: SnackbarService,

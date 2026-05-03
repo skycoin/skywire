@@ -210,6 +210,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     if (
       this.lastUrl && (this.lastUrl.includes('/info') ||
       this.lastUrl.includes('/routing') ||
+      this.lastUrl.includes('/transports') ||
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/resources') ||
@@ -231,6 +232,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           icon: 'shuffle',
           label: 'node.tabs.routing',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'routing'] : null,
+        },
+        {
+          icon: 'swap_horiz',
+          label: 'node.tabs.transports',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'transports'] : null,
         },
         {
           icon: 'apps',
@@ -265,20 +271,23 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/routing')) {
         this.selectedTabIndex = 1;
       }
-      if (this.lastUrl.includes('/apps')) {
+      if (this.lastUrl.includes('/transports')) {
         this.selectedTabIndex = 2;
       }
-      if (this.lastUrl.includes('/rewards')) {
+      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
         this.selectedTabIndex = 3;
       }
-      if (this.lastUrl.includes('/skynet')) {
+      if (this.lastUrl.includes('/rewards')) {
         this.selectedTabIndex = 4;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/skynet')) {
         this.selectedTabIndex = 5;
       }
-      if (this.lastUrl.includes('/chat')) {
+      if (this.lastUrl.includes('/resources')) {
         this.selectedTabIndex = 6;
+      }
+      if (this.lastUrl.includes('/chat')) {
+        this.selectedTabIndex = 7;
       }
 
       // Inform that the current subpage is not for showing a full list.
@@ -291,9 +300,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
 
       // If showing a page dedicated to display a full list.
     } else if (
-      this.lastUrl && (this.lastUrl.includes('/transports') ||
-      this.lastUrl.includes('/routes') ||
-      this.lastUrl.includes('/apps-list'))) {
+      this.lastUrl && (this.lastUrl.includes('/apps-list'))) {
 
       this.showingFullList = true;
       this.nodeActionsHelper = new NodeActionsHelper(this.injector, this.showingFullList);
@@ -302,13 +309,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
         this.nodeActionsHelper.setCurrentNode(this.node);
       }
 
-      // Set the tabs bar header.
-      let prefix = 'transports';
-      if (this.lastUrl.includes('/routes')) {
-        prefix = 'routes';
-      } else if (this.lastUrl.includes('/apps-list')) {
-        prefix = 'apps.apps-list';
-      }
+      // /apps-list is the only remaining full-list page (transports
+      // and routes are tabs now).
+      const prefix = 'apps.apps-list';
       this.titleParts = ['nodes.title', 'node.title', prefix + '.title'];
 
       this.tabsData = [

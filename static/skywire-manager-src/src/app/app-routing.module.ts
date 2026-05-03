@@ -116,21 +116,22 @@ const routes: Routes = [
           },
           {
             path: 'transports',
-            redirectTo: 'transports/1',
-            pathMatch: 'full'
+            component: AllTransportsComponent
           },
+          // Legacy paginated URLs — bounce to the new tab. Old
+          // bookmarks (/.../transports/1, /.../routes/1) keep working.
           {
             path: 'transports/:page',
-            component: AllTransportsComponent
+            redirectTo: 'transports'
           },
           {
             path: 'routes',
-            redirectTo: 'routes/1',
+            redirectTo: 'routing',
             pathMatch: 'full'
           },
           {
             path: 'routes/:page',
-            component: AllRoutesComponent
+            redirectTo: 'routing'
           },
           {
             path: 'rewards',

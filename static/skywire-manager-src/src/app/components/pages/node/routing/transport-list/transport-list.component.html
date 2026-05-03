@@ -409,14 +409,6 @@
         </td></tr>
       }
     </table>
-    <!-- Link for accessing the full list. -->
-    @if (showShortList_ && numberOfPages > 1) {
-      <app-view-all-link
-        [numberOfElements]="filteredTransports.length"
-        [linkParts]="['/nodes', nodePK, 'transports']"
-        [queryParams]="dataFilterer.currentUrlQueryParams"
-      ></app-view-all-link>
-    }
   </div></div>
 }
 

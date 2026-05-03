@@ -3,6 +3,12 @@
   flex-direction: column;
 }
 
+.sc-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .sc-status {
   display: flex;
   align-items: center;
@@ -10,7 +16,9 @@
   font-size: 13px;
   padding: 6px 4px;
 
-  .status-text { font-weight: 500; }
+  .status-text { font-weight: 600; font-size: 14px; }
+  .status-sep { opacity: 0.5; }
+  .status-conn { font-weight: 500; }
   .error { opacity: 0.85; color: rgba(229, 57, 53, 0.9); }
   .hint { opacity: 0.6; }
 
@@ -58,6 +66,67 @@
     gap: 8px;
     justify-content: flex-end;
   }
+}
+
+.sc-body {
+  display: flex;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.sc-sidebar {
+  flex: 0 0 220px;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  overflow-y: auto;
+  max-height: 60vh;
+
+  .sc-sidebar-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.6;
+    padding: 2px 4px 6px;
+  }
+
+  .sc-sidebar-empty {
+    padding: 8px 4px;
+    font-size: 12px;
+    opacity: 0.5;
+  }
+
+  .sc-peer {
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    background: rgba(255, 255, 255, 0.03);
+
+    &:hover { background: rgba(255, 255, 255, 0.06); }
+    &.active {
+      background: rgba(33, 150, 243, 0.18);
+      border-color: rgba(33, 150, 243, 0.45);
+    }
+    .peer-pk { display: block; }
+  }
+}
+
+@media (max-width: 720px) {
+  .sc-body { flex-direction: column; }
+  .sc-sidebar { flex: 0 0 auto; max-width: none; max-height: 140px; }
+}
+
+.sc-chat {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
 .sc-log {
@@ -118,12 +187,38 @@
 .sc-composer {
   display: flex;
   gap: 12px;
-  align-items: center;
+  align-items: flex-start;
   margin-top: 8px;
 
   .field-pk { flex: 1 1 360px; }
   .field-sm { flex: 0 1 130px; }
-  .field-msg { flex: 1 1 100%; }
+  .field-msg { flex: 1 1 auto; min-width: 0; }
 
-  button { white-space: nowrap; }
+  .send-btn {
+    flex: 0 0 auto;
+    align-self: center;
+    height: 56px;
+    white-space: nowrap;
+  }
+}
+
+// Force readable contrast on the form-field inputs against the dark
+// hvui background. The default Material outline-appearance picks the
+// theme's foreground color, which renders as near-black on this
+// theme; override to a light tone explicitly.
+:host ::ng-deep .skychat-box {
+  .mat-mdc-form-field input.mat-mdc-input-element,
+  .mat-mdc-form-field textarea.mat-mdc-input-element,
+  .mat-mdc-form-field .mat-mdc-select-value,
+  .mat-mdc-form-field .mat-mdc-select-value-text {
+    color: rgba(255, 255, 255, 0.92) !important;
+    caret-color: rgba(255, 255, 255, 0.92) !important;
+  }
+  .mat-mdc-form-field input.mat-mdc-input-element::placeholder,
+  .mat-mdc-form-field textarea.mat-mdc-input-element::placeholder {
+    color: rgba(255, 255, 255, 0.45) !important;
+  }
+  .mat-mdc-form-field .mdc-floating-label {
+    color: rgba(255, 255, 255, 0.7);
+  }
 }

@@ -1,5 +1,5 @@
 <!-- Header. -->
-<div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
+<div class="generic-title-container mt-4.5 d-flex">
   <div class="title">
     @if (showShortList_) {
       <span  class="uppercase">
@@ -51,15 +51,6 @@
         </div>
       </mat-menu>
     </div>
-    <!-- Upper paginator. -->
-    @if (!showShortList_ && numberOfPages > 1 && dataSource) {
-      <app-paginator
-        [currentPage]="currentPage"
-        [numberOfPages]="numberOfPages"
-        [linkParts]="['/nodes', nodePK, 'routes']"
-        [queryParams]="dataFilterer.currentUrlQueryParams">
-      </app-paginator>
-    }
   </div>
 </div>
 
@@ -315,14 +306,6 @@
         </td></tr>
       }
     </table>
-    <!-- Link for accessing the full list. -->
-    @if (showShortList_ && numberOfPages > 1) {
-      <app-view-all-link
-        [numberOfElements]="filteredRoutes.length"
-        [linkParts]="['/nodes', nodePK, 'routes']"
-        [queryParams]="dataFilterer.currentUrlQueryParams"
-      ></app-view-all-link>
-    }
   </div></div>
 }
 
@@ -341,12 +324,3 @@
   </div>
 }
 
-<!-- Lower paginator. -->
-@if (!showShortList_ && numberOfPages > 1 && dataSource) {
-  <app-paginator
-    [currentPage]="currentPage"
-    [numberOfPages]="numberOfPages"
-    [linkParts]="['/nodes', nodePK, 'routes']"
-    [queryParams]="dataFilterer.currentUrlQueryParams">
-  </app-paginator>
-}
