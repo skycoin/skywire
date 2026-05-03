@@ -254,6 +254,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'apps'] : null,
         },
         {
+          icon: 'forum',
+          label: 'node.tabs.chat',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
+        },
+        {
           icon: 'monetization_on',
           label: 'node.tabs.rewards',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'rewards'] : null,
@@ -284,11 +289,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'logs'] : null,
         },
         {
-          icon: 'forum',
-          label: 'node.tabs.chat',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
-        },
-        {
           icon: 'device_hub',
           label: 'node.tabs.dmsg',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'dmsg'] : null,
@@ -310,28 +310,28 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
         this.selectedTabIndex = 4;
       }
-      if (this.lastUrl.includes('/rewards')) {
+      if (this.lastUrl.includes('/chat')) {
         this.selectedTabIndex = 5;
+      }
+      if (this.lastUrl.includes('/rewards')) {
+        this.selectedTabIndex = 6;
       }
       // /skynet matches BOTH the skynet tab and would otherwise also
       // match a hypothetical /skynet-foo path; check after web-proxy
       // since /web-proxy must take precedence on its own URL.
       if (this.lastUrl.includes('/skynet')) {
-        this.selectedTabIndex = 6;
-      }
-      if (this.lastUrl.includes('/web-proxy')) {
         this.selectedTabIndex = 7;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/web-proxy')) {
         this.selectedTabIndex = 8;
       }
-      if (this.lastUrl.includes('/terminal')) {
+      if (this.lastUrl.includes('/resources')) {
         this.selectedTabIndex = 9;
       }
-      if (this.lastUrl.includes('/logs')) {
+      if (this.lastUrl.includes('/terminal')) {
         this.selectedTabIndex = 10;
       }
-      if (this.lastUrl.includes('/chat')) {
+      if (this.lastUrl.includes('/logs')) {
         this.selectedTabIndex = 11;
       }
       if (this.lastUrl.includes('/dmsg')) {
