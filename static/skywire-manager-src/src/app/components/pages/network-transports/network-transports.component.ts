@@ -39,6 +39,7 @@ interface ByTransportRow {
   recv: number;
   bandwidth: number;
   latency?: TransportLatency;
+  live: boolean; // TPD's per-transport liveness flag
 }
 
 /** Tree node: one visor with its transports as children. */
@@ -48,6 +49,8 @@ interface VisorNode {
   recv: number;
   bandwidth: number;
   transports: VisorChildTp[];
+  liveCount: number;   // # of children with live=true
+  offlineCount: number;
   expanded: boolean;
 }
 interface VisorChildTp {
@@ -58,6 +61,7 @@ interface VisorChildTp {
   recv: number;
   bandwidth: number;
   latency?: TransportLatency;
+  live: boolean;
 }
 
 type ViewMode = 'compact' | 'tree';
@@ -85,6 +89,10 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   // Compact-view edge columns are wide (66-char PKs ×2). Hide them
   // when the operator only cares about ID/type/bandwidth/latency.
   hideEdges = false;
+  // Hide offline transports — when false, dim them in place; when
+  // true, drop them from the rendered view entirely. The TPD live
+  // flag is per-transport, not per-edge.
+  hideOffline = false;
 
   rawCount = 0;
   networkBandwidth = 0;
@@ -131,6 +139,28 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
     this.hideEdges = hide;
   }
 
+  setHideOffline(hide: boolean) {
+    this.hideOffline = hide;
+  }
+
+  /** Compact-view rows after applying the offline filter. */
+  get visibleByTransport(): ByTransportRow[] {
+    return this.hideOffline ? this.byTransport.filter((r) => r.live) : this.byTransport;
+  }
+
+  /** Tree-view visors after applying the offline filter (drops
+   *  visors whose every transport is offline; surviving visors keep
+   *  only their live children). */
+  get visibleByVisor(): VisorNode[] {
+    if (!this.hideOffline) { return this.byVisor; }
+    return this.byVisor
+      .map((v) => ({
+        ...v,
+        transports: v.transports.filter((c) => c.live),
+      }))
+      .filter((v) => v.transports.length > 0);
+  }
+
   toggleVisor(v: VisorNode) { v.expanded = !v.expanded; }
 
   private fetch() {
@@ -172,23 +202,28 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
         recv: bToA,
         bandwidth: bw,
         latency: m.latency,
+        live: !!m.live,
       });
 
       // Edge A perspective.
       const a = byVisorMap.get(m.edges[0]) || this.newVisorNode(m.edges[0]);
       a.sent += aToB; a.recv += bToA; a.bandwidth += bw;
+      if (m.live) { a.liveCount++; } else { a.offlineCount++; }
       a.transports.push({
         id: m.id, type: m.type, remote: m.edges[1],
         sent: aToB, recv: bToA, bandwidth: bw, latency: m.latency,
+        live: !!m.live,
       });
       byVisorMap.set(m.edges[0], a);
 
       // Edge B perspective.
       const b = byVisorMap.get(m.edges[1]) || this.newVisorNode(m.edges[1]);
       b.sent += bToA; b.recv += aToB; b.bandwidth += bw;
+      if (m.live) { b.liveCount++; } else { b.offlineCount++; }
       b.transports.push({
         id: m.id, type: m.type, remote: m.edges[0],
         sent: bToA, recv: aToB, bandwidth: bw, latency: m.latency,
+        live: !!m.live,
       });
       byVisorMap.set(m.edges[1], b);
     }
@@ -207,7 +242,7 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   }
 
   private newVisorNode(pk: string): VisorNode {
-    return { pk, sent: 0, recv: 0, bandwidth: 0, transports: [], expanded: false };
+    return { pk, sent: 0, recv: 0, bandwidth: 0, transports: [], liveCount: 0, offlineCount: 0, expanded: false };
   }
 
   /** Mirrors verifiedBandwidth() in cmd/skywire-cli/commands/tp/tp-metrics.go. */

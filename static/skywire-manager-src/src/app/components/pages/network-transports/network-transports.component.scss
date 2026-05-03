@@ -77,6 +77,41 @@
 
   td.mono { font-size: 11px; }
   th.num, td.num { white-space: nowrap; }
+
+  // Offline rows stay readable but visibly de-emphasized.
+  tr.nt-row-offline {
+    color: rgba(255, 200, 200, 0.55);
+    td { opacity: 0.7; }
+  }
+}
+
+// Type pill — small colored chip on each row's "Type" cell.
+// Live = blue (UI accent); offline = red.
+.nt-type-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  text-transform: lowercase;
+  background: rgba(33, 150, 243, 0.18);
+  border: 1px solid rgba(33, 150, 243, 0.35);
+  color: rgba(255, 255, 255, 0.9);
+
+  &.nt-type-offline {
+    background: rgba(229, 57, 53, 0.18);
+    border-color: rgba(229, 57, 53, 0.4);
+    color: rgba(255, 200, 200, 0.95);
+  }
+}
+
+.nt-offline-count {
+  margin-left: 4px;
+  font-size: 11px;
+  color: rgba(229, 57, 53, 0.85);
+  background: rgba(229, 57, 53, 0.12);
+  border: 1px solid rgba(229, 57, 53, 0.3);
+  border-radius: 3px;
+  padding: 0 6px;
 }
 
 .nt-tree {
@@ -129,9 +164,20 @@
         border-radius: 3px;
         font-size: 10px;
         text-transform: lowercase;
+
+        &.nt-type-offline {
+          background: rgba(229, 57, 53, 0.18);
+          border-color: rgba(229, 57, 53, 0.4);
+          color: rgba(255, 200, 200, 0.95);
+        }
       }
       .nt-arrow { color: rgba(255, 255, 255, 0.45); }
       .nt-tp-remote { font-size: 11px; color: rgba(255, 255, 255, 0.7); }
+
+      &.nt-child-offline {
+        opacity: 0.55;
+        color: rgba(255, 200, 200, 0.7);
+      }
     }
   }
 }

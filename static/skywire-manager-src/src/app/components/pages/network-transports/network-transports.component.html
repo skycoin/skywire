@@ -39,6 +39,15 @@
           </button>
         </div>
       }
+      <div class="control-group">
+        <span class="control-label">{{ 'network-transports.offline' | translate }}:</span>
+        <button mat-button [class.active]="!hideOffline" (click)="setHideOffline(false)">
+          {{ 'network-transports.offline-show' | translate }}
+        </button>
+        <button mat-button [class.active]="hideOffline" (click)="setHideOffline(true)">
+          {{ 'network-transports.offline-hide' | translate }}
+        </button>
+      </div>
       <button mat-stroked-button class="refresh-btn" (click)="refreshNow()" [disabled]="loading">
         <mat-icon [inline]="true">refresh</mat-icon>
         {{ 'network-transports.refresh' | translate }}
@@ -91,10 +100,12 @@
             <th class="num">{{ 'network-transports.total' | translate }}</th>
             <th class="num">{{ 'network-transports.latency' | translate }}</th>
           </tr>
-          @for (e of byTransport; track trackTpId($index, e)) {
-            <tr>
+          @for (e of visibleByTransport; track trackTpId($index, e)) {
+            <tr [ngClass]="{ 'nt-row-offline': !e.live }">
               <td class="mono small">{{ e.id }}</td>
-              <td>{{ e.type }}</td>
+              <td>
+                <span class="nt-type-pill" [ngClass]="{ 'nt-type-offline': !e.live }">{{ e.type }}</span>
+              </td>
               @if (!hideEdges) {
                 <td class="mono small">{{ e.edge_a }}</td>
                 <td class="mono small">{{ e.edge_b }}</td>
@@ -111,7 +122,7 @@
       <!-- Tree: visor parent rows with their transports as children -->
       @if (viewMode === 'tree') {
         <div class="nt-tree mt-3">
-          @for (v of byVisor; track trackVisorPk($index, v)) {
+          @for (v of visibleByVisor; track trackVisorPk($index, v)) {
             <div class="nt-visor">
               <div class="nt-visor-row" (click)="toggleVisor(v)">
                 <mat-icon [inline]="true" class="exp">{{ v.expanded ? 'expand_more' : 'chevron_right' }}</mat-icon>
@@ -119,14 +130,19 @@
                 <span class="nt-bw"><strong>{{ fmtBytes(v.bandwidth) }}</strong></span>
                 <span class="dim">↑ {{ fmtBytes(v.sent) }} ↓ {{ fmtBytes(v.recv) }}</span>
                 <span class="dim">· {{ v.transports.length }} tp</span>
+                @if (!hideOffline && v.offlineCount > 0) {
+                  <span class="nt-offline-count" [matTooltip]="('network-transports.offline-count-tooltip' | translate)">
+                    {{ v.offlineCount }} offline
+                  </span>
+                }
               </div>
               @if (v.expanded) {
                 <div class="nt-children">
                   @for (c of v.transports; track trackChildId($index, c); let last = $last) {
-                    <div class="nt-child">
+                    <div class="nt-child" [ngClass]="{ 'nt-child-offline': !c.live }">
                       <span class="nt-prefix">{{ last ? '└──' : '├──' }}</span>
                       <span class="nt-tp-id mono small">{{ c.id }}</span>
-                      <span class="nt-tp-type">{{ c.type }}</span>
+                      <span class="nt-tp-type" [ngClass]="{ 'nt-type-offline': !c.live }">{{ c.type }}</span>
                       <span class="nt-arrow">→</span>
                       <span class="nt-tp-remote mono small">{{ c.remote }}</span>
                       <span class="dim">↑ {{ fmtBytes(c.sent) }}</span>
