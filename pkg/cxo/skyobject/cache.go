@@ -333,19 +333,22 @@ func (c *Cache) cleanDown(vol int) (err error) {
 		it  *item
 	}
 
-	var rank = make([]*rankItem, 0, len(c.is)) // rank items
+	// Value slice (not []*rankItem) so we don't allocate a tiny heap
+	// object per cache entry; this turns one make+N small allocs into
+	// a single backing array per cleanDown call.
+	var rank = make([]rankItem, 0, len(c.is))
 
 	for key, it := range c.is {
 
 		if it.isWanted() == true { //nolint:staticcheck
-			return err // skip wanted
+			continue // skip wanted
 		}
 
 		if it.isFilling() == true { //nolint:staticcheck
-			return err // skip filling (where val is nil)
+			continue // skip filling (where val is nil)
 		}
 
-		rank = append(rank, &rankItem{key, it})
+		rank = append(rank, rankItem{key, it})
 
 	}
 
@@ -361,8 +364,8 @@ func (c *Cache) cleanDown(vol int) (err error) {
 	if c.amount+1 > c.c.conf.CacheMaxAmount {
 
 		var (
-			i  int       // to reduce the rank slice
-			ri *rankItem // for the range (we need the i)
+			i  int      // to reduce the rank slice
+			ri rankItem // for the range (we need the i)
 		)
 
 		for i, ri = range rank {
@@ -376,8 +379,6 @@ func (c *Cache) cleanDown(vol int) (err error) {
 				return err // fail on first error
 			}
 
-			rank[i].it = nil // GC
-
 		}
 
 		rank = rank[i:] // shift
@@ -390,7 +391,7 @@ func (c *Cache) cleanDown(vol int) (err error) {
 		return err // enough
 	}
 
-	for i, ri := range rank {
+	for _, ri := range rank {
 
 		if c.volume+vol <= c.volumec {
 			break
@@ -399,8 +400,6 @@ func (c *Cache) cleanDown(vol int) (err error) {
 		if err = c.delete(ri.key, ri.it); err != nil { //nolint:errcheck,gosec
 			return err // fail on first error
 		}
-
-		rank[i].it = nil // GC
 
 	}
 
