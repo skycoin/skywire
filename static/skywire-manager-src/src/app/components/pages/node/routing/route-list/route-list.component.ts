@@ -305,24 +305,20 @@ export class RouteListComponent implements OnDestroy {
   }
 
   /**
-   * Deletes the selected elements.
+   * Deletes the selected elements. No modal — feedback via snackbar.
+   * Routing rules regenerate on next dial; misclicks are recoverable.
    */
   deleteSelected() {
-    // Ask for confirmation.
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'routes.delete-selected-confirmation');
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      const elementsToRemove: number[] = [];
-      this.selections.forEach((val, key) => {
-        if (val) {
-          elementsToRemove.push(key);
-        }
-      });
-
-      this.deleteRecursively(elementsToRemove, confirmationDialog);
+    const elementsToRemove: number[] = [];
+    this.selections.forEach((val, key) => {
+      if (val) {
+        elementsToRemove.push(key);
+      }
     });
+    if (elementsToRemove.length === 0) {
+      return;
+    }
+    this.deleteRecursively(elementsToRemove, null);
   }
 
   /**
@@ -357,25 +353,16 @@ export class RouteListComponent implements OnDestroy {
   }
 
   /**
-   * Deletes a specific element.
+   * Deletes a specific element. No modal — see deleteSelected.
    */
   delete(routeKey: number) {
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'routes.delete-confirmation');
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      // Start the operation and save it for posible cancellation.
-      this.operationSubscriptionsGroup.push(this.startDeleting(routeKey).subscribe(() => {
-        confirmationDialog.close();
-        // Make the parent page reload the data.
-        NodeComponent.refreshCurrentDisplayedData();
-        this.snackbarService.showDone('routes.deleted');
-      }, (err: OperationError) => {
-        err = processServiceError(err);
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      }));
-    });
+    this.operationSubscriptionsGroup.push(this.startDeleting(routeKey).subscribe(() => {
+      NodeComponent.refreshCurrentDisplayedData();
+      this.snackbarService.showDone('routes.deleted');
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
+    }));
   }
 
   /**
@@ -442,12 +429,13 @@ export class RouteListComponent implements OnDestroy {
    * @param ids List with the IDs of the elements to delete.
    * @param confirmationDialog Dialog used for requesting confirmation from the user.
    */
-  deleteRecursively(ids: number[], confirmationDialog: MatDialogRef<ConfirmationComponent, any>) {
+  deleteRecursively(ids: number[], confirmationDialog: MatDialogRef<ConfirmationComponent, any> | null) {
     this.operationSubscriptionsGroup.push(this.startDeleting(ids[ids.length - 1]).subscribe(() => {
       ids.pop();
       if (ids.length === 0) {
-        confirmationDialog.close();
-        // Make the parent page reload the data.
+        if (confirmationDialog) {
+          confirmationDialog.close();
+        }
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('routes.deleted');
       } else {
@@ -455,9 +443,12 @@ export class RouteListComponent implements OnDestroy {
       }
     }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
-
       err = processServiceError(err);
-      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      if (confirmationDialog) {
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      } else {
+        this.snackbarService.showError(err);
+      }
     }));
   }
 }

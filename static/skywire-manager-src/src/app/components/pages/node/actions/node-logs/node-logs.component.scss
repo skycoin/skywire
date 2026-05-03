@@ -99,3 +99,28 @@
 .extra-data-color {
   color: #ad8021;
 }
+
+
+.logs-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.live-tail-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+
+  .icon {
+    font-size: 18px;
+  }
+}
+

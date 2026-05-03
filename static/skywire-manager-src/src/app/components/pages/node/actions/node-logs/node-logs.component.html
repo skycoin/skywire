@@ -97,16 +97,22 @@
     <app-loading-indicator [showWhite]="false"></app-loading-indicator>
   }
 
-  <!-- Update button. -->
-  <div class="update-button subtle-transparent-button" (click)="loadData(0)">
-    @if (!loading) {
-      <div class="update-time">
-        @if (!showAlert) {
+  <!-- Footer: live-tail toggle on the left, manual refresh on
+       the right. Live tail polls the visor every livePollMs and
+       only auto-scrolls when the viewport is already pinned. -->
+  <div class="logs-footer">
+    <div class="live-tail-toggle subtle-transparent-button" (click)="toggleLiveTail()">
+      <mat-icon class="icon" [inline]="true">{{ liveTail ? 'pause' : 'play_arrow' }}</mat-icon>
+      <span>{{ (liveTail ? 'node.logs.live-on' : 'node.logs.live-off') | translate }}</span>
+    </div>
+    <div class="update-button subtle-transparent-button" (click)="loadData(0)">
+      @if (!loading) {
+        <div class="update-time">
           <mat-icon class="icon" [inline]="true">refresh</mat-icon>
-        }
-        <span>{{ ('refresh-button.' + elapsedTime.translationVarName) | translate:{time: elapsedTime.elapsedTime} }}</span>
-      </div>
-    }
+          <span>{{ ('refresh-button.' + elapsedTime.translationVarName) | translate:{time: elapsedTime.elapsedTime} }}</span>
+        </div>
+      }
+    </div>
   </div>
 </mat-dialog-content>
 </app-dialog>

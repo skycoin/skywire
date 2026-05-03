@@ -115,6 +115,17 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
   // How much time has passed since the data was loaded.
   elapsedTime: ElapsedTime;
 
+  // Live tail polling. When true, the dialog re-fetches every
+  // livePollMs and replaces the current log buffer with the visor's
+  // current view. Toggleable so the user can pause when copying
+  // lines or scrolling back through history.
+  liveTail = true;
+  livePollMs = 2000;
+  // Track whether the scroll viewport is pinned to the bottom so
+  // we only auto-scroll on each refresh when the user was already
+  // tailing — scrolling up to read history shouldn't get yanked.
+  private wasAtBottom = true;
+
   // How many entries the modal window can show, to avoid performance problems.
   maxElementsPerPage = 1000;
 
@@ -202,21 +213,48 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
 
   /**
    * Gets the logs from the back-end.
-   * @param delayMilliseconds Delay before getting the data, for retries after errors..
+   * @param delayMilliseconds Delay before getting the data; used both
+   *   for the initial load and for the live-tail polling cadence.
    */
   loadData(delayMilliseconds: number) {
     this.removeSubscription();
 
-    this.loading = true;
+    // Capture scroll position before the fetch so the post-receive
+    // auto-scroll only fires when the user is tailing.
+    this.captureScrollTailState();
+
+    this.loading = this.logEntries.length === 0;
     this.subscription = of(1).pipe(
-      // Wait the delay.
       delay(delayMilliseconds),
-      // Load the data. The node pk is obtained from the currently openned node page.
       mergeMap(() => this.nodeService.getRuntimeLogs(NodeComponent.getCurrentNodeKey()))
     ).subscribe(
       (log) => this.onLogsReceived(log),
       (err: OperationError) => this.onLogsError(err)
     );
+  }
+
+  /**
+   * User-toggleable live tail. When off, polling stops and the
+   * displayed buffer freezes at whatever was last fetched.
+   */
+  toggleLiveTail() {
+    this.liveTail = !this.liveTail;
+    if (this.liveTail) {
+      this.loadData(0);
+    } else {
+      this.removeSubscription();
+    }
+  }
+
+  private captureScrollTailState() {
+    if (!this.content) {
+      this.wasAtBottom = true;
+      return;
+    }
+    const el = this.content.nativeElement as HTMLElement;
+    // Treat "near the bottom" (within 40px) as still tailing — the
+    // last log line's height plus a margin shouldn't break stickiness.
+    this.wasAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
   }
 
   private removeSubscription() {
@@ -236,6 +274,11 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     this.totalLogs = logs.length;
     // Check if the modal window can show all the entries.
     this.hasMoreLogMessages = this.totalLogs - this.maxElementsPerPage > 0;
+
+    // Replace the buffer rather than appending — the runtime-logs
+    // endpoint is full-buffer, no `since` cursor, so each poll is
+    // a complete view. Reset before processing.
+    this.logEntries = [];
 
     logs.forEach(e => {
       // Save all the basic data.
@@ -310,10 +353,17 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
 
     this.loading = false;
     this.LoadingMoment = Date.now();
+    this.shouldShowError = true;
 
     this.startUpdatingTime();
-
     this.filter();
+
+    // Schedule the next poll if live-tail is enabled. If the user
+    // turned it off mid-flight, this is a no-op and the dialog
+    // freezes on the buffer they were looking at.
+    if (this.liveTail) {
+      this.loadData(this.livePollMs);
+    }
   }
 
   // Removes all the entries that do not meet the filter criteria.
@@ -329,10 +379,16 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
       }
     });
 
-    // Scroll to the bottom. Use a timer to wait for the UI to be updated.
-    setTimeout(() => {
-      (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
-    });
+    // Auto-scroll only if the user was already tailing before this
+    // refresh; otherwise leave their scroll position alone so they
+    // can read history without getting yanked.
+    if (this.wasAtBottom) {
+      setTimeout(() => {
+        if (this.content) {
+          (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
+        }
+      });
+    }
   }
 
   // Updates the text which says how much time has passed since the data was loaded. It does it

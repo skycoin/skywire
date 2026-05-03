@@ -406,18 +406,9 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       }
     });
 
-    if (startApps) {
-      this.changeAppsValRecursively(elementsToChange, false, startApps);
-    } else {
-      // Ask for confirmation if the apps are going to be stopped.
-      const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'apps.stop-selected-confirmation');
-
-      confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-        confirmationDialog.componentInstance.showProcessing();
-
-        this.changeAppsValRecursively(elementsToChange, false, startApps, confirmationDialog);
-      });
-    }
+    // No confirmation modal — start/stop are reversible (start the
+    // app again to undo a stop) and the snackbar reports completion.
+    this.changeAppsValRecursively(elementsToChange, false, startApps);
   }
 
   /**
@@ -482,26 +473,14 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Starts or stops a specific app.
+   * Starts or stops a specific app. No confirmation modal —
+   * reversible by starting/stopping again; snackbar reports it.
    */
   changeAppState(app: Application): void {
-    if (app.status === 0 || app.status === 2) {
-      this.changeSingleAppVal(
-        this.startChangingAppState(app.name, true)
-      );
-    } else {
-      // Ask for confirmation if the app is going to be stopped.
-      const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'apps.stop-confirmation');
-
-      confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-        confirmationDialog.componentInstance.showProcessing();
-
-        this.changeSingleAppVal(
-          this.startChangingAppState(app.name, false),
-          confirmationDialog
-        );
-      });
-    }
+    const wantStart = (app.status === 0 || app.status === 2);
+    this.changeSingleAppVal(
+      this.startChangingAppState(app.name, wantStart),
+    );
   }
 
   /**

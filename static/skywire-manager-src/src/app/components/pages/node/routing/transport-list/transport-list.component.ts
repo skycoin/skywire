@@ -334,24 +334,21 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Deletes the selected elements.
+   * Deletes the selected elements. No confirmation modal — feedback
+   * comes from the post-action snackbar; user can re-add the
+   * transport via the inline form if it was a misclick.
    */
   deleteSelected() {
-    // Ask for confirmation.
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'transports.delete-selected-confirmation');
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      const elementsToRemove: string[] = [];
-      this.selections.forEach((val, key) => {
-        if (val) {
-          elementsToRemove.push(key);
-        }
-      });
-
-      this.deleteRecursively(elementsToRemove, confirmationDialog);
+    const elementsToRemove: string[] = [];
+    this.selections.forEach((val, key) => {
+      if (val) {
+        elementsToRemove.push(key);
+      }
     });
+    if (elementsToRemove.length === 0) {
+      return;
+    }
+    this.deleteRecursively(elementsToRemove, null);
   }
 
   /**
@@ -617,23 +614,17 @@ export class TransportListComponent implements OnDestroy {
    * Deletes a specific element.
    */
   delete(transport: Transport) {
-    const confirmationMsg = 'transports.delete-' + (transport.isPersistent ? 'persistent-' : '') + 'confirmation';
-    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, confirmationMsg);
-
-    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-      confirmationDialog.componentInstance.showProcessing();
-
-      // Start the operation and save it for posible cancellation.
-      this.operationSubscriptionsGroup.push(this.startDeleting(transport.id).subscribe(() => {
-        confirmationDialog.close();
-        // Make the parent page reload the data.
-        NodeComponent.refreshCurrentDisplayedData();
-        this.snackbarService.showDone('transports.deleted');
-      }, (err: OperationError) => {
-        err = processServiceError(err);
-        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
-      }));
-    });
+    // No confirmation modal. The action is destructive but
+    // reversible (re-create via the inline add-transport form);
+    // dialog spam was making bulk pruning of stale transports
+    // unworkable.
+    this.operationSubscriptionsGroup.push(this.startDeleting(transport.id).subscribe(() => {
+      NodeComponent.refreshCurrentDisplayedData();
+      this.snackbarService.showDone('transports.deleted');
+    }, (err: OperationError) => {
+      err = processServiceError(err);
+      this.snackbarService.showError(err);
+    }));
   }
 
   /**
@@ -717,16 +708,17 @@ export class TransportListComponent implements OnDestroy {
   }
 
   /**
-   * Recursively deletes a list of elements.
-   * @param ids List with the IDs of the elements to delete.
-   * @param confirmationDialog Dialog used for requesting confirmation from the user.
+   * Recursively deletes a list of elements. confirmationDialog is
+   * optional — when called from the inline (no-modal) flow it's
+   * null and we fall back to a snackbar for completion / error.
    */
-  deleteRecursively(ids: string[], confirmationDialog: MatDialogRef<ConfirmationComponent, any>) {
+  deleteRecursively(ids: string[], confirmationDialog: MatDialogRef<ConfirmationComponent, any> | null) {
     this.operationSubscriptionsGroup.push(this.startDeleting(ids[ids.length - 1]).subscribe(() => {
       ids.pop();
       if (ids.length === 0) {
-        confirmationDialog.close();
-        // Make the parent page reload the data.
+        if (confirmationDialog) {
+          confirmationDialog.close();
+        }
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('transports.deleted');
       } else {
@@ -734,9 +726,12 @@ export class TransportListComponent implements OnDestroy {
       }
     }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
-
       err = processServiceError(err);
-      confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      if (confirmationDialog) {
+        confirmationDialog.componentInstance.showDone('confirmation.error-header-text', err.translatableErrorMsg);
+      } else {
+        this.snackbarService.showError(err);
+      }
     }));
   }
 }

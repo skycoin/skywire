@@ -104,7 +104,9 @@
       "filter-warning": "Warning or more important",
       "filter-error": "Error or more important",
       "filter-faltal": "Faltal or more important",
-      "filter-panic": "Panic"
+      "filter-panic": "Panic",
+      "live-on": "Live (pause)",
+      "live-off": "Paused (live)"
     },
     "statuses": {
       "online": "Online",
@@ -737,6 +739,12 @@
     "type": "Type",
     "source": "Source",
     "destination": "Destination",
+    "local-port": "Local port",
+    "remote-port": "Remote port",
+    "remote-pk": "Remote",
+    "next-rid": "Next RID",
+    "next-tp": "Next TP",
+    "keep-alive": "Keep-alive",
     "delete-confirmation": "Are you sure you want to delete the route?",
     "delete-selected-confirmation": "Are you sure you want to delete the selected routes?",
     "delete": "Delete route",
