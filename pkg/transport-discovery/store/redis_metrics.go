@@ -436,13 +436,15 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 		return []TransportMetric{}, nil
 	}
 
-	// Fetch latency data via pipeline
+	// Fetch latency data via pipeline. Reads the durable lat:<id> key
+	// (35-day TTL) rather than the tp:<id> registration blob — survives
+	// the 5-minute registration churn that bandwidth has always survived.
 	var latencyResults []*redis.StringCmd
 	if query.Latency {
 		pipe := s.client.Pipeline()
 		latencyResults = make([]*redis.StringCmd, len(filtered))
 		for i, f := range filtered {
-			latencyResults[i] = pipe.Get(ctx, s.transportKey(f.entry.ID))
+			latencyResults[i] = pipe.Get(ctx, s.latencyKey(f.entry.ID))
 		}
 		_, _ = pipe.Exec(ctx) //nolint:errcheck // Errors handled per-command via Result()
 	}
@@ -544,16 +546,16 @@ func (s *redisStore) buildTransportMetrics(ctx context.Context, entries []*trans
 			metric.Edges = []string{f.entry.Edges[0].Hex(), f.entry.Edges[1].Hex()}
 		}
 
-		// Process latency result
+		// Process latency result from the durable lat:<id> key.
 		if query.Latency && latencyResults != nil {
 			dataJSON, err := latencyResults[i].Result()
 			if err == nil {
-				var data TransportData
-				if json.Unmarshal([]byte(dataJSON), &data) == nil && data.LatencyAvg > 0 {
+				var rec LatencyRecord
+				if json.Unmarshal([]byte(dataJSON), &rec) == nil && rec.Avg > 0 {
 					metric.Latency = &TransportLatency{
-						Min: data.LatencyMin,
-						Max: data.LatencyMax,
-						Avg: data.LatencyAvg,
+						Min: rec.Min,
+						Max: rec.Max,
+						Avg: rec.Avg,
 					}
 				}
 			}
