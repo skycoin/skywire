@@ -207,7 +207,8 @@ func (s *redisStore) GetTransportByID(ctx context.Context, id uuid.UUID) (*trans
 	if err != nil {
 		return nil, err
 	}
-	if rec, _ := s.getLatencyRecord(ctx, id); rec != nil && rec.Avg > 0 {
+	rec, _ := s.getLatencyRecord(ctx, id) //nolint:errcheck // best-effort overlay; entry stays usable without latency
+	if rec != nil && rec.Avg > 0 {
 		entry.Latency = float64(rec.Avg) / 1000.0
 	}
 	return entry, nil

@@ -54,6 +54,7 @@ type LatencyRecord struct {
 // refreshed before it ages out. Mirrors bw:daily:* retention so the two
 // telemetry types share the same observability window.
 const latencyTTL = 35 * 24 * time.Hour
+
 type redisStore struct {
 	client      *redis.Client
 	ttl         time.Duration
