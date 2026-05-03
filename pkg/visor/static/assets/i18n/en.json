@@ -89,6 +89,20 @@
   "node": {
     "title": "Visor details",
     "not-found": "Visor not found.",
+    "resource-monitor": {
+      "title": "Resource monitor",
+      "tab-host": "Host",
+      "tab-process": "Process",
+      "cpu": "CPU",
+      "memory": "Memory",
+      "disk": "Disk",
+      "net-rx": "Net rx",
+      "net-tx": "Net tx",
+      "threads": "Threads",
+      "heap": "Heap",
+      "goroutines": "Goroutines",
+      "gc": "GC rate"
+    },
     "logs" : {
       "title": "Runtime Logs",
       "no-logs": "No runtime logs were found for this visor.",

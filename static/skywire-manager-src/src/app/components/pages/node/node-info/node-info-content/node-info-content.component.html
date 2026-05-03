@@ -261,5 +261,7 @@
     <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
     <app-charts [trafficData]="trafficData" class="d-flex flex-column justify-content-end mt-3"></app-charts>
   </div>
+  <!-- Resource monitor (collapsed by default, polls when open). -->
+  <app-resource-monitor [nodeKey]="node.localPk"></app-resource-monitor>
 </div>
 }

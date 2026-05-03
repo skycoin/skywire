@@ -792,6 +792,11 @@ func (mc *mockRPCClient) RuntimeLogsSince(int64) (RuntimeLogsDelta, error) {
 	return RuntimeLogsDelta{}, nil
 }
 
+// HostStats implements API.
+func (mc *mockRPCClient) HostStats() (*HostStatsInfo, error) {
+	return &HostStatsInfo{}, nil
+}
+
 // RuntimeLogs implements API.
 func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil

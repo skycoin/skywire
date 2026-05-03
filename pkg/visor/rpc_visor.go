@@ -171,6 +171,18 @@ func (r *RPC) RuntimeLogsSince(since *int64, out *RuntimeLogsDelta) (err error) 
 	return err
 }
 
+// HostStats returns a host-level resource snapshot (CPU%, memory,
+// disk, network, plus the visor process slice). Backs the
+// hypervisor UI's Resource Monitor panel.
+func (r *RPC) HostStats(_ *struct{}, out *HostStatsInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "HostStats", nil)(out, &err)
+	stats, err := r.visor.HostStats()
+	if stats != nil {
+		*out = *stats
+	}
+	return err
+}
+
 // GetConfigPath returns the filesystem path the visor loaded its config from.
 func (r *RPC) GetConfigPath(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetConfigPath", nil)(out, &err)

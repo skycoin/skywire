@@ -70,6 +70,7 @@ import { SelectLanguageComponent } from './components/layout/select-language/sel
 import { LangButtonComponent } from './components/layout/lang-button/lang-button.component';
 import { TruncatedTextComponent } from './components/layout/truncated-text/truncated-text.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
+import { ResourceMonitorComponent } from './components/pages/node/resource-monitor/resource-monitor.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
 import { SkysocksSettingsComponent } from './components/pages/node/apps/node-apps/skysocks-settings/skysocks-settings.component';
@@ -161,6 +162,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         LangButtonComponent,
         TruncatedTextComponent,
         NodeInfoContentComponent,
+        ResourceMonitorComponent,
         NodeInfoComponent,
         SelectOptionComponent,
         SkysocksSettingsComponent,

@@ -675,6 +675,15 @@ func (rc *rpcClient) RuntimeLogsSince(since int64) (RuntimeLogsDelta, error) {
 	return delta, err
 }
 
+// HostStats calls HostStats.
+func (rc *rpcClient) HostStats() (*HostStatsInfo, error) {
+	var stats HostStatsInfo
+	if err := rc.Call("HostStats", &struct{}{}, &stats); err != nil {
+		return nil, err
+	}
+	return &stats, nil
+}
+
 // RuntimeStats calls RuntimeStats.
 func (rc *rpcClient) RuntimeStats() (*RuntimeStatsInfo, error) {
 	var stats RuntimeStatsInfo

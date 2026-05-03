@@ -240,6 +240,32 @@ func (hv *Hypervisor) getIsPublic() http.HandlerFunc {
 	})
 }
 
+// getRuntimeStats — Go-runtime metrics for the visor process.
+// Polled by the hypervisor UI's Resource Monitor "Process" tab.
+func (hv *Hypervisor) getRuntimeStats() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		stats, err := ctx.API.RuntimeStats()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, stats)
+	})
+}
+
+// getHostStats — psutil-style host metrics (CPU%, mem, disk, net,
+// visor process). Polled by the Resource Monitor "Host" tab.
+func (hv *Hypervisor) getHostStats() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		stats, err := ctx.API.HostStats()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, stats)
+	})
+}
+
 func (hv *Hypervisor) getRuntimeConfig() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		configJSON, err := ctx.API.GetRuntimeConfig()

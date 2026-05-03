@@ -463,6 +463,16 @@ return {
     return this.apiService.get(`visors/${nodeKey}/runtime-logs?since=${since}`);
   }
 
+  /** Visor process Go-runtime stats (heap, GC, goroutines). */
+  getRuntimeStats(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/runtime-stats`);
+  }
+
+  /** Host system + visor process resource snapshot (CPU%, mem, disk, net). */
+  getHostStats(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/host-stats`);
+  }
+
   /**
    * Removes the rewards address of the node.
    */
