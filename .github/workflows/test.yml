@@ -5,12 +5,21 @@ on:
       - 'docs/**'
       - 'LICENSE'
       - '.gitignore'
+  pull_request_target:
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
 name: Test
 
 jobs:
   linux:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
     steps:
       - name: Compute dispatch id
         id: dispatch
@@ -20,20 +29,17 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.CI_RUNNER_DISPATCH_TOKEN }}
           DISPATCH_ID: ${{ steps.dispatch.outputs.id }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           gh api repos/mrpalide/ci-runner/dispatches \
             --method POST \
-            --input - <<EOF
-          {
-            "event_type": "skywire-linux-test",
-            "client_payload": {
-              "dispatch_id": "${DISPATCH_ID}",
-              "repository": "${{ github.repository }}",
-              "pr_number": ${{ github.event.pull_request.number }},
-              "sha": "${{ github.event.pull_request.head.sha }}"
-            }
-          }
-          EOF
+            -f event_type=skywire-linux-test \
+            -f "client_payload[dispatch_id]=$DISPATCH_ID" \
+            -f "client_payload[repository]=$REPO" \
+            -F "client_payload[pr_number]=$PR_NUMBER" \
+            -f "client_payload[sha]=$SHA"
 
       - name: Locate the remote workflow run
         id: find
@@ -62,6 +68,7 @@ jobs:
         run: gh run watch ${{ steps.find.outputs.run_id }} --repo mrpalide/ci-runner --exit-status
 
   darwin:
+    if: github.event_name == 'pull_request'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
@@ -85,6 +92,7 @@ jobs:
           GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
 
   windows:
+    if: github.event_name == 'pull_request'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
