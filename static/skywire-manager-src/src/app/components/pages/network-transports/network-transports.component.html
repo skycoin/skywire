@@ -24,10 +24,21 @@
           {{ 'network-transports.view-compact' | translate }}
         </button>
         <button mat-button [class.active]="viewMode === 'tree'" (click)="setViewMode('tree')">
-          <mat-icon [inline]="true">account_tree</mat-icon>
+          <mat-icon [inline]="true">device_hub</mat-icon>
           {{ 'network-transports.view-tree' | translate }}
         </button>
       </div>
+      @if (viewMode === 'compact') {
+        <div class="control-group">
+          <span class="control-label">{{ 'network-transports.edges' | translate }}:</span>
+          <button mat-button [class.active]="!hideEdges" (click)="setHideEdges(false)">
+            {{ 'network-transports.edges-show' | translate }}
+          </button>
+          <button mat-button [class.active]="hideEdges" (click)="setHideEdges(true)">
+            {{ 'network-transports.edges-hide' | translate }}
+          </button>
+        </div>
+      }
       <button mat-stroked-button class="refresh-btn" (click)="refreshNow()" [disabled]="loading">
         <mat-icon [inline]="true">refresh</mat-icon>
         {{ 'network-transports.refresh' | translate }}
@@ -71,8 +82,10 @@
           <tr>
             <th>{{ 'network-transports.tp-id' | translate }}</th>
             <th>{{ 'network-transports.type' | translate }}</th>
-            <th>{{ 'network-transports.edge-a' | translate }}</th>
-            <th>{{ 'network-transports.edge-b' | translate }}</th>
+            @if (!hideEdges) {
+              <th>{{ 'network-transports.edge-a' | translate }}</th>
+              <th>{{ 'network-transports.edge-b' | translate }}</th>
+            }
             <th class="num">{{ 'network-transports.sent' | translate }}</th>
             <th class="num">{{ 'network-transports.recv' | translate }}</th>
             <th class="num">{{ 'network-transports.total' | translate }}</th>
@@ -82,8 +95,10 @@
             <tr>
               <td class="mono small">{{ e.id }}</td>
               <td>{{ e.type }}</td>
-              <td class="mono small">{{ e.edge_a }}</td>
-              <td class="mono small">{{ e.edge_b }}</td>
+              @if (!hideEdges) {
+                <td class="mono small">{{ e.edge_a }}</td>
+                <td class="mono small">{{ e.edge_b }}</td>
+              }
               <td class="num">{{ fmtBytes(e.sent) }}</td>
               <td class="num">{{ fmtBytes(e.recv) }}</td>
               <td class="num"><strong>{{ fmtBytes(e.bandwidth) }}</strong></td>

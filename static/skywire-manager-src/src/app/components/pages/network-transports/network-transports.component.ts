@@ -82,6 +82,9 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   lastUpdated: Date | null = null;
   days = 1;
   viewMode: ViewMode = 'compact';
+  // Compact-view edge columns are wide (66-char PKs ×2). Hide them
+  // when the operator only cares about ID/type/bandwidth/latency.
+  hideEdges = false;
 
   rawCount = 0;
   networkBandwidth = 0;
@@ -122,6 +125,10 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
 
   setViewMode(m: ViewMode) {
     this.viewMode = m;
+  }
+
+  setHideEdges(hide: boolean) {
+    this.hideEdges = hide;
   }
 
   toggleVisor(v: VisorNode) { v.expanded = !v.expanded; }
