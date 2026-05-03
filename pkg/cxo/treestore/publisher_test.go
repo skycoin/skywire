@@ -268,6 +268,94 @@ func TestPublisherPathConflictReporting(t *testing.T) {
 	}
 }
 
+// TestEncodeCacheInvalidatesOnlyAffectedPath pins the per-memNode
+// encode-cache contract: after a publish, every sub-node along an
+// untouched branch must remain `cached==true` so the next publish
+// can short-circuit the recursive encodeNode walk and skip the
+// encoder.Serialize / Cache.Set chain for that branch. A Put under
+// one branch must clear cached on its ancestors only, leaving sibling
+// branches reusable.
+func TestEncodeCacheInvalidatesOnlyAffectedPath(t *testing.T) {
+	p, _ := newTestPublisher(t)
+
+	for _, path := range []string{
+		"a/x/1",
+		"a/y/1",
+		"b/x/1",
+		"b/y/1",
+	} {
+		if err := p.Put(path, []byte("v")); err != nil {
+			t.Fatalf("Put %s: %v", path, err)
+		}
+	}
+	if err := p.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	p.mu.Lock()
+	root := p.root
+	a := root.subs["a"]
+	b := root.subs["b"]
+	ax := a.subs["x"]
+	ay := a.subs["y"]
+	bx := b.subs["x"]
+	by := b.subs["y"]
+	for name, n := range map[string]*memNode{"a": a, "b": b, "a/x": ax, "a/y": ay, "b/x": bx, "b/y": by} {
+		if !n.cached {
+			t.Fatalf("after first Flush, %s.cached = false; want true", name)
+		}
+	}
+	p.mu.Unlock()
+
+	// Mutate only under a/x. Expect cached to clear on the path
+	// root → a → a/x but stay set on every sibling.
+	if err := p.Put("a/x/2", []byte("w")); err != nil {
+		t.Fatalf("Put a/x/2: %v", err)
+	}
+
+	p.mu.Lock()
+	if a.cached {
+		t.Fatalf("a.cached = true after mutation under a/x; want false")
+	}
+	if ax.cached {
+		t.Fatalf("a/x.cached = true after mutation under a/x; want false")
+	}
+	if !ay.cached {
+		t.Fatalf("a/y.cached = false after unrelated mutation; want true (sibling)")
+	}
+	if !b.cached {
+		t.Fatalf("b.cached = false after unrelated mutation; want true (sibling subtree)")
+	}
+	if !bx.cached || !by.cached {
+		t.Fatalf("b/x.cached=%v b/y.cached=%v; want both true (unrelated subtree)", bx.cached, by.cached)
+	}
+	bxHashBefore := bx.pubHash
+	byHashBefore := by.pubHash
+	p.mu.Unlock()
+
+	if err := p.Flush(); err != nil {
+		t.Fatalf("second Flush: %v", err)
+	}
+
+	// After the second publish, sibling subtree hashes must be
+	// preserved bit-for-bit — the publisher reused them via the cache
+	// path rather than re-encoding.
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if bx.pubHash != bxHashBefore {
+		t.Fatalf("b/x.pubHash changed across an unrelated publish: %x → %x", bxHashBefore, bx.pubHash)
+	}
+	if by.pubHash != byHashBefore {
+		t.Fatalf("b/y.pubHash changed across an unrelated publish: %x → %x", byHashBefore, by.pubHash)
+	}
+	// And every sub-node should be cached again post-publish.
+	for name, n := range map[string]*memNode{"a": a, "b": b, "a/x": ax, "a/y": ay, "b/x": bx, "b/y": by} {
+		if !n.cached {
+			t.Fatalf("after second Flush, %s.cached = false; want true", name)
+		}
+	}
+}
+
 func TestPublisherConcurrentPutsAreSafe(t *testing.T) {
 	p, _ := newTestPublisher(t)
 	var wg sync.WaitGroup
