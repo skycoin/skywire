@@ -81,9 +81,12 @@ const routes: Routes = [
         path: 'network',
         component: NetworkViewComponent
       },
+      // /nodes/dmsg-settings was the old home-level DMSG page (local
+      // visor only). DMSG is a per-visor tab now — bounce the legacy
+      // URL to the home node list rather than 404.
       {
         path: 'dmsg-settings',
-        component: DmsgSettingsComponent
+        redirectTo: 'list/1'
       },
       {
         path: ':key',
@@ -113,6 +116,10 @@ const routes: Routes = [
           {
             path: 'chat',
             component: SkychatComponent
+          },
+          {
+            path: 'dmsg',
+            component: DmsgSettingsComponent
           },
           {
             path: 'transports',

@@ -8,16 +8,20 @@ import {
   DmsgConnectAllResult,
   DmsgSettingsService,
 } from 'src/app/services/dmsg-settings.service';
-import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { SnackbarService } from 'src/app/services/snackbar.service';
+import { NodeComponent } from '../node/node.component';
+import { Node } from '../../../app.datatypes';
 
 /**
- * DMSG settings dashboard. Shows the dmsg server session list for each
- * of the visor's three independent dmsg clients (main, embedded route
- * setup-node, embedded transport setup-node) and exposes two actions:
- * "Connect to all servers" (one-shot) and "Set sessions count" (persist
- * + connect-all). Polled every 20s.
+ * Per-visor DMSG tab content. Shows the dmsg server session list
+ * for each of the visor's three independent dmsg clients (main,
+ * embedded route setup-node, embedded transport setup-node) and
+ * exposes "Connect to all servers" + "Set sessions count" actions.
+ *
+ * Was a top-level page (/nodes/dmsg-settings) showing the local
+ * visor only — it's a per-visor tab now so the controls operate on
+ * whichever visor the user is looking at, including remote visors.
  */
 @Component({
   selector: 'app-dmsg-settings',
@@ -26,7 +30,7 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
   standalone: false,
 })
 export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  tabsData: TabButtonData[] = [];
+  pk = '';
   sessions: DmsgClientSessions | null = null;
   loading = true;
   error: string | null = null;
@@ -43,61 +47,40 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
   lastActionResult: DmsgConnectAllResult | null = null;
   lastActionLabel = '';
 
-  private sub: Subscription;
+  private nodeSub: Subscription;
+  private pollSub: Subscription;
 
   constructor(
     private dmsgSvc: DmsgSettingsService,
     private snackbar: SnackbarService,
   ) {
     super();
-    this.tabsData = [
-      {
-        icon: 'view_headline',
-        label: 'nodes.title',
-        linkParts: ['/nodes'],
-      },
-      {
-        icon: 'monetization_on',
-        label: 'nodes.rewards-title',
-        linkParts: ['/nodes', 'rewards'],
-      },
-      {
-        icon: 'health_and_safety',
-        label: 'nodes.services-health-title',
-        linkParts: ['/nodes', 'services-health'],
-      },
-      {
-        icon: 'public',
-        label: 'nodes.network-title',
-        linkParts: ['/nodes', 'network'],
-      },
-      {
-        icon: 'hub',
-        label: 'nodes.dmsg-settings-title',
-        linkParts: ['/nodes', 'dmsg-settings'],
-      },
-      {
-        icon: 'bubble_chart',
-        label: 'node.details.tpviz.title',
-        linkParts: [],
-        externalUrl: '/tp-viz/',
-      },
-      {
-        icon: 'settings',
-        label: 'settings.title',
-        linkParts: ['/settings'],
-      },
-    ];
   }
 
   ngOnInit() {
-    // Poll every 20s. 20s (not 15s like services-health) because the
-    // sessions list changes rarely and we want to keep RPC traffic to
-    // the visor low.
-    this.sub = interval(20000)
+    this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
+      const wasUnset = !this.pk;
+      this.pk = node?.localPk || '';
+      if (wasUnset && this.pk) {
+        this.startPolling();
+      }
+    });
+    return super.ngOnInit();
+  }
+
+  ngOnDestroy(): void {
+    this.nodeSub?.unsubscribe();
+    this.pollSub?.unsubscribe();
+  }
+
+  /** Poll every 20s. 20s (not 15s like services-health) because the
+   *  sessions list changes rarely and we want to keep RPC traffic to
+   *  the visor low. */
+  private startPolling() {
+    this.pollSub = interval(20000)
       .pipe(
         startWith(0),
-        switchMap(() => this.dmsgSvc.getSessions()),
+        switchMap(() => this.dmsgSvc.getSessions(this.pk)),
       )
       .subscribe({
         next: (sessions) => {
@@ -111,36 +94,24 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
           this.error = err?.message || 'Failed to fetch dmsg sessions';
         },
       });
-    return super.ngOnInit();
   }
 
-  ngOnDestroy(): void {
-    if (this.sub) {
-      this.sub.unsubscribe();
-    }
-  }
-
-  /** Refresh the session list immediately, bypassing the poll interval. */
   refresh(): void {
-    this.dmsgSvc.getSessions().subscribe({
+    if (!this.pk) { return; }
+    this.dmsgSvc.getSessions(this.pk).subscribe({
       next: (sessions) => {
         this.sessions = sessions || {};
         this.lastUpdated = new Date();
       },
-      error: () => {
-        /* swallow — the next poll will surface errors */
-      },
+      error: () => { /* next poll surfaces errors */ },
     });
   }
 
-  /** One-shot: open a dmsg session to every known server, no persistence. */
   connectAll(): void {
-    if (this.connectAllInFlight) {
-      return;
-    }
+    if (this.connectAllInFlight || !this.pk) { return; }
     this.connectAllInFlight = true;
     this.lastActionResult = null;
-    this.dmsgSvc.connectAll().subscribe({
+    this.dmsgSvc.connectAll(this.pk).subscribe({
       next: (result) => {
         this.connectAllInFlight = false;
         this.lastActionResult = result;
@@ -157,18 +128,15 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
     });
   }
 
-  /** Persist sessions_count and trigger connect-all. */
   applySessionsCount(): void {
-    if (this.setCountInFlight) {
-      return;
-    }
+    if (this.setCountInFlight || !this.pk) { return; }
     if (this.sessionsCountInput < 0) {
       this.snackbar.showError('Sessions count must be >= 0');
       return;
     }
     this.setCountInFlight = true;
     this.lastActionResult = null;
-    this.dmsgSvc.setSessionsCount(this.sessionsCountInput).subscribe({
+    this.dmsgSvc.setSessionsCount(this.pk, this.sessionsCountInput).subscribe({
       next: (result) => {
         this.setCountInFlight = false;
         this.lastActionResult = result;
@@ -185,47 +153,27 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
     });
   }
 
-  /** Ordered list of the clients present for ngFor iteration. */
   clientList(): DmsgClientSessionInfo[] {
     const out: DmsgClientSessionInfo[] = [];
-    if (!this.sessions) {
-      return out;
-    }
-    if (this.sessions.main) {
-      out.push(this.sessions.main);
-    }
-    if (this.sessions.route_setup) {
-      out.push(this.sessions.route_setup);
-    }
-    if (this.sessions.transport_setup) {
-      out.push(this.sessions.transport_setup);
-    }
+    if (!this.sessions) { return out; }
+    if (this.sessions.main) { out.push(this.sessions.main); }
+    if (this.sessions.route_setup) { out.push(this.sessions.route_setup); }
+    if (this.sessions.transport_setup) { out.push(this.sessions.transport_setup); }
     return out;
   }
 
-  /** Human-readable label for the role. */
   roleLabel(role: string): string {
     switch (role) {
-      case 'main':
-        return 'Main visor';
-      case 'route_setup':
-        return 'Route Setup Node';
-      case 'transport_setup':
-        return 'Transport Setup Node';
-      default:
-        return role;
+      case 'main': return 'Main visor';
+      case 'route_setup': return 'Route Setup Node';
+      case 'transport_setup': return 'Transport Setup Node';
+      default: return role;
     }
   }
 
-  trackByRole(_: number, c: DmsgClientSessionInfo): string {
-    return c.role;
-  }
+  trackByRole(_: number, c: DmsgClientSessionInfo): string { return c.role; }
+  trackByPk(_: number, pk: string): string { return pk; }
 
-  trackByPk(_: number, pk: string): string {
-    return pk;
-  }
-
-  /** Keys of a map for mobile iteration. */
   objectKeys(o: { [k: string]: any } | undefined | null): string[] {
     return o ? Object.keys(o) : [];
   }

@@ -94,7 +94,7 @@
             </tr>
             @for (e of filteredEntries; track e.pk) {
               <tr [ngClass]="rowClass(e)">
-                <td class="mono small" [matTooltip]="e.pk">{{ shortPk(e.pk) }}</td>
+                <td class="mono small" [matTooltip]="e.pk">{{ e.pk }}</td>
                 <td>{{ e.country || '-' }}</td>
                 <td>{{ e.version || '-' }}</td>
                 <td>{{ e.services || '-' }}</td>
@@ -112,7 +112,7 @@
           <div class="d-md-none nv-cards">
             @for (e of filteredEntries; track e.pk) {
               <div class="nv-card" [ngClass]="rowClass(e)">
-                <div class="nv-card-pk mono small" [matTooltip]="e.pk">{{ shortPk(e.pk) }}</div>
+                <div class="nv-card-pk mono small" [matTooltip]="e.pk">{{ e.pk }}</div>
                 <div class="nv-card-meta">
                   {{ e.country || '-' }} · {{ e.version || '-' }} · {{ e.services || '-' }}
                 </div>

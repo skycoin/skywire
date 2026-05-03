@@ -1322,6 +1322,11 @@ func (mc *mockRPCClient) HVServiceHealth(_ cipher.PubKey) ([]ServiceHealthEntry,
 	return nil, fmt.Errorf("not supported in mock")
 }
 
+// HVDmsgSessions implements API.
+func (mc *mockRPCClient) HVDmsgSessions(_ cipher.PubKey) (*DmsgClientSessions, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
 // HVDmsgConnectAll implements API.
 func (mc *mockRPCClient) HVDmsgConnectAll(_ cipher.PubKey) (*DmsgConnectAllResult, error) {
 	return nil, fmt.Errorf("not supported in mock")

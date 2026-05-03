@@ -476,6 +476,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/skynet-forwards/connect", hv.postSkynetConnect())
 				r.Post("/visors/{pk}/skynet-forwards/disconnect", hv.postSkynetDisconnect())
 
+				// Per-visor DMSG settings (used by the per-visor DMSG
+				// tab in the hvui — supersedes the home-level
+				// /api/dmsg/* endpoints which were local-visor-only).
+				r.Get("/visors/{pk}/dmsg/sessions", hv.getVisorDmsgSessions())
+				r.Post("/visors/{pk}/dmsg/connect-all", hv.postVisorDmsgConnectAll())
+				r.Put("/visors/{pk}/dmsg/sessions-count", hv.putVisorDmsgSessionsCount())
+
 				// Skychat password management.
 				r.Get("/visors/{pk}/skychat/password", hv.getSkychatPassword())
 				r.Put("/visors/{pk}/skychat/password", hv.putSkychatPassword())

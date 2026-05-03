@@ -237,7 +237,8 @@
       "rewards": "Rewards",
       "skynet": "Skynet",
       "resources": "Resources",
-      "chat": "Skychat"
+      "chat": "Skychat",
+      "dmsg": "DMSG"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },

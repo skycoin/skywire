@@ -215,6 +215,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/resources') ||
       this.lastUrl.includes('/chat') ||
+      this.lastUrl.includes('/dmsg') ||
       (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
 
       this.titleParts = ['nodes.title', 'node.title'];
@@ -262,6 +263,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           icon: 'forum',
           label: 'node.tabs.chat',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
+        },
+        {
+          icon: 'hub',
+          label: 'node.tabs.dmsg',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'dmsg'] : null,
         }
       ];
 
@@ -288,6 +294,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       }
       if (this.lastUrl.includes('/chat')) {
         this.selectedTabIndex = 7;
+      }
+      if (this.lastUrl.includes('/dmsg')) {
+        this.selectedTabIndex = 8;
       }
 
       // Inform that the current subpage is not for showing a full list.

@@ -72,6 +72,35 @@ button:focus {
   display: flex;
 }
 
+// Global text-color fix for matInput / textarea on the dark hvui
+// theme. Material 21's default outline-appearance picks the
+// theme's foreground color, which renders as near-black on this
+// theme — so user-typed text is invisible against the dark surface
+// until you focus + start typing again. Force a readable tone
+// everywhere; component-scoped overrides aren't enough for ::ng-deep
+// reasons. (Mirrors the existing global mat-mdc-select-value fix
+// further down.)
+.mat-mdc-form-field input.mat-mdc-input-element,
+.mat-mdc-form-field textarea.mat-mdc-input-element {
+  color: rgba(255, 255, 255, 0.92) !important;
+  caret-color: rgba(255, 255, 255, 0.92) !important;
+}
+.mat-mdc-form-field input.mat-mdc-input-element::placeholder,
+.mat-mdc-form-field textarea.mat-mdc-input-element::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+// Outline / floating label tone — slightly dimmer so it doesn't
+// compete with the entered text.
+.mat-mdc-form-field .mdc-floating-label,
+.mat-mdc-form-field .mat-mdc-floating-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+.mat-mdc-form-field .mdc-notched-outline__leading,
+.mat-mdc-form-field .mdc-notched-outline__notch,
+.mat-mdc-form-field .mdc-notched-outline__trailing {
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
 .mdc-text-field--filled {
   background-color: transparent !important;
   padding: 0 !important;

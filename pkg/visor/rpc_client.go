@@ -1518,6 +1518,15 @@ func (rc *rpcClient) HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, er
 	return out, nil
 }
 
+// HVDmsgSessions reads the per-client dmsg sessions snapshot from a remote visor.
+func (rc *rpcClient) HVDmsgSessions(pk cipher.PubKey) (*DmsgClientSessions, error) {
+	var out DmsgClientSessions
+	if err := rc.Call("HVDmsgSessions", &pk, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // HVDmsgConnectAll triggers connect-all on a remote visor.
 func (rc *rpcClient) HVDmsgConnectAll(pk cipher.PubKey) (*DmsgConnectAllResult, error) {
 	var out DmsgConnectAllResult

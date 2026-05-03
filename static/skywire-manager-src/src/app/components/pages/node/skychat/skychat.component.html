@@ -68,7 +68,7 @@
               [ngClass]="{ 'active': toPK === p }"
               (click)="pickRecipient(p)"
               [matTooltip]="p">
-              <span class="peer-pk mono small">{{ shortPK(p) }}</span>
+              <span class="peer-pk mono small">{{ p }}</span>
             </div>
           }
         </aside>
@@ -83,7 +83,7 @@
               <div class="sc-msg" [ngClass]="m.direction">
                 <div class="sc-msg-meta">
                   <span class="peer mono small" (click)="pickRecipient(m.peer)" [matTooltip]="m.peer">
-                    {{ m.direction === 'out' ? '→' : '←' }} {{ shortPK(m.peer) }}
+                    {{ m.direction === 'out' ? '→' : '←' }} {{ m.peer }}
                   </span>
                   <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
                 </div>

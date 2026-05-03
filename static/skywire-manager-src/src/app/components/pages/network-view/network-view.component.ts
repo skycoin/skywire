@@ -69,7 +69,6 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
       { icon: 'monetization_on', label: 'nodes.rewards-title', linkParts: ['/nodes', 'rewards'] },
       { icon: 'health_and_safety', label: 'nodes.services-health-title', linkParts: ['/nodes', 'services-health'] },
       { icon: 'public', label: 'nodes.network-title', linkParts: ['/nodes', 'network'] },
-      { icon: 'hub', label: 'nodes.dmsg-settings-title', linkParts: ['/nodes', 'dmsg-settings'] },
       { icon: 'bubble_chart', label: 'node.details.tpviz.title', linkParts: [], externalUrl: '/tp-viz/' },
       { icon: 'settings', label: 'settings.title', linkParts: ['/settings'] },
     ];
@@ -152,12 +151,6 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
     if ((e.ut_status || '') === 'offline') { return 'row-offline'; }
     if (realT < 2) { return 'row-low-transports'; }
     return '';
-  }
-
-  /** Truncate a 66-char PK for display while keeping it copy-friendly. */
-  shortPk(pk: string): string {
-    if (!pk || pk.length < 16) { return pk || ''; }
-    return pk.slice(0, 8) + '…' + pk.slice(-6);
   }
 
   /** Counts shown in the header for at-a-glance health. */

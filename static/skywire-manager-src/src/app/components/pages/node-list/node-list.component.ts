@@ -248,11 +248,6 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         linkParts: ['/nodes', 'network'],
       },
       {
-        icon: 'hub',
-        label: 'nodes.dmsg-settings-title',
-        linkParts: ['/nodes', 'dmsg-settings'],
-      },
-      {
         icon: 'bubble_chart',
         label: 'node.details.tpviz.title',
         linkParts: [],

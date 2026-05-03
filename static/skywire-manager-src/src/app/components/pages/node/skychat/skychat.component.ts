@@ -229,12 +229,6 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       .catch(() => { /* network glitch — live SSE will pick up new traffic anyway */ });
   }
 
-  /** Truncate a 66-char PK for the display column. */
-  shortPK(pk: string): string {
-    if (!pk || pk.length < 14) { return pk || ''; }
-    return pk.slice(0, 8) + '…' + pk.slice(-4);
-  }
-
   pickRecipient(pk: string) {
     this.toPK = pk;
   }

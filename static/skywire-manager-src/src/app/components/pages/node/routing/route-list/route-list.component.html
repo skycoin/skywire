@@ -132,9 +132,7 @@
           <td>
             @if (route.appFields || route.forwardFields) {
               <app-labeled-element-text
-                [short]="true"
                 id="{{ route.dst }}"
-                shortTextLength="7"
                 (labelEdited)="refreshData()"
                 [elementType]="labeledElementTypes.Node">
               </app-labeled-element-text>
@@ -158,17 +156,13 @@
           <td>
             @if (route.forwardFields?.nextTid) {
               <app-labeled-element-text
-                [short]="true"
                 id="{{ route.forwardFields.nextTid }}"
-                shortTextLength="5"
                 (labelEdited)="refreshData()"
                 [elementType]="labeledElementTypes.Transport">
               </app-labeled-element-text>
             } @else if (route.intermediaryForwardFields?.nextTid) {
               <app-labeled-element-text
-                [short]="true"
                 id="{{ route.intermediaryForwardFields.nextTid }}"
-                shortTextLength="5"
                 (labelEdited)="refreshData()"
                 [elementType]="labeledElementTypes.Transport">
               </app-labeled-element-text>

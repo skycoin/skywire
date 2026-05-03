@@ -113,7 +113,14 @@
       background: rgba(33, 150, 243, 0.18);
       border-color: rgba(33, 150, 243, 0.45);
     }
-    .peer-pk { display: block; }
+    // Full 66-char PK wraps onto multiple lines rather than getting
+    // truncated — operators need the whole key to copy/verify.
+    .peer-pk {
+      display: block;
+      word-break: break-all;
+      line-height: 1.25;
+      font-size: 10px;
+    }
   }
 }
 
@@ -170,10 +177,12 @@
   align-items: center;
   font-size: 11px;
   opacity: 0.7;
+  flex-wrap: wrap;
 
   .peer {
     cursor: pointer;
     text-decoration: underline dotted transparent;
+    word-break: break-all;
     &:hover { text-decoration-color: currentColor; }
   }
 }
@@ -202,23 +211,4 @@
   }
 }
 
-// Force readable contrast on the form-field inputs against the dark
-// hvui background. The default Material outline-appearance picks the
-// theme's foreground color, which renders as near-black on this
-// theme; override to a light tone explicitly.
-:host ::ng-deep .skychat-box {
-  .mat-mdc-form-field input.mat-mdc-input-element,
-  .mat-mdc-form-field textarea.mat-mdc-input-element,
-  .mat-mdc-form-field .mat-mdc-select-value,
-  .mat-mdc-form-field .mat-mdc-select-value-text {
-    color: rgba(255, 255, 255, 0.92) !important;
-    caret-color: rgba(255, 255, 255, 0.92) !important;
-  }
-  .mat-mdc-form-field input.mat-mdc-input-element::placeholder,
-  .mat-mdc-form-field textarea.mat-mdc-input-element::placeholder {
-    color: rgba(255, 255, 255, 0.45) !important;
-  }
-  .mat-mdc-form-field .mdc-floating-label {
-    color: rgba(255, 255, 255, 0.7);
-  }
-}
+// (input/textarea contrast is handled globally in styles.scss now)

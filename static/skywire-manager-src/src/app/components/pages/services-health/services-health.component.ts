@@ -51,11 +51,6 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
         linkParts: ['/nodes', 'network'],
       },
       {
-        icon: 'hub',
-        label: 'nodes.dmsg-settings-title',
-        linkParts: ['/nodes', 'dmsg-settings'],
-      },
-      {
         icon: 'bubble_chart',
         label: 'node.details.tpviz.title',
         linkParts: [],
