@@ -1200,6 +1200,15 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 
 	rg.logger.WithField("func", "RouteGroup.handlePongPacket").Tracef("Latency is around %.1f ms", latencyMs)
 
+	// A pong correlates to no specific ping (no in-flight tracking), so
+	// a long-delayed pong arriving after the host woke / queue drained
+	// produces a 30+ second sample. Reject up front so neither
+	// networkStats, the synchronous MeasureLatency consumer, nor the
+	// underlying transport see the bogus value.
+	if latencyMs <= 0 || latencyMs > transport.MaxReasonableRTTMs {
+		return nil
+	}
+
 	rg.networkStats.SetLatency(uint32(latencyMs)) //nolint: gosec
 
 	// If there's a pending synchronous measurement, send the result
@@ -1258,12 +1267,19 @@ func (rg *RouteGroup) MeasureLatency(ctx context.Context, count int) (min, max, 
 		// Wait for pong with timeout
 		select {
 		case latencyMs := <-pongCh:
-			// Drop non-positive samples — a 0 here would seed min/max
-			// at 0 and produce a snapshot {min:0, max:X, avg:Y} that
-			// downstream consumers (TPD, /stats) treat as "no min
-			// measurement" and either reject or display misleadingly.
+			// Drop samples outside (0, transport.MaxReasonableRTTMs]:
+			//   - 0 seeds min/max at 0, producing {min:0, max:X, avg:Y}
+			//     that downstream consumers reject or display oddly.
+			//   - Stale pongs from earlier rounds (or from the periodic
+			//     pingLoop) can land in this buffered channel after a
+			//     long delay and produce 30+ second readings that
+			//     would pin Max indefinitely on the underlying tp.
 			if latencyMs <= 0 {
 				rg.logger.Debugf("Ping %d/%d: dropped non-positive sample (%.6f ms)", i+1, count, latencyMs)
+				continue
+			}
+			if latencyMs > transport.MaxReasonableRTTMs {
+				rg.logger.Debugf("Ping %d/%d: dropped outlier sample (%.0f ms) — likely stale pong", i+1, count, latencyMs)
 				continue
 			}
 			measurements = append(measurements, latencyMs)
