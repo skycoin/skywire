@@ -41,7 +41,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
         linkParts: ['/nodes', 'rewards'],
       },
       {
-        icon: 'health_and_safety',
+        icon: 'check_circle',
         label: 'nodes.services-health-title',
         linkParts: ['/nodes', 'services-health'],
       },

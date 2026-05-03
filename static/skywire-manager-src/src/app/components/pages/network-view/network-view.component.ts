@@ -67,7 +67,7 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
     this.tabsData = [
       { icon: 'view_headline', label: 'nodes.title', linkParts: ['/nodes'] },
       { icon: 'monetization_on', label: 'nodes.rewards-title', linkParts: ['/nodes', 'rewards'] },
-      { icon: 'health_and_safety', label: 'nodes.services-health-title', linkParts: ['/nodes', 'services-health'] },
+      { icon: 'check_circle', label: 'nodes.services-health-title', linkParts: ['/nodes', 'services-health'] },
       { icon: 'public', label: 'nodes.network-title', linkParts: ['/nodes', 'network'] },
       { icon: 'bubble_chart', label: 'node.details.tpviz.title', linkParts: [], externalUrl: '/tp-viz/' },
       { icon: 'settings', label: 'settings.title', linkParts: ['/settings'] },

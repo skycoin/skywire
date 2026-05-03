@@ -265,7 +265,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
         },
         {
-          icon: 'hub',
+          icon: 'device_hub',
           label: 'node.tabs.dmsg',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'dmsg'] : null,
         }

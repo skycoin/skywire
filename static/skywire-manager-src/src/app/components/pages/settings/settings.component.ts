@@ -57,7 +57,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
         linkParts: ['/nodes', 'rewards'],
       },
       {
-        icon: 'health_and_safety',
+        icon: 'check_circle',
         label: 'nodes.services-health-title',
         linkParts: ['/nodes', 'services-health'],
       },
