@@ -787,6 +787,11 @@ func (mc *mockRPCClient) Exec(string) ([]byte, error) {
 	return []byte("mock"), nil
 }
 
+// RuntimeLogsSince implements API.
+func (mc *mockRPCClient) RuntimeLogsSince(int64) (RuntimeLogsDelta, error) {
+	return RuntimeLogsDelta{}, nil
+}
+
 // RuntimeLogs implements API.
 func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil

@@ -17,6 +17,12 @@
     </div>
   }
 
+  @if (totalDropped > 0) {
+    <div class="logs-dropped-banner">
+      <mat-icon [inline]="true">history</mat-icon>
+      {{ 'node.logs.dropped' | translate:{ count: totalDropped } }}
+    </div>
+  }
   <mat-dialog-content #content>
     <!-- Link for opening all the logs, if there are too much for the modal window. -->
     @if (!loading && hasMoreLogMessages) {

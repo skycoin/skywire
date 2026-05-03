@@ -161,6 +161,16 @@ func (r *RPC) RuntimeLogs(_ *struct{}, out *string) (err error) {
 	return err
 }
 
+// RuntimeLogsSince returns only entries whose log_line is strictly
+// greater than since. Used by the hypervisor UI for diff-based live
+// tailing. Caller passes the previous response's Latest as `since`.
+func (r *RPC) RuntimeLogsSince(since *int64, out *RuntimeLogsDelta) (err error) {
+	defer rpcutil.LogCall(r.log, "RuntimeLogsSince", since)(out, &err)
+	d, err := r.visor.RuntimeLogsSince(*since)
+	*out = d
+	return err
+}
+
 // GetConfigPath returns the filesystem path the visor loaded its config from.
 func (r *RPC) GetConfigPath(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetConfigPath", nil)(out, &err)

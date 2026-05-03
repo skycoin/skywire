@@ -124,3 +124,19 @@
   }
 }
 
+
+.logs-dropped-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255, 200, 0, 0.08);
+  border-bottom: 1px solid rgba(255, 200, 0, 0.2);
+  font-size: 12px;
+  opacity: 0.9;
+
+  mat-icon {
+    font-size: 16px;
+  }
+}
+

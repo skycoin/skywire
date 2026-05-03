@@ -666,6 +666,15 @@ func (rc *rpcClient) RuntimeLogs() (string, error) {
 	return logs, err
 }
 
+// RuntimeLogsSince calls RuntimeLogsSince. Pass the previous
+// response's Latest as `since` to receive only newly-arrived
+// entries; pass 0 to fetch the full buffer.
+func (rc *rpcClient) RuntimeLogsSince(since int64) (RuntimeLogsDelta, error) {
+	var delta RuntimeLogsDelta
+	err := rc.Call("RuntimeLogsSince", &since, &delta)
+	return delta, err
+}
+
 // RuntimeStats calls RuntimeStats.
 func (rc *rpcClient) RuntimeStats() (*RuntimeStatsInfo, error) {
 	var stats RuntimeStatsInfo

@@ -106,7 +106,8 @@
       "filter-faltal": "Faltal or more important",
       "filter-panic": "Panic",
       "live-on": "Live (pause)",
-      "live-off": "Paused (live)"
+      "live-off": "Paused (live)",
+      "dropped": "Skipped {{ count }} older entries that aged out of the visor's runtime buffer."
     },
     "statuses": {
       "online": "Online",

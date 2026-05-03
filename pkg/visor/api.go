@@ -43,6 +43,7 @@ type API interface {
 	Reload() error
 	Shutdown() error
 	RuntimeLogs() (string, error)
+	RuntimeLogsSince(since int64) (RuntimeLogsDelta, error)
 	RemoteVisors() ([]string, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error

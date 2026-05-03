@@ -454,6 +454,16 @@ return {
   }
 
   /**
+   * Diff-streaming variant of getRuntimeLogs. Pass the previous
+   * response's `latest` as `since` to receive only newly-arrived
+   * entries; pass 0 for the full buffer. Returns the visor's
+   * RuntimeLogsDelta shape: { entries, latest, dropped }.
+   */
+  getRuntimeLogsSince(nodeKey: string, since: number) {
+    return this.apiService.get(`visors/${nodeKey}/runtime-logs?since=${since}`);
+  }
+
+  /**
    * Removes the rewards address of the node.
    */
   deleteRewardsAddress(nodeKey: string) {
