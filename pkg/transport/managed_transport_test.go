@@ -208,3 +208,54 @@ func TestSetLatencyStatsDropsPartialZero(t *testing.T) {
 	mt.SetLatencyStats(better)
 	require.Equal(t, better, mt.GetLatencyStats())
 }
+
+// A pong arriving long after its ping (delayed packet, suspended host)
+// produces an outlier RTT that would pin Max indefinitely. The
+// upper-bound guard must drop such samples without disturbing the
+// running stats. Live evidence: production transports observed with
+// min/avg ~190ms and max ~35,000ms after a single straggler.
+func TestSetLatencyDropsOutliers(t *testing.T) {
+	mt := &ManagedTransport{}
+	mt.SetLatency(15.5)
+	require.Equal(t, LatencyStats{Min: 15.5, Max: 15.5, Avg: 15.5}, mt.GetLatencyStats())
+
+	// Just above the bound is rejected.
+	mt.SetLatency(MaxReasonableRTTMs + 1)
+	require.Equal(t, LatencyStats{Min: 15.5, Max: 15.5, Avg: 15.5}, mt.GetLatencyStats(),
+		"outlier sample updated the stats")
+
+	// 35-second straggler — the production case.
+	mt.SetLatency(35_000)
+	require.Equal(t, LatencyStats{Min: 15.5, Max: 15.5, Avg: 15.5}, mt.GetLatencyStats(),
+		"35s straggler updated the stats")
+
+	// At the bound — accepted.
+	mt.SetLatency(MaxReasonableRTTMs)
+	require.Equal(t, LatencyStats{Min: 15.5, Max: MaxReasonableRTTMs, Avg: MaxReasonableRTTMs}, mt.GetLatencyStats(),
+		"sample exactly at the bound was rejected")
+}
+
+// SetLatencyStats must reject the entire snapshot when any field
+// exceeds the bound — better to keep the previous good record than
+// allow a 35s max to land alongside otherwise-fine min/avg values.
+func TestSetLatencyStatsDropsOutliers(t *testing.T) {
+	mt := &ManagedTransport{}
+	good := LatencyStats{Min: 100, Max: 250, Avg: 180}
+	mt.SetLatencyStats(good)
+
+	for _, bad := range []LatencyStats{
+		{Min: 100, Max: MaxReasonableRTTMs + 1, Avg: 180},     // straggler max
+		{Min: 100, Max: 35_000, Avg: 180},                     // 35s production case
+		{Min: MaxReasonableRTTMs + 1, Max: 35_000, Avg: 180},  // both at the upper end
+		{Min: 100, Max: 250, Avg: MaxReasonableRTTMs + 0.001}, // avg over the line
+	} {
+		mt.SetLatencyStats(bad)
+		require.Equal(t, good, mt.GetLatencyStats(),
+			"outlier snapshot %+v overwrote good stats", bad)
+	}
+
+	// At the bound — accepted.
+	atBound := LatencyStats{Min: 100, Max: MaxReasonableRTTMs, Avg: 5_000}
+	mt.SetLatencyStats(atBound)
+	require.Equal(t, atBound, mt.GetLatencyStats())
+}

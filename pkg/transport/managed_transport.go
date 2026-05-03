@@ -152,16 +152,29 @@ func (mt *ManagedTransport) GetLatencyStats() LatencyStats {
 	return mt.latencyStats
 }
 
+// MaxReasonableRTTMs is the upper bound for an accepted latency sample.
+// handleTransportPong has no in-flight tracking, so a pong that finally
+// arrives ~30s after its ping (delayed packet, suspended host, NIC
+// queue stall) yields rttMs in the tens of seconds. Min/Avg shrug it
+// off but Max only ever grows, so a single bad sample pins the
+// transport's Max forever (or until the lat:<id> key TTLs out 35 days
+// later). Real intercontinental RTT plus heavy queueing is comfortably
+// under 5s; 30s is a generous floor for "obviously bogus".
+//
+// Exported so router-side latency producers (RouteGroup.MeasureLatency,
+// RouteGroup.handlePongPacket) can apply the same threshold.
+const MaxReasonableRTTMs = 30_000.0
+
 // SetLatency sets the average inter-visor ping latency in milliseconds.
 // For backwards compatibility; prefer SetLatencyStats for full statistics.
 //
-// A non-positive sample is dropped: ns-resolution timestamps can produce
-// rttMs == 0 on a sub-microsecond loopback, and a 0 here would clobber
-// Avg and (via the `latencyMs < Min` branch) Min, leaving Max as the only
-// surviving field. Round-trip time is strictly positive in any real
-// measurement, so treating 0 as "no sample" is correct.
+// Samples outside (0, MaxReasonableRTTMs] are dropped:
+//   - rttMs <= 0 happens with ns-resolution timestamps on sub-µs loopback;
+//     a 0 there clobbers Avg and (via the `latencyMs < Min` branch) Min.
+//   - rttMs > MaxReasonableRTTMs happens when handleTransportPong receives
+//     a long-delayed pong; that 30+ second value would pin Max indefinitely.
 func (mt *ManagedTransport) SetLatency(latencyMs float64) {
-	if latencyMs <= 0 {
+	if latencyMs <= 0 || latencyMs > MaxReasonableRTTMs {
 		return
 	}
 	mt.latencyMx.Lock()
@@ -176,11 +189,15 @@ func (mt *ManagedTransport) SetLatency(latencyMs float64) {
 }
 
 // SetLatencyStats sets the full latency statistics. A snapshot with any
-// non-positive field is rejected: a partial measurement (e.g. all five
-// pings timed out except one that returned in <1µs) would otherwise
-// overwrite a previously good record with a zero in min or max.
+// field outside (0, MaxReasonableRTTMs] is rejected wholesale: a partial
+// measurement (e.g. all five pings timed out except one that returned in
+// <1µs) would otherwise overwrite a previously good record with a zero
+// in min, and a stragglerpong on the upper end would pin Max forever.
 func (mt *ManagedTransport) SetLatencyStats(stats LatencyStats) {
 	if stats.Min <= 0 || stats.Max <= 0 || stats.Avg <= 0 {
+		return
+	}
+	if stats.Min > MaxReasonableRTTMs || stats.Max > MaxReasonableRTTMs || stats.Avg > MaxReasonableRTTMs {
 		return
 	}
 	mt.latencyMx.Lock()
@@ -411,6 +428,14 @@ func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
 	rttMs := float64(time.Now().UnixNano()-sentAt) / 1e6
 	if rttMs <= 0 {
 		return // clock skew, corrupted timestamp, or sub-µs RTT we can't represent
+	}
+	if rttMs > MaxReasonableRTTMs {
+		// Pong arrived long after the ping — packet was delayed in a
+		// queue, the host was suspended, or the kernel held the
+		// timestamp. Accepting this would pin Max forever. SetLatency
+		// re-checks the same bound; mirrored here to avoid the log.
+		mt.log.WithField("rtt_ms", fmt.Sprintf("%.0f", rttMs)).Trace("Dropping outlier transport pong RTT")
+		return
 	}
 	mt.SetLatency(rttMs)
 	mt.log.WithField("rtt_ms", fmt.Sprintf("%.2f", rttMs)).Trace("Transport ping RTT")
