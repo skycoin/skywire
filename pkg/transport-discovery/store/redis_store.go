@@ -28,6 +28,33 @@ type TransportData struct {
 	Bandwidth  uint64 `json:"bandwidth"`   // Total bytes (sent + recv)
 	LastUpdate int64  `json:"last_update"` // Unix timestamp of last update
 }
+
+// LatencyRecord is the durable per-transport latency snapshot persisted at
+// transport-discovery:lat:<id>. It lives independently of the registration
+// blob (TransportData) so a 5-min entry-timeout cycle doesn't erase
+// latency the way it did when the values were stored only inside the tp:
+// key. Bandwidth gets the same independence via bw:daily:* keys; this
+// gives latency the equivalent durability so /metrics doesn't show a
+// transport with bandwidth-today but no latency just because the visor's
+// re-registration window briefly lapsed.
+//
+// Last-writer-wins on the per-transport key: latency is round-trip and
+// both edges observe the same RTT modulo measurement noise, so no merge
+// or per-edge tracking. Min/Max/Avg are stored in microseconds to match
+// the existing TransportData layout. UpdatedAt is informational (lets
+// readers gauge staleness) and not currently surfaced to the API.
+type LatencyRecord struct {
+	Min       int64 `json:"min"` // microseconds
+	Max       int64 `json:"max"` // microseconds
+	Avg       int64 `json:"avg"` // microseconds
+	UpdatedAt int64 `json:"updated_at"`
+}
+
+// latencyTTL is how long a latency record sits in redis without being
+// refreshed before it ages out. Mirrors bw:daily:* retention so the two
+// telemetry types share the same observability window.
+const latencyTTL = 35 * 24 * time.Hour
+
 type redisStore struct {
 	client      *redis.Client
 	ttl         time.Duration
