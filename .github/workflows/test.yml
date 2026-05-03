@@ -9,10 +9,57 @@ name: Test
 
 jobs:
   linux:
-    uses: mrpalide/ci-runner/.github/workflows/skywire-linux-test.yml@main
-    secrets:
-      DOCKER_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_PASSWORD }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Compute dispatch id
+        id: dispatch
+        run: echo "id=skywire-pr-${{ github.event.pull_request.number }}-run-${{ github.run_id }}-${{ github.run_attempt }}" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger remote linux test on mrpalide/ci-runner
+        env:
+          GH_TOKEN: ${{ secrets.CI_RUNNER_DISPATCH_TOKEN }}
+          DISPATCH_ID: ${{ steps.dispatch.outputs.id }}
+        run: |
+          gh api repos/mrpalide/ci-runner/dispatches \
+            --method POST \
+            --input - <<EOF
+          {
+            "event_type": "skywire-linux-test",
+            "client_payload": {
+              "dispatch_id": "${DISPATCH_ID}",
+              "repository": "${{ github.repository }}",
+              "pr_number": ${{ github.event.pull_request.number }},
+              "sha": "${{ github.event.pull_request.head.sha }}"
+            }
+          }
+          EOF
+
+      - name: Locate the remote workflow run
+        id: find
+        env:
+          GH_TOKEN: ${{ secrets.CI_RUNNER_DISPATCH_TOKEN }}
+          DISPATCH_ID: ${{ steps.dispatch.outputs.id }}
+        run: |
+          for i in $(seq 1 60); do
+            RUN_ID=$(gh api -X GET repos/mrpalide/ci-runner/actions/runs \
+              -F event=repository_dispatch -F per_page=30 \
+              --jq ".workflow_runs[] | select(.display_title | contains(\"${DISPATCH_ID}\")) | .id" \
+              | head -n 1)
+            if [ -n "$RUN_ID" ]; then
+              echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+              echo "Found remote run: https://github.com/mrpalide/ci-runner/actions/runs/$RUN_ID"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Timed out waiting for remote workflow run to appear"
+          exit 1
+
+      - name: Wait for remote run to finish
+        env:
+          GH_TOKEN: ${{ secrets.CI_RUNNER_DISPATCH_TOKEN }}
+        run: gh run watch ${{ steps.find.outputs.run_id }} --repo mrpalide/ci-runner --exit-status
 
   darwin:
     runs-on: macos-latest
