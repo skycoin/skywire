@@ -1,0 +1,93 @@
+.skychat-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.sc-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 6px 4px;
+
+  .status-text { font-weight: 500; }
+  .error { opacity: 0.85; color: rgba(229, 57, 53, 0.9); }
+  .hint { opacity: 0.6; }
+
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .dot-green { background: #4caf50; }
+  .dot-outline-gray { border: 1px solid rgba(255, 255, 255, 0.4); }
+}
+
+.sc-log {
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 8px;
+  height: 50vh;
+  min-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sc-empty {
+  margin: auto;
+  opacity: 0.5;
+  font-size: 13px;
+}
+
+.sc-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  max-width: 80%;
+
+  &.in { align-self: flex-start; }
+  &.out {
+    align-self: flex-end;
+    background: rgba(33, 150, 243, 0.18);
+  }
+}
+
+.sc-msg-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 11px;
+  opacity: 0.7;
+
+  .peer {
+    cursor: pointer;
+    text-decoration: underline dotted transparent;
+    &:hover { text-decoration-color: currentColor; }
+  }
+}
+
+.sc-msg-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+}
+
+.sc-composer {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+
+  .field-pk { flex: 1 1 360px; }
+  .field-sm { flex: 0 1 130px; }
+  .field-msg { flex: 1 1 100%; }
+
+  button { white-space: nowrap; }
+}

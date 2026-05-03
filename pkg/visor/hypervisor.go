@@ -475,6 +475,14 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/skynet-forwards", hv.getSkynetForwards())
 				r.Post("/visors/{pk}/skynet-forwards/connect", hv.postSkynetConnect())
 				r.Post("/visors/{pk}/skynet-forwards/disconnect", hv.postSkynetDisconnect())
+
+				// Skychat password management.
+				r.Get("/visors/{pk}/skychat/password", hv.getSkychatPassword())
+				r.Put("/visors/{pk}/skychat/password", hv.putSkychatPassword())
+				r.Delete("/visors/{pk}/skychat/password", hv.deleteSkychatPassword())
+				// Skychat reverse-proxy: forward all calls under
+				// /skychat/proxy/* to the local skychat HTTP server.
+				r.HandleFunc("/visors/{pk}/skychat/proxy/*", hv.skychatProxyHandler())
 			})
 		})
 

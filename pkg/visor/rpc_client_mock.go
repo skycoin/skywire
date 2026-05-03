@@ -802,6 +802,18 @@ func (mc *mockRPCClient) NetworkView() (*NetworkViewResponse, error) {
 	return &NetworkViewResponse{}, nil
 }
 
+// SkychatPasswordIsSet implements API.
+func (mc *mockRPCClient) SkychatPasswordIsSet() (bool, error) { return false, nil }
+
+// SetSkychatPassword implements API.
+func (mc *mockRPCClient) SetSkychatPassword(string, string) error { return nil }
+
+// ClearSkychatPassword implements API.
+func (mc *mockRPCClient) ClearSkychatPassword(string) error { return nil }
+
+// SkychatLocalAddr implements API.
+func (mc *mockRPCClient) SkychatLocalAddr() (string, error) { return "127.0.0.1:8001", nil }
+
 // RuntimeLogs implements API.
 func (mc *mockRPCClient) RuntimeLogs() (string, error) {
 	return "", nil

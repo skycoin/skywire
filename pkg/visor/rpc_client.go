@@ -693,6 +693,37 @@ func (rc *rpcClient) NetworkView() (*NetworkViewResponse, error) {
 	return &resp, nil
 }
 
+// SkychatPasswordIsSet calls SkychatPasswordIsSet.
+func (rc *rpcClient) SkychatPasswordIsSet() (bool, error) {
+	var out bool
+	if err := rc.Call("SkychatPasswordIsSet", &struct{}{}, &out); err != nil {
+		return false, err
+	}
+	return out, nil
+}
+
+// SetSkychatPassword calls SetSkychatPassword.
+func (rc *rpcClient) SetSkychatPassword(oldPassword, newPassword string) error {
+	return rc.Call("SetSkychatPassword", &SkychatPasswordChangeIn{
+		OldPassword: oldPassword,
+		NewPassword: newPassword,
+	}, &struct{}{})
+}
+
+// ClearSkychatPassword calls ClearSkychatPassword.
+func (rc *rpcClient) ClearSkychatPassword(oldPassword string) error {
+	return rc.Call("ClearSkychatPassword", &oldPassword, &struct{}{})
+}
+
+// SkychatLocalAddr calls SkychatLocalAddr.
+func (rc *rpcClient) SkychatLocalAddr() (string, error) {
+	var addr string
+	if err := rc.Call("SkychatLocalAddr", &struct{}{}, &addr); err != nil {
+		return "", err
+	}
+	return addr, nil
+}
+
 // RuntimeStats calls RuntimeStats.
 func (rc *rpcClient) RuntimeStats() (*RuntimeStatsInfo, error) {
 	var stats RuntimeStatsInfo

@@ -84,8 +84,13 @@ const (
 	// SkychatPort is the dmsg port used by skychat
 	SkychatPort uint16 = 1
 
-	// SkychatAddr is the non-dmsg port used to access the skychat app on localhost
-	SkychatAddr = ":8001"
+	// SkychatAddr is the non-dmsg address skychat binds for its HTTP
+	// UI. Localhost-only by default since skychat is unauthenticated
+	// out of the box; the operator can opt into wider exposure with
+	// "*:8001" (the docker integration configs do this for inter-
+	// container reachability), and optional password protection is
+	// available via the hypervisor's Skychat password setting.
+	SkychatAddr = "127.0.0.1:8001"
 
 	// SkysocksName is the name of the skysocks app
 	SkysocksName = "skysocks"

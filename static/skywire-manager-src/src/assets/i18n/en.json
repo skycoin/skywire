@@ -235,7 +235,8 @@
       "routing": "Routing",
       "rewards": "Rewards",
       "skynet": "Skynet",
-      "resources": "Resources"
+      "resources": "Resources",
+      "chat": "Chat"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
@@ -337,6 +338,18 @@
     "latency": "Latency",
     "version": "Version",
     "endpoint": "Endpoint"
+  },
+
+  "skychat": {
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "no-history": "history is disabled (--persist not set)",
+    "empty": "No messages yet — incoming chats from connected peers will appear here.",
+    "to": "Recipient PK",
+    "network": "Network",
+    "message": "Message",
+    "placeholder": "Type a message; Ctrl+Enter to send",
+    "send": "Send"
   },
 
   "network-view": {

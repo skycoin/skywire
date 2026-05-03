@@ -73,6 +73,7 @@ import { TruncatedTextComponent } from './components/layout/truncated-text/trunc
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { ResourceMonitorComponent } from './components/pages/node/resource-monitor/resource-monitor.component';
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
+import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
@@ -167,6 +168,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         NodeInfoContentComponent,
         ResourceMonitorComponent,
         NodeResourcesComponent,
+        SkychatComponent,
         NetworkViewComponent,
         NodeInfoComponent,
         SelectOptionComponent,

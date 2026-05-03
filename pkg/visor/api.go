@@ -46,6 +46,10 @@ type API interface {
 	RuntimeLogsSince(since int64) (RuntimeLogsDelta, error)
 	HostStats() (*HostStatsInfo, error)
 	NetworkView() (*NetworkViewResponse, error)
+	SkychatPasswordIsSet() (bool, error)
+	SetSkychatPassword(oldPassword, newPassword string) error
+	ClearSkychatPassword(oldPassword string) error
+	SkychatLocalAddr() (string, error)
 	RemoteVisors() ([]string, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error
