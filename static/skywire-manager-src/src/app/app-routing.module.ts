@@ -12,6 +12,9 @@ import { AppsComponent } from './components/pages/node/apps/apps.component';
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
 import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
 import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.component';
+import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
+import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
+import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { NodeRewardsComponent } from './components/pages/node/rewards/node-rewards.component';
@@ -131,6 +134,18 @@ const routes: Routes = [
           {
             path: 'bandwidth',
             component: BandwidthComponent
+          },
+          {
+            path: 'terminal',
+            component: TerminalComponent
+          },
+          {
+            path: 'web-proxy',
+            component: WebProxyComponent
+          },
+          {
+            path: 'logs',
+            component: LogsComponent
           },
           {
             path: 'dmsg',

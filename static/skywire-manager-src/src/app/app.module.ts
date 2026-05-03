@@ -75,6 +75,9 @@ import { ResourceMonitorComponent } from './components/pages/node/resource-monit
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
 import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
 import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.component';
+import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
+import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
+import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
 import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
@@ -173,6 +176,9 @@ const globalRippleConfig: RippleGlobalOptions = {
         NodeResourcesComponent,
         SkychatComponent,
         BandwidthComponent,
+        TerminalComponent,
+        WebProxyComponent,
+        LogsComponent,
         NetworkViewComponent,
         MultiVisorResourcesComponent,
         NetworkTransportsComponent,

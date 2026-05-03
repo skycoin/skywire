@@ -240,7 +240,10 @@
       "bandwidth": "Bandwidth",
       "rewards": "Rewards",
       "skynet": "Skynet",
+      "web-proxy": "Web Proxy",
       "resources": "Resources",
+      "terminal": "Terminal",
+      "logs": "Logs",
       "chat": "Skychat",
       "dmsg": "DMSG"
     },
@@ -400,6 +403,36 @@
     "rsn-uptime": "Uptime",
     "rsn-failure-reasons": "Top failure reasons",
     "rsn-error": "Unreachable"
+  },
+
+  "terminal": {
+    "help": "Live shell on the visor (dmsgpty). Ctrl+D or type \"exit\" to close.",
+    "open-fullscreen": "Open in new window"
+  },
+
+  "web-proxy": {
+    "title": "Resolving Proxy",
+    "help": "Browse .skynet and .dmsg domains. Optionally route all other traffic through an upstream SOCKS5 proxy (e.g. skysocks).",
+    "loading": "Reading proxy state…",
+    "resolver": "Resolver",
+    "running": "Running",
+    "socks-addr": "SOCKS",
+    "upstream": "Upstream",
+    "enable": "Enable resolving proxy (.skynet + .dmsg)",
+    "upstream-label": "Upstream SOCKS5 (e.g. 127.0.0.1:1080)",
+    "set": "Set",
+    "refresh": "Refresh"
+  },
+
+  "logs": {
+    "loading": "Loading runtime logs…",
+    "empty": "No log entries match the current filter.",
+    "filter": "Filter",
+    "pause": "Pause",
+    "resume": "Resume",
+    "open-raw": "Open raw logs",
+    "view-rest": "View all {{number}} entries in raw format >",
+    "dropped": "Skipped {{count}} older entries that aged out of the visor's runtime buffer."
   },
 
   "bandwidth": {

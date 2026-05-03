@@ -214,7 +214,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/bandwidth') ||
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
+      this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/resources') ||
+      this.lastUrl.includes('/terminal') ||
+      this.lastUrl.includes('/logs') ||
       this.lastUrl.includes('/chat') ||
       this.lastUrl.includes('/dmsg') ||
       (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
@@ -261,9 +264,24 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'skynet'] : null,
         },
         {
+          icon: 'language',
+          label: 'node.tabs.web-proxy',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'web-proxy'] : null,
+        },
+        {
           icon: 'memory',
           label: 'node.tabs.resources',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
+        },
+        {
+          icon: 'terminal',
+          label: 'node.tabs.terminal',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'terminal'] : null,
+        },
+        {
+          icon: 'description',
+          label: 'node.tabs.logs',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'logs'] : null,
         },
         {
           icon: 'forum',
@@ -295,17 +313,29 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/rewards')) {
         this.selectedTabIndex = 5;
       }
+      // /skynet matches BOTH the skynet tab and would otherwise also
+      // match a hypothetical /skynet-foo path; check after web-proxy
+      // since /web-proxy must take precedence on its own URL.
       if (this.lastUrl.includes('/skynet')) {
         this.selectedTabIndex = 6;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/web-proxy')) {
         this.selectedTabIndex = 7;
       }
-      if (this.lastUrl.includes('/chat')) {
+      if (this.lastUrl.includes('/resources')) {
         this.selectedTabIndex = 8;
       }
-      if (this.lastUrl.includes('/dmsg')) {
+      if (this.lastUrl.includes('/terminal')) {
         this.selectedTabIndex = 9;
+      }
+      if (this.lastUrl.includes('/logs')) {
+        this.selectedTabIndex = 10;
+      }
+      if (this.lastUrl.includes('/chat')) {
+        this.selectedTabIndex = 11;
+      }
+      if (this.lastUrl.includes('/dmsg')) {
+        this.selectedTabIndex = 12;
       }
 
       // Inform that the current subpage is not for showing a full list.
