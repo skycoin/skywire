@@ -76,27 +76,42 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
   }
 
   ngOnInit() {
-    // Poll every 30s — the visor caches the aggregation for 30s,
-    // so this is roughly aligned with refresh granularity.
-    this.sub = interval(30000)
+    // Poll every 5min — the visor caches the aggregation for 5min,
+    // so anything finer-grained just hits the cache. The Refresh
+    // button below the table forces a fresh fetch when the user
+    // wants a current sample on demand.
+    this.sub = interval(300000)
       .pipe(
         startWith(0),
         switchMap(() => this.nodeService.getNetworkView()),
       )
       .subscribe({
-        next: (resp: NetworkResponse) => {
-          this.entries = resp?.entries || [];
-          this.loading = false;
-          this.error = null;
-          this.lastUpdated = new Date();
-          this.applyFilters();
-        },
+        next: (resp: NetworkResponse) => this.onResponse(resp),
         error: (err) => {
           this.loading = false;
           this.error = err?.message || 'Failed to fetch network view';
         },
       });
     return super.ngOnInit();
+  }
+
+  refreshNow() {
+    this.loading = this.entries.length === 0;
+    this.nodeService.getNetworkView(true).subscribe({
+      next: (resp: NetworkResponse) => this.onResponse(resp),
+      error: (err) => {
+        this.loading = false;
+        this.error = err?.message || 'Failed to fetch network view';
+      },
+    });
+  }
+
+  private onResponse(resp: NetworkResponse) {
+    this.entries = resp?.entries || [];
+    this.loading = false;
+    this.error = null;
+    this.lastUpdated = new Date();
+    this.applyFilters();
   }
 
   ngOnDestroy(): void {

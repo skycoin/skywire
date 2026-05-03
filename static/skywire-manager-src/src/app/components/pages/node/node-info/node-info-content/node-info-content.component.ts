@@ -1,5 +1,6 @@
 import { Component, Input, OnDestroy } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
+import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
 
 import { Node } from '../../../../../app.datatypes';
@@ -7,15 +8,13 @@ import { EditLabelComponent } from 'src/app/components/layout/edit-label/edit-la
 import { NodeComponent } from '../../node.component';
 import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
-import { KnownHealthStatuses } from 'src/app/services/node.service';
-import { RouterConfigComponent, RouterConfigParams } from './router-config/router-config.component';
-import GeneralUtils from 'src/app/utils/generalUtils';
+import { NodeService } from 'src/app/services/node.service';
 import { TransportService } from 'src/app/services/transport.service';
+import { RouteService } from 'src/app/services/route.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { ApiService } from 'src/app/services/api.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
-import { RewardsAddressComponent, RewardsAddressConfigParams } from './rewards-address-config/rewards-address-config.component';
 import { TrafficData } from 'src/app/services/single-node-data.service';
 
 /**
@@ -32,21 +31,6 @@ export class NodeInfoContentComponent implements OnDestroy {
     this.node = val;
     this.timeOnline = TimeUtils.getElapsedTime(val.secondsOnline);
     this.transportStats = this.computeTransportStats();
-
-    if (val.health && val.health.servicesHealth === KnownHealthStatuses.Healthy) {
-      this.nodeHealthText = 'node.statuses.online';
-      this.nodeHealthClass = 'dot-green';
-    } else if (val.health && val.health.servicesHealth === KnownHealthStatuses.Unhealthy) {
-      this.nodeHealthText = 'node.statuses.partially-online';
-      this.nodeHealthClass = 'dot-yellow blinking';
-    } else if (val.health && val.health.servicesHealth === KnownHealthStatuses.Connecting) {
-      this.nodeHealthText = 'node.statuses.connecting';
-      this.nodeHealthClass = 'dot-outline-gray';
-    } else {
-      this.nodeHealthText = 'node.statuses.unknown';
-      this.nodeHealthClass = 'dot-outline-gray';
-    }
-
     // Fetch ports for this visor.
     this.fetchPorts(val.localPk);
     // Fetch public visor status.
@@ -67,16 +51,29 @@ export class NodeInfoContentComponent implements OnDestroy {
   node: Node;
   timeOnline: ElapsedTime;
   transportStats: { total: number, byType: { type: string, count: number }[] } = { total: 0, byType: [] };
-  nodeHealthClass: string;
-  nodeHealthText: string;
   ports: { name: string, value: string }[] = [];
   showPorts = false;
   isPublic = false;
-  showRawConfig = false;
   rawConfig = '';
+
+  // Inline reward-address editor (replaces RewardsAddressComponent dialog).
+  showRewardForm = false;
+  rewardForm: UntypedFormGroup;
+  showRewardRules = false;
+  rewardRules: string | null = null;
+
+  // Inline router-config editor (replaces RouterConfigComponent dialog).
+  showRouterForm = false;
+  routerForm: UntypedFormGroup;
+
+  // Collapsible Runtime Configuration section (matches Ports pattern).
+  showConfigSection = false;
 
   private autoconnectSubscription: Subscription;
   private publicToggleSubscription: Subscription;
+  private saveRewardsSubscription: Subscription;
+  private saveRouterSubscription: Subscription;
+  private rewardRulesSubscription: Subscription;
 
   constructor(
     private dialog: MatDialog,
@@ -84,7 +81,21 @@ export class NodeInfoContentComponent implements OnDestroy {
     private transportService: TransportService,
     private snackbarService: SnackbarService,
     private apiService: ApiService,
-  ) { }
+    private formBuilder: UntypedFormBuilder,
+    private nodeService: NodeService,
+    private routeService: RouteService,
+  ) {
+    this.rewardForm = this.formBuilder.group({
+      address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
+    });
+    this.routerForm = this.formBuilder.group({
+      min: [1, Validators.compose([
+        Validators.required,
+        Validators.maxLength(3),
+        Validators.pattern('^[0-9]+$'),
+      ])],
+    });
+  }
 
   ngOnDestroy() {
     if (this.autoconnectSubscription) {
@@ -93,28 +104,15 @@ export class NodeInfoContentComponent implements OnDestroy {
     if (this.publicToggleSubscription) {
       this.publicToggleSubscription.unsubscribe();
     }
-  }
-
-  // Map a per-subsystem health value string to a CSS dot class.
-  subHealthClass(v: string | undefined): string {
-    if (v === KnownHealthStatuses.Healthy) {
-      return 'dot-green';
+    if (this.saveRewardsSubscription) {
+      this.saveRewardsSubscription.unsubscribe();
     }
-    if (v === KnownHealthStatuses.Unhealthy) {
-      return 'dot-yellow blinking';
+    if (this.saveRouterSubscription) {
+      this.saveRouterSubscription.unsubscribe();
     }
-    return 'dot-outline-gray';
-  }
-
-  // Map a per-subsystem health value string to its translation key.
-  subHealthText(v: string | undefined): string {
-    if (v === KnownHealthStatuses.Healthy) {
-      return 'node.statuses.online';
+    if (this.rewardRulesSubscription) {
+      this.rewardRulesSubscription.unsubscribe();
     }
-    if (v === KnownHealthStatuses.Unhealthy) {
-      return 'node.statuses.partially-online';
-    }
-    return 'node.statuses.connecting';
   }
 
   showEditLabelDialog() {
@@ -134,22 +132,74 @@ export class NodeInfoContentComponent implements OnDestroy {
     });
   }
 
-  // Opens the modal window for changing the rewards address.
-  changeRewardsAddressConfig() {
-    const params: RewardsAddressConfigParams = {nodePk: this.node.localPk, currentAddress: this.node.rewardsAddress};
-    RewardsAddressComponent.openDialog(this.dialog, params).afterClosed().subscribe((changed: boolean) => {
-      if (changed) {
+  /** Toggle the inline reward-address editor; pre-fill with current value. */
+  toggleRewardForm() {
+    this.showRewardForm = !this.showRewardForm;
+    if (this.showRewardForm) {
+      this.rewardForm.get('address').setValue(this.node.rewardsAddress || '');
+    }
+  }
+
+  /** Submit the inline reward-address form. Empty address removes
+   *  the registration (replicates the dialog's empty-warning path
+   *  with a friendlier inline confirm prompt). */
+  submitRewardAddress() {
+    if (!this.rewardForm.valid) {
+      return;
+    }
+    const newAddr = (this.rewardForm.get('address').value || '').trim();
+    const op = newAddr
+      ? this.nodeService.setRewardsAddress(this.node.localPk, newAddr)
+      : this.nodeService.deleteRewardsAddress(this.node.localPk);
+    this.saveRewardsSubscription = op.subscribe({
+      next: () => {
+        this.snackbarService.showDone('rewards-address-config.done');
+        this.showRewardForm = false;
         NodeComponent.refreshCurrentDisplayedData();
-      }
+      },
+      error: (err: OperationError) => {
+        err = processServiceError(err);
+        this.snackbarService.showError(err);
+      },
     });
   }
 
-  changeRouterConfig() {
-    const params: RouterConfigParams = {nodePk: this.node.localPk, minHops: this.node.minHops};
-    RouterConfigComponent.openDialog(this.dialog, params).afterClosed().subscribe((changed: boolean) => {
-      if (changed) {
+  /** Lazy-load the embedded mainnet rules markdown the first time
+   *  the user expands the rules block; subsequent toggles just hide/
+   *  show the cached text. */
+  toggleRewardRules() {
+    this.showRewardRules = !this.showRewardRules;
+    if (this.showRewardRules && this.rewardRules === null) {
+      this.rewardRulesSubscription = this.nodeService.getRewardRules().subscribe(
+        (text: string) => { this.rewardRules = text || ''; },
+        () => { this.rewardRules = ''; this.snackbarService.showError('common.loading-error'); },
+      );
+    }
+  }
+
+  /** Toggle the inline router-config editor; pre-fill with current value. */
+  toggleRouterForm() {
+    this.showRouterForm = !this.showRouterForm;
+    if (this.showRouterForm) {
+      this.routerForm.get('min').setValue(this.node.minHops);
+    }
+  }
+
+  submitRouterConfig() {
+    if (!this.routerForm.valid) {
+      return;
+    }
+    const min = parseInt(this.routerForm.get('min').value, 10);
+    this.saveRouterSubscription = this.routeService.setMinHops(this.node.localPk, min).subscribe({
+      next: () => {
+        this.snackbarService.showDone('router-config.done');
+        this.showRouterForm = false;
         NodeComponent.refreshCurrentDisplayedData();
-      }
+      },
+      error: (err: OperationError) => {
+        err = processServiceError(err);
+        this.snackbarService.showError(err);
+      },
     });
   }
 
@@ -245,27 +295,16 @@ return { type: type, count: count }
     });
   }
 
-  /**
-   * Fetches and displays the runtime config.
-   */
-  viewConfig() {
-    if (this.showRawConfig) {
-      this.showRawConfig = false;
-      return;
+  /** Collapsible config section toggle. Fetches the runtime config
+   *  the first time the section is opened, then caches it. */
+  onConfigToggle() {
+    this.showConfigSection = !this.showConfigSection;
+    if (this.showConfigSection && !this.rawConfig) {
+      this.apiService.get(`visors/${this.node.localPk}/runtime-config`).subscribe(
+        (result: any) => { this.rawConfig = JSON.stringify(result, null, 2); },
+        () => { this.snackbarService.showError('common.loading-error'); },
+      );
     }
-    this.apiService.get(`visors/${this.node.localPk}/runtime-config`).subscribe((result: any) => {
-      this.rawConfig = JSON.stringify(result, null, 2);
-      this.showRawConfig = true;
-    }, () => {
-      this.snackbarService.showError('common.loading-error');
-    });
-  }
-
-  /**
-   * Opens the transport visualizer in a new window.
-   */
-  openTpViz() {
-    window.open('/tp-viz/', '_blank');
   }
 
   /**

@@ -2,6 +2,7 @@
   "common": {
     "save": "Save",
     "cancel": "Cancel",
+    "loading": "Loading…",
     "downloaded": "Downloaded",
     "uploaded": "Uploaded",
     "loading-error": "There was an error getting the data. Retrying...",
@@ -173,7 +174,8 @@
         "not-registered-info": "You have not specified a Skycoin address for receiving rewards for this visor. If you want to register the visor for receiving rewards, press the \"Set address\" button and set a Skycoin address.",
         "open-in-explorer": "Open in blockchain explorer",
         "set-address-button": "Set address",
-        "change-address-button": "Change address"
+        "change-address-button": "Change address",
+        "show-rules": "Reward rules (embedded mainnet_rules.md)"
       },
       "transports-info": {
         "title": "Transport",
@@ -232,7 +234,8 @@
       "apps": "Apps",
       "routing": "Routing",
       "rewards": "Rewards",
-      "skynet": "Skynet"
+      "skynet": "Skynet",
+      "resources": "Resources"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
@@ -345,6 +348,7 @@
     "version": "Version",
     "min-transports": "Min tps",
     "online-only": "Online only",
+    "refresh": "Refresh now",
     "col": {
       "pk": "PK",
       "country": "Country",

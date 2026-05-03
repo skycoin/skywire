@@ -45,9 +45,11 @@ type NetworkViewResponse struct {
 }
 
 // networkViewCacheTTL is the freshness window for the combined
-// fetch. SD/TPD/UT update at the 30s+ scale, so re-aggregating any
-// faster wastes work.
-const networkViewCacheTTL = 30 * time.Second
+// fetch. SD/TPD/UT update at the 30s+ scale; 5 minutes is plenty
+// for "is the network healthy" browsing. The UI surfaces a manual
+// refresh button (forwarded to NetworkViewRefresh below) for
+// callers who need a current sample on demand.
+const networkViewCacheTTL = 5 * time.Minute
 
 type networkViewCache struct {
 	mu       sync.Mutex
@@ -64,10 +66,20 @@ var networkViewCacheInstance = &networkViewCache{}
 // services were unreachable); today the underlying compute never
 // returns an error — partial fetches yield partial tables.
 func (v *Visor) NetworkView() (*NetworkViewResponse, error) {
+	return v.networkView(false)
+}
+
+// NetworkViewRefresh forces re-aggregation regardless of cache age.
+// Used by the UI's manual-refresh button.
+func (v *Visor) NetworkViewRefresh() (*NetworkViewResponse, error) {
+	return v.networkView(true)
+}
+
+func (v *Visor) networkView(forceRefresh bool) (*NetworkViewResponse, error) {
 	networkViewCacheInstance.mu.Lock()
 	defer networkViewCacheInstance.mu.Unlock()
 
-	if networkViewCacheInstance.response != nil &&
+	if !forceRefresh && networkViewCacheInstance.response != nil &&
 		time.Since(networkViewCacheInstance.cachedAt) < networkViewCacheTTL {
 		return networkViewCacheInstance.response, nil
 	}

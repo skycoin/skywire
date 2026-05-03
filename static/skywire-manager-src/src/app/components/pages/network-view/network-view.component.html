@@ -40,6 +40,9 @@
                 {{ 'network-view.last-updated' | translate }}: {{ lastUpdated | date:'mediumTime' }}
               </div>
             }
+            <button mat-icon-button class="nv-refresh-btn" (click)="refreshNow()" [matTooltip]="'network-view.refresh' | translate">
+              <mat-icon [inline]="true">refresh</mat-icon>
+            </button>
           </div>
 
           <!-- Inline filter bar (no dialog) -->

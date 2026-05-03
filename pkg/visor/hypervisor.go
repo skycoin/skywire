@@ -414,6 +414,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors-summary", hv.getAllVisorsSummary())
 				r.Get("/network-view", hv.getNetworkView())
+				r.Get("/reward-rules", hv.getRewardRules())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
 				r.Get("/visors/{pk}/health", hv.getHealth())

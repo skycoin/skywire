@@ -8,3 +8,13 @@
   [showShortList]="true"
   [nodePK]="nodePK">
 </app-route-list>
+
+<!-- Traffic data — moved here from the right-bar on the visor
+     detail page so it sits with the rest of the routing surface
+     it actually summarizes. -->
+<div class="rounded-elevated-box mt-3 traffic-box">
+  <div class="box-internal-container">
+    <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
+    <app-charts [trafficData]="trafficData" class="d-flex flex-column justify-content-end mt-3"></app-charts>
+  </div>
+</div>

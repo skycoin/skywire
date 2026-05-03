@@ -81,6 +81,10 @@ const WINDOW = 60; // samples kept (≈ 60s at 1s polling)
 })
 export class ResourceMonitorComponent implements OnInit, OnDestroy {
   @Input() nodeKey: string;
+  /** When true, the panel starts expanded + polling on init. Used
+   *  by the dedicated Resources tab; right-bar embeds keep the
+   *  collapsed-by-default behavior. */
+  @Input() openByDefault = false;
 
   // UI state
   expanded = false;
@@ -122,7 +126,10 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
-    // Start polling lazily — the panel is collapsed by default.
+    if (this.openByDefault) {
+      this.expanded = true;
+      this.startPolling();
+    }
   }
 
   ngOnDestroy() {

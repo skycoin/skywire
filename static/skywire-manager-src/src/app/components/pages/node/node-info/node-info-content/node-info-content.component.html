@@ -116,17 +116,33 @@
           {{ 'node.details.rewards-info.not-registered' | translate }}
           <mat-icon [inline]="true" [matTooltip]="'node.details.rewards-info.not-registered-info' | translate">info</mat-icon>
         }
+        <button mat-icon-button class="inline-edit-btn" (click)="toggleRewardForm()" [matTooltip]="(node.rewardsAddress ? 'node.details.rewards-info.change-address-button' : 'node.details.rewards-info.set-address-button') | translate">
+          <mat-icon [inline]="true">{{ showRewardForm ? 'close' : 'edit' }}</mat-icon>
+        </button>
       </span>
-      <div class="config-button-container">
-        <app-button color="primary" (action)="changeRewardsAddressConfig()" [forDarkBackground]="true">
-          @if (node.rewardsAddress) {
-            {{ 'node.details.rewards-info.change-address-button' | translate }}
-          }
-          @if (!node.rewardsAddress) {
-            {{ 'node.details.rewards-info.set-address-button' | translate }}
-          }
-        </app-button>
-      </div>
+      @if (showRewardForm) {
+        <form [formGroup]="rewardForm" (ngSubmit)="submitRewardAddress()" class="inline-form">
+          <mat-form-field appearance="outline" class="inline-form-field">
+            <mat-label>{{ 'node.details.rewards-info.rewards-address' | translate }}</mat-label>
+            <input matInput formControlName="address" maxlength="112" placeholder="2…">
+          </mat-form-field>
+          <div class="inline-form-actions">
+            <button mat-raised-button color="primary" type="submit" [disabled]="!rewardForm.valid">
+              {{ 'common.save' | translate }}
+            </button>
+            <button mat-button type="button" (click)="toggleRewardForm()">
+              {{ 'common.cancel' | translate }}
+            </button>
+          </div>
+        </form>
+      }
+      <span class="info-line collapsible-link" (click)="toggleRewardRules()">
+        <mat-icon [inline]="true">{{ showRewardRules ? 'expand_more' : 'chevron_right' }}</mat-icon>
+        {{ 'node.details.rewards-info.show-rules' | translate }}
+      </span>
+      @if (showRewardRules) {
+        <pre class="reward-rules">{{ rewardRules || ('common.loading' | translate) }}</pre>
+      }
     </div>
     <div class="separator"></div>
     <!-- Transports info section. -->
@@ -145,26 +161,16 @@
         }
       </span>
     </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.transports-info.autoconnect' | translate }} </span>
-      {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'enabled' : 'disabled')) | translate }}
-      <mat-icon [inline]="true" [matTooltip]="'node.details.transports-info.autoconnect-info' | translate">info</mat-icon>
+    <span class="info-line toggle-line">
+      <span class="title">{{ 'node.details.transports-info.autoconnect' | translate }}</span>
+      <mat-slide-toggle color="primary" [checked]="!!node.autoconnectTransports" (change)="changeTransportsConfig()"></mat-slide-toggle>
+      <mat-icon [inline]="true" class="info-tip" [matTooltip]="'node.details.transports-info.autoconnect-info' | translate">info</mat-icon>
     </span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="changeTransportsConfig()" [forDarkBackground]="true">
-        {{ ('node.details.transports-info.' + (node.autoconnectTransports ? 'disable' : 'enable') + '-button') | translate }}
-      </app-button>
-    </div>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.transports-info.is-public' | translate }} </span>
-      {{ ('node.details.transports-info.public-' + (isPublic ? 'enabled' : 'disabled')) | translate }}
-      <mat-icon [inline]="true" [matTooltip]="'node.details.transports-info.is-public-info' | translate">info</mat-icon>
+    <span class="info-line toggle-line">
+      <span class="title">{{ 'node.details.transports-info.is-public' | translate }}</span>
+      <mat-slide-toggle color="primary" [checked]="!!isPublic" (change)="changePublicConfig()"></mat-slide-toggle>
+      <mat-icon [inline]="true" class="info-tip" [matTooltip]="'node.details.transports-info.is-public-info' | translate">info</mat-icon>
     </span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="changePublicConfig()" [forDarkBackground]="true">
-        {{ ('node.details.transports-info.public-' + (isPublic ? 'disable' : 'enable') + '-button') | translate }}
-      </app-button>
-    </div>
   </div>
   <div class="separator"></div>
   <!-- Router info section. -->
@@ -173,42 +179,25 @@
     <span class="info-line">
       <span class="title">{{ 'node.details.router-info.min-hops' | translate }} </span>
       {{ node.minHops }}
+      <button mat-icon-button class="inline-edit-btn" (click)="toggleRouterForm()">
+        <mat-icon [inline]="true">{{ showRouterForm ? 'close' : 'edit' }}</mat-icon>
+      </button>
     </span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="changeRouterConfig()" [forDarkBackground]="true">
-        {{ 'node.details.router-info.change-config-button' | translate }}
-      </app-button>
-    </div>
-  </div>
-  <div class="separator"></div>
-  <!-- Health info section. -->
-  <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.node-health.title' | translate }} </span>
-    <span class="info-line">
-      <span class="title">{{ 'node.details.node-health.services' | translate }}</span>
-      <i [class]="nodeHealthClass"></i>
-      {{ nodeHealthText | translate }}
-    </span>
-    @if (node.health?.uptimeTrackerHealth) {
-      <span class="info-line sub-health">
-        <span class="title">{{ 'node.details.node-health.uptime-tracker' | translate }}</span>
-        <i [class]="subHealthClass(node.health?.uptimeTrackerHealth)"></i>
-        {{ subHealthText(node.health?.uptimeTrackerHealth) | translate }}
-      </span>
-    }
-    @if (node.health?.autoconnectHealth) {
-      <span class="info-line sub-health">
-        <span class="title">{{ 'node.details.node-health.autoconnect' | translate }}</span>
-        <i [class]="subHealthClass(node.health?.autoconnectHealth)"></i>
-        {{ subHealthText(node.health?.autoconnectHealth) | translate }}
-      </span>
-    }
-    @if (node.health?.transportabilityHealth) {
-      <span class="info-line sub-health">
-        <span class="title">{{ 'node.details.node-health.transportability' | translate }}</span>
-        <i [class]="subHealthClass(node.health?.transportabilityHealth)"></i>
-        {{ subHealthText(node.health?.transportabilityHealth) | translate }}
-      </span>
+    @if (showRouterForm) {
+      <form [formGroup]="routerForm" (ngSubmit)="submitRouterConfig()" class="inline-form">
+        <mat-form-field appearance="outline" class="inline-form-field-sm">
+          <mat-label>{{ 'node.details.router-info.min-hops' | translate }}</mat-label>
+          <input matInput type="number" formControlName="min" min="0" max="999">
+        </mat-form-field>
+        <div class="inline-form-actions">
+          <button mat-raised-button color="primary" type="submit" [disabled]="!routerForm.valid">
+            {{ 'common.save' | translate }}
+          </button>
+          <button mat-button type="button" (click)="toggleRouterForm()">
+            {{ 'common.cancel' | translate }}
+          </button>
+        </div>
+      </form>
     }
   </div>
   <!-- Ports section (collapsible). -->
@@ -230,38 +219,16 @@
       }
     </div>
   }
-  <!-- Runtime config section. -->
+  <!-- Runtime config section (collapsible, mirrors Ports pattern). -->
   <div class="separator"></div>
   <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.config.title' | translate }}</span>
-    <div class="config-button-container">
-      <app-button color="primary" (action)="viewConfig()" [forDarkBackground]="true">
-        {{ 'node.details.config.view-button' | translate }}
-      </app-button>
-    </div>
-    @if (showRawConfig && rawConfig) {
+    <span class="section-title collapsible-header" (click)="onConfigToggle()" style="cursor: pointer;">
+      <mat-icon [inline]="true">{{ showConfigSection ? 'expand_more' : 'chevron_right' }}</mat-icon>
+      {{ 'node.details.config.title' | translate }}
+    </span>
+    @if (showConfigSection && rawConfig) {
       <pre class="raw-config">{{ rawConfig }}</pre>
     }
   </div>
-  <!-- Transport Visualizer link (hypervisor only). -->
-  @if (node.isHypervisor) {
-    <div class="separator"></div>
-    <div class="d-flex flex-column">
-      <span class="section-title">{{ 'node.details.tpviz.title' | translate }}</span>
-      <div class="config-button-container">
-        <app-button color="primary" (action)="openTpViz()" [forDarkBackground]="true">
-          {{ 'node.details.tpviz.open' | translate }}
-        </app-button>
-      </div>
-    </div>
-  }
-  <div class="separator"></div>
-  <!-- Traffic info section. -->
-  <div class="d-flex flex-column">
-    <span class="section-title">{{ 'node.details.node-traffic-data' | translate }}</span>
-    <app-charts [trafficData]="trafficData" class="d-flex flex-column justify-content-end mt-3"></app-charts>
-  </div>
-  <!-- Resource monitor (collapsed by default, polls when open). -->
-  <app-resource-monitor [nodeKey]="node.localPk"></app-resource-monitor>
 </div>
 }

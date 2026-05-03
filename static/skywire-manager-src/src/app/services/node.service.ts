@@ -4,7 +4,7 @@ import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
 import { Node } from '../app.datatypes';
-import { ApiService } from './api.service';
+import { ApiService, RequestOptions, ResponseTypes } from './api.service';
 
 /**
  * Known statuses the API returns in the health property of the visors.
@@ -476,10 +476,20 @@ return {
   /**
    * Aggregated SD/TPD/UT network view — the same combined table
    * `skywire cli sd` prints. Hypervisor-scope (no nodeKey arg);
-   * cached on the visor for 30s so polling is cheap.
+   * cached on the visor for 5min by default. Pass refresh=true to
+   * force the visor to re-aggregate immediately.
    */
-  getNetworkView() {
-    return this.apiService.get(`network-view`);
+  getNetworkView(refresh = false) {
+    const q = refresh ? '?refresh=true' : '';
+    return this.apiService.get(`network-view${q}`);
+  }
+
+  /**
+   * Embedded mainnet reward rules — same content `skywire cli
+   * reward rules` prints. Returned as raw markdown text.
+   */
+  getRewardRules() {
+    return this.apiService.get(`reward-rules`, new RequestOptions({ responseType: ResponseTypes.Text }));
   }
 
   /**

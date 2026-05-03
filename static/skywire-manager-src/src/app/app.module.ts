@@ -21,6 +21,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBarModule, MAT_SNACK_BAR_DEFAULT_OPTIONS } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -71,6 +72,7 @@ import { LangButtonComponent } from './components/layout/lang-button/lang-button
 import { TruncatedTextComponent } from './components/layout/truncated-text/truncated-text.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { ResourceMonitorComponent } from './components/pages/node/resource-monitor/resource-monitor.component';
+import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
@@ -164,6 +166,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         TruncatedTextComponent,
         NodeInfoContentComponent,
         ResourceMonitorComponent,
+        NodeResourcesComponent,
         NetworkViewComponent,
         NodeInfoComponent,
         SelectOptionComponent,
@@ -214,7 +217,8 @@ const globalRippleConfig: RippleGlobalOptions = {
         MatProgressBarModule,
         MatSelectModule,
         MatProgressSpinnerModule,
-        MatCheckboxModule], providers: [
+        MatCheckboxModule,
+        MatSlideToggleModule], providers: [
         ClipboardService,
         { provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: { duration: 3000, verticalPosition: 'top' } },
         { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { width: '600px', hasBackdrop: true } },

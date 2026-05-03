@@ -193,6 +193,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/routing') ||
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
+      this.lastUrl.includes('/resources') ||
       (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
 
       this.titleParts = ['nodes.title', 'node.title'];
@@ -224,6 +225,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           icon: 'public',
           label: 'node.tabs.skynet',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'skynet'] : null,
+        },
+        {
+          icon: 'speed',
+          label: 'node.tabs.resources',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
         }
       ];
 
@@ -242,6 +248,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       }
       if (this.lastUrl.includes('/skynet')) {
         this.selectedTabIndex = 4;
+      }
+      if (this.lastUrl.includes('/resources')) {
+        this.selectedTabIndex = 5;
       }
 
       // Inform that the current subpage is not for showing a full list.
