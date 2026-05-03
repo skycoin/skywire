@@ -58,12 +58,23 @@ $top-bar-height: 56px;
 
   .lower-container {
     display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 2px;
+
+    // Each tab is wrapped in its own <div>. Force them to size by
+    // their content — without this, an unexplained gap can appear
+    // mid-strip on some viewports (likely a flex-item growth quirk).
+    > div {
+      flex: 0 0 auto;
+      min-width: 0;
+    }
 
     .tab-button {
       color: $white;
       border-radius: $mat-dialog-radius;
       opacity: 0.5;
-      margin-right: 2px;
+      margin-right: 0;
       text-decoration: none;
       height: $header-buttons-height;
       display: flex;
