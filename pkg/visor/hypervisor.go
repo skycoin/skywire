@@ -406,6 +406,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/about", hv.getAbout())
 				r.Get("/dmsg", hv.getDmsg())
 				r.Get("/service-health", hv.getServiceHealth())
+				r.Get("/route-setup-nodes/stats", hv.getRSNRemoteStats())
+				r.Get("/network/transports", hv.getNetworkTransports())
 				r.Get("/dmsg/sessions", hv.getDmsgSessions())
 				r.Post("/dmsg/connect-all", hv.postDmsgConnectAll())
 				r.Put("/dmsg/sessions-count", hv.putDmsgSessionsCount())
@@ -413,6 +415,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/lan-dmsg-server", hv.getLANDmsgServer())
 				r.Get("/visors", hv.getVisors())
 				r.Get("/visors-summary", hv.getAllVisorsSummary())
+				r.Get("/network-view", hv.getNetworkView())
+				r.Get("/reward-rules", hv.getRewardRules())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
 				r.Get("/visors/{pk}/health", hv.getHealth())
@@ -439,6 +443,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Post("/visors/{pk}/shutdown", hv.shutdown())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
+				r.Get("/visors/{pk}/runtime-stats", hv.getRuntimeStats())
+				r.Get("/visors/{pk}/host-stats", hv.getHostStats())
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
@@ -471,6 +477,21 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/skynet-forwards", hv.getSkynetForwards())
 				r.Post("/visors/{pk}/skynet-forwards/connect", hv.postSkynetConnect())
 				r.Post("/visors/{pk}/skynet-forwards/disconnect", hv.postSkynetDisconnect())
+
+				// Per-visor DMSG settings (used by the per-visor DMSG
+				// tab in the hvui — supersedes the home-level
+				// /api/dmsg/* endpoints which were local-visor-only).
+				r.Get("/visors/{pk}/dmsg/sessions", hv.getVisorDmsgSessions())
+				r.Post("/visors/{pk}/dmsg/connect-all", hv.postVisorDmsgConnectAll())
+				r.Put("/visors/{pk}/dmsg/sessions-count", hv.putVisorDmsgSessionsCount())
+
+				// Skychat password management.
+				r.Get("/visors/{pk}/skychat/password", hv.getSkychatPassword())
+				r.Put("/visors/{pk}/skychat/password", hv.putSkychatPassword())
+				r.Delete("/visors/{pk}/skychat/password", hv.deleteSkychatPassword())
+				// Skychat reverse-proxy: forward all calls under
+				// /skychat/proxy/* to the local skychat HTTP server.
+				r.HandleFunc("/visors/{pk}/skychat/proxy/*", hv.skychatProxyHandler())
 			})
 		})
 

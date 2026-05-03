@@ -183,6 +183,21 @@ func (r *RPC) HVServiceHealth(pk *cipher.PubKey, out *[]ServiceHealthEntry) (err
 	return nil
 }
 
+// HVDmsgSessions returns the per-client dmsg sessions snapshot of a remote visor.
+func (r *RPC) HVDmsgSessions(pk *cipher.PubKey, out *DmsgClientSessions) (err error) {
+	defer rpcutil.LogCall(r.log, "HVDmsgSessions", pk)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	res, dErr := v.HVDmsgSessions(*pk)
+	if dErr != nil {
+		return dErr
+	}
+	*out = *res
+	return nil
+}
+
 // HVDmsgConnectAll triggers connect-all on a remote visor.
 func (r *RPC) HVDmsgConnectAll(pk *cipher.PubKey, out *DmsgConnectAllResult) (err error) {
 	defer rpcutil.LogCall(r.log, "HVDmsgConnectAll", pk)(out, &err)

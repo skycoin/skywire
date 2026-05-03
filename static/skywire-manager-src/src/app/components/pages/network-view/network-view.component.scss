@@ -1,0 +1,115 @@
+.nv-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 4px 4px;
+
+  .nv-totals {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+
+  .nv-fetched {
+    margin-left: auto;
+    font-size: 12px;
+    opacity: 0.6;
+  }
+
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: 8px;
+  }
+
+  .dot-green { background: #4caf50; }
+  .dot-red { background: #e53935; }
+  .dot-outline-gray { border: 1px solid rgba(255, 255, 255, 0.4); }
+}
+
+.nv-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+
+  mat-form-field {
+    flex: 0 1 200px;
+  }
+  .field-sm { flex: 0 1 130px; }
+  .field-md { flex: 1 1 280px; }
+}
+
+.nv-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  padding: 8px 4px;
+  opacity: 0.8;
+
+  .row-marker {
+    display: inline-block;
+    width: 16px;
+    height: 12px;
+    border-radius: 2px;
+    margin-left: 6px;
+  }
+}
+
+.responsive-table-translucid {
+  th.num, td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+// Row health-state coloring (matches the CLI palette).
+.row-offline {
+  color: rgba(229, 57, 53, 0.85) !important;
+}
+
+.row-not-in-ut {
+  background: rgba(229, 57, 53, 0.12) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.row-low-transports {
+  background: rgba(255, 167, 38, 0.12) !important;
+  color: rgba(255, 220, 150, 0.95) !important;
+}
+
+// Markers in the legend reuse the same backgrounds.
+.row-marker.row-offline { background: rgba(229, 57, 53, 0.5); }
+.row-marker.row-not-in-ut { background: rgba(229, 57, 53, 0.25); }
+.row-marker.row-low-transports { background: rgba(255, 167, 38, 0.3); }
+
+.nv-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.nv-card {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+
+  .nv-card-pk { font-weight: 600; }
+  .nv-card-meta { opacity: 0.7; font-size: 12px; }
+  .nv-card-tps { font-size: 12px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+}
+
+.nv-empty {
+  text-align: center;
+  opacity: 0.6;
+  padding: 24px;
+}

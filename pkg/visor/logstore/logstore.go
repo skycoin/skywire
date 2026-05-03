@@ -18,6 +18,17 @@ type Store interface {
 	// returned number n means that n log entries have been dropped and the oldest
 	// log entry is (n+1)th
 	GetLogs() ([]string, int64)
+	// GetLogsSince returns stored entries whose log_line is strictly
+	// greater than since. The returned `dropped` is the number of
+	// entries the caller missed because they aged out of the ring
+	// buffer between calls (0 when the caller is keeping up). The
+	// returned `latest` is the highest log_line currently in the
+	// store — callers should pass it as `since` on the next call to
+	// receive only newly-arrived entries (diff streaming).
+	//
+	// since == 0 returns the entire buffer (equivalent to GetLogs).
+	// since >= latest returns an empty entry slice.
+	GetLogsSince(since int64) (entries []string, dropped int64, latest int64)
 }
 
 // MakeStore returns a new store that will hold up to max entries,
@@ -60,6 +71,44 @@ func (s *store) GetLogs() ([]string, int64) {
 	logs := s.collectLogs(idx, s.cap)
 	logs = append(logs, s.collectLogs(0, idx)...)
 	return logs, s.entryNum - s.cap
+}
+
+// GetLogsSince returns entries whose log_line > since. See the
+// Store interface comment for `dropped`/`latest` semantics.
+//
+// log_line is 1-indexed; line N is stored at index (N-1) % cap.
+// The oldest still-buffered line when the buffer has wrapped is
+// entryNum - cap + 1; older requests yield a non-zero `dropped`
+// and start from the oldest available line.
+func (s *store) GetLogsSince(since int64) ([]string, int64, int64) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if since < 0 {
+		since = 0
+	}
+	if since >= s.entryNum {
+		return nil, 0, s.entryNum
+	}
+
+	var oldestAvailable int64 = 1
+	if s.entryNum > s.cap {
+		oldestAvailable = s.entryNum - s.cap + 1
+	}
+
+	startLine := since + 1
+	var dropped int64
+	if startLine < oldestAvailable {
+		dropped = oldestAvailable - startLine
+		startLine = oldestAvailable
+	}
+
+	logs := make([]string, 0, s.entryNum-startLine+1)
+	for line := startLine; line <= s.entryNum; line++ {
+		idx := (line - 1) % s.cap
+		logs = append(logs, s.entries[idx])
+	}
+	return logs, dropped, s.entryNum
 }
 
 // Levels implements logrus.Hook interface. It denotes log levels

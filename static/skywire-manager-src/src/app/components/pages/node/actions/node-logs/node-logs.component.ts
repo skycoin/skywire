@@ -115,6 +115,24 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
   // How much time has passed since the data was loaded.
   elapsedTime: ElapsedTime;
 
+  // Live tail polling. When true, the dialog re-fetches every
+  // livePollMs and appends only the entries newer than its cursor.
+  // Toggleable so the user can pause to copy lines / scroll back.
+  liveTail = true;
+  livePollMs = 2000;
+  // Diff-streaming cursor: the highest log_line received so far.
+  // Sent as ?since= on the next poll; the response carries only
+  // entries with log_line > cursor (plus the new cursor value).
+  private logCursor = 0;
+  // Number of entries the visor reported as dropped — i.e., the
+  // ring buffer wrapped past our cursor between polls. Surfaced
+  // in the UI as a "skipped N entries" hint.
+  totalDropped = 0;
+  // Track whether the scroll viewport is pinned to the bottom so
+  // we only auto-scroll on each refresh when the user was already
+  // tailing — scrolling up to read history shouldn't get yanked.
+  private wasAtBottom = true;
+
   // How many entries the modal window can show, to avoid performance problems.
   maxElementsPerPage = 1000;
 
@@ -201,22 +219,52 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Gets the logs from the back-end.
-   * @param delayMilliseconds Delay before getting the data, for retries after errors..
+   * Gets the logs from the back-end. First call (cursor=0) fetches
+   * the full buffer via the diff endpoint; subsequent calls receive
+   * only the entries that arrived since the previous cursor.
+   * @param delayMilliseconds Delay before getting the data; used both
+   *   for the initial load and for the live-tail polling cadence.
    */
   loadData(delayMilliseconds: number) {
     this.removeSubscription();
 
-    this.loading = true;
+    // Capture scroll position before the fetch so the post-receive
+    // auto-scroll only fires when the user is tailing.
+    this.captureScrollTailState();
+
+    this.loading = this.logEntries.length === 0;
+    const cursor = this.logCursor;
     this.subscription = of(1).pipe(
-      // Wait the delay.
       delay(delayMilliseconds),
-      // Load the data. The node pk is obtained from the currently openned node page.
-      mergeMap(() => this.nodeService.getRuntimeLogs(NodeComponent.getCurrentNodeKey()))
+      mergeMap(() => this.nodeService.getRuntimeLogsSince(NodeComponent.getCurrentNodeKey(), cursor))
     ).subscribe(
-      (log) => this.onLogsReceived(log),
+      (delta: any) => this.onLogsDeltaReceived(delta),
       (err: OperationError) => this.onLogsError(err)
     );
+  }
+
+  /**
+   * User-toggleable live tail. When off, polling stops and the
+   * displayed buffer freezes at whatever was last fetched.
+   */
+  toggleLiveTail() {
+    this.liveTail = !this.liveTail;
+    if (this.liveTail) {
+      this.loadData(0);
+    } else {
+      this.removeSubscription();
+    }
+  }
+
+  private captureScrollTailState() {
+    if (!this.content) {
+      this.wasAtBottom = true;
+      return;
+    }
+    const el = this.content.nativeElement as HTMLElement;
+    // Treat "near the bottom" (within 40px) as still tailing — the
+    // last log line's height plus a margin shouldn't break stickiness.
+    this.wasAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
   }
 
   private removeSubscription() {
@@ -231,12 +279,79 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     }
   }
 
-  private onLogsReceived(logs: any[]) {
-    let amount = 0;
-    this.totalLogs = logs.length;
-    // Check if the modal window can show all the entries.
-    this.hasMoreLogMessages = this.totalLogs - this.maxElementsPerPage > 0;
+  /**
+   * Diff-streaming receive path. The visor returns:
+   *   { entries: string[]  // each is a JSON-encoded log line
+   *     latest:  number,   // new cursor value
+   *     dropped: number }  // entries we missed (ring wrapped past us)
+   *
+   * On the first call (cursor=0) entries is the entire buffer, so
+   * we replace logEntries. On subsequent calls we append only the
+   * new lines and trim from the head if we exceed maxElementsPerPage.
+   */
+  private onLogsDeltaReceived(delta: any) {
+    if (!delta) {
+      this.loading = false;
+      this.scheduleNextPoll();
+      return;
+    }
+    const isInitial = this.logCursor === 0;
+    this.logCursor = (typeof delta.latest === 'number') ? delta.latest : this.logCursor;
+    if (typeof delta.dropped === 'number' && delta.dropped > 0) {
+      this.totalDropped += delta.dropped;
+    }
 
+    const entriesRaw: string[] = Array.isArray(delta.entries) ? delta.entries : [];
+    if (entriesRaw.length === 0) {
+      this.loading = false;
+      this.LoadingMoment = Date.now();
+      this.shouldShowError = true;
+      this.startUpdatingTime();
+      this.scheduleNextPoll();
+      return;
+    }
+
+    // Each entry is a JSON-stringified object. Parse and feed
+    // through the existing entry-decoding pipeline (level mapping,
+    // extras, etc.). Wrap in a try so a single malformed line
+    // doesn't break the whole batch.
+    const parsed: any[] = [];
+    for (const raw of entriesRaw) {
+      try {
+        parsed.push(JSON.parse(raw));
+      } catch {
+        // skip malformed
+      }
+    }
+
+    if (isInitial) {
+      this.logEntries = [];
+    }
+    this.appendParsedEntries(parsed);
+
+    // Trim to keep the buffer bounded; matches the maxElementsPerPage
+    // cap the old replace-buffer flow used.
+    if (this.logEntries.length > this.maxElementsPerPage) {
+      this.logEntries = this.logEntries.slice(this.logEntries.length - this.maxElementsPerPage);
+      this.hasMoreLogMessages = true;
+    }
+    this.totalLogs = this.logCursor;
+
+    this.loading = false;
+    this.LoadingMoment = Date.now();
+    this.shouldShowError = true;
+    this.startUpdatingTime();
+    this.filter();
+    this.scheduleNextPoll();
+  }
+
+  private scheduleNextPoll() {
+    if (this.liveTail) {
+      this.loadData(this.livePollMs);
+    }
+  }
+
+  private appendParsedEntries(logs: any[]) {
     logs.forEach(e => {
       // Save all the basic data.
       const entry = new LogEntry();
@@ -300,20 +415,10 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
         }
       }
 
-      // Add to the list.
-      if (this.totalLogs - amount <= this.maxElementsPerPage) {
-        this.logEntries.push(entry);
-      }
-
-      amount += 1;
+      // Append. Bound trimming is the caller's responsibility
+      // (onLogsDeltaReceived caps logEntries to maxElementsPerPage).
+      this.logEntries.push(entry);
     });
-
-    this.loading = false;
-    this.LoadingMoment = Date.now();
-
-    this.startUpdatingTime();
-
-    this.filter();
   }
 
   // Removes all the entries that do not meet the filter criteria.
@@ -329,10 +434,16 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
       }
     });
 
-    // Scroll to the bottom. Use a timer to wait for the UI to be updated.
-    setTimeout(() => {
-      (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
-    });
+    // Auto-scroll only if the user was already tailing before this
+    // refresh; otherwise leave their scroll position alone so they
+    // can read history without getting yanked.
+    if (this.wasAtBottom) {
+      setTimeout(() => {
+        if (this.content) {
+          (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
+        }
+      });
+    }
   }
 
   // Updates the text which says how much time has passed since the data was loaded. It does it

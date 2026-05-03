@@ -666,6 +666,64 @@ func (rc *rpcClient) RuntimeLogs() (string, error) {
 	return logs, err
 }
 
+// RuntimeLogsSince calls RuntimeLogsSince. Pass the previous
+// response's Latest as `since` to receive only newly-arrived
+// entries; pass 0 to fetch the full buffer.
+func (rc *rpcClient) RuntimeLogsSince(since int64) (RuntimeLogsDelta, error) {
+	var delta RuntimeLogsDelta
+	err := rc.Call("RuntimeLogsSince", &since, &delta)
+	return delta, err
+}
+
+// HostStats calls HostStats.
+func (rc *rpcClient) HostStats() (*HostStatsInfo, error) {
+	var stats HostStatsInfo
+	if err := rc.Call("HostStats", &struct{}{}, &stats); err != nil {
+		return nil, err
+	}
+	return &stats, nil
+}
+
+// NetworkView calls NetworkView.
+func (rc *rpcClient) NetworkView() (*NetworkViewResponse, error) {
+	var resp NetworkViewResponse
+	if err := rc.Call("NetworkView", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// SkychatPasswordIsSet calls SkychatPasswordIsSet.
+func (rc *rpcClient) SkychatPasswordIsSet() (bool, error) {
+	var out bool
+	if err := rc.Call("SkychatPasswordIsSet", &struct{}{}, &out); err != nil {
+		return false, err
+	}
+	return out, nil
+}
+
+// SetSkychatPassword calls SetSkychatPassword.
+func (rc *rpcClient) SetSkychatPassword(oldPassword, newPassword string) error {
+	return rc.Call("SetSkychatPassword", &SkychatPasswordChangeIn{
+		OldPassword: oldPassword,
+		NewPassword: newPassword,
+	}, &struct{}{})
+}
+
+// ClearSkychatPassword calls ClearSkychatPassword.
+func (rc *rpcClient) ClearSkychatPassword(oldPassword string) error {
+	return rc.Call("ClearSkychatPassword", &oldPassword, &struct{}{})
+}
+
+// SkychatLocalAddr calls SkychatLocalAddr.
+func (rc *rpcClient) SkychatLocalAddr() (string, error) {
+	var addr string
+	if err := rc.Call("SkychatLocalAddr", &struct{}{}, &addr); err != nil {
+		return "", err
+	}
+	return addr, nil
+}
+
 // RuntimeStats calls RuntimeStats.
 func (rc *rpcClient) RuntimeStats() (*RuntimeStatsInfo, error) {
 	var stats RuntimeStatsInfo
@@ -1458,6 +1516,15 @@ func (rc *rpcClient) HVServiceHealth(pk cipher.PubKey) ([]ServiceHealthEntry, er
 		return nil, err
 	}
 	return out, nil
+}
+
+// HVDmsgSessions reads the per-client dmsg sessions snapshot from a remote visor.
+func (rc *rpcClient) HVDmsgSessions(pk cipher.PubKey) (*DmsgClientSessions, error) {
+	var out DmsgClientSessions
+	if err := rc.Call("HVDmsgSessions", &pk, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // HVDmsgConnectAll triggers connect-all on a remote visor.

@@ -161,6 +161,67 @@ func (r *RPC) RuntimeLogs(_ *struct{}, out *string) (err error) {
 	return err
 }
 
+// RuntimeLogsSince returns only entries whose log_line is strictly
+// greater than since. Used by the hypervisor UI for diff-based live
+// tailing. Caller passes the previous response's Latest as `since`.
+func (r *RPC) RuntimeLogsSince(since *int64, out *RuntimeLogsDelta) (err error) {
+	defer rpcutil.LogCall(r.log, "RuntimeLogsSince", since)(out, &err)
+	d, err := r.visor.RuntimeLogsSince(*since)
+	*out = d
+	return err
+}
+
+// HostStats returns a host-level resource snapshot (CPU%, memory,
+// disk, network, plus the visor process slice). Backs the
+// hypervisor UI's Resource Monitor panel.
+func (r *RPC) HostStats(_ *struct{}, out *HostStatsInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "HostStats", nil)(out, &err)
+	stats, err := r.visor.HostStats()
+	if stats != nil {
+		*out = *stats
+	}
+	return err
+}
+
+// NetworkView returns the SD/TPD/UT-aggregated network table that
+// `cli sd` prints. Backs the hypervisor UI's Network tab.
+func (r *RPC) NetworkView(_ *struct{}, out *NetworkViewResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "NetworkView", nil)(out, &err)
+	resp, err := r.visor.NetworkView()
+	if resp != nil {
+		*out = *resp
+	}
+	return err
+}
+
+// SkychatPasswordIsSet reports whether a password is currently set.
+func (r *RPC) SkychatPasswordIsSet(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "SkychatPasswordIsSet", nil)(out, &err)
+	v, err := r.visor.SkychatPasswordIsSet()
+	*out = v
+	return err
+}
+
+// SetSkychatPassword sets / changes the skychat password.
+func (r *RPC) SetSkychatPassword(in *SkychatPasswordChangeIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetSkychatPassword", nil)(nil, &err)
+	return r.visor.SetSkychatPassword(in.OldPassword, in.NewPassword)
+}
+
+// ClearSkychatPassword removes the skychat password (gate goes off).
+func (r *RPC) ClearSkychatPassword(oldPassword *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "ClearSkychatPassword", nil)(nil, &err)
+	return r.visor.ClearSkychatPassword(*oldPassword)
+}
+
+// SkychatLocalAddr returns the host:port skychat is bound to.
+func (r *RPC) SkychatLocalAddr(_ *struct{}, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "SkychatLocalAddr", nil)(out, &err)
+	addr, err := r.visor.SkychatLocalAddr()
+	*out = addr
+	return err
+}
+
 // GetConfigPath returns the filesystem path the visor loaded its config from.
 func (r *RPC) GetConfigPath(_ *struct{}, out *string) (err error) {
 	defer rpcutil.LogCall(r.log, "GetConfigPath", nil)(out, &err)
