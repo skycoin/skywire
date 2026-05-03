@@ -359,8 +359,19 @@ Example:
 				defer agg.Close() //nolint:errcheck
 				logger.WithField("feed_pk", agg.FeedPK()).Info("CXO aggregator running: accepting inbound visor stats feeds")
 			}
+
+			// CXO metrics publisher: outbound feed mirroring the
+			// /metrics aggregate. Visors subscribe to TPD's PK on
+			// skyenv.DmsgTPDMetricsCXOPort and read the JSON-encoded
+			// []TransportMetric from "metrics/days/<n>" instead of
+			// HTTP-polling the same query.
+			if pub, perr := api.StartMetricsCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
+				logger.WithError(perr).Error("Failed to start CXO metrics publisher, continuing without it")
+			} else {
+				defer pub.Close() //nolint:errcheck
+			}
 		} else if enableCXO {
-			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator disabled")
+			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator/publisher disabled")
 		}
 
 		// Wire DHT entry mirroring: every transport registration is

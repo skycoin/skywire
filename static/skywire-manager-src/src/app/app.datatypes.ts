@@ -55,6 +55,10 @@ export interface Transport {
   type: string;
   recv: number|null;
   sent: number|null;
+  // Smoothed transport-level RTT in milliseconds. Populated from
+  // the visor's TransportSummary.latency_ms field. 0/undefined =
+  // no measurement yet (e.g., dmsg or freshly added transport).
+  latencyMs?: number;
 
   // Calculated internally
   isPersistent?: boolean;
