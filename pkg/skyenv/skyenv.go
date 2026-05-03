@@ -45,6 +45,14 @@ const (
 	// collide with DmsgHypervisorPort.
 	DmsgCXOPort uint16 = 50
 
+	// DmsgTPDMetricsCXOPort is the DMSG port the TPD's CXO metrics-
+	// aggregate publisher listens on (and visors dial when they want
+	// to subscribe to the network-wide transport metrics feed).
+	// Distinct from DmsgCXOPort because TPD already runs its
+	// CXO aggregator there for inbound visor stats publishers; the
+	// metrics publisher is a separate feed in the opposite direction.
+	DmsgTPDMetricsCXOPort uint16 = 51
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 

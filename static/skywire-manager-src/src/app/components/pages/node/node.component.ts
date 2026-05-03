@@ -255,7 +255,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'skynet'] : null,
         },
         {
-          icon: 'speed',
+          icon: 'memory',
           label: 'node.tabs.resources',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
         },

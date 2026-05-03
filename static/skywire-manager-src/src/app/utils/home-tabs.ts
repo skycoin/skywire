@@ -35,7 +35,7 @@ export function homeTabsData(): TabButtonData[] {
     // --- local: this hypervisor ---
     { icon: 'view_headline', label: 'nodes.title', linkParts: ['/nodes'], group: 'local' },
     { icon: 'monetization_on', label: 'nodes.rewards-title', linkParts: ['/nodes', 'rewards'], group: 'local' },
-    { icon: 'speed', label: 'nodes.resources-title', linkParts: ['/nodes', 'resources'], group: 'local' },
+    { icon: 'memory', label: 'nodes.resources-title', linkParts: ['/nodes', 'resources'], group: 'local' },
     // --- network-wide ---
     { icon: 'swap_horiz', label: 'nodes.transports-title', linkParts: ['/nodes', 'transports'], group: 'network' },
     { icon: 'public', label: 'nodes.network-title', linkParts: ['/nodes', 'network'], group: 'network' },
