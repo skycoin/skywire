@@ -267,8 +267,9 @@
     "title": "Visor list",
     "dmsg-title": "DMSG",
     "rewards-title": "Rewards",
-    "services-health-title": "Services health",
+    "services-health-title": "Deployment",
     "network-title": "Network",
+    "resources-title": "Resources",
     "dmsg-settings-title": "DMSG settings",
     "reward-address": "Reward Address",
     "reward-total": "Week Total",
@@ -330,16 +331,44 @@
     }
   },
 
+  "multi-resources": {
+    "loading": "Polling visor host stats…",
+    "summary": "{{count}} visors",
+    "last-updated": "last sample",
+    "visor": "Visor",
+    "cpu": "CPU",
+    "mem": "Memory",
+    "disk": "Disk",
+    "tx": "TX",
+    "rx": "RX",
+    "proc-rss": "Process RSS"
+  },
+
   "services-health": {
-    "loading": "Checking services…",
-    "all-ok": "All services operational",
-    "degraded": "One or more services are degraded",
+    "loading": "Checking deployment services…",
+    "all-ok": "All deployment services operational",
+    "degraded": "One or more deployment services are degraded",
     "last-updated": "last checked",
     "service": "Service",
     "status": "Status",
     "latency": "Latency",
     "version": "Version",
-    "endpoint": "Endpoint"
+    "endpoint": "Endpoint",
+    "rsn-section": "Route Setup Nodes",
+    "rsn-empty": "No route setup nodes configured.",
+    "rsn-pk": "Public Key",
+    "rsn-success": "Successful",
+    "rsn-failed": "Failed",
+    "rsn-rate": "Success rate",
+    "rsn-latency-p50": "p50",
+    "rsn-latency-p95": "p95",
+    "rsn-latency-p99": "p99",
+    "rsn-active": "In flight",
+    "rsn-last-success": "Last success",
+    "rsn-last-failure": "Last failure",
+    "rsn-uptime": "Uptime",
+    "rsn-failure-reasons": "Top failure reasons",
+    "rsn-error": "Unreachable"
   },
 
   "skychat": {

@@ -57,11 +57,6 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
         linkParts: ['/nodes', 'rewards'],
       },
       {
-        icon: 'check_circle',
-        label: 'nodes.services-health-title',
-        linkParts: ['/nodes', 'services-health'],
-      },
-      {
         icon: 'public',
         label: 'nodes.network-title',
         linkParts: ['/nodes', 'network'],
@@ -71,6 +66,16 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
         label: 'node.details.tpviz.title',
         linkParts: [],
         externalUrl: '/tp-viz/',
+      },
+      {
+        icon: 'check_circle',
+        label: 'nodes.services-health-title',
+        linkParts: ['/nodes', 'services-health'],
+      },
+      {
+        icon: 'speed',
+        label: 'nodes.resources-title',
+        linkParts: ['/nodes', 'resources'],
       },
       {
         icon: 'settings',
