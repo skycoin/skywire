@@ -164,6 +164,18 @@ func (r *RPC) SetRuntimeConfig(rawJSON *[]byte, _ *struct{}) (err error) {
 	return r.visor.SetRuntimeConfig(*rawJSON)
 }
 
+// LocalTransportStats returns the visor's local per-transport
+// bandwidth + latency rollup from the bbolt stats store.
+func (r *RPC) LocalTransportStats(_ *struct{}, out *LocalTransportStatsResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "LocalTransportStats", nil)(nil, &err)
+	resp, err := r.visor.LocalTransportStats()
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // RuntimeLogs returns the visor's accumulated runtime log buffer.
 // Used by the hypervisor UI's "view logs" action and the
 // `skywire cli visor logs` command.

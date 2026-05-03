@@ -123,6 +123,7 @@ type API interface {
 	GetIsPublic() bool
 	GetRuntimeConfig() ([]byte, error)
 	SetRuntimeConfig(rawJSON []byte) error
+	LocalTransportStats() (*LocalTransportStatsResponse, error)
 	GetConfigPath() (string, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error

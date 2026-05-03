@@ -211,6 +211,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl && (this.lastUrl.includes('/info') ||
       this.lastUrl.includes('/routing') ||
       this.lastUrl.includes('/transports') ||
+      this.lastUrl.includes('/bandwidth') ||
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/resources') ||
@@ -238,6 +239,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           icon: 'swap_horiz',
           label: 'node.tabs.transports',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'transports'] : null,
+        },
+        {
+          icon: 'equalizer',
+          label: 'node.tabs.bandwidth',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'bandwidth'] : null,
         },
         {
           icon: 'apps',
@@ -280,23 +286,26 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/transports')) {
         this.selectedTabIndex = 2;
       }
-      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
+      if (this.lastUrl.includes('/bandwidth')) {
         this.selectedTabIndex = 3;
       }
-      if (this.lastUrl.includes('/rewards')) {
+      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
         this.selectedTabIndex = 4;
       }
-      if (this.lastUrl.includes('/skynet')) {
+      if (this.lastUrl.includes('/rewards')) {
         this.selectedTabIndex = 5;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/skynet')) {
         this.selectedTabIndex = 6;
       }
-      if (this.lastUrl.includes('/chat')) {
+      if (this.lastUrl.includes('/resources')) {
         this.selectedTabIndex = 7;
       }
-      if (this.lastUrl.includes('/dmsg')) {
+      if (this.lastUrl.includes('/chat')) {
         this.selectedTabIndex = 8;
+      }
+      if (this.lastUrl.includes('/dmsg')) {
+        this.selectedTabIndex = 9;
       }
 
       // Inform that the current subpage is not for showing a full list.

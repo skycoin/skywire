@@ -11,6 +11,7 @@ import { RoutingComponent } from './components/pages/node/routing/routing.compon
 import { AppsComponent } from './components/pages/node/apps/apps.component';
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
 import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
+import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { NodeRewardsComponent } from './components/pages/node/rewards/node-rewards.component';
@@ -126,6 +127,10 @@ const routes: Routes = [
           {
             path: 'chat',
             component: SkychatComponent
+          },
+          {
+            path: 'bandwidth',
+            component: BandwidthComponent
           },
           {
             path: 'dmsg',

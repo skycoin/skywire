@@ -280,6 +280,20 @@ func (hv *Hypervisor) getRuntimeConfig() http.HandlerFunc {
 	})
 }
 
+// getLocalTransportStats returns the visor's locally-tracked
+// per-transport bandwidth + latency rollup. Source of truth is
+// the visor's bbolt stats store; no TPD round-trip.
+func (hv *Hypervisor) getLocalTransportStats() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		resp, err := ctx.API.LocalTransportStats()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	})
+}
+
 // putRuntimeConfig accepts a raw JSON body and forwards it to
 // SetRuntimeConfig on the target visor. The body is validated
 // server-side (strict JSON decode + SK/PK consistency); the visor

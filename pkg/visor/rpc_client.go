@@ -523,6 +523,15 @@ func (rc *rpcClient) SetRuntimeConfig(rawJSON []byte) error {
 	return rc.Call("SetRuntimeConfig", &rawJSON, &struct{}{})
 }
 
+// LocalTransportStats implements API.
+func (rc *rpcClient) LocalTransportStats() (*LocalTransportStatsResponse, error) {
+	var resp LocalTransportStatsResponse
+	if err := rc.Call("LocalTransportStats", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // GetRuntimeConfig implements API.
 func (rc *rpcClient) GetRuntimeConfig() ([]byte, error) {
 	var out []byte

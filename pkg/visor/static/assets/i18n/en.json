@@ -237,6 +237,7 @@
       "apps": "Apps",
       "routing": "Routing",
       "transports": "Transports",
+      "bandwidth": "Bandwidth",
       "rewards": "Rewards",
       "skynet": "Skynet",
       "resources": "Resources",
@@ -399,6 +400,27 @@
     "rsn-uptime": "Uptime",
     "rsn-failure-reasons": "Top failure reasons",
     "rsn-error": "Unreachable"
+  },
+
+  "bandwidth": {
+    "loading": "Reading local transport stats…",
+    "empty": "No transport bandwidth recorded yet.",
+    "transports": "transports",
+    "total": "total",
+    "last-updated": "fetched",
+    "window": "Window",
+    "window-now": "Now",
+    "refresh": "Refresh",
+    "current-snapshot": "Current snapshot",
+    "daily-history": "Daily history",
+    "no-history": "No daily rollups recorded yet.",
+    "date": "Date",
+    "sent": "Sent",
+    "recv": "Recv",
+    "samples": "Samples",
+    "latency-current": "Latency (min/avg/max)",
+    "latency-min-avg-max": "Lat min/avg/max",
+    "sampled-at": "Sampled at"
   },
 
   "skychat": {
