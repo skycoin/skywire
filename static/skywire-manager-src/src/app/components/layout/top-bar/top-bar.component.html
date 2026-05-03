@@ -97,6 +97,9 @@
     <div class="lower-container">
       <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
       @for (tabData of tabsData; track tabData; let i = $index) {
+        @if (i > 0 && tabsData[i - 1].group !== tabData.group) {
+          <span class="tab-group-separator d-none d-md-inline-block" aria-hidden="true"></span>
+        }
         <div
           [ngClass]="{'d-lg-none': tabData.onlyIfLessThanLg, 'd-none d-md-inline-block': tabsData.length !== 1}"
           >

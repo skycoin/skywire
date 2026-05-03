@@ -6,6 +6,7 @@ import { ServiceHealthEntry, ServiceHealthService } from 'src/app/services/servi
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
+import { homeTabsData } from 'src/app/utils/home-tabs';
 
 /** One RSN's remote /stats fetch result, mirrors pkg/visor.RSNRemoteStat. */
 interface RSNRemoteStat {
@@ -61,44 +62,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
 
   constructor(private healthSvc: ServiceHealthService, private api: ApiService) {
     super();
-    this.tabsData = [
-      {
-        icon: 'view_headline',
-        label: 'nodes.title',
-        linkParts: ['/nodes'],
-      },
-      {
-        icon: 'monetization_on',
-        label: 'nodes.rewards-title',
-        linkParts: ['/nodes', 'rewards'],
-      },
-      {
-        icon: 'public',
-        label: 'nodes.network-title',
-        linkParts: ['/nodes', 'network'],
-      },
-      {
-        icon: 'bubble_chart',
-        label: 'node.details.tpviz.title',
-        linkParts: [],
-        externalUrl: '/tp-viz/',
-      },
-      {
-        icon: 'check_circle',
-        label: 'nodes.services-health-title',
-        linkParts: ['/nodes', 'services-health'],
-      },
-      {
-        icon: 'speed',
-        label: 'nodes.resources-title',
-        linkParts: ['/nodes', 'resources'],
-      },
-      {
-        icon: 'settings',
-        label: 'settings.title',
-        linkParts: ['/settings'],
-      },
-    ];
+    this.tabsData = homeTabsData();
   }
 
   ngOnInit() {

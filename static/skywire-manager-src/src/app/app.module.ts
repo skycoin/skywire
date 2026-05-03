@@ -76,6 +76,7 @@ import { NodeResourcesComponent } from './components/pages/node/node-resources/n
 import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
+import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
 import { SkysocksSettingsComponent } from './components/pages/node/apps/node-apps/skysocks-settings/skysocks-settings.component';
@@ -172,6 +173,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         SkychatComponent,
         NetworkViewComponent,
         MultiVisorResourcesComponent,
+        NetworkTransportsComponent,
         NodeInfoComponent,
         SelectOptionComponent,
         SkysocksSettingsComponent,

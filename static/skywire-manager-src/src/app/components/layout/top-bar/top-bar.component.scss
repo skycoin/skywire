@@ -62,6 +62,18 @@ $top-bar-height: 56px;
     align-items: center;
     gap: 2px;
 
+    // Visual divider between tab groups (e.g. "this hypervisor"
+    // tabs vs network-wide tabs on the home top-bar). Inserted
+    // dynamically by top-bar.component.html when the `group`
+    // marker on TabButtonData changes between adjacent tabs.
+    .tab-group-separator {
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.2);
+      margin: 0 8px;
+      align-self: center;
+    }
+
     // Each tab is wrapped in its own <div>. Force them to size by
     // their content — without this, an unexplained gap can appear
     // mid-strip on some viewports (likely a flex-item growth quirk).

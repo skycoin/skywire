@@ -270,6 +270,7 @@
     "services-health-title": "Deployment",
     "network-title": "Network",
     "resources-title": "Resources",
+    "transports-title": "Transports",
     "dmsg-settings-title": "DMSG settings",
     "reward-address": "Reward Address",
     "reward-total": "Week Total",
@@ -329,6 +330,25 @@
         "offline": "Offline"
       }
     }
+  },
+
+  "network-transports": {
+    "loading": "Fetching transport metrics from TPD…",
+    "summary": "{{transports}} transports · {{bandwidth}} network bandwidth ({{days}} days)",
+    "last-updated": "last fetched",
+    "days": "Window",
+    "view": "View",
+    "view-compact": "Compact",
+    "view-tree": "Tree",
+    "refresh": "Refresh",
+    "tp-id": "Transport ID",
+    "type": "Type",
+    "edge-a": "Edge A",
+    "edge-b": "Edge B",
+    "sent": "Sent",
+    "recv": "Recv",
+    "total": "Total",
+    "latency": "Latency"
   },
 
   "multi-resources": {

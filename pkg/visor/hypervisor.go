@@ -407,6 +407,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/dmsg", hv.getDmsg())
 				r.Get("/service-health", hv.getServiceHealth())
 				r.Get("/route-setup-nodes/stats", hv.getRSNRemoteStats())
+				r.Get("/network/transports", hv.getNetworkTransports())
 				r.Get("/dmsg/sessions", hv.getDmsgSessions())
 				r.Post("/dmsg/connect-all", hv.postDmsgConnectAll())
 				r.Put("/dmsg/sessions-count", hv.putDmsgSessionsCount())

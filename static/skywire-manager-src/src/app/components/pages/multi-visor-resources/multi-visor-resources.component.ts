@@ -4,6 +4,7 @@ import { switchMap, catchError } from 'rxjs/operators';
 
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
+import { homeTabsData } from 'src/app/utils/home-tabs';
 import { NodeService } from 'src/app/services/node.service';
 import { ApiService } from 'src/app/services/api.service';
 import { Node } from 'src/app/app.datatypes';
@@ -76,16 +77,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
     private cdr: ChangeDetectorRef,
   ) {
     super();
-    // Same tab list as the other home pages, with Resources highlighted.
-    this.tabsData = [
-      { icon: 'view_headline', label: 'nodes.title', linkParts: ['/nodes'] },
-      { icon: 'monetization_on', label: 'nodes.rewards-title', linkParts: ['/nodes', 'rewards'] },
-      { icon: 'public', label: 'nodes.network-title', linkParts: ['/nodes', 'network'] },
-      { icon: 'bubble_chart', label: 'node.details.tpviz.title', linkParts: [], externalUrl: '/tp-viz/' },
-      { icon: 'check_circle', label: 'nodes.services-health-title', linkParts: ['/nodes', 'services-health'] },
-      { icon: 'speed', label: 'nodes.resources-title', linkParts: ['/nodes', 'resources'] },
-      { icon: 'settings', label: 'settings.title', linkParts: ['/settings'] },
-    ];
+    this.tabsData = homeTabsData();
   }
 
   ngOnInit() {

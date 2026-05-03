@@ -10,6 +10,7 @@ import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
 import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
+import { homeTabsData } from 'src/app/utils/home-tabs';
 import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
@@ -225,45 +226,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       }
     });
 
-    // Data for populating the tab bar.
-    this.tabsData = [
-      {
-        icon: 'view_headline',
-        label: 'nodes.title',
-        linkParts: ['/nodes'],
-      },
-      {
-        icon: 'monetization_on',
-        label: 'nodes.rewards-title',
-        linkParts: ['/nodes', 'rewards'],
-      },
-      {
-        icon: 'public',
-        label: 'nodes.network-title',
-        linkParts: ['/nodes', 'network'],
-      },
-      {
-        icon: 'bubble_chart',
-        label: 'node.details.tpviz.title',
-        linkParts: [],
-        externalUrl: '/tp-viz/',
-      },
-      {
-        icon: 'check_circle',
-        label: 'nodes.services-health-title',
-        linkParts: ['/nodes', 'services-health'],
-      },
-      {
-        icon: 'speed',
-        label: 'nodes.resources-title',
-        linkParts: ['/nodes', 'resources'],
-      },
-      {
-        icon: 'settings',
-        label: 'settings.title',
-        linkParts: ['/settings'],
-      }
-    ];
+    this.tabsData = homeTabsData();
 
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.

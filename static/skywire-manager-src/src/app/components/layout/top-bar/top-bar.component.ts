@@ -29,6 +29,14 @@ export interface TabButtonData {
    * If set, clicking the tab opens this URL in a new window instead of navigating via the router.
    */
   externalUrl?: string;
+  /**
+   * Optional grouping marker. The home top-bar uses 'local' vs
+   * 'network' to separate tabs that summarize the hypervisor's own
+   * visors from tabs that summarize the wider deployment.
+   * Consecutive tabs with the same group render as a cluster; a
+   * change in group inserts a visual separator in the tab strip.
+   */
+  group?: string;
 }
 
 /**

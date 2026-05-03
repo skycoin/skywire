@@ -17,6 +17,7 @@ import { NodeRewardsComponent } from './components/pages/node/rewards/node-rewar
 import { ServicesHealthComponent } from './components/pages/services-health/services-health.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
+import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
 import { DmsgSettingsComponent } from './components/pages/dmsg-settings/dmsg-settings.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
@@ -85,6 +86,10 @@ const routes: Routes = [
       {
         path: 'resources',
         component: MultiVisorResourcesComponent
+      },
+      {
+        path: 'transports',
+        component: NetworkTransportsComponent
       },
       // /nodes/dmsg-settings was the old home-level DMSG page (local
       // visor only). DMSG is a per-visor tab now — bounce the legacy
