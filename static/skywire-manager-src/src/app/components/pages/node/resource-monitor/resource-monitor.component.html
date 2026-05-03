@@ -1,0 +1,130 @@
+<div class="resource-monitor mt-3">
+  <div class="rm-header" (click)="toggleExpanded()">
+    <mat-icon [inline]="true" class="rm-toggle-icon">{{ expanded ? 'expand_less' : 'expand_more' }}</mat-icon>
+    <span class="section-title">{{ 'node.resource-monitor.title' | translate }}</span>
+    @if (host) {
+      <span class="rm-host-summary">
+        {{ host.hostname }} · {{ host.platform || host.os }} {{ host.arch }} · uptime {{ fmtUptime(host.uptime_seconds) }}
+      </span>
+    }
+  </div>
+
+  @if (expanded) {
+    <div class="rm-tabs">
+      <span class="rm-tab" [class.active]="activeTab === 'host'" (click)="setTab('host')">
+        {{ 'node.resource-monitor.tab-host' | translate }}
+      </span>
+      <span class="rm-tab" [class.active]="activeTab === 'process'" (click)="setTab('process')">
+        {{ 'node.resource-monitor.tab-process' | translate }}
+      </span>
+    </div>
+
+    @if (activeTab === 'host') {
+      <div class="rm-grid">
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.cpu' | translate }}</span>
+            <span class="rm-cell-value">{{ host ? (host.cpu_percent | number:'1.0-1') : '-' }}%</span>
+          </div>
+          <app-line-chart [data]="cpuPctSeries" [min]="0" [max]="100" [height]="60"></app-line-chart>
+          @if (host) {
+            <div class="rm-cell-foot">{{ host.cpu_logical_count }} cores · visor {{ procCPUPercent | number:'1.0-1' }}%</div>
+          }
+        </div>
+
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.memory' | translate }}</span>
+            <span class="rm-cell-value">{{ host ? (host.mem_percent | number:'1.0-1') : '-' }}%</span>
+          </div>
+          <app-line-chart [data]="memPctSeries" [min]="0" [max]="100" [height]="60"></app-line-chart>
+          @if (host) {
+            <div class="rm-cell-foot">
+              {{ fmtBytes(host.mem_used) }} / {{ fmtBytes(host.mem_total) }}
+              · visor RSS {{ procMemRssMB | number:'1.0-0' }}M
+            </div>
+          }
+        </div>
+
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.disk' | translate }}</span>
+            <span class="rm-cell-value">{{ host && host.disk_percent ? (host.disk_percent | number:'1.0-1') : '-' }}%</span>
+          </div>
+          <app-line-chart [data]="diskPctSeries" [min]="0" [max]="100" [height]="60"></app-line-chart>
+          @if (host && host.disk_total) {
+            <div class="rm-cell-foot">{{ fmtBytes(host.disk_used) }} / {{ fmtBytes(host.disk_total) }} on /</div>
+          }
+        </div>
+
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.net-rx' | translate }}</span>
+            <span class="rm-cell-value">{{ fmtBps(netRxBpsSeries[netRxBpsSeries.length - 1]) }}</span>
+          </div>
+          <app-line-chart [data]="netRxBpsSeries" [height]="60"></app-line-chart>
+          <div class="rm-cell-foot">{{ host ? fmtBytes(host.net_bytes_recv) : '-' }} total</div>
+        </div>
+
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.net-tx' | translate }}</span>
+            <span class="rm-cell-value">{{ fmtBps(netTxBpsSeries[netTxBpsSeries.length - 1]) }}</span>
+          </div>
+          <app-line-chart [data]="netTxBpsSeries" [height]="60"></app-line-chart>
+          <div class="rm-cell-foot">{{ host ? fmtBytes(host.net_bytes_sent) : '-' }} total</div>
+        </div>
+
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.threads' | translate }}</span>
+            <span class="rm-cell-value">{{ host && host.process ? host.process.num_threads : '-' }}</span>
+          </div>
+          <app-line-chart [data]="threadsSeries" [height]="60"></app-line-chart>
+          @if (host && host.process) {
+            <div class="rm-cell-foot">
+              fds {{ host.process.num_fds || '-' }} · conns {{ host.process.open_conns || 0 }}
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    @if (activeTab === 'process') {
+      <div class="rm-grid">
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.heap' | translate }}</span>
+            <span class="rm-cell-value">{{ proc ? ((proc.mem_heap_alloc / 1024 / 1024) | number:'1.0-1') : '-' }}M</span>
+          </div>
+          <app-line-chart [data]="heapMbSeries" [height]="60"></app-line-chart>
+          @if (proc) {
+            <div class="rm-cell-foot">heap_sys {{ fmtBytes(proc.mem_heap_sys) }} · sys {{ fmtBytes(proc.mem_sys) }}</div>
+          }
+        </div>
+
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.goroutines' | translate }}</span>
+            <span class="rm-cell-value">{{ proc ? proc.num_goroutine : '-' }}</span>
+          </div>
+          <app-line-chart [data]="goroutinesSeries" [height]="60"></app-line-chart>
+          @if (proc) {
+            <div class="rm-cell-foot">GOMAXPROCS {{ proc.gomaxprocs }} · {{ proc.go_version }}</div>
+          }
+        </div>
+
+        <div class="rm-cell">
+          <div class="rm-cell-header">
+            <span class="rm-cell-label">{{ 'node.resource-monitor.gc' | translate }}</span>
+            <span class="rm-cell-value">{{ gcSeries[gcSeries.length - 1] || 0 }}/s</span>
+          </div>
+          <app-line-chart [data]="gcSeries" [height]="60"></app-line-chart>
+          @if (proc) {
+            <div class="rm-cell-foot">total {{ proc.num_gc }} GCs · alloc {{ fmtBytes(proc.mem_total_alloc) }} since start</div>
+          }
+        </div>
+      </div>
+    }
+  }
+</div>

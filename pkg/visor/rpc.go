@@ -232,6 +232,15 @@ type DeregisterServiceIn struct {
 	PKs         []cipher.PubKey
 	ServiceType string
 }
+
+// SkychatPasswordChangeIn carries the old + new password for the
+// hypervisor's "Skychat password" set/change flow. Mirrors the
+// shape of usermanager.ChangePassword.
+type SkychatPasswordChangeIn struct {
+	OldPassword string
+	NewPassword string
+}
+
 type ConnectIn struct {
 	// Network selects the underlying transport for the reverse proxy.
 	// "skynet" (default; empty string treated as skynet) or "dmsg".

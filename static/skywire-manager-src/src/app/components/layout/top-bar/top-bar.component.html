@@ -15,11 +15,12 @@
     }
   </div>
   <div class="logo-container">
-    @if (!titleParts || titleParts.length < 2) {
-      <img src="/assets/img/logo-s.png" />
-    }
-    @if (titleParts && titleParts.length >= 2) {
+    @if (pageHeaderLabel) {
+      <span class="page-header-label-mobile">{{ pageHeaderLabel }}</span>
+    } @else if (titleParts && titleParts.length >= 2) {
       {{ titleParts[titleParts.length - 1] | translate }}
+    } @else {
+      <img src="/assets/img/logo-s.png" />
     }
   </div>
   <div class="button-container">
@@ -73,9 +74,20 @@
         </div>
       }
       @if (!showVpnInfo) {
-        <span class="title-text">
-          {{ titleParts[titleParts.length - 1] | translate }}
-        </span>
+        @if (pageHeaderLabel || pageHeaderIdentifier) {
+          <span class="page-header">
+            @if (pageHeaderLabel) {
+              <span class="page-header-label">{{ pageHeaderLabel }}</span>
+            }
+            @if (pageHeaderIdentifier) {
+              <app-copy-to-clipboard-text class="page-header-id" text="{{ pageHeaderIdentifier }}" [short]="false"></app-copy-to-clipboard-text>
+            }
+          </span>
+        } @else {
+          <span class="title-text">
+            {{ titleParts[titleParts.length - 1] | translate }}
+          </span>
+        }
       }
       @if (showVpnInfo) {
         <img class="title-image" src="./assets/img/logo-vpn.png" />
@@ -85,6 +97,9 @@
     <div class="lower-container">
       <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
       @for (tabData of tabsData; track tabData; let i = $index) {
+        @if (i > 0 && tabsData[i - 1].group !== tabData.group) {
+          <span class="tab-group-separator d-none d-md-inline-block" aria-hidden="true"></span>
+        }
         <div
           [ngClass]="{'d-lg-none': tabData.onlyIfLessThanLg, 'd-none d-md-inline-block': tabsData.length !== 1}"
           >

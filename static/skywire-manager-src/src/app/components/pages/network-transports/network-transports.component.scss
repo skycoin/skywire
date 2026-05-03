@@ -1,0 +1,130 @@
+@import "variables";
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .control-label {
+      font-size: 0.85em;
+      color: rgba(255, 255, 255, 0.65);
+      margin-right: 4px;
+    }
+
+    button {
+      min-width: 0;
+      padding: 0 12px !important;
+      opacity: 0.6;
+      &.active {
+        opacity: 1;
+        background: rgba(33, 150, 243, 0.18) !important;
+        color: #fff;
+      }
+    }
+  }
+
+  .refresh-btn {
+    margin-left: auto;
+  }
+}
+
+.loading-row,
+.error-row {
+  display: flex;
+  align-items: center;
+  padding: 24px 0;
+}
+.error-row { color: #f87171; }
+
+.summary-line {
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.95em;
+
+  .last-updated {
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 0.85em;
+    margin-left: 8px;
+  }
+}
+
+.dim { color: rgba(255, 255, 255, 0.6); }
+.small { font-size: 0.85em; }
+.mono { font-family: monospace; word-break: break-all; }
+.num { text-align: right; }
+
+.nt-compact {
+  table-layout: auto;
+
+  td.mono { font-size: 11px; }
+  th.num, td.num { white-space: nowrap; }
+}
+
+.nt-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nt-visor {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+
+  .nt-visor-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    cursor: pointer;
+    flex-wrap: wrap;
+
+    &:hover { background: rgba(255, 255, 255, 0.04); }
+
+    .exp { color: rgba(255, 255, 255, 0.6); }
+    .nt-pk { flex: 1 1 320px; min-width: 0; font-size: 11px; color: rgba(255, 255, 255, 0.85); }
+    .nt-bw { font-size: 13px; }
+    .dim { font-size: 12px; }
+  }
+
+  .nt-children {
+    padding: 4px 12px 8px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    .nt-child {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      padding: 2px 0;
+
+      .nt-prefix { font-family: monospace; color: rgba(255, 255, 255, 0.45); }
+      .nt-tp-id { font-size: 11px; color: rgba(255, 255, 255, 0.85); }
+      .nt-tp-type {
+        background: rgba(33, 150, 243, 0.18);
+        border: 1px solid rgba(33, 150, 243, 0.35);
+        padding: 0 6px;
+        border-radius: 3px;
+        font-size: 10px;
+        text-transform: lowercase;
+      }
+      .nt-arrow { color: rgba(255, 255, 255, 0.45); }
+      .nt-tp-remote { font-size: 11px; color: rgba(255, 255, 255, 0.7); }
+    }
+  }
+}

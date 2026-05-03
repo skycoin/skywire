@@ -29,6 +29,14 @@ export interface TabButtonData {
    * If set, clicking the tab opens this URL in a new window instead of navigating via the router.
    */
   externalUrl?: string;
+  /**
+   * Optional grouping marker. The home top-bar uses 'local' vs
+   * 'network' to separate tabs that summarize the hypervisor's own
+   * visors from tabs that summarize the wider deployment.
+   * Consecutive tabs with the same group render as a cluster; a
+   * change in group inserts a visual separator in the tab strip.
+   */
+  group?: string;
 }
 
 /**
@@ -97,6 +105,15 @@ export class TopBarComponent implements OnInit, OnDestroy {
    * Elements to show in the title. The idea is to show the path of the current page.
    */
   @Input() titleParts: string[];
+  /**
+   * When set, replaces the translated titleParts text with a structured
+   * "label + identifier" pair — used by the visor detail page so the
+   * visor's identity (label + PK) stays visible across every tab.
+   * label renders large in the title slot; identifier renders below
+   * it as a copy-to-clipboard text. Either can be empty.
+   */
+  @Input() pageHeaderLabel?: string;
+  @Input() pageHeaderIdentifier?: string;
   /**
    * List with the tabs to show.
    */

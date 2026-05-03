@@ -9,6 +9,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
+	"github.com/skycoin/skywire/rewards"
 )
 
 // provides overview of all visors.
@@ -112,6 +113,41 @@ func (hv *Hypervisor) getVisorSummary() http.HandlerFunc {
 
 		httputil.WriteJSON(w, r, http.StatusOK, summary)
 	})
+}
+
+// getNetworkView surfaces the SD/TPD/UT-aggregated network table
+// the `cli sd` command prints. Hypervisor-scope (network-wide
+// view, not per-visor); cached on the visor side for 5 minutes.
+// Pass ?refresh=true to force the visor to re-aggregate before
+// responding (used by the UI's manual-refresh button).
+func (hv *Hypervisor) getNetworkView() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			resp *NetworkViewResponse
+			err  error
+		)
+		if r.URL.Query().Get("refresh") == "true" {
+			resp, err = hv.visor.NetworkViewRefresh()
+		} else {
+			resp, err = hv.visor.NetworkView()
+		}
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	}
+}
+
+// getRewardRules serves the embedded mainnet_rules.md text. Used
+// by the hypervisor UI's reward-address area to surface the binary's
+// own copy of the rules instead of an external link.
+func (hv *Hypervisor) getRewardRules() http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(rewards.MainnetRules)) //nolint:errcheck
+	}
 }
 
 func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
