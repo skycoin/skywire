@@ -64,25 +64,11 @@ export class NodeActionsHelper {
   private updateOptions() {
     this.options = [];
 
-    if (this.canOpenTerminal) {
-      this.options.push({
-        name: 'actions.menu.terminal',
-        actionName: 'terminal',
-        icon: 'laptop'
-      });
-    }
-
-    this.options.push({
-      name: 'actions.menu.logs',
-      actionName: 'logs',
-      icon: 'subject',
-    });
-
-    this.options.push({
-      name: 'actions.menu.proxy',
-      actionName: 'proxy',
-      icon: 'vpn_lock'
-    });
+    // Terminal / Logs / Proxy moved to dedicated tabs (node.tabs.
+    // terminal / logs / web-proxy) so the actions menu now only
+    // carries the destructive shut-down action. This means the
+    // menu can stay narrow + the terminal / logs / proxy controls
+    // aren't gated behind the same drawer that hosts shut-down.
 
     this.options.push({
       name: 'actions.menu.turn-off',

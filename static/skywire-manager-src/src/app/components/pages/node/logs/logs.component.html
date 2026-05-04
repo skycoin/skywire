@@ -1,0 +1,65 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3 logs-box">
+    <div class="box-internal-container logs-shell">
+      <div class="logs-controls">
+        <div class="logs-filter-row">
+          <span class="control-label dim">{{ 'logs.filter' | translate }}:</span>
+          @for (l of levels; track l.level) {
+            <button mat-button [class.active]="minLevel === l.level" (click)="setLevel(l.level)">
+              {{ l.label }}
+            </button>
+          }
+        </div>
+        <div class="logs-action-row">
+          <button mat-button class="logs-tail" [class.active]="liveTail" (click)="toggleLiveTail()">
+            <mat-icon [inline]="true">{{ liveTail ? 'pause' : 'play_arrow' }}</mat-icon>
+            {{ liveTail ? ('logs.pause' | translate) : ('logs.resume' | translate) }}
+          </button>
+          <a [href]="fullLogsUrl()" target="_blank" rel="noreferrer" class="logs-raw-link">
+            <mat-icon [inline]="true">open_in_new</mat-icon>
+            {{ 'logs.open-raw' | translate }}
+          </a>
+        </div>
+      </div>
+
+      @if (totalDropped > 0) {
+        <div class="logs-dropped-banner">
+          <mat-icon [inline]="true">history</mat-icon>
+          {{ 'logs.dropped' | translate:{ count: totalDropped } }}
+        </div>
+      }
+
+      @if (loading && logEntries.length === 0) {
+        <div class="loading-row">
+          <mat-spinner [diameter]="16"></mat-spinner>
+          <span class="ml-2">{{ 'logs.loading' | translate }}</span>
+        </div>
+      }
+
+      @if (filteredLogEntries.length === 0 && !loading) {
+        <div class="logs-empty">{{ 'logs.empty' | translate }}</div>
+      }
+
+      <div #content class="logs-list">
+        @if (hasMoreLogMessages) {
+          <div class="log-entry">
+            <a [href]="fullLogsUrl()" target="_blank" class="logs-raw-link">
+              {{ 'logs.view-rest' | translate:{number: totalLogs} }}
+            </a>
+          </div>
+        }
+        @for (entry of filteredLogEntries; track trackEntry($index, entry)) {
+          <div class="log-entry">
+            <span class="le-time dim">{{ entry.time }}</span>
+            <span [class]="levelClass(entry.level)" class="le-level">{{ levelName(entry.level) }}</span>
+            @if (entry.func) { <span class="le-func dim">[{{ entry.func }}]</span> }
+            <span class="le-msg">{{ entry.msg }}</span>
+            @for (kv of entry.extra; track kv.name) {
+              <span class="le-extra dim"> {{ kv.name }}={{ kv.value }}</span>
+            }
+          </div>
+        }
+      </div>
+    </div>
+  </div>
+}

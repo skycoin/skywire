@@ -3,8 +3,9 @@ import { TabButtonData } from '../components/layout/top-bar/top-bar.component';
 /**
  * Single source of truth for the home top-bar's tab strip.
  * Used by every home-level page (node-list, network-view,
- * network-transports, multi-visor-resources, services-health,
- * settings) so the order and grouping stay consistent.
+ * network-transports, multi-visor-resources, multi-visor-uptime,
+ * services-health, settings) so the order and grouping stay
+ * consistent.
  *
  * The `group` field drives the visual separator in the top-bar
  * between local-hypervisor tabs and network-wide tabs.
@@ -16,8 +17,9 @@ import { TabButtonData } from '../components/layout/top-bar/top-bar.component';
  *   3 Transports
  *   4 Network
  *   5 Network Visualizer
- *   6 Deployment
- *   7 Settings
+ *   6 Services Health
+ *   7 Uptime
+ *   8 Settings
  */
 export const HOME_TAB_INDEX = {
   visorList: 0,
@@ -26,8 +28,9 @@ export const HOME_TAB_INDEX = {
   transports: 3,
   network: 4,
   tpviz: 5,
-  deployment: 6,
-  settings: 7,
+  servicesHealth: 6,
+  uptime: 7,
+  settings: 8,
 };
 
 export function homeTabsData(): TabButtonData[] {
@@ -41,6 +44,7 @@ export function homeTabsData(): TabButtonData[] {
     { icon: 'public', label: 'nodes.network-title', linkParts: ['/nodes', 'network'], group: 'network' },
     { icon: 'bubble_chart', label: 'node.details.tpviz.title', linkParts: [], externalUrl: '/tp-viz/', group: 'network' },
     { icon: 'check_circle', label: 'nodes.services-health-title', linkParts: ['/nodes', 'services-health'], group: 'network' },
+    { icon: 'schedule', label: 'nodes.uptime-title', linkParts: ['/nodes', 'uptime'], group: 'network' },
     // --- meta ---
     { icon: 'settings', label: 'settings.title', linkParts: ['/settings'] },
   ];

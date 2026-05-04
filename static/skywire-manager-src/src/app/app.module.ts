@@ -74,8 +74,14 @@ import { NodeInfoContentComponent } from './components/pages/node/node-info/node
 import { ResourceMonitorComponent } from './components/pages/node/resource-monitor/resource-monitor.component';
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
 import { SkychatComponent } from './components/pages/node/skychat/skychat.component';
+import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.component';
+import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
+import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
+import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
+import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
+import { MultiVisorUptimeComponent } from './components/pages/multi-visor-uptime/multi-visor-uptime.component';
 import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
@@ -171,8 +177,14 @@ const globalRippleConfig: RippleGlobalOptions = {
         ResourceMonitorComponent,
         NodeResourcesComponent,
         SkychatComponent,
+        BandwidthComponent,
+        UptimeComponent,
+        TerminalComponent,
+        WebProxyComponent,
+        LogsComponent,
         NetworkViewComponent,
         MultiVisorResourcesComponent,
+        MultiVisorUptimeComponent,
         NetworkTransportsComponent,
         NodeInfoComponent,
         SelectOptionComponent,

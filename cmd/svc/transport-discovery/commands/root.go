@@ -370,6 +370,18 @@ Example:
 			} else {
 				defer pub.Close() //nolint:errcheck
 			}
+
+			// CXO uptime publisher: outbound feed mirroring the
+			// /uptimes?v=v3 response. Visors subscribe to TPD's PK
+			// on skyenv.DmsgTPDUptimeCXOPort and read the
+			// JSON-encoded []VisorSummary from "uptimes/days/<n>".
+			// Drives the hvui Network Uptime tab without per-visor
+			// fan-out polling.
+			if pub, perr := api.StartUptimeCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
+				logger.WithError(perr).Error("Failed to start CXO uptime publisher, continuing without it")
+			} else {
+				defer pub.Close() //nolint:errcheck
+			}
 		} else if enableCXO {
 			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator/publisher disabled")
 		}

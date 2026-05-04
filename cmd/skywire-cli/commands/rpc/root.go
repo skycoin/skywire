@@ -161,6 +161,8 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 }
 
 var (
+	// NoCXO disables the CXO subscriber step in FetchServiceURL.
+	NoCXO bool
 	// NoRPC disables the RPC step in FetchServiceURL.
 	NoRPC bool
 	// NoDmsg disables the direct DMSG HTTP step in FetchServiceURL.
@@ -169,9 +171,11 @@ var (
 	NoHTTP bool
 )
 
-// RegisterFetchFlags adds --no-rpc, --no-dmsg, and --no-http flags to a command.
-// Call this in init() for any command that uses FetchServiceURL.
+// RegisterFetchFlags adds --no-cxo, --no-rpc, --no-dmsg, and --no-http
+// flags to a command. Call this in init() for any command that uses
+// FetchServiceURL.
 func RegisterFetchFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&NoCXO, "no-cxo", false, "skip CXO subscriber-cache step")
 	cmd.Flags().BoolVar(&NoRPC, "no-rpc", false, "skip visor RPC (DmsgHTTP) step")
 	cmd.Flags().BoolVar(&NoDmsg, "no-dmsg", false, "skip direct DMSG HTTP step")
 	cmd.Flags().BoolVar(&NoHTTP, "no-http", false, "skip direct HTTP fallback step")
@@ -202,6 +206,124 @@ func dmsgURLForHTTP(httpURL string) string {
 		}
 	}
 	return ""
+}
+
+// cxoFeedForURL maps a deployment-service HTTP/DMSG URL to the CXO
+// (feed, path) pair the visor's lazy-on-demand subscriber publishes
+// for it. Returns ok=false when no CXO mirror is configured for the
+// URL — the caller falls through to the existing RPC/DMSG/HTTP chain.
+//
+// Adding a new feed: register a publisher on the service side, a
+// matching subscriber on the visor side, and add a row here. The
+// CLI fetch chain picks it up automatically.
+//
+// Standalone uptime tracker (deployment.Prod.UptimeTracker /
+// UptimeTrackerDmsg) is intentionally absent — the service is being
+// deprecated; mirroring it over CXO would just be sunk effort.
+func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
+	// TPD /metrics → "tpd-metrics" feed, "metrics/days/<n>" path.
+	// Only the windows the publisher actually writes are CXO-eligible
+	// — see uptimePublishDays / metricsPublishDays in TPD. Anything
+	// else falls through to the network chain.
+	if isUnderBase(rawURL, deployment.Prod.TransportDiscovery, "/metrics") ||
+		isUnderBase(rawURL, deployment.Prod.TransportDiscoveryDmsg, "/metrics") {
+		days := queryParamInt(rawURL, "days", -1)
+		if days == 1 || days == 7 || days == 30 {
+			return "tpd-metrics", fmt.Sprintf("metrics/days/%d", days), true
+		}
+		return "", "", false
+	}
+
+	// TPD /uptimes → "tpd-uptime" feed. The publisher writes per-day
+	// windows; the CLI's graph commands hit /uptimes?v=v3 without an
+	// explicit days param so we read the 30d bucket which always
+	// contains today's data and trims older days client-side.
+	if isUnderBase(rawURL, deployment.Prod.TransportDiscovery, "/uptimes") ||
+		isUnderBase(rawURL, deployment.Prod.TransportDiscoveryDmsg, "/uptimes") {
+		// Only v3 carries timeline bitmaps — v1/v2 callers don't
+		// gain anything from CXO over the existing chain since the
+		// payload is small.
+		if v := queryParam(rawURL, "v"); v == "v3" {
+			return "tpd-uptime", "uptimes/days/30", true
+		}
+		return "", "", false
+	}
+	return "", "", false
+}
+
+// isUnderBase reports whether rawURL begins with `base + suffix`.
+// Empty bases never match — keeps deployment configs without a DMSG
+// equivalent from accidentally aliasing onto every URL.
+func isUnderBase(rawURL, base, suffix string) bool {
+	if base == "" {
+		return false
+	}
+	target := base + suffix
+	return len(rawURL) >= len(target) && rawURL[:len(target)] == target
+}
+
+// queryParam extracts a single query-string value by name. Returns
+// "" when the URL has no query, when the key is absent, or when
+// parsing fails. (Stdlib's url.Parse handles these edges; we just
+// pick out the value.)
+func queryParam(rawURL, name string) string {
+	idx := -1
+	for i := 0; i < len(rawURL); i++ {
+		if rawURL[i] == '?' {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return ""
+	}
+	q := rawURL[idx+1:]
+	for _, kv := range splitOn(q, '&') {
+		eq := -1
+		for i := 0; i < len(kv); i++ {
+			if kv[i] == '=' {
+				eq = i
+				break
+			}
+		}
+		if eq < 0 {
+			continue
+		}
+		if kv[:eq] == name {
+			return kv[eq+1:]
+		}
+	}
+	return ""
+}
+
+// queryParamInt is queryParam parsed as an int with a fallback when
+// missing or unparseable.
+func queryParamInt(rawURL, name string, fallback int) int {
+	v := queryParam(rawURL, name)
+	if v == "" {
+		return fallback
+	}
+	n := 0
+	for _, c := range v {
+		if c < '0' || c > '9' {
+			return fallback
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
+}
+
+func splitOn(s string, sep byte) []string {
+	out := []string{}
+	last := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] == sep {
+			out = append(out, s[last:i])
+			last = i + 1
+		}
+	}
+	out = append(out, s[last:])
+	return out
 }
 
 // fetchViaDmsgDirect creates ephemeral DMSG direct clients — one per DMSG server —
@@ -336,6 +458,32 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 //   - Environments without DMSG connectivity (step 3)
 func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	var lastErr error
+
+	// Step 0: CXO subscriber cache. When the URL maps to a feed the
+	// visor already subscribes to, the cached payload is a local
+	// memory read — no DMSG round-trip, no service round-trip. Falls
+	// through silently on miss; the visor's lazy-on-demand
+	// connect-with-cooldown keeps repeated probes from costing more
+	// than the first one when the publisher is down.
+	if !NoCXO {
+		if feed, path, ok := cxoFeedForURL(url); ok {
+			if rpcClient, err := Client(cmdFlags); err == nil {
+				resp, err := rpcClient.FetchCXO(visor.FetchCXOArgs{Feed: feed, Path: path})
+				if err == nil && resp != nil && resp.Hit && len(resp.Body) > 0 {
+					logger.Debugf("CXO hit for %s (feed=%s path=%s, root@%s)",
+						url, feed, path, resp.LastRootAt.Format(time.RFC3339))
+					return resp.Body, nil
+				}
+				if err != nil {
+					logger.Debugf("CXO probe error for %s: %v", url, err)
+				} else if resp != nil {
+					logger.Debugf("CXO miss for %s: %s", url, resp.Reason)
+				}
+			} else {
+				logger.Debugf("CXO step skipped (no RPC client): %v", err)
+			}
+		}
+	}
 
 	// The visor's DmsgHTTP RPC parses req.Host as a dmsg.Addr (PK:port),
 	// so hostname-based http:// URLs like http://dmsgd.skywire.skycoin.com

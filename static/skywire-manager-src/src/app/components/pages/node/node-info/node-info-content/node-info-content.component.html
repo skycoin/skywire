@@ -123,7 +123,52 @@
       {{ 'node.details.config.title' | translate }}
     </span>
     @if (showConfigSection && rawConfig) {
-      <pre class="raw-config">{{ rawConfig }}</pre>
+      <!-- Read mode: pre block + Edit button. -->
+      @if (!editingConfig) {
+        <div class="config-actions">
+          <button mat-stroked-button (click)="startEditConfig()">
+            <mat-icon [inline]="true">edit</mat-icon>
+            {{ 'node.details.config.edit' | translate }}
+          </button>
+          @if (configSaveMsg) {
+            <span class="config-save-msg">{{ configSaveMsg }}</span>
+          }
+        </div>
+        <pre class="raw-config">{{ rawConfig }}</pre>
+      }
+      <!-- Edit mode: textarea + validation + save/cancel. -->
+      @if (editingConfig) {
+        <div class="config-actions">
+          <button mat-raised-button color="primary" (click)="saveConfig()" [disabled]="!!configError || configSaving">
+            <mat-icon [inline]="true">save</mat-icon>
+            {{ configSaving ? ('common.loading' | translate) : ('node.details.config.save' | translate) }}
+          </button>
+          <button mat-button (click)="cancelEditConfig()" [disabled]="configSaving">
+            {{ 'common.cancel' | translate }}
+          </button>
+          <span class="config-restart-hint dim">
+            {{ 'node.details.config.restart-hint' | translate }}
+          </span>
+        </div>
+        @if (configError) {
+          <div class="config-error">
+            <mat-icon [inline]="true">error_outline</mat-icon>
+            {{ configError }}
+          </div>
+        }
+        @if (configSaveErr) {
+          <div class="config-error">
+            <mat-icon [inline]="true">error_outline</mat-icon>
+            {{ configSaveErr }}
+          </div>
+        }
+        <textarea
+          class="raw-config config-editor"
+          spellcheck="false"
+          [value]="configDraft"
+          (input)="onConfigDraftChange($any($event.target).value)"
+          [disabled]="configSaving"></textarea>
+      }
     }
   </div>
 </div>

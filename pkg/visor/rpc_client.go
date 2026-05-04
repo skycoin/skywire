@@ -518,6 +518,38 @@ func (rc *rpcClient) GetIsPublic() bool {
 	return out
 }
 
+// SetRuntimeConfig implements API.
+func (rc *rpcClient) SetRuntimeConfig(rawJSON []byte) error {
+	return rc.Call("SetRuntimeConfig", &rawJSON, &struct{}{})
+}
+
+// LocalTransportStats implements API.
+func (rc *rpcClient) LocalTransportStats() (*LocalTransportStatsResponse, error) {
+	var resp LocalTransportStatsResponse
+	if err := rc.Call("LocalTransportStats", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// LocalUptimeStats implements API.
+func (rc *rpcClient) LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error) {
+	var resp LocalUptimeResponse
+	if err := rc.Call("LocalUptimeStats", &args, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// FetchCXO implements API.
+func (rc *rpcClient) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
+	var resp FetchCXOResult
+	if err := rc.Call("FetchCXO", &args, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // GetRuntimeConfig implements API.
 func (rc *rpcClient) GetRuntimeConfig() ([]byte, error) {
 	var out []byte

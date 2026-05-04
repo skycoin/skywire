@@ -14,6 +14,11 @@ export enum ResponseTypes {
 
 export enum RequestTypes {
   Json = 'json',
+  // RawJson sends the body as-is (must already be a JSON-encoded
+  // string). Avoids the double JSON.stringify the default Json mode
+  // would do — useful when the caller wants the user's exact bytes
+  // preserved on the wire (e.g. the runtime-config editor).
+  RawJson = 'raw-json',
 }
 
 export class RequestOptions {
@@ -156,7 +161,7 @@ export class ApiService {
 
     requestOptions.headers = new HttpHeaders();
 
-    if (options.requestType === RequestTypes.Json) {
+    if (options.requestType === RequestTypes.Json || options.requestType === RequestTypes.RawJson) {
       requestOptions.headers = requestOptions.headers.append('Content-Type', 'application/json');
     }
 
@@ -171,6 +176,10 @@ export class ApiService {
    * Encode the content to send it to the backend.
    */
   private getPostBody(body: any, options: RequestOptions) {
+    if (options.requestType === RequestTypes.RawJson) {
+      // Caller is responsible for handing us a JSON-encoded string.
+      return typeof body === 'string' ? body : JSON.stringify(body);
+    }
     if (options.requestType === RequestTypes.Json) {
       return JSON.stringify(body);
     }

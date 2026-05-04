@@ -1,0 +1,42 @@
+.dim { color: rgba(255, 255, 255, 0.6); }
+.small { font-size: 0.85em; }
+.mono { font-family: monospace; word-break: break-all; }
+
+.wp-help {
+  margin: 4px 0 12px;
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+}
+
+.wp-status {
+  margin-bottom: 16px;
+
+  td.mono { font-size: 11px; }
+  .wp-ok { color: #4caf50; }
+  .wp-off { color: rgba(255, 255, 255, 0.6); }
+}
+
+.wp-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+
+  .wp-upstream {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .wp-upstream-field { flex: 1 1 320px; min-width: 220px; }
+
+  .wp-refresh {
+    color: rgba(255, 255, 255, 0.85) !important;
+    .mat-icon { color: inherit; }
+  }
+}
