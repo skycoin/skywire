@@ -1317,6 +1317,32 @@ func configureApps(log *logging.Logger) {
 				Port:      routing.Port(skyenv.VPNServerPort),
 				Args:      []string{"app", "vpn-server"},
 			},
+			// Skycoin daemon — full node, syncs the chain locally.
+			// Default-off; operator opts in by flipping AutoStart
+			// or starting via `skywire cli visor app start
+			// skycoin-daemon`. Args / data-dir / wallet-dir are
+			// left to the operator since the right defaults depend
+			// on which user the app drops to (see User field in
+			// the Apps tab dialog).
+			{
+				Name:      skyenv.SkycoinDaemonName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkycoinDaemonPort),
+				Args:      []string{"skycoin", "daemon"},
+			},
+			// Skycoin thin-client web wallet. Default-off. Runs as
+			// the operator's own user (set User=) so the wallet
+			// dir under ~/.skycoin/wallets stays writable to them
+			// — the visor itself can run as _skywire while this
+			// drops via the launcher's per-app credential field.
+			{
+				Name:      skyenv.SkycoinWebName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkycoinWebPort),
+				Args:      []string{"skycoin", "web"},
+			},
 		}
 	} else {
 		// Internal apps configuration (default - apps run within visor process)
