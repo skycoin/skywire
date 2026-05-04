@@ -520,6 +520,10 @@ func newMemoryStoreFromEntries(entries []*transport.Entry) *memoryStore {
 	return &memoryStore{entries: entries, byEdge: byEdge}
 }
 
+func (s *memoryStore) GetTransportsByEdgeNoLatency(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	return s.GetTransportsByEdge(ctx, pk)
+}
+
 func (s *memoryStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
 	if tps, ok := s.byEdge[pk]; ok {
 		return tps, nil

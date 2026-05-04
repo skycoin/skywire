@@ -295,7 +295,13 @@ func (api *API) mirrorEdges(ctx context.Context, edges map[cipher.PubKey]struct{
 	}
 	seq := uint64(time.Now().UnixNano()) //nolint:gosec
 	for edge := range edges {
-		entries, err := api.store.GetTransportsByEdge(ctx, edge)
+		// DHT consumers don't read the Latency field — skip the
+		// per-call MGET on lat:<id> + decode by using the
+		// no-latency variant. Production pprof showed mirrorEdges
+		// as 97.7% of GetTransportsByEdge alloc traffic, with
+		// hydrateDurableLatency contributing 10.5% of total
+		// alloc_objects.
+		entries, err := api.store.GetTransportsByEdgeNoLatency(ctx, edge)
 		if err != nil || len(entries) == 0 {
 			api.dhtMirror.Delete(edge)
 			continue
