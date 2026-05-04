@@ -24,14 +24,26 @@
             ];
         };
 
-        # Pin the version once for both packages. Bump this when
-        # cutting a new release — the source build picks the matching
-        # git tag (or the working tree, the default), and the
-        # binary build expects upstream tarballs at v${version}.
-        version = "1.3.50";
+        # Source-build version comes from the flake's own git
+        # metadata — analogous to the Makefile's
+        # `git describe --always`. Clean tree → short commit SHA;
+        # dirty tree → short SHA with a `-dirty` suffix; no git info
+        # at all → "dev". For a tagged release build, override `rev`
+        # in the call below (or pass `version` directly) and
+        # skywire.nix will strip the leading "v" off the rev.
+        sourceVersion =
+          if self ? shortRev then self.shortRev
+          else if self ? dirtyShortRev then self.dirtyShortRev
+          else "dev";
+
+        # The binary build downloads a release tarball whose URL
+        # encodes the semver, so this one stays a hand-written
+        # constant. Bump on each release. The source build does not
+        # use this — it derives version from git above.
+        binaryVersion = "1.3.50";
 
         skywire = pkgs.callPackage ./skywire.nix {
-          inherit version;
+          version = sourceVersion;
           # Default: build from the local working tree (../..). To
           # build a tagged release from upstream instead, override:
           #
@@ -41,7 +53,7 @@
         };
 
         skywire-bin = pkgs.callPackage ./skywire-bin.nix {
-          inherit version;
+          version = binaryVersion;
           # Fill in real hashes here once the release is cut. First
           # `nix build .#skywire-bin` will print the expected hash
           # for whichever arch you're on; copy it in.
