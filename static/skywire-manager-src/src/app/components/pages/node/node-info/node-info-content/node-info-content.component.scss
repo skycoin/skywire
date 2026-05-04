@@ -28,6 +28,36 @@
   }
 }
 
+// Multi-column responsive grid for the Visor info / Ports key/value
+// pairs. auto-fill + minmax(360px,1fr) means each cell wants ≥360px
+// and the browser packs as many columns as fit; on a typical 1920px
+// monitor that's 4 columns, on 1366px ~3, on a tablet 2, mobile 1.
+// `info-line` items are inline-styled spans inheriting the existing
+// title/value layout — no per-cell changes needed.
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 4px 24px;
+  align-items: baseline;
+
+  > .info-line {
+    // info-line was a span with inline-flex behaviour; force block so
+    // the grid lays it out as one cell.
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0; // let long values truncate via word-break instead of expanding the cell
+  }
+}
+
+// Used for child blocks that should span every column of an
+// .info-grid parent (e.g. the dmsg-servers list, which is its own
+// multi-line block and would look fragmented if split across cells).
+.grid-span-all {
+  grid-column: 1 / -1;
+}
+
 // .info-line / .toggle-line / .inline-edit-btn / .inline-form
 // styles moved to assets/scss/_forms.scss so they apply globally
 // (Rewards / Routing / Transports tabs reuse the same classes

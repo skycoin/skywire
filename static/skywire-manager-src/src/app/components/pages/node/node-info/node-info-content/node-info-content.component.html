@@ -1,8 +1,12 @@
 @if (node) {
   <div class="font-smaller d-flex flex-column mt-4.5">
-    <!-- Basic info section. -->
+    <!-- Basic info section. info-grid lays out the key/value pairs
+         in 1–3 responsive columns depending on viewport width, so a
+         widescreen visor-info page actually fills the horizontal
+         area instead of leaving a narrow single column on the left. -->
     <div class="d-flex flex-column">
       <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
+      <div class="info-grid">
       <span class="info-line">
         <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
         <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
@@ -40,7 +44,9 @@
         }
       </span>
       @if (node.dmsgServers && node.dmsgServers.length > 0) {
-        <div class="dmsg-servers-list">
+        <!-- Span all grid columns so the server list reads as a
+             single block instead of fragmenting across columns. -->
+        <div class="dmsg-servers-list grid-span-all">
           @for (server of node.dmsgServers; track server) {
             <div class="dmsg-server-item">
               <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
@@ -95,6 +101,7 @@
           </mat-icon>
         }
       </span>
+      </div>
     </div>
     <!-- Ports section (collapsible). -->
   @if (ports.length > 0) {
@@ -106,12 +113,14 @@
         <span class="count-badge">({{ ports.length }})</span>
       </span>
       @if (showPorts) {
+        <div class="info-grid">
         @for (port of ports; track port.name) {
           <span class="info-line">
             <span class="title">{{ port.name }}: </span>
             {{ port.value }}
           </span>
         }
+        </div>
       }
     </div>
   }
