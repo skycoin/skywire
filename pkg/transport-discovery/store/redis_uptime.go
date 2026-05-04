@@ -139,40 +139,13 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 // 5-minute slot, ' ' = missed.
 func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string {
 	timelines := make(map[string]string)
-
 	for i := 0; i < uptimeHistoryDays; i++ {
 		date := now.AddDate(0, 0, -i).Format("2006-01-02")
 		tlKey := uptimeTimelineKey(pkHex, date)
-
-		// Read all 288 bits. Redis GETBIT returns 0 for unset bits
-		// and for keys that don't exist, so this is safe.
-		var buf [timelineSlots]byte
-		pipe := s.client.Pipeline()
-		cmds := make([]*redis.IntCmd, timelineSlots)
-		for slot := 0; slot < timelineSlots; slot++ {
-			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
-		}
-		_, err := pipe.Exec(ctx)
-		if err != nil {
-			continue
-		}
-
-		hasAny := false
-		for slot := 0; slot < timelineSlots; slot++ {
-			if cmds[slot].Val() == 1 {
-				buf[slot] = '.'
-				hasAny = true
-			} else {
-				buf[slot] = ' '
-			}
-		}
-
-		// Only include days that have at least one heartbeat.
-		if hasAny {
-			timelines[date] = string(buf[:])
+		if line, ok := readTimelineLine(ctx, s.client, tlKey); ok {
+			timelines[date] = line
 		}
 	}
-
 	return timelines
 }
 
@@ -374,30 +347,49 @@ func (s *redisStore) GetTransportDailyTimeline(ctx context.Context, tpID string,
 	for i := 0; i < uptimeHistoryDays; i++ {
 		date := now.AddDate(0, 0, -i).Format("2006-01-02")
 		tlKey := tpUptimeTimelineKey(tpID, date)
-
-		pipe := s.client.Pipeline()
-		cmds := make([]*redis.IntCmd, timelineSlots)
-		for slot := 0; slot < timelineSlots; slot++ {
-			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
-		}
-		_, err := pipe.Exec(ctx)
-		if err != nil {
-			continue
-		}
-
-		var buf [timelineSlots]byte
-		hasAny := false
-		for slot := 0; slot < timelineSlots; slot++ {
-			if cmds[slot].Val() == 1 {
-				buf[slot] = '.'
-				hasAny = true
-			} else {
-				buf[slot] = ' '
-			}
-		}
-		if hasAny {
-			timelines[date] = string(buf[:])
+		if line, ok := readTimelineLine(ctx, s.client, tlKey); ok {
+			timelines[date] = line
 		}
 	}
 	return timelines
+}
+
+// readTimelineLine fetches a 288-bit / 36-byte daily uptime bitmap
+// from redis with a single GET and renders it to the conventional
+// "." / " " text form. Returns (line, false) when the key doesn't
+// exist OR when no bits are set — matching the prior "skip empty
+// days" behavior of the per-bit pipeline this replaces.
+//
+// Was: Pipeline + 288 GETBIT calls per day, each allocating an
+// *IntCmd. With uptimeHistoryDays=7 that's 2,016 commands per
+// summary call; in production /uptimes?v=v3 served at p2p churn
+// rates this dominated TPD's GC (>70% CPU in runtime.scanObject /
+// spanClass.sizeclass per pprof). One GET per day reads the same
+// bytes server-side; same wire format the SETBIT writers use.
+func readTimelineLine(ctx context.Context, client redis.UniversalClient, tlKey string) (string, bool) {
+	raw, err := client.Get(ctx, tlKey).Bytes()
+	if err != nil || len(raw) == 0 {
+		return "", false
+	}
+	var buf [timelineSlots]byte
+	hasAny := false
+	for slot := 0; slot < timelineSlots; slot++ {
+		byteIdx := slot / 8
+		if byteIdx >= len(raw) {
+			buf[slot] = ' '
+			continue
+		}
+		// Redis SETBIT stores bits MSB-first within each byte —
+		// matching pkg/visor/stats/bitmap.go and pkg/serviceuptime.
+		if raw[byteIdx]&(1<<uint(7-slot%8)) != 0 {
+			buf[slot] = '.'
+			hasAny = true
+		} else {
+			buf[slot] = ' '
+		}
+	}
+	if !hasAny {
+		return "", false
+	}
+	return string(buf[:]), true
 }
