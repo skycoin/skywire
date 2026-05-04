@@ -118,3 +118,89 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 			map[string]string{"error": "no TPD URL configured"})
 	}
 }
+
+// getNetworkVisorUptime proxies TPD's `/uptimes?v=v3` for the
+// network-wide Uptime tab. The TPD aggregates visor heartbeats from
+// the integrated tracker (transports + dmsg discovery check-ins);
+// the v3 response includes a 288-char per-day timeline string per
+// visor — exactly the "exact intervals" shape the operator wants.
+//
+// Same DMSG-HTTP-then-HTTP fallback chain as getNetworkTransports.
+// The CXO subscriber path doesn't apply here yet — TPD only
+// publishes the metrics aggregate over CXO, not per-visor uptime.
+//
+// Query params forwarded to TPD:
+//
+//	visors=<pk>;<pk>...   semicolon-separated PK filter (TPD requires
+//	                     it for v3 — without a filter the endpoint
+//	                     returns the full v2 cache without timelines)
+func (hv *Hypervisor) getNetworkVisorUptime() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable,
+				map[string]string{"error": "no local visor"})
+			return
+		}
+
+		visorsParam := strings.TrimSpace(r.URL.Query().Get("visors"))
+		// Default to v3 — the timeline is what the UI renders.
+		// Callers that just want percentages can pass v=v2.
+		version := r.URL.Query().Get("v")
+		if version == "" {
+			version = "v3"
+		}
+		path := "/uptimes?v=" + version
+		if visorsParam != "" {
+			path += "&visors=" + visorsParam
+		}
+
+		log := hv.visor.MasterLogger().PackageLogger("tpd_uptime_proxy")
+
+		tpdHTTP := strings.TrimSuffix(hv.visor.conf.Transport.Discovery, "/")
+		tpdDmsg := strings.TrimSuffix(hv.visor.conf.Transport.DiscoveryDmsg, "/")
+		if tpdHTTP == "" {
+			tpdHTTP = strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
+		}
+		if tpdDmsg == "" {
+			tpdDmsg = strings.TrimSuffix(deployment.Prod.TransportDiscoveryDmsg, "/")
+		}
+
+		if tpdDmsg != "" {
+			dmsgURL := tpdDmsg + path
+			log.Debugf("fetching TPD /uptimes via DMSG: %s", dmsgURL)
+			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{URL: dmsgURL, Method: "GET"})
+			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("X-Skywire-Uptime-Source", "dmsg-http")
+				w.WriteHeader(resp.StatusCode)
+				_, _ = w.Write(resp.Body) //nolint:errcheck,gosec
+				return
+			}
+			if err != nil {
+				log.WithError(err).Warn("DMSG fetch failed, falling back to HTTP")
+			}
+		}
+
+		if tpdHTTP != "" {
+			httpURL := tpdHTTP + path
+			log.Debugf("fetching TPD /uptimes via HTTP: %s", httpURL)
+			client := &http.Client{Timeout: 15 * time.Second}
+			resp, err := client.Get(httpURL) //nolint:gosec // operator-controlled URL
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusBadGateway,
+					map[string]string{"error": "tpd unreachable: " + err.Error()})
+				return
+			}
+			defer resp.Body.Close()          //nolint:errcheck
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+			w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+			w.Header().Set("X-Skywire-Uptime-Source", "http")
+			w.WriteHeader(resp.StatusCode)
+			_, _ = w.Write(body) //nolint:errcheck,gosec
+			return
+		}
+
+		httputil.WriteJSON(w, r, http.StatusServiceUnavailable,
+			map[string]string{"error": "no TPD URL configured"})
+	}
+}

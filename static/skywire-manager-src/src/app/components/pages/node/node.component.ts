@@ -212,6 +212,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/routing') ||
       this.lastUrl.includes('/transports') ||
       this.lastUrl.includes('/bandwidth') ||
+      this.lastUrl.includes('/uptime') ||
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/web-proxy') ||

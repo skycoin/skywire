@@ -44,15 +44,6 @@
   padding: 12px;
 }
 
-.summary-line {
-  display: flex;
-  align-items: center;
-  font-size: 0.9em;
-  color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 8px;
-  .mat-icon { font-size: 16px; height: 16px; width: 16px; }
-}
-
 .up-empty {
   padding: 24px;
   text-align: center;
@@ -60,55 +51,86 @@
   font-style: italic;
 }
 
-.up-tier {
-  margin-bottom: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 4px;
+.summary-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
   padding: 8px 12px;
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
 
-  .up-tier-head {
+  .summary-label {
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.65);
+  }
+
+  .summary-tier {
     display: flex;
     align-items: baseline;
-    gap: 12px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-    margin-bottom: 8px;
+    gap: 6px;
 
-    .up-tier-name {
-      font-weight: 600;
-      font-size: 1em;
-      color: #fff;
-      text-transform: capitalize;
+    .summary-tier-name {
+      font-size: 0.85em;
+      color: rgba(255, 255, 255, 0.75);
     }
-    .up-tier-help {
-      flex: 1;
-      color: rgba(255, 255, 255, 0.5);
-      font-size: 0.8em;
-    }
-    .up-tier-avg {
-      font-family: monospace;
+    .summary-tier-pct {
       font-size: 0.95em;
       font-weight: 600;
     }
   }
+
+  .last-updated {
+    margin-left: auto;
+  }
 }
 
-.up-day {
+.up-day-block {
+  margin-bottom: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+
+.up-day-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 6px;
+
+  .up-day-date {
+    font-weight: 600;
+    color: #fff;
+    font-size: 0.95em;
+  }
+  .up-day-today {
+    color: rgba(33, 150, 243, 0.85);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+}
+
+.up-tier-line {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 2px 0;
 
-  .up-date {
+  .up-tier-name {
     flex: 0 0 auto;
-    width: 96px;
+    width: 80px;
     color: rgba(255, 255, 255, 0.7);
+    text-transform: capitalize;
+    cursor: help;
   }
 
   .up-bar {
     flex: 1;
     display: flex;
-    height: 14px;
+    height: 12px;
     background: rgba(0, 0, 0, 0.25);
     border-radius: 2px;
     overflow: hidden;
@@ -119,12 +141,24 @@
     flex: 1;
     min-width: 1px;
     height: 100%;
-    border-right: 1px solid rgba(0, 0, 0, 0.2);
+    border-right: 1px solid rgba(0, 0, 0, 0.18);
 
     &.on { background: #4caf50; }
     &.off { background: rgba(229, 57, 53, 0.4); }
-
-    // Hide the divider on the last cell so the bar reads as one unit.
+    // Future slots — neutral, no claim about uptime; rendered as a
+    // soft hatched/dim band so today's incomplete bar reads as
+    // "not yet" rather than "down".
+    &.future {
+      background: rgba(255, 255, 255, 0.04);
+      // a subtle diagonal pattern signals the cell hasn't happened.
+      background-image: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 2px,
+        rgba(255, 255, 255, 0.06) 2px,
+        rgba(255, 255, 255, 0.06) 4px
+      );
+    }
     &:last-child { border-right: none; }
   }
 

@@ -10,19 +10,18 @@ import { ApiService } from 'src/app/services/api.service';
 /**
  * Per-visor Uptime tab. Reads from the visor's local bbolt stats
  * store via the LocalUptimeStats RPC, mirroring `/stats/uptime` on
- * the visor's logserver. The store keeps a 288-bit-per-day bitmap
- * per tier (process / dmsg / skynet) at 5-minute slot resolution;
- * we render each day as a 288-cell ribbon plus an uptime percentage.
+ * the visor's logserver.
+ *
+ * Layout: one row per UTC day (newest first), with the three tiers
+ * — process / dmsg / skynet — rendered as adjacent ribbons under a
+ * shared date header. Each ribbon has 288 cells at 5-minute slot
+ * resolution; "future" slots on today's row are explicitly distinct
+ * from "offline" so an empty bar on today doesn't read as downtime.
  *
  * Tier semantics:
  *   process — visor process is up (the local sampler ticked).
  *   dmsg    — dmsg client connected to a server.
  *   skynet  — skynet connectivity probe succeeded.
- *
- * The "exact intervals where the visor was online and offline" the
- * operator asked for is precisely a row of these cells: each cell
- * spans a five-minute UTC window, set when the tier was observed
- * online during at least one sampler tick within that window.
  */
 
 interface UptimeResp {
@@ -33,25 +32,28 @@ interface UptimeResp {
 }
 
 interface DayCell {
-  online: boolean;
-  // 5-minute slot index (0..287); used for tooltip text only.
+  state: 'on' | 'off' | 'future';
   slot: number;
 }
 
-interface DayRow {
-  date: string;
+interface TierLine {
+  name: string;
   cells: DayCell[];
-  onlineSlots: number;
-  totalSlots: number;
+  // Percentage online out of *known* slots only (excludes future slots).
   pct: number;
+  // True when this tier had no data recorded for this day at all.
+  empty: boolean;
 }
 
-interface TierBlock {
-  name: string;
-  days: DayRow[];
-  // Aggregate online% across all visible days in this tier.
-  avgPct: number;
+interface DayBlock {
+  date: string;
+  // True when this is today's UTC date — used to mark trailing
+  // slots as "future" instead of "offline".
+  isToday: boolean;
+  tiers: TierLine[];
 }
+
+const TIER_ORDER = ['process', 'dmsg', 'skynet'];
 
 type WindowDays = 1 | 7 | 30;
 
@@ -63,11 +65,16 @@ type WindowDays = 1 | 7 | 30;
 })
 export class UptimeComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
-  tiers: TierBlock[] = [];
+  days: DayBlock[] = [];
   loading = true;
   error: string | null = null;
   fetchedAt: Date | null = null;
   windowDays: WindowDays = 7;
+
+  // Per-tier window averages (across visible past + completed slots
+  // of today). Kept in render order so the summary strip stays
+  // tier-aligned with the day blocks below.
+  summary: { name: string; pct: number }[] = [];
 
   private nodeSub: Subscription;
   private pollSub: Subscription;
@@ -128,64 +135,83 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
 
   private consume(resp: UptimeResp) {
     const tiers = resp.tiers || {};
-    const out: TierBlock[] = [];
-    for (const name of Object.keys(tiers).sort(this.tierSort)) {
-      const days: DayRow[] = [];
-      for (const date of Object.keys(tiers[name]).sort()) {
-        days.push(this.buildDayRow(date, tiers[name][date]));
-      }
-      const totalOnline = days.reduce((s, d) => s + d.onlineSlots, 0);
-      const totalSlots = days.reduce((s, d) => s + d.totalSlots, 0);
-      out.push({
-        name,
-        days,
-        avgPct: totalSlots > 0 ? (totalOnline / totalSlots) * 100 : 0,
-      });
+    const todayKey = new Date().toISOString().slice(0, 10);
+    // Slot index inside today's day where "now" falls. Cells at or
+    // beyond this are future, regardless of the tier's bitmap.
+    const now = new Date();
+    const nowSlot = Math.floor((now.getUTCHours() * 60 + now.getUTCMinutes()) / 5);
+
+    // Collect every date that any tier reported.
+    const dateSet = new Set<string>();
+    for (const name of TIER_ORDER) {
+      const days = tiers[name];
+      if (!days) { continue; }
+      for (const d of Object.keys(days)) { dateSet.add(d); }
     }
-    this.tiers = out;
+    const sortedDates = Array.from(dateSet).sort().reverse(); // newest first
+
+    const out: DayBlock[] = [];
+    // Per-tier accumulators for the summary strip.
+    const onlineByTier: { [name: string]: number } = {};
+    const knownByTier: { [name: string]: number } = {};
+
+    for (const date of sortedDates) {
+      const isToday = date === todayKey;
+      const tierLines: TierLine[] = [];
+      for (const name of TIER_ORDER) {
+        const ascii = (tiers[name] && tiers[name][date]) || '';
+        const cells = this.buildCells(ascii, isToday, nowSlot);
+        let online = 0;
+        let known = 0;
+        for (const c of cells) {
+          if (c.state === 'future') { continue; }
+          known++;
+          if (c.state === 'on') { online++; }
+        }
+        tierLines.push({
+          name,
+          cells,
+          pct: known > 0 ? (online / known) * 100 : 0,
+          empty: !ascii,
+        });
+        onlineByTier[name] = (onlineByTier[name] || 0) + online;
+        knownByTier[name] = (knownByTier[name] || 0) + known;
+      }
+      out.push({ date, isToday, tiers: tierLines });
+    }
+
+    this.days = out;
+    this.summary = TIER_ORDER.map((name) => ({
+      name,
+      pct: knownByTier[name] > 0 ? (onlineByTier[name] / knownByTier[name]) * 100 : 0,
+    }));
     this.fetchedAt = resp.fetched_at ? new Date(resp.fetched_at) : new Date();
     this.loading = false;
     this.error = null;
     this.cdr.markForCheck();
   }
 
-  /** Order tiers in a sensible visual stack — process first since
-   *  it gates the rest, then network layers in dependency order. */
-  private tierSort(a: string, b: string): number {
-    const order = ['process', 'dmsg', 'skynet'];
-    const ia = order.indexOf(a);
-    const ib = order.indexOf(b);
-    if (ia >= 0 && ib >= 0) { return ia - ib; }
-    if (ia >= 0) { return -1; }
-    if (ib >= 0) { return 1; }
-    return a.localeCompare(b);
-  }
-
-  private buildDayRow(date: string, ascii: string): DayRow {
-    // The wire form is exactly 288 chars; defensively pad/trim if
-    // the server ever changes the shape so the row still renders.
+  private buildCells(ascii: string, isToday: boolean, nowSlot: number): DayCell[] {
     const expected = 288;
     let s = ascii || '';
     if (s.length < expected) { s = s.padEnd(expected, ' '); }
     if (s.length > expected) { s = s.slice(0, expected); }
-
     const cells: DayCell[] = new Array(expected);
-    let online = 0;
     for (let i = 0; i < expected; i++) {
-      const on = s.charAt(i) === '.';
-      if (on) { online++; }
-      cells[i] = { online: on, slot: i };
+      let state: DayCell['state'];
+      if (isToday && i >= nowSlot) {
+        // Don't conflate future slots with offline — the bitmap
+        // will read ' ' for them simply because they haven't
+        // happened yet, which says nothing about reachability.
+        state = 'future';
+      } else {
+        state = s.charAt(i) === '.' ? 'on' : 'off';
+      }
+      cells[i] = { state, slot: i };
     }
-    return {
-      date,
-      cells,
-      onlineSlots: online,
-      totalSlots: expected,
-      pct: (online / expected) * 100,
-    };
+    return cells;
   }
 
-  /** Format a slot index (0..287) → "HH:MM" UTC string for tooltip. */
   fmtSlot(slot: number): string {
     const minutes = slot * 5;
     const hh = Math.floor(minutes / 60).toString().padStart(2, '0');
@@ -196,16 +222,32 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
   cellTooltip(c: DayCell): string {
     const start = this.fmtSlot(c.slot);
     const end = this.fmtSlot(Math.min(c.slot + 1, 288));
-    return `${start}–${end} UTC: ${c.online ? 'online' : 'offline'}`;
+    let label: string;
+    switch (c.state) {
+      case 'on': label = 'online'; break;
+      case 'off': label = 'offline'; break;
+      default: label = 'future';
+    }
+    return `${start}–${end} UTC: ${label}`;
   }
 
   fmtPct(p: number): string {
     if (p >= 99.95) { return '100%'; }
-    if (p < 1 && p > 0) { return '<1%'; }
+    if (p > 0 && p < 1) { return '<1%'; }
     return p.toFixed(1) + '%';
   }
 
-  trackTier(_: number, t: TierBlock): string { return t.name; }
-  trackDay(_: number, d: DayRow): string { return d.date; }
+  pctClass(p: number, empty: boolean = false): string {
+    if (empty) { return 'dim'; }
+    if (p >= 99) { return 'up-good'; }
+    if (p >= 80) { return 'up-mid'; }
+    return 'up-bad';
+  }
+
+  tierLabel(name: string): string { return 'uptime.tier-' + name; }
+  tierInfo(name: string): string { return 'uptime.tier-' + name + '-info'; }
+
+  trackDay(_: number, d: DayBlock): string { return d.date; }
+  trackTier(_: number, t: TierLine): string { return t.name; }
   trackCell(_: number, c: DayCell): number { return c.slot; }
 }

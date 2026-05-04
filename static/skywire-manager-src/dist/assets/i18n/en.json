@@ -463,6 +463,8 @@
     "loading": "Reading local uptime bitmaps…",
     "empty": "No uptime data recorded yet.",
     "tiers": "tiers",
+    "today": "today",
+    "window-avg": "Window avg",
     "last-updated": "fetched",
     "window": "Window",
     "window-now": "Today",

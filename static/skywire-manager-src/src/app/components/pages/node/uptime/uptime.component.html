@@ -14,52 +14,61 @@
         </button>
       </div>
 
-      @if (loading && tiers.length === 0) {
+      @if (loading && days.length === 0) {
         <div class="loading-row">
           <mat-spinner [diameter]="16"></mat-spinner>
           <span class="ml-2">{{ 'uptime.loading' | translate }}</span>
         </div>
       }
 
-      @if (error && tiers.length === 0) {
+      @if (error && days.length === 0) {
         <div class="error-row">
           <mat-icon>error_outline</mat-icon>
           <span class="ml-2">{{ error }}</span>
         </div>
       }
 
-      @if (tiers.length === 0 && !loading && !error) {
+      @if (days.length === 0 && !loading && !error) {
         <div class="up-empty">{{ 'uptime.empty' | translate }}</div>
       }
 
-      @if (tiers.length > 0 && fetchedAt) {
-        <div class="summary-line">
-          <mat-icon>schedule</mat-icon>
-          <span class="ml-1">
-            {{ tiers.length }} {{ 'uptime.tiers' | translate }} · {{ 'uptime.last-updated' | translate }}: {{ fetchedAt | date: 'HH:mm:ss' }}
-          </span>
+      @if (days.length > 0) {
+        <div class="summary-strip">
+          <span class="summary-label">{{ 'uptime.window-avg' | translate }}:</span>
+          @for (s of summary; track s.name) {
+            <span class="summary-tier">
+              <span class="summary-tier-name">{{ tierLabel(s.name) | translate }}</span>
+              <span class="summary-tier-pct mono" [ngClass]="pctClass(s.pct)">{{ fmtPct(s.pct) }}</span>
+            </span>
+          }
+          @if (fetchedAt) {
+            <span class="last-updated dim small">— {{ 'uptime.last-updated' | translate }}: {{ fetchedAt | date: 'HH:mm:ss' }}</span>
+          }
         </div>
       }
 
-      @for (t of tiers; track trackTier($index, t)) {
-        <div class="up-tier">
-          <div class="up-tier-head">
-            <span class="up-tier-name">{{ 'uptime.tier-' + t.name | translate }}</span>
-            <span class="up-tier-help dim small">{{ 'uptime.tier-' + t.name + '-info' | translate }}</span>
-            <span class="up-tier-avg" [class.up-good]="t.avgPct >= 99" [class.up-mid]="t.avgPct >= 80 && t.avgPct < 99" [class.up-bad]="t.avgPct < 80">
-              {{ fmtPct(t.avgPct) }}
-            </span>
+      @for (d of days; track trackDay($index, d)) {
+        <div class="up-day-block">
+          <div class="up-day-head">
+            <span class="up-day-date mono">{{ d.date }}</span>
+            @if (d.isToday) {
+              <span class="up-day-today dim small">{{ 'uptime.today' | translate }}</span>
+            }
           </div>
-          @for (d of t.days; track trackDay($index, d)) {
-            <div class="up-day">
-              <span class="up-date mono small">{{ d.date }}</span>
+          @for (t of d.tiers; track trackTier($index, t)) {
+            <div class="up-tier-line">
+              <span class="up-tier-name small" [matTooltip]="tierInfo(t.name) | translate">{{ tierLabel(t.name) | translate }}</span>
               <div class="up-bar">
-                @for (c of d.cells; track trackCell($index, c)) {
-                  <span class="up-cell" [class.on]="c.online" [class.off]="!c.online" [matTooltip]="cellTooltip(c)"></span>
+                @for (c of t.cells; track trackCell($index, c)) {
+                  <span class="up-cell"
+                        [class.on]="c.state === 'on'"
+                        [class.off]="c.state === 'off'"
+                        [class.future]="c.state === 'future'"
+                        [matTooltip]="cellTooltip(c)"></span>
                 }
               </div>
-              <span class="up-pct mono small" [class.up-good]="d.pct >= 99" [class.up-mid]="d.pct >= 80 && d.pct < 99" [class.up-bad]="d.pct < 80">
-                {{ fmtPct(d.pct) }}
+              <span class="up-pct mono small" [ngClass]="pctClass(t.pct, t.empty)">
+                {{ t.empty ? '–' : fmtPct(t.pct) }}
               </span>
             </div>
           }
