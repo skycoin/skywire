@@ -5,11 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"time"
 
-	"github.com/gocarina/gocsv"
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -233,79 +230,50 @@ func (v *Visor) DiscoverTransportByID(id uuid.UUID) (*transport.Entry, error) {
 }
 
 // GetTransportLogs implements API.
-// Returns transport log entries from the last N days.
+// Returns one entry per (transport, day) for the last N UTC days, drawn
+// from the bbolt-backed stats store. The on-disk CSV transport log was
+// retired — see pkg/transport/log.go and pkg/visor/stats. Each entry's
+// RecvBytes/SentBytes is the within-day delta (matches the historical
+// CSV semantics, where the per-day file accumulated bytes from a
+// zero-anchored start-of-day baseline). Timestamp is the start of the
+// UTC day, expressed as a Unix epoch second.
 func (v *Visor) GetTransportLogs(days int) ([]TransportLogEntry, error) {
 	if days <= 0 {
 		return nil, nil
 	}
-
-	logDir := v.conf.Transport.LogStore.Location
-	if logDir == "" {
-		return nil, fmt.Errorf("transport log store location not configured")
+	if v.statsTracker == nil {
+		return nil, errors.New("stats store not available (stats subsystem disabled or not yet initialized)")
 	}
 
-	var allEntries []TransportLogEntry
-	now := time.Now().UTC()
-
-	// Read log files for the specified number of days
-	for i := 0; i < days; i++ {
-		date := now.AddDate(0, 0, -i)
-		filename := filepath.Join(logDir, fmt.Sprintf("%s.csv", date.Format("2006-01-02")))
-
-		entries, err := readTransportLogFile(filename)
-		if err != nil {
-			// Skip files that don't exist or can't be read
-			continue
-		}
-		allEntries = append(allEntries, entries...)
-	}
-
-	return allEntries, nil
-}
-
-// csvEntry matches the transport.CsvEntry struct format for gocsv parsing.
-type csvEntry struct {
-	TpID      uuid.UUID `csv:"tp_id"`
-	RecvBytes *uint64   `csv:"recv"`
-	SentBytes *uint64   `csv:"sent"`
-	TimeStamp int64     `csv:"time_stamp"`
-}
-
-// readTransportLogFile reads transport log entries from a CSV file.
-func readTransportLogFile(filename string) ([]TransportLogEntry, error) {
-	f, err := os.Open(filename) //nolint:gosec // filename is from internal config
+	records, err := v.statsTracker.Store().AllTransportRecords()
 	if err != nil {
-		return nil, err
-	}
-	defer f.Close() //nolint:errcheck
-
-	var csvEntries []*csvEntry
-	if err := gocsv.UnmarshalFile(f, &csvEntries); err != nil {
-		// Handle empty file case
-		if errors.Is(err, gocsv.ErrEmptyCSVFile) {
-			return nil, nil
-		}
-		return nil, err
+		return nil, fmt.Errorf("read stats store: %w", err)
 	}
 
-	var entries []TransportLogEntry
-	for _, ce := range csvEntries {
-		var recv, sent uint64
-		if ce.RecvBytes != nil {
-			recv = *ce.RecvBytes
-		}
-		if ce.SentBytes != nil {
-			sent = *ce.SentBytes
-		}
-		entries = append(entries, TransportLogEntry{
-			TpID:      ce.TpID,
-			RecvBytes: recv,
-			SentBytes: sent,
-			Timestamp: ce.TimeStamp,
-		})
-	}
+	// Keep entries whose date is within the last `days` UTC days
+	// (inclusive of today). Lexical comparison works because the
+	// daily-rollup date format is YYYY-MM-DD.
+	cutoff := time.Now().UTC().AddDate(0, 0, -(days - 1)).Format("2006-01-02")
 
-	return entries, nil
+	var out []TransportLogEntry
+	for _, rec := range records {
+		for _, d := range rec.Daily {
+			if d.Date < cutoff {
+				continue
+			}
+			ts, perr := time.Parse("2006-01-02", d.Date)
+			if perr != nil {
+				continue
+			}
+			out = append(out, TransportLogEntry{
+				TpID:      rec.ID,
+				RecvBytes: d.RecvBytes,
+				SentBytes: d.SentBytes,
+				Timestamp: ts.Unix(),
+			})
+		}
+	}
+	return out, nil
 }
 
 // SetPersistentTransports sets min_hops routing config of visor
