@@ -352,17 +352,30 @@ func (l *AppLauncher) RestartApp(name, binary string) error {
 
 func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string) (appcommon.ProcConfig, error) {
 
+	// Honor AppConfig WorkDir override; fall back to per-app default.
+	workDir := ac.WorkDir
+	if workDir == "" {
+		workDir = filepath.Join(lc.LocalPath, ac.Name)
+	}
+
+	// Merge per-app env on top of the launcher's base env. Per-app
+	// values land later so they win on duplicate keys.
+	mergedEnvs := append([]string(nil), envs...)
+	mergedEnvs = append(mergedEnvs, ac.Env...)
+
 	procConf := appcommon.ProcConfig{
 		AppName:     ac.Name,
 		AppSrvAddr:  lc.ServerAddr,
 		ProcKey:     appcommon.RandProcKey(),
 		ProcArgs:    ac.Args,
-		ProcEnvs:    envs,
-		ProcWorkDir: filepath.Join(lc.LocalPath, ac.Name),
+		ProcEnvs:    mergedEnvs,
+		ProcWorkDir: workDir,
 		VisorPK:     lc.VisorPK,
 		RoutingPort: ac.Port,
 		BinaryLoc:   filepath.Join(lc.BinPath, ac.Binary),
 		LogDBLoc:    filepath.Join(lc.LocalPath, ac.Name+"_log.db"),
+		ProcUser:    ac.User,
+		ProcGroup:   ac.Group,
 	}
 
 	// Try to find internal app function:
