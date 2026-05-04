@@ -36,7 +36,7 @@ type LocalUptimeResponse struct {
 
 // LocalUptimeArgs is the request shape. Empty Since/Until mean
 // "default 7-day window ending now" — caller-side defaults match
-// the logserver's own /stats/uptime behaviour so a hypervisor and a
+// the logserver's own /stats/uptime behavior so a hypervisor and a
 // direct curl agree on the rendered timeline.
 type LocalUptimeArgs struct {
 	Since time.Time `json:"since,omitempty"`

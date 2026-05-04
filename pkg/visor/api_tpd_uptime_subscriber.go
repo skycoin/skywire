@@ -104,7 +104,7 @@ func (v *Visor) ensureTPDUptimeSubscriber() (*tpdUptimeSubscriber, error) {
 	}
 
 	// Cooldown check — read the last failure timestamp without taking
-	// the mutex so a hung previous attempt doesn't serialise hvui
+	// the mutex so a hung previous attempt doesn't serialize hvui
 	// requests.
 	if last := v.tpdUptimeLastFail.Load(); last > 0 {
 		if time.Since(time.Unix(0, last)) < connectCooldown {
