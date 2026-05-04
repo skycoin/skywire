@@ -31,14 +31,22 @@ func (v *Visor) SetUptimeRecorder(r *serviceuptime.Recorder) {
 	v.uptimeRecorder = r
 	v.initLock.Unlock()
 
-	// Wire the logserver. Constructed earlier in initDmsg, so the
-	// handle is available by the time run() calls us. Defensive
-	// nil-check keeps the code robust against init-order drift.
+	// Wire BOTH logservers — initDmsg builds two independent
+	// instances: the auth'd DMSG-port one (.api, served on
+	// DmsgHTTPPort with PK whitelist) and the localhost-only one
+	// (.localAPI, no auth, used by `skywire cli` and local curl).
+	// Each has its own *logserver.API value, so a single recorder
+	// must be registered on both. Defensive nil-checks cover
+	// init-order drift and the case where LocalAddr binding fails.
 	v.initLock.RLock()
 	lsAPI := v.logServer.api
+	lsLocal := v.logServer.localAPI
 	v.initLock.RUnlock()
 	if lsAPI != nil {
 		lsAPI.SetUptimeRecorder(r)
+	}
+	if lsLocal != nil {
+		lsLocal.SetUptimeRecorder(r)
 	}
 }
 
