@@ -22,7 +22,8 @@
     "unknown": "Unknown",
     "close": "Close",
     "window-size-error": "The window is too narrow for the content.",
-    "data-update-problems": "Problem updating the data."
+    "data-update-problems": "Problem updating the data.",
+    "visors": "visors"
   },
 
   "labeled-element": {
@@ -238,6 +239,7 @@
       "routing": "Routing",
       "transports": "Transports",
       "bandwidth": "Bandwidth",
+      "uptime": "Uptime",
       "rewards": "Rewards",
       "skynet": "Skynet",
       "web-proxy": "Web Proxy",
@@ -278,6 +280,7 @@
     "network-title": "Network",
     "resources-title": "Resources",
     "transports-title": "Transports",
+    "uptime-title": "Uptime",
     "dmsg-settings-title": "DMSG settings",
     "reward-address": "Reward Address",
     "reward-total": "Week Total",
@@ -454,6 +457,33 @@
     "latency-current": "Latency (min/avg/max)",
     "latency-min-avg-max": "Lat min/avg/max",
     "sampled-at": "Sampled at"
+  },
+
+  "uptime": {
+    "loading": "Reading local uptime bitmaps…",
+    "empty": "No uptime data recorded yet.",
+    "tiers": "tiers",
+    "last-updated": "fetched",
+    "window": "Window",
+    "window-now": "Today",
+    "refresh": "Refresh",
+    "tier-process": "Process",
+    "tier-process-info": "Visor process up — local sampler ticked.",
+    "tier-dmsg": "DMSG",
+    "tier-dmsg-info": "DMSG client has at least one server session.",
+    "tier-skynet": "Skynet",
+    "tier-skynet-info": "Skynet connectivity probe succeeded.",
+    "online": "online",
+    "offline": "offline",
+    "loading-fleet": "Polling visors…",
+    "fleet-empty": "No connected visors reporting uptime.",
+    "fleet-filter": "Filter",
+    "fleet-filter-connected": "Only connected to this hypervisor",
+    "fleet-filter-all": "All visible visors",
+    "fleet-visor": "Visor",
+    "fleet-process": "Process %",
+    "fleet-dmsg": "DMSG %",
+    "fleet-skynet": "Skynet %"
   },
 
   "skychat": {

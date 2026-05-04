@@ -1,0 +1,126 @@
+@import "variables";
+
+.up-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+
+    .control-label {
+      font-size: 0.85em;
+      color: rgba(255, 255, 255, 0.65);
+    }
+
+    button {
+      min-width: 0;
+      padding: 0 12px !important;
+      opacity: 0.6;
+      color: rgba(255, 255, 255, 0.85) !important;
+
+      &.active {
+        opacity: 1;
+        background: rgba(33, 150, 243, 0.18) !important;
+        color: #fff !important;
+      }
+    }
+  }
+
+  .refresh-btn {
+    margin-left: auto;
+    color: rgba(255, 255, 255, 0.85) !important;
+    .mat-icon { color: inherit; }
+  }
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+}
+
+.summary-line {
+  display: flex;
+  align-items: center;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+  .mat-icon { font-size: 16px; height: 16px; width: 16px; }
+}
+
+.up-empty {
+  padding: 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+table.fleet-uptime {
+  width: 100%;
+  th, td { vertical-align: middle; }
+  th.num, td.num { text-align: right; }
+  td.visor-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  tr.row-offline {
+    opacity: 0.55;
+  }
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  &.online { background: #4caf50; }
+  &.offline { background: #e53935; }
+}
+
+.label-text {
+  color: rgba(255, 255, 255, 0.6);
+  font-style: italic;
+}
+
+.up-bar {
+  display: flex;
+  height: 12px;
+  width: 100%;
+  min-width: 240px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 2px;
+  overflow: hidden;
+
+  .up-cell {
+    flex: 1;
+    min-width: 1px;
+    height: 100%;
+    border-right: 1px solid rgba(0, 0, 0, 0.2);
+
+    &.on { background: #4caf50; }
+    &.off { background: rgba(229, 57, 53, 0.4); }
+
+    &:last-child { border-right: none; }
+  }
+}
+
+.mono { font-family: monospace; }
+.small { font-size: 0.85em; }
+.dim { color: rgba(255, 255, 255, 0.55); }
+.err { color: #ff8a80; }
+
+.up-good { color: #4caf50; }
+.up-mid { color: #ff9800; }
+.up-bad { color: #e53935; }
+
+.ml-2 { margin-left: 8px; }
+.ml-1 { margin-left: 4px; }
+.mt-3 { margin-top: 12px; }

@@ -1,0 +1,148 @@
+@import "variables";
+
+.up-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+
+    .control-label {
+      font-size: 0.85em;
+      color: rgba(255, 255, 255, 0.65);
+    }
+
+    button {
+      min-width: 0;
+      padding: 0 12px !important;
+      opacity: 0.6;
+      color: rgba(255, 255, 255, 0.85) !important;
+
+      &.active {
+        opacity: 1;
+        background: rgba(33, 150, 243, 0.18) !important;
+        color: #fff !important;
+      }
+    }
+  }
+
+  .refresh-btn {
+    margin-left: auto;
+    color: rgba(255, 255, 255, 0.85) !important;
+    .mat-icon { color: inherit; }
+  }
+}
+
+.loading-row, .error-row {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+}
+
+.summary-line {
+  display: flex;
+  align-items: center;
+  font-size: 0.9em;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+  .mat-icon { font-size: 16px; height: 16px; width: 16px; }
+}
+
+.up-empty {
+  padding: 24px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+.up-tier {
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  padding: 8px 12px;
+
+  .up-tier-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 8px;
+
+    .up-tier-name {
+      font-weight: 600;
+      font-size: 1em;
+      color: #fff;
+      text-transform: capitalize;
+    }
+    .up-tier-help {
+      flex: 1;
+      color: rgba(255, 255, 255, 0.5);
+      font-size: 0.8em;
+    }
+    .up-tier-avg {
+      font-family: monospace;
+      font-size: 0.95em;
+      font-weight: 600;
+    }
+  }
+}
+
+.up-day {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+
+  .up-date {
+    flex: 0 0 auto;
+    width: 96px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .up-bar {
+    flex: 1;
+    display: flex;
+    height: 14px;
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 2px;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .up-cell {
+    flex: 1;
+    min-width: 1px;
+    height: 100%;
+    border-right: 1px solid rgba(0, 0, 0, 0.2);
+
+    &.on { background: #4caf50; }
+    &.off { background: rgba(229, 57, 53, 0.4); }
+
+    // Hide the divider on the last cell so the bar reads as one unit.
+    &:last-child { border-right: none; }
+  }
+
+  .up-pct {
+    flex: 0 0 auto;
+    width: 56px;
+    text-align: right;
+  }
+}
+
+.mono { font-family: monospace; }
+.small { font-size: 0.85em; }
+.dim { color: rgba(255, 255, 255, 0.55); }
+
+.up-good { color: #4caf50; }
+.up-mid { color: #ff9800; }
+.up-bad { color: #e53935; }
+
+.ml-2 { margin-left: 8px; }
+.ml-1 { margin-left: 4px; }
+.mt-3 { margin-top: 12px; }

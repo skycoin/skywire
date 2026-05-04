@@ -249,6 +249,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'bandwidth'] : null,
         },
         {
+          icon: 'schedule',
+          label: 'node.tabs.uptime',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'uptime'] : null,
+        },
+        {
           icon: 'apps',
           label: 'node.tabs.apps',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'apps'] : null,
@@ -307,35 +312,38 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/bandwidth')) {
         this.selectedTabIndex = 3;
       }
-      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
+      if (this.lastUrl.includes('/uptime')) {
         this.selectedTabIndex = 4;
       }
-      if (this.lastUrl.includes('/chat')) {
+      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
         this.selectedTabIndex = 5;
       }
-      if (this.lastUrl.includes('/rewards')) {
+      if (this.lastUrl.includes('/chat')) {
         this.selectedTabIndex = 6;
+      }
+      if (this.lastUrl.includes('/rewards')) {
+        this.selectedTabIndex = 7;
       }
       // /skynet matches BOTH the skynet tab and would otherwise also
       // match a hypothetical /skynet-foo path; check after web-proxy
       // since /web-proxy must take precedence on its own URL.
       if (this.lastUrl.includes('/skynet')) {
-        this.selectedTabIndex = 7;
-      }
-      if (this.lastUrl.includes('/web-proxy')) {
         this.selectedTabIndex = 8;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/web-proxy')) {
         this.selectedTabIndex = 9;
       }
-      if (this.lastUrl.includes('/terminal')) {
+      if (this.lastUrl.includes('/resources')) {
         this.selectedTabIndex = 10;
       }
-      if (this.lastUrl.includes('/logs')) {
+      if (this.lastUrl.includes('/terminal')) {
         this.selectedTabIndex = 11;
       }
-      if (this.lastUrl.includes('/dmsg')) {
+      if (this.lastUrl.includes('/logs')) {
         this.selectedTabIndex = 12;
+      }
+      if (this.lastUrl.includes('/dmsg')) {
+        this.selectedTabIndex = 13;
       }
 
       // Inform that the current subpage is not for showing a full list.

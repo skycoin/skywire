@@ -1,0 +1,89 @@
+<app-top-bar
+  [titleParts]="['nodes.uptime-title']"
+  [tabsData]="tabsData"
+  [selectedTabIndex]="7"
+></app-top-bar>
+
+<div class="rounded-elevated-box mt-3">
+  <div class="box-internal-container overflow">
+    <div class="up-controls">
+      <div class="control-group">
+        <span class="control-label">{{ 'uptime.window' | translate }}:</span>
+        <button mat-button [class.active]="windowDays === 1" (click)="setWindow(1)">{{ 'uptime.window-now' | translate }}</button>
+        <button mat-button [class.active]="windowDays === 7" (click)="setWindow(7)">7d</button>
+        <button mat-button [class.active]="windowDays === 30" (click)="setWindow(30)">30d</button>
+      </div>
+      <div class="control-group">
+        <span class="control-label">{{ 'uptime.fleet-filter' | translate }}:</span>
+        <button mat-button [class.active]="filter === 'connected'" (click)="setFilter('connected')">{{ 'uptime.fleet-filter-connected' | translate }}</button>
+        <button mat-button [class.active]="filter === 'all'" (click)="setFilter('all')">{{ 'uptime.fleet-filter-all' | translate }}</button>
+      </div>
+      <button mat-stroked-button class="refresh-btn" (click)="refreshNow()">
+        <mat-icon [inline]="true">refresh</mat-icon>
+        {{ 'uptime.refresh' | translate }}
+      </button>
+    </div>
+
+    @if (loading && rows.length === 0) {
+      <div class="loading-row">
+        <mat-spinner [diameter]="16"></mat-spinner>
+        <span class="ml-2">{{ 'uptime.loading-fleet' | translate }}</span>
+      </div>
+    }
+
+    @if (!loading && rows.length === 0) {
+      <div class="up-empty">{{ 'uptime.fleet-empty' | translate }}</div>
+    }
+
+    @if (lastUpdated && rows.length > 0) {
+      <div class="summary-line">
+        <mat-icon>schedule</mat-icon>
+        <span class="ml-1">
+          {{ rows.length }} {{ 'common.visors' | translate }} · {{ 'uptime.last-updated' | translate }}: {{ lastUpdated | date: 'HH:mm:ss' }}
+        </span>
+      </div>
+    }
+
+    @if (rows.length > 0) {
+      <table class="responsive-table-translucid fleet-uptime">
+        <tr>
+          <th>{{ 'uptime.fleet-visor' | translate }}</th>
+          <th class="num">{{ 'uptime.fleet-process' | translate }}</th>
+          <th class="num">{{ 'uptime.fleet-dmsg' | translate }}</th>
+          <th class="num">{{ 'uptime.fleet-skynet' | translate }}</th>
+          <th>Today (UTC)</th>
+        </tr>
+        @for (r of rows; track trackRow($index, r)) {
+          <tr [class.row-offline]="!r.node.online">
+            <td class="visor-cell">
+              <span class="dot" [class.online]="r.node.online" [class.offline]="!r.node.online"></span>
+              <a class="mono small" [routerLink]="['/nodes', r.node.localPk, 'uptime']">{{ r.node.localPk }}</a>
+              @if (r.node.label) {
+                <span class="label-text small">{{ r.node.label }}</span>
+              }
+              @if (r.error) {
+                <span class="dim small err">— {{ r.error }}</span>
+              }
+            </td>
+            @for (tier of tierNames(); track tier) {
+              <td class="num mono small" [ngClass]="r.tiers[tier] ? pctClass(r.tiers[tier].pct) : 'dim'">
+                {{ r.tiers[tier] ? fmtPct(r.tiers[tier].pct) : '–' }}
+              </td>
+            }
+            <td>
+              @if (r.tiers['process'] && r.tiers['process'].todayCells.length > 0) {
+                <div class="up-bar">
+                  @for (c of r.tiers['process'].todayCells; track trackCell($index, c)) {
+                    <span class="up-cell" [class.on]="c.online" [class.off]="!c.online" [matTooltip]="cellTooltip(c)"></span>
+                  }
+                </div>
+              } @else {
+                <span class="dim small">–</span>
+              }
+            </td>
+          </tr>
+        }
+      </table>
+    }
+  </div>
+</div>
