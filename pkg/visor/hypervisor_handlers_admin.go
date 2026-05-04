@@ -294,6 +294,41 @@ func (hv *Hypervisor) getLocalTransportStats() http.HandlerFunc {
 	})
 }
 
+// getLocalUptimeStats returns the visor's locally-tracked tier
+// uptime bitmaps (process / dmsg / skynet) over a window. Source
+// of truth is the same bbolt stats store /stats/uptime serves on
+// the logserver; this handler bridges it through the hvui's
+// existing per-visor proxy chain. Window comes from `?since=` and
+// `?until=` (RFC3339); both default — no since means seven days
+// before until, no until means now.
+func (hv *Hypervisor) getLocalUptimeStats() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var args LocalUptimeArgs
+		if s := r.URL.Query().Get("since"); s != "" {
+			t, err := time.Parse(time.RFC3339, s)
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "since: " + err.Error()})
+				return
+			}
+			args.Since = t
+		}
+		if u := r.URL.Query().Get("until"); u != "" {
+			t, err := time.Parse(time.RFC3339, u)
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "until: " + err.Error()})
+				return
+			}
+			args.Until = t
+		}
+		resp, err := ctx.API.LocalUptimeStats(args)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	})
+}
+
 // putRuntimeConfig accepts a raw JSON body and forwards it to
 // SetRuntimeConfig on the target visor. The body is validated
 // server-side (strict JSON decode + SK/PK consistency); the visor

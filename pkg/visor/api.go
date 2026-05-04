@@ -124,6 +124,7 @@ type API interface {
 	GetRuntimeConfig() ([]byte, error)
 	SetRuntimeConfig(rawJSON []byte) error
 	LocalTransportStats() (*LocalTransportStatsResponse, error)
+	LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error)
 	GetConfigPath() (string, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error

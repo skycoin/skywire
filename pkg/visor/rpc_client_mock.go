@@ -656,6 +656,11 @@ func (mc *mockRPCClient) LocalTransportStats() (*LocalTransportStatsResponse, er
 	return &LocalTransportStatsResponse{}, nil
 }
 
+// LocalUptimeStats implements API.
+func (mc *mockRPCClient) LocalUptimeStats(_ LocalUptimeArgs) (*LocalUptimeResponse, error) {
+	return &LocalUptimeResponse{}, nil
+}
+
 // GetConfigPath implements API.
 func (mc *mockRPCClient) GetConfigPath() (string, error) { return "", nil }
 

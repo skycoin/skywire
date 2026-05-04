@@ -176,6 +176,24 @@ func (r *RPC) LocalTransportStats(_ *struct{}, out *LocalTransportStatsResponse)
 	return nil
 }
 
+// LocalUptimeStats returns the visor's tier-uptime bitmaps from the
+// bbolt stats store — process / dmsg / skynet, 5-minute resolution
+// for the requested window. Mirror of /stats/uptime on the
+// logserver, reachable through the hypervisor RPC chain so the hvui
+// can fetch it without per-visor HTTP calls.
+func (r *RPC) LocalUptimeStats(args *LocalUptimeArgs, out *LocalUptimeResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "LocalUptimeStats", nil)(nil, &err)
+	if args == nil {
+		args = &LocalUptimeArgs{}
+	}
+	resp, err := r.visor.LocalUptimeStats(*args)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // RuntimeLogs returns the visor's accumulated runtime log buffer.
 // Used by the hypervisor UI's "view logs" action and the
 // `skywire cli visor logs` command.

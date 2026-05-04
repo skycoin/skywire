@@ -458,6 +458,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/runtime-config", hv.getRuntimeConfig())
 				r.Put("/visors/{pk}/runtime-config", hv.putRuntimeConfig())
 				r.Get("/visors/{pk}/local-transport-stats", hv.getLocalTransportStats())
+				r.Get("/visors/{pk}/local-uptime-stats", hv.getLocalUptimeStats())
 				r.Get("/visors/{pk}/ports", hv.getPorts())
 
 				// Resolving proxy controls
