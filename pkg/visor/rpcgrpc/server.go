@@ -891,6 +891,9 @@ func (s *calcMemStore) GetDailyTimeline(context.Context, string, time.Time) map[
 func (s *calcMemStore) RecordTransportHeartbeat(context.Context, uuid.UUID, string, time.Time) error {
 	return nil
 }
+func (s *calcMemStore) IngestTransportTimeline(context.Context, uuid.UUID, string, []byte) error {
+	return nil
+}
 func (s *calcMemStore) GetTransportUptimeSummaries(context.Context, []uuid.UUID, bool, bool) ([]tpdstore.TransportUptimeSummary, error) {
 	return nil, nil
 }

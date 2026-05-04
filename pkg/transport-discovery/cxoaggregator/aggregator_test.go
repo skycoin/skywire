@@ -39,6 +39,85 @@ func TestParseCurrentTransportPath(t *testing.T) {
 	}
 }
 
+func TestParseTransportTimelinePath(t *testing.T) {
+	id := uuid.New()
+	cases := []struct {
+		path     string
+		want     bool
+		wantDate string
+	}{
+		{"transports/" + id.String() + "/2026-05-04/timeline", true, "2026-05-04"},
+		{"transports/" + id.String() + "/current", false, ""},
+		{"transports/" + id.String() + "/2026-05-04", false, ""},
+		{"transports/" + id.String() + "/2026/05/04/timeline", false, ""},
+		{"transports/not-a-uuid/2026-05-04/timeline", false, ""},
+		{"transports/" + id.String() + "/26-05-04/timeline", false, ""},
+		{"transports/" + id.String() + "/2026-AB-04/timeline", false, ""},
+		{"tiers/dmsg/2026-05-04/timeline", false, ""},
+		{"", false, ""},
+	}
+	for _, c := range cases {
+		gotID, gotDate, ok := parseTransportTimelinePath(c.path)
+		if ok != c.want {
+			t.Errorf("parseTransportTimelinePath(%q) ok = %v, want %v", c.path, ok, c.want)
+			continue
+		}
+		if c.want {
+			if gotID != id {
+				t.Errorf("parseTransportTimelinePath(%q) id = %v, want %v", c.path, gotID, id)
+			}
+			if gotDate != c.wantDate {
+				t.Errorf("parseTransportTimelinePath(%q) date = %q, want %q", c.path, gotDate, c.wantDate)
+			}
+		}
+	}
+}
+
+// Dispatcher routes timeline-shaped leaves into IngestTransportTimeline
+// without disturbing the bandwidth/latency/heartbeat path. Verifies
+// payload pass-through (the leaf bytes are the bitmap; no JSON parse).
+func TestDispatchLeafTimeline(t *testing.T) {
+	id := uuid.New()
+	pk := cipher.PubKey{}
+	bitmap := make([]byte, 36)
+	for i := range bitmap {
+		bitmap[i] = byte(i)
+	}
+
+	sink := &recordingSink{}
+	a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+	a.dispatchLeaf("transports/"+id.String()+"/2026-05-04/timeline", bitmap, pk)
+
+	if len(sink.timelines) != 1 {
+		t.Fatalf("expected 1 timeline call, got %d", len(sink.timelines))
+	}
+	if sink.timelines[0].tpID != id {
+		t.Errorf("tpID = %v, want %v", sink.timelines[0].tpID, id)
+	}
+	if sink.timelines[0].date != "2026-05-04" {
+		t.Errorf("date = %q, want %q", sink.timelines[0].date, "2026-05-04")
+	}
+	if !bytesEqual(sink.timelines[0].bitmap, bitmap) {
+		t.Errorf("bitmap mismatch: got %x want %x", sink.timelines[0].bitmap, bitmap)
+	}
+	// No bandwidth/latency/heartbeat side-effects.
+	if sink.bandwidths != 0 || len(sink.latencies) != 0 || len(sink.heartbeats) != 0 {
+		t.Errorf("unexpected side effects: bw=%d lat=%d hb=%d", sink.bandwidths, len(sink.latencies), len(sink.heartbeats))
+	}
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // recordingSink captures sink calls so tests can assert what dispatchLeaf
 // chose to forward (vs drop on the partial-zero gate).
 type recordingSink struct {
@@ -48,6 +127,11 @@ type recordingSink struct {
 	heartbeats []struct {
 		tpType string
 		at     time.Time
+	}
+	timelines []struct {
+		tpID   uuid.UUID
+		date   string
+		bitmap []byte
 	}
 }
 
@@ -69,6 +153,17 @@ func (s *recordingSink) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID,
 		tpType string
 		at     time.Time
 	}{tpType, at})
+	s.mu.Unlock()
+	return nil
+}
+func (s *recordingSink) IngestTransportTimeline(_ context.Context, tpID uuid.UUID, date string, bitmap []byte) error {
+	s.mu.Lock()
+	cp := append([]byte(nil), bitmap...)
+	s.timelines = append(s.timelines, struct {
+		tpID   uuid.UUID
+		date   string
+		bitmap []byte
+	}{tpID, date, cp})
 	s.mu.Unlock()
 	return nil
 }

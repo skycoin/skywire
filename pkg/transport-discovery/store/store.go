@@ -200,6 +200,13 @@ type TransportStore interface {
 	// so leaf-arrival skew that crosses a 5-minute boundary still
 	// credits the correct slot. Zero time falls back to time.Now().
 	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error
+	// IngestTransportTimeline OR-merges a visor-supplied per-transport
+	// uptime bitmap into the persistent timeline. Used by the CXO
+	// aggregator to absorb the visor's locally-tracked bitmap, which
+	// captures slots TPD's heartbeat path never observed (e.g.
+	// during TPD downtime). bitmap must be 36 bytes; date is the
+	// UTC YYYY-MM-DD the bitmap covers.
+	IngestTransportTimeline(ctx context.Context, tpID uuid.UUID, date string, bitmap []byte) error
 	GetTransportUptimeSummaries(ctx context.Context, tpIDs []uuid.UUID, v2 bool, timeline bool) ([]TransportUptimeSummary, error)
 	GetTransportUptimeByVisor(ctx context.Context, pk cipher.PubKey, v2 bool, timeline bool) ([]TransportUptimeSummary, error)
 	GetTransportDailyTimeline(ctx context.Context, tpID string, now time.Time) map[string]string

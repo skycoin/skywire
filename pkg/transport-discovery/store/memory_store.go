@@ -206,6 +206,10 @@ func (s *memoryStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _
 	return nil
 }
 
+func (s *memoryStore) IngestTransportTimeline(_ context.Context, _ uuid.UUID, _ string, _ []byte) error {
+	return nil
+}
+
 func (s *memoryStore) GetTransportUptimeSummaries(_ context.Context, _ []uuid.UUID, _ bool, _ bool) ([]TransportUptimeSummary, error) {
 	return []TransportUptimeSummary{}, nil
 }
