@@ -38,7 +38,6 @@ type ManagerConfig struct {
 	SecKey                    cipher.SecKey
 	DiscoveryClient           DiscoveryClient
 	LogStore                  LogStore
-	LatencyLogStore           LatencyLogStore
 	PersistentTransportsCache []PersistentTransports
 	PTpsCacheMu               sync.RWMutex
 	Version                   string // Visor version for reporting to TPD

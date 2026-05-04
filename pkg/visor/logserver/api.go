@@ -101,7 +101,13 @@ type API struct {
 }
 
 // New creates a new API.
-func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool) *API {
+//
+// The unused string parameter (formerly the per-day transport-log CSV
+// directory) is preserved for call-site compatibility — historical
+// bandwidth is now served from the bbolt stats store via
+// /stats/transports/history, and the /transport_logs/:file route has
+// been removed along with the on-disk CSV log store.
+func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),
@@ -170,18 +176,6 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 			return
 		}
 		c.JSON(http.StatusOK, api.cxoFeedsLister.ListCXOFeeds())
-	})
-
-	// Transport log files (auth'd)
-	authRoute.GET("/transport_logs/:file", func(c *gin.Context) {
-		if filepath.Ext(c.Param("file")) == ".csv" {
-			fpath := filepath.Join(tpLogPath, c.Param("file"))
-			if _, err := os.Stat(fpath); err == nil {
-				c.File(fpath)
-				return
-			}
-		}
-		c.Writer.WriteHeader(http.StatusNotFound)
 	})
 
 	// Serve visor log file (auth'd) — written when visor runs with -s/--save-log
@@ -298,14 +292,6 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 							links = append(links, `<a href="/pty">/pty</a> - web terminal (dmsgpty)`)
 							break
 						}
-					}
-				}
-			}
-			// List transport log files
-			if entries, err := os.ReadDir(tpLogPath); err == nil {
-				for _, e := range entries {
-					if !e.IsDir() && filepath.Ext(e.Name()) == ".csv" {
-						links = append(links, fmt.Sprintf(`<a href="/transport_logs/%s">/transport_logs/%s</a>`, e.Name(), e.Name()))
 					}
 				}
 			}
