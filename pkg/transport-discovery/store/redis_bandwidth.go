@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 // Bandwidth key generators
@@ -122,7 +123,17 @@ func (s *redisStore) UpdateLatency(ctx context.Context, transportID string, minM
 	// Defense-in-depth alongside the aggregator gate: any non-positive
 	// field means the snapshot is partial, so reject the whole update
 	// rather than persist a zero in a single field.
-	if minMS <= 0 || maxMS <= 0 || avgMS <= 0 {
+	//
+	// Upper bound: visors running pre-#2421 binaries don't filter
+	// straggler-pong outliers (35s+ RTT from a delayed pong) and push
+	// them via CXO. TPD must reject those at ingest, otherwise the
+	// 35-day lat:<id> retention pins a bogus Max for weeks regardless
+	// of how many later good samples land. transport.MaxReasonableRTTMs
+	// is the same 30s threshold the visor side enforces post-#2421.
+	if minMS <= 0 || maxMS <= 0 || avgMS <= 0 ||
+		minMS > transport.MaxReasonableRTTMs ||
+		maxMS > transport.MaxReasonableRTTMs ||
+		avgMS > transport.MaxReasonableRTTMs {
 		return nil
 	}
 
