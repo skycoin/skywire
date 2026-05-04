@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -22,7 +21,6 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -298,29 +296,19 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	var logS transport.LogStore
-	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
-		logS = transport.InMemoryTransportLogStore()
-	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
-		logS, err = transport.FileTransportLogStore(ctx, v.conf.Transport.LogStore.Location, time.Duration(v.conf.Transport.LogStore.RotationInterval), log)
-		if err != nil {
-			return err
-		}
-	} else {
-		return fmt.Errorf("invalid store type: %v", v.conf.Transport.LogStore.Type)
+	// The on-disk CSV log store has been retired — historical
+	// bandwidth/latency now lives in the bbolt-backed stats store
+	// (pkg/visor/stats), reachable via /stats/transports/history and
+	// the GetTransportLogs RPC. This in-memory store only exists so
+	// a transport that closes and re-opens within the same visor
+	// session preserves its cumulative byte counters across the gap.
+	// LogStore.Type / LogStore.Location in config are no-ops; warn
+	// if a config still requests file-mode so operators notice.
+	if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
+		log.Warn("transport.log_store.type=\"file\" is deprecated; the on-disk CSV log store has been retired. " +
+			"Historical bandwidth is now served from the bbolt stats store; this setting is now treated as \"memory\".")
 	}
-
-	// Initialize latency log store (uses same type as transport log store)
-	var latencyLogS transport.LatencyLogStore
-	latencyLogDir := filepath.Join(filepath.Dir(v.conf.Transport.LogStore.Location), skyenv.LatencyLogStore)
-	if v.conf.Transport.LogStore.Type == visorconfig.MemoryLogStore {
-		latencyLogS = transport.InMemoryLatencyLogStore()
-	} else if v.conf.Transport.LogStore.Type == visorconfig.FileLogStore {
-		latencyLogS, err = transport.FileLatencyLogStore(ctx, latencyLogDir, time.Duration(v.conf.Transport.LogStore.RotationInterval), log)
-		if err != nil {
-			return err
-		}
-	}
+	logS := transport.InMemoryTransportLogStore()
 
 	pTps, err := v.conf.GetPersistentTransports()
 	if err != nil {
@@ -337,7 +325,6 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SecKey:                    v.conf.SK,
 		DiscoveryClient:           tpdC,
 		LogStore:                  logS,
-		LatencyLogStore:           latencyLogS,
 		PersistentTransportsCache: pTps,
 		Version:                   buildinfo.Version(),
 		ARTransportLimit:          arLimit,
