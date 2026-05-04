@@ -177,6 +177,11 @@ type TransportStore interface {
 	DeregisterTransport(context.Context, uuid.UUID) error
 	GetTransportByID(context.Context, uuid.UUID) (*transport.Entry, error)
 	GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error)
+	// GetTransportsByEdgeNoLatency is the cheap variant for callers
+	// (DHT mirror, transport-count stats) that don't need the
+	// durable latency overlay. Skips the per-call MGET on lat:<id>
+	// keys and the JSON decode that follows.
+	GetTransportsByEdgeNoLatency(context.Context, cipher.PubKey) ([]*transport.Entry, error)
 	GetNumberOfTransports(context.Context) (map[types.Type]int, error)
 	GetAllTransports(context.Context, bool) ([]*transport.Entry, error)
 	// Bandwidth ingest (called by the CXO aggregator with the

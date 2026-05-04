@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -214,7 +213,41 @@ func (s *redisStore) GetTransportByID(ctx context.Context, id uuid.UUID) (*trans
 	return entry, nil
 }
 
+// GetTransportsByEdge returns every transport involving pk, with the
+// durable latency overlay applied so HTTP responses include current
+// min/max/avg from the lat:<id> keys.
+//
+// Callers that don't need latency (DHT mirroring, transport-count
+// stats) should use GetTransportsByEdgeNoLatency to skip the per-call
+// MGET on the latency keyspace and the JSON decode that follows.
+// Production pprof traced 97.7% of GetTransportsByEdge invocations
+// to mirrorEdges, where the DHT consumer doesn't read the latency
+// field at all — that's the hot path the no-latency variant is for.
 func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	entries, err := s.getTransportsByEdge(ctx, pk)
+	if err != nil {
+		return nil, err
+	}
+	s.hydrateDurableLatency(ctx, entries)
+	s.edgeCache.Put(pk, entries)
+	return entries, nil
+}
+
+// GetTransportsByEdgeNoLatency is the no-overlay sibling of
+// GetTransportsByEdge. The returned entries' Latency field reflects
+// what was in the tp:<id> blob (typically 0 — see #2418), not the
+// durable lat:<id> store.
+func (s *redisStore) GetTransportsByEdgeNoLatency(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	if entries, ok := s.edgeCache.Get(pk); ok {
+		return entries, nil
+	}
+	return s.getTransportsByEdge(ctx, pk)
+}
+
+// getTransportsByEdge does the MGET + decode without any latency
+// hydration or cache write. Shared by both public methods so the
+// fetch logic stays in one place.
+func (s *redisStore) getTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
 	if entries, ok := s.edgeCache.Get(pk); ok {
 		return entries, nil
 	}
@@ -235,8 +268,8 @@ func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 		idStr string
 		id    uuid.UUID
 	}
-	var mappings []idMapping
-	var keys []string
+	mappings := make([]idMapping, 0, len(ids))
+	keys := make([]string, 0, len(ids))
 	for _, idStr := range ids {
 		id, err := uuid.Parse(idStr)
 		if err != nil {
@@ -256,7 +289,7 @@ func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 		return nil, err
 	}
 
-	var entries []*transport.Entry
+	entries := make([]*transport.Entry, 0, len(vals))
 	var staleIDs []interface{}
 	for i, val := range vals {
 		raw, ok := val.(string)
@@ -288,9 +321,6 @@ func (s *redisStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) 
 	if len(entries) == 0 {
 		return nil, ErrTransportNotFound
 	}
-
-	s.hydrateDurableLatency(ctx, entries)
-	s.edgeCache.Put(pk, entries)
 	return entries, nil
 }
 
@@ -472,8 +502,13 @@ func (s *redisStore) scanAllTransports(ctx context.Context, selfTransports, with
 // Maintained on Register/Deregister; replaces the pre-existing
 // SCAN of the tp:* keyspace used by GetNumberOfTransports,
 // scanAllTransports, and getP2PTransportCounts.
+//
+// Hot-path key builders use string concatenation rather than
+// fmt.Sprintf. Sprintf was 9% of TPD's total alloc_objects in
+// production pprof; concat compiles to a single buffer write and
+// avoids the format-state machinery.
 func (s *redisStore) allTpsIndexKey() string {
-	return fmt.Sprintf("%s:tp:_index", serviceName)
+	return serviceName + ":tp:_index"
 }
 
 // allTransportKeysFromIndex reads the transport-id index set and returns
@@ -486,7 +521,7 @@ func (s *redisStore) allTransportKeysFromIndex(ctx context.Context) (keys, ids [
 	}
 	keys = make([]string, len(ids))
 	for i, id := range ids {
-		keys[i] = fmt.Sprintf("%s:tp:%s", serviceName, id)
+		keys[i] = serviceName + ":tp:" + id
 	}
 	return keys, ids, nil
 }
@@ -505,15 +540,15 @@ func (s *redisStore) maybeReapStaleTransports(stale []interface{}) {
 }
 
 func (s *redisStore) transportKey(id uuid.UUID) string {
-	return fmt.Sprintf("%s:tp:%s", serviceName, id.String())
+	return serviceName + ":tp:" + id.String()
 }
 
 func (s *redisStore) latencyKey(id uuid.UUID) string {
-	return fmt.Sprintf("%s:lat:%s", serviceName, id.String())
+	return serviceName + ":lat:" + id.String()
 }
 
 func (s *redisStore) edgeKey(pk cipher.PubKey) string {
-	return fmt.Sprintf("%s:edge:%s", serviceName, pk.Hex())
+	return serviceName + ":edge:" + pk.Hex()
 }
 
 // dataToEntry converts TransportData to Entry with full QoS metrics.
