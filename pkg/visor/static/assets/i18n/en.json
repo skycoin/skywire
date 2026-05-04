@@ -474,7 +474,7 @@
     "tier-dmsg": "DMSG",
     "tier-dmsg-info": "DMSG client has at least one server session.",
     "tier-skynet": "Skynet",
-    "tier-skynet-info": "Skynet connectivity probe succeeded.",
+    "tier-skynet-info": "≥ 2 live transports — visor is routable through Skynet (matches TPD's 'skynet online' criterion).",
     "online": "online",
     "offline": "offline",
     "legend": "Legend",

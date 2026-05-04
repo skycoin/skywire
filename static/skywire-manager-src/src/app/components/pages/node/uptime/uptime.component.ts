@@ -21,7 +21,10 @@ import { ApiService } from 'src/app/services/api.service';
  * Tier semantics:
  *   process — visor process is up (the local sampler ticked).
  *   dmsg    — dmsg client connected to a server.
- *   skynet  — skynet connectivity probe succeeded.
+ *   skynet  — visor has ≥ 2 live transports (matches TPD's
+ *             "skynet online" criterion: a visor is skynet-routable
+ *             only when it has at least two transports for traffic
+ *             to actually flow through).
  */
 
 interface UptimeResp {

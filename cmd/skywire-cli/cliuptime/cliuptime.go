@@ -218,11 +218,11 @@ and --per-day modes; --hours ignores them.`,
 			}
 			switch {
 			case hoursBack > 0:
-				printRollingTimelines(filtered, hoursBack, verbose)
+				printRollingTimelines(filtered, hoursBack, verbose, shuffle)
 			case perDay:
-				printTimelines(filtered, dr, verbose)
+				printTimelines(filtered, dr, verbose, shuffle)
 			default:
-				printSingleLineTimelines(filtered, dr, verbose)
+				printSingleLineTimelines(filtered, dr, verbose, shuffle)
 			}
 		},
 	}
@@ -500,7 +500,7 @@ func printVersions(entries []uptimestats.VisorSummary) {
 // printTimelines renders v3 bitmaps with one row per day per visor
 // (aka --per-day). Verbose prepends a per-visor header line with
 // version + state; non-verbose just prints date + blocks + pct.
-func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose bool) {
+func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, preserveOrder bool) {
 	if len(entries) == 0 {
 		return
 	}
@@ -509,7 +509,10 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose bo
 	for _, d := range dates {
 		dateSet[d] = struct{}{}
 	}
-	sorted := sortByPK(entries)
+	sorted := entries
+	if !preserveOrder {
+		sorted = sortByPK(entries)
+	}
 
 	first := true
 	for _, e := range sorted {
@@ -555,7 +558,7 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose bo
 // printSingleLineTimelines is the default `graph` output: each visor
 // on exactly one line as "<pk> <concatenated bar>". Verbose adds a
 // range header line above.
-func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose bool) {
+func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, preserveOrder bool) {
 	if len(entries) == 0 {
 		return
 	}
@@ -563,7 +566,10 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 	if len(dates) == 0 {
 		return
 	}
-	sorted := sortByPK(entries)
+	sorted := entries
+	if !preserveOrder {
+		sorted = sortByPK(entries)
+	}
 
 	// Build all bars first so we can compute the global leading-
 	// space trim. When uptime tracking was deployed partway through
@@ -635,13 +641,16 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 // printRollingTimelines draws the last N hours ending at now as one
 // bar per visor. Verbose adds a tick-label row above; non-verbose is
 // strictly `<pk> <bar>` to stay grep-friendly.
-func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, verbose bool) {
+func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, verbose, preserveOrder bool) {
 	if len(entries) == 0 || hoursBack <= 0 {
 		return
 	}
 	now := time.Now().UTC()
 	start := now.Add(-time.Duration(hoursBack) * time.Hour)
-	sorted := sortByPK(entries)
+	sorted := entries
+	if !preserveOrder {
+		sorted = sortByPK(entries)
+	}
 
 	if verbose {
 		fmt.Printf("# last %dh ending %s  (tick labels below)\n",
