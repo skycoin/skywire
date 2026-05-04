@@ -361,7 +361,7 @@ sessions show as "(down: <duration>)"; sessions shorter than
 			return
 		}
 		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut { //nolint:errcheck
-			b, _ := json.MarshalIndent(sessions, "", "  ")           //nolint:errcheck
+			b, _ := json.MarshalIndent(sessions, "", "  ") //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), sessions, string(b)+"\n")
 			return
 		}
