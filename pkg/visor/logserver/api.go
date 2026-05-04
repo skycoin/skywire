@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -91,8 +92,9 @@ type API struct {
 	serviceLister       ServiceLister
 	forwardedPortLister ForwardedPortLister
 	cxoFeedsLister      CXOFeedsLister
-	statsReader         StatsReader  // visor-local telemetry store, set via SetStatsReader
-	websiteHandler      http.Handler // optional: serves unmatched routes (custom website)
+	statsReader         StatsReader             // visor-local telemetry store, set via SetStatsReader
+	uptimeRecorder      *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
+	websiteHandler      http.Handler            // optional: serves unmatched routes (custom website)
 	// ptyHandler serves /pty (web terminal) when set by the visor.
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
 	// PKs + hypervisor PKs + the visor's own PK).
@@ -199,6 +201,10 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 	// /stats/* (auth'd) — visor-local telemetry store. Handlers
 	// degrade to 503 when SetStatsReader hasn't been called.
 	api.registerStatsRoutes(authRoute)
+
+	// /uptime/* (auth'd) — service-self uptime store. Handlers
+	// degrade to 503 when SetUptimeRecorder hasn't been called.
+	api.registerUptimeRoutes(authRoute)
 
 	// /pty (web terminal) — gated by ptyWhitelist (set via
 	// SetPtyHandler). Until the visor calls SetPtyHandler, the

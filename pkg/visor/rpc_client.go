@@ -175,6 +175,15 @@ func (rc *rpcClient) Uptime() (float64, error) {
 	return out, err
 }
 
+// UptimeHistory calls UptimeHistory.
+func (rc *rpcClient) UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error) {
+	var resp UptimeHistoryResponse
+	if err := rc.Call("UptimeHistory", &args, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // SetRewardAddress implements API.
 func (rc *rpcClient) SetRewardAddress(r string) (rConfig string, err error) {
 	err = rc.Call("SetRewardAddress", &r, &rConfig)
