@@ -39,7 +39,7 @@
   }
 }
 
-.loading-row {
+.loading-row, .error-row {
   display: flex;
   align-items: center;
   padding: 12px;
@@ -61,71 +61,155 @@
   font-style: italic;
 }
 
-table.fleet-uptime {
-  width: 100%;
-  th, td { vertical-align: middle; }
-  th.num, td.num { text-align: right; }
-  td.visor-cell {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+.legend {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, 0.65);
+
+  .legend-label {
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.75);
   }
-  tr.row-offline {
-    opacity: 0.55;
+  .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .up-block {
+    display: inline-block;
+    width: 12px;
+    height: 10px;
+    vertical-align: middle;
+    border: 1px solid rgba(0, 0, 0, 0.25);
+    border-radius: 1px;
+  }
+}
+
+.fleet-graph {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-family: monospace;
+}
+
+.up-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0;
+
+  .up-row-pk {
+    flex: 0 0 auto;
+    width: 600px;
+    max-width: 38vw;
+    color: rgba(255, 255, 255, 0.75);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    a {
+      color: inherit;
+      text-decoration: none;
+      &:hover { text-decoration: underline; }
+    }
+  }
+
+  .up-row-bar {
+    flex: 1;
+    display: flex;
+    height: 14px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .up-row-pct {
+    flex: 0 0 auto;
+    width: 56px;
+    text-align: right;
+  }
+
+  // The tick-row inherits .up-row spacing so the labels above line up
+  // exactly with the bar grid below.
+  &.tick-row {
+    align-items: flex-end;
+    padding: 0;
+    .tick-bar {
+      position: relative;
+      height: 14px;
+      background: transparent;
+      border-radius: 0;
+      overflow: visible;
+    }
+    .tick {
+      position: absolute;
+      bottom: 0;
+      transform: translateX(-50%);
+      font-size: 0.75em;
+      color: rgba(255, 255, 255, 0.5);
+      pointer-events: none;
+      white-space: nowrap;
+
+      &::after {
+        content: '';
+        display: block;
+        margin: 0 auto;
+        width: 1px;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.3);
+      }
+    }
+  }
+
+  &.row-offline { opacity: 0.6; }
+}
+
+.up-block {
+  flex: 1;
+  min-width: 1px;
+  height: 100%;
+  border-right: 1px solid rgba(0, 0, 0, 0.18);
+
+  &:last-child { border-right: none; }
+
+  // Density gradient for online-slot count within an hour.
+  &.lvl0 { background: rgba(229, 57, 53, 0.35); }
+  &.lvl1 { background: rgba(76, 175, 80, 0.25); }
+  &.lvl2 { background: rgba(76, 175, 80, 0.5); }
+  &.lvl3 { background: rgba(76, 175, 80, 0.75); }
+  &.lvl4 { background: #4caf50; }
+
+  // Future hours — neutral hatched band, never red.
+  &.future {
+    background: rgba(255, 255, 255, 0.04);
+    background-image: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 2px,
+      rgba(255, 255, 255, 0.06) 2px,
+      rgba(255, 255, 255, 0.06) 4px
+    );
   }
 }
 
 .dot {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
   &.online { background: #4caf50; }
   &.offline { background: #e53935; }
-}
-
-.label-text {
-  color: rgba(255, 255, 255, 0.6);
-  font-style: italic;
-}
-
-.up-bar {
-  display: flex;
-  height: 12px;
-  width: 100%;
-  min-width: 240px;
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 2px;
-  overflow: hidden;
-
-  .up-cell {
-    flex: 1;
-    min-width: 1px;
-    height: 100%;
-    border-right: 1px solid rgba(0, 0, 0, 0.2);
-
-    &.on { background: #4caf50; }
-    &.off { background: rgba(229, 57, 53, 0.4); }
-    &.future {
-      background: rgba(255, 255, 255, 0.04);
-      background-image: repeating-linear-gradient(
-        45deg,
-        transparent,
-        transparent 2px,
-        rgba(255, 255, 255, 0.06) 2px,
-        rgba(255, 255, 255, 0.06) 4px
-      );
-    }
-
-    &:last-child { border-right: none; }
-  }
 }
 
 .mono { font-family: monospace; }
 .small { font-size: 0.85em; }
 .dim { color: rgba(255, 255, 255, 0.55); }
-.err { color: #ff8a80; }
 
 .up-good { color: #4caf50; }
 .up-mid { color: #ff9800; }
@@ -134,3 +218,10 @@ table.fleet-uptime {
 .ml-2 { margin-left: 8px; }
 .ml-1 { margin-left: 4px; }
 .mt-3 { margin-top: 12px; }
+
+@media (max-width: 1100px) {
+  .up-row .up-row-pk {
+    width: 280px;
+    max-width: 35vw;
+  }
+}
