@@ -217,6 +217,13 @@ func (n *nodeHead) handle() {
 func (f *fillHead) handleRequest(key cipher.SHA256) {
 	f.node().Debugln(FillPin, "[fill] handleRequest", key.Hex()[:7])
 
+	// closeFiller niled f.rqo before this message drained — drop the
+	// stale request rather than nil-deref. See closeFiller for the
+	// race: in-flight Filler goroutines can land here after the
+	// fillHead's lists were torn down.
+	if f.rqo == nil {
+		return
+	}
 	f.rqo.PushBack(key)
 	f.triggerRequest()
 }
@@ -225,6 +232,12 @@ func (f *fillHead) handleSuccess(c *Conn) {
 	f.node().Debugln(FillPin, "[fill] handleSuccess", c.String())
 
 	f.requesting--
+	if f.fc == nil {
+		// Same closeFiller race as handleRequest — production saw
+		// "panic: runtime error: invalid memory address" at the
+		// PushBack below until this guard landed.
+		return
+	}
 	f.fc.PushBack(c) // push
 	f.triggerRequest()
 }
@@ -259,6 +272,9 @@ func (f *fillHead) handleRequestFailure(fr failedRequest) {
 
 	}
 
+	if f.rqo == nil {
+		return // closeFiller race; see handleRequest
+	}
 	f.rqo.PushFront(fr.key) // shift
 	f.triggerRequest()
 
@@ -279,6 +295,9 @@ func (f *fillHead) handleReceivedRoot(cr connRoot) {
 		f.cs.addKnown(cr.c, cr.r.Seq) // add to known
 
 		if cr.r.Seq == f.r.r.Seq {
+			if f.fc == nil {
+				return // closeFiller race
+			}
 			f.fc.PushBack(cr.c) // add to filling connections
 			f.triggerRequest()
 			return
@@ -335,6 +354,18 @@ func (f *fillHead) maxParallel() (mp int) {
 }
 
 func (f *fillHead) createFiller(cr connRoot) {
+	// handleDelConn nils out connRoot.c when the source connection is
+	// removed (line 517 in handleDelConn). The connRoot may still
+	// have a non-zero r, so the f.p == (connRoot{}) check at
+	// handleFillingResult does NOT catch the nil-c case. Without
+	// this guard, cr.c.String() below nil-derefs and panics the
+	// process. The fill simply can't proceed without a source
+	// connection — drop it.
+	if cr.c == nil {
+		f.node().Debugln(FillPin, "[fill] createFiller: source connection gone, skipping",
+			cr.r.Short())
+		return
+	}
 	f.node().Debugln(FillPin, "[fill] createFiller", cr.c.String(),
 		cr.r.Short())
 
