@@ -188,14 +188,17 @@ func tpUptimeTimelineKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s:timeline", serviceName, tpID, date)
 }
 
-func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string) error {
+func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error {
 	// Only track p2p transport types.
 	if tpType != "stcpr" && tpType != "sudph" {
 		return nil
 	}
 
-	now := time.Now().UTC()
-	date := now.Format("2006-01-02")
+	if at.IsZero() {
+		at = time.Now()
+	}
+	at = at.UTC()
+	date := at.Format("2006-01-02")
 	idStr := tpID.String()
 	key := tpUptimeKey(idStr, date)
 
@@ -203,18 +206,71 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 
 	pipe.HIncrBy(ctx, key, "count", 1)
 	pipe.HSet(ctx, key, "type", tpType)
-	pipe.HSet(ctx, key, "last_seen", now.Unix())
+	pipe.HSet(ctx, key, "last_seen", at.Unix())
 	pipe.Expire(ctx, key, 8*24*time.Hour)
 
 	pipe.SAdd(ctx, tpUptimeOnlineKey(date), idStr)
 	pipe.Expire(ctx, tpUptimeOnlineKey(date), 8*24*time.Hour)
 
 	tlKey := tpUptimeTimelineKey(idStr, date)
-	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	pipe.SetBit(ctx, tlKey, currentTimelineSlot(at), 1)
 	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
 
 	_, err := pipe.Exec(ctx)
 	return err
+}
+
+// transportTimelineBitmapBytes is the expected wire size of a single
+// day's bitmap (288 5-min slots, MSB-first, matches the visor side).
+const transportTimelineBitmapBytes = 36
+
+// IngestTransportTimeline OR-merges a visor-supplied per-transport
+// uptime bitmap into TPD's stored bitmap for that day. Both edges of
+// a transport publish their own bitmap independently, and the existing
+// per-tick heartbeat path also sets bits in the same key, so UNION
+// semantics (rather than overwrite) keeps every observation.
+//
+// Implementation: write the incoming blob into a short-lived key,
+// BITOP OR into the persistent key, then clean up. Server-side OR is
+// O(36 bytes) and avoids any client-side read-modify-write race.
+func (s *redisStore) IngestTransportTimeline(ctx context.Context, tpID uuid.UUID, date string, bitmap []byte) error {
+	if len(bitmap) != transportTimelineBitmapBytes {
+		return fmt.Errorf("transport timeline: expected %d bytes, got %d", transportTimelineBitmapBytes, len(bitmap))
+	}
+	if !validDateKey(date) {
+		return fmt.Errorf("transport timeline: invalid date %q", date)
+	}
+	idStr := tpID.String()
+	tlKey := tpUptimeTimelineKey(idStr, date)
+	stagingKey := tlKey + ":ingest"
+
+	pipe := s.client.Pipeline()
+	pipe.Set(ctx, stagingKey, string(bitmap), time.Minute)
+	pipe.BitOpOr(ctx, tlKey, tlKey, stagingKey)
+	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
+	pipe.Del(ctx, stagingKey)
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+// validDateKey rejects anything that isn't a YYYY-MM-DD string. Defends
+// the redis keyspace against malformed leaf paths.
+func validDateKey(date string) bool {
+	if len(date) != len("2006-01-02") {
+		return false
+	}
+	if date[4] != '-' || date[7] != '-' {
+		return false
+	}
+	for i, c := range date {
+		if i == 4 || i == 7 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *redisStore) GetTransportUptimeSummaries(ctx context.Context, tpIDs []uuid.UUID, v2 bool, timeline bool) ([]TransportUptimeSummary, error) {

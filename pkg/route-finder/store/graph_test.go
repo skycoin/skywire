@@ -85,7 +85,11 @@ func (m *mockStore) GetDailyTimeline(_ context.Context, _ string, _ time.Time) m
 	return nil
 }
 
-func (m *mockStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _ string) error {
+func (m *mockStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
+	return nil
+}
+
+func (m *mockStore) IngestTransportTimeline(_ context.Context, _ uuid.UUID, _ string, _ []byte) error {
 	return nil
 }
 

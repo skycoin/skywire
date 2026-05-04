@@ -54,11 +54,23 @@ import (
 
 // Sink receives per-transport telemetry updates from visor TreeStore
 // feeds. The TPD's redis store satisfies this via UpdateBandwidth (per
-// reporter, cumulative counters) and UpdateLatency (per transport, RTT
-// min/max/avg in ms).
+// reporter, cumulative counters), UpdateLatency (per transport, RTT
+// min/max/avg in ms), and RecordTransportHeartbeat (per-transport
+// uptime — sets today's 5-min slot bit and the "online today" set
+// member; previously written only via the HTTP /transports/ register
+// path).
 type Sink interface {
 	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
 	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
+	// at is the visor-side observation time (snap.SampledAt), so a
+	// heartbeat that crosses a 5-minute slot boundary in transit
+	// still credits the slot the visor was actually online for.
+	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error
+	// IngestTransportTimeline OR-merges a visor-supplied 36-byte
+	// per-transport uptime bitmap into the persistent timeline for
+	// (tpID, date). Used by dispatchLeaf to absorb the
+	// transports/<id>/<date>/timeline leaves.
+	IngestTransportTimeline(ctx context.Context, tpID uuid.UUID, date string, bitmap []byte) error
 }
 
 // BandwidthSink is retained as an alias for callers that only need the
@@ -79,6 +91,7 @@ type liveSnapshot struct {
 	LatencyMaxMS float64   `json:"latency_max_ms,omitempty"`
 	LatencyAvgMS float64   `json:"latency_avg_ms,omitempty"`
 	SampledAt    time.Time `json:"sampled_at"`
+	Type         string    `json:"type,omitempty"`
 }
 
 // Config configures the Aggregator.
@@ -340,11 +353,24 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 	}
 }
 
-// dispatchLeaf is the path → action dispatcher. Today it only
-// recognizes transports/<uuid>/current; tier and service bitmaps
-// arrive into the CXO cache but aren't yet written into TPD's redis
-// uptime tables.
+// dispatchLeaf is the path → action dispatcher. Recognized leaf
+// shapes:
+//
+//	transports/<uuid>/current             → bandwidth + latency + heartbeat
+//	transports/<uuid>/<YYYY-MM-DD>/timeline → per-transport uptime bitmap
+//
+// Tier and service bitmaps still flow through the CXO cache but
+// aren't yet projected into TPD's redis uptime tables.
 func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey) {
+	if tpID, date, ok := parseTransportTimelinePath(path); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := a.sink.IngestTransportTimeline(ctx, tpID, date, leaf); err != nil {
+			a.log.WithError(err).WithField("transport", tpID).WithField("date", date).
+				Debug("CXO aggregator: IngestTransportTimeline failed")
+		}
+		return
+	}
 	id, ok := parseCurrentTransportPath(path)
 	if !ok {
 		return
@@ -368,6 +394,52 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateLatency failed")
 		}
 	}
+	// Heartbeat into the per-transport uptime tables (tp-uptime:*),
+	// previously written only by the HTTP /transports/ register path.
+	// Type is empty on snapshots from pre-uptime visors — skip those
+	// rather than push a heartbeat the store would have to drop on
+	// the type filter (RecordTransportHeartbeat early-returns on any
+	// non-p2p type, but routing here saves the redis round-trip).
+	if snap.Type != "" {
+		if err := a.sink.RecordTransportHeartbeat(ctx, id, snap.Type, snap.SampledAt); err != nil {
+			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: RecordTransportHeartbeat failed")
+		}
+	}
+}
+
+// parseTransportTimelinePath returns the transport UUID and date for
+// paths shaped "transports/<uuid>/<YYYY-MM-DD>/timeline", or false
+// otherwise. Date format is validated as fixed-width 10 chars with
+// dashes at positions 4 and 7 — same shape MarshalBinary on a UTC
+// date emits via time.Format("2006-01-02").
+func parseTransportTimelinePath(path string) (uuid.UUID, string, bool) {
+	const prefix = "transports/"
+	const suffix = "/timeline"
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		return uuid.UUID{}, "", false
+	}
+	mid := strings.TrimSuffix(strings.TrimPrefix(path, prefix), suffix)
+	parts := strings.Split(mid, "/")
+	if len(parts) != 2 {
+		return uuid.UUID{}, "", false
+	}
+	id, err := uuid.Parse(parts[0])
+	if err != nil {
+		return uuid.UUID{}, "", false
+	}
+	date := parts[1]
+	if len(date) != len("2006-01-02") || date[4] != '-' || date[7] != '-' {
+		return uuid.UUID{}, "", false
+	}
+	for i, c := range date {
+		if i == 4 || i == 7 {
+			continue
+		}
+		if c < '0' || c > '9' {
+			return uuid.UUID{}, "", false
+		}
+	}
+	return id, date, true
 }
 
 // parseCurrentTransportPath returns the transport UUID for paths

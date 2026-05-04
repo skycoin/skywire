@@ -202,7 +202,11 @@ func (s *memoryStore) GetDailyTimeline(_ context.Context, _ string, _ time.Time)
 	return nil
 }
 
-func (s *memoryStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _ string) error {
+func (s *memoryStore) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, _ string, _ time.Time) error {
+	return nil
+}
+
+func (s *memoryStore) IngestTransportTimeline(_ context.Context, _ uuid.UUID, _ string, _ []byte) error {
 	return nil
 }
 
