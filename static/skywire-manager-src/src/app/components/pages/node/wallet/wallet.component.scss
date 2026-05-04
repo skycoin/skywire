@@ -1,0 +1,77 @@
+@import "variables";
+
+.wallet-box {
+  height: calc(100vh - 240px);
+  min-height: 600px;
+  display: flex;
+  flex-direction: column;
+}
+
+.wallet-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow: hidden;
+}
+
+.wallet-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+
+  .dim {
+    flex: 1;
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .wallet-fullscreen {
+    color: rgba(255, 255, 255, 0.85) !important;
+    .mat-icon { color: inherit; }
+  }
+}
+
+.wallet-frame {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.wallet-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 32px;
+
+  .mat-icon {
+    font-size: 64px;
+    width: 64px;
+    height: 64px;
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  .wallet-empty-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .wallet-empty-help {
+    max-width: 480px;
+    line-height: 1.5;
+  }
+}
+
+.mono { font-family: monospace; }
+.small { font-size: 0.85em; }
+.dim { color: rgba(255, 255, 255, 0.55); }
+
+.mt-3 { margin-top: 12px; }

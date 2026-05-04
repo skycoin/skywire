@@ -1,0 +1,39 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3 wallet-box">
+    <div class="box-internal-container wallet-shell">
+
+      @if (state === 'not-configured') {
+        <div class="wallet-empty">
+          <mat-icon>account_balance_wallet</mat-icon>
+          <div class="wallet-empty-title">{{ 'wallet.not-configured' | translate }}</div>
+          <div class="wallet-empty-help dim small">{{ 'wallet.not-configured-help' | translate }}</div>
+        </div>
+      }
+
+      @if (state === 'not-running') {
+        <div class="wallet-empty">
+          <mat-icon>power_off</mat-icon>
+          <div class="wallet-empty-title">{{ 'wallet.not-running' | translate }}</div>
+          <div class="wallet-empty-help dim small">{{ 'wallet.not-running-help' | translate }}</div>
+        </div>
+      }
+
+      @if (state === 'running') {
+        <div class="wallet-controls">
+          <span class="dim small">
+            {{ 'wallet.help' | translate }}
+            <span class="mono small">http://{{ resolvedHost }}:{{ resolvedPort }}</span>
+          </span>
+          <button mat-stroked-button class="wallet-fullscreen" (click)="openFullWindow()">
+            <mat-icon [inline]="true">open_in_new</mat-icon>
+            {{ 'wallet.open-fullscreen' | translate }}
+          </button>
+        </div>
+        @if (iframeUrl) {
+          <iframe class="wallet-frame" [src]="iframeUrl" allowfullscreen></iframe>
+        }
+      }
+
+    </div>
+  </div>
+}

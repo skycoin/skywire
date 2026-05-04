@@ -245,6 +245,7 @@
       "web-proxy": "Web Proxy",
       "resources": "Resources",
       "terminal": "Terminal",
+      "wallet": "Wallet",
       "logs": "Logs",
       "chat": "Skychat",
       "dmsg": "DMSG"
@@ -411,6 +412,15 @@
   "terminal": {
     "help": "Live shell on the visor (dmsgpty). Ctrl+D or type \"exit\" to close.",
     "open-fullscreen": "Open in new window"
+  },
+
+  "wallet": {
+    "help": "Skycoin thin-client wallet served by the visor's `skywire skycoin web` app at",
+    "open-fullscreen": "Open in new window",
+    "not-configured": "Skycoin wallet app not configured",
+    "not-configured-help": "Add the `skycoin-web` app entry on this visor (Apps tab → add) and start it to access the wallet here. Default-off in fresh configs because the app accesses the operator's wallet directory and shouldn't run unless you've reviewed where it's pointed.",
+    "not-running": "Skycoin wallet app not running",
+    "not-running-help": "The `skycoin-web` app is configured but not currently running. Start it from the Apps tab. The wallet will appear here automatically once it's up."
   },
 
   "web-proxy": {

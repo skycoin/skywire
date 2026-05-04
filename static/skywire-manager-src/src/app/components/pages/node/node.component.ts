@@ -218,6 +218,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/resources') ||
       this.lastUrl.includes('/terminal') ||
+      this.lastUrl.includes('/wallet') ||
       this.lastUrl.includes('/logs') ||
       this.lastUrl.includes('/chat') ||
       this.lastUrl.includes('/dmsg') ||
@@ -290,6 +291,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'terminal'] : null,
         },
         {
+          icon: 'account_balance_wallet',
+          label: 'node.tabs.wallet',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'wallet'] : null,
+        },
+        {
           icon: 'description',
           label: 'node.tabs.logs',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'logs'] : null,
@@ -340,11 +346,14 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/terminal')) {
         this.selectedTabIndex = 11;
       }
-      if (this.lastUrl.includes('/logs')) {
+      if (this.lastUrl.includes('/wallet')) {
         this.selectedTabIndex = 12;
       }
-      if (this.lastUrl.includes('/dmsg')) {
+      if (this.lastUrl.includes('/logs')) {
         this.selectedTabIndex = 13;
+      }
+      if (this.lastUrl.includes('/dmsg')) {
+        this.selectedTabIndex = 14;
       }
 
       // Inform that the current subpage is not for showing a full list.

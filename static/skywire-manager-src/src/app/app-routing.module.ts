@@ -14,6 +14,7 @@ import { SkychatComponent } from './components/pages/node/skychat/skychat.compon
 import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.component';
 import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
+import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
@@ -148,6 +149,10 @@ const routes: Routes = [
           {
             path: 'terminal',
             component: TerminalComponent
+          },
+          {
+            path: 'wallet',
+            component: WalletComponent
           },
           {
             path: 'web-proxy',
