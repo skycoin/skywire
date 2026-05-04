@@ -93,7 +93,10 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   error: string | null = null;
   lastUpdated: Date | null = null;
   windowDays: WindowDays = 7;
-  filter: FleetFilter = 'all';
+  // Default to "connected" — the operator's own fleet is the
+  // primary use case; "all" stays one click away for spotting
+  // stragglers TPD knows about that this hypervisor doesn't.
+  filter: FleetFilter = 'connected';
   // Hour-tick row drawn above the bars when there's anything to show.
   // Same contents for every row, so we render once at the top.
   ticks: { label: string; left: number }[] = [];

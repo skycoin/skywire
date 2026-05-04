@@ -66,6 +66,7 @@
         @if (ticks.length > 0) {
           <div class="up-row tick-row">
             <span class="up-row-pk small dim">&nbsp;</span>
+            <span class="up-row-today small dim">&nbsp;</span>
             <div class="up-row-bar tick-bar">
               @for (t of ticks; track t.left) {
                 <span class="tick" [style.left.%]="t.left">{{ t.label }}</span>
@@ -78,19 +79,26 @@
         @for (r of rows; track trackRow($index, r)) {
           <div class="up-row" [class.row-offline]="!r.online">
             <span class="up-row-pk mono small">
-              <span class="dot" [class.online]="r.online" [class.offline]="!r.online"></span>
+              <span class="dot" [class.online]="r.online" [class.offline]="!r.online"
+                    [matTooltip]="(r.online ? 'uptime.online' : 'uptime.offline') | translate"></span>
               @if (r.managed) {
                 <a [routerLink]="['/nodes', r.pk, 'uptime']" [matTooltip]="r.label || r.pk">{{ r.pk }}</a>
               } @else {
                 <span [matTooltip]="r.version || r.pk">{{ r.pk }}</span>
               }
             </span>
+            <span class="up-row-today mono small"
+                  [ngClass]="pctClass(r.recentPct)"
+                  [matTooltip]="('uptime.today-pct' | translate) + ': ' + fmtPct(r.recentPct)">
+              {{ fmtPct(r.recentPct) }}
+            </span>
             <div class="up-row-bar">
               @for (b of r.blocks; track trackBlock($index, b)) {
                 <span class="up-block" [ngClass]="blockClass(b)" [matTooltip]="blockTooltip(b)"></span>
               }
             </div>
-            <span class="up-row-pct mono small" [ngClass]="pctClass(r.windowPct)">
+            <span class="up-row-pct mono small" [ngClass]="pctClass(r.windowPct)"
+                  [matTooltip]="('uptime.window-avg' | translate) + ': ' + fmtPct(r.windowPct)">
               {{ fmtPct(r.windowPct) }}
             </span>
           </div>

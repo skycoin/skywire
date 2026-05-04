@@ -127,6 +127,13 @@
     min-width: 0;
   }
 
+  .up-row-today {
+    flex: 0 0 auto;
+    width: 56px;
+    text-align: right;
+    font-weight: 600;
+  }
+
   .up-row-pct {
     flex: 0 0 auto;
     width: 56px;
@@ -198,13 +205,19 @@
 
 .dot {
   display: inline-block;
-  width: 7px;
-  height: 7px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  margin-right: 4px;
+  margin-right: 6px;
   vertical-align: middle;
-  &.online { background: #4caf50; }
-  &.offline { background: #e53935; }
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset;
+  &.online {
+    background: #4caf50;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset, 0 0 4px rgba(76, 175, 80, 0.7);
+  }
+  &.offline {
+    background: #e53935;
+  }
 }
 
 .mono { font-family: monospace; }
