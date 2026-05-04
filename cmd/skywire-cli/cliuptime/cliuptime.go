@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -170,6 +171,8 @@ func newGraphCmd(cfg Config) *cobra.Command {
 		cacheDir    string
 		cacheAge    int
 		dr          dateRange
+		shuffle     bool
+		shuffleSeed int64
 	)
 	cmd := &cobra.Command{
 		Use:   "graph",
@@ -191,6 +194,24 @@ and --per-day modes; --hours ignores them.`,
 				fatal(c, err)
 			}
 			filtered := applyFilters(entries, onlineOnly, pkFilter, versionEq, minVersion, 0)
+			// --shuffle: render in random row order. Useful for the
+			// "is the visual structure I'm seeing PK-correlated?" test
+			// — if banding patterns travel with the rows under shuffle,
+			// they're real visor-uptime patterns; if they break apart,
+			// the eye was just chunking runs in a high-density set.
+			if shuffle && len(filtered) > 1 {
+				seed := shuffleSeed
+				if seed == 0 {
+					seed = time.Now().UnixNano()
+				}
+				rng := rand.New(rand.NewSource(seed)) //nolint:gosec // not a security boundary
+				rng.Shuffle(len(filtered), func(i, j int) {
+					filtered[i], filtered[j] = filtered[j], filtered[i]
+				})
+				if verbose {
+					fmt.Fprintf(c.ErrOrStderr(), "# shuffled order, seed=%d\n", seed) //nolint:errcheck,gosec
+				}
+			}
 			if jsonOut {
 				_ = json.NewEncoder(os.Stdout).Encode(filtered) //nolint:errcheck,gosec
 				return
@@ -223,6 +244,8 @@ and --per-day modes; --hours ignores them.`,
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "HTTP timeout")
 	cmd.Flags().StringVar(&cacheDir, "cache-dir", defaultCacheDir(cfg.DefaultURL), "cache directory (\"\" disables cache)")
 	cmd.Flags().IntVarP(&cacheAge, "cache-age", "m", 5, "re-fetch if cache is older than N minutes (0 disables)")
+	cmd.Flags().BoolVar(&shuffle, "shuffle", false, "render rows in random order (test: do visual banding patterns travel with the rows or with PK-sort?)")
+	cmd.Flags().Int64Var(&shuffleSeed, "shuffle-seed", 0, "seed for --shuffle; 0 = time-based (different every run)")
 	clirpc.RegisterFetchFlags(cmd)
 	// Graph's default date range differs from table's: the user
 	// typically wants the full available history when drawing a
