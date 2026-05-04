@@ -2,6 +2,7 @@
 package visor
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
@@ -276,5 +277,83 @@ func (hv *Hypervisor) getRuntimeConfig() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(configJSON) //nolint:errcheck,gosec
+	})
+}
+
+// getLocalTransportStats returns the visor's locally-tracked
+// per-transport bandwidth + latency rollup. Source of truth is
+// the visor's bbolt stats store; no TPD round-trip.
+func (hv *Hypervisor) getLocalTransportStats() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		resp, err := ctx.API.LocalTransportStats()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	})
+}
+
+// getLocalUptimeStats returns the visor's locally-tracked tier
+// uptime bitmaps (process / dmsg / skynet) over a window. Source
+// of truth is the same bbolt stats store /stats/uptime serves on
+// the logserver; this handler bridges it through the hvui's
+// existing per-visor proxy chain. Window comes from `?since=` and
+// `?until=` (RFC3339); both default — no since means seven days
+// before until, no until means now.
+func (hv *Hypervisor) getLocalUptimeStats() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var args LocalUptimeArgs
+		if s := r.URL.Query().Get("since"); s != "" {
+			t, err := time.Parse(time.RFC3339, s)
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "since: " + err.Error()})
+				return
+			}
+			args.Since = t
+		}
+		if u := r.URL.Query().Get("until"); u != "" {
+			t, err := time.Parse(time.RFC3339, u)
+			if err != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "until: " + err.Error()})
+				return
+			}
+			args.Until = t
+		}
+		resp, err := ctx.API.LocalUptimeStats(args)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, resp)
+	})
+}
+
+// putRuntimeConfig accepts a raw JSON body and forwards it to
+// SetRuntimeConfig on the target visor. The body is validated
+// server-side (strict JSON decode + SK/PK consistency); the visor
+// is NOT hot-reloaded — the caller must restart it for the change
+// to take effect. The response includes a "restart_required" flag
+// so the hvui can surface that to the operator.
+func (hv *Hypervisor) putRuntimeConfig() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		if len(bytes.TrimSpace(body)) == 0 {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "empty body"})
+			return
+		}
+		if err := ctx.API.SetRuntimeConfig(body); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]any{
+			"saved":            true,
+			"restart_required": true,
+			"restart_hint":     "Visor must be restarted for the new config to take effect.",
+		})
 	})
 }

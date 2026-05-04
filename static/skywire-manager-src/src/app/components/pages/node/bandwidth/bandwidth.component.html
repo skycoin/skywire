@@ -1,0 +1,119 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container overflow">
+      <div class="bw-controls">
+        <div class="control-group">
+          <span class="control-label">{{ 'bandwidth.window' | translate }}:</span>
+          <button mat-button [class.active]="windowDays === 1" (click)="setWindow(1)">{{ 'bandwidth.window-now' | translate }}</button>
+          <button mat-button [class.active]="windowDays === 7" (click)="setWindow(7)">7d</button>
+          <button mat-button [class.active]="windowDays === 30" (click)="setWindow(30)">30d</button>
+        </div>
+        <button mat-stroked-button class="refresh-btn" (click)="refreshNow()">
+          <mat-icon [inline]="true">refresh</mat-icon>
+          {{ 'bandwidth.refresh' | translate }}
+        </button>
+      </div>
+
+      @if (loading && rows.length === 0) {
+        <div class="loading-row">
+          <mat-spinner [diameter]="16"></mat-spinner>
+          <span class="ml-2">{{ 'bandwidth.loading' | translate }}</span>
+        </div>
+      }
+
+      @if (error && rows.length === 0) {
+        <div class="error-row">
+          <mat-icon>error_outline</mat-icon>
+          <span class="ml-2">{{ error }}</span>
+        </div>
+      }
+
+      @if (rows.length > 0) {
+        <div class="summary-line">
+          <mat-icon>swap_vert</mat-icon>
+          <span class="ml-1">
+            {{ rows.length }} {{ 'bandwidth.transports' | translate }} ·
+            {{ fmtBytes(totalNetworkBw) }} {{ 'bandwidth.total' | translate }}
+            ({{ windowDays === 1 ? ('bandwidth.window-now' | translate) : windowDays + 'd' }})
+          </span>
+          @if (fetchedAt) {
+            <span class="last-updated">— {{ 'bandwidth.last-updated' | translate }}: {{ fetchedAt | date: 'HH:mm:ss' }}</span>
+          }
+        </div>
+      }
+
+      @if (rows.length === 0 && !loading && !error) {
+        <div class="bw-empty">{{ 'bandwidth.empty' | translate }}</div>
+      }
+
+      @for (r of rows; track trackRow($index, r)) {
+        <div class="bw-row" [class.expanded]="r.expanded">
+          <div class="bw-row-head" (click)="toggleRow(r)">
+            <mat-icon [inline]="true" class="bw-exp">{{ r.expanded ? 'expand_more' : 'chevron_right' }}</mat-icon>
+            <span class="bw-type-pill">{{ r.type || '-' }}</span>
+            <span class="bw-tp-id mono small">{{ r.id }}</span>
+            <span class="bw-remote mono small">→ {{ remotePK(r) }}</span>
+            <span class="bw-totals">
+              <strong>{{ fmtBytes(r.totalBw) }}</strong>
+              <span class="dim">↑ {{ fmtBytes(r.totalSent) }} ↓ {{ fmtBytes(r.totalRecv) }}</span>
+            </span>
+            @if (r.current?.latency_avg_ms) {
+              <span class="bw-latency dim" [matTooltip]="fmtLatencyTriple(r.current)">
+                {{ fmtLatency(r.current.latency_avg_ms) }}
+              </span>
+            }
+          </div>
+          @if (r.expanded) {
+            <div class="bw-row-body">
+              <!-- Live snapshot block. -->
+              @if (r.current) {
+                <div class="bw-section">
+                  <div class="bw-section-title">{{ 'bandwidth.current-snapshot' | translate }}</div>
+                  <div class="bw-grid">
+                    <div><span class="dim">{{ 'bandwidth.sent' | translate }}:</span> <strong>{{ fmtBytes(r.current.sent_bytes) }}</strong></div>
+                    <div><span class="dim">{{ 'bandwidth.recv' | translate }}:</span> <strong>{{ fmtBytes(r.current.recv_bytes) }}</strong></div>
+                    <div><span class="dim">{{ 'bandwidth.latency-current' | translate }}:</span> <strong>{{ fmtLatencyTriple(r.current) }}</strong></div>
+                    @if (r.current.sampled_at) {
+                      <div><span class="dim">{{ 'bandwidth.sampled-at' | translate }}:</span> <strong>{{ r.current.sampled_at | date: 'HH:mm:ss' }}</strong></div>
+                    }
+                  </div>
+                </div>
+              }
+
+              <!-- Daily history table. -->
+              @if (r.daily && r.daily.length > 0) {
+                <div class="bw-section">
+                  <div class="bw-section-title">{{ 'bandwidth.daily-history' | translate }}</div>
+                  <table class="responsive-table-translucid bw-daily">
+                    <tr>
+                      <th>{{ 'bandwidth.date' | translate }}</th>
+                      <th class="num">{{ 'bandwidth.sent' | translate }}</th>
+                      <th class="num">{{ 'bandwidth.recv' | translate }}</th>
+                      <th class="num">{{ 'bandwidth.total' | translate }}</th>
+                      <th class="num">{{ 'bandwidth.latency-min-avg-max' | translate }}</th>
+                      <th class="num">{{ 'bandwidth.samples' | translate }}</th>
+                    </tr>
+                    @for (d of r.daily; track trackDay($index, d)) {
+                      <tr>
+                        <td>{{ d.date }}</td>
+                        <td class="num">{{ fmtBytes(d.sent_bytes) }}</td>
+                        <td class="num">{{ fmtBytes(d.recv_bytes) }}</td>
+                        <td class="num"><strong>{{ fmtBytes((d.sent_bytes || 0) + (d.recv_bytes || 0)) }}</strong></td>
+                        <td class="num">{{ fmtLatencyTriple(d) }}</td>
+                        <td class="num dim">{{ d.samples || 0 }}</td>
+                      </tr>
+                    }
+                  </table>
+                </div>
+              } @else {
+                <div class="bw-section">
+                  <div class="dim">{{ 'bandwidth.no-history' | translate }}</div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}

@@ -22,6 +22,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -170,6 +171,8 @@ func newGraphCmd(cfg Config) *cobra.Command {
 		cacheDir    string
 		cacheAge    int
 		dr          dateRange
+		shuffle     bool
+		shuffleSeed int64
 	)
 	cmd := &cobra.Command{
 		Use:   "graph",
@@ -191,17 +194,35 @@ and --per-day modes; --hours ignores them.`,
 				fatal(c, err)
 			}
 			filtered := applyFilters(entries, onlineOnly, pkFilter, versionEq, minVersion, 0)
+			// --shuffle: render in random row order. Useful for the
+			// "is the visual structure I'm seeing PK-correlated?" test
+			// — if banding patterns travel with the rows under shuffle,
+			// they're real visor-uptime patterns; if they break apart,
+			// the eye was just chunking runs in a high-density set.
+			if shuffle && len(filtered) > 1 {
+				seed := shuffleSeed
+				if seed == 0 {
+					seed = time.Now().UnixNano()
+				}
+				rng := rand.New(rand.NewSource(seed)) //nolint:gosec // not a security boundary
+				rng.Shuffle(len(filtered), func(i, j int) {
+					filtered[i], filtered[j] = filtered[j], filtered[i]
+				})
+				if verbose {
+					fmt.Fprintf(c.ErrOrStderr(), "# shuffled order, seed=%d\n", seed) //nolint:errcheck,gosec
+				}
+			}
 			if jsonOut {
 				_ = json.NewEncoder(os.Stdout).Encode(filtered) //nolint:errcheck,gosec
 				return
 			}
 			switch {
 			case hoursBack > 0:
-				printRollingTimelines(filtered, hoursBack, verbose)
+				printRollingTimelines(filtered, hoursBack, verbose, shuffle)
 			case perDay:
-				printTimelines(filtered, dr, verbose)
+				printTimelines(filtered, dr, verbose, shuffle)
 			default:
-				printSingleLineTimelines(filtered, dr, verbose)
+				printSingleLineTimelines(filtered, dr, verbose, shuffle)
 			}
 		},
 	}
@@ -223,6 +244,8 @@ and --per-day modes; --hours ignores them.`,
 	cmd.Flags().DurationVar(&timeout, "timeout", 30*time.Second, "HTTP timeout")
 	cmd.Flags().StringVar(&cacheDir, "cache-dir", defaultCacheDir(cfg.DefaultURL), "cache directory (\"\" disables cache)")
 	cmd.Flags().IntVarP(&cacheAge, "cache-age", "m", 5, "re-fetch if cache is older than N minutes (0 disables)")
+	cmd.Flags().BoolVar(&shuffle, "shuffle", false, "render rows in random order (test: do visual banding patterns travel with the rows or with PK-sort?)")
+	cmd.Flags().Int64Var(&shuffleSeed, "shuffle-seed", 0, "seed for --shuffle; 0 = time-based (different every run)")
 	clirpc.RegisterFetchFlags(cmd)
 	// Graph's default date range differs from table's: the user
 	// typically wants the full available history when drawing a
@@ -477,7 +500,7 @@ func printVersions(entries []uptimestats.VisorSummary) {
 // printTimelines renders v3 bitmaps with one row per day per visor
 // (aka --per-day). Verbose prepends a per-visor header line with
 // version + state; non-verbose just prints date + blocks + pct.
-func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose bool) {
+func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, preserveOrder bool) {
 	if len(entries) == 0 {
 		return
 	}
@@ -486,7 +509,10 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose bo
 	for _, d := range dates {
 		dateSet[d] = struct{}{}
 	}
-	sorted := sortByPK(entries)
+	sorted := entries
+	if !preserveOrder {
+		sorted = sortByPK(entries)
+	}
 
 	first := true
 	for _, e := range sorted {
@@ -532,7 +558,7 @@ func printTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose bo
 // printSingleLineTimelines is the default `graph` output: each visor
 // on exactly one line as "<pk> <concatenated bar>". Verbose adds a
 // range header line above.
-func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose bool) {
+func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, verbose, preserveOrder bool) {
 	if len(entries) == 0 {
 		return
 	}
@@ -540,7 +566,10 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 	if len(dates) == 0 {
 		return
 	}
-	sorted := sortByPK(entries)
+	sorted := entries
+	if !preserveOrder {
+		sorted = sortByPK(entries)
+	}
 
 	// Build all bars first so we can compute the global leading-
 	// space trim. When uptime tracking was deployed partway through
@@ -612,13 +641,16 @@ func printSingleLineTimelines(entries []uptimestats.VisorSummary, dr dateRange, 
 // printRollingTimelines draws the last N hours ending at now as one
 // bar per visor. Verbose adds a tick-label row above; non-verbose is
 // strictly `<pk> <bar>` to stay grep-friendly.
-func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, verbose bool) {
+func printRollingTimelines(entries []uptimestats.VisorSummary, hoursBack int, verbose, preserveOrder bool) {
 	if len(entries) == 0 || hoursBack <= 0 {
 		return
 	}
 	now := time.Now().UTC()
 	start := now.Add(-time.Duration(hoursBack) * time.Hour)
-	sorted := sortByPK(entries)
+	sorted := entries
+	if !preserveOrder {
+		sorted = sortByPK(entries)
+	}
 
 	if verbose {
 		fmt.Printf("# last %dh ending %s  (tick labels below)\n",

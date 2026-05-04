@@ -648,6 +648,24 @@ func (mc *mockRPCClient) GetIsPublic() bool { return false }
 // GetRuntimeConfig implements API.
 func (mc *mockRPCClient) GetRuntimeConfig() ([]byte, error) { return []byte("{}"), nil }
 
+// SetRuntimeConfig implements API.
+func (mc *mockRPCClient) SetRuntimeConfig(_ []byte) error { return nil }
+
+// LocalTransportStats implements API.
+func (mc *mockRPCClient) LocalTransportStats() (*LocalTransportStatsResponse, error) {
+	return &LocalTransportStatsResponse{}, nil
+}
+
+// LocalUptimeStats implements API.
+func (mc *mockRPCClient) LocalUptimeStats(_ LocalUptimeArgs) (*LocalUptimeResponse, error) {
+	return &LocalUptimeResponse{}, nil
+}
+
+// FetchCXO implements API.
+func (mc *mockRPCClient) FetchCXO(_ FetchCXOArgs) (*FetchCXOResult, error) {
+	return &FetchCXOResult{Reason: "mock"}, nil
+}
+
 // GetConfigPath implements API.
 func (mc *mockRPCClient) GetConfigPath() (string, error) { return "", nil }
 
