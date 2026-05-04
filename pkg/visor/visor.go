@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dht"
+	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -387,7 +388,7 @@ func run(conf *visorconfig.V1) error {
 	logBroadcaster := logging.NewBroadcaster()
 	mLog.AddHook(logBroadcaster)
 
-	stopPProf := initPProf(mLog, pprofMode, pprofAddr)
+	stopPProf := dmsgcmdutil.InitPProf(mLog.PackageLogger("pprof"), pprofMode, pprofAddr)
 	defer stopPProf()
 
 	if conf == nil {
