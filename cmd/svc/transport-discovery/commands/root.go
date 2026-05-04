@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
+	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/svcmode"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -86,7 +87,12 @@ func init() {
 	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire/tpd/bandwidth", "path for bandwidth backup files\n\r")
 	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO feed for transport data distribution over DMSG")
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
+	RootCmd.Flags().StringVar(&uptimeDB, "uptime-db", "/var/lib/skywire/tpd/uptime.db", "path for the service-self uptime bbolt store (empty disables)")
 }
+
+// uptimeDB is the path for the local self-uptime store. Open early
+// in Run so a panic during subsystem init still leaves a session row.
+var uptimeDB string
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
 func exampleJSON(v interface{}) string {
@@ -248,6 +254,26 @@ Example:
 
 		logging.SetLevel(lvl)
 
+		// Service-self uptime recorder. Opened before subsystem init so
+		// a panic in the redis or DMSG bring-up still leaves a session
+		// row with the running binary's version. Failure is non-fatal
+		// — TPD continues without the /uptime/* surface.
+		var uptimeRec *serviceuptime.Recorder
+		if uptimeDB != "" {
+			rec, rErr := serviceuptime.New(uptimeDB, serviceuptime.Config{
+				Service: "transport-discovery",
+				Version: buildinfo.Version(),
+				Commit:  buildinfo.Commit(),
+			})
+			if rErr != nil {
+				logger.WithError(rErr).Warn("Service-self uptime recorder unavailable")
+			} else {
+				uptimeRec = rec
+				defer func() { _ = uptimeRec.Close() }() //nolint:errcheck
+				uptimeRec.Start()
+			}
+		}
+
 		metricsutil.ServePProf(logger, pprofAddr, "transport-discovery")
 
 		var whitelistPKs []string
@@ -309,6 +335,9 @@ Example:
 
 		enableMetrics := metricsAddr != ""
 		tpdAPI := api.New(logger, s, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
+		if uptimeRec != nil {
+			tpdAPI.SetUptimeRecorder(uptimeRec)
+		}
 
 		logger.Infof("Listening on %s", addr)
 		logger.Infof("Transport entry timeout: %v", entryTimeout)

@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
+	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
@@ -39,6 +40,7 @@ type API interface {
 	DisableHypervisorPersist(persist bool) error
 	IsHypervisorEnabled() bool
 	Uptime() (float64, error)
+	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
 	Reload() error
 	Shutdown() error
@@ -452,6 +454,31 @@ type HealthInfo struct {
 	UptimeTrackerHealth    string `json:"uptime_tracker_health,omitempty"`
 	AutoconnectHealth      string `json:"autoconnect_health,omitempty"`
 	TransportabilityHealth string `json:"transportability_health,omitempty"`
+}
+
+// UptimeHistoryArgs is the request shape for API.UptimeHistory. All
+// fields are optional: empty Since reads everything in retention,
+// zero Limit returns all rows, IncludeTimeline=false skips the
+// timeline byte slice.
+type UptimeHistoryArgs struct {
+	Since           time.Time
+	Limit           int
+	IncludeTimeline bool
+	// TimelineDate, when set with IncludeTimeline, returns the bitmap
+	// for that UTC date instead of today.
+	TimelineDate time.Time
+}
+
+// UptimeHistoryResponse carries the visor's own session history.
+// Current is the in-flight session row; Sessions is everything the
+// recorder has retained, oldest first. Timeline (when requested) is
+// the 36-byte 288-slot bitmap for TimelineDate, suitable for
+// rendering with serviceuptime.FormatBitmap.
+type UptimeHistoryResponse struct {
+	Current      serviceuptime.SessionRecord   `json:"current"`
+	Sessions     []serviceuptime.SessionRecord `json:"sessions"`
+	Timeline     []byte                        `json:"timeline,omitempty"`
+	TimelineDate string                        `json:"timeline_date,omitempty"`
 }
 
 // RuntimeStatsInfo carries Go runtime statistics for the visor process.

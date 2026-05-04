@@ -4,6 +4,7 @@ package visor
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -295,6 +296,48 @@ func (v *Visor) IsStartupComplete() bool {
 func (v *Visor) Uptime() (float64, error) {
 	return time.Since(v.startedAt).Seconds(), nil
 }
+
+// UptimeHistory implements API. Reads from the service-self uptime
+// recorder's bbolt store. Returns ErrUptimeRecorderUnavailable when
+// the recorder isn't wired (recorder open failed at startup or the
+// visor is running without LocalPath access).
+func (v *Visor) UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error) {
+	rec := v.UptimeRecorder()
+	if rec == nil {
+		return nil, ErrUptimeRecorderUnavailable
+	}
+	store := rec.Store()
+	sessions, err := store.Sessions(args.Since)
+	if err != nil {
+		return nil, fmt.Errorf("read sessions: %w", err)
+	}
+	if args.Limit > 0 && args.Limit < len(sessions) {
+		sessions = sessions[len(sessions)-args.Limit:]
+	}
+	resp := &UptimeHistoryResponse{
+		Current:  rec.CurrentSession(),
+		Sessions: sessions,
+	}
+	if args.IncludeTimeline {
+		date := args.TimelineDate
+		if date.IsZero() {
+			date = time.Now().UTC()
+		}
+		bm, err := store.Bitmap(date)
+		if err != nil {
+			return nil, fmt.Errorf("read timeline: %w", err)
+		}
+		resp.Timeline = bm
+		resp.TimelineDate = date.UTC().Format("2006-01-02")
+	}
+	return resp, nil
+}
+
+// ErrUptimeRecorderUnavailable is returned by UptimeHistory when the
+// recorder failed to open or wasn't wired into the visor (e.g. the
+// LocalPath is unwritable). Callers should distinguish this from a
+// "the recorder ran but has no data yet" empty response.
+var ErrUptimeRecorderUnavailable = errors.New("service-self uptime recorder not configured")
 
 // RuntimeStats implements API.
 func (v *Visor) RuntimeStats() (*RuntimeStatsInfo, error) {
