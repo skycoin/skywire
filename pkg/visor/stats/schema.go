@@ -33,6 +33,12 @@ type TransportRecord struct {
 }
 
 // LiveSnapshot is the most recent observation for a transport.
+//
+// Type carries the wire-protocol type ("stcpr"/"sudph"/"stcp"/"dmsg")
+// so TPD's CXO aggregator can record per-transport uptime heartbeats
+// without a redis lookup. Empty on snapshots produced before the
+// field was added — TPD treats that as "skip uptime, but bandwidth
+// and latency still apply" so old visors keep working.
 type LiveSnapshot struct {
 	SentBytes    uint64    `json:"sent_bytes"`
 	RecvBytes    uint64    `json:"recv_bytes"`
@@ -40,6 +46,7 @@ type LiveSnapshot struct {
 	LatencyMaxMS float64   `json:"latency_max_ms,omitempty"`
 	LatencyAvgMS float64   `json:"latency_avg_ms,omitempty"`
 	SampledAt    time.Time `json:"sampled_at"`
+	Type         string    `json:"type,omitempty"`
 }
 
 // DailyRollup is the sealed per-day view. Bandwidth values are deltas

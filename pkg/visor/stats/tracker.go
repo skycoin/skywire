@@ -309,6 +309,7 @@ func (t *Tracker) recordTransport(tp TransportProbe, now time.Time, today string
 		LatencyMaxMS: tp.LatencyMS.Max,
 		LatencyAvgMS: tp.LatencyMS.Avg,
 		SampledAt:    now,
+		Type:         rec.Type,
 	}
 
 	t.mu.Lock()
@@ -350,6 +351,19 @@ func (t *Tracker) recordTransport(tp TransportProbe, now time.Time, today string
 	}
 	if data, err := json.Marshal(row); err == nil {
 		t.sinkPut(dailyTransportPath(idStr, today), data)
+	}
+
+	// Per-transport uptime bitmap: set this tick's 5-min slot and
+	// mirror the post-update bitmap. CXO content-addressing means an
+	// unchanged bitmap (subsequent ticks within the same slot)
+	// produces a stable Root and no wire republish — only slot
+	// rollovers actually transit DMSG.
+	slot := SlotForTime(now)
+	if err := t.store.MarkTransportSlot(idStr, now, slot); err != nil {
+		t.log.WithError(err).WithField("tp_id", idStr).
+			Debug("Stats: MarkTransportSlot failed")
+	} else if bm, bErr := t.store.TransportBitmap(idStr, now); bErr == nil {
+		t.sinkPut(transportTimelinePath(idStr, today), bm)
 	}
 	return nil
 }
@@ -426,6 +440,7 @@ func (t *Tracker) runRetention(now time.Time) {
 		}
 		for date := range droppedFromBolt {
 			t.sinkDelete(dailyTransportPath(rec.ID.String(), date))
+			t.sinkDelete(transportTimelinePath(rec.ID.String(), date))
 		}
 		if len(trimmed) != len(rec.Daily) {
 			rec.Daily = trimmed
@@ -464,6 +479,7 @@ func (t *Tracker) sinkPruneOutsidePublishWindow(now time.Time) {
 		for _, d := range rec.Daily {
 			if d.Date < publishCutoff {
 				t.sinkDelete(dailyTransportPath(rec.ID.String(), d.Date))
+				t.sinkDelete(transportTimelinePath(rec.ID.String(), d.Date))
 			}
 		}
 	}
@@ -498,6 +514,27 @@ func (t *Tracker) sinkPruneOutsidePublishWindow(now time.Time) {
 		for _, d := range dates {
 			if d < publishCutoff {
 				t.sinkDelete(serviceBitmapPath(svc, d))
+			}
+		}
+	}
+
+	// Transport timeline bitmaps. Walk the bucket directly rather
+	// than rec.Daily — bitmaps can persist for transports whose
+	// TransportRecord was deleted (e.g. closed transports during
+	// retention) until the bbolt prune sweep drops them.
+	tpIDs, err := t.store.TransportBitmapIDs()
+	if err != nil {
+		t.log.WithError(err).Warn("Stats: enumerate transport bitmaps for publish-window prune failed")
+	}
+	for _, id := range tpIDs {
+		dates, dErr := t.store.TransportBitmapDates(id)
+		if dErr != nil {
+			t.log.WithError(dErr).WithField("tp_id", id).Debug("Stats: TransportBitmapDates failed during prune")
+			continue
+		}
+		for _, d := range dates {
+			if d < publishCutoff {
+				t.sinkDelete(transportTimelinePath(id, d))
 			}
 		}
 	}
