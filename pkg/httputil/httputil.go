@@ -76,11 +76,21 @@ func isIOError(err error) bool {
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return true
 	}
-	// String-match fallback for syscall errors that have no clean Go sentinel
-	// (kernel-side errno wrappings that surface as descriptive strings).
+	// String-match fallback for errors that have no clean Go sentinel,
+	// or whose value differs from a sentinel that shares its message.
+	//
+	// "short write" specifically: http.timeoutWriter (from net/http's
+	// per-write deadline machinery) returns its own error when the
+	// response deadline expires mid-write — same text as io.ErrShortWrite,
+	// different identity, so errors.Is misses it. Production TPD was
+	// panicking every ~30s on large /all-transports responses to slow
+	// clients before this case was added.
 	errStr := err.Error()
 	if strings.Contains(errStr, "broken pipe") ||
-		strings.Contains(errStr, "connection reset") {
+		strings.Contains(errStr, "connection reset") ||
+		strings.Contains(errStr, "short write") ||
+		strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "deadline exceeded") {
 		return true
 	}
 	return false

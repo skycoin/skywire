@@ -2,6 +2,7 @@ package skyobject
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 	"time"
@@ -1186,7 +1187,18 @@ func (c *Cache) Finc(
 		}
 
 		if it.fc < 0 {
-			panic("Finc to negative for: " + key.Hex()[:7])
+			// Refcount inconsistency: a filler decremented fc by
+			// more than the cache's recorded Inc total. Likely a
+			// duplicate Finc on the same filler.incs map, or an
+			// Inc/Finc mismatch across overlapping fillers. The
+			// historical behavior was to panic — that's a hard
+			// process kill that observably restarts TPD on prod
+			// every 30-40s. Clamp to zero and continue so the
+			// process stays alive; the worst case is a leaked
+			// filling-item slot, not data corruption.
+			log.Printf("[CXO] Finc apply clamped negative fc to 0 for %s (was %d, inc %d)",
+				key.Hex(), it.fc+inc, inc)
+			it.fc = 0
 		}
 
 		// the fc is zero
@@ -1213,7 +1225,10 @@ func (c *Cache) Finc(
 	it.fc += inc // fc = fc - abs(inc)
 
 	if it.fc < 0 {
-		panic("Finc to negative for: " + key.Hex()[:7])
+		// Same recovery as the apply branch — see comment above.
+		log.Printf("[CXO] Finc reject clamped negative fc to 0 for %s (was %d, inc %d)",
+			key.Hex(), it.fc-inc, inc)
+		it.fc = 0
 	}
 
 	// and if it.fc turns to be zero, then the
