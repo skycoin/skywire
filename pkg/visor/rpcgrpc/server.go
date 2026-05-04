@@ -845,6 +845,10 @@ func newCalcMemStore(entries []*transport.Entry) *calcMemStore {
 	return &calcMemStore{byEdge: byEdge}
 }
 
+func (s *calcMemStore) GetTransportsByEdgeNoLatency(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	return s.GetTransportsByEdge(ctx, pk)
+}
+
 func (s *calcMemStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
 	if tps, ok := s.byEdge[pk]; ok {
 		return tps, nil
