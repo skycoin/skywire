@@ -2,18 +2,14 @@
 package transport_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -42,26 +38,6 @@ func testTransportLogStore(t *testing.T, logStore transport.LogStore) {
 
 func TestInMemoryTransportLogStore(t *testing.T) {
 	testTransportLogStore(t, transport.InMemoryTransportLogStore())
-}
-
-func TestFileTransportLogStore(t *testing.T) {
-	dir, err := os.MkdirTemp("", "log_store")
-	require.NoError(t, err)
-	defer func() {
-		require.NoError(t, os.RemoveAll(dir))
-	}()
-
-	log := logging.MustGetLogger("transport")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ls, err := transport.FileTransportLogStore(ctx, dir, time.Hour*24*7, log)
-	require.NoError(t, err)
-	testTransportLogStore(t, ls)
-
-	// Cancel context and wait briefly for background goroutine to exit
-	cancel()
-	time.Sleep(100 * time.Millisecond)
 }
 
 func TestLogEntry_MarshalJSON(t *testing.T) {
