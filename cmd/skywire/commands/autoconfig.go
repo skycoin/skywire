@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -49,11 +48,6 @@ var autoconfigCmd = &cobra.Command{
 		if os.Getenv("NOAUTOCONFIG") == "true" {
 			fmt.Println("autoconfiguration disabled. to configure and start skywire run: skywire autoconfig")
 			os.Exit(0)
-		}
-
-		// Create local directory if needed
-		if err := os.MkdirAll("/opt/skywire/local/custom", 0750); err != nil {
-			fmt.Printf("Warning: could not create local directory: %v\n", err)
 		}
 
 		msg2("Configuring skywire")
@@ -102,13 +96,6 @@ var autoconfigCmd = &cobra.Command{
 			exec.Command("systemctl", "restart", "skywire").Run()
 		} else {
 			msg2(fmt.Sprintf("Start the skywire service with:\n\t%ssystemctl start skywire%s", colorRed, colorReset))
-		}
-
-		// Restart test service only if already running
-		checkTestActive := exec.Command("systemctl", "is-active", "--quiet", "skywire-test")
-		if checkTestActive.Run() == nil {
-			msg3("Restarting skywire-test.service...")
-			exec.Command("systemctl", "restart", "skywire-test").Run() //nolint:errcheck,gosec
 		}
 
 		// Get public key
@@ -218,66 +205,7 @@ func generateConfig(hvArg string) error {
 		return err
 	}
 
-	// Generate test deployment config with the same keys.
-	// Skip if:
-	// - Custom service config URL is set (no test counterpart to fetch from)
-	// - Test deployment is not defined (SKYDEPLOY with only prod section)
-	if os.Getenv("SVCCONFADDR") == "" && deployment.Test.DmsgDiscovery != "" {
-		if err := generateTestConfig(hvArg); err != nil {
-			// Non-fatal: test config is optional
-			fmt.Printf("%sWarning:%s test config generation failed: %v\n", colorYellow, colorReset, err)
-		}
-	}
 	return nil
-}
-
-func generateTestConfig(hvArg string) error {
-	testConf := "/opt/skywire/skywire-test.json"
-
-	args := []string{"cli", "config", "gen",
-		"-r",           // regen (reuses SK if test config exists, or from SKYENV)
-		"-p",           // package mode
-		"-t",           // test deployment
-		"-o", testConf, // separate config file (overrides -p default path)
-	}
-
-	// Mirror hypervisor setting from prod
-	conf, _ := visorconfig.ReadFile("/opt/skywire/skywire.json") //nolint:errcheck
-	switch hvArg {
-	case "0":
-		args = append(args, "-i")
-	case "":
-		if conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable {
-			args = append(args, "-i")
-		}
-	default:
-		if hvArg != "1" {
-			args = append(args, "-j", hvArg)
-		}
-	}
-
-	// Determine SKYENV path (same as prod config)
-	skyenv := os.Getenv("SKYENV")
-	if skyenv == "" {
-		if _, statErr := os.Stat("/etc/skywire.conf"); statErr == nil {
-			skyenv = "/etc/skywire.conf"
-		}
-	}
-
-	envPrefix := ""
-	if skyenv != "" {
-		envPrefix = fmt.Sprintf("SKYENV=%s ", skyenv)
-	}
-	msg3(fmt.Sprintf("Generating test config:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(args, " "), colorReset))
-
-	cmd := exec.Command("skywire", args...) //nolint:gosec
-	cmd.Stdout = nil
-	cmd.Stderr = nil // suppress DMSG debug logging
-	cmd.Env = os.Environ()
-	if skyenv != "" {
-		cmd.Env = append(cmd.Env, "SKYENV="+skyenv)
-	}
-	return cmd.Run()
 }
 
 func printWelcome(pubkey string, isHypervisor bool) {
