@@ -161,7 +161,10 @@ func registerModules(logger *logging.MasterLogger) {
 	stcpC = maker("stcp", initStcpClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
-	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr)
+	// dmsghttp_logserver mounts /pty on top of dmsgpty's CLI socket
+	// (or self-dialed dmsg when no CLI socket is configured), so it
+	// must run after pty has finished its setup.
+	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr, &pty)
 	systemSurvey = maker("system_survey", initSystemSurvey, &dmsgHTTPLogServer)
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
