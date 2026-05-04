@@ -157,11 +157,13 @@ func (v *Visor) ensureTPDUptimeSubscriber() (*tpdUptimeSubscriber, error) {
 			return nil, fmt.Errorf("dial tpd uptime publisher: %w", err)
 		}
 	case <-time.After(connectTimeout):
-		// In-flight goroutine will resolve later; we leak it (and the
-		// half-open subscriber) but the alternative is hanging the
-		// hvui until TPD comes back. The cooldown check above keeps
-		// successive hvui opens from re-paying the same wait until
-		// connectCooldown elapses.
+		// Close the subscriber so its listener releases port
+		// DmsgTPDUptimeCXOPort — otherwise the next ensure call
+		// would fail with "port already occupied" forever. The
+		// in-flight Connect goroutine sees the underlying transport
+		// close and unwinds; that's the standard treestore shutdown
+		// path. The cooldown above prevents a tight retry loop.
+		_ = sub.Close() //nolint:errcheck
 		v.tpdUptimeLastFail.Store(time.Now().UnixNano())
 		return nil, fmt.Errorf("dial tpd uptime publisher: timeout after %s", connectTimeout)
 	}
