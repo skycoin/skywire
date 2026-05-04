@@ -3,13 +3,16 @@ package clisvc
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/serviceuptime"
 )
 
 func init() {
@@ -79,8 +82,20 @@ func init() {
 		tpdBandwidthTpCmd,
 		tpdMetricsVisorCmd,
 		tpdMetricsTpCmd,
+		tpdUptimeCmd,
 	)
+	tpdUptimeCmd.Flags().IntVarP(&svcUptimeLimit, "limit", "n", 0, "show only the most-recent N session rows (0 = all)")
+	tpdUptimeCmd.Flags().DurationVar(&svcUptimeGapThreshold, "gap-threshold", 30*time.Second,
+		"render a (down: ...) row between sessions whose gap exceeds this")
+	tpdUptimeCmd.Flags().DurationVar(&svcUptimeRestartLoopMax, "restart-loop-threshold", 30*time.Second,
+		"sessions shorter than this get a (restart loop?) tag")
 }
+
+var (
+	svcUptimeLimit          int
+	svcUptimeGapThreshold   time.Duration
+	svcUptimeRestartLoopMax time.Duration
+)
 
 var tpdStatsCmd = &cobra.Command{
 	Use:   "stats",
@@ -306,6 +321,52 @@ var arCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		emitPretty(cmd, data)
+	},
+}
+
+// tpdUptimeCmd renders TPD's own session history (one row per process
+// incarnation, version-tagged) — recorded by pkg/serviceuptime in the
+// service's local bbolt store. Gaps between sessions = TPD was actually
+// down. Sessions shorter than --restart-loop-threshold get tagged so
+// an operator can spot a TPD that's bouncing.
+var tpdUptimeCmd = &cobra.Command{
+	Use:   "uptime",
+	Short: "TPD session history (version-tagged, with restart-loop / down-window detection)",
+	Long: `
+Render the TPD service's own session history recorded locally by
+pkg/serviceuptime. Each session is one process incarnation: started_at,
+last_seen, and the running binary's Version. Gaps between adjacent
+sessions show as "(down: <duration>)"; sessions shorter than
+--restart-loop-threshold get a "(restart loop?)" tag.
+
+	skywire cli svc tpd uptime
+	skywire cli svc tpd uptime -n 20
+	skywire cli svc tpd uptime --json | jq '.[].version' | sort -u
+`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		path := "/uptime/sessions"
+		if svcUptimeLimit > 0 {
+			path = fmt.Sprintf("%s?limit=%d", path, svcUptimeLimit)
+		}
+		data, err := fetchViaVisorOrDirect(cmd, "tpd", path, deployment.Prod.TransportDiscovery)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		var sessions []serviceuptime.SessionRecord
+		if jErr := json.Unmarshal(data, &sessions); jErr != nil {
+			// Service responded but with something other than a session
+			// list — most likely a 503 (recorder not configured) or an
+			// older binary without /uptime. Surface the raw body.
+			emitPretty(cmd, data)
+			return
+		}
+		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut { //nolint:errcheck
+			b, _ := json.MarshalIndent(sessions, "", "  ") //nolint:errcheck
+			internal.PrintOutput(cmd.Flags(), sessions, string(b)+"\n")
+			return
+		}
+		human := serviceuptime.FormatHistory(sessions, svcUptimeGapThreshold, svcUptimeRestartLoopMax)
+		internal.PrintOutput(cmd.Flags(), sessions, human)
 	},
 }
 

@@ -59,6 +59,23 @@ func (r *RPC) RuntimeStats(_ *struct{}, out *RuntimeStatsInfo) (err error) {
 	return err
 }
 
+// UptimeHistory returns the visor's session-level uptime history
+// (one row per process incarnation, version-tagged) plus optionally
+// today's 5-minute slot bitmap. Surfaces ErrUptimeRecorderUnavailable
+// when the recorder isn't wired so the CLI can render a clear
+// "(recorder unavailable)" instead of an empty list.
+func (r *RPC) UptimeHistory(in *UptimeHistoryArgs, out *UptimeHistoryResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "UptimeHistory", in)(out, &err)
+	if in == nil {
+		in = &UptimeHistoryArgs{}
+	}
+	hist, err := r.visor.UptimeHistory(*in)
+	if hist != nil {
+		*out = *hist
+	}
+	return err
+}
+
 // Uptime returns for how long the visor has been running in seconds
 func (r *RPC) Uptime(_ *struct{}, out *float64) (err error) {
 	defer rpcutil.LogCall(r.log, "Uptime", nil)(out, &err)
