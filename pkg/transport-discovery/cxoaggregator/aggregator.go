@@ -54,11 +54,15 @@ import (
 
 // Sink receives per-transport telemetry updates from visor TreeStore
 // feeds. The TPD's redis store satisfies this via UpdateBandwidth (per
-// reporter, cumulative counters) and UpdateLatency (per transport, RTT
-// min/max/avg in ms).
+// reporter, cumulative counters), UpdateLatency (per transport, RTT
+// min/max/avg in ms), and RecordTransportHeartbeat (per-transport
+// uptime — sets today's 5-min slot bit and the "online today" set
+// member; previously written only via the HTTP /transports/ register
+// path).
 type Sink interface {
 	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
 	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
+	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string) error
 }
 
 // BandwidthSink is retained as an alias for callers that only need the
@@ -79,6 +83,7 @@ type liveSnapshot struct {
 	LatencyMaxMS float64   `json:"latency_max_ms,omitempty"`
 	LatencyAvgMS float64   `json:"latency_avg_ms,omitempty"`
 	SampledAt    time.Time `json:"sampled_at"`
+	Type         string    `json:"type,omitempty"`
 }
 
 // Config configures the Aggregator.
@@ -366,6 +371,17 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 	if snap.LatencyMinMS > 0 && snap.LatencyMaxMS > 0 && snap.LatencyAvgMS > 0 {
 		if err := a.sink.UpdateLatency(ctx, id.String(), snap.LatencyMinMS, snap.LatencyMaxMS, snap.LatencyAvgMS); err != nil {
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: UpdateLatency failed")
+		}
+	}
+	// Heartbeat into the per-transport uptime tables (tp-uptime:*),
+	// previously written only by the HTTP /transports/ register path.
+	// Type is empty on snapshots from pre-uptime visors — skip those
+	// rather than push a heartbeat the store would have to drop on
+	// the type filter (RecordTransportHeartbeat early-returns on any
+	// non-p2p type, but routing here saves the redis round-trip).
+	if snap.Type != "" {
+		if err := a.sink.RecordTransportHeartbeat(ctx, id, snap.Type); err != nil {
+			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: RecordTransportHeartbeat failed")
 		}
 	}
 }

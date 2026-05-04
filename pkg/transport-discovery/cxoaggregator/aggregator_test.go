@@ -45,6 +45,7 @@ type recordingSink struct {
 	mu         sync.Mutex
 	bandwidths int
 	latencies  []struct{ min, max, avg float64 }
+	heartbeats []struct{ tpType string }
 }
 
 func (s *recordingSink) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
@@ -56,6 +57,12 @@ func (s *recordingSink) UpdateBandwidth(_ context.Context, _ string, _ cipher.Pu
 func (s *recordingSink) UpdateLatency(_ context.Context, _ string, minMS, maxMS, avgMS float64) error {
 	s.mu.Lock()
 	s.latencies = append(s.latencies, struct{ min, max, avg float64 }{minMS, maxMS, avgMS})
+	s.mu.Unlock()
+	return nil
+}
+func (s *recordingSink) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, tpType string) error {
+	s.mu.Lock()
+	s.heartbeats = append(s.heartbeats, struct{ tpType string }{tpType})
 	s.mu.Unlock()
 	return nil
 }
@@ -113,6 +120,68 @@ func TestDispatchLeafLatencyGate(t *testing.T) {
 			}
 			if !c.wantLat && len(sink.latencies) != 0 {
 				t.Errorf("expected latency dropped, got %+v", sink.latencies)
+			}
+		})
+	}
+}
+
+// Heartbeats are gated on snap.Type — old visors that don't carry
+// the field must not produce a sink call (the store would early-return
+// on the type filter, but routing here saves the round-trip and keeps
+// the dispatch contract observable).
+func TestDispatchLeafHeartbeatGate(t *testing.T) {
+	id := uuid.New()
+	pk := cipher.PubKey{}
+	now := time.Now().UTC()
+
+	cases := []struct {
+		name       string
+		snap       liveSnapshot
+		wantHB     bool
+		wantHBType string
+	}{
+		{
+			name:   "no type — pre-uptime visor, skip heartbeat",
+			snap:   liveSnapshot{SentBytes: 100, SampledAt: now},
+			wantHB: false,
+		},
+		{
+			name:       "stcpr — record heartbeat",
+			snap:       liveSnapshot{Type: "stcpr", SentBytes: 100, SampledAt: now},
+			wantHB:     true,
+			wantHBType: "stcpr",
+		},
+		{
+			name:       "sudph — record heartbeat",
+			snap:       liveSnapshot{Type: "sudph", SentBytes: 100, SampledAt: now},
+			wantHB:     true,
+			wantHBType: "sudph",
+		},
+		{
+			name:       "type pass-through (filter happens in store, not dispatch)",
+			snap:       liveSnapshot{Type: "dmsg", SampledAt: now},
+			wantHB:     true,
+			wantHBType: "dmsg",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			sink := &recordingSink{}
+			a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+			leaf, err := json.Marshal(c.snap)
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			a.dispatchLeaf("transports/"+id.String()+"/current", leaf, pk)
+			if c.wantHB {
+				if len(sink.heartbeats) != 1 {
+					t.Fatalf("expected 1 heartbeat call, got %d", len(sink.heartbeats))
+				}
+				if got := sink.heartbeats[0].tpType; got != c.wantHBType {
+					t.Errorf("heartbeat type = %q, want %q", got, c.wantHBType)
+				}
+			} else if len(sink.heartbeats) != 0 {
+				t.Errorf("expected no heartbeat, got %+v", sink.heartbeats)
 			}
 		})
 	}

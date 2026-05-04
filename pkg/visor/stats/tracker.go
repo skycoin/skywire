@@ -309,6 +309,7 @@ func (t *Tracker) recordTransport(tp TransportProbe, now time.Time, today string
 		LatencyMaxMS: tp.LatencyMS.Max,
 		LatencyAvgMS: tp.LatencyMS.Avg,
 		SampledAt:    now,
+		Type:         rec.Type,
 	}
 
 	t.mu.Lock()
