@@ -26,6 +26,13 @@ export class TerminalComponent extends PageBaseComponent implements OnInit, OnDe
   node: Node;
   iframeUrl: SafeResourceUrl | null = null;
   fullWindowUrl = '';
+  // Last PK we built the iframe URL for. NodeComponent.currentNode
+  // emits on every polling refresh (~every few seconds); rebuilding
+  // the SafeResourceUrl on each tick produces a fresh object that
+  // Angular's change detection treats as a new src — the iframe
+  // reloads, killing the websocket and the active shell session.
+  // Only rebuild when the visor PK actually changes.
+  private boundPk = '';
 
   private nodeSub: Subscription;
 
@@ -34,12 +41,13 @@ export class TerminalComponent extends PageBaseComponent implements OnInit, OnDe
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
-      if (node) {
+      if (node && node.localPk && node.localPk !== this.boundPk) {
         const url = '/pty/' + node.localPk;
         this.iframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
         // Same-origin so window.location.origin is fine; the
         // hypervisor handler answers /pty/<pk> on the same port.
         this.fullWindowUrl = window.location.origin + url;
+        this.boundPk = node.localPk;
       }
     });
     return super.ngOnInit();
