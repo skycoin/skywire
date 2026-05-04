@@ -92,7 +92,11 @@ func (s *memoryStore) GetTransportByID(_ context.Context, id uuid.UUID) (*transp
 	return v, nil
 }
 
-func (s *memoryStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+func (s *memoryStore) GetTransportsByEdge(ctx context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
+	return s.GetTransportsByEdgeNoLatency(ctx, pk)
+}
+
+func (s *memoryStore) GetTransportsByEdgeNoLatency(_ context.Context, pk cipher.PubKey) ([]*transport.Entry, error) {
 	if s.err != nil {
 		return nil, s.err
 	}
