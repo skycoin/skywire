@@ -30,27 +30,10 @@
           </mat-error>
         </mat-form-field>
 
-        @if (configuringVpn) {
-          <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
-            <div class="field-container">
-              <label class="field-label" for="remoteKey">{{ 'apps.vpn-socks-client-settings.password' | translate }}</label>
-              <input
-                id="password"
-                type="password"
-                formControlName="password"
-                maxlength="100"
-                matInput
-                >
-            </div>
-          </mat-form-field>
-        }
-
-        @if (form && form.get('password').value) {
-          <div class="password-history-warning">
-            <mat-icon [inline]="true">warning</mat-icon>
-            {{ 'apps.vpn-socks-client-settings.password-history-warning' | translate }}
-          </div>
-        }
+        <!-- Password field removed: vpn-client/skysocks-client no
+             longer accept a --passcode flag (see SetAppWhitelist
+             comment in pkg/visor/api_apps.go). Server access is
+             now whitelist-gated, set on the server side. -->
 
         <app-button
           #button
@@ -263,9 +246,9 @@
       }
     </mat-tab>
     <!-- Settings. -->
-    @if (configuringVpn) {
-      <mat-tab [label]="tabLabels[3] | translate">
-        <form [formGroup]="settingsForm">
+    <mat-tab [label]="tabLabels[3] | translate">
+      <form [formGroup]="settingsForm">
+        @if (configuringVpn) {
           <!-- DNS option. -->
           <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
             <div class="field-container">
@@ -289,25 +272,57 @@
               <mat-icon [inline]="true" class="help-icon" [matTooltip]="'apps.vpn-socks-client-settings.killswitch-info' | translate">help</mat-icon>
             </mat-checkbox>
           </div>
-          <!-- Settings changed alert. -->
-          @if (settingsChanged) {
-            <div class="settings-changed-warning">
-              <mat-icon [inline]="true">warning</mat-icon>
-              {{ 'apps.vpn-socks-client-settings.settings-changed-alert' | translate }}
+        } @else {
+          <!-- skysocks-client global flags (mirror of `skywire app
+               skysocks-client --help`). All optional; empty restores
+               the binary's default. -->
+          <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+            <div class="field-container">
+              <label class="field-label">{{ 'apps.vpn-socks-client-settings.addr' | translate }}</label>
+              <input formControlName="addr" maxlength="64" matInput placeholder="127.0.0.1:1080">
             </div>
-          }
-          <!-- Save button. -->
-          <app-button
-            #settingsButton
-            color="primary"
-            class="float-right"
-            [disabled]="!settingsForm.valid || !settingsChanged || working"
-            (action)="saveSettings()"
-            >
-            {{ 'apps.vpn-socks-client-settings.save-settings' | translate }}
-          </app-button>
-        </form>
-      </mat-tab>
-    }
+            <mat-hint>{{ 'apps.vpn-socks-client-settings.addr-hint' | translate }}</mat-hint>
+          </mat-form-field>
+          <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+            <div class="field-container">
+              <label class="field-label">{{ 'apps.vpn-socks-client-settings.http' | translate }}</label>
+              <input formControlName="http" maxlength="64" matInput placeholder="127.0.0.1:8080">
+            </div>
+            <mat-hint>{{ 'apps.vpn-socks-client-settings.http-hint' | translate }}</mat-hint>
+          </mat-form-field>
+          <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+            <div class="field-container">
+              <label class="field-label">{{ 'apps.vpn-socks-client-settings.tries' | translate }}</label>
+              <input formControlName="tries" maxlength="5" matInput type="number" min="1" placeholder="3">
+            </div>
+            <mat-hint>{{ 'apps.vpn-socks-client-settings.tries-hint' | translate }}</mat-hint>
+          </mat-form-field>
+          <mat-form-field [ngClass]="{'element-disabled' : disableDismiss}">
+            <div class="field-container">
+              <label class="field-label">{{ 'apps.vpn-socks-client-settings.retry-time' | translate }}</label>
+              <input formControlName="retryTime" maxlength="5" matInput type="number" min="0" placeholder="5">
+            </div>
+            <mat-hint>{{ 'apps.vpn-socks-client-settings.retry-time-hint' | translate }}</mat-hint>
+          </mat-form-field>
+        }
+        <!-- Settings changed alert. -->
+        @if (settingsChanged) {
+          <div class="settings-changed-warning">
+            <mat-icon [inline]="true">warning</mat-icon>
+            {{ 'apps.vpn-socks-client-settings.settings-changed-alert' | translate }}
+          </div>
+        }
+        <!-- Save button. -->
+        <app-button
+          #settingsButton
+          color="primary"
+          class="float-right"
+          [disabled]="!settingsForm.valid || !settingsChanged || working"
+          (action)="saveSettings()"
+          >
+          {{ 'apps.vpn-socks-client-settings.save-settings' | translate }}
+        </app-button>
+      </form>
+    </mat-tab>
   </mat-tab-group></mat-dialog-content>
 </app-dialog>
