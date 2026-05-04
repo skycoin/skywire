@@ -188,14 +188,17 @@ func tpUptimeTimelineKey(tpID string, date string) string {
 	return fmt.Sprintf("%s:tp-uptime:%s:%s:timeline", serviceName, tpID, date)
 }
 
-func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string) error {
+func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error {
 	// Only track p2p transport types.
 	if tpType != "stcpr" && tpType != "sudph" {
 		return nil
 	}
 
-	now := time.Now().UTC()
-	date := now.Format("2006-01-02")
+	if at.IsZero() {
+		at = time.Now()
+	}
+	at = at.UTC()
+	date := at.Format("2006-01-02")
 	idStr := tpID.String()
 	key := tpUptimeKey(idStr, date)
 
@@ -203,14 +206,14 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 
 	pipe.HIncrBy(ctx, key, "count", 1)
 	pipe.HSet(ctx, key, "type", tpType)
-	pipe.HSet(ctx, key, "last_seen", now.Unix())
+	pipe.HSet(ctx, key, "last_seen", at.Unix())
 	pipe.Expire(ctx, key, 8*24*time.Hour)
 
 	pipe.SAdd(ctx, tpUptimeOnlineKey(date), idStr)
 	pipe.Expire(ctx, tpUptimeOnlineKey(date), 8*24*time.Hour)
 
 	tlKey := tpUptimeTimelineKey(idStr, date)
-	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	pipe.SetBit(ctx, tlKey, currentTimelineSlot(at), 1)
 	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
 
 	_, err := pipe.Exec(ctx)

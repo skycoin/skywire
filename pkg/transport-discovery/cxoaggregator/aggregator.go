@@ -62,7 +62,10 @@ import (
 type Sink interface {
 	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
 	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
-	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string) error
+	// at is the visor-side observation time (snap.SampledAt), so a
+	// heartbeat that crosses a 5-minute slot boundary in transit
+	// still credits the slot the visor was actually online for.
+	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error
 }
 
 // BandwidthSink is retained as an alias for callers that only need the
@@ -380,7 +383,7 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 	// the type filter (RecordTransportHeartbeat early-returns on any
 	// non-p2p type, but routing here saves the redis round-trip).
 	if snap.Type != "" {
-		if err := a.sink.RecordTransportHeartbeat(ctx, id, snap.Type); err != nil {
+		if err := a.sink.RecordTransportHeartbeat(ctx, id, snap.Type, snap.SampledAt); err != nil {
 			a.log.WithError(err).WithField("transport", id).Debug("CXO aggregator: RecordTransportHeartbeat failed")
 		}
 	}

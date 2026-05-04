@@ -45,7 +45,10 @@ type recordingSink struct {
 	mu         sync.Mutex
 	bandwidths int
 	latencies  []struct{ min, max, avg float64 }
-	heartbeats []struct{ tpType string }
+	heartbeats []struct {
+		tpType string
+		at     time.Time
+	}
 }
 
 func (s *recordingSink) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
@@ -60,9 +63,12 @@ func (s *recordingSink) UpdateLatency(_ context.Context, _ string, minMS, maxMS,
 	s.mu.Unlock()
 	return nil
 }
-func (s *recordingSink) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, tpType string) error {
+func (s *recordingSink) RecordTransportHeartbeat(_ context.Context, _ uuid.UUID, tpType string, at time.Time) error {
 	s.mu.Lock()
-	s.heartbeats = append(s.heartbeats, struct{ tpType string }{tpType})
+	s.heartbeats = append(s.heartbeats, struct {
+		tpType string
+		at     time.Time
+	}{tpType, at})
 	s.mu.Unlock()
 	return nil
 }
@@ -179,6 +185,13 @@ func TestDispatchLeafHeartbeatGate(t *testing.T) {
 				}
 				if got := sink.heartbeats[0].tpType; got != c.wantHBType {
 					t.Errorf("heartbeat type = %q, want %q", got, c.wantHBType)
+				}
+				// Slot accuracy: the at field must be the snap's
+				// SampledAt, not a re-clocked time.Now() inside the
+				// dispatcher. Otherwise leaf-arrival skew would
+				// shift the slot bit.
+				if !sink.heartbeats[0].at.Equal(c.snap.SampledAt) {
+					t.Errorf("heartbeat at = %v, want SampledAt %v", sink.heartbeats[0].at, c.snap.SampledAt)
 				}
 			} else if len(sink.heartbeats) != 0 {
 				t.Errorf("expected no heartbeat, got %+v", sink.heartbeats)
