@@ -171,6 +171,24 @@ var summaryCmd = &cobra.Command{
 		msg += fmt.Sprintf("Visor Version: %s\nConfig Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
 			summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
 
+		// Last-24h rolling uptime per local-tier bitmap. Same source as
+		// the hvui's per-visor Uptime tab and `/stats/uptime` on the
+		// logserver — all read pkg/visor/stats — so the bar here is
+		// what the integrated tracker recorded for THIS visor, not the
+		// network-wide TPD aggregate. Best-effort: if the store isn't
+		// initialized (rare; e.g. partial startup) we skip the section.
+		if uptimeBars, uptimePcts, ok := localUptime24h(rpcClient); ok && len(uptimeBars) > 0 {
+			msg += "Local uptime (last 24h, hour blocks):\n"
+			for _, name := range []string{"process", "dmsg", "skynet"} {
+				bar, hasBar := uptimeBars[name]
+				if !hasBar {
+					continue
+				}
+				pct := uptimePcts[name]
+				msg += fmt.Sprintf("  %-7s  %s  %5.1f%%\n", name, bar, pct)
+			}
+		}
+
 		outputJSON := struct {
 			PublicKey      string                    `json:"public_key"`
 			IsSymmetricNAT bool                      `json:"symmetric_nat"`
@@ -369,6 +387,102 @@ var runtimeStatsCmd = &cobra.Command{
 
 		internal.PrintOutput(cmd.Flags(), stats, msg)
 	},
+}
+
+// localUptime24h fetches the visor's local tier bitmaps and folds
+// the trailing 24 wall-clock hours into one row of 24 hourly density
+// blocks per tier. Returns (bars, pcts, true) on success or (nil,
+// nil, false) when the stats store isn't available — same shape and
+// shading as `cli ut tpd graph` so an operator can eyeball the local
+// view next to TPD's network-wide one without doing mental conversion.
+func localUptime24h(rpc visor.API) (map[string]string, map[string]float64, bool) {
+	until := time.Now().UTC()
+	since := until.Add(-24 * time.Hour)
+	resp, err := rpc.LocalUptimeStats(visor.LocalUptimeArgs{Since: since, Until: until})
+	if err != nil || resp == nil || len(resp.Tiers) == 0 {
+		return nil, nil, false
+	}
+
+	const slotsPerHour = 12 // 5-minute slots
+	const totalHours = 24
+	bars := make(map[string]string, len(resp.Tiers))
+	pcts := make(map[string]float64, len(resp.Tiers))
+
+	// Build a flat slice of 288 slot characters covering the rolling
+	// window: yesterday's slots from `now`-onwards onward through
+	// today's slots up to `now`. Crossing the UTC midnight boundary
+	// is the only fiddly part — same composition logic the CLI's
+	// rolling-window mode uses, just inlined since pkg-level helpers
+	// aren't exported.
+	for tier, days := range resp.Tiers {
+		// Pull yesterday + today (if present) — those are the only
+		// dates a 24h window can touch.
+		todayKey := until.UTC().Format("2006-01-02")
+		yesterdayKey := until.UTC().Add(-24 * time.Hour).Format("2006-01-02")
+		todayAscii := days[todayKey]
+		yestAscii := days[yesterdayKey]
+
+		nowSlot := until.UTC().Hour()*slotsPerHour + until.UTC().Minute()/5
+		// Window starts (24h*12 = 288) slots before nowSlot. Negative
+		// indices wrap into yesterday's slot space.
+		var slots [288]byte
+		for i := 0; i < 288; i++ {
+			abs := nowSlot - 288 + i
+			var src string
+			if abs < 0 {
+				src = yestAscii
+				abs += 288 // map -1 → yesterday's slot 287, etc.
+			} else {
+				src = todayAscii
+			}
+			if abs >= 0 && abs < len(src) && src[abs] == '.' {
+				slots[i] = '.'
+			} else {
+				slots[i] = ' '
+			}
+		}
+
+		// Roll up into 24 hourly density blocks.
+		var b strings.Builder
+		var onlineSlots int
+		var totalSlotsKnown int
+		for h := 0; h < totalHours; h++ {
+			count := 0
+			for s := 0; s < slotsPerHour; s++ {
+				idx := h*slotsPerHour + s
+				if slots[idx] == '.' {
+					count++
+				}
+			}
+			onlineSlots += count
+			totalSlotsKnown += slotsPerHour
+			b.WriteString(shadeForCount(count))
+		}
+		bars[tier] = b.String()
+		if totalSlotsKnown > 0 {
+			pcts[tier] = 100 * float64(onlineSlots) / float64(totalSlotsKnown)
+		}
+	}
+	return bars, pcts, true
+}
+
+// shadeForCount maps an online-slot count (0–12) per hour to one of
+// five density characters. Same thresholds + glyphs as
+// cliuptime.shadeForCount so the visor-info bar reads identically
+// next to a `cli ut tpd graph` output.
+func shadeForCount(count int) string {
+	switch {
+	case count == 0:
+		return " "
+	case count <= 3:
+		return "░"
+	case count <= 6:
+		return "▒"
+	case count <= 9:
+		return "▓"
+	default:
+		return "█"
+	}
 }
 
 // formatARAddr renders one AR self-registration entry.
