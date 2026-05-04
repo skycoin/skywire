@@ -270,7 +270,9 @@ func transportsProbe(v *Visor) func() []stats.TransportProbe {
 // tierStatesProbe returns a closure that reports current tier
 // states. process is true while the visor is alive (it always is
 // when this probe runs); dmsg is read from the visor's DMSG client
-// readiness; skynet derives from the live transport count.
+// readiness; skynet is true when the visor has ≥2 live transports —
+// the same criterion TPD uses for "skynet online", so a visor here
+// counts as skynet-up only when it is actually routable through.
 func tierStatesProbe(v *Visor) func() map[string]bool {
 	return func() map[string]bool {
 		states := map[string]bool{

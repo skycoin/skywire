@@ -95,13 +95,18 @@ Port 80 has three tiers of access control:
 - `/node-info`, `/visor.log`, `/debug/pprof` — survey whitelist
 - Website (everything else) — the served port's `--whitelist`
 
-## Making HTTP Requests Over Skynet
+## Making HTTP Requests Over Skynet / DMSG
+
+`skywire cli got` is a unified HTTP client that speaks `http://`,
+`https://`, `skynet://` and `dmsg://`. The skywire schemes are
+routed through the local visor's RPC.
 
 ```bash
-skywire cli skynet curl skynet://<public-key>/path
-skywire cli skynet curl skynet://<public-key>:<port>/path
-skywire cli skynet curl -d '{"key":"val"}' skynet://<public-key>/endpoint
-skywire cli skynet curl -o output.file skynet://<public-key>/large-file
+skywire cli got skynet://<public-key>/path
+skywire cli got skynet://<public-key>:<port>/path
+skywire cli got dmsg://<public-key>:<port>/path
+skywire cli got req POST skynet://<public-key>/endpoint -D '{"key":"val"}'
+skywire cli got dl skynet://<public-key>/large-file -o output.file
 ```
 
 ## Persistence

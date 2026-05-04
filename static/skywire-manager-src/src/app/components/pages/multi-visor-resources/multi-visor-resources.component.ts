@@ -137,7 +137,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
     this.rows.forEach((r) => prevByPk.set(r.node.localPk, r));
 
     const now = Date.now();
-    this.rows = nodes.map((node) => {
+    const next = nodes.map((node) => {
       const fresh = byPk.get(node.localPk);
       const prev = prevByPk.get(node.localPk);
       const row: VisorRow = { node, ...fresh };
@@ -159,6 +159,16 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
       }
       return row;
     });
+    // Stable-sort by label (case-insensitive), falling back to PK so
+    // rows don't shuffle between polls when getNodes() returns a
+    // different order from one tick to the next.
+    next.sort((a, b) => {
+      const la = (a.node.label || '').toLowerCase();
+      const lb = (b.node.label || '').toLowerCase();
+      if (la !== lb) { return la < lb ? -1 : 1; }
+      return a.node.localPk < b.node.localPk ? -1 : 1;
+    });
+    this.rows = next;
   }
 
   /** Color class buckets — same thresholds as per-visor monitor. */

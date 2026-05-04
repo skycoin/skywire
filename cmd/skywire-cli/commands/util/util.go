@@ -5,7 +5,6 @@ import (
 	"github.com/spf13/cobra"
 
 	cliedit "github.com/skycoin/skywire/cmd/skywire-cli/commands/edit"
-	cligot "github.com/skycoin/skywire/cmd/skywire-cli/commands/got"
 	clijq "github.com/skycoin/skywire/cmd/skywire-cli/commands/jq"
 )
 
@@ -17,7 +16,6 @@ func init() {
 	RootCmd.AddCommand(
 		clijq.RootCmd,
 		cliedit.RootCmd,
-		cligot.RootCmd,
 		staticServeCmd,
 	)
 }

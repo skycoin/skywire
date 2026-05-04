@@ -21,7 +21,6 @@ import {
   FilterWindowData
 } from './skysocks-client-filter/skysocks-client-filter.component';
 import { countriesList } from 'src/app/utils/countries-list';
-import { SkysocksClientPasswordComponent } from './skysocks-client-password/skysocks-client-password.component';
 import { ClipboardService } from 'src/app/services/clipboard.service';
 import { StorageService } from 'src/app/services/storage.service';
 import { MatTabGroup } from '@angular/material/tabs';
@@ -112,6 +111,14 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
   // True if configuring Vpn-Client, false if configuring Skysocks-Client.
   configuringVpn = false;
 
+  // skysocks-client-only initial values for the new --addr / --http
+  // / --tries / --retry-time flags. Read from data.args on init,
+  // diffed on save. (vpn-client doesn't accept these flags.)
+  initialSocksAddr = '';
+  initialSocksHTTP = '';
+  initialSocksTries: number | string = '';
+  initialSocksRetryTime: number | string = '';
+
   // Indicates the value of the killswitch option in the backend the last time it was checked or changed.
   initialKillswitchSetting = false;
 
@@ -161,6 +168,7 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
         'apps.vpn-socks-client-settings.remote-visor-tab',
         'apps.vpn-socks-client-settings.discovery-tab',
         'apps.vpn-socks-client-settings.history-tab',
+        'apps.vpn-socks-client-settings.settings-tab',
       ];
     }
   }
@@ -195,15 +203,29 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     let currentVal = '';
     if (this.data.args && this.data.args.length > 0) {
       for (let i = 0; i < this.data.args.length; i++) {
-        if (this.data.args[i] === '-srv' && i + 1 < this.data.args.length) {
+        const arg = (this.data.args[i] as string) || '';
+        const argLower = arg.toLowerCase();
+        if (arg === '-srv' && i + 1 < this.data.args.length) {
           currentVal = this.data.args[i + 1];
         }
-        if ((this.data.args[i] as string).toLowerCase().includes('-killswitch')) {
-          this.initialKillswitchSetting = (this.data.args[i] as string).toLowerCase().includes('true');
+        if (argLower.includes('-killswitch')) {
+          this.initialKillswitchSetting = argLower.includes('true');
         }
-
-        if ((this.data.args[i] as string).toLowerCase().includes('-dns')) {
+        if (argLower.includes('-dns')) {
           this.initialDnsSetting = (this.data.args[i + 1] as string);
+        }
+        // skysocks-client flags. Each is "-flag <value>" pairs.
+        if (arg === '-addr' && i + 1 < this.data.args.length) {
+          this.initialSocksAddr = (this.data.args[i + 1] as string) || '';
+        }
+        if (arg === '-http' && i + 1 < this.data.args.length) {
+          this.initialSocksHTTP = (this.data.args[i + 1] as string) || '';
+        }
+        if (arg === '-tries' && i + 1 < this.data.args.length) {
+          this.initialSocksTries = (this.data.args[i + 1] as string) || '';
+        }
+        if (arg === '-retry-time' && i + 1 < this.data.args.length) {
+          this.initialSocksRetryTime = (this.data.args[i + 1] as string) || '';
         }
       }
     }
@@ -213,7 +235,18 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       dns: [this.initialDnsSetting, Validators.compose([
         Validators.maxLength(15),
         this.validateIp.bind(this)
-      ])]
+      ])],
+      // skysocks-client-only fields; ignored when configuringVpn.
+      addr: [this.initialSocksAddr, Validators.maxLength(64)],
+      http: [this.initialSocksHTTP, Validators.maxLength(64)],
+      tries: [this.initialSocksTries, Validators.compose([
+        Validators.maxLength(5),
+        Validators.pattern('^[0-9]*$'),
+      ])],
+      retryTime: [this.initialSocksRetryTime, Validators.compose([
+        Validators.maxLength(5),
+        Validators.pattern('^[0-9]*$'),
+      ])],
     });
 
     this.form = this.formBuilder.group({
@@ -223,7 +256,10 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
         Validators.maxLength(66),
         Validators.pattern('^[0-9a-fA-F]+$')])
       ],
-      password: ['', Validators.maxLength(100)]
+      // password kept on the form so existing references compile,
+      // but the field is no longer rendered and never sent to the
+      // visor. See html for the explanation comment.
+      password: [''],
     });
 
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
@@ -290,8 +326,14 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
 
   // If the UI must tell the user that the changes made in the settings have not been saved.
   get settingsChanged(): boolean {
-    return this.initialKillswitchSetting !== this.settingsForm.get('killswitch').value ||
-      this.initialDnsSetting !== this.settingsForm.get('dns').value ;
+    if (this.configuringVpn) {
+      return this.initialKillswitchSetting !== this.settingsForm.get('killswitch').value ||
+        this.initialDnsSetting !== this.settingsForm.get('dns').value;
+    }
+    return this.initialSocksAddr !== (this.settingsForm.get('addr').value || '') ||
+      this.initialSocksHTTP !== (this.settingsForm.get('http').value || '') ||
+      String(this.initialSocksTries) !== String(this.settingsForm.get('tries').value || '') ||
+      String(this.initialSocksRetryTime) !== String(this.settingsForm.get('retryTime').value || '');
   }
 
   // Opens the modal window for selecting the filters.
@@ -525,20 +567,10 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
    * @param entry Entry to be used.
    */
   useFromHistory(entry: HistoryEntry) {
-    // If the entry was created without a password, use it inmediatelly.
-    if (!entry.hasPassword) {
-      this.saveChanges(entry.key, null, entry.enteredManually, entry.location, entry.note);
-    } else {
-      // If the entry was created with a password, ask for it.
-      SkysocksClientPasswordComponent.openDialog(this.dialog).afterClosed().subscribe((response: string) => {
-        if (response) {
-          // Remove the "-" char the modal window adds at the start of the password.
-          response = response.substr(1, response.length - 1);
-
-          this.saveChanges(entry.key, response, entry.enteredManually, entry.location, entry.note);
-        }
-      });
-    }
+    // The password gate was removed; entries that originally
+    // carried a password reuse just the PK now (server-side
+    // whitelist auth is the gate).
+    this.saveChanges(entry.key, null, entry.enteredManually, entry.location, entry.note);
   }
 
   /**
@@ -587,10 +619,27 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const data = {
-      killswitch: this.settingsForm.get('killswitch').value,
-      dns: this.settingsForm.get('dns').value,
-    };
+    let data: any;
+    if (this.configuringVpn) {
+      // killswitch / dns map to typed putApp fields (SetAppKillswitch
+      // / SetAppDNS) — send at top level.
+      data = {
+        killswitch: this.settingsForm.get('killswitch').value,
+        dns: this.settingsForm.get('dns').value,
+      };
+    } else {
+      // skysocks-client global flags have no typed handler on the
+      // visor; route through custom_setting → DoCustomSetting →
+      // UpdateAppArgBatch. Empty value deletes the arg.
+      data = {
+        custom_setting: {
+          addr: this.settingsForm.get('addr').value || '',
+          http: this.settingsForm.get('http').value || '',
+          tries: this.settingsForm.get('tries').value || '',
+          'retry-time': this.settingsForm.get('retryTime').value || '',
+        },
+      };
+    }
 
     this.settingsButton.showLoading(false);
     this.button.showLoading(false);
@@ -602,8 +651,16 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
       data,
     ).subscribe(
       () => {
-        this.initialKillswitchSetting = data.killswitch;
-        this.initialDnsSetting = data.dns;
+        if (this.configuringVpn) {
+          this.initialKillswitchSetting = data.killswitch;
+          this.initialDnsSetting = data.dns;
+        } else {
+          const cs = data.custom_setting || {};
+          this.initialSocksAddr = cs.addr;
+          this.initialSocksHTTP = cs.http;
+          this.initialSocksTries = cs.tries;
+          this.initialSocksRetryTime = cs['retry-time'];
+        }
 
         this.snackbarService.showDone('apps.vpn-socks-client-settings.changes-made');
 
@@ -652,14 +709,9 @@ export class SkysocksClientSettingsComponent implements OnInit, OnDestroy {
     }
     this.working = true;
 
+    // Server access is whitelist-gated on the server side now —
+    // no passcode is sent (the apps no longer accept --passcode).
     const data = { pk: publicKey };
-    if (this.configuringVpn) {
-      if (password) {
-        data['passcode'] = password;
-      } else {
-        data['passcode'] = '';
-      }
-    }
 
     this.operationSubscription = this.appsService.changeAppSettings(
       // The node pk is obtained from the currently openned node page.
