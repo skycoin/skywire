@@ -1,0 +1,70 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container overflow">
+      <span class="section-title">{{ 'web-proxy.title' | translate }}</span>
+      <p class="dim small wp-help">{{ 'web-proxy.help' | translate }}</p>
+
+      @if (loading && !proxyStatus) {
+        <div class="loading-row">
+          <mat-spinner [diameter]="16"></mat-spinner>
+          <span class="ml-2">{{ 'web-proxy.loading' | translate }}</span>
+        </div>
+      }
+
+      @if (proxyStatus && (proxyStatus.dmsg_web || proxyStatus.skynet_web)) {
+        <table class="responsive-table-translucid wp-status">
+          <tr>
+            <th>{{ 'web-proxy.resolver' | translate }}</th>
+            <th>{{ 'web-proxy.running' | translate }}</th>
+            <th>{{ 'web-proxy.socks-addr' | translate }}</th>
+            <th>{{ 'web-proxy.upstream' | translate }}</th>
+          </tr>
+          @if (proxyStatus.dmsg_web) {
+            <tr>
+              <td>.dmsg</td>
+              <td [class]="proxyStatus.dmsg_web.running ? 'wp-ok' : 'wp-off'">
+                {{ proxyStatus.dmsg_web.running ? 'Yes' : 'No' }}
+              </td>
+              <td class="mono small">{{ proxyStatus.dmsg_web.socks_addr || '-' }}</td>
+              <td class="mono small">{{ proxyStatus.dmsg_web.upstream_socks || 'direct' }}</td>
+            </tr>
+          }
+          @if (proxyStatus.skynet_web) {
+            <tr>
+              <td>.skynet</td>
+              <td [class]="proxyStatus.skynet_web.running ? 'wp-ok' : 'wp-off'">
+                {{ proxyStatus.skynet_web.running ? 'Yes' : 'No' }}
+              </td>
+              <td class="mono small">{{ proxyStatus.skynet_web.socks_addr || '-' }}</td>
+              <td class="mono small">{{ proxyStatus.skynet_web.upstream_socks || 'direct' }}</td>
+            </tr>
+          }
+        </table>
+      }
+
+      <div class="wp-controls">
+        <mat-checkbox
+          [checked]="form.get('skynetEnabled').value"
+          (change)="form.get('skynetEnabled').setValue($event.checked); toggleProxy()"
+          [disabled]="loading">
+          {{ 'web-proxy.enable' | translate }}
+        </mat-checkbox>
+
+        <form [formGroup]="form" class="wp-upstream">
+          <mat-form-field appearance="outline" class="wp-upstream-field">
+            <mat-label>{{ 'web-proxy.upstream-label' | translate }}</mat-label>
+            <input matInput formControlName="upstream" placeholder="127.0.0.1:1080">
+          </mat-form-field>
+          <button mat-raised-button color="primary" (click)="setUpstream()" [disabled]="loading">
+            {{ 'web-proxy.set' | translate }}
+          </button>
+        </form>
+
+        <button mat-stroked-button class="wp-refresh" (click)="refresh()" [disabled]="loading">
+          <mat-icon [inline]="true">refresh</mat-icon>
+          {{ 'web-proxy.refresh' | translate }}
+        </button>
+      </div>
+    </div>
+  </div>
+}

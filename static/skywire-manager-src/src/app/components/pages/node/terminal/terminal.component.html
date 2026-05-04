@@ -1,0 +1,16 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3 term-box">
+    <div class="box-internal-container term-shell">
+      <div class="term-controls">
+        <span class="dim small">{{ 'terminal.help' | translate }}</span>
+        <button mat-stroked-button class="term-fullscreen" (click)="openFullWindow()">
+          <mat-icon [inline]="true">open_in_new</mat-icon>
+          {{ 'terminal.open-fullscreen' | translate }}
+        </button>
+      </div>
+      @if (iframeUrl) {
+        <iframe class="term-frame" [src]="iframeUrl" allowfullscreen></iframe>
+      }
+    </div>
+  </div>
+}

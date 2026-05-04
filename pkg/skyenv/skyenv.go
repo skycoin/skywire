@@ -53,6 +53,13 @@ const (
 	// metrics publisher is a separate feed in the opposite direction.
 	DmsgTPDMetricsCXOPort uint16 = 51
 
+	// DmsgTPDUptimeCXOPort is the DMSG port the TPD's CXO visor-uptime
+	// publisher listens on. Mirrors DmsgTPDMetricsCXOPort but for the
+	// network-wide visor-uptime feed (timeline + daily-percent shape
+	// of `GET /uptimes?v=v3`); kept on a distinct port so a subscriber
+	// can pick exactly the feed it wants without dragging in metrics.
+	DmsgTPDUptimeCXOPort uint16 = 52
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 

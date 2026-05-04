@@ -26,16 +26,23 @@
       min-width: 0;
       padding: 0 12px !important;
       opacity: 0.6;
+      // Global .mat-mdc-button:not(:disabled) { color: $black } in
+      // styles.scss kicks in for inactive buttons, which renders as
+      // invisible black-on-dark — force white explicitly.
+      color: rgba(255, 255, 255, 0.85) !important;
       &.active {
         opacity: 1;
         background: rgba(33, 150, 243, 0.18) !important;
-        color: #fff;
+        color: #fff !important;
       }
+      .mat-icon { color: inherit; }
     }
   }
 
   .refresh-btn {
     margin-left: auto;
+    color: rgba(255, 255, 255, 0.85) !important;
+    .mat-icon { color: inherit; }
   }
 }
 
@@ -70,6 +77,45 @@
 
   td.mono { font-size: 11px; }
   th.num, td.num { white-space: nowrap; }
+
+  // Offline rows: explicit red tint + warning border so they're
+  // unmistakably distinct from live rows. Stays readable.
+  tr.nt-row-offline {
+    background: rgba(229, 57, 53, 0.08);
+    color: rgba(255, 180, 180, 0.95);
+
+    td:first-child { box-shadow: inset 3px 0 0 rgba(229, 57, 53, 0.7); }
+    td { opacity: 0.95; }
+  }
+}
+
+// Type pill — small colored chip on each row's "Type" cell.
+// Live = blue (UI accent); offline = red.
+.nt-type-pill {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  text-transform: lowercase;
+  background: rgba(33, 150, 243, 0.18);
+  border: 1px solid rgba(33, 150, 243, 0.35);
+  color: rgba(255, 255, 255, 0.9);
+
+  &.nt-type-offline {
+    background: rgba(229, 57, 53, 0.18);
+    border-color: rgba(229, 57, 53, 0.4);
+    color: rgba(255, 200, 200, 0.95);
+  }
+}
+
+.nt-offline-count {
+  margin-left: 4px;
+  font-size: 11px;
+  color: rgba(229, 57, 53, 0.85);
+  background: rgba(229, 57, 53, 0.12);
+  border: 1px solid rgba(229, 57, 53, 0.3);
+  border-radius: 3px;
+  padding: 0 6px;
 }
 
 .nt-tree {
@@ -122,9 +168,20 @@
         border-radius: 3px;
         font-size: 10px;
         text-transform: lowercase;
+
+        &.nt-type-offline {
+          background: rgba(229, 57, 53, 0.18);
+          border-color: rgba(229, 57, 53, 0.4);
+          color: rgba(255, 200, 200, 0.95);
+        }
       }
       .nt-arrow { color: rgba(255, 255, 255, 0.45); }
       .nt-tp-remote { font-size: 11px; color: rgba(255, 255, 255, 0.7); }
+
+      &.nt-child-offline {
+        opacity: 0.55;
+        color: rgba(255, 200, 200, 0.7);
+      }
     }
   }
 }

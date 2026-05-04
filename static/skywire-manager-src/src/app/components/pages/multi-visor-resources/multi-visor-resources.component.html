@@ -34,87 +34,110 @@
         }
       </div>
 
-      <table class="responsive-table-translucid d-none d-md-table mt-3">
-        <tr>
-          <th></th>
-          <th>{{ 'multi-resources.visor' | translate }}</th>
-          <th>{{ 'multi-resources.cpu' | translate }}</th>
-          <th>{{ 'multi-resources.mem' | translate }}</th>
-          <th>{{ 'multi-resources.disk' | translate }}</th>
-          <th>{{ 'multi-resources.tx' | translate }}</th>
-          <th>{{ 'multi-resources.rx' | translate }}</th>
-          <th>{{ 'multi-resources.proc-rss' | translate }}</th>
-        </tr>
-        @for (r of rows; track trackRow($index, r)) {
+      <!-- Same shell as the home /nodes/list/1 table: rounded
+           elevated box wrapping a responsive-table-translucid. -->
+      <div class="rounded-elevated-box mt-3"><div class="box-internal-container overflow full-node-list-margins">
+        <table class="responsive-table-translucid d-none d-md-table" cellspacing="0" cellpadding="0">
           <tr>
-            <td>
-              <span class="dot" [ngClass]="r.node.online ? 'dot-green' : 'dot-red'"></span>
-            </td>
-            <td>
-              <a [routerLink]="['/nodes', r.node.localPk, 'resources']" class="visor-link">
-                <strong>{{ r.node.label || r.node.localPk }}</strong>
-              </a>
-              <div class="visor-pk mono small">{{ r.node.localPk }}</div>
-              @if (r.error) {
-                <div class="visor-err">{{ r.error }}</div>
-              }
-            </td>
-            <td [class]="pctClass(r.stats?.cpu_percent)">
-              @if (r.stats?.cpu_percent !== undefined) {
-                {{ r.stats.cpu_percent | number: '1.0-1' }}%
-              } @else {
-                <span class="dim">-</span>
-              }
-            </td>
-            <td [class]="pctClass(r.stats?.mem_percent)">
-              @if (r.stats?.mem_percent !== undefined) {
-                {{ r.stats.mem_percent | number: '1.0-1' }}%
-                <span class="dim small">({{ formatBytes(r.stats.mem_used) }} / {{ formatBytes(r.stats.mem_total) }})</span>
-              } @else {
-                <span class="dim">-</span>
-              }
-            </td>
-            <td [class]="pctClass(r.stats?.disk_percent)">
-              @if (r.stats?.disk_percent !== undefined) {
-                {{ r.stats.disk_percent | number: '1.0-1' }}%
-              } @else {
-                <span class="dim">-</span>
-              }
-            </td>
-            <td>{{ formatRate(r.txRate) }}</td>
-            <td>{{ formatRate(r.rxRate) }}</td>
-            <td>{{ formatBytes(r.stats?.process?.mem_rss) }}</td>
+            <th class="small-column"></th>
+            <th class="labels">{{ 'multi-resources.visor' | translate }}</th>
+            <th>{{ 'nodes.ip-location' | translate }}</th>
+            <th class="num">{{ 'multi-resources.cpu' | translate }}</th>
+            <th class="num">{{ 'multi-resources.mem' | translate }}</th>
+            <th class="num">{{ 'multi-resources.disk' | translate }}</th>
+            <th class="num">{{ 'multi-resources.tx' | translate }}</th>
+            <th class="num">{{ 'multi-resources.rx' | translate }}</th>
+            <th class="num">{{ 'multi-resources.proc-rss' | translate }}</th>
+            <th class="actions"></th>
           </tr>
-        }
-      </table>
+          @for (r of rows; track trackRow($index, r)) {
+            <a
+              [ngClass]="{'click-effect': r.node.online, 'non-selectable': !r.node.online}"
+              class="selectable link-row"
+              [routerLink]="r.node.online ? ['/nodes', r.node.localPk, 'resources'] : null">
+              <td>
+                <span [ngClass]="r.node.online ? 'dot-green' : 'dot-red'" class="dot"></span>
+              </td>
+              <td>
+                <div>{{ r.node.label || r.node.localPk }}</div>
+                <div class="visor-pk mono small">{{ r.node.localPk }}</div>
+                @if (r.error) {
+                  <div class="visor-err">{{ r.error }}</div>
+                }
+              </td>
+              <td>
+                @if (r.node.publicIp || r.node.ip) {
+                  @if (r.node.ip && r.node.publicIp && r.node.ip !== r.node.publicIp) {
+                    <div style="font-size: 0.85em;">{{ r.node.ip }}</div>
+                    <div style="font-size: 0.85em;">{{ r.node.publicIp }}</div>
+                  } @else if (r.node.publicIp) {
+                    <div style="font-size: 0.85em;">{{ r.node.publicIp }}</div>
+                  } @else if (r.node.ip) {
+                    <div style="font-size: 0.85em;">{{ r.node.ip }}</div>
+                  }
+                  @if (r.node.countryCode) {
+                    <div style="font-size: 0.85em;">{{ r.node.cityName ? r.node.cityName + ', ' : '' }}{{ r.node.regionName ? r.node.regionName + ', ' : '' }}{{ r.node.countryCode }}</div>
+                  }
+                } @else {
+                  <span>-</span>
+                }
+              </td>
+              <td class="num" [class]="pctClass(r.stats?.cpu_percent)">
+                @if (r.stats?.cpu_percent !== undefined) {
+                  {{ r.stats.cpu_percent | number: '1.0-1' }}%
+                } @else { <span class="dim">-</span> }
+              </td>
+              <td class="num" [class]="pctClass(r.stats?.mem_percent)">
+                @if (r.stats?.mem_percent !== undefined) {
+                  {{ r.stats.mem_percent | number: '1.0-1' }}%
+                  <div class="dim small">{{ fmtBytes(r.stats.mem_used) }} / {{ fmtBytes(r.stats.mem_total) }}</div>
+                } @else { <span class="dim">-</span> }
+              </td>
+              <td class="num" [class]="pctClass(r.stats?.disk_percent)">
+                @if (r.stats?.disk_percent !== undefined) {
+                  {{ r.stats.disk_percent | number: '1.0-1' }}%
+                } @else { <span class="dim">-</span> }
+              </td>
+              <td class="num">{{ formatRate(r.txRate) }}</td>
+              <td class="num">{{ formatRate(r.rxRate) }}</td>
+              <td class="num">{{ formatBytes(r.stats?.process?.mem_rss) }}</td>
+              <td class="actions">
+                @if (r.node.online) {
+                  <mat-icon [inline]="true">chevron_right</mat-icon>
+                }
+              </td>
+            </a>
+          }
+        </table>
 
-      <!-- Mobile: stacked cards -->
-      <div class="d-md-none mt-3">
-        @for (r of rows; track trackRow($index, r)) {
-          <div class="mobile-card">
-            <div class="mobile-header">
-              <span class="dot" [ngClass]="r.node.online ? 'dot-green' : 'dot-red'"></span>
-              <a [routerLink]="['/nodes', r.node.localPk, 'resources']" class="visor-link ml-2">
-                <strong>{{ r.node.label || r.node.localPk }}</strong>
-              </a>
-            </div>
-            <div class="mobile-pk mono small">{{ r.node.localPk }}</div>
-            @if (r.error) {
-              <div class="visor-err">{{ r.error }}</div>
-            }
-            @if (r.stats) {
-              <div class="mobile-grid">
-                <div><span class="dim">{{ 'multi-resources.cpu' | translate }}:</span> <strong [class]="pctClass(r.stats.cpu_percent)">{{ r.stats.cpu_percent | number: '1.0-1' }}%</strong></div>
-                <div><span class="dim">{{ 'multi-resources.mem' | translate }}:</span> <strong [class]="pctClass(r.stats.mem_percent)">{{ r.stats.mem_percent | number: '1.0-1' }}%</strong></div>
-                <div><span class="dim">{{ 'multi-resources.disk' | translate }}:</span> <strong [class]="pctClass(r.stats.disk_percent)">{{ r.stats.disk_percent | number: '1.0-1' }}%</strong></div>
-                <div><span class="dim">{{ 'multi-resources.tx' | translate }}:</span> <strong>{{ formatRate(r.txRate) }}</strong></div>
-                <div><span class="dim">{{ 'multi-resources.rx' | translate }}:</span> <strong>{{ formatRate(r.rxRate) }}</strong></div>
-                <div><span class="dim">{{ 'multi-resources.proc-rss' | translate }}:</span> <strong>{{ formatBytes(r.stats.process?.mem_rss) }}</strong></div>
+        <!-- Mobile: stacked cards -->
+        <div class="d-md-none">
+          @for (r of rows; track trackRow($index, r)) {
+            <a class="mobile-card-link" [routerLink]="r.node.online ? ['/nodes', r.node.localPk, 'resources'] : null">
+              <div class="mobile-card">
+                <div class="mobile-header">
+                  <span [ngClass]="r.node.online ? 'dot-green' : 'dot-red'" class="dot"></span>
+                  <strong class="ml-2">{{ r.node.label || r.node.localPk }}</strong>
+                </div>
+                <div class="mobile-pk mono small">{{ r.node.localPk }}</div>
+                @if (r.error) {
+                  <div class="visor-err">{{ r.error }}</div>
+                }
+                @if (r.stats) {
+                  <div class="mobile-grid">
+                    <div><span class="dim">{{ 'multi-resources.cpu' | translate }}:</span> <strong [class]="pctClass(r.stats.cpu_percent)">{{ r.stats.cpu_percent | number: '1.0-1' }}%</strong></div>
+                    <div><span class="dim">{{ 'multi-resources.mem' | translate }}:</span> <strong [class]="pctClass(r.stats.mem_percent)">{{ r.stats.mem_percent | number: '1.0-1' }}%</strong></div>
+                    <div><span class="dim">{{ 'multi-resources.disk' | translate }}:</span> <strong [class]="pctClass(r.stats.disk_percent)">{{ r.stats.disk_percent | number: '1.0-1' }}%</strong></div>
+                    <div><span class="dim">{{ 'multi-resources.tx' | translate }}:</span> <strong>{{ formatRate(r.txRate) }}</strong></div>
+                    <div><span class="dim">{{ 'multi-resources.rx' | translate }}:</span> <strong>{{ formatRate(r.rxRate) }}</strong></div>
+                    <div><span class="dim">{{ 'multi-resources.proc-rss' | translate }}:</span> <strong>{{ formatBytes(r.stats.process?.mem_rss) }}</strong></div>
+                  </div>
+                }
               </div>
-            }
-          </div>
-        }
-      </div>
+            </a>
+          }
+        </div>
+      </div></div>
     }
   </div>
 </div>
