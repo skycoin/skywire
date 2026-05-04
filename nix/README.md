@@ -31,7 +31,7 @@ From a checkout of this repo:
 Or as a flake input from somewhere else:
 
     {
-      inputs.skywire.url = "github:0pcom/skywire/nix/packaging";
+      inputs.skywire.url = "github:skycoin/skywire?dir=nix";
       # …
       outputs = { self, nixpkgs, skywire, ... }: {
         # nixosConfigurations / systemPackages / etc.
@@ -50,14 +50,16 @@ into the `hashes` attrset in `flake.nix` and rebuild. Repeat for
 each arch you want to support.
 
 `skywire.nix` defaults to building from the **local working tree**
-(handy for iterating on a branch). To build a tagged release from
-upstream instead, override `rev` and `version` when calling it from
-the flake (the parameter for an explicit src tree is `srcOverride`,
-to dodge a `pkgs.src` callPackage auto-bind collision in nixpkgs):
+(handy for iterating on a branch); the flake hands it a
+`git describe`-style version derived from `self.shortRev`, so
+`skywire --bv` reports the actual commit you built. To build a
+tagged release from upstream instead, override `rev` when calling
+it (version is auto-derived by stripping the leading `v`); the
+parameter for an explicit src tree is `srcOverride`, to dodge a
+`pkgs.src` callPackage auto-bind collision in nixpkgs:
 
     pkgs.callPackage ./skywire.nix {
-      rev     = "v1.3.50";
-      version = "1.3.50";
+      rev = "v1.3.50";
     }
 
 The first such build will fail with the expected `hash` for

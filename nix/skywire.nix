@@ -5,7 +5,15 @@
   fetchFromGitHub,
   runtimeShell,
   rev ? null,
-  version ? "1.3.50",
+  # If the caller passes `rev = "v1.3.50"`, strip the leading "v"
+  # and use the rest as version — saves having to repeat the same
+  # number twice. Otherwise the flake derives a git-describe-style
+  # version from `self` and passes it in explicitly; bare callers
+  # that pass neither end up with a "dev" tag in --bv.
+  version ?
+    if rev != null
+    then lib.removePrefix "v" rev
+    else "dev",
   # Renamed from `src` because callPackage auto-binding hits the
   # nixpkgs `pkgs.src` throw alias (renamed to
   # `simple-revision-control` in 2025-11) before applying our
