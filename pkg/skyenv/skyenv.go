@@ -219,11 +219,12 @@ const (
 
 	// Routing constants
 
-	// TpLogStore is where tp logs are stored
+	// TpLogStore is the legacy on-disk transport-log directory name.
+	// Retained because cmd/skywire-cli/commands/config/gen.go still
+	// emits it as the default LogStore.Location for backward-compatible
+	// config files; the runtime no longer writes anything there
+	// (historical bandwidth lives in the bbolt stats store).
 	TpLogStore = "transport_logs"
-
-	// LatencyLogStore is where transport latency logs are stored
-	LatencyLogStore = "latency_logs"
 
 	// LocalPath where the visor writes files to
 	LocalPath = "./local"
