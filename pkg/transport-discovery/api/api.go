@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/networkmonitor"
+	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/transport"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
@@ -69,6 +70,11 @@ type API struct {
 	uptimesCache   []store.VisorSummary
 	uptimesV2Cache []store.VisorSummary
 	uptimesMu      sync.RWMutex
+
+	// Service-self uptime recorder (nil until SetUptimeRecorder).
+	// Surfaces /uptime/* routes; 503s until wired.
+	uptimeRecorder *serviceuptime.Recorder
+	uptimeMu       sync.RWMutex
 
 	// cxoPublisher is an optional CXO publisher for distributing transport data.
 	// When set, transport register/deregister operations publish to CXO subscribers.
@@ -194,9 +200,73 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 	nonceHandler := &httpauth.NonceHandler{Store: nonceStore}
 	r.Get("/security/nonces/{pk}", nonceHandler.ServeHTTP)
 
+	// /uptime/* — service-self uptime store. Routes are wired
+	// unconditionally; until SetUptimeRecorder is called they 503,
+	// matching the visor's logserver pattern. No auth: this is the
+	// service's own version-history, useful for unauth'd monitoring.
+	r.Group(func(r chi.Router) {
+		r.Get("/uptime/now", api.uptimeNow)
+		r.Get("/uptime/sessions", api.uptimeSessions)
+		r.Get("/uptime/timeline", api.uptimeTimeline)
+		r.Get("/uptime/dates", api.uptimeDates)
+	})
+
 	api.Handler = r
 
 	return api
+}
+
+// SetUptimeRecorder wires a service-self uptime recorder onto the API.
+// Idempotent re-attach is a no-op (first writer wins). Until set, the
+// /uptime/* routes return 503.
+func (api *API) SetUptimeRecorder(r *serviceuptime.Recorder) {
+	api.uptimeMu.Lock()
+	defer api.uptimeMu.Unlock()
+	if api.uptimeRecorder == nil {
+		api.uptimeRecorder = r
+	}
+}
+
+func (api *API) getUptimeRecorder() *serviceuptime.Recorder {
+	api.uptimeMu.RLock()
+	defer api.uptimeMu.RUnlock()
+	return api.uptimeRecorder
+}
+
+func (api *API) uptimeNow(w http.ResponseWriter, r *http.Request) {
+	rec := api.getUptimeRecorder()
+	if rec == nil {
+		http.Error(w, "uptime recorder not configured", http.StatusServiceUnavailable)
+		return
+	}
+	serviceuptime.CurrentSessionHandler(rec).ServeHTTP(w, r)
+}
+
+func (api *API) uptimeSessions(w http.ResponseWriter, r *http.Request) {
+	rec := api.getUptimeRecorder()
+	if rec == nil {
+		http.Error(w, "uptime recorder not configured", http.StatusServiceUnavailable)
+		return
+	}
+	serviceuptime.SessionsHandler(rec.Store()).ServeHTTP(w, r)
+}
+
+func (api *API) uptimeTimeline(w http.ResponseWriter, r *http.Request) {
+	rec := api.getUptimeRecorder()
+	if rec == nil {
+		http.Error(w, "uptime recorder not configured", http.StatusServiceUnavailable)
+		return
+	}
+	serviceuptime.TimelineHandler(rec.Store()).ServeHTTP(w, r)
+}
+
+func (api *API) uptimeDates(w http.ResponseWriter, r *http.Request) {
+	rec := api.getUptimeRecorder()
+	if rec == nil {
+		http.Error(w, "uptime recorder not configured", http.StatusServiceUnavailable)
+		return
+	}
+	serviceuptime.DatesHandler(rec.Store()).ServeHTTP(w, r)
 }
 
 // SetDHTMirror sets a mirror that publishes transport lists to the DHT.
