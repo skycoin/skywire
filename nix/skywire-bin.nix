@@ -3,7 +3,10 @@
   stdenvNoCC,
   fetchurl,
   runtimeShell,
-  version ? "1.3.50",
+  # Required: the release tarball URL encodes the semver, so unlike
+  # the source build there is nothing to derive it from. Callers
+  # (the flake, or a direct callPackage) must supply it.
+  version,
   hashes ? null,
 }:
 
