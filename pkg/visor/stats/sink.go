@@ -11,10 +11,11 @@
 //
 // Path conventions (matching §07 of skywire-specs):
 //
-//	transports/<uuid>/current          → live snapshot (JSON)
-//	transports/<uuid>/<YYYY-MM-DD>     → that day's rollup (JSON)
-//	tiers/<tier>/<YYYY-MM-DD>          → 36-byte bitmap
-//	services/<slug>/<YYYY-MM-DD>       → 36-byte bitmap
+//	transports/<uuid>/current                 → live snapshot (JSON)
+//	transports/<uuid>/<YYYY-MM-DD>            → that day's rollup (JSON)
+//	transports/<uuid>/<YYYY-MM-DD>/timeline   → 36-byte uptime bitmap
+//	tiers/<tier>/<YYYY-MM-DD>                 → 36-byte bitmap
+//	services/<slug>/<YYYY-MM-DD>              → 36-byte bitmap
 //
 // Sinks are expected to be non-blocking; the Tracker invokes them
 // from the sampler goroutine and does not wait for completion.
@@ -149,6 +150,33 @@ func HydrateSink(store *Store, sink Sink, publishWindowDays int, now time.Time) 
 			pushed++
 		}
 	}
+
+	// Per-transport timeline bitmaps: same wire shape as tier/service.
+	tpIDs, err := store.TransportBitmapIDs()
+	if err != nil {
+		return pushed, fmt.Errorf("hydrate transport bitmaps: %w", err)
+	}
+	for _, id := range tpIDs {
+		dates, err := store.TransportBitmapDates(id)
+		if err != nil {
+			continue
+		}
+		for _, date := range dates {
+			if date < cutoff {
+				continue
+			}
+			d, err := time.Parse(dateFmt, date)
+			if err != nil {
+				continue
+			}
+			bm, err := store.TransportBitmap(id, d)
+			if err != nil {
+				continue
+			}
+			sink.Put(transportTimelinePath(id, date), bm)
+			pushed++
+		}
+	}
 	return pushed, nil
 }
 
@@ -161,6 +189,10 @@ func currentTransportPath(id string) string {
 
 func dailyTransportPath(id, date string) string {
 	return "transports/" + id + "/" + date
+}
+
+func transportTimelinePath(id, date string) string {
+	return "transports/" + id + "/" + date + "/timeline"
 }
 
 func tierBitmapPath(tier, date string) string {

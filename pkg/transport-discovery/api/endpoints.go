@@ -91,7 +91,7 @@ func (api *API) registerTransportV3(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, sEntry := range signed {
-		if err := api.store.RecordTransportHeartbeat(r.Context(), sEntry.Entry.ID, string(sEntry.Entry.Type)); err != nil {
+		if err := api.store.RecordTransportHeartbeat(r.Context(), sEntry.Entry.ID, string(sEntry.Entry.Type), time.Time{}); err != nil {
 			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
 		}
 	}
@@ -169,7 +169,7 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		if entryVersion == "" && entry.Version != "" {
 			entryVersion = entry.Version
 		}
-		if err := api.store.RecordTransportHeartbeat(r.Context(), entry.Entry.ID, string(entry.Entry.Type)); err != nil {
+		if err := api.store.RecordTransportHeartbeat(r.Context(), entry.Entry.ID, string(entry.Entry.Type), time.Time{}); err != nil {
 			api.log(r).WithError(err).Debug("Failed to record transport heartbeat")
 		}
 	}

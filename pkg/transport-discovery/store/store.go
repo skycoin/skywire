@@ -194,7 +194,19 @@ type TransportStore interface {
 	RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error
 	GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string
 	// Transport uptime tracking (stcpr/sudph only).
-	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string) error
+	// at is the time the heartbeat was *observed* on the visor side
+	// (snap.SampledAt for the CXO path, time.Now() for the HTTP
+	// register path); the slot bit and date bucket derive from it,
+	// so leaf-arrival skew that crosses a 5-minute boundary still
+	// credits the correct slot. Zero time falls back to time.Now().
+	RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUID, tpType string, at time.Time) error
+	// IngestTransportTimeline OR-merges a visor-supplied per-transport
+	// uptime bitmap into the persistent timeline. Used by the CXO
+	// aggregator to absorb the visor's locally-tracked bitmap, which
+	// captures slots TPD's heartbeat path never observed (e.g.
+	// during TPD downtime). bitmap must be 36 bytes; date is the
+	// UTC YYYY-MM-DD the bitmap covers.
+	IngestTransportTimeline(ctx context.Context, tpID uuid.UUID, date string, bitmap []byte) error
 	GetTransportUptimeSummaries(ctx context.Context, tpIDs []uuid.UUID, v2 bool, timeline bool) ([]TransportUptimeSummary, error)
 	GetTransportUptimeByVisor(ctx context.Context, pk cipher.PubKey, v2 bool, timeline bool) ([]TransportUptimeSummary, error)
 	GetTransportDailyTimeline(ctx context.Context, tpID string, now time.Time) map[string]string
