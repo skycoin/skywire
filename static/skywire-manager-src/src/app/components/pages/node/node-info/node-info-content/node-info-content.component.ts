@@ -8,7 +8,7 @@ import { NodeComponent } from '../../node.component';
 import TimeUtils, { ElapsedTime } from 'src/app/utils/timeUtils';
 import { LabeledElementTypes, StorageService } from 'src/app/services/storage.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
-import { ApiService } from 'src/app/services/api.service';
+import { ApiService, RequestOptions, RequestTypes } from 'src/app/services/api.service';
 
 /**
  * Shows the basic info of a node. The reward-address management,
@@ -38,6 +38,14 @@ export class NodeInfoContentComponent implements OnDestroy {
 
   // Collapsible Runtime Configuration section (matches Ports pattern).
   showConfigSection = false;
+
+  // Edit-mode state for the runtime-config editor.
+  editingConfig = false;
+  configDraft = '';
+  configError = '';   // client-side parse error
+  configSaving = false;
+  configSaveMsg = ''; // success message (e.g. "saved; restart required")
+  configSaveErr = ''; // server-side save error
 
   constructor(
     private dialog: MatDialog,
@@ -110,5 +118,69 @@ export class NodeInfoContentComponent implements OnDestroy {
         () => { this.snackbarService.showError('common.loading-error'); },
       );
     }
+  }
+
+  /** Enter edit mode: copy the rendered config into the draft
+   *  buffer so the user starts from the live state. */
+  startEditConfig() {
+    this.editingConfig = true;
+    this.configDraft = this.rawConfig;
+    this.configError = '';
+    this.configSaveErr = '';
+    this.configSaveMsg = '';
+  }
+
+  /** Exit edit mode without saving. Discards the draft. */
+  cancelEditConfig() {
+    this.editingConfig = false;
+    this.configDraft = '';
+    this.configError = '';
+    this.configSaveErr = '';
+  }
+
+  /** Live JSON validation as the user types. Empty error string
+   *  means the draft parses cleanly. */
+  onConfigDraftChange(next: string) {
+    this.configDraft = next;
+    this.configSaveMsg = '';
+    this.configSaveErr = '';
+    if (!next.trim()) {
+      this.configError = 'Config is empty';
+      return;
+    }
+    try {
+      JSON.parse(next);
+      this.configError = '';
+    } catch (e: any) {
+      this.configError = e?.message || 'Invalid JSON';
+    }
+  }
+
+  /** PUT the draft to the visor. Server validates again
+   *  (strict decode + SK/PK consistency); on success we update
+   *  rawConfig so the read-only pre re-renders the saved state. */
+  saveConfig() {
+    if (this.configError || this.configSaving) { return; }
+    this.configSaving = true;
+    this.configSaveErr = '';
+    this.configSaveMsg = '';
+    this.apiService.put(
+      `visors/${this.node.localPk}/runtime-config`,
+      this.configDraft,
+      new RequestOptions({ requestType: RequestTypes.RawJson }),
+    ).subscribe(
+      (resp: any) => {
+        this.configSaving = false;
+        this.rawConfig = this.configDraft;
+        this.editingConfig = false;
+        this.configSaveMsg = (resp && resp.restart_required)
+          ? 'Saved. Restart the visor for changes to take effect.'
+          : 'Saved.';
+      },
+      (err: any) => {
+        this.configSaving = false;
+        this.configSaveErr = err?.originalError?.error?.error || err?.message || 'Save failed';
+      },
+    );
   }
 }

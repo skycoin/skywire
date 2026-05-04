@@ -93,6 +93,11 @@ type API struct {
 	cxoFeedsLister      CXOFeedsLister
 	statsReader         StatsReader  // visor-local telemetry store, set via SetStatsReader
 	websiteHandler      http.Handler // optional: serves unmatched routes (custom website)
+	// ptyHandler serves /pty (web terminal) when set by the visor.
+	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
+	// PKs + hypervisor PKs + the visor's own PK).
+	ptyHandler   http.Handler
+	ptyWhitelist []cipher.PubKey
 }
 
 // New creates a new API.
@@ -201,6 +206,43 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 	// degrade to 503 when SetStatsReader hasn't been called.
 	api.registerStatsRoutes(authRoute)
 
+	// /pty (web terminal) — gated by ptyWhitelist (set via
+	// SetPtyHandler). Until the visor calls SetPtyHandler, the
+	// route is wired but returns 404 so a misconfigured deployment
+	// doesn't accidentally expose a shell. The dmsgpty UI handler
+	// terminates websocket-upgrade requests for the live session
+	// and serves the static term page on plain GETs.
+	ptyAuth := func(c *gin.Context) {
+		if api.ptyHandler == nil {
+			c.AbortWithStatus(http.StatusNotFound)
+			return
+		}
+		// Empty whitelist on the API means "no PK allowed" rather than
+		// "open to all" — pty is high-power, fail closed.
+		if len(api.ptyWhitelist) == 0 {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+		remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+		if err != nil {
+			remoteHost = c.Request.RemoteAddr
+		}
+		allowed := false
+		for _, pk := range api.ptyWhitelist {
+			if remoteHost == pk.String() {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			c.AbortWithStatus(http.StatusForbidden)
+			return
+		}
+		api.ptyHandler.ServeHTTP(c.Writer, c.Request)
+	}
+	r.GET("/pty", ptyAuth)
+	r.GET("/pty/*path", ptyAuth)
+
 	// isWhitelisted checks if the current request is from a whitelisted PK
 	// without blocking. Used by the landing page to show/hide auth'd links.
 	isWhitelisted := func(c *gin.Context) bool {
@@ -242,6 +284,22 @@ func New(log *logging.Logger, tpLogPath, localPath, _ string, whitelistedPKs []c
 				links = append(links, `<a href="/stats/transports/history">/stats/transports/history</a> - daily transport rollups (?since=&until=&id=)`)
 				links = append(links, `<a href="/stats/uptime">/stats/uptime</a> - three-tier uptime bitmaps`)
 				links = append(links, `<a href="/stats/services">/stats/services</a> - per-service uptime bitmaps`)
+			}
+			// /pty link is shown only when the requester's PK is on
+			// the dmsgpty whitelist. The pty whitelist is intentionally
+			// distinct from the survey whitelist (it can include
+			// Dmsgpty.Whitelist entries the survey list doesn't), so
+			// we re-check rather than reuse `wl`.
+			if api.ptyHandler != nil && len(api.ptyWhitelist) > 0 {
+				remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
+				if err == nil {
+					for _, pk := range api.ptyWhitelist {
+						if remoteHost == pk.String() {
+							links = append(links, `<a href="/pty">/pty</a> - web terminal (dmsgpty)`)
+							break
+						}
+					}
+				}
 			}
 			// List transport log files
 			if entries, err := os.ReadDir(tpLogPath); err == nil {
@@ -388,6 +446,19 @@ func (api *API) SetForwardedPortLister(lister ForwardedPortLister) {
 
 // SetCXOFeedsLister sets the CXO feed catalog provider. Called from
 // visor init after the user-feed registry is wired up.
+// SetPtyHandler installs the dmsgpty UI handler under /pty, gated
+// by the supplied whitelist. The whitelist is expected to mirror
+// the dmsgpty Host's whitelist (configured PKs + hypervisor PKs +
+// the visor's own PK), so the same set of peers that can connect
+// directly to dmsgpty over dmsg can also reach the web terminal.
+// Pass a nil/empty whitelist or nil handler to disable; the route
+// stays registered and returns 404/403, which is the correct
+// signal to a probing client.
+func (api *API) SetPtyHandler(h http.Handler, whitelist []cipher.PubKey) {
+	api.ptyHandler = h
+	api.ptyWhitelist = whitelist
+}
+
 func (api *API) SetCXOFeedsLister(lister CXOFeedsLister) {
 	api.cxoFeedsLister = lister
 }

@@ -211,9 +211,14 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl && (this.lastUrl.includes('/info') ||
       this.lastUrl.includes('/routing') ||
       this.lastUrl.includes('/transports') ||
+      this.lastUrl.includes('/bandwidth') ||
+      this.lastUrl.includes('/uptime') ||
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
+      this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/resources') ||
+      this.lastUrl.includes('/terminal') ||
+      this.lastUrl.includes('/logs') ||
       this.lastUrl.includes('/chat') ||
       this.lastUrl.includes('/dmsg') ||
       (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
@@ -240,9 +245,24 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'transports'] : null,
         },
         {
+          icon: 'equalizer',
+          label: 'node.tabs.bandwidth',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'bandwidth'] : null,
+        },
+        {
+          icon: 'schedule',
+          label: 'node.tabs.uptime',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'uptime'] : null,
+        },
+        {
           icon: 'apps',
           label: 'node.tabs.apps',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'apps'] : null,
+        },
+        {
+          icon: 'forum',
+          label: 'node.tabs.chat',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
         },
         {
           icon: 'monetization_on',
@@ -255,14 +275,24 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'skynet'] : null,
         },
         {
+          icon: 'language',
+          label: 'node.tabs.web-proxy',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'web-proxy'] : null,
+        },
+        {
           icon: 'memory',
           label: 'node.tabs.resources',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
         },
         {
-          icon: 'forum',
-          label: 'node.tabs.chat',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
+          icon: 'terminal',
+          label: 'node.tabs.terminal',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'terminal'] : null,
+        },
+        {
+          icon: 'description',
+          label: 'node.tabs.logs',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'logs'] : null,
         },
         {
           icon: 'device_hub',
@@ -280,23 +310,41 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/transports')) {
         this.selectedTabIndex = 2;
       }
-      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
+      if (this.lastUrl.includes('/bandwidth')) {
         this.selectedTabIndex = 3;
       }
-      if (this.lastUrl.includes('/rewards')) {
+      if (this.lastUrl.includes('/uptime')) {
         this.selectedTabIndex = 4;
       }
-      if (this.lastUrl.includes('/skynet')) {
+      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
         this.selectedTabIndex = 5;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/chat')) {
         this.selectedTabIndex = 6;
       }
-      if (this.lastUrl.includes('/chat')) {
+      if (this.lastUrl.includes('/rewards')) {
         this.selectedTabIndex = 7;
       }
-      if (this.lastUrl.includes('/dmsg')) {
+      // /skynet matches BOTH the skynet tab and would otherwise also
+      // match a hypothetical /skynet-foo path; check after web-proxy
+      // since /web-proxy must take precedence on its own URL.
+      if (this.lastUrl.includes('/skynet')) {
         this.selectedTabIndex = 8;
+      }
+      if (this.lastUrl.includes('/web-proxy')) {
+        this.selectedTabIndex = 9;
+      }
+      if (this.lastUrl.includes('/resources')) {
+        this.selectedTabIndex = 10;
+      }
+      if (this.lastUrl.includes('/terminal')) {
+        this.selectedTabIndex = 11;
+      }
+      if (this.lastUrl.includes('/logs')) {
+        this.selectedTabIndex = 12;
+      }
+      if (this.lastUrl.includes('/dmsg')) {
+        this.selectedTabIndex = 13;
       }
 
       // Inform that the current subpage is not for showing a full list.

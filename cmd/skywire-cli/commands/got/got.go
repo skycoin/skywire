@@ -56,14 +56,21 @@ func init() {
 // RootCmd is the got command, defaults to download behavior.
 var RootCmd = &cobra.Command{
 	Use:   "got",
-	Short: "HTTP client with concurrent downloads",
-	Long: `HTTP client utility with concurrent chunked downloads (RFC 7233),
+	Short: "HTTP client with concurrent downloads (also speaks skynet:// and dmsg://)",
+	Long: `HTTP client with concurrent chunked downloads (RFC 7233),
 SOCKS5 proxy support, and general-purpose HTTP requests.
 
-  Default (no subcommand): concurrent download
-  got dl <URL>             concurrent chunked download
-  got req <METHOD> <URL>   general HTTP request
-  got head <URL>           HEAD request (show headers)`,
+URL schemes:
+  http://, https://         standard HTTP, with chunked range downloads
+  skynet://<pk>:<port>/path routed through the local visor (SkynetHTTP RPC)
+  dmsg://<pk>:<port>/path   routed through the local visor (DmsgHTTP RPC)
+
+Subcommands:
+  got dl <URL>             chunked download (HTTP); single GET (skywire)
+  got req <METHOD> <URL>   general request, any method
+  got head <URL>           HEAD (HTTP) / GET-headers-only (skywire)
+
+Default (no subcommand) is download.`,
 	Args: cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		// Default behavior: download
@@ -73,11 +80,30 @@ SOCKS5 proxy support, and general-purpose HTTP requests.
 
 var dlCmd = &cobra.Command{
 	Use:   "dl <URL> [URL...]",
-	Short: "Download files with concurrent chunks",
-	Long: `Download files using concurrent chunked HTTP range requests (RFC 7233).
-Falls back to single-stream download when the server doesn't support ranges.`,
+	Short: "Download files (HTTP chunked, or single GET over skynet/dmsg)",
+	Long: `Download via HTTP using concurrent chunked range requests (RFC 7233),
+falling back to single-stream when the server doesn't support ranges.
+
+skynet:// and dmsg:// URLs are routed through the local visor's
+SkynetHTTP / DmsgHTTP RPC and complete in a single GET (no chunking).`,
 	Args: cobra.MinimumNArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
+		// Skywire URLs go through the visor RPC. Process them first so
+		// we don't spin up an HTTP client for an http-only flow.
+		var httpURLs []string
+		for _, rawURL := range args {
+			if isSkywireURL(rawURL) {
+				if err := downloadSkywire(cmd, rawURL); err != nil {
+					fatal(err)
+				}
+				continue
+			}
+			httpURLs = append(httpURLs, rawURL)
+		}
+		if len(httpURLs) == 0 {
+			return
+		}
+
 		g, err := newGot()
 		if err != nil {
 			fatal(err)
@@ -90,7 +116,7 @@ Falls back to single-stream download when the server doesn't support ranges.`,
 
 		g.ProgressFunc = progressFunc()
 
-		for _, rawURL := range args {
+		for _, rawURL := range httpURLs {
 			url, err := got.NormalizeURL(rawURL)
 			if err != nil {
 				fatal(err)
@@ -118,17 +144,28 @@ Falls back to single-stream download when the server doesn't support ranges.`,
 
 var reqCmd = &cobra.Command{
 	Use:   "req <METHOD> <URL>",
-	Short: "Perform an HTTP request",
+	Short: "Perform an HTTP request (also accepts skynet:// and dmsg://)",
 	Long: `Perform a general HTTP request (GET, POST, PUT, DELETE, PATCH, etc).
+URLs starting with skynet:// or dmsg:// are routed through the local
+visor's SkynetHTTP / DmsgHTTP RPC.
 
 Examples:
   got req GET https://example.com/api/data
   got req POST https://example.com/api -D '{"key":"value"}' -H "Content-Type: application/json"
-  got req PUT https://example.com/api -D @payload.json`,
+  got req PUT https://example.com/api -D @payload.json
+  got req GET skynet://02abc.../health
+  got req POST dmsg://02abc.../api -D '{"k":"v"}'`,
 	Args: cobra.ExactArgs(2),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		method := strings.ToUpper(args[0])
 		rawURL := args[1]
+
+		if isSkywireURL(rawURL) {
+			if err := requestSkywireCmd(cmd, method, rawURL); err != nil {
+				fatal(err)
+			}
+			return
+		}
 
 		url, err := got.NormalizeURL(rawURL)
 		if err != nil {
@@ -187,9 +224,17 @@ Examples:
 
 var headCmd = &cobra.Command{
 	Use:   "head <URL>",
-	Short: "Show response headers (HEAD request)",
+	Short: "Show response headers (HEAD on http; GET-headers on skynet/dmsg)",
 	Args:  cobra.ExactArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
+		if isSkywireURL(args[0]) {
+			// Visor RPC has no HEAD; we issue GET and only print
+			// headers, discarding the body.
+			if err := headSkywire(cmd, args[0]); err != nil {
+				fatal(err)
+			}
+			return
+		}
 		url, err := got.NormalizeURL(args[0])
 		if err != nil {
 			fatal(err)

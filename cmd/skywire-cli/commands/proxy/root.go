@@ -120,6 +120,7 @@ var (
 	forceLocalRoutes  bool
 	muxRoutes         int
 	muxMode           string
+	minHops           uint16
 	startVerbose      bool
 	startVerboseLevel string
 	// multi-hop testing

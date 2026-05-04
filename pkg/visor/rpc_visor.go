@@ -2,6 +2,8 @@
 package visor
 
 import (
+	"errors"
+
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
@@ -149,6 +151,66 @@ func (r *RPC) GetRuntimeConfig(_ *struct{}, out *[]byte) (err error) {
 	defer rpcutil.LogCall(r.log, "GetRuntimeConfig", nil)(nil, &err)
 	*out, err = r.visor.GetRuntimeConfig()
 	return err
+}
+
+// SetRuntimeConfig validates rawJSON and writes it to the visor's
+// on-disk config file. Visor restart is required for the change to
+// take effect; this RPC does NOT trigger one.
+func (r *RPC) SetRuntimeConfig(rawJSON *[]byte, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetRuntimeConfig", nil)(nil, &err)
+	if rawJSON == nil {
+		return errors.New("nil runtime config payload")
+	}
+	return r.visor.SetRuntimeConfig(*rawJSON)
+}
+
+// LocalTransportStats returns the visor's local per-transport
+// bandwidth + latency rollup from the bbolt stats store.
+func (r *RPC) LocalTransportStats(_ *struct{}, out *LocalTransportStatsResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "LocalTransportStats", nil)(nil, &err)
+	resp, err := r.visor.LocalTransportStats()
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// LocalUptimeStats returns the visor's tier-uptime bitmaps from the
+// bbolt stats store — process / dmsg / skynet, 5-minute resolution
+// for the requested window. Mirror of /stats/uptime on the
+// logserver, reachable through the hypervisor RPC chain so the hvui
+// can fetch it without per-visor HTTP calls.
+func (r *RPC) LocalUptimeStats(args *LocalUptimeArgs, out *LocalUptimeResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "LocalUptimeStats", nil)(nil, &err)
+	if args == nil {
+		args = &LocalUptimeArgs{}
+	}
+	resp, err := r.visor.LocalUptimeStats(*args)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
+// FetchCXO probes the visor's lazy-on-demand CXO subscriber for the
+// requested (feed, path) and returns the cached payload or a miss
+// reason. Used by the CLI's FetchServiceURL to add a CXO step at
+// the front of the RPC→DMSG→HTTP chain — when the visor already has
+// a fresh subscription the CLI can skip the network round-trip
+// entirely.
+func (r *RPC) FetchCXO(args *FetchCXOArgs, out *FetchCXOResult) (err error) {
+	defer rpcutil.LogCall(r.log, "FetchCXO", args)(nil, &err)
+	if args == nil {
+		args = &FetchCXOArgs{}
+	}
+	resp, err := r.visor.FetchCXO(*args)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
 }
 
 // RuntimeLogs returns the visor's accumulated runtime log buffer.

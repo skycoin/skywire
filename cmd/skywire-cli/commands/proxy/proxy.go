@@ -81,6 +81,7 @@ func init() {
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
 	startCmd.Flags().IntVar(&muxRoutes, "mux", 1, "parallel mux routes: 0=unlimited (every distinct path), 1=disabled (default), 2+=N routes")
 	startCmd.Flags().StringVar(&muxMode, "mux-mode", "auto", "mux weight distribution mode: auto (latency-based) or equal (round-robin)")
+	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
@@ -169,6 +170,21 @@ var startCmd = &cobra.Command{
 		if muxMode != "" && muxMode != "auto" {
 			if err := rpcClient.SetMuxMode(muxMode); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set mux mode: %w", err))
+			}
+		}
+
+		// --min-hops only fires when the user explicitly set it; we
+		// don't want to clobber visor's default just because the flag
+		// has a default value of 1. Reusing the existing global
+		// SetMinHops RPC (matches the SetMux*/SetExistingTPOnly idiom);
+		// changes the visor-wide setting, so a follow-up `proxy start
+		// --min-hops=1` is needed to revert.
+		if cmd.Flags().Changed("min-hops") {
+			if minHops == 0 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--min-hops=0 disables routing; pick at least 1"))
+			}
+			if err := rpcClient.SetMinHops(minHops); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set min-hops: %w", err))
 			}
 		}
 

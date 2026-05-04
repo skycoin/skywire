@@ -408,6 +408,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/service-health", hv.getServiceHealth())
 				r.Get("/route-setup-nodes/stats", hv.getRSNRemoteStats())
 				r.Get("/network/transports", hv.getNetworkTransports())
+				r.Get("/network/visor-uptime", hv.getNetworkVisorUptime())
 				r.Get("/dmsg/sessions", hv.getDmsgSessions())
 				r.Post("/dmsg/connect-all", hv.postDmsgConnectAll())
 				r.Put("/dmsg/sessions-count", hv.putDmsgSessionsCount())
@@ -456,6 +457,9 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Put("/visors/{pk}/public", hv.putIsPublic())
 				r.Get("/visors/{pk}/public", hv.getIsPublic())
 				r.Get("/visors/{pk}/runtime-config", hv.getRuntimeConfig())
+				r.Put("/visors/{pk}/runtime-config", hv.putRuntimeConfig())
+				r.Get("/visors/{pk}/local-transport-stats", hv.getLocalTransportStats())
+				r.Get("/visors/{pk}/local-uptime-stats", hv.getLocalUptimeStats())
 				r.Get("/visors/{pk}/ports", hv.getPorts())
 
 				// Resolving proxy controls
