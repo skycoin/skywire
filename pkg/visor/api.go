@@ -125,6 +125,7 @@ type API interface {
 	SetRuntimeConfig(rawJSON []byte) error
 	LocalTransportStats() (*LocalTransportStatsResponse, error)
 	LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error)
+	FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error)
 	GetConfigPath() (string, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error
@@ -633,6 +634,32 @@ type SkynetHTTPResponse struct {
 	Status     string            `json:"status"`
 	Header     map[string]string `json:"header,omitempty"`
 	Body       []byte            `json:"body,omitempty"`
+}
+
+// FetchCXOArgs identifies which CXO feed + path the caller wants the
+// visor to read from its lazy-on-demand subscriber cache. Feed names
+// are stable strings the CLI's URL→feed mapping table emits; adding
+// a new feed means adding a case to the visor's FetchCXO switch and
+// a row to the mapping table — nothing in between needs to know.
+type FetchCXOArgs struct {
+	// Feed is one of: "tpd-metrics", "tpd-uptime". (UT's standalone
+	// uptime tracker is intentionally absent — that service is being
+	// deprecated, so there's no point publishing it over CXO.)
+	Feed string `json:"feed"`
+	// Path is the TreeStore path inside the feed, e.g.
+	// "metrics/days/7" or "uptimes/days/30".
+	Path string `json:"path"`
+}
+
+// FetchCXOResult is the visor's reply for a FetchCXO probe. Hit is
+// true when the subscriber returned a cached payload; a miss carries
+// a Reason string ("not ready", "cooling down", "unknown feed", …)
+// so the CLI's debug log has something concrete to print.
+type FetchCXOResult struct {
+	Hit        bool      `json:"hit"`
+	Body       []byte    `json:"body,omitempty"`
+	LastRootAt time.Time `json:"last_root_at,omitempty"`
+	Reason     string    `json:"reason,omitempty"`
 }
 
 // TPSHealthCheckArgs is empty input for health check.

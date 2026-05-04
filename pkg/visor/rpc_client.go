@@ -541,6 +541,15 @@ func (rc *rpcClient) LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeRespons
 	return &resp, nil
 }
 
+// FetchCXO implements API.
+func (rc *rpcClient) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
+	var resp FetchCXOResult
+	if err := rc.Call("FetchCXO", &args, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // GetRuntimeConfig implements API.
 func (rc *rpcClient) GetRuntimeConfig() ([]byte, error) {
 	var out []byte

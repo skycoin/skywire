@@ -194,6 +194,25 @@ func (r *RPC) LocalUptimeStats(args *LocalUptimeArgs, out *LocalUptimeResponse) 
 	return nil
 }
 
+// FetchCXO probes the visor's lazy-on-demand CXO subscriber for the
+// requested (feed, path) and returns the cached payload or a miss
+// reason. Used by the CLI's FetchServiceURL to add a CXO step at
+// the front of the RPC→DMSG→HTTP chain — when the visor already has
+// a fresh subscription the CLI can skip the network round-trip
+// entirely.
+func (r *RPC) FetchCXO(args *FetchCXOArgs, out *FetchCXOResult) (err error) {
+	defer rpcutil.LogCall(r.log, "FetchCXO", args)(nil, &err)
+	if args == nil {
+		args = &FetchCXOArgs{}
+	}
+	resp, err := r.visor.FetchCXO(*args)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // RuntimeLogs returns the visor's accumulated runtime log buffer.
 // Used by the hypervisor UI's "view logs" action and the
 // `skywire cli visor logs` command.

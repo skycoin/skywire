@@ -661,6 +661,11 @@ func (mc *mockRPCClient) LocalUptimeStats(_ LocalUptimeArgs) (*LocalUptimeRespon
 	return &LocalUptimeResponse{}, nil
 }
 
+// FetchCXO implements API.
+func (mc *mockRPCClient) FetchCXO(_ FetchCXOArgs) (*FetchCXOResult, error) {
+	return &FetchCXOResult{Reason: "mock"}, nil
+}
+
 // GetConfigPath implements API.
 func (mc *mockRPCClient) GetConfigPath() (string, error) { return "", nil }
 
