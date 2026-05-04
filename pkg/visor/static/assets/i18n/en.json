@@ -485,7 +485,8 @@
     "fleet-visor": "Visor",
     "fleet-process": "Process %",
     "fleet-dmsg": "DMSG %",
-    "fleet-skynet": "Skynet %"
+    "fleet-skynet": "Skynet %",
+    "today-pct": "Today %"
   },
 
   "skychat": {

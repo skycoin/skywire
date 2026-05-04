@@ -125,15 +125,26 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 // the v3 response includes a 288-char per-day timeline string per
 // visor — exactly the "exact intervals" shape the operator wants.
 //
-// Same DMSG-HTTP-then-HTTP fallback chain as getNetworkTransports.
-// The CXO subscriber path doesn't apply here yet — TPD only
-// publishes the metrics aggregate over CXO, not per-visor uptime.
+// Three fetch strategies, tried in order:
 //
-// Query params forwarded to TPD:
+//  1. CXO subscriber (instant when fresh) — visor maintains a lazy
+//     long-lived TreeStore subscriber to TPD's uptime publisher
+//     (api_tpd_uptime_subscriber.go). When the publisher has pushed
+//     a Root for the requested day window the subscriber returns
+//     it without a DMSG round-trip per hvui open.
+//  2. DMSG-HTTP fallback when the CXO cache misses.
+//  3. Plain HTTP last resort.
 //
-//	visors=<pk>;<pk>...   semicolon-separated PK filter (TPD requires
-//	                     it for v3 — without a filter the endpoint
-//	                     returns the full v2 cache without timelines)
+// Query params:
+//
+//	days=N             — selects which CXO bucket to read (1, 7, 30);
+//	                     defaults to 7. Only the publisher-supported
+//	                     windows hit the cache; everything else falls
+//	                     straight through to the HTTP path.
+//	visors=<pk>;<pk>... — semicolon-separated PK filter; only takes
+//	                     effect on the HTTP/DMSG-HTTP fallback path
+//	                     (the CXO bucket is the full fleet for that
+//	                     window — clients filter on their side).
 func (hv *Hypervisor) getNetworkVisorUptime() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if hv.visor == nil {
@@ -149,12 +160,37 @@ func (hv *Hypervisor) getNetworkVisorUptime() http.HandlerFunc {
 		if version == "" {
 			version = "v3"
 		}
+		// Parse days for the CXO bucket lookup. If unparseable or
+		// missing, default to 7 — matches the per-visor tab default.
+		days := 7
+		if d := strings.TrimSpace(r.URL.Query().Get("days")); d != "" {
+			if n, err := strconv.Atoi(d); err == nil && n > 0 && n <= 35 {
+				days = n
+			}
+		}
+
+		log := hv.visor.MasterLogger().PackageLogger("tpd_uptime_proxy")
+
+		// Step 1: CXO subscriber bucket. Hits whenever TPD has pushed
+		// the requested day window since the visor's first hvui-driven
+		// fetch. The X-Skywire-Uptime-Source header lets the UI know
+		// where the response came from.
+		if version == "v3" {
+			if body, ts, err := hv.visor.FetchVisorUptimeCXO(days); err == nil && len(body) > 0 {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("X-Skywire-Uptime-Source", "cxo")
+				if !ts.IsZero() {
+					w.Header().Set("X-Skywire-Uptime-Updated", ts.UTC().Format(time.RFC3339))
+				}
+				_, _ = w.Write(body) //nolint:errcheck,gosec
+				return
+			}
+		}
+
 		path := "/uptimes?v=" + version
 		if visorsParam != "" {
 			path += "&visors=" + visorsParam
 		}
-
-		log := hv.visor.MasterLogger().PackageLogger("tpd_uptime_proxy")
 
 		tpdHTTP := strings.TrimSuffix(hv.visor.conf.Transport.Discovery, "/")
 		tpdDmsg := strings.TrimSuffix(hv.visor.conf.Transport.DiscoveryDmsg, "/")

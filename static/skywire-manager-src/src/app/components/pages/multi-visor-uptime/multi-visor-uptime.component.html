@@ -31,7 +31,14 @@
       </div>
     }
 
-    @if (!loading && rows.length === 0) {
+    @if (error && rows.length === 0) {
+      <div class="error-row">
+        <mat-icon>error_outline</mat-icon>
+        <span class="ml-2">{{ error }}</span>
+      </div>
+    }
+
+    @if (!loading && !error && rows.length === 0) {
       <div class="up-empty">{{ 'uptime.fleet-empty' | translate }}</div>
     }
 
@@ -48,33 +55,41 @@
       <table class="responsive-table-translucid fleet-uptime">
         <tr>
           <th>{{ 'uptime.fleet-visor' | translate }}</th>
-          <th class="num">{{ 'uptime.fleet-process' | translate }}</th>
-          <th class="num">{{ 'uptime.fleet-dmsg' | translate }}</th>
-          <th class="num">{{ 'uptime.fleet-skynet' | translate }}</th>
-          <th>Today (UTC)</th>
+          <th class="num">{{ 'uptime.window-avg' | translate }}</th>
+          <th class="num">{{ 'uptime.today-pct' | translate }}</th>
+          <th>{{ 'uptime.today' | translate }} (UTC)</th>
         </tr>
         @for (r of rows; track trackRow($index, r)) {
-          <tr [class.row-offline]="!r.node.online">
+          <tr [class.row-offline]="!r.online">
             <td class="visor-cell">
-              <span class="dot" [class.online]="r.node.online" [class.offline]="!r.node.online"></span>
-              <a class="mono small" [routerLink]="['/nodes', r.node.localPk, 'uptime']">{{ r.node.localPk }}</a>
-              @if (r.node.label) {
-                <span class="label-text small">{{ r.node.label }}</span>
+              <span class="dot" [class.online]="r.online" [class.offline]="!r.online"></span>
+              @if (r.managed) {
+                <a class="mono small" [routerLink]="['/nodes', r.pk, 'uptime']">{{ r.pk }}</a>
+              } @else {
+                <span class="mono small">{{ r.pk }}</span>
               }
-              @if (r.error) {
-                <span class="dim small err">— {{ r.error }}</span>
+              @if (r.label) {
+                <span class="label-text small">{{ r.label }}</span>
+              }
+              @if (r.version) {
+                <span class="dim small">{{ r.version }}</span>
               }
             </td>
-            @for (tier of tierNames(); track tier) {
-              <td class="num mono small" [ngClass]="r.tiers[tier] ? pctClass(r.tiers[tier].pct) : 'dim'">
-                {{ r.tiers[tier] ? fmtPct(r.tiers[tier].pct) : '–' }}
-              </td>
-            }
+            <td class="num mono small" [ngClass]="pctClass(r.windowPct)">
+              {{ fmtPct(r.windowPct) }}
+            </td>
+            <td class="num mono small" [ngClass]="pctClass(r.recentPct)">
+              {{ fmtPct(r.recentPct) }}
+            </td>
             <td>
-              @if (r.tiers['process'] && r.tiers['process'].todayCells.length > 0) {
+              @if (r.todayCells.length > 0) {
                 <div class="up-bar">
-                  @for (c of r.tiers['process'].todayCells; track trackCell($index, c)) {
-                    <span class="up-cell" [class.on]="c.online" [class.off]="!c.online" [matTooltip]="cellTooltip(c)"></span>
+                  @for (c of r.todayCells; track trackCell($index, c)) {
+                    <span class="up-cell"
+                          [class.on]="c.state === 'on'"
+                          [class.off]="c.state === 'off'"
+                          [class.future]="c.state === 'future'"
+                          [matTooltip]="cellTooltip(c)"></span>
                   }
                 </div>
               } @else {

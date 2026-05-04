@@ -239,6 +239,12 @@ type Visor struct {
 	// back to HTTP /metrics when a path hasn't been published yet.
 	tpdMetricsSub   *tpdMetricsSubscriber
 	tpdMetricsSubMu sync.RWMutex
+
+	// Same lazy-on-demand pattern for TPD's network-wide visor-uptime
+	// feed (the /uptimes?v=v3 mirror). Drives the hvui Network Uptime
+	// tab. Falls back to DMSG-HTTP / HTTP when the cache misses.
+	tpdUptimeSub   *tpdUptimeSubscriber
+	tpdUptimeSubMu sync.RWMutex
 }
 
 // pingState manages Skywire transport ping connections.
@@ -655,10 +661,11 @@ func (v *Visor) Close() error {
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
 
-	// Tear down lazy CXO subscribers (TPD metrics) before the
-	// closeStack runs, since they hold dmsg conns that closeStack
+	// Tear down lazy CXO subscribers (TPD metrics + uptime) before
+	// the closeStack runs, since they hold dmsg conns that closeStack
 	// also touches via the dmsg client shutdown.
 	v.closeTPDMetricsSubscriber()
+	v.closeTPDUptimeSubscriber()
 
 	// Cleanly close ongoing raw TCP forward conns
 	for _, forwardConn := range appnet.GetAllRawTCPForwardConns() {

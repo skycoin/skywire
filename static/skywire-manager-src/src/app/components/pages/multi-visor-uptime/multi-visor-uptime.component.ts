@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
-import { Subscription, interval, startWith, forkJoin, of } from 'rxjs';
+import { Subscription, interval, startWith, of, forkJoin } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
@@ -10,57 +10,59 @@ import { ApiService } from 'src/app/services/api.service';
 import { Node } from 'src/app/app.datatypes';
 
 /**
- * Network-wide Uptime tab on the home page. Iterates the
- * hypervisor's known visors, hits each one's LocalUptimeStats RPC
- * (mirror of /stats/uptime on the visor's logserver), and shows a
- * compact per-visor row with today's bitmap plus tier averages over
- * the selected window.
+ * Network-wide Uptime tab. Source of truth is the TPD integrated
+ * uptime tracker (transports + dmsg-discovery heartbeats), surfaced
+ * to the hypervisor through `/api/network/visor-uptime` — which
+ * itself reads from a lazy on-demand CXO subscriber connected to
+ * TPD's uptime publisher (skyenv.DmsgTPDUptimeCXOPort), falling
+ * back to DMSG-HTTP and plain HTTP when the cache is cold.
  *
- * Rendering note: each visor's data comes from its own bbolt store,
- * not from the standalone uptime-tracker service or TPD aggregates —
- * that's the integrated tracking the operator wanted to see (exact
- * five-minute online/offline intervals per visor, locally-recorded).
+ * Response shape (v3): `[{pk, on, version, daily: {date: pct},
+ * timeline: {date: 288-char-bitmap}}, ...]`. The 288-char timeline
+ * is the "exact intervals where the visor was online and offline"
+ * the operator asked for, recorded by the integrated tracker
+ * rather than the standalone uptime-tracker service.
  *
- * Filter toggle: "connected only" (default — visors with an active
- * hypervisor session) vs "all" (also show offline visors as
- * unreachable rows). The hypervisor doesn't have a remote bbolt
- * store mirror, so offline visors show "no data" until they
- * reconnect. Anything richer would require pulling from TPD/dmsgd
- * snapshots, which is out of scope here.
+ * Filter toggle:
+ *   "connected only" — restrict to PKs the hypervisor currently has
+ *     an RPC session with. Useful when the operator only cares
+ *     about their own fleet.
+ *   "all known" — every PK TPD reports for the day window, regardless
+ *     of whether this hypervisor manages it.
  */
 
-interface UptimeResp {
-  tiers?: { [tier: string]: { [date: string]: string } };
-  fetched_at?: string;
+interface VisorSummary {
+  pk: string;
+  on: boolean;
+  version?: string;
+  daily?: { [date: string]: string };
+  timeline?: { [date: string]: string };
 }
 
 interface DayCell {
-  online: boolean;
+  state: 'on' | 'off' | 'future';
   slot: number;
 }
 
-interface TierSummary {
-  // Average online% across all days in the window.
-  pct: number;
-  // Today's 288-cell bar (or empty if no data for today).
-  todayCells: DayCell[];
-}
-
 interface VisorRow {
-  node: Node;
-  // Tier name → summary. Order is preserved by visiting in fixed order.
-  tiers: { [name: string]: TierSummary };
-  // Best-effort overall pct: process tier preferred (it's the gating one),
-  // else mean of available tiers.
-  overallPct: number;
-  error?: string;
-  fetchedAt?: number;
+  pk: string;
+  online: boolean;
+  version: string;
+  // Today's 288-cell ribbon for the at-a-glance bar.
+  todayCells: DayCell[];
+  // Window-aggregate: percentage of *known* (non-future) slots that
+  // were online across all days in the response.
+  windowPct: number;
+  // Most-recent-day percentage (today, if available; else newest).
+  recentPct: number;
+  // True when this row is also a hypervisor-managed visor.
+  managed: boolean;
+  // Hypervisor-side label, when known.
+  label?: string;
 }
 
 type WindowDays = 1 | 7 | 30;
 type FleetFilter = 'connected' | 'all';
-
-const TIER_ORDER = ['process', 'dmsg', 'skynet'];
 
 @Component({
   selector: 'app-multi-visor-uptime',
@@ -75,9 +77,9 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   error: string | null = null;
   lastUpdated: Date | null = null;
   windowDays: WindowDays = 7;
-  filter: FleetFilter = 'connected';
+  filter: FleetFilter = 'all';
+  source: string = '';
 
-  // Cached "all rows" before filter — so toggling filter is instant.
   private allRows: VisorRow[] = [];
   private sub: Subscription;
 
@@ -91,12 +93,10 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   }
 
   ngOnInit() {
-    // 60s cadence — fan-out per connected visor; tier bitmaps update
-    // on the per-visor 5-minute sampler so faster polling is wasted.
+    // 60s cadence — matches the TPD publisher's recompute tick.
     this.sub = interval(60000).pipe(
       startWith(0),
-      switchMap(() => this.nodeService.getNodes()),
-      switchMap((nodes: Node[]) => this.fetchAll(nodes || [])),
+      switchMap(() => this.fetchOnce()),
     ).subscribe();
     return super.ngOnInit();
   }
@@ -108,7 +108,6 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   setWindow(d: WindowDays) {
     if (d === this.windowDays) { return; }
     this.windowDays = d;
-    // Force a fresh fetch — server-side window matters for the avg%.
     this.refreshNow();
   }
 
@@ -119,126 +118,144 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   }
 
   refreshNow() {
-    this.nodeService.getNodes().pipe(
-      switchMap((nodes: Node[]) => this.fetchAll(nodes || [])),
-    ).subscribe();
+    this.fetchOnce().subscribe();
   }
 
-  private fetchAll(nodes: Node[]) {
-    if (nodes.length === 0) {
-      this.allRows = [];
-      this.applyFilter();
-      this.loading = false;
-      this.lastUpdated = new Date();
-      this.cdr.markForCheck();
-      return of(null);
-    }
-
-    const online = nodes.filter((n) => n.online);
-    if (online.length === 0) {
-      this.allRows = nodes.map((n) => this.emptyRow(n, 'offline'));
-      this.applyFilter();
-      this.loading = false;
-      this.lastUpdated = new Date();
-      this.cdr.markForCheck();
-      return of(null);
-    }
-
-    const until = new Date();
-    const since = new Date(until.getTime() - this.windowDays * 86400 * 1000);
-    const qs = `?since=${since.toISOString()}&until=${until.toISOString()}`;
-
-    const fetches = online.map((n) =>
-      this.api.get(`visors/${n.localPk}/local-uptime-stats${qs}`).pipe(
-        catchError((err) => of({ __error: err?.message || 'failed' })),
+  private fetchOnce() {
+    // Fetch the network uptime feed and the local nodes list in
+    // parallel — the nodes list lets us mark "managed" rows and
+    // surfaces hypervisor-side labels for the connected-only filter.
+    return forkJoin({
+      summaries: this.api.get(`network/visor-uptime?days=${this.windowDays}`).pipe(
+        catchError((err) => {
+          this.error = err?.message || 'Failed to fetch network uptime';
+          this.loading = false;
+          this.cdr.markForCheck();
+          return of([]);
+        }),
       ),
-    );
-
-    return forkJoin(fetches).pipe(
-      switchMap((results: any[]) => {
-        const byPk: { [pk: string]: VisorRow } = {};
-        for (let i = 0; i < online.length; i++) {
-          const node = online[i];
-          const result = results[i];
-          if (result && result.__error) {
-            byPk[node.localPk] = this.emptyRow(node, result.__error);
-          } else {
-            byPk[node.localPk] = this.buildRow(node, result as UptimeResp);
-          }
-        }
-        // Include offline nodes as empty rows so the "all" filter
-        // can show them as unreachable.
-        const all: VisorRow[] = nodes.map((n) =>
-          byPk[n.localPk] || this.emptyRow(n, 'offline'),
-        );
-        all.sort((a, b) => b.overallPct - a.overallPct);
-        this.allRows = all;
-        this.applyFilter();
-        this.loading = false;
-        this.lastUpdated = new Date();
-        this.cdr.markForCheck();
-        return of(results);
+      nodes: this.nodeService.getNodes().pipe(catchError(() => of([] as Node[]))),
+    }).pipe(
+      switchMap(({ summaries, nodes }) => {
+        this.consume((summaries as VisorSummary[]) || [], nodes || []);
+        return of(null);
       }),
     );
   }
 
-  private buildRow(node: Node, resp: UptimeResp): VisorRow {
-    const tiers: { [name: string]: TierSummary } = {};
+  private consume(summaries: VisorSummary[], nodes: Node[]) {
+    const managedByPk: { [pk: string]: Node } = {};
+    for (const n of nodes) {
+      managedByPk[n.localPk] = n;
+    }
     const todayKey = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const nowSlot = Math.floor((now.getUTCHours() * 60 + now.getUTCMinutes()) / 5);
 
-    let tierCount = 0;
-    let pctSum = 0;
-    let processPct: number | null = null;
-    for (const name of TIER_ORDER) {
-      const days = resp.tiers?.[name];
-      if (!days) { continue; }
-      let onlineSlots = 0;
-      let totalSlots = 0;
-      const todayAscii = days[todayKey] || '';
+    const out: VisorRow[] = [];
+    for (const s of summaries) {
+      const days = s.timeline || {};
+      const dailyPcts = s.daily || {};
+
+      // Aggregate window pct from timeline (counting non-future slots
+      // only). Falls back to averaging the daily-percent dictionary
+      // when the row has no timeline (TPD v3 still emits timelines
+      // for known PKs only — unknowns degrade to v2 shape).
+      let online = 0;
+      let known = 0;
       for (const date of Object.keys(days)) {
         const ascii = days[date] || '';
+        const isToday = date === todayKey;
         for (let i = 0; i < ascii.length; i++) {
-          if (ascii.charAt(i) === '.') { onlineSlots++; }
-          totalSlots++;
+          if (isToday && i >= nowSlot) { continue; }
+          known++;
+          if (ascii.charAt(i) === '.') { online++; }
         }
       }
-      const pct = totalSlots > 0 ? (onlineSlots / totalSlots) * 100 : 0;
-      tiers[name] = {
-        pct,
-        todayCells: this.cellsFromAscii(todayAscii),
-      };
-      if (name === 'process') { processPct = pct; }
-      pctSum += pct;
-      tierCount++;
+      let windowPct = known > 0 ? (online / known) * 100 : 0;
+      if (known === 0 && Object.keys(dailyPcts).length > 0) {
+        let sum = 0;
+        let n = 0;
+        for (const date of Object.keys(dailyPcts)) {
+          const v = parseFloat(dailyPcts[date]);
+          if (!isNaN(v)) { sum += v; n++; }
+        }
+        windowPct = n > 0 ? sum / n : 0;
+      }
+
+      // Most-recent-day percentage. Prefer today if it has any data,
+      // else the most recent date with a non-zero timeline.
+      let recentPct = 0;
+      if (dailyPcts[todayKey] !== undefined) {
+        const v = parseFloat(dailyPcts[todayKey]);
+        recentPct = isNaN(v) ? 0 : v;
+      } else if (days[todayKey]) {
+        recentPct = this.pctFromAscii(days[todayKey], true, nowSlot);
+      } else {
+        const sortedDates = Object.keys(days).sort().reverse();
+        for (const d of sortedDates) {
+          if (days[d]) {
+            recentPct = this.pctFromAscii(days[d], false, 288);
+            break;
+          }
+        }
+      }
+
+      const todayCells = this.cellsFromAscii(days[todayKey] || '', true, nowSlot);
+      const managed = !!managedByPk[s.pk];
+      out.push({
+        pk: s.pk,
+        online: s.on,
+        version: s.version || '',
+        todayCells,
+        windowPct,
+        recentPct,
+        managed,
+        label: managed ? (managedByPk[s.pk].label || '') : '',
+      });
     }
-    const overallPct = processPct !== null ? processPct : (tierCount > 0 ? pctSum / tierCount : 0);
-    return {
-      node,
-      tiers,
-      overallPct,
-      fetchedAt: resp.fetched_at ? new Date(resp.fetched_at).getTime() : Date.now(),
-    };
+
+    out.sort((a, b) => b.windowPct - a.windowPct);
+    this.allRows = out;
+    this.applyFilter();
+    this.loading = false;
+    this.error = null;
+    this.lastUpdated = new Date();
+    this.cdr.markForCheck();
   }
 
-  private emptyRow(node: Node, error: string): VisorRow {
-    return { node, tiers: {}, overallPct: 0, error };
+  private pctFromAscii(ascii: string, isToday: boolean, nowSlot: number): number {
+    let online = 0;
+    let known = 0;
+    for (let i = 0; i < ascii.length; i++) {
+      if (isToday && i >= nowSlot) { continue; }
+      known++;
+      if (ascii.charAt(i) === '.') { online++; }
+    }
+    return known > 0 ? (online / known) * 100 : 0;
   }
 
-  private cellsFromAscii(ascii: string): DayCell[] {
+  private cellsFromAscii(ascii: string, isToday: boolean, nowSlot: number): DayCell[] {
     const expected = 288;
     let s = ascii || '';
     if (s.length < expected) { s = s.padEnd(expected, ' '); }
     if (s.length > expected) { s = s.slice(0, expected); }
     const cells: DayCell[] = new Array(expected);
     for (let i = 0; i < expected; i++) {
-      cells[i] = { online: s.charAt(i) === '.', slot: i };
+      let state: DayCell['state'];
+      if (isToday && i >= nowSlot) {
+        state = 'future';
+      } else {
+        state = s.charAt(i) === '.' ? 'on' : 'off';
+      }
+      cells[i] = { state, slot: i };
     }
     return cells;
   }
 
   private applyFilter() {
     if (this.filter === 'connected') {
-      this.rows = this.allRows.filter((r) => r.node.online);
+      this.rows = this.allRows.filter((r) => r.managed);
     } else {
       this.rows = this.allRows.slice();
     }
@@ -260,7 +277,13 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   cellTooltip(c: DayCell): string {
     const start = this.fmtSlot(c.slot);
     const end = this.fmtSlot(Math.min(c.slot + 1, 288));
-    return `${start}–${end} UTC: ${c.online ? 'online' : 'offline'}`;
+    let label: string;
+    switch (c.state) {
+      case 'on': label = 'online'; break;
+      case 'off': label = 'offline'; break;
+      default: label = 'future';
+    }
+    return `${start}–${end} UTC: ${label}`;
   }
 
   private fmtSlot(slot: number): string {
@@ -270,7 +293,6 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
     return `${hh}:${mm}`;
   }
 
-  tierNames(): string[] { return TIER_ORDER; }
-  trackRow(_: number, r: VisorRow): string { return r.node.localPk; }
+  trackRow(_: number, r: VisorRow): string { return r.pk; }
   trackCell(_: number, c: DayCell): number { return c.slot; }
 }
