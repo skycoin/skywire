@@ -25,6 +25,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dht"
@@ -33,6 +34,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -187,6 +189,15 @@ type Visor struct {
 	// and is read by the /stats/* HTTP handlers and the CXO
 	// publisher.
 	statsTracker *stats.Tracker
+
+	// Service-self uptime recorder (nil when not wired). Owns the
+	// bbolt store at <local_path>/uptime.db, refreshes the current
+	// session row on a 60s tick, and surfaces both the visor's
+	// running version and its session history via /uptime/* HTTP
+	// endpoints. Distinct from statsTracker: this is for
+	// "was-the-visor-itself-running" with version provenance, not
+	// transport/tier/service uptime.
+	uptimeRecorder *serviceuptime.Recorder
 
 	// User-registered CXO TreeStore feeds keyed by name. Each feed
 	// is its own dmsg listener on a distinct port; the system feed
@@ -418,6 +429,24 @@ func run(conf *visorconfig.V1) error {
 		conf.Hypervisor.UIAssets = *uiAssets
 	}
 
+	// Open the service-self uptime recorder before NewVisor so a panic
+	// during subsystem init still leaves a session row with the
+	// running binary's version. Failure to open is non-fatal — the
+	// visor brings up without it; only the /uptime/* surface is missing.
+	uptimeRec, uptimeErr := serviceuptime.New(
+		filepath.Join(conf.LocalPath, "uptime.db"),
+		serviceuptime.Config{
+			Service: "skywire-visor",
+			Version: buildinfo.Version(),
+			Commit:  buildinfo.Commit(),
+		},
+	)
+	if uptimeErr != nil {
+		mLog.WithError(uptimeErr).Warn("Service-self uptime recorder unavailable")
+	} else {
+		defer func() { _ = uptimeRec.Close() }() //nolint:errcheck
+	}
+
 	ctx, cancel := cmdutil.SignalContext(context.Background(), mLog)
 	vis, ok := NewVisor(ctx, conf)
 	if !ok {
@@ -428,6 +457,11 @@ func run(conf *visorconfig.V1) error {
 			return fmt.Errorf("failed to start visor")
 		}
 		return nil
+	}
+
+	if uptimeRec != nil {
+		vis.SetUptimeRecorder(uptimeRec)
+		uptimeRec.Start()
 	}
 
 	stopVisorFn = func() {
