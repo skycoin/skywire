@@ -563,7 +563,10 @@ func (s *memoryStore) RecordHeartbeat(context.Context, cipher.PubKey, string) er
 func (s *memoryStore) GetDailyTimeline(context.Context, string, time.Time) map[string]string {
 	return nil
 }
-func (s *memoryStore) RecordTransportHeartbeat(context.Context, uuid.UUID, string) error {
+func (s *memoryStore) RecordTransportHeartbeat(context.Context, uuid.UUID, string, time.Time) error {
+	return nil
+}
+func (s *memoryStore) IngestTransportTimeline(context.Context, uuid.UUID, string, []byte) error {
 	return nil
 }
 func (s *memoryStore) GetTransportUptimeSummaries(context.Context, []uuid.UUID, bool, bool) ([]store.TransportUptimeSummary, error) {

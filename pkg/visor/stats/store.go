@@ -14,10 +14,11 @@ import (
 )
 
 var (
-	bucketMeta       = []byte("meta")
-	bucketTransports = []byte("transports")
-	bucketTiers      = []byte("tiers")
-	bucketServices   = []byte("services")
+	bucketMeta             = []byte("meta")
+	bucketTransports       = []byte("transports")
+	bucketTiers            = []byte("tiers")
+	bucketServices         = []byte("services")
+	bucketTransportBitmaps = []byte("transport_bitmaps")
 
 	keySchemaVersion = []byte("schema_version")
 	keyCreatedAt     = []byte("created_at")
@@ -50,7 +51,12 @@ func OpenStore(path string) (*Store, error) {
 	}
 
 	if err := db.Update(func(tx *bbolt.Tx) error {
-		for _, b := range [][]byte{bucketMeta, bucketTransports, bucketTiers, bucketServices} {
+		// Adding bucketTransportBitmaps preserves SchemaVersion: existing
+		// stores at version 1 simply gain the new (empty) bucket on
+		// next open. CreateBucketIfNotExists is idempotent and the
+		// version check below only fires when the on-disk version
+		// doesn't match the binary's, so this is forward-compatible.
+		for _, b := range [][]byte{bucketMeta, bucketTransports, bucketTiers, bucketServices, bucketTransportBitmaps} {
 			if _, err := tx.CreateBucketIfNotExists(b); err != nil {
 				return fmt.Errorf("create bucket %s: %w", b, err)
 			}
@@ -159,6 +165,15 @@ func (s *Store) MarkServiceSlot(service string, date time.Time, slot int) error 
 	return s.markSlot(bucketServices, service, date, slot)
 }
 
+// MarkTransportSlot is the per-transport analog of MarkTierSlot. The
+// transport ID (UUID string) is the sub-bucket key. Same wire format
+// as the tier/service bitmaps — 36 raw bytes, MSB-first, 288 5-min
+// slots — and bit-identical to TPD's tp-uptime:<id>:<date>:timeline
+// redis bitmap so the two views can be ORed without translation.
+func (s *Store) MarkTransportSlot(tpID string, date time.Time, slot int) error {
+	return s.markSlot(bucketTransportBitmaps, tpID, date, slot)
+}
+
 func (s *Store) markSlot(top []byte, name string, date time.Time, slot int) error {
 	if slot < 0 || slot >= SlotsPerDay {
 		return fmt.Errorf("stats: slot %d out of range", slot)
@@ -191,6 +206,11 @@ func (s *Store) ServiceBitmap(service string, date time.Time) ([]byte, error) {
 	return s.getBitmap(bucketServices, service, date)
 }
 
+// TransportBitmap is the per-transport analog of TierBitmap.
+func (s *Store) TransportBitmap(tpID string, date time.Time) ([]byte, error) {
+	return s.getBitmap(bucketTransportBitmaps, tpID, date)
+}
+
 func (s *Store) getBitmap(top []byte, name string, date time.Time) ([]byte, error) {
 	dateKey := []byte(date.UTC().Format(dateFmt))
 	out := make([]byte, BitmapSize)
@@ -217,6 +237,11 @@ func (s *Store) TierDates(tier string) ([]string, error) {
 // ServiceDates is the per-service analog of TierDates.
 func (s *Store) ServiceDates(service string) ([]string, error) {
 	return s.listDates(bucketServices, service)
+}
+
+// TransportBitmapDates is the per-transport analog of TierDates.
+func (s *Store) TransportBitmapDates(tpID string) ([]string, error) {
+	return s.listDates(bucketTransportBitmaps, tpID)
 }
 
 func (s *Store) listDates(top []byte, name string) ([]string, error) {
@@ -246,6 +271,13 @@ func (s *Store) ServiceNames() ([]string, error) {
 	return s.listNames(bucketServices)
 }
 
+// TransportBitmapIDs lists every transport ID with a stored bitmap.
+// Returned values are the UUID strings, suitable for re-keying the
+// sink path (transports/<id>/<date>/timeline).
+func (s *Store) TransportBitmapIDs() ([]string, error) {
+	return s.listNames(bucketTransportBitmaps)
+}
+
 func (s *Store) listNames(top []byte) ([]string, error) {
 	var names []string
 	err := s.db.View(func(tx *bbolt.Tx) error {
@@ -265,7 +297,7 @@ func (s *Store) PruneBitmaps(cutoff time.Time) (int, error) {
 	cutoffKey := cutoff.UTC().Format(dateFmt)
 	removed := 0
 	err := s.db.Update(func(tx *bbolt.Tx) error {
-		for _, top := range [][]byte{bucketTiers, bucketServices} {
+		for _, top := range [][]byte{bucketTiers, bucketServices, bucketTransportBitmaps} {
 			b := tx.Bucket(top)
 			if err := b.ForEach(func(name, _ []byte) error {
 				sub := b.Bucket(name)
