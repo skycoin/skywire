@@ -360,8 +360,8 @@ sessions show as "(down: <duration>)"; sessions shorter than
 			emitPretty(cmd, data)
 			return
 		}
-		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
-			b, _ := json.MarshalIndent(sessions, "", "  ") //nolint:errcheck
+		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut { //nolint:errcheck
+			b, _ := json.MarshalIndent(sessions, "", "  ")           //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), sessions, string(b)+"\n")
 			return
 		}

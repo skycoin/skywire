@@ -86,7 +86,7 @@ a "(restart loop?)" tag.
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 
-		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut {
+		if jsonOut, _ := cmd.Flags().GetBool("json"); jsonOut { //nolint:errcheck
 			b, _ := json.MarshalIndent(hist, "", "  ") //nolint:errcheck
 			internal.PrintOutput(cmd.Flags(), hist, string(b)+"\n")
 			return

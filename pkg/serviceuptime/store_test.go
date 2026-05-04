@@ -13,7 +13,7 @@ func newTempStore(t *testing.T) *Store {
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
-	t.Cleanup(func() { s.Close() }) //nolint:errcheck
+	t.Cleanup(func() { _ = s.Close() }) //nolint:errcheck,gosec
 	return s
 }
 
@@ -113,17 +113,17 @@ func TestPruneDropsOldSessionsAndBitmaps(t *testing.T) {
 
 	// Old session — both StartedAt and LastSeen before cutoff.
 	old := now.Add(-40 * 24 * time.Hour)
-	_ = s.PutSession(SessionRecord{StartedAt: old, LastSeen: old.Add(time.Hour), Service: "old"})
+	_ = s.PutSession(SessionRecord{StartedAt: old, LastSeen: old.Add(time.Hour), Service: "old"}) //nolint:errcheck
 	// Long-running session that crosses the cutoff. LastSeen is fresh,
 	// StartedAt is old. Must be preserved.
 	straddle := now.Add(-50 * 24 * time.Hour)
-	_ = s.PutSession(SessionRecord{StartedAt: straddle, LastSeen: now.Add(-1 * time.Hour), Service: "straddle"})
+	_ = s.PutSession(SessionRecord{StartedAt: straddle, LastSeen: now.Add(-1 * time.Hour), Service: "straddle"}) //nolint:errcheck
 	// Recent session.
 	recent := now.Add(-1 * time.Hour)
-	_ = s.PutSession(SessionRecord{StartedAt: recent, LastSeen: now, Service: "recent"})
+	_ = s.PutSession(SessionRecord{StartedAt: recent, LastSeen: now, Service: "recent"}) //nolint:errcheck
 
-	_ = s.MarkSlot(now.Add(-40*24*time.Hour), 0) // old date
-	_ = s.MarkSlot(now, 0)                       // today
+	_ = s.MarkSlot(now.Add(-40*24*time.Hour), 0) //nolint:errcheck // old date
+	_ = s.MarkSlot(now, 0)                       //nolint:errcheck // today
 
 	cutoff := now.Add(-35 * 24 * time.Hour)
 	sessions, bitmaps, err := s.Prune(cutoff)
@@ -136,7 +136,7 @@ func TestPruneDropsOldSessionsAndBitmaps(t *testing.T) {
 	if bitmaps != 1 {
 		t.Errorf("bitmaps removed = %d, want 1", bitmaps)
 	}
-	all, _ := s.Sessions(time.Time{})
+	all, _ := s.Sessions(time.Time{}) //nolint:errcheck
 	if len(all) != 2 {
 		t.Fatalf("after prune want 2 sessions, got %d", len(all))
 	}

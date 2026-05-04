@@ -95,7 +95,7 @@ func TestCloseFlushesFinalKeepalive(t *testing.T) {
 	if !got[0].LastSeen.Equal(tEnd) {
 		t.Errorf("LastSeen = %v, want %v (final tick should fire on Close)", got[0].LastSeen, tEnd)
 	}
-	bm, _ := s.Bitmap(tEnd)
+	bm, _ := s.Bitmap(tEnd) //nolint:errcheck
 	if !GetSlot(bm, SlotForTime(tEnd)) {
 		t.Errorf("final slot %d not set", SlotForTime(tEnd))
 	}
@@ -128,7 +128,7 @@ func TestKeepaliveAdvancesSession(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	var got []SessionRecord
 	for time.Now().Before(deadline) {
-		got, _ = r.Store().Sessions(time.Time{})
+		got, _ = r.Store().Sessions(time.Time{}) //nolint:errcheck
 		if len(got) == 1 && got[0].LastSeen.After(t0) {
 			break
 		}
