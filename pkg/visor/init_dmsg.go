@@ -398,6 +398,35 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	lsAPI.SetServiceLister(v.services)
 	lsAPI.SetForwardedPortLister(v.forwardedPorts)
 
+	// Mount the dmsgpty web terminal at /pty, gated by the same
+	// whitelist the dmsgpty Host enforces on direct connections —
+	// configured Dmsgpty.Whitelist + Hypervisors + the visor's own
+	// PK (a hypervisor running locally can reach itself). The
+	// dialer prefers the local CLI socket when it's set up; that
+	// avoids a self-loop through dmsg for a request that's already
+	// in-process. When no CLI socket is configured we fall back to
+	// dialing our own dmsg client at DmsgPtyPort, which works the
+	// same way the hypervisor's per-PK ptyUI does for remote visors.
+	if v.conf.Dmsgpty != nil {
+		var ptyDialer dmsgpty.UIDialer
+		if v.conf.Dmsgpty.CLINet != "" {
+			ptyDialer = dmsgpty.NetUIDialer(v.conf.Dmsgpty.CLINet, v.conf.Dmsgpty.CLIAddr)
+		} else {
+			ptyDialer = dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: v.conf.PK, Port: skyenv.DmsgPtyPort})
+		}
+		ptyUI := dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig())
+		ptyHandler := ptyUI.Handler(map[string][]string{
+			"update": visorconfig.UpdateCommand(),
+		})
+		ptyWL := []cipher.PubKey{v.conf.PK}
+		ptyWL = append(ptyWL, v.conf.Hypervisors...)
+		if v.conf.Dmsgpty.Whitelist != nil {
+			ptyWL = append(ptyWL, v.conf.Dmsgpty.Whitelist...)
+		}
+		lsAPI.SetPtyHandler(ptyHandler, ptyWL)
+		logger.WithField("whitelist_size", len(ptyWL)).Info("Mounted /pty on logserver")
+	}
+
 	// Mount the website handler for port 80 — rewards UI if configured,
 	// otherwise the forwarded-port reverse proxy if one is registered.
 	v.refreshWebsiteHandler(logger)
