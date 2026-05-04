@@ -234,6 +234,11 @@ func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
 }
 
+// UptimeHistory implements API.
+func (mc *mockRPCClient) UptimeHistory(_ UptimeHistoryArgs) (*UptimeHistoryResponse, error) {
+	return &UptimeHistoryResponse{}, nil
+}
+
 // SetRewardAddress implements API
 func (mc *mockRPCClient) SetRewardAddress(_ string) (string, error) {
 	return "", nil
