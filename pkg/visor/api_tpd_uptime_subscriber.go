@@ -29,6 +29,23 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
+// connectTimeout bounds how long we'll block in the CXO Connect dial
+// before treating it as a cache miss. The publisher's listener
+// shouldn't take more than a single dmsg round-trip to ack, so 3s
+// is generous. When TPD's CXO publisher is down (e.g. TPD is
+// panicking) the dial otherwise hangs indefinitely under
+// dmsg.ConnectPK — and the surrounding handler chain never falls
+// through to its DMSG-HTTP / HTTP fallbacks. Keeping it short means
+// the operator's first hvui open during a TPD outage costs ~3s
+// rather than 5s before falling through.
+const connectTimeout = 3 * time.Second
+
+// connectCooldown throttles re-dials after a failed Connect. Without
+// it every hvui open of the Network Uptime tab would re-trigger the
+// 5s wait while the publisher is still down — burning the operator's
+// time and adding flap pressure.
+const connectCooldown = 30 * time.Second
+
 // ErrTPDUptimeNotReady is returned by FetchVisorUptimeCXO when the
 // local subscriber hasn't received a payload for the requested day
 // window yet (subscriber not yet running, hasn't received any Root,
@@ -75,13 +92,24 @@ func (v *Visor) FetchVisorUptimeCXO(days int) ([]byte, time.Time, error) {
 // ensureTPDUptimeSubscriber lazily constructs the subscriber on
 // first use. Returns nil + nil when the visor has no DMSG client or
 // no parseable TPD CXO peer (the caller treats both as a cache miss
-// and falls through to HTTP).
+// and falls through to HTTP). When a recent Connect attempt failed
+// we short-circuit on the cooldown so successive hvui opens don't
+// re-pay the connectTimeout while TPD's publisher is still down.
 func (v *Visor) ensureTPDUptimeSubscriber() (*tpdUptimeSubscriber, error) {
 	v.tpdUptimeSubMu.RLock()
 	state := v.tpdUptimeSub
 	v.tpdUptimeSubMu.RUnlock()
 	if state != nil {
 		return state, nil
+	}
+
+	// Cooldown check — read the last failure timestamp without taking
+	// the mutex so a hung previous attempt doesn't serialise hvui
+	// requests.
+	if last := v.tpdUptimeLastFail.Load(); last > 0 {
+		if time.Since(time.Unix(0, last)) < connectCooldown {
+			return nil, fmt.Errorf("dial tpd uptime publisher: cooling down")
+		}
 	}
 
 	v.tpdUptimeSubMu.Lock()
@@ -114,9 +142,28 @@ func (v *Visor) ensureTPDUptimeSubscriber() (*tpdUptimeSubscriber, error) {
 		}
 		v.tpdUptimeSubMu.Unlock()
 	})
-	if err := sub.Connect(tpdPK); err != nil {
-		_ = sub.Close() //nolint:errcheck
-		return nil, fmt.Errorf("dial tpd uptime publisher: %w", err)
+
+	// Connect can hang indefinitely when the publisher's listener is
+	// down (e.g. TPD is panicking). Run it in a goroutine and bound
+	// the wait — anything past connectTimeout is treated as a cache
+	// miss so the handler chain falls through to DMSG-HTTP / HTTP.
+	done := make(chan error, 1)
+	go func() { done <- sub.Connect(tpdPK) }()
+	select {
+	case err := <-done:
+		if err != nil {
+			_ = sub.Close() //nolint:errcheck
+			v.tpdUptimeLastFail.Store(time.Now().UnixNano())
+			return nil, fmt.Errorf("dial tpd uptime publisher: %w", err)
+		}
+	case <-time.After(connectTimeout):
+		// In-flight goroutine will resolve later; we leak it (and the
+		// half-open subscriber) but the alternative is hanging the
+		// hvui until TPD comes back. The cooldown check above keeps
+		// successive hvui opens from re-paying the same wait until
+		// connectCooldown elapses.
+		v.tpdUptimeLastFail.Store(time.Now().UnixNano())
+		return nil, fmt.Errorf("dial tpd uptime publisher: timeout after %s", connectTimeout)
 	}
 	v.tpdUptimeSub = state
 	return state, nil

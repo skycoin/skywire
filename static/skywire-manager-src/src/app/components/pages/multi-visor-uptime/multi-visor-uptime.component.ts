@@ -76,9 +76,11 @@ const HOURS_PER_DAY = 24;
 const SLOTS_PER_HOUR = 12;
 const SLOTS_PER_DAY = HOURS_PER_DAY * SLOTS_PER_HOUR;
 // Hard upper bound for the network/visor-uptime fetch. The handler's
-// CXO/DMSG-HTTP/HTTP fallback chain can sit on a hung dial; this just
-// surfaces an error after 30s instead of leaving the spinner forever.
-const FETCH_TIMEOUT_MS = 30000;
+// CXO/DMSG-HTTP/HTTP fallback chain can take ~3s (CXO timeout) +
+// ~15s (DMSG-HTTP) + ~15s (HTTP) in the worst case when TPD is
+// unhealthy. 45s gives every step a chance to fail and surface a
+// real error instead of leaving the spinner up forever.
+const FETCH_TIMEOUT_MS = 45000;
 
 @Component({
   selector: 'app-multi-visor-uptime',

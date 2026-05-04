@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -245,6 +246,11 @@ type Visor struct {
 	// tab. Falls back to DMSG-HTTP / HTTP when the cache misses.
 	tpdUptimeSub   *tpdUptimeSubscriber
 	tpdUptimeSubMu sync.RWMutex
+	// Records the last unix-nano time a Connect attempt failed so we
+	// can throttle re-dials while TPD's publisher is down. Read
+	// lock-free on the hot path (atomic), written from inside the
+	// connect-fail branch under the outer mutex.
+	tpdUptimeLastFail atomic.Int64
 }
 
 // pingState manages Skywire transport ping connections.
