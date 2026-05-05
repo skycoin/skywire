@@ -246,6 +246,7 @@
       "rewards": "Rewards",
       "skynet": "Skynet",
       "web-proxy": "Web Proxy",
+      "vpn": "VPN",
       "resources": "Resources",
       "terminal": "Terminal",
       "wallet": "Wallet",
@@ -415,6 +416,35 @@
   "terminal": {
     "help": "Live shell on the visor (dmsgpty). Ctrl+D or type \"exit\" to close.",
     "open-fullscreen": "Open in new window"
+  },
+
+  "vpn-tab": {
+    "client": {
+      "title": "VPN Client",
+      "help": "Connect this visor as a VPN client to a remote vpn-server. The 'Full UI' button opens the standalone server picker.",
+      "not-configured": "The vpn-client app is not configured on this visor."
+    },
+    "server": {
+      "title": "VPN Server",
+      "help": "Run this visor as a VPN exit node. Other visors with vpn-client can dial in.",
+      "not-configured": "The vpn-server app is not configured on this visor."
+    },
+    "status": {
+      "stopped": "Stopped",
+      "running": "Running",
+      "errored": "Errored",
+      "starting": "Starting…",
+      "not-configured": "Not configured",
+      "unknown": "Unknown"
+    },
+    "start": "Start",
+    "stop": "Stop",
+    "settings": "Settings",
+    "full-ui": "Full UI",
+    "started": "VPN app started",
+    "stopped": "VPN app stopped",
+    "start-error": "Failed to start app",
+    "stop-error": "Failed to stop app"
   },
 
   "wallet": {

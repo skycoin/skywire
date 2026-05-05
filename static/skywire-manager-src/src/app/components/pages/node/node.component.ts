@@ -216,6 +216,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/web-proxy') ||
+      this.lastUrl.includes('/vpn-tab') ||
       this.lastUrl.includes('/resources') ||
       this.lastUrl.includes('/terminal') ||
       this.lastUrl.includes('/wallet') ||
@@ -281,6 +282,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'web-proxy'] : null,
         },
         {
+          icon: 'vpn_lock',
+          label: 'node.tabs.vpn',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'vpn-tab'] : null,
+        },
+        {
           icon: 'memory',
           label: 'node.tabs.resources',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
@@ -340,20 +346,23 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/web-proxy')) {
         this.selectedTabIndex = 9;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/vpn-tab')) {
         this.selectedTabIndex = 10;
       }
-      if (this.lastUrl.includes('/terminal')) {
+      if (this.lastUrl.includes('/resources')) {
         this.selectedTabIndex = 11;
       }
-      if (this.lastUrl.includes('/wallet')) {
+      if (this.lastUrl.includes('/terminal')) {
         this.selectedTabIndex = 12;
       }
-      if (this.lastUrl.includes('/logs')) {
+      if (this.lastUrl.includes('/wallet')) {
         this.selectedTabIndex = 13;
       }
-      if (this.lastUrl.includes('/dmsg')) {
+      if (this.lastUrl.includes('/logs')) {
         this.selectedTabIndex = 14;
+      }
+      if (this.lastUrl.includes('/dmsg')) {
+        this.selectedTabIndex = 15;
       }
 
       // Inform that the current subpage is not for showing a full list.

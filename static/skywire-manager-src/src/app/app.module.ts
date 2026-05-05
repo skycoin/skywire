@@ -79,6 +79,7 @@ import { UptimeComponent } from './components/pages/node/uptime/uptime.component
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
+import { VpnComponent } from './components/pages/node/vpn/vpn.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
@@ -183,6 +184,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         TerminalComponent,
         WalletComponent,
         WebProxyComponent,
+        VpnComponent,
         LogsComponent,
         NetworkViewComponent,
         MultiVisorResourcesComponent,
