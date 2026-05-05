@@ -111,6 +111,17 @@ var (
 	enableCalculateRoutes      bool
 	isSkychatEnable            bool
 	skychatAddr                string
+	// Skycoin embedded apps — daemon (full node) + web (thin-client
+	// wallet). Default-off for both. SkycoinWebUser drops the wallet
+	// process to a different UID via the launcher's per-app
+	// credential field; left empty means the wallet runs as the
+	// visor's own UID.
+	isSkycoinDaemonEnable bool
+	isSkycoinWebEnable    bool
+	skycoinWebAddr        string
+	skycoinWebNodeURL     string
+	skycoinWebWalletDir   string
+	skycoinWebUser        string
 	rewardSkyAddr              string
 	hvHTTPAddr                 string
 	stunServers                string

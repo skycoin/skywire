@@ -294,6 +294,23 @@ func init() {
 	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
 	gHiddenFlags = append(gHiddenFlags, "chataddr")
 
+	// Skycoin embedded apps. Default-off for both — operator opts in
+	// per-app via these flags or via SKYENV. The wallet's user-drop
+	// (SKYCOINWEBUSER) is the security-critical knob: the wallet
+	// touches the operator's ~/.skycoin/wallets dir, so when the
+	// visor itself runs as _skywire the wallet should be configured
+	// to drop to the operator's UID.
+	genConfigCmd.Flags().BoolVar(&isSkycoinDaemonEnable, "skycoind", scriptExecBool("${SKYCOIND:-false}"), "autostart skycoin daemon (full node)")
+	genConfigCmd.Flags().BoolVar(&isSkycoinWebEnable, "skycoinweb", scriptExecBool("${SKYCOINWEB:-false}"), "autostart skycoin-web thin-client wallet")
+	genConfigCmd.Flags().StringVar(&skycoinWebAddr, "skycoinwebaddr", scriptExecString("${SKYCOINWEBADDR:-127.0.0.1:8001}"), "skycoin-web bind address (host:port)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebaddr")
+	genConfigCmd.Flags().StringVar(&skycoinWebNodeURL, "skycoinwebnode", scriptExecString("${SKYCOINWEBNODE}"), "node URL the skycoin-web wallet talks to (empty = upstream default at https://node.skycoin.com)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebnode")
+	genConfigCmd.Flags().StringVar(&skycoinWebWalletDir, "skycoinwebwallet", scriptExecString("${SKYCOINWEBWALLET}"), "skycoin-web --wallet-dir override (empty = upstream default at ~/.skycoin/wallets)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebwallet")
+	genConfigCmd.Flags().StringVar(&skycoinWebUser, "skycoinwebuser", scriptExecString("${SKYCOINWEBUSER}"), "drop skycoin-web to this user via launcher external-mode (POSIX setuid; empty = inherit visor UID)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebuser")
+
 	// Reward address
 	genConfigCmd.Flags().StringVar(&rewardSkyAddr, "rewardaddr", scriptExecString("${REWARDSKYADDR}"), "skycoin reward address or xpub key")
 
@@ -1318,31 +1335,42 @@ func configureApps(log *logging.Logger) {
 				Args:      []string{"app", "vpn-server"},
 			},
 			// Skycoin daemon — full node, syncs the chain locally.
-			// Default-off; operator opts in by flipping AutoStart
-			// or starting via `skywire cli visor app start
-			// skycoin-daemon`. Args / data-dir / wallet-dir are
-			// left to the operator since the right defaults depend
-			// on which user the app drops to (see User field in
-			// the Apps tab dialog).
+			// AutoStart driven by SKYCOIND. Args minimal at gen
+			// time; operator extends via the Apps tab settings or
+			// by editing the args in the config directly.
 			{
 				Name:      skyenv.SkycoinDaemonName,
 				Binary:    "skywire",
-				AutoStart: false,
+				AutoStart: isSkycoinDaemonEnable,
 				Port:      routing.Port(skyenv.SkycoinDaemonPort),
 				Args:      []string{"skycoin", "daemon"},
 			},
-			// Skycoin thin-client web wallet. Default-off. Runs as
-			// the operator's own user (set User=) so the wallet
-			// dir under ~/.skycoin/wallets stays writable to them
-			// — the visor itself can run as _skywire while this
-			// drops via the launcher's per-app credential field.
-			{
-				Name:      skyenv.SkycoinWebName,
-				Binary:    "skywire",
-				AutoStart: false,
-				Port:      routing.Port(skyenv.SkycoinWebPort),
-				Args:      []string{"skycoin", "web"},
-			},
+			// Skycoin thin-client web wallet. AutoStart driven by
+			// SKYCOINWEB. The User= field lets the wallet drop to
+			// the operator's UID so ~/.skycoin/wallets is writable
+			// even when the visor itself runs as _skywire.
+			func() appserver.AppConfig {
+				args := []string{"skycoin", "web"}
+				if skycoinWebAddr != "" {
+					if h, p, err := net.SplitHostPort(offsetAddr(skycoinWebAddr)); err == nil {
+						args = append(args, "--host", h, "--port", p)
+					}
+				}
+				if skycoinWebNodeURL != "" {
+					args = append(args, "--node-url", skycoinWebNodeURL)
+				}
+				if skycoinWebWalletDir != "" {
+					args = append(args, "--wallet-dir", skycoinWebWalletDir)
+				}
+				return appserver.AppConfig{
+					Name:      skyenv.SkycoinWebName,
+					Binary:    "skywire",
+					AutoStart: isSkycoinWebEnable,
+					Port:      routing.Port(skyenv.SkycoinWebPort),
+					Args:      args,
+					User:      skycoinWebUser,
+				}
+			}(),
 		}
 	} else {
 		// Internal apps configuration (default - apps run within visor process)

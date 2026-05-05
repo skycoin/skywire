@@ -28,12 +28,60 @@
   }
 }
 
-// Multi-column responsive grid for the Visor info / Ports key/value
-// pairs. auto-fill + minmax(360px,1fr) means each cell wants ≥360px
-// and the browser packs as many columns as fit; on a typical 1920px
-// monitor that's 4 columns, on 1366px ~3, on a tablet 2, mobile 1.
-// `info-line` items are inline-styled spans inheriting the existing
-// title/value layout — no per-cell changes needed.
+// Three-card responsive layout for the Visor info section. Each
+// card is a self-contained label/value panel; together they pack
+// into 1, 2, or 3 columns based on viewport width via auto-fit.
+// The Identity card spans both columns when the layout is 2-up
+// (PK is wide; needs the room).
+.info-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.info-card {
+  background: rgba(0, 212, 255, 0.03);
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  border-radius: 8px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0; // let long values inside (PK, IPs) wrap rather than overflow
+
+  .section-title {
+    margin-bottom: 6px;
+  }
+
+  .info-line {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  // Drop the bg/border on the dmsg-servers panel inside an info-card
+  // so it doesn't double-up the card's own background. Keep the
+  // left-border accent.
+  .dmsg-servers-list {
+    background: transparent;
+    padding: 6px 8px;
+    margin-left: 4px;
+  }
+}
+
+// Identity card — make it the wide one when 2 cards fit per row.
+// 3-card-per-row layouts pack identity into a normal cell.
+.identity-card {
+  @media (min-width: 800px) and (max-width: 1199px) {
+    grid-column: 1 / -1;
+  }
+}
+
+// Legacy class kept around for sub-components that still reference
+// it; equivalent to the per-card .info-line treatment above.
 .info-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
@@ -41,19 +89,14 @@
   align-items: baseline;
 
   > .info-line {
-    // info-line was a span with inline-flex behaviour; force block so
-    // the grid lays it out as one cell.
     display: flex;
     align-items: baseline;
     gap: 6px;
     flex-wrap: wrap;
-    min-width: 0; // let long values truncate via word-break instead of expanding the cell
+    min-width: 0;
   }
 }
 
-// Used for child blocks that should span every column of an
-// .info-grid parent (e.g. the dmsg-servers list, which is its own
-// multi-line block and would look fragmented if split across cells).
 .grid-span-all {
   grid-column: 1 / -1;
 }

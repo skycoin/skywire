@@ -144,6 +144,41 @@ const envfileLinux = `#
 #--	Set VPN Server network interface - i.e. eth0
 #VPNSEVERNETIFC=''
 
+### Skycoin embedded apps ###############################################
+#	The skywire binary ships skycoin daemon + thin-client web wallet
+#	as 'skywire skycoin daemon' / 'skywire skycoin web'. Both default
+#	off in config-gen. The wallet's user-drop field is the security
+#	knob to remember: it touches the operator's wallet directory
+#	(~/.skycoin/wallets) and should run as the operator's UID — even
+#	when the visor itself runs as _skywire.
+
+#--	Autostart skycoin daemon (full node, syncs the chain)
+#SKYCOIND=true
+
+#--	Autostart skycoin-web thin-client wallet
+#SKYCOINWEB=true
+
+#--	skycoin-web bind address (default 127.0.0.1:8001)
+#SKYCOINWEBADDR='127.0.0.1:8001'
+
+#--	Node URL the wallet talks to. Empty = upstream default
+#	(https://node.skycoin.com). For local-daemon use, point at
+#	the daemon's bind, e.g. http://127.0.0.1:6420.
+#SKYCOINWEBNODE='http://127.0.0.1:6420'
+
+#--	Wallet directory override. Empty = upstream default at
+#	$HOME/.skycoin/wallets of whichever user the app runs as
+#	(see SKYCOINWEBUSER below).
+#SKYCOINWEBWALLET=''
+
+#--	Drop skycoin-web to this user (POSIX setuid before exec).
+#	Empty = run as the visor's own UID. Required when the visor
+#	runs as _skywire and the wallet should access the operator's
+#	~/.skycoin/wallets directory. The launcher only honours this
+#	in external mode (Binary set on the AppConfig entry, which
+#	the default skycoin-web entry already has).
+#SKYCOINWEBUSER='youruser'
+
 ### Advanced Tuning #####################################################
 
 #--	CLI RPC address (default localhost:3435)

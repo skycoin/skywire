@@ -141,6 +141,8 @@
       "node-info": {
         "title": "Visor",
         "title-local": "Local Visor",
+        "network-section": "Network",
+        "system-section": "System",
         "label": "Label:",
         "public-key": "Public key:",
         "symmetic-nat": "Symmetic NAT:",

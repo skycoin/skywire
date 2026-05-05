@@ -1,106 +1,117 @@
 @if (node) {
   <div class="font-smaller d-flex flex-column mt-4.5">
-    <!-- Basic info section. info-grid lays out the key/value pairs
-         in 1–3 responsive columns depending on viewport width, so a
-         widescreen visor-info page actually fills the horizontal
-         area instead of leaving a narrow single column on the left. -->
-    <div class="d-flex flex-column">
-      <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
-      <div class="info-grid">
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
-        <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
-          <span class="text-with-small-right-margin">{{ node.label }}</span>
-          <mat-icon class="edit-icon" [inline]="true">edit</mat-icon>
-        </span>
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
-        <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }} </span>
-        {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
-      </span>
-      @if (!node.isSymmeticNat) {
+    <!-- Three logical cards (Identity, Network, System) in a
+         responsive grid. Each card has its own internal label/value
+         layout, so the visor info reads as grouped panels instead of
+         a fragmented row of unrelated cells. -->
+    <div class="info-cards">
+      <!-- Identity card — visor title, PK, label. Spans both
+           columns on the standard 2-col layout because the PK is
+           wide and the card hosts the inline copy-text widgets. -->
+      <div class="info-card identity-card">
+        <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
         <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.public-ip' | translate }} </span>
-          <app-copy-to-clipboard-text text="{{ node.publicIp }}"></app-copy-to-clipboard-text>
+          <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
+          <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
+            <span class="text-with-small-right-margin">{{ node.label }}</span>
+            <mat-icon class="edit-icon" [inline]="true">edit</mat-icon>
+          </span>
         </span>
-      }
-      @if (node.ip) {
         <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.ip' | translate }} </span>
-          <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
+          <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
+          <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
         </span>
-      }
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
-        @if (node.dmsgServers && node.dmsgServers.length > 0) {
-          {{ node.dmsgServers.length }} {{ 'node.details.node-info.connected' | translate }}
-        }
-        @if (!node.dmsgServers || node.dmsgServers.length === 0) {
-          {{ 'node.details.node-info.no-dmsg-server' | translate }}
-        }
-      </span>
-      @if (node.dmsgServers && node.dmsgServers.length > 0) {
-        <!-- Span all grid columns so the server list reads as a
-             single block instead of fragmenting across columns. -->
-        <div class="dmsg-servers-list grid-span-all">
-          @for (server of node.dmsgServers; track server) {
-            <div class="dmsg-server-item">
-              <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
-              @if (server.latency > 0) {
-                <span class="dmsg-latency"
-              [ngClass]="{
-                'latency-high': server.latency > 300000000,
-                'latency-very-high': server.latency > 800000000
-              }">
-                  {{ formatLatency(server.latency) }}
-                </span>
-              }
-            </div>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
+          {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
+          @if (timeOnline.totalMinutes > 60) {
+            <mat-icon
+              [inline]="true"
+              [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: timeOnline.totalMinutes}"
+              >
+              info
+            </mat-icon>
           }
-        </div>
-      }
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
-        {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
-        {{ node.version ? node.version : ('common.unknown' | translate) }}
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
-        {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
-        {{ node.os ? node.os : ('common.unknown' | translate) }}
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
-        {{ node.arch ? node.arch : ('common.unknown' | translate) }}
-      </span>
-      @if (node.skybianBuildVersion) {
-        <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
-          {{ node.skybianBuildVersion }}
         </span>
-      }
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
-        {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
-        @if (timeOnline.totalMinutes > 60) {
-          <mat-icon
-            [inline]="true"
-            [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: timeOnline.totalMinutes}"
-            >
-            info
-          </mat-icon>
+      </div>
+
+      <!-- Network card — DMSG, NAT, IP, ping. -->
+      <div class="info-card network-card">
+        <span class="section-title">{{ 'node.details.node-info.network-section' | translate }}</span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }} </span>
+          {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
+        </span>
+        @if (!node.isSymmeticNat) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.public-ip' | translate }} </span>
+            <app-copy-to-clipboard-text text="{{ node.publicIp }}"></app-copy-to-clipboard-text>
+          </span>
         }
-      </span>
+        @if (node.ip) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.ip' | translate }} </span>
+            <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
+          </span>
+        }
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
+          {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
+          @if (node.dmsgServers && node.dmsgServers.length > 0) {
+            {{ node.dmsgServers.length }} {{ 'node.details.node-info.connected' | translate }}
+          }
+          @if (!node.dmsgServers || node.dmsgServers.length === 0) {
+            {{ 'node.details.node-info.no-dmsg-server' | translate }}
+          }
+        </span>
+        @if (node.dmsgServers && node.dmsgServers.length > 0) {
+          <div class="dmsg-servers-list">
+            @for (server of node.dmsgServers; track server) {
+              <div class="dmsg-server-item">
+                <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
+                @if (server.latency > 0) {
+                  <span class="dmsg-latency"
+                [ngClass]="{
+                  'latency-high': server.latency > 300000000,
+                  'latency-very-high': server.latency > 800000000
+                }">
+                    {{ formatLatency(server.latency) }}
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <!-- System card — version, OS, arch. -->
+      <div class="info-card system-card">
+        <span class="section-title">{{ 'node.details.node-info.system-section' | translate }}</span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
+          {{ node.version ? node.version : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
+          {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
+          {{ node.os ? node.os : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
+          {{ node.arch ? node.arch : ('common.unknown' | translate) }}
+        </span>
+        @if (node.skybianBuildVersion) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
+            {{ node.skybianBuildVersion }}
+          </span>
+        }
       </div>
     </div>
     <!-- Ports section (collapsible). -->
