@@ -1,10 +1,16 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { MatDialog } from '@angular/material/dialog';
 
-import { Node } from '../../../../app.datatypes';
+import { Node, Application } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
+import { AppsService } from 'src/app/services/apps.service';
+import { SnackbarService } from 'src/app/services/snackbar.service';
+import { UserAppSettingsComponent } from '../apps/node-apps/user-app-settings/user-app-settings.component';
+
+const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
 
 /**
  * Per-visor Wallet tab. Iframes the embedded `skywire skycoin web`
@@ -48,9 +54,20 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // had open (mirrors the bug we fixed on the terminal tab earlier).
   private boundPk = '';
 
+  // Skycoin daemon instances on this visor — the wallet is a
+  // thin-client of one or more daemons, so they live on the same
+  // tab. Multi-instance: one daemon per fiberchain.
+  daemons: Application[] = [];
+  daemonsBusy = new Set<string>();
+
   private nodeSub: Subscription;
 
-  constructor(private sanitizer: DomSanitizer) { super(); }
+  constructor(
+    private sanitizer: DomSanitizer,
+    private appsService: AppsService,
+    private snackbar: SnackbarService,
+    private dialog: MatDialog,
+  ) { super(); }
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
@@ -69,7 +86,10 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   private recompute() {
     if (!this.node) { this.state = 'unknown'; return; }
 
-    const apps = (this.node.apps || []) as Array<{ name: string, status: number, args?: string[] }>;
+    const apps = (this.node.apps || []) as Application[];
+    this.daemons = apps
+      .filter((a) => a.name === SKYCOIN_DAEMON_PREFIX || a.name.startsWith(SKYCOIN_DAEMON_PREFIX + '-'))
+      .sort((a, b) => a.name.localeCompare(b.name));
     const app = apps.find((a) => a.name === 'skycoin-web');
 
     if (!app) {
@@ -108,6 +128,71 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   openFullWindow() {
     if (!this.fullWindowUrl) { return; }
     window.open(this.fullWindowUrl, '_blank', 'noopener noreferrer');
+  }
+
+  // ---- Skycoin daemon multi-instance controls ----
+
+  isDaemonRunning(d: Application): boolean { return d.status === 1; }
+  isDaemonStarting(d: Application): boolean { return d.status === 3; }
+
+  daemonStatusKey(d: Application): string {
+    switch (d.status) {
+      case 0: return 'wallet.daemons.status.stopped';
+      case 1: return 'wallet.daemons.status.running';
+      case 2: return 'wallet.daemons.status.errored';
+      case 3: return 'wallet.daemons.status.starting';
+      default: return 'wallet.daemons.status.unknown';
+    }
+  }
+
+  toggleDaemon(d: Application) {
+    if (!this.node || this.daemonsBusy.has(d.name)) { return; }
+    const start = !this.isDaemonRunning(d);
+    const name = d.name;
+    this.daemonsBusy.add(name);
+    this.appsService.changeAppState(this.node.localPk, name, start).subscribe({
+      next: () => {
+        this.daemonsBusy.delete(name);
+        this.snackbar.showDone(start ? 'wallet.daemons.started' : 'wallet.daemons.stopped');
+      },
+      error: () => {
+        this.daemonsBusy.delete(name);
+        this.snackbar.showError(start ? 'wallet.daemons.start-error' : 'wallet.daemons.stop-error');
+      },
+    });
+  }
+
+  configureDaemon(d: Application) {
+    UserAppSettingsComponent.openDialog(this.dialog, d);
+  }
+
+  addDaemon() {
+    if (!this.node) { return; }
+    let suggested = SKYCOIN_DAEMON_PREFIX;
+    if (this.daemons.some((d) => d.name === SKYCOIN_DAEMON_PREFIX)) {
+      const used = new Set(this.daemons.map((d) => d.name));
+      let n = 2;
+      while (used.has(`${SKYCOIN_DAEMON_PREFIX}-${n}`)) { n++; }
+      suggested = `${SKYCOIN_DAEMON_PREFIX}-${n}`;
+    }
+    // eslint-disable-next-line no-alert
+    const name = (window.prompt('Daemon instance name (one per fiberchain):', suggested) || '').trim();
+    if (!name) { return; }
+    if (this.daemonsBusy.has('add')) { return; }
+    this.daemonsBusy.add('add');
+    this.appsService.addApp(this.node.localPk, name, SKYCOIN_DAEMON_PREFIX).subscribe({
+      next: (app: Application) => {
+        this.daemonsBusy.delete('add');
+        this.snackbar.showDone('wallet.daemons.added');
+        // Open the generic settings dialog so the operator can set
+        // FIBER_TOML / API set / data dir args before starting.
+        UserAppSettingsComponent.openDialog(this.dialog, app);
+      },
+      error: () => {
+        this.daemonsBusy.delete('add');
+        this.snackbar.showError('wallet.daemons.add-error');
+      },
+    });
   }
 }
 

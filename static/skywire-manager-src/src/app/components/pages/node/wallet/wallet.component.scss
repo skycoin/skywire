@@ -75,3 +75,90 @@
 .dim { color: rgba(255, 255, 255, 0.55); }
 
 .mt-3 { margin-top: 12px; }
+
+// ---- Skycoin daemon multi-instance section ----
+
+.daemons-box {
+  padding: 4px 0;
+}
+
+.daemons-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 8px;
+
+  .mat-icon { color: #00d4ff; }
+}
+
+.daemons-title {
+  font-size: 1.05em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.5px;
+  flex: 0 0 auto;
+}
+
+.daemons-empty {
+  padding: 6px 0 10px 0;
+  font-style: italic;
+}
+
+.daemon-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 4px 0;
+  background: rgba(0, 212, 255, 0.05);
+  border-left: 2px solid rgba(0, 212, 255, 0.3);
+  border-radius: 4px;
+  flex-wrap: wrap;
+
+  .daemon-name {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.95em;
+  }
+
+  .daemon-status {
+    font-size: 0.85em;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.65);
+
+    &.status-running { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+    &.status-stopped { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+    &.status-starting { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  }
+
+  .spacer { flex: 1; }
+
+  button.mat-mdc-outlined-button:not(:disabled) {
+    color: rgba(255, 255, 255, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    .mat-icon { color: inherit; }
+  }
+}
+
+.daemons-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+
+  button.mat-mdc-outlined-button:not(:disabled) {
+    color: rgba(255, 255, 255, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    .mat-icon { color: inherit; }
+  }
+
+  .daemons-hint {
+    flex: 1;
+    line-height: 1.4;
+  }
+}

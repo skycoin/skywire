@@ -485,7 +485,29 @@
     "not-configured": "Skycoin wallet app not configured",
     "not-configured-help": "Add the `skycoin-web` app entry on this visor (Apps tab → add) and start it to access the wallet here. Default-off in fresh configs because the app accesses the operator's wallet directory and shouldn't run unless you've reviewed where it's pointed.",
     "not-running": "Skycoin wallet app not running",
-    "not-running-help": "The `skycoin-web` app is configured but not currently running. Start it from the Apps tab. The wallet will appear here automatically once it's up."
+    "not-running-help": "The `skycoin-web` app is configured but not currently running. Start it from the Apps tab. The wallet will appear here automatically once it's up.",
+    "daemons": {
+      "title": "Skycoin Daemons",
+      "empty": "No skycoin-daemon instances configured. Each fiberchain you want to sync needs its own daemon instance.",
+      "hint": "Each instance runs `skywire skycoin daemon` with its own FIBER_TOML / data dir. Configure those args in the settings dialog before starting.",
+      "add": "Add Daemon Instance",
+      "start": "Start",
+      "stop": "Stop",
+      "settings": "Settings",
+      "status": {
+        "stopped": "Stopped",
+        "running": "Running",
+        "errored": "Errored",
+        "starting": "Starting…",
+        "unknown": "Unknown"
+      },
+      "started": "Daemon started",
+      "stopped": "Daemon stopped",
+      "start-error": "Failed to start daemon",
+      "stop-error": "Failed to stop daemon",
+      "added": "Daemon instance added — set FIBER_TOML / data dir in settings, then Start",
+      "add-error": "Failed to add daemon instance (name may be in use)"
+    }
   },
 
   "web-proxy": {

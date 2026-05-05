@@ -1,4 +1,56 @@
 @if (node) {
+  <!-- Skycoin daemon instances. One per fiberchain; multi-instance
+       via the same POST /visors/{pk}/apps route used by Skysocks. -->
+  <div class="rounded-elevated-box mt-3 daemons-box">
+    <div class="box-internal-container">
+      <div class="daemons-header">
+        <mat-icon [inline]="true">memory</mat-icon>
+        <span class="daemons-title">{{ 'wallet.daemons.title' | translate }}</span>
+        <span class="dim small">{{ daemons.length }}</span>
+      </div>
+
+      @if (daemons.length === 0) {
+        <div class="dim small daemons-empty">
+          {{ 'wallet.daemons.empty' | translate }}
+        </div>
+      }
+
+      @for (d of daemons; track d.name) {
+        <div class="daemon-row">
+          <span class="daemon-name mono">{{ d.name }}</span>
+          <span class="daemon-status"
+                [class.status-running]="isDaemonRunning(d)"
+                [class.status-stopped]="!isDaemonRunning(d) && !isDaemonStarting(d)"
+                [class.status-starting]="isDaemonStarting(d)">
+            {{ daemonStatusKey(d) | translate }}
+          </span>
+          <span class="spacer"></span>
+          <button mat-raised-button
+                  color="{{ isDaemonRunning(d) ? 'warn' : 'primary' }}"
+                  [disabled]="daemonsBusy.has(d.name) || isDaemonStarting(d)"
+                  (click)="toggleDaemon(d)">
+            <mat-icon [inline]="true">{{ isDaemonRunning(d) ? 'stop' : 'play_arrow' }}</mat-icon>
+            {{ (isDaemonRunning(d) ? 'wallet.daemons.stop' : 'wallet.daemons.start') | translate }}
+          </button>
+          <button mat-stroked-button (click)="configureDaemon(d)">
+            <mat-icon [inline]="true">settings</mat-icon>
+            {{ 'wallet.daemons.settings' | translate }}
+          </button>
+        </div>
+      }
+
+      <div class="daemons-actions">
+        <button mat-stroked-button (click)="addDaemon()" [disabled]="daemonsBusy.has('add')">
+          <mat-icon [inline]="true">add</mat-icon>
+          {{ 'wallet.daemons.add' | translate }}
+        </button>
+        <span class="dim small daemons-hint">
+          {{ 'wallet.daemons.hint' | translate }}
+        </span>
+      </div>
+    </div>
+  </div>
+
   <div class="rounded-elevated-box mt-3 wallet-box">
     <div class="box-internal-container wallet-shell">
 
