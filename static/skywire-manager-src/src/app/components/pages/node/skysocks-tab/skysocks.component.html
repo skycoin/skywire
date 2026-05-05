@@ -1,0 +1,85 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3 ssx-box">
+    <div class="box-internal-container">
+
+      <!-- Server -->
+      <div class="ssx-card">
+        <div class="ssx-card-header">
+          <mat-icon [inline]="true">dns</mat-icon>
+          <span class="ssx-card-title">{{ 'skysocks-tab.server.title' | translate }}</span>
+          <span class="ssx-status"
+                [class.status-running]="isRunning(server)"
+                [class.status-stopped]="server && !isRunning(server) && !isStarting(server)"
+                [class.status-starting]="isStarting(server)">
+            {{ statusKey(server) | translate }}
+          </span>
+        </div>
+        <div class="ssx-card-help dim small">
+          {{ (server ? 'skysocks-tab.server.help' : 'skysocks-tab.server.not-configured') | translate }}
+        </div>
+        <div class="ssx-actions">
+          @if (server) {
+            <button mat-raised-button
+                    color="{{ isRunning(server) ? 'warn' : 'primary' }}"
+                    [disabled]="busy.has(server.name) || isStarting(server)"
+                    (click)="toggle(server)">
+              <mat-icon [inline]="true">{{ isRunning(server) ? 'stop' : 'play_arrow' }}</mat-icon>
+              {{ (isRunning(server) ? 'skysocks-tab.stop' : 'skysocks-tab.start') | translate }}
+            </button>
+            <button mat-stroked-button (click)="configureServer()">
+              <mat-icon [inline]="true">settings</mat-icon>
+              {{ 'skysocks-tab.settings' | translate }}
+            </button>
+          }
+        </div>
+      </div>
+
+      <!-- Clients (one card per instance) -->
+      <div class="ssx-card">
+        <div class="ssx-card-header">
+          <mat-icon [inline]="true">cloud_download</mat-icon>
+          <span class="ssx-card-title">{{ 'skysocks-tab.clients.title' | translate }}</span>
+          <span class="ssx-count dim">{{ clients.length }}</span>
+        </div>
+
+        @if (clients.length === 0) {
+          <div class="ssx-card-help dim small">
+            {{ 'skysocks-tab.clients.not-configured' | translate }}
+          </div>
+        }
+
+        @for (c of clients; track c.name) {
+          <div class="ssx-instance">
+            <div class="ssx-instance-row">
+              <span class="ssx-instance-name mono">{{ c.name }}</span>
+              <span class="ssx-status"
+                    [class.status-running]="isRunning(c)"
+                    [class.status-stopped]="!isRunning(c) && !isStarting(c)"
+                    [class.status-starting]="isStarting(c)">
+                {{ statusKey(c) | translate }}
+              </span>
+            </div>
+            <div class="ssx-actions">
+              <button mat-raised-button
+                      color="{{ isRunning(c) ? 'warn' : 'primary' }}"
+                      [disabled]="busy.has(c.name) || isStarting(c)"
+                      (click)="toggle(c)">
+                <mat-icon [inline]="true">{{ isRunning(c) ? 'stop' : 'play_arrow' }}</mat-icon>
+                {{ (isRunning(c) ? 'skysocks-tab.stop' : 'skysocks-tab.start') | translate }}
+              </button>
+              <button mat-stroked-button (click)="configureClient(c)">
+                <mat-icon [inline]="true">settings</mat-icon>
+                {{ 'skysocks-tab.settings' | translate }}
+              </button>
+            </div>
+          </div>
+        }
+
+        <div class="ssx-multi-hint dim small">
+          {{ 'skysocks-tab.clients.multi-instance-hint' | translate }}
+        </div>
+      </div>
+
+    </div>
+  </div>
+}

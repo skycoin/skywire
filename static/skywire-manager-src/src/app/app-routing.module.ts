@@ -17,6 +17,7 @@ import { TerminalComponent } from './components/pages/node/terminal/terminal.com
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { VpnComponent } from './components/pages/node/vpn/vpn.component';
+import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
@@ -162,6 +163,10 @@ const routes: Routes = [
           {
             path: 'vpn-tab',
             component: VpnComponent
+          },
+          {
+            path: 'skysocks',
+            component: SkysocksTabComponent
           },
           {
             path: 'logs',

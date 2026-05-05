@@ -217,6 +217,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/vpn-tab') ||
+      this.lastUrl.includes('/skysocks') ||
       this.lastUrl.includes('/resources') ||
       this.lastUrl.includes('/terminal') ||
       this.lastUrl.includes('/wallet') ||
@@ -287,6 +288,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'vpn-tab'] : null,
         },
         {
+          icon: 'cloud_download',
+          label: 'node.tabs.skysocks',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'skysocks'] : null,
+        },
+        {
           icon: 'memory',
           label: 'node.tabs.resources',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
@@ -349,20 +355,23 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/vpn-tab')) {
         this.selectedTabIndex = 10;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/skysocks')) {
         this.selectedTabIndex = 11;
       }
-      if (this.lastUrl.includes('/terminal')) {
+      if (this.lastUrl.includes('/resources')) {
         this.selectedTabIndex = 12;
       }
-      if (this.lastUrl.includes('/wallet')) {
+      if (this.lastUrl.includes('/terminal')) {
         this.selectedTabIndex = 13;
       }
-      if (this.lastUrl.includes('/logs')) {
+      if (this.lastUrl.includes('/wallet')) {
         this.selectedTabIndex = 14;
       }
-      if (this.lastUrl.includes('/dmsg')) {
+      if (this.lastUrl.includes('/logs')) {
         this.selectedTabIndex = 15;
+      }
+      if (this.lastUrl.includes('/dmsg')) {
+        this.selectedTabIndex = 16;
       }
 
       // Inform that the current subpage is not for showing a full list.

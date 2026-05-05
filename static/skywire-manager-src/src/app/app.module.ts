@@ -80,6 +80,7 @@ import { TerminalComponent } from './components/pages/node/terminal/terminal.com
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { VpnComponent } from './components/pages/node/vpn/vpn.component';
+import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
@@ -185,6 +186,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         WalletComponent,
         WebProxyComponent,
         VpnComponent,
+        SkysocksTabComponent,
         LogsComponent,
         NetworkViewComponent,
         MultiVisorResourcesComponent,

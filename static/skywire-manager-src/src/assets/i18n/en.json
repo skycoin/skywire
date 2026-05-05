@@ -247,6 +247,7 @@
       "skynet": "Skynet",
       "web-proxy": "Web Proxy",
       "vpn": "VPN",
+      "skysocks": "Skysocks",
       "resources": "Resources",
       "terminal": "Terminal",
       "wallet": "Wallet",
@@ -416,6 +417,34 @@
   "terminal": {
     "help": "Live shell on the visor (dmsgpty). Ctrl+D or type \"exit\" to close.",
     "open-fullscreen": "Open in new window"
+  },
+
+  "skysocks-tab": {
+    "server": {
+      "title": "Skysocks Server",
+      "help": "Run this visor as a SOCKS5 exit node. Other visors can route through skysocks-client.",
+      "not-configured": "The skysocks app is not configured on this visor."
+    },
+    "clients": {
+      "title": "Skysocks Clients",
+      "not-configured": "No skysocks-client app entries on this visor.",
+      "multi-instance-hint": "Multi-instance: add more clients via `cli skynet srv start --app=skysocks-client-N`. UI-driven add/remove is a follow-up."
+    },
+    "status": {
+      "stopped": "Stopped",
+      "running": "Running",
+      "errored": "Errored",
+      "starting": "Starting…",
+      "not-configured": "Not configured",
+      "unknown": "Unknown"
+    },
+    "start": "Start",
+    "stop": "Stop",
+    "settings": "Settings",
+    "started": "Skysocks app started",
+    "stopped": "Skysocks app stopped",
+    "start-error": "Failed to start app",
+    "stop-error": "Failed to stop app"
   },
 
   "vpn-tab": {
