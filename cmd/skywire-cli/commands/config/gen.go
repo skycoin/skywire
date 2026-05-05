@@ -301,11 +301,22 @@ func init() {
 	// visor itself runs as _skywire the wallet should be configured
 	// to drop to the operator's UID.
 	genConfigCmd.Flags().BoolVar(&isSkycoinDaemonEnable, "skycoind", scriptExecBool("${SKYCOIND:-false}"), "autostart skycoin daemon (full node)")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonFiber, "skycoindfiber", scriptExecString("${SKYCOIND_FIBER_TOML}"), "FIBER_TOML path for the daemon (run a fibercoin chain instead of skycoin); empty = vanilla skycoin")
+	gHiddenFlags = append(gHiddenFlags, "skycoindfiber")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonAPISets, "skycoindapi", scriptExecString("${SKYCOIND_API_SETS}"), "skycoin daemon --enable-gui-api-sets value (comma-separated; empty = daemon defaults)")
+	gHiddenFlags = append(gHiddenFlags, "skycoindapi")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonUser, "skycoindUSER", scriptExecString("${SKYCOIND_USER}"), "drop skycoin daemon to this user via launcher external-mode")
+	gHiddenFlags = append(gHiddenFlags, "skycoindUSER")
 	genConfigCmd.Flags().BoolVar(&isSkycoinWebEnable, "skycoinweb", scriptExecBool("${SKYCOINWEB:-false}"), "autostart skycoin-web thin-client wallet")
 	genConfigCmd.Flags().StringVar(&skycoinWebAddr, "skycoinwebaddr", scriptExecString("${SKYCOINWEBADDR:-127.0.0.1:8001}"), "skycoin-web bind address (host:port)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebaddr")
-	genConfigCmd.Flags().StringVar(&skycoinWebNodeURL, "skycoinwebnode", scriptExecString("${SKYCOINWEBNODE}"), "node URL the skycoin-web wallet talks to (empty = upstream default at https://node.skycoin.com)")
-	gHiddenFlags = append(gHiddenFlags, "skycoinwebnode")
+	// SKYCOINWEBNODES is a bash array (multiple node URLs supported
+	// — one per fibercoin the wallet is meant to multi-coin-browse).
+	// scriptExecArray expands ${VAR[@]} into a CSV string here; we
+	// re-split on commas at AppConfig render time and emit repeated
+	// --node-url flags as skycoin-web's StringArrayVar expects.
+	genConfigCmd.Flags().StringVar(&skycoinWebNodeURLs, "skycoinwebnodes", scriptExecArray("${SKYCOINWEBNODES[@]}"), "comma-separated node URLs the skycoin-web wallet talks to (empty = upstream default at https://node.skycoin.com)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebnodes")
 	genConfigCmd.Flags().StringVar(&skycoinWebWalletDir, "skycoinwebwallet", scriptExecString("${SKYCOINWEBWALLET}"), "skycoin-web --wallet-dir override (empty = upstream default at ~/.skycoin/wallets)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebwallet")
 	genConfigCmd.Flags().StringVar(&skycoinWebUser, "skycoinwebuser", scriptExecString("${SKYCOINWEBUSER}"), "drop skycoin-web to this user via launcher external-mode (POSIX setuid; empty = inherit visor UID)")
@@ -1335,20 +1346,36 @@ func configureApps(log *logging.Logger) {
 				Args:      []string{"app", "vpn-server"},
 			},
 			// Skycoin daemon — full node, syncs the chain locally.
-			// AutoStart driven by SKYCOIND. Args minimal at gen
-			// time; operator extends via the Apps tab settings or
-			// by editing the args in the config directly.
-			{
-				Name:      skyenv.SkycoinDaemonName,
-				Binary:    "skywire",
-				AutoStart: isSkycoinDaemonEnable,
-				Port:      routing.Port(skyenv.SkycoinDaemonPort),
-				Args:      []string{"skycoin", "daemon"},
-			},
+			// AutoStart driven by SKYCOIND. SKYCOIND_FIBER_TOML
+			// becomes a FIBER_TOML= entry in the spawned proc's
+			// env (the daemon reads it on startup to switch from
+			// vanilla skycoin to a fibercoin chain).
+			func() appserver.AppConfig {
+				args := []string{"skycoin", "daemon"}
+				if skycoinDaemonAPISets != "" {
+					args = append(args, "--enable-gui-api-sets", skycoinDaemonAPISets)
+				}
+				env := []string(nil)
+				if skycoinDaemonFiber != "" {
+					env = append(env, "FIBER_TOML="+skycoinDaemonFiber)
+				}
+				return appserver.AppConfig{
+					Name:      skyenv.SkycoinDaemonName,
+					Binary:    "skywire",
+					AutoStart: isSkycoinDaemonEnable,
+					Port:      routing.Port(skyenv.SkycoinDaemonPort),
+					Args:      args,
+					User:      skycoinDaemonUser,
+					Env:       env,
+				}
+			}(),
 			// Skycoin thin-client web wallet. AutoStart driven by
-			// SKYCOINWEB. The User= field lets the wallet drop to
-			// the operator's UID so ~/.skycoin/wallets is writable
-			// even when the visor itself runs as _skywire.
+			// SKYCOINWEB. SKYCOINWEBNODES is a CSV → repeated
+			// --node-url flags so the wallet can multi-coin-browse
+			// (default skycoin + fibercoins). The User= field lets
+			// the wallet drop to the operator's UID so
+			// ~/.skycoin/wallets is writable even when the visor
+			// itself runs as _skywire.
 			func() appserver.AppConfig {
 				args := []string{"skycoin", "web"}
 				if skycoinWebAddr != "" {
@@ -1356,8 +1383,11 @@ func configureApps(log *logging.Logger) {
 						args = append(args, "--host", h, "--port", p)
 					}
 				}
-				if skycoinWebNodeURL != "" {
-					args = append(args, "--node-url", skycoinWebNodeURL)
+				for _, u := range strings.Split(skycoinWebNodeURLs, ",") {
+					u = strings.TrimSpace(u)
+					if u != "" {
+						args = append(args, "--node-url", u)
+					}
 				}
 				if skycoinWebWalletDir != "" {
 					args = append(args, "--wallet-dir", skycoinWebWalletDir)

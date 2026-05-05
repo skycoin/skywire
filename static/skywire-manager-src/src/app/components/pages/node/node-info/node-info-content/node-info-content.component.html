@@ -1,13 +1,13 @@
 @if (node) {
   <div class="font-smaller d-flex flex-column mt-4.5">
-    <!-- Three logical cards (Identity, Network, System) in a
-         responsive grid. Each card has its own internal label/value
-         layout, so the visor info reads as grouped panels instead of
-         a fragmented row of unrelated cells. -->
+    <!-- Three logical cards (Local Visor, Network, DMSG) in a
+         responsive grid. Local Visor absorbs identity + system
+         info; Network is the public-IP / NAT / ping triplet; DMSG
+         is split out so the per-server list has room of its own. -->
     <div class="info-cards">
-      <!-- Identity card — visor title, PK, label. Spans both
-           columns on the standard 2-col layout because the PK is
-           wide and the card hosts the inline copy-text widgets. -->
+      <!-- Local Visor — title, label, PK, time online, version,
+           OS/arch. Spans both columns at the 2-col breakpoint
+           because the PK + version strings benefit from the room. -->
       <div class="info-card identity-card">
         <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
         <span class="info-line">
@@ -33,9 +33,32 @@
             </mat-icon>
           }
         </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
+          {{ node.version ? node.version : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
+          {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
+          {{ node.os ? node.os : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
+          {{ node.arch ? node.arch : ('common.unknown' | translate) }}
+        </span>
+        @if (node.skybianBuildVersion) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
+            {{ node.skybianBuildVersion }}
+          </span>
+        }
       </div>
 
-      <!-- Network card — DMSG, NAT, IP, ping. -->
+      <!-- Network — NAT/IP/ping. Compact card; sits next to DMSG
+           on wide layouts. -->
       <div class="info-card network-card">
         <span class="section-title">{{ 'node.details.node-info.network-section' | translate }}</span>
         <span class="info-line">
@@ -58,6 +81,13 @@
           <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
           {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
         </span>
+      </div>
+
+      <!-- DMSG — server count + per-server list. The list is the
+           bulky element on a healthy visor (8+ servers); giving it
+           its own card keeps the Network card readable. -->
+      <div class="info-card dmsg-card">
+        <span class="section-title">{{ 'node.details.node-info.dmsg-section' | translate }}</span>
         <span class="info-line">
           <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
           @if (node.dmsgServers && node.dmsgServers.length > 0) {
@@ -84,33 +114,6 @@
               </div>
             }
           </div>
-        }
-      </div>
-
-      <!-- System card — version, OS, arch. -->
-      <div class="info-card system-card">
-        <span class="section-title">{{ 'node.details.node-info.system-section' | translate }}</span>
-        <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
-          {{ node.version ? node.version : ('common.unknown' | translate) }}
-        </span>
-        <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
-          {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
-        </span>
-        <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
-          {{ node.os ? node.os : ('common.unknown' | translate) }}
-        </span>
-        <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
-          {{ node.arch ? node.arch : ('common.unknown' | translate) }}
-        </span>
-        @if (node.skybianBuildVersion) {
-          <span class="info-line">
-            <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
-            {{ node.skybianBuildVersion }}
-          </span>
         }
       </div>
     </div>

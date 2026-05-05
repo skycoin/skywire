@@ -151,9 +151,32 @@ const envfileLinux = `#
 #	knob to remember: it touches the operator's wallet directory
 #	(~/.skycoin/wallets) and should run as the operator's UID — even
 #	when the visor itself runs as _skywire.
+#
+#	Note: only one daemon and one wallet are configured by default.
+#	Running multiple daemons (one per fibercoin chain) is supported
+#	by the binary itself but requires editing the AppConfig array
+#	by hand — the hypervisor UI's multi-instance app management
+#	(see Apps tab → add) is the manageable path until tab-based
+#	skycoin daemon controls land.
 
 #--	Autostart skycoin daemon (full node, syncs the chain)
 #SKYCOIND=true
+
+#--	FIBER_TOML path. Empty = vanilla skycoin. Set to a fiber.toml
+#	to make the daemon serve a fibercoin chain instead.
+#SKYCOIND_FIBER_TOML='/path/to/fiber.toml'
+
+#--	GUI API sets to enable on the daemon (comma-separated list).
+#	Empty = the daemon's compiled-in defaults. See:
+#		'skywire skycoin daemon --help' for the full list.
+#	Common values: STATUS,WALLET,READ,TXN,BACKGROUND_SCANNER
+#SKYCOIND_API_SETS='STATUS,WALLET,READ'
+
+#--	Drop skycoin daemon to this user (POSIX setuid before exec).
+#	Empty = run as the visor's own UID. The chain ends up under
+#	~<user>/.skycoin/data.db, so picking the right user matters
+#	for chain ownership across upgrades.
+#SKYCOIND_USER='youruser'
 
 #--	Autostart skycoin-web thin-client wallet
 #SKYCOINWEB=true
@@ -161,10 +184,14 @@ const envfileLinux = `#
 #--	skycoin-web bind address (default 127.0.0.1:8001)
 #SKYCOINWEBADDR='127.0.0.1:8001'
 
-#--	Node URL the wallet talks to. Empty = upstream default
-#	(https://node.skycoin.com). For local-daemon use, point at
-#	the daemon's bind, e.g. http://127.0.0.1:6420.
-#SKYCOINWEBNODE='http://127.0.0.1:6420'
+#--	Node URLs the wallet talks to. Bash array — set one per
+#	fibercoin you want the wallet to multi-coin-browse. Empty
+#	= upstream default (https://node.skycoin.com). For
+#	local-daemon use, point at the daemon's bind:
+#		SKYCOINWEBNODES=('http://127.0.0.1:6420')
+#	For multi-chain:
+#		SKYCOINWEBNODES=('http://127.0.0.1:6420' 'http://127.0.0.1:6421')
+#SKYCOINWEBNODES=('')
 
 #--	Wallet directory override. Empty = upstream default at
 #	$HOME/.skycoin/wallets of whichever user the app runs as
