@@ -75,6 +75,13 @@
           </div>
         }
 
+        <div class="ssx-actions" style="margin-top: 12px;">
+          <button mat-stroked-button (click)="addClient()" [disabled]="busy.has('add')">
+            <mat-icon [inline]="true">add</mat-icon>
+            {{ 'skysocks-tab.clients.add' | translate }}
+          </button>
+        </div>
+
         <div class="ssx-multi-hint dim small">
           {{ 'skysocks-tab.clients.multi-instance-hint' | translate }}
         </div>

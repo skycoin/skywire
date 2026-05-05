@@ -25,6 +25,18 @@ export class AppsService {
   }
 
   /**
+   * Adds a new app entry to the visor's launcher config (used to
+   * create additional instances of multi-instance apps like
+   * skysocks-client-2). Returns the freshly-added AppState.
+   */
+  addApp(nodeKey: string, appName: string, binaryName: string) {
+    return this.apiService.post(`visors/${nodeKey}/apps`, {
+      name: appName,
+      binary: binaryName,
+    });
+  }
+
+  /**
    * Changes the autostart setting of an app.
    */
   changeAppAutostart(nodeKey: string, appName: string, autostart: boolean) {

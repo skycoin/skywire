@@ -36,6 +36,44 @@ func (hv *Hypervisor) getApp() http.HandlerFunc {
 	})
 }
 
+// postApp adds a new app entry to the visor's launcher config. Used to
+// create additional instances of multi-instance apps (skysocks-client-2,
+// skycoin-daemon-mychain, etc.) from the hypervisor UI without dropping
+// to the CLI. The caller picks both the instance name (must be unique
+// within the visor) and the binary it points at; subsequent
+// configuration / autostart / start are done via the existing PUT
+// /visors/{pk}/apps/{app} route.
+func (hv *Hypervisor) postApp() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		type req struct {
+			Name   string `json:"name"`
+			Binary string `json:"binary"`
+		}
+		var reqBody req
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postApp request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if strings.TrimSpace(reqBody.Name) == "" || strings.TrimSpace(reqBody.Binary) == "" {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("name and binary are required"))
+			return
+		}
+		if err := ctx.API.AddApp(reqBody.Name, reqBody.Binary); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		app, err := ctx.API.App(reqBody.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusCreated, app)
+	})
+}
+
 func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		stats, err := ctx.API.GetAppStats(ctx.App.Name)

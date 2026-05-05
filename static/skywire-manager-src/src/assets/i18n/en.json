@@ -428,7 +428,8 @@
     "clients": {
       "title": "Skysocks Clients",
       "not-configured": "No skysocks-client app entries on this visor.",
-      "multi-instance-hint": "Multi-instance: add more clients via `cli skynet srv start --app=skysocks-client-N`. UI-driven add/remove is a follow-up."
+      "add": "Add Client Instance",
+      "multi-instance-hint": "Adding an instance creates a new entry in the visor's launcher config; configure --srv (remote PK) in the settings dialog that opens automatically. Removing an instance is currently a config-edit operation (Info → Config)."
     },
     "status": {
       "stopped": "Stopped",
@@ -444,7 +445,9 @@
     "started": "Skysocks app started",
     "stopped": "Skysocks app stopped",
     "start-error": "Failed to start app",
-    "stop-error": "Failed to stop app"
+    "stop-error": "Failed to stop app",
+    "added": "Instance added — configure remote PK in the settings dialog and then Start",
+    "add-error": "Failed to add instance (name may be in use)"
   },
 
   "vpn-tab": {

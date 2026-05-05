@@ -110,4 +110,35 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
       SkysocksSettingsComponent.openDialog(this.dialog, this.server);
     }
   }
+
+  addClient() {
+    if (!this.node) { return; }
+    // Suggest the next free skysocks-client-N name based on what
+    // already exists; the operator can override in the prompt.
+    let suggested = SKYSOCKS_CLIENT_PREFIX;
+    if (this.clients.some((c) => c.name === SKYSOCKS_CLIENT_PREFIX)) {
+      const used = new Set(this.clients.map((c) => c.name));
+      let n = 2;
+      while (used.has(`${SKYSOCKS_CLIENT_PREFIX}-${n}`)) { n++; }
+      suggested = `${SKYSOCKS_CLIENT_PREFIX}-${n}`;
+    }
+    // eslint-disable-next-line no-alert
+    const name = (window.prompt('Instance name (must be unique on this visor):', suggested) || '').trim();
+    if (!name) { return; }
+    if (this.busy.has('add')) { return; }
+    this.busy.add('add');
+    this.appsService.addApp(this.node.localPk, name, SKYSOCKS_CLIENT_PREFIX).subscribe({
+      next: (app: Application) => {
+        this.busy.delete('add');
+        this.snackbar.showDone('skysocks-tab.added');
+        // Open the settings dialog on the new entry so the operator
+        // can fill in --srv (remote PK) before starting it.
+        SkysocksClientSettingsComponent.openDialog(this.dialog, app);
+      },
+      error: () => {
+        this.busy.delete('add');
+        this.snackbar.showError('skysocks-tab.add-error');
+      },
+    });
+  }
 }
