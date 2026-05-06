@@ -33,6 +33,46 @@
   }
 }
 
+// Wallet app header — name + status pill + start/stop + settings
+// toggle. Mirrors the daemon-row layout below but pinned to the
+// top of the wallet box because skycoin-web is the primary thing
+// this tab exposes (the daemons it talks to are a backing detail).
+.web-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+
+  .web-name {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.95em;
+  }
+
+  .web-status {
+    font-size: 0.85em;
+    padding: 2px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.65);
+
+    &.status-running { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+    &.status-stopped { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+    &.status-starting { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  }
+
+  .spacer { flex: 1; }
+
+  button.mat-mdc-outlined-button:not(:disabled) {
+    color: rgba(255, 255, 255, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    .mat-icon { color: inherit; }
+  }
+}
+
 .wallet-frame {
   flex: 1;
   width: 100%;

@@ -52,6 +52,14 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // had open (mirrors the bug we fixed on the terminal tab earlier).
   private boundPk = '';
 
+  // The skycoin-web app entry from this.node.apps, when present.
+  // Drives both the wallet header (start/stop/settings) and the
+  // iframe state above. Null when the app isn't configured on the
+  // visor at all (a "not-configured" template state results).
+  webApp: Application | null = null;
+  webAppBusy = false;
+  webAppSettingsOpen = false;
+
   // Skycoin daemon instances on this visor — the wallet is a
   // thin-client of one or more daemons, so they live on the same
   // tab. Multi-instance: one daemon per fiberchain.
@@ -91,7 +99,8 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     this.daemons = apps
       .filter((a) => a.name === SKYCOIN_DAEMON_PREFIX || a.name.startsWith(SKYCOIN_DAEMON_PREFIX + '-'))
       .sort((a, b) => a.name.localeCompare(b.name));
-    const app = apps.find((a) => a.name === 'skycoin-web');
+    const app = apps.find((a) => a.name === 'skycoin-web') || null;
+    this.webApp = app;
 
     if (!app) {
       this.state = 'not-configured';
@@ -130,6 +139,39 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     if (!this.fullWindowUrl) { return; }
     window.open(this.fullWindowUrl, '_blank', 'noopener noreferrer');
   }
+
+  // ---- skycoin-web app controls (start/stop + settings) ----
+
+  isWebRunning(): boolean { return !!this.webApp && this.webApp.status === 1; }
+  isWebStarting(): boolean { return !!this.webApp && this.webApp.status === 3; }
+
+  webStatusKey(): string {
+    if (!this.webApp) { return 'wallet.daemons.status.unknown'; }
+    switch (this.webApp.status) {
+      case 0: return 'wallet.daemons.status.stopped';
+      case 1: return 'wallet.daemons.status.running';
+      case 2: return 'wallet.daemons.status.errored';
+      case 3: return 'wallet.daemons.status.starting';
+      default: return 'wallet.daemons.status.unknown';
+    }
+  }
+
+  toggleWebApp() {
+    if (!this.node || !this.webApp || this.webAppBusy) { return; }
+    const start = !this.isWebRunning();
+    const name = this.webApp.name;
+    this.webAppBusy = true;
+    this.appsService.changeAppState(this.node.localPk, name, start).subscribe({
+      next: () => { this.webAppBusy = false; },
+      error: () => {
+        this.webAppBusy = false;
+        this.snackbar.showError(start ? 'wallet.daemons.start-error' : 'wallet.daemons.stop-error');
+      },
+    });
+  }
+
+  toggleWebSettings() { this.webAppSettingsOpen = !this.webAppSettingsOpen; }
+  onWebSettingsSaved() { this.webAppSettingsOpen = false; }
 
   // ---- Skycoin daemon multi-instance controls ----
 

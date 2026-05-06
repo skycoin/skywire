@@ -1,6 +1,79 @@
 @if (node) {
-  <!-- Skycoin daemon instances. One per fiberchain; multi-instance
-       via the same POST /visors/{pk}/apps route used by Skysocks. -->
+  <!-- skycoin-web thin-client. Header carries the app's status pill +
+       start/stop + settings; iframe sits below when running. -->
+  <div class="rounded-elevated-box mt-3 wallet-box">
+    <div class="box-internal-container wallet-shell">
+
+      @if (webApp) {
+        <div class="web-header">
+          <span class="web-name mono">{{ webApp.name }}</span>
+          <span class="web-status"
+                [class.status-running]="isWebRunning()"
+                [class.status-stopped]="!isWebRunning() && !isWebStarting()"
+                [class.status-starting]="isWebStarting()">
+            {{ webStatusKey() | translate }}
+          </span>
+          <span class="spacer"></span>
+          <button mat-raised-button
+                  color="{{ isWebRunning() ? 'warn' : 'primary' }}"
+                  [disabled]="webAppBusy || isWebStarting()"
+                  (click)="toggleWebApp()">
+            <mat-icon [inline]="true">{{ isWebRunning() ? 'stop' : 'play_arrow' }}</mat-icon>
+            {{ (isWebRunning() ? 'wallet.daemons.stop' : 'wallet.daemons.start') | translate }}
+          </button>
+          <button mat-stroked-button (click)="toggleWebSettings()"
+                  [class.settings-toggle-open]="webAppSettingsOpen">
+            <mat-icon [inline]="true">{{ webAppSettingsOpen ? 'expand_less' : 'settings' }}</mat-icon>
+            {{ 'wallet.daemons.settings' | translate }}
+          </button>
+        </div>
+        @if (webAppSettingsOpen) {
+          <app-app-settings
+            [app]="webApp"
+            (saved)="onWebSettingsSaved()"
+            (cancelled)="toggleWebSettings()">
+          </app-app-settings>
+        }
+      }
+
+      @if (state === 'not-configured') {
+        <div class="wallet-empty">
+          <mat-icon>account_balance_wallet</mat-icon>
+          <div class="wallet-empty-title">{{ 'wallet.not-configured' | translate }}</div>
+          <div class="wallet-empty-help dim small">{{ 'wallet.not-configured-help' | translate }}</div>
+        </div>
+      }
+
+      @if (state === 'not-running') {
+        <div class="wallet-empty">
+          <mat-icon>power_off</mat-icon>
+          <div class="wallet-empty-title">{{ 'wallet.not-running' | translate }}</div>
+          <div class="wallet-empty-help dim small">{{ 'wallet.not-running-help' | translate }}</div>
+        </div>
+      }
+
+      @if (state === 'running') {
+        <div class="wallet-controls">
+          <span class="dim small">
+            {{ 'wallet.help' | translate }}
+            <span class="mono small">http://{{ resolvedHost }}:{{ resolvedPort }}</span>
+          </span>
+          <button mat-stroked-button class="wallet-fullscreen" (click)="openFullWindow()">
+            <mat-icon [inline]="true">open_in_new</mat-icon>
+            {{ 'wallet.open-fullscreen' | translate }}
+          </button>
+        </div>
+        @if (iframeUrl) {
+          <iframe class="wallet-frame" [src]="iframeUrl" allowfullscreen></iframe>
+        }
+      }
+
+    </div>
+  </div>
+
+  <!-- Skycoin daemon instances. Beneath the wallet UI since the
+       wallet is the primary surface here; the daemon list is a
+       backing-detail panel one or more fibercoins per visor. -->
   <div class="rounded-elevated-box mt-3 daemons-box">
     <div class="box-internal-container">
       <div class="daemons-header">
@@ -56,44 +129,6 @@
           {{ 'wallet.daemons.hint' | translate }}
         </span>
       </div>
-    </div>
-  </div>
-
-  <div class="rounded-elevated-box mt-3 wallet-box">
-    <div class="box-internal-container wallet-shell">
-
-      @if (state === 'not-configured') {
-        <div class="wallet-empty">
-          <mat-icon>account_balance_wallet</mat-icon>
-          <div class="wallet-empty-title">{{ 'wallet.not-configured' | translate }}</div>
-          <div class="wallet-empty-help dim small">{{ 'wallet.not-configured-help' | translate }}</div>
-        </div>
-      }
-
-      @if (state === 'not-running') {
-        <div class="wallet-empty">
-          <mat-icon>power_off</mat-icon>
-          <div class="wallet-empty-title">{{ 'wallet.not-running' | translate }}</div>
-          <div class="wallet-empty-help dim small">{{ 'wallet.not-running-help' | translate }}</div>
-        </div>
-      }
-
-      @if (state === 'running') {
-        <div class="wallet-controls">
-          <span class="dim small">
-            {{ 'wallet.help' | translate }}
-            <span class="mono small">http://{{ resolvedHost }}:{{ resolvedPort }}</span>
-          </span>
-          <button mat-stroked-button class="wallet-fullscreen" (click)="openFullWindow()">
-            <mat-icon [inline]="true">open_in_new</mat-icon>
-            {{ 'wallet.open-fullscreen' | translate }}
-          </button>
-        </div>
-        @if (iframeUrl) {
-          <iframe class="wallet-frame" [src]="iframeUrl" allowfullscreen></iframe>
-        }
-      }
-
     </div>
   </div>
 }
