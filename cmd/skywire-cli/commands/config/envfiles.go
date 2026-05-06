@@ -181,8 +181,10 @@ const envfileLinux = `#
 #--	Autostart skycoin-web thin-client wallet
 #SKYCOINWEB=true
 
-#--	skycoin-web bind address (default 127.0.0.1:8001)
-#SKYCOINWEBADDR='127.0.0.1:8001'
+#--	skycoin-web bind address (default 127.0.0.1:8002 — bumped
+#	one up from skycoin's upstream default of 8001 because
+#	skychat is already pinned at 127.0.0.1:8001 in skywire).
+#SKYCOINWEBADDR='127.0.0.1:8002'
 
 #--	Node URLs the wallet talks to. Bash array — set one per
 #	fibercoin you want the wallet to multi-coin-browse. Empty

@@ -318,7 +318,11 @@ func init() {
 	genConfigCmd.Flags().StringVar(&skycoinDaemonFlags, "skycoindflags", scriptExecString("${SKYCOIND_FLAGS}"), "extra flags appended to every skycoin-daemon instance (e.g. '--enable-gui-api-sets READ,STATUS'); --port and --data-dir are auto-allocated and must not appear here")
 	gHiddenFlags = append(gHiddenFlags, "skycoindflags")
 	genConfigCmd.Flags().BoolVar(&isSkycoinWebEnable, "skycoinweb", scriptExecBool("${SKYCOINWEB:-false}"), "autostart skycoin-web thin-client wallet")
-	genConfigCmd.Flags().StringVar(&skycoinWebAddr, "skycoinwebaddr", scriptExecString("${SKYCOINWEBADDR:-127.0.0.1:8001}"), "skycoin-web bind address (host:port)")
+	// 8002 to avoid colliding with skychat's default at 127.0.0.1:8001.
+	// Both apps' upstream defaults happen to be 8001; skychat got there
+	// first in skywire so skycoin-web shifts up by one. Operator can
+	// override via SKYCOINWEBADDR or the universal settings panel.
+	genConfigCmd.Flags().StringVar(&skycoinWebAddr, "skycoinwebaddr", scriptExecString("${SKYCOINWEBADDR:-127.0.0.1:8002}"), "skycoin-web bind address (host:port)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebaddr")
 	// SKYCOINWEBNODES is a bash array (multiple node URLs supported
 	// — one per fibercoin the wallet is meant to multi-coin-browse).
