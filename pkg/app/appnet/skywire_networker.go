@@ -3,11 +3,13 @@ package appnet
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 var (
@@ -31,7 +34,25 @@ type SkywireNetworker struct {
 	porter    *netutil.Porter
 	isServing int32
 	MuxRoutes int // Number of parallel mux routes per connection (0 or 1 = disabled)
+
+	// appDirectMux carries direct-transport app dials (route ID 0).
+	// When non-nil, Dial tries it first before falling back to
+	// route-setup-mediated DialRoutes. Server-side: an accept loop
+	// dispatches inbound streams by destination port to whichever
+	// listener registered with porter. Set via SetAppDirectMux at
+	// visor init time; never changes thereafter.
+	appDirectMux *transport.VStreamMux
+	// appDirectAccepting is set on the first SetAppDirectMux call so
+	// repeated calls (or late mux replacement) don't spawn duplicate
+	// accept goroutines.
+	appDirectAccepting int32
 }
+
+// directDialHandshakeTimeout bounds how long we'll wait for the
+// destination visor to ack the port handshake on a direct dial.
+// Direct dials should be near-instant (no setup-node round trip);
+// 5s is generous and surfaces hung-server problems quickly.
+const directDialHandshakeTimeout = 5 * time.Second
 
 // NewSkywireNetworker constructs skywire networker.
 func NewSkywireNetworker(l logrus.FieldLogger, r router.Router) Networker {
@@ -53,6 +74,15 @@ func (r *SkywireNetworker) DialContext(ctx context.Context, addr Addr) (conn net
 }
 
 // DialContextWithOptions dials remote `addr` via `skynet` with context and custom dial options.
+//
+// Tries the direct-transport path first when the visor has an
+// AppDirectMux configured: opens a vstream over an existing direct
+// transport to addr.PubKey and writes a 2-byte port header to the
+// remote's accept loop. No setup-node, no rule installation, no
+// handshake-await — just the transport's own framing. Falls back to
+// the legacy route-setup-mediated DialRoutes path when there's no
+// direct transport, or when the direct dial fails (e.g. remote
+// doesn't expose the mux yet — older build).
 func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr, opts *router.DialOptions) (conn net.Conn, err error) {
 	localPort, freePort, err := r.porter.ReserveEphemeral(ctx, nil)
 	if err != nil {
@@ -79,6 +109,13 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		opts.AppName = AppNameFromContext(ctx)
 	}
 
+	if directConn, ok := r.tryDirectDial(ctx, addr); ok {
+		return &SkywireConn{
+			Conn:     directConn,
+			freePort: freePort,
+		}, nil
+	}
+
 	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, opts)
 	if err != nil {
 		return nil, err
@@ -89,6 +126,195 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		nrg:      conn.(*router.NoiseRouteGroup),
 		freePort: freePort,
 	}, nil
+}
+
+// tryDirectDial attempts to dial `addr` via the AppDirectMux. Returns
+// (conn, true) on success or (nil, false) on any failure — the caller
+// then falls back to the route-setup path. Any error is logged at
+// debug level since the fallback is the load-bearing path; we don't
+// want to surface a noisy error every time direct happens not to be
+// available.
+func (r *SkywireNetworker) tryDirectDial(ctx context.Context, addr Addr) (net.Conn, bool) {
+	mux := r.appDirectMux
+	if mux == nil {
+		return nil, false
+	}
+	stream, err := mux.Dial(addr.PubKey)
+	if err != nil {
+		r.log.WithField("remote", addr.PubKey.String()).
+			WithError(err).
+			Debug("Direct app dial: vstream dial failed, falling through to route setup")
+		return nil, false
+	}
+	// Wire protocol on the stream:
+	//   client → server: 2-byte BE destination port
+	//   server → client: 1 ack byte (0x00 = listener found,
+	//                                 0x01 = no listener on that port)
+	// The ack lets us detect "older remote without AppDirect
+	// support" — those visors silently ignore unrecognized packet
+	// types, so the SYN is dropped on their side and our ack read
+	// times out. Either way, on no-ack we close and let the caller
+	// fall through to the route-setup path.
+	hdr := make([]byte, 2)
+	binary.BigEndian.PutUint16(hdr, uint16(addr.Port))
+	if _, err := stream.Write(hdr); err != nil {
+		r.log.WithField("remote", addr.PubKey.String()).
+			WithError(err).
+			Debug("Direct app dial: port-header write failed, falling through to route setup")
+		stream.Close() //nolint:errcheck,gosec
+		return nil, false
+	}
+	ack := make([]byte, 1)
+	ackErr := readWithTimeout(stream, ack, directDialHandshakeTimeout)
+	if ackErr != nil {
+		r.log.WithField("remote", addr.PubKey.String()).
+			WithError(ackErr).
+			Debug("Direct app dial: ack not received, falling through to route setup")
+		stream.Close() //nolint:errcheck,gosec
+		return nil, false
+	}
+	if ack[0] != 0x00 {
+		r.log.WithField("remote", addr.PubKey.String()).
+			WithField("port", addr.Port).
+			Debug("Direct app dial: remote rejected (no listener), falling through to route setup")
+		stream.Close() //nolint:errcheck,gosec
+		return nil, false
+	}
+	r.log.WithField("remote", addr.PubKey.String()).
+		WithField("port", addr.Port).
+		Debug("Direct app dial succeeded (no setup-node)")
+	return &directConn{VStream: stream, remote: addr.PubKey}, true
+}
+
+// readWithTimeout reads len(buf) bytes from r within d, since
+// VStream doesn't natively support read deadlines. Goroutine leaks
+// on timeout are bounded — the caller closes the stream after a
+// timeout, which causes the in-flight Read to return io.EOF and
+// the goroutine to exit.
+func readWithTimeout(rdr io.Reader, buf []byte, d time.Duration) error {
+	ch := make(chan error, 1)
+	go func() {
+		_, err := io.ReadFull(rdr, buf)
+		ch <- err
+	}()
+	select {
+	case err := <-ch:
+		return err
+	case <-time.After(d):
+		return errors.New("read timed out")
+	}
+}
+
+// directConn wraps a transport vstream as a net.Conn for the app
+// layer. VStream itself provides Read / Write / Close / RemotePK;
+// directConn fills in the remaining net.Conn surface (addrs +
+// deadlines). Apps that introspect LocalAddr / RemoteAddr only do
+// so on route-based conns, so the addr stubs are minimal.
+type directConn struct {
+	*transport.VStream
+	remote cipher.PubKey
+}
+
+func (c *directConn) LocalAddr() net.Addr                  { return Addr{Net: TypeSkynet} }
+func (c *directConn) RemoteAddr() net.Addr                 { return Addr{Net: TypeSkynet, PubKey: c.remote} }
+func (c *directConn) SetDeadline(_ time.Time) error        { return nil }
+func (c *directConn) SetReadDeadline(_ time.Time) error    { return nil }
+func (c *directConn) SetWriteDeadline(_ time.Time) error   { return nil }
+func (c *directConn) RemotePK() cipher.PubKey              { return c.remote }
+
+// SetAppDirectMux installs the visor's AppDirectMux on this
+// networker and starts the accept loop that dispatches inbound
+// direct-dial streams to listeners by destination port. Safe to call
+// once at visor init; repeated calls are no-ops after the loop is
+// running.
+func (r *SkywireNetworker) SetAppDirectMux(mux *transport.VStreamMux) {
+	r.appDirectMux = mux
+	if mux == nil {
+		return
+	}
+	if !atomic.CompareAndSwapInt32(&r.appDirectAccepting, 0, 1) {
+		return
+	}
+	go r.serveDirectMux(mux)
+}
+
+// serveDirectMux runs the inbound accept loop for direct-dial
+// vstreams. For each accepted stream, reads the 2-byte destination
+// port, looks up the corresponding listener via the porter, and
+// hands the connection in. Streams whose port has no listener are
+// closed.
+func (r *SkywireNetworker) serveDirectMux(mux *transport.VStreamMux) {
+	log := r.log.WithField("loop", "direct-app-mux")
+	log.Info("Direct app-dial accept loop started")
+	for {
+		stream, err := mux.Accept()
+		if err != nil {
+			log.WithError(err).Debug("Direct app-dial accept loop stopped")
+			return
+		}
+		go r.handleDirectStream(stream)
+	}
+}
+
+// handleDirectStream reads the port header, finds the matching
+// listener, and feeds the conn in. Errors are logged at debug; on
+// any failure the stream is closed.
+func (r *SkywireNetworker) handleDirectStream(stream *transport.VStream) {
+	log := r.log.WithField("remote", stream.RemotePK().String())
+	hdr := make([]byte, 2)
+	// Bound the port-header read with our own goroutine timer since
+	// VStream doesn't support read deadlines. Worst case a stuck
+	// client just leaks one goroutine; a misbehaving peer can't
+	// stall us further since we close the stream below.
+	done := make(chan error, 1)
+	go func() {
+		_, err := io.ReadFull(stream, hdr)
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			log.WithError(err).Debug("Direct app-dial: failed to read port header")
+			stream.Close() //nolint:errcheck,gosec
+			return
+		}
+	case <-time.After(directDialHandshakeTimeout):
+		log.Debug("Direct app-dial: port-header read timed out")
+		stream.Close() //nolint:errcheck,gosec
+		return
+	}
+	port := binary.BigEndian.Uint16(hdr)
+	lisIfc, ok := r.porter.PortValue(port)
+	if !ok {
+		log.WithField("port", port).Debug("Direct app-dial: no listener for port")
+		// Send 0x01 NACK so the dialer doesn't time out waiting for
+		// an ack that never comes; lets it fall through to the
+		// route-setup path immediately.
+		_, _ = stream.Write([]byte{0x01})
+		stream.Close() //nolint:errcheck,gosec
+		return
+	}
+	lis, ok := lisIfc.(*skywireListener)
+	if !ok {
+		log.WithField("port", port).Debug("Direct app-dial: porter slot is not a skywireListener")
+		_, _ = stream.Write([]byte{0x01})
+		stream.Close() //nolint:errcheck,gosec
+		return
+	}
+	// 0x00 ACK — listener found, conn is being handed in.
+	if _, err := stream.Write([]byte{0x00}); err != nil {
+		log.WithError(err).Debug("Direct app-dial: ack write failed")
+		stream.Close() //nolint:errcheck,gosec
+		return
+	}
+	conn := &directConn{VStream: stream, remote: stream.RemotePK()}
+	// putConn channels the conn into the listener's accept queue;
+	// SkywireNetworker.serve isn't used on this path because we
+	// already know the destination port (no LocalAddr lookup needed).
+	// Accept will detect the pre-wrapped SkywireConn and skip the
+	// nrg type-assert that the route-based path needs.
+	lis.putConn(&SkywireConn{Conn: conn})
+	log.WithField("port", port).Debug("Direct app-dial: handed to listener")
 }
 
 // Ping dials remote `addr` via `skynet`.
@@ -245,13 +471,18 @@ type skywireListener struct {
 	once       sync.Once
 }
 
-// Accept accepts incoming connection.
+// Accept accepts incoming connection. If the conn is already a
+// *SkywireConn (direct app-dial path pre-wrapped it), pass it
+// through; otherwise it's a route-group conn that still needs the
+// NoiseRouteGroup wrap.
 func (l *skywireListener) Accept() (net.Conn, error) {
 	conn, ok := <-l.connsCh
 	if !ok {
 		return nil, ErrClosedConn
 	}
-
+	if sc, ok := conn.(*SkywireConn); ok {
+		return sc, nil
+	}
 	return &SkywireConn{
 		Conn: conn,
 		nrg:  conn.(*router.NoiseRouteGroup),
