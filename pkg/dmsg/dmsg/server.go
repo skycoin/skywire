@@ -235,6 +235,32 @@ func (s *Server) AdvertisedAddr() string {
 	return s.addr
 }
 
+// AddDiscovery registers an additional dmsg-discovery this server
+// should publish its entry to. advertisedAddr, when non-empty,
+// overrides the server's default AdvertisedAddr() for THIS discovery
+// only — useful for advertising a LAN address to a local discovery
+// and a public address to an internet discovery. discPK, when set,
+// lets the server recognize an inbound DMSG session originated by
+// this discovery and trigger an immediate registration push.
+//
+// Safe to call before or after Serve. Subsequent updateServerEntry
+// iterations pick up the new endpoint automatically.
+func (s *Server) AddDiscovery(client disc.APIClient, advertisedAddr string, discPK cipher.PubKey) {
+	s.addDiscovery(client, advertisedAddr, discPK)
+}
+
+// SetDiscoveryClients replaces the underlying disc.APIClient on each
+// configured discovery endpoint, preserving advertised addresses and
+// PKs. The lengths must match the current endpoint count, otherwise
+// the call is a no-op. Used to upgrade plain HTTP clients to
+// dmsgfirst-wrapped clients once the server's outbound dmsg.Client is
+// available — registration then prefers DMSG over HTTP, which keeps
+// the server reachable from local discoveries when the public internet
+// is unavailable.
+func (s *Server) SetDiscoveryClients(clients []disc.APIClient) {
+	s.setDiscoveryClients(clients)
+}
+
 // SetAdvertisedAddr sets the advertised TCP address in which the dmsg server is advertised by.
 // This should only be called once.
 func (s *Server) SetAdvertisedAddr(lis net.Listener, addr *string) {
