@@ -89,6 +89,35 @@ func (r *RPC) SetAppEnvBatch(in *SetAppEnvBatchIn, _ *struct{}) (err error) {
 	return r.visor.SetAppEnvBatch(in.AppName, in.Env)
 }
 
+// SetAppArgs replaces the entire Args slice on an app.
+func (r *RPC) SetAppArgs(in *SetAppArgsIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppArgs", in)(nil, &err)
+	return r.visor.SetAppArgs(in.AppName, in.Args)
+}
+
+// SetAppEnvFull replaces the entire Env slice on an app.
+func (r *RPC) SetAppEnvFull(in *SetAppEnvFullIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppEnvFull", in)(nil, &err)
+	return r.visor.SetAppEnvFull(in.AppName, in.Env)
+}
+
+// SetAppLauncherMode persists the launcher-mode preference for an app.
+func (r *RPC) SetAppLauncherMode(in *SetAppLauncherModeIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppLauncherMode", in)(nil, &err)
+	return r.visor.SetAppLauncherMode(in.AppName, in.Mode)
+}
+
+// AppHelp returns the captured `<binary> --help` output for an app.
+func (r *RPC) AppHelp(in *AppNameIn, reply *string) (err error) {
+	defer rpcutil.LogCall(r.log, "AppHelp", in)(reply, &err)
+	out, err := r.visor.AppHelp(in.AppName)
+	if err != nil {
+		return err
+	}
+	*reply = out
+	return nil
+}
+
 // RegisterApp registers a App with provided proc config.
 func (r *RPC) RegisterApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcKey) (err error) {
 	defer rpcutil.LogCall(r.log, "RegisterApp", procConf)(reply, &err)

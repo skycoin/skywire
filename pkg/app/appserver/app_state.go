@@ -64,6 +64,13 @@ type AppConfig struct {
 	// Env adds key=value pairs to the spawned process's
 	// environment. Useful for HOME=/home/<user> when User is set.
 	Env []string `json:"env,omitempty"`
+	// LauncherMode persists the operator's launcher-mode preference
+	// for this app: "internal" runs the app inside the visor process,
+	// "external" spawns it as a child with optional User/Group/etc.
+	// Empty = use whatever the visor's StartApp default chooses
+	// (today: external when Binary is set, internal otherwise).
+	// Honored by StartApp; StartAppWithMode still wins per-call.
+	LauncherMode string `json:"launcher_mode,omitempty"`
 }
 
 // AppState defines state parameters for a registered App.

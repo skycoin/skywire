@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // returns app summaries of a given node of pk
@@ -74,6 +75,20 @@ func (hv *Hypervisor) postApp() http.HandlerFunc {
 	})
 }
 
+// appHelp returns the cached `<binary> --help` output for the named
+// app. Backs the universal app-settings panel's "Show flags"
+// disclosure so operators don't have to memorize flag names.
+func (hv *Hypervisor) appHelp() http.HandlerFunc {
+	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		out, err := ctx.API.AppHelp(ctx.App.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]string{"help": out})
+	})
+}
+
 // deleteApp removes an app entry from the launcher config (and
 // stops it first if running). Pairs with postApp for the
 // add-instance / remove-instance lifecycle that the hypervisor UI
@@ -118,12 +133,19 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 			PK            *cipher.PubKey    `json:"pk,omitempty"`
 			CustomSetting map[string]any    `json:"custom_setting,omitempty"`
 			Env           map[string]string `json:"env,omitempty"`
+			// Universal-panel fields: full replacements for the
+			// canonical lists. ArgsString is parsed via shellwords;
+			// EnvList replaces .Env wholesale (including deletes).
+			ArgsString   *string  `json:"args,omitempty"`
+			EnvList      []string `json:"env_full,omitempty"`
+			LauncherMode *string  `json:"launcher_mode,omitempty"`
 		}
 
 		shouldRestartApp := func(r req) bool {
 			// we restart the app if one of these fields was changed
 			return r.Killswitch != nil || r.Secure != nil || r.Address != nil || r.Whitelist != nil ||
-				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil || r.Env != nil
+				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil || r.Env != nil ||
+				r.ArgsString != nil || r.EnvList != nil
 		}
 
 		var reqBody req
@@ -204,6 +226,32 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.Env != nil {
 			if err := ctx.API.SetAppEnvBatch(ctx.App.Name, reqBody.Env); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.ArgsString != nil {
+			parsed, perr := visorconfig.SplitArgs(*reqBody.ArgsString)
+			if perr != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("parsing args: %w", perr))
+				return
+			}
+			if err := ctx.API.SetAppArgs(ctx.App.Name, parsed); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.EnvList != nil {
+			if err := ctx.API.SetAppEnvFull(ctx.App.Name, reqBody.EnvList); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.LauncherMode != nil {
+			if err := ctx.API.SetAppLauncherMode(ctx.App.Name, *reqBody.LauncherMode); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}

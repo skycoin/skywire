@@ -56,28 +56,30 @@ func (a *appsList) UnmarshalJSON(data []byte) error {
 // appConfigOnDisk mirrors appserver.AppConfig with Args as a string.
 // Only used at the JSON boundary.
 type appConfigOnDisk struct {
-	Name      string       `json:"name"`
-	Binary    string       `json:"binary,omitempty"`
-	Args      string       `json:"args,omitempty"`
-	AutoStart bool         `json:"auto_start"`
-	Port      routing.Port `json:"port"`
-	User      string       `json:"user,omitempty"`
-	Group     string       `json:"group,omitempty"`
-	WorkDir   string       `json:"work_dir,omitempty"`
-	Env       []string     `json:"env,omitempty"`
+	Name         string       `json:"name"`
+	Binary       string       `json:"binary,omitempty"`
+	Args         string       `json:"args,omitempty"`
+	AutoStart    bool         `json:"auto_start"`
+	Port         routing.Port `json:"port"`
+	User         string       `json:"user,omitempty"`
+	Group        string       `json:"group,omitempty"`
+	WorkDir      string       `json:"work_dir,omitempty"`
+	Env          []string     `json:"env,omitempty"`
+	LauncherMode string       `json:"launcher_mode,omitempty"`
 }
 
 func toOnDisk(c appserver.AppConfig) appConfigOnDisk {
 	return appConfigOnDisk{
-		Name:      c.Name,
-		Binary:    c.Binary,
-		Args:      joinArgs(c.Args),
-		AutoStart: c.AutoStart,
-		Port:      c.Port,
-		User:      c.User,
-		Group:     c.Group,
-		WorkDir:   c.WorkDir,
-		Env:       c.Env,
+		Name:         c.Name,
+		Binary:       c.Binary,
+		Args:         joinArgs(c.Args),
+		AutoStart:    c.AutoStart,
+		Port:         c.Port,
+		User:         c.User,
+		Group:        c.Group,
+		WorkDir:      c.WorkDir,
+		Env:          c.Env,
+		LauncherMode: c.LauncherMode,
 	}
 }
 

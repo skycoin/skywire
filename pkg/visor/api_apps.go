@@ -5,7 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -36,9 +40,21 @@ func (v *Visor) App(appName string) (*appserver.AppState, error) {
 	return appState, nil
 }
 
-// StartApp implements API.
+// StartApp implements API. Resolves the launcher mode from the
+// AppConfig.LauncherMode field if set, falling back to the visor's
+// default. StartAppWithMode("") matches; StartAppWithMode(<explicit>)
+// still wins per-call.
 func (v *Visor) StartApp(appName string) error {
-	return v.StartAppWithMode(appName, "")
+	mode := ""
+	if v.conf != nil {
+		for _, app := range v.conf.Launcher.Apps {
+			if app.Name == appName {
+				mode = app.LauncherMode
+				break
+			}
+		}
+	}
+	return v.StartAppWithMode(appName, mode)
 }
 
 // StartAppWithMode implements API with launcher mode override.
@@ -101,6 +117,93 @@ func (v *Visor) DeleteApp(appName string) error {
 			Warn("DeleteApp: stop returned an error, continuing with config removal")
 	}
 	return v.conf.DeleteAppConfig(v.appL, appName)
+}
+
+// SetAppArgs replaces the entire Args slice on the named app.
+// Used by the universal app-settings panel where the operator
+// edits args as a shell-string; the caller (HTTP handler / CLI)
+// is responsible for tokenizing.
+func (v *Visor) SetAppArgs(appName string, args []string) error {
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	return v.conf.UpdateAppArgsFull(v.appL, appName, args)
+}
+
+// SetAppEnvFull replaces the entire Env slice on the named app.
+// Counterpart to SetAppArgs for environment vars; the per-key
+// SetAppEnv RPC is still available for targeted mutation.
+func (v *Visor) SetAppEnvFull(appName string, env []string) error {
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	return v.conf.UpdateAppEnvFull(v.appL, appName, env)
+}
+
+// SetAppLauncherMode persists the launcher-mode preference for an
+// app entry. Empty clears the override; "internal" / "external"
+// pin the mode. Honored by StartApp on the next start.
+func (v *Visor) SetAppLauncherMode(appName, mode string) error {
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	return v.conf.UpdateAppLauncherMode(v.appL, appName, mode)
+}
+
+// appHelpCache memoizes the --help output of each binary so the
+// universal settings panel's "Show flags" disclosure is cheap to
+// open repeatedly. Keyed by the binary's absolute path; we re-fetch
+// when the file's mtime changes (operator updated the binary).
+var appHelpCache sync.Map // map[string]appHelpCacheEntry
+
+type appHelpCacheEntry struct {
+	mtime int64
+	help  string
+}
+
+// AppHelp execs the configured binary for the named app with --help
+// and returns the captured stdout. Cached per (binary, mtime) so
+// repeat calls are free. Empty string returned for in-process apps
+// where Binary == "" — those don't have a flag binary to query.
+func (v *Visor) AppHelp(appName string) (string, error) {
+	if v.appL == nil {
+		return "", ErrAppLauncherNotAvailable
+	}
+	var binary string
+	for _, app := range v.conf.Launcher.Apps {
+		if app.Name == appName {
+			binary = app.Binary
+			break
+		}
+	}
+	if binary == "" {
+		return "", fmt.Errorf("app %q has no binary (in-process app)", appName)
+	}
+	// The launcher's ProcConfig joins BinPath + Binary the same way.
+	binPath := filepath.Join(v.conf.Launcher.BinPath, binary)
+	st, err := os.Stat(binPath)
+	if err != nil {
+		return "", fmt.Errorf("stat binary %s: %w", binPath, err)
+	}
+	mtime := st.ModTime().UnixNano()
+	if cached, ok := appHelpCache.Load(binPath); ok {
+		entry := cached.(appHelpCacheEntry)
+		if entry.mtime == mtime {
+			return entry.help, nil
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, binPath, "--help").CombinedOutput()
+	// Many CLI binaries exit non-zero on --help; treat output as
+	// authoritative regardless and only surface a hard error when
+	// no output came back.
+	if len(out) == 0 && err != nil {
+		return "", fmt.Errorf("exec %s --help: %w", binPath, err)
+	}
+	help := string(out)
+	appHelpCache.Store(binPath, appHelpCacheEntry{mtime: mtime, help: help})
+	return help, nil
 }
 
 // SetAppEnv implements API. Sets / replaces / deletes a KEY=value

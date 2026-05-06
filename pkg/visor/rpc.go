@@ -174,6 +174,25 @@ type SetAppEnvBatchIn struct {
 	AppName string
 	Env     map[string]string
 }
+
+// SetAppArgsIn replaces the entire Args slice on an app.
+type SetAppArgsIn struct {
+	AppName string
+	Args    []string
+}
+
+// SetAppEnvFullIn replaces the entire Env slice on an app.
+type SetAppEnvFullIn struct {
+	AppName string
+	Env     []string
+}
+
+// SetAppLauncherModeIn persists the launcher-mode preference.
+// Mode is "" / "internal" / "external".
+type SetAppLauncherModeIn struct {
+	AppName string
+	Mode    string
+}
 type TransportsIn struct {
 	FilterTypes   []string
 	FilterPubKeys []cipher.PubKey

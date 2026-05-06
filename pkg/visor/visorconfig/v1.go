@@ -646,6 +646,86 @@ func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName str
 	return v1.flush(v1)
 }
 
+// UpdateAppArgsFull replaces the entire Args slice on the named app.
+// Used by the universal app-settings panel where the operator edits
+// the args as a shell-string and we parse + replace; per-flag
+// UpdateAppArg is for targeted CLI surface, not whole-form save.
+func (v1 *V1) UpdateAppArgsFull(launch *launcher.AppLauncher, appName string, args []string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+		conf.Apps[i].Args = args
+		launch.ResetConfig(launcher.AppLauncherConfig{
+			VisorPK:       v1.PK,
+			Apps:          conf.Apps,
+			ServerAddr:    conf.ServerAddr,
+			DisplayNodeIP: conf.DisplayNodeIP,
+		})
+		return v1.flush(v1)
+	}
+	return fmt.Errorf("app %q not found in launcher config", appName)
+}
+
+// UpdateAppEnvFull replaces the entire Env slice on the named app.
+// Counterpart to UpdateAppArgsFull for the env list. Per-key
+// UpdateAppEnv is still available for targeted mutation; this
+// method is for whole-form save where deletion of keys not in the
+// new list is the intended semantics.
+func (v1 *V1) UpdateAppEnvFull(launch *launcher.AppLauncher, appName string, env []string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+		conf.Apps[i].Env = env
+		launch.ResetConfig(launcher.AppLauncherConfig{
+			VisorPK:       v1.PK,
+			Apps:          conf.Apps,
+			ServerAddr:    conf.ServerAddr,
+			DisplayNodeIP: conf.DisplayNodeIP,
+		})
+		return v1.flush(v1)
+	}
+	return fmt.Errorf("app %q not found in launcher config", appName)
+}
+
+// UpdateAppLauncherMode persists the launcher-mode preference for
+// an app entry. Empty string clears the override (visor default).
+// Validated values: "", "internal", "external".
+func (v1 *V1) UpdateAppLauncherMode(launch *launcher.AppLauncher, appName, mode string) error {
+	switch mode {
+	case "", "internal", "external":
+	default:
+		return fmt.Errorf("invalid launcher mode %q (must be empty, 'internal', or 'external')", mode)
+	}
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+		conf.Apps[i].LauncherMode = mode
+		launch.ResetConfig(launcher.AppLauncherConfig{
+			VisorPK:       v1.PK,
+			Apps:          conf.Apps,
+			ServerAddr:    conf.ServerAddr,
+			DisplayNodeIP: conf.DisplayNodeIP,
+		})
+		return v1.flush(v1)
+	}
+	return fmt.Errorf("app %q not found in launcher config", appName)
+}
+
 // DeleteAppConfig removes an app entry from the launcher config and
 // flushes the change. The caller is responsible for stopping the
 // running proc (if any) before calling this — V1 doesn't own the
