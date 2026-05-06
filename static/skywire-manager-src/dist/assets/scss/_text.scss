@@ -1,0 +1,51 @@
+span {
+  overflow-wrap: break-word;
+}
+
+.font-sm {
+  font-size: $font-size-sm !important;
+  font-weight: $font-weight-light !important;
+}
+
+.font-smaller {
+  font-size: $font-size-smaller !important;
+  font-weight: $font-weight-light !important;
+}
+
+.uppercase {
+  text-transform: uppercase;
+}
+
+.single-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.green-text {
+  color: $green;
+}
+
+.green-clear-text {
+  color: $green-clear;
+}
+
+.yellow-text {
+  color: $yellow;
+}
+
+.yellow-clear-text {
+  color: $yellow-clear;
+}
+
+.red-text {
+  color: $red;
+}
+
+.red-clear-text {
+  color: $red-clear;
+}
+
+.grey-text {
+  color: $light-gray !important;
+}

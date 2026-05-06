@@ -2,12 +2,13 @@ import { Component, OnInit, OnDestroy, Inject } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
+import { take } from 'rxjs/operators';
 
 import { AppConfig } from 'src/app/app.config';
 import { AppsService } from 'src/app/services/apps.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { NodeComponent } from '../../node.component';
-import { Application } from 'src/app/app.datatypes';
+import { Application, Node } from 'src/app/app.datatypes';
 
 /**
  * Daemon-specific settings dialog used by the Wallet tab's "Add
@@ -69,8 +70,12 @@ export class SkycoinDaemonSettingsComponent implements OnInit, OnDestroy {
     if (this.saving) { return; }
     this.saving = true;
     this.saveError = '';
+    NodeComponent.currentNode.pipe(take(1)).subscribe((node: Node) => {
+      this.doSave(node);
+    });
+  }
 
-    const node = NodeComponent.currentNode.value;
+  private doSave(node: Node) {
     if (!node) {
       this.saveError = 'No active node';
       this.saving = false;

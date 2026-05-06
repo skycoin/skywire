@@ -163,7 +163,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   configureDaemon(d: Application) {
-    UserAppSettingsComponent.openDialog(this.dialog, d);
+    SkycoinDaemonSettingsComponent.openDialog(this.dialog, d);
   }
 
   addDaemon() {

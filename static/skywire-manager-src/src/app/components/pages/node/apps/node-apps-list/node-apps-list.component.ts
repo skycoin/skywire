@@ -22,6 +22,7 @@ import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { UserAppSettingsComponent } from '../node-apps/user-app-settings/user-app-settings.component';
+import { SkycoinDaemonSettingsComponent } from '../../wallet/skycoin-daemon-settings/skycoin-daemon-settings.component';
 import { SkychatSettingsComponent } from '../node-apps/skychat-settings/skychat-settings.component';
 
 /**
@@ -42,7 +43,32 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   private readonly listIdForUserApps = 'up';
 
   // Set with the names of the official apps.
-  private readonly officialAppsList = new Set<string>(['skychat', 'skysocks', 'skysocks-client', 'vpn-client', 'vpn-server']);
+  // Official apps — those shipped with the visor binary and emitted
+  // by config-gen. Used to split the apps list between "Official" and
+  // "User" tabs and to gate the per-app settings dialog dispatch.
+  // Multi-instance entries (skysocks-client-N, skycoin-daemon-aix,
+  // etc.) match by prefix in isOfficialApp() below.
+  private readonly officialAppsList = new Set<string>([
+    'skychat', 'skysocks', 'skysocks-client', 'vpn-client', 'vpn-server',
+    'skycoin-daemon', 'skycoin-web',
+  ]);
+
+  // isOfficialApp covers the multi-instance naming scheme:
+  // 'skysocks-client-2' → skysocks-client family,
+  // 'skycoin-daemon-aix' → skycoin-daemon family. Multi-instance
+  // entries should land under "Official" alongside their canonical
+  // sibling, not in "User".
+  private isOfficialApp(name: string): boolean {
+    if (this.officialAppsList.has(name)) {
+      return true;
+    }
+    for (const base of this.officialAppsList) {
+      if (name.startsWith(base + '-')) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   @Input() nodePK: string;
   @Input() nodeIp: string;
@@ -101,9 +127,9 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     if (this.allApps) {
       this.allAppsForType = [];
       this.allApps.forEach(app => {
-        if (this.showOfficialApps && this.officialAppsList.has(app.name)) {
+        if (this.showOfficialApps && this.isOfficialApp(app.name)) {
           this.allAppsForType.push(app);
-        } else if (!this.showOfficialApps && !this.officialAppsList.has(app.name)) {
+        } else if (!this.showOfficialApps && !this.isOfficialApp(app.name)) {
           this.allAppsForType.push(app);
         }
       });
@@ -277,7 +303,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       return 'http://' + url + port;
     } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
       return location.origin + '/#/vpn/' + this.nodePK + '/status';
-    } else if (!this.officialAppsList.has(app.name)) {
+    } else if (!this.isOfficialApp(app.name)) {
       // Try to get the URL arg. If found, return the URL.
       if (app.args) {
         const urlArgsSet = new Set<string>(['url', '-url']);
@@ -555,8 +581,11 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       SkychatSettingsComponent.openDialog(this.dialog, app);
     } else if (app.name === 'skysocks' || app.name === 'vpn-server') {
       SkysocksSettingsComponent.openDialog(this.dialog, app);
-    } else if (app.name === 'skysocks-client' || app.name === 'vpn-client') {
+    } else if (app.name === 'skysocks-client' || app.name === 'vpn-client'
+               || app.name.startsWith('skysocks-client-')) {
       SkysocksClientSettingsComponent.openDialog(this.dialog, app);
+    } else if (app.name === 'skycoin-daemon' || app.name.startsWith('skycoin-daemon-')) {
+      SkycoinDaemonSettingsComponent.openDialog(this.dialog, app);
     } else {
       UserAppSettingsComponent.openDialog(this.dialog, app);
     }
