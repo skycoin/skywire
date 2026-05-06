@@ -201,24 +201,29 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return ctx.Err()
 	}
 
-	// Once dmsgC has at least one session, upgrade its discovery
-	// client(s) to dmsgfirst-wrapped variants so subsequent
-	// AvailableServers / Entry / PutEntry calls prefer DMSG and only
-	// fall back to plain HTTP per-call when the dmsg dial fails. The
-	// initial-construction httpC was forced to plain HTTP whenever
-	// initDmsgHTTP's dmsgDC wasn't ready yet (a startup race), which
-	// pinned the dmsgC's discovery refresh to HTTP for the whole
-	// process lifetime — so an outage on the public HTTP fronting
-	// (Caddy, etc.) would break the visor's discovery refresh even
-	// when DMSG was healthy.
-	upgradeDmsgDiscToDmsgfirst(dmsgC, v.conf.Dmsg, log)
-
-	// Seed the DMSG client's entry cache with deployment service PKs.
-	// These services run as "direct" DMSG clients and don't register
-	// in the HTTP discovery, so DialStream's discovery lookup fails.
-	// Pre-seeding lets DialStream find them via the normal delegated-
-	// server path instead of the slower connected-server fallback.
+	// Seed the DMSG client's entry cache with deployment service PKs
+	// FIRST, before swapping in the dmsgfirst disc client below. The
+	// dmsg-discovery's own PK is in this list, and dmsgfirst's
+	// primary path needs to DialStream to that PK — without the
+	// seed already in place, the moment dmsgC.SetDiscoveryClients
+	// installs dmsgfirst, any background AvailableServers /
+	// PutEntry refresh that dmsgC kicks off recurses (DialStream →
+	// cache miss → disc → dmsgfirst.primary → DialStream(dmsgdiscPK)
+	// → cache miss → ...) until the goroutine stack overflows.
 	v.seedDmsgServiceEntries(dmsgC, log)
+
+	// Now safe to upgrade. dmsgC's background discovery refreshes
+	// will hit the seeded dmsgdiscPK entry from cache, route
+	// through the delegated-server path, and never recurse back
+	// into the disc client looking for that PK.
+	//
+	// The initial-construction httpC was forced to plain HTTP
+	// whenever initDmsgHTTP's dmsgDC wasn't ready yet (a startup
+	// race), which pinned the dmsgC's discovery refresh to HTTP
+	// for the whole process lifetime — so an outage on the public
+	// HTTP fronting (Caddy, etc.) would break the visor's
+	// discovery refresh even when DMSG was healthy.
+	upgradeDmsgDiscToDmsgfirst(dmsgC, v.conf.Dmsg, log)
 
 	// Start periodic config refresh for dynamic key sets
 	go v.startConfigRefresh(ctx) //nolint:errcheck,gosec

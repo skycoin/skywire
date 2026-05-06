@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var appName string
@@ -39,6 +40,10 @@ func init() {
 		lsAppsCmd,
 		startAppCmd,
 		stopAppCmd,
+		addAppCmd,
+		rmAppCmd,
+		envAppCmd,
+		argsAppCmd,
 		registerAppCmd,
 		deregisterAppCmd,
 		appLogsSinceCmd,
@@ -141,6 +146,118 @@ var startAppCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(args[0], launcherMode))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
+}
+
+var addAppCmd = &cobra.Command{
+	Use:   "add <name> <binary>",
+	Short: "Add a new app entry to the visor's launcher config",
+	Long: `Add a new app entry to the visor's launcher config. <binary> is
+the binary the launcher should spawn (e.g. "skysocks-client",
+"skycoin-daemon", "skywire" for an in-tree app).
+
+This is the runtime equivalent of editing the apps[] array in
+skywire-config.json by hand. The new entry is created with auto_start
+disabled and no args/env. Use 'app env' / 'app arg autostart' / etc.
+to configure it before starting.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.AddApp(args[0], args[1]))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var rmAppCmd = &cobra.Command{
+	Use:   "rm <name>",
+	Short: "Remove an app entry from the visor's launcher config",
+	Long: `Stop the named app (best-effort — already-stopped apps are
+fine) and remove its entry from the launcher config. The on-disk
+config file is updated immediately. Use this to clean up stale
+entries left behind by older mechanisms (e.g. the legacy 'cli
+skynet srv' that pre-dates 'cli serve'), or to remove
+multi-instance daemons / proxy clients added at runtime via 'app
+add' or 'skycoin daemon add'.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.DeleteApp(args[0]))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var argsAppCmd = &cobra.Command{
+	Use:   "args <name> <shell-string>",
+	Short: "Replace the entire Args list on an app",
+	Long: `Replace the entire Args slice on the named app's launcher
+config. The shell-string is parsed via the same shell-like
+tokenizer the on-disk config file uses (whitespace separates,
+"double quotes" and 'single quotes' group).
+
+Examples:
+  skywire cli visor app args skycoin-web "skycoin web --host 127.0.0.1 --port 8002 --node-url http://127.0.0.1:6420"
+  skywire cli visor app args skycoin-daemon "skycoin daemon --enable-all-api-sets=true --log-level=debug"`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		appName := args[0]
+		shellStr := args[1]
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		// Tokenize via the visorconfig parser so the CLI matches
+		// the server-side semantics exactly.
+		toks, perr := visorconfig.SplitArgs(shellStr)
+		if perr != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("parse args: %w", perr))
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppArgs(appName, toks))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var envAppCmd = &cobra.Command{
+	Use:   "env <name> KEY=VALUE",
+	Short: "Set, replace, or delete an env-var entry on an app",
+	Long: `Mutate the Env list on the named app's launcher config.
+
+  KEY=value   sets or replaces the entry
+  KEY=        deletes the entry (empty value)
+
+The app is restarted on the next call to 'app start' so the new
+env takes effect for fresh proc spawns. Used to configure
+multi-instance skycoin-daemon entries' FIBER_TOML at runtime
+without dropping to a config edit.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		key, value, ok := splitKV(args[1])
+		if !ok {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("expected KEY=VALUE, got %q", args[1]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppEnv(args[0], key, value))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+// splitKV splits "KEY=VALUE" — returns key, value, true on success.
+// Empty value is allowed (means "delete this key" at the SetAppEnv
+// layer); empty key is rejected.
+func splitKV(s string) (string, string, bool) {
+	for i := 0; i < len(s); i++ {
+		if s[i] == '=' {
+			return s[:i], s[i+1:], i > 0
+		}
+	}
+	return "", "", false
 }
 
 var stopAppCmd = &cobra.Command{

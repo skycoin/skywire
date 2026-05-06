@@ -152,6 +152,26 @@ const (
 	// Previously 48 — conflicted with DmsgTransportSetupServicePort
 	SkyPingPort uint16 = 58
 
+	// SkycoinDaemonName is the name of the embedded skycoin daemon
+	// app (`skywire skycoin daemon`). Default-off in config-gen
+	// (AutoStart=false) — the daemon syncs the chain to ~/.skycoin
+	// and is heavy enough that we don't want it firing on every
+	// visor that doesn't ask for it.
+	SkycoinDaemonName = "skycoin-daemon"
+	// SkycoinDaemonPort is unused over Skywire routes (the daemon
+	// serves HTTP on localhost:6420 by default), but the launcher
+	// requires a non-zero routing port for app accounting; pick a
+	// value outside the in-use cluster.
+	SkycoinDaemonPort uint16 = 60
+
+	// SkycoinWebName is the name of the embedded skycoin thin-client
+	// web wallet app (`skywire skycoin web`). Default-off; intended
+	// to run as the operator's own user (set AppConfig.User) so the
+	// wallet directory under ~/.skycoin/wallets stays writable.
+	SkycoinWebName = "skycoin-web"
+	// SkycoinWebPort — same routing-port note as SkycoinDaemonPort.
+	SkycoinWebPort uint16 = 61
+
 	// RPC constants.
 
 	// RPCAddr for skywire-cli to access skywire-visor

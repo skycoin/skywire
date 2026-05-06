@@ -1,0 +1,98 @@
+@import "variables";
+
+.ssx-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.ssx-card {
+  padding: 14px 16px;
+  margin: 0 0 12px 0;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+
+  &:last-child { margin-bottom: 0; }
+}
+
+.ssx-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+
+  .mat-icon { color: #00d4ff; }
+}
+
+.ssx-card-title {
+  font-size: 1.05em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+  letter-spacing: 0.5px;
+}
+
+.ssx-count {
+  margin-left: 6px;
+  font-size: 0.85em;
+}
+
+.ssx-status {
+  margin-left: auto;
+  font-size: 0.85em;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.65);
+
+  &.status-running { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+  &.status-stopped { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+  &.status-starting { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+}
+
+.ssx-card-help {
+  margin: 4px 0 10px 0;
+  line-height: 1.4;
+}
+
+.ssx-instance {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(0, 212, 255, 0.05);
+  border-left: 2px solid rgba(0, 212, 255, 0.3);
+  border-radius: 4px;
+
+  .ssx-instance-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .ssx-instance-name {
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.95em;
+  }
+}
+
+.ssx-multi-hint {
+  margin-top: 12px;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.ssx-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  button.mat-mdc-outlined-button:not(:disabled) {
+    color: rgba(255, 255, 255, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    .mat-icon { color: inherit; }
+  }
+}
+
+.mono { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; }
+.small { font-size: 0.85em; }
+.dim { color: rgba(255, 255, 255, 0.55); }
+.mt-3 { margin-top: 12px; }

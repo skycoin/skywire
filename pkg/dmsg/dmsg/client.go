@@ -636,11 +636,27 @@ func (ce *Client) getCachedEntry(pk cipher.PubKey) (*disc.Entry, bool) {
 	return cached.entry, true
 }
 
-// setCachedEntry stores a discovery entry in the cache.
+// setCachedEntry stores a discovery entry in the cache. Refuses to
+// overwrite a permanent entry — those are seeded by SeedEntryCache
+// for deployment service PKs (dmsg-discovery itself, address-resolver,
+// etc.). Without this guard, a fresh-fetch refresh would clobber the
+// seed's far-future timestamp with time.Now(), the entry would expire
+// 30 seconds later (entryCacheTTL), and the next DialStream lookup
+// for one of those PKs would recurse — disc.Entry fall-through goes
+// through the dmsgfirst-wrapped client whose primary path calls
+// DialStream(dmsgdiscPK), which cache-misses and asks disc.Entry
+// again. Stack overflow within seconds.
+//
+// Permanent is detected by a fetchedAt > now+50years; SeedEntryCache
+// uses now+100years so the threshold gives plenty of headroom.
 func (ce *Client) setCachedEntry(pk cipher.PubKey, entry *disc.Entry) {
+	const permanentThreshold = 50 * 365 * 24 * time.Hour
 	ce.entryCacheMx.Lock()
+	defer ce.entryCacheMx.Unlock()
+	if existing, ok := ce.entryCache[pk]; ok && time.Until(existing.fetchedAt) > permanentThreshold {
+		return
+	}
 	ce.entryCache[pk] = entryCacheEntry{entry: entry, fetchedAt: time.Now()}
-	ce.entryCacheMx.Unlock()
 }
 
 // SetDHTLookup sets a callback for DHT-based client entry resolution.

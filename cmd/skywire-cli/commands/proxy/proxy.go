@@ -363,14 +363,47 @@ var startCmd = &cobra.Command{
 			}
 		}
 
-		// --verbose: stay in the foreground, streaming logs until the
-		// user hits ctrl+c. Then stop the app cleanly and exit.
+		// --verbose: stay in the foreground, streaming logs until
+		// either the user hits ctrl+c or the visor-side app exits.
+		// Without the app-status watcher the CLI parks forever on
+		// ctx.Done() even after the proc on the visor died — and
+		// the operator has to ctrl+c just to get their terminal
+		// back, with no idea why nothing is flowing.
 		if startVerbose && appReachedRunning {
 			fmt.Fprintln(os.Stderr, "--- app running; streaming logs (ctrl+c to stop) ---")
-			<-ctx.Done()
-			fmt.Fprintln(os.Stderr, "stopping app...")
-			if err := rpcClient.StopApp(clientName); err != nil {
-				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+			appExited := make(chan string, 1)
+			go func() {
+				ticker := time.NewTicker(2 * time.Second)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-ctx.Done():
+						return
+					case <-ticker.C:
+						st, err := rpcClient.App(clientName)
+						if err != nil || st == nil {
+							continue // transient — keep polling
+						}
+						if st.Status == appserver.AppStatusErrored ||
+							st.Status == appserver.AppStatusStopped {
+							msg := st.DetailedStatus
+							if msg == "" || msg == string(appserver.AppDetailedStatusStopped) {
+								msg = "(check visor logs for details)"
+							}
+							appExited <- msg
+							return
+						}
+					}
+				}
+			}()
+			select {
+			case <-ctx.Done():
+				fmt.Fprintln(os.Stderr, "stopping app...")
+				if err := rpcClient.StopApp(clientName); err != nil {
+					fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+				}
+			case msg := <-appExited:
+				fmt.Fprintln(os.Stderr, "app exited: "+msg)
 			}
 			if verboseStream != nil {
 				verboseStream.Close()

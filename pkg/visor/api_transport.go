@@ -16,6 +16,62 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
+// RouterSettings bundles the visor-wide router knobs the universal
+// "Router Settings" UI panel surfaces. Mirrors the per-flag CLI
+// surface ('cli proxy start --local-route' etc.) so the UI can
+// achieve parity in one round-trip rather than four separate calls.
+type RouterSettings struct {
+	ForceLocalRoutes bool   `json:"force_local_routes"`
+	ExistingTPOnly   bool   `json:"existing_tp_only"`
+	MuxRoutes        int    `json:"mux_routes"`
+	MinHops          uint16 `json:"min_hops"`
+}
+
+// GetRouterSettings returns the current runtime values of the four
+// router knobs. None of these survive a visor restart on their own —
+// some get persisted via separate config paths (MinHops, MuxRoutes
+// are written to Routing.*) but ForceLocalRoutes / ExistingTPOnly
+// are runtime-only, mirroring the CLI's behavior.
+func (v *Visor) GetRouterSettings() (RouterSettings, error) {
+	if v.router == nil {
+		return RouterSettings{}, errors.New("router not available")
+	}
+	hops, err := v.GetMinHops()
+	if err != nil {
+		return RouterSettings{}, err
+	}
+	return RouterSettings{
+		ForceLocalRoutes: v.router.GetForceLocalRoutes(),
+		ExistingTPOnly:   v.router.GetExistingTPOnly(),
+		MuxRoutes:        v.router.GetMuxRoutes(),
+		MinHops:          hops,
+	}, nil
+}
+
+// SetRouterSettings is the unified setter behind PUT
+// /visors/{pk}/router-settings. Each field is applied via the
+// existing per-knob setter so the same persistence rules apply.
+// Returns an error mid-way if any setter fails; partial application
+// is possible — UI surfaces should re-fetch on error.
+func (v *Visor) SetRouterSettings(s RouterSettings) error {
+	if v.router == nil {
+		return errors.New("router not available")
+	}
+	if err := v.SetForceLocalRoutes(s.ForceLocalRoutes); err != nil {
+		return err
+	}
+	if err := v.SetExistingTPOnly(s.ExistingTPOnly); err != nil {
+		return err
+	}
+	if err := v.SetMuxRoutes(s.MuxRoutes); err != nil {
+		return err
+	}
+	if err := v.SetMinHops(s.MinHops); err != nil {
+		return err
+	}
+	return nil
+}
+
 // SetExistingTPOnly implements API.
 // Sets whether to only use existing transports for routing (no new transport creation).
 func (v *Visor) SetExistingTPOnly(enabled bool) error {

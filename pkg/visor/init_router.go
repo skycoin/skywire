@@ -278,6 +278,12 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 	case <-ctx.Done():
 		return fmt.Errorf("context canceled waiting for route setup-node dmsg client")
 	}
+	// Seed deployment service PKs into routeSetupDmsgC's entry cache
+	// BEFORE swapping in dmsgfirst — same reason as the main dmsgC
+	// path in initDmsg. Without the seed, dmsgfirst's primary
+	// DialStream(dmsgdiscPK) cache-misses, recurses through the
+	// disc client, and overflows the goroutine stack.
+	v.seedDmsgServiceEntries(routeSetupDmsgC, log)
 	// Same dmsgfirst upgrade as the main dmsgC: discovery refresh
 	// prefers DMSG and only falls back to plain HTTP per-call.
 	upgradeDmsgDiscToDmsgfirst(routeSetupDmsgC, v.conf.Dmsg, log)

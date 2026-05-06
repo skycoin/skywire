@@ -25,6 +25,52 @@ export class AppsService {
   }
 
   /**
+   * Adds a new app entry to the visor's launcher config (used to
+   * create additional instances of multi-instance apps like
+   * skysocks-client-2). Returns the freshly-added AppState.
+   */
+  addApp(nodeKey: string, appName: string, binaryName: string) {
+    return this.apiService.post(`visors/${nodeKey}/apps`, {
+      name: appName,
+      binary: binaryName,
+    });
+  }
+
+  /**
+   * Sets / replaces / deletes env-var entries on an existing app.
+   * Empty value means delete that key. Pairs with custom_setting to
+   * configure multi-instance daemons (FIBER_TOML lives in env, the
+   * rest live in args).
+   */
+  setAppEnv(nodeKey: string, appName: string, env: { [key: string]: string }) {
+    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`, { env });
+  }
+
+  /**
+   * Universal-panel save: replaces the full args list (parsed
+   * server-side from a shell-like string), the full env list, and
+   * the persisted launcher mode in one round-trip. Any field can
+   * be omitted to leave it untouched. The visor restarts the app
+   * if any are present (same gate as custom_setting).
+   */
+  setAppFullConfig(nodeKey: string, appName: string, body: {
+    args?: string,
+    env_full?: string[],
+    launcher_mode?: string,
+    autostart?: boolean,
+  }) {
+    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`, body);
+  }
+
+  /**
+   * Returns the cached `<binary> --help` output for an app. Backs
+   * the universal-panel "Show flags" disclosure.
+   */
+  getAppHelp(nodeKey: string, appName: string) {
+    return this.apiService.get(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}/help`);
+  }
+
+  /**
    * Changes the autostart setting of an app.
    */
   changeAppAutostart(nodeKey: string, appName: string, autostart: boolean) {

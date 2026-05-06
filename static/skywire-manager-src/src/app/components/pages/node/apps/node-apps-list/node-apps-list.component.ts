@@ -14,15 +14,11 @@ import GeneralUtils from '../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../layout/confirmation/confirmation.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
-import { SkysocksSettingsComponent } from '../node-apps/skysocks-settings/skysocks-settings.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
-import { SkysocksClientSettingsComponent } from '../node-apps/skysocks-client-settings/skysocks-client-settings.component';
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
-import { UserAppSettingsComponent } from '../node-apps/user-app-settings/user-app-settings.component';
-import { SkychatSettingsComponent } from '../node-apps/skychat-settings/skychat-settings.component';
 
 /**
  * Shows the list of applications of a node. It shows official or user apps, not both at the
@@ -42,7 +38,32 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   private readonly listIdForUserApps = 'up';
 
   // Set with the names of the official apps.
-  private readonly officialAppsList = new Set<string>(['skychat', 'skysocks', 'skysocks-client', 'vpn-client', 'vpn-server']);
+  // Official apps — those shipped with the visor binary and emitted
+  // by config-gen. Used to split the apps list between "Official" and
+  // "User" tabs and to gate the per-app settings dialog dispatch.
+  // Multi-instance entries (skysocks-client-N, skycoin-daemon-aix,
+  // etc.) match by prefix in isOfficialApp() below.
+  private readonly officialAppsList = new Set<string>([
+    'skychat', 'skysocks', 'skysocks-client', 'vpn-client', 'vpn-server',
+    'skycoin-daemon', 'skycoin-web',
+  ]);
+
+  // isOfficialApp covers the multi-instance naming scheme:
+  // 'skysocks-client-2' → skysocks-client family,
+  // 'skycoin-daemon-aix' → skycoin-daemon family. Multi-instance
+  // entries should land under "Official" alongside their canonical
+  // sibling, not in "User".
+  private isOfficialApp(name: string): boolean {
+    if (this.officialAppsList.has(name)) {
+      return true;
+    }
+    for (const base of this.officialAppsList) {
+      if (name.startsWith(base + '-')) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   @Input() nodePK: string;
   @Input() nodeIp: string;
@@ -101,9 +122,9 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     if (this.allApps) {
       this.allAppsForType = [];
       this.allApps.forEach(app => {
-        if (this.showOfficialApps && this.officialAppsList.has(app.name)) {
+        if (this.showOfficialApps && this.isOfficialApp(app.name)) {
           this.allAppsForType.push(app);
-        } else if (!this.showOfficialApps && !this.officialAppsList.has(app.name)) {
+        } else if (!this.showOfficialApps && !this.isOfficialApp(app.name)) {
           this.allAppsForType.push(app);
         }
       });
@@ -277,7 +298,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       return 'http://' + url + port;
     } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
       return location.origin + '/#/vpn/' + this.nodePK + '/status';
-    } else if (!this.officialAppsList.has(app.name)) {
+    } else if (!this.isOfficialApp(app.name)) {
       // Try to get the URL arg. If found, return the URL.
       if (app.args) {
         const urlArgsSet = new Set<string>(['url', '-url']);
@@ -467,7 +488,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       } else if (selectedOption === 3) {
         this.changeAppAutostart(app);
       } else if (selectedOption === 4) {
-        this.config(app);
+        this.toggleExpanded(app.name);
       }
     });
   }
@@ -547,19 +568,25 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Shows the appropriate modal window for configuring the app.
-   */
-  config(app: Application): void {
-    if (app.name === 'skychat') {
-      SkychatSettingsComponent.openDialog(this.dialog, app);
-    } else if (app.name === 'skysocks' || app.name === 'vpn-server') {
-      SkysocksSettingsComponent.openDialog(this.dialog, app);
-    } else if (app.name === 'skysocks-client' || app.name === 'vpn-client') {
-      SkysocksClientSettingsComponent.openDialog(this.dialog, app);
+  // Names of apps whose universal settings panel is currently
+  // expanded. Multiple panels can be open at once — they're inline
+  // so they don't fight for focus the way the old dialogs did.
+  expandedApps = new Set<string>();
+
+  toggleExpanded(name: string): void {
+    if (this.expandedApps.has(name)) {
+      this.expandedApps.delete(name);
     } else {
-      UserAppSettingsComponent.openDialog(this.dialog, app);
+      this.expandedApps.add(name);
     }
+  }
+
+  isExpanded(name: string): boolean {
+    return this.expandedApps.has(name);
+  }
+
+  onSettingsSaved(name: string): void {
+    this.expandedApps.delete(name);
   }
 
   /**
