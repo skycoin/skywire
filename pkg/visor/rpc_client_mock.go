@@ -516,6 +516,12 @@ func (mc *mockRPCClient) DoCustomSetting(appName string, _ map[string]any) error
 	})
 }
 
+// SetAppEnv implements API.
+func (*mockRPCClient) SetAppEnv(string, string, string) error { return nil }
+
+// SetAppEnvBatch implements API.
+func (*mockRPCClient) SetAppEnvBatch(string, map[string]string) error { return nil }
+
 // LogsSince implements API. Manually set (*mockRPPClient).logS before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
 	return mc.logS.LogsSince(timestamp)

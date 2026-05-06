@@ -398,6 +398,99 @@ func (v1 *V1) UpdateAppArgBatch(launch *launcher.AppLauncher, appName string, ar
 	return v1.flush(v1)
 }
 
+// UpdateAppEnv sets, replaces, or deletes a KEY=value entry on the
+// named app's Env list. An empty value deletes the entry. The
+// updated config gets flushed to file if anything changed and the
+// launcher is reset so the new env takes effect on the next start.
+func (v1 *V1) UpdateAppEnv(launch *launcher.AppLauncher, appName, key, value string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	if key == "" {
+		return fmt.Errorf("env key must not be empty")
+	}
+
+	conf := v1.Launcher
+	configChanged := updateEnvEntry(conf, appName, key, value)
+	if !configChanged {
+		return nil
+	}
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
+// UpdateAppEnvBatch is the multi-key counterpart to UpdateAppEnv.
+// One config flush + one launcher reset for the whole batch. An
+// empty map value deletes that key.
+func (v1 *V1) UpdateAppEnvBatch(launch *launcher.AppLauncher, appName string, env map[string]string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	configChanged := false
+	for key, value := range env {
+		if key == "" {
+			return fmt.Errorf("env key must not be empty")
+		}
+		if updateEnvEntry(conf, appName, key, value) {
+			configChanged = true
+		}
+	}
+	if !configChanged {
+		return nil
+	}
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
+// updateEnvEntry mutates conf.Apps[i].Env in place: replaces the
+// entry whose KEY= prefix matches `key`, deletes it if value is
+// empty, or appends a new KEY=value entry. Returns true iff the
+// app's Env actually changed (so the caller knows whether to flush).
+func updateEnvEntry(conf *Launcher, appName, key, value string) bool {
+	prefix := key + "="
+	desired := key + "=" + value
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+		// Look for an existing entry with this key.
+		for j := range conf.Apps[i].Env {
+			if !strings.HasPrefix(conf.Apps[i].Env[j], prefix) {
+				continue
+			}
+			if value == "" {
+				conf.Apps[i].Env = append(conf.Apps[i].Env[:j], conf.Apps[i].Env[j+1:]...)
+				return true
+			}
+			if conf.Apps[i].Env[j] == desired {
+				return false
+			}
+			conf.Apps[i].Env[j] = desired
+			return true
+		}
+		// No existing entry; nothing to delete.
+		if value == "" {
+			return false
+		}
+		conf.Apps[i].Env = append(conf.Apps[i].Env, desired)
+		return true
+	}
+	// App not found — silently no-op, mirrors UpdateAppArg's behavior
+	// (it iterates and just doesn't match).
+	return false
+}
+
 // UpdateAppPort update app port for communicat with visor
 func (v1 *V1) UpdateAppPort(launch *launcher.AppLauncher, appName string, port uint16) error {
 	v1.mu.Lock()

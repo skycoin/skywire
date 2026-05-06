@@ -93,22 +93,23 @@ func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		type req struct {
-			AutoStart     *bool          `json:"autostart,omitempty"`
-			Killswitch    *bool          `json:"killswitch,omitempty"`
-			Secure        *bool          `json:"secure,omitempty"`
-			Address       *string        `json:"Address,omitempty"`
-			Status        *int           `json:"status,omitempty"`
-			Whitelist     *string        `json:"whitelist,omitempty"`
-			NetIfc        *string        `json:"netifc,omitempty"`
-			DNSAddr       *string        `json:"dns,omitempty"`
-			PK            *cipher.PubKey `json:"pk,omitempty"`
-			CustomSetting map[string]any `json:"custom_setting,omitempty"`
+			AutoStart     *bool             `json:"autostart,omitempty"`
+			Killswitch    *bool             `json:"killswitch,omitempty"`
+			Secure        *bool             `json:"secure,omitempty"`
+			Address       *string           `json:"Address,omitempty"`
+			Status        *int              `json:"status,omitempty"`
+			Whitelist     *string           `json:"whitelist,omitempty"`
+			NetIfc        *string           `json:"netifc,omitempty"`
+			DNSAddr       *string           `json:"dns,omitempty"`
+			PK            *cipher.PubKey    `json:"pk,omitempty"`
+			CustomSetting map[string]any    `json:"custom_setting,omitempty"`
+			Env           map[string]string `json:"env,omitempty"`
 		}
 
 		shouldRestartApp := func(r req) bool {
 			// we restart the app if one of these fields was changed
 			return r.Killswitch != nil || r.Secure != nil || r.Address != nil || r.Whitelist != nil ||
-				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil
+				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil || r.Env != nil
 		}
 
 		var reqBody req
@@ -182,6 +183,13 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.CustomSetting != nil {
 			if err := ctx.API.DoCustomSetting(ctx.App.Name, reqBody.CustomSetting); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Env != nil {
+			if err := ctx.API.SetAppEnvBatch(ctx.App.Name, reqBody.Env); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}

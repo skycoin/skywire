@@ -89,6 +89,8 @@ type API interface {
 	SetAppNetworkInterface(appName string, netifc string) error
 	SetAppDNS(appName string, dnsaddr string) error
 	DoCustomSetting(appName string, customSetting map[string]any) error
+	SetAppEnv(appName, key, value string) error
+	SetAppEnvBatch(appName string, env map[string]string) error
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)

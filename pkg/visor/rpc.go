@@ -152,6 +152,22 @@ type SetAppMapIn struct {
 	AppName string
 	Val     map[string]any
 }
+
+// SetAppEnvIn carries a single KEY=value mutation for an app's
+// environment. Empty Value deletes the entry.
+type SetAppEnvIn struct {
+	AppName string
+	Key     string
+	Value   string
+}
+
+// SetAppEnvBatchIn carries a multi-key environment mutation. Map
+// values are strings (env vars are KEY=string by definition);
+// empty values delete.
+type SetAppEnvBatchIn struct {
+	AppName string
+	Env     map[string]string
+}
 type TransportsIn struct {
 	FilterTypes   []string
 	FilterPubKeys []cipher.PubKey

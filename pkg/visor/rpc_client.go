@@ -395,6 +395,23 @@ func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]an
 	}, &struct{}{})
 }
 
+// SetAppEnv implements API.
+func (rc *rpcClient) SetAppEnv(appName, key, value string) error {
+	return rc.Call("SetAppEnv", &SetAppEnvIn{
+		AppName: appName,
+		Key:     key,
+		Value:   value,
+	}, &struct{}{})
+}
+
+// SetAppEnvBatch implements API.
+func (rc *rpcClient) SetAppEnvBatch(appName string, env map[string]string) error {
+	return rc.Call("SetAppEnvBatch", &SetAppEnvBatchIn{
+		AppName: appName,
+		Env:     env,
+	}, &struct{}{})
+}
+
 // LogsSince calls LogsSince
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)

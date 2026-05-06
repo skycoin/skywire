@@ -71,6 +71,18 @@ func (r *RPC) DoCustomSetting(in *SetAppMapIn, _ *struct{}) (err error) {
 	return r.visor.DoCustomSetting(in.AppName, in.Val)
 }
 
+// SetAppEnv sets/replaces/deletes a single KEY=value entry on an app's environment.
+func (r *RPC) SetAppEnv(in *SetAppEnvIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppEnv", in)(nil, &err)
+	return r.visor.SetAppEnv(in.AppName, in.Key, in.Value)
+}
+
+// SetAppEnvBatch is the multi-key counterpart to SetAppEnv.
+func (r *RPC) SetAppEnvBatch(in *SetAppEnvBatchIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppEnvBatch", in)(nil, &err)
+	return r.visor.SetAppEnvBatch(in.AppName, in.Env)
+}
+
 // RegisterApp registers a App with provided proc config.
 func (r *RPC) RegisterApp(procConf *appcommon.ProcConfig, reply *appcommon.ProcKey) (err error) {
 	defer rpcutil.LogCall(r.log, "RegisterApp", procConf)(reply, &err)

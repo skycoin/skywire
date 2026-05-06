@@ -84,6 +84,24 @@ func (v *Visor) AddApp(appName, binaryName string) error {
 	return v.conf.AddAppConfig(v.appL, appName, binaryName)
 }
 
+// SetAppEnv implements API. Sets / replaces / deletes a KEY=value
+// entry on the named app's environment. Empty value deletes.
+func (v *Visor) SetAppEnv(appName, key, value string) error {
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	return v.conf.UpdateAppEnv(v.appL, appName, key, value)
+}
+
+// SetAppEnvBatch is the multi-key counterpart to SetAppEnv. Single
+// config flush + launcher reset for the whole batch.
+func (v *Visor) SetAppEnvBatch(appName string, env map[string]string) error {
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	return v.conf.UpdateAppEnvBatch(v.appL, appName, env)
+}
+
 // RegisterApp implements API.
 func (v *Visor) RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error) {
 	// check process manager and app launcher availability
