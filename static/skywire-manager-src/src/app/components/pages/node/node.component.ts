@@ -298,7 +298,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
         },
         {
-          icon: 'terminal',
+          // 'terminal' was added to Material Icons in 2020 but the
+          // font we ship locally predates that. 'code' is in the
+          // bundled glyph map and reads as terminal-ish.
+          icon: 'code',
           label: 'node.tabs.terminal',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'terminal'] : null,
         },
