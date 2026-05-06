@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dht"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -36,6 +37,7 @@ var log = logging.MustGetLogger("service-discovery")
 const redisPrefix = "service-discovery"
 
 var (
+	configPath     string
 	addr           string
 	metricsAddr    string
 	redisURL       string
@@ -113,6 +115,7 @@ GET /security/nonces/{pk}
 }
 
 func init() {
+	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. Generate with `skywire cli config gen --sd -o /etc/skywire/service-discovery.json`.\n\r")
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to\n\r")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
@@ -162,6 +165,16 @@ Example:
   skywire cli config gen-keys | tee sd-keys.txt
   service-discovery --sk $(tail -n1 sd-keys.txt)`,
 	Run: func(_ *cobra.Command, _ []string) {
+		var configServers []*disc.Entry
+		var configSurveyWL []cipher.PubKey
+		if configPath != "" {
+			c, cErr := LoadConfig(configPath)
+			if cErr != nil {
+				log.Fatal(cErr)
+			}
+			configServers, configSurveyWL = applyConfig(c)
+		}
+
 		if dmsgDisc == "" {
 			dmsgDisc = dmsg.DiscURL(false)
 		}
@@ -249,6 +262,12 @@ Example:
 			log.WithError(err).Fatal("invalid --mode")
 		}
 
+		embeddedServers := dmsgDiscEntries(configServers)
+		surveyWL := deployment.Prod.SurveyWhitelist
+		if len(configSurveyWL) > 0 {
+			surveyWL = configSurveyWL
+		}
+
 		h, err := svcmode.Start(ctx, svcmode.Config{
 			Mode:                resolvedMode,
 			HTTPAddr:            addr,
@@ -258,8 +277,8 @@ Example:
 			DmsgPort:            dmsgPort,
 			DmsgDiscovery:       dmsgDisc,
 			DmsgServerType:      dmsgServerType,
-			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
-			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
+			EmbeddedDmsgServers: embeddedServers,
+			SurveyWhitelist:     surveyWL,
 			Log:                 log,
 			DisableDHT:          true,
 			OnDmsgServersUpdated: func(s []string) {

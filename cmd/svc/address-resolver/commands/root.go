@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dht"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -38,6 +39,7 @@ const (
 )
 
 var (
+	configPath      string
 	addr            string
 	udpAddr         string
 	publicUDPAddr   string
@@ -120,6 +122,7 @@ GET /security/nonces/{pk}
 }
 
 func init() {
+	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. Generate with `skywire cli config gen --ar -o /etc/skywire/address-resolver.json`.\n\r")
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9093", "address to bind to\n\r")
 	RootCmd.Flags().StringVar(&udpAddr, "udp-addr", ":30178", "UDP address to bind to for SUDPH\n\r")
 	RootCmd.Flags().StringVar(&publicUDPAddr, "public-udp-address", "", "externally-reachable host:port advertised in /health for SUDPH (e.g. ar.example.com:30178)\n\rrequired for visors that reach this AR over dmsghttp; without it those visors cannot register SUDPH")
@@ -184,6 +187,16 @@ Example:
 	Run: func(_ *cobra.Command, _ []string) {
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
+		}
+
+		var configServers []*disc.Entry
+		var configSurveyWL []cipher.PubKey
+		if configPath != "" {
+			c, cErr := LoadConfig(configPath)
+			if cErr != nil {
+				log.Fatal(cErr)
+			}
+			configServers, configSurveyWL = applyConfig(c)
 		}
 
 		if !strings.HasPrefix(redisURL, redisScheme) {
@@ -291,6 +304,12 @@ Example:
 			logger.WithError(err).Fatal("invalid --mode")
 		}
 
+		embeddedServers := dmsgDiscEntries(configServers)
+		surveyWL := deployment.Prod.SurveyWhitelist
+		if len(configSurveyWL) > 0 {
+			surveyWL = configSurveyWL
+		}
+
 		h, err := svcmode.Start(ctx, svcmode.Config{
 			Mode:                resolvedMode,
 			HTTPAddr:            addr,
@@ -300,8 +319,8 @@ Example:
 			DmsgPort:            dmsgPort,
 			DmsgDiscovery:       dmsgDisc,
 			DmsgServerType:      dmsgServerType,
-			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
-			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
+			EmbeddedDmsgServers: embeddedServers,
+			SurveyWhitelist:     surveyWL,
 			Log:                 logger,
 			DisableDHT:          true,
 			OnDmsgServersUpdated: func(s []string) {

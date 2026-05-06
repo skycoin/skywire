@@ -39,6 +39,7 @@ const redisPasswordEnvName = "REDIS_PASSWORD"
 
 var (
 	sf                cmdutil.ServiceFlags
+	configPath        string
 	addr              string
 	redisURL          string
 	whitelistKeys     string
@@ -61,6 +62,7 @@ var (
 func init() {
 	sf.Init(RootCmd, "dmsg_disc", "")
 
+	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. When set, every other CLI flag below is ignored — fields come from the config file. Generate one with `skywire cli config gen --dmsgdisc -o /etc/skywire/dmsg-discovery.json`.\n\r")
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9090", "address to bind to\n\r")
 	RootCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
@@ -128,6 +130,19 @@ Example:
 		}
 
 		log := sf.Logger()
+
+		// configServers, when non-nil, overrides the embedded keyring
+		// preload below. Populated only when --config is set.
+		var configServers []*disc.Entry
+		if configPath != "" {
+			c, cErr := LoadConfig(configPath)
+			if cErr != nil {
+				log.WithError(cErr).Fatal("failed to load config")
+			}
+			applyConfig(c)
+			configServers = c.DmsgServers
+			log.WithField("path", configPath).Info("loaded config")
+		}
 
 		var err error
 		if keyFile != "" {
@@ -199,27 +214,32 @@ Example:
 			}
 		}()
 		if !pk.Null() && resolvedMode.IncludesDmsg() {
-			// Preload dmsg-servers from the embedded deployment keyring
-			// so the local direct.Client can dial dmsg BEFORE any
-			// HTTP-side registration has happened. Operators that need
-			// a non-default keyring (private network, lab) point
-			// SKYDEPLOY at a custom services-config.json — see
-			// deployment/config.go. Falling back to the legacy API
-			// self-poll only happens when both embedded keyring is
-			// empty AND SKYDEPLOY hasn't supplied one — typically
-			// development with a hand-rolled binary.
-			src := deployment.Prod
-			srcName := "deployment.Prod"
-			if testEnvironment {
-				src = deployment.Test
-				srcName = "deployment.Test"
-			}
-			servers := src.ToDiscEntries()
-			if len(servers) > 0 {
-				log.WithField("count", len(servers)).WithField("source", srcName).Info("preloading dmsg-servers from embedded deployment keyring")
-			} else {
-				log.Warn("no dmsg-servers in embedded deployment keyring; falling back to API self-poll (legacy behavior; will block until at least one server registers over HTTP)")
-				servers = getServers(ctx, a, dmsgServerType, log)
+			// Source priority for the dmsg-server transit set:
+			//   1. config.dmsg_servers from --config (config-file mode)
+			//   2. embedded deployment keyring (deployment.Prod, or
+			//      deployment.Test with --test-environment)
+			//   3. legacy API self-poll (the original bootstrap loop;
+			//      kept as last-resort safety net for binaries built
+			//      with an empty embedded keyring)
+			var servers []*disc.Entry
+			switch {
+			case len(configServers) > 0:
+				servers = configServers
+				log.WithField("count", len(servers)).WithField("source", "config").Info("preloading dmsg-servers from config")
+			default:
+				src := deployment.Prod
+				srcName := "deployment.Prod"
+				if testEnvironment {
+					src = deployment.Test
+					srcName = "deployment.Test"
+				}
+				servers = src.ToDiscEntries()
+				if len(servers) > 0 {
+					log.WithField("count", len(servers)).WithField("source", srcName).Info("preloading dmsg-servers from embedded deployment keyring")
+				} else {
+					log.Warn("no dmsg-servers in embedded deployment keyring; falling back to API self-poll (legacy behavior; will block until at least one server registers over HTTP)")
+					servers = getServers(ctx, a, dmsgServerType, log)
+				}
 			}
 			config := &dmsg.Config{
 				MinSessions:          0, // listen on all available servers
