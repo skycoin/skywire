@@ -15,7 +15,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ErrorStateMatcher, ShowOnDirtyErrorStateMatcher, RippleGlobalOptions, MAT_RIPPLE_GLOBAL_OPTIONS } from '@angular/material/core';
 import { MAT_DIALOG_DEFAULT_OPTIONS, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
+import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -77,7 +77,11 @@ import { SkychatComponent } from './components/pages/node/skychat/skychat.compon
 import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.component';
 import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
+import { WalletComponent } from './components/pages/node/wallet/wallet.component';
+import { AppSettingsComponent } from './components/pages/node/apps/app-settings/app-settings.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
+import { VpnComponent } from './components/pages/node/vpn/vpn.component';
+import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
@@ -85,19 +89,6 @@ import { MultiVisorUptimeComponent } from './components/pages/multi-visor-uptime
 import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
-import { SkysocksSettingsComponent } from './components/pages/node/apps/node-apps/skysocks-settings/skysocks-settings.component';
-import {
-  SkysocksClientSettingsComponent
-} from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
-import {
-  EditSkysocksClientNoteComponent
-} from './components/pages/node/apps/node-apps/skysocks-client-settings/edit-skysocks-client-note/edit-skysocks-client-note.component';
-import {
-  SkysocksClientFilterComponent
-} from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-filter/skysocks-client-filter.component';
-import {
-  SkysocksClientPasswordComponent
-} from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-password/skysocks-client-password.component';
 import { FiltersSelectionComponent } from './components/layout/filters-selection/filters-selection.component';
 import { LabeledElementTextComponent } from './components/layout/labeled-element-text/labeled-element-text.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
@@ -117,9 +108,7 @@ import { UpdateAllComponent } from './components/layout/update-all/update-all.co
 import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
 import { RewardsAddressComponent } from './components/pages/node/node-info/node-info-content/rewards-address-config/rewards-address-config.component';
 import { BulkRewardAddressChangerComponent } from './components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
-import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps/user-app-settings/user-app-settings.component';
 import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
-import { SkychatSettingsComponent } from './components/pages/node/apps/node-apps/skychat-settings/skychat-settings.component';
 import { TabSelectorComponent } from './components/layout/tab-selector/tab-selector.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
@@ -180,7 +169,11 @@ const globalRippleConfig: RippleGlobalOptions = {
         BandwidthComponent,
         UptimeComponent,
         TerminalComponent,
+        WalletComponent,
+        AppSettingsComponent,
         WebProxyComponent,
+        VpnComponent,
+        SkysocksTabComponent,
         LogsComponent,
         NetworkViewComponent,
         MultiVisorResourcesComponent,
@@ -188,17 +181,12 @@ const globalRippleConfig: RippleGlobalOptions = {
         NetworkTransportsComponent,
         NodeInfoComponent,
         SelectOptionComponent,
-        SkysocksSettingsComponent,
-        SkysocksClientSettingsComponent,
         FiltersSelectionComponent,
         LabeledElementTextComponent,
         AllLabelsComponent,
         LabelListComponent,
         UpdateComponent,
         UpdaterConfigComponent,
-        EditSkysocksClientNoteComponent,
-        SkysocksClientFilterComponent,
-        SkysocksClientPasswordComponent,
         RouterConfigComponent,
         VpnServerListComponent,
         VpnStatusComponent,
@@ -212,9 +200,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         VpnDnsConfigComponent,
         RewardsAddressComponent,
         BulkRewardAddressChangerComponent,
-        UserAppSettingsComponent,
         NodeLogsComponent,
-        SkychatSettingsComponent,
         TabSelectorComponent,
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
@@ -245,4 +231,15 @@ const globalRippleConfig: RippleGlobalOptions = {
         { provide: MAT_RIPPLE_GLOBAL_OPTIONS, useValue: globalRippleConfig },
         provideHttpClient(withInterceptorsFromDi()),
     ] })
-export class AppModule { }
+export class AppModule {
+  // Angular Material 19+ defaults <mat-icon> to the
+  // "Material Symbols Outlined" font, but we ship the older
+  // "Material Icons" font locally (assets/fonts/material-icons/*).
+  // Without this override every icon renders as a literal token like
+  // "terminal" or "settings" because the symbols font isn't loaded —
+  // the per-tab icon row in the per-visor view then overflows
+  // horizontally as text. Wire the registry to our font on bootstrap.
+  constructor(iconRegistry: MatIconRegistry) {
+    iconRegistry.setDefaultFontSetClass('material-icons');
+  }
+}

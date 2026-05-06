@@ -67,6 +67,10 @@ func (t PacketType) String() string {
 		return "SetupRPC"
 	case VisorRPCPacket:
 		return "VisorRPC"
+	case SkynetForwardPacket:
+		return "SkynetForward"
+	case AppDirectPacket:
+		return "AppDirect"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -97,6 +101,7 @@ const (
 	SetupRPCPacket      // RSN RPC relay over transport (route ID = 0), payload: virtual stream data
 	VisorRPCPacket      // visor RPC over transport (route ID = 0), payload: virtual stream data
 	SkynetForwardPacket // skynet port forwarding over direct transport (route ID = 0), virtual stream
+	AppDirectPacket     // skywire-network app direct dial over direct transport (route ID = 0), virtual stream
 )
 
 // Capability bitmap flags for extended handshake negotiation.

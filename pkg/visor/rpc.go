@@ -115,6 +115,12 @@ type SetAppAddIn struct {
 	AppName    string
 	BinaryName string
 }
+
+// AppNameIn carries a single app name for RPCs whose only argument
+// is the target's name (DeleteApp, etc.).
+type AppNameIn struct {
+	AppName string
+}
 type StartVPNClientIn struct {
 	PK           cipher.PubKey
 	LauncherMode string // "internal", "external", or "" for default
@@ -151,6 +157,41 @@ type SetAppStringIn struct {
 type SetAppMapIn struct {
 	AppName string
 	Val     map[string]any
+}
+
+// SetAppEnvIn carries a single KEY=value mutation for an app's
+// environment. Empty Value deletes the entry.
+type SetAppEnvIn struct {
+	AppName string
+	Key     string
+	Value   string
+}
+
+// SetAppEnvBatchIn carries a multi-key environment mutation. Map
+// values are strings (env vars are KEY=string by definition);
+// empty values delete.
+type SetAppEnvBatchIn struct {
+	AppName string
+	Env     map[string]string
+}
+
+// SetAppArgsIn replaces the entire Args slice on an app.
+type SetAppArgsIn struct {
+	AppName string
+	Args    []string
+}
+
+// SetAppEnvFullIn replaces the entire Env slice on an app.
+type SetAppEnvFullIn struct {
+	AppName string
+	Env     []string
+}
+
+// SetAppLauncherModeIn persists the launcher-mode preference.
+// Mode is "" / "internal" / "external".
+type SetAppLauncherModeIn struct {
+	AppName string
+	Mode    string
 }
 type TransportsIn struct {
 	FilterTypes   []string

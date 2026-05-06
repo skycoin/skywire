@@ -324,6 +324,25 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		log.Info("Direct skynet forwarding enabled (route ID 0)")
 	}
 
+	// Bring up the AppDirect mux for direct skywire-network app dials
+	// (skysocks-client, vpn-client, etc. — anything riding the
+	// appnet.SkywireNetworker dial path). Mirrors the skynet mux
+	// above: visor owns the mux, the SkywireNetworker registers an
+	// accept loop on it, and clients use it before falling back to
+	// route-setup-mediated DialRoutes. Hands the same mux to the
+	// networker for outbound dials too.
+	if v.tpM != nil {
+		appDirectMux := transport.NewVStreamMux(v.tpM, routing.AppDirectPacket, log)
+		v.tpM.SetAppDirectHandler(appDirectMux.HandlePacket)
+		v.appDirectMux = appDirectMux
+		if n, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
+			if sn, ok := n.(*appnet.SkywireNetworker); ok {
+				sn.SetAppDirectMux(appDirectMux)
+				log.Info("Direct skywire-network app dial enabled (route ID 0)")
+			}
+		}
+	}
+
 	return nil
 }
 

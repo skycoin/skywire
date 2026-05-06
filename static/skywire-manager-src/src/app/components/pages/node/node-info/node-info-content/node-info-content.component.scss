@@ -28,6 +28,79 @@
   }
 }
 
+// Three-card responsive layout for the Visor info section. Each
+// card is a self-contained label/value panel; together they pack
+// into 1, 2, or 3 columns based on viewport width via auto-fit.
+// The Identity card spans both columns when the layout is 2-up
+// (PK is wide; needs the room).
+.info-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.info-card {
+  background: rgba(0, 212, 255, 0.03);
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  border-radius: 8px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0; // let long values inside (PK, IPs) wrap rather than overflow
+
+  .section-title {
+    margin-bottom: 6px;
+  }
+
+  .info-line {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  // Drop the bg/border on the dmsg-servers panel inside an info-card
+  // so it doesn't double-up the card's own background. Keep the
+  // left-border accent.
+  .dmsg-servers-list {
+    background: transparent;
+    padding: 6px 8px;
+    margin-left: 4px;
+  }
+}
+
+// Identity card — make it the wide one when 2 cards fit per row.
+// 3-card-per-row layouts pack identity into a normal cell.
+.identity-card {
+  @media (min-width: 800px) and (max-width: 1199px) {
+    grid-column: 1 / -1;
+  }
+}
+
+// Legacy class kept around for sub-components that still reference
+// it; equivalent to the per-card .info-line treatment above.
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 4px 24px;
+  align-items: baseline;
+
+  > .info-line {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+}
+
+.grid-span-all {
+  grid-column: 1 / -1;
+}
+
 // .info-line / .toggle-line / .inline-edit-btn / .inline-form
 // styles moved to assets/scss/_forms.scss so they apply globally
 // (Rewards / Routing / Transports tabs reuse the same classes
@@ -182,6 +255,56 @@ textarea.raw-config.config-editor {
   gap: 6px;
 
   .mat-icon { font-size: 16px; }
+}
+
+// Router Settings section — checkboxes + numeric inputs for the
+// visor-wide dial-time knobs (force_local_routes, existing_tp_only,
+// mux_routes, min_hops). UI parity with 'cli proxy start --xxx'.
+.router-settings {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid rgba(0, 212, 255, 0.4);
+  border-radius: 4px;
+}
+
+.rs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  font-size: 0.9em;
+
+  input[type="checkbox"] { accent-color: #00d4ff; }
+
+  .rs-label {
+    color: rgba(255, 255, 255, 0.92);
+    flex: 0 0 auto;
+  }
+
+  .rs-hint {
+    flex: 1;
+    line-height: 1.35;
+  }
+
+  .rs-num {
+    width: 80px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: rgba(255, 255, 255, 0.95);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    outline: none;
+
+    &:focus { border-color: rgba(0, 212, 255, 0.6); }
+  }
 }
 
 // Per-subsystem health lines (indented under the aggregate "Services" line).

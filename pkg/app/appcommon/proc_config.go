@@ -89,7 +89,13 @@ type ProcConfig struct {
 	BinaryLoc    string        `json:"binary_loc"`
 	LogDBLoc     string        `json:"log_db_loc"`
 	LogStorePath string        `json:"log_store_path"`
-	RunFunc      interface{}   `json:"-"`
+	// ProcUser / ProcGroup drop the spawned process to a different
+	// UID/GID before exec (POSIX, external launcher only). Ignored
+	// silently when RunFunc != nil (internal launcher) since
+	// credentials are process-wide.
+	ProcUser  string      `json:"proc_user,omitempty"`
+	ProcGroup string      `json:"proc_group,omitempty"`
+	RunFunc   interface{} `json:"-"`
 }
 
 // ProcConfigFromEnv obtains a ProcConfig from the associated env variable, returning an error if any.
