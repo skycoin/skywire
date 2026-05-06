@@ -283,18 +283,18 @@ type PublicVisorConfig struct {
 
 // Launcher configures the app
 type Launcher struct {
-	ServiceDisc       string `json:"service_discovery"`
-	ServiceDiscDmsg   string `json:"service_discovery_dmsg,omitempty"` // DMSG-HTTP URL for service discovery
+	ServiceDisc     string `json:"service_discovery"`
+	ServiceDiscDmsg string `json:"service_discovery_dmsg,omitempty"` // DMSG-HTTP URL for service discovery
 	// Apps uses the appsList wrapper so on-disk JSON renders each
 	// AppConfig's Args as a single shell-like string (much easier
 	// to hand-edit than the array form). Old configs with array-
 	// form args still load. Behaviorally this is a []appserver.AppConfig
 	// — readers that take the Apps field unchanged still work.
 	Apps              appsList `json:"apps"`
-	ServerAddr        string                `json:"server_addr"`
-	BinPath           string                `json:"bin_path"`
-	DisplayNodeIP     bool                  `json:"display_node_ip"`
-	HeartbeatInterval Duration              `json:"heartbeat_interval,omitempty"`
+	ServerAddr        string   `json:"server_addr"`
+	BinPath           string   `json:"bin_path"`
+	DisplayNodeIP     bool     `json:"display_node_ip"`
+	HeartbeatInterval Duration `json:"heartbeat_interval,omitempty"`
 }
 
 // Flush flushes the config to file (if specified).

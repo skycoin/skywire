@@ -4,22 +4,22 @@
 // (re)generate the visor config and (re)start the service. The shape
 // of the output — paths, owner, systemd unit — is driven entirely by
 // the SKYENV file (default /etc/skywire.conf, with one level of
-// SKYENV= redirect honoured by pkg/cmdutil/skyenv).
+// SKYENV= redirect honored by pkg/cmdutil/skyenv).
 //
 // Identity model:
 //
-//   PKGENV=true  → /opt/skywire/* paths, system-level systemd unit.
-//                  When SKYWIRE_USER=name is also set in the file,
-//                  autoconfig writes a drop-in pinning User= and
-//                  chowns /opt/skywire/* to that user, so the visor
-//                  runs as them.
+//	PKGENV=true  → /opt/skywire/* paths, system-level systemd unit.
+//	               When SKYWIRE_USER=name is also set in the file,
+//	               autoconfig writes a drop-in pinning User= and
+//	               chowns /opt/skywire/* to that user, so the visor
+//	               runs as them.
 //
-//   USRENV=true  → $HOME-based paths, user-level systemd unit
-//                  (`systemctl --user`).
+//	USRENV=true  → $HOME-based paths, user-level systemd unit
+//	               (`systemctl --user`).
 //
-//   neither set  → euid==0 falls back to PKGENV behaviour, otherwise
-//                  USRENV. This preserves the legacy "root install"
-//                  flow for operators who haven't migrated.
+//	neither set  → euid==0 falls back to PKGENV behavior, otherwise
+//	               USRENV. This preserves the legacy "root install"
+//	               flow for operators who haven't migrated.
 //
 // The only env var autoconfig itself reads is SKYENV (the path to
 // the env file). Everything else lives inside that file.
@@ -80,8 +80,8 @@ type resolvedConfig struct {
 }
 
 var autoconfigCmd = &cobra.Command{
-	Use:    "autoconfig",
-	Short:  "Automatic visor configuration for packages",
+	Use:   "autoconfig",
+	Short: "Automatic visor configuration for packages",
 	Long: `Automatic visor configuration. Reads /etc/skywire.conf (or whatever
 SKYENV points at), generates the visor config, manages the systemd
 drop-in, and restarts (or prompts to start) the service.
@@ -214,7 +214,7 @@ Mode is selected by PKGENV/USRENV in the env file:
 
 // resolveConfig reads the skyenv file and translates it to the
 // concrete answers downstream code needs. Falls back gracefully to
-// the legacy PKGENV-on-root behaviour when the file is silent.
+// the legacy PKGENV-on-root behavior when the file is silent.
 func resolveConfig() resolvedConfig {
 	r := resolvedConfig{}
 	r.skyenvPath = os.Getenv("SKYENV")
@@ -292,10 +292,13 @@ func generateConfig(r resolvedConfig, hvArg string) error {
 // same user.
 func writeSystemdDropIn(username string) error {
 	content := fmt.Sprintf("# Managed by `skywire autoconfig`. Edits will be overwritten.\n[Service]\nUser=%s\nGroup=%s\n", username, username)
-	if err := os.MkdirAll(filepath.Dir(systemdDropIn), 0o755); err != nil {
+	// Systemd drop-in dir + file are intentionally world-readable.
+	// systemctl reads these as root regardless, but the operator may
+	// also want to inspect them without sudo.
+	if err := os.MkdirAll(filepath.Dir(systemdDropIn), 0o755); err != nil { //nolint:gosec
 		return err
 	}
-	return os.WriteFile(systemdDropIn, []byte(content), 0o644)
+	return os.WriteFile(systemdDropIn, []byte(content), 0o644) //nolint:gosec
 }
 
 // chownInstall recursively chowns the package install path to the
@@ -310,11 +313,14 @@ func chownInstall(username string) error {
 	uid, _ := strconv.Atoi(u.Uid) //nolint:errcheck
 	gid, _ := strconv.Atoi(u.Gid) //nolint:errcheck
 	root := skyenv.SkywirePath
+	// Walk root is the package install path (e.g. /opt/skywire) under
+	// our control; symlink-TOCTOU isn't a realistic threat for an
+	// install-time chown of paths the package itself just laid down.
 	return filepath.Walk(root, func(path string, _ os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		return os.Lchown(path, uid, gid)
+		return os.Lchown(path, uid, gid) //nolint:gosec
 	})
 }
 

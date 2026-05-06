@@ -40,7 +40,7 @@ var daemonListCmd = &cobra.Command{
 
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
-		_, _ = fmt.Fprintln(w, "name\tauto_start\tstatus\tfiber_toml")
+		_, _ = fmt.Fprintln(w, "name\tauto_start\tstatus\tfiber_toml") //nolint:errcheck
 		for _, s := range states {
 			if !isDaemon(s.Name) {
 				continue
@@ -58,9 +58,9 @@ var daemonListCmd = &cobra.Command{
 			if fiber == "" {
 				fiber = "(skycoin defaults)"
 			}
-			_, _ = fmt.Fprintf(w, "%s\t%t\t%s\t%s\n", s.Name, s.AutoStart, status, fiber)
+			_, _ = fmt.Fprintf(w, "%s\t%t\t%s\t%s\n", s.Name, s.AutoStart, status, fiber) //nolint:errcheck
 		}
-		_ = w.Flush()
+		_ = w.Flush() //nolint:errcheck
 		internal.PrintOutput(cmd.Flags(), nil, b.String())
 	},
 }

@@ -3,7 +3,7 @@
 // Renders the per-app Args slice as a single shell-like string in
 // the on-disk config file. The hand-edit experience is the goal:
 //
-//   "args": "skycoin daemon --port 6420 --data-dir /var/skycoin/sky"
+//	"args": "skycoin daemon --port 6420 --data-dir /var/skycoin/sky"
 //
 // is far easier to read and tweak than the array form. The Go
 // internals (launcher, RPC, HTTP API) keep []string — only the

@@ -109,7 +109,7 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		opts.AppName = AppNameFromContext(ctx)
 	}
 
-	if directConn, ok := r.tryDirectDial(ctx, addr); ok {
+	if directConn, ok := r.tryDirectDial(addr); ok {
 		return &SkywireConn{
 			Conn:     directConn,
 			freePort: freePort,
@@ -134,7 +134,7 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 // debug level since the fallback is the load-bearing path; we don't
 // want to surface a noisy error every time direct happens not to be
 // available.
-func (r *SkywireNetworker) tryDirectDial(ctx context.Context, addr Addr) (net.Conn, bool) {
+func (r *SkywireNetworker) tryDirectDial(addr Addr) (net.Conn, bool) {
 	mux := r.appDirectMux
 	if mux == nil {
 		return nil, false
@@ -215,12 +215,12 @@ type directConn struct {
 	remote cipher.PubKey
 }
 
-func (c *directConn) LocalAddr() net.Addr                  { return Addr{Net: TypeSkynet} }
-func (c *directConn) RemoteAddr() net.Addr                 { return Addr{Net: TypeSkynet, PubKey: c.remote} }
-func (c *directConn) SetDeadline(_ time.Time) error        { return nil }
-func (c *directConn) SetReadDeadline(_ time.Time) error    { return nil }
-func (c *directConn) SetWriteDeadline(_ time.Time) error   { return nil }
-func (c *directConn) RemotePK() cipher.PubKey              { return c.remote }
+func (c *directConn) LocalAddr() net.Addr                { return Addr{Net: TypeSkynet} }
+func (c *directConn) RemoteAddr() net.Addr               { return Addr{Net: TypeSkynet, PubKey: c.remote} }
+func (c *directConn) SetDeadline(_ time.Time) error      { return nil }
+func (c *directConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (c *directConn) SetWriteDeadline(_ time.Time) error { return nil }
+func (c *directConn) RemotePK() cipher.PubKey            { return c.remote }
 
 // SetAppDirectMux installs the visor's AppDirectMux on this
 // networker and starts the accept loop that dispatches inbound
@@ -290,15 +290,15 @@ func (r *SkywireNetworker) handleDirectStream(stream *transport.VStream) {
 		// Send 0x01 NACK so the dialer doesn't time out waiting for
 		// an ack that never comes; lets it fall through to the
 		// route-setup path immediately.
-		_, _ = stream.Write([]byte{0x01})
-		stream.Close() //nolint:errcheck,gosec
+		_, _ = stream.Write([]byte{0x01}) //nolint:errcheck
+		stream.Close()                    //nolint:errcheck,gosec
 		return
 	}
 	lis, ok := lisIfc.(*skywireListener)
 	if !ok {
 		log.WithField("port", port).Debug("Direct app-dial: porter slot is not a skywireListener")
-		_, _ = stream.Write([]byte{0x01})
-		stream.Close() //nolint:errcheck,gosec
+		_, _ = stream.Write([]byte{0x01}) //nolint:errcheck
+		stream.Close()                    //nolint:errcheck,gosec
 		return
 	}
 	// 0x00 ACK — listener found, conn is being handed in.

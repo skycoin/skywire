@@ -1336,7 +1336,7 @@ func configureHypervisor(log *logging.Logger) {
 //
 // Returns an error on flag-validation failure; the caller should
 // surface it to log.Fatal so config-gen aborts cleanly.
-func buildSkycoinDaemonApps(log *logging.Logger) ([]appserver.AppConfig, error) {
+func buildSkycoinDaemonApps() ([]appserver.AppConfig, error) {
 	insts := splitCSV(skycoinDaemonInstances)
 
 	if len(insts) == 0 {
@@ -1538,7 +1538,7 @@ func configureApps(log *logging.Logger) {
 		// SKYCOIND_INSTANCES entry). Each multi-instance entry gets
 		// auto-allocated --port + --data-dir and a FIBER_TOML env
 		// when the entry is a fiber.toml path.
-		daemons, derr := buildSkycoinDaemonApps(log)
+		daemons, derr := buildSkycoinDaemonApps()
 		if derr != nil {
 			log.WithError(derr).Fatal("invalid skycoin daemon configuration")
 		}

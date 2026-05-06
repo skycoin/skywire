@@ -170,17 +170,17 @@ type appHelpCacheEntry struct {
 // AppHelp returns the `--help` output for the named app. Three
 // resolution paths to cover the launcher's three app shapes:
 //
-//   1. In-process registered app (launcher.RegisterApp("skysocks", …))
-//      with args like ["app", "skysocks", …] → exec the running
-//      skywire binary with the leading non-flag args + "--help"
-//      (i.e. "skywire app skysocks --help").
+//  1. In-process registered app (launcher.RegisterApp("skysocks", …))
+//     with args like ["app", "skysocks", …] → exec the running
+//     skywire binary with the leading non-flag args + "--help"
+//     (i.e. "skywire app skysocks --help").
 //
-//   2. Embedded cobra subcommand of skywire (skycoin daemon,
-//      skycoin web) with args like ["skycoin", "daemon", …] → same
-//      pattern: "skywire skycoin daemon --help".
+//  2. Embedded cobra subcommand of skywire (skycoin daemon,
+//     skycoin web) with args like ["skycoin", "daemon", …] → same
+//     pattern: "skywire skycoin daemon --help".
 //
-//   3. External standalone binary at <BinPath>/<Binary> → exec the
-//      file directly with --help.
+//  3. External standalone binary at <BinPath>/<Binary> → exec the
+//     file directly with --help.
 //
 // Cached per resolved (exec, args-prefix); invalidated by the
 // running skywire binary's mtime so a rebuild surfaces fresh help.
@@ -219,7 +219,11 @@ func (v *Visor) AppHelp(appName string) (string, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, execPath, helpArgs...)
+	// execPath comes from os.Executable() (running skywire binary)
+	// or BinPath/Binary from the visor's own AppConfig — both
+	// operator-controlled, not user input. helpArgs is positional
+	// app-args plus the literal "--help" string.
+	cmd := exec.CommandContext(ctx, execPath, helpArgs...) //nolint:gosec
 	out, runErr := cmd.CombinedOutput()
 	// Many CLI binaries exit non-zero on --help; treat the captured
 	// output as authoritative regardless and only surface a hard

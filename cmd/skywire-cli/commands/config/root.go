@@ -131,20 +131,20 @@ var (
 	// instance's args (e.g. "--enable-gui-api-sets READ,STATUS").
 	// --port and --data-dir are auto-allocated per instance and
 	// must not appear here — gen errors out if they do.
-	skycoinDaemonFlags string
-	isSkycoinWebEnable    bool
-	skycoinWebAddr        string
-	skycoinWebNodeURLs    string // comma-separated; rendered as repeated --node-url flags
-	skycoinWebWalletDir   string
-	skycoinWebUser        string
-	rewardSkyAddr              string
-	hvHTTPAddr                 string
-	stunServers                string
-	shutdownTimeout            string
-	publicVisorRegTimeout      string
-	publicVisorMaxTransports   int
-	muxRoutes                  int
-	cliAddr                    string
+	skycoinDaemonFlags       string
+	isSkycoinWebEnable       bool
+	skycoinWebAddr           string
+	skycoinWebNodeURLs       string // comma-separated; rendered as repeated --node-url flags
+	skycoinWebWalletDir      string
+	skycoinWebUser           string
+	rewardSkyAddr            string
+	hvHTTPAddr               string
+	stunServers              string
+	shutdownTimeout          string
+	publicVisorRegTimeout    string
+	publicVisorMaxTransports int
+	muxRoutes                int
+	cliAddr                  string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

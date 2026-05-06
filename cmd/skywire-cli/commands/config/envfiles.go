@@ -203,7 +203,7 @@ const envfileLinux = `#
 #--	Drop skycoin-web to this user (POSIX setuid before exec).
 #	Empty = run as the visor's own UID. Required when the visor
 #	runs as _skywire and the wallet should access the operator's
-#	~/.skycoin/wallets directory. The launcher only honours this
+#	~/.skycoin/wallets directory. The launcher only honors this
 #	in external mode (Binary set on the AppConfig entry, which
 #	the default skycoin-web entry already has).
 #SKYCOINWEBUSER='youruser'

@@ -15,7 +15,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { ErrorStateMatcher, ShowOnDirtyErrorStateMatcher, RippleGlobalOptions, MAT_RIPPLE_GLOBAL_OPTIONS } from '@angular/material/core';
 import { MAT_DIALOG_DEFAULT_OPTIONS, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
+import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -231,4 +231,15 @@ const globalRippleConfig: RippleGlobalOptions = {
         { provide: MAT_RIPPLE_GLOBAL_OPTIONS, useValue: globalRippleConfig },
         provideHttpClient(withInterceptorsFromDi()),
     ] })
-export class AppModule { }
+export class AppModule {
+  // Angular Material 19+ defaults <mat-icon> to the
+  // "Material Symbols Outlined" font, but we ship the older
+  // "Material Icons" font locally (assets/fonts/material-icons/*).
+  // Without this override every icon renders as a literal token like
+  // "terminal" or "settings" because the symbols font isn't loaded —
+  // the per-tab icon row in the per-visor view then overflows
+  // horizontally as text. Wire the registry to our font on bootstrap.
+  constructor(iconRegistry: MatIconRegistry) {
+    iconRegistry.setDefaultFontSetClass('material-icons');
+  }
+}

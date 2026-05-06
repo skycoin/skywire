@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -16,7 +15,7 @@ func TestBuildSkycoinDaemonApps_Legacy(t *testing.T) {
 	skycoinDaemonAPISets = "READ,STATUS"
 	skycoinDaemonUser = "skycoin"
 
-	apps, err := buildSkycoinDaemonApps(testLogger())
+	apps, err := buildSkycoinDaemonApps()
 	if err != nil {
 		t.Fatalf("legacy path: %v", err)
 	}
@@ -54,7 +53,7 @@ func TestBuildSkycoinDaemonApps_Multi(t *testing.T) {
 	conf = &visorconfig.V1{}
 	conf.LocalPath = "/opt/skywire/local"
 
-	apps, err := buildSkycoinDaemonApps(testLogger())
+	apps, err := buildSkycoinDaemonApps()
 	if err != nil {
 		t.Fatalf("multi: %v", err)
 	}
@@ -105,7 +104,7 @@ func TestBuildSkycoinDaemonApps_FlagsConflict(t *testing.T) {
 	skycoinDaemonFlags = "--port 9999"
 	conf = &visorconfig.V1{}
 
-	_, err := buildSkycoinDaemonApps(testLogger())
+	_, err := buildSkycoinDaemonApps()
 	if err == nil {
 		t.Fatal("expected error when --skycoindflags carries --port")
 	}
@@ -117,7 +116,7 @@ func TestBuildSkycoinDaemonApps_DuplicateName(t *testing.T) {
 	skycoinDaemonInstances = "/path/a/aix.toml,/path/b/aix.toml"
 	conf = &visorconfig.V1{}
 
-	_, err := buildSkycoinDaemonApps(testLogger())
+	_, err := buildSkycoinDaemonApps()
 	if err == nil {
 		t.Fatal("expected error on duplicate instance name")
 	}
@@ -131,12 +130,6 @@ func resetSkycoinFlags(t *testing.T) {
 	skycoinDaemonAPISets = ""
 	skycoinDaemonUser = ""
 	isSkycoinDaemonEnable = false
-}
-
-func testLogger() *logging.Logger {
-	mlog := logging.NewMasterLogger()
-	mlog.Logger.Out = nil // discard
-	return mlog.PackageLogger("test")
 }
 
 func slicesEq(a, b []string) bool {
