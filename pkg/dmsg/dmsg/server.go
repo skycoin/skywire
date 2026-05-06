@@ -72,6 +72,23 @@ type Server struct {
 	peerSessionsMx sync.Mutex
 }
 
+// GeoLookupFunc returns geolocation data for the given IP. Returns
+// zero values when the IP is non-public or the lookup fails — the
+// caller passes the zero values straight through into the response
+// and the dmsg client falls back to a local lookup on its end.
+type GeoLookupFunc func(ip net.IP) (country, region string, lat, lon float64)
+
+// SetGeoLookup registers an IP-to-geo lookup function. The function
+// is called by the IP-info stream handler when the request has
+// GeoInfo=true, so dmsg clients can get their public IP and its
+// geolocation in one round-trip. Pass nil to disable. cmd/dmsg/dmsg-
+// server wires the embedded MaxMind DB; pkg/dmsg/dmsg deliberately
+// does not import pkg/geoip to avoid pulling the 62MB embedded DB
+// into every dmsg-using binary.
+func (s *Server) SetGeoLookup(fn GeoLookupFunc) {
+	s.geoLookup = fn
+}
+
 // NewServer creates a new dmsg server entity.
 func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *ServerConfig, m metrics.Metrics) *Server {
 	if conf == nil {

@@ -312,6 +312,72 @@ func (ce *Client) dialViaConnectedServers(ctx context.Context, addr Addr) (*Stre
 	return nil, ErrCannotConnectToDelegated
 }
 
+// LookupIPGeo dials a dmsg-server for both the client's public IP
+// and its geolocation in a single round-trip. Falls through to
+// dmsg-servers exactly like LookupIP — first a session-mate, then
+// any delegated server. Older dmsg-servers without a geo lookup
+// configured return GeoCountry="" — the caller should fall back to
+// a local geoip lookup in that case.
+func (ce *Client) LookupIPGeo(ctx context.Context, servers []cipher.PubKey) (StreamResponse, error) {
+	cancellabelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	if servers == nil {
+		entries, err := ce.discoverServers(cancellabelCtx, true)
+		if err != nil {
+			return StreamResponse{}, err
+		}
+		for _, entry := range entries {
+			servers = append(servers, entry.Static)
+		}
+	}
+
+	// Already-connected sessions first.
+	for _, srvPK := range servers {
+		if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+			resp, err := dSes.LookupIPGeo(Addr{PK: dSes.RemotePK(), Port: 1})
+			if err != nil {
+				ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to dial server for IP+geo.")
+				continue
+			}
+			if ce.conf.ClientType == "test" {
+				return resp, nil
+			}
+			if !netutil.IsPublicIP(resp.IP) {
+				ce.log.WithField("server_pk", srvPK).WithField("ip", resp.IP.String()).Warn("Received non-public IP address from dmsg server, trying other servers.")
+				continue
+			}
+			return resp, nil
+		}
+	}
+
+	// Otherwise dial a delegated server.
+	for _, srvPK := range servers {
+		dSes, err := ce.EnsureAndObtainSession(ctx, srvPK)
+		if err != nil {
+			continue
+		}
+		resp, err := dSes.LookupIPGeo(Addr{PK: dSes.RemotePK(), Port: 1})
+		if err != nil {
+			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to dial server for IP+geo.")
+			continue
+		}
+		if err := dSes.Close(); err != nil {
+			ce.log.WithError(err).WithField("server_pk", srvPK).Warn("Failed to close session")
+		}
+		if ce.conf.ClientType == "test" {
+			return resp, nil
+		}
+		if !netutil.IsPublicIP(resp.IP) {
+			ce.log.WithField("server_pk", srvPK).WithField("ip", resp.IP.String()).Warn("Received non-public IP address from dmsg server, trying other servers.")
+			continue
+		}
+		return resp, nil
+	}
+
+	return StreamResponse{}, ErrCannotConnectToDelegated
+}
+
 // LookupIP dails to dmsg servers for public IP of the client.
 func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP net.IP, err error) {
 

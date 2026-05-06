@@ -222,7 +222,15 @@ type StreamRequest struct {
 	SrcAddr   Addr
 	DstAddr   Addr
 	IPinfo    bool
-	NoiseMsg  []byte
+	// GeoInfo, when set, asks the destination dmsg-server to also
+	// populate the geo fields on StreamResponse using its own embedded
+	// MaxMind database. Only meaningful when IPinfo is also set, since
+	// the geo lookup runs on the same TCP source IP. Older
+	// dmsg-servers ignore this flag and return zero geo fields, so the
+	// client must be prepared to fall back to a local lookup when the
+	// response's geo fields are empty.
+	GeoInfo  bool
+	NoiseMsg []byte
 
 	raw SignedObject `enc:"-"` // back reference.
 }
@@ -259,8 +267,18 @@ type StreamResponse struct {
 	ReqHash  cipher.SHA256 // Hash of associated dial request.
 	Accepted bool          // Whether the request is accepted.
 	IP       net.IP        // IP address of the node.
-	ErrCode  errorCode     // Check if not accepted.
-	NoiseMsg []byte
+	// Geo fields are populated only when the request had both
+	// IPinfo=true and GeoInfo=true and the dmsg-server has a geo
+	// lookup function configured (cmd/dmsg/dmsg-server wires the
+	// embedded MaxMind DB; other dmsg.Server users may leave it
+	// unset, in which case these fields stay zero). The client
+	// falls back to a local lookup when GeoCountry is empty.
+	GeoCountry string  // ISO country code
+	GeoRegion  string  // ISO region/subdivision code
+	GeoLat     float64 // latitude
+	GeoLon     float64 // longitude
+	ErrCode    errorCode
+	NoiseMsg   []byte
 
 	raw SignedObject `enc:"-"` // back reference.
 }

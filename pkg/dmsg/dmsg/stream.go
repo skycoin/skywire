@@ -128,7 +128,12 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	return req, err
 }
 
-func (s *Stream) writeIPRequest(rAddr Addr) (req StreamRequest, err error) {
+// writeIPRequestWithGeo opens an IP-info stream request to the
+// destination dmsg-server. When geo is true, the request also asks
+// the server to populate the response's geo fields (the lookup runs
+// against the server's embedded MaxMind DB; older servers without
+// the hook return empty geo and the caller falls back locally).
+func (s *Stream) writeIPRequestWithGeo(rAddr Addr, geo bool) (req StreamRequest, err error) {
 	// Reserve stream in porter.
 	var lPort uint16
 	var closeFn func()
@@ -149,6 +154,7 @@ func (s *Stream) writeIPRequest(rAddr Addr) (req StreamRequest, err error) {
 		SrcAddr:   s.lAddr,
 		DstAddr:   s.rAddr,
 		IPinfo:    true,
+		GeoInfo:   geo,
 	}
 	obj, err := MakeSignedStreamRequest(&req, s.ses.localSK())
 	if err != nil {
@@ -261,28 +267,34 @@ func (s *Stream) readResponse(req StreamRequest) error {
 	return s.ns.ProcessHandshakeMessage(resp.NoiseMsg)
 }
 
-func (s *Stream) readIPResponse(req StreamRequest) (net.IP, error) {
+// readIPGeoResponse reads the StreamResponse from an IP-info stream
+// request. The IP field is always populated on success; the geo
+// fields are populated only when the request had GeoInfo=true and
+// the server has a geo lookup hook configured. Older servers leave
+// the geo fields zero — callers must be prepared to fall back to a
+// local lookup.
+func (s *Stream) readIPGeoResponse(req StreamRequest) (StreamResponse, error) {
 	var obj SignedObject
 	var err error
 	if s.sStr != nil {
 		obj, err = s.ses.readObject(s.sStr)
 		if err != nil {
-			return nil, err
+			return StreamResponse{}, err
 		}
 	} else {
 		obj, err = s.ses.readObject(s.yStr)
 		if err != nil {
-			return nil, err
+			return StreamResponse{}, err
 		}
 	}
 	resp, err := obj.ObtainStreamResponse()
 	if err != nil {
-		return nil, err
+		return StreamResponse{}, err
 	}
 	if err := resp.Verify(req); err != nil {
-		return nil, err
+		return StreamResponse{}, err
 	}
-	return resp.IP, nil
+	return resp, nil
 }
 
 func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) error {
