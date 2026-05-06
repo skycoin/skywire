@@ -102,6 +102,11 @@ type ManagedTransport struct {
 	visorRPCHandler func(p routing.Packet, mt *ManagedTransport)
 	// skynetFwdHandler handles skynet forward packets (route ID 0).
 	skynetFwdHandler func(p routing.Packet, mt *ManagedTransport)
+	// appDirectHandler handles direct skywire-network app dial packets
+	// (route ID 0). The mux at the other end is what lets app clients
+	// like skysocks-client / vpn-client reach app servers without going
+	// through a route-setup-mediated route group.
+	appDirectHandler func(p routing.Packet, mt *ManagedTransport)
 }
 
 // LatencyStats holds latency measurement statistics for a transport.
@@ -296,6 +301,11 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			case routing.SkynetForwardPacket:
 				if mt.skynetFwdHandler != nil {
 					mt.skynetFwdHandler(p, mt)
+				}
+				continue
+			case routing.AppDirectPacket:
+				if mt.appDirectHandler != nil {
+					mt.appDirectHandler(p, mt)
 				}
 				continue
 			}
