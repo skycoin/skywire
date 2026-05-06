@@ -43,8 +43,11 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	// (cached on disk in <local_path>/dmsg_servers.json) over the addresses
 	// in skywire.json — those can be months stale if a server has rotated
 	// IP since the config was generated. The cache is written by the
-	// background refresh loop in initDmsg.
-	configured := v.conf.Dmsg.Servers
+	// background refresh loop in initDmsg. ResolvedServers unions the
+	// top-level Servers list with any per-discovery Configs[].Servers,
+	// so multi-deployment configs (each discovery with its own disjoint
+	// server set) are honored.
+	configured := v.conf.Dmsg.ResolvedServers()
 	if v.dmsgServersCache != nil {
 		configured = v.dmsgServersCache.MergePreferringCache(configured)
 	}
@@ -128,17 +131,13 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
 
-	// When the modern Configs[] schema is set, we use its first entry
-	// as the primary discovery (DMSG URL preferred when dmsgHTTP is
-	// ready, else HTTP URL); the rest are attached as additional
-	// discoveries inside dmsgc.New. This keeps the legacy single-
-	// discovery code path identical when Configs is empty.
+	// Pick the primary deployment for the discovery dial choice. The
+	// top-level Discovery / DiscoveryDmsg mirror Deployments[0] after
+	// UnmarshalJSON, so single-deployment configs work without
+	// changes; multi-deployment configs surface deployments[0] here
+	// and the rest are attached inside dmsgc.New.
 	primary := v.conf.Dmsg.Discovery
 	primaryDmsg := v.conf.Dmsg.DiscoveryDmsg
-	if cfgs := v.conf.Dmsg.Configs; len(cfgs) > 0 {
-		primary = cfgs[0].URL
-		primaryDmsg = cfgs[0].DmsgURL
-	}
 
 	// Prefer DMSG-HTTP for discovery if configured (more private, no DNS dependency),
 	// fall back to plain HTTP URL. If HTTP URL is empty (DMSG-only deployment),
