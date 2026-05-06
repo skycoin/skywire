@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
@@ -33,6 +34,7 @@ const (
 )
 
 var (
+	configPath     string
 	addr           string
 	metricsAddr    string
 	redisURL       string
@@ -92,6 +94,7 @@ POST /routes
 }
 
 func init() {
+	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. Generate with `skywire cli config gen --rf -o /etc/skywire/route-finder.json`.\n\r")
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9092", "address to bind to\n\r")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
@@ -140,6 +143,16 @@ Example:
 	Run: func(_ *cobra.Command, _ []string) {
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
+		}
+
+		var configServers []*disc.Entry
+		var configSurveyWL []cipher.PubKey
+		if configPath != "" {
+			c, cErr := LoadConfig(configPath)
+			if cErr != nil {
+				log.Fatal(cErr)
+			}
+			configServers, configSurveyWL = applyConfig(c)
 		}
 
 		if !strings.HasPrefix(redisURL, redisScheme) {
@@ -203,6 +216,12 @@ Example:
 			logger.WithError(err).Fatal("invalid --mode")
 		}
 
+		embeddedServers := dmsgDiscEntries(configServers)
+		surveyWL := deployment.Prod.SurveyWhitelist
+		if len(configSurveyWL) > 0 {
+			surveyWL = configSurveyWL
+		}
+
 		h, err := svcmode.Start(ctx, svcmode.Config{
 			Mode:                resolvedMode,
 			HTTPAddr:            addr,
@@ -212,8 +231,8 @@ Example:
 			DmsgPort:            dmsgPort,
 			DmsgDiscovery:       dmsgDisc,
 			DmsgServerType:      dmsgServerType,
-			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
-			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
+			EmbeddedDmsgServers: embeddedServers,
+			SurveyWhitelist:     surveyWL,
 			Log:                 logger,
 			DisableDHT:          true,
 			OnDmsgServersUpdated: func(s []string) {
