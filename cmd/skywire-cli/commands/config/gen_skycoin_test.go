@@ -30,7 +30,10 @@ func TestBuildSkycoinDaemonApps_Legacy(t *testing.T) {
 	if !a.AutoStart {
 		t.Fatal("AutoStart should mirror SKYCOIND")
 	}
-	want := []string{"skycoin", "daemon", "--enable-gui-api-sets", "READ,STATUS"}
+	want := []string{"skycoin", "daemon",
+		"--enable-all-api-sets=true", "--log-level=debug",
+		"--enable-gui-api-sets", "READ,STATUS",
+	}
 	if !slicesEq(a.Args, want) {
 		t.Fatalf("legacy args = %v, want %v", a.Args, want)
 	}
@@ -66,7 +69,12 @@ func TestBuildSkycoinDaemonApps_Multi(t *testing.T) {
 	if len(apps[0].Env) != 0 {
 		t.Fatalf("[0] should have no env, got %v", apps[0].Env)
 	}
-	wantArgs0 := []string{"skycoin", "daemon", "--port", "6420", "--data-dir", "/opt/skywire/local/skycoin-daemon-skycoin", "--enable-gui-api-sets", "READ,STATUS"}
+	wantArgs0 := []string{"skycoin", "daemon",
+		"--port", "6420",
+		"--data-dir", "/opt/skywire/local/skycoin-daemon-skycoin",
+		"--enable-all-api-sets=true", "--log-level=debug",
+		"--enable-gui-api-sets", "READ,STATUS",
+	}
 	if !slicesEq(apps[0].Args, wantArgs0) {
 		t.Fatalf("[0] args = %v, want %v", apps[0].Args, wantArgs0)
 	}

@@ -1338,7 +1338,20 @@ func buildSkycoinDaemonApps(log *logging.Logger) ([]appserver.AppConfig, error) 
 	if len(insts) == 0 {
 		// Legacy single-instance path — emit the daemon entry
 		// regardless of SKYCOIND so the Apps tab can flip it on.
-		args := []string{"skycoin", "daemon"}
+		// Default flags expose the full GUI API surface (so the
+		// thin-client wallet has everything it needs to talk to
+		// this daemon) and run at debug log level (this is dev
+		// territory — terse default-skycoin logging hides
+		// problems). Operator can override via the universal
+		// settings panel or --skycoindapi for the GUI flag alone.
+		// Port and data-dir are deliberately omitted: skycoin's
+		// own defaults (6420 + ~/.skycoin) are sensible for the
+		// single-instance case.
+		args := []string{
+			"skycoin", "daemon",
+			"--enable-all-api-sets=true",
+			"--log-level=debug",
+		}
 		if skycoinDaemonAPISets != "" {
 			args = append(args, "--enable-gui-api-sets", skycoinDaemonAPISets)
 		}
@@ -1388,9 +1401,16 @@ func buildSkycoinDaemonApps(log *logging.Logger) ([]appserver.AppConfig, error) 
 		port := basePort + i*portStep
 		dataDir := filepath.Join(conf.LocalPath, appName)
 
+		// Multi-instance: --port and --data-dir MUST differ per
+		// instance so they're auto-allocated regardless. The same
+		// "open the GUI API + log debug" defaults the single-
+		// instance path uses apply here too. SKYCOIND_FLAGS
+		// layers on top.
 		args := []string{"skycoin", "daemon",
 			"--port", fmt.Sprintf("%d", port),
 			"--data-dir", dataDir,
+			"--enable-all-api-sets=true",
+			"--log-level=debug",
 		}
 		args = append(args, flagsToks...)
 
