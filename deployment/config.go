@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )
 
 /*
@@ -48,6 +49,35 @@ type DmsgServerEntry struct {
 // HasDmsgServers returns true if the deployment has DMSG server entries.
 func (s *Services) HasDmsgServers() bool {
 	return len(s.DmsgServers) > 0
+}
+
+// DmsgServerEntriesToDisc converts a list of DmsgServerEntry to
+// []*disc.Entry suitable for direct.NewClient / direct.GetAllEntries.
+// Entries whose Static field is not a valid public key are skipped
+// silently — the deployment file is the source of truth and a single
+// malformed entry should not abort the whole preload.
+func DmsgServerEntriesToDisc(in []DmsgServerEntry) []*disc.Entry {
+	if len(in) == 0 {
+		return nil
+	}
+	entries := make([]*disc.Entry, 0, len(in))
+	for _, srv := range in {
+		var pk cipher.PubKey
+		if err := pk.Set(srv.Static); err != nil {
+			continue
+		}
+		entries = append(entries, &disc.Entry{
+			Static: pk,
+			Server: &disc.Server{Address: srv.Server.Address},
+		})
+	}
+	return entries
+}
+
+// ToDiscEntries is the method form of DmsgServerEntriesToDisc, scoped
+// to the receiver's DmsgServers list.
+func (s *Services) ToDiscEntries() []*disc.Entry {
+	return DmsgServerEntriesToDisc(s.DmsgServers)
 }
 
 // HasDmsgEndpoints returns true if the deployment has DMSG service endpoints.
