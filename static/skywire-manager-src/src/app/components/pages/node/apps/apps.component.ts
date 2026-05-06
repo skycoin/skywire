@@ -6,7 +6,10 @@ import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
- * Page that shows the apps summary. It is a subpage of the Node page.
+ * Apps tab — list view + sub-tabs for the per-app management
+ * surfaces (Skychat, VPN, Skysocks). Used to be three separate
+ * top-level tabs in the per-visor tab bar; consolidated here so
+ * the row stops overflowing horizontally on default zoom.
  */
 @Component({
     selector: 'app-apps',
@@ -18,6 +21,10 @@ export class AppsComponent extends PageBaseComponent implements OnInit, OnDestro
   apps: Application[];
   nodePK: string;
   nodeIp: string;
+
+  // Active sub-tab. 'list' (default) is the apps table; the other
+  // three render the per-app management surfaces inline.
+  sub: 'list' | 'chat' | 'vpn' | 'skysocks' = 'list';
 
   private dataSubscription: Subscription;
 

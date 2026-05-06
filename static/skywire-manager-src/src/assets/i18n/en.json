@@ -231,6 +231,9 @@
         "save": "Save",
         "restart-hint": "Visor must be restarted for changes to take effect."
       },
+      "dmsg-settings": {
+        "title": "DMSG Sessions"
+      },
       "router-settings": {
         "title": "Router Settings",
         "force-local-routes": "Force local route calculation",
@@ -258,14 +261,10 @@
       "rewards": "Rewards",
       "skynet": "Skynet",
       "web-proxy": "Web Proxy",
-      "vpn": "VPN",
-      "skysocks": "Skysocks",
       "resources": "Resources",
       "terminal": "Terminal",
       "wallet": "Wallet",
-      "logs": "Logs",
-      "chat": "Skychat",
-      "dmsg": "DMSG"
+      "logs": "Logs"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
@@ -847,6 +846,12 @@
   },
 
   "apps": {
+    "tabs": {
+      "list": "All Apps",
+      "chat": "Skychat",
+      "vpn": "VPN",
+      "skysocks": "Skysocks"
+    },
     "log": {
       "title": "Log",
       "empty": "There are no log messages for the selected time range.",

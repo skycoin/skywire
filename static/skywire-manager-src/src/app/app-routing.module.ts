@@ -136,9 +136,14 @@ const routes: Routes = [
             path: 'resources',
             component: NodeResourcesComponent
           },
+          // Skychat / VPN / Skysocks moved into the Apps tab as
+          // sub-tabs (the per-visor tab row was overflowing).
+          // Redirect old top-level URLs to the Apps tab — the
+          // operator picks the sub-tab from there.
           {
             path: 'chat',
-            component: SkychatComponent
+            redirectTo: 'apps',
+            pathMatch: 'full'
           },
           {
             path: 'bandwidth',
@@ -162,19 +167,24 @@ const routes: Routes = [
           },
           {
             path: 'vpn-tab',
-            component: VpnComponent
+            redirectTo: 'apps',
+            pathMatch: 'full'
           },
           {
             path: 'skysocks',
-            component: SkysocksTabComponent
+            redirectTo: 'apps',
+            pathMatch: 'full'
           },
           {
             path: 'logs',
             component: LogsComponent
           },
+          // DMSG settings is now a collapsible section on the
+          // Info tab (was a separate top-level tab). Redirect.
           {
             path: 'dmsg',
-            component: DmsgSettingsComponent
+            redirectTo: 'info',
+            pathMatch: 'full'
           },
           {
             path: 'transports',

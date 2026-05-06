@@ -39,6 +39,11 @@ export class NodeInfoContentComponent implements OnDestroy {
   // Collapsible Runtime Configuration section (matches Ports pattern).
   showConfigSection = false;
 
+  // Collapsible DMSG sessions section. Used to be a top-level
+  // tab; folded here to keep the per-visor tab bar from
+  // overflowing. Lazy-mounts the existing DmsgSettingsComponent.
+  showDmsgSettings = false;
+
   // Collapsible Router Settings section. Wraps the visor-wide knobs
   // that 'cli proxy start --local-route' / '--existing-tp' / '--mux'
   // / '--min-hops' set; UI parity with the CLI for visor-wide
