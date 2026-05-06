@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/url"
+	"slices"
 	"testing"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -219,7 +220,7 @@ func TestAllMethodsForwardCorrectly(t *testing.T) {
 			p := &stubClient{name: "p", entryErr: transport}
 			f := &stubClient{name: "f"}
 			c := newFallback(t, p, f)
-			_ = k.fn(c)
+			_ = k.fn(c) //nolint:errcheck // primary returns the transport error; this test asserts on which leg was called, not the propagated error
 			wantPrim := []string{"p:" + k.name}
 			wantFall := []string{"f:" + k.name}
 			if !equalCalls(p.calls, wantPrim) {
@@ -250,15 +251,7 @@ func TestNewWithoutDmsgClientDegradesToHTTP(t *testing.T) {
 
 // equalCalls compares two []string for full sequence equality.
 func equalCalls(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(a, b)
 }
 
 // Sanity check: ensure the package compiles its test file with the
