@@ -53,7 +53,7 @@ type Publisher struct {
 	// is no window where the gate is unconfigured.
 	allow *allowState
 
-	batchWindow time.Duration
+	batchWindow  time.Duration
 	wakeup       chan struct{}
 	done         chan struct{}
 	cleanupNudge chan struct{} // 1-buffered; non-blocking send from publishRoot
