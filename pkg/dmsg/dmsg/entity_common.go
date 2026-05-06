@@ -17,6 +17,20 @@ import (
 	"github.com/skycoin/skywire/pkg/netutil"
 )
 
+// discoveryEndpoint represents one dmsg-discovery the entity registers
+// with. AdvertisedAddr applies to servers only — clients pass empty.
+// When non-empty, AdvertisedAddr overrides the addr passed to
+// updateServerEntryLoop for THIS discovery only, supporting the
+// "advertise LAN to local-disc, advertise public IP to internet-disc"
+// pattern. PK, when set, identifies the discovery's own dmsg-server
+// PK so the entity can recognize an inbound session as originating
+// from that discovery and trigger an immediate registration push.
+type discoveryEndpoint struct {
+	Client        disc.APIClient
+	AdvertisedAddr string
+	PK            cipher.PubKey
+}
+
 // EntityCommon contains the common fields and methods for server and client entities.
 type EntityCommon struct {
 	// atomic requires 64-bit alignment for struct field access
@@ -24,7 +38,17 @@ type EntityCommon struct {
 
 	pk cipher.PubKey
 	sk cipher.SecKey
+	// dc is the primary discovery — kept as a separate field for
+	// backward compatibility with constructors and zero-value behavior.
+	// Equivalent to discoveries[0].Client when discoveries is non-empty.
 	dc disc.APIClient
+	// discoveries holds the primary plus any additional dmsg-discoveries
+	// the entity registers with. The primary is always discoveries[0]
+	// (mirror of c.dc) when discoveries is non-empty. Extra discoveries
+	// are appended via addDiscovery; ordering is preserved so callers
+	// can control which is "first" for read fallback.
+	discoveries   []*discoveryEndpoint
+	discoveriesMx sync.RWMutex
 
 	sessions   map[cipher.PubKey]*SessionCommon
 	sessionsMx *sync.Mutex
@@ -73,11 +97,83 @@ func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClien
 	c.pk = pk
 	c.sk = sk
 	c.dc = dc
+	c.discoveries = []*discoveryEndpoint{{Client: dc}}
 	c.sessions = make(map[cipher.PubKey]*SessionCommon)
 	c.sessionsMx = new(sync.Mutex)
 	c.updateInterval = updateInterval
 	c.entryNudge = make(chan struct{}, 1)
 	c.log = log
+}
+
+// addDiscovery appends an additional dmsg-discovery to register with.
+// advertisedAddr, when non-empty, overrides the entity's default addr
+// for this discovery (servers only — clients should pass empty). pk,
+// when non-zero, identifies the discovery's own dmsg-server PK so the
+// entity can detect inbound sessions from this discovery.
+//
+// Safe to call after init/Serve has started — subsequent
+// updateServerEntryLoop iterations will pick up the new endpoint.
+func (c *EntityCommon) addDiscovery(client disc.APIClient, advertisedAddr string, pk cipher.PubKey) {
+	if client == nil {
+		return
+	}
+	c.discoveriesMx.Lock()
+	c.discoveries = append(c.discoveries, &discoveryEndpoint{
+		Client:        client,
+		AdvertisedAddr: advertisedAddr,
+		PK:            pk,
+	})
+	c.discoveriesMx.Unlock()
+}
+
+// setDiscoveryClients replaces the disc.APIClient on each existing
+// endpoint, in-place. The lengths must match, otherwise the call is a
+// no-op. Used to upgrade plain HTTP clients to dmsgfirst-wrapped
+// clients once an outbound dmsg.Client is ready, without reordering
+// or losing per-discovery advertised addresses / PKs.
+func (c *EntityCommon) setDiscoveryClients(clients []disc.APIClient) {
+	c.discoveriesMx.Lock()
+	defer c.discoveriesMx.Unlock()
+	if len(clients) != len(c.discoveries) {
+		return
+	}
+	for i, cl := range clients {
+		if cl != nil {
+			c.discoveries[i].Client = cl
+		}
+	}
+	if len(c.discoveries) > 0 {
+		c.dc = c.discoveries[0].Client
+	}
+}
+
+// snapshotDiscoveries returns a copy of the discovery list, safe for
+// iteration outside the lock. The returned slice may be empty when
+// init has not yet been called.
+func (c *EntityCommon) snapshotDiscoveries() []*discoveryEndpoint {
+	c.discoveriesMx.RLock()
+	defer c.discoveriesMx.RUnlock()
+	if len(c.discoveries) == 0 {
+		return nil
+	}
+	out := make([]*discoveryEndpoint, len(c.discoveries))
+	copy(out, c.discoveries)
+	return out
+}
+
+// matchDiscoveryByPK returns the discoveryEndpoint configured with the
+// given PK, or nil if none. Used by setSession callbacks to recognize
+// an inbound session originated by a configured dmsg-discovery and
+// trigger an immediate registration push.
+func (c *EntityCommon) matchDiscoveryByPK(pk cipher.PubKey) *discoveryEndpoint {
+	c.discoveriesMx.RLock()
+	defer c.discoveriesMx.RUnlock()
+	for _, ep := range c.discoveries {
+		if ep.PK == pk && pk != (cipher.PubKey{}) {
+			return ep
+		}
+	}
+	return nil
 }
 
 // LocalPK returns the local public key of the entity.
@@ -192,34 +288,67 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 	}
 }
 
-// updateServerEntry updates the dmsg server's entry within dmsg discovery.
-// If 'addr' is an empty string, the Entry.addr field will not be updated in discovery.
+// updateServerEntry updates the dmsg server's entry within all
+// configured dmsg-discoveries. Each endpoint is updated independently
+// — a per-discovery advertised address (when set) overrides the
+// default addr argument for that endpoint only.
+//
+// If 'addr' is an empty string AND no endpoint provides its own
+// advertised address, no update is performed for that endpoint
+// (preserving the legacy "empty addr = skip update" semantics).
+//
 // Caller must hold c.sessionsMx.
 func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int, authPassphrase string) (err error) {
-	if addr == "" {
-		return errors.New("updateServerEntry cannot accept empty 'addr' input")
+	endpoints := c.snapshotDiscoveries()
+	if len(endpoints) == 0 {
+		return errors.New("updateServerEntry: no discoveries configured")
 	}
-
-	// Record last update on success.
-	defer func() {
-		if err == nil {
-			c.recordUpdate()
-		}
-	}()
 
 	availableSessions := maxSessions - len(c.sessions)
 	if availableSessions < 0 {
 		availableSessions = 0
 	}
 
-	entry, err := c.dc.Entry(ctx, c.pk)
+	// Aggregate errors across endpoints. We return the first non-nil
+	// error so the caller's existing "log on error, retry on next
+	// tick" behavior keeps working — a transient failure on one
+	// discovery doesn't mask a successful update to another.
+	var firstErr error
+	anyOK := false
+	for _, ep := range endpoints {
+		epAddr := addr
+		if ep.AdvertisedAddr != "" {
+			epAddr = ep.AdvertisedAddr
+		}
+		if epAddr == "" {
+			continue
+		}
+		if updateErr := c.updateServerEntryOnEndpoint(ctx, ep, epAddr, availableSessions, authPassphrase); updateErr != nil {
+			if firstErr == nil {
+				firstErr = updateErr
+			}
+			c.log.WithError(updateErr).WithField("discovery_pk", ep.PK).Debug("server entry update failed for discovery; will retry next tick")
+			continue
+		}
+		anyOK = true
+	}
+	if anyOK {
+		c.recordUpdate()
+	}
+	return firstErr
+}
+
+// updateServerEntryOnEndpoint runs the read-modify-write registration
+// cycle against a single discovery endpoint.
+func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, addr string, availableSessions int, authPassphrase string) error {
+	entry, err := ep.Client.Entry(ctx, c.pk)
 	if err != nil {
 		entry = disc.NewServerEntry(c.pk, 0, addr, availableSessions)
 		entry.Server.DHTBootstrap = c.dhtBootstrap
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
-		return c.dc.PostEntry(ctx, entry)
+		return ep.Client.PostEntry(ctx, entry)
 	}
 
 	if entry.Server == nil {
@@ -251,7 +380,7 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 	entry.Server.DHTBootstrap = c.dhtBootstrap
 	log.Debug("Updating entry.\n")
 
-	return c.dc.PutEntry(ctx, c.sk, entry)
+	return ep.Client.PutEntry(ctx, c.sk, entry)
 }
 
 func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, maxSessions int, authPassphrase string) {
@@ -307,12 +436,10 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 }
 
 func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType string, protocol string) (err error) {
-	// Record last update on success.
-	defer func() {
-		if err == nil {
-			c.recordUpdate()
-		}
-	}()
+	endpoints := c.snapshotDiscoveries()
+	if len(endpoints) == 0 {
+		return errors.New("initilizeClientEntry: no discoveries configured")
+	}
 
 	c.sessionsMx.Lock()
 	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
@@ -321,17 +448,34 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 	}
 	c.sessionsMx.Unlock()
 
-	_, err = c.dc.Entry(ctx, c.pk)
-	if err != nil {
+	var firstErr error
+	anyOK := false
+	for _, ep := range endpoints {
+		if _, lookupErr := ep.Client.Entry(ctx, c.pk); lookupErr == nil {
+			anyOK = true
+			continue
+		}
 		entry := disc.NewClientEntry(c.pk, 0, srvPKs)
 		entry.ClientType = clientType
 		entry.Protocol = protocol
-		if err := entry.Sign(c.sk); err != nil {
-			return err
+		if signErr := entry.Sign(c.sk); signErr != nil {
+			if firstErr == nil {
+				firstErr = signErr
+			}
+			continue
 		}
-		return c.dc.PostEntry(ctx, entry)
+		if postErr := ep.Client.PostEntry(ctx, entry); postErr != nil {
+			if firstErr == nil {
+				firstErr = postErr
+			}
+			continue
+		}
+		anyOK = true
 	}
-	return nil
+	if anyOK {
+		c.recordUpdate()
+	}
+	return firstErr
 }
 
 func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}, clientType string) (err error) {
@@ -339,26 +483,15 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		return nil
 	}
 
+	endpoints := c.snapshotDiscoveries()
+	if len(endpoints) == 0 {
+		return errors.New("updateClientEntry: no discoveries configured")
+	}
+
 	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
 	for pk := range c.sessions {
 		srvPKs = append(srvPKs, pk)
 	}
-
-	// Record last update on success AND cache the set of delegated
-	// server PKs we just pushed, so the next call can short-circuit.
-	defer func() {
-		if err == nil {
-			c.recordUpdate()
-			c.pushedSrvPKsMx.Lock()
-			// Make a defensive copy — the srvPKs slice is a local
-			// snapshot but the caller may hold a reference in log
-			// output, so copying is cheap and keeps ownership clean.
-			pushed := make([]cipher.PubKey, len(srvPKs))
-			copy(pushed, srvPKs)
-			c.lastPushedSrvPKs = pushed
-			c.pushedSrvPKsMx.Unlock()
-		}
-	}()
 
 	// Short-circuit: if the delegated server set we're about to publish
 	// is identical to what we last successfully pushed AND an update
@@ -374,14 +507,42 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		return nil
 	}
 
-	entry, err := c.dc.Entry(ctx, c.pk)
+	var firstErr error
+	anyOK := false
+	for _, ep := range endpoints {
+		if updateErr := c.updateClientEntryOnEndpoint(ctx, ep, clientType, srvPKs); updateErr != nil {
+			if firstErr == nil {
+				firstErr = updateErr
+			}
+			c.log.WithError(updateErr).Debug("client entry update failed for discovery; will retry next tick")
+			continue
+		}
+		anyOK = true
+	}
+	if anyOK {
+		c.recordUpdate()
+		c.pushedSrvPKsMx.Lock()
+		// Defensive copy — caller may retain srvPKs in log output, so
+		// copying is cheap and keeps ownership clean.
+		pushed := make([]cipher.PubKey, len(srvPKs))
+		copy(pushed, srvPKs)
+		c.lastPushedSrvPKs = pushed
+		c.pushedSrvPKsMx.Unlock()
+	}
+	return firstErr
+}
+
+// updateClientEntryOnEndpoint runs the read-modify-write registration
+// cycle against a single discovery endpoint.
+func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, clientType string, srvPKs []cipher.PubKey) error {
+	entry, err := ep.Client.Entry(ctx, c.pk)
 	if err != nil {
 		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
 		entry.ClientType = clientType
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
-		return c.dc.PostEntry(ctx, entry)
+		return ep.Client.PostEntry(ctx, entry)
 	}
 
 	// The entry might be a server entry (e.g., debug client running on a dmsg server).
@@ -392,7 +553,7 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
-		return c.dc.PostEntry(ctx, entry)
+		return ep.Client.PostEntry(ctx, entry)
 	}
 
 	// Whether the client's CURRENT delegated servers is the same as what would be advertised.
@@ -406,7 +567,7 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	entry.ClientType = clientType
 	entry.Client.DelegatedServers = srvPKs
 	c.log.WithField("entry", entry).Debug("Updating entry.\n")
-	return c.dc.PutEntry(ctx, c.sk, entry)
+	return ep.Client.PutEntry(ctx, c.sk, entry)
 }
 
 // entryUpdateDebounce is how long to wait after a nudge before updating
@@ -478,21 +639,23 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 }
 
 func (c *EntityCommon) entryProtocol(ctx context.Context, pk cipher.PubKey) string {
-	entry, err := c.dc.Entry(ctx, pk)
-	if err != nil {
-		c.log.WithField("entry", entry).WithError(err).Warn("Entry not found, so return empty as protocol.\n")
-		return ""
+	endpoints := c.snapshotDiscoveries()
+	for _, ep := range endpoints {
+		entry, err := ep.Client.Entry(ctx, pk)
+		if err != nil {
+			continue
+		}
+		c.log.WithField("entry", entry).Debug("Entry's protocol fetch.\n")
+		return entry.Protocol
 	}
-
-	c.log.WithField("entry", entry).Debug("Entry's protocol fetch.\n")
-	return entry.Protocol
+	c.log.WithField("pk", pk).Warn("Entry not found in any discovery; returning empty protocol.\n")
+	return ""
 }
 
 func (c *EntityCommon) delEntry(ctx context.Context) (err error) {
-
-	entry, err := c.dc.Entry(ctx, c.pk)
-	if err != nil {
-		return err
+	endpoints := c.snapshotDiscoveries()
+	if len(endpoints) == 0 {
+		return errors.New("delEntry: no discoveries configured")
 	}
 
 	defer func() {
@@ -501,8 +664,21 @@ func (c *EntityCommon) delEntry(ctx context.Context) (err error) {
 		}
 	}()
 
-	c.log.WithField("entry", entry).Debug("Deleting entry.\n")
-	return c.dc.DelEntry(ctx, entry)
+	var firstErr error
+	for _, ep := range endpoints {
+		entry, lookupErr := ep.Client.Entry(ctx, c.pk)
+		if lookupErr != nil {
+			if firstErr == nil {
+				firstErr = lookupErr
+			}
+			continue
+		}
+		c.log.WithField("entry", entry).Debug("Deleting entry.\n")
+		if delErr := ep.Client.DelEntry(ctx, entry); delErr != nil && firstErr == nil {
+			firstErr = delErr
+		}
+	}
+	return firstErr
 }
 
 func getServerEntry(ctx context.Context, dc disc.APIClient, srvPK cipher.PubKey) (*disc.Entry, error) {
