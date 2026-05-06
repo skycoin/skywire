@@ -283,13 +283,18 @@ type PublicVisorConfig struct {
 
 // Launcher configures the app
 type Launcher struct {
-	ServiceDisc       string                `json:"service_discovery"`
-	ServiceDiscDmsg   string                `json:"service_discovery_dmsg,omitempty"` // DMSG-HTTP URL for service discovery
-	Apps              []appserver.AppConfig `json:"apps"`
-	ServerAddr        string                `json:"server_addr"`
-	BinPath           string                `json:"bin_path"`
-	DisplayNodeIP     bool                  `json:"display_node_ip"`
-	HeartbeatInterval Duration              `json:"heartbeat_interval,omitempty"`
+	ServiceDisc     string `json:"service_discovery"`
+	ServiceDiscDmsg string `json:"service_discovery_dmsg,omitempty"` // DMSG-HTTP URL for service discovery
+	// Apps uses the appsList wrapper so on-disk JSON renders each
+	// AppConfig's Args as a single shell-like string (much easier
+	// to hand-edit than the array form). Old configs with array-
+	// form args still load. Behaviorally this is a []appserver.AppConfig
+	// — readers that take the Apps field unchanged still work.
+	Apps              appsList `json:"apps"`
+	ServerAddr        string   `json:"server_addr"`
+	BinPath           string   `json:"bin_path"`
+	DisplayNodeIP     bool     `json:"display_node_ip"`
+	HeartbeatInterval Duration `json:"heartbeat_interval,omitempty"`
 }
 
 // Flush flushes the config to file (if specified).
@@ -391,6 +396,99 @@ func (v1 *V1) UpdateAppArgBatch(launch *launcher.AppLauncher, appName string, ar
 		DisplayNodeIP: conf.DisplayNodeIP,
 	})
 	return v1.flush(v1)
+}
+
+// UpdateAppEnv sets, replaces, or deletes a KEY=value entry on the
+// named app's Env list. An empty value deletes the entry. The
+// updated config gets flushed to file if anything changed and the
+// launcher is reset so the new env takes effect on the next start.
+func (v1 *V1) UpdateAppEnv(launch *launcher.AppLauncher, appName, key, value string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	if key == "" {
+		return fmt.Errorf("env key must not be empty")
+	}
+
+	conf := v1.Launcher
+	configChanged := updateEnvEntry(conf, appName, key, value)
+	if !configChanged {
+		return nil
+	}
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
+// UpdateAppEnvBatch is the multi-key counterpart to UpdateAppEnv.
+// One config flush + one launcher reset for the whole batch. An
+// empty map value deletes that key.
+func (v1 *V1) UpdateAppEnvBatch(launch *launcher.AppLauncher, appName string, env map[string]string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	configChanged := false
+	for key, value := range env {
+		if key == "" {
+			return fmt.Errorf("env key must not be empty")
+		}
+		if updateEnvEntry(conf, appName, key, value) {
+			configChanged = true
+		}
+	}
+	if !configChanged {
+		return nil
+	}
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
+// updateEnvEntry mutates conf.Apps[i].Env in place: replaces the
+// entry whose KEY= prefix matches `key`, deletes it if value is
+// empty, or appends a new KEY=value entry. Returns true iff the
+// app's Env actually changed (so the caller knows whether to flush).
+func updateEnvEntry(conf *Launcher, appName, key, value string) bool {
+	prefix := key + "="
+	desired := key + "=" + value
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+		// Look for an existing entry with this key.
+		for j := range conf.Apps[i].Env {
+			if !strings.HasPrefix(conf.Apps[i].Env[j], prefix) {
+				continue
+			}
+			if value == "" {
+				conf.Apps[i].Env = append(conf.Apps[i].Env[:j], conf.Apps[i].Env[j+1:]...)
+				return true
+			}
+			if conf.Apps[i].Env[j] == desired {
+				return false
+			}
+			conf.Apps[i].Env[j] = desired
+			return true
+		}
+		// No existing entry; nothing to delete.
+		if value == "" {
+			return false
+		}
+		conf.Apps[i].Env = append(conf.Apps[i].Env, desired)
+		return true
+	}
+	// App not found — silently no-op, mirrors UpdateAppArg's behavior
+	// (it iterates and just doesn't match).
+	return false
 }
 
 // UpdateAppPort update app port for communicat with visor
@@ -538,6 +636,117 @@ func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName str
 	}
 
 	conf.Apps = append(conf.Apps, appserver.AppConfig{Name: appName, Binary: binaryName, Port: routing.Port(randomNumber)}) //nolint: gosec
+
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
+// UpdateAppArgsFull replaces the entire Args slice on the named app.
+// Used by the universal app-settings panel where the operator edits
+// the args as a shell-string and we parse + replace; per-flag
+// UpdateAppArg is for targeted CLI surface, not whole-form save.
+func (v1 *V1) UpdateAppArgsFull(launch *launcher.AppLauncher, appName string, args []string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+		conf.Apps[i].Args = args
+		launch.ResetConfig(launcher.AppLauncherConfig{
+			VisorPK:       v1.PK,
+			Apps:          conf.Apps,
+			ServerAddr:    conf.ServerAddr,
+			DisplayNodeIP: conf.DisplayNodeIP,
+		})
+		return v1.flush(v1)
+	}
+	return fmt.Errorf("app %q not found in launcher config", appName)
+}
+
+// UpdateAppEnvFull replaces the entire Env slice on the named app.
+// Counterpart to UpdateAppArgsFull for the env list. Per-key
+// UpdateAppEnv is still available for targeted mutation; this
+// method is for whole-form save where deletion of keys not in the
+// new list is the intended semantics.
+func (v1 *V1) UpdateAppEnvFull(launch *launcher.AppLauncher, appName string, env []string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+		conf.Apps[i].Env = env
+		launch.ResetConfig(launcher.AppLauncherConfig{
+			VisorPK:       v1.PK,
+			Apps:          conf.Apps,
+			ServerAddr:    conf.ServerAddr,
+			DisplayNodeIP: conf.DisplayNodeIP,
+		})
+		return v1.flush(v1)
+	}
+	return fmt.Errorf("app %q not found in launcher config", appName)
+}
+
+// UpdateAppLauncherMode persists the launcher-mode preference for
+// an app entry. Empty string clears the override (visor default).
+// Validated values: "", "internal", "external".
+func (v1 *V1) UpdateAppLauncherMode(launch *launcher.AppLauncher, appName, mode string) error {
+	switch mode {
+	case "", "internal", "external":
+	default:
+		return fmt.Errorf("invalid launcher mode %q (must be empty, 'internal', or 'external')", mode)
+	}
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	for i := range conf.Apps {
+		if conf.Apps[i].Name != appName {
+			continue
+		}
+		conf.Apps[i].LauncherMode = mode
+		launch.ResetConfig(launcher.AppLauncherConfig{
+			VisorPK:       v1.PK,
+			Apps:          conf.Apps,
+			ServerAddr:    conf.ServerAddr,
+			DisplayNodeIP: conf.DisplayNodeIP,
+		})
+		return v1.flush(v1)
+	}
+	return fmt.Errorf("app %q not found in launcher config", appName)
+}
+
+// DeleteAppConfig removes an app entry from the launcher config and
+// flushes the change. The caller is responsible for stopping the
+// running proc (if any) before calling this — V1 doesn't own the
+// procmanager. Returns an error if the named app isn't in the
+// config so accidental no-ops surface to the operator.
+func (v1 *V1) DeleteAppConfig(launch *launcher.AppLauncher, appName string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	idx := -1
+	for i, app := range conf.Apps {
+		if app.Name == appName {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("app %q not found in launcher config", appName)
+	}
+	conf.Apps = append(conf.Apps[:idx], conf.Apps[idx+1:]...)
 
 	launch.ResetConfig(launcher.AppLauncherConfig{
 		VisorPK:       v1.PK,

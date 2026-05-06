@@ -111,14 +111,40 @@ var (
 	enableCalculateRoutes      bool
 	isSkychatEnable            bool
 	skychatAddr                string
-	rewardSkyAddr              string
-	hvHTTPAddr                 string
-	stunServers                string
-	shutdownTimeout            string
-	publicVisorRegTimeout      string
-	publicVisorMaxTransports   int
-	muxRoutes                  int
-	cliAddr                    string
+	// Skycoin embedded apps — daemon (full node) + web (thin-client
+	// wallet). Default-off for both. SkycoinWebUser drops the wallet
+	// process to a different UID via the launcher's per-app
+	// credential field; left empty means the wallet runs as the
+	// visor's own UID.
+	isSkycoinDaemonEnable bool
+	skycoinDaemonFiber    string // legacy single-instance FIBER_TOML — superseded by skycoinDaemonInstances when that's non-empty
+	skycoinDaemonAPISets  string // legacy single-instance API sets — superseded by skycoinDaemonFlags when that's non-empty
+	skycoinDaemonUser     string
+	// skycoinDaemonInstances is the new multi-instance knob. Each
+	// entry is either the literal "skycoin" (built-in defaults, no
+	// FIBER_TOML override) or a path to a fiber.toml. Each entry
+	// produces one skycoin-daemon-<name> AppConfig with auto-
+	// allocated --port and --data-dir; <name> = "skycoin" for the
+	// literal, basename-without-.toml for paths.
+	skycoinDaemonInstances string
+	// skycoinDaemonFlags are extra flags appended to every
+	// instance's args (e.g. "--enable-gui-api-sets READ,STATUS").
+	// --port and --data-dir are auto-allocated per instance and
+	// must not appear here — gen errors out if they do.
+	skycoinDaemonFlags       string
+	isSkycoinWebEnable       bool
+	skycoinWebAddr           string
+	skycoinWebNodeURLs       string // comma-separated; rendered as repeated --node-url flags
+	skycoinWebWalletDir      string
+	skycoinWebUser           string
+	rewardSkyAddr            string
+	hvHTTPAddr               string
+	stunServers              string
+	shutdownTimeout          string
+	publicVisorRegTimeout    string
+	publicVisorMaxTransports int
+	muxRoutes                int
+	cliAddr                  string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

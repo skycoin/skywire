@@ -128,6 +128,19 @@ func (r *RPC) SetMuxMode(mode *string, _ *struct{}) (err error) {
 	return err
 }
 
+// GetRouterSettings returns the unified runtime router knobs.
+func (r *RPC) GetRouterSettings(_ *struct{}, out *RouterSettings) (err error) {
+	defer rpcutil.LogCall(r.log, "GetRouterSettings", nil)(out, &err)
+	*out, err = r.visor.GetRouterSettings()
+	return
+}
+
+// SetRouterSettings sets the unified runtime router knobs.
+func (r *RPC) SetRouterSettings(s *RouterSettings, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetRouterSettings", s)(nil, &err)
+	return r.visor.SetRouterSettings(*s)
+}
+
 // ActiveRoutes returns all active routes with app associations and live stats
 func (r *RPC) ActiveRoutes(_ *struct{}, out *[]AppRouteStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "ActiveRoutes", nil)(out, &err)

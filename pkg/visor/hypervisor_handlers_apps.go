@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // returns app summaries of a given node of pk
@@ -36,6 +37,72 @@ func (hv *Hypervisor) getApp() http.HandlerFunc {
 	})
 }
 
+// postApp adds a new app entry to the visor's launcher config. Used to
+// create additional instances of multi-instance apps (skysocks-client-2,
+// skycoin-daemon-mychain, etc.) from the hypervisor UI without dropping
+// to the CLI. The caller picks both the instance name (must be unique
+// within the visor) and the binary it points at; subsequent
+// configuration / autostart / start are done via the existing PUT
+// /visors/{pk}/apps/{app} route.
+func (hv *Hypervisor) postApp() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		type req struct {
+			Name   string `json:"name"`
+			Binary string `json:"binary"`
+		}
+		var reqBody req
+		if err := httputil.ReadJSON(r, &reqBody); err != nil {
+			if err != io.EOF {
+				hv.log(r).Warnf("postApp request: %v", err)
+			}
+			httputil.WriteJSON(w, r, http.StatusBadRequest, usermanager.ErrMalformedRequest)
+			return
+		}
+		if strings.TrimSpace(reqBody.Name) == "" || strings.TrimSpace(reqBody.Binary) == "" {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("name and binary are required"))
+			return
+		}
+		if err := ctx.API.AddApp(reqBody.Name, reqBody.Binary); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		app, err := ctx.API.App(reqBody.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusCreated, app)
+	})
+}
+
+// appHelp returns the cached `<binary> --help` output for the named
+// app. Backs the universal app-settings panel's "Show flags"
+// disclosure so operators don't have to memorize flag names.
+func (hv *Hypervisor) appHelp() http.HandlerFunc {
+	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		out, err := ctx.API.AppHelp(ctx.App.Name)
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]string{"help": out})
+	})
+}
+
+// deleteApp removes an app entry from the launcher config (and
+// stops it first if running). Pairs with postApp for the
+// add-instance / remove-instance lifecycle that the hypervisor UI
+// surfaces for multi-instance apps.
+func (hv *Hypervisor) deleteApp() http.HandlerFunc {
+	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		if err := ctx.API.DeleteApp(ctx.App.Name); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]string{"name": ctx.App.Name})
+	})
+}
+
 func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		stats, err := ctx.API.GetAppStats(ctx.App.Name)
@@ -55,22 +122,30 @@ func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 func (hv *Hypervisor) putApp() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		type req struct {
-			AutoStart     *bool          `json:"autostart,omitempty"`
-			Killswitch    *bool          `json:"killswitch,omitempty"`
-			Secure        *bool          `json:"secure,omitempty"`
-			Address       *string        `json:"Address,omitempty"`
-			Status        *int           `json:"status,omitempty"`
-			Whitelist     *string        `json:"whitelist,omitempty"`
-			NetIfc        *string        `json:"netifc,omitempty"`
-			DNSAddr       *string        `json:"dns,omitempty"`
-			PK            *cipher.PubKey `json:"pk,omitempty"`
-			CustomSetting map[string]any `json:"custom_setting,omitempty"`
+			AutoStart     *bool             `json:"autostart,omitempty"`
+			Killswitch    *bool             `json:"killswitch,omitempty"`
+			Secure        *bool             `json:"secure,omitempty"`
+			Address       *string           `json:"Address,omitempty"`
+			Status        *int              `json:"status,omitempty"`
+			Whitelist     *string           `json:"whitelist,omitempty"`
+			NetIfc        *string           `json:"netifc,omitempty"`
+			DNSAddr       *string           `json:"dns,omitempty"`
+			PK            *cipher.PubKey    `json:"pk,omitempty"`
+			CustomSetting map[string]any    `json:"custom_setting,omitempty"`
+			Env           map[string]string `json:"env,omitempty"`
+			// Universal-panel fields: full replacements for the
+			// canonical lists. ArgsString is parsed via shellwords;
+			// EnvList replaces .Env wholesale (including deletes).
+			ArgsString   *string  `json:"args,omitempty"`
+			EnvList      []string `json:"env_full,omitempty"`
+			LauncherMode *string  `json:"launcher_mode,omitempty"`
 		}
 
 		shouldRestartApp := func(r req) bool {
 			// we restart the app if one of these fields was changed
 			return r.Killswitch != nil || r.Secure != nil || r.Address != nil || r.Whitelist != nil ||
-				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil
+				r.PK != nil || r.NetIfc != nil || r.CustomSetting != nil || r.Env != nil ||
+				r.ArgsString != nil || r.EnvList != nil
 		}
 
 		var reqBody req
@@ -144,6 +219,39 @@ func (hv *Hypervisor) putApp() http.HandlerFunc {
 
 		if reqBody.CustomSetting != nil {
 			if err := ctx.API.DoCustomSetting(ctx.App.Name, reqBody.CustomSetting); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.Env != nil {
+			if err := ctx.API.SetAppEnvBatch(ctx.App.Name, reqBody.Env); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.ArgsString != nil {
+			parsed, perr := visorconfig.SplitArgs(*reqBody.ArgsString)
+			if perr != nil {
+				httputil.WriteJSON(w, r, http.StatusBadRequest, fmt.Errorf("parsing args: %w", perr))
+				return
+			}
+			if err := ctx.API.SetAppArgs(ctx.App.Name, parsed); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.EnvList != nil {
+			if err := ctx.API.SetAppEnvFull(ctx.App.Name, reqBody.EnvList); err != nil {
+				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+				return
+			}
+		}
+
+		if reqBody.LauncherMode != nil {
+			if err := ctx.API.SetAppLauncherMode(ctx.App.Name, *reqBody.LauncherMode); err != nil {
 				httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
 				return
 			}

@@ -218,9 +218,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/resources') ||
       this.lastUrl.includes('/terminal') ||
+      this.lastUrl.includes('/wallet') ||
       this.lastUrl.includes('/logs') ||
-      this.lastUrl.includes('/chat') ||
-      this.lastUrl.includes('/dmsg') ||
       (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
 
       this.titleParts = ['nodes.title', 'node.title'];
@@ -231,7 +230,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           label: 'node.tabs.info',
           // Info is now a real tab on every screen size — the right
           // bar split-view that previously surfaced this content
-          // has been removed.
+          // has been removed. DMSG settings folded into Info as a
+          // collapsible section to keep the tab row compact.
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'info'] : null,
         },
         {
@@ -255,14 +255,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'uptime'] : null,
         },
         {
+          // Apps tab: list view + sub-tabs for Skychat / VPN /
+          // Skysocks (was three separate top-level tabs each).
           icon: 'apps',
           label: 'node.tabs.apps',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'apps'] : null,
-        },
-        {
-          icon: 'forum',
-          label: 'node.tabs.chat',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
         },
         {
           icon: 'monetization_on',
@@ -285,24 +282,30 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
         },
         {
-          icon: 'terminal',
+          // 'terminal' was added to Material Icons in 2020 but the
+          // font we ship locally predates that. 'code' is in the
+          // bundled glyph map and reads as terminal-ish.
+          icon: 'code',
           label: 'node.tabs.terminal',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'terminal'] : null,
+        },
+        {
+          icon: 'account_balance_wallet',
+          label: 'node.tabs.wallet',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'wallet'] : null,
         },
         {
           icon: 'description',
           label: 'node.tabs.logs',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'logs'] : null,
         },
-        {
-          icon: 'device_hub',
-          label: 'node.tabs.dmsg',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'dmsg'] : null,
-        }
       ];
 
       // Check the URL to find out which tab should be shown as selected.
-      // Info is the default landing tab now (was Routing).
+      // Info is the default landing tab now (was Routing). Sub-paths
+      // under /apps (chat, vpn, skysocks) all keep the Apps tab
+      // highlighted since they're sub-tabs inside it; the legacy
+      // top-level /chat /vpn-tab /skysocks routes redirect there.
       this.selectedTabIndex = 0;
       if (this.lastUrl.includes('/routing')) {
         this.selectedTabIndex = 1;
@@ -319,32 +322,29 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
         this.selectedTabIndex = 5;
       }
-      if (this.lastUrl.includes('/chat')) {
-        this.selectedTabIndex = 6;
-      }
       if (this.lastUrl.includes('/rewards')) {
-        this.selectedTabIndex = 7;
+        this.selectedTabIndex = 6;
       }
       // /skynet matches BOTH the skynet tab and would otherwise also
       // match a hypothetical /skynet-foo path; check after web-proxy
       // since /web-proxy must take precedence on its own URL.
       if (this.lastUrl.includes('/skynet')) {
-        this.selectedTabIndex = 8;
+        this.selectedTabIndex = 7;
       }
       if (this.lastUrl.includes('/web-proxy')) {
-        this.selectedTabIndex = 9;
+        this.selectedTabIndex = 8;
       }
       if (this.lastUrl.includes('/resources')) {
-        this.selectedTabIndex = 10;
+        this.selectedTabIndex = 9;
       }
       if (this.lastUrl.includes('/terminal')) {
+        this.selectedTabIndex = 10;
+      }
+      if (this.lastUrl.includes('/wallet')) {
         this.selectedTabIndex = 11;
       }
       if (this.lastUrl.includes('/logs')) {
         this.selectedTabIndex = 12;
-      }
-      if (this.lastUrl.includes('/dmsg')) {
-        this.selectedTabIndex = 13;
       }
 
       // Inform that the current subpage is not for showing a full list.

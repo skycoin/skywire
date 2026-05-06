@@ -29,6 +29,7 @@ import (
 	clisd "github.com/skycoin/skywire/cmd/skywire-cli/commands/sd"
 	cliserve "github.com/skycoin/skywire/cmd/skywire-cli/commands/serve"
 	cliskychat "github.com/skycoin/skywire/cmd/skywire-cli/commands/skychat"
+	cliskycoin "github.com/skycoin/skywire/cmd/skywire-cli/commands/skycoin"
 	cliskynet "github.com/skycoin/skywire/cmd/skywire-cli/commands/skynet"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
 	clisvc "github.com/skycoin/skywire/cmd/skywire-cli/commands/svc"
@@ -126,6 +127,7 @@ func init() {
 		climdisc.RootCmd,
 		clisd.RootCmd,
 		cliskychat.RootCmd,
+		cliskycoin.RootCmd,
 		clicompletion.RootCmd,
 		clilog.RootCmd,
 		cliskysocksc.RootCmd,

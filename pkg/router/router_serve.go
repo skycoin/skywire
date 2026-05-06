@@ -251,13 +251,33 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 			r.mx.Unlock()
 			return nil, ctx.Err()
 		}
-		// remote should send handshake packet during initialization,
-		// if no packet received during timeout interval, we're dealing
-		// with the old visor
-		rg.handshakeProcessedOnce.Do(func() {
-			rg.encrypt = false
-			close(rg.handshakeProcessed)
-		})
+		// Remote never sent its reciprocal handshake. Historically this
+		// branch silently downgraded encrypt=false on the assumption that
+		// the remote was an old visor without handshake support — but
+		// every supported visor does the handshake now, so what this
+		// silence actually masks is "remote app isn't there / transport
+		// is one-way / whitelist denied". The route group then runs in a
+		// half-open state (rules saved on both sides per the setup-node
+		// but no real peer), and the operator sees a 'running' app that
+		// silently black-holes for ~90s before the keep-alive gives up.
+		//
+		// Hard-fail loudly so the dial returns a real error to the caller
+		// and the operator can see "remote not responding" instead of a
+		// phantom success.
+		log.WithField("desc", rules.Desc.String()).
+			WithField("timeout", handshakeAwaitTimeout).
+			Warn("Remote handshake not received within timeout — failing dial")
+		// Clean up rgsRaw + delete the rules we installed locally so the
+		// keyRouteIDs are free for the next attempt.
+		if err := rg.Close(); err != nil {
+			log.WithError(err).Warnf("Failed to close route group on handshake timeout")
+		}
+		r.mx.Lock()
+		delete(r.rgsRaw, rules.Desc)
+		r.mx.Unlock()
+		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+		return nil, fmt.Errorf("remote handshake not received within %s (peer %s likely unreachable, app down, or whitelist-rejected)",
+			handshakeAwaitTimeout, rules.Desc.DstPK())
 	}
 
 	if !nsConf.Initiator {

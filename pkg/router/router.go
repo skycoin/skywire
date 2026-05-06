@@ -175,6 +175,9 @@ type Router interface {
 	SetForceLocalRoutes(bool)
 	SetMuxRoutes(int)
 	SetMuxMode(WeightMode)
+	GetExistingTPOnly() bool
+	GetForceLocalRoutes() bool
+	GetMuxRoutes() int
 	GetLastRouteCalcTime() time.Duration
 	ActiveRouteStatuses() []RouteStatus
 	AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error

@@ -1,0 +1,141 @@
+@if (node) {
+  <!-- skycoin-web thin-client. Header carries the app's status pill +
+       start/stop + settings; iframe sits below when running. -->
+  <div class="rounded-elevated-box mt-3 wallet-box">
+    <div class="box-internal-container wallet-shell">
+
+      @if (webApp) {
+        <div class="web-header">
+          <span class="web-name mono">{{ webApp.name }}</span>
+          <span class="web-status"
+                [class.status-running]="isWebRunning()"
+                [class.status-stopped]="!isWebRunning() && !isWebStarting()"
+                [class.status-starting]="isWebStarting()">
+            {{ webStatusKey() | translate }}
+          </span>
+          <span class="spacer"></span>
+          <button mat-raised-button
+                  color="{{ isWebRunning() ? 'warn' : 'primary' }}"
+                  [disabled]="webAppBusy || isWebStarting()"
+                  (click)="toggleWebApp()">
+            <mat-icon [inline]="true">{{ isWebRunning() ? 'stop' : 'play_arrow' }}</mat-icon>
+            {{ (isWebRunning() ? 'wallet.daemons.stop' : 'wallet.daemons.start') | translate }}
+          </button>
+          @if (hasRunningDaemons) {
+            <button mat-stroked-button (click)="applyLocalDaemons()"
+                    [matTooltip]="'wallet.daemons.use-local-tooltip' | translate">
+              <mat-icon [inline]="true">link</mat-icon>
+              {{ 'wallet.daemons.use-local' | translate }}
+            </button>
+          }
+          <button mat-stroked-button (click)="toggleWebSettings()"
+                  [class.settings-toggle-open]="webAppSettingsOpen">
+            <mat-icon [inline]="true">{{ webAppSettingsOpen ? 'expand_less' : 'settings' }}</mat-icon>
+            {{ 'wallet.daemons.settings' | translate }}
+          </button>
+        </div>
+        @if (webAppSettingsOpen) {
+          <app-app-settings
+            [app]="webApp"
+            (saved)="onWebSettingsSaved()"
+            (cancelled)="toggleWebSettings()">
+          </app-app-settings>
+        }
+      }
+
+      @if (state === 'not-configured') {
+        <div class="wallet-empty">
+          <mat-icon>account_balance_wallet</mat-icon>
+          <div class="wallet-empty-title">{{ 'wallet.not-configured' | translate }}</div>
+          <div class="wallet-empty-help dim small">{{ 'wallet.not-configured-help' | translate }}</div>
+        </div>
+      }
+
+      @if (state === 'not-running') {
+        <div class="wallet-empty">
+          <mat-icon>power_off</mat-icon>
+          <div class="wallet-empty-title">{{ 'wallet.not-running' | translate }}</div>
+          <div class="wallet-empty-help dim small">{{ 'wallet.not-running-help' | translate }}</div>
+        </div>
+      }
+
+      @if (state === 'running') {
+        <div class="wallet-controls">
+          <span class="dim small">
+            {{ 'wallet.help' | translate }}
+            <span class="mono small">http://{{ resolvedHost }}:{{ resolvedPort }}</span>
+          </span>
+          <button mat-stroked-button class="wallet-fullscreen" (click)="openFullWindow()">
+            <mat-icon [inline]="true">open_in_new</mat-icon>
+            {{ 'wallet.open-fullscreen' | translate }}
+          </button>
+        </div>
+        @if (iframeUrl) {
+          <iframe class="wallet-frame" [src]="iframeUrl" allowfullscreen></iframe>
+        }
+      }
+
+    </div>
+  </div>
+
+  <!-- Skycoin daemon instances. Beneath the wallet UI since the
+       wallet is the primary surface here; the daemon list is a
+       backing-detail panel one or more fibercoins per visor. -->
+  <div class="rounded-elevated-box mt-3 daemons-box">
+    <div class="box-internal-container">
+      <div class="daemons-header">
+        <mat-icon [inline]="true">memory</mat-icon>
+        <span class="daemons-title">{{ 'wallet.daemons.title' | translate }}</span>
+        <span class="dim small">{{ daemons.length }}</span>
+      </div>
+
+      @if (daemons.length === 0) {
+        <div class="dim small daemons-empty">
+          {{ 'wallet.daemons.empty' | translate }}
+        </div>
+      }
+
+      @for (d of daemons; track d.name) {
+        <div class="daemon-row">
+          <span class="daemon-name mono">{{ d.name }}</span>
+          <span class="daemon-status"
+                [class.status-running]="isDaemonRunning(d)"
+                [class.status-stopped]="!isDaemonRunning(d) && !isDaemonStarting(d)"
+                [class.status-starting]="isDaemonStarting(d)">
+            {{ daemonStatusKey(d) | translate }}
+          </span>
+          <span class="spacer"></span>
+          <button mat-raised-button
+                  color="{{ isDaemonRunning(d) ? 'warn' : 'primary' }}"
+                  [disabled]="daemonsBusy.has(d.name) || isDaemonStarting(d)"
+                  (click)="toggleDaemon(d)">
+            <mat-icon [inline]="true">{{ isDaemonRunning(d) ? 'stop' : 'play_arrow' }}</mat-icon>
+            {{ (isDaemonRunning(d) ? 'wallet.daemons.stop' : 'wallet.daemons.start') | translate }}
+          </button>
+          <button mat-stroked-button (click)="toggleDaemonSettings(d.name)"
+                  [class.settings-toggle-open]="isDaemonSettingsOpen(d.name)">
+            <mat-icon [inline]="true">{{ isDaemonSettingsOpen(d.name) ? 'expand_less' : 'settings' }}</mat-icon>
+            {{ 'wallet.daemons.settings' | translate }}
+          </button>
+        </div>
+        @if (isDaemonSettingsOpen(d.name)) {
+          <app-app-settings
+            [app]="d"
+            (saved)="onDaemonSettingsSaved(d.name)"
+            (cancelled)="toggleDaemonSettings(d.name)">
+          </app-app-settings>
+        }
+      }
+
+      <div class="daemons-actions">
+        <button mat-stroked-button (click)="addDaemon()" [disabled]="daemonsBusy.has('add')">
+          <mat-icon [inline]="true">add</mat-icon>
+          {{ 'wallet.daemons.add' | translate }}
+        </button>
+        <span class="dim small daemons-hint">
+          {{ 'wallet.daemons.hint' | translate }}
+        </span>
+      </div>
+    </div>
+  </div>
+}

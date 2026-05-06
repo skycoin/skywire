@@ -65,10 +65,57 @@ func (r *RPC) AddApp(in *SetAppAddIn, _ *struct{}) (err error) {
 	return r.visor.AddApp(in.AppName, in.BinaryName)
 }
 
+// DeleteApp removes an app entry from the launcher config (and stops it first if running).
+func (r *RPC) DeleteApp(in *AppNameIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeleteApp", in)(nil, &err)
+	return r.visor.DeleteApp(in.AppName)
+}
+
 // DoCustomSetting set custom setting to apps arguments
 func (r *RPC) DoCustomSetting(in *SetAppMapIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DoCustomSetting", in)(nil, &err)
 	return r.visor.DoCustomSetting(in.AppName, in.Val)
+}
+
+// SetAppEnv sets/replaces/deletes a single KEY=value entry on an app's environment.
+func (r *RPC) SetAppEnv(in *SetAppEnvIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppEnv", in)(nil, &err)
+	return r.visor.SetAppEnv(in.AppName, in.Key, in.Value)
+}
+
+// SetAppEnvBatch is the multi-key counterpart to SetAppEnv.
+func (r *RPC) SetAppEnvBatch(in *SetAppEnvBatchIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppEnvBatch", in)(nil, &err)
+	return r.visor.SetAppEnvBatch(in.AppName, in.Env)
+}
+
+// SetAppArgs replaces the entire Args slice on an app.
+func (r *RPC) SetAppArgs(in *SetAppArgsIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppArgs", in)(nil, &err)
+	return r.visor.SetAppArgs(in.AppName, in.Args)
+}
+
+// SetAppEnvFull replaces the entire Env slice on an app.
+func (r *RPC) SetAppEnvFull(in *SetAppEnvFullIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppEnvFull", in)(nil, &err)
+	return r.visor.SetAppEnvFull(in.AppName, in.Env)
+}
+
+// SetAppLauncherMode persists the launcher-mode preference for an app.
+func (r *RPC) SetAppLauncherMode(in *SetAppLauncherModeIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppLauncherMode", in)(nil, &err)
+	return r.visor.SetAppLauncherMode(in.AppName, in.Mode)
+}
+
+// AppHelp returns the captured `<binary> --help` output for an app.
+func (r *RPC) AppHelp(in *AppNameIn, reply *string) (err error) {
+	defer rpcutil.LogCall(r.log, "AppHelp", in)(reply, &err)
+	out, err := r.visor.AppHelp(in.AppName)
+	if err != nil {
+		return err
+	}
+	*reply = out
+	return nil
 }
 
 // RegisterApp registers a App with provided proc config.

@@ -1,0 +1,173 @@
+@import 'variables';
+
+.inline-settings {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid rgba(0, 212, 255, 0.4);
+  border-radius: 4px;
+}
+
+.inline-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 10px;
+
+  .name {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    color: #00d4ff;
+    font-weight: 600;
+  }
+}
+
+.inline-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  > label {
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  input[type="text"] {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    padding: 7px 9px;
+    color: rgba(255, 255, 255, 0.95);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.88em;
+    outline: none;
+
+    &:focus { border-color: rgba(0, 212, 255, 0.6); }
+  }
+}
+
+.field-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-start;
+
+  .field { flex: 1; min-width: 180px; }
+}
+
+.mode-row .auto-field { flex: 0 0 auto; align-self: center; padding-top: 18px; }
+
+.mode-radios {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.radio-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.88em;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+
+  input[type="radio"] { accent-color: #00d4ff; }
+}
+
+.checkbox-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88em;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: pointer;
+
+  input[type="checkbox"] { accent-color: #00d4ff; }
+}
+
+.env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.env-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+
+  input { flex: 1; }
+}
+
+.env-remove,
+.env-add,
+.show-flags-toggle {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.85em;
+  padding: 4px 9px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+
+  &:hover { color: rgba(255, 255, 255, 0.95); border-color: rgba(255, 255, 255, 0.3); }
+
+  mat-icon { font-size: 16px; height: 16px; width: 16px; }
+}
+
+.env-remove { padding: 4px 6px; }
+.env-add { align-self: flex-start; margin-top: 2px; }
+.show-flags-toggle { align-self: flex-start; margin-top: 2px; }
+
+.help-text {
+  margin-top: 6px;
+  padding: 9px 11px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.82em;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: pre-wrap;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.help-status { margin-top: 4px; }
+.help-error  { color: rgba(248, 113, 113, 0.95); }
+
+.error-box {
+  padding: 7px 9px;
+  background: rgba(229, 57, 53, 0.12);
+  border: 1px solid rgba(229, 57, 53, 0.35);
+  border-radius: 4px;
+  color: rgba(255, 200, 200, 0.95);
+  font-size: 0.85em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+
+  button.mat-mdc-button-base:not(:disabled):not(.mat-primary) {
+    color: rgba(255, 255, 255, 0.92) !important;
+  }
+}
+
+.dim { color: rgba(255, 255, 255, 0.55); }
+.small { font-size: 0.85em; }
+.mono { font-family: 'Consolas', 'Monaco', 'Courier New', monospace; }

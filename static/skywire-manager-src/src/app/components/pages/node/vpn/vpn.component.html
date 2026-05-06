@@ -1,0 +1,95 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3 vpn-box">
+    <div class="box-internal-container">
+
+      <!-- VPN Client -->
+      <div class="vpn-card">
+        <div class="vpn-card-header">
+          <mat-icon [inline]="true">vpn_lock</mat-icon>
+          <span class="vpn-card-title">{{ 'vpn-tab.client.title' | translate }}</span>
+          <span class="vpn-status"
+                [class.status-running]="isRunning(client)"
+                [class.status-stopped]="client && !isRunning(client) && !isStarting(client)"
+                [class.status-starting]="isStarting(client)">
+            {{ statusKey(client) | translate }}
+          </span>
+        </div>
+
+        <div class="vpn-card-help dim small">
+          {{ (client ? 'vpn-tab.client.help' : 'vpn-tab.client.not-configured') | translate }}
+        </div>
+
+        <div class="vpn-actions">
+          @if (client) {
+            <button mat-raised-button
+                    color="{{ isRunning(client) ? 'warn' : 'primary' }}"
+                    [disabled]="busy.has('vpn-client') || isStarting(client)"
+                    (click)="toggle(client, 'vpn-client')">
+              <mat-icon [inline]="true">{{ isRunning(client) ? 'stop' : 'play_arrow' }}</mat-icon>
+              {{ (isRunning(client) ? 'vpn-tab.stop' : 'vpn-tab.start') | translate }}
+            </button>
+            <button mat-stroked-button (click)="toggleSettings(client.name)"
+                    [class.settings-toggle-open]="isSettingsOpen(client.name)">
+              <mat-icon [inline]="true">{{ isSettingsOpen(client.name) ? 'expand_less' : 'settings' }}</mat-icon>
+              {{ 'vpn-tab.settings' | translate }}
+            </button>
+            <button mat-stroked-button (click)="openStandaloneClient()">
+              <mat-icon [inline]="true">open_in_new</mat-icon>
+              {{ 'vpn-tab.full-ui' | translate }}
+            </button>
+          }
+        </div>
+        @if (client && isSettingsOpen(client.name)) {
+          <app-app-settings
+            [app]="client"
+            (saved)="onSettingsSaved(client.name)"
+            (cancelled)="toggleSettings(client.name)">
+          </app-app-settings>
+        }
+      </div>
+
+      <!-- VPN Server -->
+      <div class="vpn-card">
+        <div class="vpn-card-header">
+          <mat-icon [inline]="true">dns</mat-icon>
+          <span class="vpn-card-title">{{ 'vpn-tab.server.title' | translate }}</span>
+          <span class="vpn-status"
+                [class.status-running]="isRunning(server)"
+                [class.status-stopped]="server && !isRunning(server) && !isStarting(server)"
+                [class.status-starting]="isStarting(server)">
+            {{ statusKey(server) | translate }}
+          </span>
+        </div>
+
+        <div class="vpn-card-help dim small">
+          {{ (server ? 'vpn-tab.server.help' : 'vpn-tab.server.not-configured') | translate }}
+        </div>
+
+        <div class="vpn-actions">
+          @if (server) {
+            <button mat-raised-button
+                    color="{{ isRunning(server) ? 'warn' : 'primary' }}"
+                    [disabled]="busy.has('vpn-server') || isStarting(server)"
+                    (click)="toggle(server, 'vpn-server')">
+              <mat-icon [inline]="true">{{ isRunning(server) ? 'stop' : 'play_arrow' }}</mat-icon>
+              {{ (isRunning(server) ? 'vpn-tab.stop' : 'vpn-tab.start') | translate }}
+            </button>
+            <button mat-stroked-button (click)="toggleSettings(server.name)"
+                    [class.settings-toggle-open]="isSettingsOpen(server.name)">
+              <mat-icon [inline]="true">{{ isSettingsOpen(server.name) ? 'expand_less' : 'settings' }}</mat-icon>
+              {{ 'vpn-tab.settings' | translate }}
+            </button>
+          }
+        </div>
+        @if (server && isSettingsOpen(server.name)) {
+          <app-app-settings
+            [app]="server"
+            (saved)="onSettingsSaved(server.name)"
+            (cancelled)="toggleSettings(server.name)">
+          </app-app-settings>
+        }
+      </div>
+
+    </div>
+  </div>
+}
