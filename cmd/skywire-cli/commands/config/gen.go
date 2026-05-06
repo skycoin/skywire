@@ -294,6 +294,48 @@ func init() {
 	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
 	gHiddenFlags = append(gHiddenFlags, "chataddr")
 
+	// Skycoin embedded apps. Default-off for both — operator opts in
+	// per-app via these flags or via SKYENV. The wallet's user-drop
+	// (SKYCOINWEBUSER) is the security-critical knob: the wallet
+	// touches the operator's ~/.skycoin/wallets dir, so when the
+	// visor itself runs as _skywire the wallet should be configured
+	// to drop to the operator's UID.
+	genConfigCmd.Flags().BoolVar(&isSkycoinDaemonEnable, "skycoind", scriptExecBool("${SKYCOIND:-false}"), "autostart skycoin daemon (full node) — single-instance legacy path; superseded by --skycoindinstances when set")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonFiber, "skycoindfiber", scriptExecString("${SKYCOIND_FIBER_TOML}"), "legacy single-instance FIBER_TOML; superseded by --skycoindinstances")
+	gHiddenFlags = append(gHiddenFlags, "skycoindfiber")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonAPISets, "skycoindapi", scriptExecString("${SKYCOIND_API_SETS}"), "legacy single-instance --enable-gui-api-sets; superseded by --skycoindflags")
+	gHiddenFlags = append(gHiddenFlags, "skycoindapi")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonUser, "skycoindUSER", scriptExecString("${SKYCOIND_USER}"), "drop skycoin daemon to this user via launcher external-mode (applies to every instance)")
+	gHiddenFlags = append(gHiddenFlags, "skycoindUSER")
+	// Multi-instance: SKYCOIND_INSTANCES is a bash array. Entries
+	// are either the literal "skycoin" (built-in defaults, no
+	// FIBER_TOML override) or a path to a fiber.toml. scriptExecArray
+	// expands ${VAR[@]} into a CSV string here; gen splits on commas
+	// at render time and emits one AppConfig per entry with auto-
+	// allocated --port (base 6420 +2N) and --data-dir.
+	genConfigCmd.Flags().StringVar(&skycoinDaemonInstances, "skycoindinstances", scriptExecArray("${SKYCOIND_INSTANCES[@]}"), "comma-separated list of skycoin-daemon instances; entries are either 'skycoin' (built-in defaults) or a fiber.toml path. Empty = use the legacy single-instance path driven by --skycoind / --skycoindfiber.")
+	gHiddenFlags = append(gHiddenFlags, "skycoindinstances")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonFlags, "skycoindflags", scriptExecString("${SKYCOIND_FLAGS}"), "extra flags appended to every skycoin-daemon instance (e.g. '--enable-gui-api-sets READ,STATUS'); --port and --data-dir are auto-allocated and must not appear here")
+	gHiddenFlags = append(gHiddenFlags, "skycoindflags")
+	genConfigCmd.Flags().BoolVar(&isSkycoinWebEnable, "skycoinweb", scriptExecBool("${SKYCOINWEB:-false}"), "autostart skycoin-web thin-client wallet")
+	// 8002 to avoid colliding with skychat's default at 127.0.0.1:8001.
+	// Both apps' upstream defaults happen to be 8001; skychat got there
+	// first in skywire so skycoin-web shifts up by one. Operator can
+	// override via SKYCOINWEBADDR or the universal settings panel.
+	genConfigCmd.Flags().StringVar(&skycoinWebAddr, "skycoinwebaddr", scriptExecString("${SKYCOINWEBADDR:-127.0.0.1:8002}"), "skycoin-web bind address (host:port)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebaddr")
+	// SKYCOINWEBNODES is a bash array (multiple node URLs supported
+	// — one per fibercoin the wallet is meant to multi-coin-browse).
+	// scriptExecArray expands ${VAR[@]} into a CSV string here; we
+	// re-split on commas at AppConfig render time and emit repeated
+	// --node-url flags as skycoin-web's StringArrayVar expects.
+	genConfigCmd.Flags().StringVar(&skycoinWebNodeURLs, "skycoinwebnodes", scriptExecArray("${SKYCOINWEBNODES[@]}"), "comma-separated node URLs the skycoin-web wallet talks to (empty = upstream default at https://node.skycoin.com)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebnodes")
+	genConfigCmd.Flags().StringVar(&skycoinWebWalletDir, "skycoinwebwallet", scriptExecString("${SKYCOINWEBWALLET}"), "skycoin-web --wallet-dir override (empty = upstream default at ~/.skycoin/wallets)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebwallet")
+	genConfigCmd.Flags().StringVar(&skycoinWebUser, "skycoinwebuser", scriptExecString("${SKYCOINWEBUSER}"), "drop skycoin-web to this user via launcher external-mode (POSIX setuid; empty = inherit visor UID)")
+	gHiddenFlags = append(gHiddenFlags, "skycoinwebuser")
+
 	// Reward address
 	genConfigCmd.Flags().StringVar(&rewardSkyAddr, "rewardaddr", scriptExecString("${REWARDSKYADDR}"), "skycoin reward address or xpub key")
 
@@ -1271,6 +1313,179 @@ func configureHypervisor(log *logging.Logger) {
 	}
 }
 
+// buildSkycoinDaemonApps emits the AppConfig slice for skycoin-daemon
+// instances based on the SKYCOIND_* knobs.
+//
+// Two paths:
+//
+//   - Multi-instance: SKYCOIND_INSTANCES is non-empty. Each entry is
+//     either the literal "skycoin" (built-in defaults, no FIBER_TOML)
+//     or a path to a fiber.toml. Emits one AppConfig per entry with
+//     auto-allocated --port (base 6420, step +2) and --data-dir.
+//     SKYCOIND_FLAGS is appended to every instance's args (and
+//     validated to not redefine --port or --data-dir, which the
+//     auto-allocator owns). SKYCOIND_FIBER_TOML / SKYCOIND_API_SETS
+//     are silently ignored on this path — they're the legacy single-
+//     instance knobs.
+//
+//   - Legacy single-instance: SKYCOIND_INSTANCES empty. Emits the
+//     historical single AppConfig with skyenv.SkycoinDaemonName, args
+//     from --skycoindapi, env from --skycoindfiber. AutoStart driven
+//     by --skycoind. Always emitted (even when --skycoind=false) so
+//     operators can toggle autostart at runtime via the Apps tab.
+//
+// Returns an error on flag-validation failure; the caller should
+// surface it to log.Fatal so config-gen aborts cleanly.
+func buildSkycoinDaemonApps() ([]appserver.AppConfig, error) {
+	insts := splitCSV(skycoinDaemonInstances)
+
+	if len(insts) == 0 {
+		// Legacy single-instance path — emit the daemon entry
+		// regardless of SKYCOIND so the Apps tab can flip it on.
+		// Default flags expose the full GUI API surface (so the
+		// thin-client wallet has everything it needs to talk to
+		// this daemon) and run at debug log level (this is dev
+		// territory — terse default-skycoin logging hides
+		// problems). Operator can override via the universal
+		// settings panel or --skycoindapi for the GUI flag alone.
+		// Port and data-dir are deliberately omitted: skycoin's
+		// own defaults (6420 + ~/.skycoin) are sensible for the
+		// single-instance case.
+		args := []string{
+			"skycoin", "daemon",
+			"--enable-all-api-sets=true",
+			"--log-level=debug",
+		}
+		if skycoinDaemonAPISets != "" {
+			args = append(args, "--enable-gui-api-sets", skycoinDaemonAPISets)
+		}
+		var env []string
+		if skycoinDaemonFiber != "" {
+			env = append(env, "FIBER_TOML="+skycoinDaemonFiber)
+		}
+		return []appserver.AppConfig{{
+			Name:      skyenv.SkycoinDaemonName,
+			Binary:    "skywire",
+			AutoStart: isSkycoinDaemonEnable,
+			Port:      routing.Port(skyenv.SkycoinDaemonPort),
+			Args:      args,
+			User:      skycoinDaemonUser,
+			Env:       env,
+		}}, nil
+	}
+
+	// Multi-instance path — validate and emit.
+	flagsToks, err := splitDaemonFlags(skycoinDaemonFlags)
+	if err != nil {
+		return nil, fmt.Errorf("--skycoindflags: %w", err)
+	}
+	for _, t := range flagsToks {
+		if t == "--port" || strings.HasPrefix(t, "--port=") ||
+			t == "--data-dir" || strings.HasPrefix(t, "--data-dir=") {
+			return nil, fmt.Errorf("--skycoindflags must not contain --port or --data-dir; those are auto-allocated per instance")
+		}
+	}
+
+	const basePort = 6420 // skycoin daemon's default HTTP port
+	const portStep = 2    // +2 leaves the daemon's RPC port slot free per instance
+
+	out := make([]appserver.AppConfig, 0, len(insts))
+	usedNames := make(map[string]bool, len(insts))
+	for i, raw := range insts {
+		name, fiberPath, err := parseDaemonInstance(raw)
+		if err != nil {
+			return nil, fmt.Errorf("--skycoindinstances entry %d (%q): %w", i, raw, err)
+		}
+		appName := skyenv.SkycoinDaemonName + "-" + name
+		if usedNames[appName] {
+			return nil, fmt.Errorf("--skycoindinstances duplicate instance name %q", name)
+		}
+		usedNames[appName] = true
+
+		port := basePort + i*portStep
+		dataDir := filepath.Join(conf.LocalPath, appName)
+
+		// Multi-instance: --port and --data-dir MUST differ per
+		// instance so they're auto-allocated regardless. The same
+		// "open the GUI API + log debug" defaults the single-
+		// instance path uses apply here too. SKYCOIND_FLAGS
+		// layers on top.
+		args := []string{"skycoin", "daemon",
+			"--port", fmt.Sprintf("%d", port),
+			"--data-dir", dataDir,
+			"--enable-all-api-sets=true",
+			"--log-level=debug",
+		}
+		args = append(args, flagsToks...)
+
+		var env []string
+		if fiberPath != "" {
+			env = append(env, "FIBER_TOML="+fiberPath)
+		}
+
+		// Skywire app port: keep stepping by 1 from the legacy
+		// SkycoinDaemonPort so multiple instances each have a
+		// unique slot inside the visor's app-port space.
+		appPort := routing.Port(int(skyenv.SkycoinDaemonPort) + i)
+
+		out = append(out, appserver.AppConfig{
+			Name:      appName,
+			Binary:    "skywire",
+			AutoStart: isSkycoinDaemonEnable,
+			Port:      appPort,
+			Args:      args,
+			User:      skycoinDaemonUser,
+			Env:       env,
+		})
+	}
+	return out, nil
+}
+
+// parseDaemonInstance maps a SKYCOIND_INSTANCES entry to an
+// (instance-name, fiber.toml-path) pair. The literal "skycoin"
+// produces ("skycoin", "") — built-in defaults. Any other value is
+// treated as a fiber.toml path; the name is the basename without
+// the .toml suffix.
+func parseDaemonInstance(raw string) (string, string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", "", fmt.Errorf("empty entry")
+	}
+	if raw == "skycoin" {
+		return "skycoin", "", nil
+	}
+	base := filepath.Base(raw)
+	base = strings.TrimSuffix(base, ".toml")
+	if base == "" || base == "." || base == "/" {
+		return "", "", fmt.Errorf("can't derive instance name from path")
+	}
+	return base, raw, nil
+}
+
+// splitCSV splits a comma-separated string into trimmed, non-empty
+// tokens. scriptExecArray's bash-array expansion lands here.
+func splitCSV(s string) []string {
+	out := []string{}
+	for _, t := range strings.Split(s, ",") {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// splitDaemonFlags applies a tiny shell-like tokenizer to the
+// SKYCOIND_FLAGS string so values quoted with " ... " stay intact.
+// Wraps the same parser used for the on-disk config file.
+func splitDaemonFlags(s string) ([]string, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	return visorconfig.SplitArgs(s)
+}
+
 // configureApps sets up launcher app configurations (internal or external),
 // handles app disable/enable flags, and configures VPN/proxy app settings.
 func configureApps(log *logging.Logger) {
@@ -1281,7 +1496,7 @@ func configureApps(log *logging.Logger) {
 	// App config settings
 	if externalApps {
 		// External apps configuration (apps run as separate processes)
-		conf.Launcher.Apps = []appserver.AppConfig{
+		apps := []appserver.AppConfig{
 			{
 				Name:      skyenv.VPNClientName,
 				Binary:    "skywire",
@@ -1318,6 +1533,48 @@ func configureApps(log *logging.Logger) {
 				Args:      []string{"app", "vpn-server"},
 			},
 		}
+		// Skycoin daemon — full node, syncs the chain locally. May
+		// emit one entry (legacy single-instance) or N (one per
+		// SKYCOIND_INSTANCES entry). Each multi-instance entry gets
+		// auto-allocated --port + --data-dir and a FIBER_TOML env
+		// when the entry is a fiber.toml path.
+		daemons, derr := buildSkycoinDaemonApps()
+		if derr != nil {
+			log.WithError(derr).Fatal("invalid skycoin daemon configuration")
+		}
+		apps = append(apps, daemons...)
+
+		// Skycoin thin-client web wallet. AutoStart driven by
+		// SKYCOINWEB. SKYCOINWEBNODES is a CSV → repeated
+		// --node-url flags so the wallet can multi-coin-browse
+		// (default skycoin + fibercoins). The User= field lets
+		// the wallet drop to the operator's UID so the wallet dir
+		// is writable even when the visor itself runs as _skywire.
+		webArgs := []string{"skycoin", "web"}
+		if skycoinWebAddr != "" {
+			if h, p, err := net.SplitHostPort(offsetAddr(skycoinWebAddr)); err == nil {
+				webArgs = append(webArgs, "--host", h, "--port", p)
+			}
+		}
+		for _, u := range strings.Split(skycoinWebNodeURLs, ",") {
+			u = strings.TrimSpace(u)
+			if u != "" {
+				webArgs = append(webArgs, "--node-url", u)
+			}
+		}
+		if skycoinWebWalletDir != "" {
+			webArgs = append(webArgs, "--wallet-dir", skycoinWebWalletDir)
+		}
+		apps = append(apps, appserver.AppConfig{
+			Name:      skyenv.SkycoinWebName,
+			Binary:    "skywire",
+			AutoStart: isSkycoinWebEnable,
+			Port:      routing.Port(skyenv.SkycoinWebPort),
+			Args:      webArgs,
+			User:      skycoinWebUser,
+		})
+
+		conf.Launcher.Apps = apps
 	} else {
 		// Internal apps configuration (default - apps run within visor process)
 		conf.Launcher.Apps = []appserver.AppConfig{

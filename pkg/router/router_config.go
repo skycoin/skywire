@@ -60,6 +60,25 @@ func (r *router) SetMuxMode(mode WeightMode) {
 	r.logger.Infof("SetMuxMode: %v", mode)
 }
 
+// GetExistingTPOnly returns the current value of the existing-tp-only flag.
+func (r *router) GetExistingTPOnly() bool {
+	r.existingTpOnlyMu.Lock()
+	defer r.existingTpOnlyMu.Unlock()
+	return r.existingTpOnly
+}
+
+// GetForceLocalRoutes returns the current value of the force-local-routes flag.
+func (r *router) GetForceLocalRoutes() bool {
+	r.forceLocalRoutesMu.Lock()
+	defer r.forceLocalRoutesMu.Unlock()
+	return r.forceLocalRoutes
+}
+
+// GetMuxRoutes returns the current parallel-mux-routes value.
+func (r *router) GetMuxRoutes() int {
+	return r.muxRoutes
+}
+
 // GetLastRouteCalcTime returns the time it took to calculate the last local route.
 func (r *router) GetLastRouteCalcTime() time.Duration {
 	r.lastRouteCalcMu.Lock()

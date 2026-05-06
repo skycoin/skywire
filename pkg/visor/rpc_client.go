@@ -395,6 +395,52 @@ func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]an
 	}, &struct{}{})
 }
 
+// DeleteApp implements API.
+func (rc *rpcClient) DeleteApp(appName string) error {
+	return rc.Call("DeleteApp", &AppNameIn{AppName: appName}, &struct{}{})
+}
+
+// SetAppEnv implements API.
+func (rc *rpcClient) SetAppEnv(appName, key, value string) error {
+	return rc.Call("SetAppEnv", &SetAppEnvIn{
+		AppName: appName,
+		Key:     key,
+		Value:   value,
+	}, &struct{}{})
+}
+
+// SetAppEnvBatch implements API.
+func (rc *rpcClient) SetAppEnvBatch(appName string, env map[string]string) error {
+	return rc.Call("SetAppEnvBatch", &SetAppEnvBatchIn{
+		AppName: appName,
+		Env:     env,
+	}, &struct{}{})
+}
+
+// SetAppArgs implements API.
+func (rc *rpcClient) SetAppArgs(appName string, args []string) error {
+	return rc.Call("SetAppArgs", &SetAppArgsIn{AppName: appName, Args: args}, &struct{}{})
+}
+
+// SetAppEnvFull implements API.
+func (rc *rpcClient) SetAppEnvFull(appName string, env []string) error {
+	return rc.Call("SetAppEnvFull", &SetAppEnvFullIn{AppName: appName, Env: env}, &struct{}{})
+}
+
+// SetAppLauncherMode implements API.
+func (rc *rpcClient) SetAppLauncherMode(appName, mode string) error {
+	return rc.Call("SetAppLauncherMode", &SetAppLauncherModeIn{AppName: appName, Mode: mode}, &struct{}{})
+}
+
+// AppHelp implements API.
+func (rc *rpcClient) AppHelp(appName string) (string, error) {
+	var out string
+	if err := rc.Call("AppHelp", &AppNameIn{AppName: appName}, &out); err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
 // LogsSince calls LogsSince
 func (rc *rpcClient) LogsSince(timestamp time.Time, appName string) ([]string, error) {
 	res := make([]string, 0)
@@ -608,6 +654,20 @@ func (rc *rpcClient) SetMuxRoutes(n int) error {
 // SetMuxMode sets the weight distribution mode for mux transport selection.
 func (rc *rpcClient) SetMuxMode(mode string) error {
 	return rc.Call("SetMuxMode", &mode, &struct{}{})
+}
+
+// GetRouterSettings returns the unified runtime router knobs.
+func (rc *rpcClient) GetRouterSettings() (RouterSettings, error) {
+	var out RouterSettings
+	if err := rc.Call("GetRouterSettings", &struct{}{}, &out); err != nil {
+		return RouterSettings{}, err
+	}
+	return out, nil
+}
+
+// SetRouterSettings sets the unified runtime router knobs.
+func (rc *rpcClient) SetRouterSettings(s RouterSettings) error {
+	return rc.Call("SetRouterSettings", &s, &struct{}{})
 }
 
 // AddMuxRoute adds a leg to the app's active rg using the

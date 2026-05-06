@@ -15,6 +15,13 @@ import (
 
 // SkyenvValue sources a SKYENV file and evaluates a bash variable expression,
 // returning the raw string result. This is the common core for all typed helpers.
+//
+// One level of SKYENV= redirect is honored: if the sourced envfile sets
+// SKYENV to a different existing path (e.g. /etc/skywire.conf saying
+// SKYENV=/home/operator/.config/skywire.conf), that file is sourced
+// after the original so its values win. Recursion stops there — a
+// chain `/etc/skywire.conf` → `~/.config/skywire.conf` →
+// `~/.config/skywire-test.conf` would only follow the first hop.
 func SkyenvValue(expr, envfile string) (string, error) {
 	if skyenv.OS == "windows" {
 		variable := expr
@@ -23,8 +30,8 @@ func SkyenvValue(expr, envfile string) (string, error) {
 			variable = parts[0] + "}"
 		}
 		out, err := script.Exec(fmt.Sprintf(
-			`powershell -c "$SKYENV = '%s'; if ($SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`,
-			envfile, variable,
+			`powershell -c "$SKYENV = '%s'; if ($SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; if ($SKYENV -ne '%s' -and $SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`,
+			envfile, envfile, variable,
 		)).String()
 		if err != nil {
 			return "", err
@@ -35,9 +42,12 @@ func SkyenvValue(expr, envfile string) (string, error) {
 		}
 		return out, nil
 	}
+	// First source — pulls in the original envfile's variables. If
+	// the file reassigned SKYENV to a different existing path, source
+	// that path next so its assignments override the originals.
 	out, err := script.Exec(fmt.Sprintf(
-		`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`,
-		envfile, expr,
+		`bash -c 'SKYENV=%s ; ORIGINAL_SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; if [[ $SKYENV != "" ]] && [[ $SKYENV != "$ORIGINAL_SKYENV" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`,
+		envfile, envfile, expr,
 	)).String()
 	if err != nil {
 		return "", err
@@ -46,7 +56,8 @@ func SkyenvValue(expr, envfile string) (string, error) {
 }
 
 // SkyenvSlice sources a SKYENV file and expands a bash array expression
-// into a string slice, one element per line.
+// into a string slice, one element per line. Honors the same
+// one-level SKYENV= redirect as SkyenvValue.
 func SkyenvSlice(expr, envfile string) ([]string, error) {
 	if skyenv.OS == "windows" {
 		variable := expr
@@ -55,13 +66,13 @@ func SkyenvSlice(expr, envfile string) ([]string, error) {
 			variable = strings.TrimSuffix(variable, "{")
 		}
 		return script.Exec(fmt.Sprintf(
-			`powershell -c "$SKYENV = '%s'; if ($SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; foreach ($item in %s) { Write-Host $item }"`,
-			envfile, variable,
+			`powershell -c "$SKYENV = '%s'; if ($SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; if ($SKYENV -ne '%s' -and $SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; foreach ($item in %s) { Write-Host $item }"`,
+			envfile, envfile, variable,
 		)).Slice()
 	}
 	return script.Exec(fmt.Sprintf(
-		`bash -c 'SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`,
-		envfile, expr,
+		`bash -c 'SKYENV=%s ; ORIGINAL_SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; if [[ $SKYENV != "" ]] && [[ $SKYENV != "$ORIGINAL_SKYENV" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`,
+		envfile, envfile, expr,
 	)).Slice()
 }
 

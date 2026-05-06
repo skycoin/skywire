@@ -492,6 +492,12 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	case <-ctx.Done():
 		return fmt.Errorf("context canceled waiting for TPS dmsg client")
 	}
+	// Seed the deployment service PKs into tpsDmsgC's entry cache
+	// BEFORE swapping in dmsgfirst — same reason as the main dmsgC
+	// path in initDmsg. Without the seed, dmsgfirst's primary
+	// DialStream(dmsgdiscPK) cache-misses, recurses through the
+	// disc client, and overflows the goroutine stack.
+	v.seedDmsgServiceEntries(tpsDmsgC, log)
 	// Same dmsgfirst upgrade as the main dmsgC: avoids pinning the
 	// embedded TPS's discovery refresh to plain HTTP for the process
 	// lifetime when initDmsgHTTP's dmsgDC isn't ready at construction.

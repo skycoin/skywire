@@ -112,7 +112,7 @@
         <th class="actions"></th>
       </tr>
       <!-- Values. -->
-      @for (app of dataSource; track app) {
+      @for (app of dataSource; track app.name) {
         <tr>
           <td class="selection-col">
             <mat-checkbox
@@ -162,12 +162,13 @@
             }
             @if (!appsWithoutConfig.has(app.name)) {
               <button
-                (click)="config(app)"
+                (click)="toggleExpanded(app.name)"
                 mat-button
                 [matTooltip]="'apps.settings' | translate"
                 class="big-action-button transparent-button"
+                [class.settings-toggle-open]="isExpanded(app.name)"
                 >
-                <mat-icon [inline]="true">settings</mat-icon>
+                <mat-icon [inline]="true">{{ isExpanded(app.name) ? 'expand_less' : 'settings' }}</mat-icon>
               </button>
             }
             <button
@@ -188,6 +189,17 @@
             </button>
           </td>
         </tr>
+        @if (isExpanded(app.name)) {
+          <tr class="settings-row">
+            <td colspan="6">
+              <app-app-settings
+                [app]="app"
+                (saved)="onSettingsSaved(app.name)"
+                (cancelled)="toggleExpanded(app.name)">
+              </app-app-settings>
+            </td>
+          </tr>
+        }
       }
     </table>
     <!-- List for small screens. -->
@@ -216,7 +228,7 @@
         </div>
       </td></tr>
       <!-- Values. -->
-      @for (app of dataSource; track app) {
+      @for (app of dataSource; track app.name) {
         <tr><td>
           <div class="list-item-container">
             <div class="check-part">
@@ -271,6 +283,15 @@
             </div>
           </div>
         </td></tr>
+        @if (isExpanded(app.name)) {
+          <tr><td>
+            <app-app-settings
+              [app]="app"
+              (saved)="onSettingsSaved(app.name)"
+              (cancelled)="toggleExpanded(app.name)">
+            </app-app-settings>
+          </td></tr>
+        }
       }
     </table>
     <!-- Link for accessing the full list. -->
