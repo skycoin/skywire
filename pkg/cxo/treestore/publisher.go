@@ -19,6 +19,7 @@ import (
 	skycipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxotransport "github.com/skycoin/skywire/pkg/cxo/node/transport"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject"
@@ -52,10 +53,12 @@ type Publisher struct {
 	// is no window where the gate is unconfigured.
 	allow *allowState
 
-	batchWindow time.Duration
-	wakeup      chan struct{}
-	done        chan struct{}
-	stopOnce    sync.Once
+	batchWindow  time.Duration
+	wakeup       chan struct{}
+	done         chan struct{}
+	cleanupNudge chan struct{} // 1-buffered; non-blocking send from publishRoot
+	cleanupDone  chan struct{} // closed when the cleanup goroutine exits
+	stopOnce     sync.Once
 }
 
 // memNode is the in-memory mirror of a TreeNode. Children are kept
@@ -235,17 +238,20 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 	}
 
 	p := &Publisher{
-		log:         conf.Logger,
-		cxoNode:     cxoNode,
-		pk:          pk,
-		sk:          sk,
-		root:        newMemNode(),
-		allow:       allow,
-		batchWindow: conf.BatchWindow,
-		wakeup:      make(chan struct{}, 1),
-		done:        make(chan struct{}),
+		log:          conf.Logger,
+		cxoNode:      cxoNode,
+		pk:           pk,
+		sk:           sk,
+		root:         newMemNode(),
+		allow:        allow,
+		batchWindow:  conf.BatchWindow,
+		wakeup:       make(chan struct{}, 1),
+		done:         make(chan struct{}),
+		cleanupNudge: make(chan struct{}, 1),
+		cleanupDone:  make(chan struct{}),
 	}
 	go p.runLoop()
+	go p.runCleanupLoop()
 	return p, nil
 }
 
@@ -451,6 +457,10 @@ func (p *Publisher) Close() error {
 		// Best-effort flush before signaling stop.
 		firstErr = p.Flush()
 		close(p.done)
+		// Wait for the cleanup goroutine to drain its final sweep.
+		// Bounded since RemoveObjects is O(CXDS size), but for
+		// in-memory CXDS this completes in milliseconds.
+		<-p.cleanupDone
 		if p.ownsNode && p.cxoNode != nil {
 			if err := p.cxoNode.Close(); err != nil && firstErr == nil {
 				firstErr = err
@@ -458,6 +468,49 @@ func (p *Publisher) Close() error {
 		}
 	})
 	return firstErr
+}
+
+// runCleanupLoop drops superseded Roots and frees CXDS entries whose
+// reference count fell to zero. CXO never auto-deletes — every
+// publish leaves the previous Root and its tree at rc≥1, and the
+// changed leaves from the prior tree become orphaned (rc=0 but
+// kept in CXDS). Without this sweep, in-process memory grows by
+// roughly one published payload per publish (60s tick × ~5 MB/publish
+// = ~5 GB / day for the TPD metrics+uptime publishers — exactly the
+// leak that hit production with 96.8% of TPD's heap living under
+// treestore.Publisher.publishIfDirty / encoder.Serialize).
+//
+// The loop runs OUTSIDE p.mu so it doesn't extend Flush's polling
+// window, and at most once per nudge (publishRoot fires a
+// non-blocking send into cleanupNudge after each successful Save).
+// Errors are logged and discarded — a missed sweep is recovered on
+// the next nudge. RemoveRootObjects (keepLast=1) decrements rc
+// throughout the previous Root's tree; RemoveObjects then deletes
+// every CXDS entry whose rc reached zero AND isn't currently in
+// the LRU cache.
+func (p *Publisher) runCleanupLoop() {
+	defer close(p.cleanupDone)
+	for {
+		select {
+		case <-p.done:
+			// One last sweep to catch the final publish.
+			p.runCleanup()
+			return
+		case <-p.cleanupNudge:
+			p.runCleanup()
+		}
+	}
+}
+
+func (p *Publisher) runCleanup() {
+	c := p.cxoNode.Container()
+	if err := cxoutils.RemoveRootObjects(c, 1); err != nil {
+		p.log.WithError(err).Debug("treestore: RemoveRootObjects failed; will retry next publish")
+		return
+	}
+	if err := cxoutils.RemoveObjects(c); err != nil {
+		p.log.WithError(err).Debug("treestore: RemoveObjects failed; will retry next publish")
+	}
 }
 
 // markDirty notes that the in-memory tree has unpublished changes
@@ -572,6 +625,15 @@ func (p *Publisher) publishRoot(root *memNode) error {
 	for _, fs := range freshSubs {
 		fs.n.pubHash = fs.hash
 		fs.n.cached = true
+	}
+
+	// Nudge the cleanup goroutine. Non-blocking: if cleanup is already
+	// running or pending, we don't need to enqueue another. The cleanup
+	// runs outside the publisher mutex so it doesn't extend Flush's
+	// polling window.
+	select {
+	case p.cleanupNudge <- struct{}{}:
+	default:
 	}
 	return nil
 }
