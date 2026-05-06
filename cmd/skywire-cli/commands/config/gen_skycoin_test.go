@@ -1,6 +1,7 @@
 package cliconfig
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -70,7 +71,7 @@ func TestBuildSkycoinDaemonApps_Multi(t *testing.T) {
 	}
 	wantArgs0 := []string{"skycoin", "daemon",
 		"--port", "6420",
-		"--data-dir", "/opt/skywire/local/skycoin-daemon-skycoin",
+		"--data-dir", filepath.Join(conf.LocalPath, "skycoin-daemon-skycoin"),
 		"--enable-all-api-sets=true", "--log-level=debug",
 		"--enable-gui-api-sets", "READ,STATUS",
 	}
@@ -85,7 +86,8 @@ func TestBuildSkycoinDaemonApps_Multi(t *testing.T) {
 	if len(apps[1].Env) != 1 || apps[1].Env[0] != "FIBER_TOML=/etc/skywire/fibercoins/aix.toml" {
 		t.Fatalf("[1] env = %v", apps[1].Env)
 	}
-	if !strings.Contains(strings.Join(apps[1].Args, " "), "--port 6422 --data-dir /opt/skywire/local/skycoin-daemon-aix") {
+	wantAix := "--port 6422 --data-dir " + filepath.Join(conf.LocalPath, "skycoin-daemon-aix")
+	if !strings.Contains(strings.Join(apps[1].Args, " "), wantAix) {
 		t.Fatalf("[1] args = %v", apps[1].Args)
 	}
 
