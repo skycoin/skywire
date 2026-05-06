@@ -112,7 +112,7 @@
         <th class="actions"></th>
       </tr>
       <!-- Values. -->
-      @for (app of dataSource; track app) {
+      @for (app of dataSource; track app.name) {
         <tr>
           <td class="selection-col">
             <mat-checkbox
@@ -228,7 +228,7 @@
         </div>
       </td></tr>
       <!-- Values. -->
-      @for (app of dataSource; track app) {
+      @for (app of dataSource; track app.name) {
         <tr><td>
           <div class="list-item-container">
             <div class="check-part">
