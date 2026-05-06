@@ -426,6 +426,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/apps", hv.postApp())
 				r.Get("/visors/{pk}/apps/{app}", hv.getApp())
 				r.Put("/visors/{pk}/apps/{app}", hv.putApp())
+				r.Delete("/visors/{pk}/apps/{app}", hv.deleteApp())
 				r.Get("/visors/{pk}/apps/{app}/logs", hv.appLogsSince())
 				r.Get("/visors/{pk}/apps/{app}/stats", hv.getAppStats())
 				r.Get("/visors/{pk}/apps/{app}/connections", hv.appConnections())

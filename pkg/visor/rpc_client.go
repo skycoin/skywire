@@ -395,6 +395,11 @@ func (rc *rpcClient) DoCustomSetting(appName string, customSetting map[string]an
 	}, &struct{}{})
 }
 
+// DeleteApp implements API.
+func (rc *rpcClient) DeleteApp(appName string) error {
+	return rc.Call("DeleteApp", &AppNameIn{AppName: appName}, &struct{}{})
+}
+
 // SetAppEnv implements API.
 func (rc *rpcClient) SetAppEnv(appName, key, value string) error {
 	return rc.Call("SetAppEnv", &SetAppEnvIn{

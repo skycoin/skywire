@@ -40,6 +40,7 @@ func init() {
 		startAppCmd,
 		stopAppCmd,
 		addAppCmd,
+		rmAppCmd,
 		envAppCmd,
 		registerAppCmd,
 		deregisterAppCmd,
@@ -163,6 +164,27 @@ to configure it before starting.`,
 			os.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.AddApp(args[0], args[1]))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var rmAppCmd = &cobra.Command{
+	Use:   "rm <name>",
+	Short: "Remove an app entry from the visor's launcher config",
+	Long: `Stop the named app (best-effort — already-stopped apps are
+fine) and remove its entry from the launcher config. The on-disk
+config file is updated immediately. Use this to clean up stale
+entries left behind by older mechanisms (e.g. the legacy 'cli
+skynet srv' that pre-dates 'cli serve'), or to remove
+multi-instance daemons / proxy clients added at runtime via 'app
+add' or 'skycoin daemon add'.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.DeleteApp(args[0]))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }

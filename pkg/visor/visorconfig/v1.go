@@ -646,6 +646,37 @@ func (v1 *V1) AddAppConfig(launch *launcher.AppLauncher, appName, binaryName str
 	return v1.flush(v1)
 }
 
+// DeleteAppConfig removes an app entry from the launcher config and
+// flushes the change. The caller is responsible for stopping the
+// running proc (if any) before calling this — V1 doesn't own the
+// procmanager. Returns an error if the named app isn't in the
+// config so accidental no-ops surface to the operator.
+func (v1 *V1) DeleteAppConfig(launch *launcher.AppLauncher, appName string) error {
+	v1.mu.Lock()
+	defer v1.mu.Unlock()
+
+	conf := v1.Launcher
+	idx := -1
+	for i, app := range conf.Apps {
+		if app.Name == appName {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("app %q not found in launcher config", appName)
+	}
+	conf.Apps = append(conf.Apps[:idx], conf.Apps[idx+1:]...)
+
+	launch.ResetConfig(launcher.AppLauncherConfig{
+		VisorPK:       v1.PK,
+		Apps:          conf.Apps,
+		ServerAddr:    conf.ServerAddr,
+		DisplayNodeIP: conf.DisplayNodeIP,
+	})
+	return v1.flush(v1)
+}
+
 // updateStringArg updates the cli non-boolean flag of the specified app config and also within the
 // It removes argName from app args if value is an empty string.
 // The updated config gets flushed to file if there are any changes.

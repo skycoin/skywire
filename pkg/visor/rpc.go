@@ -115,6 +115,12 @@ type SetAppAddIn struct {
 	AppName    string
 	BinaryName string
 }
+
+// AppNameIn carries a single app name for RPCs whose only argument
+// is the target's name (DeleteApp, etc.).
+type AppNameIn struct {
+	AppName string
+}
 type StartVPNClientIn struct {
 	PK           cipher.PubKey
 	LauncherMode string // "internal", "external", or "" for default

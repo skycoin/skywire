@@ -84,6 +84,25 @@ func (v *Visor) AddApp(appName, binaryName string) error {
 	return v.conf.AddAppConfig(v.appL, appName, binaryName)
 }
 
+// DeleteApp implements API. Stops the running proc (if any), then
+// removes the app entry from the launcher config and flushes the
+// updated config to disk. Returns an error if the app doesn't
+// exist or the proc fails to stop cleanly.
+func (v *Visor) DeleteApp(appName string) error {
+	if v.appL == nil {
+		return ErrAppLauncherNotAvailable
+	}
+	// Best-effort stop. StopApp on a not-running app returns
+	// ErrAppProcNotRunning, which we tolerate so delete still
+	// proceeds for stopped entries.
+	if err := v.StopApp(appName); err != nil &&
+		!errors.Is(err, ErrAppProcNotRunning) {
+		v.log.WithField("app", appName).WithError(err).
+			Warn("DeleteApp: stop returned an error, continuing with config removal")
+	}
+	return v.conf.DeleteAppConfig(v.appL, appName)
+}
+
 // SetAppEnv implements API. Sets / replaces / deletes a KEY=value
 // entry on the named app's environment. Empty value deletes.
 func (v *Visor) SetAppEnv(appName, key, value string) error {

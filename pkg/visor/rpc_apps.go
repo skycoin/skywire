@@ -65,6 +65,12 @@ func (r *RPC) AddApp(in *SetAppAddIn, _ *struct{}) (err error) {
 	return r.visor.AddApp(in.AppName, in.BinaryName)
 }
 
+// DeleteApp removes an app entry from the launcher config (and stops it first if running).
+func (r *RPC) DeleteApp(in *AppNameIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DeleteApp", in)(nil, &err)
+	return r.visor.DeleteApp(in.AppName)
+}
+
 // DoCustomSetting set custom setting to apps arguments
 func (r *RPC) DoCustomSetting(in *SetAppMapIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DoCustomSetting", in)(nil, &err)

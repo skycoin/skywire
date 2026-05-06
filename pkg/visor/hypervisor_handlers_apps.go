@@ -74,6 +74,20 @@ func (hv *Hypervisor) postApp() http.HandlerFunc {
 	})
 }
 
+// deleteApp removes an app entry from the launcher config (and
+// stops it first if running). Pairs with postApp for the
+// add-instance / remove-instance lifecycle that the hypervisor UI
+// surfaces for multi-instance apps.
+func (hv *Hypervisor) deleteApp() http.HandlerFunc {
+	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		if err := ctx.API.DeleteApp(ctx.App.Name); err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]string{"name": ctx.App.Name})
+	})
+}
+
 func (hv *Hypervisor) getAppStats() http.HandlerFunc {
 	return hv.withCtx(hv.appCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		stats, err := ctx.API.GetAppStats(ctx.App.Name)

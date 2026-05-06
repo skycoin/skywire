@@ -73,6 +73,7 @@ type API interface {
 	StartApp(appName string) error
 	StartAppWithMode(appName, launcherMode string) error
 	AddApp(appName, binaryName string) error
+	DeleteApp(appName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error

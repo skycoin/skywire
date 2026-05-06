@@ -516,6 +516,9 @@ func (mc *mockRPCClient) DoCustomSetting(appName string, _ map[string]any) error
 	})
 }
 
+// DeleteApp implements API.
+func (*mockRPCClient) DeleteApp(string) error { return nil }
+
 // SetAppEnv implements API.
 func (*mockRPCClient) SetAppEnv(string, string, string) error { return nil }
 
