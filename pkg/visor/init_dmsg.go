@@ -22,8 +22,10 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/disc/dmsgfirst"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -199,6 +201,18 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return ctx.Err()
 	}
 
+	// Once dmsgC has at least one session, upgrade its discovery
+	// client(s) to dmsgfirst-wrapped variants so subsequent
+	// AvailableServers / Entry / PutEntry calls prefer DMSG and only
+	// fall back to plain HTTP per-call when the dmsg dial fails. The
+	// initial-construction httpC was forced to plain HTTP whenever
+	// initDmsgHTTP's dmsgDC wasn't ready yet (a startup race), which
+	// pinned the dmsgC's discovery refresh to HTTP for the whole
+	// process lifetime — so an outage on the public HTTP fronting
+	// (Caddy, etc.) would break the visor's discovery refresh even
+	// when DMSG was healthy.
+	upgradeDmsgDiscToDmsgfirst(dmsgC, v.conf.Dmsg, log)
+
 	// Seed the DMSG client's entry cache with deployment service PKs.
 	// These services run as "direct" DMSG clients and don't register
 	// in the HTTP discovery, so DialStream's discovery lookup fails.
@@ -232,6 +246,40 @@ const dmsgServersCacheRefreshInterval = 5 * time.Minute
 // fixed interval. Empty refreshes (dmsgd unreachable, no entries) are
 // skipped — DmsgServersCache.Replace treats empty input as a no-op so
 // a transient outage doesn't wipe the cache.
+// upgradeDmsgDiscToDmsgfirst swaps each of dmsgC's per-deployment
+// disc.APIClient instances for a dmsgfirst-wrapped one so the dmsg
+// client's own discovery refresh tries DMSG first and only falls back
+// to plain HTTP when the dmsg dial fails. The dmsg-discovery's PK is
+// extracted from each deployment's `discovery_dmsg` URL — when that's
+// absent, the entry stays on plain HTTP because dmsgfirst.New needs a
+// PK to dial. Safe to call after dmsgC.Ready(); a no-op if no
+// deployments yield a non-zero PK.
+func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
+	if conf == nil {
+		return
+	}
+	deployments := conf.AllDeployments()
+	if len(deployments) == 0 {
+		return
+	}
+	upgraded := make([]dmsgdisc.APIClient, len(deployments))
+	anyUpgraded := false
+	for i, d := range deployments {
+		pk := cmdutil.PKFromDmsgURL(d.DiscoveryDmsg)
+		if pk == (cipher.PubKey{}) {
+			upgraded[i] = dmsgdisc.NewHTTP(d.Discovery, &http.Client{}, log)
+			continue
+		}
+		upgraded[i] = dmsgfirst.New(dmsgC, pk, d.Discovery, &http.Client{}, log)
+		anyUpgraded = true
+		log.WithField("url", d.Discovery).WithField("pk", pk).Info("dmsg discovery client upgraded to dmsgfirst")
+	}
+	if !anyUpgraded {
+		return
+	}
+	dmsgC.SetDiscoveryClients(upgraded)
+}
+
 func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string, httpC *http.Client) {
 	cacheLog := v.MasterLogger().PackageLogger("dmsg_servers_cache")
 	dc := dmsgdisc.NewHTTP(discURL, httpC, cacheLog)
