@@ -32,11 +32,19 @@
             <mat-icon [inline]="true">{{ isDaemonRunning(d) ? 'stop' : 'play_arrow' }}</mat-icon>
             {{ (isDaemonRunning(d) ? 'wallet.daemons.stop' : 'wallet.daemons.start') | translate }}
           </button>
-          <button mat-stroked-button (click)="configureDaemon(d)">
-            <mat-icon [inline]="true">settings</mat-icon>
+          <button mat-stroked-button (click)="toggleDaemonSettings(d.name)"
+                  [class.settings-toggle-open]="isDaemonSettingsOpen(d.name)">
+            <mat-icon [inline]="true">{{ isDaemonSettingsOpen(d.name) ? 'expand_less' : 'settings' }}</mat-icon>
             {{ 'wallet.daemons.settings' | translate }}
           </button>
         </div>
+        @if (isDaemonSettingsOpen(d.name)) {
+          <app-skycoin-daemon-settings
+            [app]="d"
+            (saved)="onDaemonSettingsSaved(d.name)"
+            (cancelled)="toggleDaemonSettings(d.name)">
+          </app-skycoin-daemon-settings>
+        }
       }
 
       <div class="daemons-actions">

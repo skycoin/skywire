@@ -1,22 +1,28 @@
 @import 'variables';
 
-.dialog-title {
-  font-size: 1.1em;
+.inline-settings {
+  margin-top: 8px;
+  padding: 12px 14px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid rgba(0, 212, 255, 0.4);
+  border-radius: 4px;
+}
+
+.inline-title {
+  margin-bottom: 10px;
   font-weight: 600;
-  margin-bottom: 14px;
-  color: rgba(255, 255, 255, 0.92);
 
   .mono {
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.9em;
     color: #00d4ff;
   }
 }
 
-.dialog-form {
+.inline-form {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 
 .field {
@@ -25,23 +31,21 @@
   gap: 4px;
 
   label {
-    font-size: 0.9em;
-    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.85em;
+    color: rgba(255, 255, 255, 0.78);
   }
 
   input {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 4px;
-    padding: 8px 10px;
+    padding: 7px 9px;
     color: rgba(255, 255, 255, 0.95);
     font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-    font-size: 0.9em;
+    font-size: 0.88em;
     outline: none;
 
-    &:focus {
-      border-color: rgba(0, 212, 255, 0.6);
-    }
+    &:focus { border-color: rgba(0, 212, 255, 0.6); }
   }
 }
 
@@ -50,30 +54,28 @@
   gap: 12px;
   flex-wrap: wrap;
 
-  .field { flex: 1; min-width: 140px; }
+  .field { flex: 1; min-width: 130px; }
 }
 
-.hint {
-  line-height: 1.4;
-}
+.hint { line-height: 1.4; }
 
 .save-error {
-  padding: 8px 10px;
+  padding: 7px 9px;
   background: rgba(229, 57, 53, 0.12);
   border: 1px solid rgba(229, 57, 53, 0.35);
   border-radius: 4px;
   color: rgba(255, 200, 200, 0.95);
-  font-size: 0.9em;
+  font-size: 0.85em;
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.dialog-actions {
+.inline-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 4px;
 
   button.mat-mdc-button-base:not(:disabled):not(.mat-primary) {
     color: rgba(255, 255, 255, 0.92) !important;

@@ -1,14 +1,12 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
-import { MatDialog } from '@angular/material/dialog';
 
 import { Node, Application } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppsService } from 'src/app/services/apps.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
-import { SkycoinDaemonSettingsComponent } from './skycoin-daemon-settings/skycoin-daemon-settings.component';
 
 const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
 
@@ -59,6 +57,10 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // tab. Multi-instance: one daemon per fiberchain.
   daemons: Application[] = [];
   daemonsBusy = new Set<string>();
+  // Names of daemons whose settings panel is currently expanded.
+  // Multiple can be open at once — the panels are inline so they
+  // don't fight for focus the way dialogs do.
+  expandedDaemons = new Set<string>();
 
   private nodeSub: Subscription;
 
@@ -66,7 +68,6 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     private sanitizer: DomSanitizer,
     private appsService: AppsService,
     private snackbar: SnackbarService,
-    private dialog: MatDialog,
   ) { super(); }
 
   ngOnInit() {
@@ -162,8 +163,20 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     });
   }
 
-  configureDaemon(d: Application) {
-    SkycoinDaemonSettingsComponent.openDialog(this.dialog, d);
+  toggleDaemonSettings(name: string) {
+    if (this.expandedDaemons.has(name)) {
+      this.expandedDaemons.delete(name);
+    } else {
+      this.expandedDaemons.add(name);
+    }
+  }
+
+  isDaemonSettingsOpen(name: string): boolean {
+    return this.expandedDaemons.has(name);
+  }
+
+  onDaemonSettingsSaved(name: string) {
+    this.expandedDaemons.delete(name);
   }
 
   addDaemon() {
@@ -184,9 +197,11 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
       next: (app: Application) => {
         this.daemonsBusy.delete('add');
         this.snackbar.showDone('wallet.daemons.added');
-        // Open the generic settings dialog so the operator can set
-        // FIBER_TOML / API set / data dir args before starting.
-        SkycoinDaemonSettingsComponent.openDialog(this.dialog, app);
+        // Auto-expand the new instance's settings panel so the
+        // operator can immediately set FIBER_TOML / API set /
+        // data dir before starting. The next NodeComponent poll
+        // will fold the new app into this.daemons via recompute().
+        this.expandedDaemons.add(app.name);
       },
       error: () => {
         this.daemonsBusy.delete('add');

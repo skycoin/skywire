@@ -22,7 +22,6 @@ import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
 import { UserAppSettingsComponent } from '../node-apps/user-app-settings/user-app-settings.component';
-import { SkycoinDaemonSettingsComponent } from '../../wallet/skycoin-daemon-settings/skycoin-daemon-settings.component';
 import { SkychatSettingsComponent } from '../node-apps/skychat-settings/skychat-settings.component';
 
 /**
@@ -584,9 +583,12 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     } else if (app.name === 'skysocks-client' || app.name === 'vpn-client'
                || app.name.startsWith('skysocks-client-')) {
       SkysocksClientSettingsComponent.openDialog(this.dialog, app);
-    } else if (app.name === 'skycoin-daemon' || app.name.startsWith('skycoin-daemon-')) {
-      SkycoinDaemonSettingsComponent.openDialog(this.dialog, app);
     } else {
+      // Daemons + other apps fall through to the generic user-app
+      // dialog here. The Wallet tab provides the rich daemon-
+      // specific editor (FIBER_TOML / port / data-dir / api-sets)
+      // inline. Scope-(b) of the dialogs-to-inline migration will
+      // unify this dispatch.
       UserAppSettingsComponent.openDialog(this.dialog, app);
     }
   }
