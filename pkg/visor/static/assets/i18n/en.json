@@ -246,6 +246,8 @@
       "rewards": "Rewards",
       "skynet": "Skynet",
       "web-proxy": "Web Proxy",
+      "vpn": "VPN",
+      "skysocks": "Skysocks",
       "resources": "Resources",
       "terminal": "Terminal",
       "wallet": "Wallet",
@@ -417,13 +419,95 @@
     "open-fullscreen": "Open in new window"
   },
 
+  "skysocks-tab": {
+    "server": {
+      "title": "Skysocks Server",
+      "help": "Run this visor as a SOCKS5 exit node. Other visors can route through skysocks-client.",
+      "not-configured": "The skysocks app is not configured on this visor."
+    },
+    "clients": {
+      "title": "Skysocks Clients",
+      "not-configured": "No skysocks-client app entries on this visor.",
+      "add": "Add Client Instance",
+      "multi-instance-hint": "Adding an instance creates a new entry in the visor's launcher config; configure --srv (remote PK) in the settings dialog that opens automatically. Removing an instance is currently a config-edit operation (Info → Config)."
+    },
+    "status": {
+      "stopped": "Stopped",
+      "running": "Running",
+      "errored": "Errored",
+      "starting": "Starting…",
+      "not-configured": "Not configured",
+      "unknown": "Unknown"
+    },
+    "start": "Start",
+    "stop": "Stop",
+    "settings": "Settings",
+    "started": "Skysocks app started",
+    "stopped": "Skysocks app stopped",
+    "start-error": "Failed to start app",
+    "stop-error": "Failed to stop app",
+    "added": "Instance added — configure remote PK in the settings dialog and then Start",
+    "add-error": "Failed to add instance (name may be in use)"
+  },
+
+  "vpn-tab": {
+    "client": {
+      "title": "VPN Client",
+      "help": "Connect this visor as a VPN client to a remote vpn-server. The 'Full UI' button opens the standalone server picker.",
+      "not-configured": "The vpn-client app is not configured on this visor."
+    },
+    "server": {
+      "title": "VPN Server",
+      "help": "Run this visor as a VPN exit node. Other visors with vpn-client can dial in.",
+      "not-configured": "The vpn-server app is not configured on this visor."
+    },
+    "status": {
+      "stopped": "Stopped",
+      "running": "Running",
+      "errored": "Errored",
+      "starting": "Starting…",
+      "not-configured": "Not configured",
+      "unknown": "Unknown"
+    },
+    "start": "Start",
+    "stop": "Stop",
+    "settings": "Settings",
+    "full-ui": "Full UI",
+    "started": "VPN app started",
+    "stopped": "VPN app stopped",
+    "start-error": "Failed to start app",
+    "stop-error": "Failed to stop app"
+  },
+
   "wallet": {
     "help": "Skycoin thin-client wallet served by the visor's `skywire skycoin web` app at",
     "open-fullscreen": "Open in new window",
     "not-configured": "Skycoin wallet app not configured",
     "not-configured-help": "Add the `skycoin-web` app entry on this visor (Apps tab → add) and start it to access the wallet here. Default-off in fresh configs because the app accesses the operator's wallet directory and shouldn't run unless you've reviewed where it's pointed.",
     "not-running": "Skycoin wallet app not running",
-    "not-running-help": "The `skycoin-web` app is configured but not currently running. Start it from the Apps tab. The wallet will appear here automatically once it's up."
+    "not-running-help": "The `skycoin-web` app is configured but not currently running. Start it from the Apps tab. The wallet will appear here automatically once it's up.",
+    "daemons": {
+      "title": "Skycoin Daemons",
+      "empty": "No skycoin-daemon instances configured. Each fiberchain you want to sync needs its own daemon instance.",
+      "hint": "Each instance runs `skywire skycoin daemon` with its own FIBER_TOML / data dir. Configure those args in the settings dialog before starting.",
+      "add": "Add Daemon Instance",
+      "start": "Start",
+      "stop": "Stop",
+      "settings": "Settings",
+      "status": {
+        "stopped": "Stopped",
+        "running": "Running",
+        "errored": "Errored",
+        "starting": "Starting…",
+        "unknown": "Unknown"
+      },
+      "started": "Daemon started",
+      "stopped": "Daemon stopped",
+      "start-error": "Failed to start daemon",
+      "stop-error": "Failed to stop daemon",
+      "added": "Daemon instance added — set FIBER_TOML / data dir in settings, then Start",
+      "add-error": "Failed to add daemon instance (name may be in use)"
+    }
   },
 
   "web-proxy": {
