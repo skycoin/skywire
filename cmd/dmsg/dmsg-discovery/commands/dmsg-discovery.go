@@ -52,7 +52,6 @@ var (
 	dmsgPort          uint16
 	authPassphrase    string
 	officialServers   string
-	dmsgServersFlag   string
 	dmsgServerType    string
 	pprofMode         string
 	pprofAddr         string
@@ -81,14 +80,6 @@ func init() {
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	// Bootstrap dmsg-servers used to start the local direct.Client BEFORE
-	// any HTTP-side registration has happened. Without this, dmsg-discovery
-	// has to wait for dmsg-servers to HTTP-POST their entries to it before
-	// it can dial dmsg — a circular dependency on a fresh deployment.
-	// Format: comma-separated PK@host:port pairs. Empty defaults to the
-	// embedded deployment keyring (deployment.Prod or deployment.Test
-	// when --test-environment is set).
-	RootCmd.Flags().StringVar(&dmsgServersFlag, "dmsg-servers", "", "bootstrap dmsg-servers (PK@host:port,…); empty = embedded deployment keyring")
 	// dmsg-discovery cannot run in dmsg-only mode because dmsg-servers
 	// themselves register with it over plain HTTP (see
 	// cmd/dmsg-commands/dmsg-server/commands/start/root.go). http and
@@ -208,9 +199,26 @@ Example:
 			}
 		}()
 		if !pk.Null() && resolvedMode.IncludesDmsg() {
-			servers := bootstrapServers(dmsgServersFlag, testEnvironment, dmsgServerType, log)
-			if len(servers) == 0 {
-				log.Warn("no dmsg-servers preloaded from --dmsg-servers or embedded keyring; falling back to API self-poll (legacy behavior; will block until at least one server registers over HTTP)")
+			// Preload dmsg-servers from the embedded deployment keyring
+			// so the local direct.Client can dial dmsg BEFORE any
+			// HTTP-side registration has happened. Operators that need
+			// a non-default keyring (private network, lab) point
+			// SKYDEPLOY at a custom services-config.json — see
+			// deployment/config.go. Falling back to the legacy API
+			// self-poll only happens when both embedded keyring is
+			// empty AND SKYDEPLOY hasn't supplied one — typically
+			// development with a hand-rolled binary.
+			src := deployment.Prod
+			srcName := "deployment.Prod"
+			if testEnvironment {
+				src = deployment.Test
+				srcName = "deployment.Test"
+			}
+			servers := src.ToDiscEntries()
+			if len(servers) > 0 {
+				log.WithField("count", len(servers)).WithField("source", srcName).Info("preloading dmsg-servers from embedded deployment keyring")
+			} else {
+				log.Warn("no dmsg-servers in embedded deployment keyring; falling back to API self-poll (legacy behavior; will block until at least one server registers over HTTP)")
 				servers = getServers(ctx, a, dmsgServerType, log)
 			}
 			config := &dmsg.Config{
@@ -298,63 +306,6 @@ func prepareDB(ctx context.Context, log *logging.Logger) store.Storer {
 	}
 
 	return db
-}
-
-// bootstrapServers resolves the initial dmsg-server list used to seed
-// the direct.Client before dmsg-discovery has any HTTP registrations.
-// The flag takes priority; on empty flag, the embedded deployment
-// keyring is used (Prod, or Test when testEnvironment is set). When
-// dmsgServerType is set, the embedded keyring path returns all entries
-// (the type filter only applies when fetched via the runtime API since
-// the embedded keyring doesn't carry server-type metadata).
-func bootstrapServers(flag string, testEnv bool, _ string, log logrus.FieldLogger) []*disc.Entry {
-	if flag != "" {
-		entries := parseDmsgServersFlag(flag, log)
-		if len(entries) > 0 {
-			log.WithField("count", len(entries)).Info("preloading dmsg-servers from --dmsg-servers")
-			return entries
-		}
-	}
-	src := deployment.Prod
-	srcName := "deployment.Prod"
-	if testEnv {
-		src = deployment.Test
-		srcName = "deployment.Test"
-	}
-	entries := src.ToDiscEntries()
-	if len(entries) > 0 {
-		log.WithField("count", len(entries)).WithField("source", srcName).Info("preloading dmsg-servers from embedded deployment keyring")
-	}
-	return entries
-}
-
-// parseDmsgServersFlag parses a comma-separated list of PK@host:port
-// pairs into disc.Entry values. Malformed entries are logged and
-// skipped — a typo in one entry should not disable the whole flag.
-func parseDmsgServersFlag(flag string, log logrus.FieldLogger) []*disc.Entry {
-	parts := strings.Split(flag, ",")
-	entries := make([]*disc.Entry, 0, len(parts))
-	for _, raw := range parts {
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			continue
-		}
-		at := strings.IndexByte(raw, '@')
-		if at <= 0 || at == len(raw)-1 {
-			log.WithField("entry", raw).Warn("skipping malformed --dmsg-servers entry; expected PK@host:port")
-			continue
-		}
-		var entryPK cipher.PubKey
-		if err := entryPK.Set(raw[:at]); err != nil {
-			log.WithField("entry", raw).WithError(err).Warn("skipping --dmsg-servers entry with invalid PK")
-			continue
-		}
-		entries = append(entries, &disc.Entry{
-			Static: entryPK,
-			Server: &disc.Server{Address: raw[at+1:]},
-		})
-	}
-	return entries
 }
 
 func getServers(ctx context.Context, a *api.API, dmsgServerType string, log logrus.FieldLogger) (servers []*disc.Entry) {
