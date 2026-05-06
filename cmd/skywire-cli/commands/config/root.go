@@ -103,6 +103,10 @@ var (
 	snConfig                   bool
 	dmsgDiscConfig             bool
 	dmsgSrvConfig              bool
+	tpdConfig                  bool
+	sdConfig                   bool
+	arConfig                   bool
+	rfConfig                   bool
 	externalApps               bool
 	enableCalculateRoutes      bool
 	isSkychatEnable            bool
