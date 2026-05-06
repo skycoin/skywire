@@ -14,15 +14,11 @@ import GeneralUtils from '../../../../../utils/generalUtils';
 import { ConfirmationComponent } from '../../../../layout/confirmation/confirmation.component';
 import { SnackbarService } from '../../../../../services/snackbar.service';
 import { SelectableOption, SelectOptionComponent } from 'src/app/components/layout/select-option/select-option.component';
-import { SkysocksSettingsComponent } from '../node-apps/skysocks-settings/skysocks-settings.component';
 import { processServiceError } from 'src/app/utils/errors';
 import { OperationError } from 'src/app/utils/operation-error';
-import { SkysocksClientSettingsComponent } from '../node-apps/skysocks-client-settings/skysocks-client-settings.component';
 import { FilterProperties, FilterFieldTypes } from 'src/app/utils/filters';
 import { SortingColumn, SortingModes, DataSorter } from 'src/app/utils/lists/data-sorter';
 import { DataFilterer } from 'src/app/utils/lists/data-filterer';
-import { UserAppSettingsComponent } from '../node-apps/user-app-settings/user-app-settings.component';
-import { SkychatSettingsComponent } from '../node-apps/skychat-settings/skychat-settings.component';
 
 /**
  * Shows the list of applications of a node. It shows official or user apps, not both at the
@@ -492,7 +488,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       } else if (selectedOption === 3) {
         this.changeAppAutostart(app);
       } else if (selectedOption === 4) {
-        this.config(app);
+        this.toggleExpanded(app.name);
       }
     });
   }
@@ -572,25 +568,25 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Shows the appropriate modal window for configuring the app.
-   */
-  config(app: Application): void {
-    if (app.name === 'skychat') {
-      SkychatSettingsComponent.openDialog(this.dialog, app);
-    } else if (app.name === 'skysocks' || app.name === 'vpn-server') {
-      SkysocksSettingsComponent.openDialog(this.dialog, app);
-    } else if (app.name === 'skysocks-client' || app.name === 'vpn-client'
-               || app.name.startsWith('skysocks-client-')) {
-      SkysocksClientSettingsComponent.openDialog(this.dialog, app);
+  // Names of apps whose universal settings panel is currently
+  // expanded. Multiple panels can be open at once — they're inline
+  // so they don't fight for focus the way the old dialogs did.
+  expandedApps = new Set<string>();
+
+  toggleExpanded(name: string): void {
+    if (this.expandedApps.has(name)) {
+      this.expandedApps.delete(name);
     } else {
-      // Daemons + other apps fall through to the generic user-app
-      // dialog here. The Wallet tab provides the rich daemon-
-      // specific editor (FIBER_TOML / port / data-dir / api-sets)
-      // inline. Scope-(b) of the dialogs-to-inline migration will
-      // unify this dispatch.
-      UserAppSettingsComponent.openDialog(this.dialog, app);
+      this.expandedApps.add(name);
     }
+  }
+
+  isExpanded(name: string): boolean {
+    return this.expandedApps.has(name);
+  }
+
+  onSettingsSaved(name: string): void {
+    this.expandedApps.delete(name);
   }
 
   /**

@@ -78,7 +78,7 @@ import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.
 import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
-import { SkycoinDaemonSettingsComponent } from './components/pages/node/wallet/skycoin-daemon-settings/skycoin-daemon-settings.component';
+import { AppSettingsComponent } from './components/pages/node/apps/app-settings/app-settings.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { VpnComponent } from './components/pages/node/vpn/vpn.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
@@ -89,19 +89,6 @@ import { MultiVisorUptimeComponent } from './components/pages/multi-visor-uptime
 import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
-import { SkysocksSettingsComponent } from './components/pages/node/apps/node-apps/skysocks-settings/skysocks-settings.component';
-import {
-  SkysocksClientSettingsComponent
-} from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
-import {
-  EditSkysocksClientNoteComponent
-} from './components/pages/node/apps/node-apps/skysocks-client-settings/edit-skysocks-client-note/edit-skysocks-client-note.component';
-import {
-  SkysocksClientFilterComponent
-} from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-filter/skysocks-client-filter.component';
-import {
-  SkysocksClientPasswordComponent
-} from './components/pages/node/apps/node-apps/skysocks-client-settings/skysocks-client-password/skysocks-client-password.component';
 import { FiltersSelectionComponent } from './components/layout/filters-selection/filters-selection.component';
 import { LabeledElementTextComponent } from './components/layout/labeled-element-text/labeled-element-text.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
@@ -121,9 +108,7 @@ import { UpdateAllComponent } from './components/layout/update-all/update-all.co
 import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
 import { RewardsAddressComponent } from './components/pages/node/node-info/node-info-content/rewards-address-config/rewards-address-config.component';
 import { BulkRewardAddressChangerComponent } from './components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
-import { UserAppSettingsComponent } from './components/pages/node/apps/node-apps/user-app-settings/user-app-settings.component';
 import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
-import { SkychatSettingsComponent } from './components/pages/node/apps/node-apps/skychat-settings/skychat-settings.component';
 import { TabSelectorComponent } from './components/layout/tab-selector/tab-selector.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
@@ -185,7 +170,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         UptimeComponent,
         TerminalComponent,
         WalletComponent,
-        SkycoinDaemonSettingsComponent,
+        AppSettingsComponent,
         WebProxyComponent,
         VpnComponent,
         SkysocksTabComponent,
@@ -196,17 +181,12 @@ const globalRippleConfig: RippleGlobalOptions = {
         NetworkTransportsComponent,
         NodeInfoComponent,
         SelectOptionComponent,
-        SkysocksSettingsComponent,
-        SkysocksClientSettingsComponent,
         FiltersSelectionComponent,
         LabeledElementTextComponent,
         AllLabelsComponent,
         LabelListComponent,
         UpdateComponent,
         UpdaterConfigComponent,
-        EditSkysocksClientNoteComponent,
-        SkysocksClientFilterComponent,
-        SkysocksClientPasswordComponent,
         RouterConfigComponent,
         VpnServerListComponent,
         VpnStatusComponent,
@@ -220,9 +200,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         VpnDnsConfigComponent,
         RewardsAddressComponent,
         BulkRewardAddressChangerComponent,
-        UserAppSettingsComponent,
         NodeLogsComponent,
-        SkychatSettingsComponent,
         TabSelectorComponent,
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,

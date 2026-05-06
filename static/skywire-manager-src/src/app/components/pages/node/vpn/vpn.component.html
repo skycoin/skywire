@@ -28,8 +28,9 @@
               <mat-icon [inline]="true">{{ isRunning(client) ? 'stop' : 'play_arrow' }}</mat-icon>
               {{ (isRunning(client) ? 'vpn-tab.stop' : 'vpn-tab.start') | translate }}
             </button>
-            <button mat-stroked-button (click)="configureClient()">
-              <mat-icon [inline]="true">settings</mat-icon>
+            <button mat-stroked-button (click)="toggleSettings(client.name)"
+                    [class.settings-toggle-open]="isSettingsOpen(client.name)">
+              <mat-icon [inline]="true">{{ isSettingsOpen(client.name) ? 'expand_less' : 'settings' }}</mat-icon>
               {{ 'vpn-tab.settings' | translate }}
             </button>
             <button mat-stroked-button (click)="openStandaloneClient()">
@@ -38,6 +39,13 @@
             </button>
           }
         </div>
+        @if (client && isSettingsOpen(client.name)) {
+          <app-app-settings
+            [app]="client"
+            (saved)="onSettingsSaved(client.name)"
+            (cancelled)="toggleSettings(client.name)">
+          </app-app-settings>
+        }
       </div>
 
       <!-- VPN Server -->
@@ -66,12 +74,20 @@
               <mat-icon [inline]="true">{{ isRunning(server) ? 'stop' : 'play_arrow' }}</mat-icon>
               {{ (isRunning(server) ? 'vpn-tab.stop' : 'vpn-tab.start') | translate }}
             </button>
-            <button mat-stroked-button (click)="configureServer()">
-              <mat-icon [inline]="true">settings</mat-icon>
+            <button mat-stroked-button (click)="toggleSettings(server.name)"
+                    [class.settings-toggle-open]="isSettingsOpen(server.name)">
+              <mat-icon [inline]="true">{{ isSettingsOpen(server.name) ? 'expand_less' : 'settings' }}</mat-icon>
               {{ 'vpn-tab.settings' | translate }}
             </button>
           }
         </div>
+        @if (server && isSettingsOpen(server.name)) {
+          <app-app-settings
+            [app]="server"
+            (saved)="onSettingsSaved(server.name)"
+            (cancelled)="toggleSettings(server.name)">
+          </app-app-settings>
+        }
       </div>
 
     </div>

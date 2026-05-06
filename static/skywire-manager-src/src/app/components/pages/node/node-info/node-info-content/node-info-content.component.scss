@@ -257,6 +257,56 @@ textarea.raw-config.config-editor {
   .mat-icon { font-size: 16px; }
 }
 
+// Router Settings section — checkboxes + numeric inputs for the
+// visor-wide dial-time knobs (force_local_routes, existing_tp_only,
+// mux_routes, min_hops). UI parity with 'cli proxy start --xxx'.
+.router-settings {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 2px solid rgba(0, 212, 255, 0.4);
+  border-radius: 4px;
+}
+
+.rs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  cursor: pointer;
+  font-size: 0.9em;
+
+  input[type="checkbox"] { accent-color: #00d4ff; }
+
+  .rs-label {
+    color: rgba(255, 255, 255, 0.92);
+    flex: 0 0 auto;
+  }
+
+  .rs-hint {
+    flex: 1;
+    line-height: 1.35;
+  }
+
+  .rs-num {
+    width: 80px;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    padding: 4px 8px;
+    color: rgba(255, 255, 255, 0.95);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    outline: none;
+
+    &:focus { border-color: rgba(0, 212, 255, 0.6); }
+  }
+}
+
 // Per-subsystem health lines (indented under the aggregate "Services" line).
 .sub-health {
   padding-left: 12px;

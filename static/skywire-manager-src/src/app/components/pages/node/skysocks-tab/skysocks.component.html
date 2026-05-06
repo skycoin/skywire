@@ -26,12 +26,20 @@
               <mat-icon [inline]="true">{{ isRunning(server) ? 'stop' : 'play_arrow' }}</mat-icon>
               {{ (isRunning(server) ? 'skysocks-tab.stop' : 'skysocks-tab.start') | translate }}
             </button>
-            <button mat-stroked-button (click)="configureServer()">
-              <mat-icon [inline]="true">settings</mat-icon>
+            <button mat-stroked-button (click)="toggleSettings(server.name)"
+                    [class.settings-toggle-open]="isSettingsOpen(server.name)">
+              <mat-icon [inline]="true">{{ isSettingsOpen(server.name) ? 'expand_less' : 'settings' }}</mat-icon>
               {{ 'skysocks-tab.settings' | translate }}
             </button>
           }
         </div>
+        @if (server && isSettingsOpen(server.name)) {
+          <app-app-settings
+            [app]="server"
+            (saved)="onSettingsSaved(server.name)"
+            (cancelled)="toggleSettings(server.name)">
+          </app-app-settings>
+        }
       </div>
 
       <!-- Clients (one card per instance) -->
@@ -67,11 +75,19 @@
                 <mat-icon [inline]="true">{{ isRunning(c) ? 'stop' : 'play_arrow' }}</mat-icon>
                 {{ (isRunning(c) ? 'skysocks-tab.stop' : 'skysocks-tab.start') | translate }}
               </button>
-              <button mat-stroked-button (click)="configureClient(c)">
-                <mat-icon [inline]="true">settings</mat-icon>
+              <button mat-stroked-button (click)="toggleSettings(c.name)"
+                      [class.settings-toggle-open]="isSettingsOpen(c.name)">
+                <mat-icon [inline]="true">{{ isSettingsOpen(c.name) ? 'expand_less' : 'settings' }}</mat-icon>
                 {{ 'skysocks-tab.settings' | translate }}
               </button>
             </div>
+            @if (isSettingsOpen(c.name)) {
+              <app-app-settings
+                [app]="c"
+                (saved)="onSettingsSaved(c.name)"
+                (cancelled)="toggleSettings(c.name)">
+              </app-app-settings>
+            }
           </div>
         }
 

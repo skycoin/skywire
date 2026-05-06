@@ -1,0 +1,96 @@
+<div class="inline-settings">
+  <div class="inline-title">
+    <span class="dim small">{{ 'app-settings.title' | translate }}:</span>
+    <span class="mono name">{{ app?.name }}</span>
+  </div>
+
+  @if (isErrored) {
+    <div class="error-box">
+      <mat-icon [inline]="true">error_outline</mat-icon>
+      <span>{{ 'app-settings.last-error' | translate }}: {{ lastError }}</span>
+    </div>
+  }
+
+  <form [formGroup]="form" (ngSubmit)="save()" class="inline-form">
+
+    <div class="field">
+      <label for="args-{{ app?.name }}">{{ 'app-settings.args' | translate }}</label>
+      <input id="args-{{ app?.name }}" type="text" formControlName="args"
+             placeholder="--addr :1080 --srv 0123abc...">
+      <button type="button" class="show-flags-toggle" (click)="toggleHelp()">
+        <mat-icon [inline]="true">{{ showHelp ? 'expand_less' : 'expand_more' }}</mat-icon>
+        {{ 'app-settings.show-flags' | translate }}
+      </button>
+      @if (showHelp) {
+        @if (helpLoading) {
+          <div class="help-status dim small">{{ 'app-settings.help-loading' | translate }}</div>
+        }
+        @if (helpError) {
+          <div class="help-status help-error">{{ helpError }}</div>
+        }
+        @if (helpText) {
+          <pre class="help-text">{{ helpText }}</pre>
+        }
+      }
+    </div>
+
+    <div class="field">
+      <label>{{ 'app-settings.env' | translate }}</label>
+      <div class="env-list" formArrayName="env">
+        @for (ctrl of envArray.controls; track $index) {
+          <div class="env-row">
+            <input type="text" [formControlName]="$index" placeholder="KEY=value">
+            <button type="button" class="env-remove" (click)="removeEnvRow($index)" title="{{ 'common.remove' | translate }}">
+              <mat-icon [inline]="true">close</mat-icon>
+            </button>
+          </div>
+        }
+        <button type="button" class="env-add" (click)="addEnvRow()">
+          <mat-icon [inline]="true">add</mat-icon>
+          {{ 'app-settings.env-add' | translate }}
+        </button>
+      </div>
+    </div>
+
+    <div class="field-row mode-row">
+      <div class="field">
+        <label>{{ 'app-settings.launcher-mode' | translate }}</label>
+        <div class="mode-radios">
+          <label class="radio-opt">
+            <input type="radio" formControlName="launcher_mode" value=""> {{ 'app-settings.mode-default' | translate }}
+          </label>
+          <label class="radio-opt">
+            <input type="radio" formControlName="launcher_mode" value="internal"> {{ 'app-settings.mode-internal' | translate }}
+          </label>
+          <label class="radio-opt">
+            <input type="radio" formControlName="launcher_mode" value="external"> {{ 'app-settings.mode-external' | translate }}
+          </label>
+        </div>
+      </div>
+      <div class="field auto-field">
+        <label class="checkbox-opt">
+          <input type="checkbox" formControlName="autostart">
+          <span>{{ 'app-settings.autostart' | translate }}</span>
+        </label>
+      </div>
+    </div>
+
+    @if (saveError) {
+      <div class="error-box">
+        <mat-icon [inline]="true">error_outline</mat-icon>
+        <span>{{ saveError }}</span>
+      </div>
+    }
+
+    <div class="inline-actions">
+      <button type="button" mat-button (click)="cancel()" [disabled]="saving">
+        {{ 'common.cancel' | translate }}
+      </button>
+      <button type="submit" mat-raised-button color="primary" [disabled]="saving">
+        <mat-icon [inline]="true">save</mat-icon>
+        {{ saving ? ('common.loading' | translate) : ('common.save' | translate) }}
+      </button>
+    </div>
+
+  </form>
+</div>

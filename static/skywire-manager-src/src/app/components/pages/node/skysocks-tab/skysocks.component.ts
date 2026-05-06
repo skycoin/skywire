@@ -1,14 +1,11 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
-import { MatDialog } from '@angular/material/dialog';
 
 import { Node, Application } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppsService } from 'src/app/services/apps.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
-import { SkysocksSettingsComponent } from '../apps/node-apps/skysocks-settings/skysocks-settings.component';
-import { SkysocksClientSettingsComponent } from '../apps/node-apps/skysocks-client-settings/skysocks-client-settings.component';
 
 const SKYSOCKS_SERVER = 'skysocks';
 const SKYSOCKS_CLIENT_PREFIX = 'skysocks-client';
@@ -34,15 +31,27 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
   server: Application | null = null;
   clients: Application[] = [];
   busy = new Set<string>();
+  // Names of apps whose universal settings panel is currently open
+  // inline below their row.
+  expandedSettings = new Set<string>();
 
   private nodeSub: Subscription;
 
   constructor(
     private appsService: AppsService,
     private snackbar: SnackbarService,
-    private dialog: MatDialog,
     private cdr: ChangeDetectorRef,
   ) { super(); }
+
+  toggleSettings(name: string) {
+    if (this.expandedSettings.has(name)) {
+      this.expandedSettings.delete(name);
+    } else {
+      this.expandedSettings.add(name);
+    }
+  }
+  isSettingsOpen(name: string): boolean { return this.expandedSettings.has(name); }
+  onSettingsSaved(name: string) { this.expandedSettings.delete(name); }
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
@@ -101,16 +110,6 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
     });
   }
 
-  configureClient(app: Application) {
-    SkysocksClientSettingsComponent.openDialog(this.dialog, app);
-  }
-
-  configureServer() {
-    if (this.server) {
-      SkysocksSettingsComponent.openDialog(this.dialog, this.server);
-    }
-  }
-
   addClient() {
     if (!this.node) { return; }
     // Suggest the next free skysocks-client-N name based on what
@@ -131,9 +130,9 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
       next: (app: Application) => {
         this.busy.delete('add');
         this.snackbar.showDone('skysocks-tab.added');
-        // Open the settings dialog on the new entry so the operator
-        // can fill in --srv (remote PK) before starting it.
-        SkysocksClientSettingsComponent.openDialog(this.dialog, app);
+        // Auto-expand the new entry's settings panel so the
+        // operator can fill in --srv (remote PK) before Start.
+        this.expandedSettings.add(app.name);
       },
       error: () => {
         this.busy.delete('add');

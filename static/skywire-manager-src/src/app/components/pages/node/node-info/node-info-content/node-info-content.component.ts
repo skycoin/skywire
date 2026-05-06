@@ -39,6 +39,22 @@ export class NodeInfoContentComponent implements OnDestroy {
   // Collapsible Runtime Configuration section (matches Ports pattern).
   showConfigSection = false;
 
+  // Collapsible Router Settings section. Wraps the visor-wide knobs
+  // that 'cli proxy start --local-route' / '--existing-tp' / '--mux'
+  // / '--min-hops' set; UI parity with the CLI for visor-wide
+  // dial-time options. Lazy-loaded on first open via fetchRouterSettings.
+  showRouterSettings = false;
+  routerSettingsLoaded = false;
+  routerSettings = {
+    force_local_routes: false,
+    existing_tp_only: false,
+    mux_routes: 1,
+    min_hops: 0,
+  };
+  routerSettingsSaving = false;
+  routerSettingsSaveMsg = '';
+  routerSettingsSaveErr = '';
+
   // Edit-mode state for the runtime-config editor.
   editingConfig = false;
   configDraft = '';
@@ -106,6 +122,58 @@ export class NodeInfoContentComponent implements OnDestroy {
     }, () => {
       this.ports = [];
     });
+  }
+
+  /** Collapsible router-settings section toggle. Lazy-loads on
+   *  first open. */
+  onRouterSettingsToggle() {
+    this.showRouterSettings = !this.showRouterSettings;
+    if (this.showRouterSettings && !this.routerSettingsLoaded) {
+      this.fetchRouterSettings();
+    }
+  }
+
+  private fetchRouterSettings() {
+    if (!this.node) { return; }
+    this.apiService.get(`visors/${this.node.localPk}/router-settings`).subscribe(
+      (result: any) => {
+        this.routerSettings = {
+          force_local_routes: !!result.force_local_routes,
+          existing_tp_only: !!result.existing_tp_only,
+          mux_routes: typeof result.mux_routes === 'number' ? result.mux_routes : 1,
+          min_hops: typeof result.min_hops === 'number' ? result.min_hops : 0,
+        };
+        this.routerSettingsLoaded = true;
+      },
+      () => { this.snackbarService.showError('common.loading-error'); },
+    );
+  }
+
+  saveRouterSettings() {
+    if (!this.node || this.routerSettingsSaving) { return; }
+    this.routerSettingsSaving = true;
+    this.routerSettingsSaveMsg = '';
+    this.routerSettingsSaveErr = '';
+    this.apiService.put(
+      `visors/${this.node.localPk}/router-settings`,
+      this.routerSettings,
+    ).subscribe(
+      (result: any) => {
+        this.routerSettingsSaving = false;
+        this.routerSettings = {
+          force_local_routes: !!result.force_local_routes,
+          existing_tp_only: !!result.existing_tp_only,
+          mux_routes: typeof result.mux_routes === 'number' ? result.mux_routes : 1,
+          min_hops: typeof result.min_hops === 'number' ? result.min_hops : 0,
+        };
+        this.routerSettingsSaveMsg = 'Saved';
+      },
+      (err: any) => {
+        this.routerSettingsSaving = false;
+        this.routerSettingsSaveErr = (err && err.message) ? err.message :
+          (typeof err === 'string' ? err : 'Save failed');
+      },
+    );
   }
 
   /** Collapsible config section toggle. Fetches the runtime config

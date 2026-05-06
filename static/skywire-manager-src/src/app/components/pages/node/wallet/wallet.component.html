@@ -39,11 +39,11 @@
           </button>
         </div>
         @if (isDaemonSettingsOpen(d.name)) {
-          <app-skycoin-daemon-settings
+          <app-app-settings
             [app]="d"
             (saved)="onDaemonSettingsSaved(d.name)"
             (cancelled)="toggleDaemonSettings(d.name)">
-          </app-skycoin-daemon-settings>
+          </app-app-settings>
         }
       }
 

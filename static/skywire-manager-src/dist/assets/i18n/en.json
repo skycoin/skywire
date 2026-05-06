@@ -3,6 +3,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "loading": "Loading…",
+    "remove": "Remove",
     "downloaded": "Downloaded",
     "uploaded": "Uploaded",
     "loading-error": "There was an error getting the data. Retrying...",
@@ -230,6 +231,17 @@
         "save": "Save",
         "restart-hint": "Visor must be restarted for changes to take effect."
       },
+      "router-settings": {
+        "title": "Router Settings",
+        "force-local-routes": "Force local route calculation",
+        "force-local-routes-hint": "Skip the route-finder service; calculate routes locally from cached transport data. Same as 'cli proxy start --local-route'.",
+        "existing-tp-only": "Use existing transports only",
+        "existing-tp-only-hint": "Don't create new transports when dialing routes; only use what's already established. Same as 'cli proxy start --existing-tp'.",
+        "mux-routes": "Mux routes (default)",
+        "mux-routes-hint": "Parallel routes per dial. 0 = unlimited (every distinct path), 1 = disabled, 2+ = N routes. Same as 'cli proxy start --mux N'.",
+        "min-hops": "Minimum hops",
+        "min-hops-hint": "Minimum number of hops on routes. 1 = no minimum (allow direct). Same as 'cli proxy start --min-hops N'."
+      },
       "tpviz": {
         "title": "Network Visualizer",
         "open": "Open Transport Visualizer"
@@ -417,6 +429,22 @@
   "terminal": {
     "help": "Live shell on the visor (dmsgpty). Ctrl+D or type \"exit\" to close.",
     "open-fullscreen": "Open in new window"
+  },
+
+  "app-settings": {
+    "title": "App Settings",
+    "args": "Args",
+    "show-flags": "Show flags",
+    "help-loading": "Loading help…",
+    "env": "Environment",
+    "env-add": "Add row",
+    "launcher-mode": "Launcher mode",
+    "mode-default": "Default",
+    "mode-internal": "Internal",
+    "mode-external": "External",
+    "autostart": "Autostart on visor boot",
+    "saved": "Settings saved (restart the app for changes to take effect)",
+    "last-error": "Last error"
   },
 
   "skysocks-tab": {
