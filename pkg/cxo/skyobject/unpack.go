@@ -47,7 +47,15 @@ func (u *Unpack) Set(key cipher.SHA256, val []byte) (err error) {
 	}
 
 	ui.inc++
-	ui.created = (rc == 1)
+	// Sticky: a later duplicate Set returning rc>1 must not clobber
+	// created=true from the first Set, otherwise Save's walk skips the
+	// dedup'd subtree (deepper=false), its children end up at ui.dec=0
+	// ui.inc=N, and the post-walk decrement drives them to rc=0 even
+	// though the new Root still references them through the dedup'd
+	// parent — which a later RemoveObjects sweep then deletes.
+	if rc == 1 {
+		ui.created = true
+	}
 
 	return
 }
