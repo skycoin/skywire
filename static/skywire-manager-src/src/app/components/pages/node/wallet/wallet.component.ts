@@ -8,7 +8,7 @@ import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppsService } from 'src/app/services/apps.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
-import { UserAppSettingsComponent } from '../apps/node-apps/user-app-settings/user-app-settings.component';
+import { SkycoinDaemonSettingsComponent } from './skycoin-daemon-settings/skycoin-daemon-settings.component';
 
 const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
 
@@ -186,7 +186,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
         this.snackbar.showDone('wallet.daemons.added');
         // Open the generic settings dialog so the operator can set
         // FIBER_TOML / API set / data dir args before starting.
-        UserAppSettingsComponent.openDialog(this.dialog, app);
+        SkycoinDaemonSettingsComponent.openDialog(this.dialog, app);
       },
       error: () => {
         this.daemonsBusy.delete('add');

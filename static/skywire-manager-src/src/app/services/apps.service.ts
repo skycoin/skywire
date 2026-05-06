@@ -37,6 +37,16 @@ export class AppsService {
   }
 
   /**
+   * Sets / replaces / deletes env-var entries on an existing app.
+   * Empty value means delete that key. Pairs with custom_setting to
+   * configure multi-instance daemons (FIBER_TOML lives in env, the
+   * rest live in args).
+   */
+  setAppEnv(nodeKey: string, appName: string, env: { [key: string]: string }) {
+    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`, { env });
+  }
+
+  /**
    * Changes the autostart setting of an app.
    */
   changeAppAutostart(nodeKey: string, appName: string, autostart: boolean) {

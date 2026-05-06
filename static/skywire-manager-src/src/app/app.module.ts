@@ -78,6 +78,7 @@ import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.
 import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
+import { SkycoinDaemonSettingsComponent } from './components/pages/node/wallet/skycoin-daemon-settings/skycoin-daemon-settings.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { VpnComponent } from './components/pages/node/vpn/vpn.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
@@ -184,6 +185,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         UptimeComponent,
         TerminalComponent,
         WalletComponent,
+        SkycoinDaemonSettingsComponent,
         WebProxyComponent,
         VpnComponent,
         SkysocksTabComponent,

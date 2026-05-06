@@ -1,0 +1,84 @@
+@import 'variables';
+
+.dialog-title {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin-bottom: 14px;
+  color: rgba(255, 255, 255, 0.92);
+
+  .mono {
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    color: #00d4ff;
+  }
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  label {
+    font-size: 0.9em;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    padding: 8px 10px;
+    color: rgba(255, 255, 255, 0.95);
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.9em;
+    outline: none;
+
+    &:focus {
+      border-color: rgba(0, 212, 255, 0.6);
+    }
+  }
+}
+
+.field-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  .field { flex: 1; min-width: 140px; }
+}
+
+.hint {
+  line-height: 1.4;
+}
+
+.save-error {
+  padding: 8px 10px;
+  background: rgba(229, 57, 53, 0.12);
+  border: 1px solid rgba(229, 57, 53, 0.35);
+  border-radius: 4px;
+  color: rgba(255, 200, 200, 0.95);
+  font-size: 0.9em;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+
+  button.mat-mdc-button-base:not(:disabled):not(.mat-primary) {
+    color: rgba(255, 255, 255, 0.92) !important;
+  }
+}
+
+.dim { color: rgba(255, 255, 255, 0.55); }
+.small { font-size: 0.85em; }

@@ -1,0 +1,46 @@
+<div class="dialog-title">{{ 'wallet.daemons.settings.title' | translate }}: <span class="mono">{{ data?.name }}</span></div>
+
+<form [formGroup]="form" (ngSubmit)="save()" class="dialog-form">
+
+  <div class="field">
+    <label for="fiberToml">{{ 'wallet.daemons.settings.fiber-toml' | translate }}</label>
+    <input id="fiberToml" type="text" formControlName="fiberToml"
+           placeholder="/etc/skywire/fibercoins/aix.toml">
+    <div class="hint dim small">{{ 'wallet.daemons.settings.fiber-toml-hint' | translate }}</div>
+  </div>
+
+  <div class="field-row">
+    <div class="field">
+      <label for="port">{{ 'wallet.daemons.settings.port' | translate }}</label>
+      <input id="port" type="text" formControlName="port" placeholder="6420">
+    </div>
+    <div class="field">
+      <label for="apiSets">{{ 'wallet.daemons.settings.api-sets' | translate }}</label>
+      <input id="apiSets" type="text" formControlName="apiSets" placeholder="READ,STATUS">
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="dataDir">{{ 'wallet.daemons.settings.data-dir' | translate }}</label>
+    <input id="dataDir" type="text" formControlName="dataDir" placeholder="/var/skycoin/aix">
+    <div class="hint dim small">{{ 'wallet.daemons.settings.data-dir-hint' | translate }}</div>
+  </div>
+
+  @if (saveError) {
+    <div class="save-error">
+      <mat-icon [inline]="true">error_outline</mat-icon>
+      {{ saveError }}
+    </div>
+  }
+
+  <div class="dialog-actions">
+    <button type="button" mat-button (click)="dialogRef.close(false)" [disabled]="saving">
+      {{ 'common.cancel' | translate }}
+    </button>
+    <button type="submit" mat-raised-button color="primary" [disabled]="saving">
+      <mat-icon [inline]="true">save</mat-icon>
+      {{ saving ? ('common.loading' | translate) : ('common.save' | translate) }}
+    </button>
+  </div>
+
+</form>
