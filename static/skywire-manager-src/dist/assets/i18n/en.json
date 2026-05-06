@@ -536,6 +536,10 @@
       "stop-error": "Failed to stop daemon",
       "added": "Daemon instance added — set FIBER_TOML / data dir in settings, then Start",
       "add-error": "Failed to add daemon instance (name may be in use)",
+      "use-local": "Use local daemons",
+      "use-local-tooltip": "Replace the wallet's --node-url args with the http endpoints of the running skycoin-daemon* instances on this visor. Restart the wallet (Stop, then Start) to pick up the new node list.",
+      "local-applied": "Wallet args updated with local daemon URLs — restart the wallet to apply",
+      "no-running": "No running skycoin-daemon* instances on this visor",
       "settings-saved": "Daemon settings saved (restart the daemon to pick up the new env)",
       "settings": {
         "title": "Daemon Settings",

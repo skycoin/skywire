@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var appName string
@@ -42,6 +43,7 @@ func init() {
 		addAppCmd,
 		rmAppCmd,
 		envAppCmd,
+		argsAppCmd,
 		registerAppCmd,
 		deregisterAppCmd,
 		appLogsSinceCmd,
@@ -185,6 +187,36 @@ add' or 'skycoin daemon add'.`,
 			os.Exit(1)
 		}
 		internal.Catch(cmd.Flags(), rpcClient.DeleteApp(args[0]))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+var argsAppCmd = &cobra.Command{
+	Use:   "args <name> <shell-string>",
+	Short: "Replace the entire Args list on an app",
+	Long: `Replace the entire Args slice on the named app's launcher
+config. The shell-string is parsed via the same shell-like
+tokenizer the on-disk config file uses (whitespace separates,
+"double quotes" and 'single quotes' group).
+
+Examples:
+  skywire cli visor app args skycoin-web "skycoin web --host 127.0.0.1 --port 8002 --node-url http://127.0.0.1:6420"
+  skywire cli visor app args skycoin-daemon "skycoin daemon --enable-all-api-sets=true --log-level=debug"`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		appName := args[0]
+		shellStr := args[1]
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		// Tokenize via the visorconfig parser so the CLI matches
+		// the server-side semantics exactly.
+		toks, perr := visorconfig.SplitArgs(shellStr)
+		if perr != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("parse args: %w", perr))
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppArgs(appName, toks))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
 	},
 }

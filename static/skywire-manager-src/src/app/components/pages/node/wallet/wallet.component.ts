@@ -173,6 +173,46 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   toggleWebSettings() { this.webAppSettingsOpen = !this.webAppSettingsOpen; }
   onWebSettingsSaved() { this.webAppSettingsOpen = false; }
 
+  // True iff there are running skycoin-daemon* instances whose ports
+  // could be added to skycoin-web's --node-url list. Drives the
+  // "Use local daemons" button's visibility / disabled state.
+  get hasRunningDaemons(): boolean {
+    return this.daemons.some((d) => d.status === 1);
+  }
+
+  /** Replaces skycoin-web's --node-url args with the http endpoints
+   *  of the currently-running skycoin-daemon* instances on this
+   *  visor. Other args are preserved verbatim. The wallet must be
+   *  restarted (Stop, then Start) for it to pick up the new node
+   *  list — skycoin-web reads --node-url at startup. */
+  applyLocalDaemons() {
+    if (!this.node || !this.webApp) { return; }
+    const running = this.daemons.filter((d) => d.status === 1);
+    if (running.length === 0) {
+      this.snackbar.showError('wallet.daemons.no-running');
+      return;
+    }
+    const nodeUrls = running.map((d) => {
+      const port = parseDaemonPort((d.args as string[]) || []);
+      return `http://127.0.0.1:${port}`;
+    });
+
+    const args = stripFlag((this.webApp.args as string[]) || [], '--node-url');
+    for (const url of nodeUrls) {
+      args.push('--node-url', url);
+    }
+    const body = { args: shellJoin(args) };
+    this.appsService.setAppFullConfig(this.node.localPk, this.webApp.name, body).subscribe({
+      next: () => {
+        this.snackbar.showDone('wallet.daemons.local-applied');
+      },
+      error: (e: any) => {
+        const msg = (e && e.message) ? e.message : 'Failed to update node-url args';
+        this.snackbar.showError(msg);
+      },
+    });
+  }
+
   // ---- Skycoin daemon multi-instance controls ----
 
   isDaemonRunning(d: Application): boolean { return d.status === 1; }
@@ -251,6 +291,54 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
       },
     });
   }
+}
+
+/** Reads the --port value out of a skycoin-daemon's args slice.
+ *  Accepts both `--port 6420` and `--port=6420`. Defaults to 6420
+ *  if the flag isn't set (skycoin's compile-time default). */
+function parseDaemonPort(args: string[]): number {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--port' || a === '-p') {
+      if (i + 1 < args.length) {
+        const n = parseInt(args[i + 1], 10);
+        if (!isNaN(n)) { return n; }
+      }
+    } else if (a.startsWith('--port=')) {
+      const n = parseInt(a.substring('--port='.length), 10);
+      if (!isNaN(n)) { return n; }
+    }
+  }
+  return 6420;
+}
+
+/** Strips every occurrence of a flag and its value from the args.
+ *  Handles both two-arg `--flag value` and equals `--flag=value`
+ *  forms. Used by applyLocalDaemons to wipe the existing
+ *  --node-url entries before re-emitting them. */
+function stripFlag(args: string[], flag: string): string[] {
+  const eq = flag + '=';
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === flag) {
+      i++; // skip value
+      continue;
+    }
+    if (a.startsWith(eq)) {
+      continue;
+    }
+    out.push(a);
+  }
+  return out;
+}
+
+/** Joins string args back into a shell-like string for the PUT body.
+ *  Tokens with whitespace get wrapped in double quotes. Mirrors the
+ *  same logic the universal panel uses on save so round-tripping
+ *  with visorconfig.SplitArgs is consistent. */
+function shellJoin(args: string[]): string {
+  return args.map(a => /[\s"']/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a).join(' ');
 }
 
 /** Picks --host and --port values out of the app args slice, with

@@ -21,6 +21,13 @@
             <mat-icon [inline]="true">{{ isWebRunning() ? 'stop' : 'play_arrow' }}</mat-icon>
             {{ (isWebRunning() ? 'wallet.daemons.stop' : 'wallet.daemons.start') | translate }}
           </button>
+          @if (hasRunningDaemons) {
+            <button mat-stroked-button (click)="applyLocalDaemons()"
+                    [matTooltip]="'wallet.daemons.use-local-tooltip' | translate">
+              <mat-icon [inline]="true">link</mat-icon>
+              {{ 'wallet.daemons.use-local' | translate }}
+            </button>
+          }
           <button mat-stroked-button (click)="toggleWebSettings()"
                   [class.settings-toggle-open]="webAppSettingsOpen">
             <mat-icon [inline]="true">{{ webAppSettingsOpen ? 'expand_less' : 'settings' }}</mat-icon>
