@@ -118,6 +118,27 @@ type Client struct {
 	sesMx sync.Mutex
 }
 
+// AddDiscovery registers an additional dmsg-discovery this client
+// should publish its entry to. discPK, when set, identifies the
+// discovery's own dmsg-server PK so the client can detect inbound
+// sessions originated by this discovery (currently unused on the
+// client side; reserved for symmetry with Server).
+//
+// Safe to call before or after Serve. Subsequent updateClientEntry
+// iterations pick up the new endpoint automatically.
+func (c *Client) AddDiscovery(client disc.APIClient, discPK cipher.PubKey) {
+	c.addDiscovery(client, "", discPK)
+}
+
+// SetDiscoveryClients replaces the underlying disc.APIClient on each
+// configured discovery endpoint, preserving PKs. The lengths must
+// match the current endpoint count, otherwise the call is a no-op.
+// Used to upgrade plain HTTP clients to dmsgfirst-wrapped clients
+// once an outbound dmsg.Client is available.
+func (c *Client) SetDiscoveryClients(clients []disc.APIClient) {
+	c.setDiscoveryClients(clients)
+}
+
 // NewClient creates a dmsg client entity.
 func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Config) *Client {
 	log := logging.MustGetLogger("dmsg_client")

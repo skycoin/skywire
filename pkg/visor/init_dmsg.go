@@ -128,22 +128,34 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		return fmt.Errorf("cannot initialize dmsg: empty configuration")
 	}
 
+	// When the modern Configs[] schema is set, we use its first entry
+	// as the primary discovery (DMSG URL preferred when dmsgHTTP is
+	// ready, else HTTP URL); the rest are attached as additional
+	// discoveries inside dmsgc.New. This keeps the legacy single-
+	// discovery code path identical when Configs is empty.
+	primary := v.conf.Dmsg.Discovery
+	primaryDmsg := v.conf.Dmsg.DiscoveryDmsg
+	if cfgs := v.conf.Dmsg.Configs; len(cfgs) > 0 {
+		primary = cfgs[0].URL
+		primaryDmsg = cfgs[0].DmsgURL
+	}
+
 	// Prefer DMSG-HTTP for discovery if configured (more private, no DNS dependency),
 	// fall back to plain HTTP URL. If HTTP URL is empty (DMSG-only deployment),
 	// DMSG is required — not optional.
-	discURL := v.conf.Dmsg.Discovery
-	if v.conf.Dmsg.DiscoveryDmsg != "" && v.dmsgHTTP != nil {
-		if _, err := getHTTPClient(ctx, v, v.conf.Dmsg.DiscoveryDmsg); err == nil {
-			discURL = v.conf.Dmsg.DiscoveryDmsg
+	discURL := primary
+	if primaryDmsg != "" && v.dmsgHTTP != nil {
+		if _, err := getHTTPClient(ctx, v, primaryDmsg); err == nil {
+			discURL = primaryDmsg
 			log.Info("Using DMSG-HTTP for dmsg discovery")
 		} else if discURL != "" {
 			log.WithError(err).Warn("DMSG-HTTP discovery failed, using plain HTTP")
 		} else {
 			return fmt.Errorf("DMSG-only deployment but DMSG discovery unreachable: %w", err)
 		}
-	} else if discURL == "" && v.conf.Dmsg.DiscoveryDmsg != "" {
+	} else if discURL == "" && primaryDmsg != "" {
 		// DMSG URL set but dmsgHTTP not ready — can't proceed without either
-		discURL = v.conf.Dmsg.DiscoveryDmsg
+		discURL = primaryDmsg
 		log.Warn("HTTP discovery URL empty, attempting DMSG discovery without dmsgHTTP transport")
 	}
 
