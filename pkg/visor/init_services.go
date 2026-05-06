@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
+	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -205,6 +206,26 @@ func LookupGeo(ip string) *GeoData {
 		g.Longitude = *res.Longitude
 	}
 	return g
+}
+
+// serviceGeo returns a snapshot of the visor's cached geolocation in
+// the shape expected by service-discovery / uptime-tracker entries.
+// When the visor populates this on its registrations, the receiving
+// service short-circuits its own IP→geo HTTP lookup. Returns nil
+// when geolocation has not been determined yet (e.g. before the
+// address-resolver init that populates v.geo.data).
+func (v *Visor) serviceGeo() *geo.LocationData {
+	v.geo.mu.RLock()
+	defer v.geo.mu.RUnlock()
+	if v.geo.data == nil {
+		return nil
+	}
+	return &geo.LocationData{
+		Country: v.geo.data.CountryCode,
+		Region:  v.geo.data.RegionCode,
+		Lat:     v.geo.data.Latitude,
+		Lon:     v.geo.data.Longitude,
+	}
 }
 
 func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) error {

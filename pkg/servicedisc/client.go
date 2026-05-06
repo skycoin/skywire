@@ -18,6 +18,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/httpauthclient"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -42,6 +43,12 @@ type Config struct {
 	Port          uint16
 	DiscAddr      string
 	DisplayNodeIP bool
+	// Geo, when non-nil, is attached to the entry on Register/Update.
+	// The service-discovery server short-circuits its own IP→geo HTTP
+	// lookup when the entry already carries Geo, so a visor that does
+	// its own geoip lookup (via dmsg-server LookupIPGeo or the visor's
+	// embedded MaxMind DB) eliminates the SD→geoip-service round-trip.
+	Geo *geo.LocationData
 }
 
 // HTTPClient is responsible for interacting with the service-discovery
@@ -66,6 +73,7 @@ func NewClient(log logrus.FieldLogger, mLog *logging.MasterLogger, conf Config, 
 			Type:          conf.Type,
 			Version:       buildinfo.Version(),
 			DisplayNodeIP: conf.DisplayNodeIP,
+			Geo:           conf.Geo,
 		},
 		client:         client,
 		clientPublicIP: clientPublicIP,

@@ -190,13 +190,29 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 
 // LookupIP attempts to dial a stream to the server for the IP address of the client.
 func (cs *ClientSession) LookupIP(dst Addr) (myIP net.IP, err error) {
+	resp, err := cs.lookupIPInternal(dst, false)
+	if err != nil {
+		return nil, err
+	}
+	return resp.IP, nil
+}
+
+// LookupIPGeo is the same as LookupIP but additionally asks the dmsg
+// server for geolocation data on the resolved IP. Older servers
+// without a configured GeoLookupFunc return zero geo fields — the
+// caller falls back to a local lookup when GeoCountry is empty.
+func (cs *ClientSession) LookupIPGeo(dst Addr) (StreamResponse, error) {
+	return cs.lookupIPInternal(dst, true)
+}
+
+func (cs *ClientSession) lookupIPInternal(dst Addr, geo bool) (resp StreamResponse, err error) {
 	log := cs.log.
 		WithField("func", "ClientSession.LookupIP").
 		WithField("dst_addr", cs.rPK)
 
 	dStr, err := newInitiatingStream(cs)
 	if err != nil {
-		return nil, err
+		return StreamResponse{}, err
 	}
 
 	// Close stream on failure.
@@ -210,26 +226,25 @@ func (cs *ClientSession) LookupIP(dst Addr) (myIP net.IP, err error) {
 
 	// Prepare deadline.
 	if err = dStr.SetDeadline(time.Now().Add(HandshakeTimeout)); err != nil {
-		return nil, err
+		return StreamResponse{}, err
 	}
 
 	// Do stream handshake.
-	req, err := dStr.writeIPRequest(dst)
+	req, err := dStr.writeIPRequestWithGeo(dst, geo)
 	if err != nil {
-		return nil, err
+		return StreamResponse{}, err
 	}
 
-	myIP, err = dStr.readIPResponse(req)
+	resp, err = dStr.readIPGeoResponse(req)
 	if err != nil {
-		return nil, err
+		return StreamResponse{}, err
 	}
 
-	err = dStr.Close()
-	if err != nil {
-		return nil, err
+	if err = dStr.Close(); err != nil {
+		return StreamResponse{}, err
 	}
 
-	return myIP, err
+	return resp, nil
 }
 
 // serve accepts incoming streams from remote clients.

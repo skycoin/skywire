@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/rpc"
 	"net/url"
@@ -35,6 +36,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgserver"
+	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
@@ -149,6 +151,33 @@ var RootCmd = &cobra.Command{
 		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, primaryHTTP, &srvConf, m)
 		srv.SetLogger(log)
 		srv.SetDHTBootstrap(conf.EnableDHT)
+
+		// Wire the geo lookup hook so visors using LookupIPGeo can get
+		// their public IP and its geolocation in a single round-trip
+		// without HTTP-calling the geoip service. The DB is embedded
+		// in pkg/geoip and shared with the standalone geoip service
+		// and the visor's local fallback path. A failure to open the
+		// DB (corrupt embed, etc.) leaves the hook unset; older
+		// LookupIP callers still work, and LookupIPGeo callers see
+		// empty geo fields and fall back to local lookup.
+		if geoDB, err := geoip.OpenEmbedded(); err != nil {
+			log.WithError(err).Warn("failed to open embedded geoip DB; LookupIPGeo will return empty geo fields")
+		} else {
+			srv.SetGeoLookup(func(ip net.IP) (country, region string, lat, lon float64) {
+				res, err := geoip.Lookup(geoDB, ip.String())
+				if err != nil || res == nil {
+					return "", "", 0, 0
+				}
+				if res.Latitude != nil {
+					lat = *res.Latitude
+				}
+				if res.Longitude != nil {
+					lon = *res.Longitude
+				}
+				return res.CountryCode, res.RegionCode, lat, lon
+			})
+		}
+
 		// Attach extras (each with its own per-deployment advertised
 		// address). The primary's advertised address is passed through
 		// the legacy Serve(..., publicAddr) path below.
