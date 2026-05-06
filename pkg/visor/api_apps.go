@@ -9,11 +9,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -150,60 +152,145 @@ func (v *Visor) SetAppLauncherMode(appName, mode string) error {
 	return v.conf.UpdateAppLauncherMode(v.appL, appName, mode)
 }
 
-// appHelpCache memoizes the --help output of each binary so the
-// universal settings panel's "Show flags" disclosure is cheap to
-// open repeatedly. Keyed by the binary's absolute path; we re-fetch
-// when the file's mtime changes (operator updated the binary).
-var appHelpCache sync.Map // map[string]appHelpCacheEntry
+// appHelpCache memoizes the --help output so the universal panel's
+// "Show flags" disclosure is cheap to open repeatedly. Keyed by the
+// resolved exec path + leading positional args (the subcommand path
+// for embedded apps); cleared whenever the running skywire binary's
+// mtime changes (operator rebuilt it).
+var (
+	appHelpCacheMu sync.Mutex
+	appHelpCache   = make(map[string]appHelpCacheEntry)
+)
 
 type appHelpCacheEntry struct {
 	mtime int64
 	help  string
 }
 
-// AppHelp execs the configured binary for the named app with --help
-// and returns the captured stdout. Cached per (binary, mtime) so
-// repeat calls are free. Empty string returned for in-process apps
-// where Binary == "" — those don't have a flag binary to query.
+// AppHelp returns the `--help` output for the named app. Three
+// resolution paths to cover the launcher's three app shapes:
+//
+//   1. In-process registered app (launcher.RegisterApp("skysocks", …))
+//      with args like ["app", "skysocks", …] → exec the running
+//      skywire binary with the leading non-flag args + "--help"
+//      (i.e. "skywire app skysocks --help").
+//
+//   2. Embedded cobra subcommand of skywire (skycoin daemon,
+//      skycoin web) with args like ["skycoin", "daemon", …] → same
+//      pattern: "skywire skycoin daemon --help".
+//
+//   3. External standalone binary at <BinPath>/<Binary> → exec the
+//      file directly with --help.
+//
+// Cached per resolved (exec, args-prefix); invalidated by the
+// running skywire binary's mtime so a rebuild surfaces fresh help.
 func (v *Visor) AppHelp(appName string) (string, error) {
 	if v.appL == nil {
 		return "", ErrAppLauncherNotAvailable
 	}
-	var binary string
-	for _, app := range v.conf.Launcher.Apps {
-		if app.Name == appName {
-			binary = app.Binary
+	var ac *appserver.AppConfig
+	for i := range v.conf.Launcher.Apps {
+		if v.conf.Launcher.Apps[i].Name == appName {
+			ac = &v.conf.Launcher.Apps[i]
 			break
 		}
 	}
-	if binary == "" {
-		return "", fmt.Errorf("app %q has no binary (in-process app)", appName)
+	if ac == nil {
+		return "", fmt.Errorf("app %q not found", appName)
 	}
-	// The launcher's ProcConfig joins BinPath + Binary the same way.
-	binPath := filepath.Join(v.conf.Launcher.BinPath, binary)
-	st, err := os.Stat(binPath)
+
+	execPath, helpArgs, err := resolveAppHelpExec(*ac, v.conf.Launcher.BinPath)
 	if err != nil {
-		return "", fmt.Errorf("stat binary %s: %w", binPath, err)
+		return "", err
 	}
-	mtime := st.ModTime().UnixNano()
-	if cached, ok := appHelpCache.Load(binPath); ok {
-		entry := cached.(appHelpCacheEntry)
-		if entry.mtime == mtime {
-			return entry.help, nil
-		}
+
+	mtime, err := mtimeNanos(execPath)
+	if err != nil {
+		return "", fmt.Errorf("stat %s: %w", execPath, err)
 	}
+	cacheKey := execPath + "\x00" + strings.Join(helpArgs, "\x00")
+
+	appHelpCacheMu.Lock()
+	if entry, ok := appHelpCache[cacheKey]; ok && entry.mtime == mtime {
+		appHelpCacheMu.Unlock()
+		return entry.help, nil
+	}
+	appHelpCacheMu.Unlock()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, binPath, "--help").CombinedOutput()
-	// Many CLI binaries exit non-zero on --help; treat output as
-	// authoritative regardless and only surface a hard error when
-	// no output came back.
-	if len(out) == 0 && err != nil {
-		return "", fmt.Errorf("exec %s --help: %w", binPath, err)
+	cmd := exec.CommandContext(ctx, execPath, helpArgs...)
+	out, runErr := cmd.CombinedOutput()
+	// Many CLI binaries exit non-zero on --help; treat the captured
+	// output as authoritative regardless and only surface a hard
+	// error when nothing was emitted.
+	if len(out) == 0 && runErr != nil {
+		return "", fmt.Errorf("exec %s %s: %w", execPath, strings.Join(helpArgs, " "), runErr)
 	}
 	help := string(out)
-	appHelpCache.Store(binPath, appHelpCacheEntry{mtime: mtime, help: help})
+	appHelpCacheMu.Lock()
+	appHelpCache[cacheKey] = appHelpCacheEntry{mtime: mtime, help: help}
+	appHelpCacheMu.Unlock()
 	return help, nil
+}
+
+// resolveAppHelpExec picks the exec path and args used to fetch
+// help for the given AppConfig. See AppHelp for the resolution
+// strategy. Returns (execPath, [args..., "--help"]).
+func resolveAppHelpExec(ac appserver.AppConfig, binPath string) (string, []string, error) {
+	// Take the leading run of non-flag positional args. For the
+	// in-process / cobra cases this is the subcommand path
+	// (e.g. ["app", "skysocks"] or ["skycoin", "daemon"]).
+	var positional []string
+	for _, a := range ac.Args {
+		if strings.HasPrefix(a, "-") {
+			break
+		}
+		positional = append(positional, a)
+	}
+
+	if len(positional) > 0 {
+		// Embedded subcommand or in-process app — invoke the running
+		// skywire binary with the positional path + --help.
+		exe, err := os.Executable()
+		if err != nil {
+			return "", nil, fmt.Errorf("os.Executable: %w", err)
+		}
+		return exe, append(positional, "--help"), nil
+	}
+
+	// No positional args. Two cases:
+	//   - In-process app registered via launcher.RegisterApp (the
+	//     launcher resolves this by Name or Binary; same registry
+	//     lookup tells us whether 'skywire app <name>' is the right
+	//     help target). Internal apps whose AppConfig.Args is pure
+	//     flags (vpn-client: ["--dns", "1.1.1.1"]) land here.
+	//   - External standalone binary at <BinPath>/<Binary>.
+	registryName := ac.Name
+	if ac.Binary != "" {
+		registryName = ac.Binary
+	}
+	if _, found := launcher.GetApp(registryName); found {
+		exe, err := os.Executable()
+		if err != nil {
+			return "", nil, fmt.Errorf("os.Executable: %w", err)
+		}
+		return exe, []string{"app", registryName, "--help"}, nil
+	}
+
+	if ac.Binary == "" {
+		return "", nil, fmt.Errorf("app %q has no positional args and no binary; can't resolve help target", ac.Name)
+	}
+	external := filepath.Join(binPath, ac.Binary)
+	return external, []string{"--help"}, nil
+}
+
+func mtimeNanos(path string) (int64, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return 0, err
+	}
+	return st.ModTime().UnixNano(), nil
 }
 
 // SetAppEnv implements API. Sets / replaces / deletes a KEY=value
