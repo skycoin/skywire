@@ -113,6 +113,14 @@ func unmarshalAppConfig(raw json.RawMessage) (appserver.AppConfig, error) {
 	return cfg, nil
 }
 
+// SplitArgs is the exported counterpart to splitArgs — same parser,
+// available to callers outside the package (e.g. config-gen wants
+// to tokenize SKYCOIND_FLAGS using the same rules the on-disk
+// config uses).
+func SplitArgs(s string) ([]string, error) {
+	return splitArgs(s)
+}
+
 // splitArgs parses a shell-like argument string into a token slice.
 // Handles whitespace separators plus "double" and 'single' quoted
 // tokens; backslash escapes only inside double quotes. Doesn't do

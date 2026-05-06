@@ -117,9 +117,21 @@ var (
 	// credential field; left empty means the wallet runs as the
 	// visor's own UID.
 	isSkycoinDaemonEnable bool
-	skycoinDaemonFiber    string // FIBER_TOML env value for the spawned daemon — runs a fiber-coin chain instead of the default skycoin
-	skycoinDaemonAPISets  string // comma-separated GUI API set names; empty = upstream defaults
+	skycoinDaemonFiber    string // legacy single-instance FIBER_TOML — superseded by skycoinDaemonInstances when that's non-empty
+	skycoinDaemonAPISets  string // legacy single-instance API sets — superseded by skycoinDaemonFlags when that's non-empty
 	skycoinDaemonUser     string
+	// skycoinDaemonInstances is the new multi-instance knob. Each
+	// entry is either the literal "skycoin" (built-in defaults, no
+	// FIBER_TOML override) or a path to a fiber.toml. Each entry
+	// produces one skycoin-daemon-<name> AppConfig with auto-
+	// allocated --port and --data-dir; <name> = "skycoin" for the
+	// literal, basename-without-.toml for paths.
+	skycoinDaemonInstances string
+	// skycoinDaemonFlags are extra flags appended to every
+	// instance's args (e.g. "--enable-gui-api-sets READ,STATUS").
+	// --port and --data-dir are auto-allocated per instance and
+	// must not appear here — gen errors out if they do.
+	skycoinDaemonFlags string
 	isSkycoinWebEnable    bool
 	skycoinWebAddr        string
 	skycoinWebNodeURLs    string // comma-separated; rendered as repeated --node-url flags
