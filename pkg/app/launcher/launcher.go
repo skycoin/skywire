@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -374,16 +375,44 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 		workDir = filepath.Join(lc.LocalPath, ac.Name)
 	}
 
+	// Determine the effective HOME for this proc: the target user's
+	// home dir when the AppConfig pins User, else inherit the visor's.
+	// Used to (a) tilde-expand args / env values like
+	// `--wallet-dir ~/.skycoin/wallets` (exec doesn't run a shell, so
+	// ~/ stays literal otherwise — the binary then looks in a directory
+	// called "~" and fails to find anything) and (b) inject HOME into
+	// the proc's env so binaries that read $HOME directly (most do)
+	// see the operator-user's home, not _skywire's.
+	procHome := ""
+	if ac.User != "" {
+		if u, err := user.Lookup(ac.User); err == nil {
+			procHome = u.HomeDir
+		}
+	}
+	if procHome == "" {
+		procHome = os.Getenv("HOME")
+	}
+
+	expandedArgs := expandHomeAll(ac.Args, procHome)
+
 	// Merge per-app env on top of the launcher's base env. Per-app
 	// values land later so they win on duplicate keys.
 	mergedEnvs := append([]string(nil), envs...)
 	mergedEnvs = append(mergedEnvs, ac.Env...)
+	mergedEnvs = expandHomeAllEnv(mergedEnvs, procHome)
+	// Auto-inject HOME for credential-dropped procs unless the operator
+	// already set one explicitly. Without this, exec'd binaries running
+	// as a different UID inherit the visor's HOME and write to the
+	// wrong directory (e.g. _skywire's home instead of the operator's).
+	if procHome != "" && !envHasKey(mergedEnvs, "HOME") {
+		mergedEnvs = append(mergedEnvs, "HOME="+procHome)
+	}
 
 	procConf := appcommon.ProcConfig{
 		AppName:     ac.Name,
 		AppSrvAddr:  lc.ServerAddr,
 		ProcKey:     appcommon.RandProcKey(),
-		ProcArgs:    ac.Args,
+		ProcArgs:    expandedArgs,
 		ProcEnvs:    mergedEnvs,
 		ProcWorkDir: workDir,
 		VisorPK:     lc.VisorPK,
@@ -413,6 +442,71 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 
 	err := ensureDir(&procConf.ProcWorkDir)
 	return procConf, err
+}
+
+// expandHome replaces a leading "~/" or bare "~" in a path-shaped
+// string with the given home directory. Other forms like "~user/..."
+// are intentionally left alone — they're rare in app args and would
+// require a username lookup the launcher shouldn't do per-arg.
+// Returns s unchanged if home is empty (nothing to expand to).
+func expandHome(s, home string) string {
+	if home == "" {
+		return s
+	}
+	if s == "~" {
+		return home
+	}
+	if strings.HasPrefix(s, "~/") {
+		return home + s[1:]
+	}
+	return s
+}
+
+// expandHomeAll runs expandHome on every arg in a slice; returns a
+// fresh slice so the input AppConfig isn't mutated in place.
+func expandHomeAll(args []string, home string) []string {
+	if home == "" || len(args) == 0 {
+		return args
+	}
+	out := make([]string, len(args))
+	for i, a := range args {
+		out[i] = expandHome(a, home)
+	}
+	return out
+}
+
+// expandHomeAllEnv runs expandHome on the value side of each
+// KEY=VALUE entry. Common case: SKYCOINWEBWALLET=~/.skycoin/wallets
+// in the on-disk config should reach the proc as
+// HOME-resolved /home/.../.skycoin/wallets. Empty home → no-op.
+func expandHomeAllEnv(env []string, home string) []string {
+	if home == "" || len(env) == 0 {
+		return env
+	}
+	out := make([]string, len(env))
+	for i, kv := range env {
+		eq := strings.IndexByte(kv, '=')
+		if eq < 0 {
+			out[i] = kv
+			continue
+		}
+		key, value := kv[:eq], kv[eq+1:]
+		out[i] = key + "=" + expandHome(value, home)
+	}
+	return out
+}
+
+// envHasKey checks whether KEY=… is present in the env slice.
+// Used by makeProcConfig to avoid clobbering an explicit HOME
+// override the operator set in the AppConfig.
+func envHasKey(env []string, key string) bool {
+	prefix := key + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // isRawProcessApp reports whether the named app is a "raw" external
