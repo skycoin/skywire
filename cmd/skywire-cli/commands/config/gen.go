@@ -207,6 +207,14 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "dmsgdisc")
 	genConfigCmd.Flags().BoolVar(&dmsgSrvConfig, "dmsgsrv", false, "generate config for dmsg-server service")
 	gHiddenFlags = append(gHiddenFlags, "dmsgsrv")
+	genConfigCmd.Flags().BoolVar(&tpdConfig, "tpd", false, "generate config for transport-discovery service")
+	gHiddenFlags = append(gHiddenFlags, "tpd")
+	genConfigCmd.Flags().BoolVar(&sdConfig, "sd", false, "generate config for service-discovery service")
+	gHiddenFlags = append(gHiddenFlags, "sd")
+	genConfigCmd.Flags().BoolVar(&arConfig, "ar", false, "generate config for address-resolver service")
+	gHiddenFlags = append(gHiddenFlags, "ar")
+	genConfigCmd.Flags().BoolVar(&rfConfig, "rf", false, "generate config for route-finder service")
+	gHiddenFlags = append(gHiddenFlags, "rf")
 	genConfigCmd.Flags().BoolVar(&enableCalculateRoutes, "calculate-routes", scriptExecBool("${CALCULATEROUTES:-false}"), "enable local route calculation")
 	gHiddenFlags = append(gHiddenFlags, "calculate-routes")
 
@@ -923,12 +931,25 @@ func serviceProjectionJQ() string {
 		// when the multi-network NAT case requires it.
 		return "{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, public_address: \"\", local_address: \":8081\", health_endpoint_address: \":8082\", log_level: .log_level, max_sessions: 2048}"
 	case dmsgDiscConfig:
-		// Project to a dmsg-discovery config. dmsg-discovery has no
-		// JSON config file today (CLI flags only), but emitting a
-		// JSON-shaped config makes it scriptable: tooling can read
-		// {public_key, secret_key, addr, dmsg_servers} and pass the
-		// fields to the dmsg-discovery binary as flags.
-		return "{public_key: .pk, secret_key: .sk, addr: \":9090\", dmsg_port: 80, dmsg_servers: .dmsg.servers, log_level: .log_level}"
+		// Project to a dmsg-discovery config. Keys map onto the
+		// Config struct in cmd/dmsg/dmsg-discovery/commands/config.go.
+		// dmsg_servers is the static transit set (replaces the
+		// runtime read of deployment.Prod.DmsgServers).
+		return "{public_key: .pk, secret_key: .sk, addr: \":9090\", redis: \"redis://localhost:6379\", dmsg_port: 80, mode: \"dual\", dmsg_servers: .dmsg.servers, log_level: .log_level}"
+	case tpdConfig:
+		// Project to a transport-discovery config. The `dmsg` block
+		// matches the shape used by every other service in this
+		// family so operators see one schema everywhere.
+		return "{public_key: .pk, secret_key: .sk, addr: \":9091\", redis: \"redis://localhost:6379\", redis_pool_size: 10, entry_timeout: 300000000000, log_level: .log_level, tag: \"transport_discovery\", mode: \"dual\", store_data_path: \"/var/lib/skywire/tpd/bandwidth\", uptime_db: \"/var/lib/skywire/tpd/uptime.db\", dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}}"
+	case sdConfig:
+		// Project to a service-discovery config. Same `dmsg` shape.
+		return "{public_key: .pk, secret_key: .sk, addr: \":9098\", redis: \"redis://localhost:6379\", entry_timeout: 300000000000, log_level: .log_level, mode: \"dual\", dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}}"
+	case arConfig:
+		// Project to an address-resolver config.
+		return "{public_key: .pk, secret_key: .sk, addr: \":9093\", udp_addr: \":30178\", redis: \"redis://localhost:6379\", redis_pool_size: 10, entry_timeout: 300000000000, log_level: .log_level, tag: \"address_resolver\", mode: \"dual\", dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}}"
+	case rfConfig:
+		// Project to a route-finder config.
+		return "{public_key: .pk, secret_key: .sk, addr: \":9092\", redis: \"redis://localhost:6379\", redis_pool_size: 10, log_level: .log_level, tag: \"route_finder\", mode: \"dual\", dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}}"
 	}
 	return ""
 }
