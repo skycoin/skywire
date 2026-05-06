@@ -55,16 +55,21 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// Get public IP for address resolver binding (needed for NAT setups).
-	// Try dmsg first; fall back to STUN. Geolocation comes from the embedded
-	// MaxMind database — no HTTP round-trip to the geoip service.
+	// Get public IP (and ideally geolocation) from a connected
+	// dmsg-server. LookupIPGeo asks the server to fold in the geoip
+	// data using its own embedded MaxMind DB so the visor doesn't
+	// need an HTTP round-trip to the geoip service. Older
+	// dmsg-servers without the geo lookup hook return GeoCountry=""
+	// — we fall back to the visor's own embedded LookupGeo in that
+	// case. STUN is the last-resort path when dmsg can't answer.
 	var pIP string
+	var serverGeo *GeoData
 
 	lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
-	ipAddr, err := v.dmsgC.LookupIP(lookupCtx, nil)
+	resp, err := v.dmsgC.LookupIPGeo(lookupCtx, nil)
 	lookupCancel()
 	if err != nil {
-		log.WithError(err).Debug("Failed to get public IP from dmsg server, trying STUN")
+		log.WithError(err).Debug("Failed to get public IP+geo from dmsg server, trying STUN")
 		<-v.stun.ready
 		if v.stun.client.PublicIP != nil {
 			pIP = v.stun.client.PublicIP.IP()
@@ -73,12 +78,27 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 			log.Warn("Failed to determine public IP from dmsg and STUN")
 		}
 	} else {
-		pIP = ipAddr.String()
+		pIP = resp.IP.String()
 		log.WithField("public_ip", pIP).Debug("Got public IP from dmsg server")
+		if resp.GeoCountry != "" {
+			serverGeo = &GeoData{
+				CountryCode: resp.GeoCountry,
+				RegionCode:  resp.GeoRegion,
+				Latitude:    resp.GeoLat,
+				Longitude:   resp.GeoLon,
+			}
+			log.WithField("country", serverGeo.CountryCode).Debug("Got geolocation from dmsg server")
+		}
 	}
 
-	if geoData := LookupGeo(pIP); geoData != nil {
-		log.WithField("country", geoData.CountryCode).Debug("Got geolocation from embedded GeoIP database")
+	geoData := serverGeo
+	if geoData == nil {
+		if local := LookupGeo(pIP); local != nil {
+			log.WithField("country", local.CountryCode).Debug("Got geolocation from embedded GeoIP database (fallback)")
+			geoData = local
+		}
+	}
+	if geoData != nil {
 		v.geo.mu.Lock()
 		v.geo.data = geoData
 		v.geo.mu.Unlock()
@@ -132,6 +152,7 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		factory.DisplayNodeIP = conf.DisplayNodeIP
 		factory.HeartbeatInterval = time.Duration(conf.HeartbeatInterval)
 		factory.Client = httpC
+		factory.Geo = v.serviceGeo()
 
 		// Get public IP for service discovery (needed for NAT setups).
 		// Try dmsg first; fall back to STUN. No HTTP geoip query.
@@ -528,6 +549,7 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 		Port:          uint16(0),
 		DiscAddr:      serviceDisc,
 		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
+		Geo:           v.serviceGeo(),
 	}
 	// only needed for dmsghttp
 	pIP, err := getPublicIP(v, serviceDisc)

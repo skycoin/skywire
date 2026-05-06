@@ -88,6 +88,10 @@ type EntityCommon struct {
 	// a single batched update, matching the transport manager's
 	// re-registration debounce pattern.
 	entryNudge chan struct{}
+
+	// geoLookup is set by Server.SetGeoLookup. Server-side IP-info
+	// stream handler reads it; client entities leave it nil.
+	geoLookup GeoLookupFunc
 }
 
 func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, log logrus.FieldLogger, updateInterval time.Duration) {

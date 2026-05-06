@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -27,7 +28,8 @@ type Factory struct {
 	DisplayNodeIP     bool
 	Client            *http.Client
 	ClientPublicIP    string
-	HeartbeatInterval time.Duration // Interval for service discovery heartbeats
+	HeartbeatInterval time.Duration     // Interval for service discovery heartbeats
+	Geo               *geo.LocationData // Visor's geolocation; included in service entries
 }
 
 func (f *Factory) setDefaults() {
@@ -56,6 +58,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 		Port:          port,
 		DiscAddr:      f.ServiceDisc,
 		DisplayNodeIP: f.DisplayNodeIP,
+		Geo:           f.Geo,
 	}
 
 	return newServiceUpdater(
@@ -86,6 +89,7 @@ func (f *Factory) PublicVisorUpdater(
 		Port:          port,
 		DiscAddr:      f.ServiceDisc,
 		DisplayNodeIP: f.DisplayNodeIP,
+		Geo:           f.Geo,
 	}
 
 	inner := newServiceUpdater(
@@ -127,6 +131,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 			SK:       f.SK,
 			Port:     uint16(conf.RoutingPort),
 			DiscAddr: f.ServiceDisc,
+			Geo:      f.Geo,
 		}
 	}
 
