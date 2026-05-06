@@ -117,8 +117,7 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		configs = []DiscoveryConfig{{URL: conf.Discovery, DmsgURL: conf.DiscoveryDmsg}}
 	}
 
-	primaryHTTP := disc.NewHTTP(configs[0].URL, httpC, masterLogger.PackageLogger("dmsgC:disc"))
-	var primary disc.APIClient = primaryHTTP
+	primary := disc.NewHTTP(configs[0].URL, httpC, masterLogger.PackageLogger("dmsgC:disc"))
 	if len(conf.LANServers) > 0 {
 		masterLogger.PackageLogger("dmsgC").Infof("Using %d LAN DMSG servers (tried first)", len(conf.LANServers))
 		primary = &lanPriorityDisc{APIClient: primary, lanEntries: conf.LANServers}

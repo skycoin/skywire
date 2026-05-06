@@ -26,9 +26,9 @@ import (
 // PK so the entity can recognize an inbound session as originating
 // from that discovery and trigger an immediate registration push.
 type discoveryEndpoint struct {
-	Client        disc.APIClient
+	Client         disc.APIClient
 	AdvertisedAddr string
-	PK            cipher.PubKey
+	PK             cipher.PubKey
 }
 
 // EntityCommon contains the common fields and methods for server and client entities.
@@ -119,9 +119,9 @@ func (c *EntityCommon) addDiscovery(client disc.APIClient, advertisedAddr string
 	}
 	c.discoveriesMx.Lock()
 	c.discoveries = append(c.discoveries, &discoveryEndpoint{
-		Client:        client,
+		Client:         client,
 		AdvertisedAddr: advertisedAddr,
-		PK:            pk,
+		PK:             pk,
 	})
 	c.discoveriesMx.Unlock()
 }
@@ -159,21 +159,6 @@ func (c *EntityCommon) snapshotDiscoveries() []*discoveryEndpoint {
 	out := make([]*discoveryEndpoint, len(c.discoveries))
 	copy(out, c.discoveries)
 	return out
-}
-
-// matchDiscoveryByPK returns the discoveryEndpoint configured with the
-// given PK, or nil if none. Used by setSession callbacks to recognize
-// an inbound session originated by a configured dmsg-discovery and
-// trigger an immediate registration push.
-func (c *EntityCommon) matchDiscoveryByPK(pk cipher.PubKey) *discoveryEndpoint {
-	c.discoveriesMx.RLock()
-	defer c.discoveriesMx.RUnlock()
-	for _, ep := range c.discoveries {
-		if ep.PK == pk && pk != (cipher.PubKey{}) {
-			return ep
-		}
-	}
-	return nil
 }
 
 // LocalPK returns the local public key of the entity.
