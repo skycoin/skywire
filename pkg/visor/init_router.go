@@ -278,6 +278,9 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 	case <-ctx.Done():
 		return fmt.Errorf("context canceled waiting for route setup-node dmsg client")
 	}
+	// Same dmsgfirst upgrade as the main dmsgC: discovery refresh
+	// prefers DMSG and only falls back to plain HTTP per-call.
+	upgradeDmsgDiscToDmsgfirst(routeSetupDmsgC, v.conf.Dmsg, log)
 
 	v.initLock.Lock()
 	v.embeddedRouteSetup = &EmbeddedRouteSetup{
