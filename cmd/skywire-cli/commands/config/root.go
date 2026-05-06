@@ -101,6 +101,8 @@ var (
 	configServicePath          string
 	dmsgHTTPPath               string
 	snConfig                   bool
+	dmsgDiscConfig             bool
+	dmsgSrvConfig              bool
 	externalApps               bool
 	enableCalculateRoutes      bool
 	isSkychatEnable            bool

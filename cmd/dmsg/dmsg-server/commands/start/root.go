@@ -29,6 +29,7 @@ import (
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/dmsg/disc/dmsgfirst"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
@@ -128,9 +129,32 @@ var RootCmd = &cobra.Command{
 			AuthPassphrase: authPassphrase,
 			Peers:          peers,
 		}
-		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, disc.NewHTTP(conf.Discovery, &http.Client{}, log), &srvConf, m)
+
+		// Resolve the configured discoveries. NormalizedDiscoveries
+		// folds the legacy single-discovery fields into a one-element
+		// list so existing config files continue to work unchanged.
+		discoveriesCfg := conf.NormalizedDiscoveries()
+		if len(discoveriesCfg) == 0 {
+			log.Fatal("no dmsg-discoveries configured; set 'discovery' or 'discoveries' in config")
+		}
+
+		// Primary discovery is the first in the list. NewServer takes a
+		// single primary; we attach extras via srv.AddDiscovery once the
+		// server is constructed. Using plain HTTP at construction time;
+		// once the server's outbound dmsg.Client is up later, the
+		// discovery clients are swapped for dmsgfirst-wrapped versions
+		// so registration prefers DMSG when available.
+		primaryHTTP := disc.NewHTTP(discoveriesCfg[0].URL, &http.Client{}, log)
+		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, primaryHTTP, &srvConf, m)
 		srv.SetLogger(log)
 		srv.SetDHTBootstrap(conf.EnableDHT)
+		// Attach extras (each with its own per-discovery advertised
+		// address). The primary's advertised address is passed through
+		// the legacy Serve(..., conf.PublicAddress) path below.
+		for i := 1; i < len(discoveriesCfg); i++ {
+			extra := discoveriesCfg[i]
+			srv.AddDiscovery(disc.NewHTTP(extra.URL, &http.Client{}, log), extra.AdvertisedAddress, extra.PK)
+		}
 
 		srvAPI.SetDmsgServer(srv)
 		defer func() { log.WithError(srvAPI.Close()).Info("Closed server.") }()
@@ -138,10 +162,19 @@ var RootCmd = &cobra.Command{
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 
+		// The Server's primary discovery uses the first entry's
+		// advertised address as the default (passed through Serve).
+		// AdvertisedAddress on extras overrides per-endpoint inside
+		// EntityCommon's update loop.
+		primaryAdvertised := discoveriesCfg[0].AdvertisedAddress
+		if primaryAdvertised == "" {
+			primaryAdvertised = conf.PublicAddress
+		}
+
 		go srvAPI.RunBackgroundTasks(ctx)
 		log.WithField("addr", conf.HTTPAddress).Info("Serving server API...")
 		go func() {
-			if err := srvAPI.ListenAndServe(conf.LocalAddress, conf.PublicAddress, conf.HTTPAddress); err != nil {
+			if err := srvAPI.ListenAndServe(conf.LocalAddress, primaryAdvertised, conf.HTTPAddress); err != nil {
 				log.Errorf("Serve: %v", err)
 				cancel()
 			}
@@ -194,6 +227,24 @@ var RootCmd = &cobra.Command{
 				return
 			}
 			defer closeDebug()
+
+			// Upgrade each configured discovery client from plain HTTP
+			// to dmsgfirst — registration then tries DMSG first and
+			// only falls back to HTTP if the dmsg dial fails. Discoveries
+			// without a configured PK can't use DMSG (dmsgfirst.New
+			// needs the discovery's own PK to dial it), so we leave
+			// those as plain HTTP and log it.
+			upgraded := make([]disc.APIClient, len(discoveriesCfg))
+			for i, d := range discoveriesCfg {
+				if d.PK == (cipher.PubKey{}) {
+					upgraded[i] = disc.NewHTTP(d.URL, &http.Client{}, log)
+					log.WithField("url", d.URL).Debug("discovery has no PK; staying on plain HTTP")
+					continue
+				}
+				upgraded[i] = dmsgfirst.New(dmsgC, d.PK, d.URL, &http.Client{}, log)
+				log.WithField("url", d.URL).WithField("pk", d.PK).Info("discovery upgraded to dmsg-first registration")
+			}
+			srv.SetDiscoveryClients(upgraded)
 
 			// Shared DHT node reference — set by the DHT goroutine,
 			// read by the HTTP handler. Access is safe because the

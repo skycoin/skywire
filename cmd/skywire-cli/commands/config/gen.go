@@ -203,6 +203,10 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
 	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
 	gHiddenFlags = append(gHiddenFlags, "sn")
+	genConfigCmd.Flags().BoolVar(&dmsgDiscConfig, "dmsgdisc", false, "generate config for dmsg-discovery service")
+	gHiddenFlags = append(gHiddenFlags, "dmsgdisc")
+	genConfigCmd.Flags().BoolVar(&dmsgSrvConfig, "dmsgsrv", false, "generate config for dmsg-server service")
+	gHiddenFlags = append(gHiddenFlags, "dmsgsrv")
 	genConfigCmd.Flags().BoolVar(&enableCalculateRoutes, "calculate-routes", scriptExecBool("${CALCULATEROUTES:-false}"), "enable local route calculation")
 	gHiddenFlags = append(gHiddenFlags, "calculate-routes")
 
@@ -891,24 +895,42 @@ func configureServices(log *logging.Logger) {
 	}
 }
 
+// serviceProjectionJQ returns the JQ filter to project the generated
+// visor config into a service-specific config shape. Returns empty
+// string when no projection flag is set, so writeConfigOutput emits
+// the regular visor config. The projections deliberately mirror the
+// existing fields the target service already accepts — they don't
+// invent new schema, only rearrange the visor config's keys.
+//
+// Mutually-exclusive flags: only the FIRST set flag wins, in
+// precedence order sn → dmsgsrv → dmsgdisc. The CLI rejects multiple
+// flags upstream of this helper, but the precedence here keeps
+// behavior deterministic if that check is ever bypassed.
+func serviceProjectionJQ() string {
+	switch {
+	case snConfig:
+		return "{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: (.transport.discovery_dmsg // .transport.discovery), log_level: .log_level}"
+	case dmsgSrvConfig:
+		// Project to a dmsg-server config. Keys map onto
+		// pkg/dmsg/dmsgserver.Config exactly. The discoveries[] list
+		// is synthesized from the visor's dmsg.discovery /
+		// dmsg.discovery_dmsg pair so a single config command can
+		// produce a dmsg-server config that registers with the same
+		// discovery the visor uses.
+		return "{public_key: .pk, secret_key: .sk, discoveries: [{url: .dmsg.discovery, dmsg_url: .dmsg.discovery_dmsg, advertised_address: \"\"}], local_address: \":8081\", health_endpoint_address: \":8082\", log_level: .log_level, max_sessions: 2048}"
+	case dmsgDiscConfig:
+		// Project to a dmsg-discovery config. dmsg-discovery has no
+		// JSON config file today (CLI flags only), but emitting a
+		// JSON-shaped config makes it scriptable: tooling can read
+		// {public_key, secret_key, addr, dmsg_servers} and pass the
+		// fields to the dmsg-discovery binary as flags.
+		return "{public_key: .pk, secret_key: .sk, addr: \":9090\", dmsg_port: 80, dmsg_servers: .dmsg.servers, log_level: .log_level}"
+	}
+	return ""
+}
+
 // configureDMSG sets up the DMSG configuration on conf, preserving protocol
 // from a previous config if regenerating.
-// serviceDmsgServerEntries converts DmsgServerEntry to []*disc.Entry
-// for use in the visor's DMSG config.
-func serviceDmsgServerEntries() []*disc.Entry {
-	var entries []*disc.Entry
-	for _, s := range services.DmsgServers { //nolint:gocritic
-		var pk cipher.PubKey
-		if err := pk.UnmarshalText([]byte(s.Static)); err != nil {
-			continue
-		}
-		entries = append(entries, &disc.Entry{
-			Static: pk,
-			Server: &disc.Server{Address: s.Server.Address},
-		})
-	}
-	return entries
-}
 
 func configureDMSG() {
 	conf.Dmsg = &dmsgc.DmsgConfig{
@@ -1075,7 +1097,7 @@ func configureLauncher(log *logging.Logger) {
 		// Prefer unified services config; fall back to legacy dmsgHTTPServersList
 		if services.HasDmsgEndpoints() {
 			// Unified config: DMSG fields from services-config.json
-			conf.Dmsg.Servers = serviceDmsgServerEntries()
+			conf.Dmsg.Servers = deployment.DmsgServerEntriesToDisc(services.DmsgServers)
 
 			if isDmsgHTTP {
 				conf.Dmsg.Discovery = services.DmsgDiscoveryDmsg
@@ -1462,10 +1484,10 @@ func writeConfigOutput(log *logging.Logger) {
 		if err != nil {
 			log.WithError(err).Fatal("Failed to marshal config to indented JSON")
 		}
-		if snConfig {
-			jsonData, err = script.Echo(string(jsonData)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: (.transport.discovery_dmsg // .transport.discovery), log_level: .log_level}").Bytes()
+		if filter := serviceProjectionJQ(); filter != "" {
+			jsonData, err = script.Echo(string(jsonData)).JQ(filter).Bytes()
 			if err != nil {
-				log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+				log.Fatalf("Failed to convert config to service config format: %v", err)
 			}
 			// Re-indent for readable file output
 			var data any
@@ -1486,14 +1508,14 @@ func writeConfigOutput(log *logging.Logger) {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to marshal config to indented JSON")
 	}
-	if snConfig {
-		j, err = script.Echo(string(j)).JQ("{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: (.transport.discovery_dmsg // .transport.discovery), log_level: .log_level}").Bytes()
+	if filter := serviceProjectionJQ(); filter != "" {
+		j, err = script.Echo(string(j)).JQ(filter).Bytes()
 		if err != nil {
-			log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+			log.Fatalf("Failed to convert config to service config format: %v", err)
 		}
 		var data any
 		if err = json.Unmarshal(j, &data); err != nil {
-			log.Fatalf("Failed to convert config to setup-node config format: %v", err)
+			log.Fatalf("Failed to convert config to service config format: %v", err)
 		}
 		j, err = json.MarshalIndent(data, "", "    ")
 		if err != nil {
