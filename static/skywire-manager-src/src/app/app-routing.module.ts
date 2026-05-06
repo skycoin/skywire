@@ -14,7 +14,10 @@ import { SkychatComponent } from './components/pages/node/skychat/skychat.compon
 import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.component';
 import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
+import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
+import { VpnComponent } from './components/pages/node/vpn/vpn.component';
+import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
@@ -133,9 +136,14 @@ const routes: Routes = [
             path: 'resources',
             component: NodeResourcesComponent
           },
+          // Skychat / VPN / Skysocks moved into the Apps tab as
+          // sub-tabs (the per-visor tab row was overflowing).
+          // Redirect old top-level URLs to the Apps tab — the
+          // operator picks the sub-tab from there.
           {
             path: 'chat',
-            component: SkychatComponent
+            redirectTo: 'apps',
+            pathMatch: 'full'
           },
           {
             path: 'bandwidth',
@@ -150,16 +158,33 @@ const routes: Routes = [
             component: TerminalComponent
           },
           {
+            path: 'wallet',
+            component: WalletComponent
+          },
+          {
             path: 'web-proxy',
             component: WebProxyComponent
+          },
+          {
+            path: 'vpn-tab',
+            redirectTo: 'apps',
+            pathMatch: 'full'
+          },
+          {
+            path: 'skysocks',
+            redirectTo: 'apps',
+            pathMatch: 'full'
           },
           {
             path: 'logs',
             component: LogsComponent
           },
+          // DMSG settings is now a collapsible section on the
+          // Info tab (was a separate top-level tab). Redirect.
           {
             path: 'dmsg',
-            component: DmsgSettingsComponent
+            redirectTo: 'info',
+            pathMatch: 'full'
           },
           {
             path: 'transports',

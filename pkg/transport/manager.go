@@ -126,6 +126,11 @@ type Manager struct {
 	// skynetFwdHandler handles skynet forward packets (route ID 0).
 	skynetFwdHandler   func(p routing.Packet, mt *ManagedTransport)
 	skynetFwdHandlerMu sync.RWMutex
+	// appDirectHandler handles direct skywire-network app dial packets
+	// (route ID 0). Set by the visor at init when it brings up its
+	// AppDirect VStreamMux.
+	appDirectHandler   func(p routing.Packet, mt *ManagedTransport)
+	appDirectHandlerMu sync.RWMutex
 }
 
 // NewManager creates a Manager with the provided configuration and transport factories.
@@ -457,6 +462,20 @@ func (tm *Manager) SetSkynetForwardHandler(h func(p routing.Packet, mt *ManagedT
 	tm.mx.RUnlock()
 }
 
+// SetAppDirectHandler sets the handler for direct skywire-network app dial
+// packets (route ID 0). Used by the visor to deliver inbound direct-dial
+// streams to the per-app server-side accept loop without route setup.
+func (tm *Manager) SetAppDirectHandler(h func(p routing.Packet, mt *ManagedTransport)) {
+	tm.appDirectHandlerMu.Lock()
+	defer tm.appDirectHandlerMu.Unlock()
+	tm.appDirectHandler = h
+	tm.mx.RLock()
+	for _, mt := range tm.tps {
+		mt.appDirectHandler = h
+	}
+	tm.mx.RUnlock()
+}
+
 // SetSetupRPCHandler sets the handler for RSN RPC relay packets (route ID 0).
 func (tm *Manager) SetSetupRPCHandler(h func(p routing.Packet, mt *ManagedTransport)) {
 	tm.setupRPCHandlerMu.Lock()
@@ -727,6 +746,9 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 		tm.skynetFwdHandlerMu.RLock()
 		mTp.skynetFwdHandler = tm.skynetFwdHandler
 		tm.skynetFwdHandlerMu.RUnlock()
+		tm.appDirectHandlerMu.RLock()
+		mTp.appDirectHandler = tm.appDirectHandler
+		tm.appDirectHandlerMu.RUnlock()
 
 		go func() {
 			mTp.Serve(tm.readCh)
@@ -950,6 +972,9 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.skynetFwdHandlerMu.RLock()
 	mTp.skynetFwdHandler = tm.skynetFwdHandler
 	tm.skynetFwdHandlerMu.RUnlock()
+	tm.appDirectHandlerMu.RLock()
+	mTp.appDirectHandler = tm.appDirectHandler
+	tm.appDirectHandlerMu.RUnlock()
 
 	tm.Logger.Debugf("Dialing transport to %v via %v", mTp.Remote(), mTp.client.Type())
 	errCh := make(chan error)

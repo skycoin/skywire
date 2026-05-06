@@ -3,6 +3,7 @@
     "save": "Save",
     "cancel": "Cancel",
     "loading": "Loading…",
+    "remove": "Remove",
     "downloaded": "Downloaded",
     "uploaded": "Uploaded",
     "loading-error": "There was an error getting the data. Retrying...",
@@ -141,6 +142,9 @@
       "node-info": {
         "title": "Visor",
         "title-local": "Local Visor",
+        "network-section": "Network",
+        "system-section": "System",
+        "dmsg-section": "DMSG",
         "label": "Label:",
         "public-key": "Public key:",
         "symmetic-nat": "Symmetic NAT:",
@@ -227,6 +231,20 @@
         "save": "Save",
         "restart-hint": "Visor must be restarted for changes to take effect."
       },
+      "dmsg-settings": {
+        "title": "DMSG Sessions"
+      },
+      "router-settings": {
+        "title": "Router Settings",
+        "force-local-routes": "Force local route calculation",
+        "force-local-routes-hint": "Skip the route-finder service; calculate routes locally from cached transport data. Same as 'cli proxy start --local-route'.",
+        "existing-tp-only": "Use existing transports only",
+        "existing-tp-only-hint": "Don't create new transports when dialing routes; only use what's already established. Same as 'cli proxy start --existing-tp'.",
+        "mux-routes": "Mux routes (default)",
+        "mux-routes-hint": "Parallel routes per dial. 0 = unlimited (every distinct path), 1 = disabled, 2+ = N routes. Same as 'cli proxy start --mux N'.",
+        "min-hops": "Minimum hops",
+        "min-hops-hint": "Minimum number of hops on routes. 1 = no minimum (allow direct). Same as 'cli proxy start --min-hops N'."
+      },
       "tpviz": {
         "title": "Network Visualizer",
         "open": "Open Transport Visualizer"
@@ -245,9 +263,8 @@
       "web-proxy": "Web Proxy",
       "resources": "Resources",
       "terminal": "Terminal",
-      "logs": "Logs",
-      "chat": "Skychat",
-      "dmsg": "DMSG"
+      "wallet": "Wallet",
+      "logs": "Logs"
     },
     "error-load": "An error occurred while refreshing the data. Retrying..."
   },
@@ -411,6 +428,128 @@
   "terminal": {
     "help": "Live shell on the visor (dmsgpty). Ctrl+D or type \"exit\" to close.",
     "open-fullscreen": "Open in new window"
+  },
+
+  "app-settings": {
+    "title": "App Settings",
+    "args": "Args",
+    "show-help": "Show help",
+    "help-loading": "Loading help…",
+    "env": "Environment",
+    "env-add": "Add row",
+    "launcher-mode": "Launcher mode",
+    "mode-default": "Default",
+    "mode-internal": "Internal",
+    "mode-external": "External",
+    "internal-unavailable": "Internal mode is not available for this app — only the seven shipped in-process apps (skysocks, skysocks-client, vpn-client, vpn-server, skychat, skynet, skynet-client) can run inside the visor process. Embedded subcommands like skycoin-daemon / skycoin-web run as external children regardless.",
+    "autostart": "Autostart on visor boot",
+    "saved": "Settings saved (restart the app for changes to take effect)",
+    "last-error": "Last error"
+  },
+
+  "skysocks-tab": {
+    "server": {
+      "title": "Skysocks Server",
+      "help": "Run this visor as a SOCKS5 exit node. Other visors can route through skysocks-client.",
+      "not-configured": "The skysocks app is not configured on this visor."
+    },
+    "clients": {
+      "title": "Skysocks Clients",
+      "not-configured": "No skysocks-client app entries on this visor.",
+      "add": "Add Client Instance",
+      "multi-instance-hint": "Adding an instance creates a new entry in the visor's launcher config; configure --srv (remote PK) in the settings dialog that opens automatically. Removing an instance is currently a config-edit operation (Info → Config)."
+    },
+    "status": {
+      "stopped": "Stopped",
+      "running": "Running",
+      "errored": "Errored",
+      "starting": "Starting…",
+      "not-configured": "Not configured",
+      "unknown": "Unknown"
+    },
+    "start": "Start",
+    "stop": "Stop",
+    "settings": "Settings",
+    "started": "Skysocks app started",
+    "stopped": "Skysocks app stopped",
+    "start-error": "Failed to start app",
+    "stop-error": "Failed to stop app",
+    "added": "Instance added — configure remote PK in the settings dialog and then Start",
+    "add-error": "Failed to add instance (name may be in use)"
+  },
+
+  "vpn-tab": {
+    "client": {
+      "title": "VPN Client",
+      "help": "Connect this visor as a VPN client to a remote vpn-server. The 'Full UI' button opens the standalone server picker.",
+      "not-configured": "The vpn-client app is not configured on this visor."
+    },
+    "server": {
+      "title": "VPN Server",
+      "help": "Run this visor as a VPN exit node. Other visors with vpn-client can dial in.",
+      "not-configured": "The vpn-server app is not configured on this visor."
+    },
+    "status": {
+      "stopped": "Stopped",
+      "running": "Running",
+      "errored": "Errored",
+      "starting": "Starting…",
+      "not-configured": "Not configured",
+      "unknown": "Unknown"
+    },
+    "start": "Start",
+    "stop": "Stop",
+    "settings": "Settings",
+    "full-ui": "Full UI",
+    "started": "VPN app started",
+    "stopped": "VPN app stopped",
+    "start-error": "Failed to start app",
+    "stop-error": "Failed to stop app"
+  },
+
+  "wallet": {
+    "help": "Skycoin thin-client wallet served by the visor's `skywire skycoin web` app at",
+    "open-fullscreen": "Open in new window",
+    "not-configured": "Skycoin wallet app not configured",
+    "not-configured-help": "Add the `skycoin-web` app entry on this visor (Apps tab → add) and start it to access the wallet here. Default-off in fresh configs because the app accesses the operator's wallet directory and shouldn't run unless you've reviewed where it's pointed.",
+    "not-running": "Skycoin wallet app not running",
+    "not-running-help": "The `skycoin-web` app is configured but not currently running. Start it from the Apps tab. The wallet will appear here automatically once it's up.",
+    "daemons": {
+      "title": "Skycoin Daemons",
+      "empty": "No skycoin-daemon instances configured. Each fiberchain you want to sync needs its own daemon instance.",
+      "hint": "Each instance runs `skywire skycoin daemon` with its own FIBER_TOML / data dir. Configure those args in the settings dialog before starting.",
+      "add": "Add Daemon Instance",
+      "start": "Start",
+      "stop": "Stop",
+      "settings": "Settings",
+      "status": {
+        "stopped": "Stopped",
+        "running": "Running",
+        "errored": "Errored",
+        "starting": "Starting…",
+        "unknown": "Unknown"
+      },
+      "started": "Daemon started",
+      "stopped": "Daemon stopped",
+      "start-error": "Failed to start daemon",
+      "stop-error": "Failed to stop daemon",
+      "added": "Daemon instance added — set FIBER_TOML / data dir in settings, then Start",
+      "add-error": "Failed to add daemon instance (name may be in use)",
+      "use-local": "Use local daemons",
+      "use-local-tooltip": "Replace the wallet's --node-url args with the http endpoints of the running skycoin-daemon* instances on this visor. Restart the wallet (Stop, then Start) to pick up the new node list.",
+      "local-applied": "Wallet args updated with local daemon URLs — restart the wallet to apply",
+      "no-running": "No running skycoin-daemon* instances on this visor",
+      "settings-saved": "Daemon settings saved (restart the daemon to pick up the new env)",
+      "settings": {
+        "title": "Daemon Settings",
+        "fiber-toml": "FIBER_TOML",
+        "fiber-toml-hint": "Path to a fiber.toml; switches the daemon from vanilla skycoin to a fibercoin chain. Leave empty for the binary's compile-time defaults (skycoin).",
+        "port": "--port",
+        "data-dir": "--data-dir",
+        "data-dir-hint": "Daemon data directory. Empty leaves the launcher's default in place.",
+        "api-sets": "--enable-gui-api-sets"
+      }
+    }
   },
 
   "web-proxy": {
@@ -707,6 +846,12 @@
   },
 
   "apps": {
+    "tabs": {
+      "list": "All Apps",
+      "chat": "Skychat",
+      "vpn": "VPN",
+      "skysocks": "Skysocks"
+    },
     "log": {
       "title": "Log",
       "empty": "There are no log messages for the selected time range.",

@@ -516,6 +516,27 @@ func (mc *mockRPCClient) DoCustomSetting(appName string, _ map[string]any) error
 	})
 }
 
+// DeleteApp implements API.
+func (*mockRPCClient) DeleteApp(string) error { return nil }
+
+// SetAppEnv implements API.
+func (*mockRPCClient) SetAppEnv(string, string, string) error { return nil }
+
+// SetAppArgs implements API.
+func (*mockRPCClient) SetAppArgs(string, []string) error { return nil }
+
+// SetAppEnvFull implements API.
+func (*mockRPCClient) SetAppEnvFull(string, []string) error { return nil }
+
+// SetAppLauncherMode implements API.
+func (*mockRPCClient) SetAppLauncherMode(string, string) error { return nil }
+
+// AppHelp implements API.
+func (*mockRPCClient) AppHelp(string) (string, error) { return "", nil }
+
+// SetAppEnvBatch implements API.
+func (*mockRPCClient) SetAppEnvBatch(string, map[string]string) error { return nil }
+
 // LogsSince implements API. Manually set (*mockRPPClient).logS before calling this function
 func (mc *mockRPCClient) LogsSince(timestamp time.Time, _ string) ([]string, error) {
 	return mc.logS.LogsSince(timestamp)
@@ -709,6 +730,9 @@ func (mc *mockRPCClient) SetMuxRoutes(_ int) error {
 func (mc *mockRPCClient) SetMuxMode(_ string) error {
 	return nil
 }
+
+func (*mockRPCClient) GetRouterSettings() (RouterSettings, error) { return RouterSettings{}, nil }
+func (*mockRPCClient) SetRouterSettings(RouterSettings) error     { return nil }
 
 func (mc *mockRPCClient) ActiveRoutes() ([]AppRouteStatus, error) {
 	return nil, nil

@@ -1,101 +1,138 @@
 @if (node) {
   <div class="font-smaller d-flex flex-column mt-4.5">
-    <!-- Basic info section. -->
-    <div class="d-flex flex-column">
-      <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
-        <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
-          <span class="text-with-small-right-margin">{{ node.label }}</span>
-          <mat-icon class="edit-icon" [inline]="true">edit</mat-icon>
-        </span>
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
-        <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }} </span>
-        {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
-      </span>
-      @if (!node.isSymmeticNat) {
+    <!-- Three logical cards (Local Visor, Network, DMSG) in a
+         responsive grid. Local Visor absorbs identity + system
+         info; Network is the public-IP / NAT / ping triplet; DMSG
+         is split out so the per-server list has room of its own. -->
+    <div class="info-cards">
+      <!-- Local Visor — title, label, PK, time online, version,
+           OS/arch. Spans both columns at the 2-col breakpoint
+           because the PK + version strings benefit from the room. -->
+      <div class="info-card identity-card">
+        <span class="section-title">{{ (node.isHypervisor ? 'node.details.node-info.title-local' : 'node.details.node-info.title') | translate }}</span>
         <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.public-ip' | translate }} </span>
-          <app-copy-to-clipboard-text text="{{ node.publicIp }}"></app-copy-to-clipboard-text>
+          <span class="title">{{ 'node.details.node-info.label' | translate }} </span>
+          <span class="highlight-internal-icon" (click)="showEditLabelDialog()">
+            <span class="text-with-small-right-margin">{{ node.label }}</span>
+            <mat-icon class="edit-icon" [inline]="true">edit</mat-icon>
+          </span>
         </span>
-      }
-      @if (node.ip) {
         <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.ip' | translate }} </span>
-          <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
+          <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
+          <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
         </span>
-      }
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
-        @if (node.dmsgServers && node.dmsgServers.length > 0) {
-          {{ node.dmsgServers.length }} {{ 'node.details.node-info.connected' | translate }}
-        }
-        @if (!node.dmsgServers || node.dmsgServers.length === 0) {
-          {{ 'node.details.node-info.no-dmsg-server' | translate }}
-        }
-      </span>
-      @if (node.dmsgServers && node.dmsgServers.length > 0) {
-        <div class="dmsg-servers-list">
-          @for (server of node.dmsgServers; track server) {
-            <div class="dmsg-server-item">
-              <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
-              @if (server.latency > 0) {
-                <span class="dmsg-latency"
-              [ngClass]="{
-                'latency-high': server.latency > 300000000,
-                'latency-very-high': server.latency > 800000000
-              }">
-                  {{ formatLatency(server.latency) }}
-                </span>
-              }
-            </div>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
+          {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
+          @if (timeOnline.totalMinutes > 60) {
+            <mat-icon
+              [inline]="true"
+              [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: timeOnline.totalMinutes}"
+              >
+              info
+            </mat-icon>
           }
-        </div>
-      }
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
-        {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
-        {{ node.version ? node.version : ('common.unknown' | translate) }}
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
-        {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
-        {{ node.os ? node.os : ('common.unknown' | translate) }}
-      </span>
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
-        {{ node.arch ? node.arch : ('common.unknown' | translate) }}
-      </span>
-      @if (node.skybianBuildVersion) {
-        <span class="info-line">
-          <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
-          {{ node.skybianBuildVersion }}
         </span>
-      }
-      <span class="info-line">
-        <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
-        {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
-        @if (timeOnline.totalMinutes > 60) {
-          <mat-icon
-            [inline]="true"
-            [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: timeOnline.totalMinutes}"
-            >
-            info
-          </mat-icon>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.node-version' | translate }} </span>
+          {{ node.version ? node.version : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.config-version' | translate }} </span>
+          {{ node.configVersion ? node.configVersion : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.os' | translate }} </span>
+          {{ node.os ? node.os : ('common.unknown' | translate) }}
+        </span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.arch' | translate }} </span>
+          {{ node.arch ? node.arch : ('common.unknown' | translate) }}
+        </span>
+        @if (node.skybianBuildVersion) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.skybian-version' | translate }} </span>
+            {{ node.skybianBuildVersion }}
+          </span>
         }
-      </span>
+      </div>
+
+      <!-- Network — NAT/IP/ping. Compact card; sits next to DMSG
+           on wide layouts. -->
+      <div class="info-card network-card">
+        <span class="section-title">{{ 'node.details.node-info.network-section' | translate }}</span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }} </span>
+          {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
+        </span>
+        @if (!node.isSymmeticNat) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.public-ip' | translate }} </span>
+            <app-copy-to-clipboard-text text="{{ node.publicIp }}"></app-copy-to-clipboard-text>
+          </span>
+        }
+        @if (node.ip) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.ip' | translate }} </span>
+            <app-copy-to-clipboard-text text="{{ node.ip }}"></app-copy-to-clipboard-text>
+          </span>
+        }
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
+          {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+        </span>
+      </div>
+
+      <!-- DMSG — server count + per-server list. The list is the
+           bulky element on a healthy visor (8+ servers); giving it
+           its own card keeps the Network card readable. -->
+      <div class="info-card dmsg-card">
+        <span class="section-title">{{ 'node.details.node-info.dmsg-section' | translate }}</span>
+        <span class="info-line">
+          <span class="title">{{ 'node.details.node-info.dmsg-servers' | translate }} </span>
+          @if (node.dmsgServers && node.dmsgServers.length > 0) {
+            {{ node.dmsgServers.length }} {{ 'node.details.node-info.connected' | translate }}
+          }
+          @if (!node.dmsgServers || node.dmsgServers.length === 0) {
+            {{ 'node.details.node-info.no-dmsg-server' | translate }}
+          }
+        </span>
+        @if (node.dmsgServers && node.dmsgServers.length > 0) {
+          <div class="dmsg-servers-list">
+            @for (server of node.dmsgServers; track server) {
+              <div class="dmsg-server-item">
+                <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
+                @if (server.latency > 0) {
+                  <span class="dmsg-latency"
+                [ngClass]="{
+                  'latency-high': server.latency > 300000000,
+                  'latency-very-high': server.latency > 800000000
+                }">
+                    {{ formatLatency(server.latency) }}
+                  </span>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
     </div>
+    <!-- DMSG sessions section (collapsible). Used to be a top-
+         level tab; folded into Info because the data is closely
+         related to the DMSG card above and the tab row was
+         overflowing. The standalone /dmsg route still works as
+         a redirect for old bookmarks. -->
+    <div class="separator"></div>
+    <div class="d-flex flex-column">
+      <span class="section-title collapsible-header" (click)="showDmsgSettings = !showDmsgSettings" style="cursor: pointer;">
+        <mat-icon [inline]="true">{{ showDmsgSettings ? 'expand_more' : 'chevron_right' }}</mat-icon>
+        {{ 'node.details.dmsg-settings.title' | translate }}
+      </span>
+      @if (showDmsgSettings) {
+        <app-dmsg-settings></app-dmsg-settings>
+      }
+    </div>
+
     <!-- Ports section (collapsible). -->
   @if (ports.length > 0) {
     <div class="separator"></div>
@@ -106,15 +143,68 @@
         <span class="count-badge">({{ ports.length }})</span>
       </span>
       @if (showPorts) {
+        <div class="info-grid">
         @for (port of ports; track port.name) {
           <span class="info-line">
             <span class="title">{{ port.name }}: </span>
             {{ port.value }}
           </span>
         }
+        </div>
       }
     </div>
   }
+  <!-- Router Settings section (collapsible). Visor-wide dial-time
+       knobs — UI parity with 'cli proxy start --local-route' etc. -->
+  <div class="separator"></div>
+  <div class="d-flex flex-column">
+    <span class="section-title collapsible-header" (click)="onRouterSettingsToggle()" style="cursor: pointer;">
+      <mat-icon [inline]="true">{{ showRouterSettings ? 'expand_more' : 'chevron_right' }}</mat-icon>
+      {{ 'node.details.router-settings.title' | translate }}
+    </span>
+    @if (showRouterSettings) {
+      @if (!routerSettingsLoaded) {
+        <div class="dim small" style="margin-top: 6px;">{{ 'common.loading' | translate }}</div>
+      }
+      @if (routerSettingsLoaded) {
+        <div class="router-settings">
+          <label class="rs-row">
+            <input type="checkbox" [(ngModel)]="routerSettings.force_local_routes">
+            <span class="rs-label">{{ 'node.details.router-settings.force-local-routes' | translate }}</span>
+            <span class="rs-hint dim small">{{ 'node.details.router-settings.force-local-routes-hint' | translate }}</span>
+          </label>
+          <label class="rs-row">
+            <input type="checkbox" [(ngModel)]="routerSettings.existing_tp_only">
+            <span class="rs-label">{{ 'node.details.router-settings.existing-tp-only' | translate }}</span>
+            <span class="rs-hint dim small">{{ 'node.details.router-settings.existing-tp-only-hint' | translate }}</span>
+          </label>
+          <label class="rs-row">
+            <span class="rs-label">{{ 'node.details.router-settings.mux-routes' | translate }}</span>
+            <input type="number" min="0" [(ngModel)]="routerSettings.mux_routes" class="rs-num">
+            <span class="rs-hint dim small">{{ 'node.details.router-settings.mux-routes-hint' | translate }}</span>
+          </label>
+          <label class="rs-row">
+            <span class="rs-label">{{ 'node.details.router-settings.min-hops' | translate }}</span>
+            <input type="number" min="0" [(ngModel)]="routerSettings.min_hops" class="rs-num">
+            <span class="rs-hint dim small">{{ 'node.details.router-settings.min-hops-hint' | translate }}</span>
+          </label>
+          <div class="config-actions">
+            <button mat-raised-button color="primary" (click)="saveRouterSettings()" [disabled]="routerSettingsSaving">
+              <mat-icon [inline]="true">save</mat-icon>
+              {{ routerSettingsSaving ? ('common.loading' | translate) : ('common.save' | translate) }}
+            </button>
+            @if (routerSettingsSaveMsg) {
+              <span class="config-save-msg">{{ routerSettingsSaveMsg }}</span>
+            }
+            @if (routerSettingsSaveErr) {
+              <span class="config-error">{{ routerSettingsSaveErr }}</span>
+            }
+          </div>
+        </div>
+      }
+    }
+  </div>
+
   <!-- Runtime config section (collapsible, mirrors Ports pattern). -->
   <div class="separator"></div>
   <div class="d-flex flex-column">

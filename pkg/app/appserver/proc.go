@@ -100,6 +100,26 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 		cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) //nolint:gosec
 		cmd.Env = append(os.Environ(), envs...)
 		cmd.Dir = conf.ProcWorkDir
+		// Drop privileges before exec when AppConfig set User/Group.
+		// applyProcCredentials is POSIX-only (the windows build returns
+		// a hard error so a misconfiguration surfaces loudly). When
+		// the lookup fails or the visor lacks CAP_SETUID, we leave the
+		// cmd ready-to-run and let exec.Start surface the kernel's
+		// EPERM at startup; the resulting log line points at proc.go.
+		if conf.ProcUser != "" {
+			if cerr := applyProcCredentials(cmd, conf.ProcUser, conf.ProcGroup); cerr != nil {
+				mLog.PackageLogger(moduleName).WithError(cerr).
+					Warnf("Could not set credentials for %s; spawning under the visor's UID instead", conf.AppName)
+			}
+		}
+	} else if conf.ProcUser != "" || conf.ProcGroup != "" {
+		// In-process apps can't drop privileges per-goroutine — the
+		// runtime moves them between OS threads, and setuid is
+		// process-wide anyway. Surface the misconfiguration so the
+		// operator knows the User/Group they set is being ignored.
+		mLog.PackageLogger(moduleName).
+			Warnf("AppConfig.User/Group ignored for in-process app %q; switch to external launcher mode if you need the privilege drop",
+				conf.AppName)
 	}
 
 	var appLogDB appcommon.LogStore

@@ -73,6 +73,7 @@ type API interface {
 	StartApp(appName string) error
 	StartAppWithMode(appName, launcherMode string) error
 	AddApp(appName, binaryName string) error
+	DeleteApp(appName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
 	DeregisterApp(procKey appcommon.ProcKey) error
 	StopApp(appName string) error
@@ -89,6 +90,12 @@ type API interface {
 	SetAppNetworkInterface(appName string, netifc string) error
 	SetAppDNS(appName string, dnsaddr string) error
 	DoCustomSetting(appName string, customSetting map[string]any) error
+	SetAppArgs(appName string, args []string) error
+	SetAppEnv(appName, key, value string) error
+	SetAppEnvBatch(appName string, env map[string]string) error
+	SetAppEnvFull(appName string, env []string) error
+	SetAppLauncherMode(appName, mode string) error
+	AppHelp(appName string) (string, error)
 	LogsSince(timestamp time.Time, appName string) ([]string, error)
 	GetAppStats(appName string) (appserver.AppStats, error)
 	GetAppError(appName string) (string, error)
@@ -110,6 +117,8 @@ type API interface {
 	SetExistingTPOnly(enabled bool) error
 	SetForceLocalRoutes(enabled bool) error
 	SetMuxRoutes(n int) error
+	GetRouterSettings() (RouterSettings, error)
+	SetRouterSettings(s RouterSettings) error
 	SetMuxMode(mode string) error
 
 	//transports
