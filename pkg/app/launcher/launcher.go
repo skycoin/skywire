@@ -188,6 +188,17 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 			// App is running but doesn't use connections (e.g. skynet server)
 			state.Status = appserver.AppStatusRunning
 			state.DetailedStatus = procStatus
+		} else if proc.IsRunning() && isRawProcessApp(ac) {
+			// Raw external apps (skycoin-daemon, skycoin-web — cobra
+			// subcommands of the skywire binary that don't speak the
+			// appserver IPC) never call SetDetailedStatus("Running")
+			// and never get a ConnectionsSummary, so the two checks
+			// above can't promote them out of "Starting". Trust the
+			// IsRunning bit (set by the proc launcher when the child
+			// successfully exec'd and Wait() hasn't returned) for
+			// these — same semantics as systemd's Type=simple.
+			state.Status = appserver.AppStatusRunning
+			state.DetailedStatus = appserver.AppDetailedStatusRunning
 		} else if savedError != "" {
 			// Proc exists but not running — preserve the saved error
 			state.DetailedStatus = savedError
@@ -197,8 +208,13 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 		}
 		switch procStatus {
 		case appserver.AppDetailedStatusVPNConnecting, appserver.AppDetailedStatusStarting, appserver.AppDetailedStatusReconnecting:
-			state.Status = appserver.AppStatusStarting
-			state.DetailedStatus = procStatus
+			// Don't downgrade raw-process apps that we just promoted
+			// to Running above — IsRunning() is the source of truth
+			// for them since they never call SetDetailedStatus.
+			if !(proc.IsRunning() && isRawProcessApp(ac)) {
+				state.Status = appserver.AppStatusStarting
+				state.DetailedStatus = procStatus
+			}
 		}
 	}
 	return state, true
@@ -397,6 +413,39 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 
 	err := ensureDir(&procConf.ProcWorkDir)
 	return procConf, err
+}
+
+// isRawProcessApp reports whether the named app is a "raw" external
+// process — one that doesn't speak the visor's appserver IPC, never
+// connects an RPC gateway, and therefore never calls
+// SetDetailedStatus("Running") or reports a ConnectionsSummary.
+//
+// Concretely this covers cobra subcommands of the skywire binary
+// like 'skywire skycoin daemon' and 'skywire skycoin web' — they run
+// as ordinary child processes with their own log/output streams; the
+// visor knows they're alive only because Wait() hasn't returned.
+//
+// In-process apps (registered via launcher.RegisterApp by name or
+// binary) AND in-tree external apps invoked via 'skywire app <name>'
+// both DO speak the IPC and are excluded.
+func isRawProcessApp(ac appserver.AppConfig) bool {
+	// In-process registry hit by name → not raw.
+	if _, found := GetApp(ac.Name); found {
+		return false
+	}
+	// Multi-instance: registry hit by binary → not raw
+	// (skysocks-client-2 → "skysocks-client" func).
+	if ac.Binary != "" {
+		if _, found := GetApp(ac.Binary); found {
+			return false
+		}
+	}
+	// 'skywire app <name>' wrapper — also speaks IPC.
+	if len(ac.Args) > 0 && ac.Args[0] == "app" {
+		return false
+	}
+	// Anything else (cobra subcommand, third-party binary) is raw.
+	return true
 }
 
 func ensureDir(path *string) error {
