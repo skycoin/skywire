@@ -911,13 +911,17 @@ func serviceProjectionJQ() string {
 	case snConfig:
 		return "{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, transport_discovery: (.transport.discovery_dmsg // .transport.discovery), log_level: .log_level}"
 	case dmsgSrvConfig:
-		// Project to a dmsg-server config. Keys map onto
-		// pkg/dmsg/dmsgserver.Config exactly. The discoveries[] list
-		// is synthesized from the visor's dmsg.discovery /
-		// dmsg.discovery_dmsg pair so a single config command can
-		// produce a dmsg-server config that registers with the same
-		// discovery the visor uses.
-		return "{public_key: .pk, secret_key: .sk, discoveries: [{url: .dmsg.discovery, dmsg_url: .dmsg.discovery_dmsg, advertised_address: \"\"}], local_address: \":8081\", health_endpoint_address: \":8082\", log_level: .log_level, max_sessions: 2048}"
+		// Project to a dmsg-server config. The output `dmsg` block
+		// mirrors the visor's `dmsg` block shape — same fields,
+		// `discovery` / `discovery_dmsg` / `servers` / `sessions_count`
+		// carried straight over. Single-deployment shape (object form)
+		// by default; users with multi-deployment requirements hand-
+		// edit the `dmsg` field into an array of the same per-element
+		// shape. `public_address` lives at the top level (one external
+		// address for the single TCP listener); the per-deployment
+		// override `advertised_address` inside `dmsg[i]` is only set
+		// when the multi-network NAT case requires it.
+		return "{public_key: .pk, secret_key: .sk, dmsg: {discovery: .dmsg.discovery, discovery_dmsg: .dmsg.discovery_dmsg, sessions_count: .dmsg.sessions_count, servers: .dmsg.servers}, public_address: \"\", local_address: \":8081\", health_endpoint_address: \":8082\", log_level: .log_level, max_sessions: 2048}"
 	case dmsgDiscConfig:
 		// Project to a dmsg-discovery config. dmsg-discovery has no
 		// JSON config file today (CLI flags only), but emitting a

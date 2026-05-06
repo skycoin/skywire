@@ -130,12 +130,13 @@ var RootCmd = &cobra.Command{
 			Peers:          peers,
 		}
 
-		// Resolve the configured discoveries. NormalizedDiscoveries
-		// folds the legacy single-discovery fields into a one-element
-		// list so existing config files continue to work unchanged.
-		discoveriesCfg := conf.NormalizedDiscoveries()
-		if len(discoveriesCfg) == 0 {
-			log.Fatal("no dmsg-discoveries configured; set 'discovery' or 'discoveries' in config")
+		// Resolve the configured deployments. NormalizedDeployments
+		// folds the legacy Discovery / DiscoveryDmsg / PublicAddress
+		// fields into a one-element list so existing config files
+		// continue to work unchanged.
+		deployments := conf.NormalizedDeployments()
+		if len(deployments) == 0 {
+			log.Fatal("no dmsg-discoveries configured; set 'discovery' or 'dmsg' in config")
 		}
 
 		// Primary discovery is the first in the list. NewServer takes a
@@ -144,16 +145,20 @@ var RootCmd = &cobra.Command{
 		// once the server's outbound dmsg.Client is up later, the
 		// discovery clients are swapped for dmsgfirst-wrapped versions
 		// so registration prefers DMSG when available.
-		primaryHTTP := disc.NewHTTP(discoveriesCfg[0].URL, &http.Client{}, log)
+		primaryHTTP := disc.NewHTTP(deployments[0].Discovery, &http.Client{}, log)
 		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, primaryHTTP, &srvConf, m)
 		srv.SetLogger(log)
 		srv.SetDHTBootstrap(conf.EnableDHT)
-		// Attach extras (each with its own per-discovery advertised
+		// Attach extras (each with its own per-deployment advertised
 		// address). The primary's advertised address is passed through
-		// the legacy Serve(..., conf.PublicAddress) path below.
-		for i := 1; i < len(discoveriesCfg); i++ {
-			extra := discoveriesCfg[i]
-			srv.AddDiscovery(disc.NewHTTP(extra.URL, &http.Client{}, log), extra.AdvertisedAddress, extra.PK)
+		// the legacy Serve(..., publicAddr) path below.
+		for i := 1; i < len(deployments); i++ {
+			extra := deployments[i]
+			srv.AddDiscovery(
+				disc.NewHTTP(extra.Discovery, &http.Client{}, log),
+				extra.AdvertisedAddress,
+				dmsgserver.PKFromDmsgURL(extra.DiscoveryDmsg),
+			)
 		}
 
 		srvAPI.SetDmsgServer(srv)
@@ -162,11 +167,11 @@ var RootCmd = &cobra.Command{
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
 
-		// The Server's primary discovery uses the first entry's
+		// The Server's primary discovery uses the first deployment's
 		// advertised address as the default (passed through Serve).
 		// AdvertisedAddress on extras overrides per-endpoint inside
 		// EntityCommon's update loop.
-		primaryAdvertised := discoveriesCfg[0].AdvertisedAddress
+		primaryAdvertised := deployments[0].AdvertisedAddress
 		if primaryAdvertised == "" {
 			primaryAdvertised = conf.PublicAddress
 		}
@@ -207,13 +212,33 @@ var RootCmd = &cobra.Command{
 			// peer wound up cached as non-DHT until restart. Mirrors
 			// the BootstrapDmsg helper that every other deployment
 			// service uses (pkg/cmdutil/dmsg_bootstrap.go).
+			// Build the transit set: the union of (a) per-discovery
+			// servers from the config (multi-deployment case where
+			// each discovery has its own disjoint server set), (b) the
+			// embedded deployment keyring (single-deployment fallback),
+			// minus this server itself. Each discovery's `servers` list
+			// expresses which dmsg-servers reach THAT discovery; the
+			// union ensures dmsgC has a session-relayable path to every
+			// configured discovery.
 			servers := []*disc.Entry{serverEntry}
-			for i := range dmsg.Prod.DmsgServers {
-				peer := &dmsg.Prod.DmsgServers[i]
-				if peer.Static == conf.PubKey {
-					continue
+			seenPK := map[cipher.PubKey]struct{}{conf.PubKey: {}}
+			addServer := func(e *disc.Entry) {
+				if e == nil {
+					return
 				}
-				servers = append(servers, peer)
+				if _, ok := seenPK[e.Static]; ok {
+					return
+				}
+				seenPK[e.Static] = struct{}{}
+				servers = append(servers, e)
+			}
+			for _, d := range deployments {
+				for _, e := range d.Servers {
+					addServer(e)
+				}
+			}
+			for i := range dmsg.Prod.DmsgServers {
+				addServer(&dmsg.Prod.DmsgServers[i])
 			}
 			entries := direct.GetAllEntries(cipher.PubKeys{conf.PubKey}, servers)
 			dClient := direct.NewClient(entries, log)
@@ -230,19 +255,20 @@ var RootCmd = &cobra.Command{
 
 			// Upgrade each configured discovery client from plain HTTP
 			// to dmsgfirst — registration then tries DMSG first and
-			// only falls back to HTTP if the dmsg dial fails. Discoveries
-			// without a configured PK can't use DMSG (dmsgfirst.New
-			// needs the discovery's own PK to dial it), so we leave
-			// those as plain HTTP and log it.
-			upgraded := make([]disc.APIClient, len(discoveriesCfg))
-			for i, d := range discoveriesCfg {
-				if d.PK == (cipher.PubKey{}) {
-					upgraded[i] = disc.NewHTTP(d.URL, &http.Client{}, log)
-					log.WithField("url", d.URL).Debug("discovery has no PK; staying on plain HTTP")
+			// only falls back to HTTP if the dmsg dial fails. The PK
+			// is extracted from the deployment's discovery_dmsg URL;
+			// when discovery_dmsg is unset, dmsgfirst can't dial it
+			// over DMSG, so we leave that entry on plain HTTP and log it.
+			upgraded := make([]disc.APIClient, len(deployments))
+			for i, d := range deployments {
+				pk := dmsgserver.PKFromDmsgURL(d.DiscoveryDmsg)
+				if pk == (cipher.PubKey{}) {
+					upgraded[i] = disc.NewHTTP(d.Discovery, &http.Client{}, log)
+					log.WithField("url", d.Discovery).Debug("discovery_dmsg unset; staying on plain HTTP")
 					continue
 				}
-				upgraded[i] = dmsgfirst.New(dmsgC, d.PK, d.URL, &http.Client{}, log)
-				log.WithField("url", d.URL).WithField("pk", d.PK).Info("discovery upgraded to dmsg-first registration")
+				upgraded[i] = dmsgfirst.New(dmsgC, pk, d.Discovery, &http.Client{}, log)
+				log.WithField("url", d.Discovery).WithField("pk", pk).Info("discovery upgraded to dmsg-first registration")
 			}
 			srv.SetDiscoveryClients(upgraded)
 
