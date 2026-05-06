@@ -219,6 +219,19 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 			Accepted: true,
 			IP:       ip,
 		}
+		// Optional geo enrichment: when the client asked for geo and
+		// the server has a lookup function configured, fill the geo
+		// fields from the embedded MaxMind DB (wired by
+		// cmd/dmsg/dmsg-server). Lookup failures (private IP,
+		// unmappable IP, DB error) leave the fields zero — the
+		// client falls back to a local lookup in that case.
+		if req.GeoInfo && ss.entity.geoLookup != nil {
+			country, region, lat, lon := ss.entity.geoLookup(ip)
+			resp.GeoCountry = country
+			resp.GeoRegion = region
+			resp.GeoLat = lat
+			resp.GeoLon = lon
+		}
 		obj, err := MakeSignedStreamResponse(&resp, ss.entity.LocalSK())
 		if err != nil {
 			ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
