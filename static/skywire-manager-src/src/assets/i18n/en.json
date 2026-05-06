@@ -434,7 +434,7 @@
   "app-settings": {
     "title": "App Settings",
     "args": "Args",
-    "show-flags": "Show flags",
+    "show-help": "Show help",
     "help-loading": "Loading help…",
     "env": "Environment",
     "env-add": "Add row",
@@ -442,6 +442,7 @@
     "mode-default": "Default",
     "mode-internal": "Internal",
     "mode-external": "External",
+    "internal-unavailable": "Internal mode is not available for this app — only the seven shipped in-process apps (skysocks, skysocks-client, vpn-client, vpn-server, skychat, skynet, skynet-client) can run inside the visor process. Embedded subcommands like skycoin-daemon / skycoin-web run as external children regardless.",
     "autostart": "Autostart on visor boot",
     "saved": "Settings saved (restart the app for changes to take effect)",
     "last-error": "Last error"

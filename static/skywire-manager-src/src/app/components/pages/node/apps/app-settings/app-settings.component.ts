@@ -58,18 +58,62 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     private snackbarService: SnackbarService,
   ) {}
 
+  // Tracks which app the form is bound to so we can distinguish
+  // "different app entirely" (rebuild form, reset help) from "same
+  // app, fresh poll snapshot" (no-op — would otherwise clobber the
+  // operator's in-progress edits every couple of seconds).
+  private boundAppName = '';
+
+  // Apps whose binary or name is registered via launcher.RegisterApp
+  // (in-process AppFunc). Only these can run in launcher "internal"
+  // mode — skycoin-daemon / skycoin-web are cobra subcommands of
+  // the skywire binary, not in-process functions, so internal mode
+  // isn't available for them. Multi-instance entries match by their
+  // family prefix (skysocks-client-2 → skysocks-client).
+  private static readonly internalCapable = new Set<string>([
+    'skysocks', 'skysocks-client',
+    'vpn-client', 'vpn-server',
+    'skychat',
+    'skynet', 'skynet-client',
+  ]);
+
+  /** True iff the launcher's "internal" mode is meaningful for this
+   *  app — i.e. an in-process RunFunc is registered for it. */
+  get internalModeAvailable(): boolean {
+    if (!this.app) { return false; }
+    const candidates = [this.app.name];
+    const bin = (this.app as any).binary as string | undefined;
+    if (bin) { candidates.push(bin); }
+    for (const c of candidates) {
+      if (AppSettingsComponent.internalCapable.has(c)) { return true; }
+      // Multi-instance: skysocks-client-2 → skysocks-client family.
+      for (const base of AppSettingsComponent.internalCapable) {
+        if (c.startsWith(base + '-')) { return true; }
+      }
+    }
+    return false;
+  }
+
   ngOnInit() {
     this.buildForm();
+    this.boundAppName = this.app?.name || '';
   }
 
   ngOnChanges(changes: SimpleChanges) {
-    if (changes['app'] && this.form) {
-      this.buildForm();
-      // Reset help state when binding to a different app.
-      this.showHelp = false;
-      this.helpText = '';
-      this.helpError = '';
+    if (!changes['app']) { return; }
+    const next = (this.app && this.app.name) || '';
+    if (next === this.boundAppName) {
+      // Same app rebinding from the parent's poll loop. Don't
+      // rebuild the form (would clobber typed edits) and don't
+      // reset help (would collapse the disclosure repeatedly).
+      return;
     }
+    this.boundAppName = next;
+    this.buildForm();
+    // Different app — reset help state.
+    this.showHelp = false;
+    this.helpText = '';
+    this.helpError = '';
   }
 
   ngOnDestroy(): void {

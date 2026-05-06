@@ -19,7 +19,7 @@
              placeholder="--addr :1080 --srv 0123abc...">
       <button type="button" class="show-flags-toggle" (click)="toggleHelp()">
         <mat-icon [inline]="true">{{ showHelp ? 'expand_less' : 'expand_more' }}</mat-icon>
-        {{ 'app-settings.show-flags' | translate }}
+        {{ 'app-settings.show-help' | translate }}
       </button>
       @if (showHelp) {
         @if (helpLoading) {
@@ -59,13 +59,18 @@
           <label class="radio-opt">
             <input type="radio" formControlName="launcher_mode" value=""> {{ 'app-settings.mode-default' | translate }}
           </label>
-          <label class="radio-opt">
-            <input type="radio" formControlName="launcher_mode" value="internal"> {{ 'app-settings.mode-internal' | translate }}
-          </label>
+          @if (internalModeAvailable) {
+            <label class="radio-opt">
+              <input type="radio" formControlName="launcher_mode" value="internal"> {{ 'app-settings.mode-internal' | translate }}
+            </label>
+          }
           <label class="radio-opt">
             <input type="radio" formControlName="launcher_mode" value="external"> {{ 'app-settings.mode-external' | translate }}
           </label>
         </div>
+        @if (!internalModeAvailable) {
+          <div class="hint dim small">{{ 'app-settings.internal-unavailable' | translate }}</div>
+        }
       </div>
       <div class="field auto-field">
         <label class="checkbox-opt">
