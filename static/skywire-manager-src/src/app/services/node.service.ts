@@ -56,6 +56,12 @@ export class NodeService {
 
           // Basic data.
           node.online = response.online;
+          // Cached-summary metadata (set when the hypervisor served
+          // a stale row because the live RPC failed). Both undefined
+          // on live rows and on never-seen placeholders.
+          node.offlineSince = response.offline_since;
+          node.lastSeenAt = response.last_seen_at;
+          node.isStale = !!response.offline_since;
           node.localPk = response.overview.local_pk;
           node.version = response.overview.build_info.version;
           node.configVersion = response.config_version;
@@ -104,27 +110,29 @@ export class NodeService {
           const labelInfo = this.storageService.getLabelInfo(node.localPk);
           node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
 
-          // If the node is offline, there if no need for getting the rest of the data.
-          if (!node.online) {
-            node.dmsgServerPk = '';
-            node.roundTripPing = '';
-            nodes.push(node);
-
-            return;
-          }
+          // Offline rows from the hypervisor cache still carry the
+          // visor's last-known fields (version, transports, dmsg
+          // servers, etc.) — keep parsing them so the UI can dim the
+          // row but show the data the user just lost. Truly absent
+          // visors (no cache hit) come through as offline rows with
+          // no overview/health/dmsg_stats; gate the per-section
+          // accesses below on the field existing.
 
           // Health data.
-          node.health = {
-            servicesHealth: response.health.services_health,
-            uptimeTrackerHealth: response.health.uptime_tracker_health,
-            autoconnectHealth: response.health.autoconnect_health,
-            transportabilityHealth: response.health.transportability_health,
-          };
+          if (response.health) {
+            node.health = {
+              servicesHealth: response.health.services_health,
+              uptimeTrackerHealth: response.health.uptime_tracker_health,
+              autoconnectHealth: response.health.autoconnect_health,
+              transportabilityHealth: response.health.transportability_health,
+            };
+          }
 
-          // DMSG info.
-          node.dmsgServerPk = response.dmsg_stats.server_public_key;
+          // DMSG info. dmsg_stats may be null on cached-offline rows
+          // captured before the visor reported any DMSG client data.
+          node.dmsgServerPk = response.dmsg_stats ? response.dmsg_stats.server_public_key : '';
           node.connectedDmsgServers = response.connected_dmsg_servers || [];
-          node.roundTripPing = this.nsToMs(response.dmsg_stats.round_trip);
+          node.roundTripPing = response.dmsg_stats ? this.nsToMs(response.dmsg_stats.round_trip) : '';
 
           // Parse new dmsg_servers with per-server latencies
           if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
@@ -138,7 +146,7 @@ return {
 
           // Transports.
           node.transports = [];
-          if (response.overview.transports) {
+          if (response.overview && response.overview.transports) {
             (response.overview.transports as any[]).forEach(transport => {
               node.transports.push({
                 id: transport.id,
@@ -154,7 +162,7 @@ return {
 
           // Apps (for services column).
           node.apps = [];
-          if (response.overview.apps) {
+          if (response.overview && response.overview.apps) {
             (response.overview.apps as any[]).forEach(app => {
               node.apps.push({
                 name: app.name,
