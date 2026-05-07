@@ -27,9 +27,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/sirupsen/logrus"
+
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
@@ -140,14 +142,47 @@ func WithVerbose(ctx context.Context, rpcAddr string, filter VerboseFilter, fn f
 	return fn()
 }
 
-// emitEntry writes one log line to w in the verbose-stream format
-// the cli uses across commands: HH:MM:SS.mmm  LEVEL [module] message.
-// Exported via the helper so refactored callers stay consistent.
+// verboseFormatter mirrors the visor's MasterLogger text formatter so
+// streamed entries render identically to entries written locally on
+// the visor. ForceFormatting=true keeps the output stable when stderr
+// isn't a terminal (e.g. piped to a file); colors follow the terminal
+// detection in formatter.init.
+var verboseFormatter = &logging.TextFormatter{
+	FullTimestamp:      true,
+	AlwaysQuoteStrings: true,
+	QuoteEmptyFields:   true,
+	ForceFormatting:    true,
+	TimestampFormat:    "2006-01-02T15:04:05.0000Z07:00",
+}
+
+// emitEntry writes one log line to w in the visor's MasterLogger
+// format so cli `--verbose` output is byte-identical to what the
+// visor would print locally for the same entry: bracketed timestamp,
+// level, [module]: prefix, message, then key=value fields.
 func emitEntry(w io.Writer, e *rpcgrpc.AppLogEntry) {
-	ts := time.Unix(0, e.TimestampNs).Format("15:04:05.000")
-	module := e.Module
-	if module == "" {
-		module = "-"
+	level, err := logging.LevelFromString(e.Level)
+	if err != nil {
+		level = logrus.DebugLevel
 	}
-	fmt.Fprintf(w, "%s %5s [%s] %s\n", ts, strings.ToUpper(e.Level), module, e.Message) //nolint:errcheck,gosec
+	data := logrus.Fields{}
+	if e.Module != "" {
+		data["_module"] = e.Module
+	}
+	for k, v := range e.GetFields() {
+		data[k] = v
+	}
+	entry := &logrus.Entry{
+		Time:    time.Unix(0, e.TimestampNs),
+		Level:   level,
+		Message: e.Message,
+		Data:    data,
+	}
+	b, fErr := verboseFormatter.Format(entry)
+	if fErr != nil {
+		// Should be unreachable; fall back to a plain line so
+		// the user still sees something on a formatter glitch.
+		fmt.Fprintf(w, "[%s] %s [%s]: %s\n", entry.Time.Format(time.RFC3339Nano), e.Level, e.Module, e.Message) //nolint:errcheck,gosec
+		return
+	}
+	_, _ = w.Write(b) //nolint:errcheck
 }

@@ -183,7 +183,11 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		}
 		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
 
-		// Remote visor summaries with per-visor timeout
+		// Remote visor summaries with per-visor timeout. Successful
+		// fetches are cached so a later RPC failure can still surface
+		// the visor's last-known fields (version, IP, etc) instead of
+		// dropping the row from the response and forcing the UI into
+		// its empty-hyphens state.
 		var deadVisors []cipher.PubKey
 		var mu sync.Mutex
 		wg := new(sync.WaitGroup)
@@ -201,6 +205,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 					close(done)
 				}()
 
+				live := false
 				select {
 				case <-done:
 					if rpcErr != nil {
@@ -209,10 +214,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 						deadVisors = append(deadVisors, pk)
 						mu.Unlock()
 					} else {
-						resp := makeSummaryResp(true, false, sum)
-						mu.Lock()
-						summaries = append(summaries, resp)
-						mu.Unlock()
+						live = true
 					}
 				case <-time.After(5 * time.Second):
 					hv.logger.WithField("pk", pk).Warn("Remote visor summary RPC timed out (5s)")
@@ -220,11 +222,46 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 					deadVisors = append(deadVisors, pk)
 					mu.Unlock()
 				}
+
+				if live {
+					now := time.Now().UTC()
+					// Cache a copy so later mutations can't bleed in.
+					cached := *sum
+					hv.summaryCacheMx.Lock()
+					hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
+					hv.summaryCacheMx.Unlock()
+					resp := makeSummaryResp(true, false, sum)
+					resp.LastSeenAt = &now
+					mu.Lock()
+					summaries = append(summaries, resp)
+					mu.Unlock()
+					return
+				}
+
+				// Live fetch failed — try the cache.
+				hv.summaryCacheMx.RLock()
+				cached, ok := hv.summaryCache[pk]
+				hv.summaryCacheMx.RUnlock()
+				if !ok {
+					return
+				}
+				stale := *cached.sum
+				offlineSince := time.Now().UTC()
+				resp := makeSummaryResp(false, false, &stale)
+				seenAt := cached.seenAt
+				resp.LastSeenAt = &seenAt
+				resp.OfflineSince = &offlineSince
+				mu.Lock()
+				summaries = append(summaries, resp)
+				mu.Unlock()
 			}(entry.pk, entry.conn)
 		}
 		wg.Wait()
 
-		// Remove dead visors under write lock (safe — no goroutines accessing the map)
+		// Remove dead visors under write lock (safe — no goroutines accessing the map).
+		// Cache entries are NOT dropped here; they keep serving stale rows
+		// until the visor reconnects and we get a fresh summary, which
+		// overwrites the cache entry.
 		if len(deadVisors) > 0 {
 			hv.mu.Lock()
 			for _, pk := range deadVisors {

@@ -155,6 +155,9 @@
                   </td>
                   <td>
                     {{ node.label }}
+                    @if (node.isStale) {
+                      <div class="stale-caption">{{ lastSeenText(node) }}</div>
+                    }
                   </td>
                   <td>
                     {{ node.localPk }}
@@ -274,7 +277,7 @@
               <!-- Values. -->
               @for (node of dataSource; track node) {
                 <a
-                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online}"
+                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale}"
                   class="selectable link-row"
                   [routerLink]="node.online ? ['/nodes', node.localPk] : null"
                   >
@@ -288,6 +291,9 @@
                   </td>
                   <td>
                     {{ node.label }}
+                    @if (node.isStale) {
+                      <div class="stale-caption">{{ lastSeenText(node) }}</div>
+                    }
                   </td>
                   <td>
                     @if (node.ip || node.publicIp || node.countryCode) {
@@ -419,7 +425,7 @@
               </td></tr>
               <!-- Values. -->
               @for (node of dataSource; track node) {
-                <a class="link-row" [ngClass]="{'selectable click-effect': node.online}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
+                <a class="link-row" [ngClass]="{'selectable click-effect': node.online, 'stale-row': node.isStale}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
                   <div class="list-item-container">
                     <div class="left-part">
                       @if (node.isHypervisor) {
@@ -435,6 +441,9 @@
                       <div class="list-row">
                         <span class="title">{{ 'nodes.label' | translate }}</span>:
                         {{ node.label }}
+                        @if (node.isStale) {
+                          <span class="stale-caption">&nbsp;({{ lastSeenText(node) }})</span>
+                        }
                       </div>
                       @if (node.ip || node.publicIp) {
                         <div class="list-row">
