@@ -132,10 +132,12 @@ func TestPublisherAsyncCleanupBounded(t *testing.T) {
 	all, _ := cxds.Amount()
 	vol, _ := cxds.Volume()
 	rcHist := map[uint32]int{}
-	_ = cxds.Iterate(func(_ skycipher.SHA256, rc uint32, _ []byte) error {
+	if err := cxds.Iterate(func(_ skycipher.SHA256, rc uint32, _ []byte) error {
 		rcHist[rc]++
 		return nil
-	})
+	}); err != nil {
+		t.Fatalf("Iterate: %v", err)
+	}
 	t.Logf("After 30 ticks: amount=%d volume=%d rcHist=%v", all, vol, rcHist)
 
 	// One stable Root references ~10–12 small structural objects plus
