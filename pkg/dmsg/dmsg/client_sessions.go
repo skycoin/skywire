@@ -18,17 +18,35 @@ import (
 // EnsureAndObtainSession attempts to obtain a session.
 // If the session does not exist, we will attempt to establish one.
 // It returns an error if the session does not exist AND cannot be established.
+//
+// sesMx is released across the discovery lookup (getServerEntry) because
+// ce.dc may be a dmsgfirst-wrapped client whose primary path dials over
+// DMSG itself — DialStream → phase 3 → EnsureAndObtainSession on the
+// same goroutine, which would re-acquire sesMx and self-deadlock on a
+// non-reentrant mutex. Holding the lock only during the cache check and
+// the dialSession step still serializes concurrent dials to the same
+// server, preserving the invariant the lock was protecting.
 func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKey) (ClientSession, error) {
 	ce.sesMx.Lock()
-	defer ce.sesMx.Unlock()
-
 	if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+		ce.sesMx.Unlock()
 		return dSes, nil
 	}
+	ce.sesMx.Unlock()
 
 	srvEntry, err := getServerEntry(ctx, ce.dc, srvPK)
 	if err != nil {
 		return ClientSession{}, err
+	}
+
+	ce.sesMx.Lock()
+	defer ce.sesMx.Unlock()
+	// Re-check after re-locking — another goroutine may have raced
+	// us to establish a session for the same server PK while we
+	// were doing the discovery lookup. Use it instead of dialing
+	// a duplicate.
+	if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+		return dSes, nil
 	}
 	return ce.dialSession(ctx, srvEntry)
 }
