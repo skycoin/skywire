@@ -59,11 +59,27 @@ type Hypervisor struct {
 	tpvizServer  *tpviz.Server
 	lanDmsg      *LANDmsgServer // embedded LAN DMSG server (nil if disabled)
 
+	// summaryCache holds the most recent successful Summary per
+	// remote visor PK so the UI can keep showing version / IP / etc
+	// when the visor is briefly unreachable, instead of replacing
+	// every field with "-". Cache hits are returned with Online=false
+	// and OfflineSince/LastSeenAt set so the UI can dim them and
+	// show a "last seen" timestamp. In-memory only — repopulates
+	// from the next successful summary after a hypervisor restart.
+	summaryCache   map[cipher.PubKey]cachedSummary
+	summaryCacheMx sync.RWMutex
+
 	// Runtime state for enable/disable toggle
 	httpSrv   *http.Server // nil when disabled
 	srvCancel context.CancelFunc
 	enabled   bool
 	enableMu  sync.Mutex
+}
+
+// cachedSummary is one entry in Hypervisor.summaryCache.
+type cachedSummary struct {
+	sum    *Summary
+	seenAt time.Time
 }
 
 func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dmsg.Client) (*Hypervisor, error) {
@@ -97,6 +113,7 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		vsMu:         new(sync.RWMutex),
 		selfConn:     selfConn,
 		logger:       mLogger.PackageLogger("hypervisor"),
+		summaryCache: make(map[cipher.PubKey]cachedSummary),
 	}
 
 	if config.TPViz.Enable && visor != nil {

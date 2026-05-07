@@ -50,3 +50,26 @@
 .reward-pending {
   color: #ff9800;
 }
+
+// Visual treatment for rows whose data came from the hypervisor's
+// stale summary cache (visor offline, last-known fields shown).
+// The opacity drop signals "don't act on this without checking";
+// the data itself is preserved so the operator can still see
+// version / IP / etc rather than a row of hyphens.
+.stale-row {
+  opacity: 0.55;
+}
+
+// Small caption beside the label, e.g. "last seen 5m ago".
+.stale-caption {
+  font-size: 0.75em;
+  color: #999;
+  font-style: italic;
+}
+
+// Dimmed variant of the status dot/text used by stale rows.
+// Pairs with the existing dot-red / red-text classes.
+.dot-red.dimmed,
+.red-text.dimmed {
+  opacity: 0.6;
+}
