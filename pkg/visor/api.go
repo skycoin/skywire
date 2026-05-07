@@ -434,6 +434,15 @@ type Summary struct {
 	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
 	DMSGServers          []DMSGServerInfo                 `json:"dmsg_servers"`           // Connected DMSG servers with latencies
 	Online               bool                             `json:"online"`
+	// OfflineSince is set on cached summaries served when the live
+	// RPC fails. Lets the UI render a "offline since X" indicator
+	// alongside the otherwise-stale fields. nil when Online=true.
+	OfflineSince *time.Time `json:"offline_since,omitempty"`
+	// LastSeenAt is the timestamp of the last successful live
+	// summary fetch. Set on both fresh and cached responses so the
+	// UI can show "as of HH:MM:SS" even on stale rows. nil only on
+	// the never-seen path.
+	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version,omitempty"` // Deprecated
