@@ -136,7 +136,9 @@
       "partially-online": "Online with problems",
       "partially-online-tooltip": "The visor is online, but disconnected from the uptime tracker.",
       "offline": "Offline",
-      "offline-tooltip": "The visor is offline."
+      "offline-tooltip": "The visor is offline.",
+      "stale": "Offline (stale)",
+      "stale-tooltip": "The visor is offline; showing last-known data."
     },
     "details": {
       "node-info": {
