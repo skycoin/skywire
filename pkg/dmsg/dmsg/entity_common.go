@@ -285,15 +285,22 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 // If 'addr' is an empty string AND no endpoint provides its own
 // advertised address, no update is performed for that endpoint
 // (preserving the legacy "empty addr = skip update" semantics).
-//
-// Caller must hold c.sessionsMx.
 func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int, authPassphrase string) (err error) {
 	endpoints := c.snapshotDiscoveries()
 	if len(endpoints) == 0 {
 		return errors.New("updateServerEntry: no discoveries configured")
 	}
 
+	// Snapshot session count under sessionsMx and release before any IO.
+	// Holding sessionsMx across ep.Client.Entry / PutEntry self-deadlocks
+	// the server: when the disc client is dmsgfirst, the discovery roundtrip
+	// dials over DMSG, and every concurrent stream forward through this
+	// server (server_session.go: serveStream → entity.serverSession →
+	// EntityCommon.session) wants the same mutex. Same shape as the
+	// client-side fix in PR #2443.
+	c.sessionsMx.Lock()
 	availableSessions := maxSessions - len(c.sessions)
+	c.sessionsMx.Unlock()
 	if availableSessions < 0 {
 		availableSessions = 0
 	}
@@ -387,10 +394,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 				continue
 			}
 
-			c.sessionsMx.Lock()
 			err := c.updateServerEntry(ctx, addr, maxSessions, authPassphrase)
-			c.sessionsMx.Unlock()
-
 			if err != nil {
 				c.log.WithError(err).Warn("Failed to update discovery entry.")
 			}
@@ -413,9 +417,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 				}
 			}
 		serverUpdate:
-			c.sessionsMx.Lock()
 			err := c.updateServerEntry(ctx, addr, maxSessions, authPassphrase)
-			c.sessionsMx.Unlock()
 			if err != nil {
 				c.log.WithError(err).Warn("Failed to update discovery entry (nudge).")
 			}
