@@ -477,10 +477,17 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		return errors.New("updateClientEntry: no discoveries configured")
 	}
 
+	// Snapshot the connected-server PK set under sessionsMx and release
+	// before any IO. Holding sessionsMx across ep.Client.Entry() / PutEntry()
+	// self-deadlocks now that the disc client (dmsgfirst) dials over DMSG —
+	// HTTPTransport.RoundTrip → DialStream → sortedDelegatedSessions →
+	// session() also wants sessionsMx, on this same goroutine.
+	c.sessionsMx.Lock()
 	srvPKs := make([]cipher.PubKey, 0, len(c.sessions))
 	for pk := range c.sessions {
 		srvPKs = append(srvPKs, pk)
 	}
+	c.sessionsMx.Unlock()
 
 	// Short-circuit: if the delegated server set we're about to publish
 	// is identical to what we last successfully pushed AND an update
@@ -590,11 +597,9 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 				continue
 			}
 
-			c.sessionsMx.Lock()
-			err := c.updateClientEntry(ctx, done, clientType)
-			c.sessionsMx.Unlock()
-
-			if err != nil {
+			// updateClientEntry takes sessionsMx itself for its snapshot;
+			// holding it here would self-deadlock via the dmsgfirst path.
+			if err := c.updateClientEntry(ctx, done, clientType); err != nil {
 				c.log.WithError(err).Warn("Failed to update discovery entry.")
 			}
 
@@ -616,10 +621,8 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 				}
 			}
 		clientUpdate:
-			c.sessionsMx.Lock()
-			err := c.updateClientEntry(ctx, done, clientType)
-			c.sessionsMx.Unlock()
-			if err != nil {
+			// See timer-tick comment above re: sessionsMx.
+			if err := c.updateClientEntry(ctx, done, clientType); err != nil {
 				c.log.WithError(err).Warn("Failed to update discovery entry (nudge).")
 			}
 			t.Reset(c.updateInterval)

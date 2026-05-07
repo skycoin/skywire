@@ -177,11 +177,10 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 			c.nudgeEntryUpdate()
 			return nil
 		default:
-			// First session — update immediately.
-			c.sessionsMx.Lock()
-			err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType)
-			c.sessionsMx.Unlock()
-			if err != nil {
+			// First session — update immediately. updateClientEntry
+			// takes sessionsMx itself for its snapshot; holding it
+			// here would self-deadlock via the dmsgfirst path.
+			if err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType); err != nil {
 				return err
 			}
 			c.readyOnce.Do(func() { close(c.ready) })
