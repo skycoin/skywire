@@ -325,6 +325,10 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       } else {
         return forDot ? 'dot-outline-gray' : '';
       }
+    } else if (node.isStale) {
+      // Offline but the row carries last-known data from the
+      // hypervisor's summary cache. Distinguish from plain offline.
+      return forDot ? 'dot-red dimmed' : 'red-text dimmed';
     } else {
       return forDot ? 'dot-red' : 'red-text';
     }
@@ -346,9 +350,44 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       } else {
         return 'node.statuses.unknown' + (forTooltip ? '-tooltip' : '');
       }
+    } else if (node.isStale) {
+      return 'node.statuses.stale' + (forTooltip ? '-tooltip' : '');
     } else {
       return 'node.statuses.offline' + (forTooltip ? '-tooltip' : '');
     }
+  }
+
+  /**
+   * Returns "last seen Xm ago" for a stale-cached row, or empty for
+   * fresh / never-seen rows. Used as a small caption beside the row's
+   * label so the operator knows how old the displayed data is.
+   */
+  lastSeenText(node: Node): string {
+    if (!node.lastSeenAt) {
+      return '';
+    }
+    const seen = new Date(node.lastSeenAt).getTime();
+    if (isNaN(seen)) {
+      return '';
+    }
+    const diffMs = Date.now() - seen;
+    if (diffMs < 0) {
+      return '';
+    }
+    const sec = Math.floor(diffMs / 1000);
+    if (sec < 60) {
+      return `last seen ${sec}s ago`;
+    }
+    const min = Math.floor(sec / 60);
+    if (min < 60) {
+      return `last seen ${min}m ago`;
+    }
+    const hr = Math.floor(min / 60);
+    if (hr < 24) {
+      return `last seen ${hr}h ago`;
+    }
+    const day = Math.floor(hr / 24);
+    return `last seen ${day}d ago`;
   }
 
   /**
