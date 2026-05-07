@@ -12,10 +12,16 @@
 // Path conventions (matching §07 of skywire-specs):
 //
 //	transports/<uuid>/current                 → live snapshot (JSON)
-//	transports/<uuid>/<YYYY-MM-DD>            → that day's rollup (JSON)
+//	transports/<uuid>/<YYYY-MM-DD>/rollup     → that day's rollup (JSON)
 //	transports/<uuid>/<YYYY-MM-DD>/timeline   → 36-byte uptime bitmap
 //	tiers/<tier>/<YYYY-MM-DD>                 → 36-byte bitmap
 //	services/<slug>/<YYYY-MM-DD>              → 36-byte bitmap
+//
+// The rollup and timeline are nested under <YYYY-MM-DD> as siblings.
+// Putting the daily JSON at the bare-date leaf ("transports/<uuid>/<date>")
+// would collide with the timeline write ("transports/<uuid>/<date>/timeline")
+// because the treestore is strictly a tree — a node is leaf XOR sub-tree,
+// never both. The /rollup suffix keeps <date> unambiguously a branch.
 //
 // Sinks are expected to be non-blocking; the Tracker invokes them
 // from the sampler goroutine and does not wait for completion.
@@ -188,7 +194,7 @@ func currentTransportPath(id string) string {
 }
 
 func dailyTransportPath(id, date string) string {
-	return "transports/" + id + "/" + date
+	return "transports/" + id + "/" + date + "/rollup"
 }
 
 func transportTimelinePath(id, date string) string {
