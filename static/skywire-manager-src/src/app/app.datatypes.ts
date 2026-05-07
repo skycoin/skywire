@@ -20,6 +20,17 @@ export class Node {
   minHops: number;
   routes?: Route[];
   online?: boolean;
+  // Set on rows the hypervisor served from its summary cache because
+  // the live RPC failed. Pair: offlineSince = when the live fetch
+  // failed; lastSeenAt = when the cached snapshot was captured.
+  // Both are ISO timestamps; both undefined on the never-seen path
+  // (offline placeholder synthesized client-side from local storage).
+  offlineSince?: string;
+  lastSeenAt?: string;
+  // True when the row's metadata came from the hypervisor's stale
+  // cache rather than a live fetch. Convenience flag derived from
+  // offlineSince — saves repeating the truthiness check in templates.
+  isStale?: boolean;
   secondsOnline?: number;
   health?: HealthInfo;
   dmsgServerPk?: string;
