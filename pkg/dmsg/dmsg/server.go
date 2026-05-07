@@ -233,8 +233,9 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 
 func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
 	err := netutil.NewDefaultRetrier(s.log).Do(ctx, func() error {
-		s.sessionsMx.Lock()
-		defer s.sessionsMx.Unlock()
+		// updateServerEntry takes sessionsMx internally only for the
+		// session-count snapshot; do NOT hold it across this call —
+		// see the comment in EntityCommon.updateServerEntry.
 		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, s.authPassphrase)
 	})
 	if err != nil {
