@@ -100,7 +100,7 @@ func TestSinkReceivesTransportPutsOnSample(t *testing.T) {
 
 	puts, _ := sink.snapshot()
 	wantCurrent := "transports/" + id.String() + "/current"
-	wantDaily := "transports/" + id.String() + "/2026-04-27"
+	wantDaily := "transports/" + id.String() + "/2026-04-27/rollup"
 	if _, ok := puts[wantCurrent]; !ok {
 		t.Errorf("missing %s in sink puts; got %v", wantCurrent, keysOf(puts))
 	}
@@ -224,7 +224,7 @@ func TestSinkDeletedOnBboltRetentionDrop(t *testing.T) {
 		gotPaths[d] = true
 	}
 	for _, want := range wantDates {
-		path := "transports/" + id.String() + "/" + want
+		path := "transports/" + id.String() + "/" + want + "/rollup"
 		if !gotPaths[path] {
 			t.Errorf("expected sink Delete for retention-dropped %s; got dels = %v", path, dels)
 		}
