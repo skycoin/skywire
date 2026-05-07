@@ -424,16 +424,16 @@ type Overview struct {
 
 // Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	Overview             *Overview                        `json:"overview"`
-	Health               *HealthInfo                      `json:"health"`
-	Uptime               float64                          `json:"uptime"`
-	Routes               []routingRuleResp                `json:"routes"`
-	RouteGroups          []RouteGroupInfo                 `json:"route_groups,omitempty"`
-	IsHypervisor         bool                             `json:"is_hypervisor,omitempty"`
-	DmsgStats            *dmsgtracker.DmsgClientSummary   `json:"dmsg_stats"`
-	ConnectedDmsgServers []string                         `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
-	DMSGServers          []DMSGServerInfo                 `json:"dmsg_servers"`           // Connected DMSG servers with latencies
-	Online               bool                             `json:"online"`
+	Overview             *Overview                      `json:"overview"`
+	Health               *HealthInfo                    `json:"health"`
+	Uptime               float64                        `json:"uptime"`
+	Routes               []routingRuleResp              `json:"routes"`
+	RouteGroups          []RouteGroupInfo               `json:"route_groups,omitempty"`
+	IsHypervisor         bool                           `json:"is_hypervisor,omitempty"`
+	DmsgStats            *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
+	ConnectedDmsgServers []string                       `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
+	DMSGServers          []DMSGServerInfo               `json:"dmsg_servers"`           // Connected DMSG servers with latencies
+	Online               bool                           `json:"online"`
 	// OfflineSince is set on cached summaries served when the live
 	// RPC fails. Lets the UI render a "offline since X" indicator
 	// alongside the otherwise-stale fields. nil when Online=true.
@@ -442,7 +442,7 @@ type Summary struct {
 	// summary fetch. Set on both fresh and cached responses so the
 	// UI can show "as of HH:MM:SS" even on stale rows. nil only on
 	// the never-seen path.
-	LastSeenAt *time.Time `json:"last_seen_at,omitempty"`
+	LastSeenAt           *time.Time                       `json:"last_seen_at,omitempty"`
 	MinHops              uint16                           `json:"min_hops"`
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version,omitempty"` // Deprecated
