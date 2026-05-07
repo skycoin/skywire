@@ -884,6 +884,19 @@ func (i *Index) delPackWalkFunc(
 		err error, //          : a DB error
 	) {
 
+		// Skip blank hashes (e.g. an unset Ref.Sub field on a
+		// leaf TreeEntry). Calling getNoCache on the zero hash
+		// returns ErrNotFound, which aborts the walk and leaves
+		// every sibling-and-after reference undecremented — the
+		// upstream cause of TPD's CXDS-bytes-keep-climbing leak
+		// despite RemoveRootObjects firing on every publish.
+		// Mirrors the same guard in (*Container).Save's walkFunc
+		// (skyobject/unpack.go) where blank refs were already
+		// filtered before this Walk path was discovered.
+		if hash == (cipher.SHA256{}) {
+			return deepper, err
+		}
+
 		var (
 			rc  int
 			val []byte
