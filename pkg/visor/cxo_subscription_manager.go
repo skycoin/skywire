@@ -235,6 +235,29 @@ func (m *CXOSubscriptionManager) Get(feed CXOFeed, path string) ([]byte, time.Ti
 	return body, ts, true
 }
 
+// Walk iterates every (path, body) pair under the given prefix on
+// the named feed's active subscriber, calling fn for each leaf.
+// Returns ok=false when the feed isn't currently subscribed (no
+// AcquireFor live, or the dial failed). Walk does NOT block waiting
+// for the first Root — use it after a Get of any specific path
+// returns ok or when handlers are happy with "best effort, fall
+// through to HTTP on empty."
+func (m *CXOSubscriptionManager) Walk(feed CXOFeed, prefix string, fn func(path string, body []byte) bool) bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	f, ok := m.feeds[feed]
+	if !ok || f == nil || f.sub == nil {
+		m.mu.Unlock()
+		return false
+	}
+	sub := f.sub
+	m.mu.Unlock()
+	sub.Walk(prefix, fn)
+	return true
+}
+
 // Close tears down every active subscription. Called from the
 // visor's shutdown sequence.
 func (m *CXOSubscriptionManager) Close() {
