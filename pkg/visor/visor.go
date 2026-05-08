@@ -265,6 +265,14 @@ type Visor struct {
 	// tab. Falls back to DMSG-HTTP / HTTP when the cache misses.
 	tpdUptimeSub   *tpdUptimeSubscriber
 	tpdUptimeSubMu sync.RWMutex
+
+	// cxoSubMgr is the on-demand CXO subscription manager that owns
+	// the network-visualizer / metrics-tab data feeds (SD services,
+	// DMSG-D clients-by-server, TPD aggregates). Constructed in
+	// initCXOSubscriptionManager when the hypervisor is enabled;
+	// nil otherwise. Tabs that source CXO data call AcquireFor on
+	// open and ReleaseFor on close.
+	cxoSubMgr *CXOSubscriptionManager
 	// Records the last unix-nano time a Connect attempt failed so we
 	// can throttle re-dials while TPD's publisher is down. Read
 	// lock-free on the hot path (atomic), written from inside the
@@ -714,6 +722,9 @@ func (v *Visor) Close() error {
 	// also touches via the dmsg client shutdown.
 	v.closeTPDMetricsSubscriber()
 	v.closeTPDUptimeSubscriber()
+	if v.cxoSubMgr != nil {
+		v.cxoSubMgr.Close()
+	}
 
 	// Cleanly close ongoing raw TCP forward conns
 	for _, forwardConn := range appnet.GetAllRawTCPForwardConns() {
