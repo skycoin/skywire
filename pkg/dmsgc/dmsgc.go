@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -296,6 +297,39 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 	dmsgC := dmsg.NewClient(pk, sk, primaryC, dmsgConf)
 	dmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))
 	dmsgC.SetMasterLogger(masterLogger)
+
+	// Pre-seed the entry cache with every configured server (across
+	// all deployments + LAN servers). EnsureAndObtainSession resolves
+	// server entries from this cache before falling through to the
+	// disc client, which prevents a recursion that otherwise blows the
+	// goroutine stack on shutdown / disrupted-network paths: when
+	// ce.dc is the dmsgfirst wrapper, its primary is dmsghttp, and
+	// dmsghttp.RoundTrip → DialStream → EnsureAndObtainSession →
+	// getServerEntry → ce.dc.Entry → dmsghttp.RoundTrip … with
+	// nothing to break the loop. With these entries pre-seeded, any
+	// dial against a configured server short-circuits before the disc
+	// client is even consulted, so the loop never starts.
+	seenSeeds := make(map[cipher.PubKey]struct{})
+	seedFn := func(srcLabel string, entries []*disc.Entry) {
+		for _, srv := range entries {
+			if srv == nil || srv.Static.Null() || srv.Server == nil {
+				continue
+			}
+			if _, dup := seenSeeds[srv.Static]; dup {
+				continue
+			}
+			seenSeeds[srv.Static] = struct{}{}
+			dmsgC.SeedEntryCache(srv.Static, srv)
+			masterLogger.PackageLogger("dmsgC").
+				WithField("server_pk", srv.Static.String()).
+				WithField("source", srcLabel).
+				Debug("Pre-seeded dmsg server entry into cache")
+		}
+	}
+	for i, dep := range deployments {
+		seedFn(fmt.Sprintf("deployments[%d].servers", i), dep.Servers)
+	}
+	seedFn("primary.lan_servers", primary.LANServers)
 	// Attach extra deployments so the visor publishes its client entry
 	// to every configured discovery. Plain HTTP at construction time;
 	// the visor's init_dmsg path can swap these for dmsgfirst-wrapped
