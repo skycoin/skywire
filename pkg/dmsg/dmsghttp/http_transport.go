@@ -90,6 +90,11 @@ func MakeHTTPTransport(_ context.Context, dmsgC *dmsg.Client) *HTTPTransport {
 // the response body is fully read and closed, the stream goes back
 // into the idle pool. On any I/O error the stream is discarded.
 func (t *HTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Tag the request context so dmsgfirst's fallbackClient knows it's
+	// running inside a dmsghttp dial and must not re-enter this same
+	// transport for its own discovery lookups (would recurse until the
+	// goroutine stack blows). See recursion_guard.go.
+	req = req.WithContext(WithRecursionGuard(req.Context()))
 	if req.URL.Scheme == "dmsg" {
 		req = req.Clone(req.Context())
 		req.URL.Scheme = "http"
