@@ -665,6 +665,25 @@ func (ce *Client) SetDHTLookup(fn func(pk cipher.PubKey) (*disc.Entry, error)) {
 	ce.DHTLookup = fn
 }
 
+// resolveServerEntry returns the discovery entry for the given dmsg
+// server PK, consulting the local entryCache first and only falling
+// through to the disc.APIClient (potentially a dmsgfirst-wrapped client
+// whose primary path dials over DMSG and would land back here) on a
+// cache miss. Configured bootstrap servers are pre-seeded by
+// dmsgc.New, so the common dial-session path never reaches the fall-
+// through and the dmsgfirst recursion never has a chance to run.
+//
+// The returned entry is validated to be a server entry — a client
+// entry would mean someone passed a non-server PK as srvPK, which is
+// a programming error in the caller and we want to surface it the
+// same way the bare disc lookup did.
+func (ce *Client) resolveServerEntry(ctx context.Context, srvPK cipher.PubKey) (*disc.Entry, error) {
+	if entry, ok := ce.getCachedEntry(srvPK); ok && entry != nil && entry.Server != nil {
+		return entry, nil
+	}
+	return getServerEntry(ctx, ce.dc, srvPK)
+}
+
 // SeedEntryCache injects a client entry into the discovery cache so that
 // DialStream can find the destination without querying the HTTP discovery.
 // This is used for deployment services that run as direct DMSG clients
