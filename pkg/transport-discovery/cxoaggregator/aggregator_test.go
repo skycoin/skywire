@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
 func TestParseCurrentTransportPath(t *testing.T) {
@@ -133,6 +134,8 @@ type recordingSink struct {
 		date   string
 		bitmap []byte
 	}
+	registers   []recordedRegister
+	deregisters []recordedDeregister
 }
 
 func (s *recordingSink) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
@@ -166,6 +169,31 @@ func (s *recordingSink) IngestTransportTimeline(_ context.Context, tpID uuid.UUI
 	}{tpID, date, cp})
 	s.mu.Unlock()
 	return nil
+}
+
+func (s *recordingSink) RegisterTransportFromCXO(_ context.Context, e *transport.Entry, reporter cipher.PubKey, version string) error {
+	s.mu.Lock()
+	s.registers = append(s.registers, recordedRegister{entry: e, reporter: reporter, version: version})
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *recordingSink) DeregisterTransportFromCXO(_ context.Context, id uuid.UUID, reporter cipher.PubKey) error {
+	s.mu.Lock()
+	s.deregisters = append(s.deregisters, recordedDeregister{id: id, reporter: reporter})
+	s.mu.Unlock()
+	return nil
+}
+
+type recordedRegister struct {
+	entry    *transport.Entry
+	reporter cipher.PubKey
+	version  string
+}
+
+type recordedDeregister struct {
+	id       uuid.UUID
+	reporter cipher.PubKey
 }
 
 func TestDispatchLeafLatencyGate(t *testing.T) {
@@ -293,4 +321,115 @@ func TestDispatchLeafHeartbeatGate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseTransportEntryAndTombstonePaths(t *testing.T) {
+	id := uuid.New()
+	cases := []struct {
+		path        string
+		wantEntry   bool
+		wantTombsto bool
+	}{
+		{"transports/" + id.String() + "/entry", true, false},
+		{"transports/" + id.String() + "/tombstone", false, true},
+		{"transports/" + id.String() + "/current", false, false},
+		{"transports/" + id.String() + "/2026-04-27/timeline", false, false},
+		{"transports//entry", false, false},
+		{"transports/" + id.String() + "/entry/extra", false, false},
+		{"tiers/" + id.String() + "/entry", false, false},
+	}
+	for _, c := range cases {
+		gotID, ok := parseTransportEntryPath(c.path)
+		if ok != c.wantEntry {
+			t.Errorf("parseTransportEntryPath(%q) ok = %v, want %v", c.path, ok, c.wantEntry)
+		}
+		if c.wantEntry && gotID != id {
+			t.Errorf("parseTransportEntryPath(%q) id = %v, want %v", c.path, gotID, id)
+		}
+		gotID, ok = parseTransportTombstonePath(c.path)
+		if ok != c.wantTombsto {
+			t.Errorf("parseTransportTombstonePath(%q) ok = %v, want %v", c.path, ok, c.wantTombsto)
+		}
+		if c.wantTombsto && gotID != id {
+			t.Errorf("parseTransportTombstonePath(%q) id = %v, want %v", c.path, gotID, id)
+		}
+	}
+}
+
+func TestDispatchLeafEntryAndTombstone(t *testing.T) {
+	id := uuid.New()
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+
+	t.Run("entry leaf dispatches to RegisterTransportFromCXO", func(t *testing.T) {
+		sink := &recordingSink{}
+		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+		entry := &transport.Entry{
+			ID:    id,
+			Edges: [2]cipher.PubKey{pkA, pkB},
+			Type:  "stcpr",
+		}
+		body, err := json.Marshal(transportEntryLeaf{Version: "v1.2.3", Entry: entry})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		a.dispatchLeaf("transports/"+id.String()+"/entry", body, pkA)
+		if len(sink.registers) != 1 {
+			t.Fatalf("expected 1 register call, got %d", len(sink.registers))
+		}
+		got := sink.registers[0]
+		if got.entry == nil || got.entry.ID != id {
+			t.Errorf("register entry id mismatch: got %+v", got.entry)
+		}
+		if got.version != "v1.2.3" {
+			t.Errorf("register version = %q, want v1.2.3", got.version)
+		}
+		if got.reporter != pkA {
+			t.Errorf("register reporter mismatch")
+		}
+	})
+
+	t.Run("entry leaf with mismatched id is dropped", func(t *testing.T) {
+		sink := &recordingSink{}
+		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+		entry := &transport.Entry{ID: uuid.New(), Edges: [2]cipher.PubKey{pkA, pkB}, Type: "stcpr"}
+		body, err := json.Marshal(transportEntryLeaf{Entry: entry})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		// path declares `id`, but leaf carries a different UUID — must drop.
+		a.dispatchLeaf("transports/"+id.String()+"/entry", body, pkA)
+		if len(sink.registers) != 0 {
+			t.Errorf("expected drop on id mismatch, got %d registers", len(sink.registers))
+		}
+	})
+
+	t.Run("tombstone leaf dispatches to DeregisterTransportFromCXO", func(t *testing.T) {
+		sink := &recordingSink{}
+		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+		body, err := json.Marshal(tombstoneLeaf{DeletedAt: time.Now().UTC()})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
+		a.dispatchLeaf("transports/"+id.String()+"/tombstone", body, pkA)
+		if len(sink.deregisters) != 1 {
+			t.Fatalf("expected 1 deregister call, got %d", len(sink.deregisters))
+		}
+		got := sink.deregisters[0]
+		if got.id != id {
+			t.Errorf("deregister id = %v, want %v", got.id, id)
+		}
+		if got.reporter != pkA {
+			t.Errorf("deregister reporter mismatch")
+		}
+	})
+
+	t.Run("entry leaf with malformed body is dropped", func(t *testing.T) {
+		sink := &recordingSink{}
+		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+		a.dispatchLeaf("transports/"+id.String()+"/entry", []byte("not json"), pkA)
+		if len(sink.registers) != 0 {
+			t.Errorf("expected drop on bad json, got %d registers", len(sink.registers))
+		}
+	})
 }
