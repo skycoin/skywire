@@ -1264,31 +1264,6 @@ func (mc *mockRPCClient) DmsgPorterReset() (*DmsgPorterStatus, error) {
 	return &DmsgPorterStatus{}, nil
 }
 
-// DHTGetAll implements API.
-func (mc *mockRPCClient) DHTGetAll(_ string) (string, error) {
-	return "[]", nil
-}
-
-// DHTListWithTargets implements API.
-func (mc *mockRPCClient) DHTListWithTargets(_ string) (string, error) {
-	return "[]", nil
-}
-
-// DHTSync implements API.
-func (mc *mockRPCClient) DHTSync(_ string, _ string) (int, error) {
-	return 0, fmt.Errorf("not supported in mock")
-}
-
-// DHTPeers implements API.
-func (mc *mockRPCClient) DHTPeers() ([]DHTPeerInfo, error) {
-	return nil, fmt.Errorf("not supported in mock")
-}
-
-// DHTReconcile implements API.
-func (mc *mockRPCClient) DHTReconcile(_ string, _ string) (int, int, error) {
-	return 0, 0, fmt.Errorf("not supported in mock")
-}
-
 // TransportRPCCall implements API.
 func (mc *mockRPCClient) TransportRPCCall(_ cipher.PubKey, _ string, _ json.RawMessage) (json.RawMessage, error) {
 	return nil, fmt.Errorf("not supported in mock")
@@ -1467,26 +1442,6 @@ func (mc *mockRPCClient) CheckAREntry(_ string) ([]string, error) {
 // ARSelfInfo implements API.
 func (mc *mockRPCClient) ARSelfInfo() (*ARSelfRegistration, error) {
 	return &ARSelfRegistration{}, nil
-}
-
-// DHTStatus implements API.
-func (mc *mockRPCClient) DHTStatus() (*DHTStatus, error) {
-	return &DHTStatus{Running: false}, nil
-}
-
-// DHTGet implements API.
-func (mc *mockRPCClient) DHTGet(_, _ string) ([]byte, error) {
-	return nil, fmt.Errorf("DHT not available in mock")
-}
-
-// DHTPut implements API.
-func (mc *mockRPCClient) DHTPut(_ []byte, _ uint64, _ string) error {
-	return fmt.Errorf("DHT not available in mock")
-}
-
-// DHTSetFullNode implements API.
-func (mc *mockRPCClient) DHTSetFullNode(_ bool) error {
-	return fmt.Errorf("DHT not available in mock")
 }
 
 // Close implements API.
