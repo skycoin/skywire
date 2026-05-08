@@ -132,9 +132,71 @@ func (s *Server) tryCXOServices() (map[string]ServiceInfo, bool) {
 	return services, true
 }
 
-// (DMSG-D clients-by-server consumer — future PR. The publisher tree
-// lives at clients-by-server/<server>/<client>/{entry,tombstone}; a
-// helper that walks it and produces map[serverPK][]clientPK can be
-// added next to tryCXOServices once a tpviz handler needs it.
-// CXOFeedDMSGDClientsByServer is reserved here for that consumer.)
-var _ = CXOFeedDMSGDClientsByServer // silence unused-const linter
+// tryCXOClientsByServer walks the DMSG-D clients-by-server snapshot
+// and rebuilds a map[server-pk-hex][]disc.Entry — same shape the
+// upstream DMSG-D /dmsg-discovery/servers/clients HTTP endpoint
+// returns. Returns ok=false when the manager isn't installed, the
+// snapshot is empty, or every entry leaf fails to parse — caller
+// falls through to its existing HTTP path.
+//
+// Tombstones are skipped (live entries only). Each leaf carries the
+// full disc.Entry as JSON; the (server, client) PK pair is derivable
+// from the path (clients-by-server/<server>/<client>/entry) but we
+// re-use the server segment for the result map key directly so the
+// shape exactly matches AllClientsByServer's hex-string keys.
+func (s *Server) tryCXOClientsByServer() (map[string][]*discEntry, bool) {
+	mgr := s.cxoMgr()
+	if mgr == nil {
+		return nil, false
+	}
+	out := make(map[string][]*discEntry)
+	any := false
+	mgr.Walk(CXOFeedDMSGDClientsByServer, "clients-by-server/", func(path string, body []byte) bool {
+		if !strings.HasSuffix(path, "/entry") {
+			return true
+		}
+		// path = clients-by-server/<server>/<client>/entry
+		parts := strings.Split(path, "/")
+		if len(parts) != 4 {
+			return true
+		}
+		server := parts[1]
+		var entry discEntry
+		if err := json.Unmarshal(body, &entry); err != nil {
+			return true
+		}
+		out[server] = append(out[server], &entry)
+		any = true
+		return true
+	})
+	if !any {
+		return nil, false
+	}
+	return out, true
+}
+
+// discEntry is a tpviz-local mirror of the disc.Entry JSON shape.
+// Defined here (rather than imported from pkg/dmsg/disc) so tpviz
+// stays decoupled from the dmsg-disc package's full type surface —
+// we only need the JSON-serializable shell for the response body.
+// The fields match the disc.Entry public layout; unknown fields in
+// the wire data are tolerated by encoding/json.
+type discEntry struct {
+	Static    string         `json:"static"`
+	Sequence  uint64         `json:"sequence,omitempty"`
+	Timestamp int64          `json:"timestamp,omitempty"`
+	Client    *discClient    `json:"client,omitempty"`
+	Server    *discServerRec `json:"server,omitempty"`
+	Signature string         `json:"signature,omitempty"`
+	Version   string         `json:"version,omitempty"`
+}
+
+type discClient struct {
+	DelegatedServers []string `json:"delegated_servers,omitempty"`
+}
+
+type discServerRec struct {
+	Address           string `json:"address,omitempty"`
+	AvailableSessions int    `json:"availableSessions,omitempty"`
+	ServerType        string `json:"serverType,omitempty"`
+}

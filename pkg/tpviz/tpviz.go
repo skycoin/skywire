@@ -587,6 +587,11 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/api/dmsg/servers", s.handleDMSGServers)
 	s.mux.HandleFunc("/api/dmsg/entries", s.handleDMSGEntries)
 	s.mux.HandleFunc("/api/dmsg/health", s.handleDMSGHealth)
+	// /api/dmsg/servers/clients mirrors upstream DMSG-D's
+	// /dmsg-discovery/servers/clients path shape. CXO-fed when the
+	// manager has a snapshot; falls through to a direct HTTP fetch
+	// of the upstream endpoint otherwise.
+	s.mux.HandleFunc("/api/dmsg/servers/clients", s.handleDMSGServersClients)
 
 	// Network ping endpoint
 	s.mux.HandleFunc("/api/ping", s.handlePing)
@@ -1919,6 +1924,44 @@ func (s *Server) handleDMSGEntries(w http.ResponseWriter, r *http.Request) {
 		"count":   data.EntriesCount,
 		"entries": data.Entries,
 	})
+}
+
+// handleDMSGServersClients returns the same map[server-pk][]Entry
+// shape as upstream DMSG-D's /dmsg-discovery/servers/clients —
+// drives the network visualizer's "who's on each dmsg server" view.
+//
+// CXO-first via the on-demand subscription manager (DMSG-D's
+// clients-by-server tree), falling through to a direct HTTP fetch
+// of the upstream endpoint when the snapshot is empty.
+func (s *Server) handleDMSGServersClients(w http.ResponseWriter, _ *http.Request) {
+	if mgr := s.cxoMgr(); mgr != nil {
+		mgr.AcquireForTab(CXOTabNetworkVisualizer)
+		defer mgr.ReleaseForTab(CXOTabNetworkVisualizer)
+		if grouped, ok := s.tryCXOClientsByServer(); ok {
+			result, mErr := json.Marshal(grouped)
+			if mErr == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Set("X-Skywire-Source", "cxo")
+				w.Write(result) //nolint:errcheck,gosec
+				return
+			}
+		}
+	}
+
+	// Fall through: pull the same shape from upstream DMSG-D over HTTP.
+	if s.config.DMSGURL == "" {
+		http.Error(w, "DMSG discovery URL not configured", http.StatusServiceUnavailable)
+		return
+	}
+	body, err := fetchURL(s.config.DMSGURL + "/dmsg-discovery/servers/clients")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("upstream fetch failed: %v", err), http.StatusBadGateway)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Write([]byte(body)) //nolint:errcheck,gosec
 }
 
 // handleDMSGHealth performs a health check on a remote visor via DMSG
