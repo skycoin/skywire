@@ -17,6 +17,8 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dht"
@@ -403,7 +405,11 @@ Example:
 		// re-dial — TPD just accepts and re-subscribes on the next
 		// reconcile tick. No visor enumeration needed on TPD's side.
 		if enableCXO && h.DmsgClient != nil {
-			agg, err := cxoaggregator.New(h.DmsgClient, s, cxoaggregator.Config{
+			// Sink wraps the redis store (telemetry methods) plus the
+			// API (register/deregister methods, which need mirrorEdges
+			// in addition to a store write).
+			sink := &tpdAggregatorSink{Store: s, api: tpdAPI}
+			agg, err := cxoaggregator.New(h.DmsgClient, sink, cxoaggregator.Config{
 				Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
 			})
 			if err != nil {
@@ -475,4 +481,29 @@ func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
+}
+
+// tpdAggregatorSink composes the cxoaggregator.Sink contract from the
+// two collaborators that own the relevant pieces:
+//
+//   - store.Store satisfies the telemetry half (UpdateBandwidth,
+//     UpdateLatency, RecordTransportHeartbeat, IngestTransportTimeline)
+//     directly via the embedded interface.
+//   - The API satisfies the metadata half (RegisterTransportFromCXO,
+//     DeregisterTransportFromCXO) because those need mirrorEdges in
+//     addition to a redis write, and mirrorEdges lives on the API.
+//
+// Defined here so the cxoaggregator package doesn't gain a dependency
+// on the API package; the wiring stays at the deployment layer.
+type tpdAggregatorSink struct {
+	store.Store
+	api *api.API
+}
+
+func (s *tpdAggregatorSink) RegisterTransportFromCXO(ctx context.Context, entry *transport.Entry, reporter cipher.PubKey, version string) error {
+	return s.api.RegisterTransportFromCXO(ctx, entry, reporter, version)
+}
+
+func (s *tpdAggregatorSink) DeregisterTransportFromCXO(ctx context.Context, id uuid.UUID, reporter cipher.PubKey) error {
+	return s.api.DeregisterTransportFromCXO(ctx, id, reporter)
 }

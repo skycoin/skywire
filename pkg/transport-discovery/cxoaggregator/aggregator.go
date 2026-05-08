@@ -50,15 +50,17 @@ import (
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport"
 )
 
-// Sink receives per-transport telemetry updates from visor TreeStore
-// feeds. The TPD's redis store satisfies this via UpdateBandwidth (per
-// reporter, cumulative counters), UpdateLatency (per transport, RTT
-// min/max/avg in ms), and RecordTransportHeartbeat (per-transport
-// uptime — sets today's 5-min slot bit and the "online today" set
-// member; previously written only via the HTTP /transports/ register
-// path).
+// Sink receives per-transport updates from visor TreeStore feeds. The
+// telemetry methods (UpdateBandwidth / UpdateLatency /
+// RecordTransportHeartbeat / IngestTransportTimeline) are satisfied
+// by the TPD's redis store directly. The metadata methods
+// (RegisterTransportFromCXO / DeregisterTransportFromCXO) require
+// the redis write plus the API-layer DHT mirror update; the wiring
+// in cmd/svc/transport-discovery/commands/root.go composes a sink
+// adapter that delegates each method to the appropriate place.
 type Sink interface {
 	UpdateBandwidth(ctx context.Context, transportID string, reporterPK cipher.PubKey, sent, recv uint64) error
 	UpdateLatency(ctx context.Context, transportID string, minMS, maxMS, avgMS float64) error
@@ -71,6 +73,19 @@ type Sink interface {
 	// (tpID, date). Used by dispatchLeaf to absorb the
 	// transports/<id>/<date>/timeline leaves.
 	IngestTransportTimeline(ctx context.Context, tpID uuid.UUID, date string, bitmap []byte) error
+	// RegisterTransportFromCXO accepts a transport entry published on
+	// a visor's TreeStore feed under transports/<uuid>/entry. The
+	// implementation MUST verify reporter is an edge of the entry
+	// (auth equivalence to the SW-Sig httpauth used by the HTTP
+	// register endpoints). version is the publishing visor's build
+	// version (formerly carried in the SW-Visor-Version header).
+	RegisterTransportFromCXO(ctx context.Context, entry *transport.Entry, reporter cipher.PubKey, version string) error
+	// DeregisterTransportFromCXO accepts a delete signal published on
+	// a visor's TreeStore feed under transports/<uuid>/tombstone. The
+	// implementation MUST verify reporter is an edge of the existing
+	// entry; an unknown ID is treated as a no-op (idempotent) so a
+	// tombstone that arrives after a TPD-side eviction doesn't error.
+	DeregisterTransportFromCXO(ctx context.Context, id uuid.UUID, reporter cipher.PubKey) error
 }
 
 // BandwidthSink is retained as an alias for callers that only need the
@@ -92,6 +107,25 @@ type liveSnapshot struct {
 	LatencyAvgMS float64   `json:"latency_avg_ms,omitempty"`
 	SampledAt    time.Time `json:"sampled_at"`
 	Type         string    `json:"type,omitempty"`
+}
+
+// transportEntryLeaf is the wire shape for transports/<uuid>/entry
+// leaves. Carries the bare transport.Entry plus the publishing
+// visor's build version (parity with the SW-Visor-Version header
+// used on POST /v3/transports/). Re-declared on both sides to keep
+// the dependency direction one-way; the visor publisher in
+// pkg/transport/manager.go publishes the same JSON shape.
+type transportEntryLeaf struct {
+	Version string           `json:"version,omitempty"`
+	Entry   *transport.Entry `json:"entry"`
+}
+
+// tombstoneLeaf is the wire shape for transports/<uuid>/tombstone
+// leaves. The timestamp is informational (the visor's local
+// deletion time); TPD applies the deletion at receive time and does
+// not use the timestamp for ordering.
+type tombstoneLeaf struct {
+	DeletedAt time.Time `json:"deleted_at"`
 }
 
 // Config configures the Aggregator.
@@ -356,6 +390,8 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 // dispatchLeaf is the path → action dispatcher. Recognized leaf
 // shapes:
 //
+//	transports/<uuid>/entry               → register (metadata)
+//	transports/<uuid>/tombstone           → deregister
 //	transports/<uuid>/current             → bandwidth + latency + heartbeat
 //	transports/<uuid>/<YYYY-MM-DD>/timeline → per-transport uptime bitmap
 //
@@ -368,6 +404,36 @@ func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubK
 		if err := a.sink.IngestTransportTimeline(ctx, tpID, date, leaf); err != nil {
 			a.log.WithError(err).WithField("transport", tpID).WithField("date", date).
 				Debug("CXO aggregator: IngestTransportTimeline failed")
+		}
+		return
+	}
+	if tpID, ok := parseTransportEntryPath(path); ok {
+		var leafEntry transportEntryLeaf
+		if err := json.Unmarshal(leaf, &leafEntry); err != nil {
+			a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: entry leaf decode failed")
+			return
+		}
+		// The leaf carries the entry; the path carries the UUID. They
+		// must agree — a mismatch is either a publisher bug or
+		// tampering and we drop it.
+		if leafEntry.Entry == nil || leafEntry.Entry.ID != tpID {
+			a.log.WithField("path", path).Debug("CXO aggregator: entry leaf id mismatch")
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := a.sink.RegisterTransportFromCXO(ctx, leafEntry.Entry, reporter, leafEntry.Version); err != nil {
+			a.log.WithError(err).WithField("transport", tpID).
+				Debug("CXO aggregator: RegisterTransportFromCXO failed")
+		}
+		return
+	}
+	if tpID, ok := parseTransportTombstonePath(path); ok {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := a.sink.DeregisterTransportFromCXO(ctx, tpID, reporter); err != nil {
+			a.log.WithError(err).WithField("transport", tpID).
+				Debug("CXO aggregator: DeregisterTransportFromCXO failed")
 		}
 		return
 	}
@@ -445,8 +511,25 @@ func parseTransportTimelinePath(path string) (uuid.UUID, string, bool) {
 // parseCurrentTransportPath returns the transport UUID for paths
 // shaped "transports/<uuid>/current", or false otherwise.
 func parseCurrentTransportPath(path string) (uuid.UUID, bool) {
+	return parseTransportLeafByName(path, "/current")
+}
+
+// parseTransportEntryPath returns the transport UUID for paths shaped
+// "transports/<uuid>/entry", or false otherwise.
+func parseTransportEntryPath(path string) (uuid.UUID, bool) {
+	return parseTransportLeafByName(path, "/entry")
+}
+
+// parseTransportTombstonePath returns the transport UUID for paths
+// shaped "transports/<uuid>/tombstone", or false otherwise.
+func parseTransportTombstonePath(path string) (uuid.UUID, bool) {
+	return parseTransportLeafByName(path, "/tombstone")
+}
+
+// parseTransportLeafByName extracts the transport UUID from any path
+// shaped "transports/<uuid><suffix>" with no extra slashes between.
+func parseTransportLeafByName(path, suffix string) (uuid.UUID, bool) {
 	const prefix = "transports/"
-	const suffix = "/current"
 	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
 		return uuid.UUID{}, false
 	}
