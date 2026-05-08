@@ -18,9 +18,10 @@ func (hv *Hypervisor) getLANDmsgServer() http.HandlerFunc {
 			return
 		}
 		httputil.WriteJSON(w, r, http.StatusOK, LANDmsgServerInfo{
-			Enabled: true,
-			PK:      hv.lanDmsg.PK,
-			Address: hv.lanDmsg.Address,
+			Enabled:       true,
+			PK:            hv.lanDmsg.PK,
+			Address:       hv.lanDmsg.Address,
+			PublicAddress: hv.lanDmsg.PublicAddress,
 		})
 	}
 }

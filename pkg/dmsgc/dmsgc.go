@@ -31,6 +31,13 @@ type Deployment struct {
 	ConnectedServersType string        `json:"servers_type,omitempty"`
 	Protocol             string        `json:"protocol,omitempty"`
 	LANServers           []*disc.Entry `json:"lan_servers,omitempty"`
+	// HypervisorDiscovery is an optional override URL pointing at a
+	// hypervisor-hosted dmsg-discovery proxy. When set, the dmsg client
+	// queries this URL first and falls back to Discovery (the canonical
+	// public dmsg-discovery) on error. Pushed automatically by
+	// hypervisors with their embedded dmsg server enabled — see
+	// LANDmsgServerInfo.DiscoveryURL.
+	HypervisorDiscovery string `json:"hypervisor_discovery,omitempty"`
 }
 
 // DmsgConfig is the visor-side dmsg subsystem configuration.
@@ -63,6 +70,7 @@ type DmsgConfig struct {
 	ConnectedServersType string        `json:"-"`
 	Protocol             string        `json:"-"`
 	LANServers           []*disc.Entry `json:"-"`
+	HypervisorDiscovery  string        `json:"-"`
 }
 
 // UnmarshalJSON accepts either a single Deployment object or an array
@@ -92,7 +100,7 @@ func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
 // is synthesized from the mirror fields so the JSON output is correct.
 func (c DmsgConfig) MarshalJSON() ([]byte, error) {
 	deployments := c.Deployments
-	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.LANServers) > 0) {
+	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.LANServers) > 0 || c.HypervisorDiscovery != "") {
 		deployments = []Deployment{c.toDeployment()}
 	}
 	if len(deployments) == 1 {
@@ -117,6 +125,7 @@ func (c *DmsgConfig) mirrorPrimary() {
 	c.ConnectedServersType = d.ConnectedServersType
 	c.Protocol = d.Protocol
 	c.LANServers = d.LANServers
+	c.HypervisorDiscovery = d.HypervisorDiscovery
 }
 
 // toDeployment snapshots the legacy top-level fields into a Deployment.
@@ -129,6 +138,7 @@ func (c *DmsgConfig) toDeployment() Deployment {
 		ConnectedServersType: c.ConnectedServersType,
 		Protocol:             c.Protocol,
 		LANServers:           c.LANServers,
+		HypervisorDiscovery:  c.HypervisorDiscovery,
 	}
 }
 
@@ -151,7 +161,7 @@ func (c *DmsgConfig) AllDeployments() []Deployment {
 	if len(c.Deployments) > 0 {
 		return c.Deployments
 	}
-	if c.Discovery == "" && c.DiscoveryDmsg == "" && len(c.Servers) == 0 {
+	if c.Discovery == "" && c.DiscoveryDmsg == "" && len(c.Servers) == 0 && c.HypervisorDiscovery == "" {
 		return nil
 	}
 	return []Deployment{c.toDeployment()}
@@ -264,6 +274,20 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 	}
 
 	primaryC := disc.NewHTTP(deployments[0].Discovery, httpC, masterLogger.PackageLogger("dmsgC:disc"))
+	// When the operator (or a hypervisor's auto-discovery push) has set
+	// HypervisorDiscovery, wrap the public discovery as the fallback
+	// behind it. The hypervisor's proxy serves locally-known PKs from
+	// its embedded dmsg server's session list and forwards everything
+	// else upstream — but if the hypervisor itself is unreachable, the
+	// fallback ensures lookups still hit public discovery directly
+	// instead of failing outright.
+	if deployments[0].HypervisorDiscovery != "" {
+		hypC := disc.NewHTTP(deployments[0].HypervisorDiscovery, httpC, masterLogger.PackageLogger("dmsgC:disc:hypervisor"))
+		masterLogger.PackageLogger("dmsgC").
+			Infof("Using hypervisor dmsg-discovery proxy as primary: %s (public fallback: %s)",
+				deployments[0].HypervisorDiscovery, deployments[0].Discovery)
+		primaryC = disc.NewFallbackClient(hypC, primaryC, masterLogger.PackageLogger("dmsgC:disc:fallback"))
+	}
 	if len(primary.LANServers) > 0 {
 		masterLogger.PackageLogger("dmsgC").Infof("Using %d LAN DMSG servers (tried first)", len(primary.LANServers))
 		primaryC = &lanPriorityDisc{APIClient: primaryC, lanEntries: primary.LANServers}
