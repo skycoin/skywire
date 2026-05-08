@@ -266,6 +266,16 @@ type Server struct {
 	tpsMu  sync.RWMutex
 	tpsAPI TPSAPI
 
+	// On-demand CXO subscription manager (optional). When set, the
+	// /api/services and /api/dmsg/entries handlers try the CXO
+	// subscriber tree first and fall through to the HTTP path on
+	// cache miss. AcquireFor / ReleaseFor on every request scopes
+	// the subscription to actual UI activity — its 10s grace
+	// smooths over multi-fetch tab opens. Wired from the hypervisor
+	// via SetCXOSubMgr.
+	cxoSubMu  sync.RWMutex
+	cxoSubMgr CXOSubMgr
+
 	// DMSG discovery cache
 	dmsgMu    sync.RWMutex
 	dmsgCache *DMSGData
@@ -618,6 +628,26 @@ func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
+	// CXO-first: when a subscription manager is wired in, acquire the
+	// network-visualizer feed bundle for the duration of this request
+	// (the manager's grace period batches multi-fetch tab loads). If
+	// the SD feed has any leaves cached, serve from there. Otherwise
+	// fall through to the SD-cache file path / live HTTP fetch below.
+	if mgr := s.cxoMgr(); mgr != nil {
+		mgr.AcquireForTab(CXOTabNetworkVisualizer)
+		defer mgr.ReleaseForTab(CXOTabNetworkVisualizer)
+		if services, ok := s.tryCXOServices(); ok {
+			result, mErr := json.Marshal(services)
+			if mErr == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Set("X-Skywire-Source", "cxo")
+				w.Write(result) //nolint:errcheck,gosec
+				return
+			}
+		}
+	}
+
 	// Try to use cached SD data first
 	if s.config.CacheDirSD != "" && !s.config.NoCache {
 		data, err := s.getSDData()

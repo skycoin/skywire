@@ -1154,6 +1154,31 @@ func (a *tpsAPIAdapter) PK() string {
 	return tps.pk.String()
 }
 
+// cxoSubMgrAdapter wires the visor's on-demand CXO subscription
+// manager into tpviz's narrow CXOSubMgr interface. Tpviz uses int
+// for tab/feed identifiers to keep its API decoupled from
+// pkg/visor (which would close an import cycle). The values match
+// CXOTab / CXOFeed by construction; the cast is safe.
+type cxoSubMgrAdapter struct{ v *Visor }
+
+// AcquireForTab forwards to the visor's lazily-constructed manager.
+// A nil manager (visor has no DMSG client yet) is a no-op — the
+// caller's CXO-first path naturally falls through to its HTTP
+// fallback on a subsequent Walk that returns ok=false.
+func (a *cxoSubMgrAdapter) AcquireForTab(tab int) {
+	a.v.CXOSubMgr().AcquireFor(CXOTab(tab))
+}
+
+// ReleaseForTab forwards to the manager. No-op on nil.
+func (a *cxoSubMgrAdapter) ReleaseForTab(tab int) {
+	a.v.CXOSubMgr().ReleaseFor(CXOTab(tab))
+}
+
+// Walk forwards to the manager.
+func (a *cxoSubMgrAdapter) Walk(feed int, prefix string, fn func(path string, body []byte) bool) bool {
+	return a.v.CXOSubMgr().Walk(CXOFeed(feed), prefix, fn)
+}
+
 func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Check if UI server is configured and enabled
 	if v.conf.UIServer == nil || !v.conf.UIServer.Enable {
