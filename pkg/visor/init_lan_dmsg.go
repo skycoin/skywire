@@ -17,11 +17,12 @@ import (
 
 // LANDmsgServer holds the state of an embedded LAN DMSG server.
 type LANDmsgServer struct {
-	Server  *dmsg.Server
-	PK      cipher.PubKey
-	SK      cipher.SecKey
-	Address string // "ip:port" the server is listening on (LAN-routable)
-	Port    int    // actual port (useful when port 0 was configured)
+	Server        *dmsg.Server
+	PK            cipher.PubKey
+	SK            cipher.SecKey
+	Address       string // "ip:port" the server is listening on (LAN-routable)
+	PublicAddress string // operator-set WAN-routable "host:port" (empty when not configured)
+	Port          int    // actual port (useful when port 0 was configured)
 }
 
 // startLANDmsgServer creates and starts an embedded DMSG server for LAN visors.
@@ -80,7 +81,11 @@ func startLANDmsgServer(conf *visorconfig.LANDmsgServerConf, visorConf *visorcon
 	lanIP := getLANIP(log)
 	advertisedAddr := fmt.Sprintf("%s:%d", lanIP, actualPort)
 
-	log.Infof("LAN DMSG server listening on :%d, advertised as %s", actualPort, advertisedAddr)
+	if conf.PublicAddress != "" {
+		log.Infof("LAN DMSG server listening on :%d, LAN=%s, public=%s", actualPort, advertisedAddr, conf.PublicAddress)
+	} else {
+		log.Infof("LAN DMSG server listening on :%d, advertised as %s", actualPort, advertisedAddr)
+	}
 
 	// Create a direct (in-memory) discovery client for the server
 	serverEntry := &dmsgdisc.Entry{
@@ -106,11 +111,12 @@ func startLANDmsgServer(conf *visorconfig.LANDmsgServerConf, visorConf *visorcon
 	}()
 
 	return &LANDmsgServer{
-		Server:  server,
-		PK:      pk,
-		SK:      sk,
-		Address: advertisedAddr,
-		Port:    actualPort,
+		Server:        server,
+		PK:            pk,
+		SK:            sk,
+		Address:       advertisedAddr,
+		PublicAddress: conf.PublicAddress,
+		Port:          actualPort,
 	}, nil
 }
 
