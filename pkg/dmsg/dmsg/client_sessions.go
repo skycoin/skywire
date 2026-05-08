@@ -26,6 +26,19 @@ import (
 // non-reentrant mutex. Holding the lock only during the cache check and
 // the dialSession step still serializes concurrent dials to the same
 // server, preserving the invariant the lock was protecting.
+//
+// We also resolve the server entry from the local entryCache first when
+// possible. If we go to ce.dc here, the dmsgfirst wrapper's primary
+// path is dmsghttp — which is itself a DialStream that lands back in
+// EnsureAndObtainSession to set up its session, calls getServerEntry,
+// and recurses into the same disc.Entry call until the goroutine stack
+// blows up. The cache short-circuit removes that loop entirely for any
+// server PK we already know about (configured servers are pre-seeded by
+// dmsgc.New, so the common case never makes a network lookup; runtime-
+// learned servers fall through to the slower disc-client path which
+// only recurses if we genuinely don't have the entry yet — and even
+// then, the recursion bottoms out as soon as one configured server's
+// session is dialed and seeds itself).
 func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKey) (ClientSession, error) {
 	ce.sesMx.Lock()
 	if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
@@ -34,7 +47,7 @@ func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKe
 	}
 	ce.sesMx.Unlock()
 
-	srvEntry, err := getServerEntry(ctx, ce.dc, srvPK)
+	srvEntry, err := ce.resolveServerEntry(ctx, srvPK)
 	if err != nil {
 		return ClientSession{}, err
 	}
