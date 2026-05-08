@@ -14,8 +14,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
-	"sync/atomic"
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
@@ -26,7 +24,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dht"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -150,7 +147,6 @@ var RootCmd = &cobra.Command{
 		primaryHTTP := disc.NewHTTP(deployments[0].Discovery, &http.Client{}, log)
 		srv := dmsg.NewServer(conf.PubKey, conf.SecKey, primaryHTTP, &srvConf, m)
 		srv.SetLogger(log)
-		srv.SetDHTBootstrap(conf.EnableDHT)
 
 		// Wire the geo lookup hook so visors using LookupIPGeo can get
 		// their public IP and its geolocation in a single round-trip
@@ -301,12 +297,7 @@ var RootCmd = &cobra.Command{
 			}
 			srv.SetDiscoveryClients(upgraded)
 
-			// Shared DHT node reference — set by the DHT goroutine,
-			// read by the HTTP handler. Access is safe because the
-			// handler only reads after the pointer is set (atomic).
-			var dhtNodeRef atomic.Pointer[dht.Node]
-
-			// Health + DHT query endpoints on port 80
+			// Health endpoint on port 80
 			startedAt := time.Now()
 			dmsgAddr := fmt.Sprintf("%s:%d", conf.PubKey.Hex(), dmsg.DefaultDmsgHTTPPort)
 			healthMux := http.NewServeMux()
@@ -326,55 +317,8 @@ var RootCmd = &cobra.Command{
 					DmsgAddr:      dmsgAddr,
 					DmsgDiscovery: conf.Discovery,
 					PeerServers:   peerPKs,
-					DHTBootstrap:  conf.EnableDHT,
 				}
 				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
-			})
-			// DHT entry lookup: GET /dht/entry/<pk>?salt=dmsg
-			// Allows any connected client (including ephemeral ones like
-			// dmsgcurl) to resolve a PK from the server's local DHT store
-			// without needing a DHT node of their own.
-			healthMux.HandleFunc("/dht/entry/", func(w http.ResponseWriter, r *http.Request) {
-				node := dhtNodeRef.Load()
-				if node == nil {
-					http.Error(w, "DHT not available", http.StatusServiceUnavailable)
-					return
-				}
-				pkHex := strings.TrimPrefix(r.URL.Path, "/dht/entry/")
-				if pkHex == "" {
-					http.Error(w, "missing pk", http.StatusBadRequest)
-					return
-				}
-				var pk cipher.PubKey
-				if err := pk.Set(pkHex); err != nil {
-					http.Error(w, "invalid pk", http.StatusBadRequest)
-					return
-				}
-				salt := r.URL.Query().Get("salt")
-				if salt == "" {
-					salt = "dmsg"
-				}
-				target := dht.MutableItemTarget(pk, []byte(salt))
-				item := node.Store().Get(target)
-				if item == nil {
-					http.Error(w, "not found", http.StatusNotFound)
-					return
-				}
-				w.Header().Set("Content-Type", "application/json")
-				w.Write(item.V) //nolint:errcheck,gosec
-			})
-
-			// DHT entries listing: GET /dht/entries?salt=dmsg
-			healthMux.HandleFunc("/dht/entries", func(w http.ResponseWriter, r *http.Request) {
-				node := dhtNodeRef.Load()
-				if node == nil {
-					http.Error(w, "DHT not available", http.StatusServiceUnavailable)
-					return
-				}
-				salt := r.URL.Query().Get("salt")
-				items, _, _ := node.Store().GetItems(salt, 0, 0)
-				w.Header().Set("Content-Type", "application/json")
-				fmt.Fprintf(w, `{"count":%d}`, len(items)) //nolint:errcheck
 			})
 
 			go func() {
@@ -450,123 +394,6 @@ var RootCmd = &cobra.Command{
 				}()
 			} else {
 				log.Info("Route setup-node disabled (enable with enable_route_setup in config)")
-			}
-
-			// DHT full node on port 100 (optional, enabled via config)
-			if conf.EnableDHT {
-				go func() {
-					dhtLog := logging.MustGetLogger("dmsg-server:dht")
-					dhtLog.Info("Starting DHT full node")
-
-					// Collect other DMSG server PKs as bootstrap peers.
-					var bootstrapPKs []cipher.PubKey
-					for _, p := range conf.Peers {
-						bootstrapPKs = append(bootstrapPKs, p.PubKey)
-					}
-					// Also include deployment service PKs.
-					bootstrapPKs = append(bootstrapPKs, deployment.Prod.DHTBootstrapPKs()...)
-
-					dhtCfg := dht.Config{
-						BootstrapPKs: bootstrapPKs,
-						FullNode:     true,
-					}
-					dhtCfg.SetDefaults()
-
-					dhtTP := dht.NewDMSGTransport(dmsgC)
-					dhtNode := dht.New(dhtCfg, conf.PubKey, conf.SecKey, dhtTP, dhtLog)
-
-					// Set up persistence backend.
-					// Precedence (matches dht.NewBackendFromConfig): RedisAddr →
-					// PersistPath → in-memory. Visors auto-default PersistPath
-					// to <local>/dht.db (see pkg/visor/init_dht.go); the
-					// dmsg-server is environment-dependent (host vs container
-					// vs k8s) so we require it to be set explicitly. Empty
-					// RedisAddr + empty PersistPath = in-memory only, which is
-					// fine for development but loses state on every restart.
-					if conf.RedisAddr != "" {
-						dhtCfg.RedisAddr = conf.RedisAddr
-						dhtCfg.RedisPassword = os.Getenv("REDIS_PASSWORD")
-					} else if conf.PersistPath != "" {
-						dhtCfg.PersistPath = conf.PersistPath
-					}
-					backend, backendErr := dht.NewBackendFromConfig(&dhtCfg)
-					if backendErr != nil {
-						dhtLog.WithError(backendErr).Warn("DHT persistence failed — running in-memory")
-					} else {
-						if setErr := dhtNode.Store().SetBackend(backend); setErr != nil {
-							dhtLog.WithError(setErr).Warn("DHT backend rehydration failed")
-						} else {
-							dhtLog.WithField("items", dhtNode.Store().Len()).Info("DHT store rehydrated")
-						}
-					}
-
-					if startErr := dhtNode.Start(ctx); startErr != nil {
-						dhtLog.WithError(startErr).Error("Failed to start DHT node")
-						return
-					}
-					dhtNodeRef.Store(dhtNode)
-					dhtLog.WithField("id", dhtNode.ID().String()).
-						WithField("bootstrap_peers", len(bootstrapPKs)).
-						Info("DHT full node started on port 100")
-
-					// Advertise this DHT full node under salt "fullnode"
-					// so visor full nodes running fullNodePullLoop can
-					// discover us without relying on hardcoded bootstrap
-					// PKs. The advert is signed by conf.SecKey at PUT
-					// time; a stale advert (>30min old) is filtered out
-					// downstream by FindAdvertisedFullNodes.
-					go dht.AdvertiseFullNode(ctx, dhtNode, dhtLog)
-
-					// Mirror DHT writes back to HTTP discoveries so they
-					// stay in sync when visors publish directly to the DHT.
-					discEndpoints := map[string]string{
-						"dmsg": conf.Discovery,
-					}
-					// TPD and SD URLs from environment (same as other services)
-					if tpdURL := os.Getenv("TPD_URL"); tpdURL != "" {
-						discEndpoints["tp"] = tpdURL
-					}
-					if sdURL := os.Getenv("SD_URL"); sdURL != "" {
-						discEndpoints["svc"] = sdURL
-					}
-					pusher := dht.NewDiscoveryPusher(discEndpoints, logging.MustGetLogger("dht:disc-pusher"))
-					dhtNode.Store().SetOnPut(pusher.OnPut)
-					dhtLog.Info("DHT→discovery pusher enabled")
-
-					// Publish this server's entry to the DHT so visors can
-					// discover DMSG servers without the DMSG discovery HTTP API.
-					go func() {
-						seq := uint64(1)
-						ticker := time.NewTicker(5 * time.Minute)
-						defer ticker.Stop()
-						for {
-							serverEntry := map[string]interface{}{
-								"pk":            conf.PubKey.Hex(),
-								"address":       conf.PublicAddress,
-								"max_sessions":  conf.MaxSessions,
-								"server_type":   conf.Peers, // peer list for reference
-								"dht_bootstrap": true,
-							}
-							data, jErr := json.Marshal(serverEntry)
-							if jErr == nil {
-								if putErr := dhtNode.Put(ctx, data, seq, []byte("dmsg-server")); putErr != nil {
-									dhtLog.WithError(putErr).Trace("Failed to publish server entry to DHT")
-								}
-								seq++
-							}
-							select {
-							case <-ctx.Done():
-								return
-							case <-ticker.C:
-							}
-						}
-					}()
-
-					<-ctx.Done()
-					dhtNode.Stop() //nolint:errcheck,gosec
-				}()
-			} else {
-				log.Info("DHT disabled (enable with enable_dht in config)")
 			}
 
 			<-ctx.Done()

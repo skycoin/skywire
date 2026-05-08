@@ -28,7 +28,6 @@ type V1 struct {
 	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
 	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
-	DHT           *DHTConfig          `json:"dht,omitempty"`
 	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
 	Transport     *Transport          `json:"transport"`
 	Routing       *Routing            `json:"routing"`
@@ -114,31 +113,6 @@ type RewardsConfig struct {
 	CanonicalDomain string          `json:"canonical_domain,omitempty"`
 	SkycoinNode     string          `json:"skycoin_node,omitempty"`
 	LoginNode       string          `json:"login_node,omitempty"`
-}
-
-// DHTConfig configures the Kademlia DHT subsystem.
-// DHT is always enabled when DMSG is available — this config only
-// controls optional parameters like full node mode and trust tiers.
-type DHTConfig struct {
-	// BootstrapPKs are public keys of seed DHT nodes to contact on startup.
-	// If empty, deployment service PKs are used automatically.
-	BootstrapPKs []cipher.PubKey `json:"bootstrap_pks,omitempty"`
-	// FullNode stores all DHT items regardless of XOR distance (few needed).
-	FullNode bool `json:"full_node,omitempty"`
-	// WhitelistedPKs are publisher keys whose data is always replicated and never evicted.
-	WhitelistedPKs []cipher.PubKey `json:"whitelisted_pks,omitempty"`
-	// TrustedPKs are publisher keys that get full replication unless abuse is detected.
-	TrustedPKs []cipher.PubKey `json:"trusted_pks,omitempty"`
-	// PersistPath is the bbolt file for local persistence. Empty = in-memory only.
-	// Default: "<local_path>/dht.db" (set automatically if omitted).
-	PersistPath string `json:"persist_path,omitempty"`
-	// RedisAddr enables Redis persistence (deployment services only).
-	// Format: "host:port". Empty = no Redis.
-	RedisAddr string `json:"redis_addr,omitempty"`
-	// RedisPassword for authenticated Redis connections.
-	RedisPassword string `json:"redis_password,omitempty"`
-	// RedisDB is the Redis database number.
-	RedisDB int `json:"redis_db,omitempty"`
 }
 
 // DmsgWebConfig enables the embedded `.dmsg` resolving proxy hosted by

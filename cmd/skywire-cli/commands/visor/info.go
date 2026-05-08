@@ -140,17 +140,6 @@ var summaryCmd = &cobra.Command{
 		}
 		msg += fmt.Sprintf("Transports: %s\n", tpStr)
 
-		// DHT status
-		if summary.DHTStatus != nil && summary.DHTStatus.Running {
-			dhtMode := "regular"
-			if summary.DHTStatus.FullNode {
-				dhtMode = "full node"
-			}
-			msg += fmt.Sprintf("DHT: %s (%d peers, %d items)\n", dhtMode, summary.DHTStatus.Peers, summary.DHTStatus.StoredItems)
-		} else {
-			msg += "DHT: not running\n"
-		}
-
 		// AR registration: best-effort. A failure here means we'll skip the
 		// AR section in human output and emit nothing for it in JSON; the
 		// rest of the summary is still useful.

@@ -19,7 +19,6 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -309,25 +308,6 @@ Example:
 			}
 		} else if enableCXO {
 			log.Warn("CXO requested but dmsg is not enabled (--mode=http); services publisher disabled")
-		}
-
-		// Wire DHT entry mirroring: every service registration is
-		// also published to the DHT under the visor's PK.
-		if h.DHTNode != nil {
-			mirror := dht.NewEntryMirror(h.DHTNode, "svc", logging.MustGetLogger("dht:svc-mirror"))
-			sdAPI.SetDHTMirror(mirror)
-			log.Info("DHT service mirroring enabled (via local DHT node)")
-		} else if redisURL != "" {
-			redisHost := strings.TrimPrefix(redisURL, "redis://")
-			redisPassword := storeconfig.RedisPassword()
-			redisMirror, mErr := dht.NewRedisMirror(redisHost, redisPassword, 0, "svc", pk, sk, logging.MustGetLogger("dht:svc-redis-mirror"))
-			if mErr != nil {
-				log.WithError(mErr).Warn("DHT Redis mirror failed — service data won't be in DHT")
-			} else {
-				sdAPI.SetDHTMirror(redisMirror)
-				log.Info("DHT service mirroring enabled (via Redis)")
-				go sdAPI.BackfillDHTMirror(ctx, log)
-			}
 		}
 
 		select {

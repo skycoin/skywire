@@ -1389,32 +1389,6 @@ func (rc *rpcClient) TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]
 	return resp, err
 }
 
-// DHTStatus returns the DHT node's status.
-func (rc *rpcClient) DHTStatus() (*DHTStatus, error) {
-	var resp DHTStatus
-	if err := rc.Call("DHTStatus", &struct{}{}, &resp); err != nil {
-		return nil, err
-	}
-	return &resp, nil
-}
-
-// DHTGet retrieves a value from the DHT.
-func (rc *rpcClient) DHTGet(pk string, salt string) ([]byte, error) {
-	var resp []byte
-	err := rc.Call("DHTGet", &DHTGetIn{PK: pk, Salt: salt}, &resp)
-	return resp, err
-}
-
-// DHTPut publishes a value to the DHT.
-func (rc *rpcClient) DHTPut(value []byte, seq uint64, salt string) error {
-	return rc.Call("DHTPut", &DHTPutIn{Value: value, Seq: seq, Salt: salt}, &struct{}{})
-}
-
-// DHTSetFullNode enables or disables full node mode.
-func (rc *rpcClient) DHTSetFullNode(full bool) error {
-	return rc.Call("DHTSetFullNode", &full, &struct{}{})
-}
-
 // DmsgPorterStats returns ephemeral port reservation counts.
 func (rc *rpcClient) DmsgPorterStats() (*DmsgPorterStatus, error) {
 	var resp DmsgPorterStatus
@@ -1457,54 +1431,6 @@ func (rc *rpcClient) DmsgReconnect() (int, error) {
 	var resp int
 	err := rc.Call("DmsgReconnect", &struct{}{}, &resp)
 	return resp, err
-}
-
-// DHTGetAll returns all DHT items matching a salt as JSON.
-func (rc *rpcClient) DHTGetAll(salt string) (string, error) {
-	var resp string
-	if err := rc.Call("DHTGetAll", &salt, &resp); err != nil {
-		return "", err
-	}
-	return resp, nil
-}
-
-// DHTListWithTargets returns all DHT items matching a salt as JSON,
-// each annotated with its storage target key.
-func (rc *rpcClient) DHTListWithTargets(salt string) (string, error) {
-	var resp string
-	if err := rc.Call("DHTListWithTargets", &salt, &resp); err != nil {
-		return "", err
-	}
-	return resp, nil
-}
-
-// DHTSync syncs items from a DHT full node.
-func (rc *rpcClient) DHTSync(remotePK string, salt string) (int, error) {
-	req := DHTSyncRequest{RemotePK: remotePK, Salt: salt}
-	var resp int
-	if err := rc.Call("DHTSync", &req, &resp); err != nil {
-		return 0, err
-	}
-	return resp, nil
-}
-
-// DHTPeers returns the routing-table contents.
-func (rc *rpcClient) DHTPeers() ([]DHTPeerInfo, error) {
-	var resp []DHTPeerInfo
-	if err := rc.Call("DHTPeers", &struct{}{}, &resp); err != nil {
-		return nil, err
-	}
-	return resp, nil
-}
-
-// DHTReconcile runs a one-shot reconcile against a remote full node.
-func (rc *rpcClient) DHTReconcile(remotePK string, salt string) (int, int, error) {
-	req := DHTSyncRequest{RemotePK: remotePK, Salt: salt}
-	var resp DHTReconcileResult
-	if err := rc.Call("DHTReconcile", &req, &resp); err != nil {
-		return 0, 0, err
-	}
-	return resp.Pulled, resp.Pushed, nil
 }
 
 // TransportRPCCall proxies an RPC call to a remote visor over a transport.
