@@ -2,13 +2,11 @@ package visor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
@@ -136,12 +134,10 @@ func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
 }
 
 // arSelfRefreshLoop periodically reconciles the visor's local AR-self
-// cache with what the AR HTTP service reports for our own PK, and (if
-// the DHT node is up) self-publishes the canonical record under the
-// matching addr:* salt. The DHT writes are dual with AR's own RedisMirror
-// — same target, same payload — so newer visors don't depend on the
-// AR-side mirror reaching them and older non-DHT-publishing visors are
-// still covered by AR's mirror.
+// cache with what the AR HTTP service reports for our own PK. AR's
+// own RedisMirror is the canonical replication channel; the visor
+// just needs the local cache so the CLI display and any callers
+// asking for our public addresses get a recent answer.
 //
 // The first refresh runs after a short warmup, then every refreshEvery.
 func (v *Visor) arSelfRefreshLoop(ctx context.Context, log *logging.Logger) {
@@ -156,26 +152,11 @@ func (v *Visor) arSelfRefreshLoop(ctx context.Context, log *logging.Logger) {
 	case <-time.After(warmup):
 	}
 
-	// Initial seq from wall-clock nanoseconds (same scheme dhtPublishLoop
-	// uses for "dmsg" salt) so a republish after restart climbs above any
-	// cached value at peers.
-	seq := uint64(time.Now().UnixNano())
-	if v.dhtNode != nil {
-		queryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		for _, salt := range []string{"addr:stcpr", "addr:sudph"} {
-			if got, err := v.dhtNode.Get(queryCtx, v.conf.PK, []byte(salt)); err == nil && got != nil && got.Seq >= seq {
-				seq = got.Seq + 1
-			}
-		}
-		cancel()
-	}
-
 	tick := time.NewTicker(refreshEvery)
 	defer tick.Stop()
 
 	for {
-		v.arSelfRefreshOnce(ctx, log, seq)
-		seq++
+		v.arSelfRefreshOnce(ctx, log)
 
 		select {
 		case <-ctx.Done():
@@ -185,12 +166,10 @@ func (v *Visor) arSelfRefreshLoop(ctx context.Context, log *logging.Logger) {
 	}
 }
 
-// arSelfRefreshOnce resolves AR for both transport types, updates the
-// cache, and (if the DHT is up) publishes each successful entry.
-//
-// On Resolve failure we keep the previous cache entry — a transient AR
-// error shouldn't drop the CLI display or the DHT advertisement.
-func (v *Visor) arSelfRefreshOnce(ctx context.Context, log *logging.Logger, seq uint64) {
+// arSelfRefreshOnce resolves AR for both transport types and updates
+// the local cache. On Resolve failure we keep the previous cache
+// entry — a transient AR error shouldn't drop the CLI display.
+func (v *Visor) arSelfRefreshOnce(ctx context.Context, _ *logging.Logger) {
 	if v.tpM == nil {
 		return
 	}
@@ -211,24 +190,5 @@ func (v *Visor) arSelfRefreshOnce(ctx context.Context, log *logging.Logger, seq 
 			continue
 		}
 		v.arSelf.set(tpType, data)
-
-		if v.dhtNode == nil {
-			continue
-		}
-		payload, err := json.Marshal(&data)
-		if err != nil {
-			log.WithError(err).Trace("DHT addr publish: marshal failed")
-			continue
-		}
-		if len(payload) > dht.MaxValueSize {
-			continue
-		}
-		salt := []byte("addr:" + tpType)
-		putCtx, putCancel := context.WithTimeout(ctx, 10*time.Second)
-		if err := v.dhtNode.Put(putCtx, payload, seq, salt); err != nil {
-			log.WithError(err).WithField("salt", string(salt)).
-				Trace("DHT addr publish failed")
-		}
-		putCancel()
 	}
 }

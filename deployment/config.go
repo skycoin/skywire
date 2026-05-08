@@ -115,22 +115,6 @@ type Services struct {
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 }
 
-// DHTBootstrapPKs returns the public keys of peers that run DHT nodes.
-// Only DMSG servers have DHT listeners (port 100) — deployment services
-// (DMSG disc, TPD, AR, etc.) only serve HTTP on port 80 and don't run
-// DHT, so including them causes "no associated listener" spam.
-func (s *Services) DHTBootstrapPKs() []cipher.PubKey {
-	var pks []cipher.PubKey
-	// DMSG servers run DHT nodes (enable_dht: true in their config).
-	for _, srv := range s.DmsgServers {
-		var pk cipher.PubKey
-		if err := pk.Set(srv.Static); err == nil {
-			pks = append(pks, pk)
-		}
-	}
-	return pks
-}
-
 // Conf is the configuration URL for the deployment which may be fetched on `skywire cli config gen`
 type Conf struct {
 	Conf string `json:"conf,omitempty"`
