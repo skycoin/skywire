@@ -147,8 +147,20 @@ func (ce *Client) DialStream(ctx context.Context, addr Addr) (*Stream, error) {
 //  1. Entry cache (instant, in-memory)
 //  2. DHT lookup (instant if entry is in local store, no network)
 //  3. HTTP discovery (network round-trip)
+//
+// The entryCache is shared with the server-entry resolution path
+// (Client.resolveServerEntry, populated by SeedEntryCache for
+// configured dmsg servers — see dmsgc.New). A cached entry's kind
+// (Client vs Server) is determined by which fields are populated, so
+// when callers expect a client entry but the cache happens to hold a
+// server entry for that PK (e.g. DHT bootstrap dialing a dmsg server
+// PK as if it were a peer), we must treat it as a miss and fall
+// through to the discovery path — getClientEntry will return
+// ErrDiscEntryIsNotClient, matching the pre-cache behavior. Without
+// this guard, DialStream returns a nil-Client entry and segfaults
+// dereferencing entry.Client.DelegatedServers at line 110.
 func (ce *Client) getClientEntryCached(ctx context.Context, clientPK cipher.PubKey) (*disc.Entry, error) {
-	if entry, ok := ce.getCachedEntry(clientPK); ok {
+	if entry, ok := ce.getCachedEntry(clientPK); ok && entry != nil && entry.Client != nil {
 		ce.LookupCacheHits.Add(1)
 		return entry, nil
 	}
