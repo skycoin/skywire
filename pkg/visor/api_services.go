@@ -296,60 +296,9 @@ func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
 	return body, nil
 }
 
-// dhtServices queries the local DHT store for service entries matching
-// the given type. Returns nil if the DHT has no data (caller should
-// fall back to HTTP). Filters by version and country if non-empty.
-func (v *Visor) dhtServices(serviceType, version, country string) []servicedisc.Service {
-	if v.dhtNode == nil {
-		return nil
-	}
-	items, _, _ := v.dhtNode.Store().GetItems("svc", 0, 0)
-	if len(items) == 0 {
-		return nil
-	}
-	matches := func(svc servicedisc.Service) bool {
-		if svc.Type != serviceType {
-			return false
-		}
-		if version != "" && svc.Version != version {
-			return false
-		}
-		if country != "" {
-			if svc.Geo == nil || !strings.EqualFold(svc.Geo.Country, country) {
-				return false
-			}
-		}
-		return true
-	}
-	// Accept both the new per-visor list shape and the legacy single-
-	// service shape so this reader works across an SD/visor rollout.
-	var services []servicedisc.Service
-	for _, item := range items {
-		var list []servicedisc.Service
-		if err := json.Unmarshal(item.V, &list); err == nil {
-			for _, svc := range list {
-				if matches(svc) {
-					services = append(services, svc)
-				}
-			}
-			continue
-		}
-		var svc servicedisc.Service
-		if json.Unmarshal(item.V, &svc) == nil && matches(svc) {
-			services = append(services, svc)
-		}
-	}
-	return services
-}
-
-// servicesFromDHTOrHTTP tries the DHT first for service listings,
-// falls back to HTTP service discovery if the DHT has no data.
-func (v *Visor) servicesFromDHTOrHTTP(serviceType, version, country string) ([]servicedisc.Service, error) {
-	// Try DHT first.
-	if services := v.dhtServices(serviceType, version, country); len(services) > 0 {
-		return services, nil
-	}
-	// Fall back to HTTP.
+// servicesFromHTTP queries service discovery for service entries
+// matching the given type, with optional version + country filters.
+func (v *Visor) servicesFromHTTP(serviceType, version, country string) ([]servicedisc.Service, error) {
 	log := logging.MustGetLogger("servicedisc")
 	vLog := logging.NewMasterLogger()
 	vLog.SetLevel(logrus.InfoLevel)
@@ -363,19 +312,19 @@ func (v *Visor) servicesFromDHTOrHTTP(serviceType, version, country string) ([]s
 	return sdClient.Services(context.Background(), 0, version, country)
 }
 
-// VPNServers gets available public VPN servers. DHT first, HTTP fallback.
+// VPNServers gets available public VPN servers from service discovery.
 func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {
-	return v.servicesFromDHTOrHTTP(servicedisc.ServiceTypeVPN, version, country)
+	return v.servicesFromHTTP(servicedisc.ServiceTypeVPN, version, country)
 }
 
-// ProxyServers gets available proxy servers. DHT first, HTTP fallback.
+// ProxyServers gets available proxy servers from service discovery.
 func (v *Visor) ProxyServers(version, country string) ([]servicedisc.Service, error) {
-	return v.servicesFromDHTOrHTTP(servicedisc.ServiceTypeProxy, version, country)
+	return v.servicesFromHTTP(servicedisc.ServiceTypeProxy, version, country)
 }
 
-// PublicVisors gets available public visors. DHT first, HTTP fallback.
+// PublicVisors gets available public visors from service discovery.
 func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, error) {
-	return v.servicesFromDHTOrHTTP(servicedisc.ServiceTypeVisor, version, country)
+	return v.servicesFromHTTP(servicedisc.ServiceTypeVisor, version, country)
 }
 
 // DeregisterService deregisters the specified public keys from service discovery.
