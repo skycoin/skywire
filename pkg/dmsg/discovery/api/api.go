@@ -83,6 +83,13 @@ type API struct {
 	allClientsAt     time.Time
 	allClientsErr    error
 	allClientsSingle singleflight // dedupes concurrent refreshes
+
+	// cxoPublisher mirrors set/del entry events into a CXO TreeStore
+	// feed under clients-by-server/<server>/<client>/{entry,tombstone}.
+	// Set when DMSG-D is started with --cxo. Nil when the flag is off;
+	// calling sites null-check via pub == nil so the HTTP path always
+	// works regardless.
+	cxoPublisher *ClientsByServerCXOPublisher
 }
 
 // singleflight is a tiny in-place dedupe primitive. When a refresh is
@@ -165,6 +172,15 @@ func (a *API) SetDHTMirror(m interface {
 	Delete(subjectPK cipher.PubKey)
 }) {
 	a.dhtMirror = m
+}
+
+// SetClientsByServerCXOPublisher installs the CXO publisher that
+// mirrors set/del entry events into a TreeStore feed at
+// clients-by-server/<server>/<client>/{entry,tombstone}. Pass nil to
+// disable. Wired by cmd/dmsg/dmsg-discovery after the publisher is
+// built; no-op until then.
+func (a *API) SetClientsByServerCXOPublisher(p *ClientsByServerCXOPublisher) {
+	a.cxoPublisher = p
 }
 
 // BackfillDHTMirror iterates all existing entries in the store and
@@ -468,6 +484,11 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 				a.dhtMirror.Mirror(entry.Static, entry, entry.Sequence)
 			}
 
+			// CXO mirror — best-effort, no-op if --cxo wasn't set on
+			// startup. Server entries are ignored at this layer (the
+			// publisher only emits clients-by-server leaves).
+			a.cxoPublisher.PublishSetEntry(nil, entry)
+
 			// Record heartbeat for uptime tracking on new client entries.
 			if entry.Client != nil {
 				_ = a.db.RecordHeartbeat(r.Context(), entry.Static, entry.ClientType) //nolint:errcheck
@@ -497,6 +518,10 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 		if a.dhtMirror != nil {
 			a.dhtMirror.Mirror(entry.Static, entry, entry.Sequence)
 		}
+
+		// CXO mirror — diff old vs new DelegatedServers so subscribers
+		// see clean adds/removes for the (server, client) pairs.
+		a.cxoPublisher.PublishSetEntry(oldEntry, entry)
 
 		// Record heartbeat for uptime tracking on client entry updates.
 		if entry.Client != nil {
@@ -540,6 +565,17 @@ func (a *API) delEntry() func(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		// Capture the existing entry BEFORE deleting it so the CXO
+		// publisher knows which (server, client) pairs to tombstone.
+		// Best-effort: a fetch failure here just means we publish no
+		// CXO tombstones; the HTTP delete still proceeds.
+		var preDelEntry *disc.Entry
+		if a.cxoPublisher != nil {
+			if existing, ferr := a.db.Entry(r.Context(), entry.Static); ferr == nil {
+				preDelEntry = existing
+			}
+		}
+
 		err := a.db.DelEntry(r.Context(), entry.Static)
 
 		// If we make sure that every error is handled then we can
@@ -552,6 +588,10 @@ func (a *API) delEntry() func(w http.ResponseWriter, r *http.Request) {
 		if a.dhtMirror != nil {
 			a.dhtMirror.Delete(entry.Static)
 		}
+
+		// CXO mirror: tombstone every (server, client) pair the
+		// deleted client entry was previously delegated to.
+		a.cxoPublisher.PublishDelEntry(preDelEntry)
 
 		a.writeJSON(w, r, http.StatusOK, disc.MsgEntryDeleted)
 	}

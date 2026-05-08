@@ -57,6 +57,7 @@ var (
 	pprofMode         string
 	pprofAddr         string
 	mode              string
+	enableCXO         bool
 )
 
 func init() {
@@ -87,6 +88,7 @@ func init() {
 	// cmd/dmsg-commands/dmsg-server/commands/start/root.go). http and
 	// dual are accepted; dmsg is rejected.
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dual (dmsg-only is rejected — dmsg-servers reach this service over HTTP)")
+	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO clients-by-server publisher feed over DMSG (requires --sk and --mode=dual)")
 }
 
 // RootCmd contains commands for dmsg-discovery
@@ -283,6 +285,22 @@ Example:
 					log.Errorf("dmsghttp.ServeDebug: %v", debugErr)
 				}
 			}()
+
+			// CXO clients-by-server publisher: outbound feed mirroring
+			// the AllClientsByServer / ClientsByServer view. Subscribers
+			// (the hypervisor's network visualizer) connect to DMSG-D's
+			// PK on skyenv.DmsgDMSGDClientsByServerCXOPort and read
+			// JSON-encoded client entries grouped by server PK from
+			// "clients-by-server/<server>/<client>/{entry,tombstone}"
+			// instead of HTTP-polling /dmsg-discovery/servers/clients.
+			if enableCXO {
+				if pub, perr := api.StartClientsByServerCXOPublisher(dmsgDC, sk, log); perr != nil {
+					log.WithError(perr).Error("Failed to start CXO clients-by-server publisher, continuing without it")
+				} else {
+					a.SetClientsByServerCXOPublisher(pub)
+					defer pub.Close() //nolint:errcheck
+				}
+			}
 
 			// Mirror DMSG entries to Redis in DHT format. The DMSG servers'
 			// DHT nodes read from the same Redis and serve the data via
