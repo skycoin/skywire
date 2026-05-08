@@ -268,12 +268,6 @@ type API interface {
 	TPSExternalAddTransport(tpsPK, targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
 	TPSExternalGetTransports(tpsPK, targetPK cipher.PubKey) ([]TPSTransportResponse, error)
 
-	// DHT operations
-	DHTStatus() (*DHTStatus, error)
-	DHTGet(pk string, salt string) ([]byte, error)
-	DHTPut(value []byte, seq uint64, salt string) error
-	DHTSetFullNode(full bool) error
-
 	// DMSG diagnostics
 	DmsgPorterStats() (*DmsgPorterStatus, error)
 	DmsgPorterReset() (*DmsgPorterStatus, error)
@@ -313,11 +307,6 @@ type API interface {
 	HVListForwardedPorts(pk cipher.PubKey) ([]ForwardedPort, error)
 	HVRegisterForwardedPort(pk cipher.PubKey, p ForwardedPort) error
 	HVUpdateForwardedPort(pk cipher.PubKey, p ForwardedPort) error
-	DHTSync(remotePK string, salt string) (int, error)
-	DHTGetAll(salt string) (string, error)
-	DHTListWithTargets(salt string) (string, error)
-	DHTPeers() ([]DHTPeerInfo, error)
-	DHTReconcile(remotePK string, salt string) (pulled, pushed int, err error)
 
 	// Close closes the API connection (for RPC clients)
 	Close() error
@@ -451,15 +440,6 @@ type Summary struct {
 	ConfigVersion        string                           `json:"config_version"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 	IsPublic             bool                             `json:"is_public"`
-	DHTStatus            *DHTStatusSummary                `json:"dht_status,omitempty"`
-}
-
-// DHTStatusSummary is a compact DHT status for visor info/summary.
-type DHTStatusSummary struct {
-	Running     bool `json:"running"`
-	FullNode    bool `json:"full_node"`
-	Peers       int  `json:"peers"`
-	StoredItems int  `json:"stored_items"`
 }
 
 // HealthInfo carries information about visor's services health.

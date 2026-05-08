@@ -3,7 +3,6 @@ package cliroute
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -19,14 +18,12 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dht"
 	routeFinder "github.com/skycoin/skywire/pkg/route-finder/store"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -177,26 +174,14 @@ var calcCmd = &cobra.Command{
 
 		var entries []*transport.Entry
 		var err error
+		// --source dht / auto previously walked the local DHT store
+		// before falling back to TPD. The DHT subsystem has been
+		// removed; both modes now go straight to TPD.
 		switch strings.ToLower(calcSource) {
-		case "tpd":
+		case "tpd", "auto", "dht":
 			entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
-		case "dht":
-			if rpcClient == nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--source dht requires a running visor (RPC unavailable)"))
-			}
-			entries, err = fetchAllTransportsFromDHT(rpcClient)
-		case "auto":
-			if rpcClient != nil {
-				entries, err = fetchAllTransportsFromDHT(rpcClient)
-				if err != nil || len(entries) < 10 {
-					// DHT had no useful data; fall back.
-					entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
-				}
-			} else {
-				entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
-			}
 		default:
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|dht|auto", calcSource))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|auto", calcSource))
 		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -398,109 +383,6 @@ func fetchAllTransports(_ context.Context, cmdFlags *pflag.FlagSet, tpdAddr stri
 		return nil, err
 	}
 	return entries, nil
-}
-
-// fetchAllTransportsFromDHT pulls every "tp" salt entry from the local
-// DHT store and parses it as a list of transport.Entry. Three formats
-// coexist under this salt:
-//
-//  1. Bare entries (TPDAdapter): []transport.Entry — used directly.
-//  2. SignedEntries: []transport.SignedEntry — unwrap the .Entry.
-//  3. Compact entries: [{r, t, l}] — published by deployment-side
-//     mirrors, missing the source PK in the value. We recover the
-//     source PK by cross-referencing the tp entry's storage-target
-//     hash against the dmsg salt's index: every dmsg entry contains
-//     its publisher PK in `static`, and target = SHA256(pk || salt),
-//     so the dmsg salt is a known PK→target index for every visor
-//     that publishes both. Targets we can't resolve via that index
-//     are skipped.
-//
-// Synthetic transport IDs are generated for compact entries (the
-// tuple is deterministic, so re-running on the same data gives the
-// same IDs). Latency is preserved as Entry.Latency.
-//
-// On a full node the bare-entry coverage is comprehensive; on a
-// non-full node the local store is sparse and this function will
-// return only entries near the local node ID. For comparison
-// against TPD HTTP, run on a full node after a reconcile pass.
-func fetchAllTransportsFromDHT(rpcClient visor.API) ([]*transport.Entry, error) {
-	tpBody, err := rpcClient.DHTListWithTargets("tp")
-	if err != nil {
-		return nil, fmt.Errorf("DHT ListWithTargets(tp): %w", err)
-	}
-	// Build the target→PK index from the dmsg salt.
-	pkByTpTarget, err := buildTpTargetIndex(rpcClient)
-	if err != nil {
-		// Non-fatal: we still have bare entries, just no compact recovery.
-		pkByTpTarget = nil
-	}
-
-	type targeted struct {
-		Target string          `json:"target"`
-		Value  json.RawMessage `json:"value"`
-	}
-	var rows []targeted
-	if err := json.Unmarshal([]byte(tpBody), &rows); err != nil {
-		return nil, fmt.Errorf("parse DHT tp envelope: %w", err)
-	}
-
-	var entries []*transport.Entry
-	resolved, unresolved := 0, 0
-
-	for _, row := range rows {
-		// Compact-array shape needs a source PK; try the dmsg-salt
-		// index. Bare/signed/compact-envelope shapes carry the source
-		// internally, so we don't need a srcPK for them — but pass it
-		// anyway so DecodeTpItem can fall back if needed.
-		srcPK := pkByTpTarget[row.Target]
-		decoded, err := dht.DecodeTpItem(row.Value, srcPK)
-		if err != nil {
-			unresolved++
-			continue
-		}
-		if len(decoded) == 0 {
-			continue
-		}
-		entries = append(entries, decoded...)
-		resolved++
-	}
-
-	if len(entries) == 0 {
-		return nil, fmt.Errorf("DHT tp salt empty or unparseable (rows=%d, resolved=%d, unresolved=%d)",
-			len(rows), resolved, unresolved)
-	}
-	return entries, nil
-}
-
-// buildTpTargetIndex walks the dmsg salt to build a hex(target) → PK
-// map suitable for resolving compact tp entries. Each dmsg entry
-// contains the publisher PK in its `static` field; we hash that PK
-// with the tp salt to compute the target where the visor's tp entry
-// would live. Returned map is keyed by hex-encoded target.
-func buildTpTargetIndex(rpcClient visor.API) (map[string]cipher.PubKey, error) {
-	dmsgBody, err := rpcClient.DHTGetAll("dmsg")
-	if err != nil {
-		return nil, fmt.Errorf("DHT GetAll(dmsg): %w", err)
-	}
-	var raw []struct {
-		Static string `json:"static"`
-	}
-	if err := json.Unmarshal([]byte(dmsgBody), &raw); err != nil {
-		return nil, fmt.Errorf("parse DHT dmsg envelope: %w", err)
-	}
-	out := make(map[string]cipher.PubKey, len(raw))
-	for _, e := range raw {
-		if e.Static == "" {
-			continue
-		}
-		var pk cipher.PubKey
-		if err := pk.Set(e.Static); err != nil {
-			continue
-		}
-		target := dht.MutableItemTarget(pk, []byte("tp"))
-		out[hex.EncodeToString(target[:])] = pk
-	}
-	return out, nil
 }
 
 // memoryStore wraps fetched transports to implement store.Store for route-finder's Graph

@@ -21,7 +21,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/httpauth"
@@ -444,27 +443,6 @@ Example:
 			}
 		} else if enableCXO {
 			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator/publisher disabled")
-		}
-
-		// Wire DHT entry mirroring: every transport registration is
-		// also published to the DHT under each edge visor's PK.
-		if h.DHTNode != nil {
-			mirror := dht.NewEntryMirror(h.DHTNode, "tp", logging.MustGetLogger("dht:tp-mirror"))
-			tpdAPI.SetDHTMirror(mirror)
-			logger.Info("DHT transport mirroring enabled (via local DHT node)")
-		} else if redisURL != "" {
-			// No local DHT node — write directly to Redis so DMSG servers'
-			// DHT nodes can serve the data to the Kademlia network.
-			redisHost := strings.TrimPrefix(redisURL, redisScheme)
-			redisPassword := os.Getenv("REDIS_PASSWORD")
-			redisMirror, mErr := dht.NewRedisMirror(redisHost, redisPassword, 0, "tp", pk, sk, logging.MustGetLogger("dht:tp-redis-mirror"))
-			if mErr != nil {
-				logger.WithError(mErr).Warn("DHT Redis mirror failed — transport data won't be in DHT")
-			} else {
-				tpdAPI.SetDHTMirror(redisMirror)
-				logger.Info("DHT transport mirroring enabled (via Redis)")
-				go tpdAPI.BackfillDHTMirror(ctx, logger)
-			}
 		}
 
 		select {
