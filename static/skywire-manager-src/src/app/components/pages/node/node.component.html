@@ -24,7 +24,27 @@
            in the top bar instead, persistent across tabs. -->
       <div class="full-size-main-area">
         <div class="d-flex flex-column h-100">
-          <router-outlet></router-outlet>
+          <!-- Router outlet hosts every tab except Terminal. The
+               terminal iframe is rendered as a sibling below so its
+               DOM element stays mounted across tab switches; pulling
+               it through router-outlet would let Angular detach the
+               element on navigation, which forces a browser-level
+               iframe reload and resets the dmsgpty session. -->
+          <div [hidden]="isTerminalTab" class="d-flex flex-column h-100">
+            <router-outlet></router-outlet>
+          </div>
+          <div *ngIf="terminalIframeUrl" [hidden]="!isTerminalTab" class="rounded-elevated-box mt-3 term-box">
+            <div class="box-internal-container term-shell">
+              <div class="term-controls">
+                <span class="dim small">{{ 'terminal.help' | translate }}</span>
+                <button mat-stroked-button class="term-fullscreen" (click)="openTerminalFullWindow()">
+                  <mat-icon [inline]="true">open_in_new</mat-icon>
+                  {{ 'terminal.open-fullscreen' | translate }}
+                </button>
+              </div>
+              <iframe class="term-frame" [src]="terminalIframeUrl" allowfullscreen></iframe>
+            </div>
+          </div>
         </div>
       </div>
     </div>

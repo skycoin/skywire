@@ -41,3 +41,42 @@
     float: right;
   }
 }
+
+// Terminal iframe lives in this template (not TerminalComponent) so
+// its DOM element stays mounted across tab switches.
+.term-box {
+  display: flex;
+  flex-direction: column;
+}
+
+.term-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.term-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0;
+
+  .dim { color: rgba(255, 255, 255, 0.6); }
+  .small { font-size: 0.85em; }
+
+  .term-fullscreen {
+    margin-left: auto;
+    color: rgba(255, 255, 255, 0.85) !important;
+    .mat-icon { color: inherit; }
+  }
+}
+
+.term-frame {
+  width: 100%;
+  height: 70vh;
+  min-height: 420px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: #000;
+}
