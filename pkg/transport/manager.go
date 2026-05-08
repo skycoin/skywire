@@ -3,6 +3,7 @@ package transport
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -91,6 +92,14 @@ type Manager struct {
 	// tpdCache stores the cached transport discovery data for local route calculation
 	tpdCache   []*Entry
 	tpdCacheMu sync.RWMutex
+
+	// tpdLeafPub mirrors register / deregister to the visor's CXO
+	// stats publisher tree (the same tree that already carries
+	// transports/<uuid>/current and timeline leaves). Set lazily by
+	// the visor's stats init after the publisher is constructed; nil
+	// means "no CXO publish, HTTP path only." See SetTPDLeafPublisher.
+	tpdLeafPubMu sync.RWMutex
+	tpdLeafPub   TPDLeafPublisher
 
 	// regNudge signals the re-registration loop to run soon (after a short debounce).
 	// Sent after accepting a new transport so it gets batch-registered quickly.
@@ -320,6 +329,11 @@ func (tm *Manager) flushDeletionQueue() {
 	} else {
 		tm.Logger.Debugf("Batch deleted %d/%d transports from TPD", deleted, len(ids))
 	}
+
+	// Mirror to the CXO publisher tree. Dual-write phase: best-effort,
+	// and idempotent on TPD's side (DeregisterTransport on a
+	// not-found ID is a no-op).
+	tm.publishTPDTombstones(ids)
 }
 
 func (tm *Manager) reRegisterTransports(ctx context.Context) {
@@ -358,6 +372,11 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 	} else {
 		tm.Logger.Debugf("Successfully re-registered %d transports", len(bareEntries))
 	}
+
+	// Mirror to the CXO publisher tree. Dual-write phase: HTTP is
+	// authoritative; CXO is best-effort and converges by the next
+	// tick if a publish fails or the publisher isn't yet wired.
+	tm.publishTPDEntries(bareEntries)
 }
 
 func (tm *Manager) getPTpsCache() []PersistentTransports {
@@ -365,6 +384,95 @@ func (tm *Manager) getPTpsCache() []PersistentTransports {
 	defer tm.Conf.PTpsCacheMu.Unlock()
 
 	return tm.Conf.PersistentTransportsCache
+}
+
+// TPDLeafPublisher is the contract the transport manager uses to
+// mirror register / deregister events into a CXO publisher tree
+// consumed by TPD's aggregator. *treestore.Publisher already
+// satisfies this; declaring it as an interface keeps the transport
+// package free of a cxo/treestore dependency. Wired by
+// pkg/visor/init_stats.go after the publisher is built.
+type TPDLeafPublisher interface {
+	Put(path string, value []byte) error
+	Delete(path string) error
+}
+
+// SetTPDLeafPublisher installs (or clears, if nil) the CXO publisher
+// hook used to mirror transport register / deregister leaves to TPD.
+// Safe to call after Serve has started — the next register tick or
+// flushDeletionQueue picks it up. Calling with nil disables CXO
+// mirroring without affecting the HTTP register path.
+func (tm *Manager) SetTPDLeafPublisher(p TPDLeafPublisher) {
+	tm.tpdLeafPubMu.Lock()
+	tm.tpdLeafPub = p
+	tm.tpdLeafPubMu.Unlock()
+}
+
+func (tm *Manager) tpdLeafPublisher() TPDLeafPublisher {
+	tm.tpdLeafPubMu.RLock()
+	defer tm.tpdLeafPubMu.RUnlock()
+	return tm.tpdLeafPub
+}
+
+// publishTPDEntries publishes one transports/<uuid>/entry leaf per
+// entry. Best-effort: failures are logged at debug and the next
+// reRegister tick retries.
+func (tm *Manager) publishTPDEntries(entries []*Entry) {
+	pub := tm.tpdLeafPublisher()
+	if pub == nil || len(entries) == 0 {
+		return
+	}
+	type entryLeaf struct {
+		Version string `json:"version,omitempty"`
+		Entry   *Entry `json:"entry"`
+	}
+	for _, e := range entries {
+		if e == nil {
+			continue
+		}
+		body, err := json.Marshal(entryLeaf{Version: tm.Conf.Version, Entry: e})
+		if err != nil {
+			tm.Logger.WithError(err).WithField("transport", e.ID).
+				Debug("Failed to marshal transport entry leaf")
+			continue
+		}
+		path := fmt.Sprintf("transports/%s/entry", e.ID.String())
+		if err := pub.Put(path, body); err != nil {
+			tm.Logger.WithError(err).WithField("path", path).
+				Debug("Failed to publish transport entry leaf to CXO")
+		}
+	}
+}
+
+// publishTPDTombstones publishes a transports/<uuid>/tombstone leaf
+// per id, and removes the corresponding /entry leaf. Best-effort.
+func (tm *Manager) publishTPDTombstones(ids []uuid.UUID) {
+	pub := tm.tpdLeafPublisher()
+	if pub == nil || len(ids) == 0 {
+		return
+	}
+	body, err := json.Marshal(struct {
+		DeletedAt time.Time `json:"deleted_at"`
+	}{DeletedAt: time.Now().UTC()})
+	if err != nil {
+		tm.Logger.WithError(err).Debug("Failed to marshal tombstone body")
+		return
+	}
+	for _, id := range ids {
+		// Delete the entry leaf so a future tree walk doesn't replay
+		// the now-stale registration; the tombstone leaf is the
+		// positive deletion signal that drives TPD's aggregator.
+		entryPath := fmt.Sprintf("transports/%s/entry", id.String())
+		if err := pub.Delete(entryPath); err != nil {
+			tm.Logger.WithError(err).WithField("path", entryPath).
+				Debug("Failed to delete transport entry leaf from CXO")
+		}
+		tombPath := fmt.Sprintf("transports/%s/tombstone", id.String())
+		if err := pub.Put(tombPath, body); err != nil {
+			tm.Logger.WithError(err).WithField("path", tombPath).
+				Debug("Failed to publish transport tombstone to CXO")
+		}
+	}
 }
 
 // SetPTpsCache sets the PersistentTransportsCache

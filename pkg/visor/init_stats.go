@@ -65,6 +65,13 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 			log.WithError(err).Warn("Stats: hydrating CXO publisher from bbolt failed")
 		}
 		tracker.SetSink(sink)
+		// Wire the same publisher into the transport manager so its
+		// register / deregister loops mirror the canonical entry +
+		// tombstone leaves to TPD's CXO aggregator (dual-write
+		// alongside the HTTP path during migration).
+		if v.tpM != nil {
+			v.tpM.SetTPDLeafPublisher(pub)
+		}
 	}
 
 	tracker.Run(v.ctx)
