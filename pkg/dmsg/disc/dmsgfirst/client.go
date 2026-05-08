@@ -155,7 +155,24 @@ func shouldFallback(err error) bool {
 	return false
 }
 
+// insideTransport reports whether the call is happening inside a
+// dmsghttp.HTTPTransport.RoundTrip frame. The DMSG-primary path of
+// every fallbackClient method dials over THIS very transport, so
+// re-entering it here would recurse indefinitely on the same
+// goroutine — every level adds a fresh DialStream → discovery
+// lookup → fallbackClient.X → dmsghttp.RoundTrip frame, blowing
+// the stack within milliseconds. When the guard is set, we skip
+// the primary entirely and use the HTTP fallback for that one call.
+// The outer (non-recursive) caller's normal DMSG-primary flow is
+// unaffected — the guard is scoped to the single nested call.
+func insideTransport(ctx context.Context) bool {
+	return dmsghttp.IsInsideTransport(ctx)
+}
+
 func (c *fallbackClient) Entry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error) {
+	if insideTransport(ctx) {
+		return c.fallback.Entry(ctx, pk)
+	}
 	if e, err := c.primary.Entry(ctx, pk); !shouldFallback(err) {
 		return e, err
 	} else { //nolint:revive
@@ -165,6 +182,9 @@ func (c *fallbackClient) Entry(ctx context.Context, pk cipher.PubKey) (*disc.Ent
 }
 
 func (c *fallbackClient) PostEntry(ctx context.Context, entry *disc.Entry) error {
+	if insideTransport(ctx) {
+		return c.fallback.PostEntry(ctx, entry)
+	}
 	if err := c.primary.PostEntry(ctx, entry); !shouldFallback(err) {
 		return err
 	} else { //nolint:revive
@@ -174,6 +194,9 @@ func (c *fallbackClient) PostEntry(ctx context.Context, entry *disc.Entry) error
 }
 
 func (c *fallbackClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *disc.Entry) error {
+	if insideTransport(ctx) {
+		return c.fallback.PutEntry(ctx, sk, entry)
+	}
 	if err := c.primary.PutEntry(ctx, sk, entry); !shouldFallback(err) {
 		return err
 	} else { //nolint:revive
@@ -183,6 +206,9 @@ func (c *fallbackClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *
 }
 
 func (c *fallbackClient) DelEntry(ctx context.Context, entry *disc.Entry) error {
+	if insideTransport(ctx) {
+		return c.fallback.DelEntry(ctx, entry)
+	}
 	if err := c.primary.DelEntry(ctx, entry); !shouldFallback(err) {
 		return err
 	} else { //nolint:revive
@@ -192,6 +218,9 @@ func (c *fallbackClient) DelEntry(ctx context.Context, entry *disc.Entry) error 
 }
 
 func (c *fallbackClient) AvailableServers(ctx context.Context) ([]*disc.Entry, error) {
+	if insideTransport(ctx) {
+		return c.fallback.AvailableServers(ctx)
+	}
 	if v, err := c.primary.AvailableServers(ctx); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
@@ -201,6 +230,9 @@ func (c *fallbackClient) AvailableServers(ctx context.Context) ([]*disc.Entry, e
 }
 
 func (c *fallbackClient) AllServers(ctx context.Context) ([]*disc.Entry, error) {
+	if insideTransport(ctx) {
+		return c.fallback.AllServers(ctx)
+	}
 	if v, err := c.primary.AllServers(ctx); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
@@ -210,6 +242,9 @@ func (c *fallbackClient) AllServers(ctx context.Context) ([]*disc.Entry, error) 
 }
 
 func (c *fallbackClient) AllEntries(ctx context.Context) ([]string, error) {
+	if insideTransport(ctx) {
+		return c.fallback.AllEntries(ctx)
+	}
 	if v, err := c.primary.AllEntries(ctx); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
@@ -219,6 +254,9 @@ func (c *fallbackClient) AllEntries(ctx context.Context) ([]string, error) {
 }
 
 func (c *fallbackClient) AllClientsByServer(ctx context.Context) (map[string][]*disc.Entry, error) {
+	if insideTransport(ctx) {
+		return c.fallback.AllClientsByServer(ctx)
+	}
 	if v, err := c.primary.AllClientsByServer(ctx); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
@@ -228,6 +266,9 @@ func (c *fallbackClient) AllClientsByServer(ctx context.Context) (map[string][]*
 }
 
 func (c *fallbackClient) ClientsByServer(ctx context.Context, serverPK cipher.PubKey) ([]*disc.Entry, error) {
+	if insideTransport(ctx) {
+		return c.fallback.ClientsByServer(ctx, serverPK)
+	}
 	if v, err := c.primary.ClientsByServer(ctx, serverPK); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
