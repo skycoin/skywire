@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, NgZone, Injector, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Subscription } from 'rxjs/internal/Subscription';
 import { Observable, ReplaySubject, delay, of, timer } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -96,6 +97,17 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // Manages the options shown in the menu.
   nodeActionsHelper: NodeActionsHelper;
 
+  // Terminal iframe is hosted here (not in TerminalComponent) so the
+  // dmsgpty websocket survives tab switches. Browsers reload an
+  // iframe whenever its DOM element is detached and re-attached, so
+  // routing the iframe through <router-outlet> would reset the shell
+  // every time the user clicks away. Keeping the element parked in
+  // NodeComponent's template — visible only when the Terminal tab is
+  // active — preserves the running session.
+  terminalIframeUrl: SafeResourceUrl | null = null;
+  terminalFullWindowUrl = '';
+  private boundTerminalPk = '';
+
   /**
    * Ask the currently displayed instance of this page to reload the node data.
    */
@@ -134,6 +146,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     private snackbarService: SnackbarService,
     private injector: Injector,
     private cdr: ChangeDetectorRef,
+    private sanitizer: DomSanitizer,
     router: Router,
   ) {
     super();
@@ -179,6 +192,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
     }
     this.updateTabBar();
+    this.maybeBuildTerminalUrl();
     this.navigationsSubscription.unsubscribe();
 
     // Load the data.
@@ -386,6 +400,31 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     }
   }
 
+  get isTerminalTab(): boolean {
+    return this.selectedTabIndex === 10;
+  }
+
+  /**
+   * Build the iframe URL the first time the user lands on the
+   * Terminal tab for this visor. Once built, the iframe element is
+   * kept mounted (just hidden when off-tab) so the websocket and
+   * shell session live for as long as NodeComponent does.
+   */
+  private maybeBuildTerminalUrl() {
+    if (!this.isTerminalTab) { return; }
+    if (!this.node || !this.node.localPk) { return; }
+    if (this.boundTerminalPk === this.node.localPk) { return; }
+    const url = '/pty/' + this.node.localPk;
+    this.terminalIframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    this.terminalFullWindowUrl = window.location.origin + url;
+    this.boundTerminalPk = this.node.localPk;
+  }
+
+  openTerminalFullWindow() {
+    if (!this.terminalFullWindowUrl) { return; }
+    window.open(this.terminalFullWindowUrl, '_blank', 'noopener noreferrer');
+  }
+
   /**
    * Called when an option form the top bar is selected.
    * @param actionName Name of the selected option.
@@ -458,6 +497,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
             this.trafficData = result.trafficData;
             this.nodeLoaded = true;
             this.refreshHeader();
+            this.maybeBuildTerminalUrl();
           });
           console.log('[HV-DIAG] node assigned, instance:', this.instanceId, 'nodeLoaded:', this.nodeLoaded, 'node.localPk:', this.node?.localPk?.substring(0, 8), 'transports:', this.node?.transports?.length, 'routes:', this.node?.routes?.length);
           try {
