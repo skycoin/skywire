@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -193,7 +194,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 
 			// fetch public visors
 			var addrs []cipher.PubKey
-			addrs, err = a.fetchPubAddresses(ctx)
+			addrs, err = a.fetchPubAddresses(ctx, v)
 			if err != nil {
 				a.log.Errorf("Cannot fetch public visors from service discovery: %s", err)
 				v.isServicesHealthy.unset()
@@ -411,10 +412,25 @@ func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.Pub
 	return nil
 }
 
-func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey, error) {
-	var services []servicedisc.Service
+func (a *autoconnector) fetchPubAddresses(ctx context.Context, v *Visor) ([]cipher.PubKey, error) {
+	// CXO-first: when the on-demand subscription manager has a fresh
+	// snapshot of SD's services tree, use it. The manager's cycle
+	// runs at most once per `hypervisor.cxo_subscribe_interval`
+	// (default 5min), and a fresh AcquireFor here kicks off that
+	// cycle if no other consumer has already done so. Release on
+	// return; the manager's grace period handles the next
+	// autoconnect tick reusing the running cycle.
+	if mgr := v.CXOSubMgr(); mgr != nil {
+		mgr.AcquireFor(TabAutoconnect)
+		defer mgr.ReleaseFor(TabAutoconnect)
+		if pks := pubVisorsFromCXOSnapshot(mgr); len(pks) > 0 {
+			a.log.WithField("count", len(pks)).Debug("Autoconnect: resolved public visors from CXO snapshot")
+			return pks, nil
+		}
+	}
 
-	// Resolve public visors from service discovery over HTTP.
+	// Fall back to HTTP service discovery.
+	var services []servicedisc.Service
 	retrier := netutil.NewDefaultRetrier(a.log)
 	fetch := func() (err error) {
 		services, err = a.client.Services(ctx, a.maxConns, "", "")
@@ -428,6 +444,34 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context) ([]cipher.PubKey,
 		pks[i] = service.Addr.PubKey()
 	}
 	return pks, nil
+}
+
+// pubVisorsFromCXOSnapshot walks the SD services tree under
+// services/visor/<pk>/entry and returns the PKs as a slice. Empty
+// slice (rather than nil) when the snapshot exists but has no visor
+// entries; nil when the snapshot is missing entirely (caller falls
+// through to HTTP).
+func pubVisorsFromCXOSnapshot(mgr *CXOSubscriptionManager) []cipher.PubKey {
+	var pks []cipher.PubKey
+	mgr.Walk(FeedSDServices, "services/visor/", func(path string, _ []byte) bool {
+		// path = services/visor/<pk>/{entry,tombstone}.
+		// Skip tombstones; live entries only.
+		if !strings.HasSuffix(path, "/entry") {
+			return true
+		}
+		// Strip the prefix and trailing "/entry" to recover the PK.
+		core := strings.TrimSuffix(strings.TrimPrefix(path, "services/visor/"), "/entry")
+		if core == "" {
+			return true
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(core); err != nil {
+			return true
+		}
+		pks = append(pks, pk)
+		return true
+	})
+	return pks
 }
 
 // return public keys from pks that are absent in given list of transports
