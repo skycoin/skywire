@@ -388,6 +388,16 @@ func init() {
 	genConfigCmd.Flags().StringVar(&cliAddr, "cliaddr", scriptExecString("${CLIADDR}"), "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")
 
+	// Embedded DMSG server (LAN/WAN). Disabled by default; pinning the
+	// port + setting public_address makes it WAN-reachable for managed
+	// remote visors (operator must port-forward the chosen TCP port).
+	genConfigCmd.Flags().BoolVar(&lanDmsgEnable, "lan-dmsg", scriptExecBool("${LANDMSG:-false}"), "enable hypervisor's embedded DMSG server (requires --ishv)")
+	gHiddenFlags = append(gHiddenFlags, "lan-dmsg")
+	genConfigCmd.Flags().IntVar(&lanDmsgPort, "lan-dmsg-port", 0, "embedded DMSG server TCP port (0 = OS-assigned at runtime; pin for stable WAN reachability)")
+	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-port")
+	genConfigCmd.Flags().StringVar(&lanDmsgPublicAddress, "lan-dmsg-public", scriptExecString("${LANDMSGPUBLIC}"), "embedded DMSG server WAN-reachable address (host:port; requires port-forward)")
+	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-public")
+
 	genConfigCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 
 	//show all flags on help
@@ -1269,6 +1279,16 @@ func configureHypervisor(log *logging.Logger) {
 			config.HTTPAddr = hvHTTPAddr
 		} else {
 			config.HTTPAddr = offsetAddr(config.HTTPAddr)
+		}
+		// Embedded DMSG server. Only emit the block when the operator
+		// asked for it (or supplied port/public-address knobs); leaving
+		// it nil keeps existing configs unchanged.
+		if lanDmsgEnable || lanDmsgPort != 0 || lanDmsgPublicAddress != "" {
+			config.LANDmsgServer = &visorconfig.LANDmsgServerConf{
+				Enable:        lanDmsgEnable,
+				Port:          lanDmsgPort,
+				PublicAddress: lanDmsgPublicAddress,
+			}
 		}
 		conf.Hypervisor = &config
 	}

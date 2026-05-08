@@ -78,16 +78,21 @@ func DefaultHypervisorConfig() HypervisorConfig {
 	return c
 }
 
-// LANDmsgServerConf configures an embedded DMSG server for LAN visors.
-// When enabled, the hypervisor acts as a local DMSG relay so LAN visors
-// don't need to route through public DMSG servers.
+// LANDmsgServerConf configures an embedded DMSG server for LAN visors,
+// optionally reachable from outside the LAN as well.
+// When enabled, the hypervisor acts as a local DMSG relay so its managed
+// visors don't need to route through public DMSG servers. With Port pinned
+// and PublicAddress set, remote visors can also reach the server (operator
+// must configure port forwarding on the router for the chosen Port).
 // The server keypair is stored in the config so it persists across restarts.
 type LANDmsgServerConf struct {
-	Enable      bool          `json:"enable"`                 // Enable the LAN DMSG server.
-	Port        int           `json:"port,omitempty"`         // TCP port (0 = auto-select).
-	MaxSessions int           `json:"max_sessions,omitempty"` // Max concurrent sessions (default 100).
-	PK          cipher.PubKey `json:"pk,omitempty"`           // Server public key (auto-generated if empty).
-	SK          cipher.SecKey `json:"sk,omitempty"`           // Server secret key (auto-generated if empty).
+	Enable             bool          `json:"enable"`                         // Enable the LAN/WAN DMSG server.
+	Port               int           `json:"port,omitempty"`                 // TCP port (0 = auto-select; auto-selected port changes on every restart, so set explicitly for stable address).
+	PublicAddress      string        `json:"public_address,omitempty"`       // Operator-set "host:port" advertised to remote visors (e.g. "203.0.113.5:8082"). Empty = LAN-only.
+	MaxSessions        int           `json:"max_sessions,omitempty"`         // Max concurrent sessions (default 100).
+	PK                 cipher.PubKey `json:"pk,omitempty"`                   // Server public key (auto-generated if empty).
+	SK                 cipher.SecKey `json:"sk,omitempty"`                   // Server secret key (auto-generated if empty).
+	PublicDiscoveryURL string        `json:"public_discovery_url,omitempty"` // Override for the dmsg-discovery URL advertised to managed visors (e.g. "http://hypervisor.example.com:8000"). Empty = auto-derived from HTTPAddr when remotely reachable.
 }
 
 // TPVizConfig configures the embedded transport visualizer.

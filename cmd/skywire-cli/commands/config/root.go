@@ -145,6 +145,13 @@ var (
 	publicVisorMaxTransports int
 	muxRoutes                int
 	cliAddr                  string
+	// Hypervisor-embedded DMSG server (LAN/WAN). Operator-set knobs:
+	// enable, port, and an optional public address advertised to remote
+	// visors. Port should be pinned for stable WAN reachability since
+	// the OS-assigned port (when 0) changes on every restart.
+	lanDmsgEnable        bool
+	lanDmsgPort          int
+	lanDmsgPublicAddress string
 )
 
 // RootCmd contains commands that interact with the config of local skywire-visor

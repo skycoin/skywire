@@ -297,11 +297,17 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 
 		// Push LAN DMSG server info to the connected visor
 		if hv.lanDmsg != nil {
+			discoveryURL := hv.c.LANDmsgServer.PublicDiscoveryURL
+			if discoveryURL == "" {
+				discoveryURL = hv.discoveryURLForVisor()
+			}
 			go func() {
 				if err := visorConn.API.SetLANDmsgServer(LANDmsgServerInfo{
-					Enabled: true,
-					PK:      hv.lanDmsg.PK,
-					Address: hv.lanDmsg.Address,
+					Enabled:       true,
+					PK:            hv.lanDmsg.PK,
+					Address:       hv.lanDmsg.Address,
+					PublicAddress: hv.lanDmsg.PublicAddress,
+					DiscoveryURL:  discoveryURL,
 				}); err != nil {
 					hv.logger.WithError(err).Debug("Failed to push LAN DMSG server info to visor")
 				} else {
@@ -526,6 +532,35 @@ func (hv *Hypervisor) makeMux() chi.Router {
 		// DMSG-first access pattern.
 		r.Get("/api/rewards/*", hv.proxyRewardSystem())
 
+		// dmsg-discovery proxy. Visors can be configured to point their
+		// dmsg-discovery URL at this hypervisor; entry GETs for PKs
+		// currently sessioned with the embedded dmsg server are served
+		// from local registry, everything else proxies to upstream.
+		// Routes live outside /api/ because they have to match the path
+		// pattern dmsg-discovery clients hit ("/dmsg-discovery/...").
+		// No auth — managed visors don't authenticate against the
+		// hypervisor's HTTP layer; access is gated by network reach.
+		if hv.lanDmsg != nil {
+			upstreamRP := hv.upstreamDiscProxy()
+			r.Route("/dmsg-discovery", func(r chi.Router) {
+				r.Get("/entry/{pk}", hv.discProxyEntryGet(upstreamRP))
+				r.Post("/entry", hv.discProxyForward(upstreamRP))
+				r.Post("/entry/", hv.discProxyForward(upstreamRP))
+				r.Put("/entry", hv.discProxyForward(upstreamRP))
+				r.Put("/entry/", hv.discProxyForward(upstreamRP))
+				r.Delete("/entry", hv.discProxyForward(upstreamRP))
+				r.Delete("/entry/", hv.discProxyForward(upstreamRP))
+				r.Get("/available_servers", hv.discProxyForward(upstreamRP))
+				r.Get("/all_servers", hv.discProxyForward(upstreamRP))
+				r.Get("/all_clients_by_server", hv.discProxyForward(upstreamRP))
+				r.Get("/clients_by_server/{pk}", hv.discProxyForward(upstreamRP))
+				// Local-only inspection — never falls through.
+				r.Get("/local/entry/{pk}", hv.discLocalEntryGet())
+				r.Get("/local/all", hv.discLocalAll())
+				r.Get("/local/pks", hv.localPKsJSONHandler())
+			})
+		}
+
 		// we don't enable `dmsgpty` endpoints for Windows
 		r.Route("/pty", func(r chi.Router) {
 			if hv.c.EnableAuth {
@@ -576,9 +611,18 @@ type About struct {
 	DmsgSessions  int             `json:"dmsg_sessions"`  // Number of active DMSG server sessions.
 }
 type LANDmsgServerInfo struct {
-	Enabled bool          `json:"enabled"`
-	PK      cipher.PubKey `json:"pk,omitempty"`
-	Address string        `json:"address,omitempty"`
+	Enabled       bool          `json:"enabled"`
+	PK            cipher.PubKey `json:"pk,omitempty"`
+	Address       string        `json:"address,omitempty"`        // LAN-routable "host:port" advertised by the hypervisor.
+	PublicAddress string        `json:"public_address,omitempty"` // Operator-set WAN-routable "host:port"; empty when not configured.
+	// DiscoveryURL is the hypervisor-hosted dmsg-discovery proxy URL that
+	// receiving visors should use as their primary discovery (with their
+	// existing public dmsg-discovery as fall-through behind it). Empty
+	// when the hypervisor's HTTP address isn't remotely reachable AND the
+	// operator hasn't set lan_dmsg_server.public_discovery_url. Visors
+	// that receive a non-empty value save it to config; the change takes
+	// effect on the next visor restart.
+	DiscoveryURL string `json:"discovery_url,omitempty"`
 }
 type dmsgSessionsCountRequest struct {
 	Count int `json:"count"`
