@@ -91,6 +91,12 @@ type API struct {
 		Mirror(subjectPK cipher.PubKey, entry interface{}, seq uint64)
 		Delete(subjectPK cipher.PubKey)
 	}
+
+	// cxoPublisher mirrors register / deregister events into a CXO
+	// TreeStore feed, set when SD is started with --cxo. Nil when the
+	// flag is off; the calling sites null-check via pub == nil so the
+	// HTTP path always works regardless.
+	cxoPublisher *ServicesCXOPublisher
 }
 
 // SetDHTMirror sets a mirror that publishes per-visor service lists to
@@ -100,6 +106,14 @@ func (a *API) SetDHTMirror(m interface {
 	Delete(subjectPK cipher.PubKey)
 }) {
 	a.dhtMirror = m
+}
+
+// SetServicesCXOPublisher installs the CXO publisher that mirrors
+// register / deregister events into a TreeStore feed. Pass nil to
+// disable. Wired by cmd/svc/service-discovery/commands/root.go after
+// the publisher is built; no-op until then.
+func (a *API) SetServicesCXOPublisher(p *ServicesCXOPublisher) {
+	a.cxoPublisher = p
 }
 
 // mirrorVisorServices re-publishes the current full list of services
@@ -443,6 +457,8 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 	// Mirror the visor's FULL service list (not just this new entry) so
 	// the DHT target holds the same set as HTTP discovery for this PK.
 	a.mirrorVisorServices(r.Context(), se.Addr.PubKey())
+	// CXO mirror — best-effort, no-op if --cxo wasn't set on startup.
+	a.cxoPublisher.PutEntry(&se)
 
 	httputil.WriteJSON(w, r, http.StatusOK, &se)
 }
@@ -476,6 +492,7 @@ func (a *API) delEntry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.mirrorVisorServices(r.Context(), serviceAddr.PubKey())
+	a.cxoPublisher.DelEntry(sType, serviceAddr.PubKey())
 	httputil.WriteJSON(w, r, http.StatusOK, true)
 }
 
@@ -552,6 +569,7 @@ func (a *API) deregisterEntry(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.mirrorVisorServices(r.Context(), key)
+		a.cxoPublisher.DelEntry(sType, key)
 	}
 	a.log.WithFields(logrus.Fields{"Number of Keys": len(keys), "Keys": keys, "Type": sType}).Info("Deregistration process completed.")
 	a.writeJSON(w, r, http.StatusOK, true)
