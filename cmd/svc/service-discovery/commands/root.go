@@ -52,6 +52,7 @@ var (
 	pprofAddr      string
 	entryTimeout   time.Duration
 	mode           string
+	enableCXO      bool
 )
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
@@ -133,6 +134,7 @@ func init() {
 	// or two dropped refreshes without expiring a live entry.
 	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "client service entry TTL (0 to disable)\n\r")
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
+	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO services publisher feed over DMSG (requires --sk and --mode that includes dmsg)")
 }
 
 // RootCmd contains the root service-discovery command
@@ -291,6 +293,23 @@ Example:
 		defer h.Close()
 
 		// (Visor reachability probe gate removed — see api.go.)
+
+		// CXO services publisher: outbound feed mirroring the live
+		// services state. Subscribers (the hypervisor's network
+		// visualizer + tab-specific consumers) connect to SD's PK on
+		// skyenv.DmsgSDServicesCXOPort and read the JSON-encoded
+		// service entries from "services/<type>/<pk>/{entry,tombstone}"
+		// instead of HTTP-polling /api/services?type=...
+		if enableCXO && h.DmsgClient != nil {
+			if pub, perr := api.StartServicesCXOPublisher(ctx, h.DmsgClient, sk, log); perr != nil {
+				log.WithError(perr).Error("Failed to start CXO services publisher, continuing without it")
+			} else {
+				sdAPI.SetServicesCXOPublisher(pub)
+				defer pub.Close() //nolint:errcheck
+			}
+		} else if enableCXO {
+			log.Warn("CXO requested but dmsg is not enabled (--mode=http); services publisher disabled")
+		}
 
 		// Wire DHT entry mirroring: every service registration is
 		// also published to the DHT under the visor's PK.

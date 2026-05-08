@@ -60,6 +60,22 @@ const (
 	// can pick exactly the feed it wants without dragging in metrics.
 	DmsgTPDUptimeCXOPort uint16 = 52
 
+	// DmsgSDServicesCXOPort is the DMSG port the service-discovery's
+	// CXO services publisher listens on. Subscribers (the hypervisor's
+	// network visualizer + tab-specific consumers) dial this port to
+	// receive incremental service register/deregister events at
+	// services/<type>/<pk>/{entry,tombstone}.
+	DmsgSDServicesCXOPort uint16 = 53
+
+	// DmsgDMSGDClientsByServerCXOPort is the DMSG port the
+	// dmsg-discovery's CXO clients-by-server publisher listens on.
+	// Subscribers dial it to receive the denormalized clients-by-server
+	// index at clients-by-server/<server-pk>/<client-pk>/{entry,tombstone}
+	// — the shape the network visualizer's "who's on each dmsg server"
+	// view consumes. Distinct port from DmsgSDServicesCXOPort so
+	// consumers can subscribe to one feed without the other.
+	DmsgDMSGDClientsByServerCXOPort uint16 = 54
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 
