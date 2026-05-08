@@ -28,7 +28,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dht"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -175,13 +174,9 @@ type Visor struct {
 	// Embedded Route Setup Node (nil if route_setup_sk not configured)
 	embeddedRouteSetup *EmbeddedRouteSetup
 
-	// DHT node (nil if dht.enable is false)
-	dhtNode *dht.Node
-
 	// arSelf caches our own AR-side bind state (one entry per transport
 	// type, populated by the AR self-refresh loop). Used by ARSelfInfo
-	// to answer the CLI without round-tripping AR, and by the DHT
-	// self-publisher to advertise our own addr:* records.
+	// to answer the CLI without round-tripping AR.
 	arSelf arSelfState
 
 	// Visor-local telemetry tracker (nil if Stats.Disabled).

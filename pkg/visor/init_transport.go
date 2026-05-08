@@ -403,13 +403,8 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.tpM = tpM
 	v.initLock.Unlock()
 
-	// AR self-refresh + addr:* publisher. Polls AR for our own STCPR /
-	// SUDPH bind state, caches it (so ARSelfInfo answers the CLI from
-	// memory), and dual-publishes to the DHT under addr:stcpr / addr:sudph
-	// alongside AR's own RedisMirror. Started here rather than from
-	// initDHT because the cache is useful even when DHT is disabled —
-	// CLI display works in both configurations, the DHT publish branch
-	// in the loop simply no-ops when v.dhtNode is nil.
+	// AR self-refresh: polls AR for our own STCPR / SUDPH bind state and
+	// caches it so ARSelfInfo answers the CLI from memory.
 	go v.arSelfRefreshLoop(ctx, log)
 
 	return nil
@@ -566,7 +561,7 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 	if err != nil {
 		return err
 	}
-	connector := MakeConnector(conf, 3, v.tpM, v.dmsgC, v.dhtNode, v.serviceDisc.Client, pIP, log, v.MasterLogger())
+	connector := MakeConnector(conf, 3, v.tpM, v.dmsgC, v.serviceDisc.Client, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel stored in v.autoconnect.cancel, called in pushCloseStack
 	v.autoconnect.cancel = cancel

@@ -41,10 +41,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dht"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -192,9 +190,12 @@ type Config struct {
 	// (matching the existing per-service polling loops).
 	DmsgServerPollInterval time.Duration
 
-	// DisableDHT prevents the automatic DHT full node from starting.
-	// Disabled by default — DMSG servers handle DHT, not deployment
-	// services. Set to false explicitly to enable on a service.
+	// DisableDHT is retained as a no-op field for backward compatibility
+	// with callers that previously passed it. The DHT subsystem has
+	// been removed from the tree; new code should drop the field
+	// entirely.
+	//
+	// Deprecated: no-op.
 	DisableDHT bool
 }
 
@@ -205,9 +206,6 @@ type Handle struct {
 	// ModeHTTP. Services that need raw dmsg access (e.g. to spawn
 	// a CXO publisher or TPS listener) can use it directly.
 	DmsgClient *dmsg.Client
-
-	// DHTNode is the DHT full node, or nil when EnableDHT is false.
-	DHTNode *dht.Node
 
 	// Mode is the resolved listener mode.
 	Mode Mode
@@ -349,29 +347,6 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 				}
 			}
 		}()
-	}
-
-	// Start DHT full node when the service has a DMSG client and
-	// DHT is explicitly enabled. Disabled by default for deployment
-	// services — DMSG servers handle DHT networking. Services that
-	// need DHT should set DisableDHT=false in their svcmode.Config.
-	if !cfg.DisableDHT && h.DmsgClient != nil {
-		dhtLog := cfg.Log.WithField("subsystem", "dht")
-		bootstrapPKs := deployment.Prod.DHTBootstrapPKs()
-		dhtCfg := dht.Config{
-			BootstrapPKs: bootstrapPKs,
-			FullNode:     true,
-		}
-		tp := dht.NewDMSGTransport(h.DmsgClient)
-		dhtNode := dht.New(dhtCfg, cfg.PK, cfg.SK, tp, logging.MustGetLogger("dht"))
-		if err := dhtNode.Start(ctx); err != nil {
-			dhtLog.WithError(err).Warn("DHT node failed to start")
-		} else {
-			h.DHTNode = dhtNode
-			dhtLog.WithField("id", dhtNode.ID().String()).
-				WithField("bootstrap_peers", len(bootstrapPKs)).
-				Info("DHT full node started")
-		}
 	}
 
 	return h, nil

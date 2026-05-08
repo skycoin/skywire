@@ -20,7 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dht"
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -302,24 +301,6 @@ Example:
 				}
 			}
 
-			// Mirror DMSG entries to Redis in DHT format. The DMSG servers'
-			// DHT nodes read from the same Redis and serve the data via
-			// Kademlia. This replaces the previous EntryMirror which ran
-			// a local DHT node and did expensive Kademlia PutSigned on
-			// every SetEntry — at ~30 req/sec that consumed 60%+ CPU on
-			// secp256k1 noise handshakes for each DHT dial.
-			redisHost := strings.TrimPrefix(redisURL, "redis://")
-			redisPassword := os.Getenv(redisPasswordEnvName)
-			redisMirror, mirrorErr := dht.NewRedisMirror(redisHost, redisPassword, 0, "dmsg", pk, sk, logging.MustGetLogger("dht:redis-mirror"))
-			if mirrorErr != nil {
-				log.WithError(mirrorErr).Warn("DHT Redis mirror failed — entries won't be in DHT")
-			} else {
-				a.SetDHTMirror(redisMirror)
-				log.Info("DHT entry mirroring enabled (via Redis)")
-				// Backfill: mirror all existing entries so the DHT has the
-				// full dataset, not just entries updated since this restart.
-				go a.BackfillDHTMirror(ctx, log)
-			}
 		}
 
 		<-ctx.Done()

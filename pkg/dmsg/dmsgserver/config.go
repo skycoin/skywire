@@ -119,21 +119,6 @@ type Config struct {
 	MaxSessions      int           `json:"max_sessions"`
 	Peers            []PeerConfig  `json:"peers,omitempty"`
 	EnableRouteSetup bool          `json:"enable_route_setup,omitempty"`
-	// EnableDHT runs a Kademlia DHT full node on this DMSG server.
-	// Every visor uses DMSG server PKs as DHT bootstrap peers, so
-	// enabling this makes the DHT network functional without any
-	// additional infrastructure.
-	EnableDHT bool   `json:"enable_dht,omitempty"`
-	RedisAddr string `json:"redis_addr,omitempty"` // Redis for DHT persistence (optional)
-	// PersistPath is a bbolt file path for DHT persistence. Used only
-	// when RedisAddr is empty; ignored otherwise. Empty means in-memory
-	// only — DHT state is lost on every restart and the cluster's
-	// disc-mirror data (which lives in Redis) is unreachable. For
-	// Docker deployments point this at a path inside the existing
-	// config volume mount (e.g. "/etc/skywire/dmsg-server/dht.db").
-	// For Kubernetes use a writable PersistentVolume mount; the config
-	// Secret/ConfigMap is typically read-only and bbolt cannot use it.
-	PersistPath string `json:"persist_path,omitempty"`
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server
