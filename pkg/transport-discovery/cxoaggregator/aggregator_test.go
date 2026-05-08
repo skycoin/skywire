@@ -393,7 +393,10 @@ func TestDispatchLeafEntryAndTombstone(t *testing.T) {
 		sink := &recordingSink{}
 		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
 		entry := &transport.Entry{ID: uuid.New(), Edges: [2]cipher.PubKey{pkA, pkB}, Type: "stcpr"}
-		body, _ := json.Marshal(transportEntryLeaf{Entry: entry})
+		body, err := json.Marshal(transportEntryLeaf{Entry: entry})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
 		// path declares `id`, but leaf carries a different UUID — must drop.
 		a.dispatchLeaf("transports/"+id.String()+"/entry", body, pkA)
 		if len(sink.registers) != 0 {
@@ -404,7 +407,10 @@ func TestDispatchLeafEntryAndTombstone(t *testing.T) {
 	t.Run("tombstone leaf dispatches to DeregisterTransportFromCXO", func(t *testing.T) {
 		sink := &recordingSink{}
 		a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
-		body, _ := json.Marshal(tombstoneLeaf{DeletedAt: time.Now().UTC()})
+		body, err := json.Marshal(tombstoneLeaf{DeletedAt: time.Now().UTC()})
+		if err != nil {
+			t.Fatalf("marshal: %v", err)
+		}
 		a.dispatchLeaf("transports/"+id.String()+"/tombstone", body, pkA)
 		if len(sink.deregisters) != 1 {
 			t.Fatalf("expected 1 deregister call, got %d", len(sink.deregisters))
