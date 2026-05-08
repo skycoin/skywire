@@ -312,18 +312,70 @@ func (v *Visor) servicesFromHTTP(serviceType, version, country string) ([]servic
 	return sdClient.Services(context.Background(), 0, version, country)
 }
 
-// VPNServers gets available public VPN servers from service discovery.
+// servicesFromCXO walks the SD services snapshot under
+// services/<serviceType>/<pk>/entry and rebuilds a []Service
+// honoring optional version + country filters. Returns ok=false when
+// the manager isn't installed, the snapshot is empty, or every leaf
+// failed to parse — caller falls through to servicesFromHTTP.
+func (v *Visor) servicesFromCXO(serviceType, version, country string) ([]servicedisc.Service, bool) {
+	mgr := v.CXOSubMgr()
+	if mgr == nil {
+		return nil, false
+	}
+	mgr.AcquireFor(TabCLIServices)
+	defer mgr.ReleaseFor(TabCLIServices)
+
+	prefix := "services/" + serviceType + "/"
+	var services []servicedisc.Service
+	mgr.Walk(FeedSDServices, prefix, func(path string, body []byte) bool {
+		if !strings.HasSuffix(path, "/entry") {
+			return true
+		}
+		var svc servicedisc.Service
+		if err := json.Unmarshal(body, &svc); err != nil {
+			return true
+		}
+		if version != "" && svc.Version != version {
+			return true
+		}
+		if country != "" {
+			if svc.Geo == nil || svc.Geo.Country != country {
+				return true
+			}
+		}
+		services = append(services, svc)
+		return true
+	})
+	if len(services) == 0 {
+		return nil, false
+	}
+	return services, true
+}
+
+// VPNServers gets available public VPN servers — CXO snapshot first,
+// HTTP service-discovery fallback.
 func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, error) {
+	if services, ok := v.servicesFromCXO(servicedisc.ServiceTypeVPN, version, country); ok {
+		return services, nil
+	}
 	return v.servicesFromHTTP(servicedisc.ServiceTypeVPN, version, country)
 }
 
-// ProxyServers gets available proxy servers from service discovery.
+// ProxyServers gets available proxy servers — CXO snapshot first,
+// HTTP service-discovery fallback.
 func (v *Visor) ProxyServers(version, country string) ([]servicedisc.Service, error) {
+	if services, ok := v.servicesFromCXO(servicedisc.ServiceTypeProxy, version, country); ok {
+		return services, nil
+	}
 	return v.servicesFromHTTP(servicedisc.ServiceTypeProxy, version, country)
 }
 
-// PublicVisors gets available public visors from service discovery.
+// PublicVisors gets available public visors — CXO snapshot first,
+// HTTP service-discovery fallback.
 func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, error) {
+	if services, ok := v.servicesFromCXO(servicedisc.ServiceTypeVisor, version, country); ok {
+		return services, nil
+	}
 	return v.servicesFromHTTP(servicedisc.ServiceTypeVisor, version, country)
 }
 

@@ -79,6 +79,11 @@ const (
 	// TabAutoconnect is the visor's public-visor autoconnect cycle —
 	// SD services only (filters down to the visor type at walk time).
 	TabAutoconnect
+	// TabCLIServices is the operator-facing service-listing CLI
+	// commands (`skywire cli proxy list`, `vpn list`, `pv`). Same
+	// SD services feed; refcount summed with TabAutoconnect when
+	// both are active so they share the running cycle.
+	TabCLIServices
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -89,6 +94,7 @@ var tabFeedDeps = map[CXOTab][]CXOFeed{
 	TabMetrics:           {FeedTPDMetrics, FeedTPDUptime},
 	TabUptime:            {FeedTPDUptime},
 	TabAutoconnect:       {FeedSDServices},
+	TabCLIServices:       {FeedSDServices},
 }
 
 // CXOSubscriptionManager owns the per-feed cycle goroutines + the
