@@ -4,6 +4,7 @@ package appdisc
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -36,6 +37,14 @@ type serviceUpdater struct {
 	cancel            context.CancelFunc
 	wg                sync.WaitGroup
 	stopOnce          sync.Once
+	// paused, when true, makes the heartbeat loop skip its Register
+	// call. Pause() additionally calls DeleteEntry once so the SD
+	// entry goes away promptly; Resume() flips the flag back and
+	// kicks an immediate re-registration. The loop itself stays
+	// alive across pause cycles — operators using PublicVisorUpdater
+	// expect transient drain (e.g. max_transports) to be reversible
+	// when the situation clears, not a permanent removal.
+	paused atomic.Bool
 }
 
 // newServiceUpdater creates a new serviceUpdater with heartbeat support.
@@ -81,12 +90,49 @@ func (u *serviceUpdater) heartbeatLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if u.paused.Load() {
+				// Drained state — caller (e.g. PublicVisorUpdater
+				// after hitting max_transports) wants no SD entry
+				// for now. Stay alive so Resume can flip us back.
+				continue
+			}
 			if err := u.client.Register(ctx); err != nil {
 				u.log.WithError(err).Warn("Failed to send heartbeat to service discovery")
 			} else {
 				u.log.Debug("Service discovery heartbeat sent successfully")
 			}
 		}
+	}
+}
+
+// Pause flags the heartbeat loop to stop publishing the SD entry and
+// removes any currently-published entry. The loop itself keeps running
+// so Resume can flip the flag back without a fresh goroutine. Idempotent.
+func (u *serviceUpdater) Pause() {
+	if !u.paused.CompareAndSwap(false, true) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := u.client.DeleteEntry(ctx); err != nil {
+		u.log.WithError(err).Warn("Failed to delete service entry on pause")
+	}
+}
+
+// Resume flips paused off and immediately re-registers so the SD
+// entry reappears without waiting for the next heartbeat tick.
+// Idempotent. No-op if Stop has already been called (cancel is nil).
+func (u *serviceUpdater) Resume() {
+	if !u.paused.CompareAndSwap(true, false) {
+		return
+	}
+	if u.cancel == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := u.client.Register(ctx); err != nil {
+		u.log.WithError(err).Warn("Re-registration on resume failed; will retry via heartbeat")
 	}
 }
 
@@ -123,6 +169,16 @@ type PublicVisorUpdater struct {
 	wg              sync.WaitGroup
 	stopOnce        sync.Once
 	deregisteredFor string // reason for deregistration (empty if still registered)
+	// drained tracks whether we've called inner.Pause() because the
+	// transport count crossed maxTransports. While drained the SD
+	// entry is gone; the monitor loop watches for the count to drop
+	// back below the resume threshold (90% of maxTransports — small
+	// hysteresis to prevent flapping right at the boundary) and then
+	// calls inner.Resume(). Without this, hitting the cap once was a
+	// permanent removal until visor restart, and the visor's other
+	// public siblings frequently disappeared from service discovery
+	// after a single transient spike.
+	drained bool
 }
 
 // NewPublicVisorUpdater creates a new public visor updater with validation logic.
@@ -214,13 +270,21 @@ func (u *PublicVisorUpdater) monitorLoop(ctx context.Context) {
 			// Continue monitoring for max transports
 
 		case <-transportTicker.C:
-			// Check transport count
+			// Check transport count, manage drained <-> active state.
 			if u.maxTransports > 0 && u.getTransportCount != nil {
 				count := u.getTransportCount()
-				if count >= u.maxTransports {
-					u.log.Infof("Public visor reached max transports (%d/%d). Deregistering from service discovery.", count, u.maxTransports)
-					u.deregister("max_transports")
-					return
+				switch {
+				case !u.drained && count >= u.maxTransports:
+					u.log.Infof("Public visor reached max transports (%d/%d). Pausing service-discovery registration.", count, u.maxTransports)
+					u.inner.Pause()
+					u.drained = true
+				case u.drained && count < (u.maxTransports*9)/10:
+					// Hysteresis: only resume once we're meaningfully
+					// under the cap (90%). Prevents flapping when the
+					// count oscillates around maxTransports.
+					u.log.Infof("Public visor transport count fell to %d/%d. Resuming service-discovery registration.", count, u.maxTransports)
+					u.inner.Resume()
+					u.drained = false
 				}
 			}
 		}
