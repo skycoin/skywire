@@ -66,6 +66,13 @@ type HypervisorConfig struct {
 	TLSKeyFile    string             `json:"tls_key_file"`              // TLS key file location.
 	TPViz         TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
 	LANDmsgServer *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
+	// CXOSubscribeInterval is the resync floor for the on-demand
+	// CXO subscription manager. Subscriptions stay open while a UI
+	// tab is acquired; the manager won't tear down a feed sooner
+	// than this after its last release. 0 falls back to the
+	// package default (5m). Common knob to tune the bandwidth /
+	// freshness tradeoff for hvui tabs that source CXO data.
+	CXOSubscribeInterval Duration `json:"cxo_subscribe_interval,omitempty"`
 }
 
 // DefaultHypervisorConfig returns a HypervisorConfig with sensible defaults.
