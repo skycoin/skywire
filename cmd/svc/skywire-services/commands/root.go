@@ -38,6 +38,7 @@ import (
 	_ "github.com/skycoin/skywire/pkg/services/stun"
 	_ "github.com/skycoin/skywire/pkg/services/tpd"
 	_ "github.com/skycoin/skywire/pkg/services/tps"
+	_ "github.com/skycoin/skywire/pkg/services/visor"
 )
 
 func init() {

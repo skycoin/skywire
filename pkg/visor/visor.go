@@ -383,11 +383,24 @@ func reload(v *Visor) error {
 		return err
 	}
 	v = nil
-	return run(nil)
+	return run(context.Background(), nil)
 }
 
-// RunVisor runs the visor
-func run(conf *visorconfig.V1) error {
+// Run is the exported entry point used by pkg/services/visor. parentCtx
+// becomes the parent of the SignalContext run() builds internally —
+// when the multi-service supervisor cancels its ctx, the visor's
+// signal-derived ctx cancels too and the visor unwinds cleanly.
+//
+// Behaves identically to the standalone cobra path when parentCtx is
+// context.Background(), which is what runApp / runAppSystray pass.
+func Run(parentCtx context.Context, conf *visorconfig.V1) error {
+	return run(parentCtx, conf)
+}
+
+// run is the implementation for both the standalone cobra entry point
+// and the multi-service supervisor. parentCtx is the parent of the
+// SignalContext built around it.
+func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	store, hook := logstore.MakeStore(runtimeLogMaxEntries)
 	mLog.AddHook(hook)
 
@@ -458,7 +471,7 @@ func run(conf *visorconfig.V1) error {
 		defer func() { _ = uptimeRec.Close() }() //nolint:errcheck
 	}
 
-	ctx, cancel := cmdutil.SignalContext(context.Background(), mLog)
+	ctx, cancel := cmdutil.SignalContext(parentCtx, mLog)
 	vis, ok := NewVisor(ctx, conf)
 	if !ok {
 		select {

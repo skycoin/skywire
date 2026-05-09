@@ -5,6 +5,7 @@
 package visor
 
 import (
+	"context"
 	"sync"
 )
 
@@ -18,7 +19,7 @@ func runAppSystray() {
 }
 
 func runApp() {
-	err := run(nil)
+	err := run(context.Background(), nil)
 	if err != nil {
 		mLog.WithError(err).Fatal("a fatal error occurred")
 	}
