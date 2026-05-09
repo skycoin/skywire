@@ -5,6 +5,8 @@
 package visor
 
 import (
+	"context"
+
 	"fyne.io/systray"
 )
 
@@ -17,7 +19,7 @@ func runAppSystray() {
 	conf := initConfig()
 
 	go func() {
-		err := run(conf)
+		err := run(context.Background(), conf)
 		if err != nil {
 			mLog.WithError(err).Fatal("a fatal error occurred")
 		}
@@ -29,7 +31,7 @@ func runAppSystray() {
 }
 
 func runApp() {
-	err := run(nil)
+	err := run(context.Background(), nil)
 	if err != nil {
 		mLog.WithError(err).Fatal("a fatal error occurred")
 	}
