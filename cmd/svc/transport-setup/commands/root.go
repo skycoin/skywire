@@ -6,13 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/bitfield/script"
 	"github.com/google/uuid"
@@ -23,8 +19,10 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/services/tps"
 	"github.com/skycoin/skywire/pkg/transport-setup/api"
 	"github.com/skycoin/skywire/pkg/transport-setup/config"
 )
@@ -140,59 +138,17 @@ Generate Keys:
 		}
 		const loggerTag = "transport_setup"
 		logger := logging.MustGetLogger(loggerTag)
-		lvl, err := logging.LevelFromString(logLvl)
-		if err != nil {
-			logger.Fatal("Invalid loglvl detected")
-		}
-		logging.SetLevel(lvl)
 
 		conf := config.MustReadConfig(configFile, logger)
-		tpsAPI := api.New(logger, conf)
-
-		// Setup context with signal handling
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
-
-		sigCh := make(chan os.Signal, 1)
-		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-		go func() {
-			<-sigCh
-			logger.Info("Received shutdown signal")
-			cancel()
-		}()
-
-		// Start dmsg listener in goroutine
-		go func() {
-			logger.Info("Starting dmsg RPC listener")
-			if err := tpsAPI.ServeDmsg(ctx); err != nil {
-				if ctx.Err() == nil {
-					logger.WithError(err).Error("Dmsg server error")
-				}
-			}
-		}()
-
-		// Start HTTP server
-		srv := &http.Server{
-			Addr:              fmt.Sprintf(":%d", conf.Port),
-			ReadHeaderTimeout: 2 * time.Second,
-			IdleTimeout:       30 * time.Second,
-			Handler:           tpsAPI,
+		cfg := &tps.Config{
+			Config:   conf,
+			LogLevel: logLvl,
+			Tag:      loggerTag,
 		}
-
-		logger.WithField("addr", srv.Addr).Info("Starting HTTP server")
-
-		// Graceful shutdown
-		go func() {
-			<-ctx.Done()
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer shutdownCancel()
-			if err := srv.Shutdown(shutdownCtx); err != nil {
-				logger.WithError(err).Error("HTTP server shutdown error")
-			}
-		}()
-
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Errorf("ListenAndServe: %v", err)
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
+		defer cancel()
+		if err := tps.New(cfg, logger).Run(ctx); err != nil {
+			logger.WithError(err).Fatal("transport-setup: run failed")
 		}
 	},
 }

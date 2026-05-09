@@ -6,17 +6,16 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
-	"syscall"
 
-	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
-	"github.com/skycoin/skywire/pkg/stunserver"
+	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/services/stun"
 )
 
 var (
@@ -57,38 +56,18 @@ Requires two distinct IPs for full NAT type detection.
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, _ []string) {
 		logger := logging.MustGetLogger(tag)
-		lvl, err := logging.LevelFromString(logLvl)
-		if err != nil {
-			logger.Fatal("Invalid loglvl detected")
-		}
-		logging.SetLevel(lvl)
-
-		if primaryIP == "" || secondaryIP == "" {
-			logger.Fatal("Both --primary-ip and --secondary-ip are required")
-		}
-
-		srv := &stunserver.Server{
+		cfg := &stun.Config{
 			PrimaryIP:   primaryIP,
 			SecondaryIP: secondaryIP,
-			PrimaryPort: port,
+			Port:        port,
 			AltPort:     altPort,
-			Software:    "skywire-stun",
-			Log:         logger,
+			LogLevel:    logLvl,
+			Tag:         tag,
 		}
-
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
-
-		stop := make(chan os.Signal, 1)
-		signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
-
-		go func() {
-			<-stop
-			cancel()
-		}()
-
-		if err := srv.Start(ctx); err != nil {
-			logger.Fatalf("STUN server failed: %v", err)
+		if err := stun.New(cfg, logger).Run(ctx); err != nil {
+			logger.WithError(err).Fatal("stun-server: run failed")
 		}
 	},
 }
