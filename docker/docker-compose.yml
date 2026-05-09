@@ -202,14 +202,18 @@ services:
         target: /release/transport-setup.json
         read_only: true
     healthcheck:
-      # All four service /debug/service endpoints (TPD, SD, AR, RF)
+      # All four pprof /debug/service endpoints (TPD, SD, AR, RF)
       # share one process — checking any one of them validates the
       # supervisor is up and at least one HTTP listener is live.
+      # Nine services all starting concurrently on a 2-core CI
+      # runner contends much more than the previous staged
+      # bring-up; bump start_period so a slow goroutine schedule
+      # doesn't get marked unhealthy during its first 30s.
       test: ["CMD", "curl", "-sf", "http://127.0.0.1:6094/debug/service"]
       interval: 3s
       timeout: 3s
       retries: 30
-      start_period: 10s
+      start_period: 60s
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
