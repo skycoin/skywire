@@ -133,20 +133,52 @@ Mode is selected by PKGENV/USRENV in the env file:
 		}
 		msg3(fmt.Sprintf("%sSkywire%s configuration updated\nconfig path: %s%s%s", colorBlue, colorReset, colorPurple, resolved.configPath, colorReset))
 
-		// PKGENV + SKYWIRE_USER → write drop-in + chown the install.
-		// Only meaningful when running as root (chown of root-owned
-		// files needs root); when run as the target user already, the
-		// drop-in still needs root, so we skip both branches and let
-		// the operator manage them out of band if they wish.
-		if !resolved.usrEnv && resolved.skywireUser != "" && os.Geteuid() == 0 {
-			if err := writeSystemdDropIn(resolved.skywireUser); err != nil {
-				fmt.Printf("%sWarning:%s could not write systemd drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
-			} else {
-				msg3(fmt.Sprintf("Wrote %s (User=%s)", systemdDropIn, resolved.skywireUser))
-				_ = exec.Command("systemctl", "daemon-reload").Run() //nolint:errcheck,gosec
+		// PKGENV mode: keep the systemd drop-in in sync with
+		// SKYWIRE_USER. When SKYWIRE_USER is set, write a drop-in
+		// pinning User= and chown the install to that user. When it's
+		// unset (or the operator switched away from it), tear down a
+		// previously-written drop-in so the unit reverts to running
+		// as root — otherwise the stale `User=<old_user>` would
+		// either fail CHDIR (if that user no longer has access to
+		// the install) or fail the visor's `--pkg requires root`
+		// pre-run check (because the drop-in still pins a non-root
+		// User= even though the operator's policy changed).
+		//
+		// Only meaningful when invoked as root: chowning root-owned
+		// files and writing under /etc/systemd/system/ both need it.
+		// When run as the target user already, we skip both branches
+		// and let the operator manage them out of band.
+		if !resolved.usrEnv && os.Geteuid() == 0 {
+			daemonReload := false
+			switch {
+			case resolved.skywireUser != "":
+				if err := writeSystemdDropIn(resolved.skywireUser); err != nil {
+					fmt.Printf("%sWarning:%s could not write systemd drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
+				} else {
+					msg3(fmt.Sprintf("Wrote %s (User=%s)", systemdDropIn, resolved.skywireUser))
+					daemonReload = true
+				}
+				if err := chownInstall(resolved.skywireUser); err != nil {
+					fmt.Printf("%sWarning:%s chown %s failed: %v\n", colorYellow, colorReset, skyenv.SkywirePath, err)
+				}
+			default:
+				// SKYWIRE_USER unset → ensure no stale drop-in is
+				// present that would still pin the unit to a
+				// non-root user. Idempotent: silent when there's
+				// nothing to remove.
+				if _, statErr := os.Stat(systemdDropIn); statErr == nil {
+					if err := os.Remove(systemdDropIn); err != nil {
+						fmt.Printf("%sWarning:%s could not remove stale drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
+					} else {
+						msg3(fmt.Sprintf("Removed stale %s (SKYWIRE_USER unset)", systemdDropIn))
+						// Also drop the parent dir if it's now empty.
+						_ = os.Remove(filepath.Dir(systemdDropIn)) //nolint:errcheck
+						daemonReload = true
+					}
+				}
 			}
-			if err := chownInstall(resolved.skywireUser); err != nil {
-				fmt.Printf("%sWarning:%s chown %s failed: %v\n", colorYellow, colorReset, skyenv.SkywirePath, err)
+			if daemonReload {
+				_ = exec.Command("systemctl", "daemon-reload").Run() //nolint:errcheck,gosec
 			}
 		}
 
