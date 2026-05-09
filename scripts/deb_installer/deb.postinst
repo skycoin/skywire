@@ -10,25 +10,6 @@ fi
 
 setcap 'cap_net_admin+p' /opt/skywire/apps/vpn-client
 
-# Defensive cleanup of a stale `skywire autoconfig`-managed systemd
-# drop-in. autoconfig writes `/etc/systemd/system/skywire.service.d/
-# skywire-user.conf` (User=_skywire) when /etc/skywire.conf has
-# SKYWIRE_USER=<name> set, but doesn't remove that drop-in when the
-# operator later unsets SKYWIRE_USER — leaving the unit pinned to a
-# user that the operator no longer intends to run as. This .deb
-# never asks for that drop-in (the shipped service runs as root
-# unconditionally), so any drop-in still sitting there is
-# definitionally stale: drop it. Idempotent — silent when there's
-# nothing to remove.
-if [ -f /etc/skywire.conf ] && \
-   ! grep -qE '^[[:space:]]*SKYWIRE_USER=' /etc/skywire.conf 2>/dev/null ; then
-	if [ -f /etc/systemd/system/skywire.service.d/skywire-user.conf ] ; then
-		rm -f /etc/systemd/system/skywire.service.d/skywire-user.conf
-		rmdir --ignore-fail-on-non-empty /etc/systemd/system/skywire.service.d 2>/dev/null || true
-		echo "removed stale skywire-user.conf drop-in (SKYWIRE_USER unset in /etc/skywire.conf)"
-	fi
-fi
-
 # Automatically added by dh_systemd_enable/12.1.1
 if [ \"\$1\" = \"configure\" ] || [ \"\$1\" = \"abort-upgrade\" ] || [ \"\$1\" = \"abort-deconfigure\" ] || [ \"\$1\" = \"abort-remove\" ] ; then
 	# This will only remove masks created by d-s-h on package removal.
