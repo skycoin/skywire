@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"net/url"
+	"os"
 	"strconv"
 	"time"
 
@@ -61,6 +62,14 @@ func init() {
 type Config struct {
 	dmsgserver.Config
 
+	// ConfigPath, when non-empty, is the path to an existing
+	// dmsg-server JSON config file. Read at Run() time; values
+	// from the file overwrite the inline dmsgserver.Config.
+	// Lets services.json blocks reuse the same operator-shipped
+	// config the standalone `skywire dmsg server start <path>`
+	// already uses.
+	ConfigPath string `json:"config_path,omitempty"`
+
 	// AuthPassphrase, when non-empty, is the shared secret a
 	// dmsg-server presents to the discovery for "official" server
 	// registration. Previously a CLI-only flag.
@@ -71,6 +80,22 @@ type Config struct {
 	// MetricsAddr is the address to expose Prometheus metrics on
 	// (empty disables metrics).
 	MetricsAddr string `json:"metrics_addr,omitempty"`
+}
+
+// LoadFile reads a standalone dmsg-server JSON config file (the
+// existing `skywire dmsg server start /path/to/file.json` shape).
+// Returned for callers (the multi-service factory) that want to
+// merge file-based config with their inline block fields.
+func LoadFile(path string) (*dmsgserver.Config, error) {
+	data, err := os.ReadFile(path) //nolint:gosec
+	if err != nil {
+		return nil, fmt.Errorf("dmsg-server: read config %q: %w", path, err)
+	}
+	var c dmsgserver.Config
+	if err := json.Unmarshal(data, &c); err != nil {
+		return nil, fmt.Errorf("dmsg-server: parse config %q: %w", path, err)
+	}
+	return &c, nil
 }
 
 // factory parses a services.json block into a Config and returns a
@@ -112,7 +137,18 @@ type service struct {
 // route setup-node — but takes its config from the struct rather
 // than package-level variables.
 func (s *service) Run(ctx context.Context) error {
-	cfg := &s.cfg.Config // alias for the embedded dmsgserver.Config
+	// Resolve the underlying dmsgserver.Config: file path wins
+	// over inline embedded config when ConfigPath is set, so the
+	// services.json block can either embed the full config inline
+	// or point at the existing operator-shipped JSON file.
+	if s.cfg.ConfigPath != "" {
+		fileConf, err := LoadFile(s.cfg.ConfigPath)
+		if err != nil {
+			return err
+		}
+		s.cfg.Config = *fileConf
+	}
+	cfg := &s.cfg.Config // alias for the resolved dmsgserver.Config
 	log := s.log
 
 	if cfg.MaxSessions <= 0 {
