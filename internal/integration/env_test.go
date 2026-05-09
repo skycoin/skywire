@@ -63,15 +63,13 @@ func NewEnv() *TestEnv {
 		cli:      cli,
 		intraNet: "docker_intra",
 		serviceNames: []string{
-			"/setup-node",
-			"/transport-setup",
-			"/dmsg-server",
-			"/dmsg-discovery",
-			"/route-finder",
-			"/transport-discovery",
-			"/address-resolver",
-			"/service-discovery",
-			// "/network-monitor", // intentionally disabled in production deployment
+			// Nine deployment-side services (tpd, rf, dmsg-disc,
+			// dmsg-server, sn, sd, ar, tps, stun) collapsed into
+			// /deployment-services in compose; uptime-tracker
+			// stays separate pending its replacement by TPD's
+			// uptime tracking. network-monitor is intentionally
+			// disabled in the production deployment.
+			"/deployment-services",
 			"/uptime-tracker",
 		},
 		visorNames: []string{
