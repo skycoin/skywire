@@ -6,6 +6,38 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.51
+
+Hotfix release. Two nil-deref fixes that surfaced in the wild on
+v1.3.50 visors immediately after package upgrade, plus a related
+package-state cleanup in `skywire autoconfig`.
+
+### Fixes
+-   `pkg/dmsg/dmsg`: ClientSession.serve() unconditionally
+    derefenced `cs.sm.yamux.IsClosed()` even when the session was
+    negotiated as smux, panicking on any non-EOF accept error. The
+    panic was caught by the goroutine's recover but left sessions
+    in a half-dead state. Branch on which protocol is non-nil. [#2477](https://github.com/skycoin/skywire/pull/2477)
+-   `pkg/vpn/server.go`: race between `Server.Close()` setting
+    `s.lis = nil` and `Server.Serve()` reading `s.lis.Accept()`
+    without holding the listener mutex — any accept error that
+    didn't match `net.ErrClosed` (e.g. wrapped dmsg listener
+    returning "io: read/write on closed pipe") routed to
+    `continue`, then nil-deref'd on the next iteration. The panic
+    fired outside the recover and took down the whole visor
+    process. Accept off the local parameter, not the shared
+    field, plus a defensive post-Close check. [#2477](https://github.com/skycoin/skywire/pull/2477)
+-   `skywire autoconfig`: clear the stale systemd drop-in at
+    `/etc/systemd/system/skywire.service.d/skywire-user.conf` when
+    `/etc/skywire.conf` no longer has `SKYWIRE_USER=` set. Previous
+    behavior wrote the drop-in on first set but never removed it
+    on unset, leaving the unit pinned to a user the operator no
+    longer intended to run as — failing either CHDIR or the
+    visor's `--pkg requires root` check on every restart. The same
+    defensive cleanup landed in `scripts/deb_installer/deb.postinst`
+    (the .deb's own service runs as root unconditionally, so any
+    drop-in present at install time is definitionally stale). [#2476](https://github.com/skycoin/skywire/pull/2476)
+
 ## 1.3.50
 
 ### Mux & per-transport latency
