@@ -1,25 +1,33 @@
-// Package commands cmd/dmsg-discovery/commands/config.go
-package commands
+// Package dmsgdisc pkg/services/dmsgdisc/config.go
+//
+// JSON schema for dmsg-discovery as both a standalone-service config
+// file (cmd/dmsg/dmsg-discovery -c path) AND a service block in a
+// multi-service services.json (skywire svc run --config services.json).
+// Both consumers parse the same struct so there's a single source of
+// truth for the field set.
+package dmsgdisc
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )
 
-// Config is the JSON configuration for dmsg-discovery. When --config
-// is set, every runtime knob comes from this file; otherwise the
-// service falls back to the legacy per-flag CLI behavior so existing
-// deployments don't break. The schema mirrors the visor / dmsg-server
-// pattern: per-service knobs at the top, dmsg-server transit set in
-// `dmsg_servers` (replaces the runtime read of
-// deployment.Prod.DmsgServers).
+// Config is the JSON configuration for dmsg-discovery. Mirrors the
+// cobra-flag set on cmd/dmsg/dmsg-discovery so a config file or a
+// services.json block can drive the same Run() with no flag-only
+// surprises.
+//
+// In services.json the block also carries `type: "dmsg-discovery"`
+// and an optional `name`; those fields are consumed by the
+// supervisor and are accepted-but-ignored by this struct (json
+// "type" / "name" tags omitted — DisallowUnknownFields is OFF for
+// the block path so the supervisor's framing fields pass through).
 type Config struct {
 	Path string `json:"-"`
 
@@ -61,6 +69,15 @@ type Config struct {
 	Whitelist []string `json:"whitelist_keys,omitempty"`
 	// LogLevel is the minimum log level (debug/info/warn/error).
 	LogLevel string `json:"log_level,omitempty"`
+	// MetricsAddr is the address to expose Prometheus metrics on
+	// (empty disables metrics).
+	MetricsAddr string `json:"metrics_addr,omitempty"`
+	// PProfMode / PProfAddr — pass-through to dmsgcmdutil.InitPProf.
+	PProfMode string `json:"pprof_mode,omitempty"`
+	PProfAddr string `json:"pprof_addr,omitempty"`
+	// EnableCXO turns on the CXO clients-by-server publisher feed
+	// over DMSG. Requires SecKey and a dmsg-capable Mode.
+	EnableCXO bool `json:"cxo,omitempty"`
 
 	// DmsgServers is the static dmsg-server transit set the
 	// discovery preloads at startup. Replaces the runtime read of
@@ -71,57 +88,14 @@ type Config struct {
 	DmsgServers []*disc.Entry `json:"dmsg_servers,omitempty"`
 }
 
-// applyConfig copies values from a parsed Config into the
-// package-level cobra-flag variables that the rest of Run consumes,
-// turning --config into a single source of truth. Empty / zero
-// fields in Config preserve the existing CLI-flag value, so a
-// partial config still leaves the rest at their defaults.
-func applyConfig(c *Config) {
-	if c.SecKey != (cipher.SecKey{}) {
-		sk = c.SecKey
-	}
-	if c.Addr != "" {
-		addr = c.Addr
-	}
-	if c.Redis != "" {
-		redisURL = c.Redis
-	}
-	if c.DmsgPort != 0 {
-		dmsgPort = c.DmsgPort
-	}
-	if c.EntryTimeout != 0 {
-		entryTimeout = c.EntryTimeout
-	}
-	if c.Mode != "" {
-		mode = c.Mode
-	}
-	if c.AuthPassphrase != "" {
-		authPassphrase = c.AuthPassphrase
-	}
-	if len(c.OfficialServers) > 0 {
-		officialServers = strings.Join(c.OfficialServers, ",")
-	}
-	if c.DmsgServerType != "" {
-		dmsgServerType = c.DmsgServerType
-	}
-	if c.TestMode {
-		testMode = true
-	}
-	if c.EnableLoadTesting {
-		enableLoadTesting = true
-	}
-	if c.TestEnvironment {
-		testEnvironment = true
-	}
-	if len(c.Whitelist) > 0 {
-		whitelistKeys = strings.Join(c.Whitelist, ",")
-	}
-}
-
-// LoadConfig reads, parses, and returns a Config from the given path.
+// LoadFile reads, parses, and returns a Config from the given path.
 // Returns an error if the file is missing, malformed, or has fields
 // the JSON decoder doesn't recognize (strict decoding catches typos).
-func LoadConfig(path string) (*Config, error) {
+//
+// Used by the standalone cobra command (`skywire dmsg disc -c path`).
+// The multi-service supervisor goes through ParseBlock instead since
+// it has the bytes already.
+func LoadFile(path string) (*Config, error) {
 	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("read config %q: %w", path, err)
@@ -133,5 +107,18 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config %q: %w", path, err)
 	}
 	c.Path = path
+	return &c, nil
+}
+
+// ParseBlock decodes a services.json block (the inline JSON object
+// the supervisor passes through Block.Raw) into a Config. Unlike
+// LoadFile, this path tolerates unknown fields — the supervisor's
+// framing keys ("type", "name") arrive in the same object, and any
+// future inline-block extension shouldn't break older binaries.
+func ParseBlock(raw []byte) (*Config, error) {
+	var c Config
+	if err := json.Unmarshal(raw, &c); err != nil {
+		return nil, fmt.Errorf("dmsg-discovery: parse block: %w", err)
+	}
 	return &c, nil
 }
