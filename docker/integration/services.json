@@ -1,0 +1,87 @@
+{
+  "services": [
+    {
+      "type": "transport-discovery",
+      "name": "tpd",
+      "addr": ":9094",
+      "pprof_addr": ":6094",
+      "redis": "redis://tpd-redis:6379",
+      "entry_timeout": "2m",
+      "secret_key": "85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8",
+      "uptime_db": "",
+      "store_data_path": "/var/lib/skywire/tpd/bandwidth",
+      "dmsg": {
+        "discovery": "http://dmsg-discovery:9090"
+      }
+    },
+    {
+      "type": "route-finder",
+      "name": "rf",
+      "addr": ":9092",
+      "pprof_addr": ":6092",
+      "redis": "redis://tpd-redis:6379",
+      "secret_key": "640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca",
+      "dmsg": {
+        "discovery": "http://dmsg-discovery:9090"
+      }
+    },
+    {
+      "type": "dmsg-discovery",
+      "name": "dmsgd",
+      "addr": ":9090",
+      "redis": "redis://dmsgd-redis:6379",
+      "secret_key": "b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714",
+      "test_mode": true
+    },
+    {
+      "type": "dmsg-server",
+      "name": "dmsgs",
+      "config_path": "/release/dmsg-server.json"
+    },
+    {
+      "type": "setup-node",
+      "name": "sn",
+      "config_path": "/release/setup-node.json",
+      "pprof_mode": "http",
+      "pprof_addr": ":6070"
+    },
+    {
+      "type": "service-discovery",
+      "name": "sd",
+      "addr": ":9091",
+      "pprof_addr": ":6091",
+      "redis": "redis://sd-redis:6379",
+      "entry_timeout": "2m",
+      "secret_key": "ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f",
+      "dmsg": {
+        "discovery": "http://dmsg-discovery:9090"
+      }
+    },
+    {
+      "type": "address-resolver",
+      "name": "ar",
+      "addr": ":9093",
+      "udp_addr": ":9093",
+      "pprof_addr": ":6093",
+      "redis": "redis://ar-redis:6379",
+      "entry_timeout": "2m",
+      "secret_key": "1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a",
+      "dmsg": {
+        "discovery": "http://dmsg-discovery:9090"
+      }
+    },
+    {
+      "type": "transport-setup",
+      "name": "tps",
+      "config_path": "/release/transport-setup.json"
+    },
+    {
+      "type": "stun-server",
+      "name": "stun",
+      "primary_ip": "173.0.0.17",
+      "secondary_ip": "174.0.0.17",
+      "port": 3478,
+      "alt_port": 3479
+    }
+  ]
+}
