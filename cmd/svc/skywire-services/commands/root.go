@@ -28,6 +28,7 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	// Side-effect imports register service factories with
 	// pkg/services so `skywire svc run` can dispatch them.
+	_ "github.com/skycoin/skywire/pkg/services/dmsgdisc"
 	_ "github.com/skycoin/skywire/pkg/services/noop"
 )
 
