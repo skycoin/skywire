@@ -151,10 +151,32 @@ func (s *Server) Serve(l net.Listener) error {
 		s.lis = l
 		s.lisMx.Unlock()
 		s.setAppStatus(appserver.AppDetailedStatusRunning)
+		// Accept off the local listener parameter, not s.lis.
+		// Close() sets `s.lis = nil` after closing it, and the
+		// previous code dereferenced `s.lis.Accept()` without
+		// holding s.lisMx — so any non-net.ErrClosed accept error
+		// (e.g. a dmsg listener returning "io: read/write on
+		// closed pipe" mid-shutdown) routed to `continue`, and the
+		// next iteration nil-deref'd s.lis. The local `l` always
+		// points at the listener that was passed in; closing it
+		// elsewhere is fine, calling .Accept() on a closed
+		// listener returns an error rather than panicking.
 		for {
-			conn, err := s.lis.Accept()
+			conn, err := l.Accept()
 			if err != nil {
 				if errors.Is(err, net.ErrClosed) {
+					return
+				}
+				// Best-effort match for transport-level shutdowns
+				// that a wrapped listener may surface as a
+				// non-net.ErrClosed error (e.g. dmsg's
+				// "use of closed network connection" /
+				// "io: read/write on closed pipe"). Treat any
+				// accept error after Close() as terminal.
+				s.lisMx.Lock()
+				closed := s.lis == nil
+				s.lisMx.Unlock()
+				if closed {
 					return
 				}
 				fmt.Printf("Failed to accept VPN client connection, continuing: %v\n", err)
