@@ -277,12 +277,30 @@ func (cs *ClientSession) serve() error {
 	for {
 		dStr, err := cs.acceptYamuxStream()
 		if err != nil {
-			// yamux-level failure. Shutdown / closed / EOF are
+			// Stream-mux-level failure. Shutdown / closed / EOF are
 			// terminal — the underlying session is dead. Everything
 			// else is treated as potentially-transient and retried
 			// with a short backoff, mirroring the server-side loop
 			// in ServerSession.Serve (streamErrorBackoff = 50ms).
-			if errors.Is(err, yamux.ErrSessionShutdown) || errors.Is(err, io.EOF) || cs.sm.yamux.IsClosed() {
+			//
+			// `cs.sm` carries either a yamux session or an smux
+			// session — never both. Pre-fix this branch dereferenced
+			// `cs.sm.yamux.IsClosed()` unconditionally, which nil-
+			// deref'd whenever the session was negotiated as smux
+			// (`entry.Protocol == "smux"` in client_sessions.go and
+			// the matching server-side path) and any non-EOF /
+			// non-yamux-shutdown error reached this branch.
+			// Recovered by the goroutine's defer/recover but logged
+			// only as "recovered panic in session serve goroutine: …"
+			// with no clue about the cause.
+			sessionClosed := errors.Is(err, io.EOF)
+			switch {
+			case cs.sm.yamux != nil:
+				sessionClosed = sessionClosed || errors.Is(err, yamux.ErrSessionShutdown) || cs.sm.yamux.IsClosed()
+			case cs.sm.smux != nil:
+				sessionClosed = sessionClosed || cs.sm.smux.IsClosed()
+			}
+			if sessionClosed {
 				cs.log.WithError(err).Debug("Session shut down, stopping accept loop.")
 				return err
 			}
