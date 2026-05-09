@@ -1,4 +1,9 @@
 // Package commands cmd/transport-discovery/root.go
+//
+// Cobra entry point for the standalone `skywire svc tpd` binary.
+// All run logic lives in pkg/services/tpd — this file is just the
+// flag set, the optional --config file overlay, and the
+// signal-context wiring.
 package commands
 
 import (
@@ -14,31 +19,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
-	"github.com/google/uuid"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/serviceuptime"
-	"github.com/skycoin/skywire/pkg/storeconfig"
-	"github.com/skycoin/skywire/pkg/svcmode"
+	"github.com/skycoin/skywire/pkg/services/tpd"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport-discovery/api"
-	"github.com/skycoin/skywire/pkg/transport-discovery/cxoaggregator"
-	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
-)
-
-const (
-	redisPrefix = "transport-discovery"
-	redisScheme = "redis://"
 )
 
 var (
@@ -62,6 +51,7 @@ var (
 	storeDataPath   string
 	enableCXO       bool
 	mode            string
+	uptimeDB        string
 )
 
 func init() {
@@ -71,13 +61,7 @@ func init() {
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
 	RootCmd.Flags().StringVar(&redisURL, "redis", "redis://localhost:6379", "connections string for a redis store\n\r")
 	RootCmd.Flags().IntVar(&redisPoolSize, "redis-pool-size", 10, "redis connection pool size\n\r")
-	// 5 min is ~3.3× the 90s client refresh interval
-	// (transportReRegisterInterval in pkg/transport/manager.go),
-	// giving safe margin for one or two dropped refreshes without
-	// expiring a live transport. Prior default of 2m allowed only
-	// ~1.33 refreshes per TTL window — one missed refresh and the
-	// transport would briefly drop from discovery.
-	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "transport entry TTL (0 to disable)\n\r")
+	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", tpd.DefaultEntryTimeout, "transport entry TTL (0 to disable)\n\r")
 	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[info|error|warn|debug|trace|panic]\n\r")
 	RootCmd.Flags().StringVar(&tag, "tag", "transport_discovery", "logging tag\n\r")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
@@ -88,15 +72,11 @@ func init() {
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
-	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", "/var/lib/skywire/tpd/bandwidth", "path for bandwidth backup files\n\r")
+	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", tpd.DefaultStoreDataPath, "path for bandwidth backup files\n\r")
 	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO feed for transport data distribution over DMSG")
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
-	RootCmd.Flags().StringVar(&uptimeDB, "uptime-db", "/var/lib/skywire/tpd/uptime.db", "path for the service-self uptime bbolt store (empty disables)")
+	RootCmd.Flags().StringVar(&uptimeDB, "uptime-db", tpd.DefaultUptimeDB, "path for the service-self uptime bbolt store (empty disables)")
 }
-
-// uptimeDB is the path for the local self-uptime store. Open early
-// in Run so a panic during subsystem init still leaves a session row.
-var uptimeDB string
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
 func exampleJSON(v interface{}) string {
@@ -234,224 +214,143 @@ Example:
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
-
-		var configServers []*disc.Entry
-		var configSurveyWL []cipher.PubKey
-		if configPath != "" {
-			c, cErr := LoadConfig(configPath)
-			if cErr != nil {
-				log.Fatal(cErr)
-			}
-			configServers, configSurveyWL = applyConfig(c)
-		}
-
-		if !strings.HasPrefix(redisURL, redisScheme) {
-			redisURL = redisScheme + redisURL
-		}
-
-		storeConfig := storeconfig.Config{
-			Type:     storeconfig.Redis,
-			URL:      redisURL,
-			Password: storeconfig.RedisPassword(),
-			PoolSize: redisPoolSize,
-		}
-
-		if testing {
-			storeConfig.Type = storeconfig.Memory
-		}
-
 		logger := logging.MustGetLogger(tag)
-		lvl, err := logging.LevelFromString(logLvl)
+
+		cfg, err := buildConfig()
 		if err != nil {
-			logger.Fatal("Invalid loglvl detected")
-		}
-
-		logging.SetLevel(lvl)
-
-		// Service-self uptime recorder. Opened before subsystem init so
-		// a panic in the redis or DMSG bring-up still leaves a session
-		// row with the running binary's version. Failure is non-fatal
-		// — TPD continues without the /uptime/* surface.
-		var uptimeRec *serviceuptime.Recorder
-		if uptimeDB != "" {
-			rec, rErr := serviceuptime.New(uptimeDB, serviceuptime.Config{
-				Service: "transport-discovery",
-				Version: buildinfo.Version(),
-				Commit:  buildinfo.Commit(),
-			})
-			if rErr != nil {
-				logger.WithError(rErr).Warn("Service-self uptime recorder unavailable")
-			} else {
-				uptimeRec = rec
-				defer func() { _ = uptimeRec.Close() }() //nolint:errcheck
-				uptimeRec.Start()
-			}
-		}
-
-		metricsutil.ServePProf(logger, pprofAddr, "transport-discovery")
-
-		var whitelistPKs []string
-		if whitelistKeys != "" {
-			whitelistPKs = strings.Split(whitelistKeys, ",")
-		}
-		for _, v := range whitelistPKs {
-			api.WhitelistPKs.Set(v)
+			logger.WithError(err).Fatal("failed to build transport-discovery config")
 		}
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
-
-		s, err := store.New(ctx, storeConfig, entryTimeout, logger)
-		if err != nil {
-			logger.Fatalf("Failed to create store instance: %v", err)
-		}
-		defer s.Close()
-
-		nonceStoreConfig := storeconfig.Config{
-			Type:     storeconfig.Memory,
-			URL:      redisURL,
-			Password: storeconfig.RedisPassword(),
-			PoolSize: redisPoolSize,
-		}
-
-		if !testing {
-			nonceStoreConfig.Type = storeconfig.Redis
-		}
-
-		nonceStore, err := httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
-		if err != nil {
-			log.Fatal("Failed to initialize redis nonce store: ", err)
-		}
-
-		if keyFile != "" {
-			if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
-				logger.Fatal("Failed to load keyfile: ", err)
-			}
-		}
-		pk, err := sk.PubKey()
-		if err != nil {
-			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		}
-
-		metricsutil.ServeHTTPMetrics(logger, metricsAddr)
-
-		var m tpdiscmetrics.Metrics
-		if metricsAddr == "" {
-			m = tpdiscmetrics.NewEmpty()
-		} else {
-			m = tpdiscmetrics.NewVictoriaMetrics()
-		}
-
-		var dmsgAddr string
-		if !pk.Null() {
-			dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
-		}
-
-		enableMetrics := metricsAddr != ""
-		tpdAPI := api.New(logger, s, nonceStore, enableMetrics, m, dmsgAddr, storeDataPath)
-		if uptimeRec != nil {
-			tpdAPI.SetUptimeRecorder(uptimeRec)
-		}
-
-		logger.Infof("Listening on %s", addr)
-		logger.Infof("Transport entry timeout: %v", entryTimeout)
-
-		go tpdAPI.RunBackgroundTasks(ctx, logger)
-
-		resolvedMode, err := svcmode.ResolveMode(mode, !sk.Null())
-		if err != nil {
-			logger.WithError(err).Fatal("invalid --mode")
-		}
-
-		// Source priority for embedded dmsg-server transit and the
-		// survey whitelist:
-		//   1. config (--config)
-		//   2. embedded deployment keyring (deployment.Prod / dmsg.Prod)
-		// Operators ship a config file generated from the keyring so
-		// IP rotations don't require a binary rebuild.
-		embeddedServers := dmsgDiscEntries(configServers)
-		surveyWL := deployment.Prod.SurveyWhitelist
-		if len(configSurveyWL) > 0 {
-			surveyWL = configSurveyWL
-		}
-
-		h, err := svcmode.Start(ctx, svcmode.Config{
-			Mode:                resolvedMode,
-			HTTPAddr:            addr,
-			Handler:             tpdAPI,
-			PK:                  pk,
-			SK:                  sk,
-			DmsgPort:            dmsgPort,
-			DmsgDiscovery:       dmsgDisc,
-			DmsgServerType:      dmsgServerType,
-			EmbeddedDmsgServers: embeddedServers,
-			SurveyWhitelist:     surveyWL,
-			Log:                 logger,
-			DisableDHT:          true,
-			OnDmsgServersUpdated: func(s []string) {
-				tpdAPI.DmsgServers = s
-			},
-		})
-		if err != nil {
-			logger.WithError(err).Fatal("failed to start listeners")
-		}
-		defer h.Close()
-
-		// CXO aggregator: visors dial in (using TPD's PK from
-		// Transport.DiscoveryDmsg), and the aggregator subscribes
-		// to each conn's remote PK as a feed. Reverse-dial means
-		// visor-restart / DMSG reconnect is handled by the visor's
-		// re-dial — TPD just accepts and re-subscribes on the next
-		// reconcile tick. No visor enumeration needed on TPD's side.
-		if enableCXO && h.DmsgClient != nil {
-			// Sink wraps the redis store (telemetry methods) plus the
-			// API (register/deregister methods, which need mirrorEdges
-			// in addition to a store write).
-			sink := &tpdAggregatorSink{Store: s, api: tpdAPI}
-			agg, err := cxoaggregator.New(h.DmsgClient, sink, cxoaggregator.Config{
-				Logger: logging.MustGetLogger("tpd-cxo-aggregator"),
-			})
-			if err != nil {
-				logger.WithError(err).Error("Failed to start CXO aggregator, continuing without it")
-			} else {
-				agg.Run(ctx)
-				defer agg.Close() //nolint:errcheck
-				logger.WithField("feed_pk", agg.FeedPK()).Info("CXO aggregator running: accepting inbound visor stats feeds")
-			}
-
-			// CXO metrics publisher: outbound feed mirroring the
-			// /metrics aggregate. Visors subscribe to TPD's PK on
-			// skyenv.DmsgTPDMetricsCXOPort and read the JSON-encoded
-			// []TransportMetric from "metrics/days/<n>" instead of
-			// HTTP-polling the same query.
-			if pub, perr := api.StartMetricsCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
-				logger.WithError(perr).Error("Failed to start CXO metrics publisher, continuing without it")
-			} else {
-				defer pub.Close() //nolint:errcheck
-			}
-
-			// CXO uptime publisher: outbound feed mirroring the
-			// /uptimes?v=v3 response. Visors subscribe to TPD's PK
-			// on skyenv.DmsgTPDUptimeCXOPort and read the
-			// JSON-encoded []VisorSummary from "uptimes/days/<n>".
-			// Drives the hvui Network Uptime tab without per-visor
-			// fan-out polling.
-			if pub, perr := api.StartUptimeCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
-				logger.WithError(perr).Error("Failed to start CXO uptime publisher, continuing without it")
-			} else {
-				defer pub.Close() //nolint:errcheck
-			}
-		} else if enableCXO {
-			logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator/publisher disabled")
-		}
-
-		select {
-		case <-ctx.Done():
-		case err := <-h.Errors():
-			logger.WithError(err).Error("listener failed")
-			cancel()
+		if err := tpd.New(cfg, logger).Run(ctx); err != nil {
+			logger.WithError(err).Fatal("transport-discovery: run failed")
 		}
 	},
+}
+
+// buildConfig collects flag values + the optional --config file
+// into one tpd.Config. File values override flag values where set.
+func buildConfig() (*tpd.Config, error) {
+	if keyFile != "" {
+		if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
+			return nil, err
+		}
+	}
+	cfg := &tpd.Config{
+		SecKey:          sk,
+		Addr:            addr,
+		MetricsAddr:     metricsAddr,
+		PprofAddr:       pprofAddr,
+		Redis:           redisURL,
+		RedisPoolSize:   redisPoolSize,
+		EntryTimeout:    entryTimeout,
+		LogLevel:        logLvl,
+		Tag:             tag,
+		Testing:         testing,
+		Mode:            mode,
+		Whitelist:       commaSplit(whitelistKeys),
+		TestEnvironment: testEnvironment,
+		StoreDataPath:   storeDataPath,
+		EnableCXO:       enableCXO,
+		UptimeDB:        uptimeDB,
+		DmsgPort:        dmsgPort,
+		Dmsg: cmdutil.DmsgConfig{
+			Discovery:  dmsgDisc,
+			ServerType: dmsgServerType,
+		},
+	}
+	if configPath != "" {
+		fileCfg, err := tpd.LoadFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+		mergeFile(cfg, fileCfg)
+	}
+	return cfg, nil
+}
+
+func mergeFile(dst, src *tpd.Config) {
+	if src.SecKey != (cipher.SecKey{}) {
+		dst.SecKey = src.SecKey
+	}
+	if src.Addr != "" {
+		dst.Addr = src.Addr
+	}
+	if src.MetricsAddr != "" {
+		dst.MetricsAddr = src.MetricsAddr
+	}
+	if src.PprofAddr != "" {
+		dst.PprofAddr = src.PprofAddr
+	}
+	if src.Redis != "" {
+		dst.Redis = src.Redis
+	}
+	if src.RedisPoolSize > 0 {
+		dst.RedisPoolSize = src.RedisPoolSize
+	}
+	if src.EntryTimeout != 0 {
+		dst.EntryTimeout = src.EntryTimeout
+	}
+	if src.LogLevel != "" {
+		dst.LogLevel = src.LogLevel
+	}
+	if src.Tag != "" {
+		dst.Tag = src.Tag
+	}
+	if src.Testing {
+		dst.Testing = true
+	}
+	if src.Mode != "" {
+		dst.Mode = src.Mode
+	}
+	if src.TestEnvironment {
+		dst.TestEnvironment = true
+	}
+	if len(src.Whitelist) > 0 {
+		dst.Whitelist = src.Whitelist
+	}
+	if len(src.SurveyWhitelist) > 0 {
+		dst.SurveyWhitelist = src.SurveyWhitelist
+	}
+	if src.StoreDataPath != "" {
+		dst.StoreDataPath = src.StoreDataPath
+	}
+	if src.EnableCXO {
+		dst.EnableCXO = true
+	}
+	if src.UptimeDB != "" {
+		dst.UptimeDB = src.UptimeDB
+	}
+	if src.DmsgPort != 0 {
+		dst.DmsgPort = src.DmsgPort
+	}
+	if src.Dmsg.Discovery != "" {
+		dst.Dmsg.Discovery = src.Dmsg.Discovery
+	}
+	if src.Dmsg.DiscoveryDmsg != "" {
+		dst.Dmsg.DiscoveryDmsg = src.Dmsg.DiscoveryDmsg
+	}
+	if src.Dmsg.ServerType != "" {
+		dst.Dmsg.ServerType = src.Dmsg.ServerType
+	}
+	if len(src.Dmsg.Servers) > 0 {
+		dst.Dmsg.Servers = src.Dmsg.Servers
+	}
+}
+
+func commaSplit(s string) []string {
+	if s == "" {
+		return nil
+	}
+	out := make([]string, 0, 4)
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // Execute executes root CLI command.
@@ -459,29 +358,4 @@ func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
 	}
-}
-
-// tpdAggregatorSink composes the cxoaggregator.Sink contract from the
-// two collaborators that own the relevant pieces:
-//
-//   - store.Store satisfies the telemetry half (UpdateBandwidth,
-//     UpdateLatency, RecordTransportHeartbeat, IngestTransportTimeline)
-//     directly via the embedded interface.
-//   - The API satisfies the metadata half (RegisterTransportFromCXO,
-//     DeregisterTransportFromCXO) because those need mirrorEdges in
-//     addition to a redis write, and mirrorEdges lives on the API.
-//
-// Defined here so the cxoaggregator package doesn't gain a dependency
-// on the API package; the wiring stays at the deployment layer.
-type tpdAggregatorSink struct {
-	store.Store
-	api *api.API
-}
-
-func (s *tpdAggregatorSink) RegisterTransportFromCXO(ctx context.Context, entry *transport.Entry, reporter cipher.PubKey, version string) error {
-	return s.api.RegisterTransportFromCXO(ctx, entry, reporter, version)
-}
-
-func (s *tpdAggregatorSink) DeregisterTransportFromCXO(ctx context.Context, id uuid.UUID, reporter cipher.PubKey) error {
-	return s.api.DeregisterTransportFromCXO(ctx, id, reporter)
 }
