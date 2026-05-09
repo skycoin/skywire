@@ -15,32 +15,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/dmsgc"
-	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/router"
-	"github.com/skycoin/skywire/pkg/router/setupmetrics"
+	"github.com/skycoin/skywire/pkg/services/sn"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
-	"github.com/skycoin/skywire/pkg/transport/tpdclient"
-	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
@@ -110,214 +99,50 @@ Usage:
   skywire cli config gen --sn | skywire svc sn -i`,
 	Run: func(_ *cobra.Command, args []string) {
 		mLog := logging.NewMasterLogger()
-		log := logging.MustGetLogger(tag)
+		logger := logging.MustGetLogger(tag)
 
 		if _, err := buildinfo.Get().WriteTo(mLog.Out); err != nil {
 			mLog.Printf("Failed to output build info: %v", err)
 		}
 
-		if pprofMode == "http" {
-			metricsutil.ServePProf(log, pprofAddr, "setup-node")
-		}
-
 		var rdr io.Reader
-		var err error
-
 		if !cfgFromStdin {
 			configFile := "config.json"
-
 			if len(args) > 0 {
 				configFile = args[0]
 			}
-			rdr, err = os.Open(configFile)
+			f, err := os.Open(configFile) //nolint:gosec
 			if err != nil {
-				log.Fatalf("Failed to open config: %v", err)
+				logger.Fatalf("Failed to open config: %v", err)
 			}
+			rdr = f
 		} else {
-			log.Info("Reading config from STDIN")
+			logger.Info("Reading config from STDIN")
 			rdr = bufio.NewReader(os.Stdin)
 		}
-
-		conf := &router.SetupConfig{}
-
 		raw, err := io.ReadAll(rdr)
 		if err != nil {
-			log.Fatalf("Failed to read config: %v", err)
+			logger.Fatalf("Failed to read config: %v", err)
+		}
+		var setupConf router.SetupConfig
+		if err := json.Unmarshal(raw, &setupConf); err != nil {
+			logger.WithField("raw", string(raw)).Fatalf("Failed to decode config: %s", err)
 		}
 
-		if err := json.Unmarshal(raw, &conf); err != nil {
-			log.WithField("raw", string(raw)).Fatalf("Failed to decode config: %s", err)
+		cfg := &sn.Config{
+			SetupConfig: setupConf,
+			MetricsAddr: metricsAddr,
+			PProfMode:   pprofMode,
+			PProfAddr:   pprofAddr,
+			Tag:         tag,
 		}
 
-		log.Infof("Config: %#v", conf)
-
-		sn, err := router.NewNode(conf)
-		if err != nil {
-			log.Fatal("Failed to create a setup node: ", err)
-		}
-
-		collector := prepareMetrics(log)
-
-		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
-
-		// Initialize transport manager for cascade route setup.
-		// The RSN uses STCPR transports with label "setup" to reach
-		// visors directly, enabling route setup without DMSG.
-		if conf.Transport != nil && conf.Cascade != nil {
-			tpLabel := transport.LabelSetup
-			if conf.Transport.DefaultLabel != "" {
-				tpLabel = transport.Label(conf.Transport.DefaultLabel)
-			}
-
-			// The setup-node's DMSG client is brought up inside
-			// router.NewNode (which already waits for ready before
-			// returning), so it's safe to use here for outbound
-			// dmsg-http requests to the discovery services.
-			snDmsgC := sn.DmsgClient()
-
-			var tpdC transport.DiscoveryClient
-			if conf.TransportDiscovery != "" {
-				httpC, hcErr := getHTTPClient(ctx, snDmsgC, conf.TransportDiscovery)
-				if hcErr != nil {
-					log.WithError(hcErr).Warn("Failed to build TPD HTTP client — using mock")
-					tpdC = transport.NewDiscoveryMock()
-				} else {
-					var tpdErr error
-					tpdC, tpdErr = tpdclient.NewHTTP(
-						conf.TransportDiscovery,
-						conf.PK, conf.SK,
-						httpC, "",
-						mLog,
-					)
-					if tpdErr != nil {
-						log.WithError(tpdErr).Warn("Failed to create TPD client — using mock")
-						tpdC = transport.NewDiscoveryMock()
-					}
-				}
-			} else {
-				tpdC = transport.NewDiscoveryMock()
-			}
-
-			logS := transport.InMemoryTransportLogStore()
-			tpMConf := transport.ManagerConfig{
-				PubKey:           conf.PK,
-				SecKey:           conf.SK,
-				DiscoveryClient:  tpdC,
-				LogStore:         logS,
-				Version:          buildinfo.Version(),
-				ARTransportLimit: -1, // RSN never registers with AR
-			}
-
-			var arC addrresolver.APIClient
-			if conf.Transport.AddressResolver != "" {
-				httpC, hcErr := getHTTPClient(ctx, snDmsgC, conf.Transport.AddressResolver)
-				if hcErr != nil {
-					log.WithError(hcErr).Warn("Failed to build AR HTTP client — AR disabled")
-				} else {
-					arC, _ = addrresolver.NewHTTP( //nolint:errcheck
-						conf.Transport.AddressResolver,
-						conf.PK, conf.SK,
-						httpC, "",
-						log, mLog,
-					)
-				}
-			}
-
-			factory := network.ClientFactory{
-				PK:         conf.PK,
-				SK:         conf.SK,
-				ListenAddr: conf.Transport.STCPRAddr,
-				ARClient:   arC,
-				EB:         appevent.NewBroadcaster(log, 0),
-				MLogger:    mLog,
-			}
-
-			tpM, tpErr := transport.NewManager(log, arC, factory.EB, &tpMConf, factory)
-			if tpErr != nil {
-				log.WithError(tpErr).Warn("Failed to create transport manager — cascade disabled")
-			} else {
-				tpM.InitClient(ctx, types.STCPR, 0)
-				log.WithField("stcpr_addr", conf.Transport.STCPRAddr).
-					WithField("label", tpLabel).
-					Info("RSN transport manager started (STCPR)")
-
-				sn.InitCascade(conf, tpM)
-				_ = tpLabel // label is set per-transport at dial time
-			}
+		if err := sn.New(cfg, logger).Run(ctx); err != nil {
+			logger.WithError(err).Fatal("setup-node: run failed")
 		}
-
-		// Start DMSG HTTP health server using the setup-node's own DMSG client.
-		// This avoids creating a second DMSG client with the same PK, which
-		// causes "error 306 - no associated listener" when the DMSG server
-		// routes streams to the wrong client.
-		{
-			startedAt := time.Now()
-			dmsgAddr := fmt.Sprintf("%s:%d", conf.PK.Hex(), dmsg.DefaultDmsgHTTPPort)
-
-			healthMux := http.NewServeMux()
-			healthMux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				resp := httputil.HealthCheckResponse{
-					ServiceName: "setup-node",
-					BuildInfo:   buildinfo.Get(),
-					StartedAt:   startedAt,
-					DmsgAddr:    dmsgAddr,
-					DmsgServers: sn.DmsgClient().ConnectedServersPK(),
-				}
-				json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
-			})
-
-			// Public stats endpoint — aggregate counters, latency percentiles,
-			// failure breakdown. Recent failures are sanitized (no src/dst PKs).
-			healthMux.HandleFunc("/stats", func(w http.ResponseWriter, _ *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				snap := collector.Snapshot()
-				// Sanitize: strip src/dst PKs from recent failures and top destinations
-				// to avoid leaking which visors are communicating with each other.
-				for i := range snap.RecentFailures {
-					snap.RecentFailures[i].SrcPK = ""
-					snap.RecentFailures[i].DstPK = ""
-				}
-				for i := range snap.TopDestinations {
-					snap.TopDestinations[i].PK = ""
-				}
-				for i := range snap.TopFailedDestinations {
-					snap.TopFailedDestinations[i].PK = ""
-				}
-				json.NewEncoder(w).Encode(snap) //nolint:errcheck,gosec
-			})
-
-			// Use the setup-node's own DMSG client for health/debug endpoints
-			snClient := sn.DmsgClient()
-			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, conf.SK, healthMux, nil,
-					dmsg.DefaultDmsgHTTPPort, snClient, log); err != nil {
-					log.WithError(err).Error("DMSG HTTP health server stopped")
-				}
-			}()
-			go func() {
-				if err := dmsghttp.ServeDebug(ctx, snClient, log, deployment.Prod.SurveyWhitelist); err != nil {
-					log.WithError(err).Error("DMSG HTTP debug server stopped")
-				}
-			}()
-			log.Infof("DMSG HTTP health endpoint available at %s", dmsgAddr)
-		}
-
-		log.Fatal(sn.Serve(ctx, collector))
 	},
-}
-
-func prepareMetrics(log logrus.FieldLogger) *setupmetrics.Collector {
-	collector := setupmetrics.NewCollector(setupmetrics.CollectorConfig{})
-
-	if metricsAddr != "" {
-		// Victoria Metrics publishes Prometheus gauges alongside the Collector.
-		_ = setupmetrics.NewVictoriaMetrics()
-		metricsutil.ServeHTTPMetrics(log, metricsAddr)
-	}
-
-	return collector
 }
 
 // checkHealthCmd does health check on running route setup node
@@ -394,54 +219,5 @@ var checkHealthCmd = &cobra.Command{
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
-	}
-}
-
-// getHTTPClient returns an *http.Client for the given service URL,
-// dispatching on URL scheme: dmsg:// URLs get a client backed by a
-// dmsghttp.HTTPTransport routed through snDmsgC, http(s):// URLs get
-// a plain http.Client.
-//
-// Mirrors the pattern in pkg/visor/init.go's getHTTPClient — same
-// scheme-aware handling so the setup-node can talk to TPD/AR over
-// either transport just like the visor does. The visor path also
-// PostEntry-warms the dmsg discovery; we skip that here because the
-// setup-node is a one-direction client (no inbound dmsg traffic the
-// service needs to route to it through delegated servers).
-func getHTTPClient(_ context.Context, snDmsgC *dmsg.Client, service string) (*http.Client, error) {
-	if service == "" {
-		return nil, fmt.Errorf("service URL is empty")
-	}
-
-	var serviceURL dmsgcurl.URL
-	if err := serviceURL.Fill(service); err != nil {
-		// Fill rejects malformed inputs but tolerates plain http(s)
-		// URLs without scheme — bare host:port paths fall through here.
-		// Treat any parse failure as "not a dmsg URL, use plain HTTP".
-		return plainHTTPClient(), nil
-	}
-
-	if serviceURL.Scheme != "dmsg" {
-		return plainHTTPClient(), nil
-	}
-
-	if snDmsgC == nil {
-		return nil, fmt.Errorf("dmsg URL %q requires a DMSG client; none available", service)
-	}
-
-	return &http.Client{
-		Transport: dmsghttp.MakeHTTPTransport(context.Background(), snDmsgC),
-	}, nil
-}
-
-// plainHTTPClient returns the http.Client previously hard-coded
-// in-line — kept as a small helper so the dmsg path can share the
-// same call site shape.
-func plainHTTPClient() *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			DisableKeepAlives: true,
-			IdleConnTimeout:   5 * time.Second,
-		},
 	}
 }
