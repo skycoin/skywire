@@ -31,6 +31,7 @@ import (
 	_ "github.com/skycoin/skywire/pkg/services/dmsgdisc"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgsrv"
 	_ "github.com/skycoin/skywire/pkg/services/noop"
+	_ "github.com/skycoin/skywire/pkg/services/tpd"
 )
 
 func init() {
