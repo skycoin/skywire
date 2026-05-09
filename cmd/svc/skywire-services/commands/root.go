@@ -18,6 +18,7 @@ import (
 	rf "github.com/skycoin/skywire/cmd/svc/route-finder/commands"
 	sd "github.com/skycoin/skywire/cmd/svc/service-discovery/commands"
 	sn "github.com/skycoin/skywire/cmd/svc/setup-node/commands"
+	run "github.com/skycoin/skywire/cmd/svc/skywire-services/commands/run"
 	stunsvr "github.com/skycoin/skywire/cmd/svc/stun-server/commands"
 	se "github.com/skycoin/skywire/cmd/svc/sw-env/commands"
 	tpd "github.com/skycoin/skywire/cmd/svc/transport-discovery/commands"
@@ -25,6 +26,9 @@ import (
 	ut "github.com/skycoin/skywire/cmd/svc/uptime-tracker/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
+	// Side-effect imports register service factories with
+	// pkg/services so `skywire svc run` can dispatch them.
+	_ "github.com/skycoin/skywire/pkg/services/noop"
 )
 
 func init() {
@@ -46,6 +50,7 @@ func init() {
 		nm.RootCmd,
 		geoip.RootCmd,
 		stunsvr.RootCmd,
+		run.RootCmd,
 	)
 	tpd.RootCmd.Use = "tpd"
 	tps.RootCmd.Use = "tps"
