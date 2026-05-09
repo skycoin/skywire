@@ -13,7 +13,7 @@
         "timestamp": 0,
         "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
         "server": {
-          "address": "174.0.0.5:8080",
+          "address": "174.0.0.17:8080",
           "availableSessions": 0
         }
       }
