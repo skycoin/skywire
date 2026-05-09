@@ -103,8 +103,25 @@ func TestPairRoundTripOverDmsg(t *testing.T) {
 	pairB, err := mgrB.Add(pkA)
 	require.NoError(t, err)
 
-	require.NoError(t, pairA.Connect())
-	require.NoError(t, pairB.Connect())
+	// Retry Connect — on slow CI runners, concurrent dmsg
+	// handshakes can transiently fail with "cannot connect to
+	// delegated server" (dmsg error 202) when the server's
+	// connection table is briefly saturated. Mirrors the retry
+	// pattern in pkg/dmsg/dmsgtest/e2e_test.go:264.
+	connectWithRetry := func(p *Pair) error {
+		var lastErr error
+		for attempt := 0; attempt < 10; attempt++ {
+			if err := p.Connect(); err == nil {
+				return nil
+			} else {
+				lastErr = err
+			}
+			time.Sleep(time.Duration(200+attempt*100) * time.Millisecond)
+		}
+		return lastErr
+	}
+	require.NoError(t, connectWithRetry(pairA))
+	require.NoError(t, connectWithRetry(pairB))
 
 	// A → B
 	const plaintextAB = "hello bob"

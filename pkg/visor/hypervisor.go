@@ -116,7 +116,13 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		summaryCache: make(map[cipher.PubKey]cachedSummary),
 	}
 
-	if config.TPViz.Enable && visor != nil {
+	// tpviz is started unconditionally whenever a hypervisor has a
+	// local visor — the hvui's network-visualizer tab is always shown
+	// in the home top bar, so gating the backend on a config flag
+	// just produced 404s on /tp-viz/ for older configs that hadn't
+	// flipped enable=true. The TPViz config block still tunes
+	// SurveyDir and CacheMaxAge; only the on/off gate is removed.
+	if visor != nil {
 		tpvizCfg := tpviz.DefaultConfig()
 		if config.TPViz.SurveyDir != "" {
 			tpvizCfg.SurveyDir = config.TPViz.SurveyDir
