@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
@@ -19,18 +18,9 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/route-finder/api"
-	"github.com/skycoin/skywire/pkg/storeconfig"
-	"github.com/skycoin/skywire/pkg/svcmode"
-	"github.com/skycoin/skywire/pkg/transport-discovery/store"
-)
-
-const (
-	redisScheme = "redis://"
+	"github.com/skycoin/skywire/pkg/services/rf"
 )
 
 var (
@@ -51,7 +41,6 @@ var (
 	mode           string
 )
 
-// exampleJSON marshals v to indented JSON with color, returning empty string on error
 func exampleJSON(v interface{}) string {
 	b, err := json.MarshalIndent(v, "    ", "  ")
 	if err != nil {
@@ -60,7 +49,6 @@ func exampleJSON(v interface{}) string {
 	return string(pretty.Color(b, nil))
 }
 
-// generateExamples creates example responses from actual struct types
 func generateExamples() string {
 	pk1 := "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
 	pk2 := "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
@@ -144,113 +132,99 @@ Example:
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
-
-		var configServers []*disc.Entry
-		var configSurveyWL []cipher.PubKey
-		if configPath != "" {
-			c, cErr := LoadConfig(configPath)
-			if cErr != nil {
-				log.Fatal(cErr)
-			}
-			configServers, configSurveyWL = applyConfig(c)
-		}
-
-		if !strings.HasPrefix(redisURL, redisScheme) {
-			redisURL = redisScheme + redisURL
-		}
-
-		storeConfig := storeconfig.Config{
-			Type:     storeconfig.Redis,
-			URL:      redisURL,
-			Password: storeconfig.RedisPassword(),
-			PoolSize: redisPoolSize,
-		}
-
-		if testing {
-			storeConfig.Type = storeconfig.Memory
-		}
-
 		logger := logging.MustGetLogger(tag)
-		lvl, err := logging.LevelFromString(logLvl)
+
+		cfg, err := buildConfig()
 		if err != nil {
-			logger.Fatal("Invalid loglvl detected")
+			logger.WithError(err).Fatal("failed to build route-finder config")
 		}
-
-		logging.SetLevel(lvl)
-
-		metricsutil.ServePProf(logger, pprofAddr, "route-finder")
-
 		ctx, cancel := cmdutil.SignalContext(context.Background(), logger)
 		defer cancel()
-
-		// Route finder uses a longer TTL since it only reads transport data
-		// and doesn't need the same expiration as TPD
-		transportStore, err := store.New(ctx, storeConfig, 10*time.Minute, logger)
-		if err != nil {
-			log.Fatal("Failed to initialize store: ", err)
-		}
-		defer transportStore.Close()
-
-		if keyFile != "" {
-			if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
-				logger.Fatal("Failed to load keyfile: ", err)
-			}
-		}
-		pk, err := sk.PubKey()
-		if err != nil {
-			logger.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
-		}
-
-		metricsutil.ServeHTTPMetrics(logger, metricsAddr)
-
-		var dmsgAddr string
-		if !pk.Null() {
-			dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
-		}
-
-		enableMetrics := metricsAddr != ""
-		rfAPI := api.New(transportStore, logger, enableMetrics, dmsgAddr)
-
-		resolvedMode, err := svcmode.ResolveMode(mode, !sk.Null())
-		if err != nil {
-			logger.WithError(err).Fatal("invalid --mode")
-		}
-
-		embeddedServers := dmsgDiscEntries(configServers)
-		surveyWL := deployment.Prod.SurveyWhitelist
-		if len(configSurveyWL) > 0 {
-			surveyWL = configSurveyWL
-		}
-
-		h, err := svcmode.Start(ctx, svcmode.Config{
-			Mode:                resolvedMode,
-			HTTPAddr:            addr,
-			Handler:             rfAPI,
-			PK:                  pk,
-			SK:                  sk,
-			DmsgPort:            dmsgPort,
-			DmsgDiscovery:       dmsgDisc,
-			DmsgServerType:      dmsgServerType,
-			EmbeddedDmsgServers: embeddedServers,
-			SurveyWhitelist:     surveyWL,
-			Log:                 logger,
-			DisableDHT:          true,
-			OnDmsgServersUpdated: func(s []string) {
-				rfAPI.DmsgServers = s
-			},
-		})
-		if err != nil {
-			logger.WithError(err).Fatal("failed to start listeners")
-		}
-		defer h.Close()
-
-		select {
-		case <-ctx.Done():
-		case err := <-h.Errors():
-			logger.WithError(err).Error("listener failed")
-			cancel()
+		if err := rf.New(cfg, logger).Run(ctx); err != nil {
+			logger.WithError(err).Fatal("route-finder: run failed")
 		}
 	},
+}
+
+func buildConfig() (*rf.Config, error) {
+	if keyFile != "" {
+		if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
+			return nil, err
+		}
+	}
+	cfg := &rf.Config{
+		SecKey:        sk,
+		Addr:          addr,
+		MetricsAddr:   metricsAddr,
+		PprofAddr:     pprofAddr,
+		Redis:         redisURL,
+		RedisPoolSize: redisPoolSize,
+		LogLevel:      logLvl,
+		Tag:           tag,
+		Testing:       testing,
+		Mode:          mode,
+		DmsgPort:      dmsgPort,
+		Dmsg: cmdutil.DmsgConfig{
+			Discovery:  dmsgDisc,
+			ServerType: dmsgServerType,
+		},
+	}
+	if configPath != "" {
+		fileCfg, err := rf.LoadFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+		mergeFile(cfg, fileCfg)
+	}
+	return cfg, nil
+}
+
+func mergeFile(dst, src *rf.Config) {
+	if src.SecKey != (cipher.SecKey{}) {
+		dst.SecKey = src.SecKey
+	}
+	if src.Addr != "" {
+		dst.Addr = src.Addr
+	}
+	if src.MetricsAddr != "" {
+		dst.MetricsAddr = src.MetricsAddr
+	}
+	if src.PprofAddr != "" {
+		dst.PprofAddr = src.PprofAddr
+	}
+	if src.Redis != "" {
+		dst.Redis = src.Redis
+	}
+	if src.RedisPoolSize > 0 {
+		dst.RedisPoolSize = src.RedisPoolSize
+	}
+	if src.LogLevel != "" {
+		dst.LogLevel = src.LogLevel
+	}
+	if src.Tag != "" {
+		dst.Tag = src.Tag
+	}
+	if src.Testing {
+		dst.Testing = true
+	}
+	if src.Mode != "" {
+		dst.Mode = src.Mode
+	}
+	if len(src.SurveyWhitelist) > 0 {
+		dst.SurveyWhitelist = src.SurveyWhitelist
+	}
+	if src.DmsgPort != 0 {
+		dst.DmsgPort = src.DmsgPort
+	}
+	if src.Dmsg.Discovery != "" {
+		dst.Dmsg.Discovery = src.Dmsg.Discovery
+	}
+	if src.Dmsg.ServerType != "" {
+		dst.Dmsg.ServerType = src.Dmsg.ServerType
+	}
+	if len(src.Dmsg.Servers) > 0 {
+		dst.Dmsg.Servers = src.Dmsg.Servers
+	}
 }
 
 // Execute executes root CLI command.
