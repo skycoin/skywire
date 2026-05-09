@@ -34,7 +34,10 @@ import (
 	_ "github.com/skycoin/skywire/pkg/services/noop"
 	_ "github.com/skycoin/skywire/pkg/services/rf"
 	_ "github.com/skycoin/skywire/pkg/services/sd"
+	_ "github.com/skycoin/skywire/pkg/services/sn"
+	_ "github.com/skycoin/skywire/pkg/services/stun"
 	_ "github.com/skycoin/skywire/pkg/services/tpd"
+	_ "github.com/skycoin/skywire/pkg/services/tps"
 )
 
 func init() {
