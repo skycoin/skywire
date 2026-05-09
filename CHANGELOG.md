@@ -24,11 +24,13 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 ### Routing & route-finder
 -   `cli route calc` returns multiple routes (streamed via gRPC) and respects the visor's `routing.min_hops`. [#2397](https://github.com/skycoin/skywire/pull/2397)
 
-### DHT / address mirror
+### DHT / address mirror — added then removed
+The Kademlia DHT subsystem was added during this release cycle and then removed in [#2459](https://github.com/skycoin/skywire/pull/2459) once the CXO publisher/subscriber tree (below) demonstrated a simpler way to fan out the same data. The PRs are listed for completeness but the code is gone in v1.3.50.
 -   DHT mirror to HTTP discoveries with `addr` and `self_publish` payloads; one signing writer per tp salt. [#2399](https://github.com/skycoin/skywire/pull/2399)
 -   Spec audit + comparison doc; `cli dht peers/reconcile/source` for inspecting DHT state. [#2398](https://github.com/skycoin/skywire/pull/2398)
 -   Publish a real signed DMSG entry on the DHT path. [#2365](https://github.com/skycoin/skywire/pull/2365)
 -   Fix DHT seq + self-probe endpoint. [#2351](https://github.com/skycoin/skywire/pull/2351)
+-   **Remove the Kademlia DHT subsystem in favor of CXO + HTTP discovery.** [#2459](https://github.com/skycoin/skywire/pull/2459)
 
 ### DMSG / dmsg-servers
 -   `dmsg_servers`: embedded list refresh, live `confbs` response, visor-side disk cache. Bootstrap continues working with stale or unreachable `confbs`. [#2403](https://github.com/skycoin/skywire/pull/2403)
@@ -36,6 +38,20 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 -   dmsgd: keep entry cache populated on `SetEntry` instead of invalidating. [#2382](https://github.com/skycoin/skywire/pull/2382)
 -   setup-node: dmsg-http for outbound TPD/AR clients. [#2362](https://github.com/skycoin/skywire/pull/2362)
 -   docs(deployment): dmsg-server DHT/Redis configuration. [#2392](https://github.com/skycoin/skywire/pull/2392)
+-   `disc/dmsgfirst`: APIClient that tries DMSG first, falls back to HTTP on dial failure. [#2433](https://github.com/skycoin/skywire/pull/2433)
+-   dmsg-disc: decouple discovery from the HTTP-bootstrap loop. [#2436](https://github.com/skycoin/skywire/pull/2436)
+-   dmsg-disc: drop `--dmsg-servers` flag; rely on the embedded keyring. [#2437](https://github.com/skycoin/skywire/pull/2437)
+-   dmsg-disc: polymorphic `dmsg` config block; per-deployment server lists. [#2438](https://github.com/skycoin/skywire/pull/2438)
+-   visor: upgrade dmsg disc clients to dmsgfirst once `dmsgC` is ready. [#2441](https://github.com/skycoin/skywire/pull/2441)
+
+#### dmsgfirst self-deadlock and recursion fixes
+A series of related bugs surfaced once dmsgfirst was wired into more code paths — entries getting locked while another goroutine on the same entity tried to refresh them, and recursion through the HTTP-fallback path when the DMSG dial itself needed a fresh entry.
+-   Self-deadlock in `updateClientEntry` under the dmsgfirst path. [#2443](https://github.com/skycoin/skywire/pull/2443)
+-   Self-deadlock in `updateServerEntry` under the dmsgfirst path. [#2448](https://github.com/skycoin/skywire/pull/2448)
+-   Self-deadlock in `EnsureAndObtainSession` across the dmsgfirst path. [#2449](https://github.com/skycoin/skywire/pull/2449)
+-   Break `getServerEntry` recursion under the dmsgfirst path. [#2451](https://github.com/skycoin/skywire/pull/2451)
+-   Reject cached server entries in `getClientEntryCached`. [#2454](https://github.com/skycoin/skywire/pull/2454)
+-   Break dmsgfirst recursion via context guard in `HTTPTransport`. [#2455](https://github.com/skycoin/skywire/pull/2455)
 
 ### SUDPH / STCPR
 -   sudph: reconnect on AR conn drop; retry STUN on transient failure; relax handshake to 5s. [#2372](https://github.com/skycoin/skywire/pull/2372)
@@ -49,6 +65,66 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 -   `--dmsgweb` / `--skynetweb` gen flags for proxy auto-start. [#2366](https://github.com/skycoin/skywire/pull/2366)
 -   User-publishable CXO feeds with `/feeds` discovery. [#2369](https://github.com/skycoin/skywire/pull/2369)
 -   `httputil`: fix `WriteJSON` panic on slow clients; sweep `err.Error()` string matches → `errors.Is`. [#2402](https://github.com/skycoin/skywire/pull/2402)
+-   geoip without HTTP — dmsg-server `LookupIPGeo` + `Geo` on SD entries means visors no longer need to round-trip the geoip service. [#2439](https://github.com/skycoin/skywire/pull/2439)
+-   Wire `--pprofmode` through dmsg cmdutil so non-http modes (cpu/mem/mutex/block/trace) actually work. [#2431](https://github.com/skycoin/skywire/pull/2431)
+-   Register `RuntimeLogs` on the RPC server. [#2417](https://github.com/skycoin/skywire/pull/2417)
+-   Stop disabling SD/visor registrations on transient failures. [#2407](https://github.com/skycoin/skywire/pull/2407)
+-   Re-register in service discovery once transport count drains below max. [#2453](https://github.com/skycoin/skywire/pull/2453)
+-   `--public-ip`: trust visor-declared `PublicIP` when AR's observed source is non-public (dmsg-only / NATed paths). [#2409](https://github.com/skycoin/skywire/pull/2409)
+
+### CXO publishers, subscribers, and on-demand sync
+A new pattern emerged this cycle: deployment services publish their state into a CXO TreeStore feed, visors and the hypervisor subscribe on demand, and the bulk of "discover what's out there" traffic moves off HTTP polling. Replaces the discarded DHT path.
+-   TPD: mirror transport register/deregister via CXO publisher. [#2452](https://github.com/skycoin/skywire/pull/2452)
+-   SD + DMSG-D: CXO publishers for services + clients-by-server. [#2456](https://github.com/skycoin/skywire/pull/2456)
+-   Visor: on-demand CXO subscription manager — subscriptions stay open while a UI tab is acquired and tear down on a configurable grace period. [#2457](https://github.com/skycoin/skywire/pull/2457)
+-   Cycle-based CXO sync: subscribe → snapshot → unsubscribe → wait → repeat. [#2460](https://github.com/skycoin/skywire/pull/2460)
+-   tpviz: cut `/api/services` over to CXO subscriber with HTTP fallback. [#2458](https://github.com/skycoin/skywire/pull/2458)
+-   tpviz: `/api/dmsg/servers/clients` mirroring DMSG-D's clients-by-server CXO snapshot. [#2463](https://github.com/skycoin/skywire/pull/2463)
+-   visor/autoconnect: pull public visors from the CXO snapshot when available. [#2461](https://github.com/skycoin/skywire/pull/2461)
+-   visor: cut `VPNServers` / `ProxyServers` / `PublicVisors` over to the CXO snapshot. [#2462](https://github.com/skycoin/skywire/pull/2462)
+
+#### CXO bug fixes
+-   `Cache.cleanDown` eviction bug; skip re-encoding unchanged sub-trees. [#2420](https://github.com/skycoin/skywire/pull/2420)
+-   Drop superseded roots + sticky `Unpack.created` for dedup safety. [#2434](https://github.com/skycoin/skywire/pull/2434)
+-   Skip blank refs in `DelRoot` walk so cleanup actually decrements shared subtrees. [#2446](https://github.com/skycoin/skywire/pull/2446)
+-   `cxoaggregator`: log `OnRootReceived` + `OnFillingBreaks`. [#2411](https://github.com/skycoin/skywire/pull/2411)
+-   `cxo/node`: evict dead DMSG conns from cache on Conn cleanup. [#2413](https://github.com/skycoin/skywire/pull/2413)
+-   `cxo/node`: guard `fillHead` nil-deref races (`closeFiller` + `handleDelConn`). [#2423](https://github.com/skycoin/skywire/pull/2423)
+-   tpd panic loop: cxo `Finc`-to-negative + httputil short-write discriminator. [#2422](https://github.com/skycoin/skywire/pull/2422)
+
+### Multi-service framework — `skywire svc run`
+A new entry point that runs any subset of the deployment-side services (TPD, SD, AR, RF, DMSG-D, DMSG server, setup-node, transport-setup, stun-server) — and optionally a visor — in a single process. Drives the CI e2e from eleven separate containers down to one.
+-   JSON config files for the five existing deployment services. [#2440](https://github.com/skycoin/skywire/pull/2440)
+-   `pkg/services` framework + `skywire svc run` cobra subcommand. [#2464](https://github.com/skycoin/skywire/pull/2464)
+-   Per-service migrations onto the framework: dmsg-discovery [#2465](https://github.com/skycoin/skywire/pull/2465); dmsg-server [#2466](https://github.com/skycoin/skywire/pull/2466); transport-discovery [#2468](https://github.com/skycoin/skywire/pull/2468); SD/AR/RF [#2469](https://github.com/skycoin/skywire/pull/2469); setup-node, transport-setup, stun-server [#2470](https://github.com/skycoin/skywire/pull/2470); skywire-visor [#2472](https://github.com/skycoin/skywire/pull/2472).
+-   Collapse nine deployment containers to one in CI e2e (`docker/docker-compose.yml`). [#2471](https://github.com/skycoin/skywire/pull/2471)
+-   Update Makefile `e2e-run` for the collapsed services container. [#2473](https://github.com/skycoin/skywire/pull/2473)
+
+### Hypervisor UI
+-   New tabs: VPN, Skysocks, multi-instance app surface, autoconfig-userspace; Resources / fleet CXO metrics views. [#2424](https://github.com/skycoin/skywire/pull/2424), [#2435](https://github.com/skycoin/skywire/pull/2435)
+-   Transport latency display in the transports list. [#2419](https://github.com/skycoin/skywire/pull/2419)
+-   skysocks/vpn-server whitelist setting + dmsg reverse proxy in the UI. [#2412](https://github.com/skycoin/skywire/pull/2412)
+-   WAN-reachable embedded dmsg, discovery proxy, and per-visor terminal-tab persistence. [#2450](https://github.com/skycoin/skywire/pull/2450)
+-   Always-on tpviz tab (drops the `config.TPViz.Enable` gate so older configs no longer 404). [#2474](https://github.com/skycoin/skywire/pull/2474)
+-   Render cached fields on offline visors instead of going blank. [#2447](https://github.com/skycoin/skywire/pull/2447)
+
+### Transport metrics
+-   Persist latency in a dedicated key, decoupled from registration TTL. [#2418](https://github.com/skycoin/skywire/pull/2418)
+-   Don't zero-clobber latency on partial measurements. [#2415](https://github.com/skycoin/skywire/pull/2415)
+-   Drop outlier RTT samples above `MaxReasonableRTTMs` (30s). [#2421](https://github.com/skycoin/skywire/pull/2421)
+-   Cap `UpdateLatency` at `MaxReasonableRTTMs`. [#2425](https://github.com/skycoin/skywire/pull/2425)
+-   Fix verified-bandwidth zero-edge in tp metrics. [#2414](https://github.com/skycoin/skywire/pull/2414)
+-   Render AR registration without duplicate port for SUDPH in `cli visor info`. [#2410](https://github.com/skycoin/skywire/pull/2410)
+-   Nest daily transport rollup under `<date>/rollup`, not `<date>`. [#2445](https://github.com/skycoin/skywire/pull/2445)
+
+### Service-self uptime
+-   `serviceuptime`: per-service self-uptime tracker + version provenance via local bbolt. [#2428](https://github.com/skycoin/skywire/pull/2428)
+-   Transport uptime: CXO-driven heartbeats + slot-accurate timeline + visor-published bitmap merge. [#2426](https://github.com/skycoin/skywire/pull/2426)
+-   Retire the on-disk CSV transport-log store; serve history from stats bbolt. [#2427](https://github.com/skycoin/skywire/pull/2427)
+
+#### TPD perf
+-   Bulk-read uptime timeline bitmaps with one GET per day. [#2429](https://github.com/skycoin/skywire/pull/2429)
+-   No-latency variant for `mirrorEdges` + concat redis-key builders. [#2430](https://github.com/skycoin/skywire/pull/2430)
 
 ### Skychat / pairing
 -   Consent-based pair-invite flow with accept/decline UI. [#2386](https://github.com/skycoin/skywire/pull/2386)
@@ -81,6 +157,9 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ### Infra
 -   docker: propagate build failures from deploy scripts; use `proxy.golang.org`. [#2404](https://github.com/skycoin/skywire/pull/2404)
+-   nix: packaging — flake-based source builds. [#2416](https://github.com/skycoin/skywire/pull/2416)
+-   nix: derive source-build version from flake git metadata, fix readme flake input. [#2432](https://github.com/skycoin/skywire/pull/2432)
+-   chore(deps): bump fast-uri 3.1.0 → 3.1.2 (security advisory GHSA-v39h-62p7-jpjc); refresh Go module tree. [#2474](https://github.com/skycoin/skywire/pull/2474)
 
 ## 1.3.47
 
