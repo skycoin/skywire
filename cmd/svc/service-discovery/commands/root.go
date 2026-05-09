@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-redis/redis/v8"
 	"github.com/spf13/cobra"
 	"github.com/tidwall/pretty"
 
@@ -19,21 +18,12 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/metricsutil"
-	"github.com/skycoin/skywire/pkg/service-discovery/api"
-	sdmetrics "github.com/skycoin/skywire/pkg/service-discovery/metrics"
-	"github.com/skycoin/skywire/pkg/service-discovery/store"
-	"github.com/skycoin/skywire/pkg/storeconfig"
-	"github.com/skycoin/skywire/pkg/svcmode"
+	"github.com/skycoin/skywire/pkg/services/sd"
 )
 
 var log = logging.MustGetLogger("service-discovery")
-
-const redisPrefix = "service-discovery"
 
 var (
 	configPath     string
@@ -166,157 +156,120 @@ Example:
   skywire cli config gen-keys | tee sd-keys.txt
   service-discovery --sk $(tail -n1 sd-keys.txt)`,
 	Run: func(_ *cobra.Command, _ []string) {
-		var configServers []*disc.Entry
-		var configSurveyWL []cipher.PubKey
-		if configPath != "" {
-			c, cErr := LoadConfig(configPath)
-			if cErr != nil {
-				log.Fatal(cErr)
-			}
-			configServers, configSurveyWL = applyConfig(c)
-		}
-
-		if dmsgDisc == "" {
-			dmsgDisc = dmsg.DiscURL(false)
-		}
 		if _, err := buildinfo.Get().WriteTo(os.Stdout); err != nil {
 			log.Printf("Failed to output build info: %v", err)
 		}
-
-		if keyFile != "" {
-			if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
-				log.Fatal("Failed to load keyfile: ", err)
-			}
-		}
-		pk, err := sk.PubKey()
+		cfg, err := buildConfig()
 		if err != nil {
-			log.WithError(err).Warn("No SecKey found. Skipping serving on dmsghttp.")
+			log.WithError(err).Fatal("failed to build service-discovery config")
 		}
-
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
-
-		metricsutil.ServePProf(log, pprofAddr, "service-discovery")
-
-		redisPassword := storeconfig.RedisPassword()
-		opt, err := redis.ParseURL(redisURL)
-		if err != nil {
-			log.Fatalf("Failed to parse redis URL: %v", err)
-		}
-		opt.Password = redisPassword
-
-		redisClient := redis.NewClient(opt)
-		if _, err := redisClient.Ping(ctx).Result(); err != nil {
-			log.Fatalf("Failed to connect to redis: %v", err)
-		}
-		log.Printf("Redis connected.")
-
-		db, err := store.NewStore(ctx, redisClient, log, entryTimeout)
-		if err != nil {
-			log.Fatal("Failed to initialize redis store: ", err)
-		}
-		log.Printf("Service entry timeout: %v", entryTimeout)
-
-		var nonceDB httpauth.NonceStore
-		if !testMode {
-			nonceStoreConfig := storeconfig.Config{
-				URL:      redisURL,
-				Type:     storeconfig.Redis,
-				Password: storeconfig.RedisPassword(),
-			}
-			nonceDB, err = httpauth.NewNonceStore(ctx, nonceStoreConfig, redisPrefix)
-			if err != nil {
-				log.Fatal("Failed to initialize redis nonce store: ", err)
-			}
-		}
-
-		metricsutil.ServeHTTPMetrics(log, metricsAddr)
-
-		var m sdmetrics.Metrics
-		if metricsAddr == "" {
-			m = sdmetrics.NewEmpty()
-		} else {
-			m = sdmetrics.NewVictoriaMetrics()
-		}
-
-		var dmsgAddr string
-		if !pk.Null() {
-			dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
-		}
-
-		// we enable metrics middleware if address is passed
-		enableMetrics := metricsAddr != ""
-		sdAPI := api.New(log, db, nonceDB, enableMetrics, m, dmsgAddr, geoipURL)
-
-		var whitelistPKs []string
-		if whitelistKeys != "" {
-			whitelistPKs = strings.Split(whitelistKeys, ",")
-		}
-		for _, v := range whitelistPKs {
-			api.WhitelistPKs.Set(v)
-		}
-
-		go sdAPI.RunBackgroundTasks(ctx, log)
-
-		resolvedMode, err := svcmode.ResolveMode(mode, !sk.Null())
-		if err != nil {
-			log.WithError(err).Fatal("invalid --mode")
-		}
-
-		embeddedServers := dmsgDiscEntries(configServers)
-		surveyWL := deployment.Prod.SurveyWhitelist
-		if len(configSurveyWL) > 0 {
-			surveyWL = configSurveyWL
-		}
-
-		h, err := svcmode.Start(ctx, svcmode.Config{
-			Mode:                resolvedMode,
-			HTTPAddr:            addr,
-			Handler:             sdAPI,
-			PK:                  pk,
-			SK:                  sk,
-			DmsgPort:            dmsgPort,
-			DmsgDiscovery:       dmsgDisc,
-			DmsgServerType:      dmsgServerType,
-			EmbeddedDmsgServers: embeddedServers,
-			SurveyWhitelist:     surveyWL,
-			Log:                 log,
-			DisableDHT:          true,
-			OnDmsgServersUpdated: func(s []string) {
-				sdAPI.DmsgServers = s
-			},
-		})
-		if err != nil {
-			log.WithError(err).Fatal("failed to start listeners")
-		}
-		defer h.Close()
-
-		// (Visor reachability probe gate removed — see api.go.)
-
-		// CXO services publisher: outbound feed mirroring the live
-		// services state. Subscribers (the hypervisor's network
-		// visualizer + tab-specific consumers) connect to SD's PK on
-		// skyenv.DmsgSDServicesCXOPort and read the JSON-encoded
-		// service entries from "services/<type>/<pk>/{entry,tombstone}"
-		// instead of HTTP-polling /api/services?type=...
-		if enableCXO && h.DmsgClient != nil {
-			if pub, perr := api.StartServicesCXOPublisher(ctx, h.DmsgClient, sk, log); perr != nil {
-				log.WithError(perr).Error("Failed to start CXO services publisher, continuing without it")
-			} else {
-				sdAPI.SetServicesCXOPublisher(pub)
-				defer pub.Close() //nolint:errcheck
-			}
-		} else if enableCXO {
-			log.Warn("CXO requested but dmsg is not enabled (--mode=http); services publisher disabled")
-		}
-
-		select {
-		case <-ctx.Done():
-		case err := <-h.Errors():
-			log.WithError(err).Error("listener failed")
-			cancel()
+		if err := sd.New(cfg, log).Run(ctx); err != nil {
+			log.WithError(err).Fatal("service-discovery: run failed")
 		}
 	},
+}
+
+// buildConfig collects flag values + the optional --config file
+// into one sd.Config. File values override flag values where set.
+func buildConfig() (*sd.Config, error) {
+	if keyFile != "" {
+		if err := cmdutil.LoadOrGenerateKey(keyFile, &sk); err != nil {
+			return nil, err
+		}
+	}
+	cfg := &sd.Config{
+		SecKey:       sk,
+		Addr:         addr,
+		MetricsAddr:  metricsAddr,
+		PprofAddr:    pprofAddr,
+		Redis:        redisURL,
+		EntryTimeout: entryTimeout,
+		TestMode:     testMode,
+		Mode:         mode,
+		Whitelist:    commaSplit(whitelistKeys),
+		GeoIP:        geoipURL,
+		DmsgPort:     dmsgPort,
+		EnableCXO:    enableCXO,
+		Dmsg: cmdutil.DmsgConfig{
+			Discovery:  dmsgDisc,
+			ServerType: dmsgServerType,
+		},
+	}
+	if configPath != "" {
+		fileCfg, err := sd.LoadFile(configPath)
+		if err != nil {
+			return nil, err
+		}
+		mergeFile(cfg, fileCfg)
+	}
+	return cfg, nil
+}
+
+func mergeFile(dst, src *sd.Config) {
+	if src.SecKey != (cipher.SecKey{}) {
+		dst.SecKey = src.SecKey
+	}
+	if src.Addr != "" {
+		dst.Addr = src.Addr
+	}
+	if src.MetricsAddr != "" {
+		dst.MetricsAddr = src.MetricsAddr
+	}
+	if src.PprofAddr != "" {
+		dst.PprofAddr = src.PprofAddr
+	}
+	if src.Redis != "" {
+		dst.Redis = src.Redis
+	}
+	if src.EntryTimeout != 0 {
+		dst.EntryTimeout = src.EntryTimeout
+	}
+	if src.TestMode {
+		dst.TestMode = true
+	}
+	if src.Mode != "" {
+		dst.Mode = src.Mode
+	}
+	if len(src.Whitelist) > 0 {
+		dst.Whitelist = src.Whitelist
+	}
+	if len(src.SurveyWhitelist) > 0 {
+		dst.SurveyWhitelist = src.SurveyWhitelist
+	}
+	if src.GeoIP != "" {
+		dst.GeoIP = src.GeoIP
+	}
+	if src.DmsgPort != 0 {
+		dst.DmsgPort = src.DmsgPort
+	}
+	if src.EnableCXO {
+		dst.EnableCXO = true
+	}
+	if src.Dmsg.Discovery != "" {
+		dst.Dmsg.Discovery = src.Dmsg.Discovery
+	}
+	if src.Dmsg.ServerType != "" {
+		dst.Dmsg.ServerType = src.Dmsg.ServerType
+	}
+	if len(src.Dmsg.Servers) > 0 {
+		dst.Dmsg.Servers = src.Dmsg.Servers
+	}
+}
+
+func commaSplit(s string) []string {
+	if s == "" {
+		return nil
+	}
+	out := make([]string, 0, 4)
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // Execute executes root CLI command.
