@@ -259,6 +259,7 @@
       "routing": "Routing",
       "transports": "Transports",
       "bandwidth": "Bandwidth",
+      "dmsg": "DMSG",
       "uptime": "Uptime",
       "rewards": "Rewards",
       "skynet": "Skynet",
@@ -1143,6 +1144,19 @@
         "non-persistent": "Non-persistent"
       }
     }
+  },
+
+  "dmsg": {
+    "title": "DMSG Clients",
+    "loading": "Loading dmsg sessions…",
+    "empty": "No dmsg clients reported.",
+    "refresh": "Refresh",
+    "connect-all": "Connect to all servers",
+    "connecting": "Connecting…",
+    "connect-all-done": "Connect-all dispatched.",
+    "servers": "servers",
+    "no-servers": "No connected servers.",
+    "fetched-at": "Fetched"
   },
 
   "routing": {
