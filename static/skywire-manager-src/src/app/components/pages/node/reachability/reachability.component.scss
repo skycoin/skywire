@@ -1,0 +1,111 @@
+.reach-box { margin-bottom: 16px; }
+
+.section-desc {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.92em;
+  margin: 4px 0 12px 0;
+}
+
+.reach-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+.reach-input {
+  flex: 1 1 280px;
+  min-width: 200px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: monospace;
+  font-size: 0.92em;
+}
+.reach-input-num {
+  width: 64px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.92em;
+  text-align: right;
+}
+
+.reach-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.ml-auto { margin-left: auto; }
+
+.empty-row {
+  padding: 18px 6px;
+  color: rgba(255, 255, 255, 0.5);
+  font-style: italic;
+}
+
+.reach-results { margin-top: 14px; }
+
+.reach-result {
+  border-left: 3px solid rgba(255, 255, 255, 0.2);
+  padding: 8px 12px 10px 12px;
+  margin-bottom: 8px;
+  background-color: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+.reach-ok    { border-left-color: rgba(76, 175, 80, 0.6); }
+.reach-fail  { border-left-color: rgba(244, 67, 54, 0.6); }
+
+.reach-result-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.reach-kind-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.78em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.reach-target {
+  flex: 1 1 auto;
+  word-break: break-all;
+}
+
+.reach-time {
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+}
+
+.reach-result-summary {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.95em;
+}
+
+.reach-result-detail {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 3px;
+  font-family: monospace;
+  font-size: 0.82em;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 220px;
+  overflow-y: auto;
+}

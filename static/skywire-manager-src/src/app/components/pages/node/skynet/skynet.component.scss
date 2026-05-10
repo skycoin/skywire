@@ -156,3 +156,49 @@
     color: rgba(255, 255, 255, 0.87) !important;
   }
 }
+
+// Mode badges distinguish plain TCP forward vs HTTP reverse-proxy
+// forward at a glance — the Target column already shows the dest
+// but the operator usually wants to know "what kind of forward is
+// this" without parsing the address.
+.mode-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.mode-forward {
+  background-color: rgba(76, 175, 80, 0.18);
+  color: #81c784;
+  border: 1px solid rgba(76, 175, 80, 0.35);
+}
+.mode-proxy {
+  background-color: rgba(3, 169, 244, 0.18);
+  color: #4fc3f7;
+  border: 1px solid rgba(3, 169, 244, 0.35);
+}
+
+// Whitelist badges replace the prior plain text — "open" vs the
+// PK-count form, with a tint that matches the security posture
+// (green = wide open, amber = restricted).
+.whitelist-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.wl-open {
+  background-color: rgba(76, 175, 80, 0.18);
+  color: #81c784;
+  border: 1px solid rgba(76, 175, 80, 0.35);
+}
+.wl-restricted {
+  background-color: rgba(255, 152, 0, 0.18);
+  color: #ffb74d;
+  border: 1px solid rgba(255, 152, 0, 0.35);
+}

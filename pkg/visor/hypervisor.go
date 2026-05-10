@@ -442,6 +442,11 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/about", hv.getAbout())
 				r.Get("/dmsg", hv.getDmsg())
 				r.Get("/service-health", hv.getServiceHealth())
+				// Generic deployment-service proxy: fetches /<path> on the
+				// chosen service via the visor's existing FetchServiceData.
+				// Powers the service-health drill-down + per-visor UT
+				// sub-rows (?service=tpd&path=/uptimes, etc.).
+				r.Get("/svc-fetch", hv.getSvcFetch())
 				r.Get("/route-setup-nodes/stats", hv.getRSNRemoteStats())
 				r.Get("/network/transports", hv.getNetworkTransports())
 				r.Get("/network/visor-uptime", hv.getNetworkVisorUptime())
@@ -529,6 +534,21 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/dmsg/sessions", hv.getVisorDmsgSessions())
 				r.Post("/visors/{pk}/dmsg/connect-all", hv.postVisorDmsgConnectAll())
 				r.Put("/visors/{pk}/dmsg/sessions-count", hv.putVisorDmsgSessionsCount())
+
+				// Reachability tab: skywire-route ping + dmsg ping +
+				// remote /health fetch over dmsg. Each handler atomically
+				// orchestrates the underlying RPC sequence (Dial → Ping →
+				// Stop) so the UI gets a single round-trip.
+				r.Post("/visors/{pk}/ping-target", hv.postPingTarget())
+				r.Post("/visors/{pk}/dmsg-ping-target", hv.postDmsgPingTarget())
+				r.Get("/visors/{pk}/health-fetch", hv.getHealthFetch())
+
+				// Routing toolkit: route-finder query + local route
+				// enumeration. Both call existing visor-side machinery
+				// (routefinder client, local route calc) and serialize
+				// to a JSON-array result for the Routing tab forms.
+				r.Post("/visors/{pk}/route-find", hv.postRouteFind())
+				r.Post("/visors/{pk}/route-calc", hv.postRouteCalc())
 
 				// Skychat password management.
 				r.Get("/visors/{pk}/skychat/password", hv.getSkychatPassword())

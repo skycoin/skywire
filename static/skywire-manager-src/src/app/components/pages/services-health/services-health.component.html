@@ -51,12 +51,19 @@
           <th>{{ 'services-health.endpoint' | translate }}</th>
         </tr>
         @for (entry of entries; track trackByName($index, entry)) {
-          <tr>
+          <tr [class.drilled]="isDrilled(entry.name)">
             <td>
               <span [class]="statusClass(entry)"></span>
             </td>
             <td>
               <strong>{{ entry.name }}</strong>
+              @if (canDrill(entry.name)) {
+                <button mat-icon-button class="drill-btn"
+                        (click)="toggleDrill(entry)"
+                        [matTooltip]="(isDrilled(entry.name) ? 'services-health.collapse' : 'services-health.drill') | translate">
+                  <mat-icon [inline]="true">{{ isDrilled(entry.name) ? 'expand_less' : 'unfold_more' }}</mat-icon>
+                </button>
+              }
             </td>
             <td>
               {{ entry.status }}
@@ -75,6 +82,24 @@
               <code class="dim">{{ shortUrl(entry.url) }}</code>
             </td>
           </tr>
+          @if (isDrilled(entry.name)) {
+            <tr class="drill-row">
+              <td colspan="6">
+                @if (drillLoading[entry.name]) {
+                  <div class="drill-loading">
+                    <mat-spinner [diameter]="14"></mat-spinner>
+                    <span class="ml-2">{{ 'services-health.loading' | translate }}</span>
+                  </div>
+                }
+                @if (drillError[entry.name]) {
+                  <div class="drill-error">{{ drillError[entry.name] }}</div>
+                }
+                @if (drillBody[entry.name]) {
+                  <pre class="drill-body">{{ drillBody[entry.name] }}</pre>
+                }
+              </td>
+            </tr>
+          }
         }
       </table>
 

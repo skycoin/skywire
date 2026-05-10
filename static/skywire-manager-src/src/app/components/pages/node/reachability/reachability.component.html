@@ -1,0 +1,74 @@
+@if (node) {
+  <div class="rounded-elevated-box mt-3 reach-box">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'reach.title' | translate }}</span>
+      <p class="section-desc">{{ 'reach.help' | translate }}</p>
+
+      <div class="reach-form">
+        <input matInput class="reach-input"
+               [(ngModel)]="target"
+               [placeholder]="'reach.target-placeholder' | translate"
+               spellcheck="false" autocomplete="off" />
+        <span class="control-label dim ml-2">{{ 'reach.tries' | translate }}</span>
+        <input matInput type="number" class="reach-input-num"
+               [(ngModel)]="tries" min="1" max="50" />
+        <span class="control-label dim ml-2">{{ 'reach.size' | translate }}</span>
+        <input matInput type="number" class="reach-input-num"
+               [(ngModel)]="size" min="1" max="64" />
+      </div>
+
+      <div class="reach-actions mt-2">
+        <button mat-raised-button color="primary"
+                (click)="runSkynetPing()"
+                [disabled]="!target || inFlight !== null">
+          <mat-icon [inline]="true">network_check</mat-icon>
+          {{ inFlight === 'skynet-ping'
+              ? ('reach.running' | translate)
+              : ('reach.skynet-ping' | translate) }}
+        </button>
+        <button mat-stroked-button
+                (click)="runDmsgPing()"
+                [disabled]="!target || inFlight !== null">
+          <mat-icon [inline]="true">router</mat-icon>
+          {{ inFlight === 'dmsg-ping'
+              ? ('reach.running' | translate)
+              : ('reach.dmsg-ping' | translate) }}
+        </button>
+        <button mat-stroked-button
+                (click)="runHealth()"
+                [disabled]="!target || inFlight !== null">
+          <mat-icon [inline]="true">monitor_heart</mat-icon>
+          {{ inFlight === 'health'
+              ? ('reach.running' | translate)
+              : ('reach.health' | translate) }}
+        </button>
+        @if (results.length > 0) {
+          <button mat-button (click)="clearResults()" class="ml-auto">
+            <mat-icon [inline]="true">close</mat-icon>
+            {{ 'reach.clear' | translate }}
+          </button>
+        }
+      </div>
+
+      @if (results.length === 0) {
+        <div class="empty-row">{{ 'reach.empty' | translate }}</div>
+      } @else {
+        <div class="reach-results">
+          @for (r of results; track trackResult($index, r)) {
+            <div class="reach-result" [class.reach-ok]="r.ok" [class.reach-fail]="!r.ok">
+              <div class="reach-result-head">
+                <span class="reach-kind-badge">{{ r.kind }}</span>
+                <span class="reach-target mono small" [matTooltip]="r.target">{{ r.target }}</span>
+                <span class="reach-time">{{ r.startedAt | date:'HH:mm:ss' }}</span>
+              </div>
+              <div class="reach-result-summary">{{ r.summary }}</div>
+              @if (r.detail) {
+                <pre class="reach-result-detail mono small">{{ r.detail }}</pre>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}

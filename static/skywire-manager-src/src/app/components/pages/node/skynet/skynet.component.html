@@ -15,6 +15,7 @@
       <table class="data-table" *ngIf="ports.length > 0">
         <tr>
           <th>Port</th>
+          <th>Mode</th>
           <th>Target</th>
           <th>Label</th>
           <th>Skynet</th>
@@ -26,6 +27,19 @@
         <ng-container *ngFor="let fp of ports">
           <tr>
             <td class="mono">{{ fp.port }}</td>
+            <td>
+              <!-- Visually distinguish a plain TCP forward (port → localhost:N)
+                   from a reverse-proxy forward (port → http(s)://...). Reverse
+                   proxies go through the visor's landing-page handler so they
+                   share the dmsghttp pipeline; plain forwards open a TCP socket
+                   straight to the local target. -->
+              <span *ngIf="fp.proxy_addr" class="mode-badge mode-proxy" matTooltip="HTTP reverse proxy via landing-page handler">
+                proxy
+              </span>
+              <span *ngIf="!fp.proxy_addr" class="mode-badge mode-forward" matTooltip="Plain TCP forward to localhost target">
+                forward
+              </span>
+            </td>
             <td class="mono">{{ fp.proxy_addr || ('localhost:' + (fp.local_port || fp.port)) }}</td>
             <td>{{ fp.label || '-' }}</td>
             <td>
@@ -39,8 +53,12 @@
             </td>
             <td>
               <button mat-button (click)="startEditWhitelist(fp)" [matTooltip]="(fp.whitelist || []).join(', ') || 'Open to all peers'">
-                <span *ngIf="!fp.whitelist || fp.whitelist.length === 0">open</span>
-                <span *ngIf="fp.whitelist && fp.whitelist.length > 0">
+                <!-- Replace the tooltip-only PK display with a persistent
+                     "N PKs" badge that's clearly distinct from "open" and
+                     hints at the click-to-expand affordance. Tooltip is
+                     preserved for the full list. -->
+                <span *ngIf="!fp.whitelist || fp.whitelist.length === 0" class="whitelist-badge wl-open">open</span>
+                <span *ngIf="fp.whitelist && fp.whitelist.length > 0" class="whitelist-badge wl-restricted">
                   {{ fp.whitelist.length }} PK<span *ngIf="fp.whitelist.length !== 1">s</span>
                 </span>
                 <mat-icon class="edit-icon">edit</mat-icon>
@@ -53,7 +71,7 @@
             </td>
           </tr>
           <tr *ngIf="editingWhitelistPort === fp.port" class="whitelist-edit-row">
-            <td colspan="8">
+            <td colspan="9">
               <div class="whitelist-edit">
                 <p class="whitelist-help">
                   Comma- or whitespace-separated public keys. Empty = accessible to all authenticated peers.

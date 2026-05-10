@@ -10,6 +10,23 @@
             </button>
           }
         </div>
+        <div class="logs-filter-row">
+          <span class="control-label dim">{{ 'logs.module' | translate }}:</span>
+          <input matInput class="logs-text-input"
+                 [value]="moduleFilter"
+                 (input)="setModuleFilter($any($event.target).value)"
+                 [placeholder]="'logs.module-placeholder' | translate"
+                 spellcheck="false" autocomplete="off" />
+          @if (moduleFilterError) {
+            <span class="logs-filter-error">{{ moduleFilterError }}</span>
+          }
+          <span class="control-label dim ml-3">{{ 'logs.search' | translate }}:</span>
+          <input matInput class="logs-text-input"
+                 [value]="textFilter"
+                 (input)="setTextFilter($any($event.target).value)"
+                 [placeholder]="'logs.search-placeholder' | translate"
+                 spellcheck="false" autocomplete="off" />
+        </div>
         <div class="logs-action-row">
           <button mat-button class="logs-tail" [class.active]="liveTail" (click)="toggleLiveTail()">
             <mat-icon [inline]="true">{{ liveTail ? 'pause' : 'play_arrow' }}</mat-icon>

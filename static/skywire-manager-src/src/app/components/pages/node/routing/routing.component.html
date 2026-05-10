@@ -31,11 +31,209 @@
   </div>
 }
 
-<app-route-list
-  [routes]="routes"
-  [showShortList]="true"
-  [nodePK]="nodePK">
-</app-route-list>
+<!-- Sub-view toggle: Rules vs Groups. Rules is the existing
+     rule-table view (which-app-owns-which-rule). Groups is the
+     higher-level "what's actually carrying traffic" — descriptor,
+     hops, fwd/consume rule pair, initiator flag. Equivalent to
+     `skywire cli rg ls`. -->
+<div class="routing-view-toggle mt-3">
+  <button mat-button
+          [class.active]="activeView === 'rules'"
+          (click)="setView('rules')">
+    {{ 'routing.view.rules' | translate }}
+  </button>
+  <button mat-button
+          [class.active]="activeView === 'groups'"
+          (click)="setView('groups')">
+    {{ 'routing.view.groups' | translate }}
+  </button>
+  <button mat-button
+          [class.active]="activeView === 'find'"
+          (click)="setView('find')">
+    {{ 'routing.view.find' | translate }}
+  </button>
+  <button mat-button
+          [class.active]="activeView === 'calc'"
+          (click)="setView('calc')">
+    {{ 'routing.view.calc' | translate }}
+  </button>
+</div>
+
+@if (activeView === 'rules') {
+  <app-route-list
+    [routes]="routes"
+    [showShortList]="true"
+    [nodePK]="nodePK">
+  </app-route-list>
+}
+
+@if (activeView === 'find') {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'routing.find.title' | translate }}</span>
+      <p class="section-desc">{{ 'routing.find.help' | translate }}</p>
+      <div class="route-form">
+        <input matInput class="route-input"
+               [(ngModel)]="findDstPk"
+               [placeholder]="'routing.find.dst-placeholder' | translate"
+               spellcheck="false" autocomplete="off" />
+        <span class="control-label dim ml-2">min</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="findMinHops" min="1" max="10" />
+        <span class="control-label dim ml-2">max</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="findMaxHops" min="1" max="10" />
+        <button mat-raised-button color="primary"
+                (click)="submitRouteFind()"
+                [disabled]="findLoading || !findDstPk">
+          {{ findLoading ? ('routing.find.searching' | translate) : ('routing.find.submit' | translate) }}
+        </button>
+      </div>
+      @if (findError) {
+        <div class="error-row">{{ findError }}</div>
+      }
+      @if (findResults.length > 0) {
+        <table class="data-table mt-3">
+          <tr>
+            <th>#</th>
+            <th>{{ 'routing.groups.hops' | translate }}</th>
+            <th>{{ 'routing.find.path' | translate }}</th>
+          </tr>
+          @for (r of findResults; track $index) {
+            <tr>
+              <td>{{ $index + 1 }}</td>
+              <td>{{ r.hops?.length || 0 }}</td>
+              <td class="mono small">
+                @for (h of r.hops; track $index) {
+                  <span class="hop-step">{{ h.from }}</span>
+                  <span class="hop-arrow">→</span>
+                }
+                <span class="mono small">{{ r.dst_pk }}</span>
+              </td>
+            </tr>
+          }
+        </table>
+      } @else if (!findLoading && !findError) {
+        <div class="empty-row">{{ 'routing.find.empty' | translate }}</div>
+      }
+    </div>
+  </div>
+}
+
+@if (activeView === 'calc') {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'routing.calc.title' | translate }}</span>
+      <p class="section-desc">{{ 'routing.calc.help' | translate }}</p>
+      <div class="route-form">
+        <input matInput class="route-input"
+               [(ngModel)]="calcDstPk"
+               [placeholder]="'routing.calc.dst-placeholder' | translate"
+               spellcheck="false" autocomplete="off" />
+        <span class="control-label dim ml-2">min</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="calcMinHops" min="0" max="10" />
+        <span class="control-label dim ml-2">max</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="calcMaxHops" min="1" max="10" />
+        <span class="control-label dim ml-2">count</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="calcCount" min="1" max="500" />
+        <button mat-raised-button color="primary"
+                (click)="submitRouteCalc()"
+                [disabled]="calcLoading || !calcDstPk">
+          {{ calcLoading ? ('routing.calc.searching' | translate) : ('routing.calc.submit' | translate) }}
+        </button>
+      </div>
+      @if (calcError) {
+        <div class="error-row">{{ calcError }}</div>
+      }
+      @if (calcResults.length > 0) {
+        <p class="results-summary">
+          {{ 'routing.calc.found' | translate:{ count: calcResults.length } }}
+        </p>
+        <table class="data-table mt-2">
+          <tr>
+            <th>#</th>
+            <th>{{ 'routing.groups.hops' | translate }}</th>
+            <th>{{ 'routing.find.path' | translate }}</th>
+          </tr>
+          @for (r of calcResults; track $index) {
+            <tr>
+              <td>{{ $index + 1 }}</td>
+              <td>{{ r.hops?.length || 0 }}</td>
+              <td class="mono small">
+                @for (h of r.hops; track $index) {
+                  <span class="hop-step">{{ h.from }}</span>
+                  <span class="hop-arrow">→</span>
+                }
+                <span class="mono small">{{ r.dst_pk }}</span>
+              </td>
+            </tr>
+          }
+        </table>
+      } @else if (!calcLoading && !calcError) {
+        <div class="empty-row">{{ 'routing.calc.empty' | translate }}</div>
+      }
+    </div>
+  </div>
+}
+
+@if (activeView === 'groups') {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'routing.groups.title' | translate }}</span>
+
+      @if (routeGroupsLoading && routeGroups.length === 0) {
+        <div class="loading-row">
+          <mat-spinner [diameter]="16"></mat-spinner>
+          <span class="ml-2">{{ 'routing.groups.loading' | translate }}</span>
+        </div>
+      }
+
+      @if (routeGroupsError) {
+        <div class="error-row">{{ routeGroupsError }}</div>
+      }
+
+      @if (!routeGroupsLoading && routeGroups.length === 0 && !routeGroupsError) {
+        <div class="empty-row">{{ 'routing.groups.empty' | translate }}</div>
+      }
+
+      @if (routeGroups.length > 0) {
+        <table class="data-table mt-2">
+          <tr>
+            <th>{{ 'routing.groups.role' | translate }}</th>
+            <th>{{ 'routing.groups.remote' | translate }}</th>
+            <th>{{ 'routing.groups.ports' | translate }}</th>
+            <th>{{ 'routing.groups.fwd-rule' | translate }}</th>
+            <th>{{ 'routing.groups.consume-rule' | translate }}</th>
+            <th>{{ 'routing.groups.hops' | translate }}</th>
+            <th>{{ 'routing.groups.next-tp' | translate }}</th>
+          </tr>
+          @for (rg of routeGroups; track $index) {
+            <tr>
+              <td>
+                <span class="rg-role" [class.rg-initiator]="rg.initiator">
+                  {{ rg.initiator ? 'initiator' : 'responder' }}
+                </span>
+              </td>
+              <td class="mono small">
+                {{ (rg.initiator ? rg.desc?.dst_pk : rg.desc?.src_pk) || '-' }}
+              </td>
+              <td class="mono">
+                {{ rg.desc?.src_port }}:{{ rg.desc?.dst_port }}
+              </td>
+              <td class="mono">{{ rg.fwd_rule_id ?? '-' }}</td>
+              <td class="mono">{{ rg.consume_rule_id ?? '-' }}</td>
+              <td>{{ rg.hops?.length || 0 }}</td>
+              <td class="mono small">{{ rg.fwd_next_tp_id || '-' }}</td>
+            </tr>
+          }
+        </table>
+      }
+    </div>
+  </div>
+}
 
 <!-- Traffic data — moved here from the right-bar on the visor
      detail page so it sits with the rest of the routing surface

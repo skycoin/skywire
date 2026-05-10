@@ -109,6 +109,73 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
     this.rsnSub?.unsubscribe();
   }
 
+  // Drill-down state: per-service-name expanded body + the loaded
+  // raw JSON. Keyed by service name so clicking "Drill" twice on
+  // different services keeps both expanded.
+  drilledName: string | null = null;
+  drillBody: { [name: string]: string } = {};
+  drillError: { [name: string]: string } = {};
+  drillLoading: { [name: string]: boolean } = {};
+
+  /** Map UI service name → svc-fetch service key. */
+  private svcKey(name: string): string | null {
+    switch ((name || '').toLowerCase()) {
+      case 'transport discovery': return 'tpd';
+      case 'dmsg discovery':      return 'dmsgd';
+      case 'address resolver':    return 'ar';
+      case 'route finder':        return 'rf';
+      case 'service discovery':   return 'sd';
+      case 'uptime tracker':      return 'ut';
+      default: return null; // Config Service / DMSG Servers etc. aren't proxiable
+    }
+  }
+
+  /** Toggle drill-down for a service row; lazy-loads on first open. */
+  toggleDrill(entry: ServiceHealthEntry) {
+    const wasOpen = this.drilledName === entry.name;
+    this.drilledName = wasOpen ? null : entry.name;
+    if (!wasOpen && !this.drillBody[entry.name]) {
+      const key = this.svcKey(entry.name);
+      if (!key) {
+        this.drillError[entry.name] = 'Drill-down not supported for this service';
+        return;
+      }
+      this.drillLoading[entry.name] = true;
+      // /health is the lowest-common-denominator path every
+      // deployment service supports. Operators can layer on more
+      // specific paths later (the backend endpoint takes any path).
+      this.api.get(`svc-fetch?service=${key}&path=/health`).subscribe({
+        next: (raw: any) => {
+          this.drillLoading[entry.name] = false;
+          // The backend returns the raw upstream body; angular's
+          // HttpClient may have already JSON-parsed it. Stringify
+          // either way for display.
+          try {
+            this.drillBody[entry.name] = typeof raw === 'string'
+              ? raw
+              : JSON.stringify(raw, null, 2);
+          } catch {
+            this.drillBody[entry.name] = String(raw);
+          }
+        },
+        error: (err) => {
+          this.drillLoading[entry.name] = false;
+          this.drillError[entry.name] = err?.error?.error || err?.message || 'fetch failed';
+        },
+      });
+    }
+  }
+
+  /** True if the row should render the expanded drill panel. */
+  isDrilled(name: string): boolean {
+    return this.drilledName === name;
+  }
+
+  /** Drill-down is supported only for HTTP-proxiable services. */
+  canDrill(name: string): boolean {
+    return this.svcKey(name) !== null;
+  }
+
   /** Top 3 failure reasons for one RSN, sorted by count desc. */
   topFailureReasons(snap?: RSNSnapshot): { reason: string, count: number }[] {
     if (!snap?.failures_by_reason) { return []; }
