@@ -93,7 +93,7 @@ func (s *service) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	transportStore, err := store.New(runCtx, storeConfig, cfg.EntryTimeout, logger)
+	transportStore, err := store.New(runCtx, storeConfig, cfg.EntryTimeout.Std(), logger)
 	if err != nil {
 		return fmt.Errorf("address-resolver: init store: %w", err)
 	}

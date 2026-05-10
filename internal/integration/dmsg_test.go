@@ -49,7 +49,10 @@ func TestDmsgServerHealth(t *testing.T) {
 	dmsgURL := fmt.Sprintf("dmsg://%s:%d/health", entry.Static, dmsgHTTPPort)
 	t.Logf("Fetching DMSG server health from %s", dmsgURL)
 
-	healthCmd := fmt.Sprintf("/release/skywire dmsg curl --loglvl debug %s", dmsgURL)
+	// `--loglvl debug` interleaves dmsg log lines with the response
+	// body on stdout, breaking json.Unmarshal. Use the default log
+	// level so only the JSON body is captured.
+	healthCmd := fmt.Sprintf("/release/skywire dmsg curl %s", dmsgURL)
 	var healthResult ExecResult
 	for attempt := 1; attempt <= 2; attempt++ {
 		healthResult, err = env.execResult(healthCmd)
@@ -63,12 +66,20 @@ func TestDmsgServerHealth(t *testing.T) {
 		t.Skipf("DMSG server health not reachable: %v", err)
 	}
 
-	stdout := healthResult.Stdout()
+	// dmsg curl may still append a trailing line (timestamp from
+	// the dmsg client's progress logger that goes to stdout, not
+	// stderr). Extract just the leading JSON object — accept
+	// whatever comes after as harmless noise.
+	stdout := strings.TrimSpace(healthResult.Stdout())
 	require.NotEmpty(t, stdout, "Health response should not be empty")
+	jsonOnly := stdout
+	if idx := strings.Index(stdout, "}\n"); idx > 0 {
+		jsonOnly = stdout[:idx+1]
+	}
 
 	var health map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(stdout), &health),
-		"Response should be valid JSON; got: %s", stdout)
+	require.NoError(t, json.Unmarshal([]byte(jsonOnly), &health),
+		"Response should be valid JSON; got: %s", jsonOnly)
 	require.Contains(t, health, "service_name", "Health should contain service_name")
 	t.Logf("DMSG server health: %s", truncate(stdout, 200))
 }

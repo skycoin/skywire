@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/services"
 )
 
 // Config is the JSON configuration for service-discovery.
@@ -21,16 +21,16 @@ type Config struct {
 	PubKey cipher.PubKey `json:"public_key,omitempty"`
 	SecKey cipher.SecKey `json:"secret_key,omitempty"`
 
-	Addr            string          `json:"addr,omitempty"`
-	MetricsAddr     string          `json:"metrics_addr,omitempty"`
-	PprofAddr       string          `json:"pprof_addr,omitempty"`
-	Redis           string          `json:"redis,omitempty"`
-	EntryTimeout    time.Duration   `json:"entry_timeout,omitempty"`
-	LogLevel        string          `json:"log_level,omitempty"`
-	TestMode        bool            `json:"test_mode,omitempty"`
-	Mode            string          `json:"mode,omitempty"`
-	Whitelist       []string        `json:"whitelist_keys,omitempty"`
-	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist,omitempty"`
+	Addr            string            `json:"addr,omitempty"`
+	MetricsAddr     string            `json:"metrics_addr,omitempty"`
+	PprofAddr       string            `json:"pprof_addr,omitempty"`
+	Redis           string            `json:"redis,omitempty"`
+	EntryTimeout    services.Duration `json:"entry_timeout,omitempty"`
+	LogLevel        string            `json:"log_level,omitempty"`
+	TestMode        bool              `json:"test_mode,omitempty"`
+	Mode            string            `json:"mode,omitempty"`
+	Whitelist       []string          `json:"whitelist_keys,omitempty"`
+	SurveyWhitelist []cipher.PubKey   `json:"survey_whitelist,omitempty"`
 
 	// GeoIP is the URL of the geoip service. Visors populate Geo on
 	// their entries directly post-#2439; field kept for backward

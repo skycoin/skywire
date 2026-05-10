@@ -21,6 +21,7 @@ import (
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/dmsgdisc"
 )
 
@@ -139,7 +140,7 @@ func buildConfig() (*dmsgdisc.Config, error) {
 		Addr:              addr,
 		Redis:             redisURL,
 		DmsgPort:          dmsgPort,
-		EntryTimeout:      entryTimeout,
+		EntryTimeout:      services.Duration(entryTimeout),
 		Mode:              mode,
 		AuthPassphrase:    authPassphrase,
 		OfficialServers:   commaSplit(officialServers),

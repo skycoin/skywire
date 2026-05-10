@@ -771,7 +771,7 @@ github.com/sirupsen/logrus/hooks/syslog
 # github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 ## explicit
 github.com/skycoin/noise
-# github.com/skycoin/skycoin v0.28.6-0.20260426211126-776152b2fdb8
+# github.com/skycoin/skycoin v0.28.6-0.20260510190433-7ceddfaa3620
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands

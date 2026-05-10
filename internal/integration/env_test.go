@@ -751,7 +751,8 @@ func (env *TestEnv) TestVisorAddTp(t *testing.T, tp Transport) *TestEnv {
 					}
 				}
 			}
-			arLogs, arErr := env.ReadLog("address-resolver")
+			// address-resolver is collapsed into deployment-services post-#2471
+			arLogs, arErr := env.ReadLog("deployment-services")
 			if arErr == nil {
 				for _, line := range strings.Split(arLogs, "\n") {
 					lower := strings.ToLower(line)
@@ -889,10 +890,31 @@ func (env *TestEnv) ExecJSON(cmd string, output interface{}) error {
 		env.logger.Debugf("[STDERR] %s", stderr)
 	}
 
+	stdoutStr := result.Stdout()
+
+	// CLI commands emit structured errors as JSON on STDERR (not
+	// stdout), e.g. `{"error": "app already started"}`, while
+	// stdout stays empty. The previous implementation only parsed
+	// stdout, so the caller saw "unexpected end of JSON input"
+	// instead of the actual reason — masking known-handled cases
+	// like "app already started" that have explicit recovery
+	// paths upstream. Promote a JSON-shaped stderr error to a
+	// real error so callers can branch on err.Error().
+	if strings.TrimSpace(stdoutStr) == "" {
+		if stderrStr := strings.TrimSpace(result.Stderr()); stderrStr != "" {
+			var probe struct {
+				Error string `json:"error"`
+			}
+			if jErr := json.Unmarshal([]byte(stderrStr), &probe); jErr == nil && probe.Error != "" {
+				return errors.New(probe.Error)
+			}
+		}
+	}
+
 	// Parse only stdout to avoid mixing with stderr log messages
-	err = json.Unmarshal([]byte(result.Stdout()), &output)
+	err = json.Unmarshal([]byte(stdoutStr), &output)
 	if err != nil {
-		env.logger.WithError(err).Errorf("[JSON PARSE FAILED] stdout: %s", result.Stdout())
+		env.logger.WithError(err).Errorf("[JSON PARSE FAILED] stdout: %s", stdoutStr)
 	}
 	return err
 }
@@ -1384,9 +1406,20 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	// the normal retry budget stays bounded.
 	const maxRetries = 2
 	for i := 0; i < maxRetries; i++ {
-		req, err := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
-		if err != nil {
-			return nil, err
+		// Use a distinct name for the request so the `:=` here doesn't
+		// shadow the outer named-return `err` — pre-fix, the inner
+		// `req, err :=` short-declared a local err that shadowed the
+		// named return, then `resp, err = hc.Do(req)` assigned to the
+		// shadowed local. The terminal `return nil, err` at the end
+		// of the function then returned the outer named-return err
+		// which was still nil — leaving the test with (nil, nil) and
+		// a misleading "returned nil response" failure instead of
+		// the actual hc.Do error. Use a separate `reqErr` to keep
+		// the request-build error path explicit and uncoupled from
+		// the do-loop's err.
+		req, reqErr := http.NewRequest(http.MethodPost, url, bytes.NewBuffer(data))
+		if reqErr != nil {
+			return nil, reqErr
 		}
 		req.Header.Add("content-type", "application/json")
 
@@ -1413,7 +1446,8 @@ func (env *TestEnv) SendSkyMessage(senderNode, recipientNode, message string) (r
 	// Tail visor logs — this is often the quickest way to see route setup errors.
 	env.logContainerTail(senderNode, 100)
 	env.logContainerTail(recipientNode, 100)
-	env.logContainerTail("setup-node", 100)
+	// setup-node is collapsed into deployment-services post-#2471
+	env.logContainerTail("deployment-services", 100)
 
 	return nil, err
 }
@@ -1895,7 +1929,8 @@ func (env *TestEnv) WaitForVisorReady(visor string, timeout time.Duration) error
 
 	// Log service container status and logs when visor fails due to service connectivity
 	env.GatherContainersInfo()
-	for _, svc := range []string{"transport-discovery", "dmsg-discovery", "dmsg-server", "address-resolver"} {
+	// All four collapsed into deployment-services post-#2471
+	for _, svc := range []string{"deployment-services"} {
 		if c, ok := env.containers[svc]; ok {
 			env.logger.Infof("Service %s: state=%s status=%s", svc, c.State, c.Status)
 		}
