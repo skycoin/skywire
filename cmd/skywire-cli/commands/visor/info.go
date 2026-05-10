@@ -2,11 +2,16 @@
 package clivisor
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
+	"os/signal"
+	"regexp"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -330,21 +335,217 @@ var dmsgServersCmd = &cobra.Command{
 	},
 }
 
+var (
+	logFollow       bool
+	logMinLevel     string
+	logModuleRegex  string
+	logPollInterval time.Duration
+)
+
+func init() {
+	runtimeLogsCmd.Flags().BoolVarP(&logFollow, "follow", "f", false,
+		"stream new log entries as they arrive (cancel with ctrl+c)")
+	runtimeLogsCmd.Flags().StringVarP(&logMinLevel, "min-level", "l", "",
+		"minimum severity (trace|debug|info|warn|error|fatal|panic); empty = no filter")
+	runtimeLogsCmd.Flags().StringVarP(&logModuleRegex, "module", "m", "",
+		"regex filter on log _module field (empty = no filter)")
+	runtimeLogsCmd.Flags().DurationVar(&logPollInterval, "interval", 500*time.Millisecond,
+		"poll interval in --follow mode")
+}
+
 var runtimeLogsCmd = &cobra.Command{
 	Use:   "log",
 	Short: "Visor runtime logs",
-	Long:  "\n  Returns runtime logs from the visor",
+	Long: `Returns runtime logs from the visor.
+
+Without --follow: one-shot dump of the in-memory log buffer (same JSON
+array shape as before).
+
+With --follow: streams new entries as they arrive, polling
+RuntimeLogsSince every --interval. The cursor advances on each tick;
+if the buffer wraps past the cursor (Dropped > 0), a "[N entries
+dropped]" marker is printed once.
+
+Filters --min-level and --module apply in both modes. --json keeps
+the raw per-entry JSON; otherwise entries are pretty-printed as
+'  <time>  <LEVEL>  [<module>]  <msg>'.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		logs, err := rpcClient.RuntimeLogs()
-		if err != nil {
-			internal.PrintFatalRPCError(cmd.Flags(), err)
+		filter, ferr := newLogFilter(logMinLevel, logModuleRegex)
+		if ferr != nil {
+			internal.PrintFatalError(cmd.Flags(), ferr)
 		}
-		internal.PrintOutput(cmd.Flags(), logs, logs)
+		jsonOut, _ := cmd.Flags().GetBool("json") //nolint:errcheck
+
+		if !logFollow {
+			logs, err := rpcClient.RuntimeLogs()
+			if err != nil {
+				internal.PrintFatalRPCError(cmd.Flags(), err)
+			}
+			renderLogs(logs, filter, jsonOut)
+			return
+		}
+
+		// Follow: poll RuntimeLogsSince on a ticker. Bootstrap from
+		// the current tail (since=0 → full buffer) so the operator
+		// sees recent context, then advance the cursor. Cancel on
+		// SIGINT/SIGTERM for a clean exit.
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		var cursor int64
+		// Initial dump
+		if first, ferr := rpcClient.RuntimeLogsSince(0); ferr == nil {
+			cursor = first.Latest
+			for _, entry := range first.Entries {
+				printLogEntry(entry, filter, jsonOut)
+			}
+		}
+		ticker := time.NewTicker(logPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+			delta, err := rpcClient.RuntimeLogsSince(cursor)
+			if err != nil {
+				// Transient errors shouldn't kill the stream — log
+				// to stderr and try again next tick.
+				fmt.Fprintf(os.Stderr, "RuntimeLogsSince err: %v\n", err)
+				continue
+			}
+			cursor = delta.Latest
+			if delta.Dropped > 0 {
+				fmt.Fprintf(os.Stderr, "[%d entries dropped]\n", delta.Dropped)
+			}
+			for _, entry := range delta.Entries {
+				printLogEntry(entry, filter, jsonOut)
+			}
+		}
 	},
+}
+
+// logFilter encapsulates the --min-level and --module filters.
+type logFilter struct {
+	minSeverity int
+	moduleRe    *regexp.Regexp
+}
+
+// severityRank returns a comparable rank for the log levels skywire
+// emits. Unknown levels rank above panic so they're never filtered out
+// by --min-level.
+func severityRank(level string) int {
+	switch strings.ToLower(strings.TrimSpace(level)) {
+	case "trace":
+		return 10
+	case "debug":
+		return 20
+	case "info":
+		return 30
+	case "warn", "warning":
+		return 40
+	case "error":
+		return 50
+	case "fatal":
+		return 60
+	case "panic":
+		return 70
+	}
+	return 99
+}
+
+func newLogFilter(minLevel, modulePattern string) (*logFilter, error) {
+	f := &logFilter{}
+	if minLevel != "" {
+		f.minSeverity = severityRank(minLevel)
+		if f.minSeverity == 99 {
+			return nil, fmt.Errorf("unknown --min-level %q (expected trace/debug/info/warn/error/fatal/panic)", minLevel)
+		}
+	}
+	if modulePattern != "" {
+		re, err := regexp.Compile(modulePattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid --module regex: %w", err)
+		}
+		f.moduleRe = re
+	}
+	return f, nil
+}
+
+func (f *logFilter) admit(entry map[string]any) bool {
+	if f.minSeverity > 0 {
+		level, _ := entry["level"].(string)
+		if severityRank(level) < f.minSeverity {
+			return false
+		}
+	}
+	if f.moduleRe != nil {
+		mod, _ := entry["_module"].(string)
+		if !f.moduleRe.MatchString(mod) {
+			return false
+		}
+	}
+	return true
+}
+
+// renderLogs pretty-prints (or JSON-dumps) the buffer returned by
+// RuntimeLogs(). Entries that fail to parse fall through as-is.
+func renderLogs(raw string, filter *logFilter, jsonOut bool) {
+	var entries []json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &entries); err != nil {
+		// Not JSON — print raw.
+		fmt.Print(raw)
+		return
+	}
+	for _, e := range entries {
+		printLogEntry(string(e), filter, jsonOut)
+	}
+}
+
+// printLogEntry parses one entry's JSON, applies the filter, and emits.
+func printLogEntry(rawJSON string, filter *logFilter, jsonOut bool) {
+	rawJSON = strings.TrimSpace(rawJSON)
+	if rawJSON == "" {
+		return
+	}
+	var entry map[string]any
+	if err := json.Unmarshal([]byte(rawJSON), &entry); err != nil {
+		// Malformed — print raw so nothing is silently swallowed.
+		fmt.Println(rawJSON)
+		return
+	}
+	if !filter.admit(entry) {
+		return
+	}
+	if jsonOut {
+		fmt.Println(rawJSON)
+		return
+	}
+	tStr, _ := entry["time"].(string)
+	level, _ := entry["level"].(string)
+	module, _ := entry["_module"].(string)
+	msg, _ := entry["msg"].(string)
+	// Trim extra fields onto the tail. Skip the four we already
+	// rendered so they aren't duplicated.
+	var extras []string
+	for k, v := range entry {
+		switch k {
+		case "time", "level", "_module", "msg", "log_line":
+			continue
+		}
+		extras = append(extras, fmt.Sprintf("%s=%v", k, v))
+	}
+	if len(extras) > 0 {
+		fmt.Printf("  %s  %-5s  [%s]  %s  %s\n",
+			tStr, strings.ToUpper(level), module, msg, strings.Join(extras, " "))
+	} else {
+		fmt.Printf("  %s  %-5s  [%s]  %s\n",
+			tStr, strings.ToUpper(level), module, msg)
+	}
 }
 
 var runtimeStatsCmd = &cobra.Command{
