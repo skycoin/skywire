@@ -137,7 +137,7 @@ func (s *service) Run(ctx context.Context) error {
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	st, err := store.New(runCtx, storeCfg, cfg.EntryTimeout, logger)
+	st, err := store.New(runCtx, storeCfg, cfg.EntryTimeout.Std(), logger)
 	if err != nil {
 		return fmt.Errorf("transport-discovery: create store: %w", err)
 	}
