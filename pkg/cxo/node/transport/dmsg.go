@@ -32,12 +32,19 @@ const DefaultCXOPort = skyenv.DmsgCXOPort
 type DMSGFactory struct {
 	AcceptedCallback func(conn *Connection)
 
+	// MaxPendingAccepts caps in-flight AcceptedCallback invocations.
+	// Zero (default) leaves accepts unbounded for backwards compatibility;
+	// set it from the Node's MaxPendingConnections to apply backpressure
+	// to the dmsg listener queue when handshake processing falls behind.
+	MaxPendingAccepts int
+
 	dmsgC *dmsg.Client
 	port  uint16
 
 	mu       sync.Mutex
 	listener *dmsg.Listener
 	closed   bool
+	sem      chan struct{} // nil when MaxPendingAccepts == 0
 }
 
 // NewDMSGFactory creates a new DMSGFactory using the given DMSG client.
@@ -58,6 +65,9 @@ func (f *DMSGFactory) Listen() error {
 
 	f.mu.Lock()
 	f.listener = lis
+	if f.MaxPendingAccepts > 0 {
+		f.sem = make(chan struct{}, f.MaxPendingAccepts)
+	}
 	f.mu.Unlock()
 
 	go f.acceptLoop(lis)
@@ -99,14 +109,39 @@ func (f *DMSGFactory) Close() {
 }
 
 func (f *DMSGFactory) acceptLoop(lis net.Listener) {
+	// f.sem is set once in Listen before this goroutine starts, so
+	// reading it without the lock is safe.
+	sem := f.sem
 	for {
+		// Block before Accept when the in-flight callback queue is full,
+		// so the dmsg listener applies backpressure to the remote rather
+		// than the Node piling up handshake goroutines (and their
+		// per-conn buffers + read/write loops) on a contended mutex.
+		if sem != nil {
+			sem <- struct{}{}
+		}
 		conn, err := lis.Accept()
 		if err != nil {
+			if sem != nil {
+				<-sem
+			}
 			return
 		}
 		c := newConnection(conn, false)
-		if cb := f.AcceptedCallback; cb != nil {
-			go cb(c)
+		cb := f.AcceptedCallback
+		if cb == nil {
+			if sem != nil {
+				<-sem
+			}
+			continue
 		}
+		go func() {
+			defer func() {
+				if sem != nil {
+					<-sem
+				}
+			}()
+			cb(c)
+		}()
 	}
 }
