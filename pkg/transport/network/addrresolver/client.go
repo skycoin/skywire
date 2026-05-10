@@ -607,22 +607,8 @@ func (c *httpClient) serveSUDPHConn(arConn net.Conn, addrCh chan<- RemoteVisor) 
 }
 
 func (c *httpClient) Resolve(ctx context.Context, tType string, pk cipher.PubKey) (VisorData, error) {
-	// Wait for AR readiness instead of failing fast. The other API
-	// methods (Bind, transports, etc.) all do `<-c.ready`, so the
-	// inconsistency here was a pre-existing flake source: a tp-add
-	// that hits the dial path before the AR client's initial dmsghttp
-	// connection finishes returns ErrNotReady, retries 3 times
-	// w/ ~9s of backoff, and gives up — even though the underlying
-	// AR is healthy and the client is just seconds away from being
-	// ready. ctx.Done() still cancels (callers always pass a bounded
-	// ctx), and the trigger of "AR permanently unreachable" remains
-	// the ready-fatal at line 167.
 	if !c.isReady() {
-		select {
-		case <-c.ready:
-		case <-ctx.Done():
-			return VisorData{}, fmt.Errorf("address resolver not ready: %w", ctx.Err())
-		}
+		return VisorData{}, ErrNotReady
 	}
 
 	path := fmt.Sprintf("/resolve/%s/%s", tType, pk.String())
