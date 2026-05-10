@@ -37,6 +37,7 @@ import (
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skynetca"
 )
 
 // DefaultDomainSuffix is the TLD treated as DMSG addresses when
@@ -84,6 +85,19 @@ type Config struct {
 	// layer allocates one per resolver lifetime so counters persist
 	// across Start/Stop cycles.
 	Stats *Stats
+
+	// TLSMITM enables on-the-fly TLS termination for browser
+	// connections to <pk>.dmsg on the TLSPort, using LeafMinter to
+	// produce per-host leaf certs signed by a locally-installed CA.
+	// When false the runtime behaves exactly as before — pure SOCKS5
+	// byte splice. See pkg/skynetca for the trust model.
+	TLSMITM bool
+	// TLSPort selects the destination port treated as TLS for MITM.
+	// Defaults to 443. Ignored when TLSMITM is false.
+	TLSPort uint16
+	// LeafMinter mints per-host leaf certs. Required when TLSMITM
+	// is true; ignored otherwise.
+	LeafMinter skynetca.LeafMinter
 }
 
 // DmsgTarget is a (publicKey, dmsgPort) pair used in fixed-mapping mode.
@@ -126,6 +140,14 @@ func Run(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Confi
 		log = logging.MustGetLogger("dmsgweb")
 	}
 	cfg = normalize(cfg)
+	if cfg.TLSMITM {
+		if cfg.LeafMinter == nil {
+			return errors.New("dmsgweb: TLSMITM requires LeafMinter")
+		}
+		if cfg.TLSPort == 0 {
+			cfg.TLSPort = 443
+		}
+	}
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, 1+len(cfg.ResolveAddr))
@@ -240,6 +262,23 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				if err != nil {
 					return nil, err
 				}
+
+				// Optional TLS MITM: terminate the browser's TLS
+				// session locally with a leaf cert for the host,
+				// splicing plaintext to the merchant's plain-HTTP
+				// server reachable over dmsg. The dmsg stream is
+				// already authenticated by visor pubkey; the local
+				// cert exists only to satisfy the browser's
+				// secure-context machinery.
+				if cfg.TLSMITM && uint16(port) == cfg.TLSPort {
+					leaf, lerr := cfg.LeafMinter.For(origHost)
+					if lerr != nil {
+						_ = stream.Close()
+						return nil, fmt.Errorf("dmsg mitm leaf: %w", lerr)
+					}
+					return &tcpAddrConn{Conn: skynetca.MITMTerminate(stream, leaf)}, nil
+				}
+
 				return &tcpAddrConn{Conn: stream}, nil
 			}
 

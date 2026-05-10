@@ -31,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynet"
+	"github.com/skycoin/skywire/pkg/skynetca"
 )
 
 // DefaultDomainSuffix is the TLD treated as skynet addresses when
@@ -100,6 +101,21 @@ type Config struct {
 	// Stats, when non-nil, is updated for every request.
 	// Optional; no collection happens when nil.
 	Stats *Stats
+
+	// TLSMITM enables on-the-fly TLS termination for browser
+	// connections to <pk>.skynet on the TLSPort, using LeafMinter to
+	// produce per-host leaf certs signed by a locally-installed CA.
+	// When false the runtime behaves exactly as before — pure SOCKS5
+	// byte splice. See pkg/skynetca for the trust model and the
+	// security argument for why TLS is terminated locally rather than
+	// end-to-end.
+	TLSMITM bool
+	// TLSPort selects the destination port treated as TLS for MITM.
+	// Defaults to 443. Ignored when TLSMITM is false.
+	TLSPort uint16
+	// LeafMinter mints per-host leaf certs. Required when TLSMITM
+	// is true; ignored otherwise.
+	LeafMinter skynetca.LeafMinter
 }
 
 // Run starts the SOCKS5 proxy. Blocks until ctx is canceled.
@@ -117,6 +133,14 @@ func Run(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Conf
 	}
 	if cfg.ProxyPort == 0 {
 		return errors.New("skynetweb: ProxyPort is required")
+	}
+	if cfg.TLSMITM {
+		if cfg.LeafMinter == nil {
+			return errors.New("skynetweb: TLSMITM requires LeafMinter")
+		}
+		if cfg.TLSPort == 0 {
+			cfg.TLSPort = 443
+		}
 	}
 
 	return serveSOCKS5(ctx, log, dialer, cfg)
@@ -176,6 +200,23 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					return nil, fmt.Errorf("skynet dial: %w", err)
 				}
 				done(nil)
+
+				// Optional TLS MITM: terminate the browser's TLS
+				// session locally with a leaf cert for the host,
+				// splicing plaintext to the merchant's plain-HTTP
+				// server reachable over the skywire transport. The
+				// underlying skywire conn is already authenticated
+				// by visor pubkey; the local cert exists only to
+				// satisfy the browser's secure-context machinery.
+				if cfg.TLSMITM && target.port == cfg.TLSPort {
+					leaf, lerr := cfg.LeafMinter.For(origHost)
+					if lerr != nil {
+						_ = conn.Close()
+						return nil, fmt.Errorf("skynet mitm leaf: %w", lerr)
+					}
+					return &tcpAddrConn{Conn: skynetca.MITMTerminate(conn, leaf)}, nil
+				}
+
 				return &tcpAddrConn{Conn: conn}, nil
 			}
 
