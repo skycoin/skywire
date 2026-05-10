@@ -32,6 +32,12 @@ func newDMSG(n *Node, factory *transport.DMSGFactory) *DMSG {
 		cs:          make(map[cipher.PubKey]*Conn),
 	}
 	d.AcceptedCallback = d.acceptConn
+	// Cap concurrent in-flight accepts at the Node's pending-connection
+	// limit so the dmsg listener applies backpressure when handshake
+	// processing falls behind n.mx, instead of fanning out unbounded
+	// goroutines that pile up on the same mutex (and OOM the process
+	// via per-conn buffers + read/write loops).
+	d.MaxPendingAccepts = n.config.MaxPendingConnections
 	return d
 }
 
