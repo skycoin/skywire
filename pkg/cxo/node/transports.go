@@ -33,6 +33,10 @@ func newTCP(n *Node) (t *TCP) {
 
 	t.n = n
 	t.AcceptedCallback = t.acceptConn
+	// Cap concurrent in-flight accepts at the Node's pending-connection
+	// limit so the listener applies backpressure when handshake processing
+	// falls behind n.mx, instead of fanning out unbounded goroutines.
+	t.MaxPendingAccepts = n.config.MaxPendingConnections
 	t.cs = make(map[string]*Conn)
 
 	return
@@ -203,6 +207,10 @@ func newUDP(n *Node) (u *UDP) {
 
 	u.n = n
 	u.AcceptedCallback = u.acceptConn
+	// Cap concurrent in-flight accepts at the Node's pending-connection
+	// limit so the listener applies backpressure when handshake processing
+	// falls behind n.mx, instead of fanning out unbounded goroutines.
+	u.MaxPendingAccepts = n.config.MaxPendingConnections
 	u.cs = make(map[string]*Conn)
 
 	return
