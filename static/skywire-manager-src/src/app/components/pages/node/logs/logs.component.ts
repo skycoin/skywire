@@ -79,6 +79,15 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
   filteredLogEntries: LogEntry[] = [];
   maxBufferEntries = 1000;
 
+  // Module regex + free-text search filters, both empty by default.
+  // The compiled regex is rebuilt on each setModuleFilter() so an
+  // invalid pattern leaves the prior valid filter in place and
+  // surfaces moduleFilterError to the template for inline feedback.
+  moduleFilter = '';
+  moduleFilterError: string | null = null;
+  private moduleRe: RegExp | null = null;
+  textFilter = '';
+
   private logCursor = 0;
   private wasAtBottom = true;
   private subscription: Subscription;
@@ -108,6 +117,30 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
 
   setLevel(l: Level) {
     this.minLevel = l;
+    this.applyFilter();
+  }
+
+  setModuleFilter(value: string) {
+    this.moduleFilter = value || '';
+    if (!this.moduleFilter) {
+      this.moduleRe = null;
+      this.moduleFilterError = null;
+    } else {
+      try {
+        this.moduleRe = new RegExp(this.moduleFilter, 'i');
+        this.moduleFilterError = null;
+      } catch (e: any) {
+        // Keep the prior regex active rather than dropping all output;
+        // surface the error so the user knows the pattern was rejected.
+        this.moduleFilterError = e?.message || 'invalid regex';
+        return;
+      }
+    }
+    this.applyFilter();
+  }
+
+  setTextFilter(value: string) {
+    this.textFilter = value || '';
     this.applyFilter();
   }
 
@@ -196,7 +229,23 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   private applyFilter() {
-    this.filteredLogEntries = this.logEntries.filter((e) => e.level >= this.minLevel);
+    const moduleRe = this.moduleRe;
+    const textLC = this.textFilter.toLowerCase();
+    this.filteredLogEntries = this.logEntries.filter((e) => {
+      if (e.level < this.minLevel) { return false; }
+      if (moduleRe && !moduleRe.test(e.module || '')) { return false; }
+      if (textLC) {
+        // Match against msg, module, and all extra k=v pairs so the
+        // search box behaves like ad-hoc grep over the full record.
+        if (!(e.msg || '').toLowerCase().includes(textLC) &&
+            !(e.module || '').toLowerCase().includes(textLC) &&
+            !e.extra.some((kv) => (kv.value || '').toLowerCase().includes(textLC) ||
+                                  (kv.name || '').toLowerCase().includes(textLC))) {
+          return false;
+        }
+      }
+      return true;
+    });
     if (this.wasAtBottom) {
       setTimeout(() => {
         if (this.content) {

@@ -180,3 +180,35 @@
 .ml-2 { margin-left: 8px; }
 .ml-1 { margin-left: 4px; }
 .mt-3 { margin-top: 12px; }
+
+.section-desc {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.92em;
+  margin: 4px 0 12px 0;
+}
+
+.service-uptime-table {
+  width: 100%;
+}
+
+.service-day-list {
+  display: inline-flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.service-day {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-family: monospace;
+  font-size: 0.85em;
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+.service-day.svc-ok   { background-color: rgba(76, 175, 80, 0.18); color: #81c784; }
+.service-day.svc-warn { background-color: rgba(255, 152, 0, 0.18); color: #ffb74d; }
+.service-day.svc-fail { background-color: rgba(244, 67, 54, 0.18); color: #ef5350; }
+
+.error-text { color: #ff6b6b; font-size: 0.9em; }

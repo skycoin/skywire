@@ -56,6 +56,16 @@ interface DayBlock {
   tiers: TierLine[];
 }
 
+// Service-integrated UT row: which deployment service it came
+// from + the visor's daily % series for the past N days. Each
+// entry in days is { date: 'YYYY-MM-DD', pct: number }.
+interface ServiceUptimeRow {
+  service: string;       // 'TPD' | 'SD' | 'DMSG-D'
+  loading: boolean;
+  error: string | null;
+  days: { date: string; pct: number }[];
+}
+
 const TIER_ORDER = ['process', 'dmsg', 'skynet'];
 
 type WindowDays = 1 | 7 | 30;
@@ -79,6 +89,13 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
   // tier-aligned with the day blocks below.
   summary: { name: string; pct: number }[] = [];
 
+  // Service-integrated UT — what TPD / SD / DMSG-discovery think
+  // about this visor's uptime. Fetched once per page load (and
+  // when window changes); not polled aggressively because these
+  // are external HTTP fetches via the visor's dmsghttp client.
+  serviceUptime: ServiceUptimeRow[] = [];
+  serviceUptimeLoading = false;
+
   private nodeSub: Subscription;
   private pollSub: Subscription;
 
@@ -88,9 +105,67 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;
-      if (wasUnset && node) { this.startPolling(); }
+      if (wasUnset && node) {
+        this.startPolling();
+        this.fetchServiceUptime();
+      }
     });
     return super.ngOnInit();
+  }
+
+  /**
+   * Hits the per-service /uptimes endpoint via the generic
+   * svc-fetch proxy and pulls out this visor's daily-% column.
+   * Three services in parallel: TPD, SD, DMSG-D. Failures are
+   * noted per-row so a degraded service doesn't blank the whole
+   * panel.
+   */
+  fetchServiceUptime() {
+    if (!this.node) { return; }
+    const pk = this.node.localPk;
+    this.serviceUptimeLoading = true;
+    this.serviceUptime = [
+      { service: 'TPD',    loading: true, error: null, days: [] },
+      { service: 'SD',     loading: true, error: null, days: [] },
+      { service: 'DMSG-D', loading: true, error: null, days: [] },
+    ];
+    const services: { row: ServiceUptimeRow; key: string }[] = [
+      { row: this.serviceUptime[0], key: 'tpd' },
+      { row: this.serviceUptime[1], key: 'sd' },
+      { row: this.serviceUptime[2], key: 'dmsgd' },
+    ];
+    services.forEach((s) => {
+      const path = `/uptimes?v=v2&visors=${pk}`;
+      this.api.get(`svc-fetch?service=${s.key}&path=${encodeURIComponent(path)}`).subscribe({
+        next: (raw: any) => {
+          s.row.loading = false;
+          // Response is an array of records; one per visor (we only
+          // queried one). Pull the first entry's daily array if it
+          // exists. The shape is { pk, daily: { 'YYYY-MM-DD': pct, ... } }.
+          let payload: any = raw;
+          if (typeof raw === 'string') {
+            try { payload = JSON.parse(raw); } catch { /* ignore */ }
+          }
+          const arr = Array.isArray(payload) ? payload : (payload?.uptimes || payload?.data || []);
+          const entry = Array.isArray(arr) ? arr.find((e: any) => e?.pk === pk || e?.public_key === pk) : null;
+          if (!entry) {
+            s.row.days = [];
+            return;
+          }
+          const daily = entry.daily || entry.percent_daily || {};
+          s.row.days = Object.keys(daily).sort().reverse().slice(0, 7).map((d) => ({
+            date: d,
+            pct: Number(daily[d]) || 0,
+          }));
+          this.cdr.markForCheck();
+        },
+        error: (err: any) => {
+          s.row.loading = false;
+          s.row.error = err?.error?.error || err?.message || 'fetch failed';
+          this.cdr.markForCheck();
+        },
+      });
+    });
   }
 
   ngOnDestroy(): void {
