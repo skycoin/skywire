@@ -71,15 +71,27 @@ func TestMain(m *testing.M) {
 }
 
 func TestWAN(t *testing.T) {
+	// Sanity check: e2e-test container has WAN reachability.
+	// Bumped past HTTPTimeout's 5s and retried because the first
+	// DNS resolve + TLS handshake on a cold container can blow past
+	// 5s on a contended runner — the test isn't measuring latency,
+	// only verifying connectivity is possible.
 	client := &http.Client{
-		Timeout: HTTPTimeout,
+		Timeout: 30 * time.Second,
 	}
-
-	res, err := client.Get(testURLWAN)
-	require.NoError(t, err)
-
-	require.Equal(t, http.StatusOK, res.StatusCode)
-	require.NoError(t, res.Body.Close())
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		res, err := client.Get(testURLWAN)
+		if err != nil {
+			lastErr = err
+			time.Sleep(2 * time.Second)
+			continue
+		}
+		res.Body.Close() //nolint:errcheck,gosec
+		require.Equal(t, http.StatusOK, res.StatusCode)
+		return
+	}
+	require.NoError(t, lastErr, "WAN unreachable after 3 attempts")
 }
 
 func TestNewEnv(t *testing.T) {

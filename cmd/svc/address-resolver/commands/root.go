@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/ar"
 )
 
@@ -198,7 +199,7 @@ func buildConfig() (*ar.Config, error) {
 		PprofAddr:       pprofAddr,
 		Redis:           redisURL,
 		RedisPoolSize:   redisPoolSize,
-		EntryTimeout:    entryTimeout,
+		EntryTimeout:    services.Duration(entryTimeout),
 		Tag:             tag,
 		LogLevel:        logLvl,
 		Testing:         testing,

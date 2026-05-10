@@ -12,10 +12,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/services"
 )
 
 // Config is the JSON configuration for dmsg-discovery. Mirrors the
@@ -45,7 +45,7 @@ type Config struct {
 	// EntryTimeout is how long client discovery entries live in
 	// redis between refreshes. Zero disables expiry (legacy
 	// behavior; stale entries accumulate forever).
-	EntryTimeout time.Duration `json:"entry_timeout,omitempty"`
+	EntryTimeout services.Duration `json:"entry_timeout,omitempty"`
 	// Mode is the listener mode: "http" or "dual" (dmsg-only is
 	// rejected because dmsg-servers register over plain HTTP).
 	Mode string `json:"mode,omitempty"`
