@@ -36,7 +36,22 @@ interface RouteGroupInfo {
   hops?: RouteGroupHop[];
 }
 
-type RoutingView = 'rules' | 'groups';
+// Route find/calc result shape (one entry per discovered path).
+interface RouteFindHop {
+  tp_id?: string;
+  from?: string;
+  to?: string;
+}
+interface RouteFindEntry {
+  src_pk?: string;
+  dst_pk?: string;
+  hops?: RouteFindHop[];
+}
+interface RouteFindResp {
+  routes?: RouteFindEntry[];
+}
+
+type RoutingView = 'rules' | 'groups' | 'find' | 'calc';
 
 /**
  * Routing tab content: routes list + traffic chart + the inline
@@ -63,11 +78,28 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   // Active sub-view of the routing tab. Rules is the default
   // because the existing route list lives there; Groups is the
   // higher-value diagnostic view (matches `rg ls`) so the toggle
-  // is prominent.
+  // is prominent. Find/Calc are operator diagnostic forms.
   activeView: RoutingView = 'rules';
   routeGroups: RouteGroupInfo[] = [];
   routeGroupsLoading = false;
   routeGroupsError: string | null = null;
+
+  // Route-find form state
+  findDstPk = '';
+  findMinHops = 1;
+  findMaxHops = 5;
+  findLoading = false;
+  findError: string | null = null;
+  findResults: RouteFindEntry[] = [];
+
+  // Route-calc form state (BFS-style local enumeration)
+  calcDstPk = '';
+  calcMinHops = 0;
+  calcMaxHops = 5;
+  calcCount = 50;
+  calcLoading = false;
+  calcError: string | null = null;
+  calcResults: RouteFindEntry[] = [];
 
   private dataSubscription: Subscription;
   private trafficSubscription: Subscription;
@@ -115,6 +147,49 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     if (v === 'groups' && !this.groupsSubscription) {
       this.startGroupsPolling();
     }
+  }
+
+  submitRouteFind() {
+    if (!this.nodePK || !this.findDstPk) { return; }
+    this.findLoading = true;
+    this.findError = null;
+    this.findResults = [];
+    this.routeService.routeFind(this.nodePK, {
+      dst_pk: this.findDstPk.trim(),
+      min_hops: Number(this.findMinHops) || 1,
+      max_hops: Number(this.findMaxHops) || 5,
+    }).subscribe({
+      next: (r: RouteFindResp) => {
+        this.findLoading = false;
+        this.findResults = (r && r.routes) || [];
+      },
+      error: (err: any) => {
+        this.findLoading = false;
+        this.findError = err?.message || 'Route find failed';
+      },
+    });
+  }
+
+  submitRouteCalc() {
+    if (!this.nodePK || !this.calcDstPk) { return; }
+    this.calcLoading = true;
+    this.calcError = null;
+    this.calcResults = [];
+    this.routeService.routeCalc(this.nodePK, {
+      dst_pk: this.calcDstPk.trim(),
+      min_hops: Number(this.calcMinHops) || 0,
+      max_hops: Number(this.calcMaxHops) || 5,
+      count: Number(this.calcCount) || 50,
+    }).subscribe({
+      next: (r: RouteFindResp) => {
+        this.calcLoading = false;
+        this.calcResults = (r && r.routes) || [];
+      },
+      error: (err: any) => {
+        this.calcLoading = false;
+        this.calcError = err?.message || 'Route calc failed';
+      },
+    });
   }
 
   private startGroupsPolling() {

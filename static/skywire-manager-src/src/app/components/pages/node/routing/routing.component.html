@@ -47,6 +47,16 @@
           (click)="setView('groups')">
     {{ 'routing.view.groups' | translate }}
   </button>
+  <button mat-button
+          [class.active]="activeView === 'find'"
+          (click)="setView('find')">
+    {{ 'routing.view.find' | translate }}
+  </button>
+  <button mat-button
+          [class.active]="activeView === 'calc'"
+          (click)="setView('calc')">
+    {{ 'routing.view.calc' | translate }}
+  </button>
 </div>
 
 @if (activeView === 'rules') {
@@ -55,6 +65,118 @@
     [showShortList]="true"
     [nodePK]="nodePK">
   </app-route-list>
+}
+
+@if (activeView === 'find') {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'routing.find.title' | translate }}</span>
+      <p class="section-desc">{{ 'routing.find.help' | translate }}</p>
+      <div class="route-form">
+        <input matInput class="route-input"
+               [(ngModel)]="findDstPk"
+               [placeholder]="'routing.find.dst-placeholder' | translate"
+               spellcheck="false" autocomplete="off" />
+        <span class="control-label dim ml-2">min</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="findMinHops" min="1" max="10" />
+        <span class="control-label dim ml-2">max</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="findMaxHops" min="1" max="10" />
+        <button mat-raised-button color="primary"
+                (click)="submitRouteFind()"
+                [disabled]="findLoading || !findDstPk">
+          {{ findLoading ? ('routing.find.searching' | translate) : ('routing.find.submit' | translate) }}
+        </button>
+      </div>
+      @if (findError) {
+        <div class="error-row">{{ findError }}</div>
+      }
+      @if (findResults.length > 0) {
+        <table class="data-table mt-3">
+          <tr>
+            <th>#</th>
+            <th>{{ 'routing.groups.hops' | translate }}</th>
+            <th>{{ 'routing.find.path' | translate }}</th>
+          </tr>
+          @for (r of findResults; track $index) {
+            <tr>
+              <td>{{ $index + 1 }}</td>
+              <td>{{ r.hops?.length || 0 }}</td>
+              <td class="mono small">
+                @for (h of r.hops; track $index) {
+                  <span class="hop-step">{{ h.from }}</span>
+                  <span class="hop-arrow">→</span>
+                }
+                <span class="mono small">{{ r.dst_pk }}</span>
+              </td>
+            </tr>
+          }
+        </table>
+      } @else if (!findLoading && !findError) {
+        <div class="empty-row">{{ 'routing.find.empty' | translate }}</div>
+      }
+    </div>
+  </div>
+}
+
+@if (activeView === 'calc') {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'routing.calc.title' | translate }}</span>
+      <p class="section-desc">{{ 'routing.calc.help' | translate }}</p>
+      <div class="route-form">
+        <input matInput class="route-input"
+               [(ngModel)]="calcDstPk"
+               [placeholder]="'routing.calc.dst-placeholder' | translate"
+               spellcheck="false" autocomplete="off" />
+        <span class="control-label dim ml-2">min</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="calcMinHops" min="0" max="10" />
+        <span class="control-label dim ml-2">max</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="calcMaxHops" min="1" max="10" />
+        <span class="control-label dim ml-2">count</span>
+        <input matInput type="number" class="route-input-num"
+               [(ngModel)]="calcCount" min="1" max="500" />
+        <button mat-raised-button color="primary"
+                (click)="submitRouteCalc()"
+                [disabled]="calcLoading || !calcDstPk">
+          {{ calcLoading ? ('routing.calc.searching' | translate) : ('routing.calc.submit' | translate) }}
+        </button>
+      </div>
+      @if (calcError) {
+        <div class="error-row">{{ calcError }}</div>
+      }
+      @if (calcResults.length > 0) {
+        <p class="results-summary">
+          {{ 'routing.calc.found' | translate:{ count: calcResults.length } }}
+        </p>
+        <table class="data-table mt-2">
+          <tr>
+            <th>#</th>
+            <th>{{ 'routing.groups.hops' | translate }}</th>
+            <th>{{ 'routing.find.path' | translate }}</th>
+          </tr>
+          @for (r of calcResults; track $index) {
+            <tr>
+              <td>{{ $index + 1 }}</td>
+              <td>{{ r.hops?.length || 0 }}</td>
+              <td class="mono small">
+                @for (h of r.hops; track $index) {
+                  <span class="hop-step">{{ h.from }}</span>
+                  <span class="hop-arrow">→</span>
+                }
+                <span class="mono small">{{ r.dst_pk }}</span>
+              </td>
+            </tr>
+          }
+        </table>
+      } @else if (!calcLoading && !calcError) {
+        <div class="empty-row">{{ 'routing.calc.empty' | translate }}</div>
+      }
+    </div>
+  </div>
 }
 
 @if (activeView === 'groups') {

@@ -1162,7 +1162,9 @@
   "routing": {
     "view": {
       "rules": "Rules",
-      "groups": "Route Groups"
+      "groups": "Route Groups",
+      "find": "Find Route",
+      "calc": "Calculate"
     },
     "groups": {
       "title": "Active Route Groups",
@@ -1175,6 +1177,24 @@
       "consume-rule": "Consume RID",
       "hops": "Hops",
       "next-tp": "Next TP"
+    },
+    "find": {
+      "title": "Find Route",
+      "help": "Query the route-finder service for a path between this visor and a target PK. Use this to answer 'why can't I reach X' — if no path is returned, the route-finder doesn't see one.",
+      "dst-placeholder": "destination public key",
+      "submit": "Find",
+      "searching": "Searching…",
+      "empty": "No routes found yet.",
+      "path": "Path"
+    },
+    "calc": {
+      "title": "Calculate Routes",
+      "help": "BFS-enumerate paths through the visor's local view of the transport graph (TPD snapshot). Doesn't depend on the route-finder service being reachable.",
+      "dst-placeholder": "destination public key",
+      "submit": "Calculate",
+      "searching": "Calculating…",
+      "empty": "No routes computed yet.",
+      "found": "Found {{count}} routes."
     }
   },
 

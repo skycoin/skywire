@@ -45,4 +45,23 @@ export class RouteService {
   routeGroups(nodeKey: string) {
     return this.apiService.get(`visors/${nodeKey}/routegroups`);
   }
+
+  /**
+   * Queries the route-finder service via the visor's existing
+   * rfClient. body: { src_pk?, dst_pk, min_hops?, max_hops? }.
+   * src_pk defaults to the local visor on the backend when empty.
+   */
+  routeFind(nodeKey: string, body: any) {
+    return this.apiService.post(`visors/${nodeKey}/route-find`, body);
+  }
+
+  /**
+   * Local route enumeration — fetches the TPD transport graph and
+   * BFS-walks it for paths from src_pk to dst_pk. Bounded by
+   * count (default 200) and max_hops (default 5). Doesn't depend
+   * on the route-finder service being reachable.
+   */
+  routeCalc(nodeKey: string, body: any) {
+    return this.apiService.post(`visors/${nodeKey}/route-calc`, body);
+  }
 }

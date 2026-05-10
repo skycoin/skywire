@@ -46,3 +46,58 @@ td.mono.small,
 .mono.small {
   font-size: 0.85em;
 }
+
+// Route find / calc form layout — labelled inputs in a single row,
+// horizontal scroll if the viewport's tight.
+.route-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+}
+.route-input {
+  flex: 1 1 280px;
+  min-width: 180px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 6px 10px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: monospace;
+  font-size: 0.92em;
+}
+.route-input-num {
+  width: 64px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 6px 8px;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.92em;
+  text-align: right;
+}
+
+.section-desc {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.92em;
+  margin: 4px 0 12px 0;
+}
+
+// Hop visualization in find/calc results.
+.hop-step {
+  display: inline-block;
+  font-family: monospace;
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.85);
+}
+.hop-arrow {
+  color: rgba(255, 255, 255, 0.4);
+  margin: 0 6px;
+}
+
+.results-summary {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.92em;
+  margin: 8px 0 0 0;
+}
