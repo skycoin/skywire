@@ -77,3 +77,44 @@
     </div>
   </div>
 }
+
+@if (node) {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'uptime.services-title' | translate }}</span>
+      <p class="section-desc">{{ 'uptime.services-help' | translate }}</p>
+      <table class="data-table mt-2 service-uptime-table">
+        <tr>
+          <th>{{ 'uptime.services-col-service' | translate }}</th>
+          <th>{{ 'uptime.services-col-recent' | translate }}</th>
+        </tr>
+        @for (row of serviceUptime; track row.service) {
+          <tr>
+            <td><strong>{{ row.service }}</strong></td>
+            <td>
+              @if (row.loading) {
+                <mat-spinner [diameter]="14"></mat-spinner>
+              } @else if (row.error) {
+                <span class="error-text">{{ row.error }}</span>
+              } @else if (row.days.length === 0) {
+                <span class="dim">{{ 'uptime.services-no-data' | translate }}</span>
+              } @else {
+                <span class="service-day-list">
+                  @for (d of row.days; track d.date) {
+                    <span class="service-day"
+                          [class.svc-fail]="d.pct < 50"
+                          [class.svc-warn]="d.pct >= 50 && d.pct < 90"
+                          [class.svc-ok]="d.pct >= 90"
+                          [matTooltip]="d.date">
+                      {{ d.pct.toFixed(0) }}%
+                    </span>
+                  }
+                </span>
+              }
+            </td>
+          </tr>
+        }
+      </table>
+    </div>
+  </div>
+}

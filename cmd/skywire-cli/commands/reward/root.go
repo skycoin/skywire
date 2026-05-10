@@ -13,6 +13,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -29,6 +30,8 @@ var (
 	isRewarded           bool
 	isDeleteFile         bool
 	isAll                bool
+	bulkPKsCSV           string
+	bulkAllVisors        bool
 	readFlagTxt          string
 	cHiddenFlags         []string
 )
@@ -51,6 +54,10 @@ func init() {
 	cHiddenFlags = append(cHiddenFlags, "read")
 	rewardCmd.Flags().BoolVarP(&isDeleteFile, "delete", "d", false, "delete reward addresss file - opt out of rewards")
 	cHiddenFlags = append(cHiddenFlags, "delete")
+	rewardCmd.Flags().StringVar(&bulkPKsCSV, "pks", "",
+		"comma-separated visor PKs (via hypervisor) to set reward address on")
+	rewardCmd.Flags().BoolVar(&bulkAllVisors, "all-visors", false,
+		"apply reward address to every visor connected to this hypervisor (requires running hypervisor)")
 	rewardCmd.Flags().BoolVar(&isAll, "all", false, "show all flags")
 	for _, j := range cHiddenFlags {
 		rewardCmd.Flags().MarkHidden(j) //nolint:errcheck,gosec
@@ -270,6 +277,28 @@ var rewardCmd = &cobra.Command{
 			}
 		}
 
+		// Bulk path: apply this address to multiple visors via the
+		// hypervisor's HVSetRewardAddress RPC. Triggered by --pks
+		// pk1,pk2 (explicit list) or --all-visors (every hypervisor-
+		// managed visor). Both require a running hypervisor — without
+		// RPC we have no way to reach remote visors.
+		if bulkPKsCSV != "" || bulkAllVisors {
+			if clienterr != nil {
+				internal.PrintFatalError(cmd.Flags(),
+					fmt.Errorf("bulk reward requires hypervisor RPC (RPC unreachable: %v)", clienterr))
+			}
+			pks, err := collectBulkPKs(client, bulkPKsCSV, bulkAllVisors)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			if len(pks) == 0 {
+				internal.PrintFatalError(cmd.Flags(),
+					fmt.Errorf("bulk reward: no target PKs (check --pks list / --all-visors hypervisor state)"))
+			}
+			applyBulkRewardAddress(cmd.Flags(), client, pks, canonical)
+			return
+		}
+
 		//using the rpc of the running visor avoids needing sudo permissions
 		if clienterr != nil {
 			internal.Catch(cmd.Flags(), os.WriteFile(output, []byte(canonical), 0600))
@@ -292,6 +321,78 @@ var rewardCmd = &cobra.Command{
 			readRewardFile(cmd.Flags())
 		}
 	},
+}
+
+// collectBulkPKs resolves the target set for a bulk reward operation.
+// Explicit --pks wins; --all-visors falls through to HVListVisors.
+func collectBulkPKs(client visor.API, csv string, allVisors bool) ([]string, error) {
+	var pks []string
+	seen := make(map[string]bool)
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" || seen[s] {
+			return
+		}
+		seen[s] = true
+		pks = append(pks, s)
+	}
+	if csv != "" {
+		for _, p := range strings.Split(csv, ",") {
+			add(p)
+		}
+	}
+	if allVisors {
+		summaries, err := client.HVListVisors()
+		if err != nil {
+			return nil, fmt.Errorf("HVListVisors: %w", err)
+		}
+		for _, s := range summaries {
+			add(s.PK.String())
+		}
+	}
+	return pks, nil
+}
+
+// applyBulkRewardAddress sets `addr` on each PK via HVSetRewardAddress.
+// Per-visor result is printed (PK + outcome) and failures are recorded
+// but don't abort the loop — operators usually want the rest of the
+// fleet updated even if one visor is unreachable.
+func applyBulkRewardAddress(flags *pflag.FlagSet, client visor.API, pks []string, addr string) {
+	type result struct {
+		PK  string `json:"pk"`
+		Set string `json:"set,omitempty"`
+		Err string `json:"error,omitempty"`
+	}
+	results := make([]result, 0, len(pks))
+	failures := 0
+	for _, pkStr := range pks {
+		var pk cipher.PubKey
+		if err := pk.Set(pkStr); err != nil {
+			results = append(results, result{PK: pkStr, Err: "invalid PK: " + err.Error()})
+			failures++
+			continue
+		}
+		set, err := client.HVSetRewardAddress(pk, addr)
+		if err != nil {
+			results = append(results, result{PK: pkStr, Err: err.Error()})
+			failures++
+			continue
+		}
+		results = append(results, result{PK: pkStr, Set: set})
+	}
+	humanLines := make([]string, 0, len(results)+2)
+	humanLines = append(humanLines, fmt.Sprintf("Bulk reward address: %s", addr))
+	humanLines = append(humanLines, fmt.Sprintf("Targets: %d   Succeeded: %d   Failed: %d",
+		len(results), len(results)-failures, failures))
+	for _, r := range results {
+		if r.Err != "" {
+			humanLines = append(humanLines, fmt.Sprintf("  %s  FAIL  %s", r.PK, r.Err))
+		} else {
+			humanLines = append(humanLines, fmt.Sprintf("  %s  OK    %s", r.PK, r.Set))
+		}
+	}
+	humanOut := strings.Join(humanLines, "\n") + "\n"
+	internal.PrintOutput(flags, results, humanOut)
 }
 
 func readRewardFile(cmdFlags *pflag.FlagSet) {

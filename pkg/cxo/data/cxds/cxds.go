@@ -30,6 +30,13 @@ var (
 	ErrMissingVersion = errors.New("missing version in meta")
 	ErrOldVersion     = errors.New("db file of old version")      // cxodbfix
 	ErrNewVersion     = errors.New("db file newer then this CXO") // go get
+
+	// ErrClosed is returned by mutating methods when the store has
+	// already been Closed. Without this guard, a late writer races
+	// past Close (which sets the in-memory map to nil) and panics
+	// with "assignment to entry in nil map" — see the fillHead
+	// goroutine path in pkg/cxo/node/head.go that triggered this.
+	ErrClosed = errors.New("CXDS store closed")
 )
 
 func getRefsCount(val []byte) (rc uint32) {

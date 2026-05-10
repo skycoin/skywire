@@ -1,0 +1,102 @@
+.dmsg-box {
+  margin-bottom: 16px;
+}
+
+.dmsg-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  .dmsg-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+}
+
+// Each role-scoped dmsg client gets its own block. Main is the
+// dominant client (carries app traffic + skychat); transport_setup
+// (and any others) ride beside it for their own service surfaces.
+.dmsg-client-block {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+.dmsg-client-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.dmsg-role-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 11px;
+  font-size: 0.85em;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: lowercase;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+.dmsg-role-badge.dmsg-role-main {
+  background-color: rgba(76, 175, 80, 0.18);
+  color: #81c784;
+}
+
+.dmsg-client-pk {
+  flex: 1 1 auto;
+  word-break: break-all;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dmsg-server-count {
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.55);
+  white-space: nowrap;
+}
+
+.dmsg-server-list {
+  margin: 4px 0 0 0;
+  padding: 0;
+  list-style: none;
+  li {
+    padding: 3px 0 3px 14px;
+    border-left: 2px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.85);
+  }
+}
+
+.dmsg-no-servers {
+  font-size: 0.85em;
+  color: rgba(255, 152, 0, 0.85);
+  margin: 4px 0 0 0;
+  padding-left: 14px;
+}
+
+.loading-row,
+.empty-row,
+.error-row {
+  padding: 16px 4px;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+}
+.error-row { color: #ff6b6b; }
+
+.dmsg-fetched-hint {
+  margin-top: 12px;
+  font-size: 0.8em;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.mono.small,
+.small.mono { font-size: 0.85em; }

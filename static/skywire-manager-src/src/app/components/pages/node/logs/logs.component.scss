@@ -112,3 +112,30 @@
 .lvl-debug { color: #03a9f4; }
 .lvl-trace { color: rgba(255, 255, 255, 0.55); }
 .lvl-unknown { color: rgba(255, 255, 255, 0.7); }
+
+.logs-text-input {
+  display: inline-block;
+  min-width: 220px;
+  max-width: 320px;
+  background-color: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-left: 6px;
+  color: rgba(255, 255, 255, 0.92);
+  font-family: inherit;
+  font-size: 0.92em;
+}
+
+.logs-text-input:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.4);
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.logs-filter-error {
+  display: inline-block;
+  margin-left: 8px;
+  color: #ff6b6b;
+  font-size: 0.85em;
+}
