@@ -412,6 +412,8 @@
     "latency": "Latency",
     "version": "Version",
     "endpoint": "Endpoint",
+    "drill": "Show /health payload",
+    "collapse": "Collapse",
     "rsn-section": "Route Setup Nodes",
     "rsn-empty": "No route setup nodes configured.",
     "rsn-pk": "Public Key",
