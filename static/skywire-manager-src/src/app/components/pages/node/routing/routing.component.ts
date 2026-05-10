@@ -1,6 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { Subscription, interval, startWith } from 'rxjs';
+import { switchMap, catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 
 import { Node, Route } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
@@ -10,6 +12,46 @@ import { RouteService } from 'src/app/services/route.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+
+// RouteGroupInfo as exposed by the visor's /routegroups endpoint
+// (pkg/visor/api_routing.go). Only the fields surfaced by the UI are
+// declared; extras like FwdNextTpID are kept as `any` so backend
+// additions don't break TypeScript.
+interface RouteGroupHop {
+  tp_id?: string;
+  src_pk?: string;
+  dst_pk?: string;
+}
+interface RouteGroupInfo {
+  desc?: {
+    src_pk?: string;
+    dst_pk?: string;
+    src_port?: number;
+    dst_port?: number;
+  };
+  fwd_rule_id?: number;
+  consume_rule_id?: number;
+  fwd_next_tp_id?: string;
+  initiator?: boolean;
+  hops?: RouteGroupHop[];
+}
+
+// Route find/calc result shape (one entry per discovered path).
+interface RouteFindHop {
+  tp_id?: string;
+  from?: string;
+  to?: string;
+}
+interface RouteFindEntry {
+  src_pk?: string;
+  dst_pk?: string;
+  hops?: RouteFindHop[];
+}
+interface RouteFindResp {
+  routes?: RouteFindEntry[];
+}
+
+type RoutingView = 'rules' | 'groups' | 'find' | 'calc';
 
 /**
  * Routing tab content: routes list + traffic chart + the inline
@@ -33,9 +75,36 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   showRouterForm = false;
   routerForm: UntypedFormGroup;
 
+  // Active sub-view of the routing tab. Rules is the default
+  // because the existing route list lives there; Groups is the
+  // higher-value diagnostic view (matches `rg ls`) so the toggle
+  // is prominent. Find/Calc are operator diagnostic forms.
+  activeView: RoutingView = 'rules';
+  routeGroups: RouteGroupInfo[] = [];
+  routeGroupsLoading = false;
+  routeGroupsError: string | null = null;
+
+  // Route-find form state
+  findDstPk = '';
+  findMinHops = 1;
+  findMaxHops = 5;
+  findLoading = false;
+  findError: string | null = null;
+  findResults: RouteFindEntry[] = [];
+
+  // Route-calc form state (BFS-style local enumeration)
+  calcDstPk = '';
+  calcMinHops = 0;
+  calcMaxHops = 5;
+  calcCount = 50;
+  calcLoading = false;
+  calcError: string | null = null;
+  calcResults: RouteFindEntry[] = [];
+
   private dataSubscription: Subscription;
   private trafficSubscription: Subscription;
   private saveRouterSubscription: Subscription;
+  private groupsSubscription: Subscription;
 
   constructor(
     private formBuilder: UntypedFormBuilder,
@@ -69,6 +138,81 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     this.dataSubscription.unsubscribe();
     this.trafficSubscription?.unsubscribe();
     this.saveRouterSubscription?.unsubscribe();
+    this.groupsSubscription?.unsubscribe();
+  }
+
+  setView(v: RoutingView) {
+    if (v === this.activeView) { return; }
+    this.activeView = v;
+    if (v === 'groups' && !this.groupsSubscription) {
+      this.startGroupsPolling();
+    }
+  }
+
+  submitRouteFind() {
+    if (!this.nodePK || !this.findDstPk) { return; }
+    this.findLoading = true;
+    this.findError = null;
+    this.findResults = [];
+    this.routeService.routeFind(this.nodePK, {
+      dst_pk: this.findDstPk.trim(),
+      min_hops: Number(this.findMinHops) || 1,
+      max_hops: Number(this.findMaxHops) || 5,
+    }).subscribe({
+      next: (r: RouteFindResp) => {
+        this.findLoading = false;
+        this.findResults = (r && r.routes) || [];
+      },
+      error: (err: any) => {
+        this.findLoading = false;
+        this.findError = err?.message || 'Route find failed';
+      },
+    });
+  }
+
+  submitRouteCalc() {
+    if (!this.nodePK || !this.calcDstPk) { return; }
+    this.calcLoading = true;
+    this.calcError = null;
+    this.calcResults = [];
+    this.routeService.routeCalc(this.nodePK, {
+      dst_pk: this.calcDstPk.trim(),
+      min_hops: Number(this.calcMinHops) || 0,
+      max_hops: Number(this.calcMaxHops) || 5,
+      count: Number(this.calcCount) || 50,
+    }).subscribe({
+      next: (r: RouteFindResp) => {
+        this.calcLoading = false;
+        this.calcResults = (r && r.routes) || [];
+      },
+      error: (err: any) => {
+        this.calcLoading = false;
+        this.calcError = err?.message || 'Route calc failed';
+      },
+    });
+  }
+
+  private startGroupsPolling() {
+    if (!this.nodePK) { return; }
+    // Active route groups change on tp churn. 5s is a reasonable
+    // poll cadence — frequent enough to feel live, slow enough to
+    // not hammer the visor's RPC.
+    this.groupsSubscription = interval(5000).pipe(
+      startWith(0),
+      switchMap(() => this.routeService.routeGroups(this.nodePK).pipe(
+        catchError((err) => {
+          this.routeGroupsError = err?.message || 'Failed to fetch route groups';
+          this.routeGroupsLoading = false;
+          return of(null);
+        }),
+      )),
+    ).subscribe((rgs: any) => {
+      if (rgs == null) { return; }
+      this.routeGroupsError = null;
+      this.routeGroupsLoading = false;
+      this.routeGroups = Array.isArray(rgs) ? rgs : [];
+    });
+    this.routeGroupsLoading = true;
   }
 
   toggleRouterForm() {
