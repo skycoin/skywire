@@ -639,7 +639,12 @@
     "fleet-process": "Process %",
     "fleet-dmsg": "DMSG %",
     "fleet-skynet": "Skynet %",
-    "today-pct": "Today %"
+    "today-pct": "Today %",
+    "services-title": "External Services Uptime",
+    "services-help": "Daily uptime % for this visor as recorded by each integrated UT service (TPD, SD, DMSG-D). Useful for spotting 'I think I'm online but the network lost me' divergence.",
+    "services-col-service": "Service",
+    "services-col-recent": "Last 7 days",
+    "services-no-data": "No data for this visor."
   },
 
   "skychat": {
