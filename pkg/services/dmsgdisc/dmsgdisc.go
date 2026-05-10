@@ -131,7 +131,7 @@ func (s *service) Run(ctx context.Context) error {
 		dmsgAddr = fmt.Sprintf("%s:%d", pk.Hex(), dmsgPort)
 	}
 	enableMetrics := cfg.MetricsAddr != ""
-	entryTimeout := cfg.EntryTimeout
+	entryTimeout := cfg.EntryTimeout.Std()
 	a := api.New(log, db, m, cfg.TestMode, cfg.EnableLoadTesting, enableMetrics, dmsgAddr, cfg.AuthPassphrase, entryTimeout)
 
 	for _, k := range cfg.Whitelist {
@@ -282,7 +282,7 @@ func openStore(ctx context.Context, cfg *Config, log *logging.Logger) (store.Sto
 	dbConf := &store.Config{
 		URL:      cfg.Redis,
 		Password: os.Getenv(RedisPasswordEnvName),
-		Timeout:  cfg.EntryTimeout,
+		Timeout:  cfg.EntryTimeout.Std(),
 	}
 	if dbConf.URL == "" {
 		dbConf.URL = store.DefaultURL

@@ -88,7 +88,7 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	log.Printf("Redis connected.")
 
-	db, err := store.NewStore(runCtx, redisClient, log, cfg.EntryTimeout)
+	db, err := store.NewStore(runCtx, redisClient, log, cfg.EntryTimeout.Std())
 	if err != nil {
 		return fmt.Errorf("service-discovery: init store: %w", err)
 	}

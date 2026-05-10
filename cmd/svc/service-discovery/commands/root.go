@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/services/sd"
 )
 
@@ -185,7 +186,7 @@ func buildConfig() (*sd.Config, error) {
 		MetricsAddr:  metricsAddr,
 		PprofAddr:    pprofAddr,
 		Redis:        redisURL,
-		EntryTimeout: entryTimeout,
+		EntryTimeout: services.Duration(entryTimeout),
 		TestMode:     testMode,
 		Mode:         mode,
 		Whitelist:    commaSplit(whitelistKeys),

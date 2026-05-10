@@ -10,12 +10,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/services"
 )
 
 // Config is the JSON configuration for transport-discovery.
@@ -25,19 +25,19 @@ type Config struct {
 	PubKey cipher.PubKey `json:"public_key,omitempty"`
 	SecKey cipher.SecKey `json:"secret_key,omitempty"`
 
-	Addr            string          `json:"addr,omitempty"`
-	MetricsAddr     string          `json:"metrics_addr,omitempty"`
-	PprofAddr       string          `json:"pprof_addr,omitempty"`
-	Redis           string          `json:"redis,omitempty"`
-	RedisPoolSize   int             `json:"redis_pool_size,omitempty"`
-	EntryTimeout    time.Duration   `json:"entry_timeout,omitempty"`
-	LogLevel        string          `json:"log_level,omitempty"`
-	Tag             string          `json:"tag,omitempty"`
-	Testing         bool            `json:"testing,omitempty"`
-	Mode            string          `json:"mode,omitempty"`
-	Whitelist       []string        `json:"whitelist_keys,omitempty"`
-	SurveyWhitelist []cipher.PubKey `json:"survey_whitelist,omitempty"`
-	TestEnvironment bool            `json:"test_environment,omitempty"`
+	Addr            string            `json:"addr,omitempty"`
+	MetricsAddr     string            `json:"metrics_addr,omitempty"`
+	PprofAddr       string            `json:"pprof_addr,omitempty"`
+	Redis           string            `json:"redis,omitempty"`
+	RedisPoolSize   int               `json:"redis_pool_size,omitempty"`
+	EntryTimeout    services.Duration `json:"entry_timeout,omitempty"`
+	LogLevel        string            `json:"log_level,omitempty"`
+	Tag             string            `json:"tag,omitempty"`
+	Testing         bool              `json:"testing,omitempty"`
+	Mode            string            `json:"mode,omitempty"`
+	Whitelist       []string          `json:"whitelist_keys,omitempty"`
+	SurveyWhitelist []cipher.PubKey   `json:"survey_whitelist,omitempty"`
+	TestEnvironment bool              `json:"test_environment,omitempty"`
 
 	// StoreDataPath is the on-disk path for bandwidth backup files.
 	StoreDataPath string `json:"store_data_path,omitempty"`

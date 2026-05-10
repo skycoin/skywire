@@ -11,7 +11,19 @@
       "uptime_db": "",
       "store_data_path": "/var/lib/skywire/tpd/bandwidth",
       "dmsg": {
-        "discovery": "http://dmsg-discovery:9090"
+        "discovery": "http://dmsg-discovery:9090",
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "174.0.0.17:8080",
+              "availableSessions": 0
+            }
+          }
+        ]
       }
     },
     {
@@ -22,7 +34,19 @@
       "redis": "redis://tpd-redis:6379",
       "secret_key": "640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca",
       "dmsg": {
-        "discovery": "http://dmsg-discovery:9090"
+        "discovery": "http://dmsg-discovery:9090",
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "174.0.0.17:8080",
+              "availableSessions": 0
+            }
+          }
+        ]
       }
     },
     {
@@ -54,7 +78,19 @@
       "entry_timeout": "2m",
       "secret_key": "ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f",
       "dmsg": {
-        "discovery": "http://dmsg-discovery:9090"
+        "discovery": "http://dmsg-discovery:9090",
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "174.0.0.17:8080",
+              "availableSessions": 0
+            }
+          }
+        ]
       }
     },
     {
@@ -67,7 +103,19 @@
       "entry_timeout": "2m",
       "secret_key": "1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a",
       "dmsg": {
-        "discovery": "http://dmsg-discovery:9090"
+        "discovery": "http://dmsg-discovery:9090",
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "174.0.0.17:8080",
+              "availableSessions": 0
+            }
+          }
+        ]
       }
     },
     {
