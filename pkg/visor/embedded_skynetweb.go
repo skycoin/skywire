@@ -151,8 +151,21 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		Stats:         e.stats,
 	}
+
+	// Optional TLS MITM mode. Loading the CA can fail (file
+	// missing, permissions, malformed) — those failures are not
+	// fatal: the resolver continues without MITM and logs the
+	// reason. This keeps the visor running even if the visitor's
+	// CA install is partial.
+	if e.cfg.TLSMITM {
+		if err := wireSkynetTLSMITM(&cfg, e.cfg, e.log); err != nil {
+			e.log.WithError(err).Warn("skynetweb TLS MITM disabled")
+		}
+	}
+
 	e.log.WithField("socks_port", cfg.ProxyPort).
 		WithField("domain", cfg.DomainSuffix).
+		WithField("tls_mitm", cfg.TLSMITM).
 		Info("Serving skynetweb resolver")
 
 	// Pass a pointer-to-pointer so the dialer can dereference the mux

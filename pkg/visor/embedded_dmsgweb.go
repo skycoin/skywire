@@ -151,8 +151,18 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		Stats:         e.stats,
 	}
+
+	// Optional TLS MITM. CA load failure is non-fatal — the
+	// resolver continues without MITM and logs the reason.
+	if e.cfg.TLSMITM {
+		if err := wireDmsgTLSMITM(&cfg, e.cfg, e.log); err != nil {
+			e.log.WithError(err).Warn("dmsgweb TLS MITM disabled")
+		}
+	}
+
 	e.log.WithField("socks_port", cfg.ProxyPort).
 		WithField("domain", cfg.DomainSuffix).
+		WithField("tls_mitm", cfg.TLSMITM).
 		Info("Serving dmsgweb resolver")
 	if err := dmsgweb.Run(ctx, e.log, e.dmsgC, cfg); err != nil && err != context.Canceled {
 		e.log.WithError(err).Warn("dmsgweb runtime stopped")
