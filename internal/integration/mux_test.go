@@ -128,8 +128,13 @@ func testMuxOverStcprTriangle(t *testing.T, env *TestEnv) {
 	// polls until the app reaches Running or terminates with an
 	// error and exits — so when this Exec returns success we know
 	// both route groups (primary + 1 alternate) have been set up.
+	// `proxy start --pk` is the CLI flag for "server public key" (set
+	// up via DoCustomSetting → app's --srv arg internally); the CLI
+	// itself doesn't take --srv. The CLI also calls SetMuxRoutes(2)
+	// before launching, so the visor's networker threads MuxRoutes=2
+	// into the dial.
 	startCmd := fmt.Sprintf(
-		"/release/skywire cli proxy start --rpc %s:3435 --srv %s --mux 2 --internal --timeout %d",
+		"/release/skywire cli proxy start --rpc %s:3435 --pk %s --mux 2 --internal --timeout %d",
 		visorC, serverPK, muxClientStartTimeoutSec,
 	)
 	startOut, startErr := env.Exec(startCmd)
