@@ -260,6 +260,7 @@
       "transports": "Transports",
       "bandwidth": "Bandwidth",
       "dmsg": "DMSG",
+      "reachability": "Reachability",
       "uptime": "Uptime",
       "rewards": "Rewards",
       "skynet": "Skynet",
@@ -1144,6 +1145,20 @@
         "non-persistent": "Non-persistent"
       }
     }
+  },
+
+  "reach": {
+    "title": "Reachability Probes",
+    "help": "Test live reachability to a target visor: skywire-route ping, dmsg ping, or remote /health fetch over dmsg. Each result is appended below; results stay until cleared.",
+    "target-placeholder": "target visor public key",
+    "tries": "tries",
+    "size": "kB",
+    "skynet-ping": "Skynet Ping",
+    "dmsg-ping": "DMSG Ping",
+    "health": "/health over DMSG",
+    "running": "running…",
+    "clear": "Clear",
+    "empty": "No probes run yet."
   },
 
   "dmsg": {

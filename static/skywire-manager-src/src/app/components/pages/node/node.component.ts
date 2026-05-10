@@ -227,6 +227,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/transports') ||
       this.lastUrl.includes('/bandwidth') ||
       this.lastUrl.includes('/dmsg') ||
+      this.lastUrl.includes('/reachability') ||
       this.lastUrl.includes('/uptime') ||
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
@@ -272,6 +273,14 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           icon: 'router',
           label: 'node.tabs.dmsg',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'dmsg'] : null,
+        },
+        {
+          // Reachability tab: interactive ping (skynet + dmsg)
+          // and remote /health fetch over dmsg. Adjacent to DMSG
+          // since both are operator-driven connectivity probes.
+          icon: 'network_check',
+          label: 'node.tabs.reachability',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'reachability'] : null,
         },
         {
           icon: 'schedule',
@@ -340,40 +349,43 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/bandwidth')) {
         this.selectedTabIndex = 3;
       }
-      // DMSG tab inserted between Bandwidth and Uptime; shifts all
-      // subsequent indices by one.
+      // DMSG + Reachability tabs sit between Bandwidth and Uptime;
+      // every subsequent index shifts by two from the original layout.
       if (this.lastUrl.includes('/dmsg') && !this.lastUrl.includes('/dmsg-settings')) {
         this.selectedTabIndex = 4;
       }
-      if (this.lastUrl.includes('/uptime')) {
+      if (this.lastUrl.includes('/reachability')) {
         this.selectedTabIndex = 5;
       }
-      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
+      if (this.lastUrl.includes('/uptime')) {
         this.selectedTabIndex = 6;
       }
-      if (this.lastUrl.includes('/rewards')) {
+      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
         this.selectedTabIndex = 7;
+      }
+      if (this.lastUrl.includes('/rewards')) {
+        this.selectedTabIndex = 8;
       }
       // /skynet matches BOTH the skynet tab and would otherwise also
       // match a hypothetical /skynet-foo path; check after web-proxy
       // since /web-proxy must take precedence on its own URL.
       if (this.lastUrl.includes('/skynet')) {
-        this.selectedTabIndex = 8;
-      }
-      if (this.lastUrl.includes('/web-proxy')) {
         this.selectedTabIndex = 9;
       }
-      if (this.lastUrl.includes('/resources')) {
+      if (this.lastUrl.includes('/web-proxy')) {
         this.selectedTabIndex = 10;
       }
-      if (this.lastUrl.includes('/terminal')) {
+      if (this.lastUrl.includes('/resources')) {
         this.selectedTabIndex = 11;
       }
-      if (this.lastUrl.includes('/wallet')) {
+      if (this.lastUrl.includes('/terminal')) {
         this.selectedTabIndex = 12;
       }
-      if (this.lastUrl.includes('/logs')) {
+      if (this.lastUrl.includes('/wallet')) {
         this.selectedTabIndex = 13;
+      }
+      if (this.lastUrl.includes('/logs')) {
+        this.selectedTabIndex = 14;
       }
 
       // Inform that the current subpage is not for showing a full list.
