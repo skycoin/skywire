@@ -15,13 +15,25 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// TestMux tests route multiplexing: multiple transports between the same visor
-// pair carry traffic simultaneously. The test establishes DMSG + STCPR transports,
-// starts skysocks, sends traffic, and verifies both transports show bandwidth.
+// TestMux tests skysocks proxy traffic over a non-DMSG transport.
+//
+// DMSG transports must NOT be used for multiplexed or multi-hop routes — the
+// router code (pkg/router/router_dial.go:695-707) explicitly skips mux setup
+// when the primary route contains a DMSG transport, and every mux-route
+// fetch sets ExcludeDMSG: true. So a test that mixes DMSG into the muxable
+// transport pool can never exercise mux behavior end-to-end.
+//
+// Current scope: STCPR direct path between visor-c and visor-a. Verifies the
+// proxy app starts, traffic flows, and bandwidth is recorded on the STCPR
+// transport.
+//
+// TODO: extend to true multi-hop mux by participating visor-b and adding a
+// c→b→a STCPR-only alternative path; pass --mux=2 to skysocks-client; assert
+// both routes carry traffic.
 func TestMux(t *testing.T) {
 	tt := []IntegrationTestCase{
 		{
-			Name:                         "mux distributes traffic across transports",
+			Name:                         "skysocks proxy traffic over STCPR",
 			ParticipatingVisorsHostNames: []string{visorC, visorA},
 			AppsToRun: []AppToRun{
 				{
@@ -42,49 +54,35 @@ func TestMux(t *testing.T) {
 				{
 					FromVisorHostName: visorC,
 					ToVisorHostName:   visorA,
-					Type:              types.DMSG,
-				},
-				{
-					FromVisorHostName: visorC,
-					ToVisorHostName:   visorA,
 					Type:              types.STCPR,
 				},
 			},
-			Case: testMuxDistributesTraffic,
+			Case: testProxyOverStcpr,
 		},
 	}
 
 	RunIntegrationTestCase(t, tt)
 }
 
-func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
-	// Verify both transports exist
+func testProxyOverStcpr(t *testing.T, env *TestEnv) {
 	tps, err := env.VisorTpLs(visorC)
 	require.NoError(t, err, "Failed to list transports on visor-c")
 
 	serverPK := env.visorPKs[visorA]
-	var dmsgTP, stcprTP string
+	var stcprTP string
 	for _, tp := range tps {
-		if tp.Remote.String() == serverPK {
-			switch tp.Type {
-			case types.DMSG:
-				dmsgTP = tp.ID.String()
-			case types.STCPR:
-				stcprTP = tp.ID.String()
-			}
+		if tp.Remote.String() == serverPK && tp.Type == types.STCPR {
+			stcprTP = tp.ID.String()
+			break
 		}
 	}
-
-	require.NotEmpty(t, dmsgTP, "DMSG transport to visor-a not found")
 	require.NotEmpty(t, stcprTP, "STCPR transport to visor-a not found")
-	t.Logf("DMSG transport: %s", dmsgTP)
 	t.Logf("STCPR transport: %s", stcprTP)
 
-	// Verify skysocks-client is running
 	env.VerifyAppRunning(t, visorC, skyenv.SkysocksClientName)
 
-	// Send traffic through the proxy to generate bandwidth on both transports.
-	// Make multiple requests to give mux time to distribute across transports.
+	// Generate proxy traffic. ~20 requests is enough to confirm the proxy is
+	// functional and bandwidth is being recorded.
 	proxyClient, err := env.NewProxyClient(visorC, "", "")
 	require.NoError(t, err, "Failed to create SOCKS5 proxy client")
 
@@ -100,22 +98,17 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNotFound {
 			successCount++
 		}
-		// LEGITIMATE WAIT: Brief pacing between requests to spread traffic
-		// across keep-alive cycles and avoid overwhelming the proxy.
+		// LEGITIMATE WAIT: brief pacing between requests.
 		time.Sleep(100 * time.Millisecond)
 	}
 
 	require.Greater(t, successCount, 0, "No proxy requests succeeded")
 	t.Logf("%d/%d proxy requests succeeded", successCount, requestCount)
 
-	// Poll until at least one transport shows non-zero bandwidth (up to 10s).
-	// This replaces a fixed sleep with a condition check.
-	serverPKForBW := env.visorPKs[visorA]
-	if !env.waitForNonZeroBandwidth(visorC, serverPKForBW, 10*time.Second) {
+	if !env.waitForNonZeroBandwidth(visorC, serverPK, 10*time.Second) {
 		t.Log("Warning: no bandwidth recorded yet; proceeding with check anyway")
 	}
 
-	// Parse transport list with bandwidth data (CLI outputs flat recv_bytes/sent_bytes)
 	type tpWithBW struct {
 		ID        string `json:"id"`
 		Type      string `json:"type"`
@@ -130,43 +123,21 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 	)
 	require.NoError(t, err, "Failed to list transports after traffic")
 
-	var dmsgBytes, stcprBytes uint64
+	var stcprBytes uint64
 	for _, tp := range tpResult {
 		if tp.RemotePK != serverPK {
 			continue
 		}
-		bw := tp.RecvBytes + tp.SentBytes
-		switch types.Type(tp.Type) {
-		case types.DMSG:
-			dmsgBytes = bw
-			t.Logf("DMSG transport bandwidth: sent=%d recv=%d total=%d", tp.SentBytes, tp.RecvBytes, bw)
-		case types.STCPR:
-			stcprBytes = bw
-			t.Logf("STCPR transport bandwidth: sent=%d recv=%d total=%d", tp.SentBytes, tp.RecvBytes, bw)
+		if types.Type(tp.Type) == types.STCPR {
+			stcprBytes = tp.RecvBytes + tp.SentBytes
+			t.Logf("STCPR transport bandwidth: sent=%d recv=%d total=%d",
+				tp.SentBytes, tp.RecvBytes, stcprBytes)
 		}
 	}
+	require.Greater(t, stcprBytes, uint64(0),
+		"STCPR transport should show non-zero bandwidth after proxy requests")
 
-	// The key assertion: both transports should have non-zero bandwidth,
-	// proving that route multiplexing distributed traffic across them.
-	// If mux is NOT working, only one transport would show bandwidth.
-	if dmsgBytes > 0 && stcprBytes > 0 {
-		t.Logf("SUCCESS: Route multiplexing confirmed — traffic on both DMSG (%d bytes) and STCPR (%d bytes)", dmsgBytes, stcprBytes)
-	} else {
-		// Log but don't hard-fail on bandwidth distribution since it depends on
-		// timing and capability negotiation working end-to-end.
-		// The proxy working at all with both transports is already a good sign.
-		t.Logf("NOTE: Expected bandwidth on both transports. DMSG=%d bytes, STCPR=%d bytes", dmsgBytes, stcprBytes)
-		if dmsgBytes == 0 && stcprBytes == 0 {
-			t.Error("No bandwidth recorded on either transport — proxy may not be functional")
-		}
-	}
-
-	// Verify the total bandwidth is reasonable (at least some bytes from our requests)
-	totalBW := dmsgBytes + stcprBytes
-	require.Greater(t, totalBW, uint64(0), "Total bandwidth should be non-zero after proxy requests")
-	t.Logf("Total bandwidth across muxed transports: %d bytes", totalBW)
-
-	// Also verify on the server side
+	// Verify on the server side too.
 	clientPK := env.visorPKs[visorC]
 	var serverResult []tpWithBW
 	err = env.ExecJSON(
@@ -174,22 +145,14 @@ func testMuxDistributesTraffic(t *testing.T, env *TestEnv) {
 		&serverResult,
 	)
 	if err == nil {
-		var serverDmsgBW, serverStcprBW uint64
+		var serverStcprBW uint64
 		for _, tp := range serverResult {
-			if tp.RemotePK != clientPK {
-				continue
-			}
-			bw := tp.RecvBytes + tp.SentBytes
-			switch types.Type(tp.Type) {
-			case types.DMSG:
-				serverDmsgBW = bw
-			case types.STCPR:
-				serverStcprBW = bw
+			if tp.RemotePK == clientPK && types.Type(tp.Type) == types.STCPR {
+				serverStcprBW = tp.RecvBytes + tp.SentBytes
 			}
 		}
-		t.Logf("Server side — DMSG: %d bytes, STCPR: %d bytes", serverDmsgBW, serverStcprBW)
-
-		serverTotal := serverDmsgBW + serverStcprBW
-		require.Greater(t, serverTotal, uint64(0), "Server should show bandwidth from client")
+		t.Logf("Server side STCPR: %d bytes", serverStcprBW)
+		require.Greater(t, serverStcprBW, uint64(0),
+			"Server should show STCPR bandwidth from client")
 	}
 }
