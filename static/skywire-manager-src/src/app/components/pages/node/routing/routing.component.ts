@@ -1,6 +1,8 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
-import { Subscription } from 'rxjs';
+import { Subscription, interval, startWith } from 'rxjs';
+import { switchMap, catchError } from 'rxjs/operators';
+import { of } from 'rxjs';
 
 import { Node, Route } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
@@ -10,6 +12,31 @@ import { RouteService } from 'src/app/services/route.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { OperationError } from 'src/app/utils/operation-error';
 import { processServiceError } from 'src/app/utils/errors';
+
+// RouteGroupInfo as exposed by the visor's /routegroups endpoint
+// (pkg/visor/api_routing.go). Only the fields surfaced by the UI are
+// declared; extras like FwdNextTpID are kept as `any` so backend
+// additions don't break TypeScript.
+interface RouteGroupHop {
+  tp_id?: string;
+  src_pk?: string;
+  dst_pk?: string;
+}
+interface RouteGroupInfo {
+  desc?: {
+    src_pk?: string;
+    dst_pk?: string;
+    src_port?: number;
+    dst_port?: number;
+  };
+  fwd_rule_id?: number;
+  consume_rule_id?: number;
+  fwd_next_tp_id?: string;
+  initiator?: boolean;
+  hops?: RouteGroupHop[];
+}
+
+type RoutingView = 'rules' | 'groups';
 
 /**
  * Routing tab content: routes list + traffic chart + the inline
@@ -33,9 +60,19 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   showRouterForm = false;
   routerForm: UntypedFormGroup;
 
+  // Active sub-view of the routing tab. Rules is the default
+  // because the existing route list lives there; Groups is the
+  // higher-value diagnostic view (matches `rg ls`) so the toggle
+  // is prominent.
+  activeView: RoutingView = 'rules';
+  routeGroups: RouteGroupInfo[] = [];
+  routeGroupsLoading = false;
+  routeGroupsError: string | null = null;
+
   private dataSubscription: Subscription;
   private trafficSubscription: Subscription;
   private saveRouterSubscription: Subscription;
+  private groupsSubscription: Subscription;
 
   constructor(
     private formBuilder: UntypedFormBuilder,
@@ -69,6 +106,38 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     this.dataSubscription.unsubscribe();
     this.trafficSubscription?.unsubscribe();
     this.saveRouterSubscription?.unsubscribe();
+    this.groupsSubscription?.unsubscribe();
+  }
+
+  setView(v: RoutingView) {
+    if (v === this.activeView) { return; }
+    this.activeView = v;
+    if (v === 'groups' && !this.groupsSubscription) {
+      this.startGroupsPolling();
+    }
+  }
+
+  private startGroupsPolling() {
+    if (!this.nodePK) { return; }
+    // Active route groups change on tp churn. 5s is a reasonable
+    // poll cadence — frequent enough to feel live, slow enough to
+    // not hammer the visor's RPC.
+    this.groupsSubscription = interval(5000).pipe(
+      startWith(0),
+      switchMap(() => this.routeService.routeGroups(this.nodePK).pipe(
+        catchError((err) => {
+          this.routeGroupsError = err?.message || 'Failed to fetch route groups';
+          this.routeGroupsLoading = false;
+          return of(null);
+        }),
+      )),
+    ).subscribe((rgs: any) => {
+      if (rgs == null) { return; }
+      this.routeGroupsError = null;
+      this.routeGroupsLoading = false;
+      this.routeGroups = Array.isArray(rgs) ? rgs : [];
+    });
+    this.routeGroupsLoading = true;
   }
 
   toggleRouterForm() {

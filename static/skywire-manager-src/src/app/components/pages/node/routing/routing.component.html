@@ -31,11 +31,87 @@
   </div>
 }
 
-<app-route-list
-  [routes]="routes"
-  [showShortList]="true"
-  [nodePK]="nodePK">
-</app-route-list>
+<!-- Sub-view toggle: Rules vs Groups. Rules is the existing
+     rule-table view (which-app-owns-which-rule). Groups is the
+     higher-level "what's actually carrying traffic" — descriptor,
+     hops, fwd/consume rule pair, initiator flag. Equivalent to
+     `skywire cli rg ls`. -->
+<div class="routing-view-toggle mt-3">
+  <button mat-button
+          [class.active]="activeView === 'rules'"
+          (click)="setView('rules')">
+    {{ 'routing.view.rules' | translate }}
+  </button>
+  <button mat-button
+          [class.active]="activeView === 'groups'"
+          (click)="setView('groups')">
+    {{ 'routing.view.groups' | translate }}
+  </button>
+</div>
+
+@if (activeView === 'rules') {
+  <app-route-list
+    [routes]="routes"
+    [showShortList]="true"
+    [nodePK]="nodePK">
+  </app-route-list>
+}
+
+@if (activeView === 'groups') {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'routing.groups.title' | translate }}</span>
+
+      @if (routeGroupsLoading && routeGroups.length === 0) {
+        <div class="loading-row">
+          <mat-spinner [diameter]="16"></mat-spinner>
+          <span class="ml-2">{{ 'routing.groups.loading' | translate }}</span>
+        </div>
+      }
+
+      @if (routeGroupsError) {
+        <div class="error-row">{{ routeGroupsError }}</div>
+      }
+
+      @if (!routeGroupsLoading && routeGroups.length === 0 && !routeGroupsError) {
+        <div class="empty-row">{{ 'routing.groups.empty' | translate }}</div>
+      }
+
+      @if (routeGroups.length > 0) {
+        <table class="data-table mt-2">
+          <tr>
+            <th>{{ 'routing.groups.role' | translate }}</th>
+            <th>{{ 'routing.groups.remote' | translate }}</th>
+            <th>{{ 'routing.groups.ports' | translate }}</th>
+            <th>{{ 'routing.groups.fwd-rule' | translate }}</th>
+            <th>{{ 'routing.groups.consume-rule' | translate }}</th>
+            <th>{{ 'routing.groups.hops' | translate }}</th>
+            <th>{{ 'routing.groups.next-tp' | translate }}</th>
+          </tr>
+          @for (rg of routeGroups; track $index) {
+            <tr>
+              <td>
+                <span class="rg-role" [class.rg-initiator]="rg.initiator">
+                  {{ rg.initiator ? 'initiator' : 'responder' }}
+                </span>
+              </td>
+              <td class="mono small">
+                {{ (rg.initiator ? rg.desc?.dst_pk : rg.desc?.src_pk) || '-' }}
+              </td>
+              <td class="mono">
+                {{ rg.desc?.src_port }}:{{ rg.desc?.dst_port }}
+              </td>
+              <td class="mono">{{ rg.fwd_rule_id ?? '-' }}</td>
+              <td class="mono">{{ rg.consume_rule_id ?? '-' }}</td>
+              <td>{{ rg.hops?.length || 0 }}</td>
+              <td class="mono small">{{ rg.fwd_next_tp_id || '-' }}</td>
+            </tr>
+          }
+        </table>
+      }
+    </div>
+  </div>
+}
 
 <!-- Traffic data — moved here from the right-bar on the visor
      detail page so it sits with the rest of the routing surface

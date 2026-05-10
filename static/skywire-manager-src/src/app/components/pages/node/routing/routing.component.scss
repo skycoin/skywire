@@ -1,0 +1,48 @@
+
+// Sub-view toggle within the routing tab — switches between
+// rules-table view and route-groups view (rg ls equivalent).
+.routing-view-toggle {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px;
+
+  button.active {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.95);
+  }
+}
+
+// Loading / empty / error states inside the groups view.
+.loading-row,
+.empty-row,
+.error-row {
+  padding: 18px 16px;
+  color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  align-items: center;
+}
+.error-row {
+  color: #ff6b6b;
+}
+
+// Role badges in the route-groups table.
+.rg-role {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.85em;
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+}
+.rg-role.rg-initiator {
+  background-color: rgba(76, 175, 80, 0.18);
+  color: #81c784;
+}
+
+// Truncate the long-PK and tp-id cells via mono.small instead of
+// hardcoding widths — keeps rows compact without dropping data.
+td.mono.small,
+.mono.small {
+  font-size: 0.85em;
+}

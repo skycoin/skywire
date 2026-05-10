@@ -34,4 +34,15 @@ export class RouteService {
 
     return this.apiService.post(`visors/${nodeKey}/min-hops`, data);
   }
+
+  /**
+   * Lists active route groups on the visor — descriptor (src/dst PK
+   * + ports), forward/consume rule IDs, hops, and initiator flag.
+   * Maps directly onto the CLI's `skywire cli route groups` /
+   * `rg ls`. The HTTP endpoint /visors/<pk>/routegroups is exposed
+   * by the hypervisor's getRouteGroups handler.
+   */
+  routeGroups(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/routegroups`);
+  }
 }

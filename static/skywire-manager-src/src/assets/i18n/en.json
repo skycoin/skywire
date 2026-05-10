@@ -1145,6 +1145,25 @@
     }
   },
 
+  "routing": {
+    "view": {
+      "rules": "Rules",
+      "groups": "Route Groups"
+    },
+    "groups": {
+      "title": "Active Route Groups",
+      "loading": "Loading route groups…",
+      "empty": "No active route groups.",
+      "role": "Role",
+      "remote": "Remote",
+      "ports": "Ports",
+      "fwd-rule": "Fwd RID",
+      "consume-rule": "Consume RID",
+      "hops": "Hops",
+      "next-tp": "Next TP"
+    }
+  },
+
   "routes": {
     "title": "Routes",
     "info": "Paths used to reach the remote visors to which transports have been established. Routes are automatically generated as needed.",
