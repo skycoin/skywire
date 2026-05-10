@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"net"
 	"regexp"
-	"strconv"
-	"strings"
 
 	"github.com/armon/go-socks5"
 	"golang.org/x/net/proxy"
@@ -201,6 +199,31 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				}
 				done(nil)
 
+				// Build the conn stack inside-out. The raw skywire
+				// conn is the innermost layer. Optional host-rewrite
+				// wraps it next (so the rewriter sees plaintext
+				// HTTP). Optional MITM TLS terminator is the outer
+				// layer (so the browser sees a TLS server).
+				//
+				// Order rationale:
+				//
+				//   Browser  ──TLS──► MITMTerminate ──plaintext──► hostRewriteConn ──plaintext──► raw conn ──► backend
+				//
+				// hostRewriteConn parses HTTP/1.1 between MITM
+				// decryption and the wire. If MITM is off, the
+				// browser is already sending plaintext directly to
+				// hostRewriteConn — same parser, same effect.
+				var stack net.Conn = conn
+				if target.subdomain != "" {
+					// `subdomain` already encodes the operator's
+					// intent (the URL has labels before the PK).
+					// Use it verbatim as the rewritten Host.
+					stack = newHostRewriteConn(stack, target.subdomain)
+					log.WithField("pk", target.pk.Hex()).
+						WithField("rewrite_host", target.subdomain).
+						Debug("SOCKS5 → skynet host-rewrite active")
+				}
+
 				// Optional TLS MITM: terminate the browser's TLS
 				// session locally with a leaf cert for the host,
 				// splicing plaintext to the merchant's plain-HTTP
@@ -211,13 +234,13 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				if cfg.TLSMITM && target.port == cfg.TLSPort {
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
-						_ = conn.Close()
+						_ = stack.Close() //nolint:errcheck,gosec
 						return nil, fmt.Errorf("skynet mitm leaf: %w", lerr)
 					}
-					return &tcpAddrConn{Conn: skynetca.MITMTerminate(conn, leaf)}, nil
+					stack = skynetca.MITMTerminate(stack, leaf)
 				}
 
-				return &tcpAddrConn{Conn: conn}, nil
+				return &tcpAddrConn{Conn: stack}, nil
 			}
 
 			// Not .skynet — forward to upstream or direct.
@@ -290,24 +313,28 @@ func isSkynetHost(host, suffix string) bool {
 type target struct {
 	pk   cipher.PubKey
 	port uint16
+	// subdomain is the label(s) before the PK in the original
+	// hostname, when the visitor used a vhost-style URL like
+	// "<subdomain>.<pk>.skynet". Empty when the URL was just
+	// "<pk>.skynet". Triggers the Host-header rewrite path in the
+	// dial wiring — see newHostRewriteConn in hostrewrite.go.
+	subdomain string
 }
 
-// parseHostHeader turns "<pk>.skynet[:<port>]" into (pk, port). Port
+// parseHostHeader turns "<pk>.skynet[:<port>]" or
+// "<subdomain>.<pk>.skynet[:<port>]" into a target struct. Port
 // defaults to 80 when absent to match conventional HTTP semantics.
+// The subdomain field is non-empty only when there was at least one
+// label before the PK; that signals the runtime to apply the
+// Host-rewrite wrapper.
 func parseHostHeader(host, suffix string) (target, error) {
-	hostParts := strings.SplitN(host, ":", 2)
-	pkHost := strings.TrimSuffix(hostParts[0], suffix)
+	pkLabel, subdomain, port, err := splitHostSubdomain(host, suffix)
+	if err != nil {
+		return target{}, err
+	}
 	var pk cipher.PubKey
-	if err := pk.Set(pkHost); err != nil {
-		return target{}, fmt.Errorf("invalid pk %q: %w", pkHost, err)
+	if err := pk.Set(pkLabel); err != nil {
+		return target{}, fmt.Errorf("invalid pk %q: %w", pkLabel, err)
 	}
-	port := uint16(80)
-	if len(hostParts) == 2 && hostParts[1] != "" {
-		n, err := strconv.ParseUint(hostParts[1], 10, 16)
-		if err != nil {
-			return target{}, fmt.Errorf("invalid port: %w", err)
-		}
-		port = uint16(n)
-	}
-	return target{pk: pk, port: port}, nil
+	return target{pk: pk, port: port, subdomain: subdomain}, nil
 }
