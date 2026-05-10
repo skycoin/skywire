@@ -132,6 +132,13 @@ func (m *memoryCXDS) Set(
 	m.mx.Lock()
 	defer m.mx.Unlock()
 
+	// Guard against a late writer racing past Close — Close sets
+	// m.kvs = nil and any in-flight Set/Inc would panic on the
+	// nil-map write below otherwise.
+	if m.kvs == nil {
+		return 0, ErrClosed
+	}
+
 	if mo, ok := m.kvs[key]; ok {
 		rc = m.incr(key, mo, mo.rc, inc)
 		return rc, err
