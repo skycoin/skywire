@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,15 +30,16 @@ import (
 )
 
 var (
-	calcEnable   bool
-	calcDisable  bool
-	calcTimeout  time.Duration
-	tpdURL       string
-	calcMinHops  uint16
-	calcMaxHops  uint16
-	calcCount    int
-	calcSource   string
-	calcQueueCap int
+	calcEnable    bool
+	calcDisable   bool
+	calcTimeout   time.Duration
+	tpdURL        string
+	calcMinHops   uint16
+	calcMaxHops   uint16
+	calcCount     int
+	calcSource    string
+	calcQueueCap  int
+	calcByLatency bool
 )
 
 func init() {
@@ -50,6 +52,7 @@ func init() {
 	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
 	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP), dht (visor's local DHT store), auto (DHT then TPD)")
 	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
+	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", false, "rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort")
 	clirpc.RegisterFetchFlags(calcCmd)
 }
 
@@ -154,7 +157,10 @@ var calcCmd = &cobra.Command{
 		// holding the full result set in memory. This is the only
 		// path that can handle --count 0 (unbounded) on dense graphs
 		// without OOMing the CLI.
-		if rpcClient != nil && strings.ToLower(calcSource) != "dht" {
+		// gRPC streaming path emits routes one-by-one as the BFS
+		// finds them; sorting by latency needs the full set in hand,
+		// so --by-latency forces the local-compute path below.
+		if !calcByLatency && rpcClient != nil && strings.ToLower(calcSource) != "dht" {
 			if err := streamRoutesViaGRPC(ctx, cmd, srcPK, dstPK, minHops, calcMaxHops, calcCount, calcQueueCap, calcSource, tpdURL); err == nil {
 				return
 			} else if !isFallbackEligible(err) {
@@ -202,22 +208,61 @@ var calcCmd = &cobra.Command{
 		}
 
 		type routePair struct {
-			Forward []routing.Hop `json:"forward"`
-			Reverse []routing.Hop `json:"reverse"`
+			Forward        []routing.Hop `json:"forward"`
+			Reverse        []routing.Hop `json:"reverse"`
+			CumLatencyMS   float64       `json:"cum_latency_ms,omitempty"`
+			HasFullLatency bool          `json:"has_full_latency,omitempty"`
 		}
 		pairs := make([]routePair, len(routes))
-		var textBuf strings.Builder
 		for i, r := range routes {
 			fwd := r.Hops
-			rev := reverseHops(fwd)
-			pairs[i] = routePair{Forward: fwd, Reverse: rev}
+			pairs[i] = routePair{Forward: fwd, Reverse: reverseHops(fwd)}
+		}
+
+		// --by-latency: fetch per-visor metrics, build a tp→latency
+		// map, fold into each route, sort. Skipped when the flag is
+		// off so we don't pay the metric-fetch cost for the default
+		// no-sort emit.
+		if calcByLatency {
+			hopsView := make([][]routing.Hop, len(pairs))
+			for i := range pairs {
+				hopsView[i] = pairs[i].Forward
+			}
+			latencyByTpID, lookupErr := fetchTpLatencyMap(cmd, hopsView)
+			if lookupErr != nil {
+				fmt.Fprintf(os.Stderr, "calc: metric fetch partial failure: %v (routes still listed; some routes may sort with +Inf latency)\n", lookupErr)
+			}
+			for i := range pairs {
+				cum, allMeasured := cumulativeLatencyMS(pairs[i].Forward, latencyByTpID)
+				pairs[i].CumLatencyMS = cum
+				pairs[i].HasFullLatency = allMeasured
+			}
+			sort.SliceStable(pairs, func(i, j int) bool {
+				// All-measured wins ties against partially-measured;
+				// inside each class the lower cumulative latency wins.
+				if pairs[i].HasFullLatency != pairs[j].HasFullLatency {
+					return pairs[i].HasFullLatency
+				}
+				return pairs[i].CumLatencyMS < pairs[j].CumLatencyMS
+			})
+		}
+
+		var textBuf strings.Builder
+		for i, p := range pairs {
 			if i > 0 {
 				textBuf.WriteString("\n\n")
 			}
 			if calcCount != 1 {
-				fmt.Fprintf(&textBuf, "[%d/%d]\n", i+1, len(routes))
+				fmt.Fprintf(&textBuf, "[%d/%d]\n", i+1, len(pairs))
 			}
-			fmt.Fprintf(&textBuf, "forward: %v\nreverse: %v", fwd, rev)
+			if calcByLatency {
+				if p.HasFullLatency {
+					fmt.Fprintf(&textBuf, "cumulative latency: %.2f ms\n", p.CumLatencyMS)
+				} else {
+					fmt.Fprintf(&textBuf, "cumulative latency: %.2f ms  (some hops unmeasured)\n", p.CumLatencyMS)
+				}
+			}
+			fmt.Fprintf(&textBuf, "forward: %v\nreverse: %v", p.Forward, p.Reverse)
 		}
 		textBuf.WriteString("\n")
 
@@ -481,3 +526,96 @@ func (s *memoryStore) GetTransportMetricsByVisors(context.Context, []cipher.PubK
 	return nil, nil
 }
 func (s *memoryStore) Close() {}
+
+// transportMetricEntry mirrors the JSON shape that TPD's
+// /metrics/visor/{pks} endpoint emits per transport. Latency values
+// from that endpoint are in microseconds; the cumulative-latency
+// reporter converts to milliseconds for display.
+type transportMetricEntry struct {
+	ID      string `json:"id"`
+	Live    bool   `json:"live"`
+	Latency struct {
+		Min float64 `json:"min"`
+		Max float64 `json:"max"`
+		Avg float64 `json:"avg"`
+	} `json:"latency"`
+}
+
+// fetchTpLatencyMap pulls per-transport latency (in milliseconds)
+// for every unique visor PK appearing in the candidate routes. Uses
+// the standard CLI fetch chain (CXO subscriber → DMSG RPC → HTTP)
+// via clirpc.FetchServiceURL, so the lookup costs are amortized over
+// whichever transport is fastest for the caller's setup.
+//
+// Returns the map and a non-nil error when at least one visor's
+// metrics couldn't be fetched. The map still contains partial data
+// — callers fold any unmeasured transports into the +Inf bucket
+// during sort.
+func fetchTpLatencyMap(cmd *cobra.Command, routesHops [][]routing.Hop) (map[uuid.UUID]float64, error) {
+	uniqPKs := map[cipher.PubKey]struct{}{}
+	for _, hops := range routesHops {
+		for _, h := range hops {
+			uniqPKs[h.From] = struct{}{}
+			uniqPKs[h.To] = struct{}{}
+		}
+	}
+	if len(uniqPKs) == 0 {
+		return map[uuid.UUID]float64{}, nil
+	}
+
+	tpdBase := tpdURL
+	if tpdBase == "" {
+		tpdBase = deployment.Prod.TransportDiscovery
+	}
+	out := make(map[uuid.UUID]float64, 64)
+	var firstErr error
+	for pk := range uniqPKs {
+		url := fmt.Sprintf("%s/metrics/visor/%s", strings.TrimRight(tpdBase, "/"), pk.Hex())
+		body, err := clirpc.FetchServiceURL(cmd.Flags(), url)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%s: %w", pk.Hex(), err)
+			}
+			continue
+		}
+		var entries []transportMetricEntry
+		if jerr := json.Unmarshal(body, &entries); jerr != nil {
+			if firstErr == nil {
+				firstErr = fmt.Errorf("%s: parse metrics: %w", pk.Hex(), jerr)
+			}
+			continue
+		}
+		for _, e := range entries {
+			if !e.Live || e.Latency.Avg <= 0 {
+				continue
+			}
+			tpID, perr := uuid.Parse(e.ID)
+			if perr != nil {
+				continue
+			}
+			// TPD stores latency in microseconds; the displayed unit
+			// is milliseconds. Divide once on ingest so the rest of
+			// the pipeline (sort, sum, print) is in a single unit.
+			out[tpID] = e.Latency.Avg / 1000.0
+		}
+	}
+	return out, firstErr
+}
+
+// cumulativeLatencyMS sums per-hop latency for a route. Returns the
+// sum and a bool that's true only when every hop had a measurement;
+// unmeasured hops contribute +Inf to the sum so they sort to the
+// end and the bool flips false to surface that to the operator.
+func cumulativeLatencyMS(hops []routing.Hop, latByID map[uuid.UUID]float64) (float64, bool) {
+	var sum float64
+	allMeasured := true
+	for _, h := range hops {
+		if lat, ok := latByID[h.TpID]; ok {
+			sum += lat
+		} else {
+			sum = math.Inf(1)
+			allMeasured = false
+		}
+	}
+	return sum, allMeasured
+}
