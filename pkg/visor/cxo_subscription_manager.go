@@ -317,6 +317,178 @@ func (m *CXOSubscriptionManager) Close() {
 	}
 }
 
+// FeedStatus is one row of CXOSubscriptionManager.Status. Tells the
+// operator everything needed to decide whether a CXO miss is "the
+// snapshot is genuinely empty", "the cycle has never run", or "the
+// cycle keeps failing for reason X". Exposed via the visor RPC so
+// `skywire cli visor cxo status` can render it.
+type FeedStatus struct {
+	// Feed is the FeedXxx constant's stable string name (matches the
+	// label CXOFeedString returns).
+	Feed string
+	// PeerPK is the publisher's PK (or empty if not configured).
+	PeerPK string
+	// DmsgPort is the publisher's CXO port.
+	DmsgPort uint16
+	// Prefix is the TreeStore path prefix this feed walks under.
+	Prefix string
+	// SnapshotPaths is the number of (path, body) entries currently
+	// cached. 0 + LastSyncAt zero means "no cycle has ever completed".
+	SnapshotPaths int
+	// SnapshotBytes is the sum of body lengths in the snapshot. Quick
+	// "how much memory is this feed using" check.
+	SnapshotBytes int
+	// LastSyncAt is the wall-clock time of the most recent successful
+	// sync. Zero when no cycle has ever finished cleanly.
+	LastSyncAt time.Time
+	// LastErr is the sticky last error from syncOnce, cleared on
+	// success. Empty when the most recent cycle worked.
+	LastErr string
+	// Refcount is the number of holders that have currently AcquireFor'd
+	// this feed without releasing it. >0 means a cycle is running.
+	Refcount int
+	// CycleRunning is true while the per-feed goroutine is alive (i.e.
+	// inside its tick loop). Goes false during the grace-period close.
+	CycleRunning bool
+	// SpecErr is non-empty if feedSpec couldn't resolve the publisher
+	// (e.g. SD CXO peer not configured) — meaning the feed can never
+	// sync until the visor config is fixed.
+	SpecErr string
+}
+
+// Status returns a snapshot of every feed the manager knows about
+// (i.e. every feed someone has ever acquired). Feeds that were never
+// touched don't appear; callers should treat absence as "no cycle
+// ever started". Safe to call on a nil receiver — returns nil.
+func (m *CXOSubscriptionManager) Status() []FeedStatus {
+	if m == nil {
+		return nil
+	}
+	m.mu.Lock()
+	out := make([]FeedStatus, 0, len(m.feeds))
+	for fk, f := range m.feeds {
+		st := FeedStatus{Feed: CXOFeedString(fk)}
+		if pk, port, prefix, err := m.feedSpec(fk); err != nil {
+			st.SpecErr = err.Error()
+		} else {
+			st.PeerPK = pk.Hex()
+			st.DmsgPort = port
+			st.Prefix = prefix
+		}
+		st.Refcount = f.refcount
+		st.CycleRunning = f.cancel != nil
+		f.snapMu.RLock()
+		st.SnapshotPaths = len(f.snapshot)
+		for _, body := range f.snapshot {
+			st.SnapshotBytes += len(body)
+		}
+		st.LastSyncAt = f.lastSyncAt
+		if f.lastErr != nil {
+			st.LastErr = f.lastErr.Error()
+		}
+		f.snapMu.RUnlock()
+		out = append(out, st)
+	}
+	m.mu.Unlock()
+	return out
+}
+
+// RefreshNow forces a fresh subscribe → first-Root → walk cycle for
+// `feed` and blocks until either the cycle reports success/failure or
+// the caller's ctx expires. Unlike AcquireFor — which starts a cycle
+// goroutine and returns immediately, leaving the caller racing the
+// first sync — this is synchronous: the returned FeedStatus reflects
+// the snapshot AFTER the sync attempt. Used by `skywire cli visor cxo
+// refresh` so an operator can deterministically test "can this visor
+// actually reach the publisher right now".
+//
+// The cycle goroutine started by AcquireFor (if any) is left alone;
+// this opens its own short-lived subscriber.
+func (m *CXOSubscriptionManager) RefreshNow(ctx context.Context, feed CXOFeed) (FeedStatus, error) {
+	if m == nil {
+		return FeedStatus{}, errors.New("cxo manager not initialized (no DMSG client?)")
+	}
+	m.mu.Lock()
+	f, ok := m.feeds[feed]
+	if !ok {
+		f = &managedFeed{}
+		m.feeds[feed] = f
+	}
+	m.mu.Unlock()
+	m.syncOnce(ctx, feed, f)
+	st := m.statusFor(feed, f)
+	if f.lastErr != nil {
+		return st, f.lastErr
+	}
+	return st, nil
+}
+
+// statusFor builds a FeedStatus for one feed under the manager's lock
+// discipline. Pulled out so Status() and RefreshNow() share one
+// implementation.
+func (m *CXOSubscriptionManager) statusFor(fk CXOFeed, f *managedFeed) FeedStatus {
+	st := FeedStatus{Feed: CXOFeedString(fk)}
+	if pk, port, prefix, err := m.feedSpec(fk); err != nil {
+		st.SpecErr = err.Error()
+	} else {
+		st.PeerPK = pk.Hex()
+		st.DmsgPort = port
+		st.Prefix = prefix
+	}
+	m.mu.Lock()
+	st.Refcount = f.refcount
+	st.CycleRunning = f.cancel != nil
+	m.mu.Unlock()
+	f.snapMu.RLock()
+	st.SnapshotPaths = len(f.snapshot)
+	for _, body := range f.snapshot {
+		st.SnapshotBytes += len(body)
+	}
+	st.LastSyncAt = f.lastSyncAt
+	if f.lastErr != nil {
+		st.LastErr = f.lastErr.Error()
+	}
+	f.snapMu.RUnlock()
+	return st
+}
+
+// CXOFeedString returns the stable string label for a feed constant.
+// Used by Status / RefreshNow so RPC clients don't need to import the
+// CXOFeed integer enum.
+func CXOFeedString(feed CXOFeed) string {
+	switch feed {
+	case FeedTPDMetrics:
+		return "tpd-metrics"
+	case FeedTPDUptime:
+		return "tpd-uptime"
+	case FeedSDServices:
+		return "sd-services"
+	case FeedDMSGDClientsByServer:
+		return "dmsgd-clients-by-server"
+	case FeedTPDAllTransports:
+		return "tpd-all-transports"
+	}
+	return fmt.Sprintf("feed#%d", feed)
+}
+
+// CXOFeedFromString is the inverse of CXOFeedString. Returns ok=false
+// for any unrecognized name.
+func CXOFeedFromString(name string) (CXOFeed, bool) {
+	switch name {
+	case "tpd-metrics":
+		return FeedTPDMetrics, true
+	case "tpd-uptime":
+		return FeedTPDUptime, true
+	case "sd-services":
+		return FeedSDServices, true
+	case "dmsgd-clients-by-server":
+		return FeedDMSGDClientsByServer, true
+	case "tpd-all-transports":
+		return FeedTPDAllTransports, true
+	}
+	return 0, false
+}
+
 // LastError returns the sticky last error seen by syncOnce on a
 // feed, or nil if the most recent cycle succeeded (or no cycle has
 // ever run). Exposed for /health-style introspection.

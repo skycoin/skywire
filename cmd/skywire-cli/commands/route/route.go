@@ -19,6 +19,7 @@ import (
 	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -26,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -139,6 +141,8 @@ var (
 	remotePort  routing.Port
 	keepAlive   time.Duration
 	showNextRid bool
+	routeLive   bool
+	groupsLive  bool
 )
 
 // RootCmd is routeCmd
@@ -180,6 +184,7 @@ func init() {
 	fwdRuleCmd.Flags().StringVarP(&rPt, "rpt", "q", "", "remote port")
 	routeCmd.Flags().BoolVarP(&showNextRid, "nrid", "n", false, "display the next available route id")
 	routeCmd.Flags().StringVarP(&rID, "rid", "i", "", "show routing rule matching route ID")
+	routeCmd.Flags().BoolVarP(&routeLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick) for the routing-rules listing")
 	rmRuleCmd.Flags().BoolVarP(&removeAll, "all", "a", false, "remove all routing rules")
 }
 
@@ -192,6 +197,26 @@ var routeCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
+
+		// --live: bubbletea watch view of the rules table. Each tick
+		// re-runs RoutingRules() and re-renders. Single-rule lookup
+		// (--rid) and --nrid stay one-shot; nothing to watch there.
+		if routeLive {
+			if rID != "" || showNextRid {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--live cannot be combined with --rid/--nrid"))
+			}
+			err := livetui.Run(func(ctx context.Context) (string, error) {
+				return renderRoutingRulesLive(rpcClient)
+			}, livetui.Options{
+				Title:    "skywire cli route",
+				Interval: time.Second,
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+
 		if rID != "" {
 			rule, err := rpcClient.RoutingRule(routing.RouteID(parseUint(cmd.Flags(), "route id flag value -i --rid", rID, 32)))
 			internal.Catch(cmd.Flags(), err)
@@ -514,6 +539,8 @@ func init() {
 		"role filter: all | initiator | responder")
 	groupsCmd.Flags().BoolVar(&groupsHops, "hops", false,
 		"also print the full hop path for each route group")
+	groupsCmd.Flags().BoolVarP(&groupsLive, "live", "L", false,
+		"live-refresh mode (bubbletea TUI, 1s tick); shows route groups created/torn down in place")
 }
 
 var groupsCmd = &cobra.Command{
@@ -527,6 +554,22 @@ we accepted). Use --hops to also print the full forward path.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
+
+		// --live: bubbletea watch view of the route-groups table.
+		// Honors --filter and --hops; re-fetches on every tick.
+		if groupsLive {
+			err := livetui.Run(func(ctx context.Context) (string, error) {
+				return renderRouteGroupsLive(rpcClient)
+			}, livetui.Options{
+				Title:    "skywire cli route groups",
+				Interval: time.Second,
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+
 		rgs, err := rpcClient.RouteGroups()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get route groups: %w", err))
@@ -603,4 +646,126 @@ we accepted). Use --hops to also print the full forward path.`,
 		internal.Catch(cmd.Flags(), w.Flush())
 		internal.PrintOutput(cmd.Flags(), rgs, b.String())
 	},
+}
+
+// renderRoutingRulesLive builds a snapshot of the local routing-rules
+// table for the --live bubbletea viewport. Mirrors printRoutingRules'
+// columns but writes to a string (no PrintOutput / no JSON branch);
+// the watcher re-invokes this every tick so the operator sees rules
+// being installed and expiring without re-running the command.
+func renderRoutingRulesLive(rpcClient visor.API) (string, error) {
+	rules, err := rpcClient.RoutingRules()
+	if err != nil {
+		return "", err
+	}
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
+	fmt.Fprintln(w, "id\ttype\tlocal-port\tremote-port\tremote-pk\tnext-route-id\tnext-transport-id\texpire-at") //nolint:errcheck
+	for _, rule := range rules {
+		s := rule.Summary()
+		switch {
+		case s.ConsumeFields != nil:
+			fmt.Fprintf(w, "%d\t%s\t%d\t%d\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+				rule.KeyRouteID(), s.Type,
+				s.ConsumeFields.RouteDescriptor.SrcPort,
+				s.ConsumeFields.RouteDescriptor.DstPort,
+				s.ConsumeFields.RouteDescriptor.DstPK,
+				"-", "-", s.KeepAlive)
+		case s.Type == routing.RuleForward:
+			fmt.Fprintf(w, "%d\t%s\t%d\t%d\t%s\t%d\t%s\t%s\n", //nolint:errcheck
+				rule.NextRouteID(), s.Type,
+				s.ForwardFields.RouteDescriptor.SrcPort,
+				s.ForwardFields.RouteDescriptor.DstPort,
+				s.ForwardFields.RouteDescriptor.DstPK,
+				s.ForwardFields.NextRID,
+				s.ForwardFields.NextTID,
+				s.KeepAlive)
+		default:
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", //nolint:errcheck
+				rule.NextRouteID(), s.Type, "-", "-", "-",
+				s.IntermediaryForwardFields.NextRID,
+				s.IntermediaryForwardFields.NextTID,
+				s.KeepAlive)
+		}
+	}
+	if err := w.Flush(); err != nil {
+		return "", err
+	}
+	out := b.String()
+	out += fmt.Sprintf("\n%d rule(s)\n", len(rules))
+	return out, nil
+}
+
+// renderRouteGroupsLive mirrors groupsCmd's text branch but returns a
+// string instead of printing. Used by --live to re-render the table
+// each tick. Re-applies --filter and --hops just like the one-shot
+// path so the watch view tracks the operator's chosen scope.
+func renderRouteGroupsLive(rpcClient visor.API) (string, error) {
+	rgs, err := rpcClient.RouteGroups()
+	if err != nil {
+		return "", fmt.Errorf("failed to get route groups: %w", err)
+	}
+	switch strings.ToLower(groupsFilter) {
+	case "", "all":
+	case "initiator":
+		filtered := rgs[:0]
+		for _, rg := range rgs {
+			if rg.Initiator {
+				filtered = append(filtered, rg)
+			}
+		}
+		rgs = filtered
+	case "responder":
+		filtered := rgs[:0]
+		for _, rg := range rgs {
+			if !rg.Initiator {
+				filtered = append(filtered, rg)
+			}
+		}
+		rgs = filtered
+	default:
+		return "", fmt.Errorf("invalid --filter %q; expected all|initiator|responder", groupsFilter)
+	}
+
+	if len(rgs) == 0 {
+		return "No active route groups\n", nil
+	}
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
+	fmt.Fprintln(w, "index\trole\tlocal_pk\tremote_pk\tlocal_port\tremote_port\tfwd_id\tconsume_id\ttransport") //nolint:errcheck
+	for i, rg := range rgs {
+		tpID := rg.FwdNextTpID
+		if tpID == "" {
+			tpID = "-"
+		}
+		role := "responder"
+		if rg.Initiator {
+			role = "initiator"
+		}
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%d\t%d\t%d\t%d\t%s\n", //nolint:errcheck
+			i, role, rg.Desc.DstPK, rg.Desc.SrcPK,
+			rg.Desc.DstPort, rg.Desc.SrcPort,
+			rg.FwdRuleID, rg.ConsumeRuleID, tpID)
+		if groupsHops {
+			if len(rg.Hops) == 0 {
+				fmt.Fprintln(w, "    hops:\t(not recorded)") //nolint:errcheck
+				continue
+			}
+			for j, h := range rg.Hops {
+				tpType := h.TpType
+				if tpType == "" {
+					tpType = "?"
+				}
+				fmt.Fprintf(w, "    hop %d/%d:\t%s -> %s @ %s (%s)\n", //nolint:errcheck
+					j+1, len(rg.Hops), h.From, h.To, h.TpID, tpType)
+			}
+		}
+	}
+	if err := w.Flush(); err != nil {
+		return "", err
+	}
+	out := b.String()
+	out += fmt.Sprintf("\n%d group(s)\n", len(rgs))
+	return out, nil
 }

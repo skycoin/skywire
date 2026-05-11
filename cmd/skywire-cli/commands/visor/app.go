@@ -3,6 +3,8 @@ package clivisor
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,10 +15,12 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -25,6 +29,7 @@ var localPath string
 var procKey string
 var useInternal bool
 var useExternal bool
+var lsAppsLive bool
 
 func init() {
 	// cobra.EnableCommandSorting used to be set to false here, which
@@ -62,6 +67,8 @@ func init() {
 	startAppCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startAppCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startAppCmd.MarkFlagsMutuallyExclusive("internal", "external")
+	lsAppsCmd.Flags().BoolVarP(&lsAppsLive, "live", "L", false,
+		"live-refresh mode (bubbletea TUI, 1s tick); shows app status transitions in place")
 }
 
 var argCmd = &cobra.Command{
@@ -84,45 +91,75 @@ var lsAppsCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
+
+		if lsAppsLive {
+			err := livetui.Run(func(ctx context.Context) (string, error) {
+				return renderAppListLive(rpcClient)
+			}, livetui.Options{
+				Title:    "skywire cli visor app ls",
+				Interval: time.Second,
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+
 		states, err := rpcClient.Apps()
 		internal.Catch(cmd.Flags(), err)
-		var b bytes.Buffer
-		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
-		_, err = fmt.Fprintln(w, "app\tport\tauto_start\tstatus\tdetailed_status")
-		internal.Catch(cmd.Flags(), err)
-
-		type appState struct {
-			App            string `json:"app"`
-			Port           int    `json:"port"`
-			AutoStart      bool   `json:"auto_start"`
-			Status         string `json:"status"`
-			DetailedStatus string `json:"detailed_status"`
-		}
-
-		var appStates []appState
-		for _, state := range states {
-			status := "stopped"
-			if state.Status == appserver.AppStatusRunning {
-				status = "running"
-			}
-			if state.Status == appserver.AppStatusErrored {
-				status = "errored"
-			}
-			_, err = fmt.Fprintf(w, "%s\t%s\t%t\t%s\t%s\n", state.Name, strconv.Itoa(int(state.Port)),
-				state.AutoStart, status, state.DetailedStatus)
-			internal.Catch(cmd.Flags(), err)
-			s := appState{
-				App:            state.Name,
-				Port:           int(state.Port),
-				AutoStart:      state.AutoStart,
-				Status:         status,
-				DetailedStatus: state.DetailedStatus,
-			}
-			appStates = append(appStates, s)
-		}
-		internal.Catch(cmd.Flags(), w.Flush())
-		internal.PrintOutput(cmd.Flags(), appStates, b.String())
+		appStates, text := formatAppList(states)
+		internal.PrintOutput(cmd.Flags(), appStates, text)
 	},
+}
+
+type appLsState struct {
+	App            string `json:"app"`
+	Port           int    `json:"port"`
+	AutoStart      bool   `json:"auto_start"`
+	Status         string `json:"status"`
+	DetailedStatus string `json:"detailed_status"`
+}
+
+// formatAppList returns both the JSON-friendly per-app rows and the
+// rendered tab-aligned text block. Shared between the one-shot ls
+// path and the --live watcher so they stay in lockstep.
+func formatAppList(states []*appserver.AppState) ([]appLsState, string) {
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+	fmt.Fprintln(w, "app\tport\tauto_start\tstatus\tdetailed_status") //nolint:errcheck
+
+	out := make([]appLsState, 0, len(states))
+	for _, state := range states {
+		status := "stopped"
+		switch state.Status {
+		case appserver.AppStatusRunning:
+			status = "running"
+		case appserver.AppStatusErrored:
+			status = "errored"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%t\t%s\t%s\n", //nolint:errcheck
+			state.Name, strconv.Itoa(int(state.Port)),
+			state.AutoStart, status, state.DetailedStatus)
+		out = append(out, appLsState{
+			App:            state.Name,
+			Port:           int(state.Port),
+			AutoStart:      state.AutoStart,
+			Status:         status,
+			DetailedStatus: state.DetailedStatus,
+		})
+	}
+	w.Flush() //nolint:errcheck,gosec
+	return out, b.String()
+}
+
+func renderAppListLive(rpcClient visor.API) (string, error) {
+	states, err := rpcClient.Apps()
+	if err != nil {
+		return "", err
+	}
+	_, text := formatAppList(states)
+	text += fmt.Sprintf("\n%d app(s)\n", len(states))
+	return text, nil
 }
 
 var startAppCmd = &cobra.Command{

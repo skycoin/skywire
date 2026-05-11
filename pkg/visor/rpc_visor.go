@@ -230,6 +230,32 @@ func (r *RPC) FetchCXO(args *FetchCXOArgs, out *FetchCXOResult) (err error) {
 	return nil
 }
 
+// CXOStatus exposes the CXO subscription manager's per-feed state for
+// `skywire cli visor cxo status`. See Visor.CXOStatus for semantics.
+func (r *RPC) CXOStatus(_ *struct{}, out *[]FeedStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "CXOStatus", nil)(out, &err)
+	res, err := r.visor.CXOStatus()
+	if err != nil {
+		return err
+	}
+	*out = res
+	return nil
+}
+
+// CXORefreshFeed forces a synchronous re-subscribe + first-Root + walk
+// for the named feed. See Visor.CXORefreshFeed for semantics.
+func (r *RPC) CXORefreshFeed(args *CXORefreshArgs, out *FeedStatus) (err error) {
+	defer rpcutil.LogCall(r.log, "CXORefreshFeed", args)(out, &err)
+	if args == nil {
+		args = &CXORefreshArgs{}
+	}
+	res, err := r.visor.CXORefreshFeed(*args)
+	if res != nil {
+		*out = *res
+	}
+	return err
+}
+
 // RuntimeLogs returns the visor's accumulated runtime log buffer.
 // Used by the hypervisor UI's "view logs" action and the
 // `skywire cli visor logs` command.

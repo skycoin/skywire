@@ -18,8 +18,6 @@ When called with a public key argument, pings that visor directly.
 Available subcommands:
   ping <pk>     - Ping a specific visor
   ping test     - Test connectivity to public visors
-  ping tree     - Ping visors via transport routes (tree view)
-  ping tree2    - Ping visors via transport routes (scrollable TUI)
-  ping graph    - Ping visors reachable from this visor
+  ping tree     - Ping visors via transport routes (scrollable TUI)
   ping stop-all - Stop all active ping connections`,
 }

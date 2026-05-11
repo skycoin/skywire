@@ -137,6 +137,8 @@ type API interface {
 	LocalTransportStats() (*LocalTransportStatsResponse, error)
 	LocalUptimeStats(args LocalUptimeArgs) (*LocalUptimeResponse, error)
 	FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error)
+	CXOStatus() ([]FeedStatus, error)
+	CXORefreshFeed(args CXORefreshArgs) (*FeedStatus, error)
 	GetConfigPath() (string, error)
 	StartPublicAutoconnect() error
 	StopPublicAutoconnect() error
@@ -685,6 +687,15 @@ type FetchCXOResult struct {
 	Body       []byte    `json:"body,omitempty"`
 	LastRootAt time.Time `json:"last_root_at,omitempty"`
 	Reason     string    `json:"reason,omitempty"`
+}
+
+// CXORefreshArgs identifies which feed CXORefreshFeed should force a
+// synchronous subscribe → first-Root → walk cycle on. Timeout caps
+// how long the visor will wait for the first Root before giving up;
+// zero means "use the manager's firstSyncTimeout default" (10s).
+type CXORefreshArgs struct {
+	Feed    string        `json:"feed"`
+	Timeout time.Duration `json:"timeout,omitempty"`
 }
 
 // TPSHealthCheckArgs is empty input for health check.
