@@ -211,3 +211,59 @@ func TestRunDoubleStartIsNoop(t *testing.T) {
 	f.tracker.Run(ctx)
 	<-ctx.Done()
 }
+
+// TestSampler_RecoversFromPanic guards the production-discovered case
+// where a panic inside sample() (corrupt bbolt row, probe returning
+// unexpected nil, day-rollover edge case) silently killed the sampler
+// goroutine — and the visor process kept running for hours/days with
+// stats.db frozen at the last good write. Before the recover() in
+// loop(), this test would deadlock on the second tick assertion
+// because the goroutine would already be dead.
+//
+// The test injects a one-shot panicking probe, ticks once to trigger
+// it, then verifies subsequent ticks still produce bbolt writes.
+func TestSampler_RecoversFromPanic(t *testing.T) {
+	f := newTrackerFixture(t)
+
+	// One-shot panicking TierStates probe: first call panics, then
+	// it switches to returning a normal map so the second tick can
+	// observe a real slot write.
+	callCount := 0
+	tracker := NewTracker(f.store, Probes{
+		TierStates: func() map[string]bool {
+			callCount++
+			if callCount == 1 {
+				panic("synthetic panic in TierStates probe")
+			}
+			return map[string]bool{"process": true}
+		},
+	}, Config{SampleInterval: time.Minute, RetentionDays: 30})
+
+	// First tick — should panic INSIDE sample, recover via safeSample,
+	// and NOT propagate up.
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Fatalf("safeSample let a panic escape: %v", r)
+			}
+		}()
+		tracker.safeSample(time.Now())
+	}()
+
+	if callCount < 1 {
+		t.Fatalf("probe was never called on first tick")
+	}
+
+	// Second tick — probe no longer panics; the slot for "process"
+	// must be set in bbolt afterwards, proving the loop continues.
+	now := time.Now().UTC()
+	tracker.safeSample(now)
+	bm, err := f.store.TierBitmap("process", now)
+	if err != nil {
+		t.Fatalf("TierBitmap: %v", err)
+	}
+	slot := SlotForTime(now)
+	if !GetSlot(bm, slot) {
+		t.Errorf("process tier slot %d not set after recover; sampler is wedged", slot)
+	}
+}
