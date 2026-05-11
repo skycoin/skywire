@@ -29,8 +29,16 @@ import (
 // buildReverseProxy returns a *httputil.ReverseProxy targeting the local
 // app at `target`. Behaviors beyond NewSingleHostReverseProxy:
 //
-//   - Host header is rewritten to the backend's host so apps that
-//     verify the Host header accept the request.
+//   - Host header handling is governed by preserveHost:
+//     preserveHost=false (default): Host is rewritten to target.Host.
+//     Backends that verify Host against their listening address
+//     accept the request — the historical default.
+//     preserveHost=true: the incoming request's Host header passes
+//     through unchanged. Required when the backend (Caddy,
+//     nginx, traefik) dispatches its virtual hosts by Host —
+//     e.g. when an operator forwards port 80 to a Caddy that
+//     serves N domains, paired with the resolver's subdomain
+//     rewrite (skynetweb) on the visitor side.
 //   - Origin header (when present) is rewritten to the backend's URL so
 //     WebSocket upgrades through the visor's port-80 reverse proxy
 //     pass same-origin checks. Without this, audioprism and any other
@@ -38,11 +46,19 @@ import (
 //     audio/data channel even though the WASM/HTML loaded fine.
 //   - ErrorHandler logs reverse-proxy and upgrade failures so the
 //     symptom isn't a silently broken WS connection.
-func buildReverseProxy(log *logging.Logger, target *url.URL) *httputil.ReverseProxy {
+func buildReverseProxy(log *logging.Logger, target *url.URL, preserveHost bool) *httputil.ReverseProxy {
 	proxy := &httputil.ReverseProxy{
 		Rewrite: func(r *httputil.ProxyRequest) {
 			r.SetURL(target)
-			r.Out.Host = target.Host
+			// SetURL clears Out.Host (see net/http/httputil docs);
+			// we set it explicitly in both branches so the wire
+			// Host header is fully determined by this Rewrite
+			// callback, not by the ServeHTTP default path.
+			if preserveHost {
+				r.Out.Host = r.In.Host
+			} else {
+				r.Out.Host = target.Host
+			}
 			if r.In.Header.Get("Origin") != "" {
 				r.Out.Header.Set("Origin", target.Scheme+"://"+target.Host)
 			}
@@ -110,8 +126,10 @@ func (v *Visor) refreshWebsiteHandler(log *logging.Logger) {
 				lsAPI.SetWebsiteHandler(nil)
 				return
 			}
-			log.WithField("addr", addr).Info("Reverse-proxying custom website (port 80)")
-			lsAPI.SetWebsiteHandler(buildReverseProxy(log, target))
+			log.WithField("addr", addr).
+				WithField("preserve_host", fp.PreserveHost).
+				Info("Reverse-proxying custom website (port 80)")
+			lsAPI.SetWebsiteHandler(buildReverseProxy(log, target, fp.PreserveHost))
 			return
 		}
 	}

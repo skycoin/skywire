@@ -34,6 +34,22 @@ type ForwardedPort struct {
 	// to reverse-proxy to. For port 80, this replaces the visor's
 	// default landing page with content from the local service.
 	ProxyAddr string `json:"proxy_addr,omitempty"`
+	// PreserveHost controls the Host header on the request the
+	// reverse-proxy emits to the backend. Currently effective on the
+	// port-80 HTTP reverse-proxy (the only forward type that touches
+	// HTTP headers; raw-TCP forwards don't see HTTP at all).
+	//
+	//   false (default): visor rewrites Host to the backend's address
+	//                    (target.Host). Useful when the backend
+	//                    validates Host against its listening address
+	//                    — the historical behavior.
+	//   true:            visor preserves whatever Host the incoming
+	//                    request already carried (e.g. magnetosphere
+	//                    .net after the skynetweb resolver's
+	//                    subdomain rewrite). Required when the
+	//                    backend (Caddy, nginx, traefik) dispatches
+	//                    its virtual hosts by Host header.
+	PreserveHost bool `json:"preserve_host,omitempty"`
 }
 
 // EffectiveLocalPort returns the local TCP port to forward to.
