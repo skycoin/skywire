@@ -303,6 +303,15 @@ func (s *service) startCXO(
 			pub.Close() //nolint:errcheck,gosec
 		}()
 	}
+
+	if pub, perr := api.StartAllTransportsCXOPublisher(ctx, tpdAPI, h.DmsgClient, sk, logger); perr != nil {
+		logger.WithError(perr).Error("Failed to start CXO all-transports publisher, continuing without it")
+	} else {
+		go func() {
+			<-ctx.Done()
+			pub.Close() //nolint:errcheck,gosec
+		}()
+	}
 }
 
 // aggregatorSink composes the cxoaggregator.Sink contract from the
