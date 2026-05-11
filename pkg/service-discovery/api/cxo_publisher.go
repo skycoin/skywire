@@ -19,6 +19,17 @@
 // CXO content-addresses, so re-publishing an unchanged entry is a
 // no-op at the wire layer — heartbeats from a still-alive service
 // don't burn bandwidth.
+//
+// HTTP-path decoupling: PutEntry / DelEntry are non-blocking. The
+// HTTP register / deregister handlers call them inline, but the
+// underlying treestore.Publisher mutex is contended by subscriber
+// I/O — under load (many concurrent subscribers) a synchronous Put
+// can block the HTTP goroutine long enough to pile up thousands of
+// pending registrations and stall the entire visor refresh loop.
+// Instead we route every publish through a single buffered-channel
+// worker and drop on overflow. CXO data quality (last-write-wins,
+// up to publishQueueDepth events in flight) degrades gracefully;
+// the HTTP path stays fast.
 package api
 
 import (
@@ -26,6 +37,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -38,6 +50,12 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
+// publishQueueDepth bounds in-flight publish operations. Sized for
+// SD's expected register rate (a few hundred entries refreshing
+// every 90s = a few hundred ops / 90s) with headroom for a restart
+// thundering herd. Overflow is dropped; HTTP path never blocks.
+const publishQueueDepth = 4096
+
 // ServicesCXOPublisher mirrors SD's services state into a CXO
 // TreeStore feed. Started automatically at SD startup whenever
 // DMSG is enabled; the API calls into it via
@@ -45,6 +63,12 @@ import (
 type ServicesCXOPublisher struct {
 	pub *treestore.Publisher
 	log *logging.Logger
+
+	events chan func()
+	done   chan struct{}
+	wg     sync.WaitGroup
+
+	dropped uint64 // atomic; incremented on queue overflow
 
 	mu        sync.Mutex
 	lastError error
@@ -69,7 +93,15 @@ func StartServicesCXOPublisher(_ context.Context, dmsgC *dmsg.Client, sk cipher.
 	}
 	pub.SetAllowlist(nil)
 
-	p := &ServicesCXOPublisher{pub: pub, log: log}
+	p := &ServicesCXOPublisher{
+		pub:    pub,
+		log:    log,
+		events: make(chan func(), publishQueueDepth),
+		done:   make(chan struct{}),
+	}
+	p.wg.Add(1)
+	go p.run()
+
 	if logger != nil {
 		logger.WithField("feed_pk", pub.Feed()).WithField("dmsg_port", skyenv.DmsgSDServicesCXOPort).
 			Info("CXO services publisher running")
@@ -77,22 +109,80 @@ func StartServicesCXOPublisher(_ context.Context, dmsgC *dmsg.Client, sk cipher.
 	return p, nil
 }
 
+// run drains the publish queue serially. Single worker preserves
+// happens-before order between Puts and Deletes for the same path
+// (registers / heartbeats / tombstones for one service never race
+// each other). When the underlying treestore mutex is contended by
+// subscriber I/O, the worker slows down and callers see drops at
+// submit time — but the HTTP goroutine never blocks on the mutex.
+func (p *ServicesCXOPublisher) run() {
+	defer p.wg.Done()
+	for {
+		select {
+		case <-p.done:
+			return
+		case fn := <-p.events:
+			fn()
+		}
+	}
+}
+
+// submit enqueues a publish operation. Non-blocking: drops on
+// overflow and bumps the counter so the operator can spot a
+// sustained backlog via LastError + structured logs.
+func (p *ServicesCXOPublisher) submit(fn func()) {
+	select {
+	case p.events <- fn:
+	default:
+		dropped := atomic.AddUint64(&p.dropped, 1)
+		// Log on the first drop and every power-of-two thereafter
+		// (1, 2, 4, 8 …) so a runaway backlog is visible but a
+		// transient bump doesn't spam the log.
+		if dropped&(dropped-1) == 0 {
+			p.log.WithField("dropped_total", dropped).
+				Warn("CXO publish queue full; dropping mirror event")
+		}
+	}
+}
+
 // FeedPK returns the publisher's feed PK (SD's own PK, since the
 // publisher was constructed with SD's secret key). Subscribers
 // connect to this PK on skyenv.DmsgSDServicesCXOPort.
 func (p *ServicesCXOPublisher) FeedPK() cipher.PubKey { return p.pub.Feed() }
 
-// Close stops the publisher. Safe to call multiple times.
+// Dropped returns the cumulative count of publish operations that
+// were dropped because the queue was full at submit time. Exposed
+// for /health-style introspection and as a tripwire for
+// "subscribers are slow enough that the mirror is degrading".
+func (p *ServicesCXOPublisher) Dropped() uint64 {
+	if p == nil {
+		return 0
+	}
+	return atomic.LoadUint64(&p.dropped)
+}
+
+// Close stops the worker goroutine and the underlying publisher.
+// Pending events at the moment of Close are discarded (the
+// underlying CXO state is best-effort — a fresh SD startup will
+// re-emit the live entries on the next register / heartbeat).
+// Safe to call multiple times.
 func (p *ServicesCXOPublisher) Close() error {
 	if p == nil || p.pub == nil {
 		return nil
 	}
+	select {
+	case <-p.done:
+		// already closed
+	default:
+		close(p.done)
+	}
+	p.wg.Wait()
 	return p.pub.Close()
 }
 
 // PutEntry mirrors a service register/update. Idempotent: identical
-// bytes are a no-op at the wire layer. Best-effort; logs at debug
-// on failure (HTTP path is authoritative).
+// bytes are a no-op at the wire layer. Best-effort and non-blocking:
+// queued for the publish worker; dropped on queue overflow.
 func (p *ServicesCXOPublisher) PutEntry(svc *servicedisc.Service) {
 	if p == nil || p.pub == nil || svc == nil {
 		return
@@ -100,38 +190,43 @@ func (p *ServicesCXOPublisher) PutEntry(svc *servicedisc.Service) {
 	if svc.Type == "" {
 		return
 	}
+	// Marshal under the caller's goroutine so the worker doesn't
+	// serialize JSON encoding behind the publisher mutex. The
+	// caller's CPU pays for this either way; doing it pre-queue
+	// also means a bad entry is rejected synchronously instead of
+	// silently after a queue hop.
 	body, err := json.Marshal(svc)
 	if err != nil {
 		p.log.WithError(err).Debug("Failed to marshal service entry leaf")
 		p.recordError(err)
 		return
 	}
-	path := entryPath(svc.Type, svc.Addr.PubKey())
-	if err := p.pub.Put(path, body); err != nil {
-		p.log.WithError(err).WithField("path", path).Debug("Failed to publish service entry leaf")
-		p.recordError(err)
-		// Also clear any stale tombstone so subscribers don't see
-		// a dead-then-alive flap. Best-effort.
-		_ = p.pub.Delete(tombstonePath(svc.Type, svc.Addr.PubKey())) //nolint:errcheck
-		return
-	}
-	// Drop any existing tombstone for the same key — re-registration
-	// after expiry should leave only the live entry leaf.
-	if err := p.pub.Delete(tombstonePath(svc.Type, svc.Addr.PubKey())); err != nil {
-		p.log.WithError(err).Debug("Failed to clear stale services tombstone")
-	}
+	svcType := svc.Type
+	pk := svc.Addr.PubKey()
+	p.submit(func() {
+		path := entryPath(svcType, pk)
+		if err := p.pub.Put(path, body); err != nil {
+			p.log.WithError(err).WithField("path", path).Debug("Failed to publish service entry leaf")
+			p.recordError(err)
+			// Also clear any stale tombstone so subscribers don't see
+			// a dead-then-alive flap. Best-effort.
+			_ = p.pub.Delete(tombstonePath(svcType, pk)) //nolint:errcheck
+			return
+		}
+		// Drop any existing tombstone for the same key — re-registration
+		// after expiry should leave only the live entry leaf.
+		if err := p.pub.Delete(tombstonePath(svcType, pk)); err != nil {
+			p.log.WithError(err).Debug("Failed to clear stale services tombstone")
+		}
+	})
 }
 
 // DelEntry mirrors a service deregister or expiry. Removes the entry
 // leaf and writes a tombstone leaf so subscribers see the deletion.
-// Best-effort.
+// Best-effort and non-blocking.
 func (p *ServicesCXOPublisher) DelEntry(svcType string, pk cipher.PubKey) {
 	if p == nil || p.pub == nil || svcType == "" {
 		return
-	}
-	if err := p.pub.Delete(entryPath(svcType, pk)); err != nil {
-		p.log.WithError(err).WithField("type", svcType).Debug("Failed to delete service entry leaf")
-		p.recordError(err)
 	}
 	body, err := json.Marshal(struct {
 		DeletedAt time.Time `json:"deleted_at"`
@@ -140,10 +235,16 @@ func (p *ServicesCXOPublisher) DelEntry(svcType string, pk cipher.PubKey) {
 		p.log.WithError(err).Debug("Failed to marshal services tombstone")
 		return
 	}
-	if err := p.pub.Put(tombstonePath(svcType, pk), body); err != nil {
-		p.log.WithError(err).WithField("type", svcType).Debug("Failed to publish services tombstone")
-		p.recordError(err)
-	}
+	p.submit(func() {
+		if err := p.pub.Delete(entryPath(svcType, pk)); err != nil {
+			p.log.WithError(err).WithField("type", svcType).Debug("Failed to delete service entry leaf")
+			p.recordError(err)
+		}
+		if err := p.pub.Put(tombstonePath(svcType, pk), body); err != nil {
+			p.log.WithError(err).WithField("type", svcType).Debug("Failed to publish services tombstone")
+			p.recordError(err)
+		}
+	})
 }
 
 func (p *ServicesCXOPublisher) recordError(err error) {
