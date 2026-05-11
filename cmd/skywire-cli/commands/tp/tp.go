@@ -3,12 +3,15 @@ package clitp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/pterm/pterm"
@@ -16,6 +19,7 @@ import (
 	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -39,6 +43,7 @@ var (
 	utURL            string
 	sdURL            string
 	listRemoteVisors []string
+	tpLive           bool
 	// RootCmd is tpCmd
 	RootCmd = tpCmd
 )
@@ -79,6 +84,7 @@ func init() {
 	tpCmd.Flags().BoolVarP(&showStats, "stats", "s", false, "show transport statistics (count by type, unique visors)")
 	tpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	tpCmd.Flags().StringSliceVar(&listRemoteVisors, "remote", nil, "list transports on remote visor(s) via TPS (comma-separated PKs)")
+	tpCmd.Flags().BoolVarP(&tpLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick); shows transport bandwidth/latency updating in place. Skips --more service-disc fetches per tick; not compatible with --remote/--id/--tptypes")
 }
 
 // RootCmd contains commands that interact with the skywire-visor
@@ -101,6 +107,27 @@ var tpCmd = &cobra.Command{
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		// --live: bubbletea-based watch view of the default transport
+		// listing. Slim renderer — no --more service-disc fetches per
+		// tick (too expensive) and bandwidth comes straight from each
+		// tick's Transports() RPC (the tp.Log fields). Branch early so
+		// we don't waste work on incompatible flags.
+		if tpLive {
+			if len(listRemoteVisors) > 0 || tpTypes || showStats || tpID != "" {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--live cannot be combined with --remote/--tptypes/--stats/--id"))
+			}
+			err := livetui.Run(func(ctx context.Context) (string, error) {
+				return renderTransportListLive(rpcClient)
+			}, livetui.Options{
+				Title:    "skywire cli tp",
+				Interval: time.Second,
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
 		}
 
 		// Handle --remote flag: list transports on remote visor(s) via TPS
@@ -831,4 +858,83 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 	}
 
 	internal.PrintOutput(cmdFlags, outputTPS, tableOutput.String())
+}
+
+// renderTransportListLive builds a slim transport-listing snapshot for
+// the --live bubbletea viewport. It honors --types/--pks/--logs and
+// --bw so the live view matches whatever filter the user typed, but
+// deliberately skips --more (per-tick UT/SD/visor SD fetches would
+// blow the refresh budget) and inactive transports (their state
+// doesn't change live). Bandwidth is read from each tick's
+// Transports() RPC — tp.Log already aggregates send/recv counters —
+// so the numbers tick up in place.
+func renderTransportListLive(rpcClient visor.API) (string, error) {
+	var pks cipher.PubKeys
+	if filterPubKeys != nil {
+		if err := pks.Set(strings.Join(filterPubKeys, ",")); err != nil {
+			return "", err
+		}
+	}
+	transports, err := rpcClient.Transports(filterTypes, pks, showLogs)
+	if err != nil {
+		return "", err
+	}
+
+	bwByTpID := make(map[string]struct{ recv, sent uint64 })
+	if bwDays > 0 {
+		logEntries, lerr := rpcClient.GetTransportLogs(bwDays)
+		if lerr == nil {
+			for _, entry := range logEntries {
+				existing := bwByTpID[entry.TpID.String()]
+				existing.recv += entry.RecvBytes
+				existing.sent += entry.SentBytes
+				bwByTpID[entry.TpID.String()] = existing
+			}
+		}
+	}
+
+	sortTransports(transports...)
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', tabwriter.TabIndent)
+	if bwDays > 0 {
+		fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent") //nolint:errcheck
+	} else {
+		fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent") //nolint:errcheck
+	}
+
+	for _, tp := range transports {
+		if tp == nil {
+			continue
+		}
+		tpMode := "regular"
+		if tp.IsSetup {
+			tpMode = "setup"
+		}
+
+		var recvBytes, sentBytes uint64
+		if bw, ok := bwByTpID[tp.ID.String()]; ok && bwDays > 0 {
+			recvBytes = bw.recv
+			sentBytes = bw.sent
+		} else if tp.Log != nil {
+			if tp.Log.RecvBytes != nil {
+				recvBytes = *tp.Log.RecvBytes
+			}
+			if tp.Log.SentBytes != nil {
+				sentBytes = *tp.Log.SentBytes
+			}
+		}
+
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+			tp.Type, tp.ID, tp.Remote, tpMode, tp.Label,
+			formatLatencyMS(tp.LatencyMS),
+			formatBytes(recvBytes), formatBytes(sentBytes))
+	}
+	if err := w.Flush(); err != nil {
+		return "", err
+	}
+
+	out := b.String()
+	out += fmt.Sprintf("\n%d transport(s)\n", len(transports))
+	return out, nil
 }
