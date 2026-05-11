@@ -64,7 +64,7 @@ a "(restart loop?)" tag.
 	skywire cli visor uptime --json | jq '.sessions[-5:]'
 `,
 	Run: func(cmd *cobra.Command, _ []string) {
-		args, err := buildUptimeArgs(cmd)
+		args, err := buildUptimeArgs()
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
@@ -106,9 +106,9 @@ a "(restart loop?)" tag.
 	},
 }
 
-// buildUptimeArgs centralises the flag-to-args translation so the live
+// buildUptimeArgs centralizes the flag-to-args translation so the live
 // path and the one-shot path stay aligned.
-func buildUptimeArgs(cmd *cobra.Command) (visor.UptimeHistoryArgs, error) {
+func buildUptimeArgs() (visor.UptimeHistoryArgs, error) {
 	args := visor.UptimeHistoryArgs{Limit: uptimeLimit}
 	if uptimeSince != "" {
 		t, err := parseSince(uptimeSince)

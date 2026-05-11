@@ -287,6 +287,6 @@ Paths per feed:
 			internal.PrintOutput(cmd.Flags(), out, "")
 			return
 		}
-		fmt.Fprint(os.Stdout, b.String())
+		fmt.Fprint(os.Stdout, b.String()) //nolint:errcheck
 	},
 }

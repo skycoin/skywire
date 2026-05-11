@@ -30,7 +30,7 @@ import (
 )
 
 // Refresh produces the snapshot to display on each tick. ctx is
-// cancelled when the user quits the TUI; long-running Refresh
+// canceled when the user quits the TUI; long-running Refresh
 // implementations should respect it so the program shuts down
 // promptly. Errors are surfaced in the header line (red) but
 // don't terminate the loop — operators usually want to watch a

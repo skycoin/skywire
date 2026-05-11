@@ -80,7 +80,7 @@ var sendCmd = &cobra.Command{
 }
 
 // validateNetwork rejects anything but "skynet" / "dmsg" — same
-// values the skychat app's /message handler accepts. Centralised so
+// values the skychat app's /message handler accepts. Centralized so
 // `send`, the interactive `chat` view, and any future variant share
 // one source of truth.
 func validateNetwork(n string) error {
@@ -114,7 +114,7 @@ func postMessage(addr, recipientPK, msg, network string) error {
 		return nil
 	}
 	var errBody bytes.Buffer
-	_, _ = errBody.ReadFrom(resp.Body)
+	_, _ = errBody.ReadFrom(resp.Body) //nolint:errcheck
 	return fmt.Errorf("server error %d: %s", resp.StatusCode, strings.TrimSpace(errBody.String()))
 }
 
