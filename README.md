@@ -12,14 +12,38 @@
 
 # Skywire
 
-Skywire is a fully open-source, privacy-focused suite of networking tools developed by Skycoin. The public Skywire Network enables this software to be developed and tested in real-world conditions. A few features the Skywire Network provides:
+Skywire is a fully open-source, privacy-focused suite of networking tools developed by Skycoin. The public Skywire Network enables this software to be developed and tested in real-world conditions, with [daily rewards in Skycoin](/rewards/mainnet_rules.md) ($SKY) distributed to eligible participants.
 
-* service discovery for decentralized [VPN](https://sd.skycoin.com/api/services?type=proxy) and [SOCKS5 proxy](https://sd.skycoin.com/api/services?type=proxy) servers
-* multi-hop public key-based routing
-* a means of accessing and hosting hidden websites
-* [daily rewards in Skycoin](/rewards/mainnet_rules.md) ($SKY) to eligible participants in the Skywire Network
+## Major features
 
-This overview explains Skywire’s key features and network architecture.
+Skywire visors are reachable over two distinct encrypted networks, both addressed by 33-byte public keys:
+
+- **Skywire** — a peer-to-peer routing network. Visors establish encrypted transports directly with each other (STCPR over TCP, SUDPH over UDP hole-punching) and build single-hop or multi-hop routes across them using the Noise Protocol; intermediate visors see only the previous and next hop.
+- **DMSG** — a relay-based messaging network. Visors connect as clients to DMSG servers, which relay encrypted streams between them on the clients' behalf; the two endpoints never need direct connectivity to each other.
+
+The two networks share the same pubkey identity space and can be used independently or together — every feature below works over either.
+
+* **P2P port forwarding over Skywire and DMSG** — host websites and TCP services on your visor's public key.
+  -- [SkyNet](#skynet--p2p-port-forwarding-over-skywire) forwards over Skywire routes.
+  -- [DmsgWeb](#dmsgweb--anonymous-port-forwarding-over-dmsg) forwards over a DMSG relay.
+* **`.skynet` / `.dmsg` resolving SOCKS5 proxy** — point a browser at the visor's local resolver to reach `<pk>.skynet` and `<pk>.dmsg` URLs directly.
+  -- Subdomain prefix on the URL (`example.com.<pk>.skynet`) lets vhost-capable backends like Caddy / nginx dispatch by `Host` header through the visor's port forwarder.
+  -- Optional TLS-MITM mode mints leaf certs from a locally-installed name-constrained CA so HTTPS sites work in the browser without warnings.
+* **Direct, multi-hop, and multiplexed pubkey-encrypted routing** — NAT-traversing transports plus DMSG fallback mean no public IP is required.
+  -- STCPR (TCP relay) and SUDPH (UDP hole-punching) auto-create transports between visors.
+  -- Routes use the Noise Protocol (ChaCha20-Poly1305) end-to-end; intermediate visors only know the previous and next hop.
+  -- Multi-route mux groups multiple parallel routes between the same endpoints for higher bandwidth.
+* **Native apps** — managed by the visor and registered into service discovery.
+  -- [VPN](#vpn-applications) client and server.
+  -- SOCKS5 proxy client and server (skysocks / skysocks-client).
+  -- skychat messenger with persistent chat history via CXO + bbolt — messages survive restarts.
+* **Remote terminal, monitoring, and management over DMSG / SkyNet** — access any visor's terminal, runtime logs, and live stats from anywhere.
+  -- `skywire cli` over DMSG / SkyNet for scripting and one-shot commands.
+  -- Hypervisor browser UI for clusters; everything tunnels over the same pubkey-authenticated transports.
+* **Custom / corporate / private network deployments** — run your own service stack (transport discovery, route finder, service discovery, address resolver, etc.) using [skywire-deployment](https://github.com/skycoin/skywire-deployment), or layer additional deployments on top of the public network for segmented environments.
+* **Decentralized standalone operation** — hypervisor-embedded DMSG server lets a Skywire network keep running without an active connection to the public deployment after the initial config and bootstrap; useful for air-gapped, LAN-only, or self-hosted networks.
+
+This overview explains Skywire's key features and network architecture in more detail below.
 
 ## Skywire Control and Data Planes
 
@@ -75,6 +99,7 @@ Table of Contents
 =================
 
 - [Skywire](#skywire)
+  - [Major features](#major-features)
   - [Skywire Control and Data Planes](#skywire-control-and-data-planes)
   - [Skywire Network and Transports](#skywire-network-and-transports)
   - [Skywire Routing](#skywire-routing)
