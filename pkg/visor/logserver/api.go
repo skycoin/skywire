@@ -311,9 +311,12 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			if h, _, err := net.SplitHostPort(host); err == nil {
 				host = h
 			}
-			// If host is a bare PK (66 hex chars), append .skynet
-			// so generated URLs route through the SOCKS5 proxy.
-			if len(host) == 66 && !strings.Contains(host, ".") {
+			// If host is a bare PK (66 hex chars or 53 base32 chars),
+			// append .skynet so generated URLs route through the
+			// SOCKS5 proxy. Base32 is the canonical form (the only
+			// one TLS-MITM can mint a cert for); hex is accepted
+			// for backcompat with older URLs.
+			if !strings.Contains(host, ".") && (len(host) == 66 || len(host) == 53) {
 				host += ".skynet"
 			}
 			for _, fp := range api.forwardedPortLister.LandingPageEntries() {
