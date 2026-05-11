@@ -36,14 +36,15 @@ import (
 )
 
 var (
-	serveTo        string
-	serveLabel     string
-	serveDesc      string
-	serveWhitelist string
-	serveSkynet    bool
-	serveDmsg      bool
-	serveLanding   bool
-	serveJSON      bool
+	serveTo           string
+	serveLabel        string
+	serveDesc         string
+	serveWhitelist    string
+	serveSkynet       bool
+	serveDmsg         bool
+	serveLanding      bool
+	servePreserveHost bool
+	serveJSON         bool
 )
 
 func init() {
@@ -53,6 +54,10 @@ func init() {
 	servePortCmd.Flags().BoolVar(&serveSkynet, "skynet", true, "expose over skynet (sky-forwarding server)")
 	servePortCmd.Flags().BoolVar(&serveDmsg, "dmsg", true, "expose over DMSG")
 	servePortCmd.Flags().BoolVar(&serveLanding, "landing", true, "show on the visor landing page")
+	servePortCmd.Flags().BoolVar(&servePreserveHost, "preserve-host", false,
+		"for port-80 HTTP reverse-proxy: keep the original Host header instead of rewriting "+
+			"to --to target. Use when the backend (Caddy / nginx / traefik) dispatches "+
+			"its virtual hosts by Host (e.g. paired with the resolver's subdomain rewrite)")
 	servePortCmd.Flags().StringVar(&serveWhitelist, "whitelist", "", "comma-separated PKs allowed to access this port (empty = allow all)")
 
 	servePortLsCmd.Flags().BoolVar(&serveJSON, "json", false, "emit raw JSON")
@@ -129,6 +134,7 @@ Examples:
 			Skynet:        serveSkynet,
 			DMSG:          serveDmsg,
 			ShowOnLanding: serveLanding,
+			PreserveHost:  servePreserveHost,
 		}
 
 		// Resolve --to into the right field. The visor schema has two
