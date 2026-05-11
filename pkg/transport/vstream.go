@@ -92,6 +92,34 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey) (*VStream, error) {
 	return m.DialOnTransport(targetTp)
 }
 
+// DialByTransportID opens a virtual stream to remotePK pinned to a
+// specific transport (looked up by ID). Use this when the caller
+// has a specific transport in mind — e.g. ping-tree measuring the
+// latency of *that exact* transport rather than "any direct
+// transport to the peer." Same DMSG-exclusion + closed-transport
+// rules as Dial; returns an error when no matching transport
+// exists or the matching one isn't currently usable.
+func (m *VStreamMux) DialByTransportID(remotePK cipher.PubKey, tpID uuid.UUID) (*VStream, error) {
+	var targetTp *ManagedTransport
+	m.tm.WalkTransports(func(tp *ManagedTransport) bool {
+		if tp.Entry.ID == tpID && tp.Remote() == remotePK && !tp.IsClosed() && tp.Type() != "dmsg" {
+			targetTp = tp
+			return false
+		}
+		return true
+	})
+	if targetTp == nil {
+		return nil, fmt.Errorf("vstream: transport %s to %s not found or unusable", tpID, remotePK.String())
+	}
+
+	m.log.WithField("tp", targetTp.Entry.ID.String()).
+		WithField("type", targetTp.Type()).
+		WithField("remote", remotePK.String()).
+		Debug("VStreamMux: dialing on pinned transport (by ID)")
+
+	return m.DialOnTransport(targetTp)
+}
+
 // DialOnTransport opens a virtual stream on a specific transport.
 func (m *VStreamMux) DialOnTransport(tp *ManagedTransport) (*VStream, error) {
 	id := m.nextID()
