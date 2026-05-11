@@ -44,7 +44,24 @@ func (a Addr) PK() cipher.PubKey {
 }
 
 // ConvertAddr asserts type of the passed `net.Addr` and converts it
-// to `Addr` if possible.
+// to `Addr` if possible. Accepts:
+//
+//   - dmsg.Addr      — pre-skynet legacy address; mapped to TypeDmsg.
+//   - routing.Addr   — emitted by route-group conns (PingRoute path).
+//   - appnet.Addr    — already in this package's type; emitted by
+//     directConn (AppDirect VStream conns). Passed
+//     through unchanged so listeners that call
+//     WrapConn on a conn from the AppDirect dispatch
+//     loop accept it instead of erroring with
+//     ErrUnknownAddrType.
+//
+// Pre-fix: any listener calling WrapConn on a direct-dial conn (most
+// notably the ping listener at init_services.go) hit the default
+// branch, returned ErrUnknownAddrType, logged "Failed to wrap ping
+// conn" and closed the stream. The client then saw the close on its
+// first write and surfaced "write size: use of closed network
+// connection" — a confusing failure mode that masked the underlying
+// type-assertion gap.
 func ConvertAddr(addr net.Addr) (Addr, error) {
 	switch a := addr.(type) {
 	case dmsg.Addr:
@@ -59,6 +76,8 @@ func ConvertAddr(addr net.Addr) (Addr, error) {
 			PubKey: a.PubKey,
 			Port:   a.Port,
 		}, nil
+	case Addr:
+		return a, nil
 	default:
 		return Addr{}, ErrUnknownAddrType
 	}
