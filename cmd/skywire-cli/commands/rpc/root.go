@@ -8,8 +8,8 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -19,6 +19,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/clicache"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
@@ -248,6 +249,29 @@ func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
 		}
 		return "", "", false
 	}
+
+	// SD /api/services?type=X → "sd-services" feed. The visor's
+	// CXOSubscriptionManager already maintains a materialized
+	// FeedSDServices snapshot for TabCLIServices and TabAutoconnect;
+	// the FetchCXO branch just walks it for the requested type.
+	if isUnderBase(rawURL, deployment.Prod.ServiceDiscovery, "/api/services") ||
+		isUnderBase(rawURL, deployment.Prod.ServiceDiscoveryDmsg, "/api/services") {
+		if t := queryParam(rawURL, "type"); t != "" {
+			return "sd-services", "type/" + t, true
+		}
+		return "", "", false
+	}
+
+	// TPD /all-transports → "tpd-all-transports" feed. The publisher
+	// emits two variants (with-self / without-self) on a 60s
+	// cadence; the CLI's `pv -t`, `tp tree`, and `tp viz` callers
+	// hit /all-transports without an explicit selfTransports flag,
+	// which the TPD endpoint serves as "without self".
+	if isUnderBase(rawURL, deployment.Prod.TransportDiscovery, "/all-transports") ||
+		isUnderBase(rawURL, deployment.Prod.TransportDiscoveryDmsg, "/all-transports") {
+		return "tpd-all-transports", "without-self", true
+	}
+
 	return "", "", false
 }
 
@@ -393,27 +417,30 @@ func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
 // routes the fetch through FetchServiceURL (RPC → DMSG → HTTP) instead of
 // going straight to HTTP.
 //
-// Caching semantics match GetData:
+// Caching semantics:
 //   - If cachefile == "", caching is disabled and we fetch fresh every call.
-//   - If the cache file exists and is younger than cacheFilesAge minutes,
-//     its contents are returned as-is.
-//   - Otherwise we fetch via FetchServiceURL and, on success, atomically
-//     write the response to cachefile for the next call.
-//   - On fetch failure, a stale cache file (if present) is returned as a
-//     last resort rather than propagating an empty string, matching the
-//     "best-effort" behavior callers expect.
+//     Otherwise the cachefile argument is treated as a non-empty marker for
+//     "caching enabled"; the actual storage is a single bbolt DB at
+//     pkg/clicache's DefaultPath (NOT the per-URL JSON file the legacy
+//     code used). The bbolt approach replaces the older /tmp/<host>/<endpoint>.json
+//     files which couldn't be shared across users due to umask downgrade.
+//   - If a cached entry exists and is younger than cacheFilesAge minutes,
+//     its body is returned as-is.
+//   - Otherwise we fetch via FetchServiceURL and write the response through
+//     to the bbolt cache for the next call.
+//   - On fetch failure, a stale cached entry is returned as a last resort
+//     rather than propagating an empty string.
 //
 // Returns the response body as a string, or "" if every path failed and
 // there was no cache to fall back on. Errors are logged at debug level.
 func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, cacheFilesAge int) string {
-	// Serve a fresh cache if we have one.
-	if cachefile != "" {
-		if st, err := os.Stat(cachefile); err == nil {
-			if time.Since(st.ModTime()).Minutes() <= float64(cacheFilesAge) {
-				if data, err := os.ReadFile(cachefile); err == nil { //nolint:gosec
-					return string(data)
-				}
-			}
+	cache := getCLICacheIfEnabled(cachefile)
+	maxAge := time.Duration(cacheFilesAge) * time.Minute
+
+	// Serve a fresh cache entry if we have one.
+	if cache != nil {
+		if e, ok := cache.Fresh(thisurl, maxAge); ok {
+			return string(e.Body)
 		}
 	}
 
@@ -422,27 +449,52 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 	if err != nil {
 		logger.Debugf("FetchCachedServiceURL: all fetch paths failed for %s: %v", thisurl, err)
 		// Last-ditch: return stale cache if we have one.
-		if cachefile != "" {
-			if data, rerr := os.ReadFile(cachefile); rerr == nil { //nolint:gosec
-				return string(data)
+		if cache != nil {
+			if e, ok := cache.Get(thisurl); ok {
+				return string(e.Body)
 			}
 		}
 		return ""
 	}
 
 	// Write-through to cache for next call. Non-fatal on error.
-	// Use world-readable permissions so multiple users (visor service,
-	// CLI user) can share the same /tmp cache directory.
-	if cachefile != "" {
-		dir := filepath.Dir(cachefile)
-		if err := os.MkdirAll(dir, 0o777); err != nil { //nolint:gosec
-			logger.Debugf("FetchCachedServiceURL: cache mkdir failed for %s: %v", dir, err)
-		}
-		if werr := os.WriteFile(cachefile, body, 0o666); werr != nil { //nolint:gosec
-			logger.Debugf("FetchCachedServiceURL: cache write failed for %s: %v", cachefile, werr)
+	if cache != nil {
+		if werr := cache.Put(thisurl, body); werr != nil {
+			logger.Debugf("FetchCachedServiceURL: cache put failed for %s: %v", thisurl, werr)
 		}
 	}
 	return string(body)
+}
+
+var (
+	cliCacheOnce sync.Once
+	cliCache     *clicache.Cache
+)
+
+// getCLICacheIfEnabled returns the process-singleton bbolt cache iff
+// cachefile is non-empty (the historical "caching on" signal). The
+// argument's path is no longer used — the DB location is resolved
+// via clicache.DefaultPath. Returns nil when caching is disabled or
+// when the DB couldn't be opened (e.g. another CLI holds the lock);
+// callers treat nil as "no cache, fetch fresh every call".
+func getCLICacheIfEnabled(cachefile string) *clicache.Cache {
+	if cachefile == "" {
+		return nil
+	}
+	cliCacheOnce.Do(func() {
+		path, err := clicache.DefaultPath()
+		if err != nil {
+			logger.Debugf("clicache: resolve default path: %v", err)
+			return
+		}
+		c, err := clicache.Open(path)
+		if err != nil {
+			logger.Debugf("clicache: open %s: %v", path, err)
+			return
+		}
+		cliCache = c
+	})
+	return cliCache
 }
 
 // FetchServiceURL fetches a URL from a deployment service using a three-step chain:
