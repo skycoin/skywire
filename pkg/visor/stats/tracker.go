@@ -14,6 +14,7 @@ package stats
 import (
 	"context"
 	"encoding/json"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -180,16 +181,38 @@ func (t *Tracker) loop(ctx context.Context) {
 
 	// Take an immediate sample so the first observations don't have
 	// to wait an interval — keeps `current` populated at startup.
-	t.sample(time.Now())
+	t.safeSample(time.Now())
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now := <-tick.C:
-			t.sample(now)
+			t.safeSample(now)
 		}
 	}
+}
+
+// safeSample wraps sample with a panic recover so a single bad
+// observation (corrupt bbolt row, probe returning unexpected nil,
+// per-day rollover edge cases) doesn't silently kill the goroutine
+// and freeze the local uptime/bandwidth view for the rest of the
+// process lifetime. Recovered panics are logged at Error level with
+// the stack so the underlying cause is locatable, then the loop
+// keeps ticking — best effort over correctness on a single
+// observation. Discovered in production where slot fills dropped
+// from ~100% to ~2% across a multi-day window with no log signal;
+// without recover the panic-once / dead-forever behavior was
+// indistinguishable from "everything is fine".
+func (t *Tracker) safeSample(now time.Time) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.log.WithField("panic", r).
+				WithField("stack", string(debug.Stack())).
+				Error("Stats sampler panicked; recovered. Continuing.")
+		}
+	}()
+	t.sample(now)
 }
 
 // sample is the per-tick body. Exposed for tests; callers pass the
