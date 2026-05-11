@@ -1,6 +1,8 @@
 package treestore
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestSplitPath(t *testing.T) {
 	cases := []struct {

@@ -605,6 +605,24 @@ func (rc *rpcClient) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 	return &resp, nil
 }
 
+// CXOStatus implements API.
+func (rc *rpcClient) CXOStatus() ([]FeedStatus, error) {
+	var resp []FeedStatus
+	if err := rc.Call("CXOStatus", &struct{}{}, &resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// CXORefreshFeed implements API.
+func (rc *rpcClient) CXORefreshFeed(args CXORefreshArgs) (*FeedStatus, error) {
+	var resp FeedStatus
+	if err := rc.Call("CXORefreshFeed", &args, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // GetRuntimeConfig implements API.
 func (rc *rpcClient) GetRuntimeConfig() ([]byte, error) {
 	var out []byte
