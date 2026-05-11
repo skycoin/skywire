@@ -16,10 +16,23 @@ Skywire is a fully open-source, privacy-focused suite of networking tools develo
 
 ## Major features
 
-* **P2P port forwarding over Skywire and DMSG** — host websites and TCP services on your visor's public key with [SkyNet](#skynet--p2p-port-forwarding-over-skywire) and [DmsgWeb](#dmsgweb--anonymous-port-forwarding-over-dmsg). Browse `.skynet` and `.dmsg` hostnames through the resolver's SOCKS5 proxy; optional TLS-MITM mode mints leaf certs from a locally-installed name-constrained CA so HTTPS sites work in the browser.
-* **Direct, multi-hop, and multiplexed pubkey-encrypted routing** — NAT-traversing transports (STCPR, SUDPH) plus DMSG fallback mean no public IP is required. Routes use the Noise Protocol (ChaCha20-Poly1305) end-to-end; intermediate visors only know the previous and next hop. Multi-route mux groups multiple parallel routes between the same endpoints for higher bandwidth.
-* **Native apps** — built-in [VPN](#vpn-applications), SOCKS5 proxy, and skychat messenger, managed by the visor. Skychat now keeps persistent chat history via CXO + bbolt — messages survive restarts and are queryable by peer/timestamp.
-* **Remote terminal, monitoring, and management over DMSG / SkyNet** — access any visor's terminal, runtime logs, and live stats from anywhere with `skywire cli` or the hypervisor browser UI; everything tunnels over the same pubkey-authenticated transports.
+* **P2P port forwarding over Skywire and DMSG** — host websites and TCP services on your visor's public key.
+  -- [SkyNet](#skynet--p2p-port-forwarding-over-skywire) forwards over Skywire's peer-to-peer transports and routing mesh.
+  -- [DmsgWeb](#dmsgweb--anonymous-port-forwarding-over-dmsg) forwards over DMSG for visors without direct connectivity.
+* **`.skynet` / `.dmsg` resolving SOCKS5 proxy** — point a browser at the visor's local resolver to reach `<pk>.skynet` and `<pk>.dmsg` URLs directly.
+  -- Subdomain prefix on the URL (`example.com.<pk>.skynet`) lets vhost-capable backends like Caddy / nginx dispatch by `Host` header through the visor's port forwarder.
+  -- Optional TLS-MITM mode mints leaf certs from a locally-installed name-constrained CA so HTTPS sites work in the browser without warnings.
+* **Direct, multi-hop, and multiplexed pubkey-encrypted routing** — NAT-traversing transports plus DMSG fallback mean no public IP is required.
+  -- STCPR (TCP relay) and SUDPH (UDP hole-punching) auto-create transports between visors.
+  -- Routes use the Noise Protocol (ChaCha20-Poly1305) end-to-end; intermediate visors only know the previous and next hop.
+  -- Multi-route mux groups multiple parallel routes between the same endpoints for higher bandwidth.
+* **Native apps** — managed by the visor and registered into service discovery.
+  -- [VPN](#vpn-applications) client and server.
+  -- SOCKS5 proxy client and server (skysocks / skysocks-client).
+  -- skychat messenger with persistent chat history via CXO + bbolt — messages survive restarts.
+* **Remote terminal, monitoring, and management over DMSG / SkyNet** — access any visor's terminal, runtime logs, and live stats from anywhere.
+  -- `skywire cli` over DMSG / SkyNet for scripting and one-shot commands.
+  -- Hypervisor browser UI for clusters; everything tunnels over the same pubkey-authenticated transports.
 * **Custom / corporate / private network deployments** — run your own service stack (transport discovery, route finder, service discovery, address resolver, etc.) using [skywire-deployment](https://github.com/skycoin/skywire-deployment), or layer additional deployments on top of the public network for segmented environments.
 * **Decentralized standalone operation** — hypervisor-embedded DMSG server lets a Skywire network keep running without an active connection to the public deployment after the initial config and bootstrap; useful for air-gapped, LAN-only, or self-hosted networks.
 
