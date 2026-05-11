@@ -2,7 +2,7 @@
 //
 // HTTP/1.1 Host-header rewriter for the resolver SOCKS5 dial path.
 //
-// Motivation
+// # Motivation
 //
 // A visit to `https://example.com.<pk>.skynet/` resolves to the
 // visor <pk>, but the browser sends `Host: example.com.<pk>.skynet`
@@ -26,7 +26,6 @@ package skynetweb
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -42,8 +41,8 @@ import (
 // The wrapper exposes the io.ReadWriteCloser surface the SOCKS5
 // splice expects:
 //
-//   SOCKS5.io.Copy(dst=hostRewriteConn, src=browser)    → Write side
-//   SOCKS5.io.Copy(dst=browser, src=hostRewriteConn)    → Read side
+//	SOCKS5.io.Copy(dst=hostRewriteConn, src=browser)    → Write side
+//	SOCKS5.io.Copy(dst=browser, src=hostRewriteConn)    → Read side
 //
 // Write side: bytes from the browser (already TLS-decrypted by the
 // MITMTerminate wrapper sitting "above" us in the stack) come in.
@@ -102,11 +101,9 @@ func (h *hostRewriteConn) pump() {
 		if err != nil {
 			// EOF or malformed input — we can't recover the stream.
 			// Closing the backend conn lets the response pump on
-			// the Read side notice and unblock.
-			if !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrClosedPipe) {
-				// Best-effort: noisy log would be tidier in real code
-				// but we don't have access to the logger here.
-			}
+			// the Read side notice and unblock. We don't have a
+			// logger here, so any non-EOF parse error fails silently;
+			// the connection close conveys the failure to the peer.
 			return
 		}
 
@@ -177,10 +174,10 @@ func (h *hostRewriteConn) SetWriteDeadline(t time.Time) error {
 // splitHostSubdomain parses "<subdomain>.<pk>.<suffix>[:port]" or
 // "<pk>.<suffix>[:port]" into pkLabel + subdomain + port.
 //
-//   "blog.<pk>.skynet"        → ("<pk>", "blog",        80)
-//   "example.com.<pk>.skynet" → ("<pk>", "example.com", 80)
-//   "<pk>.skynet"             → ("<pk>", "",            80)
-//   "<pk>.skynet:1234"        → ("<pk>", "",          1234)
+//	"blog.<pk>.skynet"        → ("<pk>", "blog",        80)
+//	"example.com.<pk>.skynet" → ("<pk>", "example.com", 80)
+//	"<pk>.skynet"             → ("<pk>", "",            80)
+//	"<pk>.skynet:1234"        → ("<pk>", "",          1234)
 //
 // suffix is expected to start with ".". Returns an error when the
 // host shape doesn't match (no suffix match, no PK label, etc.) so
