@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/blang/semver/v4"
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -106,8 +107,8 @@ var pingTreeTUICmd = &cobra.Command{
 	Short: "Ping visors via transport routes (scrollable TUI)",
 	Long: `Ping visors via transport routes with a scrollable terminal UI.
 
-This command uses a Bubble Tea-based TUI that allows scrolling through
-results while the ping test is running.
+This command uses a Bubble Tea-based TUI that lets you scroll through
+results while the ping test runs.
 
 Controls:
   ↑/k, ↓/j     Scroll up/down one line
@@ -115,7 +116,44 @@ Controls:
   Home/End     Go to top/bottom
   q/Ctrl+C     Quit
 
-The display updates live while preserving your scroll position.`,
+The display updates live while preserving your scroll position.
+
+Level vs hops:
+  --max-level N    cap the BFS depth — ping levels 1, 2, ..., N
+                   (0 = unlimited until no new visors discoverable)
+  --hops N         ping ONLY the visors exactly N hops away from us
+                   (use with --max-level >= N so discovery reaches them)
+  default of both means "ping every level reachable through direct
+  transports and their neighbors, until expansion exhausts."
+
+Most operators want --max-level. --hops is for targeted measurement
+when characterizing latency-by-hop-count.`,
+	Example: `  # Ping every visor reachable via direct transports (level 1 only),
+  # with 5 latency samples per transport and only "online" peers.
+  skywire cli visor ping tree2 --max-level 1 --tries 5 --online
+
+  # Discovery + ping out to 3 hops; useful for the "latency as a
+  # function of hop count" measurement Synth asked about.
+  skywire cli visor ping tree2 --max-level 3 --tries 10 --online \
+    -O ping-3hop-$(date +%F).json
+
+  # Show ONLY what would be pinged (the BFS discovery tree), without
+  # firing any actual pings. Quick way to inventory your reachable
+  # network before committing to a long run.
+  skywire cli visor ping tree2 --max-level 3 --dry-run
+
+  # Resume a long run that was interrupted (re-uses the same -O file).
+  skywire cli visor ping tree2 --max-level 3 --tries 10 --resume \
+    -O ping-3hop-$(date +%F).json
+
+  # DMSG-only measurement (skip route-based ping; just probe DMSG
+  # server reachability). Useful for diagnosing route-setup-node
+  # issues separately from transport-level connectivity.
+  skywire cli visor ping tree2 --dmsg-only --online --tries 10
+
+  # Filter to visors running v1.3.51 or newer (skips old visors
+  # whose latency-publish path is broken).
+  skywire cli visor ping tree2 --max-level 2 --version v1.3.51`,
 	Run: runPingTreeTUI,
 }
 
@@ -258,6 +296,12 @@ type pingTreeModel struct {
 	statusMu  *sync.RWMutex
 	statusMsg string
 
+	// Spinner for visual "work in progress" feedback in the status
+	// bar. Driven by bubbles/spinner; ticked while the status string
+	// indicates ongoing work, paused on "Done" so the operator sees
+	// a stable indicator of completion.
+	spinner spinner.Model
+
 	// Goroutine tracking
 	pingWg *sync.WaitGroup
 }
@@ -269,6 +313,7 @@ func (m pingTreeModel) Init() tea.Cmd {
 	return tea.Batch(
 		tea.EnterAltScreen,
 		tickCmd(),
+		m.spinner.Tick,
 	)
 }
 
@@ -338,6 +383,20 @@ func (m pingTreeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.GotoBottom()
 		}
 		cmds = append(cmds, tickCmd())
+
+	case spinner.TickMsg:
+		// Spinner only animates while work is in flight. Once the
+		// status string starts with "Done" we stop pumping spinner
+		// ticks — the stationary glyph is the operator's visual cue
+		// that the run has completed.
+		m.statusMu.RLock()
+		ongoing := !strings.HasPrefix(m.statusMsg, "Done")
+		m.statusMu.RUnlock()
+		if ongoing {
+			var spinnerCmd tea.Cmd
+			m.spinner, spinnerCmd = m.spinner.Update(msg)
+			cmds = append(cmds, spinnerCmd)
+		}
 	}
 
 	m.viewport, cmd = m.viewport.Update(msg)
@@ -365,7 +424,10 @@ func (m pingTreeModel) View() string {
 	status := m.statusMsg
 	m.statusMu.RUnlock()
 	if status != "" {
-		statsLine += " | " + status
+		// Spinner glyph in front of the status string is the
+		// visual "still working" indicator. The spinner stops
+		// animating on Done so the glyph holds steady.
+		statsLine += fmt.Sprintf(" | %s %s", m.spinner.View(), status)
 	}
 
 	scrollPercent := m.viewport.ScrollPercent() * 100
@@ -1403,6 +1465,12 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 		statusMu:         &sync.RWMutex{},
 		pingWg:           &sync.WaitGroup{},
 	}
+	// Spinner: Line is a tight |/-\ rotation. Styled cyan so it
+	// stands out from the status text without being loud.
+	sp := spinner.New()
+	sp.Spinner = spinner.Line
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
+	model.spinner = sp
 
 	// Load DMSG clients if needed
 	if tuiDmsgPreCheck || tuiDmsgOnly {
@@ -1468,7 +1536,20 @@ func (m *pingTreeModel) runPingWorker() {
 		}
 
 		if !tuiContinuous {
-			m.setStatus("Done")
+			// Note: an earlier setStatus from expandLevels' break
+			// path already describes WHY the run is done (max-level
+			// reached, no parents left, no new neighbors). Only
+			// overwrite to a plain "Done" when nothing more
+			// specific is on the status line — preserves the
+			// "why expansion stopped" hint for the operator.
+			m.statusMu.RLock()
+			cur := m.statusMsg
+			m.statusMu.RUnlock()
+			if !strings.HasPrefix(cur, "Done") {
+				m.setStatus("Done — press q to exit")
+			} else {
+				m.setStatus(cur + " — press q to exit")
+			}
 			return
 		}
 
@@ -1503,7 +1584,19 @@ func (m *pingTreeModel) runRouteMode() {
 	visited := make(map[string]bool)
 	visited[m.localPK] = true
 
-	// Process level 1 (direct transports)
+	// Process level 1 (direct transports). Always discover entries
+	// at every reachable level — even when --hops N targets a
+	// deeper level than 1, we still need level-1 visors as the
+	// parents the BFS expands FROM. The pingLevel call below
+	// (and the deeper passes via expandLevels) consult tuiHops to
+	// decide whether to actually fire a latency measurement; the
+	// discovery walk itself runs unconditionally.
+	//
+	// Before this fix, --hops 2 left m.entries empty (this loop's
+	// "if tuiHops > 0 && tuiHops != 1: continue" skipped every
+	// level-1 entry), so expandLevels(2) found zero parents and
+	// the View sat at its empty-state "Discovering network
+	// topology..." placeholder forever.
 	m.setStatus("Discovering level 1...")
 	for _, tp := range m.localTps {
 		remotePK := tp.Remote.String()
@@ -1511,9 +1604,6 @@ func (m *pingTreeModel) runRouteMode() {
 			continue
 		}
 		if !m.passesFilter(remotePK) {
-			continue
-		}
-		if tuiHops > 0 && tuiHops != 1 {
 			continue
 		}
 
@@ -1641,6 +1731,20 @@ func (m *pingTreeModel) pingLevel(level int) {
 			continue
 		}
 
+		// --hops N targets a single level; non-target levels are
+		// discovered (so BFS can reach the target) but not pinged.
+		// Mark them as "skipped" so the tree still surfaces them
+		// without inflating the latency results.
+		if tuiHops > 0 && uint(level) != tuiHops { //nolint:gosec
+			m.latenciesMu.Lock()
+			if data := m.latencies[entry.tpID]; data != nil {
+				data.phase = "skipped"
+				data.timestamp = time.Now()
+			}
+			m.latenciesMu.Unlock()
+			continue
+		}
+
 		if tuiDryRun {
 			m.latenciesMu.Lock()
 			if data := m.latencies[entry.tpID]; data != nil {
@@ -1699,16 +1803,37 @@ func (m *pingTreeModel) pingLevel(level int) {
 	levelWg.Wait()
 }
 
-// expandLevels expands to deeper levels
+// expandLevels expands to deeper levels. Surfaces a clear status
+// message whenever the loop terminates so the bottom bar doesn't
+// silently sit at "Level N: K/K" after work has actually finished —
+// every break path now sets a status describing why expansion
+// stopped (max-level reached, no parents to expand from, no new
+// neighbors). Pre-fix symptom: a run that completes level 1 with
+// no expandable parents left the status frozen at "Level 1: 51/51"
+// forever and the operator couldn't tell whether the run was hung
+// or done.
 func (m *pingTreeModel) expandLevels(visited map[string]bool, startLevel int) {
 	currentLevel := startLevel
 	for {
 		if tuiMaxLevel > 0 && currentLevel > tuiMaxLevel {
+			m.setStatus(fmt.Sprintf("Done — reached --max-level %d", tuiMaxLevel))
 			break
 		}
-		if tuiHops > 0 && currentLevel >= 0 && uint(currentLevel) != tuiHops { //nolint:gosec
-			currentLevel++
-			continue
+		// Note: --hops gating happens at PING time in pingLevel, not
+		// here. Expansion needs to run at every level so non-target
+		// levels still discover their entries — those entries are the
+		// parents we need to find target-level neighbors from. Pre-fix
+		// this branch did `currentLevel++; continue` for non-target
+		// levels, which skipped the entry-adding step and left BFS
+		// without parents to expand from at the target level.
+		//
+		// Once we've passed the --hops target level, the deeper
+		// expansion serves no purpose (nothing past the target will
+		// be pinged), so stop early to avoid scanning the rest of
+		// the graph.
+		if tuiHops > 0 && uint(currentLevel) > tuiHops { //nolint:gosec
+			m.setStatus(fmt.Sprintf("Done — reached --hops target %d", tuiHops))
+			break
 		}
 
 		var expandFrom []string
@@ -1721,6 +1846,7 @@ func (m *pingTreeModel) expandLevels(visited map[string]bool, startLevel int) {
 		m.entriesMu.RUnlock()
 
 		if len(expandFrom) == 0 {
+			m.setStatus(fmt.Sprintf("Done — no successful pings at level %d to expand from", currentLevel-1))
 			break
 		}
 
@@ -1757,6 +1883,7 @@ func (m *pingTreeModel) expandLevels(visited map[string]bool, startLevel int) {
 		}
 
 		if newEntries == 0 {
+			m.setStatus(fmt.Sprintf("Done — no new visors discoverable at level %d (every neighbor of level-%d visors is already visited)", currentLevel, currentLevel-1))
 			break
 		}
 
