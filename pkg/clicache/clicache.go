@@ -79,18 +79,26 @@ func DefaultPath() (string, error) {
 // writable by other users — this is what the older per-URL file
 // cache failed to do (umask downgrade).
 //
+// The wide permissions are deliberate: when the visor runs as root
+// (e.g. via the systemd service) and the operator runs the CLI as
+// their own user, both must be able to write the cache or the CLI
+// degenerates back into per-user files. The cache contents are
+// public deployment-service responses, so wide read perms aren't a
+// disclosure risk. gosec G301/G302 warnings are silenced for the
+// same reason.
+//
 // A 2s open timeout matches the rest of the codebase's bbolt usage
 // and prevents the CLI from hanging if another process holds the
 // lock.
 func Open(path string) (*Cache, error) {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o777); err != nil {
+	if err := os.MkdirAll(dir, 0o777); err != nil { //nolint:gosec // intentional shared-cache mode; see Open doc
 		return nil, fmt.Errorf("clicache: mkdir %q: %w", dir, err)
 	}
 	// Defeat the umask explicitly — MkdirAll only sets perms on
 	// newly-created components, and the second argument is masked
 	// by the calling process's umask. Chmod isn't subject to umask.
-	if err := os.Chmod(dir, 0o777); err != nil {
+	if err := os.Chmod(dir, 0o777); err != nil { //nolint:gosec // intentional shared-cache mode; see Open doc
 		// Non-fatal: a non-shared cache still works for the calling user.
 		_ = err //nolint:errcheck // intentionally swallowed
 	}
@@ -100,7 +108,7 @@ func Open(path string) (*Cache, error) {
 		return nil, fmt.Errorf("clicache: open %q: %w", path, err)
 	}
 	// Same umask-defeat for the file itself.
-	_ = os.Chmod(path, 0o666) //nolint:errcheck // non-fatal
+	_ = os.Chmod(path, 0o666) //nolint:errcheck,gosec // non-fatal; intentional shared-cache mode
 
 	return &Cache{db: db, path: path}, nil
 }

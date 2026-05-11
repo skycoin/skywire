@@ -12,7 +12,7 @@ func TestPutGet_RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
+	defer c.Close() //nolint:errcheck,gosec
 
 	url := "http://sd.example.com/api/services?type=visor"
 	body := []byte(`[{"address":"deadbeef:80","type":"visor"}]`)
@@ -36,7 +36,7 @@ func TestFresh_RespectsMaxAge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
+	defer c.Close() //nolint:errcheck,gosec
 
 	url := "http://sd.example.com/api/services?type=visor"
 	if err := c.Put(url, []byte("x")); err != nil {
@@ -55,7 +55,7 @@ func TestGet_MissOnUnknownURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
+	defer c.Close() //nolint:errcheck,gosec
 
 	if _, ok := c.Get("http://nope"); ok {
 		t.Errorf("Get hit on never-put URL")
@@ -98,7 +98,7 @@ func TestOpen_ChmodFilePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.Close()
+	defer c.Close() //nolint:errcheck,gosec
 	info, err := os.Stat(dbPath)
 	if err != nil {
 		t.Fatal(err)
