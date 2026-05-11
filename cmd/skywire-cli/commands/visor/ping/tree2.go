@@ -31,73 +31,80 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
-// TUI-specific flags
-var (
-	tuiVersion        string
-	tuiMaxLevel       int
-	tuiTimeout        time.Duration
-	tuiSetupTimeout   time.Duration
-	tuiTries          int
-	tuiPcktSize       int
-	tuiCacheTPD       string
-	tuiCacheUT        string
-	tuiCacheDMSG      string
-	tuiCacheAge       int
-	tuiTPDURL         string
-	tuiUTURL          string
-	tuiDMSGURL        string
-	tuiOnlineOnly     bool
-	tuiOutput         string
-	tuiHops           uint
-	tuiRetries        int
-	tuiResume         bool
-	tuiMaxAge         time.Duration
-	tuiDryRun         bool
-	tuiDmsgOnly       bool
-	tuiDmsgPreCheck   bool
-	tuiDmsgAllServers bool
-	tuiUseTPS         bool
-	tuiContinuous     bool
-	tuiRecheckAge     time.Duration
-	tuiRemoveTp       bool
-	tuiRemoveRemoteTp bool
-	tuiRemakeTp       bool
-	tuiRemakeRemoteTp bool
-	tuiConcurrency    int
-)
+// pingTreeConfig holds every flag-driven knob for `ping tree2`.
+// Single package-level instance (cfg) is used for cobra flag
+// binding by address; the rest of the file reads fields off it
+// rather than through 30+ separate globals. Field names mirror
+// the long-flag names (camel-cased) so the mapping at the init()
+// call site is obvious.
+type pingTreeConfig struct {
+	Version        string
+	MaxLevel       int
+	Timeout        time.Duration
+	SetupTimeout   time.Duration
+	Tries          int
+	PcktSize       int
+	CacheTPD       string
+	CacheUT        string
+	CacheDMSG      string
+	CacheAge       int
+	TPDURL         string
+	UTURL          string
+	DMSGURL        string
+	OnlineOnly     bool
+	Output         string
+	Hops           uint
+	Retries        int
+	Resume         bool
+	MaxAge         time.Duration
+	DryRun         bool
+	DmsgOnly       bool
+	DmsgPreCheck   bool
+	DmsgAllServers bool
+	UseTPS         bool
+	Continuous     bool
+	RecheckAge     time.Duration
+	RemoveTp       bool
+	RemoveRemoteTp bool
+	RemakeTp       bool
+	RemakeRemoteTp bool
+	Concurrency    int
+}
+
+var cfg pingTreeConfig
 
 func init() {
-	pingTreeTUICmd.Flags().StringVarP(&tuiVersion, "version", "v", "", "filter by minimum version")
-	pingTreeTUICmd.Flags().IntVarP(&tuiMaxLevel, "max-level", "l", 0, "maximum hop level (0 = unlimited)")
-	pingTreeTUICmd.Flags().DurationVarP(&tuiTimeout, "timeout", "o", 30*time.Second, "timeout per ping attempt")
-	pingTreeTUICmd.Flags().DurationVar(&tuiSetupTimeout, "setup-timeout", 30*time.Second, "timeout for route setup phase")
-	pingTreeTUICmd.Flags().IntVarP(&tuiTries, "tries", "t", 1, "ping attempts per transport")
-	pingTreeTUICmd.Flags().IntVarP(&tuiPcktSize, "size", "s", 2, "packet size in KB")
-	pingTreeTUICmd.Flags().StringVar(&tuiCacheTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location")
-	pingTreeTUICmd.Flags().StringVar(&tuiCacheUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
-	pingTreeTUICmd.Flags().StringVar(&tuiCacheDMSG, "cfd", os.TempDir()+"/dmsg-clients.json", "DMSG clients cache file location")
-	pingTreeTUICmd.Flags().IntVarP(&tuiCacheAge, "cfa", "m", 5, "update cache files if older than n minutes")
-	pingTreeTUICmd.Flags().StringVar(&tuiTPDURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery URL")
-	pingTreeTUICmd.Flags().StringVar(&tuiUTURL, "uturl", deployment.Prod.UptimeTracker, "uptime tracker URL")
-	pingTreeTUICmd.Flags().StringVar(&tuiDMSGURL, "dmsgurl", deployment.Prod.DmsgDiscovery, "DMSG discovery URL")
-	pingTreeTUICmd.Flags().BoolVarP(&tuiOnlineOnly, "online", "g", false, "only ping visors marked online in UT")
-	pingTreeTUICmd.Flags().StringVarP(&tuiOutput, "output", "O", "", "output base filename (writes .json file)")
-	pingTreeTUICmd.Flags().UintVar(&tuiHops, "hops", 0, "exact hop level to ping (0 = all levels)")
-	pingTreeTUICmd.Flags().IntVar(&tuiRetries, "retries", 1, "retry attempts if ping fails")
-	pingTreeTUICmd.Flags().BoolVarP(&tuiResume, "resume", "R", false, "resume from output file if it exists")
-	pingTreeTUICmd.Flags().DurationVar(&tuiMaxAge, "max-age", 0, "re-ping entries older than this duration")
-	pingTreeTUICmd.Flags().BoolVar(&tuiDryRun, "dry-run", false, "show tree structure without pinging")
-	pingTreeTUICmd.Flags().BoolVar(&tuiDmsgOnly, "dmsg-only", false, "ping via DMSG servers instead of routes")
-	pingTreeTUICmd.Flags().BoolVar(&tuiDmsgPreCheck, "dmsg", false, "pre-check visor reachability over DMSG before route ping")
-	pingTreeTUICmd.Flags().BoolVar(&tuiDmsgAllServers, "dmsg-all-servers", false, "ping via all DMSG servers (not just first success)")
-	pingTreeTUICmd.Flags().BoolVar(&tuiUseTPS, "tps", true, "verify/update transports via TPS (default: true)")
-	pingTreeTUICmd.Flags().BoolVar(&tuiContinuous, "continuous", false, "run continuously, re-checking trees")
-	pingTreeTUICmd.Flags().DurationVar(&tuiRecheckAge, "recheck-age", 24*time.Hour, "re-ping entries older than this in continuous mode")
-	pingTreeTUICmd.Flags().BoolVar(&tuiRemoveTp, "remove-tp", false, "remove local transport if route ping fails")
-	pingTreeTUICmd.Flags().BoolVar(&tuiRemoveRemoteTp, "remove-remote-tp", false, "request remote visor to remove transport if route ping fails")
-	pingTreeTUICmd.Flags().BoolVar(&tuiRemakeTp, "remake-tp", false, "remake local transport after removing failed one (retry once)")
-	pingTreeTUICmd.Flags().BoolVar(&tuiRemakeRemoteTp, "remake-remote-tp", false, "remake transport on remote side after failure (retry once)")
-	pingTreeTUICmd.Flags().IntVarP(&tuiConcurrency, "concurrency", "c", 2, "max concurrent ping operations")
+	pingTreeTUICmd.Flags().StringVarP(&cfg.Version, "version", "v", "", "filter by minimum version")
+	pingTreeTUICmd.Flags().IntVarP(&cfg.MaxLevel, "max-level", "l", 0, "maximum hop level (0 = unlimited)")
+	pingTreeTUICmd.Flags().DurationVarP(&cfg.Timeout, "timeout", "o", 30*time.Second, "timeout per ping attempt")
+	pingTreeTUICmd.Flags().DurationVar(&cfg.SetupTimeout, "setup-timeout", 30*time.Second, "timeout for route setup phase")
+	pingTreeTUICmd.Flags().IntVarP(&cfg.Tries, "tries", "t", 1, "ping attempts per transport")
+	pingTreeTUICmd.Flags().IntVarP(&cfg.PcktSize, "size", "s", 2, "packet size in KB")
+	pingTreeTUICmd.Flags().StringVar(&cfg.CacheTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location")
+	pingTreeTUICmd.Flags().StringVar(&cfg.CacheUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
+	pingTreeTUICmd.Flags().StringVar(&cfg.CacheDMSG, "cfd", os.TempDir()+"/dmsg-clients.json", "DMSG clients cache file location")
+	pingTreeTUICmd.Flags().IntVarP(&cfg.CacheAge, "cfa", "m", 5, "update cache files if older than n minutes")
+	pingTreeTUICmd.Flags().StringVar(&cfg.TPDURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery URL")
+	pingTreeTUICmd.Flags().StringVar(&cfg.UTURL, "uturl", deployment.Prod.UptimeTracker, "uptime tracker URL")
+	pingTreeTUICmd.Flags().StringVar(&cfg.DMSGURL, "dmsgurl", deployment.Prod.DmsgDiscovery, "DMSG discovery URL")
+	pingTreeTUICmd.Flags().BoolVarP(&cfg.OnlineOnly, "online", "g", false, "only ping visors marked online in UT")
+	pingTreeTUICmd.Flags().StringVarP(&cfg.Output, "output", "O", "", "output base filename (writes .json file)")
+	pingTreeTUICmd.Flags().UintVar(&cfg.Hops, "hops", 0, "exact hop level to ping (0 = all levels)")
+	pingTreeTUICmd.Flags().IntVar(&cfg.Retries, "retries", 1, "retry attempts if ping fails")
+	pingTreeTUICmd.Flags().BoolVarP(&cfg.Resume, "resume", "R", false, "resume from output file if it exists")
+	pingTreeTUICmd.Flags().DurationVar(&cfg.MaxAge, "max-age", 0, "re-ping entries older than this duration")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.DryRun, "dry-run", false, "show tree structure without pinging")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.DmsgOnly, "dmsg-only", false, "ping via DMSG servers instead of routes")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.DmsgPreCheck, "dmsg", false, "pre-check visor reachability over DMSG before route ping")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.DmsgAllServers, "dmsg-all-servers", false, "ping via all DMSG servers (not just first success)")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.UseTPS, "tps", true, "verify/update transports via TPS (default: true)")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.Continuous, "continuous", false, "run continuously, re-checking trees")
+	pingTreeTUICmd.Flags().DurationVar(&cfg.RecheckAge, "recheck-age", 24*time.Hour, "re-ping entries older than this in continuous mode")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.RemoveTp, "remove-tp", false, "remove local transport if route ping fails")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.RemoveRemoteTp, "remove-remote-tp", false, "request remote visor to remove transport if route ping fails")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.RemakeTp, "remake-tp", false, "remake local transport after removing failed one (retry once)")
+	pingTreeTUICmd.Flags().BoolVar(&cfg.RemakeRemoteTp, "remake-remote-tp", false, "remake transport on remote side after failure (retry once)")
+	pingTreeTUICmd.Flags().IntVarP(&cfg.Concurrency, "concurrency", "c", 2, "max concurrent ping operations")
 
 	RootCmd.AddCommand(pingTreeTUICmd)
 }
@@ -480,11 +487,11 @@ func (m *pingTreeModel) renderTreeContent() string {
 	}
 	// Ping columns: "ping" in first slot, ".....ms" in rest - each 8 chars right-aligned
 	labelParts = append(labelParts, fmt.Sprintf("%8s", pterm.Gray("ping")))
-	for i := 1; i < tuiTries; i++ {
+	for i := 1; i < cfg.Tries; i++ {
 		labelParts = append(labelParts, fmt.Sprintf("%8s", pterm.Gray(".....ms")))
 	}
 	labelParts = append(labelParts, fmt.Sprintf("%9s", pterm.Gray("avg")))
-	if tuiDmsgPreCheck || tuiDmsgOnly {
+	if cfg.DmsgPreCheck || cfg.DmsgOnly {
 		labelParts = append(labelParts, pterm.Gray("dmsg"))
 	}
 	labelRow := strings.Join(labelParts, " ")
@@ -698,7 +705,7 @@ func (m *pingTreeModel) buildTreeNodeWithDmsg(entry tuiTreeEntry) pterm.TreeNode
 	node := pterm.TreeNode{Text: m.formatEntryForTree(entry)}
 
 	// Add DMSG server children if available
-	if tuiDmsgPreCheck || tuiDmsgOnly {
+	if cfg.DmsgPreCheck || cfg.DmsgOnly {
 		m.latenciesMu.RLock()
 		data := m.latencies[entry.tpID]
 		m.latenciesMu.RUnlock()
@@ -954,7 +961,7 @@ func (m *pingTreeModel) getAvgLatency(tpID string) float64 {
 
 // saveResults saves the current state to JSON file
 func (m *pingTreeModel) saveResults() {
-	if tuiOutput == "" {
+	if cfg.Output == "" {
 		return
 	}
 
@@ -975,9 +982,9 @@ func (m *pingTreeModel) saveResults() {
 		StartTime:  m.startTime.Format(time.RFC3339),
 		UpdateTime: time.Now().Format(time.RFC3339),
 		Settings: map[string]interface{}{
-			"tries":   tuiTries,
-			"timeout": tuiTimeout.String(),
-			"version": tuiVersion,
+			"tries":   cfg.Tries,
+			"timeout": cfg.Timeout.String(),
+			"version": cfg.Version,
 		},
 	}
 
@@ -1048,11 +1055,11 @@ func (m *pingTreeModel) saveResults() {
 		return
 	}
 
-	jsonFile := tuiOutput + ".json"
+	jsonFile := cfg.Output + ".json"
 	_ = os.WriteFile(jsonFile, jsonData, 0600) //nolint:errcheck,gosec
 
 	// Also save text output (with ANSI codes for colors) for consistency with tree command
-	textFile := tuiOutput + ".txt"
+	textFile := cfg.Output + ".txt"
 	textOut := m.generateTextOutput(entries, latencies)
 	_ = os.WriteFile(textFile, []byte(textOut), 0600) //nolint:errcheck,gosec
 }
@@ -1150,11 +1157,11 @@ func (m *pingTreeModel) generateTextOutput(entries []tuiTreeEntry, latencies map
 
 // loadSavedState loads previous state from JSON file for resume
 func (m *pingTreeModel) loadSavedState() bool {
-	if !tuiResume || tuiOutput == "" {
+	if !cfg.Resume || cfg.Output == "" {
 		return false
 	}
 
-	resumeFile := tuiOutput + ".json"
+	resumeFile := cfg.Output + ".json"
 	savedData, err := os.ReadFile(resumeFile) //nolint:gosec
 	if err != nil {
 		return false
@@ -1181,8 +1188,8 @@ func (m *pingTreeModel) loadSavedState() bool {
 		}
 
 		isStale := false
-		if tuiMaxAge > 0 && entry.Phase == "done" && !entryTime.IsZero() {
-			if time.Since(entryTime) > tuiMaxAge {
+		if cfg.MaxAge > 0 && entry.Phase == "done" && !entryTime.IsZero() {
+			if time.Since(entryTime) > cfg.MaxAge {
 				isStale = true
 				staleCount++
 			}
@@ -1291,13 +1298,13 @@ func (m *pingTreeModel) removeRemoteTransport(remotePK string, tpID string) erro
 
 // loadDmsgClients loads DMSG clients data for pre-checking
 func (m *pingTreeModel) loadDmsgClients() {
-	if !tuiDmsgPreCheck && !tuiDmsgOnly {
+	if !cfg.DmsgPreCheck && !cfg.DmsgOnly {
 		return
 	}
 
-	dmsgURL := tuiDMSGURL + "/dmsg-discovery/servers/clients"
+	dmsgURL := cfg.DMSGURL + "/dmsg-discovery/servers/clients"
 	m.setStatus("Loading DMSG clients...")
-	dmsgClientsRaw := clirpc.FetchCachedServiceURL(m.cmdFlags, tuiCacheDMSG, dmsgURL, tuiCacheAge)
+	dmsgClientsRaw := clirpc.FetchCachedServiceURL(m.cmdFlags, cfg.CacheDMSG, dmsgURL, cfg.CacheAge)
 
 	var clientsByServer map[string][]string
 	if err := json.Unmarshal([]byte(dmsgClientsRaw), &clientsByServer); err != nil {
@@ -1355,7 +1362,7 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 	localPK := overview.PubKey.String()
 
 	// Fetch TPD data
-	tpdRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), tuiCacheTPD, tuiTPDURL+"/all-transports", tuiCacheAge)
+	tpdRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), cfg.CacheTPD, cfg.TPDURL+"/all-transports", cfg.CacheAge)
 	var transports []transportEntry
 	if err := json.Unmarshal([]byte(tpdRaw), &transports); err != nil {
 		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
@@ -1399,17 +1406,17 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 	}
 
 	// Fetch UT data
-	utRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), tuiCacheUT, tuiUTURL+"/uptimes?v=v2", tuiCacheAge)
+	utRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), cfg.CacheUT, cfg.UTURL+"/uptimes?v=v2", cfg.CacheAge)
 	var utEntries []uptimeEntry
 	_ = json.Unmarshal([]byte(utRaw), &utEntries) //nolint:errcheck
 
 	onlineSet := make(map[string]bool)
 	versionFilteredSet := make(map[string]bool)
-	filterByVersion := tuiVersion != ""
+	filterByVersion := cfg.Version != ""
 
 	var minVersion semver.Version
 	if filterByVersion {
-		cleanVersion := strings.TrimPrefix(tuiVersion, "v")
+		cleanVersion := strings.TrimPrefix(cfg.Version, "v")
 		minVersion, err = semver.Parse(cleanVersion)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid version format: %w", err))
@@ -1432,7 +1439,7 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 	}
 
 	passesFilter := func(pk string) bool {
-		if tuiOnlineOnly && !onlineSet[pk] {
+		if cfg.OnlineOnly && !onlineSet[pk] {
 			return false
 		}
 		if filterByVersion && !versionFilteredSet[pk] {
@@ -1473,7 +1480,7 @@ func runPingTreeTUI(cmd *cobra.Command, _ []string) {
 	model.spinner = sp
 
 	// Load DMSG clients if needed
-	if tuiDmsgPreCheck || tuiDmsgOnly {
+	if cfg.DmsgPreCheck || cfg.DmsgOnly {
 		model.loadDmsgClients()
 	}
 
@@ -1529,13 +1536,13 @@ func (m *pingTreeModel) runPingWorker() {
 		default:
 		}
 
-		if tuiDmsgOnly {
+		if cfg.DmsgOnly {
 			m.runDmsgMode()
 		} else {
 			m.runRouteMode()
 		}
 
-		if !tuiContinuous {
+		if !cfg.Continuous {
 			// Note: an earlier setStatus from expandLevels' break
 			// path already describes WHY the run is done (max-level
 			// reached, no parents left, no new neighbors). Only
@@ -1557,7 +1564,7 @@ func (m *pingTreeModel) runPingWorker() {
 		select {
 		case <-m.ctx.Done():
 			return
-		case <-time.After(tuiRecheckAge):
+		case <-time.After(cfg.RecheckAge):
 		}
 
 		// Mark old entries as stale for re-ping
@@ -1571,7 +1578,7 @@ func (m *pingTreeModel) markStaleEntries() {
 	defer m.latenciesMu.Unlock()
 
 	for _, data := range m.latencies {
-		if data.phase == "done" && time.Since(data.timestamp) > tuiRecheckAge {
+		if data.phase == "done" && time.Since(data.timestamp) > cfg.RecheckAge {
 			data.stale = true
 			data.phase = "pending"
 			delete(m.pingedTpIDs, data.tpID)
@@ -1588,12 +1595,12 @@ func (m *pingTreeModel) runRouteMode() {
 	// at every reachable level — even when --hops N targets a
 	// deeper level than 1, we still need level-1 visors as the
 	// parents the BFS expands FROM. The pingLevel call below
-	// (and the deeper passes via expandLevels) consult tuiHops to
+	// (and the deeper passes via expandLevels) consult cfg.Hops to
 	// decide whether to actually fire a latency measurement; the
 	// discovery walk itself runs unconditionally.
 	//
 	// Before this fix, --hops 2 left m.entries empty (this loop's
-	// "if tuiHops > 0 && tuiHops != 1: continue" skipped every
+	// "if cfg.Hops > 0 && cfg.Hops != 1: continue" skipped every
 	// level-1 entry), so expandLevels(2) found zero parents and
 	// the View sat at its empty-state "Discovering network
 	// topology..." placeholder forever.
@@ -1623,7 +1630,7 @@ func (m *pingTreeModel) runRouteMode() {
 	m.pingLevel(1)
 
 	// Expand to deeper levels
-	if tuiMaxLevel == 0 || tuiMaxLevel > 1 {
+	if cfg.MaxLevel == 0 || cfg.MaxLevel > 1 {
 		m.expandLevels(visited, 2)
 	}
 }
@@ -1707,7 +1714,7 @@ func (m *pingTreeModel) pingLevel(level int) {
 	m.entriesMu.RUnlock()
 
 	// Use semaphore for concurrency limiting
-	concurrency := tuiConcurrency
+	concurrency := cfg.Concurrency
 	if concurrency < 1 {
 		concurrency = 1
 	}
@@ -1735,7 +1742,7 @@ func (m *pingTreeModel) pingLevel(level int) {
 		// discovered (so BFS can reach the target) but not pinged.
 		// Mark them as "skipped" so the tree still surfaces them
 		// without inflating the latency results.
-		if tuiHops > 0 && uint(level) != tuiHops { //nolint:gosec
+		if cfg.Hops > 0 && uint(level) != cfg.Hops { //nolint:gosec
 			m.latenciesMu.Lock()
 			if data := m.latencies[entry.tpID]; data != nil {
 				data.phase = "skipped"
@@ -1745,7 +1752,7 @@ func (m *pingTreeModel) pingLevel(level int) {
 			continue
 		}
 
-		if tuiDryRun {
+		if cfg.DryRun {
 			m.latenciesMu.Lock()
 			if data := m.latencies[entry.tpID]; data != nil {
 				data.phase = "done"
@@ -1788,7 +1795,7 @@ func (m *pingTreeModel) pingLevel(level int) {
 			m.setStatus(fmt.Sprintf("Level %d: %d/%d", level, current, len(levelEntries)))
 
 			// DMSG pre-check if enabled
-			if tuiDmsgPreCheck {
+			if cfg.DmsgPreCheck {
 				if !m.checkDmsgReachable(entry) {
 					return
 				}
@@ -1815,8 +1822,8 @@ func (m *pingTreeModel) pingLevel(level int) {
 func (m *pingTreeModel) expandLevels(visited map[string]bool, startLevel int) {
 	currentLevel := startLevel
 	for {
-		if tuiMaxLevel > 0 && currentLevel > tuiMaxLevel {
-			m.setStatus(fmt.Sprintf("Done — reached --max-level %d", tuiMaxLevel))
+		if cfg.MaxLevel > 0 && currentLevel > cfg.MaxLevel {
+			m.setStatus(fmt.Sprintf("Done — reached --max-level %d", cfg.MaxLevel))
 			break
 		}
 		// Note: --hops gating happens at PING time in pingLevel, not
@@ -1831,8 +1838,8 @@ func (m *pingTreeModel) expandLevels(visited map[string]bool, startLevel int) {
 		// expansion serves no purpose (nothing past the target will
 		// be pinged), so stop early to avoid scanning the rest of
 		// the graph.
-		if tuiHops > 0 && uint(currentLevel) > tuiHops { //nolint:gosec
-			m.setStatus(fmt.Sprintf("Done — reached --hops target %d", tuiHops))
+		if cfg.Hops > 0 && uint(currentLevel) > cfg.Hops { //nolint:gosec
+			m.setStatus(fmt.Sprintf("Done — reached --hops target %d", cfg.Hops))
 			break
 		}
 
@@ -1928,8 +1935,8 @@ func (m *pingTreeModel) checkDmsgReachable(entry tuiTreeEntry) bool {
 
 		// Perform DMSG ping via this server
 		var samples []float64
-		ctx, cancel := context.WithTimeout(m.ctx, tuiTimeout*time.Duration(tuiTries+1))
-		err := m.grpcClient.StreamDmsgPing(ctx, entry.remotePK, int32(tuiTries), int32(tuiPcktSize), tuiTimeout, serverPK, //nolint:gosec
+		ctx, cancel := context.WithTimeout(m.ctx, cfg.Timeout*time.Duration(cfg.Tries+1))
+		err := m.grpcClient.StreamDmsgPing(ctx, entry.remotePK, int32(cfg.Tries), int32(cfg.PcktSize), cfg.Timeout, serverPK, //nolint:gosec
 			func(_ int32, latency time.Duration, isSetup bool, _ []rpcgrpc.RouteHopDetail, _ string, _ time.Duration, pingErr error) {
 				if isSetup {
 					return
@@ -1962,7 +1969,7 @@ func (m *pingTreeModel) checkDmsgReachable(entry tuiTreeEntry) bool {
 		}
 
 		// Stop after first success unless --dmsg-all-servers
-		if !tuiDmsgAllServers && reachable {
+		if !cfg.DmsgAllServers && reachable {
 			break
 		}
 	}
@@ -2013,8 +2020,8 @@ func (m *pingTreeModel) pingViaDmsg(entry tuiTreeEntry) {
 		}
 
 		var samples []float64
-		ctx, cancel := context.WithTimeout(m.ctx, tuiTimeout*time.Duration(tuiTries+1))
-		err := m.grpcClient.StreamDmsgPing(ctx, entry.remotePK, int32(tuiTries), int32(tuiPcktSize), tuiTimeout, serverPK, //nolint:gosec
+		ctx, cancel := context.WithTimeout(m.ctx, cfg.Timeout*time.Duration(cfg.Tries+1))
+		err := m.grpcClient.StreamDmsgPing(ctx, entry.remotePK, int32(cfg.Tries), int32(cfg.PcktSize), cfg.Timeout, serverPK, //nolint:gosec
 			func(_ int32, latency time.Duration, isSetup bool, _ []rpcgrpc.RouteHopDetail, _ string, _ time.Duration, pingErr error) {
 				if isSetup {
 					return
@@ -2048,7 +2055,7 @@ func (m *pingTreeModel) pingViaDmsg(entry tuiTreeEntry) {
 		}
 		m.latenciesMu.Unlock()
 
-		if !tuiDmsgAllServers && len(samples) > 0 {
+		if !cfg.DmsgAllServers && len(samples) > 0 {
 			break
 		}
 	}
@@ -2117,15 +2124,15 @@ func (m *pingTreeModel) pingTransport(entry tuiTreeEntry) {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(m.ctx, tuiSetupTimeout+tuiTimeout*time.Duration(tuiTries+1))
+	ctx, cancel := context.WithTimeout(m.ctx, cfg.SetupTimeout+cfg.Timeout*time.Duration(cfg.Tries+1))
 	err := m.grpcClient.StreamPingWithTransport(
 		ctx,
 		entry.remotePK,
-		int32(tuiTries),    //nolint:gosec
-		int32(tuiPcktSize), //nolint:gosec
+		int32(cfg.Tries),    //nolint:gosec
+		int32(cfg.PcktSize), //nolint:gosec
 		true,
-		tuiTimeout,
-		tuiSetupTimeout,
+		cfg.Timeout,
+		cfg.SetupTimeout,
 		entry.tpID,
 		callback,
 	)
@@ -2133,7 +2140,7 @@ func (m *pingTreeModel) pingTransport(entry tuiTreeEntry) {
 
 	// Handle retries
 	retryCount := 0
-	for (setupErr != "" || pingErr != "" || len(samples) == 0) && retryCount < tuiRetries {
+	for (setupErr != "" || pingErr != "" || len(samples) == 0) && retryCount < cfg.Retries {
 		select {
 		case <-m.ctx.Done():
 			return
@@ -2152,8 +2159,8 @@ func (m *pingTreeModel) pingTransport(entry tuiTreeEntry) {
 		data.pingSamples = nil
 		m.latenciesMu.Unlock()
 
-		ctx, cancel := context.WithTimeout(m.ctx, tuiSetupTimeout+tuiTimeout*time.Duration(tuiTries+1))
-		err = m.grpcClient.StreamPingWithTransport(ctx, entry.remotePK, int32(tuiTries), int32(tuiPcktSize), true, tuiTimeout, tuiSetupTimeout, entry.tpID, callback) //nolint:gosec
+		ctx, cancel := context.WithTimeout(m.ctx, cfg.SetupTimeout+cfg.Timeout*time.Duration(cfg.Tries+1))
+		err = m.grpcClient.StreamPingWithTransport(ctx, entry.remotePK, int32(cfg.Tries), int32(cfg.PcktSize), true, cfg.Timeout, cfg.SetupTimeout, entry.tpID, callback) //nolint:gosec
 		cancel()
 	}
 
@@ -2191,7 +2198,7 @@ func (m *pingTreeModel) handleFailedTransport(entry tuiTreeEntry) {
 	isLevel1 := entry.level == 1
 
 	// Remove local transport if requested
-	if tuiRemoveTp && isLevel1 && m.localTpIDs[entry.tpID] {
+	if cfg.RemoveTp && isLevel1 && m.localTpIDs[entry.tpID] {
 		if err := m.removeLocalTransport(entry.tpID); err != nil {
 			m.entriesMu.Lock()
 			for i := range m.entries {
@@ -2214,7 +2221,7 @@ func (m *pingTreeModel) handleFailedTransport(entry tuiTreeEntry) {
 	}
 
 	// Remove remote transport if requested
-	if tuiRemoveRemoteTp && isLevel1 {
+	if cfg.RemoveRemoteTp && isLevel1 {
 		_ = m.removeRemoteTransport(entry.remotePK, entry.tpID) //nolint:errcheck
 	}
 
@@ -2229,7 +2236,7 @@ func (m *pingTreeModel) handleFailedTransport(entry tuiTreeEntry) {
 	}
 	m.entriesMu.RUnlock()
 
-	if (tuiRemakeTp || tuiRemakeRemoteTp) && isLevel1 && !alreadyRemade {
+	if (cfg.RemakeTp || cfg.RemakeRemoteTp) && isLevel1 && !alreadyRemade {
 		m.entriesMu.Lock()
 		for i := range m.entries {
 			if m.entries[i].tpID == entry.tpID {
