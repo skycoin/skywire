@@ -151,10 +151,35 @@ manually if you want to revoke completely.
 
 After install + visor restart, point a browser at the resolver
 SOCKS5 (default `127.0.0.1:4446` for skynet, `4445` for dmsg) and
-visit `https://<visor-pk>.skynet/`. You should see the merchant's
-content with no certificate warning. Browser dev-tools should
-report `isSecureContext = true` and the cert issuer as the local
-"Skynet Resolver Local CA".
+visit `https://<visor-pk-dns-label>.skynet/`. You should see the
+merchant's content with no certificate warning. Browser dev-tools
+should report `isSecureContext = true` and the cert issuer as the
+local "Skynet Resolver Local CA".
+
+### Why `<visor-pk-dns-label>` and not hex
+
+A 33-byte PubKey is 66 hex chars, which overflows two strict
+limits enforced by NSS (Firefox / Waterfox / Chrome):
+
+  - RFC 1035 caps each DNS label at 63 octets.
+  - X.520 caps an X.509 Subject `CN` attribute at 64 chars
+    (ub-common-name).
+
+A leaf cert minted for `<66-hex>.skynet` is rejected as
+"improperly encoded" before any trust check runs. The base32 form
+produced by `<pk>.DNSLabel()` is 53 chars — fits both limits.
+
+The hex form is still accepted by the resolver for backwards
+compatibility with plain-HTTP URLs already in circulation, but
+HTTPS will not work with it regardless of CA install state.
+
+To get a visor's PK in the URL form, use:
+
+```
+skywire cli pk dnslabel                       # local visor
+skywire cli pk dnslabel <hex-pk>              # arbitrary PK (hex → base32)
+skywire cli pk dnslabel <base32-pk>           # round-trip back to hex
+```
 
 ## Trust scope
 

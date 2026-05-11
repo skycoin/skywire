@@ -18,6 +18,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -29,6 +30,7 @@ func init() {
 	RootCmd.AddCommand(pkCmd)
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+fmt.Sprintf("%v", visorconfig.PackageConfig()))
+	pkCmd.AddCommand(pkDNSLabelCmd)
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(readyCmd)
 	RootCmd.AddCommand(buildInfoCmd)
@@ -65,6 +67,59 @@ var pkCmd = &cobra.Command{
 			outputPK = overview.PubKey.Hex() + "\n"
 		}
 		internal.PrintOutput(cmd.Flags(), strings.TrimSuffix(outputPK, "\n"), outputPK)
+	},
+}
+
+// pkDNSLabelCmd converts a PK between its hex (66 chars) and base32
+// DNS-label (53 chars) forms. The base32 form is what skynet URLs
+// must use — hex overflows DNS-label and X.509 CN limits and breaks
+// HTTPS via the resolver's TLS-MITM mode.
+var pkDNSLabelCmd = &cobra.Command{
+	Use:   "dnslabel [hex-or-base32-pk]",
+	Short: "Convert a PK to/from its skynet-URL DNS-label form (base32)",
+	Long: `Convert a public key between its hex and base32 DNS-label forms.
+
+With no argument: prints the local visor's PK as a base32 DNS label.
+With one argument: detects the form and prints the other.
+
+  hex (66 chars)   →  base32 (53 chars, DNS-label-safe, used in URLs)
+  base32 (53)      →  hex (66, used everywhere else in skywire)`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var pk cipher.PubKey
+		if len(args) == 1 {
+			in := args[0]
+			switch len(in) {
+			case 66:
+				if err := pk.Set(in); err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid hex PK: %w", err))
+				}
+				out := pk.DNSLabel()
+				internal.PrintOutput(cmd.Flags(), out, out+"\n")
+			case cipher.PubKeyDNSLabelLen:
+				decoded, err := cipher.ParseDNSLabel(in)
+				if err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid base32 PK: %w", err))
+				}
+				out := decoded.Hex()
+				internal.PrintOutput(cmd.Flags(), out, out+"\n")
+			default:
+				internal.PrintFatalError(cmd.Flags(),
+					fmt.Errorf("input %q has length %d; expected 66 (hex) or 53 (base32)", in, len(in)))
+			}
+			return
+		}
+		// No arg — query the running visor.
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		overview, err := rpcClient.Overview()
+		if err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		out := overview.PubKey.DNSLabel()
+		internal.PrintOutput(cmd.Flags(), out, out+"\n")
 	},
 }
 

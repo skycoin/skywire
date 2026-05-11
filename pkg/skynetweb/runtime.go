@@ -332,9 +332,28 @@ func parseHostHeader(host, suffix string) (target, error) {
 	if err != nil {
 		return target{}, err
 	}
-	var pk cipher.PubKey
-	if err := pk.Set(pkLabel); err != nil {
+	pk, err := parsePKLabel(pkLabel)
+	if err != nil {
 		return target{}, fmt.Errorf("invalid pk %q: %w", pkLabel, err)
 	}
 	return target{pk: pk, port: port, subdomain: subdomain}, nil
+}
+
+// parsePKLabel accepts either the legacy 66-char hex form or the
+// 53-char base32 DNSLabel form. Base32 is the canonical form going
+// forward — it's the only one that fits in a DNS label (RFC 1035, 63
+// octets) and an X.509 Subject.CommonName (X.520 ub-common-name, 64),
+// so TLS MITM URLs must use it. Hex remains accepted because plain-
+// HTTP skynet URLs minted before this change are in circulation.
+func parsePKLabel(label string) (cipher.PubKey, error) {
+	switch len(label) {
+	case cipher.PubKeyDNSLabelLen: // 53 — base32
+		return cipher.ParseDNSLabel(label)
+	default: // hex (66) or anything else — let PubKey.Set complain
+		var pk cipher.PubKey
+		if err := pk.Set(label); err != nil {
+			return cipher.PubKey{}, err
+		}
+		return pk, nil
+	}
 }

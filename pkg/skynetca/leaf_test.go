@@ -113,3 +113,50 @@ func TestStaticMinter_NilLeafErrors(t *testing.T) {
 		t.Errorf("expected error for nil leaf")
 	}
 }
+
+// TestMinter_EmitsRFC1035CompliantSAN protects the strict-parsers path
+// (NSS / Firefox / Waterfox / Chrome). The constants here mirror what
+// strict X.509 stacks enforce; loosening them would break browser TLS
+// over skynet without warning at compile time.
+func TestMinter_EmitsRFC1035CompliantSAN(t *testing.T) {
+	const (
+		rfc1035LabelMax = 63 // octets per DNS label
+		x520CNMax       = 64 // ub-common-name
+	)
+	ca, key, _ := GenerateCA(CAOptions{})
+	m := NewMinter(ca, key, LeafOptions{})
+
+	// Use a host with a 53-char base32 PK label, the canonical form.
+	host := "magnetosphere.net.abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrst.skynet"
+	leaf, err := m.For(host)
+	if err != nil {
+		t.Fatalf("For(%q): %v", host, err)
+	}
+
+	// CN must be empty (or ≤64 chars) — strict parsers reject longer.
+	if cn := leaf.Leaf.Subject.CommonName; len(cn) > x520CNMax {
+		t.Errorf("Subject.CN length %d > %d: %q", len(cn), x520CNMax, cn)
+	}
+
+	// Every label in every DNSName SAN must be ≤63 octets.
+	for _, name := range leaf.Leaf.DNSNames {
+		for _, label := range splitDots(name) {
+			if len(label) > rfc1035LabelMax {
+				t.Errorf("SAN %q has label %q of length %d > %d",
+					name, label, len(label), rfc1035LabelMax)
+			}
+		}
+	}
+}
+
+func splitDots(s string) []string {
+	var out []string
+	start := 0
+	for i := 0; i <= len(s); i++ {
+		if i == len(s) || s[i] == '.' {
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	return out
+}
