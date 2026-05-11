@@ -26,8 +26,6 @@ import (
 	ut "github.com/skycoin/skywire/cmd/svc/uptime-tracker/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
-	// Side-effect imports register service factories with
-	// pkg/services so `skywire svc run` can dispatch them.
 	_ "github.com/skycoin/skywire/pkg/services/ar"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgdisc"
 	_ "github.com/skycoin/skywire/pkg/services/dmsgsrv"

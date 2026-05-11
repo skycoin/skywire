@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -146,21 +147,32 @@ func (r *SkywireNetworker) tryDirectDial(addr Addr) (net.Conn, bool) {
 			Debug("Direct app dial: vstream dial failed, falling through to route setup")
 		return nil, false
 	}
-	// Wire protocol on the stream:
-	//   client → server: 2-byte BE destination port
-	//   server → client: 1 ack byte (0x00 = listener found,
-	//                                 0x01 = no listener on that port)
-	// The ack lets us detect "older remote without AppDirect
-	// support" — those visors silently ignore unrecognized packet
-	// types, so the SYN is dropped on their side and our ack read
-	// times out. Either way, on no-ack we close and let the caller
-	// fall through to the route-setup path.
+	return r.finishDirectDial(stream, addr)
+}
+
+// finishDirectDial completes the port-handshake portion of a direct
+// vstream dial. Split out from tryDirectDial so the ping path
+// (tryDirectPingDial) can pin to a specific transport via
+// DialByTransportID and then reuse the same handshake.
+//
+// Wire protocol on the stream:
+//
+//	client → server: 2-byte BE destination port
+//	server → client: 1 ack byte (0x00 = listener found,
+//	                              0x01 = no listener on that port)
+//
+// The ack lets us detect "older remote without AppDirect support"
+// — those visors silently ignore unrecognized packet types, so the
+// SYN is dropped on their side and our ack read times out. Either
+// way, on no-ack we close and let the caller fall through to the
+// route-setup path.
+func (r *SkywireNetworker) finishDirectDial(stream *transport.VStream, addr Addr) (net.Conn, bool) {
 	hdr := make([]byte, 2)
 	binary.BigEndian.PutUint16(hdr, uint16(addr.Port))
 	if _, err := stream.Write(hdr); err != nil {
 		r.log.WithField("remote", addr.PubKey.String()).
 			WithError(err).
-			Debug("Direct app dial: port-header write failed, falling through to route setup")
+			Debug("Direct dial: port-header write failed, falling through to route setup")
 		stream.Close() //nolint:errcheck,gosec
 		return nil, false
 	}
@@ -169,20 +181,20 @@ func (r *SkywireNetworker) tryDirectDial(addr Addr) (net.Conn, bool) {
 	if ackErr != nil {
 		r.log.WithField("remote", addr.PubKey.String()).
 			WithError(ackErr).
-			Debug("Direct app dial: ack not received, falling through to route setup")
+			Debug("Direct dial: ack not received, falling through to route setup")
 		stream.Close() //nolint:errcheck,gosec
 		return nil, false
 	}
 	if ack[0] != 0x00 {
 		r.log.WithField("remote", addr.PubKey.String()).
 			WithField("port", addr.Port).
-			Debug("Direct app dial: remote rejected (no listener), falling through to route setup")
+			Debug("Direct dial: remote rejected (no listener), falling through to route setup")
 		stream.Close() //nolint:errcheck,gosec
 		return nil, false
 	}
 	r.log.WithField("remote", addr.PubKey.String()).
 		WithField("port", addr.Port).
-		Debug("Direct app dial succeeded (no setup-node)")
+		Debug("Direct dial succeeded (no setup-node)")
 	return &directConn{VStream: stream, remote: addr.PubKey}, true
 }
 
@@ -328,6 +340,18 @@ func (r *SkywireNetworker) PingContext(ctx context.Context, pk cipher.PubKey, ad
 }
 
 // PingContextWithOpts dials remote `addr` via `skynet` with context and custom dial options.
+//
+// Direct-transport bypass: when an AppDirectMux is configured and
+// either (a) opts.TransportID names a transport to the peer or
+// (b) any non-DMSG transport to the peer exists, try a vstream
+// over that transport BEFORE falling back to the RSN-mediated
+// PingRoute. Same mechanism that DialContextWithOptions uses for
+// regular app dials. Cuts ping setup time from ~1-7s (RSN
+// round-trip over dmsg) down to ~10ms (transport handshake only)
+// — the difference shows up directly in `ping tree`'s setup-phase
+// column when the operator and peer are both direct-transport
+// reachable. Falls back transparently on no-direct-transport,
+// no-mux, or older-peer-doesn't-support-AppDirect.
 func (r *SkywireNetworker) PingContextWithOpts(ctx context.Context, pk cipher.PubKey, addr Addr, opts *router.DialOptions) (net.Conn, error) {
 	localPort, freePort, err := r.porter.ReserveEphemeral(ctx, nil)
 	if err != nil {
@@ -345,6 +369,13 @@ func (r *SkywireNetworker) PingContextWithOpts(ctx context.Context, pk cipher.Pu
 		opts = router.DefaultDialOptions()
 	}
 
+	if directConn, ok := r.tryDirectPingDial(addr, opts); ok {
+		return &SkywireConn{
+			Conn:     directConn,
+			freePort: freePort,
+		}, nil
+	}
+
 	conn, err := r.r.PingRoute(ctx, pk, routing.Port(localPort), addr.Port, opts)
 	if err != nil {
 		return nil, err
@@ -355,6 +386,37 @@ func (r *SkywireNetworker) PingContextWithOpts(ctx context.Context, pk cipher.Pu
 		nrg:      conn.(*router.NoiseRouteGroup),
 		freePort: freePort,
 	}, nil
+}
+
+// tryDirectPingDial is the ping-flavor of tryDirectDial. When the
+// caller has a specific transport in mind (opts.TransportID, set
+// by `ping tree` measurements), pins the vstream to that transport
+// — matters because the caller is trying to measure the latency
+// of *that exact* transport, not "any direct one." When
+// opts.TransportID is unset, picks any non-DMSG transport to the
+// peer, same as the regular app-dial path.
+//
+// The port handshake and ack semantics are identical to
+// tryDirectDial — see that function's comment for the wire protocol.
+func (r *SkywireNetworker) tryDirectPingDial(addr Addr, opts *router.DialOptions) (net.Conn, bool) {
+	mux := r.appDirectMux
+	if mux == nil {
+		return nil, false
+	}
+	var stream *transport.VStream
+	var dialErr error
+	if opts != nil && opts.TransportID != (uuid.UUID{}) {
+		stream, dialErr = mux.DialByTransportID(addr.PubKey, opts.TransportID)
+	} else {
+		stream, dialErr = mux.Dial(addr.PubKey)
+	}
+	if dialErr != nil {
+		r.log.WithField("remote", addr.PubKey.String()).
+			WithError(dialErr).
+			Debug("Direct ping dial: vstream dial failed, falling through to route setup")
+		return nil, false
+	}
+	return r.finishDirectDial(stream, addr)
 }
 
 // Listen starts listening on local `addr` in the skynet.

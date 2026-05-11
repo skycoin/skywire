@@ -10,7 +10,9 @@
 // caller needs the same helpers.
 package serviceuptime
 
-import "time"
+import (
+	"time"
+)
 
 // SlotsPerDay is the number of 5-minute slots in a UTC day.
 const SlotsPerDay = 24 * 60 / 5 // 288

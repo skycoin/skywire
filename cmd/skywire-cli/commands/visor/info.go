@@ -4,6 +4,7 @@ package clivisor
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -25,16 +27,19 @@ import (
 
 var path string
 var pkg bool
+var summaryLive bool
 
 func init() {
 	RootCmd.AddCommand(pkCmd)
 	pkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	pkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from "+fmt.Sprintf("%v", visorconfig.PackageConfig()))
 	pkCmd.AddCommand(pkDNSLabelCmd)
+	summaryCmd.Flags().BoolVarP(&summaryLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick); shows Time Online incrementing and uptime graphs updating in place")
 	RootCmd.AddCommand(summaryCmd)
 	RootCmd.AddCommand(readyCmd)
 	RootCmd.AddCommand(buildInfoCmd)
 	RootCmd.AddCommand(portsCmd)
+	dmsgServersCmd.Flags().BoolVarP(&dmsgServersLive, "live", "L", false, "live-refresh mode (bubbletea TUI, 1s tick); shows DMSG server latencies updating in place")
 	RootCmd.AddCommand(dmsgServersCmd)
 	RootCmd.AddCommand(runtimeLogsCmd)
 	RootCmd.AddCommand(runtimeStatsCmd)
@@ -132,110 +137,27 @@ var summaryCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
-		summary, err := rpcClient.Summary()
+
+		// --live: hand off to the livetui watcher and stay in a
+		// bubbletea loop until the user quits. Refresh callback
+		// re-fetches the summary on each tick, so "Time Online"
+		// increments and the 24h rolling-uptime graphs update.
+		if summaryLive {
+			err := livetui.Run(func(ctx context.Context) (string, error) {
+				return buildSummaryMessage(rpcClient)
+			}, livetui.Options{
+				Title:    "skywire cli visor info",
+				Interval: time.Second,
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+
+		msg, summary, arSelf, err := buildSummaryMessageWithData(rpcClient)
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
-		}
-
-		// Build list of connected DMSG servers with latencies
-		dmsgServersStr := ""
-		for i, server := range summary.DMSGServers {
-			if i > 0 {
-				dmsgServersStr += "\n              "
-			}
-			latStr := ""
-			if server.Latency > 0 {
-				latStr = fmt.Sprintf(" (%.1fms)", float64(server.Latency.Milliseconds()))
-			}
-			dmsgServersStr += server.PK.String() + latStr
-		}
-		if dmsgServersStr == "" {
-			dmsgServersStr = "(none)"
-		}
-
-		// Build geo location string
-		geoStr := ""
-		if summary.Overview.CityName != "" || summary.Overview.RegionName != "" || summary.Overview.CountryCode != "" {
-			parts := []string{}
-			if summary.Overview.CityName != "" {
-				parts = append(parts, summary.Overview.CityName)
-			}
-			if summary.Overview.RegionName != "" {
-				parts = append(parts, summary.Overview.RegionName)
-			}
-			if summary.Overview.CountryCode != "" {
-				parts = append(parts, summary.Overview.CountryCode)
-			}
-			geoStr = strings.Join(parts, ", ")
-		}
-
-		msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nLocal IP: %s\nPublic IP: %s\n",
-			summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
-
-		if geoStr != "" {
-			msg += fmt.Sprintf("Location: %s\n", geoStr)
-		}
-
-		msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.DMSGServers), dmsgServersStr)
-		msg += fmt.Sprintf("DMSG Latency: %s\n", summary.DmsgStats.RoundTrip)
-
-		// Transport summary by type
-		tpCounts := make(map[string]int)
-		for _, tp := range summary.Overview.Transports {
-			tpCounts[string(tp.Type)]++
-		}
-		tpTotal := len(summary.Overview.Transports)
-		tpStr := fmt.Sprintf("%d", tpTotal)
-		if tpTotal > 0 {
-			tpStr += " ("
-			first := true
-			for tpType, count := range tpCounts {
-				if !first {
-					tpStr += ", "
-				}
-				tpStr += fmt.Sprintf("%s: %d", strings.ToUpper(tpType), count)
-				first = false
-			}
-			tpStr += ")"
-		}
-		msg += fmt.Sprintf("Transports: %s\n", tpStr)
-
-		// AR registration: best-effort. A failure here means we'll skip the
-		// AR section in human output and emit nothing for it in JSON; the
-		// rest of the summary is still useful.
-		var arSelf *visor.ARSelfRegistration
-		if reg, err := rpcClient.ARSelfInfo(); err == nil {
-			arSelf = reg
-			if reg != nil && len(reg.Entries) > 0 {
-				msg += "AR Registration:\n"
-				for _, e := range reg.Entries {
-					addr := formatARAddr(e)
-					msg += fmt.Sprintf("  %-6s %s\n", strings.ToUpper(e.Type), addr)
-				}
-			} else {
-				msg += "AR Registration: (none)\n"
-			}
-		}
-
-		msg += fmt.Sprintf("Visor Version: %s\nConfig Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
-			summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
-
-		// Last-24h rolling uptime per local-tier bitmap. Same source as
-		// the hvui's per-visor Uptime tab and `/stats/uptime` on the
-		// logserver — all read pkg/visor/stats — so the bar here is
-		// what the integrated tracker recorded for THIS visor, not the
-		// network-wide TPD aggregate. Best-effort: if the store isn't
-		// initialized (rare; e.g. partial startup) we skip the section.
-		if uptimeBars, uptimePcts, ok := localUptime24h(rpcClient); ok && len(uptimeBars) > 0 {
-			msg += "Local uptime (last 24h, hour blocks):\n"
-			for _, name := range []string{"process", "dmsg", "skynet"} {
-				bar, hasBar := uptimeBars[name]
-				if !hasBar {
-					continue
-				}
-				pct := uptimePcts[name]
-				msg += fmt.Sprintf("  %-7s  %s  %5.1f%%\n", name, bar, pct)
-			}
 		}
 
 		outputJSON := struct {
@@ -352,6 +274,8 @@ var portsCmd = &cobra.Command{
 	},
 }
 
+var dmsgServersLive bool
+
 var dmsgServersCmd = &cobra.Command{
 	Use:   "dmsg-servers",
 	Short: "List connected DMSG servers with latencies",
@@ -361,6 +285,20 @@ var dmsgServersCmd = &cobra.Command{
 		if err != nil {
 			os.Exit(1)
 		}
+
+		if dmsgServersLive {
+			err := livetui.Run(func(ctx context.Context) (string, error) {
+				return renderDMSGServersLive(rpcClient)
+			}, livetui.Options{
+				Title:    "skywire cli visor dmsg-servers",
+				Interval: time.Second,
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+
 		servers, err := rpcClient.DMSGServers()
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -371,23 +309,36 @@ var dmsgServersCmd = &cobra.Command{
 			return
 		}
 
-		msg := "+--------------------------------------------------------------------+-------------+\n"
-		msg += fmt.Sprintf("| %-66s | %11s |\n", "Server Public Key", "Latency")
-		msg += "|--------------------------------------------------------------------+-------------|\n"
-
-		for _, server := range servers {
-			latStr := "-"
-			if server.Latency > 0 {
-				latStr = fmt.Sprintf("%.1fms", float64(server.Latency.Milliseconds()))
-			}
-			msg += fmt.Sprintf("| %-66s | %11s |\n", server.PK.String(), latStr)
-		}
-
-		msg += "+--------------------------------------------------------------------+-------------+\n"
-		msg += "Note: Latency is measured via self-ping through each server.\n"
-		msg += "Servers with '-' latency have not been measured yet (wait ~5s after startup).\n"
-		internal.PrintOutput(cmd.Flags(), servers, msg)
+		internal.PrintOutput(cmd.Flags(), servers, formatDMSGServers(servers))
 	},
+}
+
+func formatDMSGServers(servers []visor.DMSGServerInfo) string {
+	msg := "+--------------------------------------------------------------------+-------------+\n"
+	msg += fmt.Sprintf("| %-66s | %11s |\n", "Server Public Key", "Latency")
+	msg += "|--------------------------------------------------------------------+-------------|\n"
+	for _, server := range servers {
+		latStr := "-"
+		if server.Latency > 0 {
+			latStr = fmt.Sprintf("%.1fms", float64(server.Latency.Milliseconds()))
+		}
+		msg += fmt.Sprintf("| %-66s | %11s |\n", server.PK.String(), latStr)
+	}
+	msg += "+--------------------------------------------------------------------+-------------+\n"
+	msg += "Note: Latency is measured via self-ping through each server.\n"
+	msg += "Servers with '-' latency have not been measured yet (wait ~5s after startup).\n"
+	return msg
+}
+
+func renderDMSGServersLive(rpcClient visor.API) (string, error) {
+	servers, err := rpcClient.DMSGServers()
+	if err != nil {
+		return "", err
+	}
+	if len(servers) == 0 {
+		return "No DMSG servers connected\n", nil
+	}
+	return formatDMSGServers(servers), nil
 }
 
 var (
@@ -743,6 +694,128 @@ func shadeForCount(count int) string {
 // The previous formatter just appended ":port" unconditionally and
 // produced "ip:port:port" for SUDPH whenever RemoteAddr already
 // carried a port.
+// buildSummaryMessage is the livetui Refresh callback wrapper: returns
+// only the human-readable text. The one-shot Run path uses the richer
+// buildSummaryMessageWithData below so it can also emit JSON.
+func buildSummaryMessage(rpcClient visor.API) (string, error) {
+	msg, _, _, err := buildSummaryMessageWithData(rpcClient)
+	return msg, err
+}
+
+// buildSummaryMessageWithData fetches the visor's summary + AR
+// registration and returns the rendered human-readable string plus
+// the raw structs so the caller can build a JSON payload. Extracted
+// from summaryCmd.Run so it can be re-invoked on every livetui tick.
+func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *visor.ARSelfRegistration, error) {
+	summary, err := rpcClient.Summary()
+	if err != nil {
+		return "", nil, nil, err
+	}
+
+	// Build list of connected DMSG servers with latencies
+	dmsgServersStr := ""
+	for i, server := range summary.DMSGServers {
+		if i > 0 {
+			dmsgServersStr += "\n              "
+		}
+		latStr := ""
+		if server.Latency > 0 {
+			latStr = fmt.Sprintf(" (%.1fms)", float64(server.Latency.Milliseconds()))
+		}
+		dmsgServersStr += server.PK.String() + latStr
+	}
+	if dmsgServersStr == "" {
+		dmsgServersStr = "(none)"
+	}
+
+	// Build geo location string
+	geoStr := ""
+	if summary.Overview.CityName != "" || summary.Overview.RegionName != "" || summary.Overview.CountryCode != "" {
+		parts := []string{}
+		if summary.Overview.CityName != "" {
+			parts = append(parts, summary.Overview.CityName)
+		}
+		if summary.Overview.RegionName != "" {
+			parts = append(parts, summary.Overview.RegionName)
+		}
+		if summary.Overview.CountryCode != "" {
+			parts = append(parts, summary.Overview.CountryCode)
+		}
+		geoStr = strings.Join(parts, ", ")
+	}
+
+	msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nLocal IP: %s\nPublic IP: %s\n",
+		summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
+
+	if geoStr != "" {
+		msg += fmt.Sprintf("Location: %s\n", geoStr)
+	}
+
+	msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.DMSGServers), dmsgServersStr)
+	msg += fmt.Sprintf("DMSG Latency: %s\n", summary.DmsgStats.RoundTrip)
+
+	// Transport summary by type
+	tpCounts := make(map[string]int)
+	for _, tp := range summary.Overview.Transports {
+		tpCounts[string(tp.Type)]++
+	}
+	tpTotal := len(summary.Overview.Transports)
+	tpStr := fmt.Sprintf("%d", tpTotal)
+	if tpTotal > 0 {
+		tpStr += " ("
+		first := true
+		for tpType, count := range tpCounts {
+			if !first {
+				tpStr += ", "
+			}
+			tpStr += fmt.Sprintf("%s: %d", strings.ToUpper(tpType), count)
+			first = false
+		}
+		tpStr += ")"
+	}
+	msg += fmt.Sprintf("Transports: %s\n", tpStr)
+
+	// AR registration: best-effort. A failure here means we'll skip the
+	// AR section in human output and emit nothing for it in JSON; the
+	// rest of the summary is still useful.
+	var arSelf *visor.ARSelfRegistration
+	if reg, regErr := rpcClient.ARSelfInfo(); regErr == nil {
+		arSelf = reg
+		if reg != nil && len(reg.Entries) > 0 {
+			msg += "AR Registration:\n"
+			for _, e := range reg.Entries {
+				addr := formatARAddr(e)
+				msg += fmt.Sprintf("  %-6s %s\n", strings.ToUpper(e.Type), addr)
+			}
+		} else {
+			msg += "AR Registration: (none)\n"
+		}
+	}
+
+	msg += fmt.Sprintf("Visor Version: %s\nConfig Version: %s\nUptime Tracker: %s\nTime Online: %f seconds\nBuild Tag: %s\n",
+		summary.Overview.BuildInfo.Version, summary.ConfigVersion, summary.Health.ServicesHealth, summary.Uptime, summary.BuildTag)
+
+	// Last-24h rolling uptime per local-tier bitmap. Same source as
+	// the hvui's per-visor Uptime tab and `/stats/uptime` on the
+	// logserver — all read pkg/visor/stats — so the bar here is
+	// what the integrated tracker recorded for THIS visor, not the
+	// network-wide TPD aggregate. Best-effort: if the store isn't
+	// initialized (rare; e.g. partial startup) we skip the section.
+	if uptimeBars, uptimePcts, ok := localUptime24h(rpcClient); ok && len(uptimeBars) > 0 {
+		msg += "Local uptime (last 24h, hour blocks):\n"
+		for _, name := range []string{"process", "dmsg", "skynet"} {
+			bar, hasBar := uptimeBars[name]
+			if !hasBar {
+				continue
+			}
+			pct := uptimePcts[name]
+			msg += fmt.Sprintf("  %-7s  %s  %5.1f%%\n", name, bar, pct)
+		}
+	}
+
+	return msg, summary, arSelf, nil
+}
+
 func formatARAddr(e visor.ARSelfEntry) string {
 	if e.RemoteAddr == "" && e.Port == "" {
 		return "(unknown)"

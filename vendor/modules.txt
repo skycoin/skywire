@@ -166,7 +166,11 @@ github.com/cenkalti/backoff
 github.com/cespare/xxhash/v2
 # github.com/charmbracelet/bubbles v1.0.0
 ## explicit; go 1.24.2
+github.com/charmbracelet/bubbles/cursor
 github.com/charmbracelet/bubbles/key
+github.com/charmbracelet/bubbles/runeutil
+github.com/charmbracelet/bubbles/spinner
+github.com/charmbracelet/bubbles/textinput
 github.com/charmbracelet/bubbles/viewport
 # github.com/charmbracelet/bubbletea v1.3.10
 ## explicit; go 1.24.0
