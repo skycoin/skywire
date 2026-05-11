@@ -44,7 +44,6 @@ var (
 	pprofMode         string
 	pprofAddr         string
 	mode              string
-	enableCXO         bool
 )
 
 func init() {
@@ -73,7 +72,6 @@ func init() {
 	// dmsg-discovery cannot run in dmsg-only mode because dmsg-servers
 	// themselves register with it over plain HTTP.
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dual (dmsg-only is rejected — dmsg-servers reach this service over HTTP)")
-	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO clients-by-server publisher feed over DMSG (requires --sk and --mode=dual)")
 }
 
 // RootCmd contains commands for dmsg-discovery
@@ -152,7 +150,6 @@ func buildConfig() (*dmsgdisc.Config, error) {
 		MetricsAddr:       sf.MetricsAddr,
 		PProfMode:         pprofMode,
 		PProfAddr:         pprofAddr,
-		EnableCXO:         enableCXO,
 	}
 
 	if keyFile != "" {
@@ -221,9 +218,6 @@ func mergeFile(dst, src *dmsgdisc.Config) {
 	}
 	if len(src.DmsgServers) > 0 {
 		dst.DmsgServers = src.DmsgServers
-	}
-	if src.EnableCXO {
-		dst.EnableCXO = true
 	}
 }
 

@@ -42,7 +42,6 @@ var (
 	pprofAddr      string
 	entryTimeout   time.Duration
 	mode           string
-	enableCXO      bool
 )
 
 // exampleJSON marshals v to indented JSON with color, returning empty string on error
@@ -124,7 +123,6 @@ func init() {
 	// or two dropped refreshes without expiring a live entry.
 	RootCmd.Flags().DurationVar(&entryTimeout, "entry-timeout", 5*time.Minute, "client service entry TTL (0 to disable)\n\r")
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
-	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO services publisher feed over DMSG (requires --sk and --mode that includes dmsg)")
 }
 
 // RootCmd contains the root service-discovery command
@@ -192,7 +190,6 @@ func buildConfig() (*sd.Config, error) {
 		Whitelist:    commaSplit(whitelistKeys),
 		GeoIP:        geoipURL,
 		DmsgPort:     dmsgPort,
-		EnableCXO:    enableCXO,
 		Dmsg: cmdutil.DmsgConfig{
 			Discovery:  dmsgDisc,
 			ServerType: dmsgServerType,
@@ -244,9 +241,6 @@ func mergeFile(dst, src *sd.Config) {
 	}
 	if src.DmsgPort != 0 {
 		dst.DmsgPort = src.DmsgPort
-	}
-	if src.EnableCXO {
-		dst.EnableCXO = true
 	}
 	if src.Dmsg.Discovery != "" {
 		dst.Dmsg.Discovery = src.Dmsg.Discovery

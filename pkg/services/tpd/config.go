@@ -41,8 +41,6 @@ type Config struct {
 
 	// StoreDataPath is the on-disk path for bandwidth backup files.
 	StoreDataPath string `json:"store_data_path,omitempty"`
-	// EnableCXO turns on the CXO aggregator + metrics publisher.
-	EnableCXO bool `json:"enable_cxo,omitempty"`
 	// UptimeDB is the local self-uptime bbolt store path. Empty
 	// disables service-self uptime recording.
 	UptimeDB string `json:"uptime_db,omitempty"`

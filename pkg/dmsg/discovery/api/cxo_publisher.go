@@ -51,9 +51,9 @@ import (
 var _ = json // referenced from api.go; reuse here
 
 // ClientsByServerCXOPublisher mirrors dmsg-discovery's clients-by-
-// server view into a CXO TreeStore feed. Constructed at DMSG-D
-// startup when --cxo is set; the API calls into it via
-// SetClientsByServerCXOPublisher.
+// server view into a CXO TreeStore feed. Started automatically at
+// DMSG-D startup whenever DMSG is enabled; the API calls into it
+// via SetClientsByServerCXOPublisher.
 type ClientsByServerCXOPublisher struct {
 	pub *treestore.Publisher
 	log *logging.Logger

@@ -262,17 +262,15 @@ func (s *service) runDMSG(
 		}
 	}()
 
-	if cfg.EnableCXO {
-		pub, perr := api.StartClientsByServerCXOPublisher(dmsgDC, sk, log)
-		if perr != nil {
-			log.WithError(perr).Error("Failed to start CXO clients-by-server publisher, continuing without it")
-		} else {
-			a.SetClientsByServerCXOPublisher(pub)
-			go func() {
-				<-ctx.Done()
-				pub.Close() //nolint:errcheck,gosec
-			}()
-		}
+	pub, perr := api.StartClientsByServerCXOPublisher(dmsgDC, sk, log)
+	if perr != nil {
+		log.WithError(perr).Error("Failed to start CXO clients-by-server publisher, continuing without it")
+	} else {
+		a.SetClientsByServerCXOPublisher(pub)
+		go func() {
+			<-ctx.Done()
+			pub.Close() //nolint:errcheck,gosec
+		}()
 	}
 
 	return nil

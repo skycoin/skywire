@@ -75,9 +75,6 @@ type Config struct {
 	// PProfMode / PProfAddr — pass-through to dmsgcmdutil.InitPProf.
 	PProfMode string `json:"pprof_mode,omitempty"`
 	PProfAddr string `json:"pprof_addr,omitempty"`
-	// EnableCXO turns on the CXO clients-by-server publisher feed
-	// over DMSG. Requires SecKey and a dmsg-capable Mode.
-	EnableCXO bool `json:"cxo,omitempty"`
 
 	// DmsgServers is the static dmsg-server transit set the
 	// discovery preloads at startup. Replaces the runtime read of
