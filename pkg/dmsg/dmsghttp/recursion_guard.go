@@ -23,7 +23,9 @@
 // No extra threading required at any of the intermediate layers.
 package dmsghttp
 
-import "context"
+import (
+	"context"
+)
 
 // recursionGuardKey is the (unexported) context key marking that the
 // current goroutine is executing inside HTTPTransport.RoundTrip.

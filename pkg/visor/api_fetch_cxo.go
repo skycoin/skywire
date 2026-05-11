@@ -12,8 +12,10 @@
 package visor
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -98,6 +100,47 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 	default:
 		return &FetchCXOResult{Reason: "unknown feed: " + args.Feed}, nil
 	}
+}
+
+// CXOStatus returns the per-feed snapshot/refcount/last-sync/last-err
+// state of the in-memory CXO subscription manager. Used by
+// `skywire cli visor cxo status` so operators can see why a feed is
+// missing data (cycle never started? publisher unreachable? snapshot
+// genuinely empty?).
+//
+// Returns an empty slice when the manager hasn't been initialized
+// (e.g. visor still has no DMSG client). Errors only for genuine
+// internal failures; "no feeds yet" is not an error.
+func (v *Visor) CXOStatus() ([]FeedStatus, error) {
+	mgr := v.CXOSubMgr()
+	if mgr == nil {
+		return []FeedStatus{}, nil
+	}
+	return mgr.Status(), nil
+}
+
+// CXORefreshFeed forces a fresh subscribe → first-Root → walk cycle
+// on the named feed and blocks until it succeeds or the timeout
+// expires. The returned FeedStatus reflects the snapshot *after* the
+// sync attempt, so the operator can tell at a glance whether the
+// publisher is reachable.
+func (v *Visor) CXORefreshFeed(args CXORefreshArgs) (*FeedStatus, error) {
+	mgr := v.CXOSubMgr()
+	if mgr == nil {
+		return nil, errors.New("CXO subscription manager not initialized (no DMSG client?)")
+	}
+	feed, ok := CXOFeedFromString(args.Feed)
+	if !ok {
+		return nil, fmt.Errorf("unknown feed %q (valid: tpd-metrics, tpd-uptime, sd-services, dmsgd-clients-by-server, tpd-all-transports)", args.Feed)
+	}
+	timeout := args.Timeout
+	if timeout <= 0 {
+		timeout = firstSyncTimeout + 5*time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	st, err := mgr.RefreshNow(ctx, feed)
+	return &st, err
 }
 
 // daysFromPath extracts the trailing integer from a "<prefix>N"

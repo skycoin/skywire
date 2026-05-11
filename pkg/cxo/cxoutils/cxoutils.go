@@ -82,14 +82,37 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) {
 	return err
 }
 
-// RemoveObjects with rc == 0 from CXDS
+// RemoveObjects deletes every CXDS object whose reference count has
+// dropped to zero and that the cache is not currently tracking (so
+// we don't race a Cache.Set "resurrecting" a key by rebumping its
+// rc).
+//
+// Lock ordering: Cache.Set takes Cache.mu, then opens a bbolt RWTx
+// via cxds.Set. Earlier versions of this function called IsCached
+// from inside the IterateDel callback (i.e. inside the cleanup
+// RWTx), which inverted that order: the cleanup goroutine held
+// bbolt.rwlock while waiting on Cache.mu, and any concurrent
+// Cache.Set held Cache.mu while waiting on bbolt.rwlock. Classic
+// A/B deadlock observed in production after ~12 minutes of run.
+//
+// Fix: snapshot the cached-keys set ONCE up front (one Cache.mu
+// acquire, no bbolt involvement), then drive IterateDel with a
+// callback that only does a map lookup. The snapshot can race with
+// concurrent Cache.Set but the race always errs on the safe side:
+// a key that races into the cache after the snapshot stays on disk
+// for one extra sweep, never gets prematurely deleted.
 func RemoveObjects(c *skyobject.Container) (err error) {
 
+	cached := c.CachedKeys()
 	var db = c.DB().CXDS()
 
 	err = db.IterateDel(
 		func(key cipher.SHA256, rc uint32, _ []byte) (bool, error) {
-			return (rc == 0) && (c.IsCached(key) == false), nil //nolint:staticcheck
+			if rc != 0 {
+				return false, nil
+			}
+			_, isCached := cached[key]
+			return !isCached, nil
 		})
 
 	return

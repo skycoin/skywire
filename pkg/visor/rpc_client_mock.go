@@ -692,6 +692,16 @@ func (mc *mockRPCClient) FetchCXO(_ FetchCXOArgs) (*FetchCXOResult, error) {
 	return &FetchCXOResult{Reason: "mock"}, nil
 }
 
+// CXOStatus implements API.
+func (mc *mockRPCClient) CXOStatus() ([]FeedStatus, error) {
+	return nil, nil
+}
+
+// CXORefreshFeed implements API.
+func (mc *mockRPCClient) CXORefreshFeed(_ CXORefreshArgs) (*FeedStatus, error) {
+	return &FeedStatus{}, nil
+}
+
 // GetConfigPath implements API.
 func (mc *mockRPCClient) GetConfigPath() (string, error) { return "", nil }
 
