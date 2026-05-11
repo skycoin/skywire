@@ -1969,7 +1969,7 @@ func (m *pingTreeModel) checkDmsgReachable(entry tuiTreeEntry) bool {
 					return
 				}
 				if pingErr != nil {
-					serverData.pingErr = truncateError(pingErr.Error())
+					serverData.pingErr = pingErr.Error()
 				} else {
 					samples = append(samples, float64(latency.Milliseconds()))
 				}
@@ -1982,7 +1982,7 @@ func (m *pingTreeModel) checkDmsgReachable(entry tuiTreeEntry) bool {
 		serverData.timestamp = time.Now()
 
 		if err != nil && serverData.pingErr == "" {
-			serverData.pingErr = truncateError(err.Error())
+			serverData.pingErr = err.Error()
 		}
 
 		// Mark reachable if we got any successful pings
@@ -2054,7 +2054,7 @@ func (m *pingTreeModel) pingViaDmsg(entry tuiTreeEntry) {
 					return
 				}
 				if pingErr != nil {
-					serverData.pingErr = truncateError(pingErr.Error())
+					serverData.pingErr = pingErr.Error()
 				} else {
 					samples = append(samples, float64(latency.Milliseconds()))
 				}
@@ -2066,7 +2066,7 @@ func (m *pingTreeModel) pingViaDmsg(entry tuiTreeEntry) {
 		serverData.timestamp = time.Now()
 
 		if err != nil && serverData.pingErr == "" {
-			serverData.pingErr = truncateError(err.Error())
+			serverData.pingErr = err.Error()
 		}
 
 		m.latenciesMu.Lock()
@@ -2129,7 +2129,7 @@ func (m *pingTreeModel) pingTransport(entry tuiTreeEntry) {
 			setupTimeMs = float64(latency.Milliseconds())
 			calcTimeMs = float64(routeCalcTime.Milliseconds())
 			if err != nil {
-				setupErr = truncateError(err.Error())
+				setupErr = err.Error()
 			}
 			m.latenciesMu.Lock()
 			data.setupTimeMs = setupTimeMs
@@ -2141,7 +2141,7 @@ func (m *pingTreeModel) pingTransport(entry tuiTreeEntry) {
 			m.latenciesMu.Unlock()
 		} else {
 			if err != nil {
-				pingErr = truncateError(err.Error())
+				pingErr = err.Error()
 			} else {
 				samples = append(samples, float64(latency.Milliseconds()))
 				m.latenciesMu.Lock()
@@ -2194,7 +2194,7 @@ func (m *pingTreeModel) pingTransport(entry tuiTreeEntry) {
 	// Finalize
 	m.latenciesMu.Lock()
 	if err != nil && data.setupErr == "" && data.pingErr == "" {
-		data.pingErr = truncateError(err.Error())
+		data.pingErr = err.Error()
 	}
 	if calcErr != "" && data.calcErr == "" {
 		data.calcErr = calcErr
@@ -2305,13 +2305,4 @@ func (m *pingTreeModel) markFailed(tpID string) {
 			break
 		}
 	}
-}
-
-// truncateError truncates an error message to 20 characters
-func truncateError(s string) string {
-	const maxLen = 20
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
 }
