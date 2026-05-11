@@ -93,9 +93,11 @@ type API struct {
 	}
 
 	// cxoPublisher mirrors register / deregister events into a CXO
-	// TreeStore feed, set when SD is started with --cxo. Nil when the
-	// flag is off; the calling sites null-check via pub == nil so the
-	// HTTP path always works regardless.
+	// TreeStore feed. Started automatically whenever SD runs with a
+	// configured SecKey + dmsg-capable mode. Nil if the publisher
+	// failed to bind or DMSG isn't enabled; the calling sites
+	// null-check via pub == nil so the HTTP path always works
+	// regardless.
 	cxoPublisher *ServicesCXOPublisher
 }
 
@@ -457,7 +459,8 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 	// Mirror the visor's FULL service list (not just this new entry) so
 	// the DHT target holds the same set as HTTP discovery for this PK.
 	a.mirrorVisorServices(r.Context(), se.Addr.PubKey())
-	// CXO mirror — best-effort, no-op if --cxo wasn't set on startup.
+	// CXO mirror — best-effort, no-op if the publisher failed to
+	// start (no DMSG).
 	a.cxoPublisher.PutEntry(&se)
 
 	httputil.WriteJSON(w, r, http.StatusOK, &se)
