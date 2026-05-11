@@ -76,6 +76,15 @@ const (
 	// consumers can subscribe to one feed without the other.
 	DmsgDMSGDClientsByServerCXOPort uint16 = 54
 
+	// DmsgTPDAllTransportsCXOPort is the DMSG port the TPD's CXO
+	// all-transports snapshot publisher listens on. Mirrors the
+	// HTTP /all-transports endpoint on a fixed cadence; subscribers
+	// (the CLI's `pv -t`, `tp tree`, `tp viz`) read the snapshot
+	// instead of HTTP-polling. Distinct port from
+	// DmsgTPDMetricsCXOPort and DmsgTPDUptimeCXOPort so consumers can
+	// subscribe to one TPD feed without dragging in the others.
+	DmsgTPDAllTransportsCXOPort uint16 = 55
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 
