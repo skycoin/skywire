@@ -6,26 +6,52 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"testing"
 	"time"
 )
 
 // fakeConn is the in-memory pair used to drive the wrapper. Reads/
-// writes go through bytes.Buffer; addresses are stubs.
+// writes go through bytes.Buffer; addresses are stubs. The buffer
+// is mutex-protected because the wrapper's pump goroutine writes
+// while the test goroutine polls — bytes.Buffer is not thread-safe
+// and the -race detector flags it without the lock.
 type fakeConn struct {
 	r *io.PipeReader
 	w *io.PipeWriter
 	// out is what was received on the "backend" side. Tests assert
-	// against this.
+	// against this via the helper methods below; never touch it
+	// directly, since pump writes concurrently.
+	mu  sync.Mutex
 	out bytes.Buffer
 }
 
-func (c *fakeConn) Read(p []byte) (int, error)  { return c.r.Read(p) }
-func (c *fakeConn) Write(p []byte) (int, error) { n, err := c.out.Write(p); return n, err }
+func (c *fakeConn) Read(p []byte) (int, error) { return c.r.Read(p) }
+func (c *fakeConn) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.out.Write(p)
+}
 func (c *fakeConn) Close() error {
 	_ = c.r.Close() //nolint:errcheck,gosec
 	_ = c.w.Close() //nolint:errcheck,gosec
 	return nil
+}
+
+// outLen returns the number of bytes the backend has received so far.
+// Safe for concurrent use with the pump goroutine.
+func (c *fakeConn) outLen() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.out.Len()
+}
+
+// outSnapshot returns a copy of the current buffer contents. Used to
+// parse the received request once the pump has flushed it.
+func (c *fakeConn) outSnapshot() []byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]byte(nil), c.out.Bytes()...)
 }
 func (c *fakeConn) LocalAddr() net.Addr                { return &net.TCPAddr{} }
 func (c *fakeConn) RemoteAddr() net.Addr               { return &net.TCPAddr{} }
@@ -98,17 +124,17 @@ func TestHostRewriteConn_RewritesHostHeader(t *testing.T) {
 
 	// The parser goroutine pumps async; give it a moment to flush.
 	// In production this is the SOCKS5 splice's poll loop; here we
-	// just poll the buffer.
+	// just poll the buffer through the mutex-guarded accessor.
 	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) && backend.out.Len() == 0 {
+	for time.Now().Before(deadline) && backend.outLen() == 0 {
 		time.Sleep(5 * time.Millisecond)
 	}
-	if backend.out.Len() == 0 {
+	if backend.outLen() == 0 {
 		t.Fatal("backend received nothing within deadline")
 	}
 
 	// Parse what the backend got and verify Host.
-	got, err := http.ReadRequest(bufio.NewReader(&backend.out))
+	got, err := http.ReadRequest(bufio.NewReader(bytes.NewReader(backend.outSnapshot())))
 	if err != nil {
 		t.Fatalf("backend parse: %v", err)
 	}
@@ -139,13 +165,13 @@ func TestHostRewriteConn_RewritesTwoSequentialRequests(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if bytes.Count(backend.out.Bytes(), []byte("\r\n\r\n")) >= 2 {
+		if bytes.Count(backend.outSnapshot(), []byte("\r\n\r\n")) >= 2 {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	br := bufio.NewReader(&backend.out)
+	br := bufio.NewReader(bytes.NewReader(backend.outSnapshot()))
 	for i, wantPath := range []string{"/a", "/b"} {
 		req, err := http.ReadRequest(br)
 		if err != nil {
