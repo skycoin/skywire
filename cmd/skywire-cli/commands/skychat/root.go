@@ -137,7 +137,7 @@ var listenCmd = &cobra.Command{
 		if filter != "" {
 			fmt.Printf(" (filter: %s)", filter)
 		}
-		fmt.Println("\nPress Ctrl+C to stop\n")
+		fmt.Print("\nPress Ctrl+C to stop\n\n")
 
 		resp, err := http.Get(url) //nolint:gosec
 		if err != nil {
