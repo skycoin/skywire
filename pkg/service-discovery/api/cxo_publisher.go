@@ -39,8 +39,9 @@ import (
 )
 
 // ServicesCXOPublisher mirrors SD's services state into a CXO
-// TreeStore feed. Constructed at SD startup when --cxo is set; the
-// API calls into it via SetServicesCXOPublisher.
+// TreeStore feed. Started automatically at SD startup whenever
+// DMSG is enabled; the API calls into it via
+// SetServicesCXOPublisher.
 type ServicesCXOPublisher struct {
 	pub *treestore.Publisher
 	log *logging.Logger
