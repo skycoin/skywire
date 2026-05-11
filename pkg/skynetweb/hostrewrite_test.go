@@ -20,8 +20,8 @@ type fakeConn struct {
 	out bytes.Buffer
 }
 
-func (c *fakeConn) Read(p []byte) (int, error)         { return c.r.Read(p) }
-func (c *fakeConn) Write(p []byte) (int, error)        { n, err := c.out.Write(p); return n, err }
+func (c *fakeConn) Read(p []byte) (int, error)  { return c.r.Read(p) }
+func (c *fakeConn) Write(p []byte) (int, error) { n, err := c.out.Write(p); return n, err }
 func (c *fakeConn) Close() error {
 	_ = c.r.Close() //nolint:errcheck,gosec
 	_ = c.w.Close() //nolint:errcheck,gosec

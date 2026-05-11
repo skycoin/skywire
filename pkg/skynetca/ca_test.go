@@ -1,6 +1,7 @@
 package skynetca
 
 import (
+	"bytes"
 	"crypto/x509"
 	"os"
 	"strings"
@@ -71,14 +72,25 @@ func TestSaveLoadCA_Roundtrip(t *testing.T) {
 	if loadedCert.SerialNumber.Cmp(cert.SerialNumber) != 0 {
 		t.Errorf("serial mismatch")
 	}
-	if loadedKey.D.Cmp(key.D) != 0 {
-		t.Errorf("key D mismatch")
+	// Compare keys via DER round-trip rather than the deprecated
+	// ecdsa.PrivateKey.D field (Go 1.26 deprecates direct big.Int
+	// access on crypto values).
+	gotDER, err := x509.MarshalECPrivateKey(loadedKey)
+	if err != nil {
+		t.Fatalf("marshal loaded key: %v", err)
+	}
+	wantDER, err := x509.MarshalECPrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal original key: %v", err)
+	}
+	if !bytes.Equal(gotDER, wantDER) {
+		t.Errorf("key mismatch after SaveCA/LoadCA round-trip")
 	}
 }
 
 func TestLoadCA_RejectsNonCA(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(dir+"/junk.crt", []byte("not pem"), 0644); err != nil {
+	if err := os.WriteFile(dir+"/junk.crt", []byte("not pem"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := LoadCA(dir+"/junk.crt", dir+"/junk.key"); err == nil {
