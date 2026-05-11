@@ -6,6 +6,167 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.52
+
+Network-state release: CXO publishers/subscribers close the last
+HTTP-only gaps so service-discovery, transport-discovery and
+DMSG-discovery can be consumed over CXO with HTTP/bbolt fallback;
+operator-facing observability gains live-refresh CLI views and a
+pprof-summary command; HTTPS on `.skynet` / `.dmsg` arrives via an
+opt-in locally-installed CA; and the ping subtree gets a focused
+rewrite. Plus a tight stack of correctness fixes — including a
+12-minute production deadlock between the cxo cache and bbolt.
+
+### HTTPS on .skynet / .dmsg
+
+-   `pkg/skynetca` + resolver MITM: opt-in TLS termination for
+    `.skynet` / `.dmsg` URLs using a locally-installed
+    name-constrained CA. Browsers get padlock-green when the operator
+    enrolls the CA in their trust store; nothing changes for users
+    who don't. [#2484](https://github.com/skycoin/skywire/pull/2484)
+-   `skynetweb`: Host-header rewrite via subdomain prefix so
+    multi-tenant origins can disambiguate vhosts behind the resolver.
+    Depends on the MITM termination from #2484 to see the unencrypted
+    Host header. [#2485](https://github.com/skycoin/skywire/pull/2485)
+-   `pkg/visor`: port-80 reverse-proxy `--preserve-host` for
+    vhost-based backends — don't overwrite the Host header when the
+    backend keys on it. [#2486](https://github.com/skycoin/skywire/pull/2486)
+-   `skynetca,resolver`: base32 PK DNS labels so HTTPS-via-skynet
+    leaf certs are RFC-compliant — hex 66-char PKs exceeded the
+    63-char DNS-label limit. [#2487](https://github.com/skycoin/skywire/pull/2487)
+-   `skywire-cli`: `serve add --to <host>:<port>` preserves the
+    explicit host verbatim (previous behavior rewrote it to
+    `127.0.0.1`). [#2488](https://github.com/skycoin/skywire/pull/2488)
+
+### CXO subscribe/publish gap closed
+
+-   `pkg/service-discovery`, `pkg/transport-discovery`,
+    `pkg/dmsg/discovery`: CXO publishers are always-on instead of
+    flag-gated. Drops the `--cxo` toggle and its operator-error
+    surface; the publishers idle cheaply when there are no
+    subscribers. [#2494](https://github.com/skycoin/skywire/pull/2494)
+-   `pkg/service-discovery`, `pkg/dmsg/discovery`: decouple the HTTP
+    register path from the CXO publisher mutex so a slow CXO
+    publisher tick can't stall a service registering by HTTP.
+    [#2495](https://github.com/skycoin/skywire/pull/2495)
+-   `cli,visor,tpd`: close the last CXO subscriber gap (SD
+    `/api/services?type=…`, TPD `/all-transports`) and add a
+    bbolt-backed CLI fallback cache at
+    `$XDG_CACHE_HOME/skywire/cli-fetch.db` so URL-keyed responses
+    persist across CLI invocations and visor restarts. Replaces the
+    legacy `/tmp/*.json` files (which umask was silently
+    downgrading). [#2491](https://github.com/skycoin/skywire/pull/2491)
+-   `pkg/cxo/node`: backpressure the CXO accept loop so a pile of
+    pending handshakes can't exhaust file descriptors before any
+    completes. [#2482](https://github.com/skycoin/skywire/pull/2482)
+-   `pkg/cxo`: break a Cache.mu ↔ bbolt.rwlock A/B deadlock in
+    `cxoutils.RemoveObjects`. `Publisher.runCleanupLoop` held the
+    bbolt write lock while waiting on `Cache.IsCached` (Cache.mu);
+    `Publisher.runLoop` held Cache.mu via `Cache.Set` while waiting
+    on bbolt. Snapshot the cached-keys set once up front so the
+    iterator callback only does a map lookup — eliminates the lock
+    inversion. Observed in production after ~12 minutes of run; the
+    new `skywire cli visor goroutines` summary surfaced it in
+    seconds. Part of [#2493](https://github.com/skycoin/skywire/pull/2493)
+
+### Hypervisor + CLI parity, observability
+
+-   `hv/cli` parity wave 1: bulk-reward operations, runtime log
+    streaming with module/level filters, DMSG servers tab, route
+    groups view, skynet UI polish. [#2483](https://github.com/skycoin/skywire/pull/2483)
+-   `cli`: `--live` (-L) on every visor self-data command —
+    bubbletea split-pane with header + spinner + scrollable
+    viewport. Wired into `visor info`, `visor dmsg-servers`,
+    `visor uptime`, `visor app ls`, `tp`, `route`, `route groups`,
+    `rg ls`. Shared `cliutil/livetui` helper. Part of
+    [#2493](https://github.com/skycoin/skywire/pull/2493)
+-   `cli`: `skywire cli visor goroutines` — fetches and summarises
+    the visor's pprof goroutine dump. Per-state distribution,
+    top-N stack heads, and a lock-waiter analysis that surfaces
+    A/B deadlocks within seconds (`--full`, `--filter <regex>`,
+    `--state <substr>`, `--out <file>`). Works while the visor RPC
+    is hung — pprof keeps serving even when the rpc.Server is
+    wedged behind a mutex. Part of [#2493](https://github.com/skycoin/skywire/pull/2493)
+-   `cli`: `skywire cli visor cxo {status,refresh,fetch}` —
+    introspection for the visor's lazy-on-demand CXO subscription
+    manager. Status shows snapshot size / last-sync / refcount /
+    last-error per feed; `refresh` forces a synchronous
+    subscribe→Root→Walk and reports the post-refresh FeedStatus;
+    `fetch` invokes FetchCXO RPC directly. Part of
+    [#2493](https://github.com/skycoin/skywire/pull/2493)
+-   `route calc --by-latency`: rank candidate routes by
+    transport-aggregate latency, not just hop count. [#2492](https://github.com/skycoin/skywire/pull/2492)
+-   `pkg/visor/stats`: panic-recover wrapping on every sample
+    function so one misbehaving subsystem can't crash the
+    tracker goroutine. [#2492](https://github.com/skycoin/skywire/pull/2492)
+
+### Ping tree
+
+-   `cli`: collapse the three overlapping ping commands (`tree`,
+    `tree2`, `graph`) into a single `tree` with the better
+    rendering + status messages. Adds the `--testenv` flag,
+    extracts a `pingTreeConfig` struct from 31 globals, fixes the
+    `--hops 2` hang where level-1 entries were skipped before BFS
+    expansion, and preserves full error text in saved JSON results
+    instead of truncating display-only errors at storage time.
+    [#2493](https://github.com/skycoin/skywire/pull/2493)
+-   `pkg/visor`: direct-transport bypass for ping — skip the
+    route-setup-node when a direct transport to the target is
+    available. Reuses the AppDirect VStreamMux from skynet
+    resolving proxy. Part of [#2493](https://github.com/skycoin/skywire/pull/2493)
+-   `pkg/app/appnet`: ConvertAddr now passes appnet.Addr through
+    unchanged. Listeners using WrapConn on AppDirect dial conns
+    previously errored with ErrUnknownAddrType; the ping listener
+    closed the conn and the client saw "write size: use of closed
+    network connection". Part of [#2493](https://github.com/skycoin/skywire/pull/2493)
+
+### Skychat
+
+-   `cli`: `skywire cli skychat chat -t <pk>` — interactive
+    bubbletea split-pane with viewport history, textinput
+    compose, and SSE-livefeed. Part of
+    [#2493](https://github.com/skycoin/skywire/pull/2493)
+-   `cli/skychat`: `send -t X -m hi` (no `--net`) now correctly
+    defaults to `skynet`. The package-level `networkType` was
+    shared between `send` and `listen` with different cobra
+    defaults; the second registration's empty default clobbered
+    the first. Split into separate vars. Part of [#2493](https://github.com/skycoin/skywire/pull/2493)
+-   `apps/skychat`: SSE stream survives the HTTP server's
+    `WriteTimeout`. Disabled the per-request write deadline for
+    `/sse` only (via `http.NewResponseController`) and added
+    periodic `: ping` keepalive comments so the connection stays
+    open between message bursts and any reverse-proxy idle timeout
+    is kept warm. Previous behavior killed every SSE subscriber
+    after 10s. Part of [#2493](https://github.com/skycoin/skywire/pull/2493)
+
+### Stability + correctness
+
+-   `cli/skychat`: drop the redundant trailing `\n` in the `listen`
+    banner `Println` (go vet). [#2496](https://github.com/skycoin/skywire/pull/2496)
+-   `cli/tp`: register the `--cfa` (cache-files-age) flag on `tp`
+    itself, not just `tp tree`. `tp -m` previously ran with
+    `cacheFilesAge=0`, which `clicache.Fresh` treats as "always
+    stale" — so every invocation refetched SD and watched its
+    online-state filter flap between calls. Default of 5m matches
+    `tp tree`. Part of [#2493](https://github.com/skycoin/skywire/pull/2493)
+-   `autoconfig`: propagate resolved `PKGENV`/`USRENV` mode to the
+    `skywire-config gen` subprocess so the generated config picks
+    the right paths. Previously the parent's resolved mode was
+    discarded and `gen` re-detected from scratch — sometimes
+    landing on the wrong one. [#2490](https://github.com/skycoin/skywire/pull/2490)
+-   `svc`: `pkg/services.Duration` accepts both numeric (ns) and
+    string forms so e2e `services.json` parses `entry_timeout`
+    correctly. [#2481](https://github.com/skycoin/skywire/pull/2481)
+-   `chore(deb)`: drop the redundant `SKYWIRE_USER` drop-in cleanup
+    from `postinst` — `autoconfig`'s own cleanup (in #2476)
+    supersedes it. [#2480](https://github.com/skycoin/skywire/pull/2480)
+
+### Docs
+
+-   `README`: expand the intro into a Major-features section
+    covering the resolver, .skynet HTTPS, CXO publishers, mux
+    routing, and the diagnostic CLI. [#2489](https://github.com/skycoin/skywire/pull/2489)
+
 ## 1.3.51
 
 Hotfix release. Two nil-deref fixes that surfaced in the wild on
