@@ -12,7 +12,10 @@
 package visor
 
 import (
+	"encoding/json"
 	"errors"
+	"strings"
+	"time"
 )
 
 // FetchCXO implements API.
@@ -48,6 +51,49 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 			return &FetchCXOResult{Reason: "tpd-uptime: " + err.Error()}, nil
 		}
 		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: ts}, nil
+
+	case "sd-services":
+		// Path is "type/<typeName>". Maps onto the SD HTTP endpoint
+		// /api/services?type=<typeName>; the materialized snapshot
+		// lives in the CXOSubscriptionManager's FeedSDServices and
+		// is walked by servicesFromCXO (no extra subscriber needed).
+		const prefix = "type/"
+		if !strings.HasPrefix(args.Path, prefix) {
+			return &FetchCXOResult{Reason: "invalid path for sd-services: " + args.Path}, nil
+		}
+		serviceType := args.Path[len(prefix):]
+		if serviceType == "" {
+			return &FetchCXOResult{Reason: "sd-services: missing service type"}, nil
+		}
+		services, ok := v.servicesFromCXO(serviceType, "", "")
+		if !ok {
+			return &FetchCXOResult{Reason: "sd-services: cache miss"}, nil
+		}
+		body, err := json.Marshal(services)
+		if err != nil {
+			return &FetchCXOResult{Reason: "sd-services: marshal: " + err.Error()}, nil
+		}
+		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: time.Now()}, nil
+
+	case "tpd-all-transports":
+		// Path is "with-self" or "without-self".
+		var withSelf bool
+		switch args.Path {
+		case "with-self":
+			withSelf = true
+		case "without-self":
+			withSelf = false
+		default:
+			return &FetchCXOResult{Reason: "invalid path for tpd-all-transports: " + args.Path}, nil
+		}
+		body, err := v.FetchAllTransportsCXO(withSelf)
+		if err != nil {
+			if errors.Is(err, ErrTPDAllTransportsNotReady) {
+				return &FetchCXOResult{Reason: "tpd-all-transports: cache miss"}, nil
+			}
+			return &FetchCXOResult{Reason: "tpd-all-transports: " + err.Error()}, nil
+		}
+		return &FetchCXOResult{Hit: true, Body: body, LastRootAt: time.Now()}, nil
 
 	default:
 		return &FetchCXOResult{Reason: "unknown feed: " + args.Feed}, nil
