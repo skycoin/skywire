@@ -86,9 +86,10 @@ type API struct {
 
 	// cxoPublisher mirrors set/del entry events into a CXO TreeStore
 	// feed under clients-by-server/<server>/<client>/{entry,tombstone}.
-	// Set when DMSG-D is started with --cxo. Nil when the flag is off;
-	// calling sites null-check via pub == nil so the HTTP path always
-	// works regardless.
+	// Started automatically whenever DMSG-D runs with a configured
+	// SecKey + dmsg-capable mode. Nil if the publisher failed to bind
+	// or DMSG isn't enabled; calling sites null-check via pub == nil
+	// so the HTTP path always works regardless.
 	cxoPublisher *ClientsByServerCXOPublisher
 }
 
@@ -484,9 +485,10 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 				a.dhtMirror.Mirror(entry.Static, entry, entry.Sequence)
 			}
 
-			// CXO mirror — best-effort, no-op if --cxo wasn't set on
-			// startup. Server entries are ignored at this layer (the
-			// publisher only emits clients-by-server leaves).
+			// CXO mirror — best-effort, no-op if the publisher
+			// failed to start (no DMSG). Server entries are ignored
+			// at this layer (the publisher only emits
+			// clients-by-server leaves).
 			a.cxoPublisher.PublishSetEntry(nil, entry)
 
 			// Record heartbeat for uptime tracking on new client entries.
