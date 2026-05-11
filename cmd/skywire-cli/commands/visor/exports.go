@@ -11,6 +11,10 @@ package clivisor
 // PKCmd is the `cli visor pk` command. Top-level `cli pk` reuses its Run.
 var PKCmd = pkCmd
 
+// PKDNSLabelCmd is the `cli visor pk dnslabel` subcommand. Top-level
+// `cli pk dnslabel` re-mounts the same Command so both paths reach it.
+var PKDNSLabelCmd = pkDNSLabelCmd
+
 // SummaryCmd is the `cli visor info` command. Top-level `cli status`
 // reuses its Run; the leaf name differs only at the root.
 var SummaryCmd = summaryCmd

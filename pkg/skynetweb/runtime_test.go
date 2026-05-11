@@ -49,11 +49,11 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 		onDial: func() (net.Conn, error) {
 			client, server := net.Pipe()
 			go func() {
-				defer server.Close()
-				_ = server.SetReadDeadline(time.Now().Add(2 * time.Second))
+				defer server.Close()                                        //nolint:errcheck,gosec
+				_ = server.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck,gosec
 				buf := make([]byte, 4096)
-				_, _ = server.Read(buf)
-				_, _ = server.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello"))
+				_, _ = server.Read(buf)                                                                               //nolint:errcheck,gosec
+				_, _ = server.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello")) //nolint:errcheck,gosec
 			}()
 			return client, nil
 		},
@@ -65,7 +65,7 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), dialer, Config{
+		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), dialer, Config{ //nolint:errcheck,gosec
 			ProxyPort:  proxyPort,
 			TLSMITM:    true,
 			TLSPort:    443,
@@ -86,7 +86,7 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SOCKS5 dial: %v", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck,gosec
 
 	pool := x509.NewCertPool()
 	pool.AddCert(ca)
@@ -97,7 +97,7 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 	if _, err := tlsConn.Write([]byte("GET / HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	body, _ := io.ReadAll(tlsConn)
+	body, _ := io.ReadAll(tlsConn) //nolint:errcheck,gosec
 	if !strings.Contains(string(body), "hello") {
 		t.Errorf("body = %q, want to contain hello", string(body))
 	}
@@ -107,7 +107,7 @@ func TestSOCKS5_MITMHandshakeAndSplice(t *testing.T) {
 // 80) skynet target is unaffected by TLSMITM mode — it still goes
 // through pure splice.
 func TestSOCKS5_NonTLSPortStillSplices(t *testing.T) {
-	ca, caKey, _ := skynetca.GenerateCA(skynetca.CAOptions{})
+	ca, caKey, _ := skynetca.GenerateCA(skynetca.CAOptions{}) //nolint:errcheck,gosec
 	minter := skynetca.NewMinter(ca, caKey, skynetca.LeafOptions{})
 	proxyPort := pickFreePort(t)
 
@@ -115,11 +115,11 @@ func TestSOCKS5_NonTLSPortStillSplices(t *testing.T) {
 		onDial: func() (net.Conn, error) {
 			client, server := net.Pipe()
 			go func() {
-				defer server.Close()
-				_ = server.SetReadDeadline(time.Now().Add(2 * time.Second))
+				defer server.Close()                                        //nolint:errcheck,gosec
+				_ = server.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck,gosec
 				buf := make([]byte, 4096)
-				_, _ = server.Read(buf)
-				_, _ = server.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nplain!"))
+				_, _ = server.Read(buf)                                                                                //nolint:errcheck,gosec
+				_, _ = server.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 6\r\nConnection: close\r\n\r\nplain!")) //nolint:errcheck,gosec
 			}()
 			return client, nil
 		},
@@ -128,7 +128,7 @@ func TestSOCKS5_NonTLSPortStillSplices(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go func() {
-		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), dialer, Config{
+		_ = Run(ctx, logging.MustGetLogger("skynetweb-test"), dialer, Config{ //nolint:errcheck,gosec
 			ProxyPort:  proxyPort,
 			TLSMITM:    true,
 			TLSPort:    443,
@@ -139,17 +139,17 @@ func TestSOCKS5_NonTLSPortStillSplices(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	socksDialer, _ := proxy.SOCKS5("tcp", fmt.Sprintf("127.0.0.1:%d", proxyPort), nil, proxy.Direct)
+	socksDialer, _ := proxy.SOCKS5("tcp", fmt.Sprintf("127.0.0.1:%d", proxyPort), nil, proxy.Direct) //nolint:errcheck,gosec
 	host := testPK + ".skynet"
 	conn, err := socksDialer.Dial("tcp", host+":80")
 	if err != nil {
 		t.Fatalf("SOCKS5 dial: %v", err)
 	}
-	defer conn.Close()
+	defer conn.Close() //nolint:errcheck,gosec
 	if _, err := conn.Write([]byte("GET / HTTP/1.1\r\nHost: " + host + "\r\nConnection: close\r\n\r\n")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	body, _ := io.ReadAll(conn)
+	body, _ := io.ReadAll(conn) //nolint:errcheck,gosec
 	if !strings.Contains(string(body), "plain!") {
 		t.Errorf("plain port body = %q", string(body))
 	}
@@ -172,8 +172,8 @@ func pickFreePort(t *testing.T) uint {
 	if err != nil {
 		t.Fatal(err)
 	}
-	port := uint(lis.Addr().(*net.TCPAddr).Port)
-	_ = lis.Close()
+	port := uint(lis.Addr().(*net.TCPAddr).Port) //nolint:gosec // ephemeral port always fits in uint
+	_ = lis.Close()                              //nolint:errcheck,gosec
 	return port
 }
 
@@ -183,7 +183,7 @@ func waitForListener(host string, port uint, max time.Duration) error {
 	for time.Now().Before(deadline) {
 		c, err := net.Dial("tcp", addr)
 		if err == nil {
-			_ = c.Close()
+			_ = c.Close() //nolint:errcheck,gosec
 			return nil
 		}
 		time.Sleep(25 * time.Millisecond)

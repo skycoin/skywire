@@ -115,7 +115,10 @@ func SaveCA(cert *x509.Certificate, key *ecdsa.PrivateKey, certPath, keyPath str
 		return fmt.Errorf("mkdir cert dir: %w", err)
 	}
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
-	if err := os.WriteFile(certPath, certPEM, 0644); err != nil {
+	// 0644 is intentional: the CA cert is public material that the
+	// system trust store needs to read. The matching key file below
+	// is 0600.
+	if err := os.WriteFile(certPath, certPEM, 0644); err != nil { //nolint:gosec
 		return fmt.Errorf("write ca.crt: %w", err)
 	}
 	keyDER, err := x509.MarshalECPrivateKey(key)
@@ -131,7 +134,10 @@ func SaveCA(cert *x509.Certificate, key *ecdsa.PrivateKey, certPath, keyPath str
 
 // LoadCA reads a CA cert + key pair previously written by SaveCA.
 func LoadCA(certPath, keyPath string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
-	certBytes, err := os.ReadFile(certPath)
+	// G304: paths come from operator config (visor's skynet_web /
+	// dmsg_web blocks) — file inclusion via variable is the
+	// intentional API shape here.
+	certBytes, err := os.ReadFile(certPath) //nolint:gosec
 	if err != nil {
 		return nil, nil, fmt.Errorf("read ca.crt: %w", err)
 	}
@@ -147,7 +153,7 @@ func LoadCA(certPath, keyPath string) (*x509.Certificate, *ecdsa.PrivateKey, err
 		return nil, nil, errors.New("ca.crt: not a CA certificate")
 	}
 
-	keyBytes, err := os.ReadFile(keyPath)
+	keyBytes, err := os.ReadFile(keyPath) //nolint:gosec
 	if err != nil {
 		return nil, nil, fmt.Errorf("read ca.key: %w", err)
 	}

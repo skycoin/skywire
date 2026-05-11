@@ -248,9 +248,9 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			if _, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok {
-				pkHex := strings.TrimSuffix(origHost, cfg.DomainSuffix)
-				var pk cipher.PubKey
-				if err := pk.Set(pkHex); err != nil {
+				pkLabel := strings.TrimSuffix(origHost, cfg.DomainSuffix)
+				pk, err := parsePKLabel(pkLabel)
+				if err != nil {
 					return nil, fmt.Errorf("invalid PK in hostname %q: %w", origHost, err)
 				}
 				port, err := strconv.ParseUint(origPort, 10, 16)
@@ -273,7 +273,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				if cfg.TLSMITM && uint16(port) == cfg.TLSPort {
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
-						_ = stream.Close()
+						_ = stream.Close() //nolint:errcheck,gosec
 						return nil, fmt.Errorf("dmsg mitm leaf: %w", lerr)
 					}
 					return &tcpAddrConn{Conn: skynetca.MITMTerminate(stream, leaf)}, nil
@@ -414,4 +414,22 @@ func handleTCPConn(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client,
 	_ = conn.Close()     //nolint:errcheck
 	_ = dmsgConn.Close() //nolint:errcheck
 	<-done
+}
+
+// parsePKLabel accepts either the legacy 66-char hex form or the
+// 53-char base32 DNSLabel form. See pkg/cipher/dnslabel.go for the
+// motivation: only the base32 form fits in a DNS label and an X.509
+// Subject.CommonName, so TLS-MITM browser URLs must use it. Hex is
+// kept accepted for backcompat with plain-HTTP URLs already in use.
+func parsePKLabel(label string) (cipher.PubKey, error) {
+	switch len(label) {
+	case cipher.PubKeyDNSLabelLen: // 53 — base32
+		return cipher.ParseDNSLabel(label)
+	default:
+		var pk cipher.PubKey
+		if err := pk.Set(label); err != nil {
+			return cipher.PubKey{}, err
+		}
+		return pk, nil
+	}
 }

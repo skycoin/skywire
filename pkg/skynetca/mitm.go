@@ -33,9 +33,9 @@ func MITMTerminate(upstream net.Conn, leaf *tls.Certificate) net.Conn {
 	}
 	tlsConn := tls.Server(b, cfg)
 	go func() {
-		defer upstream.Close()
+		defer upstream.Close() //nolint:errcheck,gosec
 		// Closing tlsConn closes b too.
-		defer tlsConn.Close()
+		defer tlsConn.Close() //nolint:errcheck,gosec
 
 		// Run the handshake explicitly so handshake errors don't
 		// race with the io.Copy goroutines below.
