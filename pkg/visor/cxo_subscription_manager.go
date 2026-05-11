@@ -61,6 +61,11 @@ const (
 	// FeedDMSGDClientsByServer is DMSG-D's clients-by-server publisher
 	// (clients-by-server/<server>/<client>/{entry,tombstone}).
 	FeedDMSGDClientsByServer
+	// FeedTPDAllTransports is TPD's all-transports snapshot publisher
+	// (transports/all/{with-self,without-self}). Used by the CLI's
+	// `pv -t`, `tp tree`, `tp viz` commands as a CXO alternative to
+	// HTTP-polling /all-transports.
+	FeedTPDAllTransports
 )
 
 // CXOTab identifies a consumer of one or more CXO feeds. Tabs in the
@@ -84,6 +89,10 @@ const (
 	// SD services feed; refcount summed with TabAutoconnect when
 	// both are active so they share the running cycle.
 	TabCLIServices
+	// TabCLITransports is the operator-facing transport-listing CLI
+	// commands (`pv -t`, `tp tree`, `tp viz`). Maps to the TPD
+	// all-transports feed.
+	TabCLITransports
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -95,6 +104,7 @@ var tabFeedDeps = map[CXOTab][]CXOFeed{
 	TabUptime:            {FeedTPDUptime},
 	TabAutoconnect:       {FeedSDServices},
 	TabCLIServices:       {FeedSDServices},
+	TabCLITransports:     {FeedTPDAllTransports},
 }
 
 // CXOSubscriptionManager owns the per-feed cycle goroutines + the
@@ -512,6 +522,12 @@ func (m *CXOSubscriptionManager) feedSpec(fk CXOFeed) (cipher.PubKey, uint16, st
 			return cipher.PubKey{}, 0, "", errors.New("no DMSG-D CXO peer (dmsg.discovery_dmsg unset)")
 		}
 		return pk, skyenv.DmsgDMSGDClientsByServerCXOPort, "clients-by-server/", nil
+	case FeedTPDAllTransports:
+		pk, ok := tpdCXOPeer(m.v)
+		if !ok {
+			return cipher.PubKey{}, 0, "", errors.New("no TPD CXO peer (transport.discovery_dmsg unset)")
+		}
+		return pk, skyenv.DmsgTPDAllTransportsCXOPort, "transports/all/", nil
 	}
 	return cipher.PubKey{}, 0, "", fmt.Errorf("unknown feed: %d", fk)
 }
