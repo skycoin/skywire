@@ -40,9 +40,6 @@ type Config struct {
 	// DmsgPort is the dmsghttp listener port (default 80).
 	DmsgPort uint16 `json:"dmsg_port,omitempty"`
 
-	// EnableCXO turns on the CXO services publisher feed over DMSG.
-	EnableCXO bool `json:"enable_cxo,omitempty"`
-
 	// Dmsg is the dmsg-related config block — same shape across
 	// every deployment service that uses it.
 	Dmsg cmdutil.DmsgConfig `json:"dmsg,omitempty"`

@@ -8804,7 +8804,6 @@ Usage:
 Flags:
   -a, --addr string               address to bind to
                                    (default ":9091")
-      --cxo                       enable CXO feed for transport data distribution over DMSG
       --dmsg-disc string          url of dmsg-discovery
                                    (default "http://dmsgd.skywire.skycoin.com")
       --dmsg-server-type string   type of dmsg server on dmsghttp handler
