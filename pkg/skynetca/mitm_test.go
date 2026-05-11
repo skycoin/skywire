@@ -28,15 +28,15 @@ func TestMITMTerminate_RoundTrip(t *testing.T) {
 
 	upClient, upServer := net.Pipe()
 	go func() {
-		defer upServer.Close()
-		_ = upServer.SetReadDeadline(time.Now().Add(2 * time.Second))
+		defer upServer.Close()                                        //nolint:errcheck,gosec
+		_ = upServer.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck,gosec
 		buf := make([]byte, 4096)
-		_, _ = upServer.Read(buf)
-		_, _ = upServer.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello"))
+		_, _ = upServer.Read(buf)                                                                               //nolint:errcheck,gosec
+		_, _ = upServer.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: 5\r\nConnection: close\r\n\r\nhello")) //nolint:errcheck,gosec
 	}()
 
 	browser := MITMTerminate(upClient, leaf)
-	defer browser.Close()
+	defer browser.Close() //nolint:errcheck,gosec
 
 	pool := x509.NewCertPool()
 	pool.AddCert(ca)
@@ -61,9 +61,9 @@ func TestMITMTerminate_RoundTrip(t *testing.T) {
 // SOCKS5 library's lifecycle, which closes the dialed conn when the
 // browser disconnects.
 func TestMITMTerminate_ClosingPropagates(t *testing.T) {
-	ca, caKey, _ := GenerateCA(CAOptions{})
+	ca, caKey, _ := GenerateCA(CAOptions{}) //nolint:errcheck,gosec
 	m := NewMinter(ca, caKey, LeafOptions{})
-	leaf, _ := m.For("test.skynet")
+	leaf, _ := m.For("test.skynet") //nolint:errcheck,gosec
 
 	upClient, upServer := net.Pipe()
 	browser := MITMTerminate(upClient, leaf)
@@ -72,9 +72,9 @@ func TestMITMTerminate_ClosingPropagates(t *testing.T) {
 	// handshake the goroutine returns from Handshake() error and
 	// closes upClient via defer; that should make a Read on
 	// upServer return error.
-	_ = browser.Close()
+	_ = browser.Close() //nolint:errcheck,gosec
 
-	_ = upServer.SetReadDeadline(time.Now().Add(time.Second))
+	_ = upServer.SetReadDeadline(time.Now().Add(time.Second)) //nolint:errcheck,gosec
 	buf := make([]byte, 1)
 	if _, err := upServer.Read(buf); err == nil {
 		t.Errorf("expected upstream Read error after browser close")

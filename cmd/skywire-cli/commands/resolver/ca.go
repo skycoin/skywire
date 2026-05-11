@@ -30,7 +30,7 @@ import (
 )
 
 var (
-	caForce       bool
+	caForce        bool
 	caInstallPrint bool
 )
 
@@ -216,7 +216,7 @@ func defaultCAPaths() (certPath, keyPath string, err error) {
 // detectLinuxTrustStore inspects /etc/os-release to locate the
 // distro's anchors directory and the system trust-update command.
 func detectLinuxTrustStore() (anchorsDir string, updateCmd []string, err error) {
-	osRelease, _ := os.ReadFile("/etc/os-release")
+	osRelease, _ := os.ReadFile("/etc/os-release") //nolint:errcheck,gosec
 	id := osReleaseField(string(osRelease), "ID")
 	idLike := osReleaseField(string(osRelease), "ID_LIKE")
 	combined := id + " " + idLike
@@ -255,4 +255,3 @@ func runVisible(argv []string) error {
 	}
 	return nil
 }
-
