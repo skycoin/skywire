@@ -77,6 +77,13 @@ func init() {
 	tpCmd.Flags().StringVar(&cacheFileSDProxy, "cfsp", os.TempDir()+"/proxysd.json", "SD cache file location")
 	tpCmd.Flags().StringVar(&cacheFileSDVPN, "cfsv", os.TempDir()+"/vpnsd.json", "SD cache file location")
 	tpCmd.Flags().StringVar(&cacheFileSDVisor, "cfsvisor", os.TempDir()+"/visorsd.json", "SD cache file location")
+	// --cfa was previously only registered on `tp tree`, so `tp -m`
+	// ran with cacheFilesAge=0. clicache.Fresh treats that as
+	// "always stale" (time.Since(...) > 0 is always true), which
+	// meant every `tp -m` invocation refetched UT/SD from scratch
+	// and got whatever the online-state filter flipped to on that
+	// call. Default of 5m matches `tp tree`.
+	tpCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "c", 5, "use cached service-discovery/UT data if younger than N minutes")
 	tpCmd.Flags().StringVarP(&sdURL, "sdurl", "a", deployment.Prod.ServiceDiscovery, "service discovery url")
 	tpCmd.Flags().StringVarP(&utURL, "uturl", "w", deployment.Prod.TransportDiscovery, "uptime tracker url (TPD integrated)")
 	tpCmd.Flags().StringVarP(&tpID, "id", "i", "", "display transport matching ID")
