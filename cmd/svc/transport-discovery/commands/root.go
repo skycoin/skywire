@@ -50,7 +50,6 @@ var (
 	dmsgDisc        = deployment.Prod.DmsgDiscovery
 	pprofAddr       string
 	storeDataPath   string
-	enableCXO       bool
 	mode            string
 	uptimeDB        string
 )
@@ -74,7 +73,6 @@ func init() {
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", tpd.DefaultStoreDataPath, "path for bandwidth backup files\n\r")
-	RootCmd.Flags().BoolVar(&enableCXO, "cxo", false, "enable CXO feed for transport data distribution over DMSG")
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
 	RootCmd.Flags().StringVar(&uptimeDB, "uptime-db", tpd.DefaultUptimeDB, "path for the service-self uptime bbolt store (empty disables)")
 }
@@ -253,7 +251,6 @@ func buildConfig() (*tpd.Config, error) {
 		Whitelist:       commaSplit(whitelistKeys),
 		TestEnvironment: testEnvironment,
 		StoreDataPath:   storeDataPath,
-		EnableCXO:       enableCXO,
 		UptimeDB:        uptimeDB,
 		DmsgPort:        dmsgPort,
 		Dmsg: cmdutil.DmsgConfig{
@@ -316,9 +313,6 @@ func mergeFile(dst, src *tpd.Config) {
 	}
 	if src.StoreDataPath != "" {
 		dst.StoreDataPath = src.StoreDataPath
-	}
-	if src.EnableCXO {
-		dst.EnableCXO = true
 	}
 	if src.UptimeDB != "" {
 		dst.UptimeDB = src.UptimeDB

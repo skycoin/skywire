@@ -135,10 +135,10 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		hv.tpvizServer.SetVisorAPI(adapter, visor.conf.PK.Hex())
 		// Wire the on-demand CXO subscription manager so /api/services
 		// (and future per-feed handlers) can serve from the local SD /
-		// DMSG-D subscriber tree when --cxo is enabled on those
-		// services. cxoSubMgrAdapter forwards int tab/feed identifiers
-		// from tpviz to the typed CXOTab / CXOFeed values used by the
-		// manager — values match across both sides by construction.
+		// DMSG-D subscriber tree. cxoSubMgrAdapter forwards int
+		// tab/feed identifiers from tpviz to the typed CXOTab /
+		// CXOFeed values used by the manager — values match across
+		// both sides by construction.
 		hv.tpvizServer.SetCXOSubMgr(&cxoSubMgrAdapter{v: visor})
 		hv.tpvizServer.Start()
 	}

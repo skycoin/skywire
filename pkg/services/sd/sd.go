@@ -182,10 +182,8 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	defer h.Close()
 
-	if cfg.EnableCXO && h.DmsgClient != nil {
+	if h.DmsgClient != nil {
 		s.startServicesCXO(runCtx, h.DmsgClient, sdAPI, sk, log)
-	} else if cfg.EnableCXO {
-		log.Warn("CXO requested but dmsg is not enabled (--mode=http); services publisher disabled")
 	}
 
 	select {
