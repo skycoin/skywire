@@ -128,7 +128,24 @@ Mode is selected by PKGENV/USRENV in the env file:
 		}
 
 		if _, err := os.Stat(resolved.configPath); os.IsNotExist(err) {
+			mode := "PKGENV"
+			if resolved.usrEnv {
+				mode = "USRENV"
+			}
 			fmt.Printf("%s>>> FATAL:%s expected config file not found at %s\n", colorRed, colorReset, resolved.configPath)
+			fmt.Printf("            autoconfig resolved mode=%s from %s\n", mode, func() string {
+				if resolved.skyenvPath != "" {
+					return resolved.skyenvPath
+				}
+				return "implicit fallback (no /etc/skywire.conf)"
+			}())
+			fmt.Printf("            if %s is commented out in %s, uncomment it and re-run `skywire autoconfig`\n",
+				mode, func() string {
+					if resolved.skyenvPath != "" {
+						return resolved.skyenvPath
+					}
+					return "/etc/skywire.conf"
+				}())
 			os.Exit(100)
 		}
 		msg3(fmt.Sprintf("%sSkywire%s configuration updated\nconfig path: %s%s%s", colorBlue, colorReset, colorPurple, resolved.configPath, colorReset))
@@ -282,11 +299,27 @@ func resolveConfig() resolvedConfig {
 	return r
 }
 
-// generateConfig invokes `skywire cli config gen -r`. The mode
-// flags (-p / -u) intentionally aren't passed — the env file's
-// PKGENV/USRENV defaults the gen command already reads do the job.
+// generateConfig invokes `skywire cli config gen` with the mode
+// flag (-p or -u) matching what resolveConfig already decided. We
+// intentionally do NOT let the subprocess redo the resolution —
+// autoconfig has an implicit "euid==0 → PKGENV" fallback when the
+// env file leaves both PKGENV and USRENV commented out, but
+// `cli config gen` does not, so without explicit -p/-u the
+// subprocess writes the config to gen's own default path (working-
+// directory ./skywire-config.json) instead of the system path
+// autoconfig is expecting at r.configPath. The mismatch surfaces
+// later as the FATAL `expected config file not found` from
+// autoconfig's post-Stat check and aborts the postinst with
+// exit 100. Propagating the resolved mode explicitly closes the gap.
 func generateConfig(r resolvedConfig, hvArg string) error {
 	args := []string{"cli", "config", "gen", "-r"}
+
+	switch {
+	case r.pkgEnv:
+		args = append(args, "-p")
+	case r.usrEnv:
+		args = append(args, "-u")
+	}
 
 	switch hvArg {
 	case "0":
@@ -308,9 +341,16 @@ func generateConfig(r resolvedConfig, hvArg string) error {
 	}
 	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(args, " "), colorReset))
 
+	// Forward stdout and stderr to the parent so any error from
+	// `cli config gen` (missing service-config.json, bad SK, write
+	// permission denied, etc.) reaches the operator's apt output /
+	// journalctl. Previously these were both /dev/null'd, so a
+	// failing gen exited 0-or-noise and autoconfig only noticed
+	// downstream — by the time the FATAL Stat fired, the actual
+	// cause was lost.
 	cmd := exec.Command("skywire", args...) //nolint:gosec
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	cmd.Env = os.Environ()
 	if r.skyenvPath != "" {
 		cmd.Env = append(cmd.Env, "SKYENV="+r.skyenvPath)
