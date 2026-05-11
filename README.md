@@ -16,11 +16,16 @@ Skywire is a fully open-source, privacy-focused suite of networking tools develo
 
 ## Major features
 
-Skywire visors talk over two encrypted networks, both addressed by 33-byte public keys: **Skywire** — direct or multi-hop peer-to-peer routes between visors — and **DMSG** — a relay-based fallback for visors that can't reach each other directly. Both share the same pubkey identity, so every feature below works over either network.
+Skywire visors are reachable over two distinct encrypted networks, both addressed by 33-byte public keys:
+
+- **Skywire** — a peer-to-peer routing network. Visors establish encrypted transports directly with each other (STCPR over TCP, SUDPH over UDP hole-punching) and build single-hop or multi-hop routes across them using the Noise Protocol; intermediate visors see only the previous and next hop.
+- **DMSG** — a relay-based messaging network. Visors connect as clients to DMSG servers, which relay encrypted streams between them on the clients' behalf; the two endpoints never need direct connectivity to each other.
+
+The two networks share the same pubkey identity space and can be used independently or together — every feature below works over either.
 
 * **P2P port forwarding over Skywire and DMSG** — host websites and TCP services on your visor's public key.
-  -- [SkyNet](#skynet--p2p-port-forwarding-over-skywire) forwards over Skywire's peer-to-peer transports and routing mesh.
-  -- [DmsgWeb](#dmsgweb--anonymous-port-forwarding-over-dmsg) forwards over a DMSG relay for visors that can't reach each other directly.
+  -- [SkyNet](#skynet--p2p-port-forwarding-over-skywire) forwards over Skywire routes.
+  -- [DmsgWeb](#dmsgweb--anonymous-port-forwarding-over-dmsg) forwards over a DMSG relay.
 * **`.skynet` / `.dmsg` resolving SOCKS5 proxy** — point a browser at the visor's local resolver to reach `<pk>.skynet` and `<pk>.dmsg` URLs directly.
   -- Subdomain prefix on the URL (`example.com.<pk>.skynet`) lets vhost-capable backends like Caddy / nginx dispatch by `Host` header through the visor's port forwarder.
   -- Optional TLS-MITM mode mints leaf certs from a locally-installed name-constrained CA so HTTPS sites work in the browser without warnings.
