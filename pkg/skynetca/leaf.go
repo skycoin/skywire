@@ -124,12 +124,20 @@ func (m *CachedMinter) mint(host string) (*tls.Certificate, error) {
 	now := time.Now().UTC()
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: host},
-		DNSNames:     []string{host},
-		NotBefore:    now.Add(-1 * time.Hour),
-		NotAfter:     now.Add(m.opts.Validity),
-		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		// Subject.CommonName intentionally omitted. X.520
+		// ub-common-name caps it at 64 chars; a skynet host like
+		// "<subdomain>.<53-char-base32-pk>.skynet" easily exceeds
+		// that when the subdomain is non-trivial (e.g.
+		// "magnetosphere.net.<53>.skynet" = 78 chars). Strict
+		// X.509 parsers reject the cert outright. Browsers have
+		// ignored CN since 2017 (Chrome) / Firefox followed —
+		// SAN is the source of truth.
+		Subject:     pkix.Name{},
+		DNSNames:    []string{host},
+		NotBefore:   now.Add(-1 * time.Hour),
+		NotAfter:    now.Add(m.opts.Validity),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, m.ca, &key.PublicKey, m.caKey)
 	if err != nil {
