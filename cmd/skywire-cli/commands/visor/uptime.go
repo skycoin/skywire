@@ -6,7 +6,9 @@
 package clivisor
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -26,6 +29,7 @@ var (
 	uptimeTimelineDate   string
 	uptimeGapThreshold   time.Duration
 	uptimeRestartLoopMax time.Duration
+	uptimeLive           bool
 )
 
 func init() {
@@ -37,6 +41,8 @@ func init() {
 		"render a (down: ...) row between sessions whose gap exceeds this")
 	uptimeCmd.Flags().DurationVar(&uptimeRestartLoopMax, "restart-loop-threshold", 30*time.Second,
 		"sessions shorter than this get a (restart loop?) tag")
+	uptimeCmd.Flags().BoolVarP(&uptimeLive, "live", "L", false,
+		"live-refresh mode (bubbletea TUI, 1s tick); current session 'running:' line ticks up in place")
 	RootCmd.AddCommand(uptimeCmd)
 }
 
@@ -58,29 +64,33 @@ a "(restart loop?)" tag.
 	skywire cli visor uptime --json | jq '.sessions[-5:]'
 `,
 	Run: func(cmd *cobra.Command, _ []string) {
-		args := visor.UptimeHistoryArgs{Limit: uptimeLimit}
-		if uptimeSince != "" {
-			t, err := parseSince(uptimeSince)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --since: %w", err))
-			}
-			args.Since = t
-		}
-		if uptimeTimelineDate != "" {
-			d, err := time.Parse("2006-01-02", uptimeTimelineDate)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --date: %w", err))
-			}
-			args.IncludeTimeline = true
-			args.TimelineDate = d
-		} else if uptimeWithTimeline {
-			args.IncludeTimeline = true
+		args, err := buildUptimeArgs()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
+
+		if uptimeLive {
+			err := livetui.Run(func(ctx context.Context) (string, error) {
+				hist, err := rpcClient.UptimeHistory(args)
+				if err != nil {
+					return "", err
+				}
+				return renderUptimeHuman(hist, args), nil
+			}, livetui.Options{
+				Title:    "skywire cli visor uptime",
+				Interval: time.Second,
+			})
+			if err != nil && !errors.Is(err, context.Canceled) {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+
 		hist, err := rpcClient.UptimeHistory(args)
 		if err != nil {
 			internal.PrintFatalRPCError(cmd.Flags(), err)
@@ -92,25 +102,51 @@ a "(restart loop?)" tag.
 			return
 		}
 
-		var human string
-		if hist.Current.StartedAt.IsZero() && len(hist.Sessions) == 0 {
-			human = "(no sessions recorded — recorder may be unavailable)\n"
-		} else {
-			human = fmt.Sprintf("running: %s (since %s, %s)  pid=%d  instance=%s\n\n",
-				nonEmpty(hist.Current.Version, "?"),
-				hist.Current.StartedAt.UTC().Format("2006-01-02 15:04:05Z"),
-				humanSince(hist.Current.StartedAt, hist.Current.LastSeen),
-				hist.Current.PID,
-				hist.Current.InstanceID,
-			)
-			human += serviceuptime.FormatHistory(hist.Sessions, uptimeGapThreshold, uptimeRestartLoopMax)
-			if args.IncludeTimeline && len(hist.Timeline) > 0 {
-				human += fmt.Sprintf("\nTimeline %s (288 5-min slots, '#' = online):\n%s\n",
-					hist.TimelineDate, serviceuptime.FormatBitmap(hist.Timeline))
-			}
-		}
-		internal.PrintOutput(cmd.Flags(), hist, human)
+		internal.PrintOutput(cmd.Flags(), hist, renderUptimeHuman(hist, args))
 	},
+}
+
+// buildUptimeArgs centralizes the flag-to-args translation so the live
+// path and the one-shot path stay aligned.
+func buildUptimeArgs() (visor.UptimeHistoryArgs, error) {
+	args := visor.UptimeHistoryArgs{Limit: uptimeLimit}
+	if uptimeSince != "" {
+		t, err := parseSince(uptimeSince)
+		if err != nil {
+			return args, fmt.Errorf("invalid --since: %w", err)
+		}
+		args.Since = t
+	}
+	if uptimeTimelineDate != "" {
+		d, err := time.Parse("2006-01-02", uptimeTimelineDate)
+		if err != nil {
+			return args, fmt.Errorf("invalid --date: %w", err)
+		}
+		args.IncludeTimeline = true
+		args.TimelineDate = d
+	} else if uptimeWithTimeline {
+		args.IncludeTimeline = true
+	}
+	return args, nil
+}
+
+func renderUptimeHuman(hist *visor.UptimeHistoryResponse, args visor.UptimeHistoryArgs) string {
+	if hist.Current.StartedAt.IsZero() && len(hist.Sessions) == 0 {
+		return "(no sessions recorded — recorder may be unavailable)\n"
+	}
+	human := fmt.Sprintf("running: %s (since %s, %s)  pid=%d  instance=%s\n\n",
+		nonEmpty(hist.Current.Version, "?"),
+		hist.Current.StartedAt.UTC().Format("2006-01-02 15:04:05Z"),
+		humanSince(hist.Current.StartedAt, hist.Current.LastSeen),
+		hist.Current.PID,
+		hist.Current.InstanceID,
+	)
+	human += serviceuptime.FormatHistory(hist.Sessions, uptimeGapThreshold, uptimeRestartLoopMax)
+	if args.IncludeTimeline && len(hist.Timeline) > 0 {
+		human += fmt.Sprintf("\nTimeline %s (288 5-min slots, '#' = online):\n%s\n",
+			hist.TimelineDate, serviceuptime.FormatBitmap(hist.Timeline))
+	}
+	return human
 }
 
 func parseSince(s string) (time.Time, error) {

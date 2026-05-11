@@ -520,6 +520,15 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 	}
 }
 
+// sseKeepaliveInterval is how often sseHandler writes a `: ping`
+// comment line to keep the connection warm. SSE per the spec ignores
+// any line starting with `:` so this is invisible to clients. The
+// interval is well below the http.Server.WriteTimeout we set on the
+// listener so write activity never goes idle long enough to trigger
+// a deadline-based close — and any reverse proxy in front of skychat
+// (Caddy/nginx) also sees a steady stream and won't time out.
+const sseKeepaliveInterval = 15 * time.Second
+
 func sseHandler(w http.ResponseWriter, req *http.Request) {
 	f, ok := w.(http.Flusher)
 	if !ok {
@@ -527,10 +536,26 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// Disable WriteTimeout for this request. Long-lived SSE streams
+	// are fundamentally incompatible with a per-conn write deadline
+	// — an idle subscriber would see the server tear down the conn
+	// after WriteTimeout and the client surfaces it as `unexpected
+	// EOF`. Clearing the deadline keeps the conn open until either
+	// the client closes it or req.Context().Done() fires on shutdown.
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		// Older Go versions or wrapped writers may not support it;
+		// we can still serve — just slightly more aggressive close
+		// behavior if the operator runs an old server. Debug-log
+		// rather than failing the connection.
+		appCl.Log().Debugf("SSE SetWriteDeadline: %v", err)
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no") // disable proxy buffering
 
 	ch, unsubscribe := hub.subscribe()
 	defer unsubscribe()
@@ -559,6 +584,19 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	// Emit an initial keepalive comment immediately so the client
+	// gets confirmation the stream is open even before any real
+	// message arrives. Browsers (EventSource) and our CLI listen
+	// both treat lines beginning with `:` as no-ops.
+	if _, err := fmt.Fprint(w, ": connected\n\n"); err != nil {
+		appCl.Log().Debugf("SSE initial keepalive write failed: %v", err)
+		return
+	}
+	f.Flush()
+
+	keepalive := time.NewTicker(sseKeepaliveInterval)
+	defer keepalive.Stop()
+
 	for {
 		select {
 		case msg, ok := <-ch:
@@ -570,6 +608,13 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 				// hub deregisters this subscriber and stops buffering
 				// messages it can't deliver.
 				appCl.Log().Debugf("SSE write failed, dropping subscriber: %v", err)
+				return
+			}
+			f.Flush()
+
+		case <-keepalive.C:
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				appCl.Log().Debugf("SSE keepalive write failed: %v", err)
 				return
 			}
 			f.Flush()
