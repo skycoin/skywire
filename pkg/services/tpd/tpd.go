@@ -244,10 +244,8 @@ func (s *service) Run(ctx context.Context) error {
 	}
 	defer h.Close()
 
-	if cfg.EnableCXO && h.DmsgClient != nil {
+	if h.DmsgClient != nil {
 		s.startCXO(runCtx, h, st, tpdAPI, sk, logger)
-	} else if cfg.EnableCXO {
-		logger.Warn("CXO requested but dmsg is not enabled (--mode=http); aggregator/publisher disabled")
 	}
 
 	select {
