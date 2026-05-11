@@ -273,7 +273,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				if cfg.TLSMITM && uint16(port) == cfg.TLSPort {
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
-						_ = stream.Close()
+						_ = stream.Close() //nolint:errcheck,gosec
 						return nil, fmt.Errorf("dmsg mitm leaf: %w", lerr)
 					}
 					return &tcpAddrConn{Conn: skynetca.MITMTerminate(stream, leaf)}, nil

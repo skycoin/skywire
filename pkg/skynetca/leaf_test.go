@@ -14,7 +14,7 @@ import (
 const testPK = "027087fe40d97f7f0be4a0dc768462ddbb371d4b9e7679d4f11f117d757b9856ed"
 
 func TestMinter_RejectsForbiddenSuffix(t *testing.T) {
-	ca, key, _ := GenerateCA(CAOptions{})
+	ca, key, _ := GenerateCA(CAOptions{}) //nolint:errcheck,gosec
 	m := NewMinter(ca, key, LeafOptions{})
 
 	if _, err := m.For("foo.example.com"); err == nil {
@@ -23,7 +23,7 @@ func TestMinter_RejectsForbiddenSuffix(t *testing.T) {
 }
 
 func TestMinter_AcceptsSkynetAndDmsg(t *testing.T) {
-	ca, key, _ := GenerateCA(CAOptions{})
+	ca, key, _ := GenerateCA(CAOptions{}) //nolint:errcheck,gosec
 	m := NewMinter(ca, key, LeafOptions{})
 
 	for _, host := range []string{testPK + ".skynet", testPK + ".dmsg"} {
@@ -43,7 +43,7 @@ func TestMinter_AcceptsSkynetAndDmsg(t *testing.T) {
 }
 
 func TestMinter_Cache_ReturnsSameLeaf(t *testing.T) {
-	ca, key, _ := GenerateCA(CAOptions{})
+	ca, key, _ := GenerateCA(CAOptions{}) //nolint:errcheck,gosec
 	m := NewMinter(ca, key, LeafOptions{})
 	a, err := m.For(testPK + ".skynet")
 	if err != nil {
@@ -59,7 +59,7 @@ func TestMinter_Cache_ReturnsSameLeaf(t *testing.T) {
 }
 
 func TestMinter_RenewBefore_TriggersFreshMint(t *testing.T) {
-	ca, key, _ := GenerateCA(CAOptions{})
+	ca, key, _ := GenerateCA(CAOptions{}) //nolint:errcheck,gosec
 	// Validity barely above RenewBefore so the cached cert is
 	// already considered stale immediately.
 	m := NewMinter(ca, key, LeafOptions{Validity: 2 * time.Hour, RenewBefore: 3 * time.Hour})
@@ -82,10 +82,10 @@ func TestMinter_RenewBefore_TriggersFreshMint(t *testing.T) {
 // validate it. This regression-tests Go's name-constraint
 // enforcement, since browser TLS validation depends on it.
 func TestNameConstraints_VerifierRejectsForbiddenLeaf(t *testing.T) {
-	ca, caKey, _ := GenerateCA(CAOptions{PermittedDomains: []string{".skynet"}})
+	ca, caKey, _ := GenerateCA(CAOptions{PermittedDomains: []string{".skynet"}}) //nolint:errcheck,gosec
 
-	leafKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 159))
+	leafKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)            //nolint:errcheck,gosec
+	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 159)) //nolint:errcheck,gosec
 	tmpl := &x509.Certificate{
 		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: "evil.example.com"},
@@ -99,7 +99,7 @@ func TestNameConstraints_VerifierRejectsForbiddenLeaf(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	leaf, _ := x509.ParseCertificate(der)
+	leaf, _ := x509.ParseCertificate(der) //nolint:errcheck,gosec
 
 	pool := x509.NewCertPool()
 	pool.AddCert(ca)

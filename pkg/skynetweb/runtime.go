@@ -213,7 +213,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				// decryption and the wire. If MITM is off, the
 				// browser is already sending plaintext directly to
 				// hostRewriteConn — same parser, same effect.
-				var stack net.Conn = conn
+				stack := conn
 				if target.subdomain != "" {
 					// `subdomain` already encodes the operator's
 					// intent (the URL has labels before the PK).
