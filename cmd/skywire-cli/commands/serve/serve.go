@@ -155,7 +155,17 @@ Examples:
 					host = "127.0.0.1"
 				}
 				fp.ProxyAddr = fmt.Sprintf("%s:%d", host, p)
-			case host == "" || host == "localhost" || host == "127.0.0.1":
+			case host == "":
+				// Only fall back to the LocalPort short form when no
+				// host was given. Any explicit host — including
+				// "localhost" and "127.0.0.1" — is preserved verbatim
+				// in ProxyAddr so the visor's net.Dial uses exactly
+				// what the user typed and doesn't go through DNS
+				// resolution at dial time (where the saved LocalPort
+				// short form would reconstruct "localhost:port" and
+				// Go's Happy Eyeballs picks v4 vs v6 based on system
+				// config, sometimes landing on a different listener
+				// than the user intended).
 				fp.LocalPort = p
 			default:
 				fp.ProxyAddr = fmt.Sprintf("%s:%d", host, p)
