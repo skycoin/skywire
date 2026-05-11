@@ -664,6 +664,13 @@ func (c *Cache) get(
 // from zero).
 //
 // Use this method cleaning up DB.
+//
+// CAUTION: callers must not be holding any lock that Cache.Set's
+// critical section can transitively reach. In particular, never
+// call IsCached from inside a bbolt.DB.Update callback — Cache.Set
+// takes c.mx then opens a bbolt RWTx, so calling IsCached from
+// within a bbolt RWTx inverts that ordering and deadlocks. For
+// iteration patterns, use CachedKeys to snapshot once up front.
 func (c *Cache) IsCached(key cipher.SHA256) (yep bool) {
 
 	c.mx.Lock()
@@ -671,6 +678,29 @@ func (c *Cache) IsCached(key cipher.SHA256) (yep bool) {
 
 	_, yep = c.is[key]
 	return
+}
+
+// CachedKeys returns a fresh snapshot of every key currently tracked
+// by the cache. The returned set has no ties to the live map — once
+// the lock is released the cache can mutate freely, and callers can
+// hold the set while doing IO (e.g. bbolt iteration) without risking
+// the IsCached lock-ordering deadlock.
+//
+// The snapshot can race with Set: a key that's about to enter the
+// cache may be missing, and a key that just left may still appear.
+// Callers (DB cleanup) accept that — the goal is "don't delete an
+// object the cache might still resurrect", and a slightly stale
+// snapshot strictly favors safety: a key that races out of the
+// cache after the snapshot was taken is still kept on disk for one
+// extra sweep, never deleted while live.
+func (c *Cache) CachedKeys() map[cipher.SHA256]struct{} {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+	out := make(map[cipher.SHA256]struct{}, len(c.is))
+	for k := range c.is {
+		out[k] = struct{}{}
+	}
+	return out
 }
 
 // Get from cache or DB, increasing, leaving as is, or
