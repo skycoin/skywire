@@ -26,6 +26,11 @@ func init() {
 	statusCmd.GroupID = groupVisor
 	pkCmd.GroupID = groupVisor
 	haltCmd.GroupID = groupVisor
+	// Re-mount the dnslabel subcommand under the shortcut so
+	// `cli pk dnslabel` works as well as `cli visor pk dnslabel`.
+	// The shortcut's pkCmd is a separate *cobra.Command — its
+	// children aren't inherited from the underlying visor pkCmd.
+	pkCmd.AddCommand(clivisor.PKDNSLabelCmd)
 }
 
 // statusCmd is `skywire cli status` — equivalent to `cli visor info`.
