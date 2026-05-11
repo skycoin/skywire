@@ -123,7 +123,10 @@ func TestMinter_EmitsRFC1035CompliantSAN(t *testing.T) {
 		rfc1035LabelMax = 63 // octets per DNS label
 		x520CNMax       = 64 // ub-common-name
 	)
-	ca, key, _ := GenerateCA(CAOptions{})
+	ca, key, err := GenerateCA(CAOptions{})
+	if err != nil {
+		t.Fatalf("GenerateCA: %v", err)
+	}
 	m := NewMinter(ca, key, LeafOptions{})
 
 	// Use a host with a 53-char base32 PK label, the canonical form.

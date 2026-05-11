@@ -42,9 +42,9 @@ func TestDNSLabelCaseInsensitive(t *testing.T) {
 
 func TestDNSLabelInvalid(t *testing.T) {
 	cases := []string{
-		"",            // empty
-		"not-base32!", // bad chars
-		"aa",          // too short (decodes to <33 bytes)
+		"",                       // empty
+		"not-base32!",            // bad chars
+		"aa",                     // too short (decodes to <33 bytes)
 		strings.Repeat("a", 200), // way too long
 	}
 	for _, c := range cases {

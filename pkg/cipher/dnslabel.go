@@ -10,7 +10,7 @@
 // Either limit causes strict TLS stacks (NSS / Firefox / Chrome) to
 // reject the leaf cert minted by the resolver's TLS-MITM mode as
 // "improperly encoded," so HTTPS over skynet doesn't work at all
-// with the hex form regardless of how the URL is dialled.
+// with the hex form regardless of how the URL is dialed.
 //
 // RFC 4648 base32 of 33 bytes is 53 chars unpadded (ceil(33*8/5)),
 // well under 63. Lowercase is canonical for DNS (case-insensitive
