@@ -1298,6 +1298,72 @@ func (rc *rpcClient) PairPoll(since time.Time) ([]PairMessage, error) {
 	return resp, err
 }
 
+// GroupCreate implements API.
+func (rc *rpcClient) GroupCreate(args GroupCreateArgs) (GroupInfo, string, error) {
+	var resp GroupCreateResponse
+	if err := rc.Call("GroupCreate", &args, &resp); err != nil {
+		return GroupInfo{}, "", err
+	}
+	return resp.Info, resp.Invite, nil
+}
+
+// GroupJoin implements API.
+func (rc *rpcClient) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupJoin", &args, &resp)
+	return resp, err
+}
+
+// GroupList implements API.
+func (rc *rpcClient) GroupList() ([]GroupInfo, error) {
+	var resp []GroupInfo
+	err := rc.Call("GroupList", &struct{}{}, &resp)
+	return resp, err
+}
+
+// GroupGet implements API.
+func (rc *rpcClient) GroupGet(id string) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupGet", &id, &resp)
+	return resp, err
+}
+
+// GroupInvite implements API.
+func (rc *rpcClient) GroupInvite(id string) (string, error) {
+	var resp string
+	err := rc.Call("GroupInvite", &id, &resp)
+	return resp, err
+}
+
+// GroupAddMember implements API.
+func (rc *rpcClient) GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupAddMember", &GroupAddMemberRequest{ID: id, NewPK: pk}, &resp)
+	return resp, err
+}
+
+// GroupSend implements API.
+func (rc *rpcClient) GroupSend(args GroupSendArgs) error {
+	return rc.Call("GroupSend", &args, &struct{}{})
+}
+
+// GroupPoll implements API.
+func (rc *rpcClient) GroupPoll(since time.Time) ([]GroupMessage, error) {
+	var resp []GroupMessage
+	err := rc.Call("GroupPoll", &GroupPollRequest{Since: since}, &resp)
+	return resp, err
+}
+
+// GroupDelete implements API.
+func (rc *rpcClient) GroupDelete(id string) error {
+	return rc.Call("GroupDelete", &id, &struct{}{})
+}
+
+// GroupLeave implements API.
+func (rc *rpcClient) GroupLeave(id string) error {
+	return rc.Call("GroupLeave", &id, &struct{}{})
+}
+
 // TPSStatus returns the status of the embedded TPS.
 func (rc *rpcClient) TPSStatus() (*TPSStatus, error) {
 	var status TPSStatus
