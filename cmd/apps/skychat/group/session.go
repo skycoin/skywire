@@ -215,6 +215,10 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		DataDir:             filepath.Join(cfg.DataDir, "group", cfg.Record.ID),
 		DmsgPort:            cfg.Record.Port,
 		SubscriberAllowlist: append([]cipher.PubKey(nil), cfg.Record.Members...),
+		// Group message CXDS is content-addressed; subscribers
+		// re-sync from the publisher's in-memory tree on reconnect.
+		// Losing a torn batch at crash time is acceptable.
+		NoSyncCXDS: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("group: Open owner: build publisher: %w", err)
@@ -259,6 +263,9 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		DataDir:             filepath.Join(cfg.DataDir, "group", cfg.Record.ID, "member"),
 		DmsgPort:            cfg.Record.Port + 1, // separate port; owner owns Record.Port
 		SubscriberAllowlist: []cipher.PubKey{},   // empty = nobody allowed
+		// Member-side throwaway node — pure cache, no durability
+		// requirement at all.
+		NoSyncCXDS: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("group: Open member: build local node: %w", err)

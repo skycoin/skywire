@@ -131,6 +131,10 @@ func (v *Visor) RegisterCXOFeed(name string, dmsgPort uint16, description string
 		Logger:      log,
 		DataDir:     dataDir,
 		DmsgPort:    dmsgPort,
+		// User-feed CXDS is content-addressed cache; the publisher's
+		// pub.Put callers re-feed values from RPC / app state on
+		// restart, so a torn write at crash time self-heals.
+		NoSyncCXDS: true,
 	})
 	if err != nil {
 		return fmt.Errorf("cxo feed %q: start publisher: %w", name, err)

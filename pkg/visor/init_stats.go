@@ -183,6 +183,11 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 		BatchWindow: 10 * time.Second,
 		Logger:      log,
 		DataDir:     dataDir,
+		// Stats CXDS is content-addressed cache; the in-memory tree
+		// (regenerated from stats.db on each restart) authoritatively
+		// owns the value set. Skipping per-tx fdatasync removes the
+		// dominant write source identified in the visor's I/O profile.
+		NoSyncCXDS: true,
 	})
 	if err != nil {
 		log.WithError(err).Warn("Stats: CXO publisher init failed; continuing without push")
