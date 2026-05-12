@@ -724,7 +724,12 @@ func (a *API) allClientsByServer() http.HandlerFunc {
 			}
 			clientPK := entry.Static.Hex()
 			for _, serverPK := range entry.Client.DelegatedServers {
-				result[serverPK.Hex()] = append(result[serverPK.Hex()], clientPK)
+				// Hex once per (entry, server) pair — previously
+				// called twice per inner iter (map key + value
+				// lookup), doubling the hex-encode load on every
+				// invocation of this endpoint.
+				sHex := serverPK.Hex()
+				result[sHex] = append(result[sHex], clientPK)
 			}
 		}
 
