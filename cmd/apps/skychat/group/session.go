@@ -45,10 +45,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/routing"
 )
 
 // MessagePathPrefix is the prefix used for message leaves within a
@@ -108,16 +110,23 @@ type Session struct {
 	pub *treestore.Publisher
 	sub *treestore.Subscriber
 
-	// relayListener is set on the owner side: a dmsg.Listen on
-	// Record.Port+1 accepting member-relay submissions. Members
-	// dial this port, write a framed RelayMessage envelope, and
-	// the owner-side handler re-publishes into the CXO feed with
-	// the original sender's PK attributed (see acceptRelay).
-	// nil on the member side.
-	relayListener net.Listener
-	relayCtx      context.Context
-	relayCancel   context.CancelFunc
-	relayWG       sync.WaitGroup
+	// relayDmsg / relaySkynet are set on the owner side: parallel
+	// listeners on Record.Port+1 over dmsg AND over the skywire
+	// router (appnet.TypeSkynet). Members dial whichever they have
+	// available, write a framed RelayMessage envelope, and the
+	// owner-side handler re-publishes into the CXO feed with the
+	// original sender's PK attributed (see acceptRelay). Same port
+	// on both transports — the principle that every visor port
+	// served on dmsg is also served on skynet at the same port.
+	// relaySkynet is bound asynchronously since the SkywireNetworker
+	// usually registers later in init than the group manager starts.
+	// Either listener may be nil if its transport never came up.
+	relayDmsg   net.Listener
+	relaySkynet net.Listener
+	relayMu     sync.Mutex // guards relaySkynet assignment from the binder goroutine
+	relayCtx    context.Context
+	relayCancel context.CancelFunc
+	relayWG     sync.WaitGroup
 
 	// seq disambiguates messages with the same nanosecond timestamp.
 	seq atomic.Uint64
@@ -211,24 +220,27 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		return nil, fmt.Errorf("group: Open owner: build publisher: %w", err)
 	}
 
-	// Relay listener: dmsg.Listen on the +1 port. Members dial here
-	// to submit messages for re-publish. Failures here are non-fatal
-	// — the group is still usable for owner-broadcast even if no
-	// relay listener comes up; just log + continue with relay = off.
+	// Relay listeners: dmsg + skynet on the +1 port. Members dial
+	// whichever transport they prefer (skynet first, dmsg fallback).
+	// Failures on either side are non-fatal — the group is still
+	// usable for owner-broadcast even if neither listener comes up;
+	// only the worst case (both fail) disables member-side send.
 	relayPort := cfg.Record.Port + relayPortOffset
-	listener, err := cfg.DmsgC.Listen(relayPort)
-	if err != nil {
-		log.WithError(err).WithField("port", relayPort).
-			Warn("group: owner relay listen failed; member-side send disabled")
-		return &Session{cfg: cfg, port: cfg.Record.Port, pub: pub, log: log}, nil
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, log: log,
-		relayListener: listener, relayCtx: ctx, relayCancel: cancel,
+		relayCtx: ctx, relayCancel: cancel,
+	}
+	if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
+		log.WithError(err).WithField("port", relayPort).
+			Warn("group: owner relay dmsg listen failed")
+	} else {
+		s.relayDmsg = dmsgLis
+		s.relayWG.Add(1)
+		go s.acceptRelayOn(dmsgLis, "dmsg")
 	}
 	s.relayWG.Add(1)
-	go s.acceptRelay()
+	go s.bindRelaySkynet(relayPort)
 	return s, nil
 }
 
@@ -321,11 +333,20 @@ func (s *Session) Close() error {
 	if s.relayCancel != nil {
 		s.relayCancel()
 	}
-	if s.relayListener != nil {
-		if err := s.relayListener.Close(); err != nil && firstErr == nil {
+	if s.relayDmsg != nil {
+		if err := s.relayDmsg.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		s.relayListener = nil
+		s.relayDmsg = nil
+	}
+	s.relayMu.Lock()
+	skyLis := s.relaySkynet
+	s.relaySkynet = nil
+	s.relayMu.Unlock()
+	if skyLis != nil {
+		if err := skyLis.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
 	s.relayWG.Wait()
 	if s.sub != nil {
@@ -343,18 +364,20 @@ func (s *Session) Close() error {
 	return firstErr
 }
 
-// acceptRelay accepts member-relay streams in a loop until Close is
-// called. Each accepted stream gets its own short-lived goroutine
-// that reads one framed RelayMessage, validates the sender against
-// the group's allowlist, publishes to the CXO feed with the
-// sender's PK attributed, and closes the stream.
-func (s *Session) acceptRelay() {
+// acceptRelayOn accepts member-relay streams from one listener (dmsg
+// or skynet) in a loop until Close is called. Each accepted stream
+// gets its own short-lived goroutine that reads one framed
+// RelayMessage, validates the sender against the group's allowlist,
+// publishes to the CXO feed with the sender's PK attributed, and
+// closes the stream. The `transport` label is for diagnostic logs.
+func (s *Session) acceptRelayOn(lis net.Listener, transport string) {
 	defer s.relayWG.Done()
 	for {
-		c, err := s.relayListener.Accept()
+		c, err := lis.Accept()
 		if err != nil {
 			if s.relayCtx.Err() == nil {
-				s.log.WithError(err).Debug("group: relay accept ended")
+				s.log.WithError(err).WithField("transport", transport).
+					Debug("group: relay accept ended")
 			}
 			return
 		}
@@ -365,6 +388,60 @@ func (s *Session) acceptRelay() {
 			s.handleRelay(c)
 		}(c)
 	}
+}
+
+// bindRelaySkynet waits for the appnet SkywireNetworker to register
+// (which happens during initRouter, typically after the group manager
+// starts) and then binds a skynet listener on the relay port. Runs in
+// a single goroutine for the life of the Session and exits when the
+// relayCtx is canceled.
+//
+// Why deferred binding: the visor's init order brings up dmsg before
+// the router. A Session that opens while dmsg is up but skynet isn't
+// would otherwise miss the skynet listener forever. Polling with
+// backoff is simple and bounded — once the networker is up, we bind
+// once and switch to the same accept-loop shape as the dmsg side.
+func (s *Session) bindRelaySkynet(port uint16) {
+	defer s.relayWG.Done()
+	addr := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: s.cfg.MyPK,
+		Port:   routing.Port(port),
+	}
+	backoff := 200 * time.Millisecond
+	maxBackoff := 5 * time.Second
+	for {
+		if _, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
+			break
+		}
+		select {
+		case <-s.relayCtx.Done():
+			return
+		case <-time.After(backoff):
+			if backoff < maxBackoff {
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+			}
+		}
+	}
+	lis, err := appnet.ListenContext(s.relayCtx, addr)
+	if err != nil {
+		s.log.WithError(err).WithField("port", port).
+			Warn("group: owner relay skynet listen failed")
+		return
+	}
+	s.relayMu.Lock()
+	if s.relayCtx.Err() != nil {
+		s.relayMu.Unlock()
+		_ = lis.Close() //nolint:errcheck
+		return
+	}
+	s.relaySkynet = lis
+	s.relayMu.Unlock()
+	s.relayWG.Add(1)
+	s.acceptRelayOn(lis, "skynet")
 }
 
 // handleRelay reads one RelayMessage from c, validates the sender,
@@ -450,7 +527,15 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 // relay listener, write a framed RelayMessage, close. The owner's
 // acceptRelay handler validates + republishes. Returns an error if
 // invoked on an owner-role session (owners use Send directly) or
-// if the dial fails.
+// if neither transport can reach the owner.
+//
+// Transport selection: skynet first (so groups work over arbitrary
+// skywire transports including stcpr/sudph), dmsg fallback if the
+// networker isn't registered yet or the skynet dial fails. The dmsg
+// path is the bootstrap-time fallback and the failure recovery for
+// peers whose router can't currently reach the owner. Matches the
+// general principle that every visor port served on dmsg is also
+// served on skynet — and clients prefer skynet but tolerate dmsg.
 func (s *Session) SubmitToOwner(ctx context.Context, text string) error {
 	if s.cfg.Record.Role != RoleMember {
 		return errors.New("group: SubmitToOwner: only member-role sessions submit via relay")
@@ -458,23 +543,51 @@ func (s *Session) SubmitToOwner(ctx context.Context, text string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	addr := dmsg.Addr{PK: s.cfg.Record.OwnerPK, Port: s.cfg.Record.Port + relayPortOffset}
-	stream, err := s.cfg.DmsgC.DialStream(dialCtx, addr)
-	if err != nil {
-		return fmt.Errorf("group: SubmitToOwner: dial owner relay: %w", err)
-	}
-	defer stream.Close() //nolint:errcheck
 	rm := RelayMessage{SenderPK: s.cfg.MyPK, Text: text, TS: time.Now().UTC()}
 	body, err := json.Marshal(rm)
 	if err != nil {
 		return fmt.Errorf("group: SubmitToOwner: marshal: %w", err)
 	}
+	relayPort := s.cfg.Record.Port + relayPortOffset
+	skyAddr := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: s.cfg.Record.OwnerPK,
+		Port:   routing.Port(relayPort),
+	}
+	if conn, dialErr := dialSkynetRelay(ctx, skyAddr); dialErr == nil {
+		writeErr := writeFrame(conn, body)
+		_ = conn.Close() //nolint:errcheck
+		if writeErr == nil {
+			return nil
+		}
+		s.log.WithError(writeErr).Debug("group: SubmitToOwner: skynet write failed, falling back to dmsg")
+	} else {
+		s.log.WithError(dialErr).Debug("group: SubmitToOwner: skynet dial failed, falling back to dmsg")
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	dmsgAddr := dmsg.Addr{PK: s.cfg.Record.OwnerPK, Port: relayPort}
+	stream, err := s.cfg.DmsgC.DialStream(dialCtx, dmsgAddr)
+	if err != nil {
+		return fmt.Errorf("group: SubmitToOwner: dial owner relay (dmsg): %w", err)
+	}
+	defer stream.Close() //nolint:errcheck
 	if err := writeFrame(stream, body); err != nil {
-		return fmt.Errorf("group: SubmitToOwner: write: %w", err)
+		return fmt.Errorf("group: SubmitToOwner: write (dmsg): %w", err)
 	}
 	return nil
+}
+
+// dialSkynetRelay attempts the skynet dial with a 15s deadline.
+// Returns an error if the networker isn't registered, or the dial
+// itself fails. Caller is expected to fall back to dmsg.
+func dialSkynetRelay(ctx context.Context, addr appnet.Addr) (net.Conn, error) {
+	if _, err := appnet.ResolveNetworker(appnet.TypeSkynet); err != nil {
+		return nil, err
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	return appnet.DialContext(dialCtx, addr)
 }
 
 // readFrame / writeFrame mirror the visor-app skychat post-#2504

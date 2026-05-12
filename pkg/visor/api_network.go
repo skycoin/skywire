@@ -498,9 +498,14 @@ func shutdownDmsgDependentComponents(v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-// startDmsgForwarder creates a DMSG listener on the given port and
-// forwards accepted connections to localhost:localPort. This enables
-// .dmsg:<port> access to forwarded ports.
+// startDmsgForwarder creates parallel dmsg + skynet listeners on the
+// given port and forwards accepted connections to localhost:localPort.
+// Enables .dmsg:<port> AND skynet access to forwarded ports — every
+// port forwarded over dmsg is also reachable over skywire transports
+// at the same port number.
+//
+// The function name keeps the historical "Dmsg" prefix for caller
+// stability; behavior covers both transports.
 func (v *Visor) startDmsgForwarder(port, localPort int) {
 	if v.dmsgC == nil {
 		return
@@ -526,43 +531,41 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel stored in dmsgFwdListeners
 	v.dmsgFwdListeners[port] = cancel
 
-	go func() {
+	serveForward := func(lis net.Listener, transport string) {
 		defer lis.Close() //nolint:errcheck
-		log := v.log.WithField("dmsg_fwd", port)
-		log.WithField("local", localPort).Info("DMSG forwarder started")
+		log := v.log.WithField("fwd", port).WithField("transport", transport)
+		log.WithField("local", localPort).Info("Forwarder started")
 		for {
 			conn, err := lis.Accept()
 			if err != nil {
 				select {
 				case <-ctx.Done():
-					log.Debug("DMSG forwarder stopped")
+					log.Debug("Forwarder stopped")
 					return
 				default:
 				}
-				log.WithError(err).Debug("DMSG forwarder accept error")
+				log.WithError(err).Debug("Forwarder accept error")
 				return
 			}
 			go func() {
 				defer conn.Close() //nolint:errcheck
-				// Enforce per-port PK whitelist if one is set. The DMSG
-				// listener's RemoteAddr is dmsg.Addr — fail closed if
-				// the assertion fails on a whitelisted port.
+				// Per-port PK whitelist applies regardless of transport.
+				// remotePK pulls the peer's PK from either dmsg.Addr or
+				// appnet.Addr; fail closed if we can't identify them.
 				fp := v.forwardedPorts.Get(port)
 				if fp != nil && len(fp.Whitelist) > 0 {
-					a, ok := conn.RemoteAddr().(dmsg.Addr)
+					pk, ok := remotePK(conn.RemoteAddr())
 					if !ok {
 						log.Warn("Rejected: cannot identify peer on whitelisted port")
 						return
 					}
-					if !v.isPeerAllowed(port, a.PK) {
-						log.WithField("peer", a.PK).Warn("Rejected: peer not in whitelist")
+					if !v.isPeerAllowed(port, pk) {
+						log.WithField("peer", pk).Warn("Rejected: peer not in whitelist")
 						return
 					}
 				}
 				// ProxyAddr wins when set so users can forward to an arbitrary
-				// IP:port instead of localhost:localPort. The localPort fallback
-				// preserves behavior for existing entries that predate ProxyAddr
-				// for non-port-80 forwards.
+				// IP:port instead of localhost:localPort.
 				target := fmt.Sprintf("localhost:%d", localPort)
 				if fp != nil && fp.ProxyAddr != "" {
 					target = fp.ProxyAddr
@@ -573,7 +576,6 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 					return
 				}
 				defer local.Close() //nolint:errcheck
-				// Bidirectional pipe.
 				done := make(chan struct{}, 2)
 				pipe := func(dst, src net.Conn) {
 					buf := make([]byte, 32*1024)
@@ -595,7 +597,17 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 				<-done
 			}()
 		}
-	}()
+	}
+
+	go serveForward(lis, "dmsg")
+
+	// Skynet mirror at the same port. Same handler, same whitelist
+	// enforcement (via remotePK) — skywire-transport peers reach the
+	// same localhost target as dmsg peers do.
+	goServeSkynetMirror(ctx, v.conf.PK, uint16(port), "fwd", v.log, //nolint:gosec
+		func(skyLis net.Listener) {
+			serveForward(skyLis, "skynet")
+		})
 }
 
 // stopDmsgForwarder cancels the DMSG listener goroutine for the given port.
