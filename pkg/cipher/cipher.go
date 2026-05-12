@@ -4,6 +4,7 @@ package cipher
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
@@ -131,9 +132,15 @@ func (pk PubKey) Type() string {
 	return "cipher.PubKey"
 }
 
-// MarshalText implements encoding.TextMarshaler.
+// MarshalText implements encoding.TextMarshaler. Writes hex bytes
+// directly into a freshly-allocated buffer instead of going through
+// `[]byte(pk.Hex())`, which would round-trip through an intermediate
+// string allocation. Halves the per-marshal allocation in the
+// jsoniter / dmsg-discovery hot path that serializes lots of PKs.
 func (pk PubKey) MarshalText() ([]byte, error) {
-	return []byte(pk.Hex()), nil
+	out := make([]byte, hex.EncodedLen(len(pk)))
+	hex.Encode(out, pk[:])
+	return out, nil
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler.
@@ -227,9 +234,12 @@ func (sk *SecKey) Type() string {
 	return "cipher.SecKey"
 }
 
-// MarshalText implements encoding.TextMarshaler.
+// MarshalText implements encoding.TextMarshaler. See PubKey.MarshalText
+// for the rationale on skipping the intermediate string allocation.
 func (sk SecKey) MarshalText() ([]byte, error) {
-	return []byte(sk.Hex()), nil
+	out := make([]byte, hex.EncodedLen(len(sk)))
+	hex.Encode(out, sk[:])
+	return out, nil
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler.
@@ -279,9 +289,12 @@ func (sig Sig) Null() bool {
 	return sig == Sig{}
 }
 
-// MarshalText implements encoding.TextMarshaler.
+// MarshalText implements encoding.TextMarshaler. See PubKey.MarshalText
+// for the rationale on skipping the intermediate string allocation.
 func (sig Sig) MarshalText() ([]byte, error) {
-	return []byte(sig.Hex()), nil
+	out := make([]byte, hex.EncodedLen(len(sig)))
+	hex.Encode(out, sig[:])
+	return out, nil
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler.
