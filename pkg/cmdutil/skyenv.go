@@ -1,92 +1,65 @@
 // Package cmdutil pkg/cmdutil/skyenv.go
-// Shared SKYENV config file evaluation helpers.
-// Used by skywire cli config gen and dmsg commands.
+//
+// Shared SKYENV config file evaluation helpers. Used by
+// `skywire cli config gen` and the dmsg commands.
+//
+// Pre-refactor this file shelled out per-call to bash (Linux) or
+// powershell (Windows) to expand `${VAR:-default}` and `${VAR[@]}`
+// bash-isms against the sourced env file. The fork-per-call overhead
+// was meaningful (a single `cli config gen` triggers ~50 of these),
+// the bash dependency made it fragile under non-default shells, and
+// the parallel powershell path silently differed on edge cases.
+//
+// Now backed by a native Go parser in skyenv_parse.go — see that file
+// for the exact subset of bash syntax supported.
 package cmdutil
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/bitfield/script"
-
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-// SkyenvValue sources a SKYENV file and evaluates a bash variable expression,
-// returning the raw string result. This is the common core for all typed helpers.
-//
-// One level of SKYENV= redirect is honored: if the sourced envfile sets
-// SKYENV to a different existing path (e.g. /etc/skywire.conf saying
-// SKYENV=/home/operator/.config/skywire.conf), that file is sourced
-// after the original so its values win. Recursion stops there — a
-// chain `/etc/skywire.conf` → `~/.config/skywire.conf` →
-// `~/.config/skywire-test.conf` would only follow the first hop.
-func SkyenvValue(expr, envfile string) (string, error) {
-	if skyenv.OS == "windows" {
-		variable := expr
-		if strings.Contains(variable, ":-") {
-			parts := strings.SplitN(variable, ":-", 2)
-			variable = parts[0] + "}"
-		}
-		out, err := script.Exec(fmt.Sprintf(
-			`powershell -c "$SKYENV = '%s'; if ($SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; if ($SKYENV -ne '%s' -and $SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; echo %s"`,
-			envfile, envfile, variable,
-		)).String()
-		if err != nil {
-			return "", err
-		}
-		out = strings.TrimSpace(out)
-		if out == "" || out == variable {
-			return "", nil
-		}
-		return out, nil
-	}
-	// First source — pulls in the original envfile's variables. If
-	// the file reassigned SKYENV to a different existing path, source
-	// that path next so its assignments override the originals.
-	out, err := script.Exec(fmt.Sprintf(
-		`bash -c 'SKYENV=%s ; ORIGINAL_SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; if [[ $SKYENV != "" ]] && [[ $SKYENV != "$ORIGINAL_SKYENV" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; printf "%s"'`,
-		envfile, envfile, expr,
-	)).String()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
-}
-
-// SkyenvSlice sources a SKYENV file and expands a bash array expression
-// into a string slice, one element per line. Honors the same
-// one-level SKYENV= redirect as SkyenvValue.
-func SkyenvSlice(expr, envfile string) ([]string, error) {
-	if skyenv.OS == "windows" {
-		variable := expr
-		if idx := strings.Index(variable, "[@]}"); idx != -1 {
-			variable = strings.TrimSuffix(variable, "[@]}")
-			variable = strings.TrimSuffix(variable, "{")
-		}
-		return script.Exec(fmt.Sprintf(
-			`powershell -c "$SKYENV = '%s'; if ($SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; if ($SKYENV -ne '%s' -and $SKYENV -ne '' -and (Test-Path $SKYENV)) { . $SKYENV }; foreach ($item in %s) { Write-Host $item }"`,
-			envfile, envfile, variable,
-		)).Slice()
-	}
-	return script.Exec(fmt.Sprintf(
-		`bash -c 'SKYENV=%s ; ORIGINAL_SKYENV=%s ; if [[ $SKYENV != "" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; if [[ $SKYENV != "" ]] && [[ $SKYENV != "$ORIGINAL_SKYENV" ]] && [[ -f $SKYENV ]] ; then source $SKYENV ; fi ; for _i in %s ; do echo "$_i" ; done'`,
-		envfile, envfile, expr,
-	)).Slice()
-}
-
-// SkyenvDefault extracts the default value from a bash ${VAR:-default} expression.
+// SkyenvDefault extracts the default value from a `${VAR:-default}`
+// expression body. Public because some callers want to know "what
+// would the fallback be" without actually sourcing the env file
+// (e.g. constructing help text). The :- / - forms are handled the
+// same way the parser handles them.
 func SkyenvDefault(s string) string {
-	if strings.Contains(s, ":-") {
-		parts := strings.SplitN(s, ":-", 2)
-		return strings.TrimRight(parts[1], "}")
+	body, ok := stripExprBrackets(s)
+	if !ok {
+		return ""
+	}
+	_, def, useDefault, _ := splitExprBody(body)
+	if useDefault {
+		return def
 	}
 	return ""
 }
 
-// SkyenvString evaluates a bash variable expression and returns the string value,
-// falling back to the default from the expression if unset.
+// SkyenvValue sources `envfile` and evaluates the bash expression
+// `expr`, returning the raw string result. Errors are not used —
+// the function is best-effort: a missing file, an unrecognized
+// expression, etc. all return "".
+func SkyenvValue(expr, envfile string) (string, error) {
+	f, err := ParseSkyenvFile(envfile)
+	if err != nil {
+		return "", err
+	}
+	return f.Eval(expr), nil
+}
+
+// SkyenvSlice sources `envfile` and expands an array expression into
+// a string slice, one element per array entry.
+func SkyenvSlice(expr, envfile string) ([]string, error) {
+	f, err := ParseSkyenvFile(envfile)
+	if err != nil {
+		return nil, err
+	}
+	return f.EvalSlice(expr), nil
+}
+
+// SkyenvString evaluates expr and returns the string value, falling
+// back to the expression's `:-default` (if any) on empty / unset.
 func SkyenvString(s, envfile string) string {
 	out, err := SkyenvValue(s, envfile)
 	if err != nil || out == "" {
@@ -95,7 +68,8 @@ func SkyenvString(s, envfile string) string {
 	return out
 }
 
-// SkyenvBool evaluates a bash variable expression and returns a bool.
+// SkyenvBool evaluates expr and parses it as a Go bool. Unset / empty
+// → fall back to `:-default`; unparseable → false.
 func SkyenvBool(s, envfile string) bool {
 	out, err := SkyenvValue(s, envfile)
 	if err != nil || out == "" {
@@ -108,7 +82,9 @@ func SkyenvBool(s, envfile string) bool {
 	return b
 }
 
-// SkyenvArray evaluates a bash array expression and returns a comma-separated string.
+// SkyenvArray evaluates an array expression and returns its elements
+// joined by commas. Used by callers that feed the result to flags
+// expecting a comma-separated list (StringVar shaped).
 func SkyenvArray(s, envfile string) string {
 	items, err := SkyenvSlice(s, envfile)
 	if err != nil || len(items) == 0 {
@@ -117,7 +93,7 @@ func SkyenvArray(s, envfile string) string {
 	return strings.Join(items, ",")
 }
 
-// SkyenvInt evaluates a bash variable expression and returns an int.
+// SkyenvInt evaluates expr as a base-10 int.
 func SkyenvInt(s, envfile string) int {
 	out, err := SkyenvValue(s, envfile)
 	if err != nil || out == "" {
@@ -130,7 +106,7 @@ func SkyenvInt(s, envfile string) int {
 	return i
 }
 
-// SkyenvUint evaluates a bash variable expression and returns a uint.
+// SkyenvUint evaluates expr as a base-10 unsigned int.
 func SkyenvUint(s, envfile string) uint {
 	out, err := SkyenvValue(s, envfile)
 	if err != nil || out == "" {
@@ -143,7 +119,8 @@ func SkyenvUint(s, envfile string) uint {
 	return uint(i)
 }
 
-// SkyenvStringSlice evaluates a bash array expression and returns a string slice.
+// SkyenvStringSlice evaluates an array expression and returns the
+// raw elements.
 func SkyenvStringSlice(s, envfile string) []string {
 	items, err := SkyenvSlice(s, envfile)
 	if err != nil || len(items) == 0 {
@@ -152,7 +129,10 @@ func SkyenvStringSlice(s, envfile string) []string {
 	return items
 }
 
-// SkyenvBoolSlice evaluates a bash array expression and returns a bool slice.
+// SkyenvBoolSlice evaluates an array expression of "true"/"false"
+// tokens and returns a bool slice. Any non-"true" element parses as
+// false. An empty / unset variable returns [false] so callers that
+// index `result[0]` don't panic.
 func SkyenvBoolSlice(s, envfile string) []bool {
 	items, err := SkyenvSlice(s, envfile)
 	if err != nil {
@@ -173,7 +153,9 @@ func SkyenvBoolSlice(s, envfile string) []bool {
 	return result
 }
 
-// SkyenvUintSlice evaluates a bash array expression and returns a uint slice.
+// SkyenvUintSlice evaluates an array expression of base-10 unsigned
+// integers and returns a uint slice. Unparseable elements are
+// silently dropped.
 func SkyenvUintSlice(s, envfile string) []uint {
 	items, err := SkyenvSlice(s, envfile)
 	if err != nil {
