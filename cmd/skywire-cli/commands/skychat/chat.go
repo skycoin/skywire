@@ -37,33 +37,42 @@ var chatCmd = &cobra.Command{
 	Short: "Interactive chat TUI (bubbletea split-pane)",
 	Long: `Interactive chat against the local skychat app.
 
-Top pane scrolls message history; bottom pane is the compose line.
-Enter sends. Esc or Ctrl+C quits. ↑/↓ or PgUp/PgDn scroll history.
+Without --to: launches the unified TUI — a conversation picker that
+lists known 1:1 peers (from chat history) and joined groups. Pick
+an entry with ↑/↓ + Enter; Esc returns to the picker. From the
+picker you can also press N (new DM), J (join group via invite), G
+(create group), R (refresh).
 
-Requires the skychat app to be running (default --addr 127.0.0.1:8001).
-Use --to <pk> to pin outgoing messages to one recipient. When
---to is omitted, the TUI starts in "pick a peer" mode and prompts
-for a PK in the compose line; on a valid hex PK the view
-transitions to chat. Incoming messages from any sender still
-appear in history.`,
+With --to <pk-or-alias>: short-circuits straight into a 1:1 chat
+view for that recipient. Same view shape as the picker path but
+the conversation list is hidden.
+
+Top pane scrolls message history; bottom pane is the compose line.
+Enter sends. Esc or Ctrl+C quits/back. ↑/↓ or PgUp/PgDn scroll
+history. Ctrl+N cycles outgoing network (skynet/dmsg) for 1:1
+sends.
+
+Requires the skychat app to be running (default --addr 127.0.0.1:8001).`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Empty recipient is allowed: the TUI prompts for it.
+		// Empty recipient: default to the unified picker.
 		// Anything non-empty must parse as a valid PK or a known
 		// alias up front so a typo on the command line surfaces
 		// immediately rather than after the TUI takes over the
 		// terminal.
-		recipientPK := ""
-		if recipient != "" {
-			pk, err := resolveTarget(recipient)
-			if err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--to: %w", err))
-			}
-			recipientPK = pk.String()
-		}
 		if err := validateNetwork(sendNet); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if err := runChatTUI(httpAddr, recipientPK, sendNet); err != nil {
+		if recipient == "" {
+			if err := runUnifiedTUI(httpAddr, sendNet); err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+		pk, err := resolveTarget(recipient)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--to: %w", err))
+		}
+		if err := runChatTUI(httpAddr, pk.String(), sendNet); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 	},
