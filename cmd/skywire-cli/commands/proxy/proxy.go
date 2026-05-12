@@ -133,18 +133,21 @@ var startCmd = &cobra.Command{
 			rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 		}
 
-		// If --existing-tp flag is set, configure router to only use existing transports
-		if existingTpOnly {
-			if err := rpcClient.SetExistingTPOnly(true); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set existing transport only mode: %w", err))
-			}
+		// Both --existing-tp and --local-route map onto persistent
+		// visor state via RPC: a previous `proxy start --local-route`
+		// leaves the router permanently in forceLocal mode until the
+		// visor restarts. The flags were never "auto-rolled-back" on
+		// the next invocation, which means a subsequent
+		// `proxy start <pk>` (no flags) silently inherits the old
+		// state and fails when the new target isn't reachable under
+		// that constraint. Always SetExistingTPOnly / SetForceLocalRoutes
+		// to exactly the current flag value so the visor mirrors what
+		// the operator just typed.
+		if err := rpcClient.SetExistingTPOnly(existingTpOnly); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set existing transport only mode: %w", err))
 		}
-
-		// If --local-route flag is set, skip route finder and use local route calculation
-		if forceLocalRoutes {
-			if err := rpcClient.SetForceLocalRoutes(true); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set force local routes mode: %w", err))
-			}
+		if err := rpcClient.SetForceLocalRoutes(forceLocalRoutes); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set force local routes mode: %w", err))
 		}
 
 		// If --mux flag is set, enable route multiplexing.
