@@ -286,9 +286,24 @@ func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
 	return r, nil
 }
 
+// resumeReplayMessageCap is the max number of historical messages
+// per group replayed into the in-memory inbox on Resume. Capped so
+// a long-lived group with thousands of messages doesn't blow the
+// inbox-ring-buffer or the SSE fan-out queues on startup. 100 is
+// enough to give a freshly-restarted operator immediate context
+// without forcing them to scrape the persistent CXO tree directly.
+const resumeReplayMessageCap = 100
+
 // Resume walks the store and reopens every non-terminal session.
 // Records in StatusLeft / StatusRevoked are skipped; the operator
 // can `group join <invite>` again to bring them back.
+//
+// On reopen, the most recent resumeReplayMessageCap messages per
+// group are replayed through the registered handler so consumers
+// (visor inbox → group listen) see immediate context after a visor
+// restart, rather than an empty feed until the next live message
+// arrives. The replay drives the same handler path as live messages,
+// so order and shape match what a steady-state listener would see.
 func (m *Manager) Resume() error {
 	all, err := m.store.List()
 	if err != nil {
@@ -315,8 +330,34 @@ func (m *Manager) Resume() error {
 				_ = m.store.SetStatus(r.ID, StatusPending) //nolint:errcheck
 			}
 		}
+		m.replaySessionHistory(r.ID)
 	}
 	return nil
+}
+
+// replaySessionHistory pumps the last resumeReplayMessageCap messages
+// from a session's persistent tree through the registered handler.
+// Best-effort: errors decoding individual leaves or running the
+// handler are swallowed (debug-logged); a partial replay is better
+// than no replay.
+//
+// For owner-role sessions, the publisher's tree is the source. For
+// member-role sessions, the subscriber's tree (synced from the
+// owner) is the source. Both expose a Walk(prefix, fn) over leaf
+// values keyed by MessagePathPrefix/<ts-nano>/<seq> — sorting by
+// that path string gives us chronological order, and tail-capping
+// at the cap gives us the most recent N.
+func (m *Manager) replaySessionHistory(id string) {
+	m.mu.RLock()
+	sess := m.sessions[id]
+	m.mu.RUnlock()
+	m.onMessageMu.Lock()
+	handler := m.onMessage
+	m.onMessageMu.Unlock()
+	if sess == nil || handler == nil {
+		return
+	}
+	sess.ReplayHistoryThrough(handler, resumeReplayMessageCap)
 }
 
 // Close tears down every live session and returns the first error.
