@@ -557,8 +557,22 @@ var genConfigCmd = &cobra.Command{
 					if err != nil {
 						log.Error("cannot stat: /root")
 					}
-					if (owner != rootOwner) && isRoot {
-						log.Warn("writing config as root to directory not owned by root")
+					owner = strings.TrimSpace(owner)
+					rootOwner = strings.TrimSpace(rootOwner)
+					// The package case (-p, /opt/skywire owned by the
+					// 'skywire' sysusers user) intentionally has root
+					// writing into a non-root-owned directory — the
+					// daemon either runs as root or `skywire autoconfig`
+					// chowns the install to SKYWIRE_USER afterwards.
+					// The old unconditional warn fired on every
+					// `sudo skywire autoconfig`, masquerading
+					// expected behavior as a problem. Suppress it for
+					// the explicit -p case and add the actual path to
+					// the message for the cases where it really is a
+					// surprise (e.g. `sudo config gen` defaulting to
+					// /home/$user/skywire-config.json).
+					if (owner != rootOwner) && isRoot && !isPkgEnv {
+						log.Warnf("writing config as root to %s (owned by %q, not root); pass -p for the package path or -o to choose explicitly", confPath, owner)
 					}
 					if !isRoot && (owner == rootOwner) {
 						log.Fatal("Insufficient permissions to write to the specified path")
