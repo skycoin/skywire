@@ -240,7 +240,14 @@ var groupListenCmd = &cobra.Command{
 	Short: "Stream inbound group messages (across every joined group)",
 	Long: `Poll the visor's group inbox and print messages as they
 arrive. Mirrors ` + "`skywire cli skychat listen`" + ` for 1:1 chat but for
-group feeds. Ctrl+C exits.`,
+group feeds. Ctrl+C exits.
+
+Auto-reconnects on visor restart: the underlying RPC connection
+dies when the visor halts (rebuild-restart loop). The poller
+catches "connection is shut down" / EOF / similar errors,
+backs off (1s→30s exponential), re-creates the rpc client, and
+resumes polling. Reduces the burn-the-CLI-Ctrl+C-relaunch
+friction operators hit during a development cycle.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -258,6 +265,16 @@ group feeds. Ctrl+C exits.`,
 		defer cancel()
 		ticker := time.NewTicker(groupListenPoll)
 		defer ticker.Stop()
+
+		const (
+			minBackoff = 1 * time.Second
+			maxBackoff = 30 * time.Second
+		)
+		backoff := minBackoff
+		// reconnected suppresses repeat error spam on the same dead
+		// connection; we log the first failure, then go quiet until
+		// reconnection succeeds.
+		var lastErrLogged bool
 		for {
 			select {
 			case <-ctx.Done():
@@ -266,8 +283,39 @@ group feeds. Ctrl+C exits.`,
 			}
 			msgs, err := rpcClient.GroupPoll(since)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "group poll: %v\n", err) //nolint:errcheck
+				if !lastErrLogged {
+					fmt.Fprintf(os.Stderr, "group poll: %v (reconnecting in %s)\n", err, backoff) //nolint:errcheck
+					lastErrLogged = true
+				}
+				// Sleep before re-creating the RPC client so a
+				// visor that's still mid-rebuild has time to
+				// finish. Honor Ctrl+C while sleeping.
+				t := time.NewTimer(backoff)
+				select {
+				case <-t.C:
+				case <-ctx.Done():
+					t.Stop()
+					return
+				}
+				if newCl, cErr := clirpc.Client(cmd.Flags()); cErr == nil {
+					rpcClient = newCl
+					// Don't yet reset lastErrLogged — the new
+					// client might still 503 if the visor is
+					// up but the RPC service isn't. Reset only
+					// when the next poll actually returns nil.
+				}
+				if backoff < maxBackoff {
+					backoff *= 2
+					if backoff > maxBackoff {
+						backoff = maxBackoff
+					}
+				}
 				continue
+			}
+			if lastErrLogged {
+				fmt.Fprintln(os.Stderr, "group poll: reconnected") //nolint:errcheck
+				lastErrLogged = false
+				backoff = minBackoff
 			}
 			for _, m := range msgs {
 				if m.TS.After(since) {
