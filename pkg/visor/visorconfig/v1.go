@@ -23,6 +23,7 @@ type V1 struct {
 
 	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
 	Dmsgpty       *Dmsgpty            `json:"dmsgpty,omitempty"`
+	Dmsgscp       *Dmsgscp            `json:"dmsgscp,omitempty"`
 	UIServer      *UIServer           `json:"ui_server,omitempty"`
 	LogServer     *LogServer          `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
@@ -67,6 +68,28 @@ type Dmsgpty struct {
 	CLINet    string          `json:"cli_network"`
 	CLIAddr   string          `json:"cli_address"`
 	Whitelist []cipher.PubKey `json:"whitelist"`
+}
+
+// Dmsgscp configures the dmsgscp-host (scp-over-dmsg daemon).
+// Disabled by default — operators must opt in by setting Enabled to
+// true. When Whitelist is empty the host reuses Dmsgpty.Whitelist
+// (handled at initialisation time, not in this struct) so trusting
+// a peer for pty implicitly trusts them for file transfer too.
+type Dmsgscp struct {
+	// Enabled toggles whether initDmsgpty starts the dmsgscp Host.
+	// Default false to keep existing visors quiet on first restart
+	// after upgrade.
+	Enabled bool `json:"enabled"`
+	// DmsgPort is the dmsg port to listen on; zero means use
+	// dmsgscp.DefaultPort (23).
+	DmsgPort uint16 `json:"dmsg_port,omitempty"`
+	// RootDir is the filesystem directory the host serves files
+	// from (its effective chroot). Empty means
+	// <local_path>/scp-root is used.
+	RootDir string `json:"root_dir,omitempty"`
+	// Whitelist optionally overrides the dmsgpty whitelist. When
+	// nil or empty, init reuses Dmsgpty.Whitelist.
+	Whitelist []cipher.PubKey `json:"whitelist,omitempty"`
 }
 
 // UIServer configures the visor UI server (serves tp-viz and other UIs).
