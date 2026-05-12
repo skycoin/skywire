@@ -32,6 +32,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -137,14 +138,14 @@ Mode is selected by PKGENV/USRENV in the env file:
 				if resolved.skyenvPath != "" {
 					return resolved.skyenvPath
 				}
-				return "implicit fallback (no /etc/skywire.conf)"
+				return "implicit fallback (no " + defaultSkyenvPath() + ")"
 			}())
 			fmt.Printf("            if %s is commented out in %s, uncomment it and re-run `skywire autoconfig`\n",
 				mode, func() string {
 					if resolved.skyenvPath != "" {
 						return resolved.skyenvPath
 					}
-					return "/etc/skywire.conf"
+					return defaultSkyenvPath()
 				}())
 			os.Exit(100)
 		}
@@ -165,7 +166,7 @@ Mode is selected by PKGENV/USRENV in the env file:
 		// files and writing under /etc/systemd/system/ both need it.
 		// When run as the target user already, we skip both branches
 		// and let the operator manage them out of band.
-		if !resolved.usrEnv && os.Geteuid() == 0 {
+		if runtime.GOOS == "linux" && !resolved.usrEnv && os.Geteuid() == 0 {
 			daemonReload := false
 			switch {
 			case resolved.skywireUser != "":
@@ -201,7 +202,11 @@ Mode is selected by PKGENV/USRENV in the env file:
 
 		// SKYBIAN auto-start: legacy appliance bootstrap. Limited to
 		// PKGENV mode; user-mode appliances aren't a thing.
-		if !resolved.useUserUnit && os.Getenv("SKYBIAN") == "true" {
+		// Linux-only — Windows service registration is the Phase 2
+		// piece of the autoconfig parity project (see project memory
+		// project_windows_autoconfig_parity.md). For now Windows
+		// operators run `skywire visor` directly after autoconfig.
+		if runtime.GOOS == "linux" && !resolved.useUserUnit && os.Getenv("SKYBIAN") == "true" {
 			msg3("Enabling skywire service and starting...")
 			_ = exec.Command("systemctl", "enable", "--now", "skywire.service").Run() //nolint:errcheck,gosec
 		}
@@ -261,6 +266,23 @@ Mode is selected by PKGENV/USRENV in the env file:
 	},
 }
 
+// defaultSkyenvPath returns the canonical SKYENV file location for
+// the host OS. Linux uses /etc/skywire.conf (FHS); Windows uses
+// %ProgramData%\Skywire\skywire.conf (the equivalent system-wide
+// configuration path — picked up by an elevated Notepad or the
+// %ProgramData% environment variable). Anything else falls back to
+// the Linux path so darwin / freebsd builds keep their previous
+// behavior; they're not formally supported here but shouldn't regress.
+func defaultSkyenvPath() string {
+	if runtime.GOOS == "windows" {
+		if pd := os.Getenv("ProgramData"); pd != "" {
+			return filepath.Join(pd, "Skywire", "skywire.conf")
+		}
+		return `C:\ProgramData\Skywire\skywire.conf`
+	}
+	return "/etc/skywire.conf"
+}
+
 // resolveConfig reads the skyenv file and translates it to the
 // concrete answers downstream code needs. Falls back gracefully to
 // the legacy PKGENV-on-root behavior when the file is silent.
@@ -268,8 +290,9 @@ func resolveConfig() resolvedConfig {
 	r := resolvedConfig{}
 	r.skyenvPath = os.Getenv("SKYENV")
 	if r.skyenvPath == "" {
-		if _, err := os.Stat("/etc/skywire.conf"); err == nil {
-			r.skyenvPath = "/etc/skywire.conf"
+		candidate := defaultSkyenvPath()
+		if _, err := os.Stat(candidate); err == nil {
+			r.skyenvPath = candidate
 		}
 	}
 
@@ -385,7 +408,17 @@ func writeSystemdDropIn(username string) error {
 // configured user. Skipped silently if the user doesn't exist
 // (common during a partial install where postinstall hasn't created
 // the user yet); the operator sees a warning instead.
+//
+// Windows: POSIX uid/gid don't translate. SKYWIRE_USER on Windows is
+// resolved at Service install time by setting the service's run-as
+// account, not by chmodding files — see project memory
+// project_windows_autoconfig_parity.md Phase 2 for the ServiceInstall
+// integration. Returns nil here so the caller's "Warning: chown
+// failed" branch doesn't fire for a no-op.
 func chownInstall(username string) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
 	u, err := user.Lookup(username)
 	if err != nil {
 		return fmt.Errorf("user %q not found: %w", username, err)
@@ -405,10 +438,20 @@ func chownInstall(username string) error {
 }
 
 // restartOrPrompt branches on the resolved mode to pick the right
-// systemctl invocation. Active unit → restart; inactive → print the
-// command the operator should run to enable+start it. Never tries to
-// auto-enable: respects operator intent.
+// service-manager invocation. Linux: systemctl. Windows: defer to
+// Phase 2 — for now we just tell the operator the manual command
+// they need (`skywire visor -c <path>`) until the Windows Service
+// registration ships.
+//
+// Active unit → restart; inactive → print the start instructions.
+// Never tries to auto-enable: respects operator intent.
 func restartOrPrompt(r resolvedConfig) {
+	if runtime.GOOS == "windows" {
+		msg2(fmt.Sprintf("Start skywire on Windows with (admin PowerShell):\n\t%sskywire visor -c %q%s",
+			colorRed, r.configPath, colorReset))
+		return
+	}
+
 	systemctlArgs := []string{}
 	if r.useUserUnit {
 		systemctlArgs = append(systemctlArgs, "--user")
