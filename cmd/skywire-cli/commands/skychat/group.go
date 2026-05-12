@@ -297,7 +297,13 @@ friction operators hit during a development cycle.`,
 					t.Stop()
 					return
 				}
-				if newCl, cErr := clirpc.Client(cmd.Flags()); cErr == nil {
+				// ClientQuiet (vs Client) suppresses the per-retry
+				// "RPC connection failed" stderr spam — caller knows
+				// the dial failed because cErr is non-nil. Without
+				// this, every backoff tick during a visor restart
+				// printed an identical ERROR line, exactly the
+				// failure mode #2514 was supposed to eliminate.
+				if newCl, cErr := clirpc.ClientQuiet(cmd.Flags()); cErr == nil {
 					rpcClient = newCl
 					// Don't yet reset lastErrLogged — the new
 					// client might still 503 if the visor is
