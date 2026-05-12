@@ -315,7 +315,7 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			toRecipient := m.recipient
 			toNetwork := m.network
 			cmds = append(cmds, func() tea.Msg {
-				err := postMessage(toAddr, toRecipient, text, toNetwork)
+				_, err := postMessage(toAddr, toRecipient, text, toNetwork, 0)
 				return sentMsg{body: text, err: err}
 			})
 		case "pgup":

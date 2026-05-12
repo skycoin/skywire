@@ -32,6 +32,7 @@ var (
 	// default of "", and `skychat send -t X -m hi` (no --net)
 	// surfaced "invalid network type:" because the var was empty.
 	sendNet      string
+	sendWait     time.Duration
 	listenNet    string
 	listenFrom   string
 	historyPeer  string
@@ -53,6 +54,7 @@ func init() {
 	sendCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (required)")
 	sendCmd.Flags().StringVarP(&message, "msg", "m", "", "message to send (required)")
 	sendCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type: skynet or dmsg")
+	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 0, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 = no wait (default)")
 	sendCmd.MarkFlagRequired("to")  //nolint:errcheck,gosec
 	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
 
@@ -81,7 +83,29 @@ var RootCmd = &cobra.Command{
 var sendCmd = &cobra.Command{
 	Use:   "send",
 	Short: "Send a message",
-	Long:  "Send a message to a remote public key via skychat.",
+	Long: `Send a message to a remote public key via skychat.
+
+Default semantics ("--wait" not set): the message is written to the
+peer's framed connection and the command returns 200 as soon as the
+WriteFrame call succeeds. This confirms the message was handed to
+the underlying skywire transport — NOT that the peer's chat-app
+received or processed it.
+
+With --wait DURATION the message is wrapped in a chat-msg envelope
+with a unique id; the command waits up to DURATION for the peer's
+chat-app to send a chat-ack envelope back. Outcomes:
+
+  acked within DURATION: command prints "Acked by <pk> in <ms>ms"
+                         and exits 0.
+  timeout:               command prints "Send to <pk> via <net> not
+                         acked within <DURATION>" and exits 1.
+  peer on old binary:    --wait will time out because the chat-msg
+                         envelope is interpreted as plain JSON text
+                         by pre-2026-05-12 peers. The message was
+                         delivered but the peer can't ack.
+
+Server clamps --wait to [100ms, 60s]. Values outside that range
+are normalized server-side.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		var pk cipher.PubKey
 		if err := pk.Set(recipient); err != nil {
@@ -90,8 +114,21 @@ var sendCmd = &cobra.Command{
 		if err := validateNetwork(sendNet); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if err := postMessage(httpAddr, pk.String(), message, sendNet); err != nil {
+		ack, err := postMessage(httpAddr, pk.String(), message, sendNet, sendWait)
+		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if sendWait > 0 {
+			if ack != nil && ack.Acked {
+				internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("Acked by %s in %dms (id=%s)\n", pk.String(), ack.MS, ack.ID))
+			} else {
+				reason := "no ack"
+				if ack != nil && ack.Reason != "" {
+					reason = ack.Reason
+				}
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("send to %s via %s not acked: %s", pk.String(), sendNet, reason))
+			}
+			return
 		}
 		internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("Message sent to %s via %s\n", pk.String(), sendNet))
 	},
@@ -305,31 +342,72 @@ func validateNetwork(n string) error {
 	return fmt.Errorf("invalid network type %q (use 'skynet' or 'dmsg')", n)
 }
 
+// AckResponse is the JSON body the skychat app's /message endpoint
+// returns when wait_ms > 0. Exported so the TUI / scripted callers
+// can consume the same shape.
+type AckResponse struct {
+	Acked  bool   `json:"acked"`
+	ID     string `json:"id,omitempty"`
+	MS     int64  `json:"ms,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
 // postMessage POSTs the message payload to the skychat app's HTTP
-// /message endpoint. Returns nil on 2xx, an error with the response
-// body otherwise. Pulled out of sendCmd so the interactive `chat`
-// TUI can reuse it on every Enter.
-func postMessage(addr, recipientPK, msg, network string) error {
-	body, err := json.Marshal(map[string]string{
+// /message endpoint. Returns nil on 2xx (with no wait) or the ack
+// response when wait > 0. An error means the request failed at the
+// HTTP layer or the chat-app surfaced a 4xx/5xx that's not the
+// 504-on-timeout case (which is returned as a non-nil ack with
+// Acked=false).
+func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*AckResponse, error) {
+	payload := map[string]interface{}{
 		"recipient": recipientPK,
 		"message":   msg,
 		"network":   network,
-	})
+	}
+	if wait > 0 {
+		payload["wait_ms"] = wait.Milliseconds()
+	}
+	body, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal request: %w", err)
+		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 	url := fmt.Sprintf("http://%s/message", addr)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:gosec
+	// Client timeout: wait + grace. Without this the http.Client's
+	// default no-timeout would let a server-side hang block the CLI
+	// indefinitely; with it, the CLI deadline is always at least
+	// `wait` + 5s so the server's own clamp/timeout fires first.
+	hc := &http.Client{Timeout: wait + 5*time.Second}
+	if wait <= 0 {
+		hc.Timeout = 30 * time.Second
+	}
+	resp, err := hc.Post(url, "application/json", bytes.NewReader(body)) //nolint:gosec
 	if err != nil {
-		return fmt.Errorf("post: %w", err)
+		return nil, fmt.Errorf("post: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
+
+	// 504 carries a non-nil AckResponse{Acked:false, Reason:"timeout"}
+	// — surfaced to the caller, not treated as a server error.
+	if resp.StatusCode == http.StatusGatewayTimeout {
+		var ack AckResponse
+		if err := json.NewDecoder(resp.Body).Decode(&ack); err == nil {
+			return &ack, nil
+		}
+		return &AckResponse{Acked: false, Reason: "timeout"}, nil
+	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		return nil
+		if wait > 0 {
+			var ack AckResponse
+			if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
+				return nil, fmt.Errorf("decode ack: %w", err)
+			}
+			return &ack, nil
+		}
+		return nil, nil
 	}
 	var errBody bytes.Buffer
 	_, _ = errBody.ReadFrom(resp.Body) //nolint:errcheck
-	return fmt.Errorf("server error %d: %s", resp.StatusCode, strings.TrimSpace(errBody.String()))
+	return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, strings.TrimSpace(errBody.String()))
 }
 
 // Reconnect cadence for the listen loop. Starts at minReconnectDelay
