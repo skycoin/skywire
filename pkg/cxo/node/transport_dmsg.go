@@ -122,18 +122,27 @@ func (d *DMSG) acceptConn(fc *transport.Connection) {
 	}
 }
 
-// closeConn removes the cached entry that matches the given conn.
-// Called from Conn.run() cleanup so a dead DMSG conn does not persist
-// in d.cs and short-circuit subsequent ConnectPK calls.
+// closeConn closes the underlying transport.Connection and removes
+// the cached entry that matches the given conn. Called from
+// Conn.run() cleanup so a dead DMSG conn does not persist in d.cs
+// (which would short-circuit subsequent ConnectPK calls) and so the
+// read/write loops attached to the transport.Connection actually
+// exit (closing c.Connection signals their `<-c.done` selects).
 //
-// Without this, when the *remote* CXO node restarts (and its old
-// per-conn state goes away) the local side's dmsg session survives
-// — but the cxo Conn on top is dead. ConnectPK's existing-conn
-// cache hit then returns the dead conn, the publisher's AnnounceTo
-// never re-handshakes, and from the remote aggregator's point of
-// view that publisher is silent forever (until the publisher itself
-// restarts). closeConn is the symmetric undo for addConn so the
-// cache stays consistent with the live conn set.
+// Without the cache delete, when the *remote* CXO node restarts
+// (and its old per-conn state goes away) the local side's dmsg
+// session survives — but the cxo Conn on top is dead. ConnectPK's
+// existing-conn cache hit then returns the dead conn, the
+// publisher's AnnounceTo never re-handshakes, and from the remote
+// aggregator's point of view that publisher is silent forever
+// (until the publisher itself restarts).
+//
+// Without the Close, every dropped peer leaks the transport-level
+// readLoop and writeLoop goroutines. Observed in production after
+// ~7h uptime: 36,609 Connection.writeLoop goroutines parked in the
+// `<-c.done` select forever (one per peer ever connected),
+// dragging GC scanstack to 25% of CPU. TCP.closeConn and
+// UDP.closeConn already do this; DMSG was missing it.
 //
 // Iterating to find c is fine: d.cs is bounded by peer count, and
 // this fires only on conn teardown — not in the hot path.
@@ -143,8 +152,11 @@ func (d *DMSG) closeConn(c *Conn) {
 	for pk, cached := range d.cs {
 		if cached == c {
 			delete(d.cs, pk)
-			return
+			break
 		}
+	}
+	if !c.Connection.IsClosed() {
+		c.Connection.Close()
 	}
 }
 
