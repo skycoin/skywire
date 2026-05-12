@@ -31,9 +31,12 @@ var (
 	// — sendCmd's default of "skynet" was clobbered by listenCmd's
 	// default of "", and `skychat send -t X -m hi` (no --net)
 	// surfaced "invalid network type:" because the var was empty.
-	sendNet    string
-	listenNet  string
-	listenFrom string
+	sendNet      string
+	listenNet    string
+	listenFrom   string
+	historyPeer  string
+	historyLimit int
+	historySince string
 )
 
 func init() {
@@ -43,6 +46,8 @@ func init() {
 		sendCmd,
 		listenCmd,
 		chatCmd,
+		historyCmd,
+		statusCmd,
 	)
 
 	sendCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (required)")
@@ -53,6 +58,10 @@ func init() {
 
 	listenCmd.Flags().StringVarP(&listenNet, "net", "n", "", "filter by network type (optional; default = all)")
 	listenCmd.Flags().StringVar(&listenFrom, "from", "", "filter by sender public key (optional; full hex PK)")
+
+	historyCmd.Flags().StringVar(&historyPeer, "peer", "", "filter by peer public key (optional; full hex PK)")
+	historyCmd.Flags().IntVar(&historyLimit, "limit", 100, "max messages to return (1-1000)")
+	historyCmd.Flags().StringVar(&historySince, "since", "", "only return messages newer than this duration (e.g. 1h, 30m, 24h)")
 
 	chatCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (optional; TUI prompts for it if omitted)")
 	chatCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type for outgoing messages: skynet or dmsg")
@@ -85,6 +94,183 @@ var sendCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("Message sent to %s via %s\n", pk.String(), sendNet))
+	},
+}
+
+var historyCmd = &cobra.Command{
+	Use:   "history",
+	Short: "Print persisted message history",
+	Long: `Print the locally persisted message history.
+
+Recovery path for missed messages: when the listener is down (visor
+restart, shell filter ate the events, the agent driver missed a
+notification), the history store still has them. This command reads
+straight from the chat-app's /history HTTP endpoint and prints the
+result.
+
+Filters:
+  --peer  <PK>     only this peer's messages (full hex PK)
+  --limit N        max messages to return (default 100, max 1000)
+  --since DURATION client-side filter: drop messages older than this
+                   (e.g. 1h, 30m, 24h, 168h for a week)
+
+With --json: prints {ts, peer, from, outgoing, text} per line (NDJSON,
+matches the listen schema as closely as possible). Without --json:
+prints "<ISO ts> [in|out @ peer] body" one per line.
+
+Returns an error if the chat-app has persistence disabled.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		if historyLimit <= 0 || historyLimit > 1000 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--limit must be 1-1000, got %d", historyLimit))
+		}
+		if historyPeer != "" {
+			var pk cipher.PubKey
+			if err := pk.Set(historyPeer); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --peer public key %q: %w", historyPeer, err))
+			}
+		}
+		var sinceCutoff time.Time
+		if historySince != "" {
+			d, err := time.ParseDuration(historySince)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --since duration %q: %w", historySince, err))
+			}
+			if d < 0 {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--since duration must be positive, got %s", d))
+			}
+			sinceCutoff = time.Now().Add(-d)
+		}
+
+		url := fmt.Sprintf("http://%s/history?limit=%d", httpAddr, historyLimit)
+		if historyPeer != "" {
+			url += "&peer=" + historyPeer
+		}
+		resp, err := http.Get(url) //nolint:gosec
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("history fetch: %w", err))
+		}
+		defer resp.Body.Close() //nolint:errcheck
+		if resp.StatusCode == http.StatusServiceUnavailable {
+			internal.PrintFatalError(cmd.Flags(), errors.New("chat-app persistence not enabled (start visor with --persist-skychat-history)"))
+		}
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("history fetch: server %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+		}
+
+		// /history returns a JSON array of history.Message records.
+		var msgs []struct {
+			Peer      string    `json:"peer"`
+			From      string    `json:"from"`
+			Outgoing  bool      `json:"outgoing"`
+			Text      string    `json:"text"`
+			Timestamp time.Time `json:"timestamp"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&msgs); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("decode history: %w", err))
+		}
+
+		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		out := cmd.OutOrStdout()
+
+		for _, m := range msgs {
+			if !sinceCutoff.IsZero() && m.Timestamp.Before(sinceCutoff) {
+				continue
+			}
+			if jsonMode {
+				ev := struct {
+					TS       time.Time `json:"ts"`
+					Peer     string    `json:"peer"`
+					From     string    `json:"from,omitempty"`
+					Outgoing bool      `json:"outgoing"`
+					Text     string    `json:"text"`
+				}{
+					TS:       m.Timestamp,
+					Peer:     m.Peer,
+					From:     m.From,
+					Outgoing: m.Outgoing,
+					Text:     m.Text,
+				}
+				b, _ := json.Marshal(ev)          //nolint:errcheck
+				_, _ = out.Write(append(b, '\n')) //nolint:errcheck
+			} else {
+				dir := "in"
+				if m.Outgoing {
+					dir = "out"
+				}
+				fmt.Fprintf(out, "%s [%s @ %s] %s\n", m.Timestamp.UTC().Format(time.RFC3339), dir, m.Peer, m.Text) //nolint:errcheck
+			}
+		}
+	},
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Probe the skychat app's health",
+	Long: `Print a snapshot of the skychat app's runtime health: visor PK,
+SSE subscriber count, active peer conns and their PKs, whether
+persistence + pairing are enabled.
+
+Operator use: "is my chat app working" without docker exec / ss /
+curl gymnastics. Returns 1 + a clear error if the chat-app's HTTP
+endpoint isn't reachable.
+
+Default output is human-readable lines; --json emits the raw status
+object suitable for scripts.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		url := fmt.Sprintf("http://%s/status", httpAddr)
+		resp, err := http.Get(url) //nolint:gosec
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("chat app unreachable at %s: %w", httpAddr, err))
+		}
+		defer resp.Body.Close() //nolint:errcheck
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("status fetch: server %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+		}
+
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("status read: %w", err))
+		}
+
+		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		out := cmd.OutOrStdout()
+
+		if jsonMode {
+			_, _ = out.Write(raw) //nolint:errcheck
+			if len(raw) > 0 && raw[len(raw)-1] != '\n' {
+				_, _ = out.Write([]byte{'\n'}) //nolint:errcheck
+			}
+			return
+		}
+
+		var status struct {
+			VisorPK            string   `json:"visor_pk"`
+			SSESubscribers     int      `json:"sse_subscribers"`
+			ActivePeerConns    int      `json:"active_peer_conns"`
+			Peers              []string `json:"peers"`
+			PersistenceEnabled bool     `json:"persistence_enabled"`
+			PairingEnabled     bool     `json:"pairing_enabled"`
+			Error              string   `json:"error,omitempty"`
+		}
+		if err := json.Unmarshal(raw, &status); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("decode status: %w", err))
+		}
+		fmt.Fprintf(out, "Chat app at %s\n", httpAddr)                         //nolint:errcheck
+		fmt.Fprintf(out, "  visor PK:           %s\n", status.VisorPK)         //nolint:errcheck
+		fmt.Fprintf(out, "  SSE subscribers:    %d\n", status.SSESubscribers)  //nolint:errcheck
+		fmt.Fprintf(out, "  active peer conns:  %d\n", status.ActivePeerConns) //nolint:errcheck
+		if len(status.Peers) > 0 {
+			for _, p := range status.Peers {
+				fmt.Fprintf(out, "    - %s\n", p) //nolint:errcheck
+			}
+		}
+		fmt.Fprintf(out, "  persistence:        %v\n", status.PersistenceEnabled) //nolint:errcheck
+		fmt.Fprintf(out, "  pairing:            %v\n", status.PairingEnabled)     //nolint:errcheck
+		if status.Error != "" {
+			fmt.Fprintf(out, "  error:              %s\n", status.Error) //nolint:errcheck
+		}
 	},
 }
 
