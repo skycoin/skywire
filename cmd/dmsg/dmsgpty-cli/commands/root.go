@@ -4,8 +4,10 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -28,6 +30,9 @@ var (
 	remoteAddr dmsg.Addr
 	cmdName    = dmsgpty.DefaultCmd
 	cmdArgs    []string
+
+	execTimeout string
+	execEnv     []string
 )
 
 func init() {
@@ -37,6 +42,14 @@ func init() {
 	RootCmd.Flags().Var(&remoteAddr, "addr", "remote dmsg address of format 'pk:port'\n If unspecified, the pty will start locally\n")
 	RootCmd.Flags().StringVarP(&cmdName, "cmd", "c", cmdName, "name of command to run\n")
 	RootCmd.Flags().StringSliceVarP(&cmdArgs, "args", "a", cmdArgs, "command arguments")
+
+	RootCmd.AddCommand(execCmd)
+	execCmd.Flags().StringVarP(&cli.Net, "clinet", "n", cli.Net, "network to use for dialing to dmsgpty-host")
+	execCmd.Flags().StringVarP(&cli.Addr, "cliaddr", "r", cli.Addr, "address to use for dialing to dmsgpty-host")
+	execCmd.Flags().StringVarP(&confPath, "confpath", "p", defaultConfPath, "config path")
+	execCmd.Flags().Var(&remoteAddr, "addr", "remote dmsg address of format 'pk:port'; required for remote exec")
+	execCmd.Flags().StringVarP(&execTimeout, "timeout", "t", "30s", "max command duration (e.g. 30s, 2m); host-side cap is 5m")
+	execCmd.Flags().StringArrayVarP(&execEnv, "env", "e", nil, "extra env var KEY=VALUE; repeatable")
 }
 
 // RootCmd contains commands for dmsgpty-cli; which interacts with the dmsgpty-host instance (i.e. skywire-visor)
@@ -110,6 +123,68 @@ var RootCmd = &cobra.Command{
 		}
 		// Remote pty.
 		return cli.StartRemotePty(ctx, remoteAddr.PK, remoteAddr.Port, cmdName, cmdArgs...)
+	},
+}
+
+// execCmd is the non-interactive variant: runs a single command on
+// the remote (or local) dmsgpty host and prints its captured
+// stdout/stderr + exits with the remote's exit code.
+//
+// Same trust model as RootCmd (interactive shell): the dmsgpty
+// whitelist gates dial-in. Hosts that trust a PK to spawn a shell
+// implicitly trust it to run one command — strictly less powerful
+// surface.
+var execCmd = &cobra.Command{
+	Use:                   "exec <command> [args...]",
+	Short:                 "Run a one-shot command on a remote dmsgpty host (no TTY)",
+	Args:                  cobra.MinimumNArgs(1),
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
+	DisableFlagsInUseLine: true,
+	PreRun:                RootCmd.PreRun,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		timeout, err := time.ParseDuration(execTimeout)
+		if err != nil {
+			return err
+		}
+		name := args[0]
+		var argv []string
+		if len(args) > 1 {
+			argv = args[1:]
+		}
+		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
+		defer cancel()
+
+		var resp *dmsgpty.CommandExecResult
+		if remoteAddr.PK.Null() {
+			resp, err = cli.ExecLocal(ctx, name, argv, execEnv, nil, timeout)
+		} else {
+			resp, err = cli.ExecRemote(ctx, remoteAddr.PK, remoteAddr.Port, name, argv, execEnv, nil, timeout)
+		}
+		if err != nil {
+			return err
+		}
+		if len(resp.Stdout) > 0 {
+			_, _ = os.Stdout.Write(resp.Stdout) //nolint:errcheck
+		}
+		if len(resp.Stderr) > 0 {
+			_, _ = os.Stderr.Write(resp.Stderr) //nolint:errcheck
+		}
+		if resp.StdoutTruncated {
+			fmt.Fprintf(os.Stderr, "[stdout truncated at 16MiB]\n") //nolint:errcheck
+		}
+		if resp.StderrTruncated {
+			fmt.Fprintf(os.Stderr, "[stderr truncated at 16MiB]\n") //nolint:errcheck
+		}
+		if resp.TimedOut {
+			fmt.Fprintf(os.Stderr, "[timed out after %dms]\n", resp.DurationMS) //nolint:errcheck
+			os.Exit(124)
+		}
+		if resp.ExitCode != 0 {
+			os.Exit(resp.ExitCode)
+		}
+		return nil
 	},
 }
 
