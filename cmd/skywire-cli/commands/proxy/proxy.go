@@ -320,7 +320,19 @@ var startCmd = &cobra.Command{
 
 			for _, state := range states {
 				if state.Name == stateName {
-					if state.Status == appserver.AppStatusRunning {
+					// Bare Status flips to Running as soon as the OS
+					// process is alive — well before the app has
+					// dialed its remote. Skysocks-client (and friends)
+					// set DetailedStatus = "Starting" while inside
+					// their dial-retry loop, then flip to "Running"
+					// once the conn is established. To make
+					// `proxy start --verbose`'s "app running" banner
+					// honest, treat "Starting" as not-yet-ready and
+					// keep polling. Apps that never emit a detailed
+					// status leave it empty, so we still graduate on
+					// bare Status for those.
+					detailedStarting := state.DetailedStatus == appserver.AppDetailedStatusStarting
+					if state.Status == appserver.AppStatusRunning && !detailedStarting {
 						startProcess = false
 						appReachedRunning = true
 						if !startVerbose {
