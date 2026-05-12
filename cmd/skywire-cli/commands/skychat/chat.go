@@ -41,17 +41,28 @@ Top pane scrolls message history; bottom pane is the compose line.
 Enter sends. Esc or Ctrl+C quits. ↑/↓ or PgUp/PgDn scroll history.
 
 Requires the skychat app to be running (default --addr 127.0.0.1:8001).
-Use --to <pk> to pin outgoing messages to one recipient; incoming
-messages from other senders still appear in history.`,
+Use --to <pk> to pin outgoing messages to one recipient. When
+--to is omitted, the TUI starts in "pick a peer" mode and prompts
+for a PK in the compose line; on a valid hex PK the view
+transitions to chat. Incoming messages from any sender still
+appear in history.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		var pk cipher.PubKey
-		if err := pk.Set(recipient); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --to public key %q: %w", recipient, err))
+		// Empty recipient is allowed: the TUI prompts for it.
+		// Anything non-empty must parse as a valid PK up front so
+		// a typo on the command line surfaces immediately rather
+		// than after the TUI takes over the terminal.
+		recipientPK := ""
+		if recipient != "" {
+			var pk cipher.PubKey
+			if err := pk.Set(recipient); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --to public key %q: %w", recipient, err))
+			}
+			recipientPK = pk.String()
 		}
 		if err := validateNetwork(sendNet); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if err := runChatTUI(httpAddr, pk.String(), sendNet); err != nil {
+		if err := runChatTUI(httpAddr, recipientPK, sendNet); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 	},
@@ -90,6 +101,17 @@ type chatModel struct {
 	recipient string
 	network   string
 
+	// awaitingRecipient is true when the operator launched the
+	// TUI without --to <pk>. The textinput is repurposed as a
+	// "paste the recipient PK here" prompt; Enter validates and
+	// flips the model into chat mode. Mirrors the GUI's "enter
+	// recipient PK in the header" flow.
+	awaitingRecipient bool
+	// recipientErr surfaces the last PK-parse failure inline so
+	// the operator sees why their paste didn't take, instead of
+	// staring at an unchanged prompt.
+	recipientErr string
+
 	history []chatMsg
 	vp      viewport.Model
 	input   textinput.Model
@@ -107,10 +129,19 @@ type chatModel struct {
 
 func runChatTUI(addr, recipient, network string) error {
 	in := textinput.New()
-	in.Placeholder = "type message; Enter to send, Esc to quit"
 	in.Focus()
 	in.CharLimit = 4096
-	in.Prompt = "» "
+	if recipient == "" {
+		// Pick-a-peer mode: textinput accepts a 66-char hex PK.
+		// CharLimit bumped to fit a PK + small slack for paste
+		// noise. Prompt shape borrowed from the GUI's PK input.
+		in.Placeholder = "paste recipient PK (66 hex chars); Enter to confirm, Esc to quit"
+		in.Prompt = "to: "
+		in.CharLimit = 128
+	} else {
+		in.Placeholder = "type message; Enter to send, Esc to quit"
+		in.Prompt = "» "
+	}
 
 	inCh := make(chan chatMsg, 64)
 	errCh := make(chan error, 1)
@@ -118,13 +149,14 @@ func runChatTUI(addr, recipient, network string) error {
 	go streamSSE(ctx, addr, inCh, errCh)
 
 	m := &chatModel{
-		addr:      addr,
-		recipient: recipient,
-		network:   network,
-		input:     in,
-		sseLive:   true,
-		incoming:  inCh,
-		sseErrCh:  errCh,
+		addr:              addr,
+		recipient:         recipient,
+		network:           network,
+		input:             in,
+		sseLive:           true,
+		incoming:          inCh,
+		sseErrCh:          errCh,
+		awaitingRecipient: recipient == "",
 	}
 	prog := tea.NewProgram(m, tea.WithAltScreen())
 	_, err := prog.Run()
@@ -238,6 +270,31 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			text := strings.TrimSpace(m.input.Value())
 			if text == "" {
+				return m, nil
+			}
+			// In pick-a-peer mode, Enter parses the PK and
+			// transitions into chat mode. The textinput is
+			// then reset with the chat-mode prompt + placeholder
+			// for the actual messaging flow.
+			if m.awaitingRecipient {
+				var pk cipher.PubKey
+				if err := pk.Set(text); err != nil {
+					m.recipientErr = fmt.Sprintf("invalid PK: %v", err)
+					m.input.Reset()
+					return m, nil
+				}
+				m.recipient = pk.String()
+				m.awaitingRecipient = false
+				m.recipientErr = ""
+				m.input.Reset()
+				m.input.Placeholder = "type message; Enter to send, Esc to quit"
+				m.input.Prompt = "» "
+				m.input.CharLimit = 4096
+				if m.ready {
+					// Header now shows the recipient, so the
+					// "to <prompt>" line widens; refit input.
+					m.input.Width = m.width - len(m.input.Prompt) - 1
+				}
 				return m, nil
 			}
 			m.input.Reset()
@@ -357,17 +414,34 @@ func (m *chatModel) View() string {
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 
-	header := fmt.Sprintf("%s  %s  network=%s  addr=%s",
-		hdrStyle.Render("skychat"),
-		dimStyle.Render("to "+shortPK(m.recipient)),
-		m.network,
-		m.addr,
-	)
+	// Header differs between pick-a-peer and chat modes. In
+	// pick-a-peer the "to <pk>" slot is replaced with a prompt
+	// hint and (if applicable) the last parse error.
+	var header string
+	if m.awaitingRecipient {
+		hint := dimStyle.Render("pick a recipient PK below")
+		if m.recipientErr != "" {
+			hint = errStyle.Render(m.recipientErr)
+		}
+		header = fmt.Sprintf("%s  %s  network=%s  addr=%s",
+			hdrStyle.Render("skychat"), hint, m.network, m.addr)
+	} else {
+		header = fmt.Sprintf("%s  %s  network=%s  addr=%s",
+			hdrStyle.Render("skychat"),
+			dimStyle.Render("to "+shortPK(m.recipient)),
+			m.network, m.addr,
+		)
+	}
 	if !m.sseLive {
 		header += "  " + errStyle.Render("[SSE down: "+m.sseErr+"]")
 	}
 
-	footer := dimStyle.Render("Enter send | ↑/↓ PgUp/PgDn scroll | Esc/Ctrl+C quit")
+	var footer string
+	if m.awaitingRecipient {
+		footer = dimStyle.Render("Enter to confirm recipient | Esc/Ctrl+C quit")
+	} else {
+		footer = dimStyle.Render("Enter send | ↑/↓ PgUp/PgDn scroll | Esc/Ctrl+C quit")
+	}
 
 	var b strings.Builder
 	b.WriteString(header)
