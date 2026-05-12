@@ -173,7 +173,7 @@ restarts). Exit with Ctrl+C.`,
 				// reconnect prompt rather than an error.
 				delay = minReconnectDelay
 			} else {
-				fmt.Fprintf(cmd.ErrOrStderr(),
+				fmt.Fprintf(cmd.ErrOrStderr(), //nolint:errcheck
 					"skychat listen: %v (reconnecting in %s)\n", err, delay)
 			}
 
