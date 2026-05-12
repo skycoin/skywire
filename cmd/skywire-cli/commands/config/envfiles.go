@@ -58,7 +58,7 @@ const envfileLinux = `#
 #DISABLEPUBLICAUTOCONN=true
 
 #-- Add transport setup public keys
-#TPSETUPPKS('')
+#TPSETUPPKS=('')
 
 ### Ports ###############################################################
 #	Note: when generating a test deployment config (-t / TESTENV=true),
@@ -74,7 +74,7 @@ const envfileLinux = `#
 ### Routing #############################################################
 
 #-- Add route setup-node public keys
-#ROUTESETUPPKS('')
+#ROUTESETUPPKS=('')
 
 #--	Enable local route calculation (instead of using route finder)
 #CALCULATEROUTES=true
@@ -85,12 +85,12 @@ const envfileLinux = `#
 #HYPERVISORPKS=('')
 
 #--	Grant access to pseudoterminal (pty) for public keys
-#DMSGPTYPKS('')
+#DMSGPTYPKS=('')
 
 ### Survey Access #######################################################
 
 #--	Grant access for survey collection to these public keys
-#SURVEYPKS('')
+#SURVEYPKS=('')
 
 ### Hypervisor UI #######################################################
 
