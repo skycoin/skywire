@@ -47,6 +47,7 @@ func init() {
 		listenCmd,
 		chatCmd,
 		historyCmd,
+		statusCmd,
 	)
 
 	sendCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (required)")
@@ -199,6 +200,76 @@ Returns an error if the chat-app has persistence disabled.`,
 				}
 				fmt.Fprintf(out, "%s [%s @ %s] %s\n", m.Timestamp.UTC().Format(time.RFC3339), dir, m.Peer, m.Text) //nolint:errcheck
 			}
+		}
+	},
+}
+
+var statusCmd = &cobra.Command{
+	Use:   "status",
+	Short: "Probe the skychat app's health",
+	Long: `Print a snapshot of the skychat app's runtime health: visor PK,
+SSE subscriber count, active peer conns and their PKs, whether
+persistence + pairing are enabled.
+
+Operator use: "is my chat app working" without docker exec / ss /
+curl gymnastics. Returns 1 + a clear error if the chat-app's HTTP
+endpoint isn't reachable.
+
+Default output is human-readable lines; --json emits the raw status
+object suitable for scripts.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		url := fmt.Sprintf("http://%s/status", httpAddr)
+		resp, err := http.Get(url) //nolint:gosec
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("chat app unreachable at %s: %w", httpAddr, err))
+		}
+		defer resp.Body.Close() //nolint:errcheck
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("status fetch: server %d: %s", resp.StatusCode, strings.TrimSpace(string(body))))
+		}
+
+		raw, err := io.ReadAll(resp.Body)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("status read: %w", err))
+		}
+
+		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		out := cmd.OutOrStdout()
+
+		if jsonMode {
+			_, _ = out.Write(raw) //nolint:errcheck
+			if len(raw) > 0 && raw[len(raw)-1] != '\n' {
+				_, _ = out.Write([]byte{'\n'}) //nolint:errcheck
+			}
+			return
+		}
+
+		var status struct {
+			VisorPK            string   `json:"visor_pk"`
+			SSESubscribers     int      `json:"sse_subscribers"`
+			ActivePeerConns    int      `json:"active_peer_conns"`
+			Peers              []string `json:"peers"`
+			PersistenceEnabled bool     `json:"persistence_enabled"`
+			PairingEnabled     bool     `json:"pairing_enabled"`
+			Error              string   `json:"error,omitempty"`
+		}
+		if err := json.Unmarshal(raw, &status); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("decode status: %w", err))
+		}
+		fmt.Fprintf(out, "Chat app at %s\n", httpAddr)                         //nolint:errcheck
+		fmt.Fprintf(out, "  visor PK:           %s\n", status.VisorPK)         //nolint:errcheck
+		fmt.Fprintf(out, "  SSE subscribers:    %d\n", status.SSESubscribers)  //nolint:errcheck
+		fmt.Fprintf(out, "  active peer conns:  %d\n", status.ActivePeerConns) //nolint:errcheck
+		if len(status.Peers) > 0 {
+			for _, p := range status.Peers {
+				fmt.Fprintf(out, "    - %s\n", p) //nolint:errcheck
+			}
+		}
+		fmt.Fprintf(out, "  persistence:        %v\n", status.PersistenceEnabled) //nolint:errcheck
+		fmt.Fprintf(out, "  pairing:            %v\n", status.PairingEnabled)     //nolint:errcheck
+		if status.Error != "" {
+			fmt.Fprintf(out, "  error:              %s\n", status.Error) //nolint:errcheck
 		}
 	},
 }
