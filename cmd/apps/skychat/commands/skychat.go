@@ -544,8 +544,36 @@ func handleConn(conn *framedConn) {
 			continue
 		}
 
-		text := string(payload)
 		peerPK := raddr.PubKey.Hex()
+
+		// Then try the chat-msg / chat-ack envelope. A chat-msg
+		// envelope (type=chat-msg, ack=true) → unwrap body, send
+		// chat-ack back, surface body as a normal chat message.
+		// A chat-ack envelope (type=chat-ack) → consumed internally
+		// to satisfy a waiting /message --wait request, NOT surfaced
+		// to the SSE stream. Plain-text bodies fall through to the
+		// legacy path unchanged.
+		envHandled, envBody, _ := tryHandleChatEnvelope(payload, peerPK, func(id string) {
+			ackEnv := chatEnvelope{Type: chatTypeAck, ID: id}
+			ackBytes, mErr := json.Marshal(ackEnv)
+			if mErr != nil {
+				appLog("chat-ack marshal failed: %v", mErr)
+				return
+			}
+			if wErr := conn.WriteFrame(ackBytes); wErr != nil {
+				appLog("chat-ack write to %s failed: %v", peerPK, wErr)
+			}
+		})
+		var text string
+		if envHandled {
+			if envBody == "" {
+				// chat-ack consumed — nothing to surface.
+				continue
+			}
+			text = envBody
+		} else {
+			text = string(payload)
+		}
 
 		counterMu.Lock()
 		inboundMsgCount++
@@ -596,22 +624,35 @@ func handleConn(conn *framedConn) {
 func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
 
-		data := map[string]string{}
+		var data struct {
+			Recipient string `json:"recipient"`
+			Message   string `json:"message"`
+			Network   string `json:"network,omitempty"`
+			// WaitMS, if positive, requests peer-receipt acknowledgment:
+			// the message is wrapped in a chat-msg envelope with a
+			// unique id, written to the peer, and this handler blocks
+			// up to WaitMS for the peer's chat-ack envelope to come
+			// back over the same conn. On ack: returns 200 + JSON
+			// {acked:true, ms:<elapsed>}. On timeout: 504 + JSON
+			// {acked:false, reason:"timeout"}. Clamped to
+			// [chatAckTimeoutFloor, chatAckTimeoutCeiling] server-side.
+			WaitMS int `json:"wait_ms,omitempty"`
+		}
 		if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		pk := cipher.PubKey{}
-		if err := pk.UnmarshalText([]byte(data["recipient"])); err != nil {
+		if err := pk.UnmarshalText([]byte(data.Recipient)); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		// Determine network type - default to skynet, allow dmsg
 		netType := appnet.TypeSkynet
-		if network, ok := data["network"]; ok {
-			switch network {
+		if data.Network != "" {
+			switch data.Network {
 			case "dmsg":
 				netType = appnet.TypeDmsg
 			case "skynet":
@@ -669,10 +710,40 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			conns[pk] = conn
 			connsMu.Unlock()
 
-			go handleConn(conn)
+			// handleConn's lifetime is the underlying peer connection,
+			// not this HTTP request — req.Context() canceling on
+			// response would tear down a healthy long-lived conn that
+			// future sends + the receive loop rely on. Outliving the
+			// request is the correct shape.
+			go handleConn(conn) //nolint:gosec // G118: long-lived conn, not request-scoped
 		}
 
-		err := conn.WriteFrame([]byte(data["message"]))
+		// Build the on-the-wire payload. Default is plain text (back-
+		// compat with every binary that has shipped to date). When
+		// wait_ms is set, we wrap in a chat-msg envelope with a fresh
+		// id, register an ack-waiter, and after the write blocks the
+		// HTTP request on the ack channel up to wait_ms.
+		wirePayload := []byte(data.Message)
+		var ackID string
+		var ackCh <-chan struct{}
+		var unregisterAck func()
+		var ackWait time.Duration
+		if data.WaitMS > 0 {
+			ackID = newEventID()
+			env := chatEnvelope{Type: chatTypeMsg, ID: ackID, Body: data.Message, Ack: true}
+			eb, mErr := json.Marshal(env)
+			if mErr != nil {
+				http.Error(w, mErr.Error(), http.StatusInternalServerError)
+				return
+			}
+			wirePayload = eb
+			ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
+			ackCh, unregisterAck = registerAckWaiter(ackID)
+			defer unregisterAck()
+		}
+
+		writeStart := time.Now()
+		err := conn.WriteFrame(wirePayload)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 
@@ -687,9 +758,42 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		persistMessage(history.Message{
 			Peer:      pk.Hex(),
 			Outgoing:  true,
-			Text:      data["message"],
+			Text:      data.Message,
 			Timestamp: time.Now().UTC(),
 		})
+
+		// If --wait was requested, block on the ack channel. The
+		// envelope was written above; the peer's chat-app, if it
+		// speaks the chat-msg envelope (i.e. is post-2026-05-12),
+		// recognizes it, persists the body, sends chat-ack back over
+		// the same conn, which our handleConn routes to deliverAck →
+		// our ackCh. Old peers see the JSON-encoded envelope as plain
+		// text and never ack; we time out cleanly.
+		if ackCh != nil {
+			timer := time.NewTimer(ackWait)
+			defer timer.Stop()
+			select {
+			case <-ackCh:
+				elapsed := time.Since(writeStart)
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+					"acked": true,
+					"id":    ackID,
+					"ms":    elapsed.Milliseconds(),
+				})
+			case <-timer.C:
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusGatewayTimeout)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+					"acked":  false,
+					"id":     ackID,
+					"reason": "timeout",
+					"ms":     ackWait.Milliseconds(),
+				})
+			case <-req.Context().Done():
+				return
+			}
+		}
 
 		// Mirror the outgoing message into the SSE stream so headless
 		// listeners (skywire-cli skychat listen) see a complete
@@ -721,14 +825,20 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		if appCl != nil {
 			myPK = appCl.Config().VisorPK.Hex()
 		}
+		// Use the ack id when --wait was used, so consumers correlate
+		// the outgoing mirror to a specific send by id.
+		mirrorID := ackID
+		if mirrorID == "" {
+			mirrorID = newEventID()
+		}
 		mirrorMsg, mErr := json.Marshal(map[string]interface{}{
 			"sender":  myPK,
 			"to":      pk.Hex(),
-			"message": data["message"],
+			"message": data.Message,
 			"network": string(netType),
 			"dir":     "out",
-			"id":      newEventID(),
-			"len":     len(data["message"]),
+			"id":      mirrorID,
+			"len":     len(data.Message),
 		})
 		if mErr == nil {
 			hub.broadcast(string(mirrorMsg))
