@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
 	"embed"
 	"encoding/binary"
 	"encoding/json"
@@ -151,7 +152,53 @@ var (
 
 	// historyStore is nil when persistence is disabled.
 	historyStore history.Store
+
+	// runtime counters surfaced via /status — single mutex covers
+	// all of them since they're updated in lockstep with sse hub
+	// activity (well-bounded contention). counterMu is held only
+	// during the assignment, never spanning I/O.
+	counterMu        sync.Mutex
+	startedAt        = time.Now()
+	lastRxAt         time.Time // most recent inbound chat message (incl. self-loop)
+	lastSendAt       time.Time // most recent successful outgoing send
+	inboundMsgCount  uint64
+	outboundMsgCount uint64
+	inboundDropCount uint64 // ReadFrame errors / unparseable frames on the inbound path
 )
+
+// frameProtoVersion is the on-the-wire protocol version this chat
+// app speaks. Bumped on any frame-layout change (envelope shape,
+// new mandatory fields). Surfaced via /status so operators rolling
+// staggered deploys can spot version skew before it manifests as
+// confusing wire failures.
+//
+// version 1 — initial length-prefixed framed wire (post-#2504).
+//
+//	chat-msg envelope (pre-2026-05-12 plain bytes) and
+//	pair-control JSON envelope co-exist as before; this
+//	version is just for diagnostic visibility.
+const frameProtoVersion = 1
+
+// schemaVersion is the listen-output JSON schema version emitted on
+// banner events. Distinct from frameProtoVersion (which is the
+// on-the-wire chat-frame format) — the schema covers listener-side
+// event shape. Bump on any breaking change to msg/banner/reconnect/
+// error event field semantics (renaming, removing, type change).
+// Additive field changes are NOT a bump.
+const schemaVersion = "v1"
+
+// newEventID returns a hex-encoded 64-bit random id, used to tag
+// each SSE-broadcast msg event. Stable identifier consumers can use
+// for log correlation, dedup, and (post-#65) ack correlation.
+//
+// 8 bytes of entropy gives ~2^32 collision avoidance under birthday
+// paradox — overkill for what's effectively a per-process correlation
+// id with a lifetime of seconds.
+func newEventID() string {
+	var buf [8]byte
+	_, _ = cryptoRand.Read(buf[:]) //nolint:errcheck
+	return fmt.Sprintf("%016x", binary.BigEndian.Uint64(buf[:]))
+}
 
 // the go embed static points to skywire/cmd/apps/skychat/static
 
@@ -479,6 +526,9 @@ func handleConn(conn *framedConn) {
 		payload, err := conn.ReadFrame()
 		if err != nil {
 			appLog("Failed to read packet: %v", err)
+			counterMu.Lock()
+			inboundDropCount++
+			counterMu.Unlock()
 			connsMu.Lock()
 			delete(conns, raddr.PubKey)
 			connsMu.Unlock()
@@ -496,6 +546,11 @@ func handleConn(conn *framedConn) {
 
 		text := string(payload)
 		peerPK := raddr.PubKey.Hex()
+
+		counterMu.Lock()
+		inboundMsgCount++
+		lastRxAt = time.Now().UTC()
+		counterMu.Unlock()
 
 		// Persist (best-effort, never blocks ephemeral path).
 		persistMessage(history.Message{
@@ -515,11 +570,21 @@ func handleConn(conn *framedConn) {
 		// "group-out") rather than an "outgoing" bool so the schema
 		// stays extensible as group / relay flows land without a
 		// breaking wire-version bump.
+		//
+		// "id" is a stable per-event identifier. Pre-#65-ack: no one
+		// consumes it; post-#65-ack: send --wait references it to
+		// correlate inbound chat-ack envelopes back to the originating
+		// send without a separate schema bump. Today it's just a UUID
+		// so consumers can already use it for log correlation / dedup.
+		// "len" is the body byte length, surfaced for size-debug
+		// without forcing consumers to count after a json round-trip.
 		clientMsg, err := json.Marshal(map[string]interface{}{
 			"sender":  peerPK,
 			"message": text,
 			"network": string(raddr.Net),
 			"dir":     "in",
+			"id":      newEventID(),
+			"len":     len(text),
 		})
 		if err != nil {
 			appLog("Failed to marshal json: %v", err)
@@ -647,15 +712,32 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		// directionality (string, not bool, for extensibility — future
 		// relay/group flows can emit "relay" / "group-in" /
 		// "group-out" without a wire-schema bump).
+		// "to" is set on dir:out events so consumers can correlate
+		// outgoing mirrors back to a specific send. dir:in events
+		// don't need "to" (we're always the recipient).
+		// "from" stays as the visor's own PK so consumers can route
+		// by per-peer thread regardless of direction.
+		var myPK string
+		if appCl != nil {
+			myPK = appCl.Config().VisorPK.Hex()
+		}
 		mirrorMsg, mErr := json.Marshal(map[string]interface{}{
-			"sender":  pk.Hex(),
+			"sender":  myPK,
+			"to":      pk.Hex(),
 			"message": data["message"],
 			"network": string(netType),
 			"dir":     "out",
+			"id":      newEventID(),
+			"len":     len(data["message"]),
 		})
 		if mErr == nil {
 			hub.broadcast(string(mirrorMsg))
 		}
+
+		counterMu.Lock()
+		outboundMsgCount++
+		lastSendAt = time.Now().UTC()
+		counterMu.Unlock()
 	}
 }
 
@@ -820,6 +902,27 @@ func historyPeersHandler(w http.ResponseWriter, _ *http.Request) {
 // for operator probes. Replaces the chain of `docker exec + ss -tlnp
 // + curl /sse` an operator would otherwise need to verify the app
 // is up. JSON shape is stable — added fields are backward-compatible.
+//
+// Fields:
+//
+//	visor_pk             current PK the app is bound under
+//	sse_subscribers      live SSE listener count
+//	active_peer_conns    live peer chat conns
+//	peers                PKs we have conns to
+//	persistence_enabled  history store is initialized
+//	pairing_enabled      pair-control sub-protocol is on
+//	frame_proto_version  on-the-wire chat-frame version (diagnose
+//	                     staggered-deploy version skew before it
+//	                     manifests as confusing wire failures)
+//	schema_version       listen-output JSON event-shape version
+//	app_uptime_sec       since the app started
+//	inbound_msg_count    chat frames successfully decoded since start
+//	outbound_msg_count   chat frames successfully written since start
+//	inbound_drop_count   ReadFrame errors since start; if this climbs
+//	                     while inbound_msg_count is flat, the receive
+//	                     path is broken
+//	last_rx_ts           last successful inbound (RFC3339 / "" if none)
+//	last_send_ts         last successful outbound (RFC3339 / "" if none)
 func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	connsMu.Lock()
 	connCount := len(conns)
@@ -842,6 +945,23 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		visorPKErr = "app client not initialized"
 	}
 
+	counterMu.Lock()
+	inMsgs := inboundMsgCount
+	outMsgs := outboundMsgCount
+	inDrops := inboundDropCount
+	lastRx := lastRxAt
+	lastSend := lastSendAt
+	counterMu.Unlock()
+
+	rxStr := ""
+	if !lastRx.IsZero() {
+		rxStr = lastRx.UTC().Format(time.RFC3339Nano)
+	}
+	sendStr := ""
+	if !lastSend.IsZero() {
+		sendStr = lastSend.UTC().Format(time.RFC3339Nano)
+	}
+
 	status := map[string]interface{}{
 		"visor_pk":            visorPK,
 		"sse_subscribers":     subscriberCount,
@@ -849,6 +969,14 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		"peers":               peers,
 		"persistence_enabled": historyStore != nil,
 		"pairing_enabled":     pairEnable,
+		"frame_proto_version": frameProtoVersion,
+		"schema_version":      schemaVersion,
+		"app_uptime_sec":      int64(time.Since(startedAt).Seconds()),
+		"inbound_msg_count":   inMsgs,
+		"outbound_msg_count":  outMsgs,
+		"inbound_drop_count":  inDrops,
+		"last_rx_ts":          rxStr,
+		"last_send_ts":        sendStr,
 	}
 	if visorPKErr != "" {
 		status["error"] = visorPKErr
