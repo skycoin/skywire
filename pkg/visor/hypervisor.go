@@ -276,6 +276,68 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 	}
 	hv.mu.Unlock()
 
+	// Skynet mirror of the RPC accept loop at the same port. A
+	// remote visor that can only reach us over the skywire router
+	// (no dmsg path) still gets hypervisor RPC. The Conn shape
+	// downstream keys on Addr.PK, which we fill from the skynet
+	// addr's PubKey via remotePK; SrvPK stays zero (skynet has no
+	// equivalent of dmsg's relaying server PK — the router selects
+	// the transport per-conn).
+	goServeSkynetMirror(ctx, hv.visor.conf.PK, dmsgPort, "hypervisor_rpc", hv.logger,
+		func(skyLis net.Listener) {
+			for {
+				conn, err := skyLis.Accept()
+				if err != nil {
+					if ctx.Err() != nil || errors.Is(err, net.ErrClosed) {
+						return
+					}
+					hv.logger.WithError(err).Debug("Skynet hypervisor RPC accept error")
+					return
+				}
+				peerPK, ok := remotePK(conn.RemoteAddr())
+				if !ok {
+					hv.logger.Warn("Skynet hypervisor RPC: unable to identify peer; rejecting")
+					_ = conn.Close() //nolint:errcheck
+					continue
+				}
+				log := hv.visor.MasterLogger().PackageLogger(fmt.Sprintf("rpc_client_sky:%s", peerPK))
+				visorConn := &Conn{
+					Addr:  dmsg.Addr{PK: peerPK, Port: dmsgPort},
+					SrvPK: cipher.PubKey{},
+					API:   NewRPCClient(log, conn, RPCPrefix, skyenv.RPCTimeout),
+					PtyUI: setupDmsgPtyUI(hv.dmsgC, peerPK),
+				}
+				if hv.visor.isDTMReady() {
+					if _, err := hv.visor.dmsgTracker.manager.ShouldGet(ctx, peerPK); err != nil {
+						log.WithField("addr", hv.c.DmsgDiscovery).WithError(err).
+							Warn("Failed to dial tracker stream.")
+					}
+				}
+				log.Debug("Accepted (skynet).")
+				hv.mu.Lock()
+				hv.visor.remoteVisors[peerPK] = *visorConn
+				hv.remoteVisors[peerPK] = *visorConn
+				hv.mu.Unlock()
+				if hv.lanDmsg != nil {
+					discoveryURL := hv.c.LANDmsgServer.PublicDiscoveryURL
+					if discoveryURL == "" {
+						discoveryURL = hv.discoveryURLForVisor()
+					}
+					go func(vc *Conn) {
+						if err := vc.API.SetLANDmsgServer(LANDmsgServerInfo{
+							Enabled:       true,
+							PK:            hv.lanDmsg.PK,
+							Address:       hv.lanDmsg.Address,
+							PublicAddress: hv.lanDmsg.PublicAddress,
+							DiscoveryURL:  discoveryURL,
+						}); err != nil {
+							hv.logger.WithError(err).Debug("Failed to push LAN DMSG server info to skynet visor")
+						}
+					}(visorConn)
+				}
+			}
+		})
+
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {

@@ -1290,6 +1290,22 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 				}
 			}()
 
+			// Skynet mirror of the UI server at the same port.
+			// Whitelist parsing works as-is for skynet conns too:
+			// both dmsg.Addr and appnet.Addr stringify as "pk:port"
+			// (see appnet.Addr.String), so the existing r.RemoteAddr
+			// split by ':' yields the same PK extraction.
+			goServeSkynetMirror(ctx, v.conf.PK, conf.DmsgPort, "ui_server", log,
+				func(skyLis net.Listener) {
+					log.Infof("UI server listening on skynet port %d", conf.DmsgPort)
+					if err := dmsgSrv.Serve(skyLis); err != nil &&
+						!errors.Is(err, http.ErrServerClosed) &&
+						!errors.Is(err, dmsg.ErrEntityClosed) &&
+						!errors.Is(err, net.ErrClosed) {
+						log.WithError(err).Debug("UI server skynet listener exited")
+					}
+				})
+
 			v.pushCloseStack("ui_server.dmsg", func() error {
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()

@@ -408,6 +408,24 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 			_ = ctrl
 		}
 	}()
+
+	// Mirror on skynet at the same port. dmsgctrl.ServeListener
+	// accepts any net.Listener, so the appnet listener slots in
+	// directly and the resulting Controls flow through the same
+	// drain goroutine pattern.
+	goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgCtrlPort, "dmsgctrl", logger,
+		func(lis net.Listener) {
+			ch := dmsgctrl.ServeListener(lis, 16)
+			go func() {
+				<-ctx.Done()
+				if err := lis.Close(); err != nil {
+					logger.WithError(err).Debug("Failed to close skynet dmsgctrl listener")
+				}
+			}()
+			for ctrl := range ch {
+				_ = ctrl
+			}
+		})
 	return nil
 }
 
@@ -534,6 +552,21 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 			logger.WithError(err).Error("Logserver exited with error.")
 		}
 	}()
+
+	// Skynet mirror of the HTTP log server at the same port. Same
+	// http.Server (and therefore same handler, timeouts, and graceful
+	// shutdown) — only the listener differs. Operators dialing the
+	// log server over skynet hit the identical surface as dmsg.
+	goServeSkynetMirror(ctx, v.conf.PK, visorconfig.DmsgHTTPPort, "dmsg_http", logger,
+		func(skyLis net.Listener) {
+			if err := srv.Serve(skyLis); err != nil &&
+				!errors.Is(err, http.ErrServerClosed) &&
+				!errors.Is(err, dmsg.ErrEntityClosed) &&
+				!errors.Is(err, net.ErrClosed) {
+				logger.WithError(err).Debug("Skynet logserver exited")
+			}
+		})
+
 	v.pushCloseStack("dmsghttp.logserver", func() error {
 		// Graceful shutdown
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -763,25 +796,35 @@ func initDmsgPing(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.pushCloseStack("dmsg_ping", lis.Close)
 
-	go func() {
+	acceptPings := func(lis net.Listener, transport string) {
 		var wg sync.WaitGroup
 		defer wg.Wait()
 		for {
 			conn, err := lis.Accept()
 			if err != nil {
 				if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-					log.WithError(err).Error("Failed to accept dmsg ping conn")
+					log.WithError(err).WithField("transport", transport).
+						Error("Failed to accept ping conn")
 				}
 				return
 			}
-			log.Debugf("Accepted dmsg ping conn from %s", conn.RemoteAddr())
+			log.WithField("transport", transport).Debugf("Accepted ping conn from %s", conn.RemoteAddr())
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
 				handleDmsgPingConn(log, conn)
 			}()
 		}
-	}()
+	}
+	go acceptPings(lis, "dmsg")
+
+	// Skynet mirror of the ping responder at the same port. Same
+	// handler, same response wire — clients can ping the visor over
+	// any transport the router can negotiate.
+	goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgPingPort, "dmsg_ping", log,
+		func(skyLis net.Listener) {
+			acceptPings(skyLis, "skynet")
+		})
 
 	log.WithField("port", skyenv.DmsgPingPort).Info("Dmsg ping listener started")
 	return nil

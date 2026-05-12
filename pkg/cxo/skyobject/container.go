@@ -111,11 +111,14 @@ func (c *Container) createDB(conf *Config) (err error) {
 		var cx data.CXDS
 		var idx data.IdxDB
 
-		if cx, err = cxds.NewDriveCXDS(c.cxPath); err != nil {
+		cxOpts := cxds.DriveOptions{NoSync: conf.NoSyncCXDS}
+		idxOpts := idxdb.DriveOptions{NoSync: conf.NoSyncCXDS}
+
+		if cx, err = cxds.NewDriveCXDSWithOptions(c.cxPath, cxOpts); err != nil {
 			return err
 		}
 
-		if idx, err = idxdb.NewDriveIdxDB(c.idxPath); err != nil {
+		if idx, err = idxdb.NewDriveIdxDBWithOptions(c.idxPath, idxOpts); err != nil {
 			cx.Close() //nolint:errcheck,gosec
 			return err
 		}

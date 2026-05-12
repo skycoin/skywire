@@ -95,7 +95,15 @@ func (tps *embeddedTPS) dialRPC(ctx context.Context, targetPK cipher.PubKey) (*r
 	return rpc.NewClient(conn), nil
 }
 
-// Serve starts the dmsg RPC listener for accepting transport setup requests from remote visors.
+// Serve starts the dmsg RPC listener for accepting transport setup
+// requests from remote visors.
+//
+// Stays dmsg-only: the embedded TPS runs under its own PK/SK
+// (separate from the visor's primary identity) and has no
+// transport manager of its own. The skywire networker keys to
+// v.conf.PK; mirroring this listener on skynet would bind on the
+// wrong identity. The visor itself doesn't need a skynet mirror
+// here either — outbound TPS dialing goes the other direction.
 func (tps *embeddedTPS) Serve(ctx context.Context) error {
 	port := skyenv.DmsgTransportSetupServicePort
 	tps.log.WithField("dmsg_port", port).Info("Starting embedded TPS dmsg listener")

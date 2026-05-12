@@ -140,6 +140,17 @@ type PubConfig struct {
 	// SubscriberAllowlist, when non-nil, gates the OnSubscribeRemote
 	// hook so only listed PKs may subscribe. See Config.SubscriberAllowlist.
 	SubscriberAllowlist []cipher.PubKey
+
+	// NoSyncCXDS forwards to skyobject.Config.NoSyncCXDS — opens the
+	// underlying CXDS + IdxDB bbolt stores with NoSync=true. Use this
+	// for publishers whose data is content-addressed and rebuildable
+	// from the in-memory tree on every BatchWindow tick (typical for
+	// visor-side stats / user-feed / pair / group publishers).
+	// Trade-off: skip fdatasync per commit → far less disk write
+	// amplification, at the cost of losing the most recent batch on
+	// a hard crash. Acceptable because the publisher republishes from
+	// memory on restart.
+	NoSyncCXDS bool
 }
 
 // NewWithDMSG is a convenience wrapper around New: it constructs a
@@ -157,6 +168,7 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 	cfg.SecKey = skycipher.SecKey(sk)
 	cfg.Config = skyobject.NewConfig()
 	cfg.Config.InMemoryDB = conf.InMemoryDB
+	cfg.Config.NoSyncCXDS = conf.NoSyncCXDS
 	if conf.DataDir != "" {
 		cfg.Config.DataDir = conf.DataDir
 	}

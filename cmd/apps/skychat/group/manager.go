@@ -25,6 +25,7 @@
 package group
 
 import (
+	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
@@ -221,19 +222,34 @@ func (m *Manager) terminate(id string, status Status) error {
 }
 
 // SendToGroup publishes a message into the named group's CXO feed.
-// Caller must be the owner of the group (member-side outgoing messages
-// flow through the skychat 1:1 wire to the owner, which then calls
-// SendToGroup as the relay step). Returns ErrNotOwner if invoked for
-// a member-role record.
-func (m *Manager) SendToGroup(id, text string) error {
+// Dispatches by role:
+//
+//   - Owner: writes directly to the publisher via Session.Send.
+//   - Member: opens a dmsg stream to the owner's relay listener
+//     and submits the message; the owner re-publishes into the
+//     feed with sender attribution preserved.
+//
+// In both cases the sender's own subscriber sees the resulting
+// feed leaf and renders it to the inbox, so the UX is "type, hit
+// Send, see your message in history" regardless of role.
+func (m *Manager) SendToGroup(ctx context.Context, id, text string) error {
 	m.mu.RLock()
 	sess, ok := m.sessions[id]
 	m.mu.RUnlock()
 	if !ok {
 		return fmt.Errorf("group: SendToGroup: no live session for %s", id)
 	}
-	if err := sess.Send(text); err != nil {
-		return err
+	switch sess.cfg.Record.Role {
+	case RoleOwner:
+		if err := sess.Send(text); err != nil {
+			return err
+		}
+	case RoleMember:
+		if err := sess.SubmitToOwner(ctx, text); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("group: SendToGroup: unknown role %q", sess.cfg.Record.Role)
 	}
 	_ = m.store.MarkMessage(id, time.Now().UTC()) //nolint:errcheck
 	return nil
