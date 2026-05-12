@@ -4,10 +4,14 @@ package cliskychat
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -118,10 +122,23 @@ func postMessage(addr, recipientPK, msg, network string) error {
 	return fmt.Errorf("server error %d: %s", resp.StatusCode, strings.TrimSpace(errBody.String()))
 }
 
+// Reconnect cadence for the listen loop. Starts at minReconnectDelay
+// (short enough to recover from a normal visor restart without
+// noticeable downtime) and doubles up to maxReconnectDelay on
+// repeated failures (long enough that a visor that's down for good
+// stops hammering 127.0.0.1). Successful connect resets the backoff.
+const (
+	minReconnectDelay = 1 * time.Second
+	maxReconnectDelay = 30 * time.Second
+)
+
 var listenCmd = &cobra.Command{
 	Use:   "listen",
 	Short: "Listen for incoming messages",
-	Long:  "Connect to skychat SSE endpoint and display incoming messages.",
+	Long: `Connect to skychat SSE endpoint and display incoming messages.
+
+Reconnects automatically when the connection drops (e.g. the visor
+restarts). Exit with Ctrl+C.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Empty listenNet means "all"; if set, only print messages
 		// whose network field matches.
@@ -139,43 +156,100 @@ var listenCmd = &cobra.Command{
 		}
 		fmt.Print("\nPress Ctrl+C to stop\n\n")
 
-		resp, err := http.Get(url) //nolint:gosec
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to connect to SSE: %w", err))
-		}
-		defer resp.Body.Close() //nolint:errcheck
-
-		if resp.StatusCode != http.StatusOK {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("server returned status %d", resp.StatusCode))
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
 		}
 
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if !strings.HasPrefix(line, "data: ") {
-				continue
+		delay := minReconnectDelay
+		for {
+			err := streamSSEOnce(ctx, url, filter)
+			if ctx.Err() != nil {
+				// Caller hit Ctrl+C; exit cleanly.
+				return
 			}
-			data := strings.TrimPrefix(line, "data: ")
-			var msg struct {
-				Sender  string `json:"sender"`
-				Message string `json:"message"`
-				Network string `json:"network,omitempty"`
+			if err == nil {
+				// Server closed the stream cleanly; treat as a
+				// reconnect prompt rather than an error.
+				delay = minReconnectDelay
+			} else {
+				fmt.Fprintf(cmd.ErrOrStderr(),
+					"skychat listen: %v (reconnecting in %s)\n", err, delay)
 			}
-			if err := json.Unmarshal([]byte(data), &msg); err != nil {
-				fmt.Printf("Raw: %s\n", data)
-				continue
+
+			// Sleep before retry, but honor Ctrl+C while sleeping.
+			t := time.NewTimer(delay)
+			select {
+			case <-t.C:
+			case <-ctx.Done():
+				t.Stop()
+				return
 			}
-			if filter != "" && msg.Network != "" && msg.Network != filter {
-				continue
+
+			// Exponential backoff up to maxReconnectDelay.
+			delay *= 2
+			if delay > maxReconnectDelay {
+				delay = maxReconnectDelay
 			}
-			net := ""
-			if msg.Network != "" {
-				net = "/" + msg.Network
-			}
-			fmt.Printf("[%s%s] %s\n", msg.Sender, net, msg.Message)
-		}
-		if err := scanner.Err(); err != nil && err.Error() != "EOF" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SSE connection error: %w", err))
 		}
 	},
+}
+
+// streamSSEOnce opens a single SSE connection and drains it until
+// the stream ends, the context is canceled, or an error occurs.
+// Returns nil on clean end-of-stream so the caller can retry
+// without surfacing it as a failure.
+func streamSSEOnce(ctx context.Context, url, filter string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("build SSE request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("connect: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server returned status %d", resp.StatusCode)
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		var msg struct {
+			Sender  string `json:"sender"`
+			Message string `json:"message"`
+			Network string `json:"network,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(data), &msg); err != nil {
+			fmt.Printf("Raw: %s\n", data)
+			continue
+		}
+		if filter != "" && msg.Network != "" && msg.Network != filter {
+			continue
+		}
+		net := ""
+		if msg.Network != "" {
+			net = "/" + msg.Network
+		}
+		fmt.Printf("[%s%s] %s\n", msg.Sender, net, msg.Message)
+	}
+	// scanner.Err() returns nil on a clean EOF; io.EOF /
+	// io.ErrUnexpectedEOF / a canceled context all show up here too.
+	// Map "the connection went away" cases to nil so the caller's
+	// retry loop treats them as a normal end-of-stream rather than a
+	// fatal log line. A real error (server-side malformed frame,
+	// etc.) still bubbles up.
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
