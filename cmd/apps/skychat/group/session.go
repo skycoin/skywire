@@ -32,11 +32,16 @@
 package group
 
 import (
+	"context"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -97,19 +102,57 @@ type Session struct {
 	cfg  Config
 	port uint16
 
-	// Exactly one of pub or sub is non-nil, decided by cfg.Record.Role.
+	// pub is set on the owner side (the group's CXO message feed) and
+	// also on the member side (a throwaway local CXO node hosting the
+	// subscriber). sub is set on the member side only.
 	pub *treestore.Publisher
 	sub *treestore.Subscriber
 
+	// relayListener is set on the owner side: a dmsg.Listen on
+	// Record.Port+1 accepting member-relay submissions. Members
+	// dial this port, write a framed RelayMessage envelope, and
+	// the owner-side handler re-publishes into the CXO feed with
+	// the original sender's PK attributed (see acceptRelay).
+	// nil on the member side.
+	relayListener net.Listener
+	relayCtx      context.Context
+	relayCancel   context.CancelFunc
+	relayWG       sync.WaitGroup
+
 	// seq disambiguates messages with the same nanosecond timestamp.
-	// Owner-scoped (members don't publish in D1), but lives on the
-	// Session so the Phase-2-future where every member is a publisher
-	// just works.
 	seq atomic.Uint64
 
 	handler MessageHandler
 	log     *logging.Logger
 }
+
+// relayPortOffset is the dmsg-port delta from the group's CXO
+// publish port to the relay-submission listener. Members dial
+// Owner.PK:(Record.Port + relayPortOffset) to submit messages.
+// Keeping it as a single +1 reuses the existing "owner owns
+// Record.Port, members own Record.Port+1 on their side" pattern
+// without introducing a third port slot.
+const relayPortOffset uint16 = 1
+
+// RelayMessage is the on-the-wire envelope a member sends to the
+// owner's relay listener. The owner validates SenderPK against the
+// group's Members allowlist, then re-publishes into the CXO feed
+// using SenderPK so the attribution survives the relay hop.
+//
+// Note: this envelope is not encrypted on its own; for ModePrivate
+// groups, the owner AES-GCM-seals the Text before publishing to
+// the feed (same shape as a direct owner Send). The dmsg session
+// gives transport encryption between the member and the owner.
+type RelayMessage struct {
+	SenderPK cipher.PubKey `json:"sender_pk"`
+	Text     string        `json:"text"`
+	TS       time.Time     `json:"ts"`
+}
+
+// relayMaxFrameSize bounds the claimed-length sanity check on the
+// owner's read side. 64 KiB matches every other framed-wire in the
+// skychat tree.
+const relayMaxFrameSize = 64 * 1024
 
 // Open constructs the session's CXO node and brings up the role-
 // appropriate publisher OR subscriber. For owner role, the
@@ -154,7 +197,8 @@ func Open(cfg Config) (*Session, error) {
 	}
 }
 
-// openOwner brings up a publisher with the member allowlist.
+// openOwner brings up a publisher with the member allowlist plus
+// the relay listener that members dial when submitting messages.
 func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
 		BatchWindow:         cfg.BatchWindow,
@@ -166,7 +210,26 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("group: Open owner: build publisher: %w", err)
 	}
-	return &Session{cfg: cfg, port: cfg.Record.Port, pub: pub, log: log}, nil
+
+	// Relay listener: dmsg.Listen on the +1 port. Members dial here
+	// to submit messages for re-publish. Failures here are non-fatal
+	// — the group is still usable for owner-broadcast even if no
+	// relay listener comes up; just log + continue with relay = off.
+	relayPort := cfg.Record.Port + relayPortOffset
+	listener, err := cfg.DmsgC.Listen(relayPort)
+	if err != nil {
+		log.WithError(err).WithField("port", relayPort).
+			Warn("group: owner relay listen failed; member-side send disabled")
+		return &Session{cfg: cfg, port: cfg.Record.Port, pub: pub, log: log}, nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s := &Session{
+		cfg: cfg, port: cfg.Record.Port, pub: pub, log: log,
+		relayListener: listener, relayCtx: ctx, relayCancel: cancel,
+	}
+	s.relayWG.Add(1)
+	go s.acceptRelay()
+	return s, nil
 }
 
 // openMember creates a subscriber. The connect-to-owner step is
@@ -226,45 +289,18 @@ func (s *Session) SetMessageHandler(h MessageHandler) {
 	s.handler = h
 }
 
-// Send publishes a chat message. Owner-side only in D1: members
-// must POST to the owner via the existing 1:1 pair-control wire
-// with a group_id tag, and the owner's skychat app calls Send to
-// relay into the feed. Returns an error if invoked on a member-role
-// session.
+// Send publishes a chat message. Owner-side only: members must
+// SubmitToOwner instead. Returns an error if invoked on a
+// member-role session.
 //
 // For ModePrivate groups, the body is AES-256-GCM-sealed before
 // being stored as the leaf value. The path itself (timestamp +
 // seq) stays plaintext.
 func (s *Session) Send(text string) error {
 	if s.pub == nil || s.cfg.Record.Role != RoleOwner {
-		return errors.New("group: Send: only owner-role sessions can publish in D1")
+		return errors.New("group: Send: only owner-role sessions can publish; members must SubmitToOwner")
 	}
-	now := time.Now().UTC()
-	msg := Message{
-		SenderPK: s.cfg.MyPK,
-		TS:       now,
-	}
-	switch s.cfg.Record.Mode {
-	case ModePublic:
-		msg.Text = text
-	case ModePrivate:
-		ct, nonce, err := Encrypt(s.cfg.Record.AESKey, []byte(text))
-		if err != nil {
-			return fmt.Errorf("group: Send: %w", err)
-		}
-		msg.Ciphertext = ct
-		msg.Nonce = nonce
-	}
-	body, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("group: Send: marshal: %w", err)
-	}
-	seq := s.seq.Add(1)
-	path := MessagePathPrefix + "/" + strconv.FormatInt(now.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
-	if err := s.pub.Put(path, body); err != nil {
-		return fmt.Errorf("group: Send: put %q: %w", path, err)
-	}
-	return nil
+	return s.publishAs(s.cfg.MyPK, text, time.Now().UTC())
 }
 
 // SetAllowlist updates the publisher's subscriber allowlist to the
@@ -282,6 +318,16 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 // CXO node, owned by the publisher). Idempotent.
 func (s *Session) Close() error {
 	var firstErr error
+	if s.relayCancel != nil {
+		s.relayCancel()
+	}
+	if s.relayListener != nil {
+		if err := s.relayListener.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		s.relayListener = nil
+	}
+	s.relayWG.Wait()
 	if s.sub != nil {
 		if err := s.sub.Close(); err != nil {
 			firstErr = err
@@ -295,6 +341,179 @@ func (s *Session) Close() error {
 		s.pub = nil
 	}
 	return firstErr
+}
+
+// acceptRelay accepts member-relay streams in a loop until Close is
+// called. Each accepted stream gets its own short-lived goroutine
+// that reads one framed RelayMessage, validates the sender against
+// the group's allowlist, publishes to the CXO feed with the
+// sender's PK attributed, and closes the stream.
+func (s *Session) acceptRelay() {
+	defer s.relayWG.Done()
+	for {
+		c, err := s.relayListener.Accept()
+		if err != nil {
+			if s.relayCtx.Err() == nil {
+				s.log.WithError(err).Debug("group: relay accept ended")
+			}
+			return
+		}
+		s.relayWG.Add(1)
+		go func(c net.Conn) {
+			defer s.relayWG.Done()
+			defer c.Close() //nolint:errcheck
+			s.handleRelay(c)
+		}(c)
+	}
+}
+
+// handleRelay reads one RelayMessage from c, validates the sender,
+// and re-publishes via the same Send path the owner uses for its
+// own messages — with sender attribution from the relay envelope
+// instead of the owner's PK.
+func (s *Session) handleRelay(c net.Conn) {
+	payload, err := readFrame(c)
+	if err != nil {
+		s.log.WithError(err).Debug("group: relay read")
+		return
+	}
+	var rm RelayMessage
+	if err := json.Unmarshal(payload, &rm); err != nil {
+		s.log.WithError(err).Debug("group: relay unmarshal")
+		return
+	}
+	if rm.SenderPK == (cipher.PubKey{}) {
+		s.log.Debug("group: relay rejected: empty sender PK")
+		return
+	}
+	if !s.isMember(rm.SenderPK) {
+		s.log.WithField("sender", rm.SenderPK.Hex()).
+			Warn("group: relay rejected: sender not in allowlist")
+		return
+	}
+	if rm.TS.IsZero() {
+		rm.TS = time.Now().UTC()
+	}
+	if err := s.publishAs(rm.SenderPK, rm.Text, rm.TS); err != nil {
+		s.log.WithError(err).Debug("group: relay publish")
+		return
+	}
+}
+
+// isMember returns whether pk appears in the group's Members
+// allowlist. Owner is implicitly a member (uniqueWithSelf put them
+// there at Create time) so an owner-side echo through the relay
+// also validates cleanly.
+func (s *Session) isMember(pk cipher.PubKey) bool {
+	for _, m := range s.cfg.Record.Members {
+		if m == pk {
+			return true
+		}
+	}
+	return false
+}
+
+// publishAs is the shared write path used by both owner-direct
+// Send and member-relay handleRelay. Sender attribution is
+// parametric: the owner-direct case passes its own PK, the relay
+// case passes the relay envelope's sender PK so the feed records
+// the actual author rather than the owner-as-conduit.
+func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) error {
+	if s.pub == nil || s.cfg.Record.Role != RoleOwner {
+		return errors.New("group: publish: only owner-role sessions can publish")
+	}
+	msg := Message{SenderPK: senderPK, TS: ts}
+	switch s.cfg.Record.Mode {
+	case ModePublic:
+		msg.Text = text
+	case ModePrivate:
+		ct, nonce, err := Encrypt(s.cfg.Record.AESKey, []byte(text))
+		if err != nil {
+			return fmt.Errorf("group: publishAs: %w", err)
+		}
+		msg.Ciphertext = ct
+		msg.Nonce = nonce
+	}
+	body, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("group: publishAs: marshal: %w", err)
+	}
+	seq := s.seq.Add(1)
+	path := MessagePathPrefix + "/" + strconv.FormatInt(ts.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
+	if err := s.pub.Put(path, body); err != nil {
+		return fmt.Errorf("group: publishAs: put %q: %w", path, err)
+	}
+	return nil
+}
+
+// SubmitToOwner is the member-side outbound path: dial the owner's
+// relay listener, write a framed RelayMessage, close. The owner's
+// acceptRelay handler validates + republishes. Returns an error if
+// invoked on an owner-role session (owners use Send directly) or
+// if the dial fails.
+func (s *Session) SubmitToOwner(ctx context.Context, text string) error {
+	if s.cfg.Record.Role != RoleMember {
+		return errors.New("group: SubmitToOwner: only member-role sessions submit via relay")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	addr := dmsg.Addr{PK: s.cfg.Record.OwnerPK, Port: s.cfg.Record.Port + relayPortOffset}
+	stream, err := s.cfg.DmsgC.DialStream(dialCtx, addr)
+	if err != nil {
+		return fmt.Errorf("group: SubmitToOwner: dial owner relay: %w", err)
+	}
+	defer stream.Close() //nolint:errcheck
+	rm := RelayMessage{SenderPK: s.cfg.MyPK, Text: text, TS: time.Now().UTC()}
+	body, err := json.Marshal(rm)
+	if err != nil {
+		return fmt.Errorf("group: SubmitToOwner: marshal: %w", err)
+	}
+	if err := writeFrame(stream, body); err != nil {
+		return fmt.Errorf("group: SubmitToOwner: write: %w", err)
+	}
+	return nil
+}
+
+// readFrame / writeFrame mirror the visor-app skychat post-#2504
+// length-prefixed wire so a member's relay write and an owner's
+// relay read interoperate with the same bit layout other framed
+// wires in this tree use.
+func readFrame(c net.Conn) ([]byte, error) {
+	var hdr [4]byte
+	if _, err := io.ReadFull(c, hdr[:]); err != nil {
+		return nil, err
+	}
+	length := binary.BigEndian.Uint32(hdr[:])
+	if length == 0 {
+		return nil, errors.New("group: zero-length frame")
+	}
+	if length > relayMaxFrameSize {
+		return nil, fmt.Errorf("group: frame %d > max %d", length, relayMaxFrameSize)
+	}
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(c, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
+func writeFrame(c net.Conn, payload []byte) error {
+	if len(payload) == 0 {
+		return errors.New("group: empty payload")
+	}
+	if len(payload) > relayMaxFrameSize {
+		return fmt.Errorf("group: payload %d > max %d", len(payload), relayMaxFrameSize)
+	}
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) //nolint:gosec
+	if _, err := c.Write(hdr[:]); err != nil {
+		return err
+	}
+	_, err := c.Write(payload)
+	return err
 }
 
 // onUpdate is the subscriber callback for member-role sessions.
