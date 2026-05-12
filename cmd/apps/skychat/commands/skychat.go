@@ -97,6 +97,35 @@ func (c *framedConn) WriteFrame(payload []byte) error {
 	return err
 }
 
+// dialAndCache dials the peer at addr (using the package retrier),
+// wraps the raw conn in framing, registers it in the conns cache,
+// and starts the read loop. Used both from the cache-miss path in
+// messageHandler and from the redial-after-stale-write path. The
+// receive loop's lifetime is the underlying peer connection, not
+// the calling HTTP request — req.Context() cancel must NOT tear it
+// down, so we deliberately pass a long-lived context (the handler's
+// ctx, scoped to the whole app run).
+func dialAndCache(ctx context.Context, pk cipher.PubKey, addr appnet.Addr) (*framedConn, error) {
+	var raw net.Conn
+	err := r.Do(ctx, func() error {
+		c, dialErr := appCl.Dial(addr)
+		if dialErr != nil {
+			return dialErr
+		}
+		raw = c
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	conn := newFramedConn(raw)
+	connsMu.Lock()
+	conns[pk] = conn
+	connsMu.Unlock()
+	go handleConn(conn) //nolint:gosec // G118: long-lived conn, not request-scoped
+	return conn, nil
+}
+
 // ReadFrame reads exactly one length-prefixed message. Rejects
 // frames over skychatMaxFrameSize so a malicious or out-of-sync
 // peer can't allocate gigabytes of memory by claiming a giant
@@ -164,6 +193,30 @@ var (
 	inboundMsgCount  uint64
 	outboundMsgCount uint64
 	inboundDropCount uint64 // ReadFrame errors / unparseable frames on the inbound path
+
+	// outboundFailCount is the # of /message requests where the
+	// write to the peer conn could not be delivered — counts the
+	// failure that finally surfaces to the HTTP caller, after the
+	// in-handler redial+retry path has already given up.
+	//
+	// outboundRetryCount is how many /message requests took the
+	// redial-after-stale-conn path. A healthy steady state has this
+	// ~= 0; a non-zero rate means peers' transports are flapping
+	// (or visor restarts are tearing them down) and the in-handler
+	// retry is masking the symptom. Operators with retry > 0 and
+	// fail == 0 means "we papered over the flap"; retry > 0 and
+	// fail > 0 means "the retry isn't winning".
+	outboundFailCount  uint64
+	outboundRetryCount uint64
+
+	// sseDropCount counts messages the SSE hub dropped because a
+	// subscriber's per-client buffer was full at broadcast time.
+	// Each drop is a message that one listener never saw — climbs
+	// when a CLI listener stalls (terminal scrollback paused) or
+	// a browser tab is backgrounded long enough to drift behind
+	// sseSubscriberBufSize. Surfaced in /status so operators can
+	// tell "my listener missed N msgs" without log-scraping.
+	sseDropCount uint64
 )
 
 // frameProtoVersion is the on-the-wire protocol version this chat
@@ -255,15 +308,24 @@ func (h *sseHub) clientCount() int {
 
 // broadcast sends msg to every connected client. Drops to clients
 // whose buffer is full — bounded fan-out keeps a single stalled
-// client from holding back the whole stream.
+// client from holding back the whole stream. Each drop ticks
+// sseDropCount; a non-zero rate in /status means some listener
+// is reading slower than incoming-msg rate (or paused entirely).
 func (h *sseHub) broadcast(msg string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	var drops uint64
 	for ch := range h.clients {
 		select {
 		case ch <- msg:
 		default:
+			drops++
 		}
+	}
+	if drops > 0 {
+		counterMu.Lock()
+		sseDropCount += drops
+		counterMu.Unlock()
 	}
 }
 
@@ -681,20 +743,18 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			appCl.Log().Infof("Self-send via %s on port %d", netType, addr.Port)
 		}
 
+		// cached tells the write path whether the conn came from
+		// the cache (worth a redial+retry on stale-conn write
+		// errors) or from a fresh dial below (write failure on a
+		// fresh dial means the path is really broken — retrying is
+		// unlikely to help and just doubles the surfaced latency).
 		connsMu.Lock()
-		conn, ok := conns[pk]
+		conn, cached := conns[pk]
 		connsMu.Unlock()
 
-		if !ok {
-			var raw net.Conn
-			err := r.Do(ctx, func() error {
-				c, dialErr := appCl.Dial(addr)
-				if dialErr != nil {
-					return dialErr
-				}
-				raw = c
-				return nil
-			})
+		if !cached {
+			var err error
+			conn, err = dialAndCache(ctx, pk, addr)
 			if err != nil {
 				if isSelf {
 					appCl.Log().WithError(err).Errorf("Self-dial via %s failed", netType)
@@ -704,18 +764,6 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-
-			conn = newFramedConn(raw)
-			connsMu.Lock()
-			conns[pk] = conn
-			connsMu.Unlock()
-
-			// handleConn's lifetime is the underlying peer connection,
-			// not this HTTP request — req.Context() canceling on
-			// response would tear down a healthy long-lived conn that
-			// future sends + the receive loop rely on. Outliving the
-			// request is the correct shape.
-			go handleConn(conn) //nolint:gosec // G118: long-lived conn, not request-scoped
 		}
 
 		// Build the on-the-wire payload. Default is plain text (back-
@@ -742,55 +790,76 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			defer unregisterAck()
 		}
 
+		// Write the framed payload. On a *cached* conn, a write
+		// failure usually means the underlying transport went stale
+		// between sends (peer visor restart, route churn) — the
+		// frame is lost AND every subsequent send would also fail
+		// until something kicks the cache. To get the operator out
+		// of that hole inside the same request, we redial + retry
+		// exactly once when the first attempt was on a cached conn.
+		// A fresh-dial write failure isn't retried (a second dial
+		// of the same network in the same handler tick won't help).
 		writeStart := time.Now()
 		err := conn.WriteFrame(wirePayload)
-		if err != nil {
-			// Stale-conn auto-retry: a conn that's still in the
-			// `conns` map but whose underlying transport has gone
-			// away (peer chat-app restart, transient transport
-			// fault, etc) used to lose the caller's CURRENT message
-			// — the handler returned 400, the operator had to retry
-			// from the CLI / UI. Now we delete the stale entry, dial
-			// a fresh conn to the same peer, and retry the WriteFrame
-			// ONCE. Only on a second failure do we surface the error
-			// to the caller. The retry is one-shot to keep this
-			// codepath bounded; chronic peer-unreachability still
-			// surfaces as 400 within bounded time.
+		if err != nil && cached {
+			// Stale-conn auto-retry: a cached conn whose underlying
+			// transport has gone stale (peer chat-app restart,
+			// transient transport fault) used to lose the caller's
+			// CURRENT message — handler returned 400, operator had
+			// to retry from CLI/UI. Now we delete the stale entry
+			// (pointer-eq guarded so we don't clobber a fresh conn
+			// installed by a concurrent handler), dial fresh via
+			// dialAndCache, and retry the WriteFrame ONCE. Only on a
+			// second failure do we surface the error to the caller.
+			// Fresh-dial write failures (cached==false branch below)
+			// are NOT retried — a same-network second dial in the
+			// same handler tick won't help and just doubles latency.
 			connsMu.Lock()
-			delete(conns, pk)
-			connsMu.Unlock()
-
-			appCl.Log().WithError(err).Warnf("Stale conn to %s: retrying with fresh dial", pk)
-
-			var raw net.Conn
-			dialErr := r.Do(ctx, func() error {
-				c, dErr := appCl.Dial(addr)
-				if dErr != nil {
-					return dErr
-				}
-				raw = c
-				return nil
-			})
-			if dialErr != nil {
-				http.Error(w, fmt.Sprintf("send retry failed: %s; fresh dial: %s", err, dialErr), http.StatusBadRequest)
-				return
-			}
-			conn = newFramedConn(raw)
-			connsMu.Lock()
-			conns[pk] = conn
-			connsMu.Unlock()
-			// Same long-lived-conn semantics as the initial-dial
-			// path — handleConn owns the lifetime of this conn, not
-			// the HTTP request.
-			go handleConn(conn) //nolint:gosec // G118: long-lived conn, not request-scoped
-
-			if retryErr := conn.WriteFrame(wirePayload); retryErr != nil {
-				connsMu.Lock()
+			if conns[pk] == conn {
 				delete(conns, pk)
-				connsMu.Unlock()
-				http.Error(w, fmt.Sprintf("send retry failed: %s; fresh dial: %s", err, retryErr), http.StatusBadRequest)
+			}
+			connsMu.Unlock()
+
+			appCl.Log().Debugf("Stale-conn write to %s via %s: %v — redialing", pk, netType, err)
+			newConn, derr := dialAndCache(ctx, pk, addr)
+			if derr != nil {
+				counterMu.Lock()
+				outboundFailCount++
+				counterMu.Unlock()
+				http.Error(w, fmt.Sprintf("redial after write %v: %v", err, derr), http.StatusBadRequest)
 				return
 			}
+			if werr := newConn.WriteFrame(wirePayload); werr != nil {
+				connsMu.Lock()
+				if conns[pk] == newConn {
+					delete(conns, pk)
+				}
+				connsMu.Unlock()
+				counterMu.Lock()
+				outboundFailCount++
+				counterMu.Unlock()
+				http.Error(w, fmt.Sprintf("retry after %v: %v", err, werr), http.StatusBadRequest)
+				return
+			}
+			counterMu.Lock()
+			outboundRetryCount++
+			counterMu.Unlock()
+			conn = newConn
+			// Clear err so the post-retry block below doesn't double-
+			// report a failure on a now-successful retry.
+			err = nil
+		}
+		if err != nil {
+			connsMu.Lock()
+			if conns[pk] == conn {
+				delete(conns, pk)
+			}
+			connsMu.Unlock()
+			counterMu.Lock()
+			outboundFailCount++
+			counterMu.Unlock()
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 
 		// Persist outgoing message (best-effort).
@@ -1070,6 +1139,19 @@ func historyPeersHandler(w http.ResponseWriter, _ *http.Request) {
 //	inbound_drop_count   ReadFrame errors since start; if this climbs
 //	                     while inbound_msg_count is flat, the receive
 //	                     path is broken
+//	outbound_fail_count  /message requests that gave up after the
+//	                     in-handler redial+retry exhausted itself —
+//	                     these are real data-loss events visible to
+//	                     the caller as HTTP 400.
+//	outbound_retry_count /message requests where the first write
+//	                     errored on a cached conn and the in-handler
+//	                     redial succeeded. Healthy steady state is
+//	                     ~0; non-zero means peers' transports are
+//	                     flapping but we masked it within the request.
+//	sse_drop_count       messages the SSE hub dropped to listeners
+//	                     whose per-client buffer was full at
+//	                     broadcast time. Each drop is a message one
+//	                     listener missed.
 //	last_rx_ts           last successful inbound (RFC3339 / "" if none)
 //	last_send_ts         last successful outbound (RFC3339 / "" if none)
 func statusHandler(w http.ResponseWriter, _ *http.Request) {
@@ -1098,6 +1180,9 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	inMsgs := inboundMsgCount
 	outMsgs := outboundMsgCount
 	inDrops := inboundDropCount
+	outFails := outboundFailCount
+	outRetries := outboundRetryCount
+	sseDrops := sseDropCount
 	lastRx := lastRxAt
 	lastSend := lastSendAt
 	counterMu.Unlock()
@@ -1112,20 +1197,23 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	status := map[string]interface{}{
-		"visor_pk":            visorPK,
-		"sse_subscribers":     subscriberCount,
-		"active_peer_conns":   connCount,
-		"peers":               peers,
-		"persistence_enabled": historyStore != nil,
-		"pairing_enabled":     pairEnable,
-		"frame_proto_version": frameProtoVersion,
-		"schema_version":      schemaVersion,
-		"app_uptime_sec":      int64(time.Since(startedAt).Seconds()),
-		"inbound_msg_count":   inMsgs,
-		"outbound_msg_count":  outMsgs,
-		"inbound_drop_count":  inDrops,
-		"last_rx_ts":          rxStr,
-		"last_send_ts":        sendStr,
+		"visor_pk":             visorPK,
+		"sse_subscribers":      subscriberCount,
+		"active_peer_conns":    connCount,
+		"peers":                peers,
+		"persistence_enabled":  historyStore != nil,
+		"pairing_enabled":      pairEnable,
+		"frame_proto_version":  frameProtoVersion,
+		"schema_version":       schemaVersion,
+		"app_uptime_sec":       int64(time.Since(startedAt).Seconds()),
+		"inbound_msg_count":    inMsgs,
+		"outbound_msg_count":   outMsgs,
+		"inbound_drop_count":   inDrops,
+		"outbound_fail_count":  outFails,
+		"outbound_retry_count": outRetries,
+		"sse_drop_count":       sseDrops,
+		"last_rx_ts":           rxStr,
+		"last_send_ts":         sendStr,
 	}
 	if visorPKErr != "" {
 		status["error"] = visorPKErr
