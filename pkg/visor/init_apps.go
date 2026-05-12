@@ -325,7 +325,7 @@ func (a *visorPingAdapter) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
 	return a.v.DialDmsgRPC(pk)
 }
 
-func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
+func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if v.conf.CLIAddr == "" {
 		v.log.Debug("'cli_addr' is not configured, skipping.")
 		return nil
@@ -402,6 +402,25 @@ func initCLI(_ context.Context, v *Visor, log *logging.Logger) error {
 					}
 				}
 			}()
+
+			// Skynet mirror of the gRPC server at the same port.
+			// authorizedDmsgListener wraps the skynet listener too —
+			// PK extraction uses the transport-agnostic remotePK
+			// helper, so the same whitelist enforcement runs on both
+			// transports.
+			goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgGRPCPort, "dmsg_grpc", dmsgGRPCLog,
+				func(skyLis net.Listener) {
+					authSky := &authorizedDmsgListener{
+						Listener:      skyLis,
+						authorizedPKs: authorizedPKs,
+						log:           dmsgGRPCLog,
+					}
+					if err := dmsgGRPCServer.Serve(authSky); err != nil &&
+						!errors.Is(err, net.ErrClosed) &&
+						!strings.Contains(err.Error(), "closed") {
+						dmsgGRPCLog.WithError(err).Debug("Skynet gRPC server exited")
+					}
+				})
 		}
 	}
 
@@ -661,7 +680,11 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 // authorizedDmsgListener wraps a net.Listener and rejects connections from
 // unauthorized PKs. Only PKs in the authorizedPKs map are allowed to connect.
-// This protects the DMSG gRPC server (gotop stats, etc.) from unauthorized access.
+// This protects the gRPC server (gotop stats, etc.) from unauthorized access.
+//
+// Works with both dmsg and skynet (appnet) listeners — PK extraction
+// uses the transport-agnostic remotePK helper. Despite the historical
+// "Dmsg" name, the same wrapper is used for the skynet mirror.
 type authorizedDmsgListener struct {
 	net.Listener
 	authorizedPKs map[cipher.PubKey]bool
@@ -675,25 +698,29 @@ func (l *authorizedDmsgListener) Accept() (net.Conn, error) {
 			return nil, err
 		}
 
-		// Extract remote PK from the DMSG stream
-		type dmsgAddrProvider interface {
-			RawRemoteAddr() dmsg.Addr
-		}
-		if stream, ok := conn.(dmsgAddrProvider); ok {
-			remotePK := stream.RawRemoteAddr().PK
-			if !l.authorizedPKs[remotePK] {
-				l.log.WithField("remote_pk", remotePK).Warn("Rejected unauthorized DMSG gRPC connection")
-				conn.Close() //nolint:errcheck,gosec
-				continue
+		pk, ok := remotePK(conn.RemoteAddr())
+		if !ok {
+			// Fall back to the dmsg-specific RawRemoteAddr() for older
+			// listener types that don't surface PK via RemoteAddr.
+			type dmsgAddrProvider interface {
+				RawRemoteAddr() dmsg.Addr
 			}
-			l.log.WithField("remote_pk", remotePK).Debug("Accepted authorized DMSG gRPC connection")
-		} else {
-			// Can't determine remote PK — reject by default
-			l.log.Warn("Rejected DMSG gRPC connection: unable to determine remote PK")
+			if stream, dmsgOK := conn.(dmsgAddrProvider); dmsgOK {
+				pk = stream.RawRemoteAddr().PK
+				ok = true
+			}
+		}
+		if !ok {
+			l.log.Warn("Rejected gRPC connection: unable to determine remote PK")
 			conn.Close() //nolint:errcheck,gosec
 			continue
 		}
-
+		if !l.authorizedPKs[pk] {
+			l.log.WithField("remote_pk", pk).Warn("Rejected unauthorized gRPC connection")
+			conn.Close() //nolint:errcheck,gosec
+			continue
+		}
+		l.log.WithField("remote_pk", pk).Debug("Accepted authorized gRPC connection")
 		return conn, nil
 	}
 }

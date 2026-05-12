@@ -218,6 +218,13 @@ func (t *Tracker) safeSample(now time.Time) {
 // sample is the per-tick body. Exposed for tests; callers pass the
 // "now" instant so behavior at day boundaries is exercisable without
 // sleeping.
+//
+// All bbolt mutations for this tick — transport records, tier/service
+// slot bitmaps, transport timeline bitmaps — go through a single
+// Store.UpdateSample transaction so the whole sample commits in one
+// fdatasync. Sink mirroring (CXO publisher Put) happens after the tx
+// commits, outside the bbolt critical section, so a slow sink doesn't
+// hold the write lock.
 func (t *Tracker) sample(now time.Time) {
 	utc := now.UTC()
 	today := utc.Format(dateFmt)
@@ -232,41 +239,66 @@ func (t *Tracker) sample(now time.Time) {
 		t.runRetention(utc)
 	}
 
-	if probe := t.probes.Transports; probe != nil {
-		for _, tp := range probe() {
-			if err := t.recordTransport(tp, utc, today); err != nil {
-				t.log.WithError(err).WithField("tp_id", tp.ID).
-					Debug("Failed to record transport sample")
+	// mirrors collects (path, bytes) tuples to push to the sink AFTER
+	// the bbolt tx commits. Reading the bitmaps requires the tx
+	// (post-mutation state), so we snapshot them inside and dispatch
+	// outside.
+	var mirrors []mirrorPair
+
+	txErr := t.store.UpdateSample(func(stx *SampleTx) error {
+		if probe := t.probes.Transports; probe != nil {
+			for _, tp := range probe() {
+				if pairs, err := t.recordTransportTx(stx, tp, utc, today); err != nil {
+					t.log.WithError(err).WithField("tp_id", tp.ID).
+						Debug("Failed to record transport sample")
+				} else {
+					mirrors = append(mirrors, pairs...)
+				}
 			}
 		}
+
+		if probe := t.probes.TierStates; probe != nil {
+			for tier, online := range probe() {
+				if !online {
+					continue
+				}
+				if err := stx.MarkTierSlot(tier, utc, slot); err != nil {
+					t.log.WithError(err).WithField("tier", tier).
+						Debug("Failed to mark tier slot")
+					continue
+				}
+				mirrors = append(mirrors, mirrorPair{
+					path: tierBitmapPath(tier, today),
+					data: stx.TierBitmap(tier, utc),
+				})
+			}
+		}
+
+		if probe := t.probes.ServiceStates; probe != nil {
+			for svc, online := range probe() {
+				if !online {
+					continue
+				}
+				if err := stx.MarkServiceSlot(svc, utc, slot); err != nil {
+					t.log.WithError(err).WithField("service", svc).
+						Debug("Failed to mark service slot")
+					continue
+				}
+				mirrors = append(mirrors, mirrorPair{
+					path: serviceBitmapPath(svc, today),
+					data: stx.ServiceBitmap(svc, utc),
+				})
+			}
+		}
+		return nil
+	})
+	if txErr != nil {
+		t.log.WithError(txErr).Debug("Stats: sample tx failed")
+		return
 	}
 
-	if probe := t.probes.TierStates; probe != nil {
-		for tier, online := range probe() {
-			if !online {
-				continue
-			}
-			if err := t.store.MarkTierSlot(tier, utc, slot); err != nil {
-				t.log.WithError(err).WithField("tier", tier).
-					Debug("Failed to mark tier slot")
-				continue
-			}
-			t.mirrorTierBitmap(tier, utc)
-		}
-	}
-
-	if probe := t.probes.ServiceStates; probe != nil {
-		for svc, online := range probe() {
-			if !online {
-				continue
-			}
-			if err := t.store.MarkServiceSlot(svc, utc, slot); err != nil {
-				t.log.WithError(err).WithField("service", svc).
-					Debug("Failed to mark service slot")
-				continue
-			}
-			t.mirrorServiceBitmap(svc, utc)
-		}
+	for _, m := range mirrors {
+		t.sinkPut(m.path, m.data)
 	}
 }
 
@@ -274,25 +306,6 @@ func (t *Tracker) sample(now time.Time) {
 // Called from sample after MarkTierSlot succeeds. Errors are logged
 // at debug level — sink mirroring is best-effort and must not block
 // the sampler.
-func (t *Tracker) mirrorTierBitmap(tier string, now time.Time) {
-	bm, err := t.store.TierBitmap(tier, now)
-	if err != nil {
-		t.log.WithError(err).WithField("tier", tier).Debug("Stats: tier bitmap read failed")
-		return
-	}
-	t.sinkPut(tierBitmapPath(tier, now.UTC().Format(dateFmt)), bm)
-}
-
-// mirrorServiceBitmap is the per-service analog of mirrorTierBitmap.
-func (t *Tracker) mirrorServiceBitmap(svc string, now time.Time) {
-	bm, err := t.store.ServiceBitmap(svc, now)
-	if err != nil {
-		t.log.WithError(err).WithField("service", svc).Debug("Stats: service bitmap read failed")
-		return
-	}
-	t.sinkPut(serviceBitmapPath(svc, now.UTC().Format(dateFmt)), bm)
-}
-
 // sinkPut snapshots the sink under the lock and dispatches the put
 // outside it, so a slow sink doesn't pin the sample loop's mutex.
 func (t *Tracker) sinkPut(path string, value []byte) {
@@ -310,10 +323,20 @@ func (t *Tracker) sinkDelete(path string) {
 	sink.Delete(path)
 }
 
-func (t *Tracker) recordTransport(tp TransportProbe, now time.Time, today string) error {
-	rec, err := t.store.GetTransportRecord(tp.ID)
+// recordTransportTx is the in-tx variant of recordTransport. Reads
+// the existing record, merges the new probe, writes back, marks the
+// timeline bit, and reads the post-update bitmap — all under the
+// caller's SampleTx. Returns the list of (path, bytes) mirror pairs
+// the caller should push to the sink after the tx commits.
+type mirrorPair = struct {
+	path string
+	data []byte
+}
+
+func (t *Tracker) recordTransportTx(stx *SampleTx, tp TransportProbe, now time.Time, today string) ([]mirrorPair, error) {
+	rec, err := stx.GetTransportRecord(tp.ID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if rec == nil {
 		rec = &TransportRecord{
@@ -338,9 +361,6 @@ func (t *Tracker) recordTransport(tp TransportProbe, now time.Time, today string
 	t.mu.Lock()
 	base, ok := t.baselines[tp.ID]
 	if !ok || base.day != today {
-		// New day or first sample for this transport: anchor today's
-		// baseline at the current cumulative counters. The first
-		// daily-row delta will be 0; subsequent samples accumulate.
 		base = bandwidthBaseline{day: today, sent: tp.SentBytes, recv: tp.RecvBytes}
 		t.baselines[tp.ID] = base
 	}
@@ -361,34 +381,30 @@ func (t *Tracker) recordTransport(tp TransportProbe, now time.Time, today string
 	mergeLatency(row, tp.LatencyMS)
 	row.Samples++
 
-	if err := t.store.PutTransportRecord(rec); err != nil {
-		return err
+	if err := stx.PutTransportRecord(rec); err != nil {
+		return nil, err
 	}
 
-	// Mirror to sink after the durable write succeeds. Use JSON for
-	// transport entries (matches the wire shape served by the
-	// /stats/transports/history HTTP endpoint).
+	var mirrors []mirrorPair
 	idStr := tp.ID.String()
 	if data, err := json.Marshal(rec.Current); err == nil {
-		t.sinkPut(currentTransportPath(idStr), data)
+		mirrors = append(mirrors, mirrorPair{path: currentTransportPath(idStr), data: data})
 	}
 	if data, err := json.Marshal(row); err == nil {
-		t.sinkPut(dailyTransportPath(idStr, today), data)
+		mirrors = append(mirrors, mirrorPair{path: dailyTransportPath(idStr, today), data: data})
 	}
 
-	// Per-transport uptime bitmap: set this tick's 5-min slot and
-	// mirror the post-update bitmap. CXO content-addressing means an
-	// unchanged bitmap (subsequent ticks within the same slot)
-	// produces a stable Root and no wire republish — only slot
-	// rollovers actually transit DMSG.
 	slot := SlotForTime(now)
-	if err := t.store.MarkTransportSlot(idStr, now, slot); err != nil {
+	if err := stx.MarkTransportSlot(idStr, now, slot); err != nil {
 		t.log.WithError(err).WithField("tp_id", idStr).
 			Debug("Stats: MarkTransportSlot failed")
-	} else if bm, bErr := t.store.TransportBitmap(idStr, now); bErr == nil {
-		t.sinkPut(transportTimelinePath(idStr, today), bm)
+	} else {
+		mirrors = append(mirrors, mirrorPair{
+			path: transportTimelinePath(idStr, today),
+			data: stx.TransportBitmap(idStr, now),
+		})
 	}
-	return nil
+	return mirrors, nil
 }
 
 // findOrAppendDaily returns a pointer to today's daily row, creating
