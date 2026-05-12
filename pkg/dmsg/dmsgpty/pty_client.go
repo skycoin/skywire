@@ -115,6 +115,26 @@ func (sc *PtyClient) Start(name string, env []string, arg ...string) error {
 	}, &empty)
 }
 
+// Exec runs a one-shot command on the remote host without a PTY.
+// Same trust model as Start; see exec_gateway.go for the cap +
+// timeout semantics. Returns the captured stdout/stderr/exit-code
+// in the response; a non-nil error here means the RPC itself
+// failed, NOT that the remote command exited non-zero (check
+// resp.ExitCode and resp.TimedOut for that).
+func (sc *PtyClient) Exec(req *CommandExecReq) (*CommandExecResult, error) {
+	var resp CommandExecResult
+	if err := sc.call("Exec", req, &resp); err != nil {
+		return nil, processRPCError(err)
+	}
+	return &resp, nil
+}
+
+// execCall is the proxy-side hop used by ProxiedPtyGateway.Exec —
+// forwards the request through this client's RPC connection.
+func (sc *PtyClient) execCall(req *CommandExecReq, resp *CommandExecResult) error {
+	return sc.call("Exec", req, resp)
+}
+
 // StartWithSize starts the pty with a specified size and optional environment variables.
 func (sc *PtyClient) StartWithSize(name string, arg []string, c *WinSize, env []string) error {
 	return sc.call("Start", &CommandReq{Name: name, Arg: arg, Size: c, Env: env}, &empty)
