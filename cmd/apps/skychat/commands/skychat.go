@@ -501,11 +501,16 @@ func handleConn(conn *framedConn) {
 		// inbound just as it can filter outbound. Without this, SSE
 		// events for incoming messages carry no transport tag and any
 		// consumer-side --net filter drops them all.
+		//
+		// "dir" is a string ("in"|"out"|... future "relay"|"group-in"|
+		// "group-out") rather than an "outgoing" bool so the schema
+		// stays extensible as group / relay flows land without a
+		// breaking wire-version bump.
 		clientMsg, err := json.Marshal(map[string]interface{}{
-			"sender":   peerPK,
-			"message":  text,
-			"network":  string(raddr.Net),
-			"outgoing": false,
+			"sender":  peerPK,
+			"message": text,
+			"network": string(raddr.Net),
+			"dir":     "in",
 		})
 		if err != nil {
 			appLog("Failed to marshal json: %v", err)
@@ -619,15 +624,25 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		// renders both directions natively; this brings parity to the
 		// listen-on-the-CLI use case.
 		//
+		// IMPORTANT: dir="out" means "WriteFrame returned without
+		// error" — i.e. the framed payload was handed to the
+		// underlying skywire conn. It does NOT mean the peer's
+		// chat-app received or processed the message. Peer-app
+		// receipt-ack is a deferred protocol feature (msg-id +
+		// chat-ack envelope frame type); consumers should not treat
+		// dir:out as delivery confirmation.
+		//
 		// The "sender" field carries the RECIPIENT'S PK here (per-peer
 		// thread routing on the consumer's side stays keyed by the
-		// remote PK regardless of direction), with "outgoing":true so
-		// consumers can distinguish self-sends from peer messages.
+		// remote PK regardless of direction). dir distinguishes
+		// directionality (string, not bool, for extensibility — future
+		// relay/group flows can emit "relay" / "group-in" /
+		// "group-out" without a wire-schema bump).
 		mirrorMsg, mErr := json.Marshal(map[string]interface{}{
-			"sender":   pk.Hex(),
-			"message":  data["message"],
-			"network":  string(netType),
-			"outgoing": true,
+			"sender":  pk.Hex(),
+			"message": data["message"],
+			"network": string(netType),
+			"dir":     "out",
 		})
 		if mErr == nil {
 			hub.broadcast(string(mirrorMsg))

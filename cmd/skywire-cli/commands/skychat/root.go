@@ -147,14 +147,28 @@ restarts). Exit with Ctrl+C.
 
 Output modes:
   text (default): one line per event, format "[sender[/net]] body" for
-    messages; reconnect errors to stderr.
+    inbound messages, "[>sender[/net]] body" for outbound mirrors and
+    other non-inbound directions; reconnect errors to stderr.
   --json: one JSON object per stdout line (NDJSON). Event types:
     {"type":"banner",...}    once at startup (addr + filter context)
-    {"type":"msg",...}       a message from a peer; fields: ts, from, net, body, dir
+    {"type":"msg",...}       a message; fields: ts, from, net, body, dir
     {"type":"reconnect",...} SSE stream is being re-opened; fields: ts, err, delay_ms
     {"type":"error",...}     unparseable / unexpected; fields: ts, err
     Errors do NOT go to stderr in JSON mode — every signal is on stdout
     with a "type" tag so consumers can demux without merging two streams.
+
+Direction field ("dir") on msg events:
+  "in"   — message received from a peer.
+  "out"  — local visor sent the message; mirror surfaced so headless
+           listeners see a complete transcript. NOTE: "out" means the
+           framed payload was handed to the skywire transport (WriteFrame
+           returned without error). It does NOT mean the peer's chat-app
+           has received or processed the message. Peer-app receipt-ack
+           is a deferred protocol feature (msg-id + chat-ack envelope);
+           do not treat "dir":"out" as delivery confirmation.
+  Future values ("relay", "group-in", "group-out") may appear as group
+  and relay flows land; consumers should treat unknown dir values as
+  non-inbound rather than rejecting them.
 
 Filters:
   --net   skynet|dmsg      surface only that transport's messages
@@ -326,10 +340,10 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 		}
 		data := strings.TrimPrefix(line, "data: ")
 		var msg struct {
-			Sender   string `json:"sender"`
-			Message  string `json:"message"`
-			Network  string `json:"network,omitempty"`
-			Outgoing bool   `json:"outgoing,omitempty"`
+			Sender  string `json:"sender"`
+			Message string `json:"message"`
+			Network string `json:"network,omitempty"`
+			Dir     string `json:"dir,omitempty"` // "in" | "out" | future: "relay" | "group-in" | "group-out"
 		}
 		if err := json.Unmarshal([]byte(data), &msg); err != nil {
 			if jsonMode {
@@ -350,11 +364,14 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 			continue
 		}
 
+		// dir defaults to "in" for back-compat with older skychat-app
+		// servers that emit SSE events without a dir field at all.
+		dir := msg.Dir
+		if dir == "" {
+			dir = "in"
+		}
+
 		if jsonMode {
-			dir := "in"
-			if msg.Outgoing {
-				dir = "out"
-			}
 			emitJSON(out, listenEvent{
 				Type: evtMsg,
 				TS:   time.Now().UTC(),
@@ -368,8 +385,12 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 			if msg.Network != "" {
 				netSuffix = "/" + msg.Network
 			}
+			// ">" marks anything that ISN'T a normal inbound event —
+			// outgoing-mirror, future relay/group flows. Keeps text
+			// mode's one-line format readable while distinguishing
+			// the common-case "in" from everything else.
 			dirPrefix := ""
-			if msg.Outgoing {
+			if dir != "in" {
 				dirPrefix = ">"
 			}
 			fmt.Fprintf(out, "[%s%s%s] %s\n", dirPrefix, msg.Sender, netSuffix, msg.Message) //nolint:errcheck
