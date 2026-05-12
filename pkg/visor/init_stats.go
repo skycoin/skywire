@@ -171,10 +171,23 @@ func buildStatsPublisher(v *Visor, log *logging.Logger) (*treestore.Publisher, s
 		return nil, nil
 	}
 	dataDir := filepath.Join(v.conf.LocalPath, "cxo-stats")
+	// BatchWindow of 10s coalesces stat mutations into ~6 bbolt
+	// commits per minute on this publisher (one per window),
+	// down from ~60 with the previous 1s setting. Stats are sampled
+	// at 1-minute intervals (see stats.Tracker.SampleInterval), so a
+	// 10s publish window introduces no observable freshness loss for
+	// subscribers while cutting fsync amplification on the CXO
+	// datastore by an order of magnitude — meaningful for visors
+	// running on microSD or other write-sensitive media.
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
-		BatchWindow: 1 * time.Second,
+		BatchWindow: 10 * time.Second,
 		Logger:      log,
 		DataDir:     dataDir,
+		// Stats CXDS is content-addressed cache; the in-memory tree
+		// (regenerated from stats.db on each restart) authoritatively
+		// owns the value set. Skipping per-tx fdatasync removes the
+		// dominant write source identified in the visor's I/O profile.
+		NoSyncCXDS: true,
 	})
 	if err != nil {
 		log.WithError(err).Warn("Stats: CXO publisher init failed; continuing without push")

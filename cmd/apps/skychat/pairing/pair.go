@@ -142,6 +142,11 @@ func Open(cfg Config) (*Pair, error) {
 		DataDir:             filepath.Join(cfg.DataDir, "pair", peerHex),
 		DmsgPort:            port,
 		SubscriberAllowlist: []cipher.PubKey{cfg.PeerPK},
+		// Pair messages are content-addressed and replayed on rejoin
+		// from the persistent pair store — losing a torn write at
+		// crash time costs at most one batch of un-acked messages,
+		// recoverable on the next sync.
+		NoSyncCXDS: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pairing: Open: build publisher: %w", err)
