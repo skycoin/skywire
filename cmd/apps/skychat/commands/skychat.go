@@ -497,7 +497,16 @@ func handleConn(conn *framedConn) {
 			Timestamp: time.Now().UTC(),
 		})
 
-		clientMsg, err := json.Marshal(map[string]string{"sender": peerPK, "message": text})
+		// Include the network field so listen --net can filter
+		// inbound just as it can filter outbound. Without this, SSE
+		// events for incoming messages carry no transport tag and any
+		// consumer-side --net filter drops them all.
+		clientMsg, err := json.Marshal(map[string]interface{}{
+			"sender":   peerPK,
+			"message":  text,
+			"network":  string(raddr.Net),
+			"outgoing": false,
+		})
 		if err != nil {
 			appLog("Failed to marshal json: %v", err)
 		}
@@ -602,6 +611,27 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			Text:      data["message"],
 			Timestamp: time.Now().UTC(),
 		})
+
+		// Mirror the outgoing message into the SSE stream so headless
+		// listeners (skywire-cli skychat listen) see a complete
+		// transcript without having to scrape send invocations and
+		// merge by timestamp. The TUI's bidirectional view already
+		// renders both directions natively; this brings parity to the
+		// listen-on-the-CLI use case.
+		//
+		// The "sender" field carries the RECIPIENT'S PK here (per-peer
+		// thread routing on the consumer's side stays keyed by the
+		// remote PK regardless of direction), with "outgoing":true so
+		// consumers can distinguish self-sends from peer messages.
+		mirrorMsg, mErr := json.Marshal(map[string]interface{}{
+			"sender":   pk.Hex(),
+			"message":  data["message"],
+			"network":  string(netType),
+			"outgoing": true,
+		})
+		if mErr == nil {
+			hub.broadcast(string(mirrorMsg))
+		}
 	}
 }
 
