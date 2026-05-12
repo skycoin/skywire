@@ -60,7 +60,25 @@ func getDefaultRPCAddr() string {
 //   - "localhost:3435" (default) — direct TCP to local visor
 //   - "tp://<pk>" via --rpc flag — proxy through local visor's transport to remote visor
 //   - VisorPK via --visor flag — connect over DMSG
+//
+// On dial failure, prints the error to stderr via internal.PrintError
+// so one-shot callers see the cause. Long-running reconnect loops
+// (group listen, skychat listen) should use ClientQuiet to suppress
+// per-retry spam.
 func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
+	return clientImpl(cmdFlags, false)
+}
+
+// ClientQuiet is the silent variant of Client. On dial failure it
+// returns the error WITHOUT printing to stderr. Use this from any
+// callsite that retries on failure (a noisy loop spamming the same
+// "RPC connection failed" line is worse than no message at all —
+// the caller knows the dial failed because err is non-nil).
+func ClientQuiet(cmdFlags *pflag.FlagSet) (visor.API, error) {
+	return clientImpl(cmdFlags, true)
+}
+
+func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 	// If VisorPK is provided, use dmsg connection
 	if VisorPK != "" {
 		return DmsgClient(cmdFlags)
@@ -68,10 +86,12 @@ func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 
 	// Check for tp:// scheme — transport proxy through local visor
 	if strings.HasPrefix(Addr, "tp://") {
-		internal.PrintError(cmdFlags, fmt.Errorf(
-			"tp:// scheme detected. Use 'skywire cli visor tp-rpc %s <method>' instead.\n"+
-				"Example: skywire cli visor tp-rpc %s Overview",
-			Addr[5:], Addr[5:]))
+		if !quiet {
+			internal.PrintError(cmdFlags, fmt.Errorf(
+				"tp:// scheme detected. Use 'skywire cli visor tp-rpc %s <method>' instead.\n"+
+					"Example: skywire cli visor tp-rpc %s Overview",
+				Addr[5:], Addr[5:]))
+		}
 		return nil, fmt.Errorf("tp:// not supported as --rpc address; use 'visor tp-rpc' command")
 	}
 
@@ -79,7 +99,9 @@ func Client(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", Addr, rpcDialTimeout)
 	if err != nil {
-		internal.PrintError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
+		if !quiet {
+			internal.PrintError(cmdFlags, fmt.Errorf("RPC connection failed; is skywire running?: %v", err))
+		}
 		return nil, err
 	}
 	// Timeout of 0 means unlimited
