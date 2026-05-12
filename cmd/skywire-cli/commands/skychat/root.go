@@ -16,7 +16,6 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
-	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 var (
@@ -49,6 +48,7 @@ func init() {
 		chatCmd,
 		historyCmd,
 		statusCmd,
+		aliasCmd,
 	)
 
 	sendCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (required)")
@@ -107,9 +107,9 @@ chat-app to send a chat-ack envelope back. Outcomes:
 Server clamps --wait to [100ms, 60s]. Values outside that range
 are normalized server-side.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		var pk cipher.PubKey
-		if err := pk.Set(recipient); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid recipient public key %q: %w", recipient, err))
+		pk, err := resolveTarget(recipient)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		if err := validateNetwork(sendNet); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -161,10 +161,11 @@ Returns an error if the chat-app has persistence disabled.`,
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--limit must be 1-1000, got %d", historyLimit))
 		}
 		if historyPeer != "" {
-			var pk cipher.PubKey
-			if err := pk.Set(historyPeer); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --peer public key %q: %w", historyPeer, err))
+			pk, err := resolveTarget(historyPeer)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--peer: %w", err))
 			}
+			historyPeer = pk.Hex()
 		}
 		var sinceCutoff time.Time
 		if historySince != "" {
@@ -235,7 +236,11 @@ Returns an error if the chat-app has persistence disabled.`,
 				if m.Outgoing {
 					dir = "out"
 				}
-				fmt.Fprintf(out, "%s [%s @ %s] %s\n", m.Timestamp.UTC().Format(time.RFC3339), dir, m.Peer, m.Text) //nolint:errcheck
+				peerDisplay := m.Peer
+				if alias := lookupAlias(m.Peer); alias != "" {
+					peerDisplay = alias
+				}
+				fmt.Fprintf(out, "%s [%s @ %s] %s\n", m.Timestamp.UTC().Format(time.RFC3339), dir, peerDisplay, m.Text) //nolint:errcheck
 			}
 		}
 	},
@@ -466,13 +471,14 @@ Filters:
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
 		}
-		// --from must be a valid full-hex PK if supplied; reject early
-		// rather than silently never matching.
-		var fromFilter cipher.PubKey
+		// --from accepts either a 66-hex PK or an alias name. Resolve
+		// up front and convert to the canonical hex form server-side.
 		if listenFrom != "" {
-			if err := fromFilter.Set(listenFrom); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --from public key %q: %w", listenFrom, err))
+			pk, err := resolveTarget(listenFrom)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--from: %w", err))
 			}
+			listenFrom = pk.Hex()
 		}
 
 		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
@@ -562,13 +568,15 @@ type listenEvent struct {
 	Schema string `json:"schema,omitempty"` // listen-output schema version (currently "v1")
 
 	// Msg-only.
-	ID   string `json:"id,omitempty"`   // stable per-event identifier; used by send-ack to correlate
-	From string `json:"from,omitempty"` // local side: own PK on dir:out, peer PK on dir:in
-	To   string `json:"to,omitempty"`   // dir:out only — peer the message was sent to
-	Net  string `json:"net,omitempty"`
-	Body string `json:"body,omitempty"`
-	Dir  string `json:"dir,omitempty"` // "in" | "out" | future: "relay" | "group-in" | "group-out"
-	Len  int    `json:"len,omitempty"` // body byte length, surfaced for size-debug w/o re-parsing
+	ID        string `json:"id,omitempty"`         // stable per-event identifier; used by send-ack to correlate
+	From      string `json:"from,omitempty"`       // local side: own PK on dir:out, peer PK on dir:in
+	FromAlias string `json:"from_alias,omitempty"` // resolved alias for From (consumer-side, best-effort)
+	To        string `json:"to,omitempty"`         // dir:out only — peer the message was sent to
+	ToAlias   string `json:"to_alias,omitempty"`   // resolved alias for To (consumer-side, best-effort)
+	Net       string `json:"net,omitempty"`
+	Body      string `json:"body,omitempty"`
+	Dir       string `json:"dir,omitempty"` // "in" | "out" | future: "relay" | "group-in" | "group-out"
+	Len       int    `json:"len,omitempty"` // body byte length, surfaced for size-debug w/o re-parsing
 
 	// Reconnect / error.
 	Err     string `json:"err,omitempty"`
@@ -667,7 +675,7 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 		}
 
 		if jsonMode {
-			emitJSON(out, listenEvent{
+			ev := listenEvent{
 				Type: evtMsg,
 				TS:   time.Now().UTC(),
 				ID:   msg.ID,
@@ -677,7 +685,18 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 				Body: msg.Message,
 				Dir:  dir,
 				Len:  msg.Len,
-			})
+			}
+			// Best-effort alias resolution: if the local addressbook
+			// has a name for the PK, surface it as a sibling field so
+			// scripted consumers can pretty-print without re-querying.
+			// Empty when unknown — never blocks or errors.
+			if alias := lookupAlias(msg.Sender); alias != "" {
+				ev.FromAlias = alias
+			}
+			if alias := lookupAlias(msg.To); alias != "" {
+				ev.ToAlias = alias
+			}
+			emitJSON(out, ev)
 		} else {
 			netSuffix := ""
 			if msg.Network != "" {
@@ -691,7 +710,13 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 			if dir != "in" {
 				dirPrefix = ">"
 			}
-			fmt.Fprintf(out, "[%s%s%s] %s\n", dirPrefix, msg.Sender, netSuffix, msg.Message) //nolint:errcheck
+			// Reverse-resolve the sender PK to a friendlier alias for
+			// display. Falls back to the hex PK when no alias matches.
+			display := msg.Sender
+			if alias := lookupAlias(msg.Sender); alias != "" {
+				display = alias
+			}
+			fmt.Fprintf(out, "[%s%s%s] %s\n", dirPrefix, display, netSuffix, msg.Message) //nolint:errcheck
 		}
 	}
 	// scanner.Err() returns nil on a clean EOF; io.EOF /
