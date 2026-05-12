@@ -132,6 +132,15 @@ type Session struct {
 	// seq disambiguates messages with the same nanosecond timestamp.
 	seq atomic.Uint64
 
+	// membersMu guards live updates to the owner-side member
+	// allowlist used by isMember (the relay-side gate). Open seeds
+	// it from cfg.Record.Members; SetAllowlist replaces it. The
+	// CXO subscriber-side allowlist on pub is a separate state
+	// living in publisher.allowState — kept in sync but accessed
+	// through different code paths, so both need updating.
+	membersMu sync.RWMutex
+	members   []cipher.PubKey
+
 	handler MessageHandler
 	log     *logging.Logger
 }
@@ -234,6 +243,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, log: log,
+		members:  append([]cipher.PubKey(nil), cfg.Record.Members...),
 		relayCtx: ctx, relayCancel: cancel,
 	}
 	if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
@@ -337,14 +347,34 @@ func (s *Session) Send(text string) error {
 	return s.publishAs(s.cfg.MyPK, text, time.Now().UTC())
 }
 
-// SetAllowlist updates the publisher's subscriber allowlist to the
-// given member set. Owner-side only. Used when an invite is issued
-// or a member is removed.
+// SetAllowlist updates the publisher's subscriber allowlist AND the
+// owner-side relay-gate's view of the member set, both live. Owner-
+// side only. Used when an invite is issued or a member is removed.
+//
+// Two gates that both need refreshing:
+//
+//   - publisher's CXO subscriber allowlist (s.pub.SetAllowlist) —
+//     gates who can SUBSCRIBE to the CXO feed.
+//   - relay-side isMember check (s.members) — gates who the relay
+//     listener accepts framed RelayMessage envelopes from.
+//
+// Pre-fix, only the publisher side was refreshed; s.members was
+// frozen at Open from cfg.Record.Members. A member added AFTER Open
+// could subscribe to the feed (publisher accepted them), but their
+// SubmitToOwner frames hit the relay listener and got rejected with
+// "sender not in allowlist" because isMember walked the stale list.
+// Visible symptom: member sends silently dropped on the owner; the
+// member's local Record.Members showing the original allowlist while
+// the owner had since added more peers.
 func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 	if s.pub == nil || s.cfg.Record.Role != RoleOwner {
 		return errors.New("group: SetAllowlist: only owner-role sessions have an allowlist")
 	}
+	snap := append([]cipher.PubKey(nil), members...)
 	s.pub.SetAllowlist(append([]cipher.PubKey(nil), members...))
+	s.membersMu.Lock()
+	s.members = snap
+	s.membersMu.Unlock()
 	return nil
 }
 
@@ -503,8 +533,17 @@ func (s *Session) handleRelay(c net.Conn) {
 // allowlist. Owner is implicitly a member (uniqueWithSelf put them
 // there at Create time) so an owner-side echo through the relay
 // also validates cleanly.
+//
+// Reads the live s.members list (seeded from cfg.Record.Members at
+// Open, refreshed by SetAllowlist on AddMember/RemoveMember). The
+// stale cfg.Record.Members snapshot is not consulted here — that's
+// the bug 02f9aa58 caught: a peer added AFTER Open would otherwise
+// be silently rejected at the relay gate while passing the CXO
+// subscriber-side allowlist gate.
 func (s *Session) isMember(pk cipher.PubKey) bool {
-	for _, m := range s.cfg.Record.Members {
+	s.membersMu.RLock()
+	defer s.membersMu.RUnlock()
+	for _, m := range s.members {
 		if m == pk {
 			return true
 		}
