@@ -40,6 +40,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -668,6 +669,81 @@ func writeFrame(c net.Conn, payload []byte) error {
 	}
 	_, err := c.Write(payload)
 	return err
+}
+
+// ReplayHistoryThrough pumps the last `cap` messages from this
+// session's persistent tree through the given handler. Owner-role
+// sessions read from the publisher's local tree; member-role
+// sessions read from the subscriber's synced tree. Empty or
+// uninitialized sessions are no-ops.
+//
+// Best-effort: per-leaf decode / decrypt failures are silently
+// skipped (consistent with onUpdate's policy — a torn leaf
+// shouldn't block the rest of replay).
+//
+// The cap clamps the tail of chronological order: leaves whose
+// path encodes a later timestamp win when more than `cap` exist.
+// Path layout MessagePathPrefix/<ts-nano>/<seq> sorts lexically =
+// chronologically, so a simple sort + tail does the job.
+func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
+	if handler == nil || cap <= 0 {
+		return
+	}
+	type leaf struct {
+		path  string
+		value []byte
+	}
+	var leaves []leaf
+	walk := func(path string, value []byte) bool {
+		// Defensive copy: tree-store Walk may reuse the value
+		// slice between callback invocations.
+		v := make([]byte, len(value))
+		copy(v, value)
+		leaves = append(leaves, leaf{path: path, value: v})
+		return true
+	}
+	switch s.cfg.Record.Role {
+	case RoleOwner:
+		if s.pub != nil {
+			s.pub.Walk(MessagePathPrefix, walk)
+		}
+	case RoleMember:
+		if s.sub != nil {
+			s.sub.Walk(MessagePathPrefix, walk)
+		}
+	default:
+		return
+	}
+	if len(leaves) == 0 {
+		return
+	}
+	sort.Slice(leaves, func(i, j int) bool {
+		return leaves[i].path < leaves[j].path
+	})
+	start := 0
+	if len(leaves) > cap {
+		start = len(leaves) - cap
+	}
+	for _, l := range leaves[start:] {
+		var msg Message
+		if err := json.Unmarshal(l.value, &msg); err != nil {
+			s.log.WithError(err).WithField("path", l.path).
+				Debug("group: replay: undecodable leaf, skipping")
+			continue
+		}
+		if s.cfg.Record.Mode == ModePrivate && len(msg.Ciphertext) > 0 {
+			plain, dErr := Decrypt(s.cfg.Record.AESKey, msg.Ciphertext, msg.Nonce)
+			if dErr != nil {
+				s.log.WithError(dErr).WithField("path", l.path).
+					Debug("group: replay: decrypt failed, skipping")
+				continue
+			}
+			msg.Text = string(plain)
+			msg.Ciphertext = nil
+			msg.Nonce = nil
+		}
+		handler(s.cfg.Record.ID, msg.SenderPK, msg)
+	}
 }
 
 // onUpdate is the subscriber callback for member-role sessions.
