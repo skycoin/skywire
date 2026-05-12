@@ -48,14 +48,15 @@ transitions to chat. Incoming messages from any sender still
 appear in history.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Empty recipient is allowed: the TUI prompts for it.
-		// Anything non-empty must parse as a valid PK up front so
-		// a typo on the command line surfaces immediately rather
-		// than after the TUI takes over the terminal.
+		// Anything non-empty must parse as a valid PK or a known
+		// alias up front so a typo on the command line surfaces
+		// immediately rather than after the TUI takes over the
+		// terminal.
 		recipientPK := ""
 		if recipient != "" {
-			var pk cipher.PubKey
-			if err := pk.Set(recipient); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --to public key %q: %w", recipient, err))
+			pk, err := resolveTarget(recipient)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--to: %w", err))
 			}
 			recipientPK = pk.String()
 		}
