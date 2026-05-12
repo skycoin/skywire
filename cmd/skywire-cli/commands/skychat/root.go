@@ -31,8 +31,9 @@ var (
 	// — sendCmd's default of "skynet" was clobbered by listenCmd's
 	// default of "", and `skychat send -t X -m hi` (no --net)
 	// surfaced "invalid network type:" because the var was empty.
-	sendNet   string
-	listenNet string
+	sendNet    string
+	listenNet  string
+	listenFrom string
 )
 
 func init() {
@@ -51,6 +52,7 @@ func init() {
 	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
 
 	listenCmd.Flags().StringVarP(&listenNet, "net", "n", "", "filter by network type (optional; default = all)")
+	listenCmd.Flags().StringVar(&listenFrom, "from", "", "filter by sender public key (optional; full hex PK)")
 
 	chatCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (optional; TUI prompts for it if omitted)")
 	chatCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type for outgoing messages: skynet or dmsg")
@@ -141,23 +143,79 @@ var listenCmd = &cobra.Command{
 	Long: `Connect to skychat SSE endpoint and display incoming messages.
 
 Reconnects automatically when the connection drops (e.g. the visor
-restarts). Exit with Ctrl+C.`,
+restarts). Exit with Ctrl+C.
+
+Output modes:
+  text (default): one line per event, format "[sender[/net]] body" for
+    inbound messages, "[>sender[/net]] body" for outbound mirrors and
+    other non-inbound directions; reconnect errors to stderr.
+  --json: one JSON object per stdout line (NDJSON). Event types:
+    {"type":"banner",...}    once at startup (addr + filter context)
+    {"type":"msg",...}       a message; fields: ts, from, net, body, dir
+    {"type":"reconnect",...} SSE stream is being re-opened; fields: ts, err, delay_ms
+    {"type":"error",...}     unparseable / unexpected; fields: ts, err
+    Errors do NOT go to stderr in JSON mode — every signal is on stdout
+    with a "type" tag so consumers can demux without merging two streams.
+
+Direction field ("dir") on msg events:
+  "in"   — message received from a peer.
+  "out"  — local visor sent the message; mirror surfaced so headless
+           listeners see a complete transcript. NOTE: "out" means the
+           framed payload was handed to the skywire transport (WriteFrame
+           returned without error). It does NOT mean the peer's chat-app
+           has received or processed the message. Peer-app receipt-ack
+           is a deferred protocol feature (msg-id + chat-ack envelope);
+           do not treat "dir":"out" as delivery confirmation.
+  Future values ("relay", "group-in", "group-out") may appear as group
+  and relay flows land; consumers should treat unknown dir values as
+  non-inbound rather than rejecting them.
+
+Filters:
+  --net   skynet|dmsg      surface only that transport's messages
+  --from  <PK hex>         surface only this sender (handy for N-way
+                           channels; filter applies before output)`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Empty listenNet means "all"; if set, only print messages
 		// whose network field matches.
-		filter := listenNet
-		if filter != "" {
-			if err := validateNetwork(filter); err != nil {
+		netFilter := listenNet
+		if netFilter != "" {
+			if err := validateNetwork(netFilter); err != nil {
 				internal.PrintFatalError(cmd.Flags(), err)
 			}
 		}
+		// --from must be a valid full-hex PK if supplied; reject early
+		// rather than silently never matching.
+		var fromFilter cipher.PubKey
+		if listenFrom != "" {
+			if err := fromFilter.Set(listenFrom); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --from public key %q: %w", listenFrom, err))
+			}
+		}
+
+		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		out := cmd.OutOrStdout()
+		errOut := cmd.ErrOrStderr()
 
 		url := fmt.Sprintf("http://%s/sse", httpAddr)
-		fmt.Printf("Listening for messages from %s", httpAddr)
-		if filter != "" {
-			fmt.Printf(" (filter: %s)", filter)
+
+		if jsonMode {
+			emitJSON(out, listenEvent{
+				Type: evtBanner,
+				TS:   time.Now().UTC(),
+				Addr: httpAddr,
+				Net:  netFilter,
+				From: listenFrom,
+			})
+		} else {
+			fmt.Fprintf(out, "Listening for messages from %s", httpAddr) //nolint:errcheck
+			if netFilter != "" {
+				fmt.Fprintf(out, " (net=%s)", netFilter) //nolint:errcheck
+			}
+			if listenFrom != "" {
+				fmt.Fprintf(out, " (from=%s)", listenFrom) //nolint:errcheck
+			}
+			fmt.Fprint(out, "\nPress Ctrl+C to stop\n\n") //nolint:errcheck
 		}
-		fmt.Print("\nPress Ctrl+C to stop\n\n")
 
 		ctx := cmd.Context()
 		if ctx == nil {
@@ -166,7 +224,7 @@ restarts). Exit with Ctrl+C.`,
 
 		delay := minReconnectDelay
 		for {
-			err := streamSSEOnce(ctx, url, filter)
+			err := streamSSEOnce(ctx, out, url, netFilter, listenFrom, jsonMode)
 			if ctx.Err() != nil {
 				// Caller hit Ctrl+C; exit cleanly.
 				return
@@ -176,8 +234,16 @@ restarts). Exit with Ctrl+C.`,
 				// reconnect prompt rather than an error.
 				delay = minReconnectDelay
 			} else {
-				fmt.Fprintf(cmd.ErrOrStderr(), //nolint:errcheck
-					"skychat listen: %v (reconnecting in %s)\n", err, delay)
+				if jsonMode {
+					emitJSON(out, listenEvent{
+						Type:    evtReconnect,
+						TS:      time.Now().UTC(),
+						Err:     err.Error(),
+						DelayMS: delay.Milliseconds(),
+					})
+				} else {
+					fmt.Fprintf(errOut, "skychat listen: %v (reconnecting in %s)\n", err, delay) //nolint:errcheck
+				}
 			}
 
 			// Sleep before retry, but honor Ctrl+C while sleeping.
@@ -198,11 +264,56 @@ restarts). Exit with Ctrl+C.`,
 	},
 }
 
+// listenEvent is the NDJSON wire-shape emitted by listen --json.
+// One JSON object per stdout line; consumers parse line-at-a-time.
+// Field tagging is stable — adding new fields is backward-compatible
+// (consumers ignore unknown fields); changing or removing a field
+// requires a wire-version bump.
+type listenEvent struct {
+	Type string    `json:"type"`
+	TS   time.Time `json:"ts"`
+
+	// Banner-only.
+	Addr string `json:"addr,omitempty"`
+
+	// Msg-only.
+	From string `json:"from,omitempty"`
+	Net  string `json:"net,omitempty"`
+	Body string `json:"body,omitempty"`
+	Dir  string `json:"dir,omitempty"` // "in" | "out"
+
+	// Reconnect / error.
+	Err     string `json:"err,omitempty"`
+	DelayMS int64  `json:"delay_ms,omitempty"`
+}
+
+const (
+	evtBanner    = "banner"
+	evtMsg       = "msg"
+	evtReconnect = "reconnect"
+	evtError     = "error"
+)
+
+// emitJSON writes one NDJSON line. Errors are intentionally swallowed
+// — the listener is best-effort and we can't do anything useful if
+// stdout is broken.
+func emitJSON(w io.Writer, ev listenEvent) {
+	b, err := json.Marshal(ev)
+	if err != nil {
+		return
+	}
+	b = append(b, '\n')
+	_, _ = w.Write(b) //nolint:errcheck
+}
+
 // streamSSEOnce opens a single SSE connection and drains it until
 // the stream ends, the context is canceled, or an error occurs.
 // Returns nil on clean end-of-stream so the caller can retry
 // without surfacing it as a failure.
-func streamSSEOnce(ctx context.Context, url, filter string) error {
+//
+// netFilter (""|skynet|dmsg) and fromFilter ("" | full-hex PK)
+// suppress non-matching events before any output.
+func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilter string, jsonMode bool) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("build SSE request: %w", err)
@@ -218,6 +329,10 @@ func streamSSEOnce(ctx context.Context, url, filter string) error {
 	}
 
 	scanner := bufio.NewScanner(resp.Body)
+	// Default Scanner buffer is 64KB which can split long SSE payloads
+	// (skychat frames cap at 64KB but the SSE wrapping adds the "data: "
+	// prefix + newline). Bump to 256KB to leave headroom.
+	scanner.Buffer(make([]byte, 0, 64*1024), 256*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "data: ") {
@@ -228,19 +343,58 @@ func streamSSEOnce(ctx context.Context, url, filter string) error {
 			Sender  string `json:"sender"`
 			Message string `json:"message"`
 			Network string `json:"network,omitempty"`
+			Dir     string `json:"dir,omitempty"` // "in" | "out" | future: "relay" | "group-in" | "group-out"
 		}
 		if err := json.Unmarshal([]byte(data), &msg); err != nil {
-			fmt.Printf("Raw: %s\n", data)
+			if jsonMode {
+				emitJSON(out, listenEvent{
+					Type: evtError,
+					TS:   time.Now().UTC(),
+					Err:  fmt.Sprintf("unparseable SSE data: %s", data),
+				})
+			} else {
+				fmt.Fprintf(out, "Raw: %s\n", data) //nolint:errcheck
+			}
 			continue
 		}
-		if filter != "" && msg.Network != "" && msg.Network != filter {
+		if netFilter != "" && msg.Network != "" && msg.Network != netFilter {
 			continue
 		}
-		net := ""
-		if msg.Network != "" {
-			net = "/" + msg.Network
+		if fromFilter != "" && msg.Sender != fromFilter {
+			continue
 		}
-		fmt.Printf("[%s%s] %s\n", msg.Sender, net, msg.Message)
+
+		// dir defaults to "in" for back-compat with older skychat-app
+		// servers that emit SSE events without a dir field at all.
+		dir := msg.Dir
+		if dir == "" {
+			dir = "in"
+		}
+
+		if jsonMode {
+			emitJSON(out, listenEvent{
+				Type: evtMsg,
+				TS:   time.Now().UTC(),
+				From: msg.Sender,
+				Net:  msg.Network,
+				Body: msg.Message,
+				Dir:  dir,
+			})
+		} else {
+			netSuffix := ""
+			if msg.Network != "" {
+				netSuffix = "/" + msg.Network
+			}
+			// ">" marks anything that ISN'T a normal inbound event —
+			// outgoing-mirror, future relay/group flows. Keeps text
+			// mode's one-line format readable while distinguishing
+			// the common-case "in" from everything else.
+			dirPrefix := ""
+			if dir != "in" {
+				dirPrefix = ">"
+			}
+			fmt.Fprintf(out, "[%s%s%s] %s\n", dirPrefix, msg.Sender, netSuffix, msg.Message) //nolint:errcheck
+		}
 	}
 	// scanner.Err() returns nil on a clean EOF; io.EOF /
 	// io.ErrUnexpectedEOF / a canceled context all show up here too.
