@@ -312,7 +312,15 @@ func resolveConfig() resolvedConfig {
 // autoconfig's post-Stat check and aborts the postinst with
 // exit 100. Propagating the resolved mode explicitly closes the gap.
 func generateConfig(r resolvedConfig, hvArg string) error {
-	args := []string{"cli", "config", "gen", "-r"}
+	// `-w` / `--hide` suppresses the generated config from being
+	// echoed to stdout. autoconfig is meant for unattended
+	// systemd/postinst invocation — dumping the visor's SK + every
+	// service URL through the terminal at every install is both
+	// noisy (the file is the authoritative copy) and a perceived
+	// secret-leak risk on shared terminals / CI logs. The Stdout
+	// pipe we hook up below is still useful for errors; `-w` only
+	// hides the success-path JSON dump.
+	args := []string{"cli", "config", "gen", "-r", "-w"}
 
 	switch {
 	case r.pkgEnv:
