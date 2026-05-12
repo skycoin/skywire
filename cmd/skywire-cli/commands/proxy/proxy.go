@@ -133,18 +133,21 @@ var startCmd = &cobra.Command{
 			rpcClient.StopApp("skysocks-client") //nolint:errcheck,gosec
 		}
 
-		// If --existing-tp flag is set, configure router to only use existing transports
-		if existingTpOnly {
-			if err := rpcClient.SetExistingTPOnly(true); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set existing transport only mode: %w", err))
-			}
+		// Both --existing-tp and --local-route map onto persistent
+		// visor state via RPC: a previous `proxy start --local-route`
+		// leaves the router permanently in forceLocal mode until the
+		// visor restarts. The flags were never "auto-rolled-back" on
+		// the next invocation, which means a subsequent
+		// `proxy start <pk>` (no flags) silently inherits the old
+		// state and fails when the new target isn't reachable under
+		// that constraint. Always SetExistingTPOnly / SetForceLocalRoutes
+		// to exactly the current flag value so the visor mirrors what
+		// the operator just typed.
+		if err := rpcClient.SetExistingTPOnly(existingTpOnly); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set existing transport only mode: %w", err))
 		}
-
-		// If --local-route flag is set, skip route finder and use local route calculation
-		if forceLocalRoutes {
-			if err := rpcClient.SetForceLocalRoutes(true); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set force local routes mode: %w", err))
-			}
+		if err := rpcClient.SetForceLocalRoutes(forceLocalRoutes); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set force local routes mode: %w", err))
 		}
 
 		// If --mux flag is set, enable route multiplexing.
@@ -320,7 +323,19 @@ var startCmd = &cobra.Command{
 
 			for _, state := range states {
 				if state.Name == stateName {
-					if state.Status == appserver.AppStatusRunning {
+					// Bare Status flips to Running as soon as the OS
+					// process is alive — well before the app has
+					// dialed its remote. Skysocks-client (and friends)
+					// set DetailedStatus = "Starting" while inside
+					// their dial-retry loop, then flip to "Running"
+					// once the conn is established. To make
+					// `proxy start --verbose`'s "app running" banner
+					// honest, treat "Starting" as not-yet-ready and
+					// keep polling. Apps that never emit a detailed
+					// status leave it empty, so we still graduate on
+					// bare Status for those.
+					detailedStarting := state.DetailedStatus == appserver.AppDetailedStatusStarting
+					if state.Status == appserver.AppStatusRunning && !detailedStarting {
 						startProcess = false
 						appReachedRunning = true
 						if !startVerbose {
