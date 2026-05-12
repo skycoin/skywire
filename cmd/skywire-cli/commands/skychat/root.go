@@ -34,6 +34,7 @@ var (
 	sendWait     time.Duration
 	listenNet    string
 	listenFrom   string
+	listenRaw    bool
 	historyPeer  string
 	historyLimit int
 	historySince string
@@ -60,6 +61,11 @@ func init() {
 
 	listenCmd.Flags().StringVarP(&listenNet, "net", "n", "", "filter by network type (optional; default = all)")
 	listenCmd.Flags().StringVar(&listenFrom, "from", "", "filter by sender public key (optional; full hex PK)")
+	// --raw and --json are mutually exclusive; default (neither set)
+	// escapes \n and \r so each event is exactly one line of stdout
+	// for agent / log-aggregator consumption. See escape.go for the
+	// rationale and exact transformation.
+	listenCmd.Flags().BoolVar(&listenRaw, "raw", false, "emit unescaped multi-line message bodies (humans reading directly; not safe for line-based log aggregators)")
 
 	historyCmd.Flags().StringVar(&historyPeer, "peer", "", "filter by peer public key (optional; full hex PK)")
 	historyCmd.Flags().IntVar(&historyLimit, "limit", 100, "max messages to return (1-1000)")
@@ -433,11 +439,23 @@ var listenCmd = &cobra.Command{
 Reconnects automatically when the connection drops (e.g. the visor
 restarts). Exit with Ctrl+C.
 
-Output modes:
+Output modes (mutually exclusive — passing both --raw and --json
+errors out):
   text (default): one line per event, format "[sender[/net]] body" for
     inbound messages, "[>sender[/net]] body" for outbound mirrors and
     other non-inbound directions; reconnect errors to stderr.
-  --json: one JSON object per stdout line (NDJSON). Event types:
+    Embedded newlines and carriage returns in the body are escaped to
+    the literal two-character sequences \n / \r so every event is
+    exactly ONE line of stdout. This is the mode agents and log-line
+    aggregators should use — otherwise a multi-line chat body would
+    fragment into N stdout events.
+  --raw: same text format, but the body is NOT escaped. Use this when
+    a human is reading the output directly and wants the original
+    multi-line layout. Not safe for monitor harnesses that treat each
+    line as a separate event.
+  --json: one JSON object per stdout line (NDJSON). Bodies pass through
+    JSON's native string encoding (\n, \r, etc are escaped by the JSON
+    encoder), so this mode is also one-line-per-event. Event types:
     {"type":"banner",...}    once at startup (addr + filter context)
     {"type":"msg",...}       a message; fields: ts, from, net, body, dir
     {"type":"reconnect",...} SSE stream is being re-opened; fields: ts, err, delay_ms
@@ -482,6 +500,9 @@ Filters:
 		}
 
 		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		if jsonMode && listenRaw {
+			internal.PrintFatalError(cmd.Flags(), errors.New("--raw and --json are mutually exclusive"))
+		}
 		out := cmd.OutOrStdout()
 		errOut := cmd.ErrOrStderr()
 
@@ -514,7 +535,7 @@ Filters:
 
 		delay := minReconnectDelay
 		for {
-			err := streamSSEOnce(ctx, out, url, netFilter, listenFrom, jsonMode)
+			err := streamSSEOnce(ctx, out, url, netFilter, listenFrom, jsonMode, listenRaw)
 			if ctx.Err() != nil {
 				// Caller hit Ctrl+C; exit cleanly.
 				return
@@ -613,7 +634,12 @@ func emitJSON(w io.Writer, ev listenEvent) {
 //
 // netFilter (""|skynet|dmsg) and fromFilter ("" | full-hex PK)
 // suppress non-matching events before any output.
-func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilter string, jsonMode bool) error {
+//
+// raw=false (default) escapes \n / \r in the message body so every
+// text-mode event is exactly one line of stdout; raw=true preserves
+// the original body verbatim. jsonMode supersedes both (the JSON
+// encoder handles escaping natively).
+func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilter string, jsonMode, raw bool) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("build SSE request: %w", err)
@@ -716,7 +742,11 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 			if alias := lookupAlias(msg.Sender); alias != "" {
 				display = alias
 			}
-			fmt.Fprintf(out, "[%s%s%s] %s\n", dirPrefix, display, netSuffix, msg.Message) //nolint:errcheck
+			body := msg.Message
+			if !raw {
+				body = escapeForOneLine(body)
+			}
+			fmt.Fprintf(out, "[%s%s%s] %s\n", dirPrefix, display, netSuffix, body) //nolint:errcheck
 		}
 	}
 	// scanner.Err() returns nil on a clean EOF; io.EOF /
