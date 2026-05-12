@@ -76,6 +76,14 @@ func (c *Connection) GetChanIn() <-chan []byte {
 }
 
 func (c *Connection) readLoop() {
+	// On any exit (read error, peer drop, size violation) tear down
+	// the whole Connection so the paired writeLoop's `<-c.done`
+	// select unblocks. Without this, a passive remote-side drop
+	// leaves writeLoop parked in the select forever — Close is
+	// only called from upper layers, and not every code path that
+	// loses a peer reaches one. Close is idempotent so the paired
+	// defer in writeLoop is safe.
+	defer c.Close()
 	defer close(c.in)
 
 	header := make([]byte, 4)
@@ -101,6 +109,11 @@ func (c *Connection) readLoop() {
 }
 
 func (c *Connection) writeLoop() {
+	// Mirrors readLoop's defer: tear down the Connection on any
+	// exit so the paired readLoop's io.ReadFull unblocks (via the
+	// underlying conn.Close inside Close). Close is idempotent.
+	defer c.Close()
+
 	header := make([]byte, 4)
 	for {
 		select {
