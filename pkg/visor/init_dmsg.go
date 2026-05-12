@@ -739,18 +739,24 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	}
 
-	// dmsgscp Host (scp-over-dmsg). Reuses the dmsgpty whitelist by
-	// default — operators who trust a peer for pty also trust them
-	// for file transfer in v1. Disabled by default; only starts the
-	// listener when the operator opts in via config.
-	if scpConf := v.conf.Dmsgscp; scpConf != nil && scpConf.Enabled {
+	// dmsgscp Host (scp-over-dmsg). On by default — access is gated
+	// by the same whitelist that dmsgpty uses. Operators opt OUT
+	// via Dmsgscp.Disabled. When Dmsgscp.Whitelist is non-empty it
+	// overrides the dmsgpty whitelist; otherwise the dmsgpty
+	// whitelist (already constructed above with hypervisors + own
+	// PK) is reused so trusting a peer for pty also trusts them
+	// for file transfer.
+	//
+	// Listens on BOTH dmsg and the skywire router at the same port.
+	// dmsg covers the bootstrap path; skynet covers steady-state
+	// operation over arbitrary transports.
+	scpConf := v.conf.Dmsgscp
+	if scpConf == nil {
+		scpConf = &visorconfig.Dmsgscp{} // all-defaults: enabled, port 23, default rootDir, dmsgpty whitelist
+	}
+	if !scpConf.Disabled {
 		scpWL := wl
 		if len(scpConf.Whitelist) > 0 {
-			// Operator opted into a separate whitelist for scp.
-			// Build a fresh memory-whitelist seeded with those keys
-			// + the visor's own PK + the hypervisors (mirrors the
-			// dmsgpty whitelist construction above so loopback +
-			// hypervisor access stay consistent across services).
 			ownWL := dmsgpty.NewMemoryWhitelist()
 			if err := ownWL.Add(scpConf.Whitelist...); err != nil {
 				return fmt.Errorf("dmsgscp: seed whitelist: %w", err)
@@ -785,12 +791,23 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 				runtimeErrors <- fmt.Errorf("dmsgscp listen-and-serve stopped: %w", err)
 			}
 		}()
+		// Skynet mirror — same port, same Host. Polls until the
+		// router's skynet networker is registered (initRouter may
+		// run after this), then binds and serves. Same accept loop
+		// as the dmsg side; per-stream whitelist gate is uniform
+		// across both transports.
+		goServeSkynetMirror(serveCtx, v.conf.PK, scpPort, "dmsgscp", v.log,
+			func(skyLis net.Listener) {
+				if err := scpHost.ServeListener(serveCtx, skyLis); err != nil {
+					getErrors(ctx) <- fmt.Errorf("dmsgscp skynet mirror stopped: %w", err)
+				}
+			})
 		v.pushCloseStack("dmsgscp.serve", func() error {
 			cancel()
 			wg.Wait()
 			return nil
 		})
-		log.WithField("port", scpPort).WithField("root", rootDir).Info("dmsgscp host started.")
+		log.WithField("port", scpPort).WithField("root", rootDir).Info("dmsgscp host started (dmsg + skynet).")
 	}
 
 	if conf.CLINet != "" {
