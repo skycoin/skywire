@@ -38,11 +38,40 @@ type driveCXDS struct {
 	b *bolt.DB
 }
 
+// DriveOptions tune the on-disk CXDS. Zero values use safe defaults.
+type DriveOptions struct {
+	// NoSync skips the fdatasync call at the end of each bbolt
+	// transaction commit. Trades durability for an order-of-magnitude
+	// reduction in disk write traffic (relevant for CXDS because
+	// every refcount mutation today triggers a separate fsync — see
+	// Get-with-inc and Set in this file).
+	//
+	// Appropriate when the underlying data is rebuildable on the
+	// next process restart. CXDS is content-addressed: any leaf that
+	// survives the crash is still indexable by its hash; any leaf
+	// lost in a torn write can be re-fetched from peers via the next
+	// CXO subscription cycle. The publisher's in-memory tree
+	// (republished on every BatchWindow tick) authoritatively owns
+	// the value set.
+	//
+	// Leave false (the default) for CXDS instances that must survive
+	// a hard crash with byte-exact contents (e.g. operator-managed
+	// archival CXO stores without peer republish).
+	NoSync bool
+}
+
 // NewDriveCXDS opens existing CXDS-database
 // or creates new by given file name. Underlying
 // database is boltdb (github.com/boltdb/bolt).
-// E.g. this stores data on disk
+// E.g. this stores data on disk. Uses safe defaults; for caller-
+// tuned behavior use NewDriveCXDSWithOptions.
 func NewDriveCXDS(fileName string) (ds data.CXDS, err error) {
+	return NewDriveCXDSWithOptions(fileName, DriveOptions{})
+}
+
+// NewDriveCXDSWithOptions opens the on-disk CXDS with the given
+// options. See DriveOptions for tunables.
+func NewDriveCXDSWithOptions(fileName string, opts DriveOptions) (ds data.CXDS, err error) {
 
 	var created bool // true if the file does not exist
 
@@ -52,6 +81,7 @@ func NewDriveCXDS(fileName string) (ds data.CXDS, err error) {
 	var b *bolt.DB
 	b, err = bolt.Open(fileName, 0644, &bolt.Options{
 		Timeout: time.Millisecond * 500,
+		NoSync:  opts.NoSync,
 	})
 
 	if err != nil {
@@ -297,7 +327,19 @@ func (d *driveCXDS) incr(
 }
 
 // Get value by key changing or
-// leaving as is references counter
+// leaving as is references counter.
+//
+// Concurrency / write-batching: when inc != 0 the read-modify-write
+// is routed through bbolt's db.Batch instead of db.Update. Batch
+// coalesces concurrent calls into a single transaction → a single
+// fdatasync (or single page dirty in NoSync mode), instead of one
+// fsync per refcount bump. The semantics for a single call are
+// identical to Update: the function still runs in one atomic tx
+// and the caller blocks until the batch commits.
+//
+// CXO callers (cache.Get-with-inc on cache miss, subscriber pulls,
+// publisher tree-walk holds) frequently fire concurrent refcount
+// bumps during sync cycles; that's where Batch pays for itself.
 func (d *driveCXDS) Get(
 	key cipher.SHA256, // :
 	inc int, //           :
@@ -327,9 +369,9 @@ func (d *driveCXDS) Get(
 	}
 
 	if inc == 0 {
-		err = d.b.View(tx) // lookup only
+		err = d.b.View(tx) // lookup only — no transaction commit at all
 	} else {
-		err = d.b.Update(tx) // some changes
+		err = d.b.Batch(tx) // refcount bump — coalesces with concurrent calls
 	}
 
 	return val, rc, err
@@ -347,7 +389,19 @@ func (d *driveCXDS) addAll(vol int) {
 	d.volumeAll += vol
 }
 
-// Set value and its references counter
+// Set value and its references counter.
+//
+// Two paths: (1) the key is new — bucket has no entry — and the
+// value must be created with rc=1. (2) the key exists — only its
+// refcount is being bumped. Path (2) is the hot one (every
+// publisher tree-walk hold fires it), so it uses db.Batch for
+// concurrent coalescing. Path (1) uses db.Update for normal
+// new-object durability semantics.
+//
+// We don't know which path applies without reading the bucket
+// first, so we do a quick View probe and dispatch. The probe is
+// cheap (no tx commit, no fsync) and the saved write cost when the
+// key exists is large.
 func (d *driveCXDS) Set(
 	key cipher.SHA256,
 	val []byte,
@@ -366,25 +420,40 @@ func (d *driveCXDS) Set(
 		return rc, err
 	}
 
-	err = d.b.Update(func(tx *bolt.Tx) (err error) {
+	// Probe whether the key already exists so we can pick Batch
+	// (refcount-only) vs Update (new value) without rolling the
+	// branch decision into a single committed tx.
+	var exists bool
+	if vErr := d.b.View(func(tx *bolt.Tx) error {
+		exists = len(tx.Bucket(objsBucket).Get(key[:])) > 0
+		return nil
+	}); vErr != nil {
+		return rc, vErr
+	}
 
+	fn := func(tx *bolt.Tx) (err error) {
 		var (
 			o   = tx.Bucket(objsBucket)
 			got = o.Get(key[:])
 		)
 
 		if len(got) == 0 {
-
-			// created
+			// created (the probe could race with a concurrent Del;
+			// fall through to the create path)
 			d.addAll(len(val))
-
 			rc, err = d.incr(o, key[:], val, 0, 1)
 			return err
 		}
 
 		rc, err = d.incr(o, key[:], got[4:], getRefsCount(got), inc)
 		return err
-	})
+	}
+
+	if exists {
+		err = d.b.Batch(fn) // refcount bump only — coalesce
+	} else {
+		err = d.b.Update(fn) // new value — durable single-tx
+	}
 
 	return rc, err
 }
@@ -422,7 +491,7 @@ func (d *driveCXDS) Inc(
 	if inc == 0 {
 		err = d.b.View(tx) // lookup only
 	} else {
-		err = d.b.Update(tx) // changes required
+		err = d.b.Batch(tx) // refcount bump — coalesce concurrent calls
 	}
 
 	return rc, err
@@ -449,7 +518,11 @@ func (d *driveCXDS) Del(
 	err error,
 ) {
 
-	err = d.b.Update(func(tx *bolt.Tx) (err error) {
+	// Batch: cache cleaning sweeps fire many Dels in rapid
+	// succession; coalescing them into one transaction (and one
+	// commit) is appropriate. Visibility semantics are preserved —
+	// Batch blocks the caller until the enclosing tx commits.
+	err = d.b.Batch(func(tx *bolt.Tx) (err error) {
 
 		var (
 			o   = tx.Bucket(objsBucket)

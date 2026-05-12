@@ -19,6 +19,7 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -177,14 +178,23 @@ func (v *Visor) GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error) {
 }
 
 // GroupSend publishes a message into the named group's feed.
-// Owner-side only in v1. Members get "only owner can send" — the
-// member-side relay path lands in a follow-up commit.
+// Owners write directly; members open a dmsg stream to the owner's
+// relay listener and submit, the owner re-publishes with sender
+// attribution preserved. Either way the sender's own subscriber
+// renders the message back into its inbox so the UX is consistent
+// across roles.
+//
+// Bounded with a 30s context: a dead owner shouldn't hang an RPC
+// caller forever. Members get a clean dial-timeout error they can
+// surface to the operator.
 func (v *Visor) GroupSend(args GroupSendArgs) error {
 	mgr := v.groupManager()
 	if mgr == nil {
 		return ErrGroupingDisabled
 	}
-	return mgr.SendToGroup(args.ID, args.Text)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return mgr.SendToGroup(ctx, args.ID, args.Text)
 }
 
 // GroupPoll drains messages with TS > since. Mirrors PairPoll.
