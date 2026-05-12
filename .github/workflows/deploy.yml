@@ -6,6 +6,21 @@ on:
       - develop
       - master
 
+# Serialize Deploy runs per-branch so a rapid burst of merges (e.g.
+# three back-to-back PRs landing on develop within seconds) doesn't
+# race on `docker push :test` — without this the second-to-finish
+# Deploy overwrites the last-to-finish Deploy's image, and the hub
+# tag ends up pointing at whichever build happened to finish last,
+# not at the latest commit. Observed in production on 2026-05-12:
+# PRs #2499 and #2500 merged 4 s apart; both Deploys started, but
+# the #2499 Deploy ran 12 s longer and its `docker push test`
+# overwrote the #2500 build that had pushed seconds earlier.
+# cancel-in-progress is OFF so every commit still gets its own
+# build — they just queue.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
