@@ -36,16 +36,24 @@ This branch has no shared history with `develop` — it's updated by CI only.
 Using `go run` with isolated cache (no persistent build artifacts):
 
 ```bash
-TMPDIR=$(mktemp -d) && COMMIT=$(GOCACHE=$TMPDIR go run github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit) && rm -rf $TMPDIR
+TMPDIR=$(mktemp -d) && COMMIT=$(GOPROXY=direct GOCACHE=$TMPDIR go run github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit) && rm -rf $TMPDIR
 echo $COMMIT
 ```
 
 Or install the helper binary (2MB, reusable):
 
 ```bash
-go install github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit
+GOPROXY=direct go install github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit
 COMMIT=$(~/go/bin/skywire-commit)
 ```
+
+**Why `GOPROXY=direct`?** `@skywire-commit` is a branch name. The Go module proxy
+(`proxy.golang.org`) caches branch-tip → SHA resolutions for up to 30 minutes —
+so if you run the update right after a CI merge, the proxy may still return the
+previous SHA and your install no-ops (visible as a suspiciously fast "success"
+in well under a second). Setting `GOPROXY=direct` bypasses the proxy and reads
+the SHA straight from GitHub. The actual module download still proceeds with
+the global default; only the branch-tip resolution is forced direct.
 
 ### Install Skywire at the Tested Commit
 
@@ -53,10 +61,13 @@ COMMIT=$(~/go/bin/skywire-commit)
 go install github.com/skycoin/skywire@$COMMIT
 ```
 
+This step does NOT need `GOPROXY=direct` — once you have the exact commit SHA,
+the proxy lookup is content-addressed and returns the right module regardless.
+
 ### One-Liner (isolated, no persistent build artifacts from the commit check)
 
 ```bash
-TMPDIR=$(mktemp -d) && go install github.com/skycoin/skywire@$(GOCACHE=$TMPDIR go run github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit && rm -rf $TMPDIR)
+TMPDIR=$(mktemp -d) && go install github.com/skycoin/skywire@$(GOPROXY=direct GOCACHE=$TMPDIR go run github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit && rm -rf $TMPDIR)
 ```
 
 ### Check if Update is Needed
@@ -79,8 +90,10 @@ Docker images are pushed to Docker Hub on every merge to `develop`, tagged with 
 
 ```bash
 #!/bin/bash
-# Get the latest tested commit
-go install github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit
+# Get the latest tested commit. GOPROXY=direct bypasses proxy.golang.org's
+# branch-tip cache (up to 30min TTL) — without it, the resolver can return
+# the previous SHA and the update silently no-ops in ~250ms with exit 0.
+GOPROXY=direct go install github.com/skycoin/skywire/cmd/skywire-commit@skywire-commit
 LATEST=$(~/go/bin/skywire-commit)
 SHORT=${LATEST:0:12}
 CURRENT=$(cat ~/.skywire-deploy-commit 2>/dev/null || echo "none")
