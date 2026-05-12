@@ -745,13 +745,52 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		writeStart := time.Now()
 		err := conn.WriteFrame(wirePayload)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-
+			// Stale-conn auto-retry: a conn that's still in the
+			// `conns` map but whose underlying transport has gone
+			// away (peer chat-app restart, transient transport
+			// fault, etc) used to lose the caller's CURRENT message
+			// — the handler returned 400, the operator had to retry
+			// from the CLI / UI. Now we delete the stale entry, dial
+			// a fresh conn to the same peer, and retry the WriteFrame
+			// ONCE. Only on a second failure do we surface the error
+			// to the caller. The retry is one-shot to keep this
+			// codepath bounded; chronic peer-unreachability still
+			// surfaces as 400 within bounded time.
 			connsMu.Lock()
 			delete(conns, pk)
 			connsMu.Unlock()
 
-			return
+			appCl.Log().WithError(err).Warnf("Stale conn to %s: retrying with fresh dial", pk)
+
+			var raw net.Conn
+			dialErr := r.Do(ctx, func() error {
+				c, dErr := appCl.Dial(addr)
+				if dErr != nil {
+					return dErr
+				}
+				raw = c
+				return nil
+			})
+			if dialErr != nil {
+				http.Error(w, fmt.Sprintf("send retry failed: %s; fresh dial: %s", err, dialErr), http.StatusBadRequest)
+				return
+			}
+			conn = newFramedConn(raw)
+			connsMu.Lock()
+			conns[pk] = conn
+			connsMu.Unlock()
+			// Same long-lived-conn semantics as the initial-dial
+			// path — handleConn owns the lifetime of this conn, not
+			// the HTTP request.
+			go handleConn(conn) //nolint:gosec // G118: long-lived conn, not request-scoped
+
+			if retryErr := conn.WriteFrame(wirePayload); retryErr != nil {
+				connsMu.Lock()
+				delete(conns, pk)
+				connsMu.Unlock()
+				http.Error(w, fmt.Sprintf("send retry failed: %s; fresh dial: %s", err, retryErr), http.StatusBadRequest)
+				return
+			}
 		}
 
 		// Persist outgoing message (best-effort).
@@ -1091,9 +1130,74 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	if visorPKErr != "" {
 		status["error"] = visorPKErr
 	}
+	if groups := collectGroupHealth(); groups != nil {
+		status["groups"] = groups
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(status) //nolint:errcheck,gosec
+}
+
+// groupHealth is the per-group health summary surfaced by /status.
+// lag_seconds is a pointer so JSON encoding emits explicit null when
+// the group has never seen a message (last_message_at is the zero
+// time). Operators can then treat "lag_seconds > 600" as a stale-feed
+// alarm without false-positive on brand-new empty groups.
+type groupHealth struct {
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Role            string    `json:"role"`
+	Status          string    `json:"status"`
+	MembersCount    int       `json:"members_count"`
+	LastMessageAt   time.Time `json:"last_message_at,omitempty"`
+	LagSeconds      *int64    `json:"lag_seconds"`
+	SubscriberAlive bool      `json:"subscriber_alive"`
+}
+
+// collectGroupHealth queries the visor's GroupList RPC and renders
+// the per-group health entries for /status. Returns nil if the
+// pair-RPC channel isn't wired (grouping then can't be inspected
+// from the chat-app process). Returns an empty slice if the visor
+// has no groups (vs. nil = "unknown / not introspectable") so
+// consumers can distinguish "no groups configured" from "grouping
+// unreachable".
+//
+// Why route through the visor RPC: the chat-app process doesn't own
+// the group.Manager — the visor does. The chat-app already opens a
+// pair-RPC channel (when --pair-enable is set, which is the default
+// for any setup that has grouping enabled at all). This reuses that
+// channel rather than introducing a new IPC dependency.
+func collectGroupHealth() []groupHealth {
+	if pairRPC == nil {
+		return nil
+	}
+	infos, err := pairRPC.GroupList()
+	if err != nil {
+		appCl.Log().Debugf("status: GroupList RPC failed: %v", err)
+		return nil
+	}
+	out := make([]groupHealth, 0, len(infos))
+	now := time.Now().UTC()
+	for _, g := range infos {
+		gh := groupHealth{
+			ID:              g.ID,
+			Name:            g.Name,
+			Role:            string(g.Role),
+			Status:          string(g.Status),
+			MembersCount:    len(g.Members),
+			LastMessageAt:   g.LastMessageAt,
+			SubscriberAlive: g.SubscriberAlive,
+		}
+		if !g.LastMessageAt.IsZero() {
+			lag := int64(now.Sub(g.LastMessageAt).Seconds())
+			if lag < 0 {
+				lag = 0
+			}
+			gh.LagSeconds = &lag
+		}
+		out = append(out, gh)
+	}
+	return out
 }
 
 // persistMessage stores a message in the history backend if persistence is

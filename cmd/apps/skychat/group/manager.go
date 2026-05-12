@@ -59,6 +59,24 @@ type Manager struct {
 
 	mu       sync.RWMutex
 	sessions map[string]*Session
+
+	// reconnect loop state — see runReconnectLoop.
+	reconnectCtx    context.Context
+	reconnectCancel context.CancelFunc
+	reconnectWG     sync.WaitGroup
+	reconnectMu     sync.Mutex
+	reconnectState  map[string]*reconnectState // keyed by group ID
+}
+
+// reconnectState tracks per-group consecutive-failure backoff so a
+// permanently-unreachable owner doesn't get hammered every cycle.
+// See runReconnectLoop for the state machine.
+type reconnectState struct {
+	failures uint32
+	// nextAttempt is set when a backoff transition extends the
+	// per-group interval beyond the base 30s tick. The reconnect
+	// loop skips groups whose nextAttempt is still in the future.
+	nextAttempt time.Time
 }
 
 // ManagerConfig wires a Manager.
@@ -88,14 +106,15 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		log = logging.MustGetLogger("skychat-group-manager")
 	}
 	return &Manager{
-		store:     cfg.Store,
-		dmsgC:     cfg.DmsgC,
-		myPK:      cfg.MyPK,
-		mySK:      cfg.MySK,
-		dataDir:   cfg.DataDir,
-		log:       log,
-		portAlloc: defaultPortAlloc,
-		sessions:  make(map[string]*Session),
+		store:          cfg.Store,
+		dmsgC:          cfg.DmsgC,
+		myPK:           cfg.MyPK,
+		mySK:           cfg.MySK,
+		dataDir:        cfg.DataDir,
+		log:            log,
+		portAlloc:      defaultPortAlloc,
+		sessions:       make(map[string]*Session),
+		reconnectState: make(map[string]*reconnectState),
 	}, nil
 }
 
@@ -248,6 +267,12 @@ func (m *Manager) SendToGroup(ctx context.Context, id, text string) error {
 		if err := sess.SubmitToOwner(ctx, text); err != nil {
 			return err
 		}
+		// A successful relay submission proves the owner is reachable
+		// over at least one transport. If the subscriber side of this
+		// session is currently down (StatusPending after a transient
+		// Connect failure), now's a good moment to retry — don't wait
+		// up to 30s for the next reconnect tick.
+		m.kickReconnect(ctx, id)
 	default:
 		return fmt.Errorf("group: SendToGroup: unknown role %q", sess.cfg.Record.Role)
 	}
@@ -324,15 +349,222 @@ func (m *Manager) Resume() error {
 			m.mu.RUnlock()
 			if err := sess.Connect(); err != nil {
 				m.log.WithError(err).WithField("id", r.ID).
-					Warn("group: Resume: member subscribe connect")
-				// Keep the record but mark pending for now; a future
-				// Reconnect step (not in v1) can retry.
+					Warn("group: Resume: member subscribe connect (will retry in background)")
+				// Mark pending; runReconnectLoop will re-attempt on
+				// its 30s cadence (with backoff on repeated failures)
+				// until the owner becomes reachable.
 				_ = m.store.SetStatus(r.ID, StatusPending) //nolint:errcheck
 			}
 		}
 		m.replaySessionHistory(r.ID)
 	}
+	m.startReconnectLoop()
 	return nil
+}
+
+// reconnectInterval is the base cadence the reconnect loop walks
+// pending sessions on. Short enough that a peer's chat-app restart
+// (which usually completes inside 30s) auto-heals without operator
+// intervention; long enough that a permanently-unreachable owner
+// isn't dial-hammered.
+const reconnectInterval = 30 * time.Second
+
+// reconnectAttemptTimeout bounds the per-Connect call so the
+// reconnect loop can't get stuck on a single slow group while other
+// pending groups starve.
+const reconnectAttemptTimeout = 5 * time.Second
+
+// Backoff transition thresholds. After this many consecutive
+// failures on a given group, the per-group nextAttempt is bumped
+// out so the loop skips it until enough wall time has passed.
+const (
+	reconnectBackoffFailures1 = 10
+	reconnectBackoffInterval1 = 5 * time.Minute
+	reconnectBackoffFailures2 = 30
+	reconnectBackoffInterval2 = 30 * time.Minute
+)
+
+// startReconnectLoop launches the background goroutine that retries
+// failed member-side Connects. Safe to call multiple times — the
+// second call is a no-op while the loop is already running.
+func (m *Manager) startReconnectLoop() {
+	m.reconnectMu.Lock()
+	if m.reconnectCtx != nil {
+		m.reconnectMu.Unlock()
+		return
+	}
+	m.reconnectCtx, m.reconnectCancel = context.WithCancel(context.Background())
+	m.reconnectMu.Unlock()
+	m.reconnectWG.Add(1)
+	go m.runReconnectLoop(m.reconnectCtx)
+}
+
+// runReconnectLoop walks every member-side session in StatusPending
+// on a 30s cadence and re-attempts Connect. Successes promote the
+// record back to StatusActive and reset the per-group failure
+// counter. Failures bump the failure counter and, past the configured
+// thresholds, extend the next-attempt time so the loop skips that
+// group until the backoff window elapses.
+//
+// Logging levels follow the spec:
+//   - debug: every reconnect attempt (success or failure)
+//   - info:  every successful reconnect (StatusPending → StatusActive)
+//   - warn:  every backoff-interval transition
+func (m *Manager) runReconnectLoop(ctx context.Context) {
+	defer m.reconnectWG.Done()
+	t := time.NewTicker(reconnectInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		m.attemptReconnectPending(ctx)
+	}
+}
+
+// attemptReconnectPending iterates all member-role sessions currently
+// in StatusPending and tries each one. Single-pass: a session whose
+// Connect succeeds here won't be tried again until its status is
+// reset to pending (e.g. on next visor restart, or a future fault).
+func (m *Manager) attemptReconnectPending(ctx context.Context) {
+	records, err := m.store.List()
+	if err != nil {
+		m.log.WithError(err).Debug("group: reconnect: store list failed")
+		return
+	}
+	now := time.Now().UTC()
+	for _, r := range records {
+		if r.Role != RoleMember || r.Status != StatusPending {
+			continue
+		}
+		if !m.reconnectShouldAttempt(r.ID, now) {
+			continue
+		}
+		m.mu.RLock()
+		sess, ok := m.sessions[r.ID]
+		m.mu.RUnlock()
+		if !ok || sess == nil {
+			continue
+		}
+		m.tryReconnect(ctx, sess, r.ID)
+	}
+}
+
+// tryReconnect runs one Connect attempt under reconnectAttemptTimeout.
+// On success: clears per-group failure state, flips Status →
+// StatusActive. On failure: bumps the counter and applies any
+// configured backoff transition.
+func (m *Manager) tryReconnect(ctx context.Context, sess *Session, id string) {
+	m.log.WithField("id", id).Debug("group: reconnect: attempting subscribe")
+	type result struct{ err error }
+	done := make(chan result, 1)
+	go func() {
+		done <- result{err: sess.Connect()}
+	}()
+	var err error
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(reconnectAttemptTimeout):
+		err = fmt.Errorf("group: reconnect: timed out after %s", reconnectAttemptTimeout)
+	case r := <-done:
+		err = r.err
+	}
+	if err == nil {
+		m.reconnectMu.Lock()
+		delete(m.reconnectState, id)
+		m.reconnectMu.Unlock()
+		if sErr := m.store.SetStatus(id, StatusActive); sErr != nil {
+			m.log.WithError(sErr).WithField("id", id).
+				Warn("group: reconnect: SetStatus active failed")
+		}
+		m.log.WithField("id", id).Info("group: reconnect: subscribe restored")
+		return
+	}
+	m.reconnectRecordFailure(id, err)
+}
+
+// reconnectShouldAttempt returns false when the per-group nextAttempt
+// is still in the future (i.e. we're in a backoff window). True when
+// there's no state (first attempt) or when the backoff has elapsed.
+func (m *Manager) reconnectShouldAttempt(id string, now time.Time) bool {
+	m.reconnectMu.Lock()
+	defer m.reconnectMu.Unlock()
+	st, ok := m.reconnectState[id]
+	if !ok {
+		return true
+	}
+	return !st.nextAttempt.After(now)
+}
+
+// reconnectRecordFailure increments the per-group counter and emits
+// a warn-level transition log when crossing one of the configured
+// failure thresholds. The backoff intervals are absolute next-attempt
+// times so the reconnect loop's cheap RLock-and-skip path doesn't
+// have to do any arithmetic per tick.
+func (m *Manager) reconnectRecordFailure(id string, attemptErr error) {
+	m.reconnectMu.Lock()
+	st, ok := m.reconnectState[id]
+	if !ok {
+		st = &reconnectState{}
+		m.reconnectState[id] = st
+	}
+	st.failures++
+	var transition string
+	switch {
+	case st.failures == reconnectBackoffFailures2:
+		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval2)
+		transition = reconnectBackoffInterval2.String()
+	case st.failures == reconnectBackoffFailures1:
+		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval1)
+		transition = reconnectBackoffInterval1.String()
+	case st.failures > reconnectBackoffFailures2:
+		// Stay at the 30min cadence for any subsequent failures.
+		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval2)
+	case st.failures > reconnectBackoffFailures1:
+		// Stay at the 5min cadence between the two thresholds.
+		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval1)
+	}
+	failures := st.failures
+	m.reconnectMu.Unlock()
+	if transition != "" {
+		m.log.WithError(attemptErr).WithField("id", id).
+			WithField("failures", failures).
+			WithField("next_interval", transition).
+			Warn("group: reconnect: extending backoff")
+	} else {
+		m.log.WithError(attemptErr).WithField("id", id).
+			WithField("failures", failures).
+			Debug("group: reconnect: attempt failed")
+	}
+}
+
+// kickReconnect is the opportunistic-retry hook: when a member-side
+// SendToGroup succeeds via the relay listener, that proves the owner
+// is reachable — so it's likely a good moment to retry the failed
+// subscriber Connect too. Called outside of any session lock to avoid
+// contending with the regular reconnect tick.
+//
+// Distinct from runReconnectLoop's 30s cadence: this fires
+// immediately on a successful send, often before the next tick would,
+// shortening the typical recovery from <30s to <1s when the failure
+// was a transient transport hiccup.
+func (m *Manager) kickReconnect(ctx context.Context, id string) {
+	m.mu.RLock()
+	sess, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok || sess == nil || sess.sub == nil {
+		return
+	}
+	if sess.IsSubscriberAlive() {
+		return
+	}
+	// Best-effort: don't block the SendToGroup caller. The retry
+	// runs in its own goroutine and surfaces results through the
+	// usual reconnect logs.
+	go m.tryReconnect(ctx, sess, id)
 }
 
 // replaySessionHistory pumps the last resumeReplayMessageCap messages
@@ -362,7 +594,19 @@ func (m *Manager) replaySessionHistory(id string) {
 
 // Close tears down every live session and returns the first error.
 // Does NOT close the Store — caller still owns that.
+//
+// Also stops the background reconnect loop (if it was started via
+// Resume). Idempotent: a second Close is a no-op.
 func (m *Manager) Close() error {
+	m.reconnectMu.Lock()
+	cancel := m.reconnectCancel
+	m.reconnectCancel = nil
+	m.reconnectCtx = nil
+	m.reconnectMu.Unlock()
+	if cancel != nil {
+		cancel()
+		m.reconnectWG.Wait()
+	}
 	m.mu.Lock()
 	sessions := m.sessions
 	m.sessions = make(map[string]*Session)
@@ -378,6 +622,23 @@ func (m *Manager) Close() error {
 
 // Get returns the persisted record for an ID.
 func (m *Manager) Get(id string) (Record, bool, error) { return m.store.Get(id) }
+
+// IsSubscriberAlive reports the live subscriber health for the group
+// id, surfaced by the chat-app's /status endpoint as the per-group
+// `subscriber_alive` field. Returns true for owner-role sessions
+// (no subscriber) and for member-role sessions whose most recent
+// Connect() succeeded. Returns false for member-role sessions sitting
+// at StatusPending or when no live session exists for the id (e.g.
+// the record was left/revoked).
+func (m *Manager) IsSubscriberAlive(id string) bool {
+	m.mu.RLock()
+	sess, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok || sess == nil {
+		return false
+	}
+	return sess.IsSubscriberAlive()
+}
 
 // List returns every persisted record.
 func (m *Manager) List() ([]Record, error) { return m.store.List() }
@@ -424,12 +685,25 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 		return nil, fmt.Errorf("group: open %s: %w", r.ID, err)
 	}
 	if h != nil {
-		sess.SetMessageHandler(h)
+		sess.SetMessageHandler(m.wrapHandler(r.ID, h))
 	}
 	m.mu.Lock()
 	m.sessions[r.ID] = sess
 	m.mu.Unlock()
 	return sess, nil
+}
+
+// wrapHandler decorates the user handler so every observed message
+// (inbound from the feed AND owner self-echo of own sends) updates
+// the record's LastMessageAt. Without this, last_message_at only
+// reflected outbound SendToGroup calls — member-side records showed
+// "0001-01-01" forever even with healthy inbound, and group list's
+// LAST_MESSAGE column was a misleading sender-only counter.
+func (m *Manager) wrapHandler(id string, h MessageHandler) MessageHandler {
+	return func(groupID string, senderPK cipher.PubKey, msg Message) {
+		_ = m.store.MarkMessage(id, msg.TS) //nolint:errcheck
+		h(groupID, senderPK, msg)
+	}
 }
 
 // defaultPortAlloc picks a random DMSG port in the range
