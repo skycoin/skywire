@@ -424,12 +424,25 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 		return nil, fmt.Errorf("group: open %s: %w", r.ID, err)
 	}
 	if h != nil {
-		sess.SetMessageHandler(h)
+		sess.SetMessageHandler(m.wrapHandler(r.ID, h))
 	}
 	m.mu.Lock()
 	m.sessions[r.ID] = sess
 	m.mu.Unlock()
 	return sess, nil
+}
+
+// wrapHandler decorates the user handler so every observed message
+// (inbound from the feed AND owner self-echo of own sends) updates
+// the record's LastMessageAt. Without this, last_message_at only
+// reflected outbound SendToGroup calls — member-side records showed
+// "0001-01-01" forever even with healthy inbound, and group list's
+// LAST_MESSAGE column was a misleading sender-only counter.
+func (m *Manager) wrapHandler(id string, h MessageHandler) MessageHandler {
+	return func(groupID string, senderPK cipher.PubKey, msg Message) {
+		_ = m.store.MarkMessage(id, msg.TS) //nolint:errcheck
+		h(groupID, senderPK, msg)
+	}
 }
 
 // defaultPortAlloc picks a random DMSG port in the range
