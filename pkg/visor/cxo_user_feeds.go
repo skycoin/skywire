@@ -121,8 +121,13 @@ func (v *Visor) RegisterCXOFeed(name string, dmsgPort uint16, description string
 
 	log := v.MasterLogger().PackageLogger("cxo_user_feed:" + name)
 	dataDir := filepath.Join(v.conf.LocalPath, "cxo-user-feeds", name)
+	// Same 10s coalescing window as the stats publisher — user-feed
+	// puts are typically operator-driven (skychat hub broadcasts,
+	// custom RPC writes) where ~10s latency between publish and
+	// downstream visibility is fine, and it cuts CXO bbolt commit
+	// frequency by 10x relative to the historic 1s default.
 	pub, err := treestore.NewWithDMSG(v.dmsgC, v.conf.SK, treestore.PubConfig{
-		BatchWindow: 1 * time.Second,
+		BatchWindow: 10 * time.Second,
 		Logger:      log,
 		DataDir:     dataDir,
 		DmsgPort:    dmsgPort,
