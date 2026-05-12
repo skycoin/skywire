@@ -541,6 +541,26 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 	if err := s.pub.Put(path, body); err != nil {
 		return fmt.Errorf("group: publishAs: put %q: %w", path, err)
 	}
+
+	// Owner-side local echo: deliver to the local handler so the
+	// owner's own inbox sees their sends. The original design assumed
+	// the owner doesn't need to "hear themselves back" because the
+	// skychat hub fans out locally before publishing — but that's
+	// not how the visor-level group inbox path works. Without a
+	// self-echo, `skywire cli skychat group listen` shows nothing
+	// when the owner is the only participant, which is misleading
+	// during testing (looks like the publish failed silently).
+	//
+	// We deliver the plaintext Message regardless of ModePrivate —
+	// the local handler should see the same content the (decoded)
+	// subscriber path would surface, not the encrypted bytes.
+	if h := s.handler; h != nil {
+		h(s.cfg.Record.ID, senderPK, Message{
+			SenderPK: senderPK,
+			Text:     text,
+			TS:       ts,
+		})
+	}
 	return nil
 }
 
