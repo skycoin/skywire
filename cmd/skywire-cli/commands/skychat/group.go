@@ -22,6 +22,7 @@ package cliskychat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -44,6 +45,7 @@ var (
 
 	groupListenSince string
 	groupListenPoll  time.Duration
+	groupListenRaw   bool
 )
 
 func init() {
@@ -54,6 +56,10 @@ func init() {
 
 	groupListenCmd.Flags().StringVar(&groupListenSince, "since", "", "RFC3339 lower bound for the first poll; empty = drain current inbox window then follow")
 	groupListenCmd.Flags().DurationVar(&groupListenPoll, "interval", time.Second, "poll interval")
+	// --raw and --json (persistent) are mutually exclusive; default
+	// escapes \n and \r so each event is exactly one stdout line.
+	// See cmd/skywire-cli/commands/skychat/escape.go for rationale.
+	groupListenCmd.Flags().BoolVar(&groupListenRaw, "raw", false, "emit unescaped multi-line message bodies (humans reading directly; not safe for line-based log aggregators)")
 
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
@@ -247,8 +253,25 @@ dies when the visor halts (rebuild-restart loop). The poller
 catches "connection is shut down" / EOF / similar errors,
 backs off (1s→30s exponential), re-creates the rpc client, and
 resumes polling. Reduces the burn-the-CLI-Ctrl+C-relaunch
-friction operators hit during a development cycle.`,
+friction operators hit during a development cycle.
+
+Output modes (mutually exclusive — passing both --raw and --json
+errors out):
+  text (default): one line per message,
+    "[<ts>] [<group-id>] <sender-pk>: <body>". Embedded newlines and
+    carriage returns in the body are escaped to literal \n / \r so
+    each message is exactly ONE line of stdout. This is the mode
+    agents and log-line aggregators should use.
+  --raw: same format, body NOT escaped. For humans reading directly.
+  --json: NDJSON, one object per line:
+    {"ts":..., "group_id":..., "sender_pk":..., "body":...}
+    JSON's native string encoding handles multi-line bodies; this
+    mode is also one-line-per-event.`,
 	Run: func(cmd *cobra.Command, _ []string) {
+		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		if jsonMode && groupListenRaw {
+			internal.PrintFatalError(cmd.Flags(), errors.New("--raw and --json are mutually exclusive"))
+		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -260,7 +283,9 @@ friction operators hit during a development cycle.`,
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --since: %w", err))
 			}
 		}
-		fmt.Println("Listening for group messages. Ctrl+C to exit.")
+		if !jsonMode {
+			fmt.Println("Listening for group messages. Ctrl+C to exit.")
+		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		ticker := time.NewTicker(groupListenPoll)
@@ -327,8 +352,31 @@ friction operators hit during a development cycle.`,
 				if m.TS.After(since) {
 					since = m.TS
 				}
+				if jsonMode {
+					ev := struct {
+						TS       time.Time `json:"ts"`
+						GroupID  string    `json:"group_id"`
+						SenderPK string    `json:"sender_pk"`
+						Body     string    `json:"body"`
+					}{
+						TS:       m.TS.UTC(),
+						GroupID:  m.GroupID,
+						SenderPK: m.SenderPK.Hex(),
+						Body:     m.Text,
+					}
+					b, mErr := json.Marshal(ev)
+					if mErr != nil {
+						continue
+					}
+					fmt.Println(string(b))
+					continue
+				}
+				body := m.Text
+				if !groupListenRaw {
+					body = escapeForOneLine(body)
+				}
 				fmt.Printf("[%s] [%s] %s: %s\n",
-					m.TS.UTC().Format(time.RFC3339), m.GroupID, m.SenderPK, m.Text)
+					m.TS.UTC().Format(time.RFC3339), m.GroupID, m.SenderPK, body)
 			}
 		}
 	},

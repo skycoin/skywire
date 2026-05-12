@@ -834,6 +834,7 @@
         this.recipients.forEach(r => this._addRecipient(r));
         this._sseSubscribe();
         this.syncPairedFromVisor();
+        this.syncHistoryPeers();
       }
 
       showToast(message, type = 'success') {
@@ -982,10 +983,81 @@
         this.showToast('Contact added successfully.');
       }
 
+      // syncHistoryPeers seeds the sidebar with peers the visor has
+      // stored history for but localStorage doesn't know about (fresh
+      // browser, new device, cleared cache). 404/503 means the visor
+      // has persistence disabled — silently fall back to the
+      // localStorage-only flow.
+      syncHistoryPeers() {
+        fetch('/history/peers')
+          .then(res => (res.status === 404 || res.status === 503) ? null : (res.ok ? res.json() : null))
+          .then(peers => {
+            if (!peers) return;
+            peers.forEach(p => {
+              if (p && !this.recipients.includes(p)) {
+                this._addRecipient(p);
+              }
+            });
+          })
+          .catch(e => console.debug('skychat /history/peers sync skipped:', e.message));
+      }
+
+      // loadHistoryFor preloads the server-side DM history for a peer
+      // when the local message buffer is empty. Idempotent: returns
+      // early if local already has messages, so it doesn't clobber
+      // in-memory sends made before the fetch resolves. 404/503 means
+      // persistence is off; fall back silently.
+      loadHistoryFor(pk) {
+        if (!this.messages[pk] || this.messages[pk].length > 0) return;
+        fetch(`/history?peer=${encodeURIComponent(pk)}&limit=100`)
+          .then(res => (res.status === 404 || res.status === 503) ? null : (res.ok ? res.json() : null))
+          .then(msgs => {
+            if (!msgs || msgs.length === 0) return;
+            if (this.messages[pk].length > 0) return; // a live message arrived; defer to it
+            const withDates = [];
+            let lastDay = null;
+            msgs.forEach(m => {
+              const ts = new Date(m.timestamp);
+              const day = ts.toDateString();
+              if (day !== lastDay) {
+                withDates.push({ date: ts });
+                lastDay = day;
+              }
+              withDates.push({
+                ts: ts,
+                from: m.outgoing ? 'me' : (m.from || m.peer),
+                text: m.text,
+              });
+            });
+            this.messages[pk] = withDates;
+            this.messagesQuantity[pk] = msgs.length;
+            this.saveChat(pk);
+            // Re-render if the user is already looking at this convo.
+            if (this.recipient === pk) {
+              const msgEl = document.getElementById('messages');
+              msgEl.innerHTML = '';
+              this.messages[pk].forEach(m => this._showMessage(m));
+              msgEl.scrollTop = msgEl.scrollHeight;
+              this.messagesSeen[pk] = this.messagesQuantity[pk];
+              this.saveSeenList();
+              this.updateUnreadBadges();
+            }
+            // Update sidebar preview from newest non-date entry.
+            for (let i = this.messages[pk].length - 1; i >= 0; i--) {
+              if (!this.messages[pk][i].date) {
+                this.updatePreview(pk, this.messages[pk][i]);
+                break;
+              }
+            }
+          })
+          .catch(e => console.debug(`skychat /history?peer=${pk} skipped:`, e.message));
+      }
+
       selectRecipient(pk) {
         if (this.recipient === pk) return;
 
         this.recipient = pk;
+        this.loadHistoryFor(pk);
 
         document.querySelectorAll('.recipient-item').forEach(item => {
           item.classList.toggle('active', item.dataset.pk === pk);
@@ -1233,6 +1305,11 @@
           this.refreshPairControls();
           this.showToast(`Pair declined by ${peer.substring(0,8)}...`, 'error');
         }
+        // Authoritative server-side reconciliation — the SSE branches
+        // above mutate local state only, so a stale received-list can
+        // hang around if the SSE envelope is malformed or arrives
+        // out-of-order. Refetch keeps the sidebar in sync with truth.
+        this.syncPendingInvites();
       }
 
       updateUnreadBadges() {
@@ -1274,7 +1351,7 @@
           url = `/pair/${destination}/message`;
           body = JSON.stringify({ text: msg });
         } else {
-          url = 'message';
+          url = '/message';
           body = JSON.stringify({ recipient: destination, message: msg, network: network });
         }
 
