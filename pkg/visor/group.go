@@ -42,6 +42,10 @@ type GroupInfo struct {
 	CreatedAt     time.Time           `json:"created_at"`
 	JoinedAt      time.Time           `json:"joined_at"`
 	LastMessageAt time.Time           `json:"last_message_at,omitempty"`
+	// SubscriberAlive is the live health of this visor's subscriber
+	// side. Populated by GroupList; left zero by other accessors that
+	// don't need it. See group.Manager.IsSubscriberAlive for semantics.
+	SubscriberAlive bool `json:"subscriber_alive"`
 }
 
 // GroupMessage is one inbound message delivered through the visor's
@@ -119,7 +123,10 @@ func (v *Visor) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
 	return toInfo(r), nil
 }
 
-// GroupList returns every persisted group on this visor.
+// GroupList returns every persisted group on this visor. The
+// SubscriberAlive field is populated from the live session map —
+// the only API surface where that's needed (the chat-app's /status
+// renders per-group health from this).
 func (v *Visor) GroupList() ([]GroupInfo, error) {
 	mgr := v.groupManager()
 	if mgr == nil {
@@ -131,7 +138,9 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 	}
 	out := make([]GroupInfo, 0, len(all))
 	for _, r := range all {
-		out = append(out, toInfo(r))
+		info := toInfo(r)
+		info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
+		out = append(out, info)
 	}
 	return out, nil
 }

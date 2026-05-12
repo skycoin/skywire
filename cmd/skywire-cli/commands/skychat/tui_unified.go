@@ -55,12 +55,13 @@ type pickerEntry struct {
 // Same shape as chat.go's chatMsg; copied here so the unified TUI is
 // independent of the 1:1 chat model and the two can evolve apart.
 type convoMessage struct {
-	When    time.Time
-	Sender  string // resolved display name (or PK)
-	Network string // skynet/dmsg (1:1 only)
-	Body    string
-	Err     string // when set, render in red
-	Self    bool   // outgoing
+	When     time.Time
+	Sender   string // resolved display name (or PK) — for rendering
+	SenderPK string // raw PK hex from wire — for routing keys; empty for outgoing
+	Network  string // skynet/dmsg (1:1 only)
+	Body     string
+	Err      string // when set, render in red
+	Self     bool   // outgoing
 }
 
 // unifiedView is which screen the TUI is currently on.
@@ -149,6 +150,11 @@ type tuiIncomingGroup struct{ msg groupTUIMsg }
 // tuiSSEErr / tuiGroupErr surface stream-level failures.
 type tuiSSEErr struct{ err error }
 type tuiGroupErr struct{ err error }
+
+// tuiMutationErr surfaces an error from a picker-level mutation
+// (group join / create) that has no associated history bucket to
+// render into. The handler renders it as a status banner.
+type tuiMutationErr struct{ err error }
 
 // tuiPickerLoaded is fired after the initial GroupList + history
 // fetch returns. Carries the populated entries.
@@ -280,11 +286,12 @@ func (m *unifiedModel) startSSE() tea.Cmd {
 				disp = alias
 			}
 			inCh <- convoMessage{
-				When:    cm.When,
-				Sender:  disp,
-				Network: cm.Network,
-				Body:    cm.Body,
-				Self:    false,
+				When:     cm.When,
+				Sender:   disp,
+				SenderPK: cm.Sender,
+				Network:  cm.Network,
+				Body:     cm.Body,
+				Self:     false,
 			}
 		}
 	}()
@@ -368,7 +375,16 @@ func (m *unifiedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.loadedAt = time.Now()
 
 	case tuiIncomingDM:
-		key := "dm:" + senderToKey(msg.msg.Sender)
+		// Route off the raw PK from the wire, not the resolved display
+		// name. If the alias was removed mid-session, the display would
+		// no longer round-trip to the PK and the inbound would split
+		// from the outbound (keyed by activeID/PK) into a separate
+		// "dm:<alias>" history bucket.
+		routePK := msg.msg.SenderPK
+		if routePK == "" {
+			routePK = senderToKey(msg.msg.Sender) // fallback for any caller still on the old path
+		}
+		key := "dm:" + routePK
 		m.history[key] = append(m.history[key], msg.msg)
 		if m.view == viewDM && m.historyKey() == key {
 			m.refreshViewport()
@@ -416,6 +432,11 @@ func (m *unifiedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tuiGroupErr:
 		if msg.err != nil {
 			m.statusErr = "group: " + msg.err.Error()
+		}
+
+	case tuiMutationErr:
+		if msg.err != nil {
+			m.statusErr = msg.err.Error()
 		}
 
 	case tea.KeyMsg:
@@ -661,7 +682,7 @@ func (m *unifiedModel) runJoinInvite(invite string) tea.Cmd {
 	return func() tea.Msg {
 		err := groupJoinRPC(invite)
 		if err != nil {
-			return tuiSent{key: "", body: "", err: err}
+			return tuiMutationErr{err: fmt.Errorf("group join: %w", err)}
 		}
 		// Successful join: refresh the picker so the new group shows.
 		return m.refreshAfterMutation()
@@ -672,7 +693,7 @@ func (m *unifiedModel) runCreateGroup(name string) tea.Cmd {
 	return func() tea.Msg {
 		err := groupCreateRPC(name)
 		if err != nil {
-			return tuiSent{key: "", body: "", err: err}
+			return tuiMutationErr{err: fmt.Errorf("group create: %w", err)}
 		}
 		return m.refreshAfterMutation()
 	}

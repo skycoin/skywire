@@ -143,6 +143,14 @@ type Session struct {
 
 	handler MessageHandler
 	log     *logging.Logger
+
+	// subAlive tracks whether the most recent Connect() succeeded
+	// and the subscriber has not yet been torn down. Owner-role
+	// sessions are always considered alive (no subscriber to track).
+	// Surfaced through IsSubscriberAlive for the chat-app's /status
+	// per-group health field. Atomic so it can be read without
+	// acquiring any session mutex from the status handler's hot path.
+	subAlive atomic.Bool
 }
 
 // relayPortOffset is the dmsg-port delta from the group's CXO
@@ -311,6 +319,11 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 // Connect dials the owner's CXO node and starts the subscribe
 // handshake. Owner sessions are a no-op (they don't subscribe to
 // themselves). Idempotent: returns nil if already connected.
+//
+// On success, flips subAlive=true so IsSubscriberAlive starts
+// reporting "true" for operator-visible group health. On error,
+// subAlive stays false and the Manager's background reconnect
+// loop (Manager.runReconnectLoop) keeps retrying.
 func (s *Session) Connect() error {
 	if s.sub == nil {
 		return nil // owner role
@@ -318,7 +331,33 @@ func (s *Session) Connect() error {
 	if err := s.sub.Connect(s.cfg.Record.OwnerPK); err != nil {
 		return fmt.Errorf("group: Connect: %w", err)
 	}
+	s.subAlive.Store(true)
 	return nil
+}
+
+// IsSubscriberAlive reports whether the subscriber side of this
+// session is currently live. Surfaced through the chat-app's
+// /status endpoint as the per-group `subscriber_alive` field so
+// operators can spot a member session whose Connect failed silently
+// or whose subscriber has been torn down.
+//
+// Semantics:
+//   - Owner-role sessions: always true (no subscriber to track; the
+//     publisher side is owned by this visor and there's nothing to
+//     "lose connection" to).
+//   - Member-role sessions: true iff the most recent Connect()
+//     succeeded AND Close has not been called. Does NOT consult the
+//     underlying treestore.Subscriber's live conn state — that would
+//     require a new accessor on Subscriber and the connection there
+//     is best-effort heartbeated by CXO already. The boolean here is
+//     "did we successfully attach + do we believe we're still
+//     attached"; the background reconnect loop is responsible for
+//     re-asserting that belief on its 30s cadence.
+func (s *Session) IsSubscriberAlive() bool {
+	if s.sub == nil {
+		return true // owner role
+	}
+	return s.subAlive.Load()
 }
 
 // ID returns the group's UUID.
@@ -382,6 +421,9 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 // CXO node, owned by the publisher). Idempotent.
 func (s *Session) Close() error {
 	var firstErr error
+	// Flip subAlive first so any concurrent /status read sees the
+	// session as dead even if Close races with a long Subscriber.Close.
+	s.subAlive.Store(false)
 	if s.relayCancel != nil {
 		s.relayCancel()
 	}
