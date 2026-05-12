@@ -71,17 +71,25 @@ type Dmsgpty struct {
 }
 
 // Dmsgscp configures the dmsgscp-host (scp-over-dmsg daemon).
-// Disabled by default — operators must opt in by setting Enabled to
-// true. When Whitelist is empty the host reuses Dmsgpty.Whitelist
-// (handled at initialisation time, not in this struct) so trusting
+// The host is on by default — access is gated by the same whitelist
+// that dmsgpty uses (a peer's PK must be on the list to be served).
+// Operators who want to disable it entirely set Disabled=true. When
+// Whitelist is empty the host reuses Dmsgpty.Whitelist so trusting
 // a peer for pty implicitly trusts them for file transfer too.
+//
+// The host listens on BOTH dmsg and the skywire router (skynet) at
+// the same port number — same dual-listen pattern dmsg_http and
+// others use. dmsg covers the bootstrap path (works before any
+// router transport is up); skynet covers steady-state operation
+// over arbitrary transports.
 type Dmsgscp struct {
-	// Enabled toggles whether initDmsgpty starts the dmsgscp Host.
-	// Default false to keep existing visors quiet on first restart
-	// after upgrade.
-	Enabled bool `json:"enabled"`
+	// Disabled, when true, suppresses both the dmsg and skynet
+	// listeners. Default false (== on). Inverted from the original
+	// `Enabled` field so the zero value matches the default.
+	Disabled bool `json:"disabled,omitempty"`
 	// DmsgPort is the dmsg port to listen on; zero means use
-	// dmsgscp.DefaultPort (23).
+	// dmsgscp.DefaultPort (23). The skynet mirror binds the same
+	// port number on the router for parity.
 	DmsgPort uint16 `json:"dmsg_port,omitempty"`
 	// RootDir is the filesystem directory the host serves files
 	// from (its effective chroot). Empty means
