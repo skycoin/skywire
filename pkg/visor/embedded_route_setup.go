@@ -112,6 +112,13 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 	const maxConcurrent = 128
 	sem := make(chan struct{}, maxConcurrent)
 
+	// Embedded RSN runs under its own PK/SK (separate from the
+	// visor's primary identity) and has no transport manager of its
+	// own — so no skynet mirror. The skywire networker keys to
+	// v.conf.PK; binding on this RSN's PK would either fail or
+	// shadow the visor's own listener at the same port. Stays
+	// dmsg-only by design.
+
 	for {
 		conn, err := lis.AcceptStream()
 		if err != nil {
@@ -144,12 +151,6 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 			continue
 		}
 
-		// Acquire semaphore before spawning. Non-blocking — if the sem is
-		// full we drop this request IMMEDIATELY rather than waiting, so
-		// the accept loop keeps draining the listener's accept buffer
-		// (AcceptBufferSize=20). If we block here, the buffer fills and
-		// dmsg drops streams with "listener accept chan maxed", which is
-		// worse than dropping with a clear reason.
 		select {
 		case sem <- struct{}{}:
 		case <-ctx.Done():
@@ -166,9 +167,6 @@ func (ers *EmbeddedRouteSetup) Serve(ctx context.Context) error {
 
 		go func() {
 			defer func() { <-sem }()
-			// Set a hard deadline on the inbound connection as a backstop.
-			// If CreateRouteGroup hangs (stuck outbound dials), the deadline
-			// fires and ServeConn returns, freeing the semaphore slot.
 			conn.SetDeadline(time.Now().Add(timeout + 10*time.Second)) //nolint:errcheck,gosec
 			rpcS.ServeConn(conn)
 		}()

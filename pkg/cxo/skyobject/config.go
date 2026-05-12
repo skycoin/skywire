@@ -203,6 +203,19 @@ type Config struct {
 	// DB is *data.DB you can provide. If the field is not nil
 	// nil, then DPPath and InMemoryDB fields ignored.
 	DB *data.DB
+
+	// NoSyncCXDS opens the on-disk CXDS + IdxDB with NoSync=true,
+	// skipping fdatasync at each transaction commit. Trades crash
+	// durability for an order-of-magnitude reduction in write
+	// traffic (see cxds.DriveOptions / idxdb.DriveOptions for the
+	// full rationale). Set this when the underlying CXO data is
+	// content-addressed AND the publisher's in-memory tree is the
+	// source of truth — losing a torn write at crash time is fine
+	// because the next BatchWindow tick republishes everything.
+	//
+	// Has no effect when InMemoryDB is true or DB is non-nil
+	// (those paths don't open files at all).
+	NoSyncCXDS bool
 }
 
 // NewConfig returns pointer to Config with default values

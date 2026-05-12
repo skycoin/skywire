@@ -111,6 +111,120 @@ func (s *Store) PutTransportRecord(rec *TransportRecord) error {
 	})
 }
 
+// SampleTx is the per-tick batched store interface handed to the
+// Tracker's sample callback. It wraps a *bbolt.Tx so all of a
+// sample's mutations (PutTransportRecord, MarkTierSlot,
+// MarkServiceSlot, MarkTransportSlot) and reads (GetTransportRecord,
+// TierBitmap, ...) commit in one transaction → one fdatasync per
+// sample instead of one per call. Methods mirror the Store API but
+// without the implicit db.View/Update wrappers.
+//
+// Lifetime: valid only inside the callback passed to Store.UpdateSample.
+// Reading or writing outside that scope is undefined behavior.
+type SampleTx struct {
+	tx *bbolt.Tx
+}
+
+// UpdateSample runs fn inside a single bbolt write transaction.
+// Returns the commit error or the fn's error (whichever fires first).
+//
+// Used by the Tracker to coalesce a full sample tick (N transports +
+// M tiers + S services worth of writes) into one commit. Replaces
+// what used to be 2N + M + S separate Update transactions per sample
+// — each of which fsynced — with one.
+func (s *Store) UpdateSample(fn func(*SampleTx) error) error {
+	return s.db.Update(func(tx *bbolt.Tx) error {
+		return fn(&SampleTx{tx: tx})
+	})
+}
+
+// PutTransportRecord overwrites the persisted record. Mirrors
+// Store.PutTransportRecord but uses the open tx.
+func (s *SampleTx) PutTransportRecord(rec *TransportRecord) error {
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return err
+	}
+	return s.tx.Bucket(bucketTransports).Put(rec.ID[:], data)
+}
+
+// GetTransportRecord looks up the persisted record under the open
+// tx. Returns nil + nil if absent (consistent with the standalone
+// Store.GetTransportRecord).
+func (s *SampleTx) GetTransportRecord(id uuid.UUID) (*TransportRecord, error) {
+	raw := s.tx.Bucket(bucketTransports).Get(id[:])
+	if raw == nil {
+		return nil, nil
+	}
+	rec := &TransportRecord{}
+	if err := json.Unmarshal(raw, rec); err != nil {
+		return nil, err
+	}
+	return rec, nil
+}
+
+// MarkTierSlot is the tx-scoped MarkTierSlot.
+func (s *SampleTx) MarkTierSlot(tier string, date time.Time, slot int) error {
+	return s.markSlot(bucketTiers, tier, date, slot)
+}
+
+// MarkServiceSlot is the tx-scoped MarkServiceSlot.
+func (s *SampleTx) MarkServiceSlot(svc string, date time.Time, slot int) error {
+	return s.markSlot(bucketServices, svc, date, slot)
+}
+
+// MarkTransportSlot is the tx-scoped MarkTransportSlot.
+func (s *SampleTx) MarkTransportSlot(tpID string, date time.Time, slot int) error {
+	return s.markSlot(bucketTransportBitmaps, tpID, date, slot)
+}
+
+func (s *SampleTx) markSlot(top []byte, name string, date time.Time, slot int) error {
+	if slot < 0 || slot >= SlotsPerDay {
+		return fmt.Errorf("stats: slot %d out of range", slot)
+	}
+	dateKey := []byte(date.UTC().Format(dateFmt))
+	sub, err := s.tx.Bucket(top).CreateBucketIfNotExists([]byte(name))
+	if err != nil {
+		return err
+	}
+	bm := sub.Get(dateKey)
+	buf := make([]byte, BitmapSize)
+	if bm != nil {
+		copy(buf, bm)
+	}
+	SetSlot(buf, slot)
+	return sub.Put(dateKey, buf)
+}
+
+// TierBitmap returns a copy of the tier bitmap under the open tx.
+func (s *SampleTx) TierBitmap(tier string, date time.Time) []byte {
+	return s.getBitmap(bucketTiers, tier, date)
+}
+
+// ServiceBitmap is the tx-scoped ServiceBitmap.
+func (s *SampleTx) ServiceBitmap(svc string, date time.Time) []byte {
+	return s.getBitmap(bucketServices, svc, date)
+}
+
+// TransportBitmap is the tx-scoped TransportBitmap.
+func (s *SampleTx) TransportBitmap(tpID string, date time.Time) []byte {
+	return s.getBitmap(bucketTransportBitmaps, tpID, date)
+}
+
+func (s *SampleTx) getBitmap(top []byte, name string, date time.Time) []byte {
+	dateKey := []byte(date.UTC().Format(dateFmt))
+	out := make([]byte, BitmapSize)
+	sub := s.tx.Bucket(top).Bucket([]byte(name))
+	if sub == nil {
+		return out
+	}
+	bm := sub.Get(dateKey)
+	if bm != nil {
+		copy(out, bm)
+	}
+	return out
+}
+
 // GetTransportRecord returns the persisted record for a transport, or
 // nil if no record has been written yet.
 func (s *Store) GetTransportRecord(id uuid.UUID) (*TransportRecord, error) {
