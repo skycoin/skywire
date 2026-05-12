@@ -252,19 +252,38 @@ object suitable for scripts.`,
 			Peers              []string `json:"peers"`
 			PersistenceEnabled bool     `json:"persistence_enabled"`
 			PairingEnabled     bool     `json:"pairing_enabled"`
+			FrameProtoVersion  int      `json:"frame_proto_version"`
+			SchemaVersion      string   `json:"schema_version"`
+			AppUptimeSec       int64    `json:"app_uptime_sec"`
+			InboundMsgCount    uint64   `json:"inbound_msg_count"`
+			OutboundMsgCount   uint64   `json:"outbound_msg_count"`
+			InboundDropCount   uint64   `json:"inbound_drop_count"`
+			LastRxTS           string   `json:"last_rx_ts"`
+			LastSendTS         string   `json:"last_send_ts"`
 			Error              string   `json:"error,omitempty"`
 		}
 		if err := json.Unmarshal(raw, &status); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("decode status: %w", err))
 		}
-		fmt.Fprintf(out, "Chat app at %s\n", httpAddr)                         //nolint:errcheck
-		fmt.Fprintf(out, "  visor PK:           %s\n", status.VisorPK)         //nolint:errcheck
-		fmt.Fprintf(out, "  SSE subscribers:    %d\n", status.SSESubscribers)  //nolint:errcheck
-		fmt.Fprintf(out, "  active peer conns:  %d\n", status.ActivePeerConns) //nolint:errcheck
+		fmt.Fprintf(out, "Chat app at %s\n", httpAddr)                            //nolint:errcheck
+		fmt.Fprintf(out, "  visor PK:           %s\n", status.VisorPK)            //nolint:errcheck
+		fmt.Fprintf(out, "  app uptime:         %ds\n", status.AppUptimeSec)      //nolint:errcheck
+		fmt.Fprintf(out, "  frame proto:        v%d\n", status.FrameProtoVersion) //nolint:errcheck
+		fmt.Fprintf(out, "  schema:             %s\n", status.SchemaVersion)      //nolint:errcheck
+		fmt.Fprintf(out, "  SSE subscribers:    %d\n", status.SSESubscribers)     //nolint:errcheck
+		fmt.Fprintf(out, "  active peer conns:  %d\n", status.ActivePeerConns)    //nolint:errcheck
 		if len(status.Peers) > 0 {
 			for _, p := range status.Peers {
 				fmt.Fprintf(out, "    - %s\n", p) //nolint:errcheck
 			}
+		}
+		fmt.Fprintf(out, "  inbound msgs:       %d (drops: %d)\n", status.InboundMsgCount, status.InboundDropCount) //nolint:errcheck
+		fmt.Fprintf(out, "  outbound msgs:      %d\n", status.OutboundMsgCount)                                     //nolint:errcheck
+		if status.LastRxTS != "" {
+			fmt.Fprintf(out, "  last rx:            %s\n", status.LastRxTS) //nolint:errcheck
+		}
+		if status.LastSendTS != "" {
+			fmt.Fprintf(out, "  last send:          %s\n", status.LastSendTS) //nolint:errcheck
 		}
 		fmt.Fprintf(out, "  persistence:        %v\n", status.PersistenceEnabled) //nolint:errcheck
 		fmt.Fprintf(out, "  pairing:            %v\n", status.PairingEnabled)     //nolint:errcheck
@@ -386,11 +405,12 @@ Filters:
 
 		if jsonMode {
 			emitJSON(out, listenEvent{
-				Type: evtBanner,
-				TS:   time.Now().UTC(),
-				Addr: httpAddr,
-				Net:  netFilter,
-				From: listenFrom,
+				Type:   evtBanner,
+				TS:     time.Now().UTC(),
+				Addr:   httpAddr,
+				Schema: listenSchemaVersion,
+				Net:    netFilter,
+				From:   listenFrom,
 			})
 		} else {
 			fmt.Fprintf(out, "Listening for messages from %s", httpAddr) //nolint:errcheck
@@ -460,18 +480,26 @@ type listenEvent struct {
 	TS   time.Time `json:"ts"`
 
 	// Banner-only.
-	Addr string `json:"addr,omitempty"`
+	Addr   string `json:"addr,omitempty"`
+	Schema string `json:"schema,omitempty"` // listen-output schema version (currently "v1")
 
 	// Msg-only.
-	From string `json:"from,omitempty"`
+	ID   string `json:"id,omitempty"`   // stable per-event identifier; used by send-ack to correlate
+	From string `json:"from,omitempty"` // local side: own PK on dir:out, peer PK on dir:in
+	To   string `json:"to,omitempty"`   // dir:out only — peer the message was sent to
 	Net  string `json:"net,omitempty"`
 	Body string `json:"body,omitempty"`
-	Dir  string `json:"dir,omitempty"` // "in" | "out"
+	Dir  string `json:"dir,omitempty"` // "in" | "out" | future: "relay" | "group-in" | "group-out"
+	Len  int    `json:"len,omitempty"` // body byte length, surfaced for size-debug w/o re-parsing
 
 	// Reconnect / error.
 	Err     string `json:"err,omitempty"`
 	DelayMS int64  `json:"delay_ms,omitempty"`
 }
+
+// listenSchemaVersion is the CLI-side view of the wire-shape version.
+// Mirrors what the chat app emits in /status as "schema_version".
+const listenSchemaVersion = "v1"
 
 const (
 	evtBanner    = "banner"
@@ -530,6 +558,9 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 			Message string `json:"message"`
 			Network string `json:"network,omitempty"`
 			Dir     string `json:"dir,omitempty"` // "in" | "out" | future: "relay" | "group-in" | "group-out"
+			ID      string `json:"id,omitempty"`
+			To      string `json:"to,omitempty"`
+			Len     int    `json:"len,omitempty"`
 		}
 		if err := json.Unmarshal([]byte(data), &msg); err != nil {
 			if jsonMode {
@@ -561,10 +592,13 @@ func streamSSEOnce(ctx context.Context, out io.Writer, url, netFilter, fromFilte
 			emitJSON(out, listenEvent{
 				Type: evtMsg,
 				TS:   time.Now().UTC(),
+				ID:   msg.ID,
 				From: msg.Sender,
+				To:   msg.To,
 				Net:  msg.Network,
 				Body: msg.Message,
 				Dir:  dir,
+				Len:  msg.Len,
 			})
 		} else {
 			netSuffix := ""
