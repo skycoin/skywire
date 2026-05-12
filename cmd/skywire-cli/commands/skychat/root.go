@@ -32,6 +32,7 @@ var (
 	// surfaced "invalid network type:" because the var was empty.
 	sendNet      string
 	sendWait     time.Duration
+	sendRetries  int
 	listenNet    string
 	listenFrom   string
 	listenRaw    bool
@@ -56,6 +57,7 @@ func init() {
 	sendCmd.Flags().StringVarP(&message, "msg", "m", "", "message to send (required)")
 	sendCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type: skynet or dmsg")
 	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 0, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 = no wait (default)")
+	sendCmd.Flags().IntVarP(&sendRetries, "retries", "r", 1, "extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried.")
 	sendCmd.MarkFlagRequired("to")  //nolint:errcheck,gosec
 	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
 
@@ -120,7 +122,28 @@ are normalized server-side.`,
 		if err := validateNetwork(sendNet); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		ack, err := postMessage(httpAddr, pk.String(), message, sendNet, sendWait)
+		// Retry on HTTP/transport failure only. Ack timeouts (peer-side
+		// failure with --wait) are NOT retried: a peer on the old
+		// unframed binary will time out every time, and a healthy peer
+		// that took >wait to ack will get the message twice if we
+		// retry. The in-handler redial+retry already absorbs the
+		// common transient stale-conn case; --retries here is the
+		// belt-and-suspenders for HTTP-layer / chat-app-down cases.
+		attempts := sendRetries + 1
+		if attempts < 1 {
+			attempts = 1
+		}
+		var ack *AckResponse
+		for i := 0; i < attempts; i++ {
+			ack, err = postMessage(httpAddr, pk.String(), message, sendNet, sendWait)
+			if err == nil {
+				break
+			}
+			if i+1 < attempts {
+				backoff := time.Duration(200*(i+1)) * time.Millisecond
+				time.Sleep(backoff)
+			}
+		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
