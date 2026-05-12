@@ -198,6 +198,14 @@ func (h *sseHub) subscribe() (<-chan string, func()) {
 	}
 }
 
+// clientCount returns how many SSE subscribers are currently
+// connected. Used by /status for operator health probes.
+func (h *sseHub) clientCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.clients)
+}
+
 // broadcast sends msg to every connected client. Drops to clients
 // whose buffer is full — bounded fan-out keeps a single stalled
 // client from holding back the whole stream.
@@ -373,6 +381,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	http.HandleFunc("/sse", requireAuthFunc(sseHandler))
 	http.HandleFunc("/history", requireAuthFunc(historyHandler))
 	http.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
+	http.HandleFunc("/status", requireAuthFunc(statusHandler))
 	registerPairHTTPHandlers(ctx)
 
 	url := ""
@@ -805,6 +814,48 @@ func historyPeersHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(peers) //nolint:errcheck,gosec
+}
+
+// statusHandler returns a snapshot of the chat-app's runtime health
+// for operator probes. Replaces the chain of `docker exec + ss -tlnp
+// + curl /sse` an operator would otherwise need to verify the app
+// is up. JSON shape is stable — added fields are backward-compatible.
+func statusHandler(w http.ResponseWriter, _ *http.Request) {
+	connsMu.Lock()
+	connCount := len(conns)
+	peers := make([]string, 0, connCount)
+	for pk := range conns {
+		peers = append(peers, pk.Hex())
+	}
+	connsMu.Unlock()
+
+	var subscriberCount int
+	if hub != nil {
+		subscriberCount = hub.clientCount()
+	}
+
+	var visorPK string
+	var visorPKErr string
+	if appCl != nil {
+		visorPK = appCl.Config().VisorPK.Hex()
+	} else {
+		visorPKErr = "app client not initialized"
+	}
+
+	status := map[string]interface{}{
+		"visor_pk":            visorPK,
+		"sse_subscribers":     subscriberCount,
+		"active_peer_conns":   connCount,
+		"peers":               peers,
+		"persistence_enabled": historyStore != nil,
+		"pairing_enabled":     pairEnable,
+	}
+	if visorPKErr != "" {
+		status["error"] = visorPKErr
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(status) //nolint:errcheck,gosec
 }
 
 // persistMessage stores a message in the history backend if persistence is
