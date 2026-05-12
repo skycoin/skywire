@@ -127,7 +127,7 @@ func TestEncryptDecryptRoundTrip(t *testing.T) {
 }
 
 func TestDecryptRejectsTampered(t *testing.T) {
-	key, _ := GenerateAESKey() //nolint:errcheck
+	key, _ := GenerateAESKey()                             //nolint:errcheck
 	ct, nonce, _ := Encrypt(key, []byte("secret message")) //nolint:errcheck
 	// Flip one byte in the ciphertext. GCM's MAC should detect it.
 	ct[0] ^= 0xff
@@ -137,8 +137,8 @@ func TestDecryptRejectsTampered(t *testing.T) {
 }
 
 func TestDecryptRejectsWrongKey(t *testing.T) {
-	k1, _ := GenerateAESKey() //nolint:errcheck
-	k2, _ := GenerateAESKey() //nolint:errcheck
+	k1, _ := GenerateAESKey()                          //nolint:errcheck
+	k2, _ := GenerateAESKey()                          //nolint:errcheck
 	ct, nonce, _ := Encrypt(k1, []byte("for k1 only")) //nolint:errcheck
 	if _, err := Decrypt(k2, ct, nonce); err == nil {
 		t.Error("Decrypt should reject wrong key")

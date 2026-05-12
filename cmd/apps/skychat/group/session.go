@@ -47,7 +47,7 @@ import (
 )
 
 // MessagePathPrefix is the prefix used for message leaves within a
-// group feed. Matches the pairing analogue so an operator who
+// group feed. Matches the pairing analog so an operator who
 // understands one understands both.
 const MessagePathPrefix = "msgs"
 

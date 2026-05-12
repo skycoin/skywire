@@ -130,6 +130,9 @@ var (
 	cxoUserFeedsMod vinit.Module
 	// Chat-pair feed manager (opt-in per-partner CXO feeds).
 	pairingMod vinit.Module
+	// Chat-group feed manager (D1 owner-centric CXO feeds with
+	// multi-PK allowlist).
+	groupingMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -209,8 +212,12 @@ func registerModules(logger *logging.MasterLogger) {
 	// Chat-pair manager: opt-in per-partner CXO feeds with allowlist.
 	// Depends only on dmsgC.
 	pairingMod = maker("pairing", initPairing, &dmsgC)
+	// Chat-group manager: D1 owner-centric group CXO feeds. Same
+	// shape as pairingMod, same dmsgC dependency, separate bbolt
+	// store. See init_group.go.
+	groupingMod = maker("grouping", initGrouping, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

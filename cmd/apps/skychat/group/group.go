@@ -52,7 +52,7 @@ const (
 	ModePrivate Mode = "private"
 )
 
-// IsValid returns true for the two recognised modes.
+// IsValid returns true for the two recognized modes.
 func (m Mode) IsValid() bool {
 	return m == ModePublic || m == ModePrivate
 }
