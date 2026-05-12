@@ -257,12 +257,26 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	// throwaway publisher with an empty allowlist (no one subscribes
 	// to a member's per-group feed in D1) just to get a node. Phase
 	// 2 turns this into a real per-member outbox feed.
+	// Member's throwaway local CXO node uses Record.Port — the SAME
+	// port number the owner's publisher binds on the owner's visor.
+	// Two visors can both bind the same DMSG port number; the port is
+	// per-PK. The DMSGFactory in CXO uses one port for both Listen
+	// AND outbound Dial (see cxo/node/transport/dmsg.go:89), so the
+	// subscriber's ConnectPK to the owner dials at the same port —
+	// which MUST be Record.Port to hit the owner's CXO publisher, not
+	// the relay listener (which is at Record.Port+1).
+	//
+	// Local collision risk: theoretical only — happens if the same
+	// visor is also publisher of a different group on the SAME
+	// Record.Port (~1/65535 birthday collision per-pair across
+	// groups). When it does happen, bind fails with a clear "address
+	// in use" error; not silent corruption.
 	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
 		BatchWindow:         cfg.BatchWindow,
 		Logger:              log,
 		DataDir:             filepath.Join(cfg.DataDir, "group", cfg.Record.ID, "member"),
-		DmsgPort:            cfg.Record.Port + 1, // separate port; owner owns Record.Port
-		SubscriberAllowlist: []cipher.PubKey{},   // empty = nobody allowed
+		DmsgPort:            cfg.Record.Port,
+		SubscriberAllowlist: []cipher.PubKey{}, // empty = nobody allowed
 		// Member-side throwaway node — pure cache, no durability
 		// requirement at all.
 		NoSyncCXDS: true,
