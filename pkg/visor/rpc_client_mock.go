@@ -1194,6 +1194,40 @@ func (mc *mockRPCClient) PairSend(_ cipher.PubKey, _ string) error { return nil 
 // PairPoll implements API.
 func (mc *mockRPCClient) PairPoll(_ time.Time) ([]PairMessage, error) { return nil, nil }
 
+// GroupCreate implements API.
+func (mc *mockRPCClient) GroupCreate(_ GroupCreateArgs) (GroupInfo, string, error) {
+	return GroupInfo{}, "", nil
+}
+
+// GroupJoin implements API.
+func (mc *mockRPCClient) GroupJoin(_ GroupJoinArgs) (GroupInfo, error) { return GroupInfo{}, nil }
+
+// GroupList implements API.
+func (mc *mockRPCClient) GroupList() ([]GroupInfo, error) { return nil, nil }
+
+// GroupGet implements API.
+func (mc *mockRPCClient) GroupGet(_ string) (GroupInfo, error) { return GroupInfo{}, nil }
+
+// GroupInvite implements API.
+func (mc *mockRPCClient) GroupInvite(_ string) (string, error) { return "", nil }
+
+// GroupAddMember implements API.
+func (mc *mockRPCClient) GroupAddMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupSend implements API.
+func (mc *mockRPCClient) GroupSend(_ GroupSendArgs) error { return nil }
+
+// GroupPoll implements API.
+func (mc *mockRPCClient) GroupPoll(_ time.Time) ([]GroupMessage, error) { return nil, nil }
+
+// GroupDelete implements API.
+func (mc *mockRPCClient) GroupDelete(_ string) error { return nil }
+
+// GroupLeave implements API.
+func (mc *mockRPCClient) GroupLeave(_ string) error { return nil }
+
 // TPSStatus implements API.
 func (mc *mockRPCClient) TPSStatus() (*TPSStatus, error) {
 	return &TPSStatus{Enabled: false}, nil
