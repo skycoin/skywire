@@ -208,6 +208,11 @@ type Visor struct {
 	// init failed); RPC handlers surface ErrPairingDisabled.
 	pairing pairingState
 
+	// grouping holds the chat-group feed manager + bbolt store +
+	// inbound message ring. Same shape as pairing, brought up by
+	// init_group.go. nil when group chat is disabled.
+	grouping groupState
+
 	// Embedded DMSG Web resolver (nil if dmsg_web.enable is false).
 	// Provides a localhost SOCKS5 proxy that resolves .dmsg hosts.
 	embeddedDmsgWeb *EmbeddedDmsgWeb

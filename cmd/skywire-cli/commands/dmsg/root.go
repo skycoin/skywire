@@ -24,5 +24,6 @@ func init() {
 	RootCmd.AddCommand(
 		curlCmd,
 		ptyCmd,
+		chatCmd,
 	)
 }
