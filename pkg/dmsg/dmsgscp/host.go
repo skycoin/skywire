@@ -27,6 +27,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
@@ -85,17 +86,33 @@ func (h *Host) RootDir() string { return h.rootDir }
 // dmsgpty.Host.ListenAndServe — see that function's comments for
 // the rationale on the temporary-error sleep and the close-pipe
 // classification.
+//
+// The accept loop body is shared with ServeListener so the same Host
+// can also accept on a skynet listener for dual-transport parity.
 func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
 	lis, err := h.dmsgC.Listen(port)
 	if err != nil {
 		return fmt.Errorf("dmsgscp: listen on dmsg port %d: %w", port, err)
 	}
+	h.logger().WithField("port", port).WithField("root", h.rootDir).
+		Debug("dmsgscp listening on dmsg.")
+	return h.ServeListener(ctx, lis)
+}
+
+// ServeListener runs the accept loop against a caller-provided
+// listener. Used directly by the skynet-mirror goroutine in
+// initDmsgpty so the dmsgscp Host serves over BOTH dmsg and the
+// skywire router at the same port number. The listener is closed
+// when ctx is canceled.
+//
+// Authorization (whitelist check) happens per-stream and works
+// uniformly across listener types because remoteAddrToPK handles
+// both dmsg.Addr and appnet.Addr shapes.
+func (h *Host) ServeListener(ctx context.Context, lis net.Listener) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	log := h.logger()
-	log.WithField("port", port).WithField("root", h.rootDir).Debug("dmsgscp listening.")
 
 	go func() {
 		<-ctx.Done()
@@ -103,7 +120,7 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 	}()
 
 	for {
-		stream, err := lis.AcceptStream()
+		conn, err := lis.Accept()
 		if err != nil {
 			log := log.WithError(err)
 			// Same temporary-error treatment as dmsgpty.
@@ -122,16 +139,22 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 			return err
 		}
 
-		rPK := stream.RawRemoteAddr().PK
+		rPK, ok := remoteAddrToPK(conn.RemoteAddr())
+		if !ok {
+			log.WithField("addr_type", fmt.Sprintf("%T", conn.RemoteAddr())).
+				Warn("dmsgscp: cannot extract peer PK from accepted conn; closing.")
+			_ = conn.Close() //nolint:errcheck
+			continue
+		}
 		slog := log.WithField("remote_pk", rPK.String())
 
 		if !h.authorize(slog, rPK) {
 			// Tell the peer why we're hanging up so the client
 			// surface gets a useful error rather than a bare EOF.
-			if werr := WriteFatal(stream, "dmsg stream rejected by whitelist"); werr != nil {
+			if werr := WriteFatal(conn, "dmsg stream rejected by whitelist"); werr != nil {
 				slog.WithError(werr).Debug("dmsgscp: failed to write rejection.")
 			}
-			if cerr := stream.Close(); cerr != nil {
+			if cerr := conn.Close(); cerr != nil {
 				slog.WithError(cerr).Debug("dmsgscp: error closing rejected stream.")
 			}
 			continue
@@ -142,8 +165,22 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 		go func(s net.Conn, l logrus.FieldLogger) {
 			h.serve(ctx, l, s)
 			atomic.AddInt32(&h.connN, -1)
-		}(stream, slog)
+		}(conn, slog)
 	}
+}
+
+// remoteAddrToPK extracts a cipher.PubKey from an accepted conn's
+// RemoteAddr. Supports dmsg.Addr (dmsg listener) and appnet.Addr
+// (skynet listener via the skywire router). Unrecognized address
+// types return ok=false; the caller logs + closes the connection.
+func remoteAddrToPK(addr net.Addr) (cipher.PubKey, bool) {
+	switch a := addr.(type) {
+	case dmsg.Addr:
+		return a.PK, true
+	case appnet.Addr:
+		return a.PubKey, true
+	}
+	return cipher.PubKey{}, false
 }
 
 // authorize mirrors the dmsgpty implementation byte-for-byte so the
