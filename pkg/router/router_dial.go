@@ -82,15 +82,33 @@ func (r *router) DialRoutes(
 	}
 
 	// Retry route setup with fresh routes if it fails due to stale TPD data.
-	// Route-finder may return routes with non-existent transports (TPD sync issues),
-	// so we query for fresh routes on each retry instead of retrying the same bad route.
+	// Route-finder may return routes with non-existent transports (TPD sync
+	// issues), so we query for fresh routes on each retry instead of retrying
+	// the same bad route.
+	//
+	// With --local-route enabled, fetchBestRoutes runs calculateLocalRoutes
+	// instead — that's deterministic over the local transport graph, so a
+	// retry against the same graph state would just burn CPU rebuilding the
+	// transport cache (~1s, 1.5k entries) for the same answer. Fail fast in
+	// that mode, and don't emit the "Route finder failed" wording either,
+	// since no route-finder query was ever made.
+	r.forceLocalRoutesMu.Lock()
+	forceLocal := r.forceLocalRoutes
+	r.forceLocalRoutesMu.Unlock()
 	const maxRetries = 3
+	maxFetchAttempts := maxRetries
+	if forceLocal {
+		maxFetchAttempts = 1
+	}
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
 		if err != nil {
-			if attempt < maxRetries {
+			if attempt < maxFetchAttempts {
 				log.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
 				continue
+			}
+			if forceLocal {
+				return nil, fmt.Errorf("local route calc: %w", err)
 			}
 			return nil, fmt.Errorf("route finder: %w", err)
 		}
@@ -308,13 +326,28 @@ func (r *router) PingRoute(
 		return r.setupPingRoute(ctx, forwardDesc, forwardPath, reversePath, rPK, opts)
 	}
 
+	// Same fail-fast logic for ping: with --local-route on, the
+	// fetch is deterministic so 3× the same calc just wastes ~3s
+	// of cache rebuilds. The "Ping route finder failed" wording is
+	// equally misleading when no route finder was queried.
+	r.forceLocalRoutesMu.Lock()
+	pingForceLocal := r.forceLocalRoutes
+	r.forceLocalRoutesMu.Unlock()
 	const maxRetries = 3
+	pingMaxFetch := maxRetries
+	if pingForceLocal {
+		pingMaxFetch = 1
+	}
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
 		if err != nil {
-			lastErr = fmt.Errorf("route finder: %w", err)
-			if attempt < maxRetries {
+			if pingForceLocal {
+				lastErr = fmt.Errorf("local route calc: %w", err)
+			} else {
+				lastErr = fmt.Errorf("route finder: %w", err)
+			}
+			if attempt < pingMaxFetch {
 				log.WithError(err).Warnf("Ping route finder failed (attempt %d/%d), retrying...", attempt, maxRetries)
 				continue
 			}
