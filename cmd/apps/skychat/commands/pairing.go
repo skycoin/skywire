@@ -491,15 +491,14 @@ func sendPairControl(ctx context.Context, peerPK cipher.PubKey, msgType string) 
 	if err != nil {
 		return err
 	}
-	_, err = conn.Write(body)
-	return err
+	return conn.WriteFrame(body)
 }
 
-// dialOrReusePeerConn returns a live connection to peerPK, dialing
-// over skynet (or dmsg as fallback) if none exists. Mirrors what
-// messageHandler does but doesn't take the HTTP request context's
-// shape.
-func dialOrReusePeerConn(ctx context.Context, peerPK cipher.PubKey) (net.Conn, error) {
+// dialOrReusePeerConn returns a live framed connection to peerPK,
+// dialing over skynet (or dmsg as fallback) if none exists. Mirrors
+// what messageHandler does but doesn't take the HTTP request
+// context's shape.
+func dialOrReusePeerConn(ctx context.Context, peerPK cipher.PubKey) (*framedConn, error) {
 	connsMu.Lock()
 	conn, ok := conns[peerPK]
 	connsMu.Unlock()
@@ -520,11 +519,12 @@ func dialOrReusePeerConn(ctx context.Context, peerPK cipher.PubKey) (net.Conn, e
 			return nil
 		})
 		if err == nil && dialed != nil {
+			fc := newFramedConn(dialed)
 			connsMu.Lock()
-			conns[peerPK] = dialed
+			conns[peerPK] = fc
 			connsMu.Unlock()
-			go handleConn(dialed) //nolint:gosec
-			return dialed, nil
+			go handleConn(fc) //nolint:gosec
+			return fc, nil
 		}
 		lastErr = err
 	}
