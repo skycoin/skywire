@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -200,6 +201,28 @@ func runDirectGotop() error {
 	lstream := getLayout(conf)
 	ly := layout.ParseLayout(lstream)
 
+	// Silence the default logger BEFORE ui.Init: upstream gotop emits
+	// log.Println on transient gopsutil glitches (e.g. the "negative
+	// value for recently received network data" line in
+	// vendor/.../widgets/net.go:118 when an interface counter rolls
+	// back across an interface reset / quick sample window). Those go
+	// to stderr by default — on a termui-backed TUI that writes straight
+	// onto the live screen, garbling the CPU graph + process list
+	// permanently (no render cycle repairs it). Capture to an in-memory
+	// buffer here so the messages aren't lost; flush them to stderr
+	// after ui.Close in the deferred restore, where the terminal is
+	// back in line-mode and a plain text dump is fine.
+	var logBuf logCapture
+	prevLogOut := log.Default().Writer()
+	log.SetOutput(&logBuf)
+	defer func() {
+		log.SetOutput(prevLogOut)
+		if captured := logBuf.String(); captured != "" {
+			fmt.Fprintln(os.Stderr, "--- gotop runtime messages ---")
+			fmt.Fprint(os.Stderr, captured)
+		}
+	}()
+
 	// Initialize UI
 	if err = ui.Init(); err != nil {
 		return err
@@ -381,6 +404,21 @@ func runGotopWithConfig(updateInterval time.Duration, remoteMode bool) error {
 	// Get layout
 	lstream := getLayout(conf)
 	ly := layout.ParseLayout(lstream)
+
+	// Same log-capture treatment as runDirectGotop — keep upstream
+	// log.Println output from the gopsutil-counter-rollback handlers
+	// off the live TUI screen. See the comment on the direct path
+	// for the full rationale.
+	var logBuf logCapture
+	prevLogOut := log.Default().Writer()
+	log.SetOutput(&logBuf)
+	defer func() {
+		log.SetOutput(prevLogOut)
+		if captured := logBuf.String(); captured != "" {
+			fmt.Fprintln(os.Stderr, "--- gotop runtime messages ---")
+			fmt.Fprint(os.Stderr, captured)
+		}
+	}()
 
 	// Initialize UI
 	if err = ui.Init(); err != nil {
@@ -745,4 +783,49 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-1] + "."
+}
+
+// logCapture is an io.Writer the runDirectGotop / runVisorGotop
+// paths swap in as log.Default()'s Writer for the duration of the
+// TUI. Captures upstream gotop's transient log output (gopsutil
+// counter rollbacks, etc.) in memory rather than letting them
+// write straight onto the live termui screen. Flushed to stderr
+// on TUI exit so the messages aren't lost.
+//
+// Bounded to avoid runaway memory on a long-running session
+// with a misbehaving gopsutil source: writes past
+// logCaptureMaxBytes drop and set truncated=true.
+type logCapture struct {
+	mu        sync.Mutex
+	buf       []byte
+	truncated bool
+}
+
+const logCaptureMaxBytes = 256 * 1024 // 256 KiB plenty for an interactive session
+
+func (c *logCapture) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	room := logCaptureMaxBytes - len(c.buf)
+	if room <= 0 {
+		c.truncated = true
+		return len(p), nil
+	}
+	if len(p) <= room {
+		c.buf = append(c.buf, p...)
+		return len(p), nil
+	}
+	c.truncated = true
+	c.buf = append(c.buf, p[:room]...)
+	return len(p), nil
+}
+
+func (c *logCapture) String() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := string(c.buf)
+	if c.truncated {
+		s += "[gotop log buffer truncated at 256KiB]\n"
+	}
+	return s
 }
