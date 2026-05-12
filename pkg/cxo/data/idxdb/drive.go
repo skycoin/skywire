@@ -21,9 +21,33 @@ type driveDB struct {
 	b *bolt.DB
 }
 
+// DriveOptions tune the on-disk IdxDB. Zero values use safe defaults.
+type DriveOptions struct {
+	// NoSync skips the fdatasync call at the end of each bbolt
+	// transaction commit. Trades durability for an order-of-magnitude
+	// reduction in disk write traffic.
+	//
+	// Appropriate when the underlying data is rebuildable on the next
+	// process restart — for the CXO index this means the publisher's
+	// in-memory tree (which republishes on every BatchWindow tick) is
+	// the source of truth, and the on-disk index is a cache that
+	// reconstructs from peer sync or republish if torn at crash time.
+	//
+	// Leave false (the default) for IdxDB instances that must survive
+	// a hard crash with byte-exact contents.
+	NoSync bool
+}
+
 // NewDriveIdxDB creates data.IdxDB instance that
-// keeps its data on drive
+// keeps its data on drive. Uses safe defaults; for caller-tuned
+// behavior use NewDriveIdxDBWithOptions.
 func NewDriveIdxDB(fileName string) (idx data.IdxDB, err error) {
+	return NewDriveIdxDBWithOptions(fileName, DriveOptions{})
+}
+
+// NewDriveIdxDBWithOptions opens the on-disk IdxDB with the given
+// options. See DriveOptions for tunables.
+func NewDriveIdxDBWithOptions(fileName string, opts DriveOptions) (idx data.IdxDB, err error) {
 
 	var created bool // true if db file has been created
 
@@ -34,6 +58,7 @@ func NewDriveIdxDB(fileName string) (idx data.IdxDB, err error) {
 
 	b, err = bolt.Open(fileName, 0644, &bolt.Options{
 		Timeout: time.Millisecond * 500,
+		NoSync:  opts.NoSync,
 	})
 
 	if err != nil {
