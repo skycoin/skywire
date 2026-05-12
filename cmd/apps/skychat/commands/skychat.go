@@ -4,9 +4,11 @@ package commands
 import (
 	"context"
 	"embed"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -38,12 +40,91 @@ import (
 
 var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
 
+// Wire-protocol constants for skychat's peer-to-peer messages.
+//
+// Pre-2026-05-12 the protocol was "one conn.Write = one conn.Read":
+// every message was sent as a raw byte slice and the receiver
+// assumed each Read returned exactly one message. That held for
+// dmsg (noise-framed up to 4 KB) but broke on the skynet route
+// path — appnet.directConn wraps transport.VStream, which is a
+// TCP-style stream that can split a single Write across multiple
+// Reads at arbitrary boundaries depending on route MTU. A
+// 600-byte chat message would arrive as two "messages" on the
+// receiver and the second half would surface as a separate chat
+// entry, looking to operators like the message was truncated.
+//
+// New protocol: length-prefixed frames. Each message is a 4-byte
+// big-endian length followed by exactly that many bytes of
+// payload. Old binaries can no longer talk to new ones — peers
+// must update together. The pair-control envelope (JSON `{type:
+// "pair-invite" | ...}`) keeps the same on-the-wire bytes; only
+// the framing around it changed.
+const skychatMaxFrameSize = 64 * 1024
+
+// framedConn wraps an appnet conn with length-prefixed framing
+// and a write mutex. The write mutex matters because two
+// callers (the HTTP /message handler and the pair-control
+// sender) can race to write to the same underlying conn — and
+// with framing, interleaving the length prefix of one message
+// with the payload of another would desync the receiver
+// permanently. The read path has a single owner (handleConn)
+// so no read mutex is needed.
+type framedConn struct {
+	net.Conn
+	writeMu sync.Mutex
+}
+
+func newFramedConn(c net.Conn) *framedConn { return &framedConn{Conn: c} }
+
+// WriteFrame writes a length-prefixed message. Returns an error
+// if the payload is empty or exceeds skychatMaxFrameSize.
+func (c *framedConn) WriteFrame(payload []byte) error {
+	if len(payload) == 0 {
+		return errors.New("skychat: empty payload")
+	}
+	if len(payload) > skychatMaxFrameSize {
+		return fmt.Errorf("skychat: payload %d > max %d", len(payload), skychatMaxFrameSize)
+	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) //nolint:gosec
+	if _, err := c.Conn.Write(hdr[:]); err != nil {
+		return err
+	}
+	_, err := c.Conn.Write(payload)
+	return err
+}
+
+// ReadFrame reads exactly one length-prefixed message. Rejects
+// frames over skychatMaxFrameSize so a malicious or out-of-sync
+// peer can't allocate gigabytes of memory by claiming a giant
+// length.
+func (c *framedConn) ReadFrame() ([]byte, error) {
+	var hdr [4]byte
+	if _, err := io.ReadFull(c.Conn, hdr[:]); err != nil {
+		return nil, err
+	}
+	length := binary.BigEndian.Uint32(hdr[:])
+	if length == 0 {
+		return nil, errors.New("skychat: zero-length frame")
+	}
+	if length > skychatMaxFrameSize {
+		return nil, fmt.Errorf("skychat: frame %d > max %d (peer running old unframed protocol?)", length, skychatMaxFrameSize)
+	}
+	payload := make([]byte, length)
+	if _, err := io.ReadFull(c.Conn, payload); err != nil {
+		return nil, err
+	}
+	return payload, nil
+}
+
 var (
 	addr      string
 	appCl     *app.Client
 	appLog    func(format string, args ...interface{}) // App logger function
 	hub       *sseHub                                  // SSE broadcast registry; see sse.go-like helpers below
-	conns     map[cipher.PubKey]net.Conn               // Chat connections
+	conns     map[cipher.PubKey]*framedConn            // Chat connections
 	connsMu   sync.Mutex
 	appPort   uint16
 	useSkynet bool
@@ -254,7 +335,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		setAppPort(appCl, port)
 	}
 
-	conns = make(map[cipher.PubKey]net.Conn)
+	conns = make(map[cipher.PubKey]*framedConn)
 
 	if useSkynet {
 		go listenLoop(appnet.TypeSkynet, port)
@@ -373,23 +454,22 @@ func listenLoop(netType appnet.Type, appPort routing.Port) {
 		appCl.Log().Debugf("Accepted skychat conn on %s", netType)
 
 		raddr := conn.RemoteAddr().(appnet.Addr)
+		fc := newFramedConn(conn)
 		connsMu.Lock()
-		conns[raddr.PubKey] = conn
+		conns[raddr.PubKey] = fc
 		connsMu.Unlock()
 		appLog("Accepted skychat conn on %s from %s via %s", conn.LocalAddr(), raddr.PubKey, netType)
 
-		go handleConn(conn)
+		go handleConn(fc)
 	}
 }
 
-func handleConn(conn net.Conn) {
+func handleConn(conn *framedConn) {
 	raddr := conn.RemoteAddr().(appnet.Addr)
 	for {
-		buf := make([]byte, 32*1024)
-		n, err := conn.Read(buf)
+		payload, err := conn.ReadFrame()
 		if err != nil {
 			appLog("Failed to read packet: %v", err)
-			raddr := conn.RemoteAddr().(appnet.Addr)
 			connsMu.Lock()
 			delete(conns, raddr.PubKey)
 			connsMu.Unlock()
@@ -401,11 +481,11 @@ func handleConn(conn net.Conn) {
 		// as chat messages; everything else falls through to the
 		// legacy plain-text path so the existing CI tests are
 		// unaffected.
-		if handlePairControlFrame(context.Background(), raddr.PubKey, buf[:n]) {
+		if handlePairControlFrame(context.Background(), raddr.PubKey, payload) {
 			continue
 		}
 
-		text := string(buf[:n])
+		text := string(payload)
 		peerPK := raddr.PubKey.Hex()
 
 		// Persist (best-effort, never blocks ephemeral path).
@@ -477,10 +557,14 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		connsMu.Unlock()
 
 		if !ok {
-			var err error
-			err = r.Do(ctx, func() error {
-				conn, err = appCl.Dial(addr)
-				return err
+			var raw net.Conn
+			err := r.Do(ctx, func() error {
+				c, dialErr := appCl.Dial(addr)
+				if dialErr != nil {
+					return dialErr
+				}
+				raw = c
+				return nil
 			})
 			if err != nil {
 				if isSelf {
@@ -492,6 +576,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				return
 			}
 
+			conn = newFramedConn(raw)
 			connsMu.Lock()
 			conns[pk] = conn
 			connsMu.Unlock()
@@ -499,7 +584,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			go handleConn(conn)
 		}
 
-		_, err := conn.Write([]byte(data["message"]))
+		err := conn.WriteFrame([]byte(data["message"]))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 
