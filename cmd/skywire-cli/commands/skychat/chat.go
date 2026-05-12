@@ -267,6 +267,19 @@ func (m *chatModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
+		case "ctrl+n":
+			// Cycle outgoing network type. Affects subsequent
+			// Sends only — already-delivered messages keep their
+			// per-message network tag. Header reflects the new
+			// value immediately. Pick-a-peer mode also honors
+			// this (operator can decide skynet vs dmsg before
+			// they even type the recipient PK).
+			if m.network == "skynet" {
+				m.network = "dmsg"
+			} else {
+				m.network = "skynet"
+			}
+			return m, nil
 		case "enter":
 			text := strings.TrimSpace(m.input.Value())
 			if text == "" {
@@ -438,9 +451,9 @@ func (m *chatModel) View() string {
 
 	var footer string
 	if m.awaitingRecipient {
-		footer = dimStyle.Render("Enter to confirm recipient | Esc/Ctrl+C quit")
+		footer = dimStyle.Render("Enter to confirm recipient | Ctrl+N toggle network | Esc/Ctrl+C quit")
 	} else {
-		footer = dimStyle.Render("Enter send | ↑/↓ PgUp/PgDn scroll | Esc/Ctrl+C quit")
+		footer = dimStyle.Render("Enter send | ↑/↓ PgUp/PgDn scroll | Ctrl+N toggle network | Esc/Ctrl+C quit")
 	}
 
 	var b strings.Builder
