@@ -25,5 +25,6 @@ func init() {
 		curlCmd,
 		ptyCmd,
 		chatCmd,
+		scpCmd,
 	)
 }

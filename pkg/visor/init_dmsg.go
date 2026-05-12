@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgscp"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -736,6 +737,60 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 			return nil
 		})
 
+	}
+
+	// dmsgscp Host (scp-over-dmsg). Reuses the dmsgpty whitelist by
+	// default — operators who trust a peer for pty also trust them
+	// for file transfer in v1. Disabled by default; only starts the
+	// listener when the operator opts in via config.
+	if scpConf := v.conf.Dmsgscp; scpConf != nil && scpConf.Enabled {
+		scpWL := wl
+		if len(scpConf.Whitelist) > 0 {
+			// Operator opted into a separate whitelist for scp.
+			// Build a fresh memory-whitelist seeded with those keys
+			// + the visor's own PK + the hypervisors (mirrors the
+			// dmsgpty whitelist construction above so loopback +
+			// hypervisor access stay consistent across services).
+			ownWL := dmsgpty.NewMemoryWhitelist()
+			if err := ownWL.Add(scpConf.Whitelist...); err != nil {
+				return fmt.Errorf("dmsgscp: seed whitelist: %w", err)
+			}
+			if err := ownWL.Add(v.conf.Hypervisors...); err != nil {
+				return fmt.Errorf("dmsgscp: seed hypervisors: %w", err)
+			}
+			if err := ownWL.Add(v.conf.PK); err != nil {
+				v.log.Errorf("Cannot add itself to the scp whitelist: %s", err)
+			}
+			scpWL = ownWL
+		}
+		rootDir := scpConf.RootDir
+		if rootDir == "" {
+			rootDir = filepath.Join(v.conf.LocalPath, "scp-root")
+		}
+		scpHost, err := dmsgscp.NewHost(dmsgC, scpWL, rootDir)
+		if err != nil {
+			return fmt.Errorf("dmsgscp: build host: %w", err)
+		}
+		scpPort := scpConf.DmsgPort
+		if scpPort == 0 {
+			scpPort = dmsgscp.DefaultPort
+		}
+		serveCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel called in pushCloseStack
+		wg := new(sync.WaitGroup)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			runtimeErrors := getErrors(ctx)
+			if err := scpHost.ListenAndServe(serveCtx, scpPort); err != nil {
+				runtimeErrors <- fmt.Errorf("dmsgscp listen-and-serve stopped: %w", err)
+			}
+		}()
+		v.pushCloseStack("dmsgscp.serve", func() error {
+			cancel()
+			wg.Wait()
+			return nil
+		})
+		log.WithField("port", scpPort).WithField("root", rootDir).Info("dmsgscp host started.")
 	}
 
 	if conf.CLINet != "" {
