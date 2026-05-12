@@ -235,6 +235,19 @@ type API interface {
 	PairSend(peerPK cipher.PubKey, text string) error
 	PairPoll(since time.Time) ([]PairMessage, error)
 
+	// Chat-group feeds — D1 owner-centric CXO feeds with multi-PK
+	// allowlists. See pkg/visor/group.go.
+	GroupCreate(args GroupCreateArgs) (GroupInfo, string, error)
+	GroupJoin(args GroupJoinArgs) (GroupInfo, error)
+	GroupList() ([]GroupInfo, error)
+	GroupGet(id string) (GroupInfo, error)
+	GroupInvite(id string) (string, error)
+	GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupSend(args GroupSendArgs) error
+	GroupPoll(since time.Time) ([]GroupMessage, error)
+	GroupDelete(id string) error
+	GroupLeave(id string) error
+
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
 	TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)

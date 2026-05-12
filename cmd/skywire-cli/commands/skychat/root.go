@@ -52,9 +52,12 @@ func init() {
 
 	listenCmd.Flags().StringVarP(&listenNet, "net", "n", "", "filter by network type (optional; default = all)")
 
-	chatCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (required)")
+	chatCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (optional; TUI prompts for it if omitted)")
 	chatCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type for outgoing messages: skynet or dmsg")
-	chatCmd.MarkFlagRequired("to") //nolint:errcheck,gosec
+	// --to deliberately NOT MarkFlagRequired: an empty recipient
+	// drops the TUI into "pick a peer" mode where the textinput
+	// gates entry to chat view on a valid PK. Matches the GUI's
+	// flow where you type the PK into the header before sending.
 }
 
 // RootCmd contains skychat commands
