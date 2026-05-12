@@ -13,13 +13,20 @@ type WinSize struct {
 	Cols uint16
 }
 
-// PtyGateway represents a pty gateway, hosted by the pty.SessionServer
+// PtyGateway represents a pty gateway, hosted by the pty.SessionServer.
+//
+// Exec is the non-interactive variant of Start: one command, capture
+// stdout/stderr/exit-code, return. Uses the same whitelist as Start
+// — a host that trusts a PK to spawn a shell implicitly trusts it
+// to run one command (strictly less powerful surface). See
+// exec_gateway.go for the impl + caps.
 type PtyGateway interface {
 	Start(req *CommandReq, _ *struct{}) error
 	Stop(_, _ *struct{}) error
 	Read(reqN *int, respB *[]byte) error
 	Write(reqB *[]byte, respN *int) error
 	SetPtySize(size *WinSize, _ *struct{}) error
+	Exec(req *CommandExecReq, resp *CommandExecResult) error
 }
 
 // CommandReq represents a pty command.

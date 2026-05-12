@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -82,6 +83,65 @@ func (cli *CLI) StartRemotePty(ctx context.Context, rPK cipher.PubKey, rPort uin
 	defer restore()
 
 	return cli.servePty(ctx, ptyC, cmd, args)
+}
+
+// ExecRemote runs a one-shot command on a remote host (no PTY).
+// Whitelist gating is identical to StartRemotePty — the same dmsgpty
+// host trust check applies. Returns the captured result; a non-nil
+// error here is an RPC-layer failure, not a remote command exit-non-
+// zero (callers must inspect resp.ExitCode and resp.TimedOut).
+//
+// rPort = 0 falls back to the host's default dmsgpty port (22).
+// stdin may be nil for commands that don't read it.
+func (cli *CLI) ExecRemote(ctx context.Context, rPK cipher.PubKey, rPort uint16, name string, args []string, env []string, stdin []byte, timeout time.Duration) (*CommandExecResult, error) {
+	_ = ctx // currently unused; the underlying call has its own server-side timeout
+	conn, err := cli.prepareConn()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close() //nolint:errcheck
+
+	ptyC, err := NewProxyClient(conn, rPK, rPort)
+	if err != nil {
+		return nil, err
+	}
+	defer ptyC.Close() //nolint:errcheck
+
+	req := &CommandExecReq{
+		Name:      name,
+		Arg:       args,
+		Env:       env,
+		Stdin:     stdin,
+		TimeoutMS: timeout.Milliseconds(),
+	}
+	return ptyC.Exec(req)
+}
+
+// ExecLocal runs a one-shot command on the local host (no PTY) via
+// the same dmsgpty client surface. Useful for self-checks where the
+// caller wants the same cap + timeout semantics as the remote path.
+func (cli *CLI) ExecLocal(ctx context.Context, name string, args []string, env []string, stdin []byte, timeout time.Duration) (*CommandExecResult, error) {
+	_ = ctx
+	conn, err := cli.prepareConn()
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close() //nolint:errcheck
+
+	ptyC, err := NewPtyClient(conn)
+	if err != nil {
+		return nil, err
+	}
+	defer ptyC.Close() //nolint:errcheck
+
+	req := &CommandExecReq{
+		Name:      name,
+		Arg:       args,
+		Env:       env,
+		Stdin:     stdin,
+		TimeoutMS: timeout.Milliseconds(),
+	}
+	return ptyC.Exec(req)
 }
 
 // prepareConn prepares a connection with the dmsgpty-host.
