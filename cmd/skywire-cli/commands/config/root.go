@@ -51,7 +51,6 @@ var (
 	isEnableAuth               bool
 	selectedOS                 string
 	disableApps                string
-	isBestProtocol             bool
 	serviceConfURL             = deployment.ProdConf.Conf
 	testServiceConfURL         = deployment.TestConf.Conf
 	dnsServer                  = "1.1.1.1"
@@ -146,10 +145,11 @@ var (
 	muxRoutes                int
 	cliAddr                  string
 	// Hypervisor-embedded DMSG server (LAN/WAN). Operator-set knobs:
-	// enable, port, and an optional public address advertised to remote
+	// port and an optional public address advertised to remote
 	// visors. Port should be pinned for stable WAN reachability since
-	// the OS-assigned port (when 0) changes on every restart.
-	lanDmsgEnable        bool
+	// the OS-assigned port (when 0) changes on every restart. The
+	// "enable" boolean is implicit — the LAN-DMSG server is always
+	// on whenever ISHYPERVISOR=true.
 	lanDmsgPort          int
 	lanDmsgPublicAddress string
 )

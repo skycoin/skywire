@@ -38,15 +38,11 @@ const envfileLinux = `#
 #--	Use test deployment
 #TESTENV=true
 
-#--	Use dmsghttp to connect to the production deployment ; overrides BESTPROTO=true
+#--	Use dmsghttp to connect to the production deployment
 #DMSGHTTP=true
 
 #--	Number of dmsg serverts to connect to (0 unlimits)
 #MINDMSGSESS=8
-
-#--	Automatically determine the best protocol (dmsg or http)
-#	based on location to connect to the deployment servers
-#BESTPROTO=true
 
 ### Transports ##########################################################
 
@@ -97,11 +93,10 @@ const envfileLinux = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
-#--	Embedded LAN/WAN DMSG server. Defaults to ON whenever ISHYPERVISOR=true;
-#	managed visors then relay through this hypervisor instead of public
-#	DMSG servers. Set LANDMSG=false to opt out (e.g. HA pair where only
-#	one hypervisor runs the server).
-#LANDMSG=true
+#--	Embedded LAN/WAN DMSG server is always on whenever ISHYPERVISOR=true.
+#	Managed visors relay through this hypervisor instead of public DMSG
+#	servers. The two knobs below control the WAN-reachability path; see
+#	the comments for when to set them.
 
 #--	Pin the DMSG server's TCP port for stable WAN reachability. Default 0
 #	= OS-assigned at runtime (changes every restart — fine for LAN-only,
@@ -316,15 +311,11 @@ const envfileWindows = `#
 #--	Use test deployment
 #$TESTENV=$true
 
-#--	Use dmsghttp to connect to the production deployment ; overrides BESTPROTO=$true
+#--	Use dmsghttp to connect to the production deployment
 #$DMSGHTTP=$true
 
 #--	Number of dmsg servers to connect to (0 unlimits)
 #$MINDMSGSESS=8
-
-#--	Automatically determine the best protocol (dmsg or http)
-#	based on location to connect to the deployment servers
-#$BESTPROTO=$true
 
 ### Transports ##########################################################
 
