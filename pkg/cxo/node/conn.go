@@ -465,6 +465,28 @@ func (c *Conn) encodeMsg(seq, rseq uint32, m msg.Msg) (raw []byte) {
 
 }
 
+// sendMsgQueueTimeout is the max time sendMsg will wait to enqueue a
+// message into the per-conn sendq. The underlying transport.Connection
+// buffers 256 frames in the `out` channel; if the buffer is full it
+// means the writeLoop is stuck (e.g. the underlying net.Conn is in a
+// silent half-close — the kernel TCP write hasn't surfaced an error
+// yet, but the writer isn't draining either).
+//
+// Pre-fix sendMsg waited indefinitely on `c.sendq <- ...`. A single
+// stuck subscriber would block broadcastRoot's sequential iteration
+// over n.cs, so the publisher's runLoop hung and NO subscriber got
+// the next root push — symptom: peers reported group heartbeats
+// silently stopped arriving and detectStaleActive eventually fired
+// across all subs in lockstep.
+//
+// Bounded with a short timeout: if the buffer can't drain in N
+// seconds the conn is declared dead, Close fires (idempotent), and
+// the conn's run() loop removes it from the nodeFeeds map so future
+// broadcasts skip it. The bounded path means a single dead sub costs
+// at most one timeout's worth of latency on the broadcast — bad but
+// bounded — instead of stopping pushes entirely.
+const sendMsgQueueTimeout = 5 * time.Second
+
 func (c *Conn) sendMsg(seq, rseq uint32, m msg.Msg) error {
 	c.n.Debugf(MsgSendPin, "[%s] send %d %T", c.String(), rseq, m)
 
@@ -474,9 +496,29 @@ func (c *Conn) sendMsg(seq, rseq uint32, m msg.Msg) error {
 	default:
 	}
 
-	c.sendq <- c.encodeMsg(seq, rseq, m)
+	encoded := c.encodeMsg(seq, rseq, m)
 
-	return nil
+	// Fast path: buffer has room, enqueue immediately.
+	select {
+	case c.sendq <- encoded:
+		return nil
+	default:
+	}
+
+	// Slow path: buffer is full. Bound the wait so a stuck subscriber
+	// doesn't stall the publisher's broadcastRoot iteration. closeq
+	// is also selected so a concurrent Close unblocks us cleanly.
+	select {
+	case c.sendq <- encoded:
+		return nil
+	case <-c.closeq:
+		return ErrClosed
+	case <-time.After(sendMsgQueueTimeout):
+		c.n.Printf("[WARN] [%s] sendMsg: queue full for %s; declaring conn dead and closing",
+			c.String(), sendMsgQueueTimeout)
+		_ = c.Close() //nolint:errcheck,gosec
+		return ErrClosed
+	}
 }
 
 func (c *Conn) receiveMsg() error {
