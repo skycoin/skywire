@@ -350,7 +350,14 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 				return
 			}
 		}
-		splice(local, remote)
+		// Listen mode uses half-close semantics: the CLI's stdin is
+		// often empty (`< /dev/null` or no piped input), which means
+		// the stdin→remote io.Copy returns EOF immediately. With the
+		// symmetric splice that would tear down the whole pair before
+		// inbound data could arrive. spliceHalfClose keeps the
+		// reverse direction open until the remote sender naturally
+		// closes their stream.
+		spliceHalfClose(local, remote)
 	}()
 
 	return &VisorCatResponse{LocalAddr: loopLis.Addr().String()}, nil
@@ -536,6 +543,11 @@ func acceptOne(ctx context.Context, lis net.Listener) (net.Conn, error) {
 // for any pair of net.Conn — dmsg.Stream, appnet route-group conn,
 // loopback TCP — they all satisfy the interface.
 //
+// Symmetric full-close on first EOF. Use this for the dial side
+// where a stdin EOF means "sender done — tear it all down". The
+// listener side wants asymmetric half-close semantics; see
+// spliceHalfClose.
+//
 // Returns the first non-EOF error seen, or nil on a clean EOF.
 func splice(a, b net.Conn) error {
 	var (
@@ -563,4 +575,68 @@ func splice(a, b net.Conn) error {
 		return nil
 	}
 	return first.err
+}
+
+// closeWriter is the optional half-close interface satisfied by
+// *net.TCPConn (and *net.UnixConn). dmsg.Stream and appnet
+// route-group conns don't implement it — we fall back to "wait for
+// the reverse direction to also EOF before full Close" there.
+type closeWriter interface {
+	CloseWrite() error
+}
+
+// spliceHalfClose is the asymmetric variant of splice used by the
+// listen mode. When one direction of io.Copy returns (its source
+// EOFed), we DO NOT close the whole pair. Instead:
+//
+//   - If the destination supports CloseWrite, we CloseWrite there to
+//     signal "no more bytes from this side" without tearing down the
+//     reverse direction.
+//   - If the destination doesn't (dmsg.Stream / appnet conn), we
+//     do nothing — wait for the reverse direction to also reach EOF
+//     before doing the full pair-Close.
+//
+// Why: the listen-mode CLI's local stdin is often `< /dev/null` or
+// an interactive terminal that never produces bytes; without
+// half-close awareness the immediate stdin-EOF would tear down the
+// whole splice before any inbound data could be received. With this
+// variant the receive direction keeps flowing until the remote sender
+// closes their side naturally.
+//
+// Hazard: if BOTH peers happen to have empty stdin AND no
+// CloseWrite-capable destination (i.e., both pairs are dmsg/dmsg),
+// neither direction will ever EOF and the splice will hang. In
+// practice one half of the pair is always a TCP loopback (the
+// CLI-to-visor bridge) which DOES support CloseWrite, so the cascade
+// completes once one side finishes.
+func spliceHalfClose(a, b net.Conn) error {
+	type copyResult struct{ err error }
+	done := make(chan copyResult, 2)
+	go func() {
+		_, err := io.Copy(a, b)
+		// b is exhausted. Signal a that no more bytes are coming
+		// from b, but keep a's read half open so the reverse
+		// direction can still drain.
+		if cw, ok := a.(closeWriter); ok {
+			_ = cw.CloseWrite() //nolint:errcheck
+		}
+		done <- copyResult{err: err}
+	}()
+	go func() {
+		_, err := io.Copy(b, a)
+		if cw, ok := b.(closeWriter); ok {
+			_ = cw.CloseWrite() //nolint:errcheck
+		}
+		done <- copyResult{err: err}
+	}()
+	r1 := <-done
+	r2 := <-done
+	_ = a.Close() //nolint:errcheck
+	_ = b.Close() //nolint:errcheck
+	for _, r := range []copyResult{r1, r2} {
+		if r.err != nil && !errors.Is(r.err, io.EOF) && !errors.Is(r.err, net.ErrClosed) {
+			return r.err
+		}
+	}
+	return nil
 }
