@@ -773,6 +773,24 @@ func (m *Manager) MarkMessageDelivered(groupID string, ts time.Time) {
 		m.log.WithError(err).WithField("id", groupID).
 			Debug("group: MarkMessageDelivered: store update failed")
 	}
+	// Re-assert subscriber liveness based on positive delivery
+	// evidence. The session's subAlive flag was set true at Connect
+	// and only cleared at Close, so a CXO conn that silently dies
+	// and reconnects under-the-hood (or a session that was created
+	// via a path that skipped the explicit Connect flag-flip) could
+	// report subscriber_alive=false despite messages flowing.
+	// Observed in production: peer reported subscriber_alive=false
+	// AND last_message_at fresh AND messages visible in listener
+	// log — three contradictory signals that point at subAlive being
+	// out of sync with reality. Any arriving message is proof that
+	// the underlying CXO connection is currently delivering data, so
+	// we re-assert here too.
+	m.mu.RLock()
+	sess := m.sessions[groupID]
+	m.mu.RUnlock()
+	if sess != nil {
+		sess.subAlive.Store(true)
+	}
 }
 
 // IsSubscriberAlive reports the live subscriber health for the group
