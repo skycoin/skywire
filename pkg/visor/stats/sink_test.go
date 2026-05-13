@@ -39,6 +39,20 @@ func (s *recordingSink) Delete(path string) {
 	delete(s.puts, path)
 }
 
+// PutBatch fans the ops onto the same recording slots Put/Delete
+// would have hit individually. Lets the existing snapshot-based
+// assertions see batched writes without spotting them as a
+// different shape.
+func (s *recordingSink) PutBatch(ops []SinkOp) {
+	for _, op := range ops {
+		if op.Value == nil {
+			s.Delete(op.Path)
+			continue
+		}
+		s.Put(op.Path, op.Value)
+	}
+}
+
 func (s *recordingSink) snapshot() (map[string][]byte, []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
