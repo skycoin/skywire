@@ -212,6 +212,14 @@ func runVisorSCP(transport string, peerPK cipher.PubKey, direction scpDirection,
 		Transport:  transport,
 		Timeout:    scpTimeout,
 	}
+	// Drop the default 30s RPC call timeout — the scp transfer's
+	// own --timeout (req.Timeout above) bounds the visor-side work,
+	// and a multi-hundred-MB transfer routinely exceeds 30s.
+	// clirpc.Timeout is a package-global; saving + restoring keeps
+	// other CLI subcommands using the default in the same process.
+	prevTimeout := clirpc.Timeout
+	clirpc.Timeout = 0
+	defer func() { clirpc.Timeout = prevTimeout }()
 	rc, err := clirpc.Client(cmd.Flags())
 	if err != nil {
 		return fmt.Errorf("VisorSCP RPC client: %w", err)
