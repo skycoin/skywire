@@ -46,6 +46,11 @@ var (
 	pk           cipher.PubKey
 	wl           cipher.PubKeys
 
+	// tcpListen, when non-empty, brings up the direct-TCP entry point
+	// (XK noise + dmsgpty whitelist gate) alongside the dmsg-overlay
+	// path. Mirrors the visor-embedded Dmsgpty.TCPListen config.
+	tcpListen string
+
 	// persistent flags
 	envPrefix = defaultEnvPrefix
 
@@ -66,6 +71,8 @@ func init() {
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgport", dmsgPort, "dmsg port for listening for remote hosts")
 	RootCmd.Flags().StringVar(&cliNet, "clinet", cliNet, "network used for listening for cli connections")
 	RootCmd.Flags().StringVar(&cliAddr, "cliaddr", cliAddr, "address used for listening for cli connections")
+	RootCmd.Flags().StringVar(&tcpListen, "tcplisten", "",
+		"optional direct-TCP entry point address (e.g. ':2022'); empty disables. XK-noise + whitelist gated, mirrors the visor-embedded Dmsgpty.TCPListen.")
 	// Prepare flags without associated env/config references.
 	RootCmd.Flags().StringVar(&envPrefix, "envprefix", envPrefix, "env prefix")
 	RootCmd.Flags().BoolVar(&confStdin, "confstdin", confStdin, "config will be read from stdin if set")
@@ -157,6 +164,27 @@ var RootCmd = &cobra.Command{
 				Info("Stopped serving dmsgpty-host.")
 			wg.Done()
 		}()
+
+		// Optional direct-TCP entry point (XK-noise + whitelist
+		// gated). Mirrors the visor-embedded Dmsgpty.TCPListen.
+		// Empty (default) skips it, preserving legacy behavior;
+		// non-empty (e.g. ":2022") brings the listener up alongside
+		// the dmsg-overlay path. The host's NewHost-wired wl is
+		// reused — no separate ACL.
+		tcpAddr := tcpListen
+		if tcpAddr == "" {
+			tcpAddr = conf.TCPListen
+		}
+		if tcpAddr != "" {
+			wg.Add(1)
+			log.WithField("addr", tcpAddr).
+				Info("Listening for direct-TCP streams (XK-noise gated).")
+			go func() {
+				log.WithError(host.ListenAndServeTCP(ctx, tcpAddr, pk, sk)).
+					Info("Stopped serving dmsgpty-host TCP entry point.")
+				wg.Done()
+			}()
+		}
 
 		wg.Wait()
 		return nil
