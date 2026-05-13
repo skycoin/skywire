@@ -1206,6 +1206,14 @@ func (rc *rpcClient) SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, err
 	return &resp, err
 }
 
+// VisorSCP asks the visor to perform a dmsgscp transfer to a peer
+// over the chosen transport (dmsg or skynet). See api_visor_scp.go
+// for the protocol details.
+func (rc *rpcClient) VisorSCP(req VisorSCPRequest) error {
+	var ok bool
+	return rc.Call("VisorSCP", &req, &ok)
+}
+
 // DmsgProbe checks dmsg reachability of a remote PK on a given port.
 func (rc *rpcClient) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 	var reachable bool

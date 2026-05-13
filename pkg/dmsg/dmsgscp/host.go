@@ -267,10 +267,6 @@ func (h *Host) serveSource(_ context.Context, log logrus.FieldLogger, conn net.C
 		_ = WriteFatal(conn, "directory transfers not supported") //nolint:errcheck
 		return
 	}
-	if info.Size() > MaxFileSize {
-		_ = WriteFatal(conn, fmt.Sprintf("file exceeds %d-byte cap", MaxFileSize)) //nolint:errcheck
-		return
-	}
 
 	f, err := os.Open(safePath) //nolint:gosec // path validated by ResolveSafePath
 	if err != nil {
