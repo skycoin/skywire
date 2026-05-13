@@ -388,12 +388,21 @@ func init() {
 	genConfigCmd.Flags().StringVar(&cliAddr, "cliaddr", scriptExecString("${CLIADDR}"), "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")
 
-	// Embedded DMSG server (LAN/WAN). Disabled by default; pinning the
-	// port + setting public_address makes it WAN-reachable for managed
-	// remote visors (operator must port-forward the chosen TCP port).
-	genConfigCmd.Flags().BoolVar(&lanDmsgEnable, "lan-dmsg", scriptExecBool("${LANDMSG:-false}"), "enable hypervisor's embedded DMSG server (requires --ishv)")
+	// Embedded LAN/WAN DMSG server. Defaults to on whenever the
+	// hypervisor is enabled (ISHYPERVISOR=true) — the embedded server
+	// is the hypervisor's responsibility to managed visors, so the
+	// "I'm a hypervisor" intent implies "I provide DMSG to my
+	// visors". Operator can force-disable with LANDMSG=false even
+	// when ISHYPERVISOR=true, e.g. for an HA pair where only one
+	// hypervisor should run the server.
+	//
+	// Pinning the port + setting public_address makes the server
+	// WAN-reachable for managed remote visors (operator must
+	// port-forward the chosen TCP port; without forwarding the
+	// server stays LAN-only).
+	genConfigCmd.Flags().BoolVar(&lanDmsgEnable, "lan-dmsg", scriptExecBool("${LANDMSG:-${ISHYPERVISOR:-false}}"), "enable hypervisor's embedded DMSG server (defaults to ISHYPERVISOR)")
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg")
-	genConfigCmd.Flags().IntVar(&lanDmsgPort, "lan-dmsg-port", 0, "embedded DMSG server TCP port (0 = OS-assigned at runtime; pin for stable WAN reachability)")
+	genConfigCmd.Flags().IntVar(&lanDmsgPort, "lan-dmsg-port", scriptExecInt("${LANDMSGPORT:-0}"), "embedded DMSG server TCP port (0 = OS-assigned at runtime; pin via LANDMSGPORT for stable WAN reachability)")
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-port")
 	genConfigCmd.Flags().StringVar(&lanDmsgPublicAddress, "lan-dmsg-public", scriptExecString("${LANDMSGPUBLIC}"), "embedded DMSG server WAN-reachable address (host:port; requires port-forward)")
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-public")

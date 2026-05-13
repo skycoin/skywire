@@ -97,6 +97,23 @@ const envfileLinux = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
+#--	Embedded LAN/WAN DMSG server. Defaults to ON whenever ISHYPERVISOR=true;
+#	managed visors then relay through this hypervisor instead of public
+#	DMSG servers. Set LANDMSG=false to opt out (e.g. HA pair where only
+#	one hypervisor runs the server).
+#LANDMSG=true
+
+#--	Pin the DMSG server's TCP port for stable WAN reachability. Default 0
+#	= OS-assigned at runtime (changes every restart — fine for LAN-only,
+#	bad for remote visors that need a stable address). Set to a chosen
+#	port (e.g. 8082) and port-forward it on your router for WAN access.
+#LANDMSGPORT=8082
+
+#--	Advertise a WAN-reachable address to remote visors (host:port). Empty
+#	= LAN-only. Combine with LANDMSGPORT + a router port-forward for
+#	hypervisors on a NAT.
+#LANDMSGPUBLIC='203.0.113.42:8082'
+
 ### Rewards #############################################################
 
 #--	Skycoin reward address or xpub key
