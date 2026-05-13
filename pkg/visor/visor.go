@@ -597,8 +597,10 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	v.runtimeErrors = make(chan error)
 	ctx = context.WithValue(ctx, runtimeErrsKey, v.runtimeErrors)
 	if dmsgServer != "" {
-		type dmsgServerKey struct{}
-		ctx = context.WithValue(ctx, dmsgServerKey{}, dmsgServer)
+		// dmsg.Client.serve() reads ctx.Value("dmsgServer") (string key)
+		// to pin discovery to a single server PK. Match that key exactly
+		// — a private struct type here would silently disable pinning.
+		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
 	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
@@ -615,22 +617,26 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	if err := mainModule.Wait(ctx); err != nil {
 		select {
 		case <-ctx.Done():
-			if err := v.Close(); err != nil {
-				log.WithError(err).Error("Visor closed with error.")
-			}
 		default:
-			log.Error(err)
+			log.WithError(err).Error("Module init failed; shutting down.")
+		}
+		// Always run the close stack so handlers registered before the
+		// failure (dmsg client Serve goroutine, listeners, etc.) get a
+		// chance to exit cleanly — otherwise partial init leaks them
+		// until the process dies.
+		if cerr := v.Close(); cerr != nil {
+			log.WithError(cerr).Error("Visor closed with error.")
 		}
 		return nil, false
 	}
 	if err := tm.Wait(ctx); err != nil {
 		select {
 		case <-ctx.Done():
-			if err := v.Close(); err != nil {
-				log.WithError(err).Error("Visor closed with error.")
-			}
 		default:
-			log.Error(err)
+			log.WithError(err).Error("Transport module init failed; shutting down.")
+		}
+		if cerr := v.Close(); cerr != nil {
+			log.WithError(cerr).Error("Visor closed with error.")
 		}
 		return nil, false
 	}

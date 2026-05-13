@@ -54,13 +54,30 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	if v.dmsgServersCache != nil {
 		configured = v.dmsgServersCache.MergePreferringCache(configured)
 	}
+	log := v.MasterLogger().PackageLogger("dmsg_http")
+	// --dmsg-server pins the direct dmsg client (dmsgDC) to a single
+	// server. The discovery-driven dmsgC is pinned separately by
+	// dmsg.Client.serve() via the "dmsgServer" context value.
+	if dmsgServer != "" {
+		var pinned []*dmsgdisc.Entry
+		for _, e := range configured {
+			if e != nil && e.Static.Hex() == dmsgServer {
+				pinned = []*dmsgdisc.Entry{e}
+				break
+			}
+		}
+		if len(pinned) == 0 {
+			log.WithField("dmsg_server", dmsgServer).
+				Warn("--dmsg-server PK not in configured/cached servers; dmsg-http will be unavailable")
+		}
+		configured = pinned
+	}
 	servers := shuffleServers(configured)
 
 	if len(servers) == 0 {
 		return nil
 	}
 
-	log := v.MasterLogger().PackageLogger("dmsg_http")
 	keys = append(keys, v.conf.PK)
 	// Add deployment service PKs so the direct client can look them up
 	// without querying the HTTP discovery (services run as direct clients
@@ -168,6 +185,23 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// Override the discovery URL used by the DMSG client
 	dmsgConf := *v.conf.Dmsg
 	dmsgConf.Discovery = discURL
+	// --dmsg-server pins the client to one server (discovery filter in
+	// dmsg.Client.serve). Force sessions_count=1 so the client doesn't
+	// burn retries trying to open additional sessions when only one
+	// server is reachable. Deep-copy Deployments so the override stays
+	// local to this dmsgConf and doesn't leak into v.conf.Dmsg via the
+	// shared slice header.
+	if dmsgServer != "" {
+		if len(dmsgConf.Deployments) > 0 {
+			deps := make([]dmsgc.Deployment, len(dmsgConf.Deployments))
+			copy(deps, dmsgConf.Deployments)
+			deps[0].SessionsCount = 1
+			dmsgConf.Deployments = deps
+		}
+		dmsgConf.SessionsCount = 1
+		log.WithField("dmsg_server", dmsgServer).
+			Info("--dmsg-server set: forcing dmsg.sessions_count=1")
+	}
 	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.MasterLogger())
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -189,17 +223,60 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	v.initLock.Unlock()
 
 	// Wait for DMSG to connect before returning. All modules that depend on
-	// dmsgC will only start after this, ensuring DMSG is ready before any
+	// dmsg will only start after this, ensuring DMSG is ready before any
 	// service tries to use it. Without this, services start dialing over DMSG
 	// before sessions are established, causing unnecessary HTTP fallbacks.
+	//
+	// Two readiness regimes:
+	//   - Unpinned (default): wait up to dmsgInitTimeout and continue
+	//     either way; services fall back to HTTP if dmsg is slow.
+	//   - Pinned (--dmsg-server): there's exactly one server we can
+	//     reach, so a timeout doesn't mean "be patient" — it means
+	//     "give up." Poll the dmsg client's pinned-failure counter
+	//     instead and abort startup once it exceeds the configured
+	//     attempt cap. Each failed pass already costs at least one
+	//     backoff (5s → 60s), so 5 attempts is on the order of
+	//     2–3 minutes before shutdown.
 	const dmsgInitTimeout = 30 * time.Second
-	select {
-	case <-dmsgC.Ready():
-		log.Info("DMSG client connected and ready.")
-	case <-time.After(dmsgInitTimeout):
-		log.Warn("DMSG client not ready after timeout, continuing (services may fall back to HTTP)")
-	case <-ctx.Done():
-		return ctx.Err()
+	if dmsgServer != "" {
+		maxAttempts := dmsgServerMaxAttempts
+		if maxAttempts <= 0 {
+			maxAttempts = 5
+		}
+		log.WithField("dmsg_server", dmsgServer).
+			WithField("max_attempts", maxAttempts).
+			Info("--dmsg-server set: waiting for pinned server (will abort after max attempts)")
+		ticker := time.NewTicker(1 * time.Second)
+	pinnedWait:
+		for {
+			select {
+			case <-dmsgC.Ready():
+				log.Info("DMSG client connected and ready.")
+				break pinnedWait
+			case <-ctx.Done():
+				ticker.Stop()
+				return ctx.Err()
+			case <-ticker.C:
+				if attempts := dmsgC.PinnedFailureCount(); attempts >= int64(maxAttempts) {
+					ticker.Stop()
+					log.WithField("dmsg_server", dmsgServer).
+						WithField("attempts", attempts).
+						WithField("max_attempts", maxAttempts).
+						Error("--dmsg-server pinned but unreachable; aborting startup")
+					return fmt.Errorf("dmsg server %s (from --dmsg-server) unreachable after %d attempts", dmsgServer, attempts)
+				}
+			}
+		}
+		ticker.Stop()
+	} else {
+		select {
+		case <-dmsgC.Ready():
+			log.Info("DMSG client connected and ready.")
+		case <-time.After(dmsgInitTimeout):
+			log.Warn("DMSG client not ready after timeout, continuing (services may fall back to HTTP)")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 
 	// Seed the DMSG client's entry cache with deployment service PKs

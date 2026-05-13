@@ -46,8 +46,9 @@ var (
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
 	visorBuildInfo *buildinfo.Info
-	dmsgServer     string
-	isStoreLog     bool
+	dmsgServer            string
+	dmsgServerMaxAttempts int
+	isStoreLog            bool
 	isForceColor   bool
 	useRouteFinder bool // override local route calculation to use route finder
 )
@@ -70,6 +71,9 @@ func init() {
 	}
 	RootCmd.Flags().StringVar(&dmsgServer, "dmsg-server", "", "use specified dmsg server public key")
 	hiddenflags = append(hiddenflags, "dmsg-server")
+	RootCmd.Flags().IntVar(&dmsgServerMaxAttempts, "dmsg-server-max-attempts", 5,
+		"max failed connect attempts before shutdown (only with --dmsg-server)")
+	hiddenflags = append(hiddenflags, "dmsg-server-max-attempts")
 	//only show flags for configs which exist
 
 	if _, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON); err == nil {
