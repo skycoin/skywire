@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"math/rand"
@@ -25,8 +24,8 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/cmdutil" //nolint:errcheck
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgcurl"
+	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -93,19 +92,59 @@ var logCmd = &cobra.Command{
 			return
 		}
 
-		// Create dmsgcurl instance
-		dg := dmsgcurl.New(flag.CommandLine)
-		flag.Parse()
+		// Bootstrap DMSG using embedded prod server entries before anything
+		// else — the previous code path opened dmsgC via `dmsgcurl.StartDmsg`
+		// which hits the dmsg-discovery over plain HTTP, AND fetched the UT
+		// over plain HTTP before dmsgC existed. Pre-seeding from the
+		// embedded keyring lets us reach UT + every per-visor endpoint
+		// purely over dmsghttp from here on. Falls back to HTTP discovery
+		// only if the binary has no embedded server entries (out-of-prod
+		// builds). Server-type empty = no filtering (production default).
+		pk, err := sk.PubKey()
+		if err != nil {
+			pk, sk = cipher.GenerateKeyPair()
+		}
+		bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers, dmsgDisc, "")
+		if err != nil {
+			log.WithError(err).Error("Failed to bootstrap dmsg client.")
+			return
+		}
+		defer bootstrap.Close()
+		dmsgC := bootstrap.Client
 
-		// Set the uptime tracker to fetch data from
+		// One pooled dmsghttp client reused for both the UT fetch and the
+		// per-visor download loop below. The transport pools per-host
+		// streams internally so concurrent visor fetches share dmsg
+		// sessions instead of paying a fresh noise handshake each.
+		dmsgHTTPC := &http.Client{
+			Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC),
+			Timeout:   60 * time.Second,
+		}
+
+		// Connect dmsgC to any additional servers the dmsg-disc knows
+		// about beyond the embedded prod set. BootstrapDmsg already
+		// dials every embedded entry; this loop catches custom / test
+		// servers that operators may have configured but that aren't
+		// baked into the binary. Fetches over dmsghttp using dmsgHTTPC,
+		// not plain HTTP.
+		allServer := getAllDMSGServers(cmd.Flags())
+		for _, server := range allServer {
+			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
+		}
+
+		// Set the uptime tracker to fetch data from. We rewrite the
+		// HTTP base to its dmsg counterpart from the deployment map so
+		// the request rides over dmsghttp on dmsgC; if the operator
+		// passed a custom utAddr that has no known dmsg twin, the
+		// original HTTP URL is used as-is (the dmsghttp transport would
+		// reject it for being non-PK-host, so getUptimes falls back to
+		// a plain http.Client in that case).
 		endpoint := utAddr + "/uptimes?v=v2"
-
 		if fetchFrom != "" {
 			endpoint = utAddr + "&visors=" + fetchFrom
 		}
 
-		//Fetch the uptime data over http
-		uptimes, err := getUptimes(endpoint, log)
+		uptimes, err := getUptimes(ctx, endpoint, dmsgHTTPC, log)
 		if err != nil {
 			log.WithError(err).Error("Unable to get data from uptime tracker.")
 			return
@@ -114,24 +153,6 @@ var logCmd = &cobra.Command{
 		rand.Shuffle(len(uptimes), func(i, j int) {
 			uptimes[i], uptimes[j] = uptimes[j], uptimes[i]
 		})
-		// Create dmsg http client
-		pk, err := sk.PubKey()
-		if err != nil {
-			pk, sk = cipher.GenerateKeyPair()
-		}
-
-		dmsgC, closeDmsg, err := dg.StartDmsg(ctx, log, pk, sk)
-		if err != nil {
-			log.Error(err) //nolint:errcheck
-			return
-		}
-		defer closeDmsg()
-
-		// Connect dmsgC to all servers
-		allServer := getAllDMSGServers(cmd.Flags())
-		for _, server := range allServer {
-			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
-		}
 
 		minimumVersion, _ := version.NewVersion(minv) //nolint:errcheck
 		incVerList := strings.Split(incVer, ",")
@@ -393,12 +414,32 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, error) {
+// getUptimes fetches the visor list from the uptime tracker. Prefers
+// the dmsg form (http://<UT-PK>:<port>/...) over the passed dmsgHTTPC,
+// since dmsgHTTPC is a pooled dmsghttp transport that already shares
+// the caller's dmsg sessions. Falls back to plain HTTP iff the UT URL
+// has no known dmsg twin in the deployment map (operator-overridden
+// utAddr against a non-deployment UT).
+//
+// Pre-fix, this function spun up its own plain http.Client and never
+// went over dmsg, even when a perfectly good dmsg.Client was already
+// up in the same process.
+func getUptimes(ctx context.Context, endpoint string, dmsgHTTPC *http.Client, log *logging.Logger) ([]VisorUptimeResponse, error) {
 	var results []VisorUptimeResponse
-	client := http.Client{
-		Timeout: 60 * time.Second,
+	fetchURL := endpoint
+	client := dmsgHTTPC
+	if dmsgEquiv := clirpc.DmsgURLForHTTP(endpoint); dmsgEquiv != "" {
+		fetchURL = dmsgEquiv
+	} else {
+		log.Debugf("No dmsg twin for %s; falling back to plain HTTP for UT fetch", endpoint)
+		client = &http.Client{Timeout: 60 * time.Second}
 	}
-	response, err := client.Get(endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchURL, nil)
+	if err != nil {
+		log.Error("Error while building UT request. Error: ", err)
+		return results, errors.New("Cannot get Uptime data")
+	}
+	response, err := client.Do(req)
 	if err != nil {
 		log.Error("Error while fetching data from uptime service. Error: ", err)
 		return results, errors.New("Cannot get Uptime data")
@@ -409,12 +450,12 @@ func getUptimes(endpoint string, log *logging.Logger) ([]VisorUptimeResponse, er
 		log.Error("Error while reading data from uptime service. Error: ", err)
 		return results, errors.New("Cannot get Uptime data")
 	}
-	log.Debugf("Successfully  called uptime service and received answer %+v", results)
 	err = json.Unmarshal(body, &results)
 	if err != nil {
 		log.Errorf("Error while unmarshalling data from uptime service.\nBody:\n%v\nError:\n%v ", string(body), err)
 		return results, errors.New("Cannot get Uptime data")
 	}
+	log.Debugf("Successfully called uptime service via %s and received %d entries", fetchURL, len(results))
 	return results, nil
 }
 
