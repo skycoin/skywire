@@ -98,11 +98,13 @@ type Config struct {
 
 	// HeartbeatInterval, when > 0, makes owner-role sessions emit a
 	// periodic no-op heartbeat probe into the group feed. Members
-	// observe the heartbeats via onUpdate, track lastHeartbeatNs, and
-	// use it as the freshness signal for stale-subscriber detection.
-	// Zero disables heartbeat emission entirely (useful for tests and
-	// for deployments that want to opt out of the ~1KB/min/group
-	// wire cost). Recommended production value: 30s.
+	// observe the heartbeats via onUpdate, which bumps lastInboundNs
+	// (the unified liveness signal) just as a real message would.
+	// Heartbeats are what keep IsSubscriberAlive true on quiet groups
+	// where no chat traffic flows for long stretches. Zero disables
+	// heartbeat emission entirely (useful for tests and for
+	// deployments that want to opt out of the ~1KB/min/group wire
+	// cost). Recommended production value: 30s.
 	HeartbeatInterval time.Duration
 }
 
@@ -153,24 +155,37 @@ type Session struct {
 	handler MessageHandler
 	log     *logging.Logger
 
-	// subAlive tracks whether the most recent Connect() succeeded
-	// and the subscriber has not yet been torn down. Owner-role
-	// sessions are always considered alive (no subscriber to track).
-	// Surfaced through IsSubscriberAlive for the chat-app's /status
-	// per-group health field. Atomic so it can be read without
-	// acquiring any session mutex from the status handler's hot path.
-	subAlive atomic.Bool
+	// lastInboundNs is the unified liveness signal for this session,
+	// in unix-nanoseconds. Set on every observable inbound event —
+	// onUpdate firing on the CXO subscriber (member side) and the
+	// owner-self-echo wrapper observing publishAs (owner side). Both
+	// heartbeats and real chat messages bump it; the distinction
+	// stops mattering here because any leaf arrival is positive
+	// proof the subscriber is currently attached and pulling.
+	//
+	// Pre-refactor (#2530..#2534) this role was split across four
+	// fields — Session.subAlive (Connect/Close), Session.lastHeartbeatNs
+	// (heartbeat-only), Record.LastMessageAt (chat-only persisted),
+	// Record.Status (configuration state pulling double duty as health).
+	// They kept disagreeing in subtle ways and each fix patched ONE
+	// pairwise disagreement; the holistic answer is a single signal
+	// computed not stored, with the persisted LastMessageAt kept as
+	// a coarse-grained crash-recovery seed.
+	//
+	// Initialized from Record.LastMessageAt on session Open so a
+	// freshly-resumed session doesn't appear instantly stale before
+	// the first new inbound arrives. Zero only if no traffic has
+	// ever been seen for this group.
+	//
+	// Atomic so the chat-app's /status hot path can read without any
+	// session-level mutex.
+	lastInboundNs atomic.Int64
 
-	// lastHeartbeatNs holds the unix-nanosecond timestamp at which
-	// this session most recently OBSERVED an owner heartbeat. Set
-	// when the subscriber's onUpdate sees a heartbeat-marker leaf
-	// (member side) OR when the owner-self-echo wrapper sees it
-	// (owner side, kept for symmetry). Zero means no heartbeat seen
-	// yet. Used by the Manager's runReconnectLoop to detect a
-	// silently-stalled subscriber within ~heartbeatStaleThreshold of
-	// the actual stall, rather than waiting for the
-	// no-traffic-implies-stuck fallback.
-	lastHeartbeatNs atomic.Int64
+	// closed is set true on Close so IsSubscriberAlive can short-
+	// circuit to false for torn-down sessions without consulting
+	// lastInbound timing. Owner-role sessions ignore this — they're
+	// always alive while the publisher is running.
+	closed atomic.Bool
 
 	// heartbeatCancel stops the owner-side heartbeat emission loop.
 	// nil for member-role sessions or when HeartbeatInterval=0.
@@ -178,10 +193,16 @@ type Session struct {
 	heartbeatWG     sync.WaitGroup
 }
 
+// subscriberStaleThreshold is defined in manager.go (it's used by
+// both Session.IsSubscriberAlive and Manager.detectStaleAndReconnect
+// so it sits in the package-level const block there).
+
 // HeartbeatMarker is the fixed body of an owner-emitted heartbeat
-// message. Subscribers detect it by exact-match on Message.Text,
-// update lastHeartbeatNs, and DO NOT bubble the message up to the
-// user handler / inbox — heartbeats are wire noise, not chat.
+// message. Subscribers detect it by exact-match on Message.Text and
+// DO NOT bubble the message up to the user handler / inbox —
+// heartbeats are wire noise, not chat. The liveness side effect
+// (bumping lastInboundNs) happens unconditionally at the top of
+// onUpdate, before the heartbeat filter runs.
 //
 // Picked to be (a) unambiguous (operator typing this verbatim into a
 // chat input would be a deliberate spoof, and the sender PK check
@@ -330,8 +351,9 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 //
 // Failures are debug-logged and the loop continues. A persistent
 // publisher problem will show up as both "publishAs heartbeat
-// failed" repeated in the log AND members' lastHeartbeatNs going
-// stale; the latter is the operator-facing signal.
+// failed" repeated in the log AND members' Session.LastInbound()
+// going stale (driving subscriber_alive=false in /status); the
+// latter is the operator-facing signal.
 func (s *Session) runHeartbeatLoop(ctx context.Context, interval time.Duration) {
 	defer s.heartbeatWG.Done()
 	t := time.NewTicker(interval)
@@ -393,6 +415,15 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	}
 	sub.SetPrefixes([]string{MessagePathPrefix})
 	s := &Session{cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log}
+	// Seed lastInboundNs from the persisted LastMessageAt so a
+	// resumed session doesn't look instantly stale before the first
+	// new inbound arrives. Zero LastMessageAt (brand-new join, no
+	// traffic yet) seeds zero — IsSubscriberAlive will report false
+	// until Connect succeeds or the first inbound lands, both of
+	// which bump the timestamp.
+	if !cfg.Record.LastMessageAt.IsZero() {
+		s.lastInboundNs.Store(cfg.Record.LastMessageAt.UnixNano())
+	}
 	sub.OnUpdate(s.onUpdate)
 	return s, nil
 }
@@ -401,10 +432,12 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 // handshake. Owner sessions are a no-op (they don't subscribe to
 // themselves). Idempotent: returns nil if already connected.
 //
-// On success, flips subAlive=true so IsSubscriberAlive starts
-// reporting "true" for operator-visible group health. On error,
-// subAlive stays false and the Manager's background reconnect
-// loop (Manager.runReconnectLoop) keeps retrying.
+// On success, bumps lastInboundNs to now — Connect itself is
+// positive evidence the subscriber side is healthy, so the
+// liveness window starts ticking from here rather than from "no
+// inbound yet". On error, lastInboundNs stays at whatever it was
+// (seeded from Record.LastMessageAt at Open) and the Manager's
+// background reconnect loop keeps retrying.
 func (s *Session) Connect() error {
 	if s.sub == nil {
 		return nil // owner role
@@ -412,8 +445,25 @@ func (s *Session) Connect() error {
 	if err := s.sub.Connect(s.cfg.Record.OwnerPK); err != nil {
 		return fmt.Errorf("group: Connect: %w", err)
 	}
-	s.subAlive.Store(true)
+	s.lastInboundNs.Store(time.Now().UnixNano())
 	return nil
+}
+
+// LastInbound returns the time at which this session most recently
+// observed any inbound CXO event — a chat leaf, an owner heartbeat,
+// or any other update. Zero if no traffic has ever been seen AND
+// Record.LastMessageAt was zero at Open (so the seed yielded zero).
+//
+// Used by Manager.detectStaleAndReconnect to identify subscribers
+// that have silently stopped pulling from the owner, and by
+// IsSubscriberAlive to compute the liveness boolean operators see
+// in /status.
+func (s *Session) LastInbound() time.Time {
+	ns := s.lastInboundNs.Load()
+	if ns == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, ns).UTC()
 }
 
 // IsSubscriberAlive reports whether the subscriber side of this
@@ -422,37 +472,38 @@ func (s *Session) Connect() error {
 // operators can spot a member session whose Connect failed silently
 // or whose subscriber has been torn down.
 //
-// Semantics:
+// Semantics — computed, not stored:
 //   - Owner-role sessions: always true (no subscriber to track; the
 //     publisher side is owned by this visor and there's nothing to
 //     "lose connection" to).
-//   - Member-role sessions: true iff the most recent Connect()
-//     succeeded AND Close has not been called. Does NOT consult the
-//     underlying treestore.Subscriber's live conn state — that would
-//     require a new accessor on Subscriber and the connection there
-//     is best-effort heartbeated by CXO already. The boolean here is
-//     "did we successfully attach + do we believe we're still
-//     attached"; the background reconnect loop is responsible for
-//     re-asserting that belief on its 30s cadence.
+//   - Member-role sessions, after Close: false (the session has been
+//     explicitly torn down; the underlying CXO subscriber is gone).
+//   - Member-role sessions, no inbound ever: false (we never had
+//     evidence the subscriber attached).
+//   - Member-role sessions, any prior inbound: true iff the last
+//     inbound is within subscriberStaleThreshold. Stale beyond that
+//     and the Manager's detectStaleAndReconnect loop will kick a
+//     reconnect; the flag stays false until the next inbound (or a
+//     successful Connect()) refreshes lastInboundNs.
 //
-// LastHeartbeat returns the time at which this session most recently
-// observed an owner heartbeat probe, or the zero time if none seen
-// yet. Used by Manager.runReconnectLoop's stale-detection to demote
-// a silently-stalled subscriber within ~heartbeatStaleThreshold of
-// the stall, regardless of whether chat traffic is flowing.
-func (s *Session) LastHeartbeat() time.Time {
-	ns := s.lastHeartbeatNs.Load()
-	if ns == 0 {
-		return time.Time{}
-	}
-	return time.Unix(0, ns).UTC()
-}
-
+// The unification was previously four-flagged (subAlive bool +
+// lastHeartbeatNs + LastMessageAt + Status's health semantics).
+// Each pair of those could disagree, and we patched the
+// disagreements one by one (#2530, #2532, #2533, #2534). The fix
+// here removes the disagreement class entirely: there is ONE
+// timestamp, and aliveness is a pure function of it.
 func (s *Session) IsSubscriberAlive() bool {
 	if s.sub == nil {
 		return true // owner role
 	}
-	return s.subAlive.Load()
+	if s.closed.Load() {
+		return false
+	}
+	last := s.LastInbound()
+	if last.IsZero() {
+		return false
+	}
+	return time.Since(last) <= subscriberStaleThreshold
 }
 
 // ID returns the group's UUID.
@@ -516,9 +567,12 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 // CXO node, owned by the publisher). Idempotent.
 func (s *Session) Close() error {
 	var firstErr error
-	// Flip subAlive first so any concurrent /status read sees the
+	// Mark closed first so any concurrent /status read sees the
 	// session as dead even if Close races with a long Subscriber.Close.
-	s.subAlive.Store(false)
+	// IsSubscriberAlive short-circuits to false on this flag for
+	// member-role sessions, so we don't have to also rewind
+	// lastInboundNs.
+	s.closed.Store(true)
 	// Stop the owner-side heartbeat emitter (if running). No-op on
 	// member sessions or when HeartbeatInterval=0 at Open time.
 	if s.heartbeatCancel != nil {
@@ -739,20 +793,12 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 	// subscriber path would surface, not the encrypted bytes.
 	// Filter heartbeat self-echoes out of the handler delivery —
 	// they are wire-level liveness probes, not chat content. Still
-	// update lastHeartbeatNs so the owner's own session has a fresh
+	// bump lastInboundNs so the owner's own session has a fresh
 	// liveness timestamp (useful symmetry with member sessions; the
-	// detectStaleActive pass skips owners but other diagnostics may
-	// look at it).
+	// detectStaleAndReconnect pass skips owners but other diagnostics
+	// may look at it).
 	if text == HeartbeatMarker {
-		s.lastHeartbeatNs.Store(time.Now().UnixNano())
-		// Heartbeats are positive evidence of CXO liveness even though
-		// they bypass the MessageHandler / inbox.deliver chain (where
-		// #2532 hooks the subAlive flip). Without this, a heartbeat-
-		// only group — quiet enough that no real messages flow —
-		// would observe heartbeats every 30s, advance lastHeartbeatNs
-		// correctly, but report subscriber_alive=false because the
-		// alive flag was never re-asserted by the delivery chain.
-		s.subAlive.Store(true)
+		s.lastInboundNs.Store(time.Now().UnixNano())
 		return nil
 	}
 	if h := s.handler; h != nil {
@@ -951,7 +997,17 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 // registered handler. Tolerates undecodable leaves (e.g. future
 // metadata under a different prefix, or a tampered ciphertext) by
 // silently dropping them with a debug log.
+//
+// Bumps lastInboundNs once per non-empty events batch — the
+// callback firing is itself proof the subscriber is attached and
+// pulling, regardless of whether the events decode, decrypt, or
+// turn out to be heartbeats. This is the unified liveness signal
+// that replaces the four-flag tangle (subAlive bool +
+// lastHeartbeatNs + LastMessageAt + Status's health semantics).
 func (s *Session) onUpdate(events []treestore.UpdateEvent) {
+	if len(events) > 0 {
+		s.lastInboundNs.Store(time.Now().UnixNano())
+	}
 	h := s.handler
 	if h == nil {
 		return
@@ -979,17 +1035,11 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 			msg.Ciphertext = nil
 			msg.Nonce = nil
 		}
-		// Heartbeat probe from the owner: refresh liveness timestamp
-		// and DO NOT bubble up. Wire-level only — the operator's
-		// listener shouldn't see them.
+		// Heartbeat probe from the owner: lastInboundNs is already
+		// bumped above (event count > 0). Don't bubble heartbeats
+		// up to the user handler — they're wire-level liveness
+		// probes, not chat content.
 		if IsHeartbeat(msg) {
-			s.lastHeartbeatNs.Store(time.Now().UnixNano())
-			// See the same flip in publishAs's heartbeat short-
-			// circuit for why this is necessary: heartbeats bypass
-			// the MessageHandler chain that #2532 hooks subAlive to,
-			// so member sessions in a quiet group would never see
-			// subAlive promoted on heartbeat-only traffic.
-			s.subAlive.Store(true)
 			continue
 		}
 		h(s.cfg.Record.ID, msg.SenderPK, msg)

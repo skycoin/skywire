@@ -387,33 +387,20 @@ func (m *Manager) Resume() error {
 // isn't dial-hammered.
 const reconnectInterval = 30 * time.Second
 
-// subscriberStaleThreshold is the lag (now - last_message_at) above
-// which an "active" member session is treated as silently stale and
-// demoted to StatusPending so the existing reconnect machinery kicks
-// in. Set well above any plausible owner-publish gap to avoid false
-// positives on genuinely quiet groups: ~10× the reconnect interval.
+// subscriberStaleThreshold is the lag (now - Session.LastInbound())
+// above which a member session is considered stale enough to warrant
+// a reconnect attempt. Set to 3× the owner heartbeat cadence (~30s)
+// plus jitter, so a single missed heartbeat doesn't trigger flap but
+// two consecutive misses do. Used both by
+// Session.IsSubscriberAlive (the operator-visible /status flag) and
+// Manager.detectStaleAndReconnect (the background recovery driver).
 //
-// The trade-off is recovery latency vs. unnecessary reconnects. A
-// truly stuck subscriber stays stuck up to this duration after the
-// CXO conn dies. A quiet group sees an unnecessary reconnect every
-// time the threshold elapses with no traffic — that's OK because
-// (a) reconnect is cheap, (b) ConnectPK is idempotent so the
-// underlying conn is reused when healthy, and (c) the backoff
-// machinery limits churn on persistent failure.
-//
-// A proper fix is owner-side heartbeat publication (PR-C) so
-// subscribers can distinguish "no traffic" from "no pull". This
-// threshold is the bridge until that lands.
-const subscriberStaleThreshold = 5 * time.Minute
-
-// heartbeatStaleThreshold is the lag threshold applied when a session
-// has been observing owner heartbeats. Set to ~3× the recommended
-// emit interval (30s) so a single missed heartbeat doesn't trigger
-// a reconnect — but two consecutive misses do, surfacing real stalls
-// inside ~90s. Tight relative to subscriberStaleThreshold because the
-// heartbeat signal is predictable: a healthy group emits regardless
-// of whether anyone is chatting.
-const heartbeatStaleThreshold = 90 * time.Second
+// Post-#unified-liveness: there is now ONE liveness signal
+// (Session.lastInboundNs, bumped on every onUpdate event including
+// heartbeats), so the previous heartbeat-vs-chat-traffic threshold
+// split is gone — heartbeats are bumps of lastInbound just like
+// chat messages, and the single threshold applies to both.
+const subscriberStaleThreshold = 100 * time.Second
 
 // reconnectAttemptTimeout bounds the per-Connect call so the
 // reconnect loop can't get stuck on a single slow group while other
@@ -445,16 +432,17 @@ func (m *Manager) startReconnectLoop() {
 	go m.runReconnectLoop(m.reconnectCtx)
 }
 
-// runReconnectLoop walks every member-side session in StatusPending
-// on a 30s cadence and re-attempts Connect. Successes promote the
-// record back to StatusActive and reset the per-group failure
-// counter. Failures bump the failure counter and, past the configured
-// thresholds, extend the next-attempt time so the loop skips that
-// group until the backoff window elapses.
+// runReconnectLoop is the background recovery driver. On a 30s
+// cadence it walks every member-role session and triggers a
+// reconnect on any whose Session.LastInbound() is stale (or never
+// recorded). Status is no longer manipulated by this loop — Status
+// is configuration state (Active/Pending/Revoked) set by the
+// operator's join/leave actions and by Connect-result transitions.
+// Health is computed live from LastInbound by IsSubscriberAlive.
 //
 // Logging levels follow the spec:
 //   - debug: every reconnect attempt (success or failure)
-//   - info:  every successful reconnect (StatusPending → StatusActive)
+//   - info:  every successful reconnect
 //   - warn:  every backoff-interval transition
 func (m *Manager) runReconnectLoop(ctx context.Context) {
 	defer m.reconnectWG.Done()
@@ -466,35 +454,28 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 			return
 		case <-t.C:
 		}
-		// Two-pass tick: first detect silently-stale active sessions
-		// and demote them to pending; then run the existing pending-
-		// reconnect pass. Order matters — the demotion has to happen
-		// before the pending walk so freshly-demoted records get a
-		// reconnect attempt this same tick.
-		m.detectStaleActive(ctx)
-		m.attemptReconnectPending(ctx)
+		m.detectStaleAndReconnect(ctx)
 	}
 }
 
-// detectStaleActive demotes any active member session whose persisted
-// last_message_at lag exceeds subscriberStaleThreshold. The demotion
-// is the only signal we have today that a "healthy-looking" subscriber
-// has gone silent — Resume's SetStatus(active) and tryReconnect's
-// success path both leave status pinned at active until something
-// flips it back. The CXO Subscriber doesn't surface "my conn died"
-// to us; until owner-side heartbeat publication lands (PR-C) the lag
-// is our best proxy.
+// detectStaleAndReconnect walks every member-role session and
+// triggers a reconnect attempt on any whose Session.LastInbound()
+// is older than subscriberStaleThreshold (or whose session has
+// never observed an inbound, indicated by a zero LastInbound).
 //
-// Demoted records pick up the reconnect loop's normal backoff state,
-// so a session that genuinely cannot reconnect doesn't churn — it
-// retries on the established schedule (30s → 5min after 10 fails →
-// 30min after 30 fails). The wrap-around on success clears the
-// backoff and restores active.
+// This is the recovery driver for the unified liveness signal:
+// IsSubscriberAlive is a pure function of LastInbound, and this
+// pass is what wakes a stuck subscriber back up. Unlike the
+// pre-#unified-liveness version, this does NOT touch
+// Record.Status — Status now reflects configuration state only
+// (joined/left/revoked), not subscriber health. Health is
+// computed live from LastInbound on every /status read.
 //
-// Skips: owner-role sessions (no subscriber), records without a
-// last_message_at (zero value — no traffic ever seen, may be a
-// brand-new join), terminal records.
-func (m *Manager) detectStaleActive(ctx context.Context) {
+// Skips: owner-role sessions (no subscriber), revoked records,
+// sessions without a corresponding live Session in m.sessions.
+// A zero LastInbound on a live session IS treated as stale —
+// we never saw the subscriber attach, so a reconnect is warranted.
+func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
 	}
@@ -504,81 +485,46 @@ func (m *Manager) detectStaleActive(ctx context.Context) {
 	}
 	now := time.Now().UTC()
 	for _, r := range records {
-		if r.Role != RoleMember || r.Status != StatusActive {
+		if r.Role != RoleMember {
 			continue
 		}
-		// Prefer the heartbeat signal when available — it ticks on a
-		// fixed cadence regardless of chat traffic, so a quiet-but-
-		// healthy group doesn't trip stale-detect. Fall back to
-		// last_message_at lag only when no heartbeat has been seen
-		// (older owner deployments without heartbeat publication, or
-		// a freshly-rejoined member that hasn't observed one yet).
+		// Both Active and Pending records get the stale-check.
+		// Active records that drift stale + Pending records that
+		// never finished the initial Connect both want a kick from
+		// the same reconnect machinery. Terminal states (Left,
+		// Revoked) are skipped — the operator's intent is "not in
+		// the group anymore", not "in the group but unhealthy".
+		if r.Status != StatusActive && r.Status != StatusPending {
+			continue
+		}
 		m.mu.RLock()
 		sess := m.sessions[r.ID]
 		m.mu.RUnlock()
-		var (
-			lag       time.Duration
-			signal    string
-			haveProbe bool
-		)
-		if sess != nil {
-			if lhb := sess.LastHeartbeat(); !lhb.IsZero() {
-				lag = now.Sub(lhb)
-				signal = "heartbeat"
-				haveProbe = true
-			}
+		if sess == nil {
+			continue
 		}
-		if !haveProbe {
-			if r.LastMessageAt.IsZero() {
-				continue
-			}
-			lag = now.Sub(r.LastMessageAt)
-			signal = "last_message_at"
+		last := sess.LastInbound()
+		var lag time.Duration
+		var reason string
+		if last.IsZero() {
+			lag = subscriberStaleThreshold + time.Second // forces the lag > threshold branch
+			reason = "no inbound seen"
+		} else {
+			lag = now.Sub(last)
+			reason = "last_inbound lag"
 		}
-		// Pick the appropriate threshold. Heartbeats are predictable
-		// (~30s cadence) so we can be aggressive — 3× interval ≈ 90s.
-		// Chat-traffic lag is unpredictable; keep the conservative
-		// 5-minute threshold to avoid spurious demotes on quiet groups.
-		threshold := subscriberStaleThreshold
-		if signal == "heartbeat" {
-			threshold = heartbeatStaleThreshold
-		}
-		if lag <= threshold {
+		if lag <= subscriberStaleThreshold {
 			continue
 		}
 		m.log.WithField("id", r.ID).
 			WithField("lag", lag.Round(time.Second).String()).
-			WithField("signal", signal).
-			Warn("group: active session stale; demoting to pending for reconnect")
-		if err := m.store.SetStatus(r.ID, StatusPending); err != nil {
-			m.log.WithError(err).WithField("id", r.ID).
-				Debug("group: stale-detect: SetStatus pending failed")
-		}
-	}
-}
-
-// attemptReconnectPending iterates all member-role sessions currently
-// in StatusPending and tries each one. Single-pass: a session whose
-// Connect succeeds here won't be tried again until its status is
-// reset to pending (e.g. on next visor restart, or a future fault).
-func (m *Manager) attemptReconnectPending(ctx context.Context) {
-	records, err := m.store.List()
-	if err != nil {
-		m.log.WithError(err).Debug("group: reconnect: store list failed")
-		return
-	}
-	now := time.Now().UTC()
-	for _, r := range records {
-		if r.Role != RoleMember || r.Status != StatusPending {
-			continue
-		}
+			WithField("reason", reason).
+			WithField("status", string(r.Status)).
+			Debug("group: session stale; kicking reconnect")
+		// Honor the per-group backoff schedule and don't churn on
+		// permanent failures. reconnectShouldAttempt returns false
+		// while the previous attempt's backoff window is still open.
 		if !m.reconnectShouldAttempt(r.ID, now) {
-			continue
-		}
-		m.mu.RLock()
-		sess, ok := m.sessions[r.ID]
-		m.mu.RUnlock()
-		if !ok || sess == nil {
 			continue
 		}
 		m.tryReconnect(ctx, sess, r.ID)
@@ -586,9 +532,13 @@ func (m *Manager) attemptReconnectPending(ctx context.Context) {
 }
 
 // tryReconnect runs one Connect attempt under reconnectAttemptTimeout.
-// On success: clears per-group failure state, flips Status →
-// StatusActive. On failure: bumps the counter and applies any
-// configured backoff transition.
+// On success: clears per-group failure state and promotes Status →
+// StatusActive (handles the join-Pending → join-Active transition;
+// idempotent on records that were already Active). On failure: bumps
+// the counter and applies any configured backoff transition.
+// Health-reflection from this success now flows automatically:
+// Session.Connect bumps lastInboundNs, so IsSubscriberAlive becomes
+// true on the very next /status read.
 func (m *Manager) tryReconnect(ctx context.Context, sess *Session, id string) {
 	m.log.WithField("id", id).Debug("group: reconnect: attempting subscribe")
 	type result struct{ err error }
@@ -773,24 +723,14 @@ func (m *Manager) MarkMessageDelivered(groupID string, ts time.Time) {
 		m.log.WithError(err).WithField("id", groupID).
 			Debug("group: MarkMessageDelivered: store update failed")
 	}
-	// Re-assert subscriber liveness based on positive delivery
-	// evidence. The session's subAlive flag was set true at Connect
-	// and only cleared at Close, so a CXO conn that silently dies
-	// and reconnects under-the-hood (or a session that was created
-	// via a path that skipped the explicit Connect flag-flip) could
-	// report subscriber_alive=false despite messages flowing.
-	// Observed in production: peer reported subscriber_alive=false
-	// AND last_message_at fresh AND messages visible in listener
-	// log — three contradictory signals that point at subAlive being
-	// out of sync with reality. Any arriving message is proof that
-	// the underlying CXO connection is currently delivering data, so
-	// we re-assert here too.
-	m.mu.RLock()
-	sess := m.sessions[groupID]
-	m.mu.RUnlock()
-	if sess != nil {
-		sess.subAlive.Store(true)
-	}
+	// Post-#unified-liveness: in-memory liveness now flows through
+	// Session.lastInboundNs (set in Session.onUpdate on every event
+	// batch). MarkMessageDelivered no longer touches a separate
+	// flag; the message arrived via onUpdate before the inbox got
+	// it, so lastInboundNs is already fresh by the time we land here.
+	// The only side effect of this method now is the LastMessageAt
+	// store-write above — the persisted projection of the in-memory
+	// signal, used to seed lastInboundNs after a visor restart.
 }
 
 // IsSubscriberAlive reports the live subscriber health for the group
