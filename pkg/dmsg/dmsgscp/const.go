@@ -47,14 +47,12 @@ const (
 	RoleSink = "SINK"
 )
 
-// Safety caps. These are hard limits enforced by both the protocol
-// parser and the Host/Client serve loops. v1 is deliberately
-// conservative — operators wanting larger transfers can fall back
-// to a chunked workflow until v2 lifts the cap.
+// Safety caps. Apply to the header parser only — there is no
+// per-transfer file-size cap. The protocol streams payloads of any
+// length the underlying transport accepts. MaxNameLen / MaxHeaderLen
+// guard against memory exhaustion from a malicious peer sending a
+// multi-megabyte header line; they have no effect on the payload.
 const (
-	// MaxFileSize is the hard cap on a single file transfer (100 MiB).
-	// Sender-claimed sizes above this are rejected by the parser.
-	MaxFileSize int64 = 100 * 1024 * 1024
 	// MaxNameLen caps the basename portion of a `C` or `D` header.
 	// Long enough for any reasonable filename, short enough that a
 	// malicious peer can't exhaust memory with a multi-megabyte
