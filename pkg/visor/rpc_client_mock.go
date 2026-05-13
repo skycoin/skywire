@@ -1152,6 +1152,11 @@ func (mc *mockRPCClient) VisorSCP(_ VisorSCPRequest) error {
 	return nil
 }
 
+// VisorCat implements API.
+func (mc *mockRPCClient) VisorCat(_ VisorCatRequest) (*VisorCatResponse, error) {
+	return &VisorCatResponse{LocalAddr: "127.0.0.1:0"}, nil
+}
+
 // DmsgProbe implements API.
 func (mc *mockRPCClient) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
 	return true, nil

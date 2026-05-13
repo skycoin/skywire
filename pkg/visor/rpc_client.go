@@ -1214,6 +1214,17 @@ func (rc *rpcClient) VisorSCP(req VisorSCPRequest) error {
 	return rc.Call("VisorSCP", &req, &ok)
 }
 
+// VisorCat asks the visor to open or accept a peer stream over the
+// chosen transport and bridge it to a 127.0.0.1 loopback the CLI
+// can dial. See api_visor_cat.go for the splice contract.
+func (rc *rpcClient) VisorCat(req VisorCatRequest) (*VisorCatResponse, error) {
+	var resp VisorCatResponse
+	if err := rc.Call("VisorCat", &req, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // DmsgProbe checks dmsg reachability of a remote PK on a given port.
 func (rc *rpcClient) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 	var reachable bool
