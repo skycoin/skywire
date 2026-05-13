@@ -27,5 +27,6 @@ func init() {
 		chatCmd,
 		scpCmd,
 		catCmd,
+		iperfCmd,
 	)
 }
