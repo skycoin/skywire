@@ -116,11 +116,40 @@ type Session struct {
 	cfg  Config
 	port uint16
 
-	// pub is set on the owner side (the group's CXO message feed) and
-	// also on the member side (a throwaway local CXO node hosting the
-	// subscriber). sub is set on the member side only.
+	// pub is set on EVERY role. Pre-D1 it was owner-only with members
+	// using a throwaway publisher purely to host their subscriber's
+	// CXO node. Post-D1 every Session writes its own messages to its
+	// own publisher (sender attribution survives via the path prefix
+	// that includes Session.MyPK; see publishAs). Members' publishers
+	// have an allowlist of Record.Members so other peers can subscribe
+	// to them; owners' publishers also serve the group config / heartbeat
+	// channel (still on the same Publisher; differentiated by path
+	// prefix at the leaf level).
 	pub *treestore.Publisher
+	// sub is the legacy single subscriber pointed at the OWNER's feed.
+	// Still used during D1 for backward-compat with old owners that
+	// haven't migrated to a per-PK config feed; subsumed by peerSubs
+	// once D4's migration path lands and the relay flow is fully
+	// retired in D5. Member role only; nil on owner sessions.
 	sub *treestore.Subscriber
+
+	// peerSubs holds one CXO subscriber per OTHER member of the group
+	// (every member-PK in Record.Members that isn't this Session's
+	// MyPK). Both owner and member roles populate this map — owner
+	// follows every member's per-PK message feed, members follow every
+	// other member's. Allows a member to publish messages locally
+	// without going through the owner relay, and other members
+	// observe the leaves directly via their own subscriber.
+	//
+	// Lifecycle: openOwner / openMember populate this map at Open
+	// time. Connect dials each entry. SetAllowlist (D2) adds/removes
+	// entries as the group's member set changes. Close tears all
+	// entries down.
+	//
+	// Guarded by peerSubsMu since SetAllowlist mutates while
+	// onUpdate / Send concurrently read.
+	peerSubsMu sync.RWMutex
+	peerSubs   map[cipher.PubKey]*treestore.Subscriber
 
 	// relayDmsg / relaySkynet are set on the owner side: parallel
 	// listeners on Record.Port+1 over dmsg AND over the skywire
@@ -316,6 +345,27 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		cfg: cfg, port: cfg.Record.Port, pub: pub, log: log,
 		members:  append([]cipher.PubKey(nil), cfg.Record.Members...),
 		relayCtx: ctx, relayCancel: cancel,
+		peerSubs: make(map[cipher.PubKey]*treestore.Subscriber),
+	}
+
+	// Per-member subscribers: each non-owner-self member publishes
+	// their own message feed at memberPK:Record.Port. Owner follows
+	// every member's feed directly so the relay-hop becomes
+	// vestigial. Subs are created here but not Connect'd; Connect
+	// dials them all on the operator-controlled timing.
+	for _, peerPK := range cfg.Record.Members {
+		if peerPK == cfg.MyPK {
+			continue
+		}
+		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, treestore.SubConfig{Logger: log})
+		if err != nil {
+			log.WithError(err).WithField("peer", peerPK.String()).
+				Warn("group: owner peer-sub create failed; group still usable via legacy relay path")
+			continue
+		}
+		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.OnUpdate(s.onUpdate)
+		s.peerSubs[peerPK] = ps
 	}
 	if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
 		log.WithError(err).WithField("port", relayPort).
@@ -394,11 +444,17 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	// groups). When it does happen, bind fails with a clear "address
 	// in use" error; not silent corruption.
 	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
-		BatchWindow:         cfg.BatchWindow,
-		Logger:              log,
-		DataDir:             filepath.Join(cfg.DataDir, "group", cfg.Record.ID, "member"),
-		DmsgPort:            cfg.Record.Port,
-		SubscriberAllowlist: []cipher.PubKey{}, // empty = nobody allowed
+		BatchWindow: cfg.BatchWindow,
+		Logger:      log,
+		DataDir:     filepath.Join(cfg.DataDir, "group", cfg.Record.ID, "member"),
+		DmsgPort:    cfg.Record.Port,
+		// D1: every group member publishes their own message feed,
+		// and the rest of the group subscribes to it directly
+		// (bypassing the owner-relay hop). Allowlist is the full
+		// member set so peers can subscribe. Pre-D1 this was empty
+		// (the member's publisher existed only to host the
+		// subscriber's CXO node; no one ever subscribed to it).
+		SubscriberAllowlist: append([]cipher.PubKey(nil), cfg.Record.Members...),
 		// Member-side throwaway node — pure cache, no durability
 		// requirement at all.
 		NoSyncCXDS: true,
@@ -414,7 +470,30 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		return nil, fmt.Errorf("group: Open member: attach subscriber: %w", err)
 	}
 	sub.SetPrefixes([]string{MessagePathPrefix})
-	s := &Session{cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log}
+	s := &Session{
+		cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log,
+		peerSubs: make(map[cipher.PubKey]*treestore.Subscriber),
+	}
+
+	// D1 peer subscribers: every OTHER member (excluding self AND
+	// the owner — the owner's feed is already covered by the legacy
+	// `sub` above for backward-compat with non-migrated owners).
+	// When D4 retires the legacy path, this loop will include the
+	// owner PK too.
+	for _, peerPK := range cfg.Record.Members {
+		if peerPK == cfg.MyPK || peerPK == cfg.Record.OwnerPK {
+			continue
+		}
+		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, treestore.SubConfig{Logger: log})
+		if err != nil {
+			log.WithError(err).WithField("peer", peerPK.String()).
+				Warn("group: member peer-sub create failed; will still receive owner-relayed messages")
+			continue
+		}
+		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.OnUpdate(s.onUpdate)
+		s.peerSubs[peerPK] = ps
+	}
 	// Seed lastInboundNs from the persisted LastMessageAt so a
 	// resumed session doesn't look instantly stale before the first
 	// new inbound arrives. Zero LastMessageAt (brand-new join, no
@@ -439,11 +518,32 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 // (seeded from Record.LastMessageAt at Open) and the Manager's
 // background reconnect loop keeps retrying.
 func (s *Session) Connect() error {
-	if s.sub == nil {
-		return nil // owner role
+	// Owner-feed subscriber (legacy path) — only set on member sessions.
+	// Failure here is fatal for the member's read path TODAY since
+	// peerSubs may not be enough until every visor migrates. Once D4
+	// retires the relay/owner-feed flow we'll relax this to "any sub
+	// succeeded" semantics.
+	if s.sub != nil {
+		if err := s.sub.Connect(s.cfg.Record.OwnerPK); err != nil {
+			return fmt.Errorf("group: Connect: %w", err)
+		}
 	}
-	if err := s.sub.Connect(s.cfg.Record.OwnerPK); err != nil {
-		return fmt.Errorf("group: Connect: %w", err)
+	// D1 per-PK peer subscribers. Best-effort: if a single peer's
+	// publisher isn't reachable yet (e.g. they restarted), that one
+	// connect fails silently and the reconnect loop retries. Don't
+	// fail the whole Connect — partial connectivity is better than
+	// none, and at least the owner-feed legacy path is up.
+	s.peerSubsMu.RLock()
+	peers := make(map[cipher.PubKey]*treestore.Subscriber, len(s.peerSubs))
+	for k, v := range s.peerSubs {
+		peers[k] = v
+	}
+	s.peerSubsMu.RUnlock()
+	for pk, ps := range peers {
+		if err := ps.Connect(pk); err != nil {
+			s.log.WithError(err).WithField("peer", pk.String()).
+				Debug("group: Connect: peer-sub Connect failed; will retry on next reconnect tick")
+		}
 	}
 	s.lastInboundNs.Store(time.Now().UnixNano())
 	return nil
@@ -526,9 +626,13 @@ func (s *Session) SetMessageHandler(h MessageHandler) {
 // being stored as the leaf value. The path itself (timestamp +
 // seq) stays plaintext.
 func (s *Session) Send(text string) error {
-	if s.pub == nil || s.cfg.Record.Role != RoleOwner {
-		return errors.New("group: Send: only owner-role sessions can publish; members must SubmitToOwner")
+	if s.pub == nil {
+		return errors.New("group: Send: session has no publisher")
 	}
+	// D1: every role publishes via its own publisher. Pre-D1 this was
+	// owner-only and members went through SubmitToOwner → relay-listener
+	// → owner re-publish. SubmitToOwner is retained for backward-compat
+	// with non-migrated owners; D5 retires it.
 	return s.publishAs(s.cfg.MyPK, text, time.Now().UTC())
 }
 
@@ -560,6 +664,49 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 	s.membersMu.Lock()
 	s.members = snap
 	s.membersMu.Unlock()
+
+	// D1: keep the owner's per-PK peer-sub map in sync with the new
+	// allowlist. Add subscribers for newly-added members; close and
+	// drop subscribers for removed members. Excludes self.
+	desired := make(map[cipher.PubKey]struct{}, len(snap))
+	for _, pk := range snap {
+		if pk == s.cfg.MyPK {
+			continue
+		}
+		desired[pk] = struct{}{}
+	}
+	s.peerSubsMu.Lock()
+	// Drop removed peers — close their subs while still holding the
+	// lock so a racing Connect doesn't pick up a half-torn sub.
+	for pk, ps := range s.peerSubs {
+		if _, keep := desired[pk]; !keep {
+			_ = ps.Close() //nolint:errcheck,gosec
+			delete(s.peerSubs, pk)
+		}
+	}
+	// Add new peers.
+	for pk := range desired {
+		if _, exists := s.peerSubs[pk]; exists {
+			continue
+		}
+		ps, err := treestore.NewSubscriberOnNode(s.pub.Node(), pk, treestore.SubConfig{Logger: s.log})
+		if err != nil {
+			s.log.WithError(err).WithField("peer", pk.String()).
+				Warn("group: SetAllowlist: peer-sub create failed; will retry on next allowlist change")
+			continue
+		}
+		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.OnUpdate(s.onUpdate)
+		// Best-effort connect — same semantics as Connect's per-peer
+		// retry: a peer that's offline now will be picked up on the
+		// next reconnect tick once the publisher comes back.
+		if err := ps.Connect(pk); err != nil {
+			s.log.WithError(err).WithField("peer", pk.String()).
+				Debug("group: SetAllowlist: peer-sub Connect failed; will retry on next reconnect tick")
+		}
+		s.peerSubs[pk] = ps
+	}
+	s.peerSubsMu.Unlock()
 	return nil
 }
 
@@ -603,6 +750,21 @@ func (s *Session) Close() error {
 			firstErr = err
 		}
 		s.sub = nil
+	}
+	// D1 per-PK peer subscribers — close before the local publisher so
+	// the subscribers' Disconnect frames flush through pub.Node() while
+	// the node is still alive. Iterate over a snapshot under the lock,
+	// then nil-out the map outside the loop so a concurrent SetAllowlist
+	// can't observe a half-torn-down state.
+	s.peerSubsMu.Lock()
+	peers := s.peerSubs
+	s.peerSubs = nil
+	s.peerSubsMu.Unlock()
+	for pk, ps := range peers {
+		if err := ps.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		_ = pk
 	}
 	if s.pub != nil {
 		if err := s.pub.Close(); err != nil && firstErr == nil {
@@ -748,14 +910,22 @@ func (s *Session) isMember(pk cipher.PubKey) bool {
 	return false
 }
 
-// publishAs is the shared write path used by both owner-direct
-// Send and member-relay handleRelay. Sender attribution is
-// parametric: the owner-direct case passes its own PK, the relay
-// case passes the relay envelope's sender PK so the feed records
-// the actual author rather than the owner-as-conduit.
+// publishAs is the shared write path used by:
+//   - owner-direct Send / heartbeat (owner publishes as itself)
+//   - member-direct Send (D1 — member publishes as itself on its own feed)
+//   - owner-side relay re-publish (legacy handleRelay path during D5
+//     migration window — owner publishes as the relayed sender on the
+//     OWNER's feed for backward-compat with subscribers that haven't
+//     migrated to per-PK subscriptions yet)
+//
+// Sender attribution is parametric: each caller passes the PK that
+// should appear as the message author. publishAs writes to THIS
+// session's own publisher (s.pub) regardless of senderPK — every
+// session has a publisher in D1, and a member writing to its own
+// publisher with senderPK=cfg.MyPK is the normal D1 path.
 func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) error {
-	if s.pub == nil || s.cfg.Record.Role != RoleOwner {
-		return errors.New("group: publish: only owner-role sessions can publish")
+	if s.pub == nil {
+		return errors.New("group: publish: session has no publisher")
 	}
 	msg := Message{SenderPK: senderPK, TS: ts}
 	switch s.cfg.Record.Mode {
@@ -774,7 +944,16 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 		return fmt.Errorf("group: publishAs: marshal: %w", err)
 	}
 	seq := s.seq.Add(1)
-	path := MessagePathPrefix + "/" + strconv.FormatInt(ts.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
+	// D1: include senderPK hex in the leaf path so messages from
+	// different publishers attributed to different senders never
+	// collide on the same (ts, seq) suffix. Pre-D1 every leaf was
+	// authored by the owner so a single seq counter was sufficient;
+	// post-D1 each publisher has its own counter and they MUST be
+	// disambiguated on the path. The receiver's onUpdate doesn't
+	// parse the path (attribution comes from the JSON body), so the
+	// senderPK segment is purely a uniqueness key on the storage
+	// side.
+	path := MessagePathPrefix + "/" + senderPK.Hex() + "/" + strconv.FormatInt(ts.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
 	if err := s.pub.Put(path, body); err != nil {
 		return fmt.Errorf("group: publishAs: put %q: %w", path, err)
 	}
@@ -917,20 +1096,26 @@ func writeFrame(c net.Conn, payload []byte) error {
 	return err
 }
 
-// ReplayHistoryThrough pumps the last `cap` messages from this
-// session's persistent tree through the given handler. Owner-role
-// sessions read from the publisher's local tree; member-role
-// sessions read from the subscriber's synced tree. Empty or
-// uninitialized sessions are no-ops.
+// ReplayHistoryThrough pumps the last `cap` messages from every
+// publisher/subscriber tree this session can reach through the
+// given handler. Empty or uninitialized sessions are no-ops.
+//
+// D1 sources walked:
+//   - the local publisher (s.pub) — owner's own sends + heartbeats +
+//     any owner-relay re-publishes; member's own direct sends
+//   - the legacy owner-feed subscriber (s.sub) — present on member
+//     sessions, mirrors the owner's feed
+//   - every D1 per-PK peer subscriber (s.peerSubs) — other members'
+//     direct sends published to their own feeds
+//
+// Sorting is by Message.TS (decoded), not by path, because the D1
+// path layout msgs/<senderHex>/<ts-nano>/<seq> would sort by sender
+// first if compared lexically — yielding per-sender chronological
+// groups but not a global chronological order.
 //
 // Best-effort: per-leaf decode / decrypt failures are silently
 // skipped (consistent with onUpdate's policy — a torn leaf
 // shouldn't block the rest of replay).
-//
-// The cap clamps the tail of chronological order: leaves whose
-// path encodes a later timestamp win when more than `cap` exist.
-// Path layout MessagePathPrefix/<ts-nano>/<seq> sorts lexically =
-// chronologically, so a simple sort + tail does the job.
 func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 	if handler == nil || cap <= 0 {
 		return
@@ -948,29 +1133,34 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 		leaves = append(leaves, leaf{path: path, value: v})
 		return true
 	}
-	switch s.cfg.Record.Role {
-	case RoleOwner:
-		if s.pub != nil {
-			s.pub.Walk(MessagePathPrefix, walk)
-		}
-	case RoleMember:
-		if s.sub != nil {
-			s.sub.Walk(MessagePathPrefix, walk)
-		}
-	default:
-		return
+	if s.pub != nil {
+		s.pub.Walk(MessagePathPrefix, walk)
+	}
+	if s.sub != nil {
+		s.sub.Walk(MessagePathPrefix, walk)
+	}
+	s.peerSubsMu.RLock()
+	peerSubs := make([]*treestore.Subscriber, 0, len(s.peerSubs))
+	for _, ps := range s.peerSubs {
+		peerSubs = append(peerSubs, ps)
+	}
+	s.peerSubsMu.RUnlock()
+	for _, ps := range peerSubs {
+		ps.Walk(MessagePathPrefix, walk)
 	}
 	if len(leaves) == 0 {
 		return
 	}
-	sort.Slice(leaves, func(i, j int) bool {
-		return leaves[i].path < leaves[j].path
-	})
-	start := 0
-	if len(leaves) > cap {
-		start = len(leaves) - cap
+	// Decode every leaf upfront so we can sort by Message.TS and
+	// drop undecodable leaves before the cap window is applied
+	// (otherwise a window full of garbage leaves would starve the
+	// handler of real messages within the same cap budget).
+	type decoded struct {
+		path string
+		msg  Message
 	}
-	for _, l := range leaves[start:] {
+	out := make([]decoded, 0, len(leaves))
+	for _, l := range leaves {
 		var msg Message
 		if err := json.Unmarshal(l.value, &msg); err != nil {
 			s.log.WithError(err).WithField("path", l.path).
@@ -988,7 +1178,20 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 			msg.Ciphertext = nil
 			msg.Nonce = nil
 		}
-		handler(s.cfg.Record.ID, msg.SenderPK, msg)
+		out = append(out, decoded{path: l.path, msg: msg})
+	}
+	if len(out) == 0 {
+		return
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].msg.TS.Before(out[j].msg.TS)
+	})
+	start := 0
+	if len(out) > cap {
+		start = len(out) - cap
+	}
+	for _, d := range out[start:] {
+		handler(s.cfg.Record.ID, d.msg.SenderPK, d.msg)
 	}
 }
 
