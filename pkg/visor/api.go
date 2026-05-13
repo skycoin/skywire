@@ -780,6 +780,13 @@ type VisorCatRequest struct {
 	// mode) plus the splice. Zero defaults: 60s for dial, 5m for
 	// listen.
 	Timeout time.Duration `json:"timeout,omitempty"`
+	// Routes requests N parallel mux routes for the skynet transport
+	// in dial mode. The router opens N route-groups in parallel and
+	// stripes writes across them with sequence numbers + resequencing
+	// on reads — bytes remain ordered at the app layer. Ignored for
+	// dmsg transport and for listen mode (listener accepts whatever
+	// the peer dials). 0 or 1 = single route (default).
+	Routes int `json:"routes,omitempty"`
 }
 
 // VisorCatResponse carries the 127.0.0.1 loopback address the CLI
