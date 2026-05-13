@@ -240,6 +240,19 @@ var startCmd = &cobra.Command{
 			}
 		}
 
+		// Accept the server PK from either --pk / -k (named flag) OR
+		// the positional arg documented in `Use: "start [pk]"`.
+		// Pre-fix, an operator running
+		//   skywire cli proxy start <pk> --verbose
+		// (which matches the Use line + is the natural CLI shape)
+		// silently fell into the no-pk branch below: the app started
+		// without --srv, the SOCKS5 listener never bound, and the
+		// "app running" banner lied because the visor only checks the
+		// proc Status flag, not whether the app actually configured
+		// itself.
+		if pk == "" && len(args) > 0 {
+			pk = args[0]
+		}
 		if pk != "" {
 			err := pubkey.Set(pk)
 			if err != nil {
