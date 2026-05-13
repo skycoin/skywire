@@ -34,23 +34,42 @@ import (
 	"time"
 )
 
+// SinkOp is a single (path, value) pair for a batched Put. A nil
+// Value means "delete this path" — folded into PutBatch so the
+// sampler can hand the sink a single fan-out operation per tick
+// instead of N round-trips.
+type SinkOp struct {
+	Path  string
+	Value []byte // nil = delete
+}
+
 // Sink receives per-path writes mirroring the bbolt store. Methods
 // are called from the Tracker's sampler goroutine; implementations
 // that want to do network I/O should defer it to their own loop.
 //
 // The Sink is best-effort: a returning error is not propagated to
 // the caller. Implementations should log internally if needed.
+//
+// PutBatch collapses a slice of (path, value) ops into one sink
+// call. Sinks that proxy to a contended downstream (the CXO
+// publisher, whose mutex is also taken by transport-manager
+// re-registers and other publishers) MUST implement this in a way
+// that acquires the downstream's lock once for the entire batch —
+// otherwise sampler ticks with many mirrors (e.g. one transport
+// tier × N services) serialize against every other writer.
 type Sink interface {
 	Put(path string, value []byte)
 	Delete(path string)
+	PutBatch(ops []SinkOp)
 }
 
 // noopSink is the default Sink used when none is wired. All
 // operations are dropped silently.
 type noopSink struct{}
 
-func (noopSink) Put(string, []byte) {}
-func (noopSink) Delete(string)      {}
+func (noopSink) Put(string, []byte)   {}
+func (noopSink) Delete(string)        {}
+func (noopSink) PutBatch([]SinkOp)    {}
 
 // SetSink replaces the Tracker's mirror sink. Pass nil to detach
 // (resets to a no-op sink). Safe to call before or after Run.
