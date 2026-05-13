@@ -745,6 +745,14 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 	// look at it).
 	if text == HeartbeatMarker {
 		s.lastHeartbeatNs.Store(time.Now().UnixNano())
+		// Heartbeats are positive evidence of CXO liveness even though
+		// they bypass the MessageHandler / inbox.deliver chain (where
+		// #2532 hooks the subAlive flip). Without this, a heartbeat-
+		// only group — quiet enough that no real messages flow —
+		// would observe heartbeats every 30s, advance lastHeartbeatNs
+		// correctly, but report subscriber_alive=false because the
+		// alive flag was never re-asserted by the delivery chain.
+		s.subAlive.Store(true)
 		return nil
 	}
 	if h := s.handler; h != nil {
@@ -976,6 +984,12 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 		// listener shouldn't see them.
 		if IsHeartbeat(msg) {
 			s.lastHeartbeatNs.Store(time.Now().UnixNano())
+			// See the same flip in publishAs's heartbeat short-
+			// circuit for why this is necessary: heartbeats bypass
+			// the MessageHandler chain that #2532 hooks subAlive to,
+			// so member sessions in a quiet group would never see
+			// subAlive promoted on heartbeat-only traffic.
+			s.subAlive.Store(true)
 			continue
 		}
 		h(s.cfg.Record.ID, msg.SenderPK, msg)
