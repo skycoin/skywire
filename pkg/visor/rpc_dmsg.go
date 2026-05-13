@@ -69,6 +69,19 @@ func (r *RPC) VisorSCP(req *VisorSCPRequest, out *bool) (err error) {
 	return nil
 }
 
+// VisorCat opens or accepts a peer stream over the chosen transport
+// and bridges it to a 127.0.0.1 loopback the CLI dials to splice
+// stdio. See api_visor_cat.go.
+func (r *RPC) VisorCat(req *VisorCatRequest, out *VisorCatResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "VisorCat", req)(out, &err)
+	resp, err := r.visor.VisorCat(*req)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // DmsgConnectAll reaches every dmsg server in discovery and ensures a session to each.
 func (r *RPC) DmsgConnectAll(_ *struct{}, out *DmsgConnectAllResult) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgConnectAll", nil)(out, &err)
