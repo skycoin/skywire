@@ -769,6 +769,11 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 			scpWL = ownWL
 		}
+		// Share scp's whitelist with VisorCat so cat's listen-mode
+		// auth matches scp's. Runtime mutations via the dmsgpty
+		// whitelist gateway propagate without rebuilding because
+		// memoryWhitelist mutates in place.
+		v.dmsgWL = scpWL
 		rootDir := scpConf.RootDir
 		if rootDir == "" {
 			rootDir = filepath.Join(v.conf.LocalPath, "scp-root")
@@ -808,6 +813,11 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 			return nil
 		})
 		log.WithField("port", scpPort).WithField("root", rootDir).Info("dmsgscp host started (dmsg + skynet).")
+	} else {
+		// scp disabled — VisorCat still needs an auth source. Fall
+		// back to the dmsgpty whitelist (same shared reference the
+		// pty Host + WhitelistGateway mutate).
+		v.dmsgWL = wl
 	}
 
 	if conf.CLINet != "" {
