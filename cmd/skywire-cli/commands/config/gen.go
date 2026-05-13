@@ -803,6 +803,30 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 	}
 	defer dmsgBoot.Close()
 
+	// Pre-seed the conf service's PK in the dmsg client's entry cache.
+	// The conf service runs as a direct client (it doesn't register in
+	// the HTTP discovery), so dmsgC.DialStream's default disc lookup
+	// fails with "entry is not found in discovery" — which is harmless
+	// (the FallbackRoundTripper below recovers via plain HTTP) but
+	// loud during a fresh apt install where every postinst log line
+	// is operator-visible. Seeding the entry tells DialStream the conf
+	// service is reachable via every embedded DMSG server as a
+	// delegated relay, mirroring the visor-side
+	// `seedDmsgServiceEntries` pattern in pkg/visor/init_dmsg.go.
+	if confPK := dmsg.ExtractPKFromDmsgAddr(embeddedConf.ConfDmsg); confPK != "" {
+		var pkObj cipher.PubKey
+		if err := pkObj.UnmarshalText([]byte(confPK)); err == nil {
+			serverPKs := make([]cipher.PubKey, 0, len(dmsg.Prod.DmsgServers))
+			for i := range dmsg.Prod.DmsgServers {
+				serverPKs = append(serverPKs, dmsg.Prod.DmsgServers[i].Static)
+			}
+			dmsgBoot.Client.SeedEntryCache(pkObj, &disc.Entry{
+				Static: pkObj,
+				Client: &disc.Client{DelegatedServers: serverPKs},
+			})
+		}
+	}
+
 	// Make HTTP request through DMSG transport using FallbackRoundTripper.
 	// This tries each connected DMSG server directly, bypassing discovery
 	// lookup (conf service uses a direct client, not registered in discovery).
@@ -984,7 +1008,7 @@ func configureServices(log *logging.Logger) {
 // invent new schema, only rearrange the visor config's keys.
 //
 // Mutually-exclusive flags: only the FIRST set flag wins, in
-// precedence order sn → dmsgsrv → dmsgdisc. The CLI rejects multiple
+// precedence order sn → dmsgsrv → disc. The CLI rejects multiple
 // flags upstream of this helper, but the precedence here keeps
 // behavior deterministic if that check is ever bypassed.
 func serviceProjectionJQ() string {
