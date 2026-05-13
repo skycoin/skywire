@@ -369,6 +369,25 @@ func (m *Manager) Resume() error {
 // isn't dial-hammered.
 const reconnectInterval = 30 * time.Second
 
+// subscriberStaleThreshold is the lag (now - last_message_at) above
+// which an "active" member session is treated as silently stale and
+// demoted to StatusPending so the existing reconnect machinery kicks
+// in. Set well above any plausible owner-publish gap to avoid false
+// positives on genuinely quiet groups: ~10× the reconnect interval.
+//
+// The trade-off is recovery latency vs. unnecessary reconnects. A
+// truly stuck subscriber stays stuck up to this duration after the
+// CXO conn dies. A quiet group sees an unnecessary reconnect every
+// time the threshold elapses with no traffic — that's OK because
+// (a) reconnect is cheap, (b) ConnectPK is idempotent so the
+// underlying conn is reused when healthy, and (c) the backoff
+// machinery limits churn on persistent failure.
+//
+// A proper fix is owner-side heartbeat publication (PR-C) so
+// subscribers can distinguish "no traffic" from "no pull". This
+// threshold is the bridge until that lands.
+const subscriberStaleThreshold = 5 * time.Minute
+
 // reconnectAttemptTimeout bounds the per-Connect call so the
 // reconnect loop can't get stuck on a single slow group while other
 // pending groups starve.
@@ -420,7 +439,60 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 			return
 		case <-t.C:
 		}
+		// Two-pass tick: first detect silently-stale active sessions
+		// and demote them to pending; then run the existing pending-
+		// reconnect pass. Order matters — the demotion has to happen
+		// before the pending walk so freshly-demoted records get a
+		// reconnect attempt this same tick.
+		m.detectStaleActive(ctx)
 		m.attemptReconnectPending(ctx)
+	}
+}
+
+// detectStaleActive demotes any active member session whose persisted
+// last_message_at lag exceeds subscriberStaleThreshold. The demotion
+// is the only signal we have today that a "healthy-looking" subscriber
+// has gone silent — Resume's SetStatus(active) and tryReconnect's
+// success path both leave status pinned at active until something
+// flips it back. The CXO Subscriber doesn't surface "my conn died"
+// to us; until owner-side heartbeat publication lands (PR-C) the lag
+// is our best proxy.
+//
+// Demoted records pick up the reconnect loop's normal backoff state,
+// so a session that genuinely cannot reconnect doesn't churn — it
+// retries on the established schedule (30s → 5min after 10 fails →
+// 30min after 30 fails). The wrap-around on success clears the
+// backoff and restores active.
+//
+// Skips: owner-role sessions (no subscriber), records without a
+// last_message_at (zero value — no traffic ever seen, may be a
+// brand-new join), terminal records.
+func (m *Manager) detectStaleActive(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	records, err := m.store.List()
+	if err != nil {
+		return
+	}
+	now := time.Now().UTC()
+	for _, r := range records {
+		if r.Role != RoleMember || r.Status != StatusActive {
+			continue
+		}
+		if r.LastMessageAt.IsZero() {
+			continue
+		}
+		if now.Sub(r.LastMessageAt) <= subscriberStaleThreshold {
+			continue
+		}
+		m.log.WithField("id", r.ID).
+			WithField("lag", now.Sub(r.LastMessageAt).Round(time.Second).String()).
+			Warn("group: active session stale; demoting to pending for reconnect")
+		if err := m.store.SetStatus(r.ID, StatusPending); err != nil {
+			m.log.WithError(err).WithField("id", r.ID).
+				Debug("group: stale-detect: SetStatus pending failed")
+		}
 	}
 }
 
@@ -622,6 +694,25 @@ func (m *Manager) Close() error {
 
 // Get returns the persisted record for an ID.
 func (m *Manager) Get(id string) (Record, bool, error) { return m.store.Get(id) }
+
+// MarkMessageDelivered records that a message with the given timestamp
+// reached the inbox for the named group. Belt-and-suspenders to keep
+// LastMessageAt fresh independent of the wrapped-handler chain in
+// openLocked: any subsystem with a Manager reference can call this
+// after delivering a message externally (e.g. the visor's groupInbox
+// when it drains a SSE push) so the persisted last_message_at stays
+// consistent with what's actually flowing into the inbox.
+//
+// Idempotent and best-effort: errors are swallowed at debug level
+// because a failure here is purely cosmetic — the message still
+// reached its consumer; only the operator-visible lag indicator is
+// affected.
+func (m *Manager) MarkMessageDelivered(groupID string, ts time.Time) {
+	if err := m.store.MarkMessage(groupID, ts); err != nil {
+		m.log.WithError(err).WithField("id", groupID).
+			Debug("group: MarkMessageDelivered: store update failed")
+	}
+}
 
 // IsSubscriberAlive reports the live subscriber health for the group
 // id, surfaced by the chat-app's /status endpoint as the per-group
