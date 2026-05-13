@@ -283,6 +283,14 @@ func (p *Publisher) Node() *node.Node {
 	return p.cxoNode
 }
 
+// Stats returns the underlying CXO node's publisher-side health
+// snapshot. Pass-through to node.Node.Stats() for callers that
+// only have a Publisher handle in scope. See node.PublisherStats
+// for counter semantics.
+func (p *Publisher) Stats() node.PublisherStats {
+	return p.cxoNode.Stats()
+}
+
 // SetAllowlist atomically replaces the subscriber allowlist. nil
 // disables the gate (any subscriber accepted). An empty non-nil
 // slice closes the gate to all subscribers — useful for staging a
