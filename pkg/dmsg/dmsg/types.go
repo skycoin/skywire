@@ -39,8 +39,23 @@ var (
 	// in waitRead from holding ephemeral ports indefinitely.
 	StreamIdleTimeout = 2 * time.Minute
 
-	// AcceptBufferSize defines the size of the accepts buffer.
-	AcceptBufferSize = 20
+	// AcceptBufferSize is the buffer depth of each dmsg Listener's
+	// accept channel — how many newly-arrived (but not yet
+	// AcceptStream-drained) streams the listener can hold before it
+	// starts dropping with "Accept buffer full" + ErrAcceptChanMaxed.
+	//
+	// Sized for the largest plausible burst of inbound REQUEST
+	// frames between consumer drains. Production TPD's CXO
+	// subscriber listener (port 50) was empirically hitting steady-
+	// state ~16 drops/sec with a peer count in the few-hundreds
+	// range — small enough that the constant being 20 (the original
+	// value, intended for hobbyist visor accept rates) saturated
+	// within ~1s of a deploy-restart traffic spike and never
+	// recovered. Bumping to 256 absorbs ~16s of burst at that rate
+	// before drops start, and is still tiny in absolute memory
+	// terms (256 pointers ≈ 2 KiB per listener). Listeners that see
+	// less load (visor-side ports, etc.) pay the same trivial cost.
+	AcceptBufferSize = 256
 )
 
 // YamuxConfig returns a tuned yamux configuration for dmsg sessions.
