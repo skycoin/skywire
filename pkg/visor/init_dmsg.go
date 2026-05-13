@@ -60,15 +60,34 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	// dmsg.Client.serve() via the "dmsgServer" context value.
 	if dmsgServer != "" {
 		var pinned []*dmsgdisc.Entry
-		for _, e := range configured {
-			if e != nil && e.Static.Hex() == dmsgServer {
-				pinned = []*dmsgdisc.Entry{e}
-				break
+		if dmsgServerAddr != "" {
+			// pk@host:port form: synthesize the entry from the flag so
+			// dmsg-http works on a bootstrap visor that has no cached
+			// servers and possibly no working discovery.
+			var pk cipher.PubKey
+			if err := pk.Set(dmsgServer); err != nil {
+				log.WithError(err).WithField("dmsg_server", dmsgServer).
+					Error("--dmsg-server: invalid public key; dmsg-http will be unavailable")
+			} else {
+				pinned = []*dmsgdisc.Entry{{
+					Static: pk,
+					Server: &dmsgdisc.Server{Address: dmsgServerAddr},
+				}}
+				log.WithField("dmsg_server", dmsgServer).
+					WithField("addr", dmsgServerAddr).
+					Info("--dmsg-server pk@host:port: skipping discovery for dmsg-http")
 			}
-		}
-		if len(pinned) == 0 {
-			log.WithField("dmsg_server", dmsgServer).
-				Warn("--dmsg-server PK not in configured/cached servers; dmsg-http will be unavailable")
+		} else {
+			for _, e := range configured {
+				if e != nil && e.Static.Hex() == dmsgServer {
+					pinned = []*dmsgdisc.Entry{e}
+					break
+				}
+			}
+			if len(pinned) == 0 {
+				log.WithField("dmsg_server", dmsgServer).
+					Warn("--dmsg-server PK not in configured/cached servers; dmsg-http will be unavailable")
+			}
 		}
 		configured = pinned
 	}

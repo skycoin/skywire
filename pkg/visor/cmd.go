@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -47,6 +48,7 @@ var (
 	// visorBuildInfo holds information about the build
 	visorBuildInfo        *buildinfo.Info
 	dmsgServer            string
+	dmsgServerAddr        string // populated from --dmsg-server when given as pk@host:port; empty means "use discovery"
 	dmsgServerMaxAttempts int
 	isStoreLog            bool
 	isForceColor          bool
@@ -223,6 +225,35 @@ var RootCmd = &cobra.Command{
 				if _, err := os.Stat(confPath); err != nil {
 					//fail here on no config
 					log.WithError(err).Fatal("config file not found")
+				}
+			}
+		}
+		// Parse --dmsg-server. Two accepted forms:
+		//   <pk>               — let dmsg discovery resolve the address (existing behavior)
+		//   <pk>@<host:port>   — skip discovery entirely and dial host:port directly
+		// The "@" form is for bootstrapping a visor that can't reach
+		// dmsg-discovery yet (fresh install, sealed network, etc.) and
+		// for pinning a specific server address regardless of what
+		// discovery says. The pinned-failure cap from
+		// --dmsg-server-max-attempts still applies — TCP dial failures
+		// count as attempts.
+		if dmsgServer != "" {
+			if i := strings.Index(dmsgServer, "@"); i >= 0 {
+				pkPart := dmsgServer[:i]
+				addrPart := dmsgServer[i+1:]
+				if pkPart == "" || addrPart == "" {
+					log.Fatalf("--dmsg-server: invalid pk@host:port form (need both pk and address): %q", dmsgServer)
+				}
+				var pk cipher.PubKey
+				if err := pk.Set(pkPart); err != nil {
+					log.WithError(err).Fatalf("--dmsg-server: invalid public key %q", pkPart)
+				}
+				dmsgServer = pkPart
+				dmsgServerAddr = addrPart
+			} else {
+				var pk cipher.PubKey
+				if err := pk.Set(dmsgServer); err != nil {
+					log.WithError(err).Fatalf("--dmsg-server: invalid public key %q", dmsgServer)
 				}
 			}
 		}

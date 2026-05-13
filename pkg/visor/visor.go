@@ -601,6 +601,12 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		// to pin discovery to a single server PK. Match that key exactly
 		// — a private struct type here would silently disable pinning.
 		ctx = context.WithValue(ctx, "dmsgServer", dmsgServer) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
+		if dmsgServerAddr != "" {
+			// --dmsg-server pk@host:port form. dmsg.Client.serve() reads
+			// "dmsgServerAddr" alongside "dmsgServer" and skips discovery
+			// when both are set, dialing host:port directly.
+			ctx = context.WithValue(ctx, "dmsgServerAddr", dmsgServerAddr) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
+		}
 	}
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module

@@ -244,7 +244,29 @@ func (ce *Client) Serve(ctx context.Context) {
 		var err error
 		ce.log.Debug("Discovering dmsg servers...")
 		pinned := ctx.Value("dmsgServer") != nil
-		if pinned {
+		pinnedAddr, _ := ctx.Value("dmsgServerAddr").(string)
+		if pinned && pinnedAddr != "" {
+			// pk@host:port form: skip discovery entirely. We have
+			// everything dialSession needs (PK + TCP address) right
+			// here, so don't burn an HTTP round-trip on dmsg-discovery
+			// — that may be unreachable in the bootstrap scenarios
+			// this mode exists for. A bad PK falls through to "No
+			// entries found" and gets counted as a pinned failure.
+			if dmsgServer, ok := ctx.Value("dmsgServer").(string); ok {
+				var pk cipher.PubKey
+				if err := pk.Set(dmsgServer); err != nil {
+					ce.log.WithError(err).
+						WithField("dmsg_server", dmsgServer).
+						Warn("Pinned dmsg server PK invalid; will retry.")
+					entries = nil
+				} else {
+					entries = []*disc.Entry{{
+						Static: pk,
+						Server: &disc.Server{Address: pinnedAddr},
+					}}
+				}
+			}
+		} else if pinned {
 			entries, err = ce.discoverServers(cancellabelCtx, true)
 			if err != nil {
 				ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
