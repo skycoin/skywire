@@ -259,10 +259,17 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 
 // groupInbox is a bounded ring buffer of inbound group messages,
 // drained by GroupPoll. Mirrors pairInbox exactly.
+//
+// mgr is set after construction via setManager; deliver() uses it to
+// tick last_message_at on the persisted record so the indicator stays
+// fresh independent of the wrapped-handler chain in
+// group.Manager.openLocked. Nil-tolerant: if setManager hasn't been
+// called the bookkeeping side-effect is skipped.
 type groupInbox struct {
 	mu  sync.Mutex
 	cap int
 	buf []GroupMessage
+	mgr *skychatgroup.Manager
 }
 
 func newGroupInbox(capacity int) *groupInbox {
@@ -272,9 +279,18 @@ func newGroupInbox(capacity int) *groupInbox {
 	return &groupInbox{cap: capacity, buf: make([]GroupMessage, 0, capacity)}
 }
 
+// setManager wires the group Manager so deliver() can refresh
+// last_message_at on the persisted record after a successful push.
+// Set once during init_group.go after both the Manager and inbox
+// exist; subsequent calls overwrite atomically under the inbox mutex.
+func (g *groupInbox) setManager(mgr *skychatgroup.Manager) {
+	g.mu.Lock()
+	g.mgr = mgr
+	g.mu.Unlock()
+}
+
 func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychatgroup.Message) {
 	g.mu.Lock()
-	defer g.mu.Unlock()
 	g.buf = append(g.buf, GroupMessage{
 		GroupID:  groupID,
 		SenderPK: senderPK,
@@ -284,6 +300,20 @@ func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychat
 	if len(g.buf) > g.cap {
 		drop := len(g.buf) - g.cap
 		g.buf = append(g.buf[:0], g.buf[drop:]...)
+	}
+	mgr := g.mgr
+	g.mu.Unlock()
+	// Belt-and-suspenders: also tick the persisted last_message_at on
+	// the manager. The wrapped MessageHandler installed by openLocked
+	// is supposed to do this too, but during the 3-agent coordination
+	// session some peers observed last_message_at not advancing even
+	// while messages were arriving in their group-listen output —
+	// suggesting at least one delivery path bypasses the wrapper.
+	// Updating from inbox.deliver guarantees the indicator tracks
+	// whatever actually lands in the inbox, regardless of which
+	// upstream code path put it there.
+	if mgr != nil {
+		mgr.MarkMessageDelivered(groupID, msg.TS)
 	}
 }
 
