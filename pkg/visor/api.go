@@ -216,6 +216,7 @@ type API interface {
 	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 	SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error)
+	VisorSCP(req VisorSCPRequest) error
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
 	DmsgSessions() (*DmsgClientSessions, error)
@@ -674,6 +675,61 @@ type SkynetHTTPResponse struct {
 	Status     string            `json:"status"`
 	Header     map[string]string `json:"header,omitempty"`
 	Body       []byte            `json:"body,omitempty"`
+}
+
+// VisorSCPDirection enumerates the two scp transfer directions.
+const (
+	// VisorSCPUpload pushes a local file to the remote host's rootDir.
+	VisorSCPUpload = "upload"
+	// VisorSCPDownload pulls a file from the remote host's rootDir
+	// into a local path.
+	VisorSCPDownload = "download"
+)
+
+// VisorSCPTransport enumerates the transports the visor will dial
+// the peer's dmsgscp host over. Both peers expose the host on dmsg
+// AND skynet at the same port; the caller picks per-call.
+const (
+	// VisorSCPTransportDmsg dials peer:port over dmsg.
+	VisorSCPTransportDmsg = "dmsg"
+	// VisorSCPTransportSkynet dials peer:port over the skywire router
+	// (appnet TypeSkynet). Routing through skynet keeps the bytes off
+	// the dmsg overlay and lets the transfer ride whatever transports
+	// the router picks for the route group.
+	VisorSCPTransportSkynet = "skynet"
+)
+
+// VisorSCPRequest describes a peer-to-peer file transfer the visor
+// should perform on the caller's behalf. The visor process opens the
+// stream over the chosen transport (it has both dmsgC + appnet
+// resolvers wired in, where a standalone CLI does not) and drives
+// the dmsgscp wire protocol entirely inside the visor.
+//
+// Local files are read/written on the visor host's filesystem.
+// Operators running the CLI as the same user as the visor process
+// see the obvious "this is my $HOME" behavior.
+type VisorSCPRequest struct {
+	// RemotePK is the peer's visor PK. The peer must have a dmsgscp
+	// host bound and the caller's PK on the host's whitelist.
+	RemotePK cipher.PubKey `json:"remote_pk"`
+	// Port is the peer's dmsgscp port (same for both transports —
+	// dmsgscp.DefaultPort is 23).
+	Port uint16 `json:"port"`
+	// Direction is VisorSCPUpload or VisorSCPDownload.
+	Direction string `json:"direction"`
+	// LocalPath is the path on the visor host's filesystem. For an
+	// upload it's the source; for a download it's the destination.
+	LocalPath string `json:"local_path"`
+	// RemotePath is the path relative to the peer's rootDir. For an
+	// upload it's the destination; for a download it's the source.
+	// Absolute paths and `..` components are rejected by the peer.
+	RemotePath string `json:"remote_path"`
+	// Transport is VisorSCPTransportDmsg or VisorSCPTransportSkynet.
+	// Empty defaults to dmsg.
+	Transport string `json:"transport,omitempty"`
+	// Timeout bounds the whole transfer (dial + scp protocol +
+	// payload). Zero falls back to a 5-minute default.
+	Timeout time.Duration `json:"timeout,omitempty"`
 }
 
 // FetchCXOArgs identifies which CXO feed + path the caller wants the
