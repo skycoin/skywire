@@ -1218,8 +1218,18 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	if visorPKErr != "" {
 		status["error"] = visorPKErr
 	}
-	if groups := collectGroupHealth(); groups != nil {
-		status["groups"] = groups
+	// Always surface a result for the groups[] introspection path
+	// even when it fails. Previously a nil pairRPC or a GroupList RPC
+	// failure was returned as a silent nil and the 'groups' key was
+	// suppressed entirely — making it impossible for an operator to
+	// distinguish "this visor has no groups" from "the introspection
+	// path is broken". Now we always set 'groups' (an array, possibly
+	// empty) AND, on the failure paths, set 'groups_error' with a
+	// short reason string so the failure mode is greppable.
+	groups, groupsErr := collectGroupHealth()
+	status["groups"] = groups
+	if groupsErr != "" {
+		status["groups_error"] = groupsErr
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1255,14 +1265,36 @@ type groupHealth struct {
 // pair-RPC channel (when --pair-enable is set, which is the default
 // for any setup that has grouping enabled at all). This reuses that
 // channel rather than introducing a new IPC dependency.
-func collectGroupHealth() []groupHealth {
+// collectGroupHealth returns the per-group health summary for every
+// joined group on this visor, plus a short error-reason string when
+// the introspection path failed. The caller always renders a 'groups'
+// array (possibly empty) so an operator never sees the field silently
+// missing; the 'groups_error' field appears alongside whenever the
+// returned reason is non-empty, making the failure mode visible.
+//
+// Two failure paths surface as distinct reason strings:
+//
+//   - pairRPC == nil  → "pair-rpc-disabled" (operator turned off
+//     pair mode, so the chat-app can't reach the visor for group
+//     introspection; not necessarily a bug).
+//   - GroupList RPC errored → "rpc-error: <truncated err>" (the
+//     visor's group manager rejected or failed the call — usually
+//     means group support is disabled in the visor config, OR the
+//     RPC client has a transient connection issue).
+func collectGroupHealth() ([]groupHealth, string) {
 	if pairRPC == nil {
-		return nil
+		return []groupHealth{}, "pair-rpc-disabled"
 	}
 	infos, err := pairRPC.GroupList()
 	if err != nil {
 		appCl.Log().Debugf("status: GroupList RPC failed: %v", err)
-		return nil
+		// Truncate the err so a long upstream chain doesn't bloat
+		// /status responses or wrap unprintable bytes through HTTP.
+		es := err.Error()
+		if len(es) > 200 {
+			es = es[:200] + "…"
+		}
+		return []groupHealth{}, "rpc-error: " + es
 	}
 	out := make([]groupHealth, 0, len(infos))
 	now := time.Now().UTC()
@@ -1285,7 +1317,7 @@ func collectGroupHealth() []groupHealth {
 		}
 		out = append(out, gh)
 	}
-	return out
+	return out, ""
 }
 
 // persistMessage stores a message in the history backend if persistence is
