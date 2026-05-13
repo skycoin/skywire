@@ -295,7 +295,7 @@ func runVisorCatListen(port uint16, cmd *cobra.Command) error {
 	if catVerbose {
 		fmt.Fprintf(os.Stderr, "stream accepted; splicing stdio\n")
 	}
-	return spliceStdio(conn)
+	return spliceStdioHalfClose(conn)
 }
 
 // splitPKPort parses a `pkhex:port` argument used by `cli dmsg cat`.
@@ -323,6 +323,10 @@ func splitPKPort(s string) (cipher.PubKey, uint16, error) {
 // process's stdio. Returns when either side EOFs or errors. The
 // stdin → conn half drives close-on-eof of conn so the remote sees
 // our stdin close.
+//
+// Used by dial mode (and standalone dmsg dial). For listen mode use
+// spliceStdioHalfClose — that variant doesn't tear down the receive
+// direction when the (often empty) local stdin EOFs.
 func spliceStdio(conn net.Conn) error {
 	var (
 		once    sync.Once
@@ -350,4 +354,45 @@ func spliceStdio(conn net.Conn) error {
 		return nil
 	}
 	return first
+}
+
+// closeWriter is the optional half-close interface satisfied by
+// *net.TCPConn. The CLI's loopback conn to the visor always satisfies
+// this (it's TCP), so we use CloseWrite to signal "no more stdin
+// bytes" instead of full-closing the conn.
+type closeWriter interface {
+	CloseWrite() error
+}
+
+// spliceStdioHalfClose is the asymmetric variant of spliceStdio for
+// the listen-mode CLI. When stdin EOFs (commonly immediately, since
+// `cat listen` is usually invoked with `< /dev/null` or an idle TTY),
+// we CloseWrite on the conn rather than fully closing it. The reverse
+// direction (conn → stdout) keeps reading until the remote sender
+// naturally closes the stream.
+//
+// Hangs only if the remote never closes its side; the listen mode's
+// --timeout flag bounds that on the visor end.
+func spliceStdioHalfClose(conn net.Conn) error {
+	done := make(chan error, 2)
+	go func() {
+		_, err := io.Copy(conn, os.Stdin)
+		if cw, ok := conn.(closeWriter); ok {
+			_ = cw.CloseWrite()
+		}
+		done <- err
+	}()
+	go func() {
+		_, err := io.Copy(os.Stdout, conn)
+		done <- err
+	}()
+	e1 := <-done
+	e2 := <-done
+	_ = conn.Close()
+	for _, e := range []error{e1, e2} {
+		if e != nil && !errors.Is(e, io.EOF) && !errors.Is(e, net.ErrClosed) {
+			return e
+		}
+	}
+	return nil
 }
