@@ -230,6 +230,27 @@ func (s *cxoSink) Delete(path string) {
 	}
 }
 
+// PutBatch fans an entire sample's mirror writes into a single
+// treestore.Publisher.PutBatch — one mutex acquire + one markDirty
+// for the lot. Pre-batch each sinkPut took the publisher's mutex
+// independently and contended with transport-manager re-registers
+// + other publishers on the shared mutex; under heavy transport
+// churn that drove ~27% CPU in bbolt-commit and ~47% in
+// gcBgMarkWorker. With the batch, one mutex hop per sample tick
+// regardless of how many tier × service entries fired.
+func (s *cxoSink) PutBatch(ops []stats.SinkOp) {
+	if len(ops) == 0 {
+		return
+	}
+	tsOps := make([]treestore.PutOp, 0, len(ops))
+	for _, op := range ops {
+		tsOps = append(tsOps, treestore.PutOp{Path: op.Path, Value: op.Value})
+	}
+	if err := s.pub.PutBatch(tsOps); err != nil {
+		s.log.WithError(err).WithField("count", len(tsOps)).Debug("Stats: CXO PutBatch failed")
+	}
+}
+
 func statsPath(v *Visor, conf *visorconfig.Stats) string {
 	if conf != nil && conf.Path != "" {
 		return conf.Path
