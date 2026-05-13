@@ -44,6 +44,14 @@ var (
 	// PK, so callers wanting stable authorization should pin --sk
 	// (or set DMSGPTY_SK in the environment). Unset = ephemeral.
 	ptySK cipher.SecKey
+	// ptyViaVisor, when true, borrows the local visor's secret key
+	// from its config file for the --via tcp path's noise handshake.
+	// Convenience for the common case of running the CLI on a host
+	// that also runs a visor: the visor's PK is typically already
+	// on the remote's whitelist, so the operator skips having to
+	// pin --sk or seed DMSGPTY_SK. An explicit --sk / DMSGPTY_SK
+	// always wins.
+	ptyViaVisor bool
 )
 
 // ptyTCPViaRE matches `tcp://<66-hex-pk>@<host:port>` for the --via
@@ -71,6 +79,8 @@ func init() {
 		"bypass local visor + dial remote dmsgpty-host's direct-TCP listener: tcp://<pk>@<host>:<port>")
 	ptyStartCmd.Flags().VarP(&ptySK, "sk", "s",
 		"local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization)")
+	ptyStartCmd.Flags().BoolVar(&ptyViaVisor, "via-visor", false,
+		"borrow local visor's secret key from "+visorconfig.SkywireConfig()+" for the --via noise handshake (--sk wins if set)")
 
 	// Flags for exec command
 	ptyExecCmd.PersistentFlags().StringVarP(&ptyRpcAddr, "rpc", "", "localhost:3435", "RPC server address")
@@ -81,6 +91,8 @@ func init() {
 		"bypass local visor + dial remote dmsgpty-host's direct-TCP listener: tcp://<pk>@<host>:<port>")
 	ptyExecCmd.Flags().VarP(&ptySK, "sk", "s",
 		"local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization)")
+	ptyExecCmd.Flags().BoolVar(&ptyViaVisor, "via-visor", false,
+		"borrow local visor's secret key from "+visorconfig.SkywireConfig()+" for the --via noise handshake (--sk wins if set)")
 
 	// Flags for ui command
 	ptyUICmd.Flags().StringVarP(&ptyPath, "input", "i", "", "read from specified config file")
@@ -273,12 +285,20 @@ func parseTCPVia(via string) (cipher.PubKey, string, error) {
 }
 
 // resolveTCPIdentity returns the (PK, SK) used as the local
-// identity in the --via tcp noise handshake. If skFlag is non-zero,
-// it's used and the matching PK is derived. Otherwise a fresh
-// keypair is generated for the run (operator gets a one-shot
-// identity; whitelist-pinned hosts will reject it). DMSGPTY_SK
-// environment variable is a third source consulted before
-// generation.
+// identity in the --via tcp noise handshake. Resolution order:
+//
+//  1. skFlag (--sk) if non-zero, OR DMSGPTY_SK env if non-empty.
+//     Explicit identity always wins.
+//  2. --via-visor: read skywire.json and use the visor's SK. The
+//     visor's PK is typically already on remote whitelists, so
+//     this is the zero-config convenience path for operators
+//     running CLI alongside a visor.
+//  3. Fresh ephemeral keypair. Whitelist-pinned remotes will
+//     reject it; useful for testing against open-whitelist hosts
+//     or proving connectivity.
+//
+// Fatal-exits with a helpful message on a malformed identity
+// source — the caller can't proceed without a valid keypair.
 func resolveTCPIdentity(skFlag cipher.SecKey) (cipher.PubKey, cipher.SecKey) {
 	var zero cipher.SecKey
 	sk := skFlag
@@ -286,6 +306,19 @@ func resolveTCPIdentity(skFlag cipher.SecKey) (cipher.PubKey, cipher.SecKey) {
 		if env := os.Getenv("DMSGPTY_SK"); env != "" {
 			_ = sk.Set(env) //nolint:errcheck,gosec
 		}
+	}
+	if sk == zero && ptyViaVisor {
+		confPath := visorconfig.SkywireConfig()
+		conf, err := visorconfig.ReadFile(confPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "pty --via-visor: read %s: %v\n", confPath, err) //nolint:errcheck
+			os.Exit(1)
+		}
+		if conf.SK == zero {
+			fmt.Fprintf(os.Stderr, "pty --via-visor: visor config %s has empty SK\n", confPath) //nolint:errcheck
+			os.Exit(1)
+		}
+		sk = conf.SK
 	}
 	if sk == zero {
 		pk, fresh := cipher.GenerateKeyPair()
