@@ -13,16 +13,19 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgscp"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 // scpPKPathRe matches a `PK:path` argument. The PK is a 66-char
@@ -32,8 +35,18 @@ import (
 var scpPKPathRe = regexp.MustCompile(`^([a-f0-9]{66}):(.*)$`)
 
 var (
-	scpPort    uint16
-	scpTimeout time.Duration
+	scpPort      uint16
+	scpTimeout   time.Duration
+	scpTransport string
+)
+
+// scpTransportAuto is the default for --transport: try the local
+// visor's VisorSCP RPC first (works for both dmsg and skynet) and
+// fall back to a standalone-dmsg dial when no visor is reachable.
+const (
+	scpTransportAuto   = "auto"
+	scpTransportDmsg   = "dmsg"
+	scpTransportSkynet = "skynet"
 )
 
 func init() {
@@ -42,8 +55,12 @@ func init() {
 		"secret key for the standalone dmsg client (random if unset)")
 	scpCmd.Flags().Uint16VarP(&scpPort, "port", "p", dmsgscp.DefaultPort,
 		"remote dmsg port for the dmsgscp host")
-	scpCmd.Flags().DurationVarP(&scpTimeout, "timeout", "t", 60*time.Second,
-		"transfer timeout (includes dmsg dial + payload)")
+	scpCmd.Flags().DurationVarP(&scpTimeout, "timeout", "t", 5*time.Minute,
+		"transfer timeout (includes dial + payload)")
+	scpCmd.Flags().StringVar(&scpTransport, "transport", scpTransportAuto,
+		"transport: auto (try visor first, fallback dmsg) | dmsg | skynet")
+	scpCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr,
+		"local visor RPC server address (env: SKYWIRE_RPC). Used for skynet / auto transports.")
 	scpCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal",
 		"[ debug | warn | error | fatal | panic | trace | info ]")
 	if env := os.Getenv("DMSG_SK"); env != "" {
@@ -64,12 +81,26 @@ Examples:
 
 The remote path is interpreted relative to the host's configured
 rootDir — absolute paths and ` + "`..`" + ` are rejected by the wire
-parser. Hard limit on file size: 100 MiB.
+parser. No size cap — large transfers stream through the underlying
+transport without buffering the whole payload in memory.
+
+Transport selection (--transport):
+  - auto    (default) try the local visor's VisorSCP RPC first
+            so the transfer rides whatever transport the visor
+            already has up. Falls back to standalone dmsg when no
+            visor is reachable on --rpc.
+  - dmsg    standalone dmsg path — the CLI bootstraps its own
+            dmsg.Client and dials peer:port directly. Works without
+            a local visor.
+  - skynet  routes the transfer over the skywire router via the
+            visor's VisorSCP RPC. Requires a local visor with
+            appnet TypeSkynet registered.
 
 Identity: --sk gives the standalone dmsg client a stable PK so the
 host's whitelist can authorize it. Without --sk you get a fresh
 random PK each invocation and the host will reject you unless its
-whitelist has been wide-opened.`,
+whitelist has been wide-opened. Identity only matters for the
+standalone dmsg path; the VisorSCP RPC uses the visor's own PK.`,
 	Args:                  cobra.ExactArgs(2),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
@@ -88,20 +119,43 @@ whitelist has been wide-opened.`,
 			return err
 		}
 
-		// Resolve our identity. Mirrors the chat command — a fresh
-		// keypair is fine for ad-hoc use but the operator should
-		// use --sk for a stable PK that can be whitelisted.
+		switch scpTransport {
+		case scpTransportAuto, scpTransportDmsg, scpTransportSkynet:
+		default:
+			return fmt.Errorf("dmsg scp: bad --transport %q (want auto|dmsg|skynet)", scpTransport)
+		}
+
+		// Skynet path requires the visor (CLI has no appnet runtime).
+		if scpTransport == scpTransportSkynet {
+			return runVisorSCP(visor.VisorSCPTransportSkynet, peerPK, direction, localPath, remotePath, cmd)
+		}
+
+		// Auto path: try the visor's RPC first. The visor's own PK is
+		// stable + already on the peer's whitelist, so we save the
+		// operator from threading --sk. Fall back to standalone dmsg
+		// when --rpc is unreachable (typical for an operator running
+		// the CLI on a host without a local visor).
+		if scpTransport == scpTransportAuto {
+			err := runVisorSCP(visor.VisorSCPTransportDmsg, peerPK, direction, localPath, remotePath, cmd)
+			if err == nil {
+				return nil
+			}
+			log.WithError(err).Debug("VisorSCP RPC failed; falling back to standalone dmsg")
+		}
+
+		// Standalone dmsg path — the CLI bootstraps its own
+		// dmsg.Client and dials peer:port directly.
+		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
+		defer cancel()
+		ctx, timeoutCancel := context.WithTimeout(ctx, scpTimeout)
+		defer timeoutCancel()
+
 		myPK, mySK := resolveChatIdentity(sk)
 		if !cmd.Flags().Changed("sk") && os.Getenv("DMSG_SK") == "" {
 			fmt.Fprintf(os.Stderr,
 				"WARN: ephemeral identity. Your PK is %s — the host's whitelist must accept this PK or the transfer will be rejected. Use --sk / DMSG_SK= for a stable identity.\n\n",
 				myPK)
 		}
-
-		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
-		defer cancel()
-		ctx, timeoutCancel := context.WithTimeout(ctx, scpTimeout)
-		defer timeoutCancel()
 
 		dmsgC, closeDmsg, err := startDmsgClient(ctx, log, myPK, mySK)
 		if err != nil {
@@ -129,6 +183,49 @@ whitelist has been wide-opened.`,
 		}
 		return nil
 	},
+}
+
+// runVisorSCP delegates the transfer to the local visor via the
+// VisorSCP RPC. The visor opens the stream over the chosen
+// transport (dmsg or skynet) and runs the dmsgscp protocol entirely
+// inside its own process — bytes never traverse the CLI, only the
+// initial request + completion ack go over the local RPC channel.
+//
+// LocalPath is normalized to an absolute path before sending so the
+// visor (which doesn't share the CLI's cwd) reads/writes the
+// expected file.
+func runVisorSCP(transport string, peerPK cipher.PubKey, direction scpDirection, localPath, remotePath string, cmd *cobra.Command) error {
+	abs, err := filepath.Abs(localPath)
+	if err != nil {
+		return fmt.Errorf("VisorSCP: resolve local path: %w", err)
+	}
+	dir := visor.VisorSCPUpload
+	if direction == scpDirDownload {
+		dir = visor.VisorSCPDownload
+	}
+	req := visor.VisorSCPRequest{
+		RemotePK:   peerPK,
+		Port:       scpPort,
+		Direction:  dir,
+		LocalPath:  abs,
+		RemotePath: remotePath,
+		Transport:  transport,
+		Timeout:    scpTimeout,
+	}
+	rc, err := clirpc.Client(cmd.Flags())
+	if err != nil {
+		return fmt.Errorf("VisorSCP RPC client: %w", err)
+	}
+	if err := rc.VisorSCP(req); err != nil {
+		return fmt.Errorf("VisorSCP (%s): %w", transport, err)
+	}
+	switch direction {
+	case scpDirDownload:
+		fmt.Fprintf(os.Stderr, "downloaded %s:%s -> %s (via visor %s)\n", peerPK, remotePath, abs, transport)
+	case scpDirUpload:
+		fmt.Fprintf(os.Stderr, "uploaded %s -> %s:%s (via visor %s)\n", abs, peerPK, remotePath, transport)
+	}
+	return nil
 }
 
 type scpDirection int

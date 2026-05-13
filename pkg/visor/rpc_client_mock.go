@@ -1147,6 +1147,11 @@ func (mc *mockRPCClient) DmsgHTTP(_ DmsgHTTPRequest) (*DmsgHTTPResponse, error) 
 	return &DmsgHTTPResponse{StatusCode: 200, Status: "OK"}, nil
 }
 
+// VisorSCP implements API.
+func (mc *mockRPCClient) VisorSCP(_ VisorSCPRequest) error {
+	return nil
+}
+
 // DmsgProbe implements API.
 func (mc *mockRPCClient) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
 	return true, nil

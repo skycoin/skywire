@@ -57,6 +57,18 @@ func (r *RPC) SkynetHTTP(req *SkynetHTTPRequest, out *SkynetHTTPResponse) (err e
 	return nil
 }
 
+// VisorSCP runs a dmsgscp transfer to the peer using the visor's
+// own dmsg.Client / appnet so the caller can pick either transport
+// without an appnet shim on its side. See api_visor_scp.go.
+func (r *RPC) VisorSCP(req *VisorSCPRequest, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "VisorSCP", req)(out, &err)
+	if err := r.visor.VisorSCP(*req); err != nil {
+		return err
+	}
+	*out = true
+	return nil
+}
+
 // DmsgConnectAll reaches every dmsg server in discovery and ensures a session to each.
 func (r *RPC) DmsgConnectAll(_ *struct{}, out *DmsgConnectAllResult) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgConnectAll", nil)(out, &err)
