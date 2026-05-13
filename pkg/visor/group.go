@@ -146,6 +146,17 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 }
 
 // GroupGet returns the info for a specific group, or ErrGroupNotFound.
+//
+// Populates SubscriberAlive the same way GroupList does — without
+// this, single-group queries (`cli skychat group info <id>`) always
+// reported subscriber_alive=false regardless of the live session
+// state, because toInfo doesn't reach into the session map. The
+// list path was already correct; the single-group path silently
+// dropped the field. Surfaced as a misleading symptom during the
+// agent-coordination work today: persisted last_message_at would
+// advance while subscriber_alive stayed false, and we kept chasing
+// that as a session-state divergence when really it was the RPC
+// shape leaving the field unpopulated.
 func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	mgr := v.groupManager()
 	if mgr == nil {
@@ -158,7 +169,9 @@ func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	if !ok {
 		return GroupInfo{}, ErrGroupNotFound
 	}
-	return toInfo(r), nil
+	info := toInfo(r)
+	info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
+	return info, nil
 }
 
 // GroupInvite returns a freshly-encoded invite link for an
