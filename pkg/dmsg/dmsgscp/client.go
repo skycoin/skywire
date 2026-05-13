@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 
@@ -22,9 +23,16 @@ import (
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
-// Client is a single-transfer dmsgscp client. Build one via Dial.
+// Client is a single-transfer dmsgscp client. Build one via Dial
+// (dmsg path) or NewClient (any net.Conn, e.g. a skynet stream
+// dialed inside the visor process where appnet is available).
+//
+// The wire protocol is transport-agnostic; the Client holds a
+// `net.Conn` so any stream-shaped transport can plug in. The dmsg
+// Dial helper stays for callers that already have a `*dmsg.Client`
+// in hand and don't need to think about transports.
 type Client struct {
-	conn   *dmsg.Stream
+	conn   net.Conn
 	reader *bufio.Reader
 	remote cipher.PubKey
 }
@@ -42,11 +50,20 @@ func Dial(ctx context.Context, dmsgC *dmsg.Client, rPK cipher.PubKey, port uint1
 	if err != nil {
 		return nil, fmt.Errorf("dmsgscp: dial %s:%d: %w", rPK, port, err)
 	}
+	return NewClient(stream, rPK), nil
+}
+
+// NewClient wraps an already-dialed net.Conn into a dmsgscp Client.
+// Used by callers that opened the stream over a non-dmsg transport
+// (notably skynet via appnet.Dial, from inside the visor process).
+// The remote PK is informational — it appears in error messages but
+// the protocol itself doesn't depend on it.
+func NewClient(conn net.Conn, remote cipher.PubKey) *Client {
 	return &Client{
-		conn:   stream,
-		reader: bufio.NewReader(stream),
-		remote: rPK,
-	}, nil
+		conn:   conn,
+		reader: bufio.NewReader(conn),
+		remote: remote,
+	}
 }
 
 // Close releases the underlying stream.
@@ -155,9 +172,6 @@ func (c *Client) Upload(localPath, remotePath string) error {
 	}
 	if info.IsDir() {
 		return errors.New("dmsgscp: directory upload not supported in v1")
-	}
-	if info.Size() > MaxFileSize {
-		return fmt.Errorf("dmsgscp: local file exceeds %d-byte cap", MaxFileSize)
 	}
 
 	// Step 1: send role line.

@@ -67,8 +67,6 @@ var (
 	ErrBadMode = errors.New("dmsgscp: bad octal mode")
 	// ErrBadSize signals an unparseable or out-of-range size field.
 	ErrBadSize = errors.New("dmsgscp: bad size")
-	// ErrSizeCap signals a size above MaxFileSize.
-	ErrSizeCap = errors.New("dmsgscp: file size exceeds cap")
 	// ErrEmptyName signals a missing or whitespace-only name.
 	ErrEmptyName = errors.New("dmsgscp: empty name")
 	// ErrNameTooLong signals a name above MaxNameLen.
@@ -161,9 +159,6 @@ func parseFileOrDir(typ RecordType, body []byte) (Header, error) {
 	if size < 0 {
 		return Header{}, fmt.Errorf("%w: negative", ErrBadSize)
 	}
-	if size > MaxFileSize {
-		return Header{}, fmt.Errorf("%w: %d > %d", ErrSizeCap, size, MaxFileSize)
-	}
 
 	name := parts[2]
 	if err := validateName(name); err != nil {
@@ -228,9 +223,6 @@ func WriteFileHeader(w io.Writer, mode os.FileMode, size int64, name string) err
 	}
 	if size < 0 {
 		return fmt.Errorf("%w: negative", ErrBadSize)
-	}
-	if size > MaxFileSize {
-		return fmt.Errorf("%w: %d > %d", ErrSizeCap, size, MaxFileSize)
 	}
 	// Mode is masked to the permission bits — same hardening we
 	// apply on the read side.

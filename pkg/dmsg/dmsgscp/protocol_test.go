@@ -24,7 +24,8 @@ func TestWriteAndReadFileHeader(t *testing.T) {
 	}{
 		{"basic", 0644, 1234, "myfile.bin"},
 		{"zero-byte", 0600, 0, "empty.txt"},
-		{"max-size", 0644, MaxFileSize, "huge.dat"},
+		{"hundred-mib", 0644, 100 * 1024 * 1024, "huge.dat"},
+		{"ten-gib", 0644, 10 * 1024 * 1024 * 1024, "very-huge.dat"},
 		{"name-with-spaces", 0755, 42, "file with spaces.txt"},
 		{"long-name", 0644, 1, strings.Repeat("a", MaxNameLen)},
 	}
@@ -106,7 +107,6 @@ func TestReadHeaderMalformed(t *testing.T) {
 		{"bad-mode", "Cabcd 1 x\n", ErrBadMode},
 		{"bad-size", "C0644 nope x\n", ErrBadSize},
 		{"negative-size", "C0644 -1 x\n", ErrBadSize},
-		{"size-over-cap", "C0644 999999999999 x\n", ErrSizeCap},
 		{"empty-name", "C0644 0 \n", ErrEmptyName},
 	}
 	for _, tc := range cases {
@@ -199,10 +199,6 @@ func TestWriteHeaderRejectsBadInput(t *testing.T) {
 	var buf bytes.Buffer
 	if err := WriteFileHeader(&buf, 0644, -1, "x"); !errors.Is(err, ErrBadSize) {
 		t.Errorf("negative size: err = %v, want ErrBadSize", err)
-	}
-	buf.Reset()
-	if err := WriteFileHeader(&buf, 0644, MaxFileSize+1, "x"); !errors.Is(err, ErrSizeCap) {
-		t.Errorf("oversize: err = %v, want ErrSizeCap", err)
 	}
 	buf.Reset()
 	if err := WriteFileHeader(&buf, 0644, 1, "../x"); !errors.Is(err, ErrPathTraversal) {
