@@ -943,7 +943,19 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 // registered handler. Tolerates undecodable leaves (e.g. future
 // metadata under a different prefix, or a tampered ciphertext) by
 // silently dropping them with a debug log.
+//
+// The CXO subscriber invoking this callback is itself proof the
+// subscriber is currently attached and pulling — so flip
+// subAlive=true on every onUpdate firing. This rescues the case
+// where Manager.detectStaleActive (or any other code path) demoted
+// the flag while leaves are still actually flowing: the next leaf
+// promotes the session back to alive, so /status's
+// subscriber_alive matches observable reality without waiting for
+// the reconnect loop's next tick.
 func (s *Session) onUpdate(events []treestore.UpdateEvent) {
+	if len(events) > 0 {
+		s.subAlive.Store(true)
+	}
 	h := s.handler
 	if h == nil {
 		return
