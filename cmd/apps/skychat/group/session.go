@@ -95,6 +95,15 @@ type Config struct {
 
 	// BatchWindow forwards to the publisher (see treestore.PubConfig).
 	BatchWindow time.Duration
+
+	// HeartbeatInterval, when > 0, makes owner-role sessions emit a
+	// periodic no-op heartbeat probe into the group feed. Members
+	// observe the heartbeats via onUpdate, track lastHeartbeatNs, and
+	// use it as the freshness signal for stale-subscriber detection.
+	// Zero disables heartbeat emission entirely (useful for tests and
+	// for deployments that want to opt out of the ~1KB/min/group
+	// wire cost). Recommended production value: 30s.
+	HeartbeatInterval time.Duration
 }
 
 // Session is one live group as this visor knows it — either as the
@@ -151,7 +160,40 @@ type Session struct {
 	// per-group health field. Atomic so it can be read without
 	// acquiring any session mutex from the status handler's hot path.
 	subAlive atomic.Bool
+
+	// lastHeartbeatNs holds the unix-nanosecond timestamp at which
+	// this session most recently OBSERVED an owner heartbeat. Set
+	// when the subscriber's onUpdate sees a heartbeat-marker leaf
+	// (member side) OR when the owner-self-echo wrapper sees it
+	// (owner side, kept for symmetry). Zero means no heartbeat seen
+	// yet. Used by the Manager's runReconnectLoop to detect a
+	// silently-stalled subscriber within ~heartbeatStaleThreshold of
+	// the actual stall, rather than waiting for the
+	// no-traffic-implies-stuck fallback.
+	lastHeartbeatNs atomic.Int64
+
+	// heartbeatCancel stops the owner-side heartbeat emission loop.
+	// nil for member-role sessions or when HeartbeatInterval=0.
+	heartbeatCancel context.CancelFunc
+	heartbeatWG     sync.WaitGroup
 }
+
+// HeartbeatMarker is the fixed body of an owner-emitted heartbeat
+// message. Subscribers detect it by exact-match on Message.Text,
+// update lastHeartbeatNs, and DO NOT bubble the message up to the
+// user handler / inbox — heartbeats are wire noise, not chat.
+//
+// Picked to be (a) unambiguous (operator typing this verbatim into a
+// chat input would be a deliberate spoof, and the sender PK check
+// still requires it to come from the owner) and (b) recognizable in
+// logs / pcap dumps without decoding the JSON envelope around it.
+const HeartbeatMarker = "__skychat_group_heartbeat__"
+
+// IsHeartbeat returns true for messages that are owner-emitted
+// heartbeat probes rather than chat content. Exposed so the visor's
+// inbox layer (pkg/visor/group.go) can filter heartbeats from the
+// poll ring without re-importing the constant in two places.
+func IsHeartbeat(msg Message) bool { return msg.Text == HeartbeatMarker }
 
 // relayPortOffset is the dmsg-port delta from the group's CXO
 // publish port to the relay-submission listener. Members dial
@@ -264,7 +306,46 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 	}
 	s.relayWG.Add(1)
 	go s.bindRelaySkynet(relayPort)
+
+	// Heartbeat emission. Publishes a tiny no-op message to the feed
+	// every HeartbeatInterval so members can detect a silently-stalled
+	// CXO subscriber as "haven't seen a heartbeat in N intervals"
+	// independent of whether real chat traffic is flowing. Zero
+	// interval disables (useful for tests + low-overhead deployments).
+	if cfg.HeartbeatInterval > 0 {
+		hbCtx, hbCancel := context.WithCancel(context.Background())
+		s.heartbeatCancel = hbCancel
+		s.heartbeatWG.Add(1)
+		go s.runHeartbeatLoop(hbCtx, cfg.HeartbeatInterval)
+	}
 	return s, nil
+}
+
+// runHeartbeatLoop is the owner-side periodic heartbeat publisher.
+// Emits a HeartbeatMarker message every interval until ctx is
+// canceled (Close path). The publishAs call goes through the normal
+// owner write path, which means heartbeats also exercise the
+// publisher's batch + CXO save machinery — a healthy probe that
+// implicitly catches publisher-side wedges too.
+//
+// Failures are debug-logged and the loop continues. A persistent
+// publisher problem will show up as both "publishAs heartbeat
+// failed" repeated in the log AND members' lastHeartbeatNs going
+// stale; the latter is the operator-facing signal.
+func (s *Session) runHeartbeatLoop(ctx context.Context, interval time.Duration) {
+	defer s.heartbeatWG.Done()
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := s.publishAs(s.cfg.MyPK, HeartbeatMarker, time.Now().UTC()); err != nil {
+				s.log.WithError(err).Debug("group: heartbeat publish failed")
+			}
+		}
+	}
 }
 
 // openMember creates a subscriber. The connect-to-owner step is
@@ -353,6 +434,20 @@ func (s *Session) Connect() error {
 //     "did we successfully attach + do we believe we're still
 //     attached"; the background reconnect loop is responsible for
 //     re-asserting that belief on its 30s cadence.
+//
+// LastHeartbeat returns the time at which this session most recently
+// observed an owner heartbeat probe, or the zero time if none seen
+// yet. Used by Manager.runReconnectLoop's stale-detection to demote
+// a silently-stalled subscriber within ~heartbeatStaleThreshold of
+// the stall, regardless of whether chat traffic is flowing.
+func (s *Session) LastHeartbeat() time.Time {
+	ns := s.lastHeartbeatNs.Load()
+	if ns == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, ns).UTC()
+}
+
 func (s *Session) IsSubscriberAlive() bool {
 	if s.sub == nil {
 		return true // owner role
@@ -424,6 +519,12 @@ func (s *Session) Close() error {
 	// Flip subAlive first so any concurrent /status read sees the
 	// session as dead even if Close races with a long Subscriber.Close.
 	s.subAlive.Store(false)
+	// Stop the owner-side heartbeat emitter (if running). No-op on
+	// member sessions or when HeartbeatInterval=0 at Open time.
+	if s.heartbeatCancel != nil {
+		s.heartbeatCancel()
+		s.heartbeatWG.Wait()
+	}
 	if s.relayCancel != nil {
 		s.relayCancel()
 	}
@@ -636,6 +737,16 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 	// We deliver the plaintext Message regardless of ModePrivate —
 	// the local handler should see the same content the (decoded)
 	// subscriber path would surface, not the encrypted bytes.
+	// Filter heartbeat self-echoes out of the handler delivery —
+	// they are wire-level liveness probes, not chat content. Still
+	// update lastHeartbeatNs so the owner's own session has a fresh
+	// liveness timestamp (useful symmetry with member sessions; the
+	// detectStaleActive pass skips owners but other diagnostics may
+	// look at it).
+	if text == HeartbeatMarker {
+		s.lastHeartbeatNs.Store(time.Now().UnixNano())
+		return nil
+	}
 	if h := s.handler; h != nil {
 		h(s.cfg.Record.ID, senderPK, Message{
 			SenderPK: senderPK,
@@ -859,6 +970,13 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 			// only see plaintext from this point.
 			msg.Ciphertext = nil
 			msg.Nonce = nil
+		}
+		// Heartbeat probe from the owner: refresh liveness timestamp
+		// and DO NOT bubble up. Wire-level only — the operator's
+		// listener shouldn't see them.
+		if IsHeartbeat(msg) {
+			s.lastHeartbeatNs.Store(time.Now().UnixNano())
+			continue
 		}
 		h(s.cfg.Record.ID, msg.SenderPK, msg)
 	}
