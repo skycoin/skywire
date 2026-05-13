@@ -68,6 +68,29 @@ type Dmsgpty struct {
 	CLINet    string          `json:"cli_network"`
 	CLIAddr   string          `json:"cli_address"`
 	Whitelist []cipher.PubKey `json:"whitelist"`
+
+	// TCPListen, when non-empty, brings up a direct-TCP entry point
+	// for the dmsgpty / dmsgscp / dmsgcat protocols, separate from the
+	// dmsg-overlay path. Listening address in net.Listen format —
+	// `:2022`, `0.0.0.0:2022`, `127.0.0.1:2022`, etc. Empty (default)
+	// disables it: only the dmsg-overlay entry point is served.
+	//
+	// Auth flow per accepted TCP connection:
+	//   1. Noise XK handshake using the visor's identity keypair —
+	//      the client side pins the server's PK (same trust model as
+	//      ssh's host key check) and the server learns the client's PK
+	//      from the handshake.
+	//   2. The learned client PK is checked against the SAME whitelist
+	//      that gates the dmsg-overlay accept loop. No separate ACL.
+	//   3. On accept, the stream is handed to the existing dmsgpty
+	//      mux so dmsgpty / dmsgscp / dmsgcat clients work uniformly
+	//      over either transport.
+	//
+	// Motivation: ssh-equivalent over skywire identity. Operators who
+	// have direct IP reachability to a peer can `cli dmsg pty exec`
+	// (and friends) over TCP — no dmsg-discovery dependency, lower
+	// latency for known endpoints, same PK-based auth model.
+	TCPListen string `json:"tcp_listen,omitempty"`
 }
 
 // Dmsgscp configures the dmsgscp-host (scp-over-dmsg daemon).
