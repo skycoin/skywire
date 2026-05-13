@@ -739,6 +739,30 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	}
 
+	// Direct-TCP dmsgpty entry point — operator opts in via
+	// Dmsgpty.TCPListen ("" disables). Same whitelist as the
+	// dmsg-overlay path; XK-noise handshake gates the accepted PK
+	// before the stream reaches the dmsgpty mux. See
+	// dmsgpty/host_tcp.go for the per-connection flow.
+	if tcpAddr := conf.TCPListen; tcpAddr != "" {
+		tcpCtx, tcpCancel := context.WithCancel(context.Background()) //nolint:gosec // cancel called in pushCloseStack
+		tcpWg := new(sync.WaitGroup)
+		tcpWg.Add(1)
+		go func() {
+			defer tcpWg.Done()
+			runtimeErrors := getErrors(ctx)
+			if err := pty.ListenAndServeTCP(tcpCtx, tcpAddr, v.conf.PK, v.conf.SK); err != nil {
+				runtimeErrors <- fmt.Errorf("dmsgpty tcp listen %s stopped: %w", tcpAddr, err)
+			}
+		}()
+		v.pushCloseStack("dmsgpty.tcp.serve", func() error {
+			tcpCancel()
+			tcpWg.Wait()
+			return nil
+		})
+		log.WithField("addr", tcpAddr).Info("Mounted dmsgpty direct-TCP entry point")
+	}
+
 	// dmsgscp Host (scp-over-dmsg). On by default — access is gated
 	// by the same whitelist that dmsgpty uses. Operators opt OUT
 	// via Dmsgscp.Disabled. When Dmsgscp.Whitelist is non-empty it
