@@ -12,6 +12,7 @@ package treestore
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -379,6 +380,80 @@ func (p *Publisher) Get(path string) ([]byte, bool) {
 	out := make([]byte, len(v))
 	copy(out, v)
 	return out, true
+}
+
+// PutOp is a single (path, value) pair for a batched Put. A nil
+// Value means "delete this path" — folded into the batch instead
+// of demanding a separate Delete call (which would re-acquire the
+// mutex on its own). Putting at a path currently held by a sub-tree
+// returns ErrPathConflict on the FIRST conflicting op; ops before
+// the conflict are applied, ops after are skipped.
+type PutOp struct {
+	Path  string
+	Value []byte // nil = delete
+}
+
+// PutBatch applies the given (path, value) pairs in a single
+// mutex-acquire + single markDirty. Mirror of Put / Delete for
+// callers that produce many writes per logical tick — the stats
+// Tracker's sample loop is the motivating case (one write per
+// mirror tier × service, currently each one taking the publisher
+// mutex individually + contending against the publisher's runLoop).
+//
+// On a per-op error (path-segment validation, conflict, etc.) the
+// batch stops at that op; ops already applied stay in the tree and
+// will be flushed by the next publish cycle. Returns the first
+// error encountered, with the index of the failing op in its
+// message.
+//
+// Path validation happens before the mutex is taken so a bad input
+// fails fast without blocking concurrent readers.
+func (p *Publisher) PutBatch(ops []PutOp) error {
+	if len(ops) == 0 {
+		return nil
+	}
+	type prep struct {
+		segs []string
+		val  []byte // nil for delete
+	}
+	prepared := make([]prep, 0, len(ops))
+	for i, op := range ops {
+		segs, err := SplitPath(op.Path)
+		if err != nil {
+			return fmt.Errorf("treestore: PutBatch[%d] %q: %w", i, op.Path, err)
+		}
+		if len(segs) == 0 {
+			return fmt.Errorf("treestore: PutBatch[%d]: cannot Put at empty path (root)", i)
+		}
+		var val []byte
+		if op.Value != nil {
+			val = append([]byte(nil), op.Value...)
+		}
+		prepared = append(prepared, prep{segs: segs, val: val})
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	applied := false
+	for i, pr := range prepared {
+		if pr.val == nil {
+			if deleteAt(p.root, pr.segs) {
+				applied = true
+			}
+			continue
+		}
+		if err := putAt(p.root, pr.segs, pr.val); err != nil {
+			if applied {
+				p.markDirty()
+			}
+			return fmt.Errorf("treestore: PutBatch[%d] %q: %w", i, ops[i].Path, err)
+		}
+		applied = true
+	}
+	if applied {
+		p.markDirty()
+	}
+	return nil
 }
 
 // Delete removes a single leaf. If the path addresses a sub-tree, it

@@ -297,9 +297,30 @@ func (t *Tracker) sample(now time.Time) {
 		return
 	}
 
-	for _, m := range mirrors {
-		t.sinkPut(m.path, m.data)
+	t.sinkPutBatch(mirrors)
+}
+
+// sinkPutBatch fans the sample's mirror writes into a single sink
+// call. The default cxoSink turns this into one Publisher.PutBatch
+// (one mutex acquire, one markDirty) instead of N individual Puts
+// that each contended with transport-manager re-registers and
+// other writers on the publisher's mutex. See pkg/cxo/treestore
+// publisher.go PutBatch for the downstream semantics.
+//
+// Skips when mirrors is empty so an idle sample tick doesn't even
+// take the sink-lookup mutex.
+func (t *Tracker) sinkPutBatch(mirrors []mirrorPair) {
+	if len(mirrors) == 0 {
+		return
 	}
+	t.mu.Lock()
+	sink := t.sink
+	t.mu.Unlock()
+	ops := make([]SinkOp, 0, len(mirrors))
+	for _, m := range mirrors {
+		ops = append(ops, SinkOp{Path: m.path, Value: m.data})
+	}
+	sink.PutBatch(ops)
 }
 
 // mirrorTierBitmap pushes the post-write tier bitmap to the sink.
