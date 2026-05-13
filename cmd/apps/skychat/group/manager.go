@@ -656,12 +656,11 @@ func (m *Manager) kickReconnect(ctx context.Context, id string) {
 // handler are swallowed (debug-logged); a partial replay is better
 // than no replay.
 //
-// For owner-role sessions, the publisher's tree is the source. For
-// member-role sessions, the subscriber's tree (synced from the
-// owner) is the source. Both expose a Walk(prefix, fn) over leaf
-// values keyed by MessagePathPrefix/<ts-nano>/<seq> — sorting by
-// that path string gives us chronological order, and tail-capping
-// at the cap gives us the most recent N.
+// D1 source set: every Session walks its local publisher (own
+// sends + heartbeats), the legacy owner-feed subscriber (member
+// sessions only), and every per-PK peer subscriber. The combined
+// leaves are decoded, sorted by Message.TS, and tail-capped to
+// resumeReplayMessageCap by Session.ReplayHistoryThrough.
 func (m *Manager) replaySessionHistory(id string) {
 	m.mu.RLock()
 	sess := m.sessions[id]
