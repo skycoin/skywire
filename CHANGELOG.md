@@ -6,6 +6,83 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.53
+
+Skychat group chat — feature complete. A three-agent live
+coordination session ran against the new group machinery and
+surfaced every reliability gap: stuck CXO subscribers after a
+chat-app restart now self-heal via a 30s background reconnect
+loop; the owner's relay isMember check now reads the live
+allowlist rather than an Open-time snapshot; member sends are
+visible in the sender's own inbox via publisher self-echo;
+owner-side `MarkMessage` fires on every observed message, not
+just outbound sends; member CXO node dial port no longer drifts
+by one and breaks join; group listen auto-reconnects across visor
+restarts without log spam; and the in-process Manager replays
+the last 100 messages per group on Resume so a freshly restarted
+operator sees recent context instead of an empty feed. Skychat
+send/receipt semantics gain a `--wait` peer-receipt ack via
+chat-msg/chat-ack envelopes (#2511) and the `/status` endpoint
+now reports send-failure / outbound-retry / sse-drop counters
+plus per-group health (last_message_at, lag_seconds,
+subscriber_alive). messageHandler retries once through a fresh
+dial when the cached `framedConn` to a peer is stale.
+
+dmsg utility belt. New `dmsg pty exec` for non-interactive
+remote-command execution — one-shot, returns
+stdout/stderr/exit. New `dmsgscp` (port 23, on by default —
+whitelist-gated identically to dmsgpty, dual-listens on dmsg +
+skynet) for peer-to-peer file transfer using the OpenSSH SCP
+framing.
+
+skychat operator UX. New unified bubbletea TUI (picker → DM →
+group) at `skywire cli skychat chat`; PK alias addressbook with
+reverse-resolve on listen/history output; `skywire cli skychat
+history` and `status` subcommands; `listen` and `group listen`
+default to single-line-per-message output (escapes `\n`) so log
+aggregators stop fragmenting multi-line messages — `--raw` for
+human reading, `--json` for NDJSON tool ingestion.
+
+Performance. dmsg noise handshake caches static-static DH
+results for repeat peers (#2507) — meaningful for visors that
+hold long-term peer sets.
+
+### Group chat
+
+-   `feat(skychat/group)`: member-side send via dmsg relay  [#2506](https://github.com/skycoin/skywire/pull/2506)
+-   `fix(skychat/group)`: member CXO node dial-port off-by-one breaks join  [#2513](https://github.com/skycoin/skywire/pull/2513)
+-   `fix(skychat-cli)`: group listen auto-reconnect on visor restart  [#2514](https://github.com/skycoin/skywire/pull/2514)
+-   `fix(skychat/group)`: owner sees own group sends in local inbox  [#2515](https://github.com/skycoin/skywire/pull/2515)
+-   `fix(skychat-cli)`: suppress reconnect-spam on group listen retries  [#2516](https://github.com/skycoin/skywire/pull/2516)
+-   `feat(skychat/group)`: replay last 100 messages on visor restart  [#2520](https://github.com/skycoin/skywire/pull/2520)
+-   `fix(skychat/group)`: isMember reads live allowlist, not snapshot  [#2522](https://github.com/skycoin/skywire/pull/2522)
+-   `fix+resilience(skychat)`: MarkMessage + TUI/GUI polish + cli single-line listen + stale-conn retry + group auto-reconnect + /status health  [#2523](https://github.com/skycoin/skywire/pull/2523)
+
+### Skychat reliability and observability
+
+-   `fix(skychat)`: listen --json + --from + outgoing-mirror + network on inbound  [#2508](https://github.com/skycoin/skywire/pull/2508)
+-   `feat(skychat)`: schema v1 — id/to/len/schema on listen + /status counters  [#2510](https://github.com/skycoin/skywire/pull/2510)
+-   `feat(skychat)`: send --wait peer-receipt ack via chat-msg/chat-ack envelopes  [#2511](https://github.com/skycoin/skywire/pull/2511)
+-   `fix(gotop)`: capture stray log output instead of corrupting the TUI  [#2521](https://github.com/skycoin/skywire/pull/2521)
+-   `feat(skychat)`: /status send-failure + sse-drop counters; cached-only retry guard; CLI --retries  [#2526](https://github.com/skycoin/skywire/pull/2526)
+
+### Operator UX
+
+-   `feat(skychat-cli)`: history + status subcommands  [#2509](https://github.com/skycoin/skywire/pull/2509)
+-   `feat(skychat-cli)`: PK alias / addressbook with reverse-resolve on listen + history  [#2512](https://github.com/skycoin/skywire/pull/2512)
+-   `feat(skychat-cli)`: unified TUI — picker + DM + group chat  [#2518](https://github.com/skycoin/skywire/pull/2518)
+
+### dmsg utility belt
+
+-   `feat(dmsgpty)`: non-interactive Exec — run one command, return stdout/stderr/exit  [#2519](https://github.com/skycoin/skywire/pull/2519)
+-   `feat(dmsgscp)`: scp-over-dmsg utility, port 23, whitelist-gated  [#2524](https://github.com/skycoin/skywire/pull/2524)
+-   `fix(dmsgscp)`: default-on, listen on dmsg + skynet  [#2527](https://github.com/skycoin/skywire/pull/2527)
+
+### Performance and docs
+
+-   `perf(dmsg/noise)`: cache static-static DH results for repeat peers  [#2507](https://github.com/skycoin/skywire/pull/2507)
+-   `docs(auto-update)`: GOPROXY=direct for branch-tip resolution  [#2517](https://github.com/skycoin/skywire/pull/2517)
+
 ## 1.3.52
 
 Network-state release: CXO publishers/subscribers close the last
