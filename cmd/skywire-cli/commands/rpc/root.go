@@ -210,9 +210,14 @@ func isDmsgURL(u string) bool {
 	return len(u) >= 7 && u[:7] == "dmsg://"
 }
 
-// dmsgURLForHTTP looks up the DMSG equivalent URL for an HTTP service URL.
+// DmsgURLForHTTP looks up the DMSG equivalent URL for an HTTP service URL.
 // Returns empty string if no DMSG address is known for the service.
-func dmsgURLForHTTP(httpURL string) string {
+//
+// Exported so callers outside cmd/skywire-cli/commands/rpc (notably
+// cli log) can rewrite a service URL to its dmsg-form before fetching
+// over a caller-owned dmsg.Client, avoiding a plain-HTTP hop through
+// the deployment-services HTTP edge.
+func DmsgURLForHTTP(httpURL string) string {
 	// Map HTTP base URLs to their DMSG counterparts from the deployment config
 	mappings := map[string]string{
 		deployment.Prod.TransportDiscovery: deployment.Prod.TransportDiscoveryDmsg,
@@ -566,7 +571,7 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	// map before calling RPC; if no mapping exists we skip step 1 and
 	// rely on step 2/3.
 	rpcURL := url
-	if dmsgEquiv := dmsgURLForHTTP(url); dmsgEquiv != "" {
+	if dmsgEquiv := DmsgURLForHTTP(url); dmsgEquiv != "" {
 		rpcURL = dmsgEquiv
 	}
 
@@ -602,7 +607,7 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	// existing sessions. Step 2 creates an ephemeral DMSG client which
 	// does discovery lookups that hang for services with server entries.
 	if !NoDmsg && NoRPC {
-		dmsgURL := dmsgURLForHTTP(url)
+		dmsgURL := DmsgURLForHTTP(url)
 		if dmsgURL != "" {
 			logger.Debugf("Trying direct DMSG fetch: %s", dmsgURL)
 			body, err := fetchViaDmsgDirect(dmsgURL)
