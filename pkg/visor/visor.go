@@ -31,6 +31,7 @@ import (
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
@@ -99,6 +100,16 @@ type Visor struct {
 	dmsgHTTP           *http.Client       // dmsghttp client
 	dmsgHTTPReady      chan struct{}      // closed when dmsgHTTP is set
 	awaitSetupListener *dmsg.Listener     // pre-opened DmsgAwaitSetupPort listener; consumed by initRouter
+
+	// dmsgWL is the live, in-memory whitelist shared with the running
+	// dmsgpty.Host and (when scp is enabled) dmsgscp.Host. VisorCat's
+	// listen-mode auth reads this same reference so runtime mutations
+	// made via dmsgpty.WhitelistGateway are honored without rebuilding
+	// from v.conf. Mirrors scp's precedence: when Dmsgscp.Whitelist is
+	// non-empty, this holds the scp-specific list (so cat behaves like
+	// scp); otherwise it holds the dmsgpty list that scp also reuses.
+	// nil when initDmsgpty was skipped (Dmsgpty config absent).
+	dmsgWL dmsgpty.Whitelist
 
 	// DMSG tracker state
 	dmsgTracker dtmState

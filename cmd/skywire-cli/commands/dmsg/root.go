@@ -26,5 +26,6 @@ func init() {
 		ptyCmd,
 		chatCmd,
 		scpCmd,
+		catCmd,
 	)
 }

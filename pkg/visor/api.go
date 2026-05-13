@@ -217,6 +217,7 @@ type API interface {
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 	SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error)
 	VisorSCP(req VisorSCPRequest) error
+	VisorCat(req VisorCatRequest) (*VisorCatResponse, error)
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
 	DmsgSessions() (*DmsgClientSessions, error)
@@ -730,6 +731,63 @@ type VisorSCPRequest struct {
 	// Timeout bounds the whole transfer (dial + scp protocol +
 	// payload). Zero falls back to a 5-minute default.
 	Timeout time.Duration `json:"timeout,omitempty"`
+}
+
+// VisorCatMode enumerates the two cat operation modes.
+const (
+	// VisorCatModeDial opens an outbound stream to (RemotePK, Port)
+	// over the chosen transport. The visor exposes the stream to the
+	// CLI as a 127.0.0.1 loopback TCP listener — the CLI dials that
+	// listener and the visor splices the two halves.
+	VisorCatModeDial = "dial"
+	// VisorCatModeListen opens a one-shot listener on Port over the
+	// chosen transport (dmsg + skynet mirror), authorizes the first
+	// inbound stream against the dmsgscp whitelist, and splices it
+	// to a 127.0.0.1 loopback the CLI dials.
+	VisorCatModeListen = "listen"
+)
+
+// VisorCatTransport enumerates the transports the visor will use
+// for a VisorCat call — identical to VisorSCP's set so a caller's
+// `--transport=skynet` keeps the same meaning across both commands.
+const (
+	// VisorCatTransportDmsg dials/listens over dmsg.
+	VisorCatTransportDmsg = "dmsg"
+	// VisorCatTransportSkynet dials/listens over the skywire router
+	// (appnet.TypeSkynet).
+	VisorCatTransportSkynet = "skynet"
+)
+
+// VisorCatRequest describes a stream-splice the visor should perform
+// on the caller's behalf. The visor process opens the remote stream
+// (dial or listen) over the chosen transport and exposes one end as
+// a 127.0.0.1 loopback TCP listener — bytes never traverse the local
+// RPC channel beyond the initial request + response.
+type VisorCatRequest struct {
+	// Mode is VisorCatModeDial or VisorCatModeListen.
+	Mode string `json:"mode"`
+	// RemotePK is the peer's visor PK. Required in dial mode;
+	// ignored in listen mode (the listener accepts whatever PK the
+	// dmsgscp whitelist authorizes).
+	RemotePK cipher.PubKey `json:"remote_pk,omitempty"`
+	// Port is the remote port to dial in dial mode, or the local
+	// port to listen on in listen mode.
+	Port uint16 `json:"port"`
+	// Transport is VisorCatTransportDmsg or VisorCatTransportSkynet.
+	// Empty defaults to dmsg.
+	Transport string `json:"transport,omitempty"`
+	// Timeout bounds the dial (dial mode) or the accept-wait (listen
+	// mode) plus the splice. Zero defaults: 60s for dial, 5m for
+	// listen.
+	Timeout time.Duration `json:"timeout,omitempty"`
+}
+
+// VisorCatResponse carries the 127.0.0.1 loopback address the CLI
+// should dial. The visor's accept-and-splice goroutine waits on this
+// listener; the CLI's dial completes the splice loop.
+type VisorCatResponse struct {
+	// LocalAddr is "127.0.0.1:PORT" the CLI dials to bridge stdio.
+	LocalAddr string `json:"local_addr"`
 }
 
 // FetchCXOArgs identifies which CXO feed + path the caller wants the
