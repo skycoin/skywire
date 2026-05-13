@@ -105,13 +105,26 @@ func (n *nodeFeed) close() {
 
 func (n *nodeFeed) broadcastRoot(cr connRoot) {
 
+	// Fan out per-subscriber pushes concurrently so one slow conn's
+	// bounded-but-non-zero queue wait (see sendMsgQueueTimeout in
+	// conn.go) doesn't serialize the broadcast latency. Without this,
+	// even with sendMsg bounded at 5s, three stuck subs would mean a
+	// 15s gap before the third healthy sub gets pushed. With fan-out
+	// the per-sub queue wait is parallelized and the publisher's
+	// runLoop returns to drain wakeup events sooner.
+	//
+	// Goroutines complete (or self-timeout via sendMsgQueueTimeout)
+	// independently; no WaitGroup needed because the caller doesn't
+	// observe individual sub-side completions. sendRoot is fire-and-
+	// forget by design — errors translate to a Close that the
+	// conn's run() loop reaps.
 	for c := range n.cs {
 
 		if c == cr.c {
 			continue
 		}
 
-		c.sendRoot(cr.r)
+		go c.sendRoot(cr.r) //nolint:errcheck
 	}
 
 }
