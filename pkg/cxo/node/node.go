@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skycoin/src/cipher"
@@ -66,6 +67,23 @@ type Node struct {
 	//
 
 	fillavg *statutil.Duration // filling average
+
+	// sendMsgTimeoutCount counts sendMsg-queue-full-timeout events.
+	// Each increment corresponds to one Conn whose send queue was
+	// blocked for sendMsgQueueTimeout (5s by default) — the conn is
+	// then closed by sendMsg. Surfaced via PublisherStats so operators
+	// can tell whether a publisher fanout is silently shedding peers.
+	// Pre-#2538 this would have manifested as a stalled broadcast loop
+	// with no observable counter; post-#2538 the conn dies but the
+	// fact that it died was only visible in WARN logs.
+	sendMsgTimeoutCount atomic.Uint64
+
+	// deadConnsClosed counts Conn instances that sendMsg closed due to
+	// the timeout path. Always == sendMsgTimeoutCount today (one
+	// timeout = one close), kept separate so a future refactor that
+	// adds other auto-close paths (idle detection, frame-error close,
+	// etc.) can be counted distinctly.
+	deadConnsClosed atomic.Uint64
 
 	//
 	// rpc
@@ -254,6 +272,47 @@ func (n *Node) Connections() (cs []*Conn) {
 	}
 
 	return
+}
+
+// PublisherStats is the snapshot of CXO-publisher-side health counters.
+// Surfaced upward (treestore.Publisher.Stats() → visor RPC →
+// `skywire cli visor doctor`) so operators can spot a publisher
+// fanout that's silently shedding subscribers without parsing WARN
+// logs.
+//
+// Counter semantics:
+//   - SendMsgTimeouts counts sendMsg-queue-full-timeout events.
+//     Each tick is one subscriber whose queue was blocked for the
+//     full sendMsgQueueTimeout window before the conn was force-closed.
+//     A non-zero counter is the smoking gun for the pre-#2538 stuck
+//     publisher pattern, now bounded but worth surfacing.
+//   - DeadConnsClosed counts Conn instances closed by sendMsg's
+//     timeout path. Today this is always equal to SendMsgTimeouts;
+//     kept distinct so future auto-close paths (idle, frame-error,
+//     etc.) can be counted without rebasing this struct.
+//   - ActiveConnections / ActiveFeeds are point-in-time gauges
+//     useful for sanity checking ("did my publisher lose all its
+//     subscribers?").
+type PublisherStats struct {
+	SendMsgTimeouts   uint64 `json:"sendmsg_timeouts"`
+	DeadConnsClosed   uint64 `json:"dead_conns_closed"`
+	ActiveConnections int    `json:"active_connections"`
+	ActiveFeeds       int    `json:"active_feeds"`
+}
+
+// Stats returns a snapshot of the Node's publisher-side health
+// counters + active gauges. Cheap: atomic loads + map-length read
+// under the node mutex.
+func (n *Node) Stats() PublisherStats {
+	n.mx.Lock()
+	conns := len(n.addrToConn)
+	n.mx.Unlock()
+	return PublisherStats{
+		SendMsgTimeouts:   n.sendMsgTimeoutCount.Load(),
+		DeadConnsClosed:   n.deadConnsClosed.Load(),
+		ActiveConnections: conns,
+		ActiveFeeds:       len(n.fs.list()),
+	}
 }
 
 // don't create TCP in background
