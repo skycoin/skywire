@@ -165,7 +165,13 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
 	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp-config path")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
-	genConfigCmd.Flags().BoolVarP(&isBestProtocol, "bestproto", "b", scriptExecBool("${BESTPROTO:-false}"), "best protocol (dmsg | direct) based on location") //this will also disable public autoconnect based on location
+	// Note: the historical `BESTPROTO=true` knob was a China-only
+	// dmsghttp-fallback path that fired only when ipinfo.io reported
+	// country=CN. The default dmsghttp+http fallback in service
+	// resolution covers that case everywhere now, so the knob is
+	// vestigial and removed in this revision. Operators who actually
+	// need the China-only behavior should set DMSGHTTP=true +
+	// DISABLEPUBLICAUTOCONN=true directly.
 	genConfigCmd.Flags().BoolVar(&noFetch, "nofetch", false, "do not fetch the services from the service conf url")
 	gHiddenFlags = append(gHiddenFlags, "nofetch")
 	// SvcConfName integration not wired in.
@@ -388,20 +394,18 @@ func init() {
 	genConfigCmd.Flags().StringVar(&cliAddr, "cliaddr", scriptExecString("${CLIADDR}"), "CLI RPC address (e.g. 0.0.0.0:3435 for Docker)")
 	gHiddenFlags = append(gHiddenFlags, "cliaddr")
 
-	// Embedded LAN/WAN DMSG server. Defaults to on whenever the
-	// hypervisor is enabled (ISHYPERVISOR=true) — the embedded server
-	// is the hypervisor's responsibility to managed visors, so the
-	// "I'm a hypervisor" intent implies "I provide DMSG to my
-	// visors". Operator can force-disable with LANDMSG=false even
-	// when ISHYPERVISOR=true, e.g. for an HA pair where only one
-	// hypervisor should run the server.
+	// Embedded LAN/WAN DMSG server. Always on whenever ISHYPERVISOR=true
+	// — "I'm a hypervisor" implies "I provide DMSG to my managed
+	// visors". The previous LANDMSG=true toggle was redundant in the
+	// 99% case (operators set it precisely because they had also set
+	// ISHYPERVISOR=true) and confusing in the 1% case (HA pair where
+	// the use case for one-but-not-the-other turned out to be
+	// imaginary — running two LAN-DMSG servers across two hypervisors
+	// is fine, managed visors just see two relay options).
 	//
-	// Pinning the port + setting public_address makes the server
-	// WAN-reachable for managed remote visors (operator must
-	// port-forward the chosen TCP port; without forwarding the
-	// server stays LAN-only).
-	genConfigCmd.Flags().BoolVar(&lanDmsgEnable, "lan-dmsg", scriptExecBool("${LANDMSG:-${ISHYPERVISOR:-false}}"), "enable hypervisor's embedded DMSG server (defaults to ISHYPERVISOR)")
-	gHiddenFlags = append(gHiddenFlags, "lan-dmsg")
+	// Operators who actually want hypervisor-without-LAN-DMSG can
+	// hand-edit /opt/skywire/skywire.json to drop the
+	// hypervisor.lan_dmsg_server.enable boolean.
 	genConfigCmd.Flags().IntVar(&lanDmsgPort, "lan-dmsg-port", scriptExecInt("${LANDMSGPORT:-0}"), "embedded DMSG server TCP port (0 = OS-assigned at runtime; pin via LANDMSGPORT for stable WAN reachability)")
 	gHiddenFlags = append(gHiddenFlags, "lan-dmsg-port")
 	genConfigCmd.Flags().StringVar(&lanDmsgPublicAddress, "lan-dmsg-public", scriptExecString("${LANDMSGPUBLIC}"), "embedded DMSG server WAN-reachable address (host:port; requires port-forward)")
@@ -601,12 +605,6 @@ var genConfigCmd = &cobra.Command{
 		// enable errors from service conf fetch from the combination of these flags
 		if isStdout && isHide {
 			isStdout = false
-		}
-
-		//determine best protocol
-		if isBestProtocol && netutil.LocalProtocol() {
-			disablePublicAutoConn = true
-			isDmsgHTTP = true
 		}
 
 		fetchServiceConfig(log)
@@ -1303,12 +1301,18 @@ func configureHypervisor(log *logging.Logger) {
 		} else {
 			config.HTTPAddr = offsetAddr(config.HTTPAddr)
 		}
-		// Embedded DMSG server. Only emit the block when the operator
-		// asked for it (or supplied port/public-address knobs); leaving
-		// it nil keeps existing configs unchanged.
-		if lanDmsgEnable || lanDmsgPort != 0 || lanDmsgPublicAddress != "" {
+		// Embedded LAN/WAN DMSG server. Implicit-on whenever this
+		// visor is also a hypervisor — the hypervisor's
+		// responsibility to its managed visors implies it provides
+		// the DMSG relay. Operators who want a hypervisor WITHOUT
+		// the embedded server can drop the
+		// `hypervisor.lan_dmsg_server.enable` boolean in
+		// /opt/skywire/skywire.json post-gen; that path is
+		// expected to be vanishingly rare so it's not exposed via
+		// a config-gen flag.
+		if isHypervisor {
 			config.LANDmsgServer = &visorconfig.LANDmsgServerConf{
-				Enable:        lanDmsgEnable,
+				Enable:        true,
 				Port:          lanDmsgPort,
 				PublicAddress: lanDmsgPublicAddress,
 			}
@@ -1908,15 +1912,14 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 	// Map of flag names to the SKYENV variable they control.
 	// When a flag is explicitly set, uncomment the corresponding line.
 	flagToEnv := map[string]string{
-		"pkg":       "PKGENV=true",
-		"bestproto": "BESTPROTO=true",
-		"ishv":      "ISHYPERVISOR=true",
-		"testenv":   "TESTENV=true",
-		"dmsghttp":  "DMSGHTTP=true",
-		"public":    "VISORISPUBLIC=true",
-		"servevpn":  "VPNSERVER=true",
-		"autoconn":  "DISABLEPUBLICAUTOCONN=true",
-		"publicip":  "DISPLAYNODEIP=true",
+		"pkg":      "PKGENV=true",
+		"ishv":     "ISHYPERVISOR=true",
+		"testenv":  "TESTENV=true",
+		"dmsghttp": "DMSGHTTP=true",
+		"public":   "VISORISPUBLIC=true",
+		"servevpn": "VPNSERVER=true",
+		"autoconn": "DISABLEPUBLICAUTOCONN=true",
+		"publicip": "DISPLAYNODEIP=true",
 	}
 
 	// Also handle string/value flags
