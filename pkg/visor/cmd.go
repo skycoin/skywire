@@ -45,12 +45,12 @@ var (
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
-	visorBuildInfo *buildinfo.Info
+	visorBuildInfo        *buildinfo.Info
 	dmsgServer            string
 	dmsgServerMaxAttempts int
 	isStoreLog            bool
-	isForceColor   bool
-	useRouteFinder bool // override local route calculation to use route finder
+	isForceColor          bool
+	useRouteFinder        bool // override local route calculation to use route finder
 )
 
 // nolint: gocyclo
