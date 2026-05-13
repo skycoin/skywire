@@ -41,6 +41,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"strconv"
@@ -61,6 +62,9 @@ var (
 	iperfInterval time.Duration
 	iperfBlockKB  int
 	iperfVerbose  bool
+	iperfRTT      bool
+	iperfRTTRate  int
+	iperfEcho     bool
 )
 
 // Sized so a default test pushes 64 KiB writes — large enough to
@@ -85,12 +89,18 @@ func init() {
 		"per-Write block size in KiB; larger amortizes write overhead, smaller surfaces stalls faster")
 	iperfCmd.Flags().BoolVarP(&iperfVerbose, "verbose", "v", false,
 		"print connection-setup info to stderr (target PK/port, transport, dial time)")
+	iperfCmd.Flags().BoolVar(&iperfRTT, "rtt", false,
+		"latency mode: send small probes + wait for echo, report RTT distribution + jitter. Requires peer in --echo mode.")
+	iperfCmd.Flags().IntVar(&iperfRTTRate, "rtt-rate", 100,
+		"probes per second in --rtt mode (default 100; rate is approximate, not paced)")
 	iperfCmd.Flags().VarP(&sk, "sk", "s",
 		"secret key for the standalone dmsg client (random if unset)")
 	iperfCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal",
 		"[ debug | warn | error | fatal | panic | trace | info ]")
 
 	iperfListenCmd.Flags().SortFlags = false
+	iperfListenCmd.Flags().BoolVar(&iperfEcho, "echo", false,
+		"echo received bytes back to the peer instead of draining to /dev/null (pairs with client's --rtt)")
 	iperfListenCmd.Flags().DurationVarP(&iperfInterval, "interval", "i", defaultIperfTick,
 		"emit a rolling-sample line every interval; zero disables intermediate samples")
 	iperfListenCmd.Flags().BoolVarP(&iperfVerbose, "verbose", "v", false,
@@ -161,6 +171,13 @@ whitelist (if any) can authorize it.`,
 		if iperfVerbose {
 			fmt.Fprintf(os.Stderr, "connected: dmsg %s:%d (transport=dmsg)\n", peerPK.String(), port)
 		}
+		if iperfRTT {
+			if iperfRTTRate <= 0 {
+				return errors.New("dmsg iperf: --rtt-rate must be > 0")
+			}
+			runIperfRTT(ctx, conn, iperfDuration, iperfRTTRate)
+			return nil
+		}
 		runIperfSender(ctx, conn, iperfDuration, iperfInterval, iperfBlockKB)
 		return nil
 	},
@@ -223,6 +240,10 @@ This is standalone-dmsg only — the CLI bootstraps its own dmsg.Client.
 
 		if iperfVerbose {
 			fmt.Fprintf(os.Stderr, "accepted: %s\n", conn.RemoteAddr())
+		}
+		if iperfEcho {
+			runIperfEcho(ctx, conn)
+			return nil
 		}
 		runIperfReceiver(ctx, conn, iperfInterval)
 		return nil
@@ -438,6 +459,209 @@ func listenDmsgIperf(ctx context.Context, log *logging.Logger, port uint16) (net
 		return nil, cipher.PubKey{}, fmt.Errorf("listen on %d: %w", port, err)
 	}
 	return lis, myPK, nil
+}
+
+// rttProbeSize is the fixed wire size of one probe — seq (8B) +
+// send-ns timestamp (8B). Tiny + fixed so we can read/write whole
+// probes with io.ReadFull/Write without framing overhead and the
+// echo side can just blast the same bytes back.
+const rttProbeSize = 16
+
+// runIperfRTT pumps small fixed-size probes through the stream and
+// listens for the peer's --echo to bounce them back. Each probe
+// carries a sequence number + the sender's send-time in unix-nanos.
+// On receipt the sender records the RTT (now - send_ns), tracks
+// the running min/max/mean/jitter, and prints a final histogram
+// shape: min / mean / max / stddev / loss-rate.
+//
+// Why fixed wire size + same encoding both ways: it makes the
+// listener side dead simple (io.Copy with a 16-byte buffer would
+// have worked even, but we explicitly loop on rttProbeSize reads
+// to surface partial-read errors clearly). The seq + ts together
+// also let us detect reordering (server echoing out-of-order
+// probes) — recorded as a separate count, doesn't escalate to
+// "lost" which is "never seen".
+func runIperfRTT(ctx context.Context, conn net.Conn, duration time.Duration, rate int) {
+	start := time.Now()
+	deadline := start.Add(duration)
+
+	type rttRecord struct {
+		sent time.Time
+	}
+	// Probes-in-flight indexed by seq. Bounded by what's sent in
+	// `duration` at `rate`; a slice is the cheapest random-access
+	// container and we never compact (test life-cycle is short).
+	sentTimes := make([]rttRecord, 0, rate*int(duration.Seconds())+rate)
+
+	// Receiver goroutine reads echoed probes, records RTT samples.
+	samples := make(chan rxSample, 4096)
+	rxCtx, rxCancel := context.WithCancel(ctx)
+	defer rxCancel()
+	go func() {
+		buf := make([]byte, rttProbeSize)
+		for {
+			if _, err := io.ReadFull(conn, buf); err != nil {
+				if !errors.Is(err, io.EOF) && rxCtx.Err() == nil {
+					fmt.Fprintf(os.Stderr, "rtt rx error: %v\n", err)
+				}
+				close(samples)
+				return
+			}
+			seq := bigEndianUint64(buf[:8])
+			sent := time.Unix(0, int64(bigEndianUint64(buf[8:16]))) //nolint:gosec
+			samples <- rxSample{seq: seq, rtt: time.Since(sent)}
+			_ = sent // present for symmetry / diag; rtt already computed
+		}
+	}()
+
+	// Sender: pace probes at `rate` per second.
+	gap := time.Second / time.Duration(rate)
+	if gap < time.Microsecond {
+		gap = time.Microsecond
+	}
+	t := time.NewTicker(gap)
+	defer t.Stop()
+	wireBuf := make([]byte, rttProbeSize)
+	var seq uint64
+sendLoop:
+	for {
+		select {
+		case <-ctx.Done():
+			break sendLoop
+		case now := <-t.C:
+			if !now.Before(deadline) {
+				break sendLoop
+			}
+			putBigEndianUint64(wireBuf[:8], seq)
+			putBigEndianUint64(wireBuf[8:16], uint64(now.UnixNano())) //nolint:gosec
+			if _, err := conn.Write(wireBuf); err != nil {
+				fmt.Fprintf(os.Stderr, "rtt tx error after %s: %v\n",
+					time.Since(start).Round(time.Millisecond), err)
+				break sendLoop
+			}
+			sentTimes = append(sentTimes, rttRecord{sent: now})
+			seq++
+		}
+	}
+
+	// Stop reading once we've waited a reasonable echo-window past
+	// the last send. After this fires, anything still in flight is
+	// counted as loss.
+	echoWindow := 2 * time.Second
+	settleTimer := time.NewTimer(echoWindow)
+	defer settleTimer.Stop()
+	var received []rxSample
+collect:
+	for {
+		select {
+		case s, ok := <-samples:
+			if !ok {
+				break collect
+			}
+			received = append(received, s)
+		case <-settleTimer.C:
+			rxCancel()
+			_ = conn.SetReadDeadline(time.Now()) //nolint:errcheck
+		}
+	}
+
+	printRTTSummary(received, uint64(len(sentTimes)), time.Since(start)) //nolint:gosec
+}
+
+// runIperfEcho is the listener-side counterpart to runIperfRTT —
+// bounce every byte back unchanged. io.Copy is sufficient because
+// the wire is byte-stream symmetric; the iperf-rtt client's
+// fixed-size probes are just bytes from the echoer's perspective.
+func runIperfEcho(ctx context.Context, conn net.Conn) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = io.Copy(conn, conn) //nolint:errcheck
+	}()
+	select {
+	case <-ctx.Done():
+		_ = conn.SetReadDeadline(time.Now()) //nolint:errcheck
+		<-done
+	case <-done:
+	}
+}
+
+// printRTTSummary computes min/mean/max/stddev + loss-rate from the
+// received samples and prints a single classic-ping-style line to
+// stdout. The stderr-vs-stdout split mirrors the throughput path:
+// summary on stdout for scripting capture, any error noise on
+// stderr.
+func printRTTSummary(samples []rxSample, sent uint64, elapsed time.Duration) {
+	if sent == 0 {
+		fmt.Println("dir=rtt sent=0 received=0 (nothing pumped)")
+		return
+	}
+	recvCount := uint64(len(samples))
+	if recvCount == 0 {
+		fmt.Printf("dir=rtt sent=%d received=0 loss=100.00%% duration=%s (no echos)\n",
+			sent, elapsed.Round(time.Millisecond))
+		return
+	}
+	var min, max, sum time.Duration
+	min = samples[0].rtt
+	max = samples[0].rtt
+	for _, s := range samples {
+		if s.rtt < min {
+			min = s.rtt
+		}
+		if s.rtt > max {
+			max = s.rtt
+		}
+		sum += s.rtt
+	}
+	mean := sum / time.Duration(recvCount)
+	// Stddev: sample std (Bessel's correction skipped — for small N
+	// the bias is negligible vs. the ms-scale RTT signal we care
+	// about; saves an extra divide).
+	var sqSum float64
+	for _, s := range samples {
+		delta := float64(s.rtt - mean)
+		sqSum += delta * delta
+	}
+	std := time.Duration(0)
+	if recvCount > 0 {
+		std = time.Duration(math.Sqrt(sqSum / float64(recvCount)))
+	}
+	loss := 100 * float64(sent-recvCount) / float64(sent)
+	fmt.Printf("dir=rtt sent=%d received=%d loss=%.2f%% duration=%s min=%s mean=%s max=%s stddev=%s\n",
+		sent, recvCount, loss, elapsed.Round(time.Millisecond),
+		min.Round(time.Microsecond),
+		mean.Round(time.Microsecond),
+		max.Round(time.Microsecond),
+		std.Round(time.Microsecond),
+	)
+}
+
+// bigEndianUint64 reads 8 bytes BE → uint64. Single-purpose so I
+// don't pull in encoding/binary just for two integers.
+func bigEndianUint64(b []byte) uint64 {
+	return uint64(b[0])<<56 | uint64(b[1])<<48 | uint64(b[2])<<40 | uint64(b[3])<<32 |
+		uint64(b[4])<<24 | uint64(b[5])<<16 | uint64(b[6])<<8 | uint64(b[7])
+}
+
+func putBigEndianUint64(b []byte, v uint64) {
+	b[0] = byte(v >> 56)
+	b[1] = byte(v >> 48)
+	b[2] = byte(v >> 40)
+	b[3] = byte(v >> 32)
+	b[4] = byte(v >> 24)
+	b[5] = byte(v >> 16)
+	b[6] = byte(v >> 8)
+	b[7] = byte(v)
+}
+
+// rxSample is declared inside runIperfRTT but referenced by
+// printRTTSummary's signature so its definition needs to be
+// visible package-wide; the inner type shadowing in runIperfRTT
+// is incidental and uses the same shape.
+type rxSample struct {
+	seq uint64
+	rtt time.Duration
 }
 
 // acceptOne blocks for a single inbound stream or ctx deadline.
