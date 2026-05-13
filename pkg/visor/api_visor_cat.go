@@ -177,28 +177,178 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 	go func() {
 		defer listenCancel()
 		defer loopLis.Close() //nolint:errcheck
+		// Listeners always get torn down on goroutine exit so the
+		// dmsg port / skynet route slot is released — even if the CLI
+		// gives up before a remote peer arrives, even on timeout, and
+		// even on panic. The pre-fix version only closed listeners
+		// after acceptCatRemote returned, which could be up to the
+		// full --timeout (default 5m) — leaving the dmsg port
+		// registered and rejecting future listens as "port already
+		// occupied".
+		defer func() {
+			if dmsgLis != nil {
+				_ = dmsgLis.Close() //nolint:errcheck
+			}
+			if skyLis != nil {
+				_ = skyLis.Close() //nolint:errcheck
+			}
+		}()
 
 		acceptCtx, acceptCancel := context.WithTimeout(context.Background(), timeout)
 		defer acceptCancel()
 
-		remote, err := acceptCatRemote(acceptCtx, wl, dmsgLis, skyLis, v.log)
-		// Either way the remote listeners are done.
-		if dmsgLis != nil {
-			_ = dmsgLis.Close() //nolint:errcheck
-		}
-		if skyLis != nil {
-			_ = skyLis.Close() //nolint:errcheck
-		}
+		// Accept the CLI's loopback dial first — it happens within
+		// milliseconds of the RPC return. Holding `local` early lets
+		// us detect CLI-side give-up (Ctrl-C, exit, timeout) via a
+		// sniffer goroutine so the remote accept can be canceled
+		// rather than waiting for its own timeout.
+		local, err := acceptOne(acceptCtx, loopLis)
 		if err != nil {
-			v.log.WithError(err).Debug("VisorCat: remote accept failed")
+			v.log.WithError(err).Debug("VisorCat: loopback accept failed")
 			return
 		}
 
-		local, err := acceptOne(acceptCtx, loopLis)
-		if err != nil {
-			_ = remote.Close() //nolint:errcheck
-			v.log.WithError(err).Debug("VisorCat: loopback accept failed")
-			return
+		// Sniffer: read 1 byte from local. Cases:
+		//   - local closes before remote arrives: err signals close,
+		//     cancel acceptCtx so remote-wait gives up promptly.
+		//   - local sends a byte before remote arrives (CLI piped
+		//     stdin early): hold the byte and prepend it to the
+		//     splice once remote is ready.
+		//   - remote arrives first: signal sniffer to stop; if it
+		//     read a byte before stopping, splice prepends.
+		type sniffResult struct {
+			b   byte
+			has bool
+			err error
+		}
+		sniffCh := make(chan sniffResult, 1)
+		stopSniff := make(chan struct{})
+		go func() {
+			var buf [1]byte
+			for {
+				_ = local.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+				n, rerr := local.Read(buf[:])
+				if n > 0 {
+					sniffCh <- sniffResult{b: buf[0], has: true}
+					return
+				}
+				if rerr != nil {
+					if ne, ok := rerr.(net.Error); ok && ne.Timeout() {
+						select {
+						case <-stopSniff:
+							sniffCh <- sniffResult{}
+							return
+						default:
+							continue
+						}
+					}
+					sniffCh <- sniffResult{err: rerr}
+					return
+				}
+			}
+		}()
+
+		// Race remote-accept against sniffer-signals-close.
+		type remoteResult struct {
+			conn net.Conn
+			err  error
+		}
+		remoteCh := make(chan remoteResult, 1)
+		go func() {
+			c, e := acceptCatRemote(acceptCtx, wl, dmsgLis, skyLis, v.log)
+			remoteCh <- remoteResult{conn: c, err: e}
+		}()
+
+		var (
+			remote  net.Conn
+			pending []byte
+		)
+	awaitRemote:
+		for {
+			select {
+			case r := <-remoteCh:
+				if r.err != nil {
+					_ = local.Close() //nolint:errcheck
+					close(stopSniff)
+					<-sniffCh
+					v.log.WithError(r.err).Debug("VisorCat: remote accept failed")
+					return
+				}
+				remote = r.conn
+				close(stopSniff)
+				s := <-sniffCh
+				if s.err != nil {
+					// CLI gave up between remote-arrival and sniff-stop;
+					// rare race. Tear down remote too.
+					_ = remote.Close() //nolint:errcheck
+					_ = local.Close() //nolint:errcheck
+					return
+				}
+				if s.has {
+					pending = []byte{s.b}
+				}
+				break awaitRemote
+			case s := <-sniffCh:
+				if s.err != nil {
+					// CLI closed local before remote arrived; cancel
+					// remote-wait so the listeners get torn down now.
+					acceptCancel()
+					_ = local.Close() //nolint:errcheck
+					r := <-remoteCh
+					if r.conn != nil {
+						// Race: remote arrived between our cancel
+						// and acceptCatRemote noticing. Don't leak it.
+						_ = r.conn.Close() //nolint:errcheck
+					}
+					return
+				}
+				if s.has {
+					// CLI sent a byte while we were sniffing. Hold it
+					// and keep waiting for remote — restart sniffer.
+					pending = []byte{s.b}
+					go func() {
+						var buf [1]byte
+						for {
+							_ = local.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+							n, rerr := local.Read(buf[:])
+							if n > 0 {
+								sniffCh <- sniffResult{b: buf[0], has: true}
+								return
+							}
+							if rerr != nil {
+								if ne, ok := rerr.(net.Error); ok && ne.Timeout() {
+									select {
+									case <-stopSniff:
+										sniffCh <- sniffResult{}
+										return
+									default:
+										continue
+									}
+								}
+								sniffCh <- sniffResult{err: rerr}
+								return
+							}
+						}
+					}()
+					// Loop and re-select — may get more bytes or remote.
+					// (Buffered bytes accumulate in `pending`.)
+					// Continue handles multi-byte CLI-pre-remote streams.
+					continue
+				}
+			}
+		}
+
+		// Clear deadline so splice reads block normally.
+		_ = local.SetReadDeadline(time.Time{})
+
+		// Drain pending sniff bytes into remote first, then splice.
+		if len(pending) > 0 {
+			if _, werr := remote.Write(pending); werr != nil {
+				_ = local.Close() //nolint:errcheck
+				_ = remote.Close() //nolint:errcheck
+				v.log.WithError(werr).Debug("VisorCat: drain sniff to remote failed")
+				return
+			}
 		}
 		splice(local, remote)
 	}()
