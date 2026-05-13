@@ -514,6 +514,8 @@ func (c *Conn) sendMsg(seq, rseq uint32, m msg.Msg) error {
 	case <-c.closeq:
 		return ErrClosed
 	case <-time.After(sendMsgQueueTimeout):
+		c.n.sendMsgTimeoutCount.Add(1)
+		c.n.deadConnsClosed.Add(1)
 		c.n.Printf("[WARN] [%s] sendMsg: queue full for %s; declaring conn dead and closing",
 			c.String(), sendMsgQueueTimeout)
 		_ = c.Close() //nolint:errcheck,gosec
