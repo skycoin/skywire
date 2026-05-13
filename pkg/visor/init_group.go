@@ -62,6 +62,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	inbox := newGroupInbox(groupInboxCap)
+	inbox.setManager(mgr)
 	mgr.SetMessageHandler(inbox.deliver)
 
 	v.initLock.Lock()
