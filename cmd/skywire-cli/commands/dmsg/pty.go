@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/toqueteos/webbrowser"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -32,7 +34,22 @@ var (
 	ptyLogger      = logging.MustGetLogger("dmsgpty")
 	ptyExecTimeout string
 	ptyExecEnv     []string
+	// ptyVia, when set, bypasses the local dmsgpty-host RPC path and
+	// dials the remote dmsgpty-host's direct-TCP listener instead.
+	// Format: `tcp://<pk>@<host>:<port>`. The remote PK is pinned in
+	// the noise XK handshake (host-key-check equivalent).
+	ptyVia string
+	// ptySK is the local identity used for the direct-TCP path's
+	// noise handshake. The remote's whitelist gates on the resulting
+	// PK, so callers wanting stable authorization should pin --sk
+	// (or set DMSGPTY_SK in the environment). Unset = ephemeral.
+	ptySK cipher.SecKey
 )
+
+// ptyTCPViaRE matches `tcp://<66-hex-pk>@<host:port>` for the --via
+// flag. Anchored so a typo doesn't silently fall through to a
+// different scheme.
+var ptyTCPViaRE = regexp.MustCompile(`^tcp://([a-f0-9]{66})@(.+)$`)
 
 func init() {
 	// pty command
@@ -50,12 +67,20 @@ func init() {
 	// Flags for start command
 	ptyStartCmd.PersistentFlags().StringVarP(&ptyRpcAddr, "rpc", "", "localhost:3435", "RPC server address")
 	ptyStartCmd.PersistentFlags().StringVarP(&ptyPort, "port", "p", "22", "port of remote visor dmsgpty")
+	ptyStartCmd.Flags().StringVar(&ptyVia, "via", "",
+		"bypass local visor + dial remote dmsgpty-host's direct-TCP listener: tcp://<pk>@<host>:<port>")
+	ptyStartCmd.Flags().VarP(&ptySK, "sk", "s",
+		"local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization)")
 
 	// Flags for exec command
 	ptyExecCmd.PersistentFlags().StringVarP(&ptyRpcAddr, "rpc", "", "localhost:3435", "RPC server address")
 	ptyExecCmd.PersistentFlags().StringVarP(&ptyPort, "port", "p", "22", "port of remote visor dmsgpty")
 	ptyExecCmd.Flags().StringVarP(&ptyExecTimeout, "timeout", "t", "30s", "max command duration (e.g. 30s, 2m); host-side cap is 5m")
 	ptyExecCmd.Flags().StringArrayVarP(&ptyExecEnv, "env", "e", nil, "extra env var KEY=VALUE; repeatable")
+	ptyExecCmd.Flags().StringVar(&ptyVia, "via", "",
+		"bypass local visor + dial remote dmsgpty-host's direct-TCP listener: tcp://<pk>@<host>:<port>")
+	ptyExecCmd.Flags().VarP(&ptySK, "sk", "s",
+		"local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization)")
 
 	// Flags for ui command
 	ptyUICmd.Flags().StringVarP(&ptyPath, "input", "i", "", "read from specified config file")
@@ -95,13 +120,30 @@ var ptyListCmd = &cobra.Command{
 var ptyStartCmd = &cobra.Command{
 	Use:   "start <pk>",
 	Short: "Start dmsgpty session",
-	Args:  cobra.MinimumNArgs(1),
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
+		defer cancel()
+
+		// --via tcp://<pk>@<host:port> bypasses local visor. <pk> in
+		// the URL pins the remote (server) PK; positional <pk> arg is
+		// then optional and ignored if supplied.
+		if ptyVia != "" {
+			rPK, addr, err := parseTCPVia(ptyVia)
+			if err != nil {
+				return err
+			}
+			myPK, mySK := resolveTCPIdentity(ptySK)
+			tcpCli := dmsgpty.DefaultCLI()
+			return (&tcpCli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, dmsgpty.DefaultCmd)
+		}
+
+		if len(args) < 1 {
+			return fmt.Errorf("pty start: <pk> required (or use --via tcp://<pk>@<host:port>)")
+		}
 		cli := dmsgpty.DefaultCLI()
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
-		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
-		defer cancel()
 		return cli.StartRemotePty(ctx, addr, uint16(port), dmsgpty.DefaultCmd)
 	},
 }
@@ -127,49 +169,137 @@ Examples:
 The local CLI exit code mirrors the remote command's exit code (0 on
 success, the remote's exit code on non-zero exit, 124 on timeout, 1 on
 RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
-	Args: cobra.MinimumNArgs(2),
+	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cli := dmsgpty.DefaultCLI()
-		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
-		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		timeout, err := time.ParseDuration(ptyExecTimeout)
 		if err != nil {
 			return fmt.Errorf("--timeout %q: %w", ptyExecTimeout, err)
 		}
+		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
+		defer cancel()
+
+		// --via tcp://<pk>@<host:port> shifts argument layout: pk is
+		// in the URL, so args are just `<command> [args...]` (no
+		// leading positional pk).
+		if ptyVia != "" {
+			if len(args) < 1 {
+				return fmt.Errorf("pty exec --via: <command> required")
+			}
+			rPK, addr, err := parseTCPVia(ptyVia)
+			if err != nil {
+				return err
+			}
+			myPK, mySK := resolveTCPIdentity(ptySK)
+			name := args[0]
+			var cmdArgs []string
+			if len(args) > 1 {
+				cmdArgs = args[1:]
+			}
+			tcpCli := dmsgpty.DefaultCLI()
+			resp, err := (&tcpCli).ExecRemoteTCP(ctx, rPK, addr, myPK, mySK, name, cmdArgs, ptyExecEnv, nil, timeout)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
+				os.Exit(1)
+			}
+			return reportExecResult(cmd, resp)
+		}
+
+		if len(args) < 2 {
+			return fmt.Errorf("pty exec: <pk> <command> required (or use --via tcp://<pk>@<host:port>)")
+		}
+		cli := dmsgpty.DefaultCLI()
+		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
+		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		name := args[1]
 		var cmdArgs []string
 		if len(args) > 2 {
 			cmdArgs = args[2:]
 		}
-		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
-		defer cancel()
 
 		resp, err := cli.ExecRemote(ctx, addr, uint16(port), name, cmdArgs, ptyExecEnv, nil, timeout)
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
 			os.Exit(1)
 		}
-		if len(resp.Stdout) > 0 {
-			_, _ = cmd.OutOrStdout().Write(resp.Stdout) //nolint:errcheck
-		}
-		if len(resp.Stderr) > 0 {
-			_, _ = cmd.ErrOrStderr().Write(resp.Stderr) //nolint:errcheck
-		}
-		if resp.StdoutTruncated {
-			fmt.Fprintf(cmd.ErrOrStderr(), "[stdout truncated at 16MiB]\n") //nolint:errcheck
-		}
-		if resp.StderrTruncated {
-			fmt.Fprintf(cmd.ErrOrStderr(), "[stderr truncated at 16MiB]\n") //nolint:errcheck
-		}
-		if resp.TimedOut {
-			fmt.Fprintf(cmd.ErrOrStderr(), "[timed out after %dms]\n", resp.DurationMS) //nolint:errcheck
-			os.Exit(124)
-		}
-		if resp.ExitCode != 0 {
-			os.Exit(resp.ExitCode)
-		}
-		return nil
+		return reportExecResult(cmd, resp)
 	},
+}
+
+// reportExecResult renders a CommandExecResult to the caller's
+// stdout/stderr and exits with the matching code. Mirrors the
+// inline rendering the dmsg-overlay path used pre-refactor; lifted
+// here so the --via tcp path can share the same surface. Returns
+// nil only on a clean (exit 0, not truncated, not timed out)
+// completion — other shapes call os.Exit directly to surface the
+// right exit code to the caller's shell.
+func reportExecResult(cmd *cobra.Command, resp *dmsgpty.CommandExecResult) error {
+	if len(resp.Stdout) > 0 {
+		_, _ = cmd.OutOrStdout().Write(resp.Stdout) //nolint:errcheck
+	}
+	if len(resp.Stderr) > 0 {
+		_, _ = cmd.ErrOrStderr().Write(resp.Stderr) //nolint:errcheck
+	}
+	if resp.StdoutTruncated {
+		fmt.Fprintf(cmd.ErrOrStderr(), "[stdout truncated at 16MiB]\n") //nolint:errcheck
+	}
+	if resp.StderrTruncated {
+		fmt.Fprintf(cmd.ErrOrStderr(), "[stderr truncated at 16MiB]\n") //nolint:errcheck
+	}
+	if resp.TimedOut {
+		fmt.Fprintf(cmd.ErrOrStderr(), "[timed out after %dms]\n", resp.DurationMS) //nolint:errcheck
+		os.Exit(124)
+	}
+	if resp.ExitCode != 0 {
+		os.Exit(resp.ExitCode)
+	}
+	return nil
+}
+
+// parseTCPVia splits a `tcp://<pk>@<host:port>` URL into the pinned
+// remote PK and the dial-target address. The PK must be the
+// canonical 66-char-hex form; the address is passed through to
+// net.Dial verbatim so any net.Dial-acceptable form (host:port,
+// [v6]:port, etc.) works.
+func parseTCPVia(via string) (cipher.PubKey, string, error) {
+	m := ptyTCPViaRE.FindStringSubmatch(via)
+	if m == nil {
+		return cipher.PubKey{}, "", fmt.Errorf("pty: --via %q must be tcp://<66-hex-pk>@<host:port>", via)
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(m[1]); err != nil {
+		return cipher.PubKey{}, "", fmt.Errorf("pty: --via remote PK invalid: %w", err)
+	}
+	return pk, m[2], nil
+}
+
+// resolveTCPIdentity returns the (PK, SK) used as the local
+// identity in the --via tcp noise handshake. If skFlag is non-zero,
+// it's used and the matching PK is derived. Otherwise a fresh
+// keypair is generated for the run (operator gets a one-shot
+// identity; whitelist-pinned hosts will reject it). DMSGPTY_SK
+// environment variable is a third source consulted before
+// generation.
+func resolveTCPIdentity(skFlag cipher.SecKey) (cipher.PubKey, cipher.SecKey) {
+	var zero cipher.SecKey
+	sk := skFlag
+	if sk == zero {
+		if env := os.Getenv("DMSGPTY_SK"); env != "" {
+			_ = sk.Set(env) //nolint:errcheck,gosec
+		}
+	}
+	if sk == zero {
+		pk, fresh := cipher.GenerateKeyPair()
+		return pk, fresh
+	}
+	pk, err := sk.PubKey()
+	if err != nil {
+		// SecKey.Set already validated the SK shape; PubKey derivation
+		// is deterministic. Treat unexpected failure as fatal — the
+		// caller can't proceed without a valid identity.
+		fmt.Fprintf(os.Stderr, "pty --via: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
+		os.Exit(1)
+	}
+	return pk, sk
 }
 
 var ptyUICmd = &cobra.Command{
