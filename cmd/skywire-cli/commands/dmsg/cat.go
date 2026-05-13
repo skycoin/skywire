@@ -62,7 +62,7 @@ func init() {
 	catCmd.Flags().DurationVarP(&catTimeout, "timeout", "t", 60*time.Second,
 		"dial / accept timeout")
 	catCmd.Flags().IntVar(&catRoutes, "routes", 1,
-		"number of skynet routes (future-use; skynet transport only)")
+		"number of parallel skynet mux routes (skynet transport only; 0 or 1 = single route)")
 	catCmd.Flags().BoolVarP(&catVerbose, "verbose", "v", false,
 		"print connection info to stderr")
 	catCmd.Flags().VarP(&sk, "sk", "s",
@@ -244,6 +244,7 @@ func runVisorCatDial(transport string, peerPK cipher.PubKey, port uint16, cmd *c
 		Port:      port,
 		Transport: transport,
 		Timeout:   catTimeout,
+		Routes:    catRoutes,
 	}
 	resp, err := rc.VisorCat(req)
 	if err != nil {

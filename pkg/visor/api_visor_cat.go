@@ -37,6 +37,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -102,7 +103,7 @@ func (v *Visor) visorCatDial(req VisorCatRequest, transport string) (*VisorCatRe
 
 	dialCtx, dialCancel := context.WithTimeout(context.Background(), timeout)
 	defer dialCancel()
-	remote, err := v.dialCatTransport(dialCtx, transport, req.RemotePK, req.Port)
+	remote, err := v.dialCatTransport(dialCtx, transport, req.RemotePK, req.Port, req.Routes)
 	if err != nil {
 		return nil, fmt.Errorf("VisorCat: dial %s %s:%d: %w",
 			transport, req.RemotePK, req.Port, err)
@@ -357,7 +358,11 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 }
 
 // dialCatTransport opens a remote stream over the requested transport.
-func (v *Visor) dialCatTransport(ctx context.Context, transport string, rPK cipher.PubKey, port uint16) (net.Conn, error) {
+// When routes > 1 and the transport is skynet, the router establishes
+// N parallel mux routes via SkywireNetworker.DialContextWithOptions —
+// writes are striped + reads are resequenced inside the route-group's
+// mux layer, so the caller still sees a single ordered net.Conn.
+func (v *Visor) dialCatTransport(ctx context.Context, transport string, rPK cipher.PubKey, port uint16, routes int) (net.Conn, error) {
 	switch transport {
 	case VisorCatTransportDmsg:
 		if err := v.mustWaitDmsgReady(); err != nil {
@@ -365,14 +370,31 @@ func (v *Visor) dialCatTransport(ctx context.Context, transport string, rPK ciph
 		}
 		return v.dmsgC.DialStream(ctx, dmsg.Addr{PK: rPK, Port: port})
 	case VisorCatTransportSkynet:
-		if _, err := appnet.ResolveNetworker(appnet.TypeSkynet); err != nil {
+		nw, err := appnet.ResolveNetworker(appnet.TypeSkynet)
+		if err != nil {
 			return nil, fmt.Errorf("skynet networker not registered: %w", err)
 		}
-		return appnet.DialContext(ctx, appnet.Addr{
+		addr := appnet.Addr{
 			Net:    appnet.TypeSkynet,
 			PubKey: rPK,
 			Port:   routing.Port(port),
-		})
+		}
+		// Routes <= 1 keeps the single-route default; otherwise reach
+		// for SkywireNetworker.DialContextWithOptions to ask the router
+		// for N parallel mux routes. Type-asserting to the concrete
+		// networker is the established pattern for opt-passing — the
+		// abstract appnet.Networker has only the no-opts DialContext.
+		if routes > 1 {
+			if sw, ok := nw.(*appnet.SkywireNetworker); ok {
+				opts := router.DefaultDialOptions()
+				opts.MuxRoutes = routes
+				return sw.DialContextWithOptions(ctx, addr, opts)
+			}
+			// Fallback: networker registered under TypeSkynet isn't the
+			// real SkywireNetworker (unlikely in production; a mock in
+			// tests). Single-route dial preserves correctness.
+		}
+		return appnet.DialContext(ctx, addr)
 	}
 	return nil, fmt.Errorf("unsupported transport %q", transport)
 }
