@@ -1311,10 +1311,24 @@ func configureHypervisor(log *logging.Logger) {
 		// expected to be vanishingly rare so it's not exposed via
 		// a config-gen flag.
 		if isHypervisor {
+			// Generate the LAN DMSG server keypair eagerly. The struct's
+			// `pk`/`sk` json tags use `omitempty` but encoding/json does
+			// NOT treat a zero-valued fixed-size byte array as empty, so
+			// without explicit keys here the marshaled config emits
+			// `"sk": "0000...0000"`. Re-reading that config back fails
+			// because cipher.SecKey.UnmarshalText calls SecKeyFromHex →
+			// NewSecKey → secp256k1.VerifySeckey which rejects all-zero
+			// keys with ErrInvalidSecKey. The lan-dmsg server needs a
+			// stable keypair anyway (the type's docstring even says it's
+			// persisted across restarts), so generating it at gen time
+			// is the cleanest path.
+			lanPK, lanSK := cipher.GenerateKeyPair()
 			config.LANDmsgServer = &visorconfig.LANDmsgServerConf{
 				Enable:        true,
 				Port:          lanDmsgPort,
 				PublicAddress: lanDmsgPublicAddress,
+				PK:            lanPK,
+				SK:            lanSK,
 			}
 		}
 		conf.Hypervisor = &config
