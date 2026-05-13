@@ -101,9 +101,18 @@ func (v *Visor) visorCatDial(req VisorCatRequest, transport string) (*VisorCatRe
 		timeout = visorCatDefaultDialTimeout
 	}
 
+	// Release the dialCtx immediately after the dial returns —
+	// `defer dialCancel()` would fire only when this function
+	// returns, AFTER the splice goroutine has been spawned. If the
+	// underlying transport (appnet RouteGroup, dmsg.Stream) holds
+	// onto the dial context for any lifecycle hook, the cancel
+	// tears down the stream before the splice goroutine pushes
+	// bytes through it. Empirically: dial returns rc=0 but 0 bytes
+	// propagate to the listener — the stream is dead by the time
+	// the splice runs.
 	dialCtx, dialCancel := context.WithTimeout(context.Background(), timeout)
-	defer dialCancel()
 	remote, err := v.dialCatTransport(dialCtx, transport, req.RemotePK, req.Port, req.Routes)
+	dialCancel()
 	if err != nil {
 		return nil, fmt.Errorf("VisorCat: dial %s %s:%d: %w",
 			transport, req.RemotePK, req.Port, err)
