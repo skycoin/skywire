@@ -210,13 +210,24 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 		}
 
 		// Sniffer: read 1 byte from local. Cases:
-		//   - local closes before remote arrives: err signals close,
-		//     cancel acceptCtx so remote-wait gives up promptly.
 		//   - local sends a byte before remote arrives (CLI piped
 		//     stdin early): hold the byte and prepend it to the
 		//     splice once remote is ready.
-		//   - remote arrives first: signal sniffer to stop; if it
-		//     read a byte before stopping, splice prepends.
+		//   - local returns io.EOF: CLI did either a CloseWrite
+		//     (post-#2549 half-close on stdin EOF — CLI still alive
+		//     reading the conn) OR a full Close (CLI gave up). The
+		//     kernel doesn't surface the distinction without a
+		//     syscall probe, so we conservatively treat EOF as "CLI
+		//     half-closed, still alive" and wait for stopSniff
+		//     (remote arrival) without canceling acceptCtx. The
+		//     acceptCtx --timeout (5min default) still bounds the
+		//     listen-resource hold if CLI genuinely gave up.
+		//   - local returns a hard error (RST / EPIPE / net.ErrClosed):
+		//     CLI is genuinely gone — cancel acceptCtx so the
+		//     deferred listener-close fires immediately.
+		//   - remote arrives first: signal sniffer to stop via
+		//     stopSniff; if it read a byte before stopping, splice
+		//     prepends.
 		type sniffResult struct {
 			b   byte
 			has bool
@@ -243,6 +254,15 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 							continue
 						}
 					}
+					// io.EOF = CLI sent FIN. Could be alive (CloseWrite
+					// from spliceStdioHalfClose) or gone (full Close).
+					// Conservatively assume alive — wait for remote.
+					if errors.Is(rerr, io.EOF) {
+						<-stopSniff
+						sniffCh <- sniffResult{}
+						return
+					}
+					// Hard error (RST, EPIPE, ErrClosed): CLI gone.
 					sniffCh <- sniffResult{err: rerr}
 					return
 				}
