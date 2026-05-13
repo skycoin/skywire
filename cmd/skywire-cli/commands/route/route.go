@@ -155,6 +155,7 @@ func init() {
 		addRuleCmd,
 		findCmd,
 		calcCmd,
+		traceCmd,
 		groupsCmd,
 	)
 	addRuleCmd.PersistentFlags().DurationVarP(&keepAlive, "keep-alive", "a", router.DefaultRouteKeepAlive, "timeout for rule expiration")
