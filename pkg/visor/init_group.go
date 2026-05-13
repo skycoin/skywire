@@ -54,6 +54,13 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 		MySK:    v.conf.SK,
 		DataDir: filepath.Join(dataDir, "cxo-groups"),
 		Logger:  log,
+		// Owner-side heartbeat emission. Every group this visor owns
+		// publishes a no-op probe every interval so members can detect
+		// a silently-stalled CXO subscriber via "no heartbeat in N
+		// seconds" rather than "no traffic in 5min". The recommended
+		// 30s cadence pairs with the member-side 90s stale threshold
+		// for a 2-misses-then-reconnect policy.
+		HeartbeatInterval: skychatgroup.DefaultHeartbeatInterval,
 	})
 	if err != nil {
 		_ = store.Close() //nolint:errcheck
