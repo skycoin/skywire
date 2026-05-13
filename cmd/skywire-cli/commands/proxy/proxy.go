@@ -310,7 +310,25 @@ var startCmd = &cobra.Command{
 		startProcess := true
 		appReachedRunning := false
 		for startProcess {
-			time.Sleep(time.Second * 1)
+			// Sleep with ctx awareness — without this, a ctrl+c during
+			// app startup (skysocks-client's dial-retry loop, route
+			// setup, etc.) was ignored by the polling loop in
+			// --verbose mode. The SignalContext goroutine above honors
+			// SIGINT by canceling ctx, but in --verbose mode it just
+			// `return`s; the cleanup is supposed to happen here. If
+			// this loop never observes ctx.Done() it spins forever
+			// until the visor-side app concludes one way or another,
+			// stranding the operator with an unresponsive terminal.
+			select {
+			case <-time.After(time.Second * 1):
+			case <-ctx.Done():
+				startProcess = false
+				// Fall through to one last status snapshot before
+				// exiting the loop so the post-loop --verbose teardown
+				// path (StopApp etc.) has a sane appReachedRunning
+				// reading instead of racing on a half-initialized
+				// state.
+			}
 			if !startVerbose {
 				internal.PrintOutput(cmd.Flags(), nil, ".")
 			}
@@ -376,6 +394,25 @@ var startCmd = &cobra.Command{
 					}
 				}
 			}
+		}
+
+		// SIGINT during the startup polling loop (above) exits the
+		// loop with appReachedRunning=false. In --verbose mode the
+		// SignalContext goroutine intentionally doesn't call KillApp
+		// (it leaves cleanup to the main goroutine so deferred
+		// rpcClient.Close + verboseStream.Close run cleanly). Without
+		// this explicit Stop, the visor-side app keeps running while
+		// the CLI exits — operator pressed ctrl+c expecting to STOP
+		// the proxy, not just detach from it.
+		if startVerbose && !appReachedRunning && ctx.Err() != nil {
+			fmt.Fprintln(os.Stderr, "canceled during startup; stopping app...")
+			if err := rpcClient.StopApp(clientName); err != nil {
+				fmt.Fprintf(os.Stderr, "stop app: %v\n", err)
+			}
+			if verboseStream != nil {
+				verboseStream.Close()
+			}
+			return
 		}
 
 		// --verbose: stay in the foreground, streaming logs until
