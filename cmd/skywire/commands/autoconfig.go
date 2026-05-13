@@ -63,9 +63,123 @@ const systemdDropIn = "/etc/systemd/system/skywire.service.d/skywire-user.conf"
 
 var autoconfigVerbose bool
 
+// Editable-via-autoconfig knobs. When the operator passes any of
+// these flags, autoconfig rewrites the corresponding line in the
+// resolved SKYENV file BEFORE calling `skywire cli config gen`, so
+// the change is persisted to /etc/skywire.conf and survives
+// re-runs and package reinstalls.
+//
+// Each flag mirrors a `config gen` flag of the same name. We don't
+// pass them through to the subprocess — instead we edit skywire.conf
+// and let the existing `SKYENV=<file> config gen` invocation pick
+// them up. This keeps skywire.conf as the single source of truth.
+var (
+	autoSetHvpks          string
+	autoSetIshv           bool
+	autoSetNoIshv         bool
+	autoSetRewardAddr     string
+	autoSetPublic         bool
+	autoSetNoPublic       bool
+	autoSetStcprPort      int
+	autoSetSudphPort      int
+	autoSetLanDmsgPort    int
+	autoSetLanDmsgPublic  string
+	autoSetDmsgptyPks     string
+	autoSetVpnServer      bool
+	autoSetNoVpnServer    bool
+	autoSetProxyServer    bool
+	autoSetNoProxyServer  bool
+	autoSetSkychat        bool
+	autoSetNoSkychat      bool
+	autoSetDmsgweb        bool
+	autoSetNoDmsgweb      bool
+	autoSetSkynetweb      bool
+	autoSetNoSkynetweb    bool
+	autoSetDisablePubAuto bool
+)
+
 func init() {
 	autoconfigCmd.Flags().BoolVarP(&autoconfigVerbose, "verbose", "v", false, "show reward address, support links, and other details")
+
+	// Persistent skywire.conf edits. Each --flag sets the
+	// corresponding env var; --no-flag clears it back to default.
+	// Empty-string / zero-value flags are "leave unchanged" by
+	// virtue of Flags().Changed() lookup at runtime.
+	autoconfigCmd.Flags().StringVar(&autoSetHvpks, "hvpks", "", "set HYPERVISORPKS in skywire.conf (comma-separated PKs)")
+	autoconfigCmd.Flags().BoolVar(&autoSetIshv, "ishv", false, "set ISHYPERVISOR=true in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetNoIshv, "no-ishv", false, "set ISHYPERVISOR=false in skywire.conf")
+	autoconfigCmd.Flags().StringVar(&autoSetRewardAddr, "rewardaddr", "", "set REWARDSKYADDR in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetPublic, "public", false, "set VISORISPUBLIC=true in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetNoPublic, "no-public", false, "set VISORISPUBLIC=false in skywire.conf")
+	autoconfigCmd.Flags().IntVar(&autoSetStcprPort, "stcpr", 0, "set STCPRPORT in skywire.conf (0 = leave unchanged)")
+	autoconfigCmd.Flags().IntVar(&autoSetSudphPort, "sudph", 0, "set SUDPHPORT in skywire.conf (0 = leave unchanged)")
+	autoconfigCmd.Flags().IntVar(&autoSetLanDmsgPort, "lan-dmsg-port", 0, "set LANDMSGPORT in skywire.conf (0 = leave unchanged)")
+	autoconfigCmd.Flags().StringVar(&autoSetLanDmsgPublic, "lan-dmsg-public", "", "set LANDMSGPUBLIC in skywire.conf (host:port)")
+	autoconfigCmd.Flags().StringVar(&autoSetDmsgptyPks, "dmsgpty-pks", "", "set DMSGPTYPKS in skywire.conf (comma-separated PKs)")
+	autoconfigCmd.Flags().BoolVar(&autoSetVpnServer, "vpnserver", false, "set VPNSERVER=true in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetNoVpnServer, "no-vpnserver", false, "set VPNSERVER=false in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetProxyServer, "proxyserver", false, "set PROXYSERVER=true in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetNoProxyServer, "no-proxyserver", false, "set PROXYSERVER=false in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetSkychat, "skychat", false, "set SKYCHAT=true in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetNoSkychat, "no-skychat", false, "set SKYCHAT=false in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetDmsgweb, "dmsgweb", false, "set DMSGWEB=true in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetNoDmsgweb, "no-dmsgweb", false, "set DMSGWEB=false in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetSkynetweb, "skynetweb", false, "set SKYNETWEB=true in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetNoSkynetweb, "no-skynetweb", false, "set SKYNETWEB=false in skywire.conf")
+	autoconfigCmd.Flags().BoolVar(&autoSetDisablePubAuto, "disable-public-autoconn", false, "set DISABLEPUBLICAUTOCONN=true in skywire.conf")
+
 	RootCmd.AddCommand(autoconfigCmd)
+}
+
+// collectSkyenvEdits walks the autoSet* flags and assembles the list
+// of edits to apply to /etc/skywire.conf. Only flags the operator
+// actually passed are included — un-passed flags leave the
+// corresponding lines untouched.
+func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
+	var edits []skyenvEdit
+	// Bool-pair helper: --flag wins over --no-flag if both somehow set,
+	// but cobra normally only sees one per invocation.
+	addBool := func(key string, onName, offName string, on, off bool) {
+		switch {
+		case cmd.Flags().Changed(onName) && on:
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(true)})
+		case cmd.Flags().Changed(offName) && off:
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(false)})
+		}
+	}
+
+	if cmd.Flags().Changed("hvpks") {
+		edits = append(edits, skyenvEdit{Key: "HYPERVISORPKS", Value: formatSkyenvBashArray(autoSetHvpks)})
+	}
+	addBool("ISHYPERVISOR", "ishv", "no-ishv", autoSetIshv, autoSetNoIshv)
+	if cmd.Flags().Changed("rewardaddr") {
+		edits = append(edits, skyenvEdit{Key: "REWARDSKYADDR", Value: formatSkyenvString(autoSetRewardAddr)})
+	}
+	addBool("VISORISPUBLIC", "public", "no-public", autoSetPublic, autoSetNoPublic)
+	if cmd.Flags().Changed("stcpr") {
+		edits = append(edits, skyenvEdit{Key: "STCPRPORT", Value: formatSkyenvInt(autoSetStcprPort)})
+	}
+	if cmd.Flags().Changed("sudph") {
+		edits = append(edits, skyenvEdit{Key: "SUDPHPORT", Value: formatSkyenvInt(autoSetSudphPort)})
+	}
+	if cmd.Flags().Changed("lan-dmsg-port") {
+		edits = append(edits, skyenvEdit{Key: "LANDMSGPORT", Value: formatSkyenvInt(autoSetLanDmsgPort)})
+	}
+	if cmd.Flags().Changed("lan-dmsg-public") {
+		edits = append(edits, skyenvEdit{Key: "LANDMSGPUBLIC", Value: formatSkyenvString(autoSetLanDmsgPublic)})
+	}
+	if cmd.Flags().Changed("dmsgpty-pks") {
+		edits = append(edits, skyenvEdit{Key: "DMSGPTYPKS", Value: formatSkyenvBashArray(autoSetDmsgptyPks)})
+	}
+	addBool("VPNSERVER", "vpnserver", "no-vpnserver", autoSetVpnServer, autoSetNoVpnServer)
+	addBool("PROXYSERVER", "proxyserver", "no-proxyserver", autoSetProxyServer, autoSetNoProxyServer)
+	addBool("SKYCHAT", "skychat", "no-skychat", autoSetSkychat, autoSetNoSkychat)
+	addBool("DMSGWEB", "dmsgweb", "no-dmsgweb", autoSetDmsgweb, autoSetNoDmsgweb)
+	addBool("SKYNETWEB", "skynetweb", "no-skynetweb", autoSetSkynetweb, autoSetNoSkynetweb)
+	if cmd.Flags().Changed("disable-public-autoconn") {
+		edits = append(edits, skyenvEdit{Key: "DISABLEPUBLICAUTOCONN", Value: formatSkyenvBool(autoSetDisablePubAuto)})
+	}
+	return edits
 }
 
 // resolvedConfig captures the answers autoconfig derives from the
@@ -100,13 +214,40 @@ Mode is selected by PKGENV/USRENV in the env file:
   neither set            → falls back to PKGENV when run as root,
                            USRENV otherwise.`,
 	Hidden: true,
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		if os.Getenv("NOAUTOCONFIG") == "true" {
 			fmt.Println("autoconfiguration disabled. to configure and start skywire run: skywire autoconfig")
 			os.Exit(0)
 		}
 
 		msg2("Configuring skywire")
+
+		// Apply any operator-requested skywire.conf edits before
+		// the rest of autoconfig sources the file. Each `--flag`
+		// rewrites the corresponding env line in place (uncomment +
+		// new value), preserving every other line. The subsequent
+		// `cli config gen` invocation reads the updated file via
+		// SKYENV so the new values take effect on the same run.
+		//
+		// Resolves the skyenv path FIRST so we know which file to
+		// edit — same lookup the downstream stages use, just lifted
+		// up to do the edits first.
+		if edits := collectSkyenvEdits(cmd); len(edits) > 0 {
+			pre := resolveConfig()
+			target := pre.skyenvPath
+			if target == "" {
+				target = defaultSkyenvPath()
+			}
+			if err := updateSkyenvFile(target, edits); err != nil {
+				fmt.Printf("%s>>> FATAL:%s could not update %s: %v\n", colorRed, colorReset, target, err)
+				os.Exit(1)
+			}
+			editedKeys := make([]string, 0, len(edits))
+			for _, e := range edits {
+				editedKeys = append(editedKeys, e.Key)
+			}
+			msg3(fmt.Sprintf("Updated %s%s%s: %s", colorPurple, target, colorReset, strings.Join(editedKeys, " ")))
+		}
 
 		versionOut, err := exec.Command("skywire", "-v").Output()
 		if err == nil {
