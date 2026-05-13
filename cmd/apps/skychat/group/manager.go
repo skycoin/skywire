@@ -60,6 +60,10 @@ type Manager struct {
 	mu       sync.RWMutex
 	sessions map[string]*Session
 
+	// heartbeatInterval is the owner-emit cadence forwarded to every
+	// new owner-role Session via openLocked. Zero disables.
+	heartbeatInterval time.Duration
+
 	// reconnect loop state — see runReconnectLoop.
 	reconnectCtx    context.Context
 	reconnectCancel context.CancelFunc
@@ -87,7 +91,20 @@ type ManagerConfig struct {
 	MySK    cipher.SecKey
 	DataDir string
 	Logger  *logging.Logger
+
+	// HeartbeatInterval, when > 0, makes every owner-role session
+	// opened by this Manager emit a periodic no-op heartbeat probe.
+	// Members observe these to detect a silently-stalled CXO
+	// subscriber inside ~3×interval. Zero disables (default for
+	// callers that don't set it; for visor production set to 30s).
+	HeartbeatInterval time.Duration
 }
+
+// DefaultHeartbeatInterval is the recommended interval an owner
+// session emits its heartbeat probe. 30s gives a stall-detection
+// window of ~90s without measurable wire overhead on a typical
+// group.
+const DefaultHeartbeatInterval = 30 * time.Second
 
 // NewManager constructs a manager. Does not open any sessions; call
 // Resume to bring up everything in the store.
@@ -106,15 +123,16 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		log = logging.MustGetLogger("skychat-group-manager")
 	}
 	return &Manager{
-		store:          cfg.Store,
-		dmsgC:          cfg.DmsgC,
-		myPK:           cfg.MyPK,
-		mySK:           cfg.MySK,
-		dataDir:        cfg.DataDir,
-		log:            log,
-		portAlloc:      defaultPortAlloc,
-		sessions:       make(map[string]*Session),
-		reconnectState: make(map[string]*reconnectState),
+		store:             cfg.Store,
+		dmsgC:             cfg.DmsgC,
+		myPK:              cfg.MyPK,
+		mySK:              cfg.MySK,
+		dataDir:           cfg.DataDir,
+		log:               log,
+		portAlloc:         defaultPortAlloc,
+		sessions:          make(map[string]*Session),
+		heartbeatInterval: cfg.HeartbeatInterval,
+		reconnectState:    make(map[string]*reconnectState),
 	}, nil
 }
 
@@ -388,6 +406,15 @@ const reconnectInterval = 30 * time.Second
 // threshold is the bridge until that lands.
 const subscriberStaleThreshold = 5 * time.Minute
 
+// heartbeatStaleThreshold is the lag threshold applied when a session
+// has been observing owner heartbeats. Set to ~3× the recommended
+// emit interval (30s) so a single missed heartbeat doesn't trigger
+// a reconnect — but two consecutive misses do, surfacing real stalls
+// inside ~90s. Tight relative to subscriberStaleThreshold because the
+// heartbeat signal is predictable: a healthy group emits regardless
+// of whether anyone is chatting.
+const heartbeatStaleThreshold = 90 * time.Second
+
 // reconnectAttemptTimeout bounds the per-Connect call so the
 // reconnect loop can't get stuck on a single slow group while other
 // pending groups starve.
@@ -480,14 +507,48 @@ func (m *Manager) detectStaleActive(ctx context.Context) {
 		if r.Role != RoleMember || r.Status != StatusActive {
 			continue
 		}
-		if r.LastMessageAt.IsZero() {
-			continue
+		// Prefer the heartbeat signal when available — it ticks on a
+		// fixed cadence regardless of chat traffic, so a quiet-but-
+		// healthy group doesn't trip stale-detect. Fall back to
+		// last_message_at lag only when no heartbeat has been seen
+		// (older owner deployments without heartbeat publication, or
+		// a freshly-rejoined member that hasn't observed one yet).
+		m.mu.RLock()
+		sess := m.sessions[r.ID]
+		m.mu.RUnlock()
+		var (
+			lag       time.Duration
+			signal    string
+			haveProbe bool
+		)
+		if sess != nil {
+			if lhb := sess.LastHeartbeat(); !lhb.IsZero() {
+				lag = now.Sub(lhb)
+				signal = "heartbeat"
+				haveProbe = true
+			}
 		}
-		if now.Sub(r.LastMessageAt) <= subscriberStaleThreshold {
+		if !haveProbe {
+			if r.LastMessageAt.IsZero() {
+				continue
+			}
+			lag = now.Sub(r.LastMessageAt)
+			signal = "last_message_at"
+		}
+		// Pick the appropriate threshold. Heartbeats are predictable
+		// (~30s cadence) so we can be aggressive — 3× interval ≈ 90s.
+		// Chat-traffic lag is unpredictable; keep the conservative
+		// 5-minute threshold to avoid spurious demotes on quiet groups.
+		threshold := subscriberStaleThreshold
+		if signal == "heartbeat" {
+			threshold = heartbeatStaleThreshold
+		}
+		if lag <= threshold {
 			continue
 		}
 		m.log.WithField("id", r.ID).
-			WithField("lag", now.Sub(r.LastMessageAt).Round(time.Second).String()).
+			WithField("lag", lag.Round(time.Second).String()).
+			WithField("signal", signal).
 			Warn("group: active session stale; demoting to pending for reconnect")
 		if err := m.store.SetStatus(r.ID, StatusPending); err != nil {
 			m.log.WithError(err).WithField("id", r.ID).
@@ -765,12 +826,13 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	h := m.onMessage
 	m.onMessageMu.RUnlock()
 	sess, err := Open(Config{
-		MyPK:    m.myPK,
-		MySK:    m.mySK,
-		Record:  r,
-		DmsgC:   m.dmsgC,
-		DataDir: m.dataDir,
-		Logger:  m.log,
+		MyPK:              m.myPK,
+		MySK:              m.mySK,
+		Record:            r,
+		DmsgC:             m.dmsgC,
+		DataDir:           m.dataDir,
+		Logger:            m.log,
+		HeartbeatInterval: m.heartbeatInterval,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("group: open %s: %w", r.ID, err)
