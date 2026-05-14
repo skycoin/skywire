@@ -374,6 +374,29 @@ type Session struct {
 	// (inboxDedupCap) so a pathological input can't grow the map.
 	// Initialized to a non-nil empty set at Open; never replaced.
 	dedup *recentSet
+
+	// peerLastInboundNs is the per-peerSub liveness signal. Each entry
+	// is bumped (to time.Now().UnixNano()) on every observable inbound
+	// event from THAT specific peer's onUpdate fan-out, including a
+	// successful per-peer Connect (which is positive evidence the
+	// peerSub is attached).
+	//
+	// Why per-peer in addition to the session-level lastInboundNs:
+	// detectStaleAndReconnect uses peer-granular liveness to decide
+	// which peerSubs to reconnect. The session-level signal aggregates
+	// across all peers, so one chatty peer keeps the session "fresh"
+	// indefinitely and masks a silent peer's failed peerSub from the
+	// reconnect machinery. The per-peer map closes that gap — staleness
+	// is detected and a reconnect is kicked per peerSub, independent of
+	// how active the others are.
+	//
+	// Key set is populated alongside Session.peerSubs: every time a
+	// peerSub is created (newSession/openMember/openOwner/SetAllowlist),
+	// a parallel atomic.Int64 is added here. Removed in SetAllowlist
+	// when peerSubs[pk] is deleted. Guarded by Session.peerSubsMu (the
+	// same lock that protects peerSubs) — readers grab a snapshot under
+	// RLock and access the *atomic.Int64 entries lock-free.
+	peerLastInboundNs map[cipher.PubKey]*atomic.Int64
 }
 
 // subscriberStaleThreshold is defined in manager.go (it's used by
@@ -532,8 +555,9 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		cfg: cfg, port: cfg.Record.Port, pub: pub, log: log,
 		members:  append([]cipher.PubKey(nil), cfg.Record.Members...),
 		relayCtx: ctx, relayCancel: cancel,
-		peerSubs: make(map[cipher.PubKey]*treestore.Subscriber),
-		dedup:    newRecentSet(inboxDedupCap),
+		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
+		peerLastInboundNs: make(map[cipher.PubKey]*atomic.Int64),
+		dedup:             newRecentSet(inboxDedupCap),
 	}
 
 	// Per-member subscribers: each non-owner-self member publishes
@@ -560,7 +584,8 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 			continue
 		}
 		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
-		ps.OnUpdate(s.onUpdate)
+		s.peerLastInboundNs[peerPK] = new(atomic.Int64)
+		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
 		s.peerSubs[peerPK] = ps
 	}
 	if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
@@ -668,8 +693,9 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	sub.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log,
-		peerSubs: make(map[cipher.PubKey]*treestore.Subscriber),
-		dedup:    newRecentSet(inboxDedupCap),
+		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
+		peerLastInboundNs: make(map[cipher.PubKey]*atomic.Int64),
+		dedup:             newRecentSet(inboxDedupCap),
 	}
 
 	// Federated mode: subscribe to every OTHER member's feed,
@@ -691,7 +717,8 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		// (admin-relayed copies of other members' sends) — see the
 		// openOwner equivalent for the full rationale.
 		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
-		ps.OnUpdate(s.onUpdate)
+		s.peerLastInboundNs[peerPK] = new(atomic.Int64)
+		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
 		s.peerSubs[peerPK] = ps
 	}
 	// Seed lastInboundNs from the persisted LastMessageAt so a
@@ -751,6 +778,7 @@ func (s *Session) Connect() error {
 	}
 	s.peerSubsMu.RUnlock()
 	peerSuccessCount := 0
+	now := time.Now().UnixNano()
 	for pk, ps := range peers {
 		if err := ps.Connect(pk); err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
@@ -758,6 +786,16 @@ func (s *Session) Connect() error {
 			continue
 		}
 		peerSuccessCount++
+		// Bump per-peer lastInbound on every successful per-peer
+		// Connect. detectStaleAndReconnect uses this peer-granular
+		// signal so a silent peer's failed peerSub gets retried even
+		// when other peers keep the session-wide lastInbound fresh.
+		s.peerSubsMu.RLock()
+		a := s.peerLastInboundNs[pk]
+		s.peerSubsMu.RUnlock()
+		if a != nil {
+			a.Store(now)
+		}
 	}
 	// Only declare the session "fresh" (bump lastInboundNs) if SOME
 	// subscriber side actually connected. Member-role sessions also
@@ -796,6 +834,107 @@ func (s *Session) LastInbound() time.Time {
 		return time.Time{}
 	}
 	return time.Unix(0, ns).UTC()
+}
+
+// PeerLastInbound returns the per-peerSub last-inbound timestamp for
+// the given peer PK. Zero time = no inbound ever observed from that
+// peer (peerSub is either never-connected or silent since startup).
+// Returns zero time if pk isn't a known peer of this session.
+//
+// Used by Manager.detectStaleAndReconnect to detect a silent peer's
+// failed peerSub even when other peers in the session are chatty
+// enough to keep the session-level LastInbound() fresh. Pre-this-
+// method the reconnect machinery only saw the session aggregate and
+// silently-failing peerSubs stayed in that state indefinitely.
+func (s *Session) PeerLastInbound(pk cipher.PubKey) time.Time {
+	s.peerSubsMu.RLock()
+	a, ok := s.peerLastInboundNs[pk]
+	s.peerSubsMu.RUnlock()
+	if !ok {
+		return time.Time{}
+	}
+	ns := a.Load()
+	if ns == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, ns).UTC()
+}
+
+// PeerPKs returns the set of peer PKs this session has a peerSub for
+// (i.e., every group member other than self that this visor follows).
+// The slice is a snapshot — safe to iterate after the function returns
+// without holding the session's internal lock. Sorted for determinism
+// so callers iterating the slice produce stable behavior (mostly
+// helpful in tests and structured-log output).
+func (s *Session) PeerPKs() []cipher.PubKey {
+	s.peerSubsMu.RLock()
+	defer s.peerSubsMu.RUnlock()
+	out := make([]cipher.PubKey, 0, len(s.peerSubs))
+	for k := range s.peerSubs {
+		out = append(out, k)
+	}
+	// Sort by hex form for determinism; cipher.PubKey doesn't have a
+	// natural ordering otherwise. The ~5 byte allocations per call are
+	// trivial vs. the reconnect machinery's work.
+	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	return out
+}
+
+// ReconnectPeer re-runs Connect on a single peerSub. Counterpart to
+// Session.Connect which retries every peer in one shot. The
+// detectStaleAndReconnect loop uses this for per-peer recovery so a
+// stale silent peer doesn't trigger redundant Connect retries on
+// already-healthy peers (and the per-peer success/failure attribution
+// keeps the manager's backoff state cleaner).
+//
+// On success: bumps the peer's per-peer lastInbound timestamp.
+// Connect is positive evidence the peerSub is attached, so the
+// liveness window for THIS peer restarts here.
+//
+// On failure: returns the underlying Subscriber.Connect error
+// verbatim; caller decides whether to log, retry, or apply backoff.
+// peerLastInboundNs is NOT bumped, so the staleness signal stays
+// honest.
+//
+// No-op + nil error if pk isn't a known peer of this session.
+func (s *Session) ReconnectPeer(pk cipher.PubKey) error {
+	s.peerSubsMu.RLock()
+	ps := s.peerSubs[pk]
+	a := s.peerLastInboundNs[pk]
+	s.peerSubsMu.RUnlock()
+	if ps == nil {
+		return nil
+	}
+	if err := ps.Connect(pk); err != nil {
+		return err
+	}
+	if a != nil {
+		a.Store(time.Now().UnixNano())
+	}
+	return nil
+}
+
+// makePeerOnUpdate wraps Session.onUpdate with per-peer lastInbound
+// bookkeeping. Each peerSub gets its own wrapper at registration time
+// (in newSession/openOwner/openMember/SetAllowlist) so onUpdate-firing
+// preserves per-peer attribution that the treestore.UpdateCallback
+// signature otherwise discards.
+//
+// The peer's atomic.Int64 is captured by closure; the wrapper is
+// safe-for-concurrent-use because atomic.Int64.Store handles
+// concurrency itself.
+func (s *Session) makePeerOnUpdate(pk cipher.PubKey) treestore.UpdateCallback {
+	return func(events []treestore.UpdateEvent) {
+		if len(events) > 0 {
+			s.peerSubsMu.RLock()
+			a := s.peerLastInboundNs[pk]
+			s.peerSubsMu.RUnlock()
+			if a != nil {
+				a.Store(time.Now().UnixNano())
+			}
+		}
+		s.onUpdate(events)
+	}
 }
 
 // IsSubscriberAlive reports whether the subscriber side of this
@@ -914,6 +1053,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 		if _, keep := desired[pk]; !keep {
 			_ = ps.Close() //nolint:errcheck,gosec
 			delete(s.peerSubs, pk)
+			delete(s.peerLastInboundNs, pk)
 		}
 	}
 	// Add new peers.
@@ -928,13 +1068,16 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 			continue
 		}
 		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
-		ps.OnUpdate(s.onUpdate)
+		s.peerLastInboundNs[pk] = new(atomic.Int64)
+		ps.OnUpdate(s.makePeerOnUpdate(pk))
 		// Best-effort connect — same semantics as Connect's per-peer
 		// retry: a peer that's offline now will be picked up on the
 		// next reconnect tick once the publisher comes back.
 		if err := ps.Connect(pk); err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Debug("group: SetAllowlist: peer-sub Connect failed; will retry on next reconnect tick")
+		} else if a := s.peerLastInboundNs[pk]; a != nil {
+			a.Store(time.Now().UnixNano())
 		}
 		s.peerSubs[pk] = ps
 	}
