@@ -163,11 +163,19 @@ Table of Contents
 
 ## Commands and Subcommands
 
-Documentation is available in the command documentation README:
+Command-line documentation lives at [docs/skywire/](docs/skywire/README.md).
+The tree is generated from the live cobra command structure — one
+markdown file per command, mirroring the subcommand hierarchy. Run the
+hidden `skywire doc` subcommand (or `make doc-gen`) from the repo root
+to regenerate it after CLI changes.
 
-* [skywire](cmd/skywire/README.md)
-* [skywire cli](cmd/skywire-cli/README.md)
-* [skywire visor](cmd/skywire-visor/README.md)
+Common entry points:
+
+* [skywire](docs/skywire/README.md) — umbrella binary
+* [skywire cli](docs/skywire/cli/README.md) — operator CLI
+* [skywire visor](docs/skywire/visor/README.md) — visor daemon
+* [skywire svc](docs/skywire/svc/README.md) — deployment services
+* [skywire dmsg](docs/skywire/dmsg/README.md) — DMSG sub-binaries
 
 ## Visor Native Applications
 
