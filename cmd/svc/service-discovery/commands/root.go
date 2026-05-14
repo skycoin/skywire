@@ -105,7 +105,7 @@ GET /security/nonces/{pk}
 }
 
 func init() {
-	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. Generate with `skywire cli config gen --sd -o /etc/skywire/service-discovery.json`.\n\r")
+	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. Generate with: skywire cli config gen --sd -o /etc/skywire/service-discovery.json\n\r")
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9098", "address to bind to\n\r")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
@@ -117,7 +117,8 @@ func init() {
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "dmsg secret key\n\r")
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
 	// 5 min is ~3.3× the 90s client refresh interval
 	// (skyenv.ServiceDiscUpdateInterval), giving safe margin for one
 	// or two dropped refreshes without expiring a live entry.

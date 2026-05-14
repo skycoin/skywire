@@ -55,7 +55,7 @@ var (
 )
 
 func init() {
-	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. When set, fields below come from the config file. Generate one with `skywire cli config gen --tpd -o /etc/skywire/transport-discovery.json`.\n\r")
+	RootCmd.Flags().StringVarP(&configPath, "config", "c", "", "path to JSON config file. When set, fields below come from the config file. Generate one with: skywire cli config gen --tpd -o /etc/skywire/transport-discovery.json\n\r")
 	RootCmd.Flags().StringVarP(&addr, "addr", "a", ":9091", "address to bind to\n\r")
 	RootCmd.Flags().StringVarP(&metricsAddr, "metrics", "m", "", "address to bind metrics API to")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprof", "", "address to bind pprof debug server (e.g. localhost:6060)")
@@ -70,7 +70,8 @@ func init() {
 	RootCmd.Flags().BoolVar(&testEnvironment, "test-environment", false, "distinguished between prod and test environment")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
-	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsgPort", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
+	RootCmd.Flags().SetNormalizeFunc(cmdutil.LegacySvcFlagNormalizer)
 	RootCmd.Flags().StringVar(&dmsgServerType, "dmsg-server-type", "", "type of dmsg server on dmsghttp handler")
 	RootCmd.Flags().StringVar(&storeDataPath, "store-data-path", tpd.DefaultStoreDataPath, "path for bandwidth backup files\n\r")
 	RootCmd.Flags().StringVar(&mode, "mode", "", "listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)")
