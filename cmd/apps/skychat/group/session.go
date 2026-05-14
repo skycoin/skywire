@@ -87,6 +87,34 @@ const MessagePathPrefix = "msgs"
 // to consume both kinds of leaves from the same feed.
 const MirrorPathPrefix = "mirror"
 
+// dedupKey reduces a leaf path to its content-identity suffix —
+// the canonical "<senderPK>/<ts>/<seq>" tail that both the primary
+// (msgs/<...>) and any admin's mirror copy (mirror/<...>) share.
+// Two leaves with the same dedup key are byte-equal in body too,
+// because the mirror code path copies the original body verbatim
+// (deriveMirrorPath only swaps the path prefix).
+//
+// Returns "" for paths under neither prefix — those are non-message
+// leaves (heartbeats live under MessagePathPrefix; future subtrees
+// like config / state would land here) and shouldn't participate in
+// the inbox dedup window.
+//
+// Used in two places:
+//   - onUpdate: skip handler fan-out + lastInboundNs bookkeeping on
+//     a leaf this session has already delivered to the user
+//   - ReplayHistoryThrough: collapse duplicate (primary + N mirror)
+//     copies of the same source message during startup replay so a
+//     resumed session doesn't see the same message N+1 times across
+//     the admin-mirrored sources
+func dedupKey(path string) string {
+	for _, prefix := range []string{MessagePathPrefix + "/", MirrorPathPrefix + "/"} {
+		if strings.HasPrefix(path, prefix) {
+			return path[len(prefix):]
+		}
+	}
+	return ""
+}
+
 // deriveMirrorPath returns the mirror-prefixed equivalent of an
 // originally msgs-prefixed leaf path. The second return is false
 // when origPath is NOT a msgs/ path — used to skip mirror writes
@@ -105,6 +133,75 @@ func deriveMirrorPath(origPath string) (string, bool) {
 		return "", false
 	}
 	return MirrorPathPrefix + "/" + origPath[len(prefix):], true
+}
+
+// inboxDedupCap bounds the per-session recent-message-set used to
+// suppress duplicate deliveries when the same source message
+// arrives via multiple paths (the original sender's msgs/<...> AND
+// one or more admin mirrors of the same leaf). Sized for typical
+// chat-app workloads: ~10msg/min from each of 30 members for ~30
+// minutes fits comfortably; bursts past it lose dedup only for the
+// oldest entries, which are vanishingly unlikely to re-appear at
+// that point. The cap is per-Session, so a visor with N groups uses
+// N * inboxDedupCap entries in the worst case — still trivially
+// small (~64KB at N=30, 32-byte keys).
+const inboxDedupCap = 1024
+
+// recentSet is a fixed-capacity FIFO membership cache. Add returns
+// true the first time a key is observed, false on every subsequent
+// observation while the key is still in the window. Eviction is
+// strict insertion-order — adequate for the dedup use case because
+// duplicates of a given source leaf arrive within seconds of each
+// other (N admins all observe the same source on their peerSubs at
+// roughly the same time and re-publish under MirrorPathPrefix),
+// not minutes apart, so the FIFO window comfortably covers the
+// duplicate-arrival burst.
+//
+// Not LRU: an LRU would re-promote a key on every duplicate Add,
+// keeping hot but useless dedup entries alive. FIFO bounds the
+// memory and naturally ages out entries even when the same source
+// leaf keeps re-appearing (which it shouldn't, but we don't want
+// pathological inputs to defeat the bound).
+//
+// Concurrency: protected by an internal mutex because peerSubs each
+// run their own update goroutine and may call Add concurrently for
+// the same Session.
+type recentSet struct {
+	mu    sync.Mutex
+	cap   int
+	order []string
+	idx   map[string]struct{}
+}
+
+func newRecentSet(capacity int) *recentSet {
+	if capacity <= 0 {
+		capacity = inboxDedupCap
+	}
+	return &recentSet{cap: capacity, idx: make(map[string]struct{}, capacity)}
+}
+
+// Add inserts key and returns true if it was not already present.
+// Returns false (without re-inserting) when key is a duplicate
+// within the current window. Empty keys are always treated as new
+// (returns true) — callers should skip Add entirely for paths that
+// shouldn't dedup (non-message subtrees).
+func (r *recentSet) Add(key string) bool {
+	if key == "" {
+		return true
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, ok := r.idx[key]; ok {
+		return false
+	}
+	r.idx[key] = struct{}{}
+	r.order = append(r.order, key)
+	if len(r.order) > r.cap {
+		evict := r.order[0]
+		r.order = r.order[1:]
+		delete(r.idx, evict)
+	}
+	return true
 }
 
 // MessageHandler is invoked on every newly-arrived group message
@@ -268,6 +365,15 @@ type Session struct {
 	// nil for member-role sessions or when HeartbeatInterval=0.
 	heartbeatCancel context.CancelFunc
 	heartbeatWG     sync.WaitGroup
+
+	// dedup tracks the recent set of (sender, ts, seq) suffixes
+	// observed across every peerSub. Used by onUpdate +
+	// ReplayHistoryThrough to suppress duplicate deliveries when the
+	// same source leaf arrives via the primary msgs/<...> path AND
+	// one or more admin mirror/<...> copies. Capacity is bounded
+	// (inboxDedupCap) so a pathological input can't grow the map.
+	// Initialized to a non-nil empty set at Open; never replaced.
+	dedup *recentSet
 }
 
 // subscriberStaleThreshold is defined in manager.go (it's used by
@@ -427,6 +533,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		members:  append([]cipher.PubKey(nil), cfg.Record.Members...),
 		relayCtx: ctx, relayCancel: cancel,
 		peerSubs: make(map[cipher.PubKey]*treestore.Subscriber),
+		dedup:    newRecentSet(inboxDedupCap),
 	}
 
 	// Per-member subscribers: each non-owner-self member publishes
@@ -434,6 +541,14 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 	// every member's feed directly so the relay-hop becomes
 	// vestigial. Subs are created here but not Connect'd; Connect
 	// dials them all on the operator-controlled timing.
+	//
+	// Subscribed prefixes: msgs/ (the peer's own sends) AND mirror/
+	// (admin-relayed copies of OTHER peers' sends, present when this
+	// peer is itself an admin). Consuming both means an owner that's
+	// offline doesn't take the group with it — any admin's mirror
+	// of the offline member's leaves keeps the message reachable.
+	// onUpdate's dedup set collapses the (primary + N mirror copies)
+	// fan-in to a single delivery per source leaf.
 	for _, peerPK := range cfg.Record.Members {
 		if peerPK == cfg.MyPK {
 			continue
@@ -444,7 +559,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 				Warn("group: owner peer-sub create failed; group still usable via legacy relay path")
 			continue
 		}
-		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
 		ps.OnUpdate(s.onUpdate)
 		s.peerSubs[peerPK] = ps
 	}
@@ -550,10 +665,11 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		_ = pub.Close() //nolint:errcheck
 		return nil, fmt.Errorf("group: Open member: attach subscriber: %w", err)
 	}
-	sub.SetPrefixes([]string{MessagePathPrefix})
+	sub.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log,
 		peerSubs: make(map[cipher.PubKey]*treestore.Subscriber),
+		dedup:    newRecentSet(inboxDedupCap),
 	}
 
 	// Federated mode: subscribe to every OTHER member's feed,
@@ -571,7 +687,10 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 				Warn("group: member peer-sub create failed; will still receive owner-relayed messages")
 			continue
 		}
-		ps.SetPrefixes([]string{MessagePathPrefix})
+		// Subscribe to both primary (peer's own sends) AND mirror
+		// (admin-relayed copies of other members' sends) — see the
+		// openOwner equivalent for the full rationale.
+		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
 		ps.OnUpdate(s.onUpdate)
 		s.peerSubs[peerPK] = ps
 	}
@@ -776,7 +895,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 				Warn("group: SetAllowlist: peer-sub create failed; will retry on next allowlist change")
 			continue
 		}
-		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
 		ps.OnUpdate(s.onUpdate)
 		// Best-effort connect — same semantics as Connect's per-peer
 		// retry: a peer that's offline now will be picked up on the
@@ -1327,7 +1446,27 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 		value []byte
 	}
 	var leaves []leaf
-	walk := func(path string, value []byte) bool {
+	// Walk both prefixes on every source: the local publisher carries
+	// our own sends under msgs/ plus (if this visor is an admin) any
+	// mirror/ copies of peers' leaves; peer subscribers may carry
+	// mirror leaves authored by the peer when the peer is an admin.
+	// Dedup is applied by canonical suffix below, so a leaf reachable
+	// through multiple paths produces a single replayed message.
+	seen := make(map[string]struct{})
+	// Walk callbacks always return true — replay is unconditionally
+	// "drain everything available"; we filter duplicates after the
+	// fact rather than short-circuiting the iterator. Returning false
+	// here would tell the treestore to stop walking, which is the
+	// wrong semantics for dedup-by-content (the duplicate may still
+	// have unique siblings in the same subtree).
+	walk := func(path string, value []byte) bool { //nolint:unparam // Walk requires bool return; we never short-circuit on purpose
+		key := dedupKey(path)
+		if key != "" {
+			if _, dup := seen[key]; dup {
+				return true
+			}
+			seen[key] = struct{}{}
+		}
 		// Defensive copy: tree-store Walk may reuse the value
 		// slice between callback invocations.
 		v := make([]byte, len(value))
@@ -1335,11 +1474,15 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 		leaves = append(leaves, leaf{path: path, value: v})
 		return true
 	}
+	walkBoth := func(walker func(prefix string, f func(path string, value []byte) bool)) {
+		walker(MessagePathPrefix, walk)
+		walker(MirrorPathPrefix, walk)
+	}
 	if s.pub != nil {
-		s.pub.Walk(MessagePathPrefix, walk)
+		walkBoth(s.pub.Walk)
 	}
 	if s.sub != nil {
-		s.sub.Walk(MessagePathPrefix, walk)
+		walkBoth(s.sub.Walk)
 	}
 	s.peerSubsMu.RLock()
 	peerSubs := make([]*treestore.Subscriber, 0, len(s.peerSubs))
@@ -1348,7 +1491,7 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 	}
 	s.peerSubsMu.RUnlock()
 	for _, ps := range peerSubs {
-		ps.Walk(MessagePathPrefix, walk)
+		walkBoth(ps.Walk)
 	}
 	if len(leaves) == 0 {
 		return
@@ -1438,6 +1581,19 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 	for _, ev := range events {
 		if ev.Value == nil {
 			continue
+		}
+		// Cross-source dedup: collapse the (primary + N mirror copies)
+		// fan-in to one delivery per source leaf. The dedup key is the
+		// canonical path suffix shared by msgs/X/Y/Z and mirror/X/Y/Z,
+		// so whichever copy arrives first wins; subsequent copies are
+		// skipped silently. recentSet.Add returns false for already-
+		// seen keys. dedupKey returns "" for non-message subtrees,
+		// which recentSet.Add treats as always-new — those flow through
+		// to handler invocation as before (heartbeats / config / etc.).
+		if key := dedupKey(ev.Path); key != "" {
+			if !s.dedup.Add(key) {
+				continue
+			}
 		}
 		var msg Message
 		if err := json.Unmarshal(ev.Value, &msg); err != nil {
