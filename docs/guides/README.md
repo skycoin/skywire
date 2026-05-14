@@ -1,7 +1,8 @@
 # Operator Guides
 
 How-to documentation for skywire operators. Conceptual overview and
-the latest install methods stay in the repo-root [README](../../README.md);
+the latest install methods stay in the repo-root
+[README](https://github.com/skycoin/skywire/blob/develop/README.md);
 this directory holds the in-depth setup/usage guides.
 
 For per-command help text (flags, usage, examples), see the generated
