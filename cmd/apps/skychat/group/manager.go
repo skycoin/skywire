@@ -605,12 +605,27 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 // treated as stale — we never saw any peer leaf arrive, so a
 // reconnect is warranted.
 //
-// Granularity note: LastInbound is per-session, not per-peerSub.
-// For owner sessions with multiple peers, a single chatty peer
-// keeps LastInbound fresh and masks the staleness of any silent
-// peer's peerSub. A future refinement would track per-peer
-// liveness; for now the per-session signal is strictly better
-// than the pre-fix "no reconnect coverage for owners at all".
+// Granularity: staleness is checked PER-PEER. Session.PeerPKs() is
+// the canonical list of peerSubs; for each, Session.PeerLastInbound()
+// returns the per-peer liveness signal. Any peer whose individual
+// peerSub is stale triggers a reconnect attempt, independent of how
+// active the other peers are. This closes the gap where one chatty
+// peer's bumps to the session-wide LastInbound() masked a silent
+// peer's failed peerSub from the reconnect machinery.
+//
+// Reconnect path: per-stale-peer, ReconnectPeer(pk) runs one peerSub
+// Connect under reconnectAttemptTimeout. The session-level
+// reconnectShouldAttempt backoff still gates the whole session (we
+// don't churn on a wedged group), so a peer that fails repeatedly
+// inherits the session's backoff schedule rather than getting its
+// own. Per-peer backoff would be a follow-up refinement if we see
+// e.g. one bad peer perpetually triggering retries.
+//
+// Fallback: if a session has no peerSubs (legacy owner-only members
+// where federated send hasn't kicked in, or owner sessions on
+// pre-federated binaries), fall back to the session-wide
+// LastInbound + Session.Connect path so those visors keep the
+// reconnect coverage they had pre-this-change.
 func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
@@ -636,31 +651,65 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 		if sess == nil {
 			continue
 		}
-		last := sess.LastInbound()
-		var lag time.Duration
-		var reason string
-		if last.IsZero() {
-			lag = subscriberStaleThreshold + time.Second // forces the lag > threshold branch
-			reason = "no inbound seen"
-		} else {
-			lag = now.Sub(last)
-			reason = "last_inbound lag"
-		}
-		if lag <= subscriberStaleThreshold {
+		peers := sess.PeerPKs()
+		if len(peers) == 0 {
+			// Fallback to session-wide signal when this session
+			// doesn't have peerSubs (legacy code paths). Same
+			// semantics as before this change.
+			last := sess.LastInbound()
+			var lag time.Duration
+			var reason string
+			if last.IsZero() {
+				lag = subscriberStaleThreshold + time.Second
+				reason = "no inbound seen"
+			} else {
+				lag = now.Sub(last)
+				reason = "last_inbound lag"
+			}
+			if lag <= subscriberStaleThreshold {
+				continue
+			}
+			m.log.WithField("id", r.ID).
+				WithField("lag", lag.Round(time.Second).String()).
+				WithField("reason", reason).
+				WithField("status", string(r.Status)).
+				Debug("group: session stale; kicking reconnect (legacy session-wide path)")
+			if !m.reconnectShouldAttempt(r.ID, now) {
+				continue
+			}
+			m.tryReconnect(ctx, sess, r.ID)
 			continue
 		}
-		m.log.WithField("id", r.ID).
-			WithField("lag", lag.Round(time.Second).String()).
-			WithField("reason", reason).
-			WithField("status", string(r.Status)).
-			Debug("group: session stale; kicking reconnect")
-		// Honor the per-group backoff schedule and don't churn on
-		// permanent failures. reconnectShouldAttempt returns false
-		// while the previous attempt's backoff window is still open.
+		// Per-peer staleness check. Collect the stale peers under
+		// one read of the clock so the iteration sees a consistent
+		// "now". One reconnect attempt per stale peer per tick.
+		var stalePeers []cipher.PubKey
+		for _, pk := range peers {
+			last := sess.PeerLastInbound(pk)
+			var lag time.Duration
+			if last.IsZero() {
+				lag = subscriberStaleThreshold + time.Second
+			} else {
+				lag = now.Sub(last)
+			}
+			if lag > subscriberStaleThreshold {
+				stalePeers = append(stalePeers, pk)
+			}
+		}
+		if len(stalePeers) == 0 {
+			continue
+		}
+		// Honor the per-group backoff so a wedged group doesn't
+		// churn the reconnect machinery once per tick per peer.
 		if !m.reconnectShouldAttempt(r.ID, now) {
 			continue
 		}
-		m.tryReconnect(ctx, sess, r.ID)
+		m.log.WithField("id", r.ID).
+			WithField("stale_peers", len(stalePeers)).
+			WithField("total_peers", len(peers)).
+			WithField("status", string(r.Status)).
+			Debug("group: per-peer stale; kicking per-peer reconnects")
+		m.tryReconnectPeers(ctx, sess, r.ID, stalePeers)
 	}
 }
 
@@ -700,6 +749,73 @@ func (m *Manager) tryReconnect(ctx context.Context, sess *Session, id string) {
 		return
 	}
 	m.reconnectRecordFailure(id, err)
+}
+
+// tryReconnectPeers runs one ReconnectPeer attempt per stale peer
+// in sequence. Each attempt is bounded by reconnectAttemptTimeout so
+// a single wedged peer can't block the others. Treats per-peer
+// success and failure independently: clears session-wide failure
+// state only when at least one peer reconnected successfully,
+// because that's positive evidence the session as a whole is
+// recovering; records a failure otherwise so the per-group backoff
+// schedule engages and we don't churn on a wedged group.
+//
+// Why sequential rather than parallel: each peer Connect can pull a
+// CXO node mutex (#2599 fixed the publisher-side mutex; the
+// subscriber side still serializes per node), and parallel attempts
+// would just queue up behind each other anyway. Sequential keeps
+// the log output readable and the worst-case wall time at
+// N × reconnectAttemptTimeout, which is acceptable for typical
+// group sizes (≤ 10 members).
+func (m *Manager) tryReconnectPeers(ctx context.Context, sess *Session, id string, peers []cipher.PubKey) {
+	type result struct{ err error }
+	successes := 0
+	var lastErr error
+	for _, pk := range peers {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+		m.log.WithField("id", id).WithField("peer", pk.String()).
+			Debug("group: reconnect: attempting peer subscribe")
+		done := make(chan result, 1)
+		pkLocal := pk
+		go func() {
+			done <- result{err: sess.ReconnectPeer(pkLocal)}
+		}()
+		var err error
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(reconnectAttemptTimeout):
+			err = fmt.Errorf("group: reconnect-peer %s: timed out after %s", pk.String(), reconnectAttemptTimeout)
+		case r := <-done:
+			err = r.err
+		}
+		if err == nil {
+			successes++
+			m.log.WithField("id", id).WithField("peer", pk.String()).
+				Info("group: reconnect: peer subscribe restored")
+			continue
+		}
+		lastErr = err
+		m.log.WithError(err).WithField("id", id).WithField("peer", pk.String()).
+			Debug("group: reconnect: peer subscribe failed")
+	}
+	if successes > 0 {
+		m.reconnectMu.Lock()
+		delete(m.reconnectState, id)
+		m.reconnectMu.Unlock()
+		if sErr := m.store.SetStatus(id, StatusActive); sErr != nil {
+			m.log.WithError(sErr).WithField("id", id).
+				Warn("group: reconnect: SetStatus active failed")
+		}
+		return
+	}
+	if lastErr != nil {
+		m.reconnectRecordFailure(id, lastErr)
+	}
 }
 
 // reconnectShouldAttempt returns false when the per-group nextAttempt
