@@ -114,6 +114,43 @@ func (r *RPC) GroupAddMember(req *GroupAddMemberRequest, out *GroupInfo) (err er
 	return nil
 }
 
+// GroupPromoteAdminRequest is the input to RPC.GroupPromoteAdmin /
+// GroupDemoteAdmin. Shape mirrors GroupAddMemberRequest.
+type GroupPromoteAdminRequest struct {
+	ID string        `json:"id"`
+	PK cipher.PubKey `json:"pk"`
+}
+
+// GroupPromoteAdmin grants roster authority to PK on the named group.
+// Callable by any existing admin on this visor.
+func (r *RPC) GroupPromoteAdmin(req *GroupPromoteAdminRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupPromoteAdmin", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupPromoteAdmin(req.ID, req.PK)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupDemoteAdmin revokes roster authority from PK on the named
+// group. Refuses to demote the founder (immutable recovery anchor).
+func (r *RPC) GroupDemoteAdmin(req *GroupPromoteAdminRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupDemoteAdmin", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupDemoteAdmin(req.ID, req.PK)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
 // GroupSend publishes one message into the named group's feed.
 // Owner-side only in v1.
 func (r *RPC) GroupSend(req *GroupSendArgs, _ *struct{}) (err error) {

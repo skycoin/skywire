@@ -32,11 +32,17 @@ import (
 // GroupInfo is the public summary of a chat group, returned by
 // GroupList and GroupGet.
 type GroupInfo struct {
-	ID            string              `json:"id"`
-	Name          string              `json:"name"`
-	OwnerPK       cipher.PubKey       `json:"owner_pk"`
-	Port          uint16              `json:"port"`
-	Mode          skychatgroup.Mode   `json:"mode"`
+	ID      string            `json:"id"`
+	Name    string            `json:"name"`
+	OwnerPK cipher.PubKey     `json:"owner_pk"`
+	Port    uint16            `json:"port"`
+	Mode    skychatgroup.Mode `json:"mode"`
+	// Admins is the per-record roster-authority set. Mirrors
+	// Record.Admins exactly — founder is implicitly admin and is
+	// surfaced explicitly here after EnsureFounderInAdmins runs on
+	// the store read path, so RPC clients can render the admin list
+	// without having to OR in OwnerPK themselves.
+	Admins        []cipher.PubKey     `json:"admins,omitempty"`
 	Members       []cipher.PubKey     `json:"members"`
 	Role          skychatgroup.Role   `json:"role"`
 	Status        skychatgroup.Status `json:"status"`
@@ -205,6 +211,38 @@ func (v *Visor) GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error) {
 	return toInfo(r), nil
 }
 
+// GroupPromoteAdmin adds pk to the group's Admins set. Callable by
+// any existing admin (founder implicitly, or any explicit Admins
+// entry). Returns the updated info — surfacing Admins so the caller
+// can confirm the grant landed.
+func (v *Visor) GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupInfo{}, ErrGroupingDisabled
+	}
+	r, err := mgr.PromoteAdmin(id, pk)
+	if err != nil {
+		return GroupInfo{}, err
+	}
+	return toInfo(r), nil
+}
+
+// GroupDemoteAdmin removes pk from the group's explicit Admins set.
+// Refuses to demote the founder (immutable recovery anchor). Other
+// admins can demote each other freely — the assumption is that admins
+// trust each other by virtue of having been promoted.
+func (v *Visor) GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupInfo{}, ErrGroupingDisabled
+	}
+	r, err := mgr.DemoteAdmin(id, pk)
+	if err != nil {
+		return GroupInfo{}, err
+	}
+	return toInfo(r), nil
+}
+
 // GroupSend publishes a message into the named group's feed.
 // Owners write directly; members open a dmsg stream to the owner's
 // relay listener and submit, the owner re-publishes with sender
@@ -309,6 +347,7 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 		OwnerPK:       r.OwnerPK,
 		Port:          r.Port,
 		Mode:          r.Mode,
+		Admins:        append([]cipher.PubKey(nil), r.Admins...),
 		Members:       append([]cipher.PubKey(nil), r.Members...),
 		Role:          r.Role,
 		Status:        r.Status,

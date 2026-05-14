@@ -9,7 +9,9 @@
 //	skywire cli skychat group info    <group-id>
 //	skywire cli skychat group invite  <group-id>           # re-emits the invite link
 //	skywire cli skychat group join    <invite-link>
-//	skywire cli skychat group add     <group-id> <pk>      # owner: extend allowlist
+//	skywire cli skychat group add     <group-id> <pk>      # admin: extend allowlist
+//	skywire cli skychat group promote <group-id> <pk>      # admin: grant roster authority
+//	skywire cli skychat group demote  <group-id> <pk>      # admin: revoke roster authority (founder is immutable)
 //	skywire cli skychat group send    <group-id> <text>    # owner only in v1
 //	skywire cli skychat group listen  [--since RFC3339]    # poll inbox, stream
 //	skywire cli skychat group leave   <group-id>           # member side
@@ -72,8 +74,9 @@ func init() {
 
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
-		groupJoinCmd, groupAddCmd, groupSendCmd, groupListenCmd,
-		groupHistoryCmd, groupLeaveCmd, groupDeleteCmd,
+		groupJoinCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd,
+		groupSendCmd, groupListenCmd, groupHistoryCmd,
+		groupLeaveCmd, groupDeleteCmd,
 	)
 	RootCmd.AddCommand(groupCmd)
 }
@@ -228,6 +231,65 @@ var groupAddCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		human := fmt.Sprintf("group %s now has %d members\n", args[0], len(info.Members))
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+var groupPromoteCmd = &cobra.Command{
+	Use:   "promote <group-id> <pk>",
+	Short: "Admin: grant roster authority (add/remove members, issue invites) to PK",
+	Long: `Promote PK to admin on the named group.
+
+Any existing admin (founder, or any visor previously promoted) can run
+this. Idempotent: promoting an already-admin returns the current
+record without writing. The promoted PK gains roster authority from
+the moment this call returns on this visor; other visors learn of the
+change through subsequent roster gossip (admin-mirror feeds; follow-up
+PR).`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var pk cipher.PubKey
+		if err := pk.Set(args[1]); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid pk %q: %w", args[1], err))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupPromoteAdmin(args[0], pk)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		human := fmt.Sprintf("group %s now has %d admin(s)\n", args[0], len(info.Admins))
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+var groupDemoteCmd = &cobra.Command{
+	Use:   "demote <group-id> <pk>",
+	Short: "Admin: revoke roster authority from PK (founder cannot be demoted)",
+	Long: `Demote PK on the named group.
+
+Any existing admin can run this. The founder (the original group
+creator, immutable per Record.OwnerPK) cannot be demoted — that's
+the recovery anchor that keeps a group reachable even if every other
+admin's visor is offline. Demoting a non-admin PK is a no-op
+(idempotent).`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var pk cipher.PubKey
+		if err := pk.Set(args[1]); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid pk %q: %w", args[1], err))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupDemoteAdmin(args[0], pk)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		human := fmt.Sprintf("group %s now has %d admin(s)\n", args[0], len(info.Admins))
 		internal.PrintOutput(cmd.Flags(), info, human)
 	},
 }
