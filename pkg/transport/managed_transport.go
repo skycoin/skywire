@@ -28,7 +28,16 @@ import (
 )
 
 const (
-	logWriteInterval = time.Second * 3
+	// logWriteInterval is how often the per-transport in-memory log
+	// entry is flushed to the manager's LogStore. The log store is
+	// in-memory (a simple map) so the flush is cheap, but at 460+
+	// transports on a hub visor a 3-second per-transport tick
+	// dominates runtime-scheduler CPU even when traffic is idle —
+	// most ticks are no-ops because logMod() reports nothing changed.
+	// 15s gives the same effective freshness for the survey/RPC
+	// consumers that read these entries while cutting wakeup pressure
+	// 5x.
+	logWriteInterval = time.Second * 15
 )
 
 // Records number of managedTransports.
@@ -82,6 +91,21 @@ type ManagedTransport struct {
 
 	latencyStats LatencyStats
 	latencyMx    sync.RWMutex
+
+	// pingReadyAtNanos is the Unix-nanos timestamp captured on the
+	// first tickPing call after the transport reaches the ready state
+	// (mt.transport != nil). Zero means not-yet-ready. Used by
+	// tickPing to schedule the one-time first ping and to gate the
+	// fallback grace period without needing a per-transport timer
+	// goroutine. atomic so the manager's central maintenance loop can
+	// touch it lock-free.
+	pingReadyAtNanos atomic.Int64
+	// pingFallbackFired is set to true after the RSN-latency fallback
+	// has been invoked once, so the maintenance loop never invokes it
+	// twice for the same transport. CompareAndSwap ensures
+	// invokeLatencyFallback is called exactly once even under
+	// concurrent ticks.
+	pingFallbackFired atomic.Bool
 
 	// manager back-reference for latency fallback (RSN-based measurement
 	// when remote visor doesn't support transport-level ping).
@@ -222,12 +246,28 @@ func (mt *ManagedTransport) GetBandwidth() *BandwidthData {
 }
 
 // transportPingInterval is how often a transport-level ping is sent.
-// 30 seconds balances latency freshness against overhead (15 bytes per ping/pong).
-const transportPingInterval = 30 * time.Second
+// 60 seconds balances latency freshness against overhead (15 bytes per
+// ping/pong). Bumped from 30s after profiling identified per-transport
+// ticker wake-ups as the dominant scheduler cost on hub visors with
+// hundreds of automatic transports — see Manager.runTransportMaintenance
+// for the centralization that replaced the per-transport ping
+// goroutine.
+const transportPingInterval = 60 * time.Second
 
 // Serve serves and manages the transport.
+//
+// Goroutine layout: one readLoop goroutine plus the Serve goroutine
+// itself, which blocks on the done channel until close fires. The
+// previous per-transport logLoop and pingLoop tickers have been
+// centralized into Manager.runTransportMaintenance — on a hub visor
+// with hundreds of automatic transports those two per-transport
+// goroutines (plus their tickers, each waking the Go scheduler every
+// 3s and 30s respectively) were the dominant runtime-scheduler cost
+// even on an otherwise idle visor. The central maintenance loop
+// walks all transports under one ticker apiece, dropping ~2*N
+// goroutines from steady state.
 func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
-	mt.wg.Add(4)
+	mt.wg.Add(2)
 	log := mt.log.
 		WithField("tp_id", mt.Entry.ID).
 		WithField("remote_pk", mt.rPK).
@@ -237,13 +277,16 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 
 	defer func() {
 		mt.close()
+		// Final flush so the LogStore reflects the last byte counts
+		// before the manager drops this transport from its map.
+		mt.recordLog()
 		log.WithField("remaining_tps", atomic.AddInt32(&mTpCount, -1)).
 			Debug("Stopped serving.")
+		mt.wg.Done()
 	}()
 
 	go mt.readLoop(readCh)
-	go mt.pingLoop()
-	mt.logLoop()
+	<-mt.done
 }
 
 // readLoop continuously reads packets from the underlying transport
@@ -320,75 +363,53 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	}
 }
 
-// logLoop continuously stores transport data in the log entry,
-// in case there is data to store
-// This is a blocking call
-func (mt *ManagedTransport) logLoop() {
-	defer func() {
-		mt.recordLog()
-		mt.wg.Done()
-		mt.log.Debug("Stopped log loop")
-	}()
-	// Ensure logs tp logs are up to date before closing.
-	logTicker := time.NewTicker(logWriteInterval)
-	for {
-		select {
-		case <-mt.done:
-			logTicker.Stop()
-			return
-		case <-logTicker.C:
-			mt.recordLog()
-		}
-	}
-}
-
 // transportPingGracePeriod is how long we wait for a transport-level pong
 // before falling back to RSN-based latency measurement. This covers the
 // case where the remote visor is running old code that doesn't support
 // transport ping frames.
 const transportPingGracePeriod = 90 * time.Second
 
-// pingLoop periodically sends transport-level pings to measure latency.
-// The first ping is sent as soon as the transport is ready. If no pong
-// is received within the grace period, falls back to RSN-based measurement
-// for backward compatibility with old visors.
-func (mt *ManagedTransport) pingLoop() {
-	defer mt.wg.Done()
-
-	// Wait for the transport to be ready.
-	select {
-	case <-mt.done:
+// tickPing is invoked once per transportPingInterval by the manager's
+// central maintenance goroutine. It encapsulates the state machine the
+// per-transport pingLoop used to run on its own goroutine:
+//
+//  1. Skip if the transport is not yet ready (mt.transport == nil).
+//  2. On the first tick that finds the transport ready, stamp
+//     pingReadyAtNanos atomically and fire the initial ping.
+//  3. Otherwise send the periodic ping.
+//  4. After the grace period elapses with no pong-derived latency,
+//     invoke the RSN latency fallback exactly once.
+//
+// Returns quickly on non-ready transports so the maintenance loop can
+// walk all transports cheaply each tick.
+func (mt *ManagedTransport) tickPing() {
+	if mt.getTransport() == nil {
 		return
-	case <-mt.transportCh:
-		if mt.getTransport() == nil {
-			return
-		}
 	}
 
-	// Send the first ping immediately.
+	// First time observed ready — stamp + send first ping. CAS makes
+	// the stamp idempotent in case the maintenance loop ever overlaps
+	// with itself (a precaution; in the current design only one
+	// maintenance goroutine drives ticks).
+	if mt.pingReadyAtNanos.CompareAndSwap(0, time.Now().UnixNano()) {
+		mt.sendTransportPing()
+		return
+	}
+
 	mt.sendTransportPing()
 
-	// After a grace period, check if transport-level ping produced latency.
-	// If not, the remote doesn't support it — fall back to RSN measurement.
-	fallbackTimer := time.NewTimer(transportPingGracePeriod)
-	defer fallbackTimer.Stop()
-	fallbackFired := false
-
-	ticker := time.NewTicker(transportPingInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-mt.done:
-			return
-		case <-ticker.C:
-			mt.sendTransportPing()
-		case <-fallbackTimer.C:
-			if !fallbackFired && mt.GetLatency() == 0 && mt.manager != nil {
-				mt.log.Debug("No transport pong received, falling back to RSN latency measurement")
-				mt.manager.invokeLatencyFallback(mt.rPK, mt)
-				fallbackFired = true
-			}
-		}
+	// Fallback: if grace period has elapsed and no pong-derived
+	// latency arrived, fall back to RSN-based measurement (for peers
+	// running old code without transport-ping support). CompareAndSwap
+	// ensures we hand off to invokeLatencyFallback exactly once.
+	readyAt := time.Unix(0, mt.pingReadyAtNanos.Load())
+	if !mt.pingFallbackFired.Load() &&
+		time.Since(readyAt) > transportPingGracePeriod &&
+		mt.GetLatency() == 0 &&
+		mt.manager != nil &&
+		mt.pingFallbackFired.CompareAndSwap(false, true) {
+		mt.log.Debug("No transport pong received, falling back to RSN latency measurement")
+		mt.manager.invokeLatencyFallback(mt.rPK, mt)
 	}
 }
 
