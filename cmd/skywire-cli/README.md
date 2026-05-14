@@ -20,14 +20,19 @@ cli
 │       ├── vpnc
 │       └── vpns
 ├── dmsg
+│   ├── cat
+│   │   └── listen
 │   ├── connect-all
 │   ├── curl
+│   ├── iperf
+│   │   └── listen
 │   ├── probe
 │   ├── pty
 │   │   ├── list
 │   │   ├── start
 │   │   ├── ui
 │   │   └── url
+│   ├── scp
 │   ├── sessions
 │   └── set-sessions
 ├── gotop
@@ -75,7 +80,8 @@ cli
 │   ├── find
 │   ├── groups
 │   ├── rm
-│   └── rsn-stats
+│   ├── rsn-stats
+│   └── trace
 ├── sd
 ├── skychat
 │   ├── listen
@@ -93,6 +99,8 @@ cli
 │   ├── start
 │   ├── status
 │   └── stop
+├── ssh
+├── sshd
 ├── survey
 ├── svc
 │   ├── ar
@@ -142,11 +150,13 @@ cli
 │       └── graph
 ├── util
 │   ├── edit
+│   ├── foreach
 │   ├── got
 │   │   ├── dl
 │   │   ├── head
 │   │   └── req
 │   ├── jq
+│   ├── nc
 │   └── serve
 ├── visor
 │   ├── app
@@ -163,6 +173,7 @@ cli
 │   │   ├── start
 │   │   └── stop
 │   ├── dmsg-servers
+│   ├── doctor
 │   ├── go
 │   ├── halt
 │   ├── hv
@@ -192,7 +203,8 @@ cli
 │   ├── reward
 │   ├── start
 │   ├── user
-│   └── ver
+│   ├── ver
+│   └── whois
 └── vpn
     ├── list
     ├── server
@@ -232,6 +244,8 @@ Apps:
   proxy                   Skysocks client
   skychat                 Skychat messaging
   skynet                  Skynet port forwarding
+  ssh                     Open a remote shell or exec a command on a peer visor (ssh-equivalent)
+  sshd                    Run a direct-TCP dmsgpty server (ssh-equivalent daemon)
   vpn                     VPN client
 
 Networking:
@@ -549,12 +563,99 @@ Usage:
   skywire cli dmsg
 
 Available Commands:
+  cat                      Splice stdio with a remote dmsg/skynet stream
   connect-all              Open a dmsg session to every known server
   curl                     Fetch data over dmsg
+  iperf                    Measure throughput / RTT between two dmsg endpoints
   probe                    Probe a remote visor's dmsg port reachability
   pty                      Interact with remote visors
+  scp                      Copy a single file between this machine and a dmsgscp host
   sessions                 List dmsg servers each visor dmsg client is connected to
   set-sessions             Persist dmsg.sessions_count and connect-all immediately
+```
+
+### skywire cli dmsg cat
+
+```
+DMSG cat — open a stream to a remote peer and splice the
+local process's stdio with it. stdin flows to the peer, the peer's
+output flows to stdout. Exits when either side EOFs.
+
+Examples:
+  echo hello | skywire cli dmsg cat <pk>:1234
+  skywire cli dmsg cat <pk>:1234 < payload.bin > response.bin
+
+Transport selection (--transport):
+  - auto    (default) try the local visor's VisorCat RPC first so
+            the stream rides whatever transport the visor has up.
+            Falls back to standalone dmsg when no visor is reachable
+            on --rpc.
+  - dmsg    standalone dmsg path — the CLI bootstraps its own
+            dmsg.Client and dials peer:port directly. Works without
+            a local visor.
+  - skynet  routes the stream over the skywire router via the
+            visor's VisorCat RPC. Requires a local visor with
+            appnet TypeSkynet registered.
+
+Identity: --sk gives the standalone dmsg client a stable PK so the
+remote's whitelist can authorize it. Without --sk you get a fresh
+random PK each invocation. Identity only matters for the standalone
+dmsg path; the VisorCat RPC uses the visor's own PK.
+
+Usage:
+  skywire cli dmsg cat <pk>:<port>
+
+Available Commands:
+  listen                  Accept one inbound stream and splice stdio with it
+
+Flags:
+      --transport string   transport: auto (try visor first, fallback dmsg) | dmsg | skynet (default "auto")
+  -t, --timeout duration   dial / accept timeout (default 1m0s)
+      --routes int         number of parallel skynet mux routes (skynet transport only; 0 or 1 = single route) (default 1)
+  -v, --verbose            print connection info to stderr
+  -s, --sk cipher.SecKey   secret key for the standalone dmsg client fallback (random if unset) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --rpc string         local visor RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
+
+Global Flags:
+      --json   print output as JSON
+```
+
+#### skywire cli dmsg cat listen
+
+```
+DMSG cat listen — bind both a dmsg and a skynet listener on
+<port>, authorize the first inbound peer against the dmsgscp
+whitelist, then splice the local process's stdio with the accepted
+stream. The first stream to arrive on either transport wins; the
+other listener is closed.
+
+Auth is identical to dmsgscp's: the peer's PK must be in the visor's
+Dmsgscp.Whitelist (or, when empty, Dmsgpty.Whitelist), plus any
+configured hypervisors, plus the visor's own PK.
+
+One-shot: the listener exits after the first stream completes — a
+persistent listener feeding multiple peers into the same stdout
+would interleave bytes meaninglessly.
+
+Examples:
+  skywire cli dmsg cat listen 1234 > captured.bin
+  cat payload.bin | skywire cli dmsg cat listen 1234
+
+This command requires a local visor on --rpc; there is no standalone
+fallback because listening requires the dmsgscp whitelist.
+
+Usage:
+  skywire cli dmsg cat listen <port>
+
+Flags:
+  -t, --timeout duration   accept timeout — how long to wait for an inbound stream (default 5m0s)
+  -v, --verbose            print connection info to stderr
+      --rpc string         local visor RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
+
+Global Flags:
+      --json   print output as JSON
 ```
 
 ### skywire cli dmsg connect-all
@@ -612,6 +713,78 @@ Flags:
   -a, --agent string       HTTP user agent (default "skywire-cli/v1.3.46-0")
 ```
 
+### skywire cli dmsg iperf
+
+```
+dmsg iperf — pump a zero-filled buffer from memory through a
+dmsg stream for the configured duration and print the achieved
+throughput. Counterpart to `dmsg iperf listen` which drains
+the receiving side.
+
+The output cadence matches classic iperf: periodic rolling-sample
+lines (one per --interval) followed by a final totals line. Bytes
+flow as raw stream content — no framing, no envelope — so the
+measurement is as close to the underlying transport as possible.
+
+Examples:
+  skywire cli dmsg iperf <pk>:6000 --duration 30s
+  skywire cli dmsg iperf <pk>:6000 --duration 5s --interval 500ms --block-kb 256
+
+Pair with `dmsg iperf listen <port>` on the peer first.
+
+This is standalone-dmsg only — the CLI bootstraps its own
+dmsg.Client. --sk pins the local identity so the listener's
+whitelist (if any) can authorize it.
+
+Usage:
+  skywire cli dmsg iperf <pk>:<port>
+
+Available Commands:
+  listen                  Accept one inbound iperf stream and report received throughput
+
+Flags:
+  -d, --duration duration   how long to pump bytes before stopping (e.g. 5s, 30s, 2m) (default 10s)
+  -i, --interval duration   emit a rolling-sample line every interval; zero disables intermediate samples (default 1s)
+      --block-kb int        per-Write block size in KiB; larger amortizes write overhead, smaller surfaces stalls faster (default 64)
+  -v, --verbose             print connection-setup info to stderr (target PK/port, transport, dial time)
+      --rtt                 latency mode: send small probes + wait for echo, report RTT distribution + jitter. Requires peer in --echo mode.
+      --rtt-rate int        probes per second in --rtt mode (default 100; rate is approximate, not paced) (default 100)
+  -s, --sk cipher.SecKey    secret key for the standalone dmsg client (random if unset) (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -l, --loglvl string       [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
+
+Global Flags:
+      --json   print output as JSON
+```
+
+#### skywire cli dmsg iperf listen
+
+```
+dmsg iperf listen — accept one inbound stream on <port>, drain
+it into a black-hole sink, and report the received throughput in the
+same shape as the client side.
+
+One-shot: exits after the first stream EOFs. To run repeated tests
+restart from a shell loop. Accept window is 10m0s (configurable in
+source; long enough for an operator to set up the listener, switch
+terminals, and start the client).
+
+This is standalone-dmsg only — the CLI bootstraps its own dmsg.Client.
+--sk pins the local PK so the client side knows what to dial.
+
+Usage:
+  skywire cli dmsg iperf listen <port>
+
+Flags:
+      --echo                echo received bytes back to the peer instead of draining to /dev/null (pairs with client's --rtt)
+  -i, --interval duration   emit a rolling-sample line every interval; zero disables intermediate samples (default 1s)
+  -v, --verbose             print connection-setup info to stderr (accepted PK, transport, accept time)
+  -s, --sk cipher.SecKey    secret key for the standalone dmsg client (random if unset) (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -l, --loglvl string       [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
+
+Global Flags:
+      --json   print output as JSON
+```
+
 ### skywire cli dmsg probe
 
 ```
@@ -637,13 +810,22 @@ Examples:
   skywire cli dmsg probe -s <pk> 136     # standalone (no visor needed)
   skywire cli dmsg probe -s <pk> 80      # check if log server is up
 
+Use --ports to sweep multiple ports in one invocation:
+  skywire cli dmsg probe <pk> --ports 22,80,136,1000-1010
+  skywire cli dmsg probe -s <pk> --ports 7,8,22,80,136 --parallel 16
+
 Usage:
   skywire cli dmsg probe <public-key> <port>
 
-
-
 Flags:
-  -s, --standalone   use a standalone dmsg client (no running visor needed)
+      --parallel int           parallel probes when --ports is set (caps simultaneous DialStreams) (default 8)
+      --ports string           multi-port sweep — comma list with optional ranges, e.g. '22,80,1000-1010,5000'. When set, the positional <port> arg is ignored and one row per port is printed.
+  -s, --standalone             use a standalone dmsg client (no running visor needed)
+  -v, --verbose                stream visor's dmsg-layer logs to stderr while probing (single-port mode only)
+      --verbose-level string   minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
+
+Global Flags:
+      --json   print output as JSON
 ```
 
 ### skywire cli dmsg pty
@@ -720,6 +902,55 @@ Flags:
   -i, --input string   read from specified config file
   -p, --pkg            read from /opt/skywire/skywire.json
   -v, --visor string   public key of visor to connect to
+```
+
+### skywire cli dmsg scp
+
+```
+DMSG scp — copy a single file between this machine and a remote
+visor's dmsgscp Host. Exactly one of <src>/<dst> must carry a
+`PK:path` prefix (66-char hex public key + colon + path).
+
+Examples:
+  skywire cli dmsg scp ./local.bin <pk>:remote.bin       (upload)
+  skywire cli dmsg scp <pk>:remote.bin ./local.bin       (download)
+
+The remote path is interpreted relative to the host's configured
+rootDir — absolute paths and `..` are rejected by the wire
+parser. No size cap — large transfers stream through the underlying
+transport without buffering the whole payload in memory.
+
+Transport selection (--transport):
+  - auto    (default) try the local visor's VisorSCP RPC first
+            so the transfer rides whatever transport the visor
+            already has up. Falls back to standalone dmsg when no
+            visor is reachable on --rpc.
+  - dmsg    standalone dmsg path — the CLI bootstraps its own
+            dmsg.Client and dials peer:port directly. Works without
+            a local visor.
+  - skynet  routes the transfer over the skywire router via the
+            visor's VisorSCP RPC. Requires a local visor with
+            appnet TypeSkynet registered.
+
+Identity: --sk gives the standalone dmsg client a stable PK so the
+host's whitelist can authorize it. Without --sk you get a fresh
+random PK each invocation and the host will reject you unless its
+whitelist has been wide-opened. Identity only matters for the
+standalone dmsg path; the VisorSCP RPC uses the visor's own PK.
+
+Usage:
+  skywire cli dmsg scp <src> <dst>
+
+Flags:
+  -s, --sk cipher.SecKey   secret key for the standalone dmsg client (random if unset) (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -p, --port uint16        remote dmsg port for the dmsgscp host (default 23)
+  -t, --timeout duration   transfer timeout (includes dial + payload) (default 5m0s)
+      --transport string   transport: auto (try visor first, fallback dmsg) | dmsg | skynet (default "auto")
+      --rpc string         local visor RPC server address (env: SKYWIRE_RPC). Used for skynet / auto transports. (default "localhost:3435")
+  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
+
+Global Flags:
+      --json   print output as JSON
 ```
 
 ### skywire cli dmsg sessions
@@ -1617,6 +1848,7 @@ Available Commands:
   groups                  List active route groups
   rm                      Remove routing rule
   rsn-stats               Show embedded Route Setup Node request statistics
+  trace                   Skywire-route traceroute
 
 Flags:
   -n, --nrid         display the next available route id
@@ -1822,6 +2054,53 @@ Flags:
       --reset   reset all counters before reading (captures a fresh window)
 
 Global Flags:
+      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+```
+
+### skywire cli route trace
+
+```
+Skywire-route traceroute.
+
+Walks the forward route the local visor would take to reach <pk> and
+pings each intermediate visor over dmsg, reporting RTT per hop. Same
+shape as Unix traceroute: hop number, intermediate PK, RTT.
+
+The route is fetched from the route finder (--rf URL, default
+http://rf.skywire.skycoin.com). Intermediate ping uses the
+local visor's DmsgPing RPC so the intermediates don't need to be on
+the route to <pk> — only reachable on dmsg (which they must be to
+serve as a route hop in the first place).
+
+Examples:
+  skywire cli route trace <pk>                # default 3 samples per hop
+  skywire cli route trace <pk> --count 10     # 10 samples; report best RTT
+  skywire cli route trace <pk> --max 8 -q     # up to 8 hops, table-only output
+  skywire cli route trace <pk> --json         # JSON for scripting
+
+Output:
+  HOP  PK                                  RTT       NOTES
+  1    <intermediate-1-pk>                 2.3ms
+  2    <intermediate-2-pk>                 4.7ms
+  3    <dst-pk>                            8.1ms     destination
+
+Usage:
+  skywire cli route trace <pk>
+
+Flags:
+  -n, --min uint16         minimum hops requested from route finder (default 1)
+  -x, --max uint16         maximum hops requested from route finder (default 5)
+  -t, --timeout duration   route-finder request timeout (default 10s)
+  -a, --rf string          route finder URL (default "http://rf.skywire.skycoin.com")
+  -c, --count int          ping samples per hop (best-of returned as the per-hop RTT) (default 3)
+  -q, --quiet              only print the per-hop table; suppress the route-discovery preamble on stderr
+      --no-cxo             skip CXO subscriber-cache step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --no-dmsg            skip direct DMSG HTTP step
+      --no-http            skip direct HTTP fallback step
+
+Global Flags:
+      --json         print output as JSON
       --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
 ```
 
@@ -2200,6 +2479,104 @@ Flags:
 
 Global Flags:
       --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+```
+
+## skywire cli ssh
+
+```
+skywire cli ssh — OpenSSH-equivalent client over skywire identity.
+
+Dials a peer's direct-TCP dmsgpty endpoint (the surface exposed by
+'skywire cli sshd' or by 'dmsgpty.ssh_listen' in the visor config),
+runs an XK noise handshake pinning the server's PK, and proxies an
+interactive shell or a one-shot exec.
+
+Compared to OpenSSH:
+  ssh's host-key check  ↔ noise XK pins the server PK from the
+                          destination URL
+  authorized_keys       ↔ dmsgpty whitelist on the server side
+  password / pubkey     ↔ client PK alone, derived from the local
+                          visor's SK by default (override with --sk
+                          or --no-visor-key)
+  TCP :22 default       ↔ TCP :2022 default (--port to override)
+  ssh -t / ssh <cmd>    ↔ no positional command → interactive pty
+                          positional command after '--' → exec mode
+
+Examples:
+  # Interactive shell on a peer visor at 1.2.3.4:2022
+  skywire cli ssh 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c@1.2.3.4:2022
+
+  # One-shot exec
+  skywire cli ssh 0323...@1.2.3.4:2022 -- systemctl status skywire
+
+  # Use a pinned client SK instead of the visor's
+  skywire cli ssh 0323...@1.2.3.4:2022 --sk <hex> -- whoami
+
+The underlying transport is identical to 'cli dmsg pty exec/start
+--via tcp://<pk>@<host>:<port>'; this command is the discoverable
+ssh-shaped alias over that path.
+
+Usage:
+  skywire cli ssh <pk>@<host>[:<port>] [-- <command> [args...]]
+
+Flags:
+  -s, --sk cipher.SecKey   local client SK for the noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --no-visor-key       don't borrow the local visor's SK from /opt/skywire/skywire.json — use --sk or a random one instead
+  -e, --env stringArray    extra env var KEY=VALUE; repeatable; exec mode only
+  -t, --timeout string     max command duration in exec mode (e.g. 30s, 2m); host-side cap is 5m (default "30s")
+      --no-pty             force exec mode even when no command is given (rarely useful — defaults to interactive when no command, exec when command is present, matching ssh's behavior)
+  -p, --port string        default port when the destination omits one (e.g. 'ssh <pk>@host' resolves to <pk>@host:<port>) (default "2022")
+
+Global Flags:
+      --json   print output as JSON
+```
+
+## skywire cli sshd
+
+```
+skywire cli sshd — OpenSSH-equivalent server over skywire identity.
+
+Binds a TCP port and serves the dmsgpty protocol over it, gated by an
+XK noise handshake against this server's PK + a whitelist of client
+PKs. The protocol underneath is identical to the dmsg-overlay
+dmsgpty-host; sshd is the discoverable, ssh-shaped surface over the
+direct-TCP entry point.
+
+Use this when:
+  - You want a peer-to-peer remote shell that doesn't require running
+    a full skywire visor on the server (or that runs ALONGSIDE one,
+    sharing the visor's PK without contending for the dmsg-disc entry).
+  - You have direct IP reachability to the server and want lower
+    latency than the dmsg overlay path.
+  - You're scripting ssh-like access into your skywire fleet.
+
+Use the visor's embedded dmsgpty.ssh_listen field instead when:
+  - You want the same port served by your already-running visor.
+  - You want the dmsg-overlay path AND the TCP path on the same
+    process (sshd is TCP-only by design).
+
+Examples:
+  # Run on :2022 with two PKs allowed, identity from default visor config:
+  skywire cli sshd --listen :2022 --allow 02f9...,03d1...
+
+  # Use a non-default visor config for the server identity:
+  skywire cli sshd --listen :2022 --sk-from-visor /etc/skywire/skywire.json --allow 02f9...
+
+  # Use a standalone dmsgpty config.json for both identity AND whitelist:
+  skywire cli sshd --listen :2022 --conf /etc/skywire/dmsgpty.json
+
+Usage:
+  skywire cli sshd
+
+Flags:
+  -l, --listen string          TCP listen address (e.g. :2022, 0.0.0.0:2022, 127.0.0.1:2022) (default ":2022")
+      --sk-from-visor string   path to a skywire-config.json whose .sk we use as the server identity; empty means try the default /opt/skywire/skywire.json
+      --allow strings          comma-separated client PKs that may connect (authorized_keys equivalent); merged with --conf's whitelist if both are set
+  -c, --conf string            optional dmsgpty config.json with whitelist + identity; --allow + --sk-from-visor override matching fields
+      --log-level string       log level: trace|debug|info|warn|error (default "info")
+
+Global Flags:
+      --json   print output as JSON
 ```
 
 ## skywire cli survey
@@ -3412,8 +3789,10 @@ Usage:
 
 Available Commands:
   edit                    Terminal text editor (femto)
+  foreach                 Run a templated shell command against each target in parallel
   got                     HTTP client with concurrent downloads
   jq                      jq-like JSON processor (gojq)
+  nc                      Plain TCP/UDP netcat (no skywire transport)
   serve                   Serve static files over HTTP
 ```
 
@@ -3426,6 +3805,61 @@ Usage:
   skywire cli util edit [file]
 
 
+```
+
+### skywire cli util foreach
+
+```
+Run a shell command against each target — public key, alias, or
+arbitrary token — substituting placeholders in the command template.
+
+Placeholders in the command template:
+  {pk}    the current target string verbatim
+  {i}     the target's 0-indexed position in the input list
+
+Targets input forms:
+  - Comma-separated:   '02f9...,03d1...,0323...'
+  - File:              '@peers.txt'  (one target per line; '#' comments OK)
+  - Mixed:             '02f9...,@more.txt,0323...'
+
+Examples:
+  cli util foreach '02f9...,03d1...' 'cli dmsg ping --dmsg {pk}'
+  cli util foreach @peers.txt 'cli visor doctor --rpc {pk}:3435'
+  cli util foreach @peers.txt 'cli dmsg probe {pk} 80' --parallel 16
+  cli util foreach 02f9... 'cli skychat send -t {pk} -m hi'
+
+Output (default, headers on):
+  === [0] 02f9...cd6c ===
+  <subprocess stdout/stderr>
+  exit=0 dur=42ms
+
+Output with --quiet: only subprocess stdout/stderr, no headers,
+exit-status footer.
+
+--json: emits an NDJSON record per target with id/target/stdout/
+stderr/exit_code/duration_ms fields. Useful for downstream
+log-aggregation.
+
+The subprocess is launched as: <shell> -c <expanded-command>
+so shell features (pipes, redirections, env) all work as expected.
+
+Exit codes:
+  0 — all targets exited 0
+  1 — at least one target exited non-zero
+  2 — one or more targets timed out
+
+Usage:
+  skywire cli util foreach <targets> <command-template>
+
+Flags:
+  -p, --parallel int       max concurrent processes (default 4)
+  -t, --timeout duration   per-target timeout — kills the subprocess when exceeded (default 1m0s)
+      --shell string       shell binary used to run each expanded command (sh -c <cmd>) (default "/bin/sh")
+      --stop-on string     stop dispatching new work when an earlier target's process matches: 'never' (default), 'first-error' (any non-zero exit), 'first-success' (zero exit)
+  -q, --quiet              suppress per-target header lines; emit only the subprocess output (useful for | downstream consumers)
+
+Global Flags:
+      --json   print output as JSON
 ```
 
 ### skywire cli util got
@@ -3527,6 +3961,44 @@ Flags:
   -s, --slurp            read all inputs into an array
 ```
 
+### skywire cli util nc
+
+```
+nc — pure-Go netcat clone for plain TCP/UDP. Useful for
+quick reachability checks, listening for a single inbound
+connection, or piping bytes between two hosts.
+
+Modes (mutually exclusive):
+  - dial  (default)     nc <host> <port>
+  - listen (-l)         nc -l <port>             (binds on all addrs)
+                        nc -l <host> <port>      (binds on host)
+  - probe (-z)          nc -z <host> <port>      (TCP only)
+
+Examples:
+  echo hi | skywire cli util nc 127.0.0.1 9000           # dial + send
+  skywire cli util nc -l 9000 > out.bin                  # one-shot listen
+  skywire cli util nc -lk 9000 > log.bin                 # keep listening
+  skywire cli util nc -u 10.0.0.1 514 < syslog.txt       # UDP send
+  skywire cli util nc -zw 1s 10.0.0.1 22                 # TCP probe
+
+This is a pure-stdlib implementation — no skywire transports are
+involved. For dmsg / skynet streams use `skywire cli dmsg cat`.
+
+Usage:
+  skywire cli util nc [flags] [host] [port]
+
+Flags:
+  -l, --listen             listen for an inbound connection
+  -u, --udp                UDP mode (default TCP)
+  -w, --timeout duration   dial / read-stall timeout (e.g. 5s, 1m). Zero = no timeout.
+  -k, --keep-listening     keep listening after the current connection EOFs (TCP listen only; one-conn-at-a-time)
+  -z, --zero-io            zero-IO probe — TCP dial then close, exit 0 on success, 1 on failure
+  -v, --verbose            print status to stderr
+
+Global Flags:
+      --json   print output as JSON
+```
+
 ### skywire cli util serve
 
 ```
@@ -3581,9 +4053,11 @@ Subsystems:
   reward                   Show reward history for a visor
 
 Diagnostics:
+  doctor                   One-shot visor health rollup (GREEN/YELLOW/RED)
   go                       Go runtime statistics
   log                      Visor runtime logs
   ping                     Ping commands for testing visor connectivity
+  whois                    Combined TPD + UT + SD rollup for a single visor PK
 
 
 Flags:
@@ -3824,6 +4298,44 @@ Usage:
 
 
 Global Flags:
+      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+```
+
+### skywire cli visor doctor
+
+```
+One-shot visor health rollup.
+
+Composes the existing Summary RPC + a best-effort skychat /status probe
+into a single verdict (GREEN, YELLOW, or RED) plus the underlying
+breakdown that drove it. No new visor RPC surface — purely a
+client-side rollup.
+
+Examples:
+  skywire cli visor doctor             # human-readable
+  skywire cli visor doctor --json      # JSON, for alerting/automation
+  skywire cli visor doctor --skychat=  # disable the skychat probe
+
+Verdict semantics:
+  GREEN  — visor ready, all subsystems healthy, skychat (if probed) clean.
+  YELLOW — at least one degraded signal (unhealthy subsystem, accumulated
+           outbound failures, SSE drops, missing groups[] in /status).
+           Visor is still serving but operator should investigate.
+  RED    — visor RPC unreachable, not ready, or in a panic-equivalent
+           state. Page someone.
+
+Exit code mirrors the verdict: 0 GREEN, 1 YELLOW, 2 RED. Lets scripts
+gate on doctor without parsing the output.
+
+Usage:
+  skywire cli visor doctor
+
+Flags:
+      --skychat string             skychat HTTP address to probe; empty disables the skychat probe entirely (default "127.0.0.1:8001")
+      --skychat-timeout duration   per-request timeout for the skychat probe (default 2s)
+
+Global Flags:
+      --json         print output as JSON
       --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
 ```
 
@@ -4531,6 +5043,36 @@ Usage:
 
 
 Global Flags:
+      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+```
+
+### skywire cli visor whois
+
+```
+Single-PK rollup over transport-discovery, uptime-tracker, and
+service-discovery. Useful for triaging a peer from a log line, a
+chat message, or a transport-id without manually hitting three
+services.
+
+Examples:
+  skywire cli visor whois <pk>             # human-readable table
+  skywire cli visor whois <pk> --json      # full raw responses, scriptable
+
+Best-effort: each service is queried in parallel with --timeout per
+request. A service being down marks its block as 'unreachable'
+rather than failing the whole command.
+
+Usage:
+  skywire cli visor whois <pk>
+
+Flags:
+  -t, --timeout duration   per-service request timeout (default 5s)
+      --tpd string         transport-discovery URL (default "http://tpd.skywire.skycoin.com")
+      --ut string          uptime-tracker URL (default "http://ut.skywire.skycoin.com")
+      --sd string          service-discovery URL (default "http://sd.skycoin.com")
+
+Global Flags:
+      --json         print output as JSON
       --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
 ```
 
