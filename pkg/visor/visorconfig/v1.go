@@ -279,10 +279,10 @@ type SkynetWebConfig struct {
 }
 
 // SkymailBridgeConfig configures the embedded SMTP-aware bridge that
-// relays recipient envelopes of the form
-// user@<host>.<base32-pk>.skynet (mode b) or
-// user@<base32-pk>.skynet (mode a) to a peer visor's exposed SMTP
-// listener over the visor's existing dmsg session.
+// relays recipient envelopes of either shape —
+// user@<host>.<base32-pk>.skynet or user@<base32-pk>.skynet — to a
+// peer visor's exposed SMTP listener over the visor's existing
+// dmsg session.
 //
 // Structurally parallel to DmsgWebConfig — runs inside the visor
 // process, lifecycled via RPC (SetEmbeddedProxyEnabled("bridge", …)),
@@ -294,11 +294,23 @@ type SkymailBridgeConfig struct {
 	// Addr is the local TCP listener Postfix's transport_map relays
 	// to (e.g. "127.0.0.1:1025"). Default "127.0.0.1:1025".
 	Addr string `json:"addr,omitempty"`
-	// Mode selects how the recipient is rewritten before relay:
-	//   "b" (default) — strip ".<pk><suffix>" from RCPT TO. Receiver
-	//                   keeps its existing domain identity.
-	//   "a"           — forward verbatim. Receiver's Postfix must
-	//                   accept "<pk><suffix>" in mydestination.
+	// Mode selects the RCPT TO rewrite rule. Both modes accept both
+	// address shapes (host-prefixed and bare-PK); they differ only
+	// in what mode b does with the host-prefixed shape.
+	//
+	//   "b" (default) — strip-when-prefixed: ".<pk><suffix>" is
+	//                   stripped from host-prefixed envelopes before
+	//                   forwarding (so the receiver's existing
+	//                   virtual_alias chain handles delivery
+	//                   natively); bare-PK envelopes are forwarded
+	//                   verbatim. Strict superset of mode a.
+	//   "a"           — verbatim: forward both shapes unchanged.
+	//                   Receiver's Postfix must accept the full
+	//                   ".<pk><suffix>" domain in every envelope.
+	//
+	// Either way, support for the bare-PK shape requires the
+	// receiver's Postfix to know the bare-PK domain — via
+	// mydestination or virtual_alias_domains.
 	Mode string `json:"mode,omitempty"`
 	// Suffix is the TLD the bridge treats as a skywire-routed
 	// recipient. Defaults to ".skynet". Independent of the resolver's

@@ -53,12 +53,28 @@ func TestParseRecipient_ModeA_Verbatim(t *testing.T) {
 	}
 }
 
-func TestParseRecipient_ModeB_RequiresHostPart(t *testing.T) {
+// TestParseRecipient_ModeB_BarePKForwardsVerbatim covers the
+// strict-superset behavior: with no host label to strip, mode b
+// falls through to verbatim. Operators can deploy a single bridge
+// accepting both host-prefixed and bare-PK address shapes; the
+// receiver's Postfix decides which to honor via mydestination /
+// virtual_alias_domains.
+func TestParseRecipient_ModeB_BarePKForwardsVerbatim(t *testing.T) {
 	pk := mustPK(t)
 	addr := "user@" + pk.DNSLabel() + ".skynet"
 
-	if _, _, _, err := ParseRecipient(addr, ".skynet", "b"); err == nil {
-		t.Errorf("mode b accepted bare <pk>.skynet, expected error")
+	gotPK, fwd, isSkynet, err := ParseRecipient(addr, ".skynet", "b")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if !isSkynet {
+		t.Fatalf("isSkynet=false on bare-PK .skynet address")
+	}
+	if gotPK != pk {
+		t.Errorf("PK mismatch: got %x want %x", gotPK, pk)
+	}
+	if fwd != addr {
+		t.Errorf("forward = %q, want %q (verbatim — nothing to strip)", fwd, addr)
 	}
 }
 
