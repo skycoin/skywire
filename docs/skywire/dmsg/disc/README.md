@@ -27,177 +27,177 @@ HTTP Endpoints:
 Response Examples:
 
 GET /health
-[1m{[0m
-      [1m[94m"build_info"[0m[1m:[0m [1m{[0m
-        [1m[94m"commit"[0m[1m:[0m [32m"abc1234"[0m[1m,[0m
-        [1m[94m"date"[0m[1m:[0m [32m"<build-date>"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"<version>"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"dmsg_address"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb:80"[0m[1m,[0m
-      [1m[94m"dmsg_servers"[0m[1m:[0m [1m[[0m
-        [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m,
-        [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
-    [1m}[0m
+{
+      "build_info": {
+        "commit": "abc1234",
+        "date": "<build-date>",
+        "version": "<version>"
+      },
+      "dmsg_address": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb:80",
+      "dmsg_servers": [
+        "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
+      ],
+      "started_at": "2024-01-15T10:00:00Z"
+    }
 
 GET /dmsg-discovery/entry/{pk} (client entry)
-[1m{[0m
-      [1m[94m"client"[0m[1m:[0m [1m{[0m
-        [1m[94m"delegated_servers"[0m[1m:[0m [1m[[0m
-          [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m,
-          [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m
-        [1m][0m
-      [1m}[0m[1m,[0m
-      [1m[94m"sequence"[0m[1m:[0m [33m1[0m[1m,[0m
-      [1m[94m"static"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-      [1m[94m"timestamp"[0m[1m:[0m [33m1705315200[0m[1m,[0m
-      [1m[94m"version"[0m[1m:[0m [32m"1.0"[0m
-    [1m}[0m
+{
+      "client": {
+        "delegated_servers": [
+          "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+          "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
+        ]
+      },
+      "sequence": 1,
+      "static": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+      "timestamp": 1705315200,
+      "version": "1.0"
+    }
 
 GET /dmsg-discovery/entry/{pk} (server entry)
-[1m{[0m
-      [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
-      [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
-      [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-      [1m[94m"static"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m,[0m
-      [1m[94m"server"[0m[1m:[0m [1m{[0m
-        [1m[94m"address"[0m[1m:[0m [32m"139.162.160.227:30086"[0m[1m,[0m
-        [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
-      [1m}[0m
-    [1m}[0m
+{
+      "version": "",
+      "sequence": 0,
+      "timestamp": 0,
+      "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+      "server": {
+        "address": "139.162.160.227:30086",
+        "availableSessions": 0
+      }
+    }
 
 POST /dmsg-discovery/entry/ (new entry)
-[1m{[0m
-      [1m[94m"code"[0m[1m:[0m [33m200[0m[1m,[0m
-      [1m[94m"message"[0m[1m:[0m [32m"wrote a new entry"[0m
-    [1m}[0m
+{
+      "code": 200,
+      "message": "wrote a new entry"
+    }
 
 POST /dmsg-discovery/entry/ (update entry)
-[1m{[0m
-      [1m[94m"code"[0m[1m:[0m [33m200[0m[1m,[0m
-      [1m[94m"message"[0m[1m:[0m [32m"wrote new entry iteration"[0m
-    [1m}[0m
+{
+      "code": 200,
+      "message": "wrote new entry iteration"
+    }
 
 DEL /dmsg-discovery/entry
-[1m{[0m
-      [1m[94m"code"[0m[1m:[0m [33m200[0m[1m,[0m
-      [1m[94m"message"[0m[1m:[0m [32m"deleted entry"[0m
-    [1m}[0m
+{
+      "code": 200,
+      "message": "deleted entry"
+    }
 
 GET /dmsg-discovery/entries (all client and server entries)
-[1m[[0m
-      [1m{[0m
-        [1m[94m"client"[0m[1m:[0m [1m{[0m
-          [1m[94m"delegated_servers"[0m[1m:[0m [1m[[0m
-            [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m,
-            [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m
-          [1m][0m
-        [1m}[0m[1m,[0m
-        [1m[94m"sequence"[0m[1m:[0m [33m1[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-        [1m[94m"timestamp"[0m[1m:[0m [33m1705315200[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"1.0"[0m
-      [1m}[0m,
-      [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
-        [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m,[0m
-        [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.160.227:30086"[0m[1m,[0m
-          [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
-        [1m}[0m
-      [1m}[0m,
-      [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
-        [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m[1m,[0m
-        [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30082"[0m[1m,[0m
-          [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
-        [1m}[0m
-      [1m}[0m
-    [1m][0m
+[
+      {
+        "client": {
+          "delegated_servers": [
+            "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+            "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
+          ]
+        },
+        "sequence": 1,
+        "static": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "timestamp": 1705315200,
+        "version": "1.0"
+      },
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "server": {
+          "address": "139.162.160.227:30086",
+          "availableSessions": 0
+        }
+      },
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+        "server": {
+          "address": "139.162.173.101:30082",
+          "availableSessions": 0
+        }
+      }
+    ]
 
 GET /dmsg-discovery/visorEntries (client entries only)
-[1m[[0m
-      [1m{[0m
-        [1m[94m"client"[0m[1m:[0m [1m{[0m
-          [1m[94m"delegated_servers"[0m[1m:[0m [1m[[0m
-            [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m,
-            [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m
-          [1m][0m
-        [1m}[0m[1m,[0m
-        [1m[94m"sequence"[0m[1m:[0m [33m1[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-        [1m[94m"timestamp"[0m[1m:[0m [33m1705315200[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"1.0"[0m
-      [1m}[0m
-    [1m][0m
+[
+      {
+        "client": {
+          "delegated_servers": [
+            "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+            "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
+          ]
+        },
+        "sequence": 1,
+        "static": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "timestamp": 1705315200,
+        "version": "1.0"
+      }
+    ]
 
 GET /dmsg-discovery/available_servers (servers with available_streams > 0)
-[1m[[0m
-      [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
-        [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m,[0m
-        [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.160.227:30086"[0m[1m,[0m
-          [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
-        [1m}[0m
-      [1m}[0m,
-      [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
-        [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m[1m,[0m
-        [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30082"[0m[1m,[0m
-          [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
-        [1m}[0m
-      [1m}[0m
-    [1m][0m
+[
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "server": {
+          "address": "139.162.160.227:30086",
+          "availableSessions": 0
+        }
+      },
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+        "server": {
+          "address": "139.162.173.101:30082",
+          "availableSessions": 0
+        }
+      }
+    ]
 
 GET /dmsg-discovery/all_servers (all server entries)
-[1m[[0m
-      [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
-        [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m,[0m
-        [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.160.227:30086"[0m[1m,[0m
-          [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
-        [1m}[0m
-      [1m}[0m,
-      [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
-        [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m[1m,[0m
-        [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30082"[0m[1m,[0m
-          [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
-        [1m}[0m
-      [1m}[0m
-    [1m][0m
+[
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "server": {
+          "address": "139.162.160.227:30086",
+          "availableSessions": 0
+        }
+      },
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+        "server": {
+          "address": "139.162.173.101:30082",
+          "availableSessions": 0
+        }
+      }
+    ]
 
 GET /dmsg-discovery/servers/clients
-[1m{[0m
-      [1m[94m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m:[0m [1m[[0m
-        [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-        [32m"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"[0m
-      [1m][0m
-    [1m}[0m
+{
+      "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb": [
+        "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"
+      ]
+    }
 
 GET /dmsg-discovery/server/{pk}/clients
-[1m[[0m
-      [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-      [32m"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"[0m
-    [1m][0m
+[
+      "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+      "024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"
+    ]
 
 Example:
   skywire cli config gen-keys > dmsgd-config.json

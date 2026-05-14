@@ -437,6 +437,15 @@ func needsCodeFence(s string) bool {
 	return false
 }
 
+// ansiRE matches ANSI CSI sequences (ESC '[' params 'm' — Select
+// Graphic Rendition, used for terminal colors). The svc command
+// Longs colorize their example JSON via tidwall/pretty at init time,
+// and we capture those Long strings byte-for-byte from cobra — the
+// escape sequences would render as literal "^[[1m{^[[0m" garbage in
+// any markdown viewer. We strip them so the underlying text is
+// readable; the loss of color is fine in a plain-text doc.
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
 // xpubRE matches Skycoin/HD-wallet extended public keys. Skywire's
 // reward command prints whatever the operator has configured, so a
 // generator running on an operator's box would otherwise leak their
@@ -497,6 +506,7 @@ const skycoinGenesisAddr = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"
 // — anything we strip here was unsafe or commit-dependent to publish at
 // least once.
 func sanitize(s string) string {
+	s = ansiRE.ReplaceAllString(s, "")
 	s = xpubRE.ReplaceAllString(s, skycoinGenesisAddr)
 	for _, r := range buildInfoReplacements {
 		s = strings.ReplaceAll(s, r[0], r[1])

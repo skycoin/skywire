@@ -28,79 +28,79 @@ HTTP Endpoints:
 Request/Response Examples:
 
 GET /health
-  [1m{[0m
-      [1m[94m"build_info"[0m[1m:[0m [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"dmsg_address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80"[0m[1m,[0m
-      [1m[94m"dmsg_servers"[0m[1m:[0m [1m[[0m
-        [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
-    [1m}[0m
+  {
+      "build_info": {
+        "version": "v1.3.29"
+      },
+      "dmsg_address": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80",
+      "dmsg_servers": [
+        "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+      ],
+      "started_at": "2024-01-15T10:00:00Z"
+    }
 
 GET /v4/update (auth)
   Response: 200 OK
 
 GET /visors
-  [1m[[0m
-      [1m{[0m
-        [1m[94m"city"[0m[1m:[0m [32m"New York"[0m[1m,[0m
-        [1m[94m"country"[0m[1m:[0m [32m"US"[0m[1m,[0m
-        [1m[94m"ip"[0m[1m:[0m [32m"192.168.1.1"[0m[1m,[0m
-        [1m[94m"online"[0m[1m:[0m [36mtrue[0m[1m,[0m
-        [1m[94m"pk"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-      [1m}[0m
-    [1m][0m
+  [
+      {
+        "city": "New York",
+        "country": "US",
+        "ip": "192.168.1.1",
+        "online": true,
+        "pk": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "version": "v1.3.29"
+      }
+    ]
 
 GET /uptimes
-  [1m[[0m
-      [1m{[0m
-        [1m[94m"key"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-        [1m[94m"online"[0m[1m:[0m [36mtrue[0m
-      [1m}[0m,
-      [1m{[0m
-        [1m[94m"key"[0m[1m:[0m [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m[1m,[0m
-        [1m[94m"online"[0m[1m:[0m [36mfalse[0m
-      [1m}[0m
-    [1m][0m
+  [
+      {
+        "key": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "online": true
+      },
+      {
+        "key": "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e",
+        "online": false
+      }
+    ]
 
 GET /uptimes?v=v2
-  [1m[[0m
-      [1m{[0m
-        [1m[94m"pk"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-        [1m[94m"on"[0m[1m:[0m [36mtrue[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m[1m,[0m
-        [1m[94m"daily"[0m[1m:[0m [1m{[0m
-          [1m[94m"2024-01-14"[0m[1m:[0m [32m"100.0"[0m[1m,[0m
-          [1m[94m"2024-01-15"[0m[1m:[0m [32m"95.5"[0m
-        [1m}[0m
-      [1m}[0m
-    [1m][0m
+  [
+      {
+        "pk": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "on": true,
+        "version": "v1.3.29",
+        "daily": {
+          "2024-01-14": "100.0",
+          "2024-01-15": "95.5"
+        }
+      }
+    ]
 
 GET /uptimes?status=on
   (same as /uptimes, filtered to online visors only)
 
 GET /uptime/{pk}
-  [1m{[0m
-      [1m[94m"key"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-      [1m[94m"online"[0m[1m:[0m [36mtrue[0m
-    [1m}[0m
+  {
+      "key": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+      "online": true
+    }
 
 GET /dashboard?length=6
   Response: HTML bar chart of monthly node counts
 
 GET /visor-ips?month=all (private API)
-  [1m{[0m
-      [1m[94m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m:[0m [32m"192.168.1.1"[0m[1m,[0m
-      [1m[94m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m[1m:[0m [32m"10.0.0.1"[0m
-    [1m}[0m
+  {
+      "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5": "192.168.1.1",
+      "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e": "10.0.0.1"
+    }
 
 GET /security/nonces/{pk}
-  [1m{[0m
-      [1m[94m"nonce"[0m[1m:[0m [33m12345[0m
-    [1m}[0m
+  {
+      "nonce": 12345
+    }
 ```
 
 ## Usage
