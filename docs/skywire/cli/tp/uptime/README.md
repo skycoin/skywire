@@ -41,15 +41,10 @@ skywire cli tp uptime
       --visors strings     filter to transports touching these visor PKs (comma-separated) — uses /metrics/uptime/visor/{pks}
 ```
 
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
+## Global Flags
 
 ```
-transports: 26913 total, 5069 online (18.8%)
-by type:
-  stcpr   2337 /  6936 online (33.7%)
-  sudph   2732 / 19977 online (13.7%)
+  -h, --help   show help menu
 ```
 
 ---

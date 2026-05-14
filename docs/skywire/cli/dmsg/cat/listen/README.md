@@ -41,6 +41,7 @@ skywire cli dmsg cat listen <port>
 ## Global Flags
 
 ```
+  -h, --help   show help menu
       --json   print output as JSON
 ```
 
