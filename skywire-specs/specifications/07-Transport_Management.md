@@ -1,27 +1,26 @@
 # Transport Management
 
-The *Transport Manager* (`pkg/transport/manager.go`) is responsible for creating, accepting, managing, and logging all transports for a visor.
+The *Transport Manager* is responsible for creating, accepting, managing, and logging all transports for a visor.
 
 ## Responsibilities
 
 1. **Network client initialization** — creates transport-type-specific network clients (STCPR, SUDPH, STCP, DMSG) based on the visor's configuration
 2. **Transport lifecycle** — dial outbound transports, accept inbound transports, serve read loops, close and deregister on shutdown
-3. **Transport Discovery registration** — registers transports with the TPD on creation and re-registers every 90 seconds. Re-registration carries the live transport set only (edges, type, label) — bandwidth and latency are no longer pushed; see §Visor-Local Telemetry Store
+3. **Transport Discovery registration** — registers transports with the TPD on creation and re-publishes the live transport set every 90 seconds. The published payload is the bare entry (edges, type, label); bandwidth and latency travel on the visor's telemetry feed, not this channel (see §Visor-Local Telemetry Store)
 4. **Bandwidth and latency measurement** — each managed transport tracks cumulative bytes sent/received and RTT via transport-level ping; samples are written to the local telemetry store
 5. **Label management** — assigns transport labels (`skycoin`, `automatic`, `user`) and propagates the initiator's label to the responder during settlement
 
 ## Transport Creation
 
-### `SaveTransport(ctx, remotePK, netType, label)`
+### Outbound Creation
 
-Creates a transport to a remote visor:
+To create a transport to a remote visor the manager SHALL:
 
-1. Checks if a transport to the remote PK of the same type already exists
-2. If an existing transport exists and has active routes (checked via `RouteChecker`), the creation is rejected to protect in-flight traffic
-3. Dials the remote visor using the type-specific network client
-4. Performs the settlement handshake (exchange Entry data, agree on Transport ID)
-5. Starts the managed transport's `Serve` loop (readLoop, logLoop, pingLoop)
-6. Registers the `SignedEntry` with the Transport Discovery
+1. Reject the creation if a transport of the same type to the remote PK already exists AND that existing transport currently carries active routes.
+2. Dial the remote visor using the network client for the requested type.
+3. Perform the settlement handshake — exchange the proposed Entry and agree on the Transport ID (see §04 Transport Discovery).
+4. Start the managed transport's serve loop (read, log, and ping subloops).
+5. Register the resulting `SignedEntry` with the Transport Discovery.
 
 ### Transport Acceptance
 
@@ -34,13 +33,14 @@ The manager runs accept loops for each initialized network client. When a remote
 
 ## Re-Registration
 
-Every 90 seconds (`transportReRegisterInterval`), the manager re-registers all active transports with the Transport Discovery via the v3 bare-entry endpoint (`POST /v3/transports/`):
+Every 90 seconds the manager SHALL re-publish its live transport set to the Transport Discovery. The published payload SHALL contain only the bare `transport.Entry` fields (id, edges, type, label) for each non-closed transport; this is the TPD's primary liveness signal for the registering visor.
 
-1. Collects `transport.Entry` for each non-closed transport (id, edges, type, label)
-2. Calls `DiscoveryClient.RegisterTransportsV3(version, entries...)`
-3. The TPD records a heartbeat for the registering visor on each call
+The manager SHALL mirror register / deregister events to two parallel channels:
 
-Bandwidth and latency are not part of the re-registration body. They are sampled into the visor-local telemetry store (see §Visor-Local Telemetry Store) and reach the TPD by it subscribing to each visor's CXO feed.
+- **CXO publisher feed.** Register and deregister events are published as transport-entry leaves on the visor's stats publisher feed (the same feed used for telemetry — see *CXO Publisher* below). The TPD subscribes to this feed via the visor's PK and ingests the leaves into the transport registry.
+- **HTTP POST `/v3/transports/`.** The authenticated v3 endpoint accepts the same bare-entry batch and records a heartbeat for the registering visor on each call.
+
+Both channels SHOULD be operated concurrently as a dual-write contract; the TPD tolerates the same event arriving via either or both. Bandwidth and latency SHALL NOT appear in the registration payload on either channel — they reach the TPD via the same CXO feed under different leaves (see §Visor-Local Telemetry Store).
 
 ## Batch Deregistration
 
@@ -70,90 +70,83 @@ When transports close, their IDs are queued for deferred batch deletion from the
 
 ## Log Store
 
-Transport bandwidth logs are persisted to CSV files:
-- Format: `transport_id, recv_bytes, sent_bytes, timestamp`
-- Files named by date: `YYYY-MM-DD.csv`
-- Auto-rotated daily
-- Retention configurable via `rotation_interval`
-
-The CSV log store is the historical raw-event log. The structured rollup store described below is the source of truth for queries and remote aggregation.
+A raw-event log of per-transport bandwidth samples MAY be retained for offline diagnostic use. Its format is local to the visor and not part of any wire contract; the structured rollup store described below is the source of truth for queries and remote aggregation. Retention of the raw log is bounded by `rotation_interval`.
 
 ## Visor-Local Telemetry Store
 
-The visor maintains a local bbolt database (`<local_path>/stats.db`) recording per-transport bandwidth/latency rollups, three-tier uptime intervals, and per-service uptime intervals. This is the source of truth for everything the Transport Discovery, the Uptime Tracker, and the Service Discovery used to track centrally; those services now act as aggregators that pull from each visor.
+The visor SHALL maintain a local telemetry store recording per-transport bandwidth/latency rollups, three-tier uptime intervals, and per-service uptime intervals. This store is the source of truth for the bandwidth, latency, and uptime data that the Transport Discovery, Uptime Tracker, and Service Discovery aggregate; those services act as subscribers rather than primary recorders.
 
-### Schema
+### Data Model
 
-Four buckets under `stats.db`:
+The store SHALL retain, at minimum:
 
-| Bucket | Sub-bucket | Key | Value |
-|---|---|---|---|
-| `meta` | — | `schema_version`, `created_at` | Schema metadata only (the CXO feed identity is the visor's existing keypair — no separate key is generated) |
-| `transports` | — | transport ID (UUID, 16 bytes) | `TransportRecord` JSON: `{id, edges, type, label, first_seen, last_seen, current, daily}` |
-| `tiers` | `process` \| `dmsg` \| `skynet` | `<YYYY-MM-DD>` (UTC) | 36-byte raw bitmap (288 bits, one per 5-minute slot) |
-| `services` | service slug (`vpn-server`, `skysocks`, `skychat`, `visor`, …) | `<YYYY-MM-DD>` (UTC) | 36-byte raw bitmap |
+| Category | Keyed by | Holds |
+|---|---|---|
+| Transport rollups | transport ID | identifying fields (edges, type, label, first/last seen), a live `current` snapshot (cumulative sent/recv bytes, latency min/max/avg), and an append-only `daily` series of per-UTC-day deltas |
+| Tier uptime | tier name (`process`, `dmsg`, `skynet`) per UTC date | a 288-slot bitmap, one bit per 5-minute slot |
+| Service uptime | service slug (e.g. `vpn-server`, `skysocks`, `skychat`, `visor`) per UTC date | a 288-slot bitmap, one bit per 5-minute slot |
 
-`TransportRecord.current` is overwritten on every sample with the live snapshot (`sent_bytes`, `recv_bytes`, latency min/max/avg). `TransportRecord.daily` is append-only, one entry per UTC day, holding the *delta* sent/recv since the day's start baseline plus accumulated latency stats.
-
-The bitmap encoding for `tiers` and `services` is bit-identical to the format the Transport Discovery already uses for integrated uptime tracking (`pkg/transport-discovery/store/redis_uptime.go`): each of the 288 5-minute slots in a UTC day maps to one bit; bit set = the tier/service was online during at least one sample within the slot. Renderers convert the 36 raw bytes to a 288-char ASCII string (`.` = set, ` ` = unset) at the HTTP / display boundary.
+The 288-slot/5-minute uptime bitmap is the wire format shared with the Transport Discovery's uptime tracking: each bit represents one 5-minute slot of a UTC day; a set bit indicates the tier or service was online during at least one sample within the slot. The 36-byte raw form is normative; the 288-character ASCII rendering (`.` = set, ` ` = unset) is for display only.
 
 ### Sampling
 
-A sampler ticks every `StatsSampleInterval` (default `1m`). On each tick:
+A sampler SHALL run on a fixed interval (default `1m`, configurable via `StatsSampleInterval`). On each tick the visor SHALL:
 
-- For each live transport: capture `tp.GetBandwidth()` and `tp.GetLatencyStats()`, update today's daily row using an in-memory day-start baseline, overwrite the `current` snapshot.
-- For each tier currently online and each registered service currently online: set the bit corresponding to the current 5-minute slot in `<bucket>/<name>/<today>`.
+- For every live transport, sample cumulative bandwidth and latency statistics, update the current UTC day's rollup delta against an in-memory day-start baseline, and overwrite the `current` snapshot.
+- For every tier currently online and every registered service currently online, set the bit corresponding to the present 5-minute slot in that tier or service's bitmap for the current UTC date.
 
-At UTC-midnight transition the day's transport row is sealed (baseline reset to the current cumulative counters) and a new bitmap key is created for each tier/service that's still online.
+At each UTC-midnight transition the transport's daily entry SHALL be sealed (its baseline reset to the now-current cumulative counters) and a fresh bitmap SHALL be opened for every tier and service that remains online into the new day.
 
 ### Three-Tier Uptime
 
 | Tier | Online when |
 |---|---|
 | `process` | Visor is running |
-| `dmsg` | The visor's DMSG client is connected (`dmsgC.Ready()` has fired and no reconnect is in progress) |
+| `dmsg` | The visor's DMSG client is connected and not in a reconnect cycle |
 | `skynet` | The visor has ≥2 live transports |
 
-Tier state is checked on each sampler tick; `init_dmsg.go` and `transport/manager.go` expose state probes the sampler queries directly (no event bus).
-
-A consumer that wants the strict "really online" view can compute `process AND dmsg` (or `process AND dmsg AND skynet`) by AND-ing the corresponding 36-byte bitmaps for the same date.
+Tier state SHALL be evaluated on each sampler tick. A consumer requiring a strict "really online" view MAY compute `process AND dmsg` (or `process AND dmsg AND skynet`) by AND-ing the corresponding bitmaps for the same date.
 
 ### Per-Service Uptime
 
-For each app registered with the Service Discovery (via `pkg/app/appdisc/discovery_manager.go`), the sampler queries the running `serviceUpdater` set on each tick and sets the slot bit for any currently-running service. The slug matches the service name registered with the Service Discovery (`vpn-server`, `skysocks`, …). The visor itself is tracked under the slug `visor` while the visor process is alive.
+For each app registered with the Service Discovery, the sampler SHALL set the slot bit on each tick for any service that is currently running. The slug used as the bitmap key SHALL match the service name registered with the Service Discovery (e.g. `vpn-server`, `skysocks`, `skychat`). The visor process itself SHALL be tracked under the slug `visor`.
 
 ### Retention
 
-A retention sweep runs at each UTC-midnight transition:
-- `transports.daily` is trimmed to the last `StatsRetentionDays` entries (default `30`)
-- Closed-transport records with empty `daily` and no recent `current` are deleted entirely
-- `tiers/<tier>/<date>` and `services/<svc>/<date>` keys with `date` older than `StatsRetentionDays` are deleted
+A retention sweep SHALL run at each UTC-midnight transition. After the sweep:
+
+- A transport's `daily` series SHALL contain at most the last `StatsRetentionDays` entries (default `30`).
+- A transport record with an empty `daily` series and no recent `current` snapshot MAY be deleted.
+- Tier and service bitmaps whose date is older than `StatsRetentionDays` SHALL be deleted.
 
 ### Query Surface
 
-The store is exposed read-only via two channels:
+The store SHALL be exposed read-only over two channels:
 
-- **HTTP-over-DMSG** on the existing log server at `dmsg://<pk>:80`, behind the survey-whitelist auth (`authRoute` group). The whitelist on these endpoints is a DoS bound on arbitrary historical ranges, not a confidentiality measure — the same data flows openly on the CXO feed.
+- **HTTP-over-DMSG** on the visor's log server at `dmsg://<pk>:80`, behind the survey-whitelist authorization. The whitelist on these endpoints bounds arbitrary historical ranges (DoS protection); it is not a confidentiality measure, as the same data flows openly on the CXO feed.
   - `GET /stats/transports` — live snapshot of all current transports
-  - `GET /stats/transports/history?since=<RFC3339>&until=<RFC3339>&id=<uuid>` — daily rollups within range; `id` filters single transport
-  - `GET /stats/uptime?since=<RFC3339>` — tier bitmaps rendered as 288-char ASCII per day
+  - `GET /stats/transports/history?since=<RFC3339>&until=<RFC3339>&id=<uuid>` — daily rollups within range; `id` filters to a single transport
+  - `GET /stats/uptime?since=<RFC3339>` — tier bitmaps rendered as 288-character ASCII per day
   - `GET /stats/services?since=<RFC3339>` — per-service bitmaps in the same format
-- **CXO publisher** (see §CXO Publisher) — the visor publishes a rolling window of the same data on its feed; subscribers (notably the Transport Discovery) get push updates without polling.
+- **CXO publisher** (see §CXO Publisher) — the visor publishes a rolling window of the same data on its feed; subscribers (notably the Transport Discovery) receive push updates without polling.
 
 ### CXO Publisher
 
-The visor runs a `pkg/cxo/publisher` instance using its existing keypair: `publisher.New(dmsgC, v.conf.SK, conf)`. The feed PK is therefore identical to the visor's PK — no separate identity is generated, and aggregators (TPD, etc.) already know it from the transport registry. The CXO feed is open to any subscriber that knows the visor's PK; this matches the existing data sensitivity (TPD's `/metric` and the DHT `tp` entries are also public).
+The visor SHALL publish telemetry on a CXO feed signed by its own keypair; the feed PK is therefore identical to the visor's PK. No separate publisher identity is generated. Aggregators that already know a visor's PK from the transport registry can subscribe directly. The feed is open to any subscriber that knows the visor's PK; its sensitivity matches that of TPD's public `/metric` aggregates.
 
-The publish loop ticks every `StatsSampleInterval` and writes:
+The feed carries two classes of leaf:
+
+- **Transport-entry leaves** that mirror register / deregister events from the transport manager (see §Re-Registration). These are how the TPD ingests a visor's live transport set without the HTTP POST round-trip.
+- **Telemetry leaves** that carry sampled rollups and uptime bitmaps from the local stats store. On each publish tick (aligned with `StatsSampleInterval`) the feed SHALL carry, for the current sample:
 
 | Key | Value |
 |---|---|
-| `transports/<id>/current` | Live snapshot JSON |
-| `transports/<id>/<date>` | Daily rollup JSON |
-| `tiers/<tier>/<date>` | 36 raw bytes (288-bit bitmap) |
-| `services/<svc>/<date>` | 36 raw bytes (288-bit bitmap) |
+| `transports/<id>/current` | Live snapshot (JSON) |
+| `transports/<id>/<date>` | Daily rollup (JSON) |
+| `tiers/<tier>/<date>` | 36-byte bitmap (288 bits) |
+| `services/<svc>/<date>` | 36-byte bitmap (288 bits) |
 
-Bitmaps travel as raw bytes on the wire — 8× smaller than the 288-char ASCII rendering — and subscribers convert at egress. Keys outside the `CXOPublishWindow` (default `7d`) are deleted at each tick. The publisher's effective window is rolling; the bbolt store retains the full `StatsRetentionDays`.
+Bitmaps travel as raw bytes on the wire; subscribers MAY convert to the ASCII rendering at egress. Keys older than `CXOPublishWindow` (default `7d`) SHALL be deleted at each tick. The publisher's window is rolling and is decoupled from the local store's `StatsRetentionDays`.
 
 ### Configuration
 
