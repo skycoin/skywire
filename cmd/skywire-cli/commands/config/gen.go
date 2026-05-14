@@ -299,6 +299,8 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat (default: true)")
 	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
 	gHiddenFlags = append(gHiddenFlags, "chataddr")
+	genConfigCmd.Flags().BoolVar(&isSkychatPairEnable, "servechatpair", scriptExecBool("${SKYCHATPAIR:-true}"), "skychat: enable pair-RPC channel to visor (required for group chat)")
+	gHiddenFlags = append(gHiddenFlags, "servechatpair")
 
 	// Skycoin embedded apps. Default-off for both — operator opts in
 	// per-app via these flags or via SKYENV. The wallet's user-drop
@@ -1571,6 +1573,31 @@ func splitDaemonFlags(s string) ([]string, error) {
 	return visorconfig.SplitArgs(s)
 }
 
+// skychatExternalArgs builds the launcher Args slice for the skychat
+// app under external-apps mode (apps run as separate `skywire app`
+// invocations). When pair is true the chat-app gets --pair-enable,
+// which opens its pair-RPC channel to the visor and is required for
+// group chat (#2580 federated send, #2585 admin mirror feeds) to
+// actually propagate messages.
+func skychatExternalArgs(addr string, pair bool) []string {
+	args := []string{"app", "skychat", "--addr", addr}
+	if pair {
+		args = append(args, "--pair-enable")
+	}
+	return args
+}
+
+// skychatInternalArgs mirrors skychatExternalArgs for internal-apps
+// mode (apps run inside the visor process). The external-mode "app"
+// "skychat" prefix is dropped — the launcher routes by app Name.
+func skychatInternalArgs(addr string, pair bool) []string {
+	args := []string{"--addr", addr}
+	if pair {
+		args = append(args, "--pair-enable")
+	}
+	return args
+}
+
 // configureApps sets up launcher app configurations (internal or external),
 // handles app disable/enable flags, and configures VPN/proxy app settings.
 func configureApps(log *logging.Logger) {
@@ -1600,10 +1627,9 @@ func configureApps(log *logging.Logger) {
 				// and for `cli skychat group history` to work. Without
 				// it the chat-app's /status reports
 				// `groups_error: pair-rpc-disabled` and group SSE events
-				// don't reach listeners. Default-on here so a generated
-				// config "just works" for groups; operators who don't
-				// want pair-RPC can edit the args manually.
-				Args: append([]string{"app", "skychat"}, "--addr", chatAddr, "--pair-enable"),
+				// don't reach listeners. Default-on via SKYCHATPAIR
+				// (overridable in /etc/skywire.conf).
+				Args: skychatExternalArgs(chatAddr, isSkychatPairEnable),
 			},
 			{
 				Name:      skyenv.SkysocksName,
@@ -1686,7 +1712,7 @@ func configureApps(log *logging.Logger) {
 				// group chat. See the external-apps branch above for
 				// the rationale; mirrored here so internal-apps
 				// generated configs behave the same.
-				Args: []string{"--addr", chatAddr, "--pair-enable"},
+				Args: skychatInternalArgs(chatAddr, isSkychatPairEnable),
 			},
 			{
 				Name:      skyenv.SkysocksName,
