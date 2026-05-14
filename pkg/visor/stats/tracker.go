@@ -323,20 +323,11 @@ func (t *Tracker) sinkPutBatch(mirrors []mirrorPair) {
 	sink.PutBatch(ops)
 }
 
-// mirrorTierBitmap pushes the post-write tier bitmap to the sink.
-// Called from sample after MarkTierSlot succeeds. Errors are logged
-// at debug level — sink mirroring is best-effort and must not block
-// the sampler.
-// sinkPut snapshots the sink under the lock and dispatches the put
-// outside it, so a slow sink doesn't pin the sample loop's mutex.
-func (t *Tracker) sinkPut(path string, value []byte) {
-	t.mu.Lock()
-	sink := t.sink
-	t.mu.Unlock()
-	sink.Put(path, value)
-}
-
-// sinkDelete is the per-key delete analog of sinkPut.
+// sinkDelete snapshots the sink under the lock and dispatches the
+// delete outside it, so a slow sink doesn't pin the sample loop's
+// mutex. Called from the retention paths when a row falls outside the
+// publish window (or the retention window) so the publisher's view
+// drops the key in sync with bbolt.
 func (t *Tracker) sinkDelete(path string) {
 	t.mu.Lock()
 	sink := t.sink

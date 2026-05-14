@@ -5,6 +5,7 @@ import (
 	"log"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skycoin/src/cipher"
@@ -116,6 +117,21 @@ type Cache struct {
 	stat *cxdsStat
 
 	closeo sync.Once //nolint:unused
+
+	// batchTx, when non-nil, redirects c.db()'s view of the underlying
+	// CXDS to a transaction-scoped handle pinned by a WithBatch call.
+	// Every Cache.Set / Cache.Get / Cache.Inc that fires while a batch
+	// is active runs its bbolt work inside that single tx instead of
+	// opening its own — collapsing the publisher tree-walk's per-leaf
+	// commits into one.
+	//
+	// Reads happen under c.mx (every Cache write/read path holds it),
+	// so concurrent Set/Get/Inc callers serialize their tx use through
+	// the mutex; the bbolt tx is never touched by two goroutines at
+	// once. WithBatch tears the pin down only after taking c.mx again
+	// to drain any in-flight CXDS user — see WithBatch for the full
+	// invariant.
+	batchTx atomic.Pointer[data.CXDS]
 }
 
 // initialize the Cache
@@ -157,9 +173,59 @@ func (c *Cache) reset() { //nolint:unused
 	c.stat = nil
 }
 
-// code readablility
+// db returns the CXDS that subsequent Cache operations should target.
+// When a WithBatch call has pinned a transaction-scoped CXDS, db()
+// returns that handle so the operation joins the open batch; otherwise
+// it returns the underlying store.
+//
+// Callers must invoke db() while holding c.mx — the same mutex
+// WithBatch synchronizes against — so the returned pointer remains
+// valid for the duration of the caller's CXDS call.
 func (c *Cache) db() data.CXDS {
+	if tx := c.batchTx.Load(); tx != nil {
+		return *tx
+	}
 	return c.c.db.CXDS()
+}
+
+// WithBatch runs fn with the Cache's underlying CXDS pinned to a
+// single transaction-scoped handle. Every Cache.Set / Cache.Get /
+// Cache.Inc invoked from fn (directly or transitively, including the
+// recursive walks inside Container.Save) runs its bbolt work inside
+// that one tx — replacing N per-leaf commits with a single one. fn
+// returning nil commits the tx; a non-nil return rolls it back.
+//
+// The pin lives in c.batchTx (atomic). Reads happen under c.mx, so
+// concurrent Cache writers/readers from outside fn naturally serialize
+// against fn's tx use through the mutex — the bbolt tx is never
+// touched by two goroutines at once. The tear-down sequence on the
+// way out:
+//
+//  1. Store nil into c.batchTx so any newly-arriving Cache.Set sees
+//     the untwisted CXDS (and will block in bbolt's writer mutex
+//     until our tx commits, as it would have pre-batch).
+//  2. Lock/unlock c.mx once to drain any in-flight Cache.Set that
+//     captured the now-stale tx pointer before step 1 — they finish
+//     their work under our serialization while we wait.
+//  3. Return; the bbolt tx commits at this point.
+//
+// fn must not retain the pinned handle past its return — the tx is
+// gone afterward.
+func (c *Cache) WithBatch(fn func() error) error {
+	return c.c.db.CXDS().RunBatch(func(scoped data.CXDS) (err error) {
+		c.batchTx.Store(&scoped)
+		defer func() {
+			c.batchTx.Store(nil)
+			// Wait for any in-flight Cache operation that may still be
+			// using the scoped CXDS to finish before letting bbolt
+			// commit. Holding the mutex briefly is sufficient: every
+			// Cache CXDS call holds c.mx for its duration, so once we
+			// acquire it nobody else is mid-tx.
+			c.mx.Lock()
+			c.mx.Unlock() //nolint:staticcheck // intentional drain
+		}()
+		return fn()
+	})
 }
 
 // call it under lock

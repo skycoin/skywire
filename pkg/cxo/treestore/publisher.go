@@ -666,6 +666,16 @@ func (p *Publisher) publishIfDirty() error {
 
 // publishRoot encodes the in-memory tree as CXO objects and saves
 // the resulting Root under the feed's PK.
+//
+// The encode+save sequence runs inside a single CXDS batch
+// transaction (Cache.WithBatch). Every Set/Inc that fires during the
+// tree walk and the subsequent Container.Save reference-walk shares
+// one bbolt writer tx, collapsing what was previously N per-leaf
+// commits into one — the dominant cost on the publisher's hot path,
+// especially for the stats publisher whose new-leaf rate scales with
+// the sample-interval mirror writes. The IdxDB tx that Container.Save
+// opens for the root metadata write is unrelated (separate bbolt
+// file) and remains its own transaction.
 func (p *Publisher) publishRoot(root *memNode) error {
 	c := p.cxoNode.Container()
 
@@ -684,36 +694,45 @@ func (p *Publisher) publishRoot(root *memNode) error {
 	// can promote them into the per-memNode cache after Save succeeds
 	// — never before, otherwise an aborted publish would leave the
 	// cache pointing at hashes that up.Close has rolled back.
-	var freshSubs []freshSub
-	rootNode, err := encodeNode(up, root, &freshSubs)
+	var (
+		freshSubs []freshSub
+		rootNode  TreeNode
+		r         *registry.Root
+	)
+
+	err = c.Cache.WithBatch(func() error {
+		var err error
+		rootNode, err = encodeNode(up, root, &freshSubs)
+		if err != nil {
+			return err
+		}
+
+		rootSchema, err := Registry.SchemaByName("cxo.treestore.TreeNode")
+		if err != nil {
+			return err
+		}
+
+		var rootDyn registry.Dynamic
+		if err := rootDyn.SetValue(up, &rootNode); err != nil {
+			return err
+		}
+		rootDyn.Schema = rootSchema.Reference()
+
+		nonce := c.ActiveHead(skycipher.PubKey(p.pk))
+		if nonce == 0 {
+			nonce = 1 // CXO requires a non-zero nonce
+		}
+
+		r = &registry.Root{
+			Pub:   skycipher.PubKey(p.pk),
+			Nonce: nonce,
+			Reg:   Registry.Reference(),
+			Refs:  []registry.Dynamic{rootDyn},
+		}
+
+		return c.Save(up, r)
+	})
 	if err != nil {
-		return err
-	}
-
-	rootSchema, err := Registry.SchemaByName("cxo.treestore.TreeNode")
-	if err != nil {
-		return err
-	}
-
-	var rootDyn registry.Dynamic
-	if err := rootDyn.SetValue(up, &rootNode); err != nil {
-		return err
-	}
-	rootDyn.Schema = rootSchema.Reference()
-
-	nonce := c.ActiveHead(skycipher.PubKey(p.pk))
-	if nonce == 0 {
-		nonce = 1 // CXO requires a non-zero nonce
-	}
-
-	r := &registry.Root{
-		Pub:   skycipher.PubKey(p.pk),
-		Nonce: nonce,
-		Reg:   Registry.Reference(),
-		Refs:  []registry.Dynamic{rootDyn},
-	}
-
-	if err := c.Save(up, r); err != nil {
 		return err
 	}
 	p.cxoNode.Publish(r)

@@ -213,7 +213,8 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 				fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
 				os.Exit(1)
 			}
-			return reportExecResult(cmd, resp)
+			reportExecResult(cmd, resp)
+			return nil
 		}
 
 		if len(args) < 2 {
@@ -233,7 +234,8 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 			fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
 			os.Exit(1)
 		}
-		return reportExecResult(cmd, resp)
+		reportExecResult(cmd, resp)
+		return nil
 	},
 }
 
@@ -241,10 +243,10 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 // stdout/stderr and exits with the matching code. Mirrors the
 // inline rendering the dmsg-overlay path used pre-refactor; lifted
 // here so the --via tcp path can share the same surface. Returns
-// nil only on a clean (exit 0, not truncated, not timed out)
-// completion — other shapes call os.Exit directly to surface the
-// right exit code to the caller's shell.
-func reportExecResult(cmd *cobra.Command, resp *dmsgpty.CommandExecResult) error {
+// only on a clean (exit 0, not truncated, not timed out) completion
+// — other shapes call os.Exit directly to surface the right exit
+// code to the caller's shell.
+func reportExecResult(cmd *cobra.Command, resp *dmsgpty.CommandExecResult) {
 	if len(resp.Stdout) > 0 {
 		_, _ = cmd.OutOrStdout().Write(resp.Stdout) //nolint:errcheck
 	}
@@ -264,7 +266,6 @@ func reportExecResult(cmd *cobra.Command, resp *dmsgpty.CommandExecResult) error
 	if resp.ExitCode != 0 {
 		os.Exit(resp.ExitCode)
 	}
-	return nil
 }
 
 // parseTCPVia splits a `tcp://<pk>@<host:port>` URL into the pinned
