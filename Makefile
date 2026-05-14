@@ -167,6 +167,18 @@ generate: ## Generate mocks and config README's
 doc-gen: ## Regenerate docs/skywire/ from the live cobra command tree
 	go run ./cmd/skywire doc --out docs/skywire
 
+docs-prepare: ## Stage external doc trees (specs/, rewards/, cmd/apps/, cmd/dmsg/, cmd/svc/) under docs/ for MkDocs
+	bash scripts/docs-prepare.sh
+
+docs-serve: docs-prepare ## Local preview of the MkDocs site at http://127.0.0.1:8000
+	mkdocs serve
+
+docs-build: docs-prepare ## Build the MkDocs site into ./site (mirrors CI)
+	mkdocs build --strict
+
+docs-install-deps: ## Install MkDocs + plugins (run once per machine)
+	pip install --user 'mkdocs-material==9.5.*' 'mkdocs-awesome-pages-plugin==2.9.*' 'pymdown-extensions==10.*'
+
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./build ./local
 

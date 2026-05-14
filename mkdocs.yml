@@ -1,0 +1,119 @@
+# MkDocs configuration for the Skywire documentation site.
+#
+# Source markdown lives in docs/ on the develop branch. The site is
+# built by .github/workflows/docs.yml on every push to develop and
+# deployed to the gh-pages branch, which GitHub Pages serves at
+# https://skycoin.github.io/skywire/.
+#
+# External markdown trees (skywire-specs/, rewards/, cmd/apps/**/README.md,
+# etc.) are NOT moved into docs/ — they're rsync'd into place at build
+# time by the workflow and gitignored under docs/. This keeps each tree's
+# canonical location intact while letting MkDocs render them as part of
+# the unified site.
+#
+# Local preview: `make docs-serve` (which runs the rsync step + mkdocs
+# serve). Open http://127.0.0.1:8000.
+
+site_name: Skywire
+site_description: Skywire — peer-to-peer encrypted networking
+site_url: https://skycoin.github.io/skywire/
+repo_url: https://github.com/skycoin/skywire
+repo_name: skycoin/skywire
+edit_uri: edit/develop/docs/
+
+docs_dir: docs
+
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.action.edit
+    - toc.follow
+  palette:
+    # Auto light/dark toggle via system preference, then manual override.
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+# Top-level nav. Sub-pages of each section are discovered automatically
+# from the directory layout; we only define the section roots here.
+# `awesome-pages` plugin lets directories opt into custom ordering via
+# .pages files when needed (e.g. the cobra-generated tree under
+# docs/skywire/ comes out alphabetical, which matches `--help` order).
+nav:
+  - Home: index.md
+  - Guides: guides/README.md
+  - Command Reference: skywire/README.md
+  - Specs: specs/index.md
+  - Rewards: rewards/index.md
+  - Blog: https://blog.theskywirenetwork.net
+
+plugins:
+  - search
+  - awesome-pages
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      permalink_title: Permalink
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/skycoin/skywire
+      name: skycoin/skywire on GitHub
+    - icon: fontawesome/brands/telegram
+      link: https://t.me/skywire
+      name: Skywire on Telegram
+    - icon: fontawesome/solid/rss
+      link: https://blog.theskywirenetwork.net
+      name: Skycoin blog
+
+# Strict mode catches broken links at build time. Disabled for now —
+# the imported skywire-specs/ and rewards/ trees contain a handful of
+# case-mismatched anchor links (e.g. `#Regional-Saturation-Scaling`
+# vs the lowercased slug MkDocs emits). They render as dead anchors
+# but don't block the rest of the site; flipping to strict belongs
+# in a follow-up that sweeps those upstream files.
+strict: false
