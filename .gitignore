@@ -106,3 +106,16 @@ skywire-new
 skywire.conf
 local2/
 cli-comprehensive-test.md
+
+# MkDocs build artifacts and rsync'd external doc trees.
+# (See scripts/docs-prepare.sh — these are derived from skywire-specs/,
+# rewards/, cmd/apps/, cmd/dmsg/, cmd/svc/ at site-build time.)
+/site/
+/docs/specs/
+/docs/rewards/
+/docs/apps/
+/docs/dmsg-binaries/
+/docs/services/
+
+# Local MkDocs preview venv (created by docs-install-deps target)
+/.venv-docs/

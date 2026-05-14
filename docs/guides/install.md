@@ -199,7 +199,7 @@ yay --mflags " -p git.PKGBUILD " -S skywire
 
 ### NixOS / Nix flake
 
-Two derivations under [`/nix/`](../../nix/) — same flavors as the AUR
+Two derivations under [`/nix/`](https://github.com/skycoin/skywire/tree/develop/nix) — same flavors as the AUR
 packages: `skywire` (source build, static-musl, mirrors
 `make build-static`) and `skywire-bin` (the upstream release
 tarball).
@@ -219,10 +219,10 @@ inputs.skywire.url = "github:skycoin/skywire?dir=nix";
 environment.systemPackages = [ skywire.packages.${system}.skywire ];
 ```
 
-See [`nix/README.md`](../../nix/README.md) for the per-arch hash-fill
+See [`nix/README.md`](https://github.com/skycoin/skywire/blob/develop/nix/README.md) for the per-arch hash-fill
 flow on `skywire-bin`, the visor's `--apps-dir` integration, and
 the static-binary sanity check.
 
 ## Docker
 
-For docker-specific documentation, see [DOCKER.md](../../DOCKER.md).
+For docker-specific documentation, see [DOCKER.md](https://github.com/skycoin/skywire/blob/develop/DOCKER.md).
