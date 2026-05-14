@@ -79,10 +79,17 @@ type Config struct {
 	// Suffix is the TLD the bridge treats as skywire-routed.
 	// Defaults to DefaultSuffix when empty.
 	Suffix string
-	// Mode selects how the recipient is rewritten before relay:
-	//   "b" — strip ".<pk><Suffix>" from RCPT TO (default).
-	//   "a" — forward RCPT TO verbatim. Receiver's Postfix must
-	//          accept "<pk><Suffix>" in mydestination.
+	// Mode selects the RCPT TO rewrite rule. Both modes accept both
+	// address shapes (host-prefixed `user@<host>.<pk><Suffix>` and
+	// bare `user@<pk><Suffix>`); they differ only in what's done
+	// with the host-prefixed shape:
+	//   "b" (default) — strip-when-prefixed: ".<pk><Suffix>" is
+	//                   stripped from host-prefixed envelopes before
+	//                   forwarding; bare envelopes pass through
+	//                   verbatim. Strict superset of mode "a".
+	//   "a"           — verbatim: forward both shapes unchanged.
+	//                   Receiver's Postfix must accept the full
+	//                   ".<pk><Suffix>" domain in every envelope.
 	Mode string
 	// HeloName is the EHLO/HELO name sent to the peer. Defaults to
 	// DefaultHeloName when empty.
@@ -175,15 +182,33 @@ type Recipient struct {
 // the configured suffix, returns (zero, "", false, nil) — caller
 // treats that as a 550 reject rather than an error.
 //
-// Address layout per mode:
+// Address layouts:
 //
-//	mode "a":  local@<base32-pk><suffix>
-//	mode "b":  local@<host>.<base32-pk><suffix>
+//	host-prefixed:  local@<host>.<base32-pk><suffix>
+//	bare:           local@<base32-pk><suffix>
 //
-// Both forms require a single base32-pk DNS label
+// Both shapes require a single base32-pk DNS label
 // (cipher.PubKeyDNSLabelLen chars) immediately before the suffix.
-// In mode B the host portion may itself contain dots (e.g.
-// "magnetosphere.net.<pk>.skynet").
+// In the host-prefixed shape the host portion may itself contain
+// dots (e.g. "magnetosphere.net.<pk>.skynet").
+//
+// Mode selects the RCPT TO rewrite rule:
+//
+//   - "a" — verbatim: forward the recipient unchanged. Receiver's
+//     Postfix must accept the full domain (host-prefixed form
+//     requires the entire dotted domain in virtual_alias_domains;
+//     bare form requires <pk><suffix> in mydestination).
+//
+//   - "b" — strip-when-prefixed: when the address is host-prefixed,
+//     strip ".<pk><suffix>" before forwarding so the receiver's
+//     existing virtual_alias chain handles delivery natively. When
+//     the address is bare, fall through to verbatim — receiver's
+//     Postfix accepts <pk><suffix> directly via mydestination /
+//     virtual_alias_domains. This makes mode "b" a strict superset
+//     of mode "a" while preserving the strip behavior that motivates
+//     it; operators can deploy a single bridge that accepts both
+//     address shapes and let the receiver's Postfix decide which
+//     domain forms it serves.
 func ParseRecipient(addr, suffix, mode string) (cipher.PubKey, string, bool, error) {
 	at := strings.LastIndex(addr, "@")
 	if at < 0 {
@@ -220,7 +245,12 @@ func ParseRecipient(addr, suffix, mode string) (cipher.PubKey, string, bool, err
 		return pk, addr, true, nil
 	case "b":
 		if hostPart == "" {
-			return cipher.PubKey{}, "", false, fmt.Errorf("mode b requires <host>.<pk>%s form; got %q", suffix, addr)
+			// Bare <pk><suffix>: no host label to strip, so forward
+			// verbatim. Receiver's Postfix decides whether to accept
+			// the bare-PK domain via mydestination /
+			// virtual_alias_domains. Makes mode b a strict superset
+			// of mode a — both address shapes work through one bridge.
+			return pk, addr, true, nil
 		}
 		return pk, local + "@" + hostPart, true, nil
 	}
