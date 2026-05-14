@@ -1,6 +1,6 @@
 # Glossary
 
-**Visor:** A Skywire network node identified by a secp256k1 public key. Runs applications, establishes transports, routes packets, and participates in the DHT.
+**Visor:** A Skywire network node identified by a secp256k1 public key. Runs applications, establishes transports, and routes packets.
 
 **Transport:** A bidirectional, encrypted line of communication between two visors (transport edges). Identified by a UUID (Transport ID) and a type (STCPR, SUDPH, STCP, DMSG).
 
@@ -40,8 +40,6 @@
 
 **Uptime Tracker (UT):** A service tracking visor online status for reward eligibility.
 
-**Kademlia DHT:** A decentralized hash table running on every visor (DMSG port 100). Stores mutable signed records keyed by SHA256(pubkey || salt) with BEP44 semantics.
-
 **Packet:** A data unit transmitted over routes. 7-byte header (type, route ID, payload size) followed by variable-length payload.
 
 **Noise Protocol:** ChaCha20-Poly1305 authenticated encryption used for route group encryption. Handshake pattern: XX for routes.
@@ -53,5 +51,3 @@
 **Porter:** The ephemeral port allocator used by the DMSG client for stream management. Ports 49152-65535 are allocated dynamically; well-known ports (listeners) are reserved explicitly.
 
 **Circuit Breaker:** Per-destination failure tracking on the RSN. Opens after consecutive failures to fast-fail subsequent requests, preventing wasted dial attempts to known-bad visors.
-
-**Full Node (DHT):** A DHT node that stores all items regardless of XOR distance. Deployment services run as full nodes. Normal nodes only store items close to their own ID.

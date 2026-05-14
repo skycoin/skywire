@@ -63,18 +63,6 @@ Route groups support capability negotiation via the handshake:
 - **CapMux** — route multiplexing with sequenced DataPackets
 - **CapSACK** — selective acknowledgment retransmission
 
-### Kademlia DHT
-
-Every visor runs a Kademlia DHT node over DMSG (port 100). The DHT provides decentralized key-value storage for discovery data:
-
-- Node IDs are derived from `SHA256(secp256k1_pubkey)` (256-bit address space)
-- Items are mutable, signed records with monotonic sequence numbers (BEP44 semantics adapted for secp256k1)
-- K-buckets with k=20, iterative lookup with alpha=3 concurrency
-- Items stored under `SHA256(publisher_pk || salt)` with salt-based namespacing (`dmsg`, `tp`, `svc`, `addr`)
-- Three-tier trust: whitelisted (never evicted), trusted (full replication), public (pool + LRU eviction)
-
-The DHT supplements centralized HTTP discovery services. Reads try DHT first, fall back to HTTP. Writes go to both (dual-write).
-
 ## Deployment Services
 
 Centralized services that bootstrap and support the network:
@@ -89,8 +77,6 @@ Centralized services that bootstrap and support the network:
 | Uptime Tracker | Tracks visor online status for reward eligibility | ut.skywire.skycoin.com | 80 |
 | Config Bootstrapper | Provides initial visor configuration | conf.skywire.skycoin.com | — |
 
-All deployment services also run as DHT full nodes (bootstrap peers).
-
 ## DMSG Port Assignments
 
 | Port | Service |
@@ -104,7 +90,6 @@ All deployment services also run as DHT full nodes (bootstrap peers).
 | 48 | Transport Setup Service |
 | 49 | gRPC (remote monitoring) |
 | 80 | DMSG HTTP (health, log server, services) |
-| 100 | Kademlia DHT |
 | 136 | Route Setup Await (visor listener for RSN connections) |
 
 ## Transport-Level Latency Measurement
