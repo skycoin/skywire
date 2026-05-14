@@ -35,6 +35,7 @@ func (v *Visor) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
 	v.initLock.RLock()
 	dmsgRuntime := v.embeddedDmsgWeb
 	skynetRuntime := v.embeddedSkynetWeb
+	bridgeRuntime := v.embeddedSkymailBridge
 	v.initLock.RUnlock()
 
 	// Report from config when available, but ALSO from the runtime
@@ -51,6 +52,11 @@ func (v *Visor) EmbeddedProxies() (*EmbeddedProxiesStatus, error) {
 		out.SkynetWeb = skynetProxyInfo(cfg, skynetRuntime)
 	} else if skynetRuntime != nil {
 		out.SkynetWeb = skynetProxyInfo(&visorconfig.SkynetWebConfig{Enable: true}, skynetRuntime)
+	}
+	if cfg := v.conf.SkymailBridge; cfg != nil {
+		out.SkymailBridge = skymailBridgeInfo(cfg, bridgeRuntime)
+	} else if bridgeRuntime != nil {
+		out.SkymailBridge = skymailBridgeInfo(&visorconfig.SkymailBridgeConfig{Enable: true}, bridgeRuntime)
 	}
 	return out, nil
 }
@@ -127,8 +133,32 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			return runtime.Start()
 		}
 		return runtime.Stop()
+	case "bridge", "skymail", "skymail_bridge", "skymailbridge":
+		v.initLock.Lock()
+		runtime := v.embeddedSkymailBridge
+		if runtime == nil && enable {
+			if v.dmsgC == nil {
+				v.initLock.Unlock()
+				return fmt.Errorf("dmsg client not available; cannot start skymail-bridge")
+			}
+			cfg := &visorconfig.SkymailBridgeConfig{Enable: true}
+			log := logging.MustGetLogger("embedded_skymail_bridge")
+			runtime = newEmbeddedSkymailBridge(v.ctx, v.dmsgC, cfg, log)
+			v.embeddedSkymailBridge = runtime
+		}
+		v.initLock.Unlock()
+		if runtime == nil {
+			if !enable {
+				return nil
+			}
+			return fmt.Errorf("embedded skymail-bridge could not be constructed")
+		}
+		if enable {
+			return runtime.Start()
+		}
+		return runtime.Stop()
 	default:
-		return fmt.Errorf("unknown proxy kind %q (want \"dmsg\" or \"skynet\")", kind)
+		return fmt.Errorf("unknown proxy kind %q (want \"dmsg\", \"skynet\", or \"bridge\")", kind)
 	}
 }
 
@@ -170,6 +200,38 @@ func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *Em
 		info.Stats = dmsgStatsToAPI(runtime.Stats())
 		if u := runtime.Upstream(); u != "" {
 			info.UpstreamSOCKS = u
+		}
+	}
+	return info
+}
+
+// skymailBridgeInfo renders the SMTP-bridge status into the API
+// shape. Distinct from {dmsg,skynet}ProxyInfo because the bridge
+// has no SOCKS5 / upstream concepts — just a TCP listener and the
+// rewrite-mode knob.
+func skymailBridgeInfo(cfg *visorconfig.SkymailBridgeConfig, runtime *EmbeddedSkymailBridge) *EmbeddedSkymailInfo {
+	info := &EmbeddedSkymailInfo{
+		Enabled: cfg.Enable,
+		Addr:    cfg.Addr,
+		Mode:    cfg.Mode,
+		Suffix:  cfg.Suffix,
+	}
+	if info.Addr == "" {
+		info.Addr = defaultSkymailBridgeAddr
+	}
+	if info.Mode == "" {
+		info.Mode = "b"
+	}
+	if info.Suffix == "" {
+		info.Suffix = ".skynet"
+	}
+	if runtime != nil {
+		info.Running = runtime.IsRunning()
+		if a := runtime.Addr(); a != "" {
+			info.Addr = a
+		}
+		if m := runtime.Mode(); m != "" {
+			info.Mode = m
 		}
 	}
 	return info
