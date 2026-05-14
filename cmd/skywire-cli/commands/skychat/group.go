@@ -47,6 +47,10 @@ var (
 	groupListenSince string
 	groupListenPoll  time.Duration
 	groupListenRaw   bool
+
+	groupHistoryLimit      int
+	groupHistoryListGroups bool
+	groupHistoryRaw        bool
 )
 
 func init() {
@@ -62,10 +66,14 @@ func init() {
 	// See cmd/skywire-cli/commands/skychat/escape.go for rationale.
 	groupListenCmd.Flags().BoolVar(&groupListenRaw, "raw", false, "emit unescaped multi-line message bodies (humans reading directly; not safe for line-based log aggregators)")
 
+	groupHistoryCmd.Flags().IntVarP(&groupHistoryLimit, "limit", "n", 100, "max messages to return (0 = all stored)")
+	groupHistoryCmd.Flags().BoolVar(&groupHistoryListGroups, "list-groups", false, "list every group ID that has persisted messages, then exit")
+	groupHistoryCmd.Flags().BoolVar(&groupHistoryRaw, "raw", false, "emit unescaped multi-line message bodies")
+
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
 		groupJoinCmd, groupAddCmd, groupSendCmd, groupListenCmd,
-		groupLeaveCmd, groupDeleteCmd,
+		groupHistoryCmd, groupLeaveCmd, groupDeleteCmd,
 	)
 	RootCmd.AddCommand(groupCmd)
 }
@@ -386,6 +394,88 @@ errors out):
 					backoff = maxBackoff
 				}
 			}
+		}
+	},
+}
+
+var groupHistoryCmd = &cobra.Command{
+	Use:   "history <group-id>",
+	Short: "Print persisted group messages from the visor's history store",
+	Long: `Read group-message history from the visor's persistent store.
+
+Unlike 'listen', which streams live messages, history is a one-shot
+read of what's already on disk. Survives visor restarts.
+
+Requires persistence to be enabled in the visor config:
+
+  "skychat": {
+    "group_history_db": "group-history.db"
+  }
+
+Output (default): newest-last, one line per message, same format as
+'listen'. --json emits NDJSON. --list-groups inverts: print every
+group ID that has stored messages, then exit.
+
+Examples:
+  skywire cli skychat group history <group-id>
+  skywire cli skychat group history <group-id> --limit 50
+  skywire cli skychat group history --list-groups`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
+		if jsonMode && groupHistoryRaw {
+			internal.PrintFatalError(cmd.Flags(), errors.New("--raw and --json are mutually exclusive"))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		if groupHistoryListGroups {
+			groups, err := rpcClient.GroupHistoryGroups()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			if jsonMode {
+				b, _ := json.Marshal(groups) //nolint:errcheck
+				fmt.Println(string(b))
+				return
+			}
+			for _, g := range groups {
+				fmt.Println(g)
+			}
+			return
+		}
+
+		if len(args) < 1 {
+			internal.PrintFatalError(cmd.Flags(), errors.New("history: <group-id> required (or use --list-groups)"))
+		}
+		groupID := args[0]
+		msgs, err := rpcClient.GroupHistory(groupID, groupHistoryLimit)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		for _, m := range msgs {
+			if jsonMode {
+				ev := struct {
+					TS       time.Time `json:"ts"`
+					GroupID  string    `json:"group_id"`
+					SenderPK string    `json:"sender_pk"`
+					Body     string    `json:"body"`
+				}{TS: m.TS.UTC(), GroupID: m.GroupID, SenderPK: m.SenderPK.Hex(), Body: m.Text}
+				b, mErr := json.Marshal(ev)
+				if mErr != nil {
+					continue
+				}
+				fmt.Println(string(b))
+				continue
+			}
+			body := m.Text
+			if !groupHistoryRaw {
+				body = escapeForOneLine(body)
+			}
+			fmt.Printf("[%s] [%s] %s: %s\n",
+				m.TS.UTC().Format(time.RFC3339), m.GroupID, m.SenderPK, body)
 		}
 	},
 }
