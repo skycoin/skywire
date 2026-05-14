@@ -12,16 +12,29 @@
 
 # Skywire
 
-Skywire is a fully open-source, privacy-focused suite of networking tools developed by Skycoin. The public Skywire Network enables this software to be developed and tested in real-world conditions, with [daily rewards in Skycoin](/rewards/mainnet_rules.md) ($SKY) distributed to eligible participants.
+Skywire is a fully open-source, privacy-focused suite of networking
+tools developed by Skycoin. The public Skywire Network enables this
+software to be developed and tested in real-world conditions, with
+[daily rewards in Skycoin](rewards/mainnet_rules.md) ($SKY) distributed
+to eligible participants.
 
 ## Major features
 
-Skywire visors are reachable over two distinct encrypted networks, both addressed by 33-byte public keys:
+Skywire visors are reachable over two distinct encrypted networks,
+both addressed by 33-byte public keys:
 
-- **Skywire** — a peer-to-peer routing network. Visors establish encrypted transports directly with each other (STCPR over TCP, SUDPH over UDP hole-punching) and build single-hop or multi-hop routes across them using the Noise Protocol; intermediate visors see only the previous and next hop.
-- **DMSG** — a relay-based messaging network. Visors connect as clients to DMSG servers, which relay encrypted streams between them on the clients' behalf; the two endpoints never need direct connectivity to each other.
+- **Skywire** — a peer-to-peer routing network. Visors establish
+  encrypted transports directly with each other (STCPR over TCP, SUDPH
+  over UDP hole-punching) and build single-hop or multi-hop routes
+  across them using the Noise Protocol; intermediate visors see only
+  the previous and next hop.
+- **DMSG** — a relay-based messaging network. Visors connect as
+  clients to DMSG servers, which relay encrypted streams between them
+  on the clients' behalf; the two endpoints never need direct
+  connectivity to each other.
 
-The two networks share the same pubkey identity space and can be used independently or together — every feature below works over either.
+The two networks share the same pubkey identity space and can be used
+independently or together — every feature below works over either.
 
 * **P2P port forwarding over Skywire and DMSG** — host websites and TCP services on your visor's public key.
   -- [SkyNet](#skynet--p2p-port-forwarding-over-skywire) forwards over Skywire routes.
@@ -34,7 +47,7 @@ The two networks share the same pubkey identity space and can be used independen
   -- Routes use the Noise Protocol (ChaCha20-Poly1305) end-to-end; intermediate visors only know the previous and next hop.
   -- Multi-route mux groups multiple parallel routes between the same endpoints for higher bandwidth.
 * **Native apps** — managed by the visor and registered into service discovery.
-  -- [VPN](#vpn-applications) client and server.
+  -- VPN client and server.
   -- SOCKS5 proxy client and server (skysocks / skysocks-client).
   -- skychat messenger with persistent chat history via CXO + bbolt — messages survive restarts.
 * **Remote terminal, monitoring, and management over DMSG / SkyNet** — access any visor's terminal, runtime logs, and live stats from anywhere.
@@ -43,391 +56,195 @@ The two networks share the same pubkey identity space and can be used independen
 * **Custom / corporate / private network deployments** — run your own service stack (transport discovery, route finder, service discovery, address resolver, etc.) using [skywire-deployment](https://github.com/skycoin/skywire-deployment), or layer additional deployments on top of the public network for segmented environments.
 * **Decentralized standalone operation** — hypervisor-embedded DMSG server lets a Skywire network keep running without an active connection to the public deployment after the initial config and bootstrap; useful for air-gapped, LAN-only, or self-hosted networks.
 
-This overview explains Skywire's key features and network architecture in more detail below.
-
 ## Skywire Control and Data Planes
 
-[Skywire](https://skycoin.com/skywire) uses [dmsg](https://github.com/skycoin/dmsg) as a control plane to enable all Skywire visors to connect to each other and to deployment services provided by the public [Skywire Network](https://conf.skywire.skycoin.com) (or a user-hosted deployment). DMSG (Read as: `D-message`) functions as a simple relay system and **encrypted** transport implementation, facilitating anonymous connections between dmsg clients (i.e., encrypted pubkey-based automatic routing), mediated by the dmsg server. Skywire expands upon this by creating a data plane of direct, secure, encrypted peer-to-peer transports between visors, which may then be used for routes.
+[Skywire](https://skycoin.com/skywire) uses [dmsg](https://github.com/skycoin/dmsg)
+as a control plane to enable all Skywire visors to connect to each
+other and to deployment services provided by the public
+[Skywire Network](https://conf.skywire.skycoin.com) (or a user-hosted
+deployment). DMSG (Read as: `D-message`) functions as a simple relay
+system and **encrypted** transport implementation, facilitating
+anonymous connections between dmsg clients (i.e., encrypted pubkey-
+based automatic routing), mediated by the dmsg server. Skywire expands
+upon this by creating a data plane of direct, secure, encrypted peer-
+to-peer transports between visors, which may then be used for routes.
 
 ## Skywire Network and Transports
 
-A Skywire visor is identified by its public key. Skywire transports are encrypted via the public keys of the visors on each side of the transport. Skywire uses a whitelist system to enable trusted nodes (route setup nodes) to set up routes as calculated by the route finder service through established [transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports). An [automatic transport creation mechanism](pkg/visor/autoconnect.go), enabled by default, is used to establish transports to [public visors](https://sd.skycoin.com/api/services?type=visor) via STCPR (Skywire TCP Relay) transports, and to visors connected to public visors via SUDPH (Skywire UDP Hole-punching) transports. This auto-transport mechanism is designed to create adequate transports for multi-hop routing.
+A Skywire visor is identified by its public key. Skywire transports
+are encrypted via the public keys of the visors on each side of the
+transport. Skywire uses a whitelist system to enable trusted nodes
+(route setup nodes) to set up routes as calculated by the route finder
+service through established
+[transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports).
+An [automatic transport creation mechanism](pkg/visor/autoconnect.go),
+enabled by default, is used to establish transports to
+[public visors](https://sd.skycoin.com/api/services?type=visor) via
+STCPR (Skywire TCP Relay) transports, and to visors connected to
+public visors via SUDPH (Skywire UDP Hole-punching) transports. This
+auto-transport mechanism is designed to create adequate transports for
+multi-hop routing.
 
 ## Skywire Routing
 
-Skywire routes consist of one or more transports. A Skywire route may not transit the same public key twice, in order to prevent data loops. The Skywire routing system is designed with privacy in mind to defeat data snooping efforts. Packets are encrypted using the Noise Protocol (ChaCha20-Poly1305), making their contents appear as random data to observers. A visor handling transports where data flows is only aware of the public key of the previous hop and the next hop — not the ultimate source or destination of the packet. These measures significantly mitigate the risk of metadata leakage or traffic analysis. When a transport is trafficking data from multiple sources and destinations, it becomes difficult to perform traffic correlation attacks or related exploits. Another planned feature is route multiplexing, which will multiplex multi-hop routes and permit more bandwidth between the source and destination — similar in concept to BitTorrent.
+Skywire routes consist of one or more transports. A Skywire route may
+not transit the same public key twice, in order to prevent data loops.
+The Skywire routing system is designed with privacy in mind to defeat
+data snooping efforts. Packets are encrypted using the Noise Protocol
+(ChaCha20-Poly1305), making their contents appear as random data to
+observers. A visor handling transports where data flows is only aware
+of the public key of the previous hop and the next hop — not the
+ultimate source or destination of the packet. These measures
+significantly mitigate the risk of metadata leakage or traffic
+analysis. When a transport is trafficking data from multiple sources
+and destinations, it becomes difficult to perform traffic correlation
+attacks or related exploits. Another planned feature is route
+multiplexing, which will multiplex multi-hop routes and permit more
+bandwidth between the source and destination — similar in concept to
+BitTorrent.
 
 ## Skywire Visor
 
-The name 'visor' was chosen as a less ambiguous term than 'node' to refer to the running Skywire process. The term 'node' is typically reserved as a reference to the hardware on which Skywire is running, in this ecosystem. A Skywire visor participates in transports and provides an interface to applications which can be accessed over or consume routes. The Skywire visor can also be configured to provide a hypervisor web UI for remotely managing a cluster of Skywire visors / nodes, typically referred to as a [skyminer](https://www.skycoin.com/skyminer/).
+The name 'visor' was chosen as a less ambiguous term than 'node' to
+refer to the running Skywire process. The term 'node' is typically
+reserved as a reference to the hardware on which Skywire is running,
+in this ecosystem. A Skywire visor participates in transports and
+provides an interface to applications which can be accessed over or
+consume routes. The Skywire visor can also be configured to provide a
+hypervisor web UI for remotely managing a cluster of Skywire visors /
+nodes, typically referred to as a
+[skyminer](https://www.skycoin.com/skyminer/).
+
+For running and configuring a visor see
+[docs/guides/visor.md](docs/guides/visor.md) and
+[docs/guides/configuration.md](docs/guides/configuration.md).
 
 ## Skywire Cli (command line interface)
 
-`skywire cli` is the primary interface to a running Skywire visor. Skywire cli provides an interface to generate a JSON config file for the Skywire visor, to control visor native applications, and to access data from different Skywire services.
+`skywire cli` is the primary interface to a running Skywire visor.
+Skywire cli provides an interface to generate a JSON config file for
+the Skywire visor, to control visor native applications, and to access
+data from different Skywire services.
+
+Full reference: [docs/skywire/cli/](docs/skywire/cli/README.md).
 
 ## Skywire Apps
 
-Skywire visors include native VPN and SOCKS5 proxy server and client applications, as well as a messenger application, which are started and managed by the visor. When a server application is started, it registers itself in the service discovery as a [proxy server](https://sd.skycoin.com/api/services?type=proxy) or [VPN server](https://sd.skycoin.com/api/services?type=proxy). These services may then be consumed by respective client applications via either a direct or multi-hop route. Refer to the documentation for `skywire cli proxy` and `skywire cli vpn` for more details.
+Skywire visors include native VPN and SOCKS5 proxy server and client
+applications, as well as a messenger application, which are started
+and managed by the visor. When a server application is started, it
+registers itself in the service discovery as a
+[proxy server](https://sd.skycoin.com/api/services?type=proxy) or
+[VPN server](https://sd.skycoin.com/api/services?type=proxy). These
+services may then be consumed by respective client applications via
+either a direct or multi-hop route.
+
+Operator guides: [vpn](docs/guides/vpn.md), [socks5](docs/guides/socks5.md), [skynet](docs/guides/skynet.md).
 
 ## DmsgWeb – Anonymous port forwarding over DMSG
 
-The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow port forwarding over DMSG. Additionally, DmsgWeb provides a resolving SOCKS5 proxy, similar to and inspired by I2P, which permits convenient configuration of a web browser to access DMSG websites. With additional proxy configuration, all browser traffic can be routed through a Skywire SOCKS5 proxy connection. With Skywire’s advanced routing, the already anonymous DMSG utilities can be made even more private by routing them through a Skywire SOCKS5 proxy connection.
+The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow
+port forwarding over DMSG. Additionally, DmsgWeb provides a resolving
+SOCKS5 proxy, similar to and inspired by I2P, which permits convenient
+configuration of a web browser to access DMSG websites. With
+additional proxy configuration, all browser traffic can be routed
+through a Skywire SOCKS5 proxy connection. With Skywire's advanced
+routing, the already anonymous DMSG utilities can be made even more
+private by routing them through a Skywire SOCKS5 proxy connection.
 
 ## SkyNet – P2P port forwarding over Skywire
 
-SkyNet is the Skywire counterpart to DmsgWeb — facilitating port forwarding over Skywire's peer-to-peer transport types and advanced routing, without transiting a DMSG server. With SkyNet, you can:
+SkyNet is the Skywire counterpart to DmsgWeb — facilitating port
+forwarding over Skywire's peer-to-peer transport types and advanced
+routing, without transiting a DMSG server. With SkyNet, you can:
 
 * **Expose local ports**: Run a SkyNet server to make local TCP services accessible to other Skywire visors
 * **Connect to remote services**: Use the SkyNet client to forward remote ports to your localhost
 * **Access control**: Whitelist specific public keys to restrict who can connect to your server
 * **Multiple instances**: Run multiple server and client instances simultaneously with unique names
 
+Operator usage: [docs/guides/skynet.md](docs/guides/skynet.md).
+
 ## Skywire Deployment Services
 
-Skywire enables users to create their own network if desired. The implementation is fully open source. [Documentation for making a custom Skywire deployment is here.](https://github.com/skycoin/skywire-deployment)
+Skywire enables users to create their own network if desired. The
+implementation is fully open source.
+[Documentation for making a custom Skywire deployment is here.](https://github.com/skycoin/skywire-deployment)
 
 ## Skywire Rewards
 
-The [Skywire reward system](https://fiber.skywire.dev) is the distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY) are distributed daily to eligible Skywire visors who meet the [requirements for obtaining rewards](/rewards/mainnet_rules.md).
+The [Skywire reward system](https://fiber.skywire.dev) is the
+distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is
+not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY)
+are distributed daily to eligible Skywire visors who meet the
+[requirements for obtaining rewards](rewards/mainnet_rules.md).
 
-Despite the terminology, Skywire visors do not process Skycoin transactions. Skywire visors do not sync the Skycoin blockchain and have no involvement in transaction processing. The only relationship between skywire and the skycoin cryptocurrency is via the reward system acting as the distribution mechanism for Skycoin.
+Despite the terminology, Skywire visors do not process Skycoin
+transactions. Skywire visors do not sync the Skycoin blockchain and
+have no involvement in transaction processing. The only relationship
+between skywire and the skycoin cryptocurrency is via the reward
+system acting as the distribution mechanism for Skycoin.
 
+Set a reward address:
+```
+skywire cli reward <skycoin-address>
+```
+Visors meeting uptime and eligibility requirements will receive daily
+skycoin rewards for up to 8 visors per location / IP address. Only
+package-based linux installations are currently supported for rewards.
 
-## TOC
+## Documentation
 
-Table of Contents
-=================
+Command-line reference, generated from the live cobra tree:
 
-- [Skywire](#skywire)
-  - [Major features](#major-features)
-  - [Skywire Control and Data Planes](#skywire-control-and-data-planes)
-  - [Skywire Network and Transports](#skywire-network-and-transports)
-  - [Skywire Routing](#skywire-routing)
-  - [Skywire Visor](#skywire-visor)
-  - [Skywire Cli (command line interface)](#skywire-cli-command-line-interface)
-  - [Skywire Apps](#skywire-apps)
-  - [DmsgWeb – Anonymous port forwarding over DMSG](#dmsgweb--anonymous-port-forwarding-over-dmsg)
-  - [SkyNet – P2P port forwarding over Skywire](#skynet--p2p-port-forwarding-over-skywire)
-  - [Skywire Deployment Services](#skywire-deployment-services)
-  - [Skywire Rewards](#skywire-rewards)
-  - [TOC](#toc)
-- [Table of Contents](#table-of-contents)
-  - [Commands and Subcommands](#commands-and-subcommands)
-  - [Visor Native Applications](#visor-native-applications)
-    - [Example custom applications](#example-custom-applications)
-  - [`go install` or `go run` Skywire (go1.25+)](#go-install-or-go-run-skywire-go125)
-  - [Installing Skywire from Release](#installing-skywire-from-release)
-  - [Permissions](#permissions)
-    - [VPN Applications](#vpn-applications)
-      - [VPN Client](#vpn-client)
-      - [VPN Server](#vpn-server)
-    - [Other Permissions](#other-permissions)
-  - [Dependencies](#dependencies)
-    - [Build Deps](#build-deps)
-    - [Visor Runtime Deps](#visor-runtime-deps)
-    - [Testing Deps](#testing-deps)
-  - [Testing](#testing)
-  - [Config Gen](#config-gen)
-  - [Skywire Configuration in-depth](#skywire-configuration-in-depth)
-    - [Hypervisor web UI](#hypervisor-web-ui)
-    - [Add remote hypervisor](#add-remote-hypervisor)
-    - [Network Visualization UI](#network-visualization-ui)
-  - [Files and folders created by skywire at runtime](#files-and-folders-created-by-skywire-at-runtime)
-  - [Run `skywire visor`](#run-skywire-visor)
-    - [Process control](#process-control)
-    - [Transport setup](#transport-setup)
-    - [Manual Routing (Advanced)](#manual-routing-advanced)
-      - [Route Types](#route-types)
-      - [Creating a Simple Direct Route](#creating-a-simple-direct-route)
-      - [Port Numbers by Application](#port-numbers-by-application)
-      - [Making Apps Use Your Manual Route](#making-apps-use-your-manual-route)
-      - [Creating Multi-Hop Routes](#creating-multi-hop-routes)
-      - [Finding Transport IDs](#finding-transport-ids)
-      - [Route Finder (Automatic Multi-Hop Discovery)](#route-finder-automatic-multi-hop-discovery)
-      - [Managing Routes](#managing-routes)
-      - [Troubleshooting](#troubleshooting)
-    - [Using the Skywire VPN](#using-the-skywire-vpn)
-    - [Using the Skywire SOCKS5 proxy client](#using-the-skywire-socks5-proxy-client)
-    - [Using SkyNet port forwarding](#using-skynet-port-forwarding)
-      - [Running a SkyNet Server](#running-a-skynet-server)
-      - [Connecting with SkyNet Client](#connecting-with-skynet-client)
-      - [Example: Exposing a Web Server](#example-exposing-a-web-server)
-  - [Skycoin Rewards](#skycoin-rewards)
-  - [Linux Packages](#linux-packages)
-    - [Debian packages](#debian-packages)
-    - [Arch Linux AUR packages](#arch-linux-aur-packages)
-    - [NixOS / Nix flake](#nixos--nix-flake)
-  - [Docker](#docker)
-  - [How to create a GitHub release](#how-to-create-a-github-release)
-  - [Dependency Graph](#dependency-graph)
+* [docs/skywire/](docs/skywire/README.md) — every command's `--help`,
+  one markdown page per command, mirroring the subcommand hierarchy.
+  Run `skywire doc` (or `make doc-gen`) from the repo root to
+  regenerate after CLI changes.
 
-## Commands and Subcommands
+Operator how-to guides:
 
-Documentation is available in the command documentation README:
+* [docs/guides/install.md](docs/guides/install.md) — install via package, release binary, Docker, Nix, or `go install`
+* [docs/guides/permissions.md](docs/guides/permissions.md) — VPN capabilities, sudoers, system survey
+* [docs/guides/configuration.md](docs/guides/configuration.md) — `config gen`, hypervisor UI, network visualization
+* [docs/guides/visor.md](docs/guides/visor.md) — run / supervise `skywire visor`, transports, runtime files
+* [docs/guides/vpn.md](docs/guides/vpn.md) — Skywire VPN
+* [docs/guides/socks5.md](docs/guides/socks5.md) — Skywire SOCKS5 proxy
+* [docs/guides/skynet.md](docs/guides/skynet.md) — SkyNet port forwarding
+* [docs/guides/manual-routing.md](docs/guides/manual-routing.md) — manual route creation, multi-hop, route-finder
+* [docs/guides/testing.md](docs/guides/testing.md) — pre-PR `make format check`
+* [docs/guides/release.md](docs/guides/release.md) — creating a GitHub release
 
-* [skywire](cmd/skywire/README.md)
-* [skywire cli](cmd/skywire-cli/README.md)
-* [skywire visor](cmd/skywire-visor/README.md)
-
-## Visor Native Applications
-
-_Note: Visor apps are not executed directly by the user, but hosted by the visor process._
+Visor native applications:
 
 * [API](docs/skywire_app_api.md)
 * [skychat](cmd/apps/skychat/README.md)
-* [skysocks](cmd/apps/skysocks/README.md)
-* [skysocks-client](cmd/apps/skysocks-client/README.md)
-* [vpn-client](cmd/apps/vpn-client/README.md)
-* [vpn-server](cmd/apps/vpn-server/README.md)
-* [skynet](cmd/apps/skynet/README.md) - P2P port forwarding server
-* [skynet-client](cmd/apps/skynet-client/README.md) - P2P port forwarding client
+* [skysocks](cmd/apps/skysocks/README.md) / [skysocks-client](cmd/apps/skysocks-client/README.md)
+* [vpn-client](cmd/apps/vpn-client/README.md) / [vpn-server](cmd/apps/vpn-server/README.md)
+* [skynet](cmd/apps/skynet/README.md) / [skynet-client](cmd/apps/skynet-client/README.md)
 
-### Example custom applications
+Example custom applications:
 
 * [example-server-app](example/example-server-app/README.md)
 * [example-client-app](example/example-client-app/README.md)
 
-Further documentation can be found in the [skywire wiki](https://github.com/skycoin/skywire/wiki).
-
-## `go install` or `go run` Skywire (go1.25+)
-
-Skywire commands can be executed via `go run`:
-
-```
-$ go run github.com/skycoin/skywire@develop
-┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
-└─┐├┴┐└┬┘││││├┬┘├┤
-└─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-v1.3.50
-built with go1.25.6
-
-Available Commands:
-  visor     Skywire Visor
-  cli       Command Line Interface for skywire
-  svc       Skywire services
-  dmsg      DMSG services & utilities
-  app       skywire native applications
-
-Flags:
-  -b, --bv        print runtime/debug.BuildInfo.Main.Version
-  -d, --info      print runtime/debug.BuildInfo
-  -v, --version   version for skywire
-```
-
-The skywire visor can now (as of v1.3.32) run directly with `go run` when using the default in-process visor native applications configuration
-
-```
-go run github.com/skycoin/skywire@develop cli config gen -br #print the config & output to skywire-config.json
-go run github.com/skycoin/skywire@develop visor #uses skywire-config.json by default
-```
-
-The new config omits the `"binary"` field and the first two arguments `app <app-name>` :
-
-```
-[
-  {
-    "name": "vpn-client",
-    "args": [
-      "--dns",
-      "1.1.1.1"
-    ],
-    "auto_start": false,
-    "port": 43
-  },
-  {
-    "name": "skychat",
-    "args": [
-      "--addr",
-      ":8001"
-    ],
-    "auto_start": true,
-    "port": 1
-  },
-  {
-    "name": "skysocks",
-    "auto_start": true,
-    "port": 3
-  },
-  {
-    "name": "skysocks-client",
-    "args": [
-      "--addr",
-      ":1080"
-    ],
-    "auto_start": false,
-    "port": 13
-  },
-  {
-    "name": "vpn-server",
-    "auto_start": false,
-    "port": 44
-  }
-]
-```
-
-For comparison, the external apps launcher config:
-
-```
-[
-  {
-    "name": "vpn-client",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "vpn-client",
-      "--dns",
-      "1.1.1.1"
-    ],
-    "auto_start": false,
-    "port": 43
-  },
-  {
-    "name": "skychat",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "skychat",
-      "--addr",
-      ":8001"
-    ],
-    "auto_start": true,
-    "port": 1
-  },
-  {
-    "name": "skysocks",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "skysocks"
-    ],
-    "auto_start": true,
-    "port": 3
-  },
-  {
-    "name": "skysocks-client",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "skysocks-client",
-      "--addr",
-      ":1080"
-    ],
-    "auto_start": false,
-    "port": 13
-  },
-  {
-    "name": "vpn-server",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "vpn-server"
-    ],
-    "auto_start": false,
-    "port": 44
-  }
-]
-```
-
-To run the visor native applications with _external_ apps configuration, one must first have the skywire binary explicitly installed:
-```
-go install github.com/skycoin/skywire@develop
-```
-Then, either:
-* place the binary in the current working directory where skywire is running
-OR
-* set the`bin_path` in the skywire-config.json to the directory containing the skywire binary
-
-Running a custom skywire visor app requires that the binary for that app exists in the directory specified by `"bin_path"` in the visor's config
-
-## Installing Skywire from Release
-
-Releases for windows & macOS are available from the [release section](https://github.com/skycoin/skywire/releases/)
-
-Install as a package on debian or arch linux: [Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
-
-[Binary Releases](https://github.com/skycoin/skywire/releases) for many platforms and architectures are provided if none of the other installation methods are preferred.
-
-## Permissions
-
-The following aspects of skywire require elevated or special permissions:
-
-### VPN Applications
-
-Both VPN client and server require special permissions for network configuration:
-
-#### VPN Client
-
-The VPN client requires the `CAP_NET_ADMIN` capability to create and configure TUN/TAP network interfaces.
-
-**Method 1: Using setcap (Recommended)**
-```bash
-# Grant CAP_NET_ADMIN capability to the skywire binary
-sudo setcap cap_net_admin+eip /path/to/skywire
-
-# Verify the capability was set
-getcap /path/to/skywire
-# Should output: /path/to/skywire cap_net_admin=eip
-```
-
-**Method 2: Running as root**
-```bash
-sudo skywire visor
-```
-
-#### VPN Server
-
-The VPN server requires elevated privileges to execute `iptables` and `sysctl` commands for:
-- Configuring iptables FORWARD policy
-- Enabling IP masquerading (NAT)
-- Setting IP forwarding (IPv4/IPv6)
-- Managing firewall rules for client traffic
-
-**Method 1: Configure sudoers (Recommended for systemd services)**
-```bash
-# Add to /etc/sudoers.d/skywire-vpn
-yourusername ALL=(ALL) NOPASSWD: /usr/sbin/iptables, /usr/sbin/ip6tables, /usr/sbin/sysctl
-```
-
-**Method 2: Using setcap for network administration**
-```bash
-# Grant CAP_NET_ADMIN and CAP_NET_RAW capabilities
-sudo setcap cap_net_admin,cap_net_raw+eip /path/to/skywire
-```
-
-**Method 3: Running as root**
-```bash
-sudo skywire visor
-```
-
-**Note for systemd services:** When running skywire as a systemd service (non-interactive), `pkexec` cannot prompt for authentication. Use the sudoers method or run the service as root.
-
-
-### Other Permissions
-
-* **File system access**: Writing to the `local` folder path and default config paths generated by linux/macOS packages or windows .msi installer
-* **System survey**: Some aspects require elevated access - only generated _if a reward address is set_
-
-See [mainnet_rules.md](/rewards/mainnet_rules.md) for more details about the system survey and eligibility requirements for rewards.
+Further docs: [skywire wiki](https://github.com/skycoin/skywire/wiki).
 
 ## Dependencies
 
 ### Build Deps
 
-* `golang`
-
-`golang` or `go` can be installed with your system package manager on most linux distributions. Alternatively, follow the procedure at [go.dev/doc/install](https://go.dev/doc/install) to install golang.
-
-Basic setup of the `go` environment is further described [here](https://github.com/skycoin/skycoin/blob/develop/INSTALLATION.md#setup-your-gopath).
-
+* `golang` — install with your system package manager on most linux
+  distributions, or follow [go.dev/doc/install](https://go.dev/doc/install).
+  Basic setup of the `go` environment is further described
+  [here](https://github.com/skycoin/skycoin/blob/develop/INSTALLATION.md#setup-your-gopath).
 * `git` (optional)
-
-* `musl` and `kernel-headers-musl` or equivalent - _for static compilation_
-
-For more information on static compilation, see [docs/static-builds.md](docs/static-builds.md).
+* `musl` and `kernel-headers-musl` or equivalent — for static
+  compilation; see [docs/static-builds.md](docs/static-builds.md).
 
 ### Visor Runtime Deps
 
-* ` glibc` or `libc6` _unless statically compiled_
+* `glibc` or `libc6` — unless statically compiled.
 
 ### Testing Deps
 
@@ -435,709 +252,9 @@ For more information on static compilation, see [docs/static-builds.md](docs/sta
 * `goimports-reviser` from github.com/incu6us/goimports-reviser/v2
 * `goimports` from golang.org/x/tools/cmd/goimports
 
-## Testing
-
-Before pushing commits to a pull request, its customary in case of edits to any of the golang source code to run the following:
-
-```
-make format check
-```
-
-`make check` will run `make test` as well. To explicitly run tests, use `make test`.
-
-## Config Gen
-
-To run skywire, first generate a config.
-
-```
-skywire cli config gen -birx
-```
-* `-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment - recommended
-* `-i --ishv` create a  local hypervisor configuration (optional)
-* `-r --regen` regenerate a config which may already exist, retaining the keys
-* `-x --retainhv` retain any remote hypervisors which are set in the config (optional)
-
-More options for configuration are displayed with `skywire cli config gen --all`.
-
-NOTE: If you have installed skywire as a package or via the windows .msi or mac installer, one should additionally include the `-p` flag - and `skywire cli config gen` must be run as root.
-
-## Skywire Configuration in-depth
-
-The skywire visor requires a config file to run. This config is a json-formatted file produced by `skywire cli config gen`.
-
-The `skywire-autoconfig` script included with the skywire package handles config generation and config updating for the user who installed the package, as well as restarting the skywire systemd service
-
-Examples of config generation and command / flag documentation can be found in the [cmd/skywire-cli/README.md](cmd/skywire-cli/README.md) and [cmd/skywire-visor/README.md](cmd/skywire-visor/README.md).
-
-The most important flags are noted below.
-
-### Hypervisor web UI
-
-In order to expose the hypervisor UI, generate a config file with `--is-hypervisor` or `-i` flag:
-
-```
- skywire cli config gen -i
-```
-
-After starting up the visor, the UI will be exposed by default on `localhost:8000`.
-
-### Hypervisor terminal UI
-
-A terminal-based hypervisor that mirrors the web UI's read and write actions
-without requiring a browser:
-
-```
-skywire cli visor hv tui
-```
-
-Lists all visors connected to the running hypervisor and (when one is selected)
-shows transports, apps, route groups with full multi-hop paths, DMSG servers,
-and a row of hotkey-driven actions: start/stop apps, set min_hops/mux_routes,
-manage transports/routes, toggle resolving proxies, register skynet/forwarded
-ports, run dmsg connect-all, view services-health, reload or shutdown.
-
-When a hypervisor has another hypervisor in its `hypervisors` config, the
-parent hypervisor transparently sees and manages the child's connected visors —
-write actions are routed through the child automatically.
-
-### Add remote hypervisor
-
-Every visor can be controlled by one or more hypervisors. To allow a hypervisor to access a visor, the PubKey of the
-hypervisor needs to be specified in the configuration file. You can add a remote hypervisor to the config with:
-
-```
-skywire cli config update --hypervisor-pks <public-key>
-```
-OR:
-```
-skywire cli config gen --hvpk <public-key>
-```
-
-### Network Visualization UI
-
-Skywire includes a network visualization and visor control interface that can run in two modes:
-
-**Visor-embedded mode** (recommended when visor is running):
-```
-skywire cli tp viz --visor
-```
-This starts the UI as part of the visor, with direct access to local transport and route data.
-
-**Standalone mode** (network visualization only):
-```
-skywire cli tp viz
-```
-This runs a standalone visualization server using transport discovery data.
-
-The web UI (default `localhost:8080`) provides:
-
-* **Real-time network graph**: Visual representation of visors and their connections in the Skywire network
-* **Transport information**: View active transports with details on type (STCPR, SUDPH, DMSG), remote public keys, and connection status
-* **Geographic clustering**: Visors are grouped by country and IP subnet for easier network topology understanding
-* **Click-to-copy**: Easily copy public keys by clicking on nodes in the graph
-* **Visor control** (visor mode): Direct interface for managing the local visor
-
-Note: This is a separate UI from the hypervisor interface and caches transport data locally.
-
-## Files and folders created by skywire at runtime
-_Note: not all of these files will be created by default._
-```
-├──skywire-config.json
-└─┬local
-  ├── apps-pid.txt
-  ├── node-info.json
-  ├── node-info.sha
-  ├── reward.txt
-  ├── skychat
-  ├── skychat_log.db
-  ├── skysocks
-  ├── skysocks-client
-  ├── skysocks-client_log.db
-  ├── skysocks_log.db
-  └── transport_logs
-      ├── 2023-03-06.csv
-      ├── 2023-03-07.csv
-      ├── 2023-03-08.csv
-      ├── 2023-03-09.csv
-      └── 2023-03-10.csv
-```
-
-Some of these files are served via the [dmsghttp logserver](https://github.com/skycoin/skywire/wiki/DMSGHTTP-logserver).
-
-## Run `skywire visor`
-
-`skywire visor` hosts apps and is an applications gateway to the Skywire network.
-
-`skywire visor` requires a valid configuration to be provided.
-
-_Note: Root permissions or special capabilities are required for VPN client and VPN server apps. See the [Permissions](#permissions) section for details._
-
-Run the visor:
-```
-skywire visor -c skywire-config.json
-```
-If the default `skywire-config.json` exists in the current dir, this can be shortened to:
-```
-skywire visor
-```
-
-When running VPN applications, ensure proper permissions are configured:
-```bash
-# With setcap configured (recommended):
-skywire visor
-
-# Or with sudo if setcap is not configured:
-sudo skywire visor
-```
-
-`skywire visor` can be run on Windows. The setup requires additional setup steps that are specified
-in [the docs](docs/windows-setup.md) if not using the windows .msi.
-
-### Process control
-
-In the instance that the visor shuts down or stops, it is desirable to restart it automatically. This may be accomplished in a few different ways.
-
-The visor may be run as a systemd service - on linux. The `skywire.service` does just that, and is provided by the linux packages. `skywire.service` is configured to run as root.
-
-The visor may be run directly in a (bash / zsh / git-bash) terminal using a `while` loop with a short timeout between restarts. If one is using the default config path for package-based installation (i.e. starting the visor with the `-p` flag) it will be required to run the visor as root. If not, omit the `-p` flag and skip becoming root.
-
-On windows it may be required to start the git-bash terminal as admin or superuser to obtain elevated privileges.
-
-To become root on linux:
-
-```
-su - root
-```
-
-Start the Visor in a `while` loop
-
-```
-while true ; do skywire visor -pl debug ; sleep 5 ; done
-```
-or
-```
-while true ; do go run github.com/skycoin/skywire@develop visor -pl debug ; sleep 5 ; done
-```
-
-A few observations when running the visor in the latter way:
-
-* the config is not updated when the binary is updated
-* the binary executed by the visor to start the apps is not the same one as is being `go run`
-
-To address these two things, it's recommended to first create the human-editable skywire.conf file. This may be done with any path, but for this example, the default path referenced by the autoconfig script included with the linux packages is used.
-
-```
-go run github.com/skycoin/skywire@develop cli config gen -q | sudo tee /etc/skywire.conf
-```
-
-Now, edit `/etc/skywire.conf` as desired.
-Remember to uncomment:
-* `PKGENV=true`
-* `BESTPROTO=true`
-
-Save the file. Now `config gen` can be added to the while loop
-
-```
-while true ; do SKYENV=/etc/skywire.conf go run github.com/skycoin/skywire@develop cli config gen -r && go run github.com/skycoin/skywire@develop visor -pl debug ; sleep 5 ; done
-```
-
-To update the binary included with the linux packages so that the visor apps will also be running on the latest commits, it's recommended to `go install github.com/skycoin/skywire@develop` and then replace the binary provided by the package with that one. The complete command becomes:
-
-```
-while true ; do go install github.com/skycoin/skywire@develop && mv $GOPATH/bin/skywire /opt/skywire/bin/skywire && SKYENV=/etc/skywire.conf skywire cli config gen -r && skywire visor -pl debug ; sleep 5 ; done
-```
-
-Note that the binary at: `/opt/skywire/bin/skywire` is already symlinked to `/usr/bin/skywire` by installing the package.
-
-### Transport setup
-
-_Note: transports should be set up automatically when starting an app in most cases. The user should not need to do this manually._
-
-A Transport represents a bidirectional line of communication between two Skywire Visors:
-- [Transports](https://github.com/skycoin/skywire/wiki/Transports)
-
-Transports are automatically established when a client application connects to a server application.
-Their creation is attempted in the following order:
-- stcpr
-- sudph
-- dmsg
-
-Transports can be manually created. Existing suitable transports will be automatically used by client applications when they are started.
-
-To create a transport, first copy the public key of an online visor from the uptime tracker:
-```
-skywire cli ut -o
-```
-or service discovery:
-```
-skywire cli vpn list #list vpn server keys
-skywire cli proxy list #list proxy server keys
-```
-
-Add the transport:
-```
-skywire cli visor tp add -t <transport-type> <public-key>
-```
-
-View established transports:
-```
-skywire cli visor tp ls
-```
-
-Remove a transport:
-```
-skywire cli visor tp rm -i <transport-id>
-```
-
-### Manual Routing (Advanced)
-
-_Note: In most cases, routes are automatically created when applications connect. Manual routing is an advanced feature for specific use cases._
-
-#### Route Types
-
-**1. App/Consume Rule** - Terminates at the local visor for app consumption
-**2. Forward Rule** - Forwards packets to the next hop in a multi-hop route  
-**3. Intermediary Forward Rule** - Forwards without app-level routing info
-
-#### Creating a Simple Direct Route
-
-First, list existing routes to find an available route ID:
-
-```bash
-skywire cli visor route ls
-```
-
-Create an app/consume rule from your visor to a remote visor:
-
-```bash
-# Get your local public key
-LOCAL_PK=$(skywire cli visor pk)
-
-# Get destination visor public key (from service discovery)
-REMOTE_PK="02..." # VPN server, proxy server, or any visor
-
-# Create consume rule
-skywire cli visor route add a \
-  -i 1 \              # route ID (increment for each route)
-  -l $LOCAL_PK \      # local public key  
-  -m 43 \             # local port (app-specific: 43=VPN client, 13=proxy client)
-  -p $REMOTE_PK \     # remote public key
-  -q 44               # remote port (44=VPN server, 3=proxy server)
-```
-
-#### Port Numbers by Application
-
-Common app port mappings:
-- **1** - skychat
-- **3** - skysocks (proxy server)
-- **13** - skysocks-client (proxy client)
-- **43** - vpn-client
-- **44** - vpn-server
-
-View app ports:
-```bash
-skywire cli visor app ls
-```
-
-#### Making Apps Use Your Manual Route
-
-**Important**: Apps will automatically use manually created routes if the route's local/remote PK and ports match the app's connection requirements.
-
-Example - VPN client using manual route:
-```bash
-# 1. Create route with local port 43, remote port 44
-skywire cli visor route add a -i 1 -l $LOCAL_PK -m 43 -p $VPN_SERVER_PK -q 44
-
-# 2. Start VPN client - it will automatically use route ID 1
-skywire cli vpn start $VPN_SERVER_PK
-```
-
-The VPN client connects from port 43 → server port 44, matching the route rule, so it's used automatically.
-
-#### Creating Multi-Hop Routes
-
-Multi-hop routes require coordination between visors. This example creates a 2-hop route: A → B → C
-
-**On Visor A (source):**
-```bash
-# Create forward rule to visor B
-skywire cli visor route add c \
-  -i 1 \
-  -j 2 \              # next route ID (on visor B)
-  -k $TRANSPORT_ID \  # transport ID to visor B
-  -l $VISOR_A_PK \
-  -m 43 \
-  -p $VISOR_C_PK \    # final destination
-  -q 44
-```
-
-**On Visor B (intermediary):**
-```bash
-# Create intermediary forward rule to visor C  
-skywire cli visor route add b \
-  -i 2 \
-  -j 3 \              # next route ID (on visor C)
-  -k $TRANSPORT_ID    # transport ID to visor C
-```
-
-**On Visor C (destination):**
-```bash
-# Create consume rule
-skywire cli visor route add a \
-  -i 3 \
-  -l $VISOR_C_PK \
-  -m 44 \
-  -p $VISOR_A_PK \
-  -q 43
-```
-
-#### Finding Transport IDs
-
-Get transport IDs for multi-hop routing:
-```bash
-# List all transports
-skywire cli visor tp ls
-
-# Find specific transport by remote public key
-skywire cli visor tp ls | grep $REMOTE_PK
-```
-
-#### Route Finder (Automatic Multi-Hop Discovery)
-
-Query the route finder to discover available multi-hop paths:
-
-```bash
-# Find routes between two visors
-skywire cli visor route find $SOURCE_PK $DEST_PK
-
-# With custom hop limits
-skywire cli visor route find $SOURCE_PK $DEST_PK --min 2 --max 3
-
-# Find routes from local visor to destination (auto-detects local PK)
-skywire cli visor route find $DEST_PK
-```
-
-The route finder returns the optimal path, which you can then configure manually using the commands above.
-
-#### Managing Routes
-
-List all routing rules:
-```bash
-skywire cli visor route ls
-```
-
-View specific route details:
-```bash
-skywire cli visor route ls -i <route-id>
-```
-
-Remove a routing rule:
-```bash
-skywire cli visor route rm <route-id>
-```
-
-#### Troubleshooting
-
-**Routes not being used:**
-- Verify local/remote ports match app requirements (`skywire cli visor app ls`)
-- Check transports exist to the next hop (`skywire cli visor tp ls`)
-- Ensure route IDs are sequential and unique
-- Verify public keys are correct
-
-**Multi-hop routes failing:**
-- Each intermediary must have the correct transport ID to the next hop
-- Route IDs must chain correctly across visors
-- Keep-alive duration may need adjustment for long routes (`--keep-alive 60s`)
-
-### Using the Skywire VPN
-
-The following documentation exists for vpn server / client setup and usage:
-- [Setup the Skywire VPN](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Client)
-- [Setup the Skywire VPN server](https://github.com/skycoin/skywire/wiki/Skywire-VPN-Server)
-- [Package Installation Guide](https://github.com/skycoin/skywire/wiki/Skywire-Package-Installation)
-
-An example using the vpn with `skywire cli`:
-
-```
-skywire cli vpn list
-```
-This will query the service discovery for a list of vpn server public keys.
-[sd.skycoin.com/api/services?type=vpn](https://sd.skycoin.com/api/services?type=vpn)
-
-Sample output:
-```
-02836f9a39e38120f338dbc98c96ee2b1ffd73420259d1fb134a2d0a15c8b66ceb
-0289a464f485ce9036f6267db10e5b6eaabd3972a25a7c2387f92b187d313aaf5e
-03cad59c029fc2394e564d0d328e35db17f79feee50c33980f3ab31869dc05217b
-02cf90f3b3001971cfb2b2df597200da525d359f4cf9828dca667ffe07f59f8225
-03e540ddb3ac61385d6be64b38eeef806d8de9273d29d7eabb8daccaf4cee945ab
-...
-```
-
-Select a key and start the vpn with:
-```
-skywire cli vpn start <public-key>
-```
-
-View the status of the vpn:
-```
-skywire cli vpn status
-```
-
-Check your ip address with ip.skywire.dev.
-
-_Note: ip.skycoin.com will only show your real ip address, not the ip address of the vpn connection._
-
-Stop the vpn:
-```
-skywire cli vpn stop
-```
-
-_Note: killswitch may be configured for the vpn - see `skywire cli config gen --all` help menu or documentation._
-
-
-### Using the Skywire SOCKS5 proxy client
-
-
-The following wiki documentation exists on the SOCKS5 proxy:
-- [Skywire SOCKS5 Proxy User Guide](https://github.com/skycoin/skywire/wiki/Skywire-SOCKS5-Proxy-User-Guide)
-- [SSH over SOCKS5 Proxy](https://github.com/skycoin/skywire/wiki/SSH-over-SOCKS5-Proxy)
-
-The main difference between the vpn and the socks5 proxy is that the proxy is configured __per application__ while the vpn wraps the connections for the whole machine.
-
-The socks client usage (from `skywire cli`) is similar to the vpn, though the `skywire cli` subcommands and flags do not currently match from the one application to the other. This will be rectified.
-
-To use the SOCKS5 proxy client via `skywire cli`:
-```
-skywire cli proxy list
-```
-This will query the service discovery for a list of visor public keys which are running the proxy server.
-[sd.skycoin.com/api/services?type=proxy](https://sd.skycoin.com/api/services?type=proxy)
-
-Sample output:
-```
-031a924f5fb38d26fd8d795a498ae53f14782bc9f036f8ff283c479ac41af95ebd
-024fdf44c126e122f09d591c8071a7355d4be9c561f85ea584e8ffe4e1ae8717f7
-03ae05142dcf5aad70d1b58ea142476bac49874bfaa67a1369f601e0eb2f5842df
-0313a76e2c331669a0cb1a3b749930881f9881cca89b59ee52365d1c15141d9d83
-03022fa8a0c38d20fae9335ef6aa780f5d762e1e161e607882923dc0d5a890f094
-03e4b6326f9df0cff1372f52906a6d1ee03cf972338d532e17470e759362e45c87
-0230689d26e5450e8c44faaba91813b7c2b00c1add3ad251e2d62ecca8041a849d
-036ae558d5e6c5fc73cb6a329cb0006b4f659ecf9ae69c9e38996dfb65b1fb1c45
-03a35c742ed17506834235b2256bb2b0a687de992e5ded52ca4d54fba3b00b8dbe
-0259721a9e79e91ce8bc94bad52a6a381d50fcb05aaadc2c99201fd137fb71dfde
-...
-```
-
-Select a key and start the proxy with:
-```
-skywire cli proxy start --pk <public-key>
-```
-
-View the status of the proxy:
-```
-skywire cli proxy status
-```
-
-Check the ip address of the connection; for example, using `curl` via the socks5 proxy connection:
-```
-curl -Lx socks5h://127.0.0.1:1080 http://ip.skycoin.com/ | jq
-```
-
-The connection may be consumed in a web browser via direct proxy configuration in browsers which support it, or using such extensions as `foxyproxy`.
-
-The connection may also be consumed in the terminal by setting `ALL_PROXY` environmental variable, or via the specific method used by a certain application.
-
-Examples of `ssh` over the socks5 proxy:
-
-Using `openbsd-netcat`:
-```
-ssh user@host -p 22 -o "ProxyCommand=nc -X 5 -x 127.0.0.1:1080 %h %p"
-```
-
-Using `ncat` from `nmap`:
-```
-ssh user@host -p 22 -o "ProxyCommand=ncat --proxy-type socks5 --proxy 127.0.0.1:1080 %h %p"
-```
-
-Stop the socks5 proxy client:
-```
-skywire cli proxy stop
-```
-
-### Using SkyNet port forwarding
-
-SkyNet enables peer-to-peer port forwarding over Skywire transports. Unlike DmsgWeb which routes through DMSG servers, SkyNet uses direct peer-to-peer connections (STCPR, SUDPH) when available.
-
-#### Running a SkyNet Server
-
-To expose a local port over the Skywire network:
-
-```bash
-# Start a server exposing local port 8080
-skywire cli skynet srv start --port 8080
-
-# Start with a custom name
-skywire cli skynet srv start --port 3000 --name my-web-server
-
-# Restrict access to specific public keys (whitelist)
-skywire cli skynet srv start --port 8080 --wl 02abc...,03def...
-```
-
-Check server status:
-```bash
-skywire cli skynet srv status
-```
-
-Stop a server:
-```bash
-skywire cli skynet srv stop --name skynet-8080
-# Or stop by port
-skywire cli skynet srv stop --port 8080
-```
-
-#### Connecting with SkyNet Client
-
-To forward a remote SkyNet server port to your localhost:
-
-```bash
-# Connect to a remote server and forward to local port
-skywire cli skynet start --pk <server-public-key> --remote 8080 --local 9000
-
-# Use raw TCP mode (for non-HTTP traffic)
-skywire cli skynet start --pk <server-pk> --remote 3306 --local 3306 --raw-tcp
-```
-
-This makes the remote service available at `localhost:9000`.
-
-Check client status:
-```bash
-skywire cli skynet status
-```
-
-Stop a client:
-```bash
-skywire cli skynet stop --name skynet-client-9000
-```
-
-#### Example: Exposing a Web Server
-
-On the server visor:
-```bash
-# Start a local web server (e.g., on port 8080)
-python -m http.server 8080
-
-# Expose it via SkyNet
-skywire cli skynet srv start --port 8080
-```
-
-On the client visor:
-```bash
-# Get the server's public key
-SERVER_PK="02abc..."
-
-# Forward remote port 8080 to local port 9000
-skywire cli skynet start --pk $SERVER_PK --remote 8080 --local 9000
-
-# Access the remote web server locally
-curl http://localhost:9000
-```
-
-## Skycoin Rewards
-
-Running skywire on eligible hardware can earn rewards in skycoin. Currently, only package-based linux installations are supported for rewards.
-Review the [mainnet rules](/rewards/mainnet_rules.md) article for the details.
-
-Set a reward address:
-```
-skywire cli reward <skycoin-address>
-```
-Visors meeting uptime and eligability requirements will recieve daily skycoin rewards for up to 8 visors per location / ip address.
-
-## Linux Packages
-
-All Linux packages provide a virtually identical installation, helper scripts, and systemd services regardless of the linux distro.
-
-Consider the [skywire PKGBUILD](https://github.com/skycoin/AUR/blob/main/skywire/PKGBUILD) as a reference for building and installing skywire on any linux distribution.
-
-### Debian packages
-
-Debian packages are maintained for skywire, as well as several build variants for archlinux.
-
-It's recommended to install the debian packages from the apt repo - see the instructions here:
-
-https://deb.skywire.skycoin.com/
-
-### Arch Linux AUR packages
-
-Installing [skywire-bin](https://aur.archlinux.org/packages/skywire-bin) from the AUR will install the release binaries provided by the release section of this repository:
-```
-yay -S skywire-bin
-```
-
-**To build the debian packages using the release binaries:**
-```
-yay --mflags " -p cc.deb.PKGBUILD " -S skywire-bin
-```
-
-Installing [skywire](https://aur.archlinux.org/packages/skywire) from the AUR will compile binaries using the source archive for the latest version release:
-```
-yay -S skywire
-```
-
-Build the skywire Arch Linux package from git sources to the latest commits on the develop branch:
-```
-yay --mflags " -p git.PKGBUILD " -S skywire
-```
-
-### NixOS / Nix flake
-
-Two derivations under [`nix/`](/nix/) — same flavors as the AUR
-packages: `skywire` (source build, static-musl, mirrors
-`make build-static`) and `skywire-bin` (the upstream release
-tarball).
-
-From a checkout:
-```
-cd nix
-nix build .#skywire        # source, static musl
-nix build .#skywire-bin    # prebuilt tarball
-nix run   .#skywire -- --bv
-```
-
-Or as a flake input from elsewhere:
-```nix
-inputs.skywire.url = "github:skycoin/skywire?dir=nix";
-# ...
-environment.systemPackages = [ skywire.packages.${system}.skywire ];
-```
-
-See [`nix/README.md`](/nix/README.md) for the per-arch hash-fill
-flow on `skywire-bin`, the visor's `--apps-dir` integration, and
-the static-binary sanity check.
-
-## Docker
-
-For docker-specific documentation, see: [DOCKER.md](/DOCKER.md)
-
-## How to create a GitHub release
-
-1. Make sure that `git` and [goreleaser](https://goreleaser.com/install) are installed.
-2. Checkout to a commit you would like to create a release against.
-3. Run `go mod vendor` and `go mod tidy`.
-4. Make sure that `git status` is in clean state. Commit all vendor changes and source code changes.
-5. Uncomment `draft: true` in `.goreleaser.yml` if this is a test release.
-6. Create a `git` tag with desired release version and release name: `git tag -a 0.1.0 -m "First release"`,
-   where `0.1.0` is release version and `First release` is release name.
-5. Push the created tag to the repository: `git push origin 0.1.0`, where `0.1.0` is release version.
-6. [ ̶I̶s̶s̶u̶e̶ ̶a̶ ̶p̶e̶r̶s̶o̶n̶a̶l̶ ̶G̶i̶t̶H̶u̶b̶ ̶a̶c̶c̶e̶s̶s̶ ̶t̶o̶k̶e̶n̶.̶](https://github.com/settings/tokens)
-7.  ̶R̶u̶n̶ ̶`̶G̶I̶T̶H̶U̶B̶_̶T̶O̶K̶E̶N̶=̶y̶o̶u̶r̶_̶t̶o̶k̶e̶n̶ ̶m̶a̶k̶e̶ ̶g̶i̶t̶h̶u̶b̶-̶r̶e̶l̶e̶a̶s̶e̶`̶
-8. [Check the created GitHub release.](https://github.com/skycoin/skywire/releases/)
-
-
 ## Dependency Graph
 
-made with [goda](https://github.com/loov/goda)
+Made with [goda](https://github.com/loov/goda):
 
 ```
 go run github.com/loov/goda@latest graph github.com/skycoin/skywire/... | dot -Tsvg -o docs/skywire-goda-graph.svg
