@@ -175,13 +175,111 @@ func (tm *Manager) InitDmsgClient(ctx context.Context, dmsgC *dmsg.Client) {
 // from all those clients
 // Additionally, it runs cleanup and persistent reconnection routines
 func (tm *Manager) Serve(ctx context.Context) {
-	// for cleanup, reconnect, re-registration, and deferred deletion goroutines
-	tm.wg.Add(4)
+	// for cleanup, reconnect, re-registration, deferred deletion, and
+	// transport-maintenance goroutines (the latter replaces what used
+	// to be 2 goroutines per ManagedTransport)
+	tm.wg.Add(5)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
 	go tm.runReRegisterTransports(ctx)
 	go tm.runDeferredDeletions(ctx)
+	go tm.runTransportMaintenance(ctx)
 	tm.Logger.Debug("transport manager is serving.")
+}
+
+// runTransportMaintenance drives the periodic per-transport work
+// (LogStore flush + transport-level ping) from a single central
+// goroutine. Replaces the previous design where each ManagedTransport
+// ran its own logLoop and pingLoop goroutines plus tickers.
+//
+// On a hub visor with hundreds of automatic transports the old
+// per-transport tickers were the dominant cost in runtime-scheduler
+// CPU: 460 transports × (one 3s ticker + one 30s ticker) = ~150
+// scheduler wake-ups per second across the visor, the vast majority
+// for no-op work (logMod() reporting nothing changed). pprof captured
+// that as a 55% slice of total samples in runtime.mcall +
+// runtime.findRunnable + futex on a steady-state idle visor.
+//
+// Centralizing collapses those wake-ups to two (logTicker + pingTicker)
+// regardless of transport count, and drops ~2N goroutines from the
+// steady-state count.
+func (tm *Manager) runTransportMaintenance(ctx context.Context) {
+	defer tm.wg.Done()
+
+	logTicker := time.NewTicker(logWriteInterval)
+	pingTicker := time.NewTicker(transportPingInterval)
+	defer logTicker.Stop()
+	defer pingTicker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tm.done:
+			return
+		case <-logTicker.C:
+			tm.recordAllTransportLogs()
+		case <-pingTicker.C:
+			tm.pingAllTransports()
+		}
+	}
+}
+
+// recordAllTransportLogs flushes every live transport's in-memory log
+// entry to the LogStore. The store is an in-memory map (see
+// init_transport.go's logS = transport.InMemoryTransportLogStore())
+// so each flush is a single mutex-protected write; iterating all
+// transports inline is cheap and avoids spawning per-flush goroutines.
+func (tm *Manager) recordAllTransportLogs() {
+	tm.mx.RLock()
+	snapshot := make([]*ManagedTransport, 0, len(tm.tps))
+	for _, mt := range tm.tps {
+		snapshot = append(snapshot, mt)
+	}
+	tm.mx.RUnlock()
+
+	for _, mt := range snapshot {
+		mt.recordLog()
+	}
+}
+
+// pingAllTransports fans tickPing across the live transport set.
+//
+// Concurrency: tickPing's sendTransportPing path does a small Write on
+// the underlying transport (15-byte ping packet) that can in principle
+// block on a stalled remote. To prevent one slow transport from
+// stalling the rest of the ping sweep, we bound concurrency at
+// pingFanoutWorkers — large enough that the full sweep finishes well
+// within transportPingInterval even on a hub visor with hundreds of
+// transports, small enough that the burst spawn isn't itself a
+// scheduler hot spot.
+//
+// Per-tick goroutine accounting: pingFanoutWorkers short-lived
+// goroutines per pingTicker fire (every transportPingInterval) ≈ one
+// short-lived spike per minute. Compared to the previous model — one
+// long-lived goroutine per transport for the lifetime of the
+// transport — this is a substantial steady-state goroutine reduction.
+func (tm *Manager) pingAllTransports() {
+	tm.mx.RLock()
+	snapshot := make([]*ManagedTransport, 0, len(tm.tps))
+	for _, mt := range tm.tps {
+		snapshot = append(snapshot, mt)
+	}
+	tm.mx.RUnlock()
+
+	const pingFanoutWorkers = 32
+	sem := make(chan struct{}, pingFanoutWorkers)
+	var wg sync.WaitGroup
+	for _, mt := range snapshot {
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(mt *ManagedTransport) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			mt.tickPing()
+		}(mt)
+	}
+	wg.Wait()
 }
 
 func (tm *Manager) runReconnectPersistent(ctx context.Context) {
