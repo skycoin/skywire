@@ -19,23 +19,10 @@ skywire cli visor app ls
 ## Global Flags
 
 ```
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-```
-
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
-
-```
-app                    port     auto_start     status      detailed_status
-skynet-client-7002     12       false          stopped     
-vpn-client             43       false          stopped     
-skychat                1        true           running     Running
-skysocks               3        true           running     Running
-skysocks-client        13       false          stopped     
-vpn-server             44       false          stopped     
-skynet-7001            35       false          stopped     
+  -h, --help          show help menu
+      --json          print output as JSON
+      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

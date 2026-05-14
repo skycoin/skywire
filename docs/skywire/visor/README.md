@@ -17,9 +17,33 @@ skywire visor
 ## Flags
 
 ```
-  -c, --config string   config file to use (default): skywire-config.json
-      --systray         run as systray
-      --all             show all flags
+  -c, --config string        config file to use (default): skywire-config.json
+  -C, --confarg string       supply config as argument
+  -n, --stdin                read config from stdin
+  -b, --browser              open hypervisor ui in default web browser
+      --dmsg-server string   use specified dmsg server public key
+  -u, --user                 u̶s̶e̶r̶s̶p̶a̶c̶e̶ ̶c̶o̶n̶f̶i̶g̶ does not exist
+  -p, --pkg                  p̶a̶c̶k̶a̶g̶e̶ ̶c̶o̶n̶f̶i̶g̶ requires root permissions
+      --systray              run as systray
+  -x, --nohvui               disable hypervisor *
+  -j, --hv string            add remote hypervisor *
+  -k, --xhv                  disable remote hypervisors *
+  -l, --loglvl string        [ debug | warn | error | fatal | panic | trace ] *
+  -q, --pprofmode string     [ cpu | mem | mutex | block | trace | http ]
+  -r, --pprofaddr string     pprof http port (default "localhost:6060")
+  -t, --logtag string        logging tag (default "skywire")
+  -z, --completion string    [ bash | zsh | fish | powershell ]
+  -s, --storelog             store all logs to file
+      --forcecolor           force color logging when out is not STDOUT
+      --csrf                 Request a CSRF token for sensitive hypervisor API requests (default true)
+      --use-rf               force use of route finder (disable local route calculation)
+      --all                  show all flags
+```
+
+## Global Flags
+
+```
+  -h, --help   show help menu
 ```
 
 ---
