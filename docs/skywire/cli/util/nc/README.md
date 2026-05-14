@@ -42,6 +42,7 @@ skywire cli util nc [flags] [host] [port]
 ## Global Flags
 
 ```
+  -h, --help   show help menu
       --json   print output as JSON
 ```
 

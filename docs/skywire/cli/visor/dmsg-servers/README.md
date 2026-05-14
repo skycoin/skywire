@@ -19,27 +19,10 @@ skywire cli visor dmsg-servers
 ## Global Flags
 
 ```
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-```
-
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
-
-```
-+--------------------------------------------------------------------+-------------+
-| Server Public Key                                                  |     Latency |
-|--------------------------------------------------------------------+-------------|
-| 0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb |       0.0ms |
-| 02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd |       1.0ms |
-| 03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4 |       1.0ms |
-| 02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0 |       2.0ms |
-| 0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13 |     429.0ms |
-| 0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7 |     535.0ms |
-+--------------------------------------------------------------------+-------------+
-Note: Latency is measured via self-ping through each server.
-Servers with '-' latency have not been measured yet (wait ~5s after startup).
+  -h, --help          show help menu
+      --json          print output as JSON
+      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

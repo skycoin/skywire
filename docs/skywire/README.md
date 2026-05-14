@@ -26,7 +26,9 @@ skywire
 ## Flags
 
 ```
+      --all    show all subcommands (including hidden)
   -b, --bv     print runtime/debug.BuildInfo.Main.Version
+  -h, --help   show help menu
   -d, --info   print runtime/debug.BuildInfo
 ```
 

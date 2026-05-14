@@ -40,7 +40,9 @@ skywire cli skychat history
 
 ```
       --addr string   skychat HTTP address (default "127.0.0.1:8001")
+  -h, --help          show help menu
       --json          print output as JSON
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

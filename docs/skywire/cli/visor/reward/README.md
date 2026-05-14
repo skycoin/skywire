@@ -22,7 +22,9 @@ skywire cli visor reward
 ## Global Flags
 
 ```
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -h, --help          show help menu
+      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---
