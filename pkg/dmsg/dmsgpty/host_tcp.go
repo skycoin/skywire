@@ -4,7 +4,7 @@
 //
 // The dmsg-overlay path (ListenAndServe on a dmsg port) is the
 // primary entry. This file adds a parallel listener that operators
-// can enable via Dmsgpty.TCPListen in the visor config. The
+// can enable via Dmsgpty.SshListen in the visor config. The
 // handshake model intentionally mirrors ssh's:
 //
 //   - The CLIENT pins the SERVER's PK (passed as RemotePK on the
@@ -187,10 +187,17 @@ func (h *Host) serveTCPConn(
 		log.WithError(err).Debug("dmsgpty-tcp: noise handshake failed.")
 		return
 	}
-	if rw.Buffered() > 0 {
-		log.Warn("dmsgpty-tcp: noise handshake left buffered bytes — abort.")
-		return
-	}
+	// rw.Buffered() may be non-zero here when the client (whose
+	// writeRequest immediately follows the handshake) has already
+	// shipped its first application frame and rawInput's bufio reader
+	// has prefetched it during the handshake's final read. Those
+	// bytes are encrypted noise frames waiting to be decrypted by
+	// the next rw.Read — letting them through is correct; aborting
+	// here was the source of the intermittent
+	// "NewPtyClient: failed to read response: EOF" the client saw
+	// on fast/local TCP paths. The original defensive check assumed
+	// post-handshake buffered bytes were stale or attacker-injected,
+	// but ReadRawFrame would fail-closed on any garbage anyway.
 	rPK := rw.RemoteStatic()
 	log = log.WithField("remote_pk", rPK.String())
 
