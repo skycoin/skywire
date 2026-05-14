@@ -2,6 +2,7 @@
 
 [← skywire svc](../README.md)
 
+```
 ┌─┐┌┬┐┬ ┬┌┐┌   ┌─┐┌─┐┬─┐┬  ┬┌─┐┬─┐
 └─┐ │ │ ││││───└─┐├┤ ├┬┘└┐┌┘├┤ ├┬┘
 └─┘ ┴ └─┘┘└┘   └─┘└─┘┴└─ └┘ └─┘┴└─
@@ -11,6 +12,7 @@ Requires two distinct IPs for full NAT type detection.
 
   skywire svc stun --primary-ip 139.162.160.227 --secondary-ip 172.104.247.120
   skywire svc stun --primary-ip 127.0.0.1 --secondary-ip 127.0.0.2 --port 3478 --alt-port 3479
+```
 
 ## Usage
 

@@ -2,6 +2,7 @@
 
 [← skywire svc](../README.md)
 
+```
 ┌┬┐┬─┐┌─┐┌┐┌┌─┐┌─┐┌─┐┬─┐┌┬┐   ┌┬┐┬┌─┐┌─┐┌─┐┬  ┬┌─┐┬─┐┬ ┬
  │ ├┬┘├─┤│││└─┐├─┘│ │├┬┘ │ ─── │││└─┐│  │ │└┐┌┘├┤ ├┬┘└┬┘
  ┴ ┴└─┴ ┴┘└┘└─┘┴  └─┘┴└─ ┴    ─┴┘┴└─┘└─┘└─┘ └┘ └─┘┴└─ ┴ 
@@ -171,6 +172,7 @@ GET /security/nonces/{pk}
 Example:
   skywire cli config gen-keys | tee tpd-keys.txt
   transport-discovery --sk $(tail -n1 tpd-keys.txt)
+```
 
 ## Usage
 
