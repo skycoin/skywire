@@ -56,7 +56,7 @@ func init() {
 	sendCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (required)")
 	sendCmd.Flags().StringVarP(&message, "msg", "m", "", "message to send (required)")
 	sendCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type: skynet or dmsg")
-	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 0, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 = no wait (default)")
+	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 5*time.Second, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 disables wait and returns success on WriteFrame (fire-and-forget). Default 5s gives delivery confirmation.")
 	sendCmd.Flags().IntVarP(&sendRetries, "retries", "r", 1, "extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried.")
 	sendCmd.MarkFlagRequired("to")  //nolint:errcheck,gosec
 	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
@@ -93,27 +93,31 @@ var sendCmd = &cobra.Command{
 	Short: "Send a message",
 	Long: `Send a message to a remote public key via skychat.
 
-Default semantics ("--wait" not set): the message is written to the
-peer's framed connection and the command returns 200 as soon as the
-WriteFrame call succeeds. This confirms the message was handed to
-the underlying skywire transport — NOT that the peer's chat-app
-received or processed it.
+Default semantics (--wait=5s): the message is wrapped in a chat-msg
+envelope with a unique id and the command waits up to 5 seconds for
+the peer's chat-app to send a chat-ack envelope back. Success means
+the peer's chat-app actually received and processed the message —
+not just that the local visor handed it to its transport.
 
-With --wait DURATION the message is wrapped in a chat-msg envelope
-with a unique id; the command waits up to DURATION for the peer's
-chat-app to send a chat-ack envelope back. Outcomes:
+With --wait=0 the command returns success on WriteFrame (fire-and-
+forget), useful for automation that doesn't care whether the peer
+received the message. Pre-2026-05-14 default behavior.
+
+With --wait=DURATION (non-zero, non-default) waits that long for an
+ack instead of 5s. Server clamps --wait to [100ms, 60s]; values
+outside that range are normalized server-side.
+
+Outcomes (--wait > 0):
 
   acked within DURATION: command prints "Acked by <pk> in <ms>ms"
                          and exits 0.
   timeout:               command prints "Send to <pk> via <net> not
-                         acked within <DURATION>" and exits 1.
+                         acked: <reason>" and exits 1.
   peer on old binary:    --wait will time out because the chat-msg
                          envelope is interpreted as plain JSON text
                          by pre-2026-05-12 peers. The message was
-                         delivered but the peer can't ack.
-
-Server clamps --wait to [100ms, 60s]. Values outside that range
-are normalized server-side.`,
+                         delivered but the peer can't ack. Use
+                         --wait=0 against known-old peers.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		pk, err := resolveTarget(recipient)
 		if err != nil {
