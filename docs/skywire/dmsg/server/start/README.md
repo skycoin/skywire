@@ -16,7 +16,7 @@ skywire dmsg server start
       --auth string         auth passphrase as simple auth for official dmsg servers registration
   -c, --config string       location of config file (STDIN to read from standard input) (default "config.json")
   -m, --metrics string      address to serve metrics API from
-      --pprofaddr string    pprof http port[0m (default "localhost:6060")
+      --pprofaddr string    pprof http port (default "localhost:6060")
       --pprofmode string    [ cpu | mem | mutex | block | trace | http ]
       --stdin               whether to read config via stdin
       --syslog string       address in which to dial to syslog server

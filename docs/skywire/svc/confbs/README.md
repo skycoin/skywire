@@ -19,35 +19,35 @@ HTTP Endpoints:
 Response Examples (from actual struct types):
 
 GET /health - api.HealthCheckResponse
-[1m{[0m
-      [1m[94m"build_info"[0m[1m:[0m [1m{[0m
-        [1m[94m"commit"[0m[1m:[0m [32m"abc1234"[0m[1m,[0m
-        [1m[94m"date"[0m[1m:[0m [32m"2024-01-15T10:30:00Z"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"dmsg_address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80"[0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
-    [1m}[0m
+{
+      "build_info": {
+        "commit": "abc1234",
+        "date": "2024-01-15T10:30:00Z",
+        "version": "v1.3.29"
+      },
+      "dmsg_address": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80",
+      "started_at": "2024-01-15T10:00:00Z"
+    }
 
 GET / - visorconfig.Services
-[1m{[0m
-      [1m[94m"address_resolver"[0m[1m:[0m [32m"http://ar.skywire.skycoin.com"[0m[1m,[0m
-      [1m[94m"dmsg_discovery"[0m[1m:[0m [32m"http://dmsgd.skywire.skycoin.com"[0m[1m,[0m
-      [1m[94m"route_finder"[0m[1m:[0m [32m"http://rf.skywire.skycoin.com"[0m[1m,[0m
-      [1m[94m"route_setup_nodes"[0m[1m:[0m [1m[[0m
-        [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-        [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"service_discovery"[0m[1m:[0m [32m"http://sd.skycoin.com"[0m[1m,[0m
-      [1m[94m"stun_servers"[0m[1m:[0m [1m[[0m
-        [32m"stun.l.google.com:19302"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"transport_discovery"[0m[1m:[0m [32m"http://tpd.skywire.skycoin.com"[0m[1m,[0m
-      [1m[94m"transport_setup"[0m[1m:[0m [1m[[0m
-        [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"uptime_tracker"[0m[1m:[0m [32m"http://ut.skywire.skycoin.com"[0m
-    [1m}[0m
+{
+      "address_resolver": "http://ar.skywire.skycoin.com",
+      "dmsg_discovery": "http://dmsgd.skywire.skycoin.com",
+      "route_finder": "http://rf.skywire.skycoin.com",
+      "route_setup_nodes": [
+        "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+      ],
+      "service_discovery": "http://sd.skycoin.com",
+      "stun_servers": [
+        "stun.l.google.com:19302"
+      ],
+      "transport_discovery": "http://tpd.skywire.skycoin.com",
+      "transport_setup": [
+        "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+      ],
+      "uptime_tracker": "http://ut.skywire.skycoin.com"
+    }
 ```
 
 ## Usage

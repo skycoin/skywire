@@ -27,67 +27,67 @@ HTTP Endpoints:
 Request/Response Examples:
 
 GET /health
-  [1m{[0m
-      [1m[94m"build_info"[0m[1m:[0m [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"dmsg_address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80"[0m[1m,[0m
-      [1m[94m"dmsg_servers"[0m[1m:[0m [1m[[0m
-        [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
-    [1m}[0m
+  {
+      "build_info": {
+        "version": "v1.3.29"
+      },
+      "dmsg_address": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80",
+      "dmsg_servers": [
+        "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+      ],
+      "started_at": "2024-01-15T10:00:00Z"
+    }
 
 GET /api/services?type=vpn&version=v1.3&country=US&quantity=10
-  [1m[[0m
-      [1m{[0m
-        [1m[94m"address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:3"[0m[1m,[0m
-        [1m[94m"geo"[0m[1m:[0m [1m{[0m
-          [1m[94m"country"[0m[1m:[0m [32m"US"[0m[1m,[0m
-          [1m[94m"lat"[0m[1m:[0m [33m37.77[0m[1m,[0m
-          [1m[94m"lon"[0m[1m:[0m [33m-122.41[0m[1m,[0m
-          [1m[94m"region"[0m[1m:[0m [32m"CA"[0m
-        [1m}[0m[1m,[0m
-        [1m[94m"type"[0m[1m:[0m [32m"vpn"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-      [1m}[0m
-    [1m][0m
+  [
+      {
+        "address": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:3",
+        "geo": {
+          "country": "US",
+          "lat": 37.77,
+          "lon": -122.41,
+          "region": "CA"
+        },
+        "type": "vpn",
+        "version": "v1.3.29"
+      }
+    ]
 
 GET /api/services/{addr}?type=vpn
-  [1m{[0m
-      [1m[94m"address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:3"[0m[1m,[0m
-      [1m[94m"geo"[0m[1m:[0m [1m{[0m
-        [1m[94m"country"[0m[1m:[0m [32m"US"[0m[1m,[0m
-        [1m[94m"lat"[0m[1m:[0m [33m37.77[0m[1m,[0m
-        [1m[94m"lon"[0m[1m:[0m [33m-122.41[0m[1m,[0m
-        [1m[94m"region"[0m[1m:[0m [32m"CA"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"type"[0m[1m:[0m [32m"vpn"[0m[1m,[0m
-      [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-    [1m}[0m
+  {
+      "address": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:3",
+      "geo": {
+        "country": "US",
+        "lat": 37.77,
+        "lon": -122.41,
+        "region": "CA"
+      },
+      "type": "vpn",
+      "version": "v1.3.29"
+    }
 
 POST /api/services (auth)
-  Request:  [1m{[0m
-      [1m[94m"address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:3"[0m[1m,[0m
-      [1m[94m"type"[0m[1m:[0m [32m"vpn"[0m[1m,[0m
-      [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-    [1m}[0m
+  Request:  {
+      "address": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:3",
+      "type": "vpn",
+      "version": "v1.3.29"
+    }
   Response: (same with geo data added)
 
 DEL /api/services/{addr}?type=vpn (auth)
   Response: true
 
 DEL /api/services/deregister/{type} (NM auth headers: NM-PK, NM-Sign)
-  Request:  [1m[[0m
-      [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-      [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-    [1m][0m
+  Request:  [
+      "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+      "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+    ]
   Response: true
 
 GET /security/nonces/{pk}
-  [1m{[0m
-      [1m[94m"nonce"[0m[1m:[0m [33m12345[0m
-    [1m}[0m
+  {
+      "nonce": 12345
+    }
 
 Example:
   skywire cli config gen-keys | tee sd-keys.txt
