@@ -71,6 +71,18 @@ type CXDS interface {
 	// doesn't exist
 	Del(key cipher.SHA256) (err error)
 
+	// RunBatch invokes fn with a CXDS handle that performs all of its
+	// Set/Get/Inc/Del calls inside a single underlying transaction. On
+	// bbolt-backed stores this collapses N writer transactions (and N
+	// commits) into one, which is the dominant cost on publisher
+	// tree-walks. The scoped handle is only valid for the duration of
+	// fn; using it after fn returns is undefined.
+	//
+	// fn returning nil commits the batch; a non-nil return rolls it
+	// back. RunBatch on stores without transaction semantics (in-memory
+	// CXDS) is a passthrough: fn is invoked with the receiver.
+	RunBatch(fn func(scoped CXDS) error) (err error)
+
 	//
 	// Stat
 	//

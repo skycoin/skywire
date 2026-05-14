@@ -326,6 +326,37 @@ func (d *driveCXDS) incr(
 	return nrc, err
 }
 
+// getInTx is Get's bucket-level work scoped to a caller-provided tx.
+// Returns the value (copy), the (possibly updated) rc, and any error.
+// Used by both the per-op Get (which opens its own tx) and the batch
+// shim (which inherits a parent tx).
+func (d *driveCXDS) getInTx(
+	tx *bolt.Tx,
+	key cipher.SHA256,
+	inc int,
+) (
+	val []byte,
+	rc uint32,
+	err error,
+) {
+
+	var (
+		o   = tx.Bucket(objsBucket)
+		got = o.Get(key[:])
+	)
+
+	if len(got) == 0 {
+		return nil, 0, data.ErrNotFound
+	}
+
+	rc = getRefsCount(got)
+	val = make([]byte, len(got)-4)
+	copy(val, got[4:])
+
+	rc, err = d.incr(o, key[:], val, rc, inc)
+	return val, rc, err
+}
+
 // Get value by key changing or
 // leaving as is references counter.
 //
@@ -349,29 +380,15 @@ func (d *driveCXDS) Get(
 	err error, //         :
 ) {
 
-	var tx = func(tx *bolt.Tx) (err error) {
-
-		var (
-			o   = tx.Bucket(objsBucket)
-			got = o.Get(key[:])
-		)
-
-		if len(got) == 0 {
-			return data.ErrNotFound // pass through
-		}
-
-		rc = getRefsCount(got)
-		val = make([]byte, len(got)-4)
-		copy(val, got[4:])
-
-		rc, err = d.incr(o, key[:], val, rc, inc)
+	fn := func(tx *bolt.Tx) (err error) {
+		val, rc, err = d.getInTx(tx, key, inc)
 		return err
 	}
 
 	if inc == 0 {
-		err = d.b.View(tx) // lookup only — no transaction commit at all
+		err = d.b.View(fn) // lookup only — no transaction commit at all
 	} else {
-		err = d.b.Batch(tx) // refcount bump — coalesces with concurrent calls
+		err = d.b.Batch(fn) // refcount bump — coalesces with concurrent calls
 	}
 
 	return val, rc, err
@@ -387,6 +404,41 @@ func (d *driveCXDS) addAll(vol int) {
 
 	d.amountAll++
 	d.volumeAll += vol
+}
+
+// setInTx is Set's bucket-level work scoped to a caller-provided tx.
+// The tx must be writable (i.e. opened via db.Update or db.Batch).
+// Callers are responsible for the value-length and inc preconditions
+// — setInTx will panic on inc <= 0 mirroring the exported Set.
+func (d *driveCXDS) setInTx(
+	tx *bolt.Tx,
+	key cipher.SHA256,
+	val []byte,
+	inc int,
+) (
+	rc uint32,
+	err error,
+) {
+
+	if inc <= 0 {
+		panicf("invalid inc argument in CXDS.Set: %d", inc)
+	}
+
+	if len(val) == 0 {
+		return 0, ErrEmptyValue
+	}
+
+	var (
+		o   = tx.Bucket(objsBucket)
+		got = o.Get(key[:])
+	)
+
+	if len(got) == 0 {
+		d.addAll(len(val))
+		return d.incr(o, key[:], val, 0, 1)
+	}
+
+	return d.incr(o, key[:], got[4:], getRefsCount(got), inc)
 }
 
 // Set value and its references counter.
@@ -411,15 +463,6 @@ func (d *driveCXDS) Set(
 	err error,
 ) {
 
-	if inc <= 0 {
-		panicf("invalid inc argument in CXDS.Set: %d", inc)
-	}
-
-	if len(val) == 0 {
-		err = ErrEmptyValue
-		return rc, err
-	}
-
 	// Probe whether the key already exists so we can pick Batch
 	// (refcount-only) vs Update (new value) without rolling the
 	// branch decision into a single committed tx.
@@ -432,20 +475,7 @@ func (d *driveCXDS) Set(
 	}
 
 	fn := func(tx *bolt.Tx) (err error) {
-		var (
-			o   = tx.Bucket(objsBucket)
-			got = o.Get(key[:])
-		)
-
-		if len(got) == 0 {
-			// created (the probe could race with a concurrent Del;
-			// fall through to the create path)
-			d.addAll(len(val))
-			rc, err = d.incr(o, key[:], val, 0, 1)
-			return err
-		}
-
-		rc, err = d.incr(o, key[:], got[4:], getRefsCount(got), inc)
+		rc, err = d.setInTx(tx, key, val, inc)
 		return err
 	}
 
@@ -458,6 +488,34 @@ func (d *driveCXDS) Set(
 	return rc, err
 }
 
+// incInTx is Inc's bucket-level work scoped to a caller-provided tx.
+func (d *driveCXDS) incInTx(
+	tx *bolt.Tx,
+	key cipher.SHA256,
+	inc int,
+) (
+	rc uint32,
+	err error,
+) {
+
+	var (
+		o   = tx.Bucket(objsBucket)
+		got = o.Get(key[:])
+	)
+
+	if len(got) == 0 {
+		return 0, data.ErrNotFound
+	}
+
+	rc = getRefsCount(got)
+
+	if inc == 0 {
+		return rc, nil // presence check only
+	}
+
+	return d.incr(o, key[:], got[4:], rc, inc)
+}
+
 // Inc changes references counter
 func (d *driveCXDS) Inc(
 	key cipher.SHA256,
@@ -467,31 +525,15 @@ func (d *driveCXDS) Inc(
 	err error,
 ) {
 
-	var tx = func(tx *bolt.Tx) (_ error) {
-
-		var (
-			o   = tx.Bucket(objsBucket)
-			got = o.Get(key[:])
-		)
-
-		if len(got) == 0 {
-			return data.ErrNotFound
-		}
-
-		rc = getRefsCount(got)
-
-		if inc == 0 {
-			return nil // done
-		}
-
-		rc, err = d.incr(o, key[:], got[4:], rc, inc)
-		return nil
+	fn := func(tx *bolt.Tx) (err error) {
+		rc, err = d.incInTx(tx, key, inc)
+		return err
 	}
 
 	if inc == 0 {
-		err = d.b.View(tx) // lookup only
+		err = d.b.View(fn) // lookup only
 	} else {
-		err = d.b.Batch(tx) // refcount bump — coalesce concurrent calls
+		err = d.b.Batch(fn) // refcount bump — coalesce concurrent calls
 	}
 
 	return rc, err
@@ -511,6 +553,26 @@ func (d *driveCXDS) del(rc uint32, vol int) {
 	d.volumeAll -= vol
 }
 
+// delInTx is Del's bucket-level work scoped to a caller-provided tx.
+func (d *driveCXDS) delInTx(tx *bolt.Tx, key cipher.SHA256) (err error) {
+
+	var (
+		o   = tx.Bucket(objsBucket)
+		got = o.Get(key[:])
+	)
+
+	if len(got) == 0 {
+		return nil // not found
+	}
+
+	if err = o.Delete(key[:]); err != nil {
+		return err
+	}
+
+	d.del(getRefsCount(got), len(got)-4)
+	return nil
+}
+
 // Del deletes value unconditionally
 func (d *driveCXDS) Del(
 	key cipher.SHA256,
@@ -523,22 +585,7 @@ func (d *driveCXDS) Del(
 	// commit) is appropriate. Visibility semantics are preserved —
 	// Batch blocks the caller until the enclosing tx commits.
 	err = d.b.Batch(func(tx *bolt.Tx) (err error) {
-
-		var (
-			o   = tx.Bucket(objsBucket)
-			got = o.Get(key[:])
-		)
-
-		if len(got) == 0 {
-			return // not found
-		}
-
-		if err = o.Delete(key[:]); err != nil {
-			return
-		}
-
-		d.del(getRefsCount(got), len(got)-4)
-		return // nil
+		return d.delInTx(tx, key)
 	})
 
 	return
@@ -655,4 +702,76 @@ func copySlice(in []byte) (got []byte) { //nolint:unused
 	got = make([]byte, len(in))
 	copy(got, in)
 	return
+}
+
+// RunBatch opens one writable bbolt tx and exposes a CXDS view scoped
+// to it. Every Set/Get/Inc/Del invoked on the scoped handle runs
+// inside that single tx, so the cost of opening + committing the tx
+// is amortized across the whole batch. Callers must not retain the
+// scoped handle past fn's return — the tx is committed (or rolled
+// back on error) when fn exits.
+//
+// The dominant workload that drives this path is the publisher
+// tree-walk (skyobject.Container.Save via cxds.Set per encoded leaf),
+// where pre-batch each leaf opened its own db.Update. Coalescing N
+// per-leaf transactions into one removes N-1 meta-page writes,
+// freelist re-allocations, and (when NoSync is off) fdatasyncs.
+//
+// Iterate, IterateDel, and Close are deliberately unavailable on the
+// scoped handle — the publisher path doesn't need them and exposing
+// them inside the writer tx risks deadlocking against bbolt's reader
+// semantics. Callers that need a write-then-iterate cycle should
+// commit the batch first.
+func (d *driveCXDS) RunBatch(fn func(scoped data.CXDS) error) (err error) {
+	return d.b.Update(func(tx *bolt.Tx) error {
+		return fn(&txDriveCXDS{parent: d, tx: tx})
+	})
+}
+
+// txDriveCXDS is a CXDS view bound to a single writable bbolt tx.
+// All Set/Get/Inc/Del operations route through the parent driveCXDS's
+// *InTx helpers using the pinned tx, so they share a single commit at
+// the end of the enclosing RunBatch.
+type txDriveCXDS struct {
+	parent *driveCXDS
+	tx     *bolt.Tx
+}
+
+func (s *txDriveCXDS) Get(key cipher.SHA256, inc int) ([]byte, uint32, error) {
+	return s.parent.getInTx(s.tx, key, inc)
+}
+
+func (s *txDriveCXDS) Set(key cipher.SHA256, val []byte, inc int) (uint32, error) {
+	return s.parent.setInTx(s.tx, key, val, inc)
+}
+
+func (s *txDriveCXDS) Inc(key cipher.SHA256, inc int) (uint32, error) {
+	return s.parent.incInTx(s.tx, key, inc)
+}
+
+func (s *txDriveCXDS) Del(key cipher.SHA256) error {
+	return s.parent.delInTx(s.tx, key)
+}
+
+func (s *txDriveCXDS) Iterate(data.IterateObjectsFunc) error {
+	return ErrUnsupportedInBatch
+}
+
+func (s *txDriveCXDS) IterateDel(data.IterateObjectsDelFunc) error {
+	return ErrUnsupportedInBatch
+}
+
+// Amount/Volume read the parent's atomic counters; safe to call
+// during a batch.
+func (s *txDriveCXDS) Amount() (all, used int) { return s.parent.Amount() }
+func (s *txDriveCXDS) Volume() (all, used int) { return s.parent.Volume() }
+
+func (s *txDriveCXDS) Close() error {
+	return ErrUnsupportedInBatch
+}
+
+// RunBatch on a batch-scoped handle reuses the active tx — nested
+// batch is just a passthrough.
+func (s *txDriveCXDS) RunBatch(fn func(scoped data.CXDS) error) error {
+	return fn(s)
 }

@@ -37,6 +37,12 @@ var (
 	// with "assignment to entry in nil map" — see the fillHead
 	// goroutine path in pkg/cxo/node/head.go that triggered this.
 	ErrClosed = errors.New("CXDS store closed")
+
+	// ErrUnsupportedInBatch is returned by methods on a CXDS handle
+	// scoped to a RunBatch tx when the method can't safely run while
+	// holding an open writer transaction (e.g. Close, Iterate-style
+	// scans that the caller did not opt into via the batch).
+	ErrUnsupportedInBatch = errors.New("operation not supported inside CXDS batch")
 )
 
 func getRefsCount(val []byte) (rc uint32) {
