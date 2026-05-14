@@ -164,7 +164,7 @@ func parsePortSpec(spec string) ([]uint16, error) {
 				return nil, fmt.Errorf("range %q has end < start", tok)
 			}
 			for p := lo; p <= hi; p++ {
-				port := uint16(p)
+				port := uint16(p) //nolint:gosec // ParseUint(..., 16) already bounds p to uint16 range
 				if _, dup := seen[port]; !dup {
 					seen[port] = struct{}{}
 					out = append(out, port)
@@ -230,13 +230,13 @@ func runMultiPortProbe(cmd *cobra.Command, pk cipher.PubKey, ports []uint16) {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "PORT\tREACHABLE\tLATENCY\tERROR")
+	fmt.Fprintln(w, "PORT\tREACHABLE\tLATENCY\tERROR") //nolint:errcheck
 	for _, r := range results {
 		state := "no"
 		if r.Reachable {
 			state = "yes"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n",
+		fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", //nolint:errcheck
 			r.Port, state, r.Latency.Round(time.Millisecond).String(), r.Err)
 	}
 	_ = w.Flush() //nolint:errcheck

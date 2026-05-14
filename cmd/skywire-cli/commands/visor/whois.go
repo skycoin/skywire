@@ -19,11 +19,8 @@
 package clivisor
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
 	"text/tabwriter"
@@ -62,21 +59,21 @@ func init() {
 // services that respond with "not found" return empty, services
 // that don't respond at all return an Error.
 type whoisReport struct {
-	PK         string         `json:"pk"`
-	Transports whoisBlock     `json:"transports"`
-	Uptime     whoisBlock     `json:"uptime"`
-	Services   whoisBlock     `json:"services"`
+	PK         string     `json:"pk"`
+	Transports whoisBlock `json:"transports"`
+	Uptime     whoisBlock `json:"uptime"`
+	Services   whoisBlock `json:"services"`
 }
 
 // whoisBlock is the per-service result shape. Raw is the
 // service's JSON response payload (truncated in human output);
 // scripts get the full body via --json.
 type whoisBlock struct {
-	URL      string          `json:"url"`
-	Status   int             `json:"http_status"`
-	Error    string          `json:"error,omitempty"`
-	Raw      json.RawMessage `json:"raw,omitempty"`
-	Summary  string          `json:"summary,omitempty"`
+	URL     string          `json:"url"`
+	Status  int             `json:"http_status"`
+	Error   string          `json:"error,omitempty"`
+	Raw     json.RawMessage `json:"raw,omitempty"`
+	Summary string          `json:"summary,omitempty"`
 }
 
 var whoisCmd = &cobra.Command{
@@ -115,7 +112,7 @@ rather than failing the whole command.`,
 		}
 
 		report := whoisReport{PK: pk.String()}
-		rc, _ := clirpc.Client(cmd.Flags()) //nolint:errcheck — best-effort, fall back to HTTP-only
+		rc, _ := clirpc.Client(cmd.Flags()) //nolint:errcheck // best-effort, fall back to HTTP-only
 
 		// Transports: prefer the visor RPC (already authenticated +
 		// rate-limited against the same TPD the operator's visor
@@ -125,7 +122,7 @@ rather than failing the whole command.`,
 			report.Transports = transportsFromVisor(rc, pk)
 		} else {
 			report.Transports = whoisBlock{
-				URL: "(visor RPC unavailable)",
+				URL:   "(visor RPC unavailable)",
 				Error: "visor RPC client not initialized; transport lookup needs a local visor",
 			}
 		}
@@ -136,7 +133,7 @@ rather than failing the whole command.`,
 			report.Uptime = uptimeFromVisor(rc, pk.String())
 		} else {
 			report.Uptime = whoisBlock{
-				URL: "(visor RPC unavailable)",
+				URL:   "(visor RPC unavailable)",
 				Error: "visor RPC client not initialized; uptime lookup needs a local visor",
 			}
 		}
@@ -152,7 +149,7 @@ rather than failing the whole command.`,
 		// answered by the operator running `cli sd` themselves with
 		// the type they care about. We surface that as a note here.
 		report.Services = whoisBlock{
-			URL: "(no per-PK SD lookup; SD is keyed by service type)",
+			URL:     "(no per-PK SD lookup; SD is keyed by service type)",
 			Summary: "use `skywire cli sd --type <skysocks|vpn|visor>` to list a service type",
 		}
 
@@ -165,11 +162,11 @@ rather than failing the whole command.`,
 
 		fmt.Printf("PK: %s\n\n", pk)
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "SOURCE\tHTTP\tSUMMARY")
-		fmt.Fprintf(w, "transports\t%s\t%s\n", httpCell(report.Transports), valOrErr(report.Transports))
-		fmt.Fprintf(w, "uptime\t%s\t%s\n", httpCell(report.Uptime), valOrErr(report.Uptime))
-		fmt.Fprintf(w, "services\t%s\t%s\n", httpCell(report.Services), valOrErr(report.Services))
-		_ = w.Flush() //nolint:errcheck
+		fmt.Fprintln(w, "SOURCE\tHTTP\tSUMMARY")                                                         //nolint:errcheck
+		fmt.Fprintf(w, "transports\t%s\t%s\n", httpCell(report.Transports), valOrErr(report.Transports)) //nolint:errcheck
+		fmt.Fprintf(w, "uptime\t%s\t%s\n", httpCell(report.Uptime), valOrErr(report.Uptime))             //nolint:errcheck
+		fmt.Fprintf(w, "services\t%s\t%s\n", httpCell(report.Services), valOrErr(report.Services))       //nolint:errcheck
+		_ = w.Flush()                                                                                    //nolint:errcheck
 	},
 }
 
@@ -227,71 +224,6 @@ func uptimeFromVisor(rc interface {
 	return block
 }
 
-// fetchWhoisBlock hits the URL with a per-service timeout, captures
-// the response body verbatim, and runs the per-source summarizer
-// over the parsed JSON. Errors are folded into the block's Error
-// field rather than failing the whole report.
-func fetchWhoisBlock(url string, summarizer func(json.RawMessage) string) whoisBlock {
-	block := whoisBlock{URL: url}
-	ctx, cancel := context.WithTimeout(context.Background(), whoisTimeout)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		block.Error = err.Error()
-		return block
-	}
-	client := &http.Client{Timeout: whoisTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		block.Error = err.Error()
-		return block
-	}
-	defer resp.Body.Close() //nolint:errcheck
-	block.Status = resp.StatusCode
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		block.Error = err.Error()
-		return block
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		block.Summary = "no record"
-		return block
-	}
-	if resp.StatusCode >= 300 {
-		block.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
-		return block
-	}
-	// json.RawMessage preserves the body for --json output without
-	// re-marshaling. We still parse-for-summary below; an unparseable
-	// body falls through to a generic summary.
-	block.Raw = json.RawMessage(body)
-	block.Summary = summarizer(block.Raw)
-	return block
-}
-
-// summarizeTransports renders a one-line count of the transports
-// the visor participates in, broken down by type. The TPD edge
-// endpoint returns a JSON array of transport entries.
-func summarizeTransports(raw json.RawMessage) string {
-	var entries []map[string]interface{}
-	if err := json.Unmarshal(raw, &entries); err != nil {
-		return "unparseable response"
-	}
-	if len(entries) == 0 {
-		return "no transports"
-	}
-	byType := map[string]int{}
-	for _, e := range entries {
-		t, _ := e["type"].(string)
-		byType[t]++
-	}
-	var parts []string
-	for t, n := range byType {
-		parts = append(parts, fmt.Sprintf("%s=%d", t, n))
-	}
-	return fmt.Sprintf("%d total (%s)", len(entries), strings.Join(parts, " "))
-}
-
 // summarizeUptime extracts a headline from a UT response. The
 // production UT endpoint returns an array of {pk, on, version,
 // daily: {YYYY-MM-DD: "pct"}} records — newest date in `daily` is
@@ -341,26 +273,6 @@ func summarizeUptime(raw json.RawMessage) string {
 		return fmt.Sprintf("%s v=%s (no daily uptime data)", on, version)
 	}
 	return on + " (uptime payload missing daily map)"
-}
-
-// summarizeServices renders a count + sample of advertised services
-// from an SD response. SD returns a list of {service_name, dmsg_addr}
-// records keyed by visor PK.
-func summarizeServices(raw json.RawMessage) string {
-	var services []map[string]interface{}
-	if err := json.Unmarshal(raw, &services); err != nil {
-		return "unparseable response"
-	}
-	if len(services) == 0 {
-		return "no services"
-	}
-	names := make([]string, 0, len(services))
-	for _, s := range services {
-		if n, _ := s["type"].(string); n != "" {
-			names = append(names, n)
-		}
-	}
-	return fmt.Sprintf("%d advertised (%s)", len(services), strings.Join(names, ","))
 }
 
 // httpCell renders the status as "200", "404", "rpc" (for visor-
