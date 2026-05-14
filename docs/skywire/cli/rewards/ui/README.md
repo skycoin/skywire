@@ -2,6 +2,7 @@
 
 [← skywire cli rewards](../README.md)
 
+```
 skycoin reward system user interface server and skywire network metrics:
  https://fiber.skywire.dev
 ┌─┐┬┌┐ ┌─┐┬─┐
@@ -10,6 +11,7 @@ skycoin reward system user interface server and skywire network metrics:
 
 .conf file may also be specified with
 SKYENV=/path/to/fiber.conf fiber run
+```
 
 ## Usage
 
