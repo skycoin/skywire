@@ -7,9 +7,11 @@
 // e.g. a tiny VPS that exists only to bridge a mail-server's
 // outbound queue onto skywire.
 //
-// For deployments that already run a visor, prefer the visor app
-// flavor in cmd/apps/skymail-bridge — it shares the visor's dmsg
-// session and doesn't need its own keypair.
+// For deployments that already run a visor, the in-process
+// equivalent lives in pkg/visor/embedded_skymail_bridge.go and is
+// toggled via `skywire cli mail up` / the skymail_bridge config
+// section — it shares the visor's dmsg session and needs no second
+// keypair.
 package main
 
 import (

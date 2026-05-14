@@ -290,6 +290,7 @@ func init() {
 	// upstream → skynetweb so one entry covers both TLDs.
 	genConfigCmd.Flags().BoolVar(&enableDmsgWeb, "dmsgweb", scriptExecBool("${DMSGWEB:-false}"), "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445")
 	genConfigCmd.Flags().BoolVar(&enableSkynetWeb, "skynetweb", scriptExecBool("${SKYNETWEB:-false}"), "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
+	genConfigCmd.Flags().BoolVar(&enableSkymailBridge, "skymail-bridge", scriptExecBool("${SKYMAILBRIDGE:-false}"), "enable embedded SMTP→skywire bridge on 127.0.0.1:1025 (relays *.skynet recipients over dmsg)")
 	genConfigCmd.Flags().StringVar(&dmsgWebUpstreamSOCKS, "dmsgweb-upstream", scriptExecString("${DMSGWEBUPSTREAM}"), "upstream SOCKS5 for non-.dmsg traffic (e.g. 127.0.0.1:1080); empty + skynetweb on = auto-chain to skynetweb")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-upstream")
 	genConfigCmd.Flags().StringVar(&skynetWebUpstreamSOCKS, "skynetweb-upstream", scriptExecString("${SKYNETWEBUPSTREAM}"), "upstream SOCKS5 for non-.skynet traffic (e.g. 127.0.0.1:1080)")
@@ -1652,19 +1653,6 @@ func configureApps(log *logging.Logger) {
 				Port:      routing.Port(skyenv.VPNServerPort),
 				Args:      []string{"app", "vpn-server"},
 			},
-			{
-				// skymail-bridge: SMTP→skywire bridge. Off by default
-				// — operators opt in by setting auto_start=true and
-				// adding the Postfix transport_map line. The Args
-				// here mirror the documented sender-side defaults
-				// from cmd/apps/skymail-bridge/README.md so a fresh
-				// config gen produces a runnable entry.
-				Name:      skyenv.SkymailBridgeName,
-				Binary:    "skywire",
-				AutoStart: false,
-				Port:      routing.Port(skyenv.SkymailBridgePort),
-				Args:      []string{"app", "skymail-bridge", "--addr", skyenv.SkymailBridgeAddr, "--mode", "b"},
-			},
 		}
 		// Skycoin daemon — full node, syncs the chain locally. May
 		// emit one entry (legacy single-instance) or N (one per
@@ -1744,14 +1732,6 @@ func configureApps(log *logging.Logger) {
 				AutoStart: isVpnServerEnable,
 				Args:      []string{},
 				Port:      routing.Port(skyenv.VPNServerPort),
-			},
-			{
-				// skymail-bridge mirrors the external-apps entry — see
-				// the external branch comment above for rationale.
-				Name:      skyenv.SkymailBridgeName,
-				AutoStart: false,
-				Port:      routing.Port(skyenv.SkymailBridgePort),
-				Args:      []string{"--addr", skyenv.SkymailBridgeAddr, "--mode", "b"},
 			},
 		}
 	}
@@ -1876,6 +1856,13 @@ func configureResolvingProxies() {
 		conf.SkynetWeb = &visorconfig.SkynetWebConfig{
 			Enable:        true,
 			UpstreamSOCKS: skynetWebUpstreamSOCKS,
+		}
+	}
+	if enableSkymailBridge {
+		conf.SkymailBridge = &visorconfig.SkymailBridgeConfig{
+			Enable: true,
+			Addr:   skyenv.SkymailBridgeAddr,
+			Mode:   "b",
 		}
 	}
 }
