@@ -194,8 +194,8 @@ func TestNCSpliceLargePayload(t *testing.T) {
 			t.Errorf("accept: %v", err)
 			return
 		}
-		defer conn.Close() //nolint:errcheck
-		_, _ = io.Copy(conn, bytes.NewReader(payload))
+		defer conn.Close()                             //nolint:errcheck
+		_, _ = io.Copy(conn, bytes.NewReader(payload)) //nolint:errcheck
 	}()
 
 	conn, err := net.Dial("tcp", lis.Addr().String())

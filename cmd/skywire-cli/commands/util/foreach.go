@@ -257,7 +257,7 @@ func runOne(parent context.Context, target string, idx int, template string) for
 
 	ctx, cancel := context.WithTimeout(parent, foreachTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, foreachShell, "-c", expanded)
+	cmd := exec.CommandContext(ctx, foreachShell, "-c", expanded) //nolint:gosec // foreach's purpose is to run an operator-supplied command per target
 	stdout := &strings.Builder{}
 	stderr := &strings.Builder{}
 	cmd.Stdout = stdout
