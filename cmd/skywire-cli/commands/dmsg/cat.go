@@ -331,7 +331,7 @@ func splitPKPort(s string) (cipher.PubKey, uint16, error) {
 func spliceStdio(conn net.Conn) error {
 	var (
 		once    sync.Once
-		closeFn = func() { _ = conn.Close() }
+		closeFn = func() { _ = conn.Close() } //nolint:errcheck
 	)
 	done := make(chan error, 2)
 	go func() {
@@ -379,7 +379,7 @@ func spliceStdioHalfClose(conn net.Conn) error {
 	go func() {
 		_, err := io.Copy(conn, os.Stdin)
 		if cw, ok := conn.(closeWriter); ok {
-			_ = cw.CloseWrite()
+			_ = cw.CloseWrite() //nolint:errcheck
 		}
 		done <- err
 	}()
@@ -389,7 +389,7 @@ func spliceStdioHalfClose(conn net.Conn) error {
 	}()
 	e1 := <-done
 	e2 := <-done
-	_ = conn.Close()
+	_ = conn.Close() //nolint:errcheck
 	for _, e := range []error{e1, e2} {
 		if e != nil && !errors.Is(e, io.EOF) && !errors.Is(e, net.ErrClosed) {
 			return e

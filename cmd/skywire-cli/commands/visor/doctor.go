@@ -56,25 +56,25 @@ type doctorReport struct {
 	Verdict string   `json:"verdict"`
 	Reasons []string `json:"reasons"`
 
-	Visor   doctorVisorBlock   `json:"visor"`
+	Visor   doctorVisorBlock    `json:"visor"`
 	Skychat *doctorSkychatBlock `json:"skychat,omitempty"`
 }
 
 type doctorVisorBlock struct {
-	Reachable             bool    `json:"reachable"`
-	ReachabilityError     string  `json:"reachability_error,omitempty"`
-	Ready                 bool    `json:"ready"`
-	PubKey                string  `json:"public_key,omitempty"`
-	Version               string  `json:"version,omitempty"`
-	UptimeSeconds         float64 `json:"uptime_seconds,omitempty"`
-	ServicesHealth        string  `json:"services_health,omitempty"`
-	UptimeTrackerHealth   string  `json:"uptime_tracker_health,omitempty"`
-	AutoconnectHealth     string  `json:"autoconnect_health,omitempty"`
-	TransportabilityHealth string `json:"transportability_health,omitempty"`
-	TransportCount        int     `json:"transport_count"`
-	RouteGroupCount       int     `json:"route_group_count"`
-	DMSGServerCount       int     `json:"dmsg_server_count"`
-	RoutesCount           int     `json:"routes_count"`
+	Reachable              bool    `json:"reachable"`
+	ReachabilityError      string  `json:"reachability_error,omitempty"`
+	Ready                  bool    `json:"ready"`
+	PubKey                 string  `json:"public_key,omitempty"`
+	Version                string  `json:"version,omitempty"`
+	UptimeSeconds          float64 `json:"uptime_seconds,omitempty"`
+	ServicesHealth         string  `json:"services_health,omitempty"`
+	UptimeTrackerHealth    string  `json:"uptime_tracker_health,omitempty"`
+	AutoconnectHealth      string  `json:"autoconnect_health,omitempty"`
+	TransportabilityHealth string  `json:"transportability_health,omitempty"`
+	TransportCount         int     `json:"transport_count"`
+	RouteGroupCount        int     `json:"route_group_count"`
+	DMSGServerCount        int     `json:"dmsg_server_count"`
+	RoutesCount            int     `json:"routes_count"`
 }
 
 type doctorSkychatBlock struct {
