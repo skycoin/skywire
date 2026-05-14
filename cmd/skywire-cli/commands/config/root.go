@@ -110,6 +110,13 @@ var (
 	enableCalculateRoutes      bool
 	isSkychatEnable            bool
 	skychatAddr                string
+	// isSkychatPairEnable adds --pair-enable to the skychat app args
+	// in the generated config. Defaults to true; toggle via SKYCHATPAIR
+	// in /etc/skywire.conf or --servechatpair=false on the CLI. The
+	// pair-RPC channel is required for group chat (#2580 federated send
+	// and #2585 admin mirror) to actually propagate messages, so this
+	// should rarely be off in practice.
+	isSkychatPairEnable bool
 	// Skycoin embedded apps — daemon (full node) + web (thin-client
 	// wallet). Default-off for both. SkycoinWebUser drops the wallet
 	// process to a different UID via the launcher's per-app
