@@ -23,25 +23,10 @@ skywire cli route groups
 ## Global Flags
 
 ```
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-```
-
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
-
-```
-index   role        local_pk                                                             remote_pk                                                            local_port   remote_port   fwd_id   consume_id   transport
-0       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   0381eac98f4e105f5ec378d7b0557ae41d6259d0eade372d1ce0d033e318331165   46           46            1593     1594         89513f87-abc3-0bc2-99ff-0d9487b32d55
-1       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   03ea4b13c0e45fca36a02a723570d11c389b47c292194c0c8f3e12b56fc473a975   46           46            1687     1688         06e2d5dc-7555-051e-9827-a8d6895aaad8
-2       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   034af2374f2b2d851654332d60874991921bcb2b582bb42d74e22fad0539f695fb   46           46            2753     2754         148d8894-11c6-018a-a7d2-73885baf88a0
-3       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   03d6f5eb282bad15540522764230eb4b751d1eca7e1e6a842b62705b15f655fcfa   46           46            679      680          4fada348-140a-06bd-a910-e887ed07ad7d
-4       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   030ea0014711383aab17cd2ee895d3ec3892db3cfb49fcf129753b9ef876ce3eaf   46           46            2549     2550         ec11e5dc-b23f-001b-829f-5ba475682172
-5       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   03c07a6abb5d452d59da98a219e0707add43515b091c5dccce3bcb5df73b7a432d   46           46            2577     2578         83795d20-e22e-06e6-a20c-1ca10742d025
-6       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   03b933163bff0f11f00c7a6571251ae69c23b29af85c5c7563138b71fb30408b63   46           46            379      380          dd7dd4b3-fe39-0c0b-9491-dbd39c0b7f02
-7       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   033ce4d8523ec940a31170b8d5e64ccc0957f3fbafdbf1f942847e707598cdc680   46           46            405      406          31d9fe52-c6d2-0b80-9293-5a97fa851e72
-8       initiator   02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36   02e575b4d5887a1acdc4aa21e239fc371bf170b04d54d99e4772cb55084201c4ee   46           46            2717     2718         aafaa269-3557-0961-9207-9b6991c3344a
+  -h, --help          show help menu
+      --json          print output as JSON
+      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

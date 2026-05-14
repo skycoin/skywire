@@ -42,6 +42,7 @@ skywire cli tp add <public-key> [public-key]...
 ## Global Flags
 
 ```
+  -h, --help   show help menu
       --json   print output as JSON
 ```
 

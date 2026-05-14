@@ -19,7 +19,9 @@ skywire cli mdisc entry <visor-public-key>
 ## Global Flags
 
 ```
-      --json   print output as JSON
+  -h, --help          show help menu
+      --json          print output as JSON
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

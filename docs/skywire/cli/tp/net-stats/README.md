@@ -24,20 +24,9 @@ skywire cli tp net-stats
 ## Global Flags
 
 ```
-      --json   print output as JSON
-```
-
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
-
-```
-.:: Network Transport Statistics ::.
-Total Transports: 4426
-Unique Visors: 774
-By Type:
-  SUDPH: 2335
-  STCPR: 2091
+  -h, --help          show help menu
+      --json          print output as JSON
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---
