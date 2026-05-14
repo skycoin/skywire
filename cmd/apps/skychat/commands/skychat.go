@@ -1017,8 +1017,13 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 					counterMu.Lock()
 					outboundFallbackCount++
 					counterMu.Unlock()
-					conn = fbConn
-					netType = fbAddr.Net
+					// Successful fallback write — conn / netType
+					// would-be-reassignments dropped because the
+					// caller doesn't read them after this point
+					// (the response is rendered from ackCh state,
+					// not the conn directly). Keeping fbAddr
+					// referenced under _ documents the intent.
+					_ = fbAddr
 					fallbackOK = true
 				} else {
 					connsMu.Lock()
@@ -1386,24 +1391,24 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	status := map[string]interface{}{
-		"visor_pk":             visorPK,
-		"sse_subscribers":      subscriberCount,
-		"active_peer_conns":    connCount,
-		"peers":                peers,
-		"persistence_enabled":  historyStore != nil,
-		"pairing_enabled":      pairEnable,
-		"frame_proto_version":  frameProtoVersion,
-		"schema_version":       schemaVersion,
-		"app_uptime_sec":       int64(time.Since(startedAt).Seconds()),
-		"inbound_msg_count":    inMsgs,
-		"outbound_msg_count":   outMsgs,
-		"inbound_drop_count":   inDrops,
+		"visor_pk":                visorPK,
+		"sse_subscribers":         subscriberCount,
+		"active_peer_conns":       connCount,
+		"peers":                   peers,
+		"persistence_enabled":     historyStore != nil,
+		"pairing_enabled":         pairEnable,
+		"frame_proto_version":     frameProtoVersion,
+		"schema_version":          schemaVersion,
+		"app_uptime_sec":          int64(time.Since(startedAt).Seconds()),
+		"inbound_msg_count":       inMsgs,
+		"outbound_msg_count":      outMsgs,
+		"inbound_drop_count":      inDrops,
 		"outbound_fail_count":     outFails,
 		"outbound_retry_count":    outRetries,
 		"outbound_fallback_count": outFallbacks,
 		"sse_drop_count":          sseDrops,
-		"last_rx_ts":           rxStr,
-		"last_send_ts":         sendStr,
+		"last_rx_ts":              rxStr,
+		"last_send_ts":            sendStr,
 	}
 	if visorPKErr != "" {
 		status["error"] = visorPKErr

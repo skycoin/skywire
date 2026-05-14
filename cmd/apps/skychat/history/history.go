@@ -38,6 +38,23 @@ type Message struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// GroupMessage is a single group-chat message record. Mirrors Message
+// but indexed by group ID + sender PK instead of a single peer PK. Stored
+// in a parallel bucket so 1:1 queries don't accidentally see group
+// traffic and vice versa.
+type GroupMessage struct {
+	// GroupID is the group identifier this message belongs to.
+	GroupID string `json:"group_id"`
+	// SenderPK is the publishing member's PK hex.
+	SenderPK string `json:"sender_pk"`
+	// Outgoing is true if this visor was the sender.
+	Outgoing bool `json:"outgoing"`
+	// Text is the message body.
+	Text string `json:"text"`
+	// Timestamp is the message timestamp (sender-set, UTC).
+	Timestamp time.Time `json:"timestamp"`
+}
+
 // Store is the persistent chat history backend.
 type Store interface {
 	// Append stores a message. Returns ErrRateLimited, ErrTooLarge,
@@ -56,6 +73,19 @@ type Store interface {
 
 	// Peers returns the set of peer PKs that have any stored messages.
 	Peers() ([]string, error)
+
+	// AppendGroup stores a group message. Same error semantics as Append,
+	// but rate-limit / whitelist checks key off GroupID instead of Peer.
+	// Errors are non-fatal — the caller still surfaces the message to
+	// live listeners; only durable storage is skipped.
+	AppendGroup(msg GroupMessage) error
+
+	// ListByGroup returns up to limit most recent messages for a specific
+	// group, newest last. If limit <= 0, returns all.
+	ListByGroup(groupID string, limit int) ([]GroupMessage, error)
+
+	// Groups returns the set of group IDs that have any stored messages.
+	Groups() ([]string, error)
 
 	// Close releases the underlying storage.
 	Close() error
