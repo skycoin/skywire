@@ -196,6 +196,92 @@ func TestDeriveMirrorPath(t *testing.T) {
 	}
 }
 
+func TestDedupKey(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "msgs leaf collapses to suffix",
+			in:   "msgs/02abcdef/1700000000000000000/1",
+			want: "02abcdef/1700000000000000000/1",
+		},
+		{
+			name: "mirror leaf collapses to identical suffix",
+			in:   "mirror/02abcdef/1700000000000000000/1",
+			want: "02abcdef/1700000000000000000/1",
+		},
+		{
+			name: "non-message subtree returns empty",
+			in:   "config/heartbeat/whatever",
+			want: "",
+		},
+		{
+			name: "bare prefix returns empty",
+			in:   "msgs",
+			want: "",
+		},
+		{
+			name: "empty returns empty",
+			in:   "",
+			want: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := dedupKey(tc.in); got != tc.want {
+				t.Errorf("dedupKey(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+	// Cross-check the core invariant the dedup logic depends on:
+	// msgs/X and mirror/X must collapse to byte-identical suffixes.
+	if a, b := dedupKey("msgs/foo/bar"), dedupKey("mirror/foo/bar"); a != b {
+		t.Errorf("primary/mirror suffix mismatch: %q vs %q", a, b)
+	}
+}
+
+func TestRecentSet(t *testing.T) {
+	r := newRecentSet(3)
+	if !r.Add("a") {
+		t.Error("first Add(a) should report new")
+	}
+	if r.Add("a") {
+		t.Error("second Add(a) should report duplicate")
+	}
+	if !r.Add("b") {
+		t.Error("Add(b) should report new")
+	}
+	if !r.Add("c") {
+		t.Error("Add(c) should report new")
+	}
+	// Cap is 3; adding d evicts a (FIFO). State after: [b, c, d].
+	if !r.Add("d") {
+		t.Error("Add(d) should report new")
+	}
+	// b is still in window — adding again should report duplicate.
+	if r.Add("b") {
+		t.Error("Add(b) before its eviction should report duplicate")
+	}
+	// a was evicted by the d insert and should now be re-addable.
+	// This in turn evicts b (oldest remaining). State after: [c, d, a].
+	if !r.Add("a") {
+		t.Error("Add(a) after eviction should report new")
+	}
+	// b should now also be re-addable (just evicted by the a insert).
+	if !r.Add("b") {
+		t.Error("Add(b) after its eviction should report new")
+	}
+	// Empty key is always treated as new (never inserted, never matches).
+	if !r.Add("") {
+		t.Error("Add(\"\") should always report new (passthrough)")
+	}
+	if !r.Add("") {
+		t.Error("repeated Add(\"\") should also report new (no insertion)")
+	}
+}
+
 // Two random nonces from independent calls must not collide in a
 // reasonable number of iterations. A regression that fixes the
 // nonce (e.g. someone hard-codes it for "convenience") would fail
