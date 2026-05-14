@@ -343,8 +343,23 @@ func render(w io.Writer, p page) error {
 		desc = p.short
 	}
 	if desc != "" {
-		b.WriteString(sanitize(strings.TrimSpace(desc)))
-		b.WriteString("\n\n")
+		desc = sanitize(strings.TrimSpace(desc))
+		// Long descriptions that contain Unicode box-drawing or ANSI
+		// color escapes are preformatted text (calvin.AsciiFont banners,
+		// colorized example JSON from svc command Longs, etc.) and only
+		// render correctly inside a code fence — without it, markdown
+		// renderers reflow whitespace and the banner collapses or the
+		// example JSON loses its alignment. Detect either marker and
+		// fence the whole block. Plain-prose Longs (most CLI commands)
+		// pass through unfenced so links and emphasis still render.
+		if needsCodeFence(desc) {
+			b.WriteString("```\n")
+			b.WriteString(desc)
+			b.WriteString("\n```\n\n")
+		} else {
+			b.WriteString(desc)
+			b.WriteString("\n\n")
+		}
 	}
 
 	if p.useLine != "" {
@@ -400,6 +415,28 @@ func render(w io.Writer, p page) error {
 	return err
 }
 
+// needsCodeFence returns true if s contains characters that markdown
+// will not render correctly outside of a code block: Unicode box-
+// drawing glyphs (the calvin.AsciiFont banners every cobra root and
+// some subcommands prepend to their Long) or ANSI color escapes (the
+// svc command Longs colorize their example JSON with tidwall/pretty
+// at init time, and those bytes survive into the Long string we
+// capture from cobra).
+func needsCodeFence(s string) bool {
+	for _, r := range s {
+		// Box Drawing block: U+2500..U+257F.
+		if r >= 0x2500 && r <= 0x257F {
+			return true
+		}
+		// ANSI escape (ESC). Any presence is sufficient — the bytes
+		// will render as literal escape sequences otherwise.
+		if r == 0x1B {
+			return true
+		}
+	}
+	return false
+}
+
 // xpubRE matches Skycoin/HD-wallet extended public keys. Skywire's
 // reward command prints whatever the operator has configured, so a
 // generator running on an operator's box would otherwise leak their
@@ -431,6 +468,17 @@ func initBuildInfoReplacements() {
 	add(bi.Version, "<version>")
 	add(bi.Commit, "<commit>")
 	add(bi.Date, "<build-date>")
+	// DBIVersion is the RAW debug.BuildInfo.Main.Version with its full
+	// "vX.Y.Z-N.<14-digit-ts>-<commit>+dirty" form intact (the parsed
+	// form in Version() strips ts/commit). The umbrella root command's
+	// Long uses DBIVersion directly, so without scrubbing the raw form
+	// the root README.md leaks the full versioned string. Order matters
+	// here — DBIVersion is a superset of Version, so add it FIRST so a
+	// substring match doesn't replace the prefix early and leave the
+	// tail behind.
+	if dbi := buildinfo.DBIVersion(); dbi != "" && dbi != bi.Version {
+		buildInfoReplacements = append([][2]string{{dbi, "<version>"}}, buildInfoReplacements...)
+	}
 	// Also scrub the trimmed 12-char commit prefix some buildinfo
 	// renderers use independently of the full hash.
 	if len(bi.Commit) > 12 {

@@ -2,6 +2,7 @@
 
 [← skywire svc](../README.md)
 
+```
 ┌─┐┌┬┐┌┬┐┬─┐┌─┐┌─┐┌─┐   ┬─┐┌─┐┌─┐┌─┐┬  ┬  ┬┌─┐┬─┐
 ├─┤ ││ ││├┬┘├┤ └─┐└─┐───├┬┘├┤ └─┐│ ││  └┐┌┘├┤ ├┬┘
 ┴ ┴─┴┘─┴┘┴└─└─┘└─┘└─┘   ┴└─└─┘└─┘└─┘┴─┘ └┘ └─┘┴└─
@@ -85,6 +86,7 @@ Note: the specified UDP port must be accessible from the internet for SUDPH.
 Example:
   skywire cli config gen-keys > ar-config.json
   skywire svc ar --addr ":9093" --redis "redis://localhost:6379" --sk $(tail -n1 ar-config.json)
+```
 
 ## Usage
 
