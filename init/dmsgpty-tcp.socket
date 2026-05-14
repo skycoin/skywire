@@ -1,0 +1,17 @@
+[Unit]
+Description=Skywire dmsgpty-host direct-TCP entry point (XK-noise gated, ssh-replacement)
+PartOf=dmsgpty-tcp@.service
+
+[Socket]
+# Default port — change to match the operator's preferred listener.
+ListenStream=2022
+# Per-connection accept: systemd accepts, spawns one
+# dmsgpty-tcp@<conn-id>.service per session with the FD on stdin.
+# Restarting this .socket only affects the listener; running per-
+# session @-instances keep their FD + shell process, matching
+# sshd's fork-per-session restart resilience.
+Accept=yes
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

@@ -1,0 +1,29 @@
+[Unit]
+Description=Skywire dmsgpty-host session (%i)
+After=network-online.target
+
+[Service]
+# Single-conn mode: dmsgpty-host reads FD 0 as net.Conn, runs one
+# noise handshake + authorize + session pipeline, exits when the
+# session closes. systemd hands the accepted socket on stdin
+# because the companion .socket sets Accept=yes.
+#
+# --no-dmsg keeps this daemon off the dmsg overlay so it can safely
+# share the visor's identity via --sk-from-visor without contending
+# for the visor's dmsg-discovery entry.
+#
+# Edit --sk-from-visor to point at your skywire-config.json. The
+# whitelist is read from /etc/skywire/dmsgpty.json by default; pass
+# --confpath to override.
+ExecStart=/usr/bin/dmsgpty-host \
+    --no-dmsg \
+    --sk-from-visor /etc/skywire/skywire-config.json \
+    --confpath /etc/skywire/dmsgpty.json \
+    --listen-fd 0
+StandardInput=socket
+StandardOutput=journal
+StandardError=journal
+
+# Per-session process: no Restart= — the session is over when the
+# user logs out, just like sshd's per-session children.
+Type=simple

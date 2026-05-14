@@ -68,9 +68,12 @@ func (h *Host) ListenAndServeTCP(ctx context.Context, addr string, localPK ciphe
 	}
 
 	log := logging.MustGetLogger("dmsg_pty_tcp")
-	masterLogger := h.dmsgC.MasterLogger()
-	if masterLogger != nil {
-		log = masterLogger.PackageLogger("dmsg_pty_tcp")
+	// dmsgC is nil in --no-dmsg mode (standalone TCP-only host); skip
+	// the master-logger lookup in that case rather than NPE-ing.
+	if h.dmsgC != nil {
+		if masterLogger := h.dmsgC.MasterLogger(); masterLogger != nil {
+			log = masterLogger.PackageLogger("dmsg_pty_tcp")
+		}
 	}
 	log.WithField("addr", lis.Addr().String()).Info("Direct-TCP dmsgpty listener bound.")
 
@@ -104,6 +107,56 @@ func (h *Host) ListenAndServeTCP(ctx context.Context, addr string, localPK ciphe
 // handshake (slow client, attacker probing the port) doesn't block
 // the accept loop.
 func (h *Host) handleTCPConn(
+	ctx context.Context,
+	parentLog logrus.FieldLogger,
+	mux *hostMux,
+	conn net.Conn,
+	localPK cipher.PubKey,
+	localSK cipher.SecKey,
+) {
+	h.serveTCPConn(ctx, parentLog, mux, conn, localPK, localSK)
+}
+
+// ServeAcceptedTCP runs the per-connection noise + authorize + serve
+// pipeline on a TCP conn that the caller has already accepted (e.g.
+// from a systemd-socket-activation handoff: net.FileConn on FD 0).
+//
+// Synchronous and one-shot: returns when the session ends. Designed
+// for the "one dmsgpty-host process per active session" model that
+// matches sshd's fork-per-session behavior — the parent socket-
+// activated unit can be restarted without disturbing this process's
+// running session.
+//
+// localPK / localSK identify the server side of the noise handshake.
+// In --sk-from-visor mode these come from skywire-config.json's
+// top-level sk/pk fields so the host shares the visor's identity
+// without contending for a dmsg-discovery entry.
+//
+// Logging: uses a fresh package logger if h has no dmsg.Client master
+// logger (the standalone --no-dmsg path); otherwise reuses the
+// master logger for parity with ListenAndServeTCP.
+func (h *Host) ServeAcceptedTCP(
+	ctx context.Context,
+	conn net.Conn,
+	localPK cipher.PubKey,
+	localSK cipher.SecKey,
+) {
+	log := logging.MustGetLogger("dmsg_pty_tcp")
+	if h.dmsgC != nil {
+		if masterLogger := h.dmsgC.MasterLogger(); masterLogger != nil {
+			log = masterLogger.PackageLogger("dmsg_pty_tcp")
+		}
+	}
+	mux := dmsgEndpoints(h)
+	h.serveTCPConn(ctx, log, &mux, conn, localPK, localSK)
+}
+
+// serveTCPConn is the shared per-conn pipeline used by both the
+// listener-driven accept loop (ListenAndServeTCP -> handleTCPConn)
+// and the externally-accepted single-conn entry point
+// (ServeAcceptedTCP). Pulled out to keep the noise/authorize logic
+// in one place.
+func (h *Host) serveTCPConn(
 	ctx context.Context,
 	parentLog logrus.FieldLogger,
 	mux *hostMux,

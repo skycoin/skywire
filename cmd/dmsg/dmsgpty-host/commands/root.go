@@ -51,6 +51,35 @@ var (
 	// path. Mirrors the visor-embedded Dmsgpty.TCPListen config.
 	tcpListen string
 
+	// noDmsg, when true, skips the dmsg.Client + dmsg-listener setup
+	// entirely. Use with --tcplisten (or --listen-fd) to run the host
+	// as an sshd-style direct-TCP-only daemon. Without --no-dmsg the
+	// host runs both the dmsg-overlay path and the optional TCP path
+	// in parallel, which is the right shape for visor-embedded use
+	// but the wrong shape for a standalone "ssh-replacement" daemon
+	// that would otherwise contend with the operator's visor for the
+	// dmsg-discovery entry for the same PK.
+	noDmsg bool
+
+	// skFromVisor, when non-empty, loads the SK (and derives the PK)
+	// from the named skywire-config.json's top-level `sk` field
+	// instead of from --sk / config / env. Lets the standalone host
+	// share the visor's identity (only safe in --no-dmsg mode — two
+	// dmsg.Clients with the same PK racing in dmsg discovery is the
+	// failure mode this avoids).
+	skFromVisor string
+
+	// listenFD, when >= 0, switches the host into single-conn
+	// socket-activation mode: read the inherited file descriptor as a
+	// net.Conn, run one noise + authorize + session pipeline against
+	// it, exit when the session closes. The companion systemd unit
+	// shape is `dmsgpty-tcp.socket` (Accept=yes) + a templated
+	// `dmsgpty-tcp@.service` that runs this binary with --listen-fd
+	// 0 — one process per session, master listener restartable
+	// without affecting running sessions. Mirrors the sshd-via-
+	// systemd-socket-activation pattern.
+	listenFD = -1
+
 	// persistent flags
 	envPrefix = defaultEnvPrefix
 
@@ -73,6 +102,12 @@ func init() {
 	RootCmd.Flags().StringVar(&cliAddr, "cliaddr", cliAddr, "address used for listening for cli connections")
 	RootCmd.Flags().StringVar(&tcpListen, "tcplisten", "",
 		"optional direct-TCP entry point address (e.g. ':2022'); empty disables. XK-noise + whitelist gated, mirrors the visor-embedded Dmsgpty.TCPListen.")
+	RootCmd.Flags().BoolVar(&noDmsg, "no-dmsg", false,
+		"skip dmsg.Client + dmsg listener; run as TCP-only daemon (use with --tcplisten or --listen-fd)")
+	RootCmd.Flags().StringVar(&skFromVisor, "sk-from-visor", "",
+		"load SK from the named skywire-config.json's .sk field; intended for --no-dmsg + visor-PK shared identity")
+	RootCmd.Flags().IntVar(&listenFD, "listen-fd", -1,
+		"single-conn socket-activation mode: read inherited FD as net.Conn, run one session, exit (companion systemd .socket Accept=yes)")
 	// Prepare flags without associated env/config references.
 	RootCmd.Flags().StringVar(&envPrefix, "envprefix", envPrefix, "env prefix")
 	RootCmd.Flags().BoolVar(&confStdin, "confstdin", confStdin, "config will be read from stdin if set")
@@ -93,6 +128,20 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
+		// --sk-from-visor takes precedence over flag/env/config-file
+		// SKs by running before getConfig validates the SK. We refuse
+		// the combination with dmsg-on, because two dmsg.Clients with
+		// the same PK racing for one dmsg-discovery entry is the
+		// failure mode this flag is designed to avoid.
+		if skFromVisor != "" {
+			if !noDmsg {
+				return fmt.Errorf("--sk-from-visor requires --no-dmsg (sharing PK with a running visor's dmsg client breaks the visor's dmsg-disc entry)")
+			}
+			if err := loadSKFromVisorConfig(skFromVisor); err != nil {
+				return err
+			}
+		}
+
 		conf, err := getConfig(cmd, false)
 		if err != nil {
 			return fmt.Errorf("failed to get config: %w", err)
@@ -112,36 +161,67 @@ var RootCmd = &cobra.Command{
 			return fmt.Errorf("failed to derive public key from secret key: %w", err)
 		}
 
-		// Prepare and serve dmsg client and wait until ready.
-		dmsgC := dmsg.NewClient(pk, sk, disc.NewHTTP(conf.DmsgDisc, &http.Client{}, log), &dmsg.Config{
-			MinSessions: conf.DmsgSessions,
-		})
-		defer func() {
-			if err := dmsgC.Close(); err != nil {
-				log.WithError(err).Warn("Failed to close dmsg client")
-			}
-		}()
-
-		go dmsgC.Serve(ctx)
-		select {
-		case <-ctx.Done():
-			return fmt.Errorf("failed to wait dmsg client to be ready: %w", ctx.Err())
-		case <-dmsgC.Ready():
-		}
-
-		// Prepare whitelist.
-		// var wl dmsgpty.Whitelist
+		// Prepare whitelist (needed regardless of dmsg/tcp/socket-activation mode).
 		wl, err := dmsgpty.NewConfigWhitelist(confPath)
 		if err != nil {
 			return fmt.Errorf("failed to init whitelist: %w", err)
 		}
 
-		// Prepare dmsgpty host.
-		host := dmsgpty.NewHost(dmsgC, wl)
-		wg := new(sync.WaitGroup)
-		wg.Add(2)
+		// dmsg.Client is optional. --no-dmsg skips the client entirely,
+		// for the sshd-style standalone-TCP daemon shape; without it
+		// we'd be racing the visor (if any) for the same dmsg-disc
+		// entry under the shared PK that --sk-from-visor pulls in.
+		var dmsgC *dmsg.Client
+		if !noDmsg {
+			dmsgC = dmsg.NewClient(pk, sk, disc.NewHTTP(conf.DmsgDisc, &http.Client{}, log), &dmsg.Config{
+				MinSessions: conf.DmsgSessions,
+			})
+			defer func() {
+				if err := dmsgC.Close(); err != nil {
+					log.WithError(err).Warn("Failed to close dmsg client")
+				}
+			}()
 
-		// Prepare CLI.
+			go dmsgC.Serve(ctx)
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("failed to wait dmsg client to be ready: %w", ctx.Err())
+			case <-dmsgC.Ready():
+			}
+		}
+
+		// Prepare dmsgpty host. dmsgC may be nil in --no-dmsg mode;
+		// the TCP entry points are explicitly nil-safe (see host_tcp.go).
+		host := dmsgpty.NewHost(dmsgC, wl)
+
+		// Socket-activation single-conn mode: read inherited FD,
+		// wrap as net.Conn, run one session pipeline, exit. The unit
+		// shape behind this is `Accept=yes` on the .socket so each
+		// session gets its own process — `systemctl restart
+		// dmsgpty-tcp.socket` only affects the listener, not running
+		// sessions, matching sshd's fork-per-session resilience.
+		if listenFD >= 0 {
+			f := os.NewFile(uintptr(listenFD), fmt.Sprintf("listen-fd-%d", listenFD))
+			if f == nil {
+				return fmt.Errorf("listen-fd %d is not a valid file descriptor", listenFD)
+			}
+			lc, err := net.FileConn(f)
+			if err != nil {
+				_ = f.Close() //nolint:errcheck
+				return fmt.Errorf("listen-fd %d net.FileConn: %w", listenFD, err)
+			}
+			// FileConn dup'd; the original FD can be closed.
+			_ = f.Close() //nolint:errcheck
+			log.WithField("listen_fd", listenFD).Info("dmsgpty-host: socket-activation mode, serving one session.")
+			host.ServeAcceptedTCP(ctx, lc, pk, sk)
+			return nil
+		}
+
+		wg := new(sync.WaitGroup)
+
+		// CLI listener — local Unix socket for `dmsgpty-cli` control
+		// of the whitelist + session start. Available in all modes;
+		// dmsg-less hosts can still admin their whitelist via CLI.
 		if conf.CLINet == "unix" {
 			_ = os.Remove(conf.CLIAddr) //nolint:errcheck
 		}
@@ -150,27 +230,30 @@ var RootCmd = &cobra.Command{
 			return fmt.Errorf("failed to serve CLI: %w", err)
 		}
 		log.WithField("addr", cliL.Addr()).Info("Listening for CLI connections.")
+		wg.Add(1)
 		go func() {
 			log.WithError(host.ServeCLI(ctx, cliL)).
 				Info("Stopped serving CLI.")
 			wg.Done()
 		}()
 
-		// Serve dmsgpty.
-		log.WithField("port", conf.DmsgPort).
-			Info("Listening for dmsg streams.")
-		go func() {
-			log.WithError(host.ListenAndServe(ctx, conf.DmsgPort)).
-				Info("Stopped serving dmsgpty-host.")
-			wg.Done()
-		}()
+		// Dmsg-overlay listener — only when dmsg is enabled.
+		if dmsgC != nil {
+			log.WithField("port", conf.DmsgPort).
+				Info("Listening for dmsg streams.")
+			wg.Add(1)
+			go func() {
+				log.WithError(host.ListenAndServe(ctx, conf.DmsgPort)).
+					Info("Stopped serving dmsgpty-host.")
+				wg.Done()
+			}()
+		}
 
 		// Optional direct-TCP entry point (XK-noise + whitelist
 		// gated). Mirrors the visor-embedded Dmsgpty.TCPListen.
-		// Empty (default) skips it, preserving legacy behavior;
-		// non-empty (e.g. ":2022") brings the listener up alongside
-		// the dmsg-overlay path. The host's NewHost-wired wl is
-		// reused — no separate ACL.
+		// Empty (default) skips it; non-empty brings the listener up
+		// alongside the dmsg-overlay path. The host's NewHost-wired wl
+		// is reused — no separate ACL.
 		tcpAddr := tcpListen
 		if tcpAddr == "" {
 			tcpAddr = conf.TCPListen
@@ -330,6 +413,37 @@ func fillConfigFromFlags(conf dmsgpty.Config) dmsgpty.Config {
 	}
 
 	return conf
+}
+
+// loadSKFromVisorConfig reads the top-level `sk` field from a skywire
+// visor config and sets the package-level sk variable. Used by the
+// --sk-from-visor flag so a standalone dmsgpty-host can share the
+// visor's identity (only safe when --no-dmsg is also set; otherwise
+// two dmsg.Clients race for the same dmsg-discovery entry under that
+// PK).
+//
+// Returns an error if the file can't be read, the JSON is malformed,
+// or the `sk` field is missing/invalid. On success sk is mutated in
+// place — the caller is responsible for deriving pk from it afterward.
+func loadSKFromVisorConfig(path string) error {
+	f, err := os.Open(path) //nolint:gosec // operator-supplied path
+	if err != nil {
+		return fmt.Errorf("sk-from-visor open %s: %w", path, err)
+	}
+	defer f.Close() //nolint:errcheck
+	var probe struct {
+		SK string `json:"sk"`
+	}
+	if err := json.NewDecoder(f).Decode(&probe); err != nil {
+		return fmt.Errorf("sk-from-visor decode %s: %w", path, err)
+	}
+	if probe.SK == "" {
+		return fmt.Errorf("sk-from-visor %s: missing top-level 'sk' field", path)
+	}
+	if err := sk.Set(probe.SK); err != nil {
+		return fmt.Errorf("sk-from-visor %s: invalid sk: %w", path, err)
+	}
+	return nil
 }
 
 // getConfig sources variables in the following precedence order: flags, env, config, default.
