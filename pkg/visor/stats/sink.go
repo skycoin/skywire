@@ -67,9 +67,9 @@ type Sink interface {
 // operations are dropped silently.
 type noopSink struct{}
 
-func (noopSink) Put(string, []byte)   {}
-func (noopSink) Delete(string)        {}
-func (noopSink) PutBatch([]SinkOp)    {}
+func (noopSink) Put(string, []byte) {}
+func (noopSink) Delete(string)      {}
+func (noopSink) PutBatch([]SinkOp)  {}
 
 // SetSink replaces the Tracker's mirror sink. Pass nil to detach
 // (resets to a no-op sink). Safe to call before or after Run.

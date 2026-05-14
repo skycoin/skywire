@@ -281,3 +281,12 @@ func (m *memoryCXDS) Close() (_ error) {
 	m.kvs = nil // clear
 	return
 }
+
+// RunBatch on the in-memory CXDS has no transaction semantics — the
+// map is already serialized through m.mx and there is no commit cost
+// to amortize. fn is invoked with the receiver, so all CXDS calls
+// inside fn go through the normal per-op locking path. This keeps the
+// interface contract uniform across drive- and memory-backed stores.
+func (m *memoryCXDS) RunBatch(fn func(scoped data.CXDS) error) error {
+	return fn(m)
+}
