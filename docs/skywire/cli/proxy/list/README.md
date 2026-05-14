@@ -41,35 +41,9 @@ skywire cli proxy list
 ## Global Flags
 
 ```
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-```
-
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
-
-```
-02aa4893366f4629a91f5f763061feb8e204e4835001c90f4e3393dabbe90e42e4 ID v1.3.45
-039ffc4777198e36ef6b3a9361f0990bd26dcfbb177972fd463f8771a5b37f8404 CZ v1.3.51
-0241b6d9a45d807e2a981f2d2b0116385f418629f5519b8934989211dc6fbed469 ID v1.3.53
-0325fe245300eb6dc99f4ce61b4adbad7b768e8222c9b2c2c919b17d8b24b945c5 JP v1.3.51
-0295372b867a65fcfaeae9da9b7a8b2f6d3bef513c19e506a0aefdec6e54c859af NL v1.3.46
-02c90316adf236467a11bbd752a18657c9d581d977bdd97048c0b5527c1ace9c36 UY v1.3.46
-03626a35ad4644392beb09286c19cc7fb88379db96e64a975f6a5573c80c7cbb15 JP v1.3.51
-0259e2df61c7916d1d22a88647786e96cb157778e865a386d7560802c6160de612 ID v1.3.51
-02df744c491f4a0ec5a26b4817f47763145fb02bcf71ac547415babefef2dbaa65 PL v1.3.51
-03906d915e95457266db55c3b3a21ef45c1e76d2189acd894455f68732c804798c IN v1.3.51
-020d689e8a4c481caa3d374bbb6cd6da3051f18f4d36034c12a4133e810e44a364 GB v1.3.51
-02932dbbb3824c269e7ec3388ac9c03e24f59c559b1818bc1b5d40bfbebf869fdd SG v1.3.51
-03b5c2de3596b33eb074634723d43231f00b256f25ff2c4ff1dd87890ec65ed61f SC v1.3.47
-02aba8108bdecc3c5f5b7402929451454ae0afa4941206749b87b11de79fccdcdc ID v1.3.47
-0265dd4fbe5693c462fcb88108b9b5b20b3a3f03a1890cd04c4f850992f6ca867a FR v1.3.51
-03960e7828fa3855899cee335a3f13a4db89ac30fee2b791657b5a51ede1ac7910 CA v1.3.47
-02935579c7372512b43a5eeef821749b3edebc22a9bc2cca80168344121c4b5a3d CA v1.3.46
-03918efeaab428ae5fbaf75327c0a05e6784def13b0c37ee5c62bb58ec6c36b810 ID v1.3.47
-03212fb66bda0a86741b4b28f6d17459c122e2d4da10cd6bde0765b4ddd02d698e GB v1.3.51
-036df68c94a28d3ec71a2e11b2b9d3b16211ae69b52babe75915e9fcd638f1c536 UY v1.3.46
-... (940 more lines)
+  -h, --help          show help menu
+      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

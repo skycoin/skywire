@@ -23,9 +23,11 @@ skywire cli config update vpns
 ## Global Flags
 
 ```
+  -h, --help            show help menu
   -i, --input string    path of input config file.
       --json            print output as JSON
   -o, --output string   config file to output
+      --timeout int     RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---
