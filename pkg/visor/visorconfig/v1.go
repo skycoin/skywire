@@ -39,6 +39,11 @@ type V1 struct {
 	// values use defaults; Disabled=true skips the store entirely.
 	Stats *Stats `json:"stats,omitempty"`
 
+	// Skychat carries chat-app-related visor-side configuration that
+	// doesn't fit elsewhere. Currently just opt-in group-message
+	// persistence; expected to grow as the chat surface evolves.
+	Skychat *Skychat `json:"skychat,omitempty"`
+
 	SurveyWhitelist     []cipher.PubKey `json:"survey_whitelist"`
 	UserSurveyWhitelist []cipher.PubKey `json:"user_survey_whitelist,omitempty"` // user-added keys, preserved across config refresh
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
@@ -60,6 +65,25 @@ type V1 struct {
 	MemoryLimit          string                           `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 60% of available RAM)
 
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
+}
+
+// Skychat carries chat-app-related visor-side configuration. Optional —
+// nil disables all knobs (the visor still runs chat groups in-memory).
+type Skychat struct {
+	// GroupHistoryDB, when non-empty, enables persistent group-message
+	// history at the visor layer. Each inbound group message is mirrored
+	// into a bolt store at this path. The Visor.GroupHistory RPC (and
+	// `skywire cli skychat group history`) read from the same store.
+	//
+	// Path may be absolute (used verbatim) or relative — relative paths
+	// resolve under <LocalPath>/skychat/. Empty (default) disables
+	// persistence: groups remain in-memory-only, bounded by the inbox
+	// ring buffer (~1024 messages).
+	//
+	// Limits track history.DefaultLimits() with a couple of group-
+	// aware overrides (rate-limit disabled, larger per-group cap).
+	// A future config knob may expose the limits directly.
+	GroupHistoryDB string `json:"group_history_db,omitempty"`
 }
 
 // Dmsgpty configures the dmsgpty-host.
