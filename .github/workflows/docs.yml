@@ -1,0 +1,72 @@
+name: Docs
+
+# Builds the MkDocs site from sources spread across the repo (docs/,
+# skywire-specs/, rewards/, cmd/apps/**/README.md, cmd/dmsg/*/README.md,
+# cmd/svc/*/README.md) and deploys to the gh-pages branch, which GitHub
+# Pages serves at https://skycoin.github.io/skywire/.
+#
+# Triggers:
+#   - push to develop: build + deploy
+#   - pull_request:    build only (catches broken links / config drift
+#                      before merge; doesn't touch gh-pages)
+#   - workflow_dispatch: manual rebuild button
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'docs/**'
+      - 'skywire-specs/**'
+      - 'rewards/**'
+      - 'cmd/apps/*/README.md'
+      - 'cmd/dmsg/*/README.md'
+      - 'cmd/svc/*/README.md'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+      - 'scripts/docs-prepare.sh'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'skywire-specs/**'
+      - 'rewards/**'
+      - 'cmd/apps/*/README.md'
+      - 'cmd/dmsg/*/README.md'
+      - 'cmd/svc/*/README.md'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+      - 'scripts/docs-prepare.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+          cache: pip
+
+      - name: Install MkDocs + plugins
+        run: |
+          pip install \
+            mkdocs-material==9.5.* \
+            mkdocs-awesome-pages-plugin==2.9.* \
+            pymdown-extensions==10.*
+
+      - name: Stage external doc trees under docs/
+        run: bash scripts/docs-prepare.sh
+
+      - name: Build
+        run: mkdocs build --strict
+
+      - name: Deploy to gh-pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdocs gh-deploy --force --message "Deploy docs from {sha}"
