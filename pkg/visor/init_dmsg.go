@@ -717,6 +717,12 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	pty := dmsgpty.NewHost(dmsgC, wl)
+	// Expose the Host on the visor so the RPC layer can drive Exec
+	// directly (see pkg/visor/rpc_visor.go DmsgPtyExec). Without this
+	// the integrated `skywire cli dmsg pty exec` path is forced
+	// through the host's CLI control socket — a separate listener
+	// with separate permissions from the visor's RPC.
+	v.dmsgPty = pty
 
 	if ptyPort := conf.DmsgPort; ptyPort != 0 {
 		serveCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack

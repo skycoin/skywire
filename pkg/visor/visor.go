@@ -111,6 +111,13 @@ type Visor struct {
 	// nil when initDmsgpty was skipped (Dmsgpty config absent).
 	dmsgWL dmsgpty.Whitelist
 
+	// dmsgPty is the live dmsgpty.Host instance, exposed so the visor
+	// RPC layer can drive remote pty operations (Exec, list) without
+	// going back through the host's CLI control listener (the unix
+	// socket / TCP loopback the standalone dmsgpty-cli uses). nil when
+	// initDmsgpty was skipped.
+	dmsgPty *dmsgpty.Host
+
 	// DMSG tracker state
 	dmsgTracker dtmState
 

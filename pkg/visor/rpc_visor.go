@@ -3,7 +3,9 @@ package visor
 
 import (
 	"errors"
+	"fmt"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
@@ -342,6 +344,23 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 		*out = remoteVisors
 	}
 	return err
+}
+
+// DmsgPtyExec runs a one-shot command on a remote visor via the
+// embedded dmsgpty host (see Visor.DmsgPtyExec).
+func (r *RPC) DmsgPtyExec(args *DmsgPtyExecArgs, out *dmsgpty.CommandExecResult) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgPtyExec", args)(out, &err)
+	if args == nil {
+		return fmt.Errorf("dmsgpty: nil args")
+	}
+	res, err := r.visor.DmsgPtyExec(*args)
+	if err != nil {
+		return err
+	}
+	if res != nil {
+		*out = *res
+	}
+	return nil
 }
 
 // Ports return list of all ports used by visor services and apps

@@ -19,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -454,6 +455,28 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 		visors = append(visors, conn.Addr.PK.String())
 	}
 	return visors, nil
+}
+
+// DmsgPtyExec runs a one-shot command on the remote visor identified
+// by args.RemotePK using this visor's embedded dmsgpty host. Skips
+// the host's CLI control listener (the unix socket / TCP loopback
+// that the standalone dmsgpty-cli connects to) — the caller already
+// holds an authenticated RPC connection to this visor, so the
+// permission gate is the visor RPC, not the dmsgpty CLI socket.
+//
+// Trust model upstream of this is the visor RPC's auth (whoever can
+// reach :3435). Trust model downstream is unchanged: the remote
+// dmsgpty host enforces its whitelist on the dmsg stream this visor
+// opens; the remote sees this visor's PK as the peer.
+func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error) {
+	if v.dmsgPty == nil {
+		return nil, fmt.Errorf("dmsgpty: not initialized on this visor")
+	}
+	if args.RemotePK.Null() {
+		return nil, fmt.Errorf("dmsgpty: remote_pk required")
+	}
+	req := args.Req
+	return v.dmsgPty.ExecRemote(context.Background(), args.RemotePK, args.RemotePort, &req)
 }
 
 // Ports return list of all ports used by visor services and apps
