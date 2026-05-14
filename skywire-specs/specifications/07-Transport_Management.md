@@ -6,7 +6,7 @@ The *Transport Manager* is responsible for creating, accepting, managing, and lo
 
 1. **Network client initialization** — creates transport-type-specific network clients (STCPR, SUDPH, STCP, DMSG) based on the visor's configuration
 2. **Transport lifecycle** — dial outbound transports, accept inbound transports, serve read loops, close and deregister on shutdown
-3. **Transport Discovery registration** — registers transports with the TPD on creation and re-registers every 90 seconds. Re-registration carries the live transport set only (edges, type, label) — bandwidth and latency are no longer pushed; see §Visor-Local Telemetry Store
+3. **Transport Discovery registration** — registers transports with the TPD on creation and re-publishes the live transport set every 90 seconds. The published payload is the bare entry (edges, type, label); bandwidth and latency travel on the visor's telemetry feed, not this channel (see §Visor-Local Telemetry Store)
 4. **Bandwidth and latency measurement** — each managed transport tracks cumulative bytes sent/received and RTT via transport-level ping; samples are written to the local telemetry store
 5. **Label management** — assigns transport labels (`skycoin`, `automatic`, `user`) and propagates the initiator's label to the responder during settlement
 
@@ -33,9 +33,14 @@ The manager runs accept loops for each initialized network client. When a remote
 
 ## Re-Registration
 
-Every 90 seconds the manager SHALL re-register every non-closed transport with the Transport Discovery via the v3 bare-entry endpoint (`POST /v3/transports/`). The request body SHALL carry only the bare `transport.Entry` fields (id, edges, type, label) for each transport; the TPD records a heartbeat for the registering visor on each call.
+Every 90 seconds the manager SHALL re-publish its live transport set to the Transport Discovery. The published payload SHALL contain only the bare `transport.Entry` fields (id, edges, type, label) for each non-closed transport; this is the TPD's primary liveness signal for the registering visor.
 
-Bandwidth and latency SHALL NOT appear in the re-registration body. They reach the TPD out of band via the visor's telemetry feed (see §Visor-Local Telemetry Store).
+The manager SHALL mirror register / deregister events to two parallel channels:
+
+- **CXO publisher feed.** Register and deregister events are published as transport-entry leaves on the visor's stats publisher feed (the same feed used for telemetry — see *CXO Publisher* below). The TPD subscribes to this feed via the visor's PK and ingests the leaves into the transport registry.
+- **HTTP POST `/v3/transports/`.** The authenticated v3 endpoint accepts the same bare-entry batch and records a heartbeat for the registering visor on each call.
+
+Both channels SHOULD be operated concurrently as a dual-write contract; the TPD tolerates the same event arriving via either or both. Bandwidth and latency SHALL NOT appear in the registration payload on either channel — they reach the TPD via the same CXO feed under different leaves (see §Visor-Local Telemetry Store).
 
 ## Batch Deregistration
 
@@ -127,9 +132,12 @@ The store SHALL be exposed read-only over two channels:
 
 ### CXO Publisher
 
-The visor SHALL publish telemetry on a CXO feed signed by its own keypair; the feed PK is therefore identical to the visor's PK. No separate publisher identity is generated. Aggregators that already know a visor's PK from the transport registry can subscribe directly. The feed is open to any subscriber that knows the visor's PK; its sensitivity matches that of public TPD data (`/metric` aggregates and DHT `tp` entries).
+The visor SHALL publish telemetry on a CXO feed signed by its own keypair; the feed PK is therefore identical to the visor's PK. No separate publisher identity is generated. Aggregators that already know a visor's PK from the transport registry can subscribe directly. The feed is open to any subscriber that knows the visor's PK; its sensitivity matches that of TPD's public `/metric` aggregates.
 
-On each publish tick (aligned with `StatsSampleInterval`) the feed SHALL carry, for the current sample:
+The feed carries two classes of leaf:
+
+- **Transport-entry leaves** that mirror register / deregister events from the transport manager (see §Re-Registration). These are how the TPD ingests a visor's live transport set without the HTTP POST round-trip.
+- **Telemetry leaves** that carry sampled rollups and uptime bitmaps from the local stats store. On each publish tick (aligned with `StatsSampleInterval`) the feed SHALL carry, for the current sample:
 
 | Key | Value |
 |---|---|
