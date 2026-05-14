@@ -249,6 +249,8 @@ type API interface {
 	GroupPoll(since time.Time) ([]GroupMessage, error)
 	GroupDelete(id string) error
 	GroupLeave(id string) error
+	GroupHistory(groupID string, limit int) ([]GroupMessage, error)
+	GroupHistoryGroups() ([]string, error)
 
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
