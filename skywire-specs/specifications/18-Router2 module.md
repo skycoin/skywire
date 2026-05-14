@@ -1,5 +1,11 @@
 # `router2`
 
+> **STATUS: Draft proposal — non-normative.** This document is a
+> design proposal for a future refactor of the `router` module. It
+> is kept in the specifications directory for historical reference;
+> none of its requirements are binding on current implementations.
+> See `11-Router.md` for the normative router contract.
+
 The goal of this proposal is to split out and define the responsiblities within `router` to allow for easier integration of future features, as well as make the codebase easier to understand.
 
 The current implementation of `routing.Rule` has fields that have different meanings, based on the rule type. A clearer definition of rule types are addressed in this proposal.
