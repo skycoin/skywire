@@ -740,11 +740,12 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	// Direct-TCP dmsgpty entry point — operator opts in via
-	// Dmsgpty.TCPListen ("" disables). Same whitelist as the
+	// Dmsgpty.SshListen ("" disables). Same whitelist as the
 	// dmsg-overlay path; XK-noise handshake gates the accepted PK
 	// before the stream reaches the dmsgpty mux. See
-	// dmsgpty/host_tcp.go for the per-connection flow.
-	if tcpAddr := conf.TCPListen; tcpAddr != "" {
+	// dmsgpty/host_tcp.go for the per-connection flow. Exposed at
+	// CLI as `skywire cli ssh` / `skywire cli sshd`.
+	if tcpAddr := conf.SshListen; tcpAddr != "" {
 		tcpCtx, tcpCancel := context.WithCancel(context.Background()) //nolint:gosec // cancel called in pushCloseStack
 		tcpWg := new(sync.WaitGroup)
 		tcpWg.Add(1)
