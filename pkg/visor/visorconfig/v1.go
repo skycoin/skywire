@@ -21,20 +21,20 @@ type V1 struct {
 	*Common
 	mu sync.RWMutex
 
-	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
-	Dmsgpty       *Dmsgpty            `json:"dmsgpty,omitempty"`
-	Dmsgscp       *Dmsgscp            `json:"dmsgscp,omitempty"`
-	UIServer      *UIServer           `json:"ui_server,omitempty"`
-	LogServer     *LogServer          `json:"log_server,omitempty"`
+	Dmsg          *dmsgc.DmsgConfig    `json:"dmsg"`
+	Dmsgpty       *Dmsgpty             `json:"dmsgpty,omitempty"`
+	Dmsgscp       *Dmsgscp             `json:"dmsgscp,omitempty"`
+	UIServer      *UIServer            `json:"ui_server,omitempty"`
+	LogServer     *LogServer           `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig     `json:"skynet_web,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
-	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
-	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
-	Transport     *Transport          `json:"transport"`
-	Routing       *Routing            `json:"routing"`
-	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
-	Launcher      *Launcher           `json:"launcher"`
+	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
+	STCP          *network.STCPConfig  `json:"skywire-tcp,omitempty"`
+	Transport     *Transport           `json:"transport"`
+	Routing       *Routing             `json:"routing"`
+	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
+	Launcher      *Launcher            `json:"launcher"`
 
 	// Stats configures the visor-local telemetry store. Nil/zero
 	// values use defaults; Disabled=true skips the store entirely.

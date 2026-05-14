@@ -121,7 +121,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// Serve runs the bridge until ctx is cancelled or lis is closed.
+// Serve runs the bridge until ctx is canceled or lis is closed.
 // Each accepted connection gets a dedicated goroutine that walks
 // one or more SMTP envelopes; lis.Close() is the canonical shutdown
 // signal.
@@ -257,9 +257,9 @@ func handleSession(ctx context.Context, c net.Conn, dialer Dialer, cfg Config, l
 		case "HELO":
 			_ = tp.PrintfLine("250 %s", cfg.HeloName) //nolint:errcheck,gosec
 		case "EHLO":
-			_ = tp.PrintfLine("250-%s", cfg.HeloName)        //nolint:errcheck,gosec
-			_ = tp.PrintfLine("250-SIZE %d", dataSizeLimit)  //nolint:errcheck,gosec
-			_ = tp.PrintfLine("250 8BITMIME")                //nolint:errcheck,gosec
+			_ = tp.PrintfLine("250-%s", cfg.HeloName)       //nolint:errcheck,gosec
+			_ = tp.PrintfLine("250-SIZE %d", dataSizeLimit) //nolint:errcheck,gosec
+			_ = tp.PrintfLine("250 8BITMIME")               //nolint:errcheck,gosec
 		case "MAIL":
 			addr, perr := parseAngleAddr(arg, "FROM")
 			if perr != nil {
@@ -414,9 +414,10 @@ func readDATA(br *bufio.Reader) ([]byte, error) {
 		if trimmed == "." {
 			return buf, nil
 		}
-		if strings.HasPrefix(trimmed, ".") {
-			trimmed = trimmed[1:]
-		}
+		// Un-dot-stuff per RFC 5321 §4.5.2: a leading "." that
+		// isn't itself the terminator was added by the sender and
+		// must be stripped before storage.
+		trimmed = strings.TrimPrefix(trimmed, ".")
 		buf = append(buf, trimmed...)
 		buf = append(buf, '\r', '\n')
 	}

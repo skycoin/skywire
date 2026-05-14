@@ -389,9 +389,9 @@ type EmbeddedProxyStats struct {
 // resolving proxy. Separate fields (not a map) so the UI can treat
 // each proxy's presence/absence as a hard-coded toggle.
 type EmbeddedProxiesStatus struct {
-	DmsgWeb       *EmbeddedProxyInfo      `json:"dmsg_web,omitempty"`
-	SkynetWeb     *EmbeddedProxyInfo      `json:"skynet_web,omitempty"`
-	SkymailBridge *EmbeddedSkymailInfo    `json:"skymail_bridge,omitempty"`
+	DmsgWeb       *EmbeddedProxyInfo   `json:"dmsg_web,omitempty"`
+	SkynetWeb     *EmbeddedProxyInfo   `json:"skynet_web,omitempty"`
+	SkymailBridge *EmbeddedSkymailInfo `json:"skymail_bridge,omitempty"`
 }
 
 // EmbeddedSkymailInfo is the runtime snapshot for the in-process

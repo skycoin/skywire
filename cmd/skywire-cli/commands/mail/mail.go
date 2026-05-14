@@ -106,9 +106,9 @@ func renderMailStatus(s *visor.EmbeddedProxiesStatus) string {
 	b := s.SkymailBridge
 	var buf strings.Builder
 	w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "enabled\trunning\taddr\tmode\tsuffix")     //nolint:errcheck,gosec
-	fmt.Fprintln(w, "-------\t-------\t----\t----\t------")     //nolint:errcheck,gosec
-	fmt.Fprintf(w, "%v\t%v\t%s\t%s\t%s\n",                       //nolint:errcheck,gosec
+	fmt.Fprintln(w, "enabled\trunning\taddr\tmode\tsuffix") //nolint:errcheck,gosec
+	fmt.Fprintln(w, "-------\t-------\t----\t----\t------") //nolint:errcheck,gosec
+	fmt.Fprintf(w, "%v\t%v\t%s\t%s\t%s\n",                  //nolint:errcheck,gosec
 		b.Enabled, b.Running,
 		dashIfEmpty(b.Addr),
 		dashIfEmpty(b.Mode),
