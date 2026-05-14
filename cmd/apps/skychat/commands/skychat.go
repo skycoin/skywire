@@ -126,6 +126,56 @@ func dialAndCache(ctx context.Context, pk cipher.PubKey, addr appnet.Addr) (*fra
 	return conn, nil
 }
 
+// tryNetworkFallback is the last-resort dial used by messageHandler
+// when the primary network's send (cached + redial+retry) failed.
+// Dials the OTHER network (skynet ↔ dmsg) once, caches the conn on
+// success, and returns it for the caller to write through.
+//
+// Returns (nil, _) when:
+//   - the alternate network isn't enabled in this chat-app run (the
+//     operator passed --skynet=false or --dmsg=false at launch)
+//   - the alternate-network dial itself fails (peer doesn't listen
+//     there, transport down, etc.)
+//
+// On success, also returns the appnet.Addr used so the caller can
+// label the fallback in logs / counters and update its local
+// netType state. The caller is responsible for the WriteFrame +
+// per-leg accounting; this helper only opens the conn.
+//
+// Implementation deliberately does NOT consult the cache for the
+// alternate network: by definition the primary network's cached
+// conn just failed; the alternate's cache is independent and may be
+// stale too. A fresh dial is the safest bet on a fallback path.
+// (We do still register the new conn in the conns map by PK, which
+// means the next /message to the same PK will find this conn —
+// per-conn caching is keyed by PK only, not by netType, so the
+// fallback "wins" until the operator's next chat-app restart or a
+// stale-write evicts it.)
+func tryNetworkFallback(ctx context.Context, pk cipher.PubKey, currentNet appnet.Type) (*framedConn, appnet.Addr) {
+	var altNet appnet.Type
+	switch currentNet {
+	case appnet.TypeSkynet:
+		altNet = appnet.TypeDmsg
+		if !useDmsg {
+			return nil, appnet.Addr{}
+		}
+	case appnet.TypeDmsg:
+		altNet = appnet.TypeSkynet
+		if !useSkynet {
+			return nil, appnet.Addr{}
+		}
+	default:
+		return nil, appnet.Addr{}
+	}
+	altAddr := appnet.Addr{Net: altNet, PubKey: pk, Port: 1}
+	conn, err := dialAndCache(ctx, pk, altAddr)
+	if err != nil {
+		appCl.Log().Debugf("Network-fallback dial %s → %s failed: %v", currentNet, altNet, err)
+		return nil, altAddr
+	}
+	return conn, altAddr
+}
+
 // ReadFrame reads exactly one length-prefixed message. Rejects
 // frames over skychatMaxFrameSize so a malicious or out-of-sync
 // peer can't allocate gigabytes of memory by claiming a giant
@@ -217,6 +267,26 @@ var (
 	// sseSubscriberBufSize. Surfaced in /status so operators can
 	// tell "my listener missed N msgs" without log-scraping.
 	sseDropCount uint64
+
+	// outboundFallbackCount is how many /message requests succeeded
+	// only after falling over from the primary network (skynet by
+	// default) to the alternate (dmsg, and vice versa).
+	//
+	// Skychat listens on BOTH networks by default, so a peer who
+	// receives on one can usually be reached on the other. When the
+	// chosen network's WriteFrame fails after the redial+retry path
+	// exhausts itself, the handler dials the alternate network once
+	// and writes again before surfacing the failure. Successful
+	// rescues increment this counter; full failures (both networks
+	// dead) still increment outboundFailCount as usual.
+	//
+	// Operators with outbound_fallback_count > 0 are seeing the
+	// chosen-network path break often enough to need the safety
+	// net. Persistent non-zero rate is a signal to investigate the
+	// primary network (route flap, dmsg server churn) — the
+	// fallback is rescuing user-visible delivery but at the cost of
+	// an extra dial per affected message.
+	outboundFallbackCount uint64
 )
 
 // frameProtoVersion is the on-the-wire protocol version this chat
@@ -923,11 +993,50 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				delete(conns, pk)
 			}
 			connsMu.Unlock()
-			counterMu.Lock()
-			outboundFailCount++
-			counterMu.Unlock()
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+			// Network fallback before surfacing the error to the
+			// caller. Skychat listens on BOTH skynet and dmsg by
+			// default (--skynet=true --dmsg=true), so a peer who
+			// receives on one will usually receive on the other.
+			// If the chosen network can't deliver, try the alternate
+			// in one last attempt: dial fresh, write once, on
+			// success continue to the normal mirror/ack/persist
+			// path. On second failure, surface the original error
+			// to the caller (the alternate's error is logged at
+			// debug but not exposed, to keep the public error
+			// stable across network-fallback fires/misses).
+			//
+			// Increment outboundFallbackCount on success so
+			// operators can see how often the fallback path is
+			// rescuing sends — a non-zero rate means the chosen
+			// network is unreliable enough that callers should
+			// reconsider the default, or the operator should fix
+			// the transport / route to the peer on that network.
+			fallbackOK := false
+			if fbConn, fbAddr := tryNetworkFallback(ctx, pk, netType); fbConn != nil {
+				if werr := fbConn.WriteFrame(wirePayload); werr == nil {
+					counterMu.Lock()
+					outboundFallbackCount++
+					counterMu.Unlock()
+					conn = fbConn
+					netType = fbAddr.Net
+					fallbackOK = true
+				} else {
+					connsMu.Lock()
+					if conns[pk] == fbConn {
+						delete(conns, pk)
+					}
+					connsMu.Unlock()
+					appCl.Log().Debugf("Network-fallback write to %s via %s also failed: %v",
+						pk, fbAddr.Net, werr)
+				}
+			}
+			if !fallbackOK {
+				counterMu.Lock()
+				outboundFailCount++
+				counterMu.Unlock()
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 		}
 
 		// Persist outgoing message (best-effort).
@@ -1250,6 +1359,7 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 	inDrops := inboundDropCount
 	outFails := outboundFailCount
 	outRetries := outboundRetryCount
+	outFallbacks := outboundFallbackCount
 	sseDrops := sseDropCount
 	lastRx := lastRxAt
 	lastSend := lastSendAt
@@ -1277,9 +1387,10 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		"inbound_msg_count":    inMsgs,
 		"outbound_msg_count":   outMsgs,
 		"inbound_drop_count":   inDrops,
-		"outbound_fail_count":  outFails,
-		"outbound_retry_count": outRetries,
-		"sse_drop_count":       sseDrops,
+		"outbound_fail_count":     outFails,
+		"outbound_retry_count":    outRetries,
+		"outbound_fallback_count": outFallbacks,
+		"sse_drop_count":          sseDrops,
 		"last_rx_ts":           rxStr,
 		"last_send_ts":         sendStr,
 	}
