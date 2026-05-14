@@ -89,6 +89,11 @@ func (s *Store) Get(id string) (Record, bool, error) {
 		found = true
 		return json.Unmarshal(raw, &r)
 	})
+	// Legacy records persisted before the Admins field existed have
+	// Admins == nil. Normalize on every read so IsAdmin and admin-
+	// gated manager ops see a consistent shape. Idempotent for new
+	// records that already have the founder explicit.
+	r.EnsureFounderInAdmins()
 	return r, found, err
 }
 
@@ -105,6 +110,10 @@ func (s *Store) List() ([]Record, error) {
 			if err := json.Unmarshal(v, &r); err != nil {
 				return err
 			}
+			// Mirror Get's legacy-record normalization so any
+			// caller iterating List sees the same admin-shape
+			// invariant Get returns.
+			r.EnsureFounderInAdmins()
 			out = append(out, r)
 			return nil
 		})

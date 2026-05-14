@@ -109,8 +109,28 @@ type Record struct {
 	// — just for display.
 	Name string `json:"name"`
 
-	// OwnerPK is the visor that publishes the message feed.
+	// OwnerPK is the founding-creator visor's public key. Historically
+	// this was the single PK with roster authority + the only PK that
+	// could publish to the feed. As of the federated send change,
+	// roster authority is on Admins (which always includes OwnerPK
+	// implicitly), and every member publishes to their own feed. The
+	// field name stays for backward compatibility with persisted
+	// records + the invite-link schema; semantically it's now the
+	// "founder" PK — immutable, used as the recovery anchor.
 	OwnerPK cipher.PubKey `json:"owner_pk"`
+
+	// Admins are the PKs with roster authority: add/remove members,
+	// issue invites, change AES key, promote/demote other admins.
+	// OwnerPK is always treated as an admin (the founder is immutable
+	// admin); on-disk this slice may or may not include it explicitly
+	// — IsAdmin handles either case.
+	//
+	// Empty/nil on legacy records — the migration path in store.Get
+	// fills it with [OwnerPK] on first read so older groups inherit
+	// founder-only admin authority. Operator-driven changes flow
+	// through Manager.PromoteAdmin / DemoteAdmin which never permit
+	// removing the founder (OwnerPK) from this list.
+	Admins []cipher.PubKey `json:"admins,omitempty"`
 
 	// Port is the DMSG port the owner's publisher listens on.
 	// Chosen by the owner at create time (not deterministic from
@@ -142,6 +162,49 @@ type Record struct {
 	CreatedAt     time.Time `json:"created_at"`
 	JoinedAt      time.Time `json:"joined_at"`
 	LastMessageAt time.Time `json:"last_message_at,omitempty"`
+}
+
+// IsFounder reports whether pk is the group's founder (the original
+// creator). The founder is implicitly always an admin and cannot be
+// demoted. Equality with OwnerPK is the source of truth.
+func (r Record) IsFounder(pk cipher.PubKey) bool {
+	return r.OwnerPK == pk
+}
+
+// IsAdmin reports whether pk has roster authority on this group —
+// i.e. is the founder OR is explicitly listed in Admins. Used to gate
+// AddMember / BuildInvite / promote-demote / delete operations.
+//
+// The founder check is OR'd in unconditionally so a legacy record
+// whose Admins slice is nil (pre-migration on-disk shape) still
+// treats the founder as an admin without needing the migration to
+// have run first.
+func (r Record) IsAdmin(pk cipher.PubKey) bool {
+	if r.IsFounder(pk) {
+		return true
+	}
+	for _, a := range r.Admins {
+		if a == pk {
+			return true
+		}
+	}
+	return false
+}
+
+// EnsureFounderInAdmins normalizes the on-disk Admins slice so the
+// founder is always explicitly present. Called by the store on read
+// for legacy records (Admins == nil) and by manager ops that mutate
+// Admins so the invariant holds post-mutation. Idempotent.
+func (r *Record) EnsureFounderInAdmins() {
+	if r.OwnerPK == (cipher.PubKey{}) {
+		return
+	}
+	for _, a := range r.Admins {
+		if a == r.OwnerPK {
+			return
+		}
+	}
+	r.Admins = append([]cipher.PubKey{r.OwnerPK}, r.Admins...)
 }
 
 // Message is the on-the-wire (well, on-the-feed) form of a group
