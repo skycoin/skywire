@@ -2,10 +2,12 @@
 
 [← skywire dmsg pty](../README.md)
 
+```
 ┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┬ ┬┌─┐┌─┐┌┬┐
  │││││└─┐│ ┬├─┘ │ └┬┘───├─┤│ │└─┐ │ 
 ─┴┘┴ ┴└─┘└─┘┴   ┴  ┴    ┴ ┴└─┘└─┘ ┴ 
 	DMSG host for pseudoterminal (pty) command line interface
+```
 
 ## Usage
 

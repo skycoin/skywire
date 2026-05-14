@@ -2,6 +2,7 @@
 
 [← skywire svc](../README.md)
 
+```
 ┌─┐┌─┐┌─┐┬┌─┐
 │ ┬├┤ │ ││├─┘
 └─┘└─┘└─┘┴┴  
@@ -38,6 +39,7 @@ Usage Examples:
   skywire svc ip 8.8.8.8                              # CLI lookup
   skywire svc ip --api --addr ":9093"                 # API server (embedded DB)
   skywire svc ip --api --db ./GeoLite2-City.mmdb      # API server (external DB)
+```
 
 ## Usage
 

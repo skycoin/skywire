@@ -2,6 +2,7 @@
 
 [← skywire svc](../README.md)
 
+```
 ┬─┐┌─┐┬ ┬┌┬┐┌─┐   ┌─┐┬┌┐┌┌┬┐┌─┐┬─┐
 ├┬┘│ ││ │ │ ├┤ ───├┤ ││││ ││├┤ ├┬┘
 ┴└─└─┘└─┘ ┴ └─┘   └  ┴┘└┘─┴┘└─┘┴└─
@@ -60,6 +61,7 @@ POST /routes
 Example:
   skywire cli config gen-keys | tee rf-keys.txt
   route-finder --sk $(tail -n1 rf-keys.txt)
+```
 
 ## Usage
 

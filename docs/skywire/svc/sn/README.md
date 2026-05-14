@@ -2,6 +2,7 @@
 
 [← skywire svc](../README.md)
 
+```
 ┬─┐┌─┐┬ ┬┌┬┐┌─┐   ┌─┐┌─┐┌┬┐┬ ┬┌─┐   ┌┐┌┌─┐┌┬┐┌─┐
 ├┬┘│ ││ │ │ ├┤ ───└─┐├┤  │ │ │├─┘───││││ │ ││├┤ 
 ┴└─└─┘└─┘ ┴ └─┘   └─┘└─┘ ┴ └─┘┴     ┘└┘└─┘─┴┘└─┘
@@ -33,6 +34,7 @@ Usage:
   skywire svc sn [config.json]
   skywire cli config gen --sn -o sn-config.json
   skywire cli config gen --sn | skywire svc sn -i
+```
 
 ## Usage
 

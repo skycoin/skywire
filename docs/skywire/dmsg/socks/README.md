@@ -2,10 +2,12 @@
 
 [← skywire dmsg](../README.md)
 
+```
 ┌┬┐┌┬┐┌─┐┌─┐   ┌─┐┌─┐┌─┐┬┌─┌─┐
  │││││└─┐│ ┬───└─┐│ ││  ├┴┐└─┐
 ─┴┘┴ ┴└─┘└─┘   └─┘└─┘└─┘┴ ┴└─┘
 	DMSG socks5 proxy server & client
+```
 
 ## Usage
 

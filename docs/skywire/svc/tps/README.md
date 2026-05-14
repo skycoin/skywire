@@ -2,6 +2,7 @@
 
 [← skywire svc](../README.md)
 
+```
 ┌┬┐┬─┐┌─┐┌┐┌┌─┐┌─┐┌─┐┬─┐┌┬┐   ┌─┐┌─┐┌┬┐┬ ┬┌─┐
  │ ├┬┘├─┤│││└─┐├─┘│ │├┬┘ │ ───└─┐├┤  │ │ │├─┘
  ┴ ┴└─┴ ┴┘└┘└─┘┴  └─┘┴└─ ┴    └─┘└─┘ ┴ └─┘┴  
@@ -55,6 +56,7 @@ Example Config:
 Generate Keys:
   skywire cli config gen-keys | tee tps-keys.txt
   # Line 1: public_key, Line 2: secret_key
+```
 
 ## Usage
 

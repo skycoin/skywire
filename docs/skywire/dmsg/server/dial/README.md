@@ -2,6 +2,7 @@
 
 [← skywire dmsg server](../README.md)
 
+```
 ┌┬┐┌┬┐┌─┐┌─┐┌┬┐┬┌─┐┬  
  │││││└─┐│ ┬ │││├─┤│  
 ─┴┘┴ ┴└─┘└─┘─┴┘┴┴ ┴┴─┘
@@ -30,6 +31,7 @@ Default mode of operation is dmsghttp:
 '-B' flag: use dmsg direct client
 * Start dmsg-direct client
 * Connect to dmsg client address (if specified)
+```
 
 ## Usage
 
