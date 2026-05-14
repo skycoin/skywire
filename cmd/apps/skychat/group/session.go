@@ -1263,13 +1263,29 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 	// the local handler should see the same content the (decoded)
 	// subscriber path would surface, not the encrypted bytes.
 	// Filter heartbeat self-echoes out of the handler delivery —
-	// they are wire-level liveness probes, not chat content. Still
-	// bump lastInboundNs so the owner's own session has a fresh
-	// liveness timestamp (useful symmetry with member sessions; the
-	// detectStaleAndReconnect pass skips owners but other diagnostics
-	// may look at it).
+	// they are wire-level liveness probes, not chat content.
+	//
+	// Critically: do NOT bump lastInboundNs here. Pre-#2595 this
+	// bump was harmless because detectStaleAndReconnect skipped
+	// owner-role sessions entirely (the "useful symmetry" the prior
+	// comment claimed didn't actually drive any behavior). Post-
+	// #2595 the reconnect loop covers owner-role peerSubs too, and
+	// the owner's OWN heartbeat (every 30s by default) bumping
+	// lastInboundNs keeps every owner session permanently
+	// "fresh" — staleness threshold (100s) is never crossed,
+	// reconnect never fires, peer-publisher restarts are never
+	// recovered from. The bump made reconnect a no-op for owners
+	// since #2595 landed.
+	//
+	// lastInboundNs is the **inbound** liveness signal — it should
+	// only advance on observable inbound events from PEERS. Local
+	// heartbeat emission is an outbound write; it proves the
+	// publisher is healthy enough to publish but says nothing about
+	// whether peer subscribers are attached or peer publishers are
+	// reachable. Conflating the two masked the peerSub reachability
+	// problem that #2600's Connect-error-on-zero-success aimed to
+	// surface.
 	if text == HeartbeatMarker {
-		s.lastInboundNs.Store(time.Now().UnixNano())
 		return nil
 	}
 	if h := s.handler; h != nil {
