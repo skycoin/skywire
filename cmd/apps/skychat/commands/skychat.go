@@ -1193,8 +1193,19 @@ func historyPeersHandler(w http.ResponseWriter, _ *http.Request) {
 //
 //	visor_pk             current PK the app is bound under
 //	sse_subscribers      live SSE listener count
-//	active_peer_conns    live peer chat conns
-//	peers                PKs we have conns to
+//	active_peer_conns    live peer chat conns (CHAT-APP LAYER —
+//	                     framed connections the app holds; NOT a
+//	                     dmsg session count. After a visor restart
+//	                     this starts at 0 and only grows when this
+//	                     app initiates an outbound DM or accepts an
+//	                     inbound one. Underlying dmsg may be fully
+//	                     reachable while this reads 0 — that's not
+//	                     a network problem, just a count of how
+//	                     many active chat sessions this app is
+//	                     holding open.)
+//	peers                PKs of the active_peer_conns. Same
+//	                     chat-app-layer caveat — these are NOT the
+//	                     visor's dmsg session list.
 //	persistence_enabled  history store is initialized
 //	pairing_enabled      pair-control sub-protocol is on
 //	frame_proto_version  on-the-wire chat-frame version (diagnose
