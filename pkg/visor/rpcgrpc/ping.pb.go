@@ -7,12 +7,11 @@
 package rpcgrpc
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1678,6 +1677,152 @@ func (x *CalcHop) GetTo() string {
 	return ""
 }
 
+// GroupMessagesRequest configures a group-message stream subscription.
+type GroupMessagesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// GroupId filters to one group. Empty subscribes to every group
+	// the visor is currently in (the default 'cli skychat group listen'
+	// behavior).
+	GroupId string `protobuf:"bytes,1,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// SinceTimestampNs replays buffered messages with TS strictly
+	// greater than this value before live deliveries start. Zero
+	// means "live only" — drains nothing from history. Mirrors the
+	// 'since' arg the previous GroupPoll RPC accepted.
+	SinceTimestampNs int64 `protobuf:"varint,2,opt,name=since_timestamp_ns,json=sinceTimestampNs,proto3" json:"since_timestamp_ns,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *GroupMessagesRequest) Reset() {
+	*x = GroupMessagesRequest{}
+	mi := &file_ping_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupMessagesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupMessagesRequest) ProtoMessage() {}
+
+func (x *GroupMessagesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupMessagesRequest.ProtoReflect.Descriptor instead.
+func (*GroupMessagesRequest) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *GroupMessagesRequest) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *GroupMessagesRequest) GetSinceTimestampNs() int64 {
+	if x != nil {
+		return x.SinceTimestampNs
+	}
+	return 0
+}
+
+// GroupMessageEvent is one inbound group message delivered to the
+// stream. Mirrors visor.GroupMessage one-for-one.
+type GroupMessageEvent struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// TimestampNs is the message Unix-nanos timestamp from the sender.
+	TimestampNs int64 `protobuf:"varint,1,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"`
+	// GroupId is the group the message arrived on.
+	GroupId string `protobuf:"bytes,2,opt,name=group_id,json=groupId,proto3" json:"group_id,omitempty"`
+	// SenderPk is the publishing member's hex public key.
+	SenderPk string `protobuf:"bytes,3,opt,name=sender_pk,json=senderPk,proto3" json:"sender_pk,omitempty"`
+	// Body is the message text (may contain embedded newlines —
+	// callers that need one-line-per-event should escape on display).
+	Body string `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	// Subscribed is set on a sentinel sent immediately after the
+	// server registers the subscription. Lets clients gate downstream
+	// RPCs on subscription liveness — same pattern AppLogEntry uses.
+	Subscribed    bool `protobuf:"varint,5,opt,name=subscribed,proto3" json:"subscribed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GroupMessageEvent) Reset() {
+	*x = GroupMessageEvent{}
+	mi := &file_ping_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GroupMessageEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GroupMessageEvent) ProtoMessage() {}
+
+func (x *GroupMessageEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GroupMessageEvent.ProtoReflect.Descriptor instead.
+func (*GroupMessageEvent) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GroupMessageEvent) GetTimestampNs() int64 {
+	if x != nil {
+		return x.TimestampNs
+	}
+	return 0
+}
+
+func (x *GroupMessageEvent) GetGroupId() string {
+	if x != nil {
+		return x.GroupId
+	}
+	return ""
+}
+
+func (x *GroupMessageEvent) GetSenderPk() string {
+	if x != nil {
+		return x.SenderPk
+	}
+	return ""
+}
+
+func (x *GroupMessageEvent) GetBody() string {
+	if x != nil {
+		return x.Body
+	}
+	return ""
+}
+
+func (x *GroupMessageEvent) GetSubscribed() bool {
+	if x != nil {
+		return x.Subscribed
+	}
+	return false
+}
+
 // ProcessStat contains information about a running process
 type ProcessStat struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1694,7 +1839,7 @@ type ProcessStat struct {
 
 func (x *ProcessStat) Reset() {
 	*x = ProcessStat{}
-	mi := &file_ping_proto_msgTypes[21]
+	mi := &file_ping_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1706,7 +1851,7 @@ func (x *ProcessStat) String() string {
 func (*ProcessStat) ProtoMessage() {}
 
 func (x *ProcessStat) ProtoReflect() protoreflect.Message {
-	mi := &file_ping_proto_msgTypes[21]
+	mi := &file_ping_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1719,7 +1864,7 @@ func (x *ProcessStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessStat.ProtoReflect.Descriptor instead.
 func (*ProcessStat) Descriptor() ([]byte, []int) {
-	return file_ping_proto_rawDescGZIP(), []int{21}
+	return file_ping_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ProcessStat) GetPid() int32 {
@@ -1931,7 +2076,18 @@ const file_ping_proto_rawDesc = "" +
 	"\aCalcHop\x12\x13\n" +
 	"\x05tp_id\x18\x01 \x01(\tR\x04tpId\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\x03 \x01(\tR\x02to\"\xce\x01\n" +
+	"\x02to\x18\x03 \x01(\tR\x02to\"_\n" +
+	"\x14GroupMessagesRequest\x12\x19\n" +
+	"\bgroup_id\x18\x01 \x01(\tR\agroupId\x12,\n" +
+	"\x12since_timestamp_ns\x18\x02 \x01(\x03R\x10sinceTimestampNs\"\xa2\x01\n" +
+	"\x11GroupMessageEvent\x12!\n" +
+	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12\x19\n" +
+	"\bgroup_id\x18\x02 \x01(\tR\agroupId\x12\x1b\n" +
+	"\tsender_pk\x18\x03 \x01(\tR\bsenderPk\x12\x12\n" +
+	"\x04body\x18\x04 \x01(\tR\x04body\x12\x1e\n" +
+	"\n" +
+	"subscribed\x18\x05 \x01(\bR\n" +
+	"subscribed\"\xce\x01\n" +
 	"\vProcessStat\x12\x10\n" +
 	"\x03pid\x18\x01 \x01(\x05R\x03pid\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
@@ -1941,7 +2097,7 @@ const file_ping_proto_rawDesc = "" +
 	"\n" +
 	"memory_rss\x18\x05 \x01(\x04R\tmemoryRss\x12\x1a\n" +
 	"\busername\x18\x06 \x01(\tR\busername\x12\x16\n" +
-	"\x06status\x18\a \x01(\tR\x06status2\xf0\x05\n" +
+	"\x06status\x18\a \x01(\tR\x06status2\xc4\x06\n" +
 	"\vPingService\x129\n" +
 	"\n" +
 	"StreamPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12=\n" +
@@ -1953,7 +2109,8 @@ const file_ping_proto_rawDesc = "" +
 	"\x0eGetSystemStats\x12\x1b.rpcgrpc.SystemStatsRequest\x1a\x14.rpcgrpc.SystemStats\x12T\n" +
 	"\x17StreamRemoteSystemStats\x12!.rpcgrpc.RemoteSystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01\x12E\n" +
 	"\rStreamAppLogs\x12\x1c.rpcgrpc.AppLogStreamRequest\x1a\x14.rpcgrpc.AppLogEntry0\x01\x12D\n" +
-	"\x10StreamCalcRoutes\x12\x1a.rpcgrpc.CalcRoutesRequest\x1a\x12.rpcgrpc.CalcRoute0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
+	"\x10StreamCalcRoutes\x12\x1a.rpcgrpc.CalcRoutesRequest\x1a\x12.rpcgrpc.CalcRoute0\x01\x12R\n" +
+	"\x13StreamGroupMessages\x12\x1d.rpcgrpc.GroupMessagesRequest\x1a\x1a.rpcgrpc.GroupMessageEvent0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
 
 var (
 	file_ping_proto_rawDescOnce sync.Once
@@ -1967,7 +2124,7 @@ func file_ping_proto_rawDescGZIP() []byte {
 	return file_ping_proto_rawDescData
 }
 
-var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_ping_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: rpcgrpc.PingRequest
 	(*PingResult)(nil),               // 1: rpcgrpc.PingResult
@@ -1990,8 +2147,10 @@ var file_ping_proto_goTypes = []any{
 	(*CalcRoutesRequest)(nil),        // 18: rpcgrpc.CalcRoutesRequest
 	(*CalcRoute)(nil),                // 19: rpcgrpc.CalcRoute
 	(*CalcHop)(nil),                  // 20: rpcgrpc.CalcHop
-	(*ProcessStat)(nil),              // 21: rpcgrpc.ProcessStat
-	nil,                              // 22: rpcgrpc.AppLogEntry.FieldsEntry
+	(*GroupMessagesRequest)(nil),     // 21: rpcgrpc.GroupMessagesRequest
+	(*GroupMessageEvent)(nil),        // 22: rpcgrpc.GroupMessageEvent
+	(*ProcessStat)(nil),              // 23: rpcgrpc.ProcessStat
+	nil,                              // 24: rpcgrpc.AppLogEntry.FieldsEntry
 }
 var file_ping_proto_depIdxs = []int32{
 	4,  // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
@@ -2004,8 +2163,8 @@ var file_ping_proto_depIdxs = []int32{
 	13, // 7: rpcgrpc.SystemStats.disks:type_name -> rpcgrpc.DiskStat
 	14, // 8: rpcgrpc.SystemStats.network:type_name -> rpcgrpc.NetworkStat
 	15, // 9: rpcgrpc.SystemStats.temps:type_name -> rpcgrpc.TempStat
-	21, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
-	22, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
+	23, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
+	24, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
 	20, // 12: rpcgrpc.CalcRoute.hops:type_name -> rpcgrpc.CalcHop
 	0,  // 13: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
 	0,  // 14: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
@@ -2017,18 +2176,20 @@ var file_ping_proto_depIdxs = []int32{
 	8,  // 20: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
 	16, // 21: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
 	18, // 22: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
-	1,  // 23: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1,  // 24: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	6,  // 25: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	6,  // 26: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	3,  // 27: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
-	9,  // 28: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 29: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 30: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
-	17, // 31: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
-	19, // 32: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
-	23, // [23:33] is the sub-list for method output_type
-	13, // [13:23] is the sub-list for method input_type
+	21, // 23: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
+	1,  // 24: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1,  // 25: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6,  // 26: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6,  // 27: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3,  // 28: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	9,  // 29: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 30: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 31: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
+	17, // 32: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
+	19, // 33: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
+	22, // 34: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
+	24, // [24:35] is the sub-list for method output_type
+	13, // [13:24] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name
 	13, // [13:13] is the sub-list for extension extendee
 	0,  // [0:13] is the sub-list for field type_name
@@ -2045,7 +2206,7 @@ func file_ping_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

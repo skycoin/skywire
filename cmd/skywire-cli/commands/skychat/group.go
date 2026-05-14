@@ -36,6 +36,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
 var (
@@ -272,68 +273,78 @@ errors out):
 		if jsonMode && groupListenRaw {
 			internal.PrintFatalError(cmd.Flags(), errors.New("--raw and --json are mutually exclusive"))
 		}
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
-		}
 		var since time.Time
 		if groupListenSince != "" {
-			since, err = time.Parse(time.RFC3339, groupListenSince)
+			t, err := time.Parse(time.RFC3339, groupListenSince)
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --since: %w", err))
 			}
+			since = t
 		}
 		if !jsonMode {
 			fmt.Println("Listening for group messages. Ctrl+C to exit.")
 		}
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		ticker := time.NewTicker(groupListenPoll)
-		defer ticker.Stop()
 
+		// gRPC server-streaming replaces the net/rpc poll loop that
+		// used to live here. The old loop hit the visor's 5-minute
+		// per-conn deadline at init_apps.go:542 every tick window;
+		// gRPC over HTTP/2 keepalives stays connected for the
+		// stream's natural lifetime. The reconnect-on-error wrapper
+		// below still handles visor restarts (visor halt → client's
+		// stream errors → we reopen + resume).
 		const (
 			minBackoff = 1 * time.Second
 			maxBackoff = 30 * time.Second
 		)
 		backoff := minBackoff
-		// reconnected suppresses repeat error spam on the same dead
-		// connection; we log the first failure, then go quiet until
-		// reconnection succeeds.
 		var lastErrLogged bool
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
+		// onMsg renders one message — extracted because the same
+		// rendering path runs against both the gRPC event type and
+		// (when we eventually replay backlog) any seed messages.
+		onMsg := func(tsNs int64, groupID, senderPK, body string) {
+			ts := time.Unix(0, tsNs).UTC()
+			if ts.After(since) {
+				since = ts
 			}
-			msgs, err := rpcClient.GroupPoll(since)
+			if jsonMode {
+				ev := struct {
+					TS       time.Time `json:"ts"`
+					GroupID  string    `json:"group_id"`
+					SenderPK string    `json:"sender_pk"`
+					Body     string    `json:"body"`
+				}{TS: ts, GroupID: groupID, SenderPK: senderPK, Body: body}
+				b, mErr := json.Marshal(ev)
+				if mErr != nil {
+					return
+				}
+				fmt.Println(string(b))
+				return
+			}
+			out := body
+			if !groupListenRaw {
+				out = escapeForOneLine(body)
+			}
+			fmt.Printf("[%s] [%s] %s: %s\n", ts.Format(time.RFC3339), groupID, senderPK, out)
+		}
+
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
 			if err != nil {
 				if !lastErrLogged {
-					fmt.Fprintf(os.Stderr, "group poll: %v (reconnecting in %s)\n", err, backoff) //nolint:errcheck
+					fmt.Fprintf(os.Stderr, "group listen: gRPC dial %v (reconnecting in %s)\n", err, backoff) //nolint:errcheck
 					lastErrLogged = true
 				}
-				// Sleep before re-creating the RPC client so a
-				// visor that's still mid-rebuild has time to
-				// finish. Honor Ctrl+C while sleeping.
 				t := time.NewTimer(backoff)
 				select {
 				case <-t.C:
 				case <-ctx.Done():
 					t.Stop()
 					return
-				}
-				// ClientQuiet (vs Client) suppresses the per-retry
-				// "RPC connection failed" stderr spam — caller knows
-				// the dial failed because cErr is non-nil. Without
-				// this, every backoff tick during a visor restart
-				// printed an identical ERROR line, exactly the
-				// failure mode #2514 was supposed to eliminate.
-				if newCl, cErr := clirpc.ClientQuiet(cmd.Flags()); cErr == nil {
-					rpcClient = newCl
-					// Don't yet reset lastErrLogged — the new
-					// client might still 503 if the visor is
-					// up but the RPC service isn't. Reset only
-					// when the next poll actually returns nil.
 				}
 				if backoff < maxBackoff {
 					backoff *= 2
@@ -343,40 +354,37 @@ errors out):
 				}
 				continue
 			}
-			if lastErrLogged {
-				fmt.Fprintln(os.Stderr, "group poll: reconnected") //nolint:errcheck
-				lastErrLogged = false
-				backoff = minBackoff
+			// Stream errors return here; we reopen above. Success
+			// path: the stream blocks indefinitely until ctx is
+			// canceled (Ctrl+C).
+			err = grpcClient.StreamGroupMessages(ctx, "", since.UnixNano(), nil, func(evt *rpcgrpc.GroupMessageEvent) {
+				if lastErrLogged {
+					fmt.Fprintln(os.Stderr, "group listen: reconnected") //nolint:errcheck
+					lastErrLogged = false
+					backoff = minBackoff
+				}
+				onMsg(evt.TimestampNs, evt.GroupId, evt.SenderPk, evt.Body)
+			})
+			_ = grpcClient.Close() //nolint:errcheck
+			if ctx.Err() != nil {
+				return
 			}
-			for _, m := range msgs {
-				if m.TS.After(since) {
-					since = m.TS
+			if err != nil && !lastErrLogged {
+				fmt.Fprintf(os.Stderr, "group listen: %v (reconnecting in %s)\n", err, backoff) //nolint:errcheck
+				lastErrLogged = true
+			}
+			t := time.NewTimer(backoff)
+			select {
+			case <-t.C:
+			case <-ctx.Done():
+				t.Stop()
+				return
+			}
+			if backoff < maxBackoff {
+				backoff *= 2
+				if backoff > maxBackoff {
+					backoff = maxBackoff
 				}
-				if jsonMode {
-					ev := struct {
-						TS       time.Time `json:"ts"`
-						GroupID  string    `json:"group_id"`
-						SenderPK string    `json:"sender_pk"`
-						Body     string    `json:"body"`
-					}{
-						TS:       m.TS.UTC(),
-						GroupID:  m.GroupID,
-						SenderPK: m.SenderPK.Hex(),
-						Body:     m.Text,
-					}
-					b, mErr := json.Marshal(ev)
-					if mErr != nil {
-						continue
-					}
-					fmt.Println(string(b))
-					continue
-				}
-				body := m.Text
-				if !groupListenRaw {
-					body = escapeForOneLine(body)
-				}
-				fmt.Printf("[%s] [%s] %s: %s\n",
-					m.TS.UTC().Format(time.RFC3339), m.GroupID, m.SenderPK, body)
 			}
 		}
 	},

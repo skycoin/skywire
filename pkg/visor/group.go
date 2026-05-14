@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	skychatgroup "github.com/skycoin/skywire/cmd/apps/skychat/group"
@@ -278,11 +279,30 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 // fresh independent of the wrapped-handler chain in
 // group.Manager.openLocked. Nil-tolerant: if setManager hasn't been
 // called the bookkeeping side-effect is skipped.
+//
+// subs is the live-subscriber set used by the gRPC StreamGroupMessages
+// path. Each subscriber gets its own bounded channel; deliver() fans
+// every inbound message out to all channels with select+default so a
+// slow consumer can't block the inbox. Slow consumers see the dropCount
+// for their subscription advance — they observe the drop, the rest of
+// the system keeps moving. nil-safe; the legacy GroupPoll-only path
+// works fine with subs unused.
 type groupInbox struct {
 	mu  sync.Mutex
 	cap int
 	buf []GroupMessage
 	mgr *skychatgroup.Manager
+
+	subsMu sync.RWMutex
+	subs   map[*groupSub]struct{}
+}
+
+// groupSub is a single live-subscription registered against the inbox.
+// Closed by the inbox on unsubscribe; the subscriber drains ch until it
+// returns ok==false, then exits.
+type groupSub struct {
+	ch        chan GroupMessage
+	dropCount atomic.Uint64
 }
 
 func newGroupInbox(capacity int) *groupInbox {
@@ -303,19 +323,35 @@ func (g *groupInbox) setManager(mgr *skychatgroup.Manager) {
 }
 
 func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychatgroup.Message) {
-	g.mu.Lock()
-	g.buf = append(g.buf, GroupMessage{
+	gm := GroupMessage{
 		GroupID:  groupID,
 		SenderPK: senderPK,
 		Text:     msg.Text,
 		TS:       msg.TS,
-	})
+	}
+	g.mu.Lock()
+	g.buf = append(g.buf, gm)
 	if len(g.buf) > g.cap {
 		drop := len(g.buf) - g.cap
 		g.buf = append(g.buf[:0], g.buf[drop:]...)
 	}
 	mgr := g.mgr
 	g.mu.Unlock()
+
+	// Fan-out to live subscribers (gRPC StreamGroupMessages path).
+	// select+default so a backed-up subscriber never blocks delivery
+	// of this message to anyone else or to the ring buffer above.
+	// A subscriber that misses messages sees its dropCount tick; the
+	// rest of the system is unaffected.
+	g.subsMu.RLock()
+	for sub := range g.subs {
+		select {
+		case sub.ch <- gm:
+		default:
+			sub.dropCount.Add(1)
+		}
+	}
+	g.subsMu.RUnlock()
 	// Belt-and-suspenders: also tick the persisted last_message_at on
 	// the manager. The wrapped MessageHandler installed by openLocked
 	// is supposed to do this too, but during the 3-agent coordination
@@ -340,4 +376,43 @@ func (g *groupInbox) snapshotAfter(since time.Time) []GroupMessage {
 		}
 	}
 	return out
+}
+
+// subscribe registers a live subscriber that receives every message
+// passed to deliver() from this point forward. The returned channel is
+// owned by the inbox: callers drain it until ok==false, which happens
+// when unsubscribe is called. bufSize bounds the per-subscriber queue;
+// bursts past it are dropped (counted via the returned sub's
+// dropCount).
+//
+// Used by the gRPC StreamGroupMessages handler to push messages to the
+// CLI without the net/rpc poll loop. The handler is responsible for
+// calling unsubscribe on its way out (defer or ctx-done).
+func (g *groupInbox) subscribe(bufSize int) *groupSub {
+	if bufSize <= 0 {
+		bufSize = 64
+	}
+	sub := &groupSub{ch: make(chan GroupMessage, bufSize)}
+	g.subsMu.Lock()
+	if g.subs == nil {
+		g.subs = make(map[*groupSub]struct{})
+	}
+	g.subs[sub] = struct{}{}
+	g.subsMu.Unlock()
+	return sub
+}
+
+// unsubscribe removes sub from the live-subscriber set and closes its
+// channel so the consumer's range/select exits cleanly. Safe to call
+// once; double-call is a no-op.
+func (g *groupInbox) unsubscribe(sub *groupSub) {
+	if sub == nil {
+		return
+	}
+	g.subsMu.Lock()
+	if _, ok := g.subs[sub]; ok {
+		delete(g.subs, sub)
+		close(sub.ch)
+	}
+	g.subsMu.Unlock()
 }
