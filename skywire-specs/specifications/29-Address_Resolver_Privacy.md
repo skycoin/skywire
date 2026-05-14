@@ -77,60 +77,16 @@ Once deregistered, the visor does NOT automatically re-register if transports ar
 
 To re-register, the visor must be restarted (or the config changed and reinitialize triggered).
 
-## CLI Support
+## Address Resolver Client Contract
 
-```
-skywire cli config show .transport.ar_transport_limit
-```
+The AR client SHALL provide a deregister operation that:
 
-Runtime changes (future):
-```
-skywire cli visor ar-limit <N>
-```
+- Issues a DELETE to the AR's deregistration endpoint for the
+  visor's public key.
+- Clears the local registration state so subsequent transport
+  changes do not re-register the visor.
+- Stops the periodic re-registration heartbeat.
 
-This would update the limit at runtime without restart. Setting it to 0 would re-register with AR. Setting it to -1 would deregister immediately.
-
-## Implementation
-
-### Config
-
-Add `ARTransportLimit` to the transport config struct:
-
-```go
-type Transport struct {
-    // ... existing fields ...
-    ARTransportLimit int `json:"ar_transport_limit,omitempty"`
-}
-```
-
-### Transport Manager
-
-After each transport is established, check the count against the limit:
-
-```go
-func (tm *Manager) checkARLimit() {
-    if tm.conf.ARTransportLimit <= 0 {
-        return // 0 = no limit, negative = never registered
-    }
-    if tm.TransportCount() >= tm.conf.ARTransportLimit {
-        tm.deregisterFromAR()
-    }
-}
-```
-
-### Initialization
-
-During visor startup, if `ARTransportLimit < 0`:
-- Skip AR registration entirely
-- Log: "Address resolver registration disabled (ar_transport_limit < 0)"
-
-If `ARTransportLimit > 0`:
-- Register normally
-- Start monitoring transport count
-
-### Address Resolver Client
-
-Add a `Deregister()` method to the AR client that removes the visor's entry:
-- DELETE request to the AR's deregistration endpoint
-- Clear the local registration state
-- Stop the periodic re-registration heartbeat
+After a successful deregistration, the AR SHALL no longer serve the
+visor's record to lookups; the visor MAY still maintain transports
+established prior to deregistration.
