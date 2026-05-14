@@ -71,6 +71,8 @@ func (t PacketType) String() string {
 		return "SkynetForward"
 	case AppDirectPacket:
 		return "AppDirect"
+	case DatagramPacket:
+		return "Datagram"
 	default:
 		return fmt.Sprintf("Unknown(%d)", t)
 	}
@@ -102,6 +104,7 @@ const (
 	VisorRPCPacket      // visor RPC over transport (route ID = 0), payload: virtual stream data
 	SkynetForwardPacket // skynet port forwarding over direct transport (route ID = 0), virtual stream
 	AppDirectPacket     // skywire-network app direct dial over direct transport (route ID = 0), virtual stream
+	DatagramPacket      // faithful-UDP routed datagram (route ID > 0), payload: opaque bytes (AEAD-sealed at the DatagramRouteGroup layer). No sequence number — counter lives in the AEAD nonce (see RFC #2607).
 )
 
 // Capability bitmap flags for extended handshake negotiation.
@@ -236,6 +239,33 @@ func MakeHandshakePacketRaw(id RouteID, payload []byte) Packet {
 	copy(packet[PacketPayloadOffset:], payload)
 
 	return packet
+}
+
+// MakeDatagramPacket constructs a DatagramPacket. Faithful-UDP path:
+// no sequence number, no reorder buffer, no SACK on the receive side.
+// Loss is loss, ordering is best-effort, head-of-line blocking does
+// not occur on the route group's read path. Payload is opaque to the
+// router — the DatagramRouteGroup wraps it in a per-datagram AEAD
+// (see RFC #2607 Stage 3) before this constructor is called, so what
+// lands on the wire is ciphertext + the 8-byte nonce-counter prefix
+// produced at that layer. This function is wire-format only.
+//
+// Returns ErrPayloadTooBig if the payload (after AEAD wrapping) does
+// not fit in a single skywire frame. Callers should check the
+// DatagramRouteGroup's MaxPayload() before constructing.
+func MakeDatagramPacket(id RouteID, payload []byte) (Packet, error) {
+	if len(payload) > math.MaxUint16 {
+		return Packet{}, ErrPayloadTooBig
+	}
+
+	packet := make([]byte, PacketHeaderSize+len(payload))
+
+	packet[PacketTypeOffset] = byte(DatagramPacket)
+	binary.BigEndian.PutUint32(packet[PacketRouteIDOffset:], uint32(id))
+	binary.BigEndian.PutUint16(packet[PacketPayloadSizeOffset:], uint16(len(payload))) //nolint:gosec
+	copy(packet[PacketPayloadOffset:], payload)
+
+	return packet, nil
 }
 
 // MakeSequencedDataPacket constructs a DataPacket with a 4-byte sequence number
