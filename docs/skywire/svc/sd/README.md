@@ -2,6 +2,7 @@
 
 [← skywire svc](../README.md)
 
+```
 ┌─┐┌─┐┬─┐┬  ┬┬┌─┐┌─┐   ┌┬┐┬┌─┐┌─┐┌─┐┬  ┬┌─┐┬─┐┬ ┬
 └─┐├┤ ├┬┘└┐┌┘││  ├┤ ─── │││└─┐│  │ │└┐┌┘├┤ ├┬┘└┬┘
 └─┘└─┘┴└─ └┘ ┴└─┘└─┘   ─┴┘┴└─┘└─┘└─┘ └┘ └─┘┴└─ ┴ 
@@ -91,6 +92,7 @@ GET /security/nonces/{pk}
 Example:
   skywire cli config gen-keys | tee sd-keys.txt
   service-discovery --sk $(tail -n1 sd-keys.txt)
+```
 
 ## Usage
 

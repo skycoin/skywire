@@ -2,10 +2,12 @@
 
 [← skywire](../README.md)
 
+```
 ┌─┐─┐ ┬┌─┐
 │  ┌┴┬┘│ │
 └─┘┴ └─└─┘
 CXO is a P2P content-addressable object distribution system.
+```
 
 ## Usage
 
