@@ -27,59 +27,59 @@ HTTP Endpoints:
 Request/Response Examples:
 
 GET /health
-  [1m{[0m
-      [1m[94m"build_info"[0m[1m:[0m [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"dmsg_address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80"[0m[1m,[0m
-      [1m[94m"dmsg_servers"[0m[1m:[0m [1m[[0m
-        [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
-    [1m}[0m
+  {
+      "build_info": {
+        "version": "v1.3.29"
+      },
+      "dmsg_address": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80",
+      "dmsg_servers": [
+        "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+      ],
+      "started_at": "2024-01-15T10:00:00Z"
+    }
 
 POST /bind/stcpr (auth)
-  Request:  [1m{[0m
-      [1m[94m"port"[0m[1m:[0m [33m30178[0m
-    [1m}[0m
+  Request:  {
+      "port": 30178
+    }
   Response: 200 OK
 
 DEL /bind/stcpr (auth)
   Response: 200 OK
 
 GET /resolve/stcpr/{pk}
-  [1m{[0m
-      [1m[94m"addr"[0m[1m:[0m [32m"192.168.1.100:30178"[0m
-    [1m}[0m
+  {
+      "addr": "192.168.1.100:30178"
+    }
 
 GET /resolve/sudph/{pk}
-  [1m{[0m
-      [1m[94m"addr"[0m[1m:[0m [32m"192.168.1.100:30178"[0m[1m,[0m
-      [1m[94m"handshake"[0m[1m:[0m [32m"[0m[35m\u003c[0m[32mbase64_handshake_data[0m[35m\u003e[0m[32m"[0m
-    [1m}[0m
+  {
+      "addr": "192.168.1.100:30178",
+      "handshake": "\u003cbase64_handshake_data\u003e"
+    }
 
 GET /transports
-  [1m{[0m
-      [1m[94m"sudph"[0m[1m:[0m [1m[[0m
-        [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"stcpr"[0m[1m:[0m [1m[[0m
-        [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-        [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-      [1m][0m
-    [1m}[0m
+  {
+      "sudph": [
+        "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
+      ],
+      "stcpr": [
+        "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+      ]
+    }
 
 DEL /deregister/{network} (NM auth headers: NM-PK, NM-Sign)
-  Request:  [1m[[0m
-      [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-      [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-    [1m][0m
+  Request:  [
+      "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+      "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+    ]
   Response: 200 OK
 
 GET /security/nonces/{pk}
-  [1m{[0m
-      [1m[94m"nonce"[0m[1m:[0m [33m12345[0m
-    [1m}[0m
+  {
+      "nonce": 12345
+    }
 
 Note: the specified UDP port must be accessible from the internet for SUDPH.
 

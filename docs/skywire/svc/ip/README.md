@@ -17,20 +17,20 @@ HTTP Endpoints (API mode):
 Request/Response Examples:
 
 GET /?ip=8.8.8.8
-  [1m{[0m
-      [1m[94m"ip_address"[0m[1m:[0m [32m"8.8.8.8"[0m[1m,[0m
-      [1m[94m"latitude"[0m[1m:[0m [33m37.751[0m[1m,[0m
-      [1m[94m"longitude"[0m[1m:[0m [33m-97.822[0m[1m,[0m
-      [1m[94m"postal_code"[0m[1m:[0m [32m""[0m[1m,[0m
-      [1m[94m"continent_code"[0m[1m:[0m [32m"NA"[0m[1m,[0m
-      [1m[94m"continent_name"[0m[1m:[0m [32m"North America"[0m[1m,[0m
-      [1m[94m"country_code"[0m[1m:[0m [32m"US"[0m[1m,[0m
-      [1m[94m"country_name"[0m[1m:[0m [32m"United States"[0m[1m,[0m
-      [1m[94m"region_code"[0m[1m:[0m [32m""[0m[1m,[0m
-      [1m[94m"region_name"[0m[1m:[0m [32m""[0m[1m,[0m
-      [1m[94m"city_name"[0m[1m:[0m [32m""[0m[1m,[0m
-      [1m[94m"timezone"[0m[1m:[0m [32m"America/Chicago"[0m
-    [1m}[0m
+  {
+      "ip_address": "8.8.8.8",
+      "latitude": 37.751,
+      "longitude": -97.822,
+      "postal_code": "",
+      "continent_code": "NA",
+      "continent_name": "North America",
+      "country_code": "US",
+      "country_name": "United States",
+      "region_code": "",
+      "region_name": "",
+      "city_name": "",
+      "timezone": "America/Chicago"
+    }
 
 CLI: skywire svc ip 8.8.8.8
   (same response as above)
