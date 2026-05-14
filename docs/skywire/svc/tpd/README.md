@@ -34,140 +34,140 @@ HTTP Endpoints:
 Request/Response Examples:
 
 GET /health
-  [1m{[0m
-      [1m[94m"build_info"[0m[1m:[0m [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"dmsg_address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80"[0m[1m,[0m
-      [1m[94m"dmsg_servers"[0m[1m:[0m [1m[[0m
-        [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-      [1m][0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
-    [1m}[0m
+  {
+      "build_info": {
+        "version": "v1.3.29"
+      },
+      "dmsg_address": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80",
+      "dmsg_servers": [
+        "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+      ],
+      "started_at": "2024-01-15T10:00:00Z"
+    }
 
 GET /all-transports?selfTransports=hide
-  [1m[[0m
-      [1m{[0m
-        [1m[94m"entry"[0m[1m:[0m [1m{[0m
-          [1m[94m"edges"[0m[1m:[0m [1m[[0m
-            [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-            [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-          [1m][0m[1m,[0m
-          [1m[94m"t_id"[0m[1m:[0m [32m"e7a7f1b3c04047f89e12a0a1459b3456"[0m[1m,[0m
-          [1m[94m"type"[0m[1m:[0m [32m"stcpr"[0m
-        [1m}[0m[1m,[0m
-        [1m[94m"latency_ms"[0m[1m:[0m [33m45.2[0m[1m,[0m
-        [1m[94m"registered"[0m[1m:[0m [33m1705312800[0m[1m,[0m
-        [1m[94m"signatures"[0m[1m:[0m [1m[[0m
-          [32m"00000000...00000000"[0m,
-          [32m"00000000...00000000"[0m
-        [1m][0m
-      [1m}[0m
-    [1m][0m
+  [
+      {
+        "entry": {
+          "edges": [
+            "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+            "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+          ],
+          "t_id": "e7a7f1b3c04047f89e12a0a1459b3456",
+          "type": "stcpr"
+        },
+        "latency_ms": 45.2,
+        "registered": 1705312800,
+        "signatures": [
+          "00000000...00000000",
+          "00000000...00000000"
+        ]
+      }
+    ]
 
 GET /all-transports/stats
-  [1m{[0m
-      [1m[94m"by_type"[0m[1m:[0m [1m{[0m
-        [1m[94m"stcpr"[0m[1m:[0m [33m100[0m[1m,[0m
-        [1m[94m"sudph"[0m[1m:[0m [33m50[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"total_transports"[0m[1m:[0m [33m150[0m[1m,[0m
-      [1m[94m"unique_visors"[0m[1m:[0m [33m75[0m
-    [1m}[0m
+  {
+      "by_type": {
+        "stcpr": 100,
+        "sudph": 50
+      },
+      "total_transports": 150,
+      "unique_visors": 75
+    }
 
 GET /all-transports/per-key-stats
-  [1m{[0m
-      [1m[94m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m:[0m [1m{[0m
-        [1m[94m"stcpr"[0m[1m:[0m [33m3[0m[1m,[0m
-        [1m[94m"sudph"[0m[1m:[0m [33m2[0m[1m,[0m
-        [1m[94m"total"[0m[1m:[0m [33m5[0m
-      [1m}[0m
-    [1m}[0m
+  {
+      "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5": {
+        "stcpr": 3,
+        "sudph": 2,
+        "total": 5
+      }
+    }
 
 GET /transports/id:{id} (auth)
-  [1m{[0m
-      [1m[94m"entry"[0m[1m:[0m [1m{[0m
-        [1m[94m"edges"[0m[1m:[0m [1m[[0m
-          [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-          [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-        [1m][0m[1m,[0m
-        [1m[94m"t_id"[0m[1m:[0m [32m"e7a7f1b3c04047f89e12a0a1459b3456"[0m[1m,[0m
-        [1m[94m"type"[0m[1m:[0m [32m"stcpr"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"registered"[0m[1m:[0m [33m1705312800[0m[1m,[0m
-      [1m[94m"signatures"[0m[1m:[0m [1m[[0m
-        [32m"00000000...00000000"[0m,
-        [32m"00000000...00000000"[0m
-      [1m][0m
-    [1m}[0m
+  {
+      "entry": {
+        "edges": [
+          "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+          "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+        ],
+        "t_id": "e7a7f1b3c04047f89e12a0a1459b3456",
+        "type": "stcpr"
+      },
+      "registered": 1705312800,
+      "signatures": [
+        "00000000...00000000",
+        "00000000...00000000"
+      ]
+    }
 
 GET /transports/edge:{pk} (auth)
   [<signed_entry>, ...]
 
 GET /transports/stats/{edge}
-  [1m{[0m
-      [1m[94m"by_type"[0m[1m:[0m [1m{[0m
-        [1m[94m"stcpr"[0m[1m:[0m [33m3[0m[1m,[0m
-        [1m[94m"sudph"[0m[1m:[0m [33m2[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"total"[0m[1m:[0m [33m5[0m
-    [1m}[0m
+  {
+      "by_type": {
+        "stcpr": 3,
+        "sudph": 2
+      },
+      "total": 5
+    }
 
 POST /transports/ (auth)
-  Request:  [1m[[0m
-      [1m{[0m
-        [1m[94m"entry"[0m[1m:[0m [1m{[0m
-          [1m[94m"edges"[0m[1m:[0m [1m[[0m
-            [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
-            [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
-          [1m][0m[1m,[0m
-          [1m[94m"t_id"[0m[1m:[0m [32m"e7a7f1b3c04047f89e12a0a1459b3456"[0m[1m,[0m
-          [1m[94m"type"[0m[1m:[0m [32m"stcpr"[0m
-        [1m}[0m[1m,[0m
-        [1m[94m"signatures"[0m[1m:[0m [1m[[0m
-          [32m"00000000...00000000"[0m,
-          [32m"00000000...00000000"[0m
-        [1m][0m
-      [1m}[0m
-    [1m][0m
+  Request:  [
+      {
+        "entry": {
+          "edges": [
+            "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+            "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
+          ],
+          "t_id": "e7a7f1b3c04047f89e12a0a1459b3456",
+          "type": "stcpr"
+        },
+        "signatures": [
+          "00000000...00000000",
+          "00000000...00000000"
+        ]
+      }
+    ]
   Response: <same with registered timestamp>
 
 DEL /transports/id:{id} (auth)
   Response: "transport deleted"
 
 DEL /transports/deregister (NM auth headers: NM-PK, NM-Sign)
-  Request:  [1m[[0m
-      [32m"e7a7f1b3c04047f89e12a0a1459b3456"[0m
-    [1m][0m
+  Request:  [
+      "e7a7f1b3c04047f89e12a0a1459b3456"
+    ]
   Response: 200 OK
 
 GET /bandwidth/transport/{id}?period=daily&limit=7
-  [1m[[0m
-      [1m{[0m
-        [1m[94m"sent_bytes"[0m[1m:[0m [33m1073741824[0m[1m,[0m
-        [1m[94m"recv_bytes"[0m[1m:[0m [33m2147483648[0m
-      [1m}[0m
-    [1m][0m
+  [
+      {
+        "sent_bytes": 1073741824,
+        "recv_bytes": 2147483648
+      }
+    ]
 
 GET /bandwidth/visor/{pk}?period=daily&limit=7
-  [1m{[0m
-      [1m[94m"sent_bytes"[0m[1m:[0m [33m5368709120[0m[1m,[0m
-      [1m[94m"recv_bytes"[0m[1m:[0m [33m10737418240[0m
-    [1m}[0m
+  {
+      "sent_bytes": 5368709120,
+      "recv_bytes": 10737418240
+    }
 
 GET /uptimes
-  [1m[[0m
-      [1m{[0m
-        [1m[94m"on"[0m[1m:[0m [36mtrue[0m[1m,[0m
-        [1m[94m"pk"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-        [1m[94m"tp_count"[0m[1m:[0m [33m5[0m
-      [1m}[0m
-    [1m][0m
+  [
+      {
+        "on": true,
+        "pk": "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
+        "tp_count": 5
+      }
+    ]
 
 GET /security/nonces/{pk}
-  [1m{[0m
-      [1m[94m"nonce"[0m[1m:[0m [33m12345[0m
-    [1m}[0m
+  {
+      "nonce": 12345
+    }
 
 Example:
   skywire cli config gen-keys | tee tpd-keys.txt

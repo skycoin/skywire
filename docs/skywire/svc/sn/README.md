@@ -15,16 +15,16 @@ RPC Methods (via dmsg):
   SetupRPCGateway.HealthCheck       Health check
 
 Example Config:
-  [1m{[0m
-      [1m[94m"public_key"[0m[1m:[0m [32m"000000000000000000000000000000000000000000000000000000000000000000"[0m[1m,[0m
-      [1m[94m"secret_key"[0m[1m:[0m [32m"0000000000000000000000000000000000000000000000000000000000000000"[0m[1m,[0m
-      [1m[94m"dmsg"[0m[1m:[0m [1m{[0m
-        [1m[94m"discovery"[0m[1m:[0m [32m"http://dmsgd.skywire.skycoin.com"[0m[1m,[0m
-        [1m[94m"sessions_count"[0m[1m:[0m [33m1[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"transport_discovery"[0m[1m:[0m [32m"http://tpd.skywire.skycoin.com"[0m[1m,[0m
-      [1m[94m"log_level"[0m[1m:[0m [32m""[0m
-    [1m}[0m
+  {
+      "public_key": "000000000000000000000000000000000000000000000000000000000000000000",
+      "secret_key": "0000000000000000000000000000000000000000000000000000000000000000",
+      "dmsg": {
+        "discovery": "http://dmsgd.skywire.skycoin.com",
+        "sessions_count": 1
+      },
+      "transport_discovery": "http://tpd.skywire.skycoin.com",
+      "log_level": ""
+    }
 
 Generate Keys:
   skywire cli config gen-keys | tee sn-keys.txt

@@ -15,36 +15,36 @@ HTTP Endpoints:
 Response Examples (from actual struct types):
 
 GET /health - api.HealthCheckResponse
-[1m{[0m
-      [1m[94m"build_info"[0m[1m:[0m [1m{[0m
-        [1m[94m"commit"[0m[1m:[0m [32m"abc1234"[0m[1m,[0m
-        [1m[94m"date"[0m[1m:[0m [32m"2024-01-15T10:30:00Z"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
-      [1m}[0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
-    [1m}[0m
+{
+      "build_info": {
+        "commit": "abc1234",
+        "date": "2024-01-15T10:30:00Z",
+        "version": "v1.3.29"
+      },
+      "started_at": "2024-01-15T10:00:00Z"
+    }
 
 GET /status - nm.Status
-[1m{[0m
-      [1m[94m"last_update"[0m[1m:[0m [32m"2024-01-15T10:30:00Z"[0m[1m,[0m
-      [1m[94m"online_visors"[0m[1m:[0m [33m1542[0m[1m,[0m
-      [1m[94m"alive_transports"[0m[1m:[0m [33m3256[0m[1m,[0m
-      [1m[94m"available_vpn"[0m[1m:[0m [33m128[0m[1m,[0m
-      [1m[94m"available_skysocks"[0m[1m:[0m [33m256[0m[1m,[0m
-      [1m[94m"available_public_visor"[0m[1m:[0m [33m512[0m[1m,[0m
-      [1m[94m"last_cleaning"[0m[1m:[0m [1m{[0m
-        [1m[94m"all_dead_entries_cleaned"[0m[1m:[0m [33m15[0m[1m,[0m
-        [1m[94m"transport_discovery"[0m[1m:[0m [33m5[0m[1m,[0m
-        [1m[94m"address_resolver"[0m[1m:[0m [1m{[0m
-          [1m[94m"sudph"[0m[1m:[0m [33m0[0m[1m,[0m
-          [1m[94m"stcpr"[0m[1m:[0m [33m0[0m
-        [1m}[0m[1m,[0m
-        [1m[94m"dmsg_discovery"[0m[1m:[0m [33m3[0m[1m,[0m
-        [1m[94m"vpn"[0m[1m:[0m [33m2[0m[1m,[0m
-        [1m[94m"skysocks"[0m[1m:[0m [33m3[0m[1m,[0m
-        [1m[94m"public_visor"[0m[1m:[0m [33m2[0m
-      [1m}[0m
-    [1m}[0m
+{
+      "last_update": "2024-01-15T10:30:00Z",
+      "online_visors": 1542,
+      "alive_transports": 3256,
+      "available_vpn": 128,
+      "available_skysocks": 256,
+      "available_public_visor": 512,
+      "last_cleaning": {
+        "all_dead_entries_cleaned": 15,
+        "transport_discovery": 5,
+        "address_resolver": {
+          "sudph": 0,
+          "stcpr": 0
+        },
+        "dmsg_discovery": 3,
+        "vpn": 2,
+        "skysocks": 3,
+        "public_visor": 2
+      }
+    }
 ```
 
 ## Usage
