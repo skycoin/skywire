@@ -43,22 +43,22 @@ skywire dmsg server dial
 
 ```
   -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
-  -A, --disc-addr string   DMSG Discovery dmsg address[0m
+  -A, --disc-addr string   DMSG Discovery dmsg address
                             (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
-  -U, --disc-url string    DMSG Discovery URL[0m
+  -U, --disc-url string    DMSG Discovery URL
                             (default "http://dmsgd.skywire.skycoin.com")
   -D, --dmsgconf string    dmsghttp-config path
   -Z, --http               use regular http to connect to DMSG Discovery
-  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ][0m
+  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ]
                             (default "info")
-  -e, --sess int           number of DMSG Servers to connect to[0m
+  -e, --sess int           number of DMSG Servers to connect to
                             (default 2)
   -s, --sk cipher.SecKey   a random key is generated if unspecified
-                           [0m (default 0000000000000000000000000000000000000000000000000000000000000000)
-  -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port[0m
+                            (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port
                            
   -w, --wait int           wait time in seconds before disconnecting
-                           [0m
+                           
 ```
 
 ## Global Flags
