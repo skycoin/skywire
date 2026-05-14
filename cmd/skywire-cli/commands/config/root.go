@@ -95,6 +95,7 @@ var (
 	proxyServerWhitelist       string
 	enableDmsgWeb              bool
 	enableSkynetWeb            bool
+	enableSkymailBridge        bool
 	dmsgWebUpstreamSOCKS       string
 	skynetWebUpstreamSOCKS     string
 	configServicePath          string

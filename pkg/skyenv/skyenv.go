@@ -118,6 +118,15 @@ const (
 
 	// Default skywire app constants.
 
+	// SkymailBridgeAddr is the local TCP address the in-process
+	// skymail-bridge listens on for inbound SMTP from a co-located
+	// Postfix's transport_map. The non-default :1025 (vs :25) keeps
+	// the bridge from racing the host's primary mailserver on the
+	// privileged port. Lives here rather than under a config field
+	// default so the config-gen flag (`--skymail-bridge`) emits a
+	// concrete value, not a "leave empty for default" sentinel.
+	SkymailBridgeAddr = "127.0.0.1:1025"
+
 	// SkychatName is the name of the skychat app
 	SkychatName = "skychat"
 

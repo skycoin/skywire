@@ -115,6 +115,8 @@ var (
 	embDmsgWeb vinit.Module
 	// Embedded skynetweb resolver (localhost SOCKS5 for .skynet browsing)
 	embSkynetWeb vinit.Module
+	// Embedded SMTP→skywire bridge (localhost SMTP listener for *.skynet recipients)
+	embSkymailBridge vinit.Module
 	// UI server module (serves tp-viz)
 	uiServer vinit.Module
 	// Node health tracking for TPS and RSN
@@ -170,6 +172,7 @@ func registerModules(logger *logging.MasterLogger) {
 	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	embRouteSetup = maker("embedded_route_setup", initEmbeddedRouteSetup, &dmsgC)
 	embDmsgWeb = maker("embedded_dmsgweb", initEmbeddedDmsgWeb, &dmsgC)
+	embSkymailBridge = maker("embedded_skymail_bridge", initEmbeddedSkymailBridge, &dmsgC)
 	// routerListener pre-opens DmsgAwaitSetupPort the moment dmsgC is
 	// ready so peers dialing it during the rt-init window (held up by
 	// &tr) don't hit "request has no associated listener". rt picks up
@@ -217,7 +220,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// store. See init_group.go.
 	groupingMod = maker("grouping", initGrouping, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
