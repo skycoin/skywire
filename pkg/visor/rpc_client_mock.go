@@ -1226,6 +1226,16 @@ func (mc *mockRPCClient) GroupAddMember(_ string, _ cipher.PubKey) (GroupInfo, e
 	return GroupInfo{}, nil
 }
 
+// GroupPromoteAdmin implements API.
+func (mc *mockRPCClient) GroupPromoteAdmin(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupDemoteAdmin implements API.
+func (mc *mockRPCClient) GroupDemoteAdmin(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
 // GroupSend implements API.
 func (mc *mockRPCClient) GroupSend(_ GroupSendArgs) error { return nil }
 
