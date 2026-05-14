@@ -4,6 +4,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/tidwall/pretty"
 
@@ -38,18 +39,27 @@ func generateExamples() string {
 		date = "2024-01-15T10:30:00Z"
 	}
 
-	// Use actual DMSG servers from embedded deployment config
+	// Use actual DMSG servers from embedded deployment config. Sort
+	// by PK first so the help-output example is deterministic — at
+	// runtime dmsg.Prod.DmsgServers is shuffled (load-distribution),
+	// and without sorting here the example PKs in --help (and in any
+	// docs generated from --help, see cmd/skywire/commands/doc) would
+	// drift on every binary invocation.
 	var serverEntries []disc.Entry
 	var serverPKs []string
 	if len(dmsg.Prod.DmsgServers) > 0 {
-		// Use up to 2 real servers for examples
+		sorted := make([]disc.Entry, len(dmsg.Prod.DmsgServers))
+		copy(sorted, dmsg.Prod.DmsgServers)
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].Static.Hex() < sorted[j].Static.Hex()
+		})
 		limit := 2
-		if len(dmsg.Prod.DmsgServers) < limit {
-			limit = len(dmsg.Prod.DmsgServers)
+		if len(sorted) < limit {
+			limit = len(sorted)
 		}
 		for i := 0; i < limit; i++ {
-			serverEntries = append(serverEntries, dmsg.Prod.DmsgServers[i])
-			serverPKs = append(serverPKs, dmsg.Prod.DmsgServers[i].Static.Hex())
+			serverEntries = append(serverEntries, sorted[i])
+			serverPKs = append(serverPKs, sorted[i].Static.Hex())
 		}
 	}
 
