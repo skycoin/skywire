@@ -22,16 +22,6 @@ extend, or understand a Skywire deployment.
     and live sample output. Generated from the cobra tree on every
     commit to `develop`.
 
-- :material-application-cog: **[Apps](apps/)**
-
-    Visor-hosted applications: skychat, skysocks, skynet, vpn.
-    Per-app behavior and configuration.
-
-- :material-server-network: **[Services](services/)**
-
-    Skywire deployment services: transport-discovery, route-finder,
-    service-discovery, address-resolver, uptime-tracker, etc.
-
 - :material-book-open-page-variant: **[Specs](specs/)**
 
     Protocol-level specifications: transports, packets, routing,
@@ -42,6 +32,17 @@ extend, or understand a Skywire deployment.
     Eligibility rules for the Skywire reward distribution.
 
 </div>
+
+!!! note "Per-app and per-service docs"
+
+    Deep documentation for visor-hosted apps (skychat, skysocks, skynet, vpn)
+    and for the deployment services (transport-discovery, route-finder,
+    service-discovery, address-resolver, uptime-tracker) currently lives
+    alongside the source under
+    [`cmd/apps/`](https://github.com/skycoin/skywire/tree/develop/cmd/apps)
+    and [`cmd/svc/`](https://github.com/skycoin/skywire/tree/develop/cmd/svc).
+    They'll be integrated into this site in a follow-up once their
+    cmd/-relative links are rewritten to live under `docs/`.
 
 ## Other resources
 
