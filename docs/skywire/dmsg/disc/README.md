@@ -2,6 +2,7 @@
 
 [← skywire dmsg](../README.md)
 
+```
 ┌┬┐┌┬┐┌─┐┌─┐  ┌┬┐┬┌─┐┌─┐┌─┐┬  ┬┌─┐┬─┐┬ ┬
 	 │││││└─┐│ ┬───│││└─┐│  │ │└┐┌┘├┤ ├┬┘└┬┘
 	─┴┘┴ ┴└─┘└─┘  ─┴┘┴└─┘└─┘└─┘ └┘ └─┘┴└─ ┴
@@ -201,6 +202,7 @@ GET /dmsg-discovery/server/{pk}/clients
 Example:
   skywire cli config gen-keys > dmsgd-config.json
   skywire dmsg disc --sk $(tail -n1 dmsgd-config.json)
+```
 
 ## Usage
 

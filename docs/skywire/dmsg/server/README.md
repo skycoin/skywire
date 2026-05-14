@@ -2,6 +2,7 @@
 
 [← skywire dmsg](../README.md)
 
+```
 ┌┬┐┌┬┐┌─┐┌─┐   ┌─┐┌─┐┬─┐┬  ┬┌─┐┬─┐
 	││││││└─┐│ ┬ ─ └─┐├┤ ├┬┘└┐┌┘├┤ ├┬┘
 	─┴┘┴ ┴└─┘└─┘   └─┘└─┘┴└─ └┘ └─┘┴└─
@@ -13,6 +14,7 @@ HTTP Endpoints:
 Example:
   skywire dmsg server config gen -o dmsg-config.json
   skywire dmsg server start dmsg-config.json
+```
 
 ## Usage
 
