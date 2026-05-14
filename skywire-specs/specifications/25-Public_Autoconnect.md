@@ -11,15 +11,6 @@ The autoconnect system ensures network connectivity by:
 - **Fallback discovery**: Finding well-connected visors via *Transport Discovery* when no public visors are available
 - **Connection maintenance**: Periodically checking and re-establishing connections
 
-## Code Structure
-
-The autoconnect logic is implemented in:
-
-- `/pkg/visor/autoconnect.go` - Main autoconnect implementation
-- `/pkg/visor/init.go` - Autoconnect initialization (`initPublicAutoconnect`)
-- `/pkg/servicedisc/` - Service discovery client for fetching public visors
-- `/pkg/skyenv/skyenv.go` - Configuration constants
-
 ## Configuration
 
 Autoconnect behavior is configured in the visor's JSON configuration:
