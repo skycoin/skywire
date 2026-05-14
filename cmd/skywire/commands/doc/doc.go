@@ -225,6 +225,12 @@ func collect(cmd *cobra.Command, segs []string, out *[]page) {
 type captureSpec struct {
 	argv  []string
 	extra []string // optional extras (typically --json or limit flags) — folded into argv at exec
+	// maxLines overrides the global --max-lines for this command. Use
+	// it for commands whose output is rich enough to want a deeper
+	// sample (e.g. `cli tp` showing the transport table) or shallow
+	// enough that a small cap reads naturally (e.g. `cli visor ver`).
+	// Zero falls back to the global --max-lines.
+	maxLines int
 }
 
 // captureAllowlist maps "cli dmsg sessions" (the space-joined cobra
@@ -232,22 +238,63 @@ type captureSpec struct {
 // conservative: only commands that print state, take no required args,
 // and complete quickly. State-changing commands (config gen, route
 // add, etc.) are NEVER in this list.
+//
+// `cli config show` is deliberately NOT in this list — it would emit
+// the local visor's config including dmsgpty whitelists and
+// hypervisor PKs that could be deployment-specific.
 var captureAllowlist = map[string]captureSpec{
-	"cli visor info":         {argv: []string{"cli", "visor", "info"}},
-	"cli visor pk":           {argv: []string{"cli", "visor", "pk"}},
-	"cli visor ver":          {argv: []string{"cli", "visor", "ver"}},
-	"cli visor ports":        {argv: []string{"cli", "visor", "ports"}},
-	"cli visor ip":           {argv: []string{"cli", "visor", "ip"}},
-	"cli visor dmsg-servers": {argv: []string{"cli", "visor", "dmsg-servers"}},
-	"cli visor app ls":       {argv: []string{"cli", "visor", "app", "ls"}},
-	"cli visor ready":        {argv: []string{"cli", "visor", "ready"}},
-	"cli visor user":         {argv: []string{"cli", "visor", "user"}},
-	"cli visor proxies":      {argv: []string{"cli", "visor", "proxies"}},
-	"cli dmsg sessions":      {argv: []string{"cli", "dmsg", "sessions"}},
-	"cli route groups":       {argv: []string{"cli", "route", "groups"}},
-	"cli rg ls":              {argv: []string{"cli", "rg", "ls"}},
-	"cli mdisc servers":      {argv: []string{"cli", "mdisc", "servers"}},
-	"cli reward rules":       {argv: []string{"cli", "reward", "rules"}},
+	// Local visor state — short, single-shot.
+	"cli visor info":         {argv: []string{"cli", "visor", "info"}, maxLines: 40},
+	"cli visor pk":           {argv: []string{"cli", "visor", "pk"}, maxLines: 4},
+	"cli visor ver":          {argv: []string{"cli", "visor", "ver"}, maxLines: 4},
+	"cli visor ports":        {argv: []string{"cli", "visor", "ports"}, maxLines: 30},
+	"cli visor ip":           {argv: []string{"cli", "visor", "ip"}, maxLines: 8},
+	"cli visor dmsg-servers": {argv: []string{"cli", "visor", "dmsg-servers"}, maxLines: 20},
+	"cli visor app ls":       {argv: []string{"cli", "visor", "app", "ls"}, maxLines: 20},
+	"cli visor ready":        {argv: []string{"cli", "visor", "ready"}, maxLines: 4},
+	"cli visor user":         {argv: []string{"cli", "visor", "user"}, maxLines: 4},
+	"cli visor proxies":      {argv: []string{"cli", "visor", "proxies"}, maxLines: 30},
+
+	// Transports — the local visor's transport table is the showcase
+	// example for `cli tp`. 30 lines covers ~25 transports + header,
+	// enough to make the columns / types obvious without dumping the
+	// whole production-server table (700+ rows on the deployment
+	// visor).
+	"cli tp":           {argv: []string{"cli", "tp"}, maxLines: 30},
+	"cli tp metrics":   {argv: []string{"cli", "tp", "metrics"}, maxLines: 20},
+	"cli tp tpd-stats": {argv: []string{"cli", "tp", "tpd-stats"}, maxLines: 40},
+	// --metrics: aggregate only (1 row), instead of the default which
+	// fetches every transport from TPD and runs into ~30s+ on a
+	// production-scale deployment.
+	"cli tp uptime":    {argv: []string{"cli", "tp", "uptime", "--metrics"}, maxLines: 20},
+	"cli tp net-stats": {argv: []string{"cli", "tp", "net-stats"}, maxLines: 20},
+
+	// Route / route group state.
+	"cli route groups": {argv: []string{"cli", "route", "groups"}, maxLines: 30},
+	"cli rg ls":        {argv: []string{"cli", "rg", "ls"}, maxLines: 30},
+
+	// DMSG.
+	"cli dmsg sessions": {argv: []string{"cli", "dmsg", "sessions"}, maxLines: 30},
+
+	// Discovery layer — fetched from prod each time, so output is
+	// network-wide, not local.
+	"cli sd":            {argv: []string{"cli", "sd"}, maxLines: 30},
+	"cli pv":            {argv: []string{"cli", "pv"}, maxLines: 30},
+	"cli ut":            {argv: []string{"cli", "ut"}, maxLines: 30},
+	"cli ut sd":         {argv: []string{"cli", "ut", "sd"}, maxLines: 30},
+	"cli ut tpd":        {argv: []string{"cli", "ut", "tpd"}, maxLines: 30},
+	"cli ut mdisc":      {argv: []string{"cli", "ut", "mdisc"}, maxLines: 30},
+	"cli mdisc servers": {argv: []string{"cli", "mdisc", "servers"}, maxLines: 20},
+
+	// App lists / status.
+	"cli proxy list":    {argv: []string{"cli", "proxy", "list"}, maxLines: 20},
+	"cli proxy status":  {argv: []string{"cli", "proxy", "status"}, maxLines: 10},
+	"cli vpn list":      {argv: []string{"cli", "vpn", "list"}, maxLines: 20},
+	"cli vpn status":    {argv: []string{"cli", "vpn", "status"}, maxLines: 10},
+	"cli skynet status": {argv: []string{"cli", "skynet", "status"}, maxLines: 20},
+
+	// Static reference content (no RPC).
+	"cli reward rules": {argv: []string{"cli", "reward", "rules"}, maxLines: 50},
 }
 
 // runCapture invokes the spec and returns (stdout-truncated, errMsg).
@@ -287,7 +334,11 @@ func runCapture(spec captureSpec) (string, string) {
 		}
 		return "", reason
 	}
-	return truncateLines(stdout.String(), maxLines), ""
+	lim := spec.maxLines
+	if lim <= 0 {
+		lim = maxLines
+	}
+	return truncateLines(stdout.String(), lim), ""
 }
 
 // truncateLines caps captured output at n lines. When truncation
@@ -398,9 +449,7 @@ func render(w io.Writer, p page) error {
 	}
 
 	if p.capture != "" {
-		b.WriteString("## Sample output\n\n_Captured live from a running visor; truncated to ")
-		fmt.Fprintf(&b, "%d", maxLines)
-		b.WriteString(" lines._\n\n```\n")
+		b.WriteString("## Sample output\n\n_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._\n\n```\n")
 		b.WriteString(sanitize(strings.TrimRight(p.capture, "\n")))
 		b.WriteString("\n```\n\n")
 	} else if p.captureErr != "" && !captureSkipNote {
