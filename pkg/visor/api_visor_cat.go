@@ -138,7 +138,7 @@ func (v *Visor) visorCatDial(req VisorCatRequest, transport string) (*VisorCatRe
 			v.log.WithError(accErr).Debug("VisorCat: loopback accept failed")
 			return
 		}
-		splice(local, remote)
+		_ = splice(local, remote) //nolint:errcheck // best-effort splice; conn lifecycle owned by caller
 	}()
 
 	return &VisorCatResponse{LocalAddr: lis.Addr().String()}, nil
@@ -236,7 +236,7 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 		go func() {
 			var buf [1]byte
 			for {
-				_ = local.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+				_ = local.SetReadDeadline(time.Now().Add(500 * time.Millisecond)) //nolint:errcheck
 				n, rerr := local.Read(buf[:])
 				if n > 0 {
 					sniffCh <- sniffResult{b: buf[0], has: true}
@@ -291,7 +291,7 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 					// CLI gave up between remote-arrival and sniff-stop;
 					// rare race. Tear down remote too.
 					_ = remote.Close() //nolint:errcheck
-					_ = local.Close() //nolint:errcheck
+					_ = local.Close()  //nolint:errcheck
 					return
 				}
 				if s.has {
@@ -319,7 +319,7 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 					go func() {
 						var buf [1]byte
 						for {
-							_ = local.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+							_ = local.SetReadDeadline(time.Now().Add(500 * time.Millisecond)) //nolint:errcheck
 							n, rerr := local.Read(buf[:])
 							if n > 0 {
 								sniffCh <- sniffResult{b: buf[0], has: true}
@@ -349,12 +349,12 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 		}
 
 		// Clear deadline so splice reads block normally.
-		_ = local.SetReadDeadline(time.Time{})
+		_ = local.SetReadDeadline(time.Time{}) //nolint:errcheck
 
 		// Drain pending sniff bytes into remote first, then splice.
 		if len(pending) > 0 {
 			if _, werr := remote.Write(pending); werr != nil {
-				_ = local.Close() //nolint:errcheck
+				_ = local.Close()  //nolint:errcheck
 				_ = remote.Close() //nolint:errcheck
 				v.log.WithError(werr).Debug("VisorCat: drain sniff to remote failed")
 				return
@@ -367,7 +367,7 @@ func (v *Visor) visorCatListen(req VisorCatRequest, transport string) (*VisorCat
 		// inbound data could arrive. spliceHalfClose keeps the
 		// reverse direction open until the remote sender naturally
 		// closes their stream.
-		spliceHalfClose(local, remote)
+		_ = spliceHalfClose(local, remote) //nolint:errcheck // best-effort splice; conn lifecycle owned by caller
 	}()
 
 	return &VisorCatResponse{LocalAddr: loopLis.Addr().String()}, nil
