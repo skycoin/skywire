@@ -219,7 +219,15 @@ func (m *Manager) Join(inv Invite) (Record, error) {
 		_ = m.store.Delete(r.ID) //nolint:errcheck
 		return Record{}, err
 	}
-	if err := sess.Connect(); err != nil {
+	// Join's interactive caller wants a bounded wait: a Connect that
+	// blocks indefinitely on an unreachable owner publisher would
+	// stall the CLI. Use reconnectAttemptTimeout — same per-attempt
+	// budget the background reconnect loop uses, so the failure
+	// mode is identical (and the same backoff machinery picks up
+	// on the next 30s tick).
+	joinCtx, cancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
+	defer cancel()
+	if err := sess.Connect(joinCtx); err != nil {
 		_ = sess.Close()         //nolint:errcheck
 		_ = m.store.Delete(r.ID) //nolint:errcheck
 		return Record{}, fmt.Errorf("group: Join: connect: %w", err)
@@ -483,7 +491,13 @@ func (m *Manager) Resume() error {
 			m.mu.RLock()
 			sess := m.sessions[r.ID]
 			m.mu.RUnlock()
-			if err := sess.Connect(); err != nil {
+			// Resume runs at visor startup — same bounded budget as
+			// the background reconnect tick so one unreachable
+			// owner can't stall the whole Resume loop.
+			resumeCtx, cancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
+			err := sess.Connect(resumeCtx)
+			cancel()
+			if err != nil {
 				m.log.WithError(err).WithField("id", r.ID).
 					Warn("group: Resume: member subscribe connect (will retry in background)")
 				// Mark pending; runReconnectLoop will re-attempt on
@@ -723,20 +737,14 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 // true on the very next /status read.
 func (m *Manager) tryReconnect(ctx context.Context, sess *Session, id string) {
 	m.log.WithField("id", id).Debug("group: reconnect: attempting subscribe")
-	type result struct{ err error }
-	done := make(chan result, 1)
-	go func() {
-		done <- result{err: sess.Connect()}
-	}()
-	var err error
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(reconnectAttemptTimeout):
-		err = fmt.Errorf("group: reconnect: timed out after %s", reconnectAttemptTimeout)
-	case r := <-done:
-		err = r.err
-	}
+	// reconnectAttemptTimeout is the per-attempt deadline. Now
+	// threaded as a context all the way through Session.Connect →
+	// per-peer ps.Connect-via-goroutine, so a timeout returns the
+	// caller cleanly instead of orphaning a goroutine and leaving a
+	// per-peer Subscriber.Connect blocked indefinitely.
+	timeoutCtx, cancel := context.WithTimeout(ctx, reconnectAttemptTimeout)
+	defer cancel()
+	err := sess.Connect(timeoutCtx)
 	if err == nil {
 		m.reconnectMu.Lock()
 		delete(m.reconnectState, id)
@@ -768,31 +776,20 @@ func (m *Manager) tryReconnect(ctx context.Context, sess *Session, id string) {
 // N × reconnectAttemptTimeout, which is acceptable for typical
 // group sizes (≤ 10 members).
 func (m *Manager) tryReconnectPeers(ctx context.Context, sess *Session, id string, peers []cipher.PubKey) {
-	type result struct{ err error }
 	successes := 0
 	var lastErr error
 	for _, pk := range peers {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			return
-		default:
 		}
 		m.log.WithField("id", id).WithField("peer", pk.String()).
 			Debug("group: reconnect: attempting peer subscribe")
-		done := make(chan result, 1)
-		pkLocal := pk
-		go func() {
-			done <- result{err: sess.ReconnectPeer(pkLocal)}
-		}()
-		var err error
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(reconnectAttemptTimeout):
-			err = fmt.Errorf("group: reconnect-peer %s: timed out after %s", pk.String(), reconnectAttemptTimeout)
-		case r := <-done:
-			err = r.err
-		}
+		// Per-peer deadline threaded as a context — Session.ReconnectPeer
+		// honors it via the same goroutine+select pattern as
+		// Session.Connect. Cancelable, no orphan goroutine pile-up.
+		timeoutCtx, cancel := context.WithTimeout(ctx, reconnectAttemptTimeout)
+		err := sess.ReconnectPeer(timeoutCtx, pk)
+		cancel()
 		if err == nil {
 			successes++
 			m.log.WithField("id", id).WithField("peer", pk.String()).
