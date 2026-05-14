@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
@@ -950,6 +951,15 @@ func (rc *rpcClient) RemoteVisors() ([]string, error) {
 	output := []string{}
 	rc.Call("RemoteVisors", &struct{}{}, &output) // nolint
 	return output, nil
+}
+
+// DmsgPtyExec calls DmsgPtyExec.
+func (rc *rpcClient) DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error) {
+	out := new(dmsgpty.CommandExecResult)
+	if err := rc.Call("DmsgPtyExec", &args, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // Ports calls Ports.
