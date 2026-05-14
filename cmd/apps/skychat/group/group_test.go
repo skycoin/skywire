@@ -145,6 +145,57 @@ func TestDecryptRejectsWrongKey(t *testing.T) {
 	}
 }
 
+func TestDeriveMirrorPath(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		wantOK  bool
+		wantOut string
+	}{
+		{
+			name:    "msgs leaf rewrites to mirror",
+			in:      "msgs/02abcdef00112233445566778899aabbccddeeff00112233445566778899aabbcc/1700000000000000000/1",
+			wantOK:  true,
+			wantOut: "mirror/02abcdef00112233445566778899aabbccddeeff00112233445566778899aabbcc/1700000000000000000/1",
+		},
+		{
+			name:    "already-mirrored leaf is rejected (loop guard)",
+			in:      "mirror/02abcdef00112233445566778899aabbccddeeff00112233445566778899aabbcc/1700000000000000000/1",
+			wantOK:  false,
+			wantOut: "",
+		},
+		{
+			name:    "non-message subtree is rejected",
+			in:      "config/heartbeat/whatever",
+			wantOK:  false,
+			wantOut: "",
+		},
+		{
+			name:    "bare msgs without slash is rejected (would otherwise produce mirror/ root)",
+			in:      "msgs",
+			wantOK:  false,
+			wantOut: "",
+		},
+		{
+			name:    "empty input is rejected",
+			in:      "",
+			wantOK:  false,
+			wantOut: "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := deriveMirrorPath(tc.in)
+			if ok != tc.wantOK {
+				t.Fatalf("deriveMirrorPath(%q): ok=%v, want %v", tc.in, ok, tc.wantOK)
+			}
+			if got != tc.wantOut {
+				t.Errorf("deriveMirrorPath(%q): got %q, want %q", tc.in, got, tc.wantOut)
+			}
+		})
+	}
+}
+
 // Two random nonces from independent calls must not collide in a
 // reasonable number of iterations. A regression that fixes the
 // nonce (e.g. someone hard-codes it for "convenience") would fail

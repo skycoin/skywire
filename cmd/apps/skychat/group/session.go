@@ -43,6 +43,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -64,6 +65,47 @@ var cryptoRandRead = cryptoRand.Read
 // group feed. Matches the pairing analog so an operator who
 // understands one understands both.
 const MessagePathPrefix = "msgs"
+
+// MirrorPathPrefix is the prefix used for admin-mirrored leaves
+// within a group feed. An admin observes a peer's primary "msgs/"
+// leaf via its peerSubs subscriber, then re-publishes the leaf body
+// verbatim under "mirror/" on its OWN publisher. The mirror leaf's
+// path suffix preserves the original "/<senderPK>/<ts>/<seq>" so
+// multiple admins re-publishing the same source leaf land on the
+// same content-addressed location — making cross-admin dedup a
+// straightforward path-equality check (handled member-side in the
+// next PR of the admin-mirror series).
+//
+// The body bytes are copied unmodified, so Message.SenderPK retains
+// the original author and Message.TS retains the original send time.
+// Path is the only piece that changes (prefix swap msgs→mirror).
+//
+// Why a distinct prefix instead of a separate feed: the admin's
+// publisher already exists for that visor's own sends — reusing it
+// avoids doubling bbolt overhead and dial state. Subscribers (PR-3)
+// can SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
+// to consume both kinds of leaves from the same feed.
+const MirrorPathPrefix = "mirror"
+
+// deriveMirrorPath returns the mirror-prefixed equivalent of an
+// originally msgs-prefixed leaf path. The second return is false
+// when origPath is NOT a msgs/ path — used to skip mirror writes
+// for paths the admin shouldn't re-publish:
+//
+//   - already-mirrored leaves observed from another admin's feed
+//     (path starts with "mirror/") — re-mirroring would loop
+//   - heartbeats / config / future non-message subtrees that share
+//     the publisher but aren't part of the chat-message channel
+//
+// Pure function; exported lowercase so the unit test next to it can
+// exercise the prefix logic without spinning up a Session.
+func deriveMirrorPath(origPath string) (string, bool) {
+	prefix := MessagePathPrefix + "/"
+	if !strings.HasPrefix(origPath, prefix) {
+		return "", false
+	}
+	return MirrorPathPrefix + "/" + origPath[len(prefix):], true
+}
 
 // MessageHandler is invoked on every newly-arrived group message
 // after decryption (for private groups). Called from the
@@ -968,6 +1010,47 @@ func (s *Session) isMember(pk cipher.PubKey) bool {
 	return false
 }
 
+// mirrorBatch re-publishes every msgs-prefixed leaf in the batch to
+// this session's own publisher under MirrorPathPrefix. The body bytes
+// are copied verbatim — Message.SenderPK + TS + content all survive
+// the mirror unchanged, so subscribers see the original author
+// regardless of which admin's feed served the leaf.
+//
+// Skips:
+//   - nil-bodied events (deletion / placeholder leaves)
+//   - paths NOT under MessagePathPrefix (heartbeats, future subtrees,
+//     and notably leaves already under MirrorPathPrefix — guards
+//     against the mirror-of-mirror loop when admin-A subscribes to
+//     admin-B's mirror leaves indirectly)
+//   - already-locally-mirrored paths (idempotent under double
+//     observation; treestore.Put on an existing path is a no-op for
+//     content-equal bodies but we save the round trip)
+//
+// Failures are logged at debug and never propagate — the user-facing
+// inbox fan-out in onUpdate must not be gated on the mirror write
+// succeeding. A stuck publisher will surface through the regular
+// liveness machinery (publishAs heartbeat failure, IsSubscriberAlive
+// turning false elsewhere); mirror is opportunistic redundancy, not
+// a critical path.
+func (s *Session) mirrorBatch(events []treestore.UpdateEvent) {
+	if s.pub == nil {
+		return
+	}
+	for _, ev := range events {
+		if ev.Value == nil {
+			continue
+		}
+		mirrorPath, ok := deriveMirrorPath(ev.Path)
+		if !ok {
+			continue
+		}
+		if err := s.pub.Put(mirrorPath, ev.Value); err != nil {
+			s.log.WithError(err).WithField("path", mirrorPath).
+				Debug("group: mirror put failed")
+		}
+	}
+}
+
 // publishAs is the shared write path used by:
 //   - owner-direct Send / heartbeat (owner publishes as itself)
 //   - member-direct Send (D1 — member publishes as itself on its own feed)
@@ -1329,6 +1412,24 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 	if len(events) > 0 {
 		s.lastInboundNs.Store(time.Now().UnixNano())
+	}
+	// Admin-mirror side-effect: re-publish every observed primary-feed
+	// leaf onto this visor's own publisher under MirrorPathPrefix so
+	// the group stays reachable through this admin whenever the
+	// original sender's visor is offline. Runs before the handler
+	// fan-out below; failures are logged-and-dropped so a wedged
+	// mirror write doesn't starve the user-facing inbox path. Skips
+	// when this visor isn't an admin on the record.
+	//
+	// The IsAdmin check reads the snapshot captured at Open time
+	// (cfg.Record.Admins) — a runtime PromoteAdmin/DemoteAdmin
+	// against this session won't be reflected until the session is
+	// reopened. That's a deliberate scope cut for this PR: re-keying
+	// a live session's admin status requires teardown coordination
+	// the federated-send work didn't establish, and the typical
+	// promote-then-restart flow is fine for D1.
+	if len(events) > 0 && s.cfg.Record.IsAdmin(s.cfg.MyPK) {
+		s.mirrorBatch(events)
 	}
 	h := s.handler
 	if h == nil {
