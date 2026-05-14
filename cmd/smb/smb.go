@@ -1,12 +1,13 @@
-// Package main cmd/skymail-bridge/skymail-bridge.go
+// Package main cmd/smb/smb.go
 //
-// Standalone (dmsg-only) flavor of skymail-bridge. Speaks SMTP on
+// Standalone (dmsg-only) SMTP→dmsg bridge ("smb"). Speaks SMTP on
 // a local TCP port, dials peers via its own dmsg.Client, and does
 // not require a running visor. Use this on machines that don't run
 // a full skywire visor but still need to relay mail over dmsg —
 // e.g. a tiny VPS that exists only to bridge a mail-server's
 // outbound queue onto skywire.
 //
+// Reachable from a unified skywire binary as `skywire dmsg smb`.
 // For deployments that already run a visor, the in-process
 // equivalent lives in pkg/visor/embedded_skymail_bridge.go and is
 // toggled via `skywire cli mail up` / the skymail_bridge config
@@ -18,7 +19,7 @@ import (
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/cmd/skymail-bridge/commands"
+	"github.com/skycoin/skywire/cmd/smb/commands"
 )
 
 func init() {

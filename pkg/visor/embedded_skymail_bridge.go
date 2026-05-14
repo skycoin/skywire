@@ -10,7 +10,7 @@
 // Lifecycle mirrors the resolvers exactly: idempotent Start/Stop,
 // running flag, runtime toggle via RPC
 // (SetEmbeddedProxyEnabled("bridge", …)). Standalone deployments
-// (hosts without a full visor) should use cmd/skymail-bridge instead.
+// (hosts without a full visor) should use cmd/smb instead.
 package visor
 
 import (

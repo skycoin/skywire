@@ -287,7 +287,7 @@ type SkynetWebConfig struct {
 // Structurally parallel to DmsgWebConfig — runs inside the visor
 // process, lifecycled via RPC (SetEmbeddedProxyEnabled("bridge", …)),
 // no separate launcher app needed. Operators who don't run a full
-// visor can use the standalone binary at cmd/skymail-bridge instead.
+// visor can use the standalone binary at cmd/smb instead.
 type SkymailBridgeConfig struct {
 	// Enable must be true for the bridge to start.
 	Enable bool `json:"enable"`

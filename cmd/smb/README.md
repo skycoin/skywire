@@ -1,10 +1,16 @@
-# skymail-bridge (standalone)
+# smb — standalone SMTP→dmsg bridge
 
 Standalone, dmsg-only SMTP→skywire bridge. Speaks SMTP on a local
 TCP port, dials peers via its own `dmsg.Client`, and **does not
 require a running visor**. Intended for hosts that bridge a
 mailserver's outbound queue onto dmsg without otherwise running
 skywire.
+
+Reachable two ways:
+
+  - As a standalone binary built from `cmd/smb/` — invoke `smb …`.
+  - As a subcommand of the unified skywire binary — invoke
+    `skywire dmsg smb …`. Both share the same `cobra.Command`.
 
 For hosts that already run a visor, use the **in-process bridge**
 embedded in the visor (`pkg/visor/embedded_skymail_bridge.go`). It

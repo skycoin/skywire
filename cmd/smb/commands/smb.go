@@ -1,9 +1,9 @@
-// Package commands cmd/skymail-bridge/commands/skymail-bridge.go
+// Package commands cmd/smb/commands/smb.go
 //
-// Standalone skymail-bridge entry — no visor dependency. The
+// Standalone SMTP→dmsg bridge ("smb") — no visor dependency. The
 // binary creates its own dmsg.Client (either with a provided
 // secret key or an ephemeral one), then runs the same SMTP server
-// loop pkg/skymailbridge ships to the visor-app flavor.
+// loop pkg/skymailbridge ships to the visor-side flavor.
 package commands
 
 import (
@@ -55,15 +55,15 @@ func init() {
 	RootCmd.Flags().StringVar(&logLevel, "log-level", "info", "log level: debug|info|warn|error")
 }
 
-// RootCmd is the cobra entry for the standalone `skymail-bridge`.
-// The "smb" alias is short-hand for the subcommand surface
-// (`skywire dmsg smb`) — the canonical name stays the long form for
-// docs and the top-level binary.
+// RootCmd is the cobra entry for the standalone SMTP→dmsg bridge.
+// Same RootCmd serves both the top-level binary (cmd/smb) and the
+// integrated subcommand (`skywire dmsg smb`). Short Use keeps the
+// subcommand quick to type; the Short description carries the full
+// description so operators reading `dmsg --help` know what it is.
 var RootCmd = &cobra.Command{
-	Use:                   "skymail-bridge",
-	Aliases:               []string{"smb"},
+	Use:                   "smb",
 	Short:                 "Standalone SMTP→dmsg bridge — relays *.skynet envelopes via own dmsg client",
-	Long:                  calvin.AsciiFont("skymail-bridge"),
+	Long:                  calvin.AsciiFont("smb"),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -104,7 +104,7 @@ func run(ctx context.Context) error {
 		return err
 	}
 
-	logger := logging.MustGetLogger("skymail-bridge")
+	logger := logging.MustGetLogger("smb")
 	if lvl, err := logging.LevelFromString(logLevel); err == nil {
 		logging.SetLevel(lvl)
 	}
@@ -125,7 +125,7 @@ func run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listen %s: %w", bindAddr, err)
 	}
-	logger.Infof("skymail-bridge (dmsg-direct) accepting SMTP on %s (mode=%s suffix=%s)", bindAddr, cfg.Mode, cfg.Suffix)
+	logger.Infof("smb (dmsg-direct SMTP bridge) accepting SMTP on %s (mode=%s suffix=%s)", bindAddr, cfg.Mode, cfg.Suffix)
 
 	dialer := &dmsgDialer{c: dmsgC}
 	if err := skymailbridge.Serve(ctx, lis, dialer, cfg, logger); err != nil && !errors.Is(err, context.Canceled) {

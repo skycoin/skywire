@@ -240,7 +240,7 @@ type Visor struct {
 	embeddedSkynetWeb *EmbeddedSkynetWeb
 	// Embedded SMTP→skywire bridge (nil if skymail_bridge.enable is false).
 	// Accepts inbound SMTP from a co-located Postfix and dials peers via
-	// the visor's dmsg client. Standalone hosts use cmd/skymail-bridge.
+	// the visor's dmsg client. Standalone hosts use cmd/smb.
 	embeddedSkymailBridge *EmbeddedSkymailBridge
 	// Shared VStreamMux for skynet forwarding (route ID 0).
 	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).

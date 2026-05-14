@@ -10,7 +10,7 @@
 //     Dialer via app.Client.Dial over skywire's routing layer
 //     (TypeSkynet). Reuses the visor's running dmsg session.
 //
-//   - cmd/skymail-bridge — standalone binary. Implements Dialer
+//   - cmd/smb — standalone binary. Implements Dialer
 //     via dmsg.Client.Dial directly, with its own keypair. Useful
 //     for headless deployments that don't run a full visor.
 //
