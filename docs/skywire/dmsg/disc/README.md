@@ -29,23 +29,23 @@ GET /health
 [1m{[0m
       [1m[94m"build_info"[0m[1m:[0m [1m{[0m
         [1m[94m"commit"[0m[1m:[0m [32m"abc1234"[0m[1m,[0m
-        [1m[94m"date"[0m[1m:[0m [32m"2026-05-14T14:29:01Z"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.54-0.-ec69b823ddaa+dirty"[0m
+        [1m[94m"date"[0m[1m:[0m [32m"<build-date>"[0m[1m,[0m
+        [1m[94m"version"[0m[1m:[0m [32m"<version>"[0m
       [1m}[0m[1m,[0m
-      [1m[94m"dmsg_address"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb:80"[0m[1m,[0m
+      [1m[94m"dmsg_address"[0m[1m:[0m [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4:80"[0m[1m,[0m
       [1m[94m"dmsg_servers"[0m[1m:[0m [1m[[0m
-        [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m,
-        [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m
+        [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m,
+        [32m"0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7"[0m
       [1m][0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
+      [1m[94m"started_at"[0m[1m:[0m [32m"<build-date>"[0m
     [1m}[0m
 
 GET /dmsg-discovery/entry/{pk} (client entry)
 [1m{[0m
       [1m[94m"client"[0m[1m:[0m [1m{[0m
         [1m[94m"delegated_servers"[0m[1m:[0m [1m[[0m
-          [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m,
-          [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m
+          [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m,
+          [32m"0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7"[0m
         [1m][0m
       [1m}[0m[1m,[0m
       [1m[94m"sequence"[0m[1m:[0m [33m1[0m[1m,[0m
@@ -59,9 +59,9 @@ GET /dmsg-discovery/entry/{pk} (server entry)
       [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
       [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
       [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-      [1m[94m"static"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m,[0m
+      [1m[94m"static"[0m[1m:[0m [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m[1m,[0m
       [1m[94m"server"[0m[1m:[0m [1m{[0m
-        [1m[94m"address"[0m[1m:[0m [32m"139.162.160.227:30086"[0m[1m,[0m
+        [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30083"[0m[1m,[0m
         [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
       [1m}[0m
     [1m}[0m
@@ -89,8 +89,8 @@ GET /dmsg-discovery/entries (all client and server entries)
       [1m{[0m
         [1m[94m"client"[0m[1m:[0m [1m{[0m
           [1m[94m"delegated_servers"[0m[1m:[0m [1m[[0m
-            [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m,
-            [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m
+            [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m,
+            [32m"0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7"[0m
           [1m][0m
         [1m}[0m[1m,[0m
         [1m[94m"sequence"[0m[1m:[0m [33m1[0m[1m,[0m
@@ -102,9 +102,9 @@ GET /dmsg-discovery/entries (all client and server entries)
         [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
         [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
         [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m,[0m
+        [1m[94m"static"[0m[1m:[0m [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m[1m,[0m
         [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.160.227:30086"[0m[1m,[0m
+          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30083"[0m[1m,[0m
           [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
         [1m}[0m
       [1m}[0m,
@@ -112,9 +112,9 @@ GET /dmsg-discovery/entries (all client and server entries)
         [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
         [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
         [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m[1m,[0m
+        [1m[94m"static"[0m[1m:[0m [32m"0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7"[0m[1m,[0m
         [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30082"[0m[1m,[0m
+          [1m[94m"address"[0m[1m:[0m [32m"70.121.13.123:9082"[0m[1m,[0m
           [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
         [1m}[0m
       [1m}[0m
@@ -125,8 +125,8 @@ GET /dmsg-discovery/visorEntries (client entries only)
       [1m{[0m
         [1m[94m"client"[0m[1m:[0m [1m{[0m
           [1m[94m"delegated_servers"[0m[1m:[0m [1m[[0m
-            [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m,
-            [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m
+            [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m,
+            [32m"0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7"[0m
           [1m][0m
         [1m}[0m[1m,[0m
         [1m[94m"sequence"[0m[1m:[0m [33m1[0m[1m,[0m
@@ -142,9 +142,9 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
         [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
         [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m,[0m
+        [1m[94m"static"[0m[1m:[0m [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m[1m,[0m
         [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.160.227:30086"[0m[1m,[0m
+          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30083"[0m[1m,[0m
           [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
         [1m}[0m
       [1m}[0m,
@@ -152,9 +152,9 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
         [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
         [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m[1m,[0m
+        [1m[94m"static"[0m[1m:[0m [32m"0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7"[0m[1m,[0m
         [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30082"[0m[1m,[0m
+          [1m[94m"address"[0m[1m:[0m [32m"70.121.13.123:9082"[0m[1m,[0m
           [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
         [1m}[0m
       [1m}[0m
@@ -166,9 +166,9 @@ GET /dmsg-discovery/all_servers (all server entries)
         [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
         [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
         [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m,[0m
+        [1m[94m"static"[0m[1m:[0m [32m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m[1m,[0m
         [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.160.227:30086"[0m[1m,[0m
+          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30083"[0m[1m,[0m
           [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
         [1m}[0m
       [1m}[0m,
@@ -176,9 +176,9 @@ GET /dmsg-discovery/all_servers (all server entries)
         [1m[94m"version"[0m[1m:[0m [32m""[0m[1m,[0m
         [1m[94m"sequence"[0m[1m:[0m [33m0[0m[1m,[0m
         [1m[94m"timestamp"[0m[1m:[0m [33m0[0m[1m,[0m
-        [1m[94m"static"[0m[1m:[0m [32m"02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"[0m[1m,[0m
+        [1m[94m"static"[0m[1m:[0m [32m"0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7"[0m[1m,[0m
         [1m[94m"server"[0m[1m:[0m [1m{[0m
-          [1m[94m"address"[0m[1m:[0m [32m"139.162.173.101:30082"[0m[1m,[0m
+          [1m[94m"address"[0m[1m:[0m [32m"70.121.13.123:9082"[0m[1m,[0m
           [1m[94m"availableSessions"[0m[1m:[0m [33m0[0m
         [1m}[0m
       [1m}[0m
@@ -186,7 +186,7 @@ GET /dmsg-discovery/all_servers (all server entries)
 
 GET /dmsg-discovery/servers/clients
 [1m{[0m
-      [1m[94m"0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"[0m[1m:[0m [1m[[0m
+      [1m[94m"03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4"[0m[1m:[0m [1m[[0m
         [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m,
         [32m"024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"[0m
       [1m][0m

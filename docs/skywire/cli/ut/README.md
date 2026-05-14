@@ -40,7 +40,7 @@ skywire cli ut
       --max-tp int           filter visors with at most N transports (fetches TPD data) (default -1)
   -n, --min int              list visors meeting minimum uptime percentage
                               (default 75)
-      --min-version string   filter visors with version >= specified (e.g. v1.3.34)
+      --min-version string   filter visors with version >= specified (e.g. <version>)
       --no-cxo               skip CXO subscriber-cache step
       --no-dmsg              skip direct DMSG HTTP step
       --no-http              skip direct HTTP fallback step

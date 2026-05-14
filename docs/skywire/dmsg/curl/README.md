@@ -37,7 +37,7 @@ skywire dmsg curl
                             (default 1)
   -w, --wait int           time to wait between requests
   -a, --agent AGENT        identify as AGENT[0m
-                            (default "dmsgcurl/v1.3.54-0.-ec69b823ddaa+dirty")
+                            (default "dmsgcurl/<version>")
   -s, --sk cipher.SecKey   a random key is generated if unspecified[0m
                             (default 0000000000000000000000000000000000000000000000000000000000000000)
 ```

@@ -3,8 +3,8 @@
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤ 
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-v1.3.54-0.20260514142901-ec69b823ddaa+dirty
-built with go1.26.1 on 2026-05-14T14:29:01Z
+<version>
+built with go1.26.1 on <build-date>
 
 ## Usage
 

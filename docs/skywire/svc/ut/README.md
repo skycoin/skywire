@@ -29,13 +29,13 @@ Request/Response Examples:
 GET /health
   [1m{[0m
       [1m[94m"build_info"[0m[1m:[0m [1m{[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
+        [1m[94m"version"[0m[1m:[0m [32m"<version>"[0m
       [1m}[0m[1m,[0m
       [1m[94m"dmsg_address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80"[0m[1m,[0m
       [1m[94m"dmsg_servers"[0m[1m:[0m [1m[[0m
         [32m"03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"[0m
       [1m][0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
+      [1m[94m"started_at"[0m[1m:[0m [32m"<build-date>"[0m
     [1m}[0m
 
 GET /v4/update (auth)
@@ -49,7 +49,7 @@ GET /visors
         [1m[94m"ip"[0m[1m:[0m [32m"192.168.1.1"[0m[1m,[0m
         [1m[94m"online"[0m[1m:[0m [36mtrue[0m[1m,[0m
         [1m[94m"pk"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
+        [1m[94m"version"[0m[1m:[0m [32m"<version>"[0m
       [1m}[0m
     [1m][0m
 
@@ -70,7 +70,7 @@ GET /uptimes?v=v2
       [1m{[0m
         [1m[94m"pk"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"[0m[1m,[0m
         [1m[94m"on"[0m[1m:[0m [36mtrue[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m[1m,[0m
+        [1m[94m"version"[0m[1m:[0m [32m"<version>"[0m[1m,[0m
         [1m[94m"daily"[0m[1m:[0m [1m{[0m
           [1m[94m"2024-01-14"[0m[1m:[0m [32m"100.0"[0m[1m,[0m
           [1m[94m"2024-01-15"[0m[1m:[0m [32m"95.5"[0m

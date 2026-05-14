@@ -28,7 +28,7 @@ skywire cli dmsg curl <dmsg-url>
   -r, --replace                replace existing output file
   -t, --try int                download attempts (0 unlimits) (default 1)
   -w, --wait int               time to wait between attempts (seconds)
-  -a, --agent string           HTTP user agent (default "skywire-cli/v1.3.54-0.-ec69b823ddaa+dirty")
+  -a, --agent string           HTTP user agent (default "skywire-cli/<version>")
   -v, --verbose                stream visor's dmsg-layer logs to stderr while the request is in flight
       --verbose-level string   minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
 ```

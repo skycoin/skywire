@@ -107,11 +107,11 @@ Run from the repo root so the default --out path resolves:
 
 		for _, p := range pages {
 			full := filepath.Join(outDir, p.path())
-			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil { //nolint:gosec // docs are world-readable
 				fmt.Fprintf(os.Stderr, "doc: mkdir %s: %v\n", filepath.Dir(full), err)
 				os.Exit(1)
 			}
-			f, err := os.Create(full)
+			f, err := os.Create(full) //nolint:gosec // path derived deterministically from outDir + cobra command segments
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "doc: create %s: %v\n", full, err)
 				os.Exit(1)
@@ -399,15 +399,40 @@ func render(w io.Writer, p page) error {
 // cmd/skywire-cli/README.md before this generator existed).
 var xpubRE = regexp.MustCompile(`xpub6[A-HJ-NP-Za-km-z1-9]{100,}`)
 
+// versionRE matches the build-version string buildinfo embeds into
+// user-agent / default-value strings (e.g. "v1.3.54-0.-82e6f3b5ee3d+dirty").
+// Without scrubbing this, every commit would change every page in
+// docs/skywire/ that references a default value carrying the version —
+// making the generated tree perpetually dirty in PRs that don't touch
+// any user-facing surface.
+var versionRE = regexp.MustCompile(`v\d+\.\d+\.\d+(?:-\d+)?(?:\.[0-9-]*[0-9a-f]{12})?(?:\+\w+)?`)
+
+// buildDateRE matches the ISO-8601 build timestamp buildinfo embeds in
+// the root command's Long description. Same rationale as versionRE:
+// without normalizing it, every commit dirties docs/skywire/README.md.
+var buildDateRE = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z`)
+
 // skycoinGenesisAddr is the well-known address of the first Skycoin
 // block. We substitute it for any real xpub the generator encounters so
 // example output stays valid (the reward command needs SOME address-
 // shaped string in its output) without leaking the build host's key.
 const skycoinGenesisAddr = "2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6"
 
+// versionPlaceholder is what replaces any embedded build version. The
+// "<version>" form is a deliberately non-version-shaped string so a
+// future render pass doesn't try to "re-normalize" it.
+const versionPlaceholder = "<version>"
+
+// buildDatePlaceholder mirrors versionPlaceholder for ISO timestamps.
+const buildDatePlaceholder = "<build-date>"
+
 // sanitize is applied to every piece of captured/embedded command
 // content before it's written to disk. Keep this monotonically additive
-// — anything we strip here was unsafe to publish at least once.
+// — anything we strip here was unsafe or commit-dependent to publish at
+// least once.
 func sanitize(s string) string {
-	return xpubRE.ReplaceAllString(s, skycoinGenesisAddr)
+	s = xpubRE.ReplaceAllString(s, skycoinGenesisAddr)
+	s = versionRE.ReplaceAllString(s, versionPlaceholder)
+	s = buildDateRE.ReplaceAllString(s, buildDatePlaceholder)
+	return s
 }

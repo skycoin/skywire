@@ -58,9 +58,9 @@ skywire cli visor ping tree
   # issues separately from transport-level connectivity.
   skywire cli visor ping tree2 --dmsg-only --online --tries 10
 
-  # Filter to visors running v1.3.51 or newer (skips old visors
+  # Filter to visors running <version> or newer (skips old visors
   # whose latency-publish path is broken).
-  skywire cli visor ping tree2 --max-level 2 --version v1.3.51
+  skywire cli visor ping tree2 --max-level 2 --version <version>
 ```
 
 ## Flags
