@@ -733,20 +733,52 @@ func (s *Session) Connect() error {
 	// connect fails silently and the reconnect loop retries. Don't
 	// fail the whole Connect — partial connectivity is better than
 	// none, and at least the owner-feed legacy path is up.
+	//
+	// We track the count of successful peer Connects so the
+	// lastInboundNs bump below only fires when there's actual
+	// evidence at least one subscriber is now attached. Pre-fix
+	// behavior was to bump unconditionally — that masked the case
+	// where every per-peer Connect failed, because the bump made
+	// the session look fresh for the next subscriberStaleThreshold
+	// (100s) and the reconnect loop skipped it. Result: silent
+	// indefinite failure to recover, since tryReconnect treats a
+	// nil-error Connect as "subscribe restored" and clears the
+	// failure state, so the backoff schedule never engages either.
 	s.peerSubsMu.RLock()
 	peers := make(map[cipher.PubKey]*treestore.Subscriber, len(s.peerSubs))
 	for k, v := range s.peerSubs {
 		peers[k] = v
 	}
 	s.peerSubsMu.RUnlock()
+	peerSuccessCount := 0
 	for pk, ps := range peers {
 		if err := ps.Connect(pk); err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Debug("group: Connect: peer-sub Connect failed; will retry on next reconnect tick")
+			continue
 		}
+		peerSuccessCount++
 	}
-	s.lastInboundNs.Store(time.Now().UnixNano())
-	return nil
+	// Only declare the session "fresh" (bump lastInboundNs) if SOME
+	// subscriber side actually connected. Member-role sessions also
+	// have the legacy s.sub path, which was already required to
+	// succeed above; reaching this point means s.sub is healthy if
+	// it exists, so member sessions bump unconditionally. Owner-role
+	// sessions have only peerSubs — for them, "fresh" requires at
+	// least one peer attached, otherwise the next reconnect tick
+	// should re-enter the reconnect path instead of being masked by
+	// a phantom freshness window.
+	if s.sub != nil || peerSuccessCount > 0 {
+		s.lastInboundNs.Store(time.Now().UnixNano())
+		return nil
+	}
+	// Owner-role with zero peer connections succeeded: surface the
+	// failure so tryReconnect's failure-count machinery engages.
+	// The exponential backoff (10 → 30 fail-count thresholds) was
+	// designed to age out permanently-unreachable groups without
+	// hammering the network; pre-fix it never engaged on owner-role
+	// because Connect always returned nil.
+	return fmt.Errorf("group: Connect: 0/%d peer-subs reachable", len(peers))
 }
 
 // LastInbound returns the time at which this session most recently
