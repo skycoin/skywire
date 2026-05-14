@@ -24,36 +24,36 @@ skywire dmsg web
 ## Flags
 
 ```
-  -r, --addproxy string    configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)[0m
+  -r, --addproxy string    configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)
                            
   -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
-  -A, --disc-addr string   DMSG Discovery dmsg address[0m
+  -A, --disc-addr string   DMSG Discovery dmsg address
                             (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
-  -U, --disc-url string    DMSG Discovery URL[0m
+  -U, --disc-url string    DMSG Discovery URL
                             (default "http://dmsgd.skywire.skycoin.com")
   -D, --dmsgconf string    dmsghttp-config path
-  -E, --envs               show example .conf file[0m
+  -E, --envs               show example .conf file
                            
-  -f, --filter string      domain suffix to filter[0m
+  -f, --filter string      domain suffix to filter
                             (default ".dmsg")
   -Z, --http               use regular http to connect to DMSG Discovery
-  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ][0m
+  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ]
                             (default "debug")
-  -p, --port uints         port(s) to serve the web application[0m
+  -p, --port uints         port(s) to serve the web application
                             (default [8080])
       --pprofaddr string   pprof http port (default "localhost:6060")
       --pprofmode string   [ cpu | mem | mutex | block | trace | http ]
-  -x, --proxy string       connect to DMSG via proxy (i.e. '127.0.0.1:1080')[0m
+  -x, --proxy string       connect to DMSG via proxy (i.e. '127.0.0.1:1080')
                            
-  -t, --resolve strings    resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy[0m
+  -t, --resolve strings    resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy
                            
-  -e, --sess int           number of DMSG Servers to connect to[0m
+  -e, --sess int           number of DMSG Servers to connect to
                             (default 2)
   -s, --sk cipher.SecKey   a random key is generated if unspecified
                             (default 0000000000000000000000000000000000000000000000000000000000000000)
-  -q, --socks uint         port to serve the socks5 proxy[0m
+  -q, --socks uint         port to serve the socks5 proxy
                             (default 4445)
-  -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port[0m
+  -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port
                            
 ```
 
