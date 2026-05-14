@@ -247,33 +247,6 @@ func (*HTTPClient) AvailableServers(ctx context.Context) ([]*Entry, error) {
 
 The module also provides public functions to instantiate valid `Entry` objects.
 
-### Messaging Discovery Integration Tests
-
-> **TODO:** Fix wording.
-
-This package does not uses another `messenger` package, so integration tests are defined for the external services that `discovery` is using. In this case, the external store and `discovery` itself for testing the `client` library.
-
-The cases for the store integration testing:
-
- 1. Its able to set an entry on the database without error by calling the `storer.SetEntry` method.
- 2. Its able to retrieve the previously set entry by calling the `storer.Entry` method.
- 3. Creates multiple service entries and store them by calling `storer.SetEntry`, then it should be able to retrieve them with `store.AvailableServers`.
- 4. `store.AvailableServers` receives a `maxCount int` argument. We also test it passing an integer which value is less than the amount of server entries we have set in the database, it should return this exact amount of server entries.
- 5. Same as in number 4, but we set `maxCount` to number bigger than the number of server entries we have set, now we should get an slice of the size of the server entries we have set.
-
-In order to run the test we preferably create a clean new instance of the store database using Docker, and the test code should connect to it. We remove it after we have tested.
-
-In order to test the client library we do integration test with an instance of the discovery server.
-The test cases for the client integration testing:
-
-1. By using the method SetEntry the client can set a new entry on the discovery server.
-2. By using the method SetEntry the client can update a previously set entry on the discovery server.
-3. If using SetEntry to update a previously set Entry, but the new sequence is not the previous sequence + 1 it should return an error with status code 500, Something unexpected happened.
-4. If using SetEntry to update a previously set Entry, but the signature of the new entry has been made by a different secret key it should return an error with status code 401, Invalid signature.
-5. By calling the method Entry with the public key of a previously set Entry it should return that entry.
-6. By calling the method Entry with the public key of a previously non-set Entry it should return an error with code 404, Entry of public key is not found.
-7. By calling the method AvailableServers when there are previously set server entries it should return them.
-
 ## Messaging Link
 
 The `link` provides two *Messaging Instances* a means to establish a connection with one another, and also handle a pool of connections.
@@ -413,19 +386,6 @@ Only the `KK` [interactive handshake pattern (fundamental)](http://noiseprotocol
 ```
 
 The `-> e, es, ss` message is the `NoiseMessage1` of a `OpenChannel` frame, while the `<- e, ee, se` message is the `NoiseMessage2` of a `ChannelOpened` frame.
-
-### Implementation in Code
-
-Within the `messaging` module:
-
-- `Link` structure should represent a link between two instances.
-- `Pool` structure should handle multiple `Links` (with different instances).
-- `Client` which implements a *Client Instance*.
-- `Server` which implements a *Server Instance*.
-
-*Client Instances* communicate with each other via a *Server Instance* (which acts as a relay).
-
-Both structs will use `link.Pool` to handle links, but *Frames* are handled differently. *Client Instances* are to implement `TransportFactory` while a *Server Instance* is not required to. A *Client Instance* should also represent an established *Channel* as a `Transport` implementation.
 
 ### Configuring an Instance
 
