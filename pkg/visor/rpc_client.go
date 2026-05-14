@@ -1361,6 +1361,20 @@ func (rc *rpcClient) GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, err
 	return resp, err
 }
 
+// GroupPromoteAdmin implements API.
+func (rc *rpcClient) GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupPromoteAdmin", &GroupPromoteAdminRequest{ID: id, PK: pk}, &resp)
+	return resp, err
+}
+
+// GroupDemoteAdmin implements API.
+func (rc *rpcClient) GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupDemoteAdmin", &GroupPromoteAdminRequest{ID: id, PK: pk}, &resp)
+	return resp, err
+}
+
 // GroupSend implements API.
 func (rc *rpcClient) GroupSend(args GroupSendArgs) error {
 	return rc.Call("GroupSend", &args, &struct{}{})
