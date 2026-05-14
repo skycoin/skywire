@@ -227,14 +227,14 @@ func stopPairPoller() {
 // /pair/invites and /pair/invites/ shadow /pair/ for the invite
 // subtree. This lets the invite handlers be cleanly separate from
 // the per-pair item handler without parsing the path twice.
-func registerPairHTTPHandlers(ctx context.Context) {
+func registerPairHTTPHandlers(ctx context.Context, mux *http.ServeMux) {
 	if !pairEnable {
 		return
 	}
-	http.HandleFunc("/pair", requireAuthFunc(pairRootHandler(ctx)))
-	http.HandleFunc("/pair/invites", requireAuthFunc(pairInvitesListHandler()))
-	http.HandleFunc("/pair/invites/", requireAuthFunc(pairInvitesItemHandler(ctx)))
-	http.HandleFunc("/pair/", requireAuthFunc(pairItemHandler(ctx)))
+	mux.HandleFunc("/pair", requireAuthFunc(pairRootHandler(ctx)))
+	mux.HandleFunc("/pair/invites", requireAuthFunc(pairInvitesListHandler()))
+	mux.HandleFunc("/pair/invites/", requireAuthFunc(pairInvitesItemHandler(ctx)))
+	mux.HandleFunc("/pair/", requireAuthFunc(pairItemHandler(ctx)))
 }
 
 // pairInvitesListHandler serves GET /pair/invites — current pending
