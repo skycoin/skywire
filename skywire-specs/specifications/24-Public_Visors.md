@@ -14,15 +14,6 @@ Unlike regular visors, public visors must be externally reachable, either via:
 - A public IP address with no NAT
 - Port forwarding configured on the router (forwarding the STCPR port, default 7777)
 
-## Code Structure
-
-The public visor logic is distributed across several packages:
-
-- `/pkg/visor/init.go` - `initPublicVisor()` initializes public visor registration
-- `/pkg/app/appdisc/discovery_manager.go` - `PublicVisorUpdater` handles registration lifecycle
-- `/pkg/transport/network/client.go` - External STCPR detection logic
-- `/pkg/visor/visorconfig/v1.go` - `PublicVisorConfig` configuration structure
-
 ## Configuration
 
 Public visor behavior is configured in the visor's JSON configuration:
