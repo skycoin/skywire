@@ -69,11 +69,15 @@ type Dmsgpty struct {
 	CLIAddr   string          `json:"cli_address"`
 	Whitelist []cipher.PubKey `json:"whitelist"`
 
-	// TCPListen, when non-empty, brings up a direct-TCP entry point
+	// SshListen, when non-empty, brings up a direct-TCP entry point
 	// for the dmsgpty / dmsgscp / dmsgcat protocols, separate from the
 	// dmsg-overlay path. Listening address in net.Listen format —
 	// `:2022`, `0.0.0.0:2022`, `127.0.0.1:2022`, etc. Empty (default)
 	// disables it: only the dmsg-overlay entry point is served.
+	//
+	// This is the surface that `skywire cli ssh` (client) and
+	// `skywire cli sshd` (server) expose as the OpenSSH-equivalent
+	// shell over skywire identity.
 	//
 	// Auth flow per accepted TCP connection:
 	//   1. Noise XK handshake using the visor's identity keypair —
@@ -86,11 +90,10 @@ type Dmsgpty struct {
 	//      mux so dmsgpty / dmsgscp / dmsgcat clients work uniformly
 	//      over either transport.
 	//
-	// Motivation: ssh-equivalent over skywire identity. Operators who
-	// have direct IP reachability to a peer can `cli dmsg pty exec`
-	// (and friends) over TCP — no dmsg-discovery dependency, lower
-	// latency for known endpoints, same PK-based auth model.
-	TCPListen string `json:"tcp_listen,omitempty"`
+	// Motivation: operators who have direct IP reachability to a peer
+	// can `cli ssh <pk>@<host>:<port>` — no dmsg-discovery dependency,
+	// lower latency for known endpoints, same PK-based auth model.
+	SshListen string `json:"ssh_listen,omitempty"`
 }
 
 // Dmsgscp configures the dmsgscp-host (scp-over-dmsg daemon).
