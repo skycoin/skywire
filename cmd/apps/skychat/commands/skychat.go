@@ -623,13 +623,21 @@ func RunSkychat(ctx context.Context, args []string) error {
 	}
 	setSkychatInternalToken(internalToken)
 
-	http.Handle("/", requireAuth(http.FileServer(getFileSystem())))
-	http.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
-	http.HandleFunc("/sse", requireAuthFunc(sseHandler))
-	http.HandleFunc("/history", requireAuthFunc(historyHandler))
-	http.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
-	http.HandleFunc("/status", requireAuthFunc(statusHandler))
-	registerPairHTTPHandlers(ctx)
+	// Use a fresh local ServeMux so RunSkychat is safe to call more
+	// than once in the same process (in-process launcher re-launch on
+	// app restart, or any caller invoking it twice). The previous
+	// http.DefaultServeMux registrations panicked on duplicate "/"
+	// the second time around — same file, same line, same pattern —
+	// taking the entire chat-app down whenever the launcher tried to
+	// recover from a transient failure or any other re-launch path.
+	mux := http.NewServeMux()
+	mux.Handle("/", requireAuth(http.FileServer(getFileSystem())))
+	mux.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
+	mux.HandleFunc("/sse", requireAuthFunc(sseHandler))
+	mux.HandleFunc("/history", requireAuthFunc(historyHandler))
+	mux.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
+	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
+	registerPairHTTPHandlers(ctx, mux)
 
 	url := ""
 	address := addr
@@ -664,6 +672,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 	srv := &http.Server{
 		Addr:         url,
+		Handler:      mux,
 		ReadTimeout:  5 * time.Second,
 		WriteTimeout: 10 * time.Second,
 	}
