@@ -377,3 +377,135 @@ func TestPublisherConcurrentPutsAreSafe(t *testing.T) {
 		t.Fatalf("Flush: %v", err)
 	}
 }
+
+// TestPublisherMutexNotHeldDuringPublish verifies the publishIfDirty
+// rewrite: while publishRoot is in flight the publisher mutex must
+// be released so concurrent Put / Delete don't stall. The probe
+// hammers Put against a long-running publish (forced by a tight
+// PutBatch keeping dirty perpetually set) and asserts that every
+// Put's wall-clock duration stays small. Pre-rewrite this test
+// would surface multi-second hangs whenever a publish hit the bbolt
+// writer mutex.
+func TestPublisherMutexNotHeldDuringPublish(t *testing.T) {
+	p, _ := newTestPublisher(t)
+
+	// Seed an initial publish so subsequent ticks have a non-trivial
+	// tree to encode.
+	for i := 0; i < 50; i++ {
+		path, jErr := JoinPath("seed", string(rune('a'+i%26)), string(rune('A'+i%26)))
+		if jErr != nil {
+			t.Fatalf("JoinPath: %v", jErr)
+		}
+		if err := p.Put(path, []byte{byte(i)}); err != nil { //nolint:gosec
+			t.Fatalf("seed Put: %v", err)
+		}
+	}
+	if err := p.Flush(); err != nil {
+		t.Fatalf("seed Flush: %v", err)
+	}
+
+	// Run a flood of Puts in parallel; record the longest single-Put
+	// latency observed. With the in-memory CXDS used by nopNode the
+	// publish path itself is fast, so we set a generous bound (250ms)
+	// — the failure shape we care about is multi-second hangs that
+	// the old code exhibits under contention; 250ms is comfortably
+	// above scheduler jitter without admitting the pathology.
+	const (
+		workers = 8
+		runFor  = 200 * time.Millisecond
+		maxOK   = 250 * time.Millisecond
+	)
+
+	// `time.After` only fires once, so all workers share a single
+	// done-channel that the deadline goroutine closes. Each worker
+	// non-blocking selects on <-done to know when to exit.
+	done := make(chan struct{})
+	go func() {
+		time.Sleep(runFor)
+		close(done)
+	}()
+
+	var mu sync.Mutex
+	var maxLatency time.Duration
+	var wg sync.WaitGroup
+
+	for w := 0; w < workers; w++ {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+			i := 0
+			for {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				path, jErr := JoinPath("hot", string(rune('a'+worker%26)), string(rune('0'+i%10)))
+				if jErr != nil {
+					return
+				}
+				start := time.Now()
+				if err := p.Put(path, []byte{byte(i)}); err != nil { //nolint:gosec
+					t.Errorf("Put: %v", err)
+					return
+				}
+				took := time.Since(start)
+				mu.Lock()
+				if took > maxLatency {
+					maxLatency = took
+				}
+				mu.Unlock()
+				i++
+			}
+		}(w)
+	}
+	wg.Wait()
+
+	if maxLatency > maxOK {
+		t.Fatalf("Put under contention: max latency %v exceeds bound %v — publisher mutex likely held across publishRoot", maxLatency, maxOK)
+	}
+}
+
+// TestPublisherNoLostWritesUnderContention verifies the
+// generation-counter race fix: when a Put lands between snapshot
+// and publishRoot completion, dirty must stay set so the next
+// publish cycle picks up the new state. Without the watermark
+// check, the buggy version could clear dirty even though a write
+// arrived during the window — losing that write until the next
+// markDirty.
+func TestPublisherNoLostWritesUnderContention(t *testing.T) {
+	p, _ := newTestPublisher(t)
+
+	const writes = 200
+	var wg sync.WaitGroup
+	for i := 0; i < writes; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			path, jErr := JoinPath("g", string(rune('a'+i%26)), string(rune('A'+(i/26)%26)))
+			if jErr != nil {
+				t.Errorf("JoinPath: %v", jErr)
+				return
+			}
+			if err := p.Put(path, []byte{byte(i)}); err != nil { //nolint:gosec
+				t.Errorf("Put: %v", err)
+			}
+		}(i)
+	}
+	wg.Wait()
+	if err := p.Flush(); err != nil {
+		t.Fatalf("Flush: %v", err)
+	}
+
+	// Every write must be readable post-Flush. A race that cleared
+	// dirty while a Put was in flight would manifest as one or more
+	// missing leaves here.
+	seen := 0
+	p.Walk("g", func(_ string, _ []byte) bool {
+		seen++
+		return true
+	})
+	if seen != writes {
+		t.Fatalf("lost writes: wrote %d, read back %d", writes, seen)
+	}
+}
