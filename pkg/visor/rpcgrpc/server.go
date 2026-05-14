@@ -53,6 +53,13 @@ type VisorAPI interface {
 	// filter; cancel() unsubscribes and returns the dropped count.
 	// Both may be nil (visor without a broadcaster wired up).
 	SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.Entry, func() uint64)
+	// SubscribeGroupMessages returns a channel of inbound group
+	// messages converted into GroupMessageData (rpcgrpc's wire-friendly
+	// mirror of visor.GroupMessage to avoid the visor → rpcgrpc import
+	// cycle). cancel() unsubscribes and returns the dropped count.
+	// Returns (nil, no-op) when grouping is not yet initialized on
+	// the visor or running in a test harness.
+	SubscribeGroupMessages(capacity int) (<-chan GroupMessageData, func() uint64)
 	// LocalPK returns the visor's own public key. Used by route-calc
 	// gRPC handlers that default the src PK to the local visor.
 	LocalPK() cipher.PubKey
@@ -60,6 +67,18 @@ type VisorAPI interface {
 	// the visor's existing discovery client. The route-calc gRPC
 	// handler builds the BFS graph from this slice.
 	FetchAllTransportEntries(ctx context.Context) ([]*transport.Entry, error)
+}
+
+// GroupMessageData mirrors visor.GroupMessage one-for-one but lives in
+// rpcgrpc so VisorAPI.SubscribeGroupMessages doesn't pull pkg/visor
+// into rpcgrpc's import graph. The adapter at the visor's init wires
+// a tiny converter goroutine between the inbox's
+// chan visor.GroupMessage and this chan GroupMessageData.
+type GroupMessageData struct {
+	TimestampNs int64
+	GroupID     string
+	SenderPK    string
+	Body        string
 }
 
 // PingConf mirrors visor.PingConfig to avoid import cycles
@@ -983,6 +1002,79 @@ func (s *PingServer) StreamRemoteSystemStats(req *RemoteSystemStatsRequest, stre
 
 		if err := stream.Send(stats); err != nil {
 			return err
+		}
+	}
+}
+
+// StreamGroupMessages opens a long-lived subscription to the visor's
+// group inbox. The server registers with the inbox via the VisorAPI
+// adapter, then forwards every delivered message to the client over
+// the gRPC stream. Stream lifetime is the subscription lifetime — no
+// per-conn deadline applies (the deadline-driven 5-minute reconnect
+// pattern is exactly what this RPC was added to escape).
+//
+// Sequence:
+//  1. Register the subscription on the inbox (bounded buffer).
+//  2. Send a Subscribed sentinel so the client can confirm the stream
+//     is live before downstream actions (mirrors the AppLogStream
+//     pattern; lets the CLI gate Ctrl+C handler installation, etc.).
+//  3. If req.SinceTimestampNs > 0, drain backlog from a one-shot
+//     GroupPoll-style call via the existing inbox snapshot — NOT done
+//     here yet; the simplest live-only path is enough for the v1 CLI
+//     replacement. Backlog replay is a follow-up (handler would need
+//     a SnapshotAfter accessor on the adapter).
+//  4. Loop: select on stream.Context().Done() or the subscription
+//     channel; forward each message to the wire.
+//
+// Filter: req.GroupId, when set, scopes the stream to one group. Empty
+// matches every group the visor is in.
+func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingService_StreamGroupMessagesServer) error {
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+
+	const subBuffer = 256
+	ch, cancel := s.visor.SubscribeGroupMessages(subBuffer)
+	if ch == nil {
+		return fmt.Errorf("group inbox not available on this visor")
+	}
+	defer cancel()
+
+	s.log.Debugf("gRPC StreamGroupMessages: subscribed group_id=%q since_ns=%d", req.GroupId, req.SinceTimestampNs)
+
+	// Sentinel: tell the client the subscription is live so it can
+	// safely drop fallback paths / install signal handlers / etc.
+	// before the first real message arrives. Sent BEFORE entering
+	// the dispatch loop.
+	if err := stream.Send(&GroupMessageEvent{
+		TimestampNs: time.Now().UnixNano(),
+		Subscribed:  true,
+	}); err != nil {
+		return err
+	}
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case m, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			// Server-side filter by group_id. The inbox fans every
+			// message to every subscriber; filtering here avoids
+			// per-stream filtering layers in the inbox itself.
+			if req.GroupId != "" && m.GroupID != req.GroupId {
+				continue
+			}
+			if err := stream.Send(&GroupMessageEvent{
+				TimestampNs: m.TimestampNs,
+				GroupId:     m.GroupID,
+				SenderPk:    m.SenderPK,
+				Body:        m.Body,
+			}); err != nil {
+				return err
+			}
 		}
 	}
 }
