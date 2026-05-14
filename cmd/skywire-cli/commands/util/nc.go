@@ -310,7 +310,7 @@ func ncProbeTCP(host, port string) error {
 func ncSpliceStdio(conn net.Conn) error {
 	var (
 		once    sync.Once
-		closeFn = func() { _ = conn.Close() }
+		closeFn = func() { _ = conn.Close() } //nolint:errcheck
 	)
 	done := make(chan error, 2)
 	go func() {

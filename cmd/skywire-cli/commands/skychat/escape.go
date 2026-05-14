@@ -20,7 +20,9 @@
 // natively via JSON string encoding).
 package cliskychat
 
-import "strings"
+import (
+	"strings"
+)
 
 // escapeForOneLine turns embedded newlines and carriage returns into
 // the literal two-character sequences `\n` and `\r`, so the returned

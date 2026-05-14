@@ -279,10 +279,11 @@ func runIperfSender(ctx context.Context, conn net.Conn, duration, interval time.
 		_ = sd.SetWriteDeadline(deadline.Add(2 * time.Second)) //nolint:errcheck
 	}
 
+sendLoop:
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
-			break
+			break sendLoop
 		default:
 		}
 		n, err := conn.Write(buf)
@@ -291,7 +292,7 @@ func runIperfSender(ctx context.Context, conn net.Conn, duration, interval time.
 		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "write error after %s: %v\n", time.Since(start).Round(time.Millisecond), err)
-			break
+			break sendLoop
 		}
 	}
 	stopPrinter()
@@ -614,7 +615,7 @@ func printRTTSummary(samples []rxSample, sent uint64, elapsed time.Duration) {
 		}
 		sum += s.rtt
 	}
-	mean := sum / time.Duration(recvCount)
+	mean := sum / time.Duration(recvCount) //nolint:gosec // recvCount is the in-process sample count, far below int64 max
 	// Stddev: sample std (Bessel's correction skipped — for small N
 	// the bias is negligible vs. the ms-scale RTT signal we care
 	// about; saves an extra divide).
@@ -645,14 +646,17 @@ func bigEndianUint64(b []byte) uint64 {
 }
 
 func putBigEndianUint64(b []byte, v uint64) {
-	b[0] = byte(v >> 56)
-	b[1] = byte(v >> 48)
-	b[2] = byte(v >> 40)
-	b[3] = byte(v >> 32)
-	b[4] = byte(v >> 24)
-	b[5] = byte(v >> 16)
-	b[6] = byte(v >> 8)
-	b[7] = byte(v)
+	// byte(v >> N) is the standard big-endian-pack idiom — the shift
+	// drops the high bits and byte() truncates the low 8. The gosec
+	// G115 warnings here are spurious.
+	b[0] = byte(v >> 56) //nolint:gosec
+	b[1] = byte(v >> 48) //nolint:gosec
+	b[2] = byte(v >> 40) //nolint:gosec
+	b[3] = byte(v >> 32) //nolint:gosec
+	b[4] = byte(v >> 24) //nolint:gosec
+	b[5] = byte(v >> 16) //nolint:gosec
+	b[6] = byte(v >> 8)  //nolint:gosec
+	b[7] = byte(v)       //nolint:gosec
 }
 
 // rxSample is declared inside runIperfRTT but referenced by

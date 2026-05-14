@@ -149,9 +149,9 @@ Output:
 		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 		if jsonMode {
 			b, _ := json.MarshalIndent(struct { //nolint:errcheck
-				Src  string            `json:"src"`
-				Dst  string            `json:"dst"`
-				Hops []traceHopResult  `json:"hops"`
+				Src  string           `json:"src"`
+				Dst  string           `json:"dst"`
+				Hops []traceHopResult `json:"hops"`
 			}{
 				Src:  srcPK.String(),
 				Dst:  dstPK.String(),
@@ -162,7 +162,7 @@ Output:
 		}
 
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "HOP\tPK\tRTT\tNOTES")
+		fmt.Fprintln(w, "HOP\tPK\tRTT\tNOTES") //nolint:errcheck
 		for _, r := range results {
 			rtt := "n/a"
 			if r.RTT > 0 {
@@ -175,7 +175,7 @@ Output:
 			if r.Error != "" {
 				notes = strings.TrimSpace(notes + " " + r.Error)
 			}
-			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", r.Index, r.PK.String(), rtt, notes)
+			fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", r.Index, r.PK.String(), rtt, notes) //nolint:errcheck
 		}
 		_ = w.Flush() //nolint:errcheck
 	},

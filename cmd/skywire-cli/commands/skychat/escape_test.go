@@ -1,7 +1,9 @@
 // Package cliskychat cmd/skywire-cli/commands/skychat/escape_test.go
 package cliskychat
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestEscapeForOneLine(t *testing.T) {
 	cases := []struct {
