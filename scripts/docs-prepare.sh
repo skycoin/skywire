@@ -48,4 +48,16 @@ distribution. See [mainnet_rules](mainnet_rules.md) for the
 authoritative ruleset.
 EOF
 
-echo "docs-prepare: staged specs and rewards under docs/"
+# --- Standalone repo-root files that the install guide references ---
+# DOCKER.md (repo root) and nix/README.md cover install paths; we want
+# them as pages in the site rather than as off-site links. Stage them
+# under docs/extras/ so they get a stable URL inside the site.
+mkdir -p docs/extras
+if [ -f DOCKER.md ]; then
+  cp DOCKER.md docs/extras/docker.md
+fi
+if [ -f nix/README.md ]; then
+  cp nix/README.md docs/extras/nix.md
+fi
+
+echo "docs-prepare: staged specs, rewards, and extras under docs/"

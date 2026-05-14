@@ -116,6 +116,7 @@ cli-comprehensive-test.md
 /docs/apps/
 /docs/dmsg-binaries/
 /docs/services/
+/docs/extras/
 
 # Local MkDocs preview venv (created by docs-install-deps target)
 /.venv-docs/
