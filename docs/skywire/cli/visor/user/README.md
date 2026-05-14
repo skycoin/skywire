@@ -19,15 +19,9 @@ skywire cli visor user
 ## Global Flags
 
 ```
-      --json   print output as JSON
-```
-
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
-
-```
-root (uid=0)
+  -h, --help          show help menu
+      --json          print output as JSON
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

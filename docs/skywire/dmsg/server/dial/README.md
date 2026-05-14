@@ -64,6 +64,7 @@ skywire dmsg server dial
 ## Global Flags
 
 ```
+  -h, --help        show help menu
       --with-kill   force exit after 3 interrupt signals (default true)
 ```
 

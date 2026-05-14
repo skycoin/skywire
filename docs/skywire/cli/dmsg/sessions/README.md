@@ -30,19 +30,11 @@ skywire cli dmsg sessions
       --json         print output in json
 ```
 
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
+## Global Flags
 
 ```
-main (02f9aa588dffa20b205e1c10bd0236130f080af157044d0eaa35753d2f2fcd6c36)
-  Connected sessions: 6
-    0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb
-    02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd
-    02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0
-    0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7
-    03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4
-    0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13
+  -h, --help          show help menu
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---
