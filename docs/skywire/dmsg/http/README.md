@@ -2,10 +2,12 @@
 
 [← skywire dmsg](../README.md)
 
+```
 ┌┬┐┌┬┐┌─┐┌─┐┬ ┬┌┬┐┌┬┐┌─┐
  │││││└─┐│ ┬├─┤ │  │ ├─┘
 ─┴┘┴ ┴└─┘└─┘┴ ┴ ┴  ┴ ┴  
 	DMSG http file server
+```
 
 ## Usage
 

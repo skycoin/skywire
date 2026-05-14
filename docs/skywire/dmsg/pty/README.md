@@ -2,10 +2,12 @@
 
 [← skywire dmsg](../README.md)
 
+```
 ┌─┐┌┬┐┬ ┬
 	├─┘ │ └┬┘
 	┴   ┴  ┴
 DMSG pseudoterminal (pty)
+```
 
 ## Usage
 

@@ -2,12 +2,14 @@
 
 [← skywire dmsg](../README.md)
 
+```
 ┌┬┐┌┬┐┌─┐┌─┐┬ ┬┌─┐┌┐
 	 │││││└─┐│ ┬│││├┤ ├┴┐
 	─┴┘┴ ┴└─┘└─┘└┴┘└─┘└─┘
 DMSG resolving proxy & browser client - access websites, HTTP & TCP interfaces over DMSG
 .conf file may also be specified with
 DMSGWEB=/path/to/dmsgweb.conf skywire dmsg web
+```
 
 ## Usage
 
