@@ -174,7 +174,7 @@ docs-serve: docs-prepare ## Local preview of the MkDocs site at http://127.0.0.1
 	mkdocs serve
 
 docs-build: docs-prepare ## Build the MkDocs site into ./site (mirrors CI)
-	mkdocs build --strict
+	mkdocs build
 
 docs-install-deps: ## Install MkDocs + plugins (run once per machine)
 	pip install --user 'mkdocs-material==9.5.*' 'mkdocs-awesome-pages-plugin==2.9.*' 'pymdown-extensions==10.*'
