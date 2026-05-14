@@ -47,6 +47,18 @@ type Publisher struct {
 	// changes; cleared by the publish loop after a successful Save.
 	dirty bool
 
+	// dirtyGen increments on every mutation that calls markDirty.
+	// The publish loop captures dirtyGen at the moment it takes the
+	// in-memory snapshot, then re-checks after publishRoot returns;
+	// equality means no Put / Delete / PrunePrefix raced the publish,
+	// so it's safe to clear dirty and promote freshSubs into the
+	// per-memNode encode-cache. Inequality means a mutation landed
+	// during the publish window — dirty stays set so the next tick
+	// picks up the new state, and freshSubs is discarded to avoid
+	// pinning the live tree to a stale pubHash that no longer
+	// matches the encoded content.
+	dirtyGen uint64
+
 	// allow gates which subscriber PKs may connect. nil-set means the
 	// allowlist is disabled (any subscriber is accepted). NewWithDMSG
 	// wires this state into the CXO node's OnSubscribeRemote hook
@@ -610,8 +622,15 @@ func (p *Publisher) runCleanup() {
 
 // markDirty notes that the in-memory tree has unpublished changes
 // and nudges the publish loop. Must be called with p.mu held.
+//
+// Bumps dirtyGen so the publish loop can detect mutations that
+// landed between snapshot and publishRoot completion. The publish
+// loop only clears dirty + promotes freshSubs when its captured
+// generation still matches; otherwise the next tick re-publishes
+// the new state.
 func (p *Publisher) markDirty() {
 	p.dirty = true
+	p.dirtyGen++
 	select {
 	case p.wakeup <- struct{}{}:
 	default:
@@ -646,26 +665,133 @@ func (p *Publisher) runLoop() {
 }
 
 func (p *Publisher) publishIfDirty() error {
-	// The publish path walks the in-memory tree (encodeNode) and
-	// must do so under p.mu, since concurrent Put / Delete /
-	// PrunePrefix mutate the same memNode maps. The CXO encode/Save
-	// work is in-memory and bounded; for the visor stats workload
-	// (1-min sample cadence, hundreds of entries max) the
-	// lock-hold time is well under a millisecond.
+	// Decouple the in-memory snapshot phase from the CXO encode /
+	// bbolt-write phase. Holding p.mu through publishRoot was the
+	// original bug: encodeNode + Cache.WithBatch can take many
+	// seconds when the shared CXDS bbolt is contended, and during
+	// that window every Put / Delete / PrunePrefix on this publisher
+	// blocks. The downstream effect under heavy contention is that
+	// the publish loop's own heartbeats stall, peer subscribers see
+	// the publisher as stale, and the group falls silent until
+	// someone restarts a visor.
+	//
+	// New shape:
+	//  1. Lock; if !dirty, exit. Otherwise clone the tree and
+	//     capture dirtyGen as a watermark. Unlock.
+	//  2. publishRoot runs against the snapshot with p.mu released.
+	//     encodeNode walks immutable copies; concurrent Put / Delete
+	//     mutate the LIVE tree without contending on the snapshot.
+	//  3. Re-lock. If dirtyGen still equals the snapshot watermark,
+	//     no mutation landed during the publish, so it's safe to
+	//     clear dirty and promote freshSubs into the live tree's
+	//     encode-cache (path-keyed walk). If dirtyGen drifted, leave
+	//     dirty set — the next tick re-publishes the new state — and
+	//     drop freshSubs to avoid pinning the live tree to a hash
+	//     that no longer matches its content.
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	if !p.dirty {
+		p.mu.Unlock()
 		return nil
 	}
-	if err := p.publishRoot(p.root); err != nil {
+	snapshot := cloneMemNode(p.root)
+	gen := p.dirtyGen
+	p.mu.Unlock()
+
+	freshSubs, err := p.publishRoot(snapshot)
+	if err != nil {
 		return err
 	}
-	p.dirty = false
+
+	p.mu.Lock()
+	if p.dirtyGen == gen {
+		// No mutation landed during the publish. Promote freshSubs
+		// into the LIVE tree by path so the next publish can skip
+		// the encode walk for unchanged subtrees, then clear dirty.
+		for _, fs := range freshSubs {
+			n := walkLivePath(p.root, fs.path)
+			if n == nil {
+				// Path was concurrently removed despite dirtyGen
+				// matching — only possible if mutation went
+				// through a code path that forgot to call
+				// markDirty. Defensive: skip.
+				continue
+			}
+			n.cached = true
+			n.pubHash = fs.hash
+		}
+		p.dirty = false
+	}
+	// If dirtyGen != gen: a Put / Delete landed during publish.
+	// freshSubs encodes the SNAPSHOT's view of those subtrees,
+	// which no longer matches the live tree. Discard the
+	// promotion entirely — the next tick will re-encode against
+	// the new live state.
+	p.mu.Unlock()
 	return nil
 }
 
-// publishRoot encodes the in-memory tree as CXO objects and saves
-// the resulting Root under the feed's PK.
+// walkLivePath returns the memNode at the given path in n, or nil if
+// the path no longer exists or hits a leaf instead of a sub-tree at
+// an intermediate segment. Used by publishIfDirty to find the
+// counterpart of a freshSub (path, hash) in the live tree after
+// publishRoot returns.
+func walkLivePath(n *memNode, path []string) *memNode {
+	for _, seg := range path {
+		if n == nil {
+			return nil
+		}
+		next, ok := n.subs[seg]
+		if !ok {
+			return nil
+		}
+		n = next
+	}
+	return n
+}
+
+// cloneMemNode returns a deep copy of n. Sub-tree structure (maps
+// and *memNode pointers) is freshly allocated so the snapshot is
+// independent of subsequent mutations on the original tree. Leaf
+// byte slices are SHARED with the original — they are immutable
+// post-Put (each Put copies its value before insertion, then never
+// mutates in place), so sharing is safe and avoids an allocation
+// per leaf during the snapshot. The pubHash / cached fields are
+// copied so encodeNode's fast-path-on-cached behavior carries over
+// to the snapshot.
+//
+// Cost: O(N) pointer + small-map allocations across the tree, no
+// I/O, no leaf copying. For chat-workload trees (< 10 levels, < 1k
+// leaves) this is sub-millisecond.
+func cloneMemNode(n *memNode) *memNode {
+	if n == nil {
+		return nil
+	}
+	out := &memNode{
+		leaves:  make(map[string][]byte, len(n.leaves)),
+		subs:    make(map[string]*memNode, len(n.subs)),
+		pubHash: n.pubHash,
+		cached:  n.cached,
+	}
+	for k, v := range n.leaves {
+		out.leaves[k] = v // share immutable leaf byte slice
+	}
+	for k, sub := range n.subs {
+		out.subs[k] = cloneMemNode(sub)
+	}
+	return out
+}
+
+// publishRoot encodes the given in-memory tree as CXO objects and
+// saves the resulting Root under the feed's PK. Returns the list of
+// freshly-encoded subtree (path, hash) pairs so the caller can
+// promote them into the LIVE tree's encode-cache after re-checking
+// the dirty-generation watermark.
+//
+// IMPORTANT: this function does NOT touch the publisher mutex. The
+// caller (publishIfDirty) takes a snapshot of the live tree under
+// p.mu, releases the lock, and passes the snapshot here. encodeNode
+// walks immutable copies; concurrent Put / Delete on the live tree
+// don't contend with this work.
 //
 // The encode+save sequence runs inside a single CXDS batch
 // transaction (Cache.WithBatch). Every Set/Inc that fires during the
@@ -676,24 +802,31 @@ func (p *Publisher) publishIfDirty() error {
 // the sample-interval mirror writes. The IdxDB tx that Container.Save
 // opens for the root metadata write is unrelated (separate bbolt
 // file) and remains its own transaction.
-func (p *Publisher) publishRoot(root *memNode) error {
+//
+// Two publishers on the same node still serialize at bbolt's writer
+// mutex during the WithBatch body. This patch doesn't change that;
+// it just stops the contention from cascading into p.mu and
+// blocking Put / Delete on the publisher whose batch is queued.
+func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 	c := p.cxoNode.Container()
 
 	skyfromCipher := skycipher.SecKey(p.sk)
 
 	up, err := c.Unpack(skyfromCipher, Registry)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer up.Close() //nolint:errcheck
 
 	// Build the root TreeNode bottom-up. encodeNode writes leaf
 	// objects and TreeEntries via up.Add, returning an unsaved
 	// TreeNode value that we then wrap in a Dynamic for Root.Refs.
-	// freshSubs collects every sub-node we just freshly encoded so we
-	// can promote them into the per-memNode cache after Save succeeds
-	// — never before, otherwise an aborted publish would leave the
-	// cache pointing at hashes that up.Close has rolled back.
+	// freshSubs collects every sub-tree we just freshly encoded so the
+	// caller can promote them into the LIVE tree's encode-cache after
+	// Save succeeds AND the dirty-generation watermark hasn't drifted.
+	// Promotion happens in publishIfDirty, never here, otherwise an
+	// aborted publish would leave the cache pointing at hashes that
+	// up.Close has rolled back.
 	var (
 		freshSubs []freshSub
 		rootNode  TreeNode
@@ -702,7 +835,7 @@ func (p *Publisher) publishRoot(root *memNode) error {
 
 	err = c.Cache.WithBatch(func() error {
 		var err error
-		rootNode, err = encodeNode(up, root, &freshSubs)
+		rootNode, err = encodeNode(up, root, nil, &freshSubs)
 		if err != nil {
 			return err
 		}
@@ -733,13 +866,9 @@ func (p *Publisher) publishRoot(root *memNode) error {
 		return c.Save(up, r)
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	p.cxoNode.Publish(r)
-	for _, fs := range freshSubs {
-		fs.n.pubHash = fs.hash
-		fs.n.cached = true
-	}
 
 	// Nudge the cleanup goroutine. Non-blocking: if cleanup is already
 	// running or pending, we don't need to enqueue another. The cleanup
@@ -749,35 +878,44 @@ func (p *Publisher) publishRoot(root *memNode) error {
 	case p.cleanupNudge <- struct{}{}:
 	default:
 	}
-	return nil
+	return freshSubs, nil
 }
 
-// freshSub records a sub-node whose TreeNode was freshly serialized
-// during the current publishRoot call. After Save succeeds the
-// publisher promotes these into the per-memNode encode-cache so the
-// next publish can skip both the recursive walk and the
-// encoder.Serialize / Cache.Set chain for any subtree that has not
-// been mutated since.
+// freshSub records a sub-tree whose TreeNode was freshly serialized
+// during the current publishRoot call. After Save succeeds AND
+// publishIfDirty confirms the dirty-generation watermark hasn't
+// drifted, the publisher walks the LIVE tree by path and promotes
+// each into the per-memNode encode-cache so the next publish can
+// skip both the recursive walk and the encoder.Serialize /
+// Cache.Set chain for any subtree that has not been mutated since.
+//
+// Path-keyed (rather than pointer-keyed) so the snapshot the encode
+// walks against can be discarded after publishRoot returns and the
+// cache state still lands on the live tree. The walk is O(depth)
+// per freshSub; for chat-message trees that's < 10 levels and
+// trivially fast.
 type freshSub struct {
-	n    *memNode
+	path []string
 	hash skycipher.SHA256
 }
 
 // encodeNode walks a memNode and produces a TreeNode whose Children
 // Refs contains TreeEntries for every leaf and sub-node, sorted by
-// name for deterministic encoding.
+// name for deterministic encoding. path tracks the segments from the
+// root to n; freshSubs records (path, hash) for every sub-tree this
+// call freshly serialized so the caller can later promote them into
+// the LIVE tree's encode-cache by path.
 //
 // For each sub-node it consults memNode.cached: if the sub-node has
-// not been mutated since its last successful publish, encodeNode reuses
-// the cached pubHash directly in the parent's TreeEntry without
-// recursing or re-serializing. Container.Save's reference walk then
-// increments the rc on the cached hash without descending into it
-// (skyobject/unpack.go:156-167), so the underlying CXO objects stay
-// alive across publishes as long as each successive Root references
-// the same hash. Mutated sub-trees are re-encoded via the slow path
-// and recorded in freshSubs so the caller can promote them after
-// Save returns nil.
-func encodeNode(up registry.Pack, n *memNode, freshSubs *[]freshSub) (TreeNode, error) {
+// not been mutated since its last successful publish, encodeNode
+// reuses the cached pubHash directly in the parent's TreeEntry
+// without recursing or re-serializing. Container.Save's reference
+// walk then increments the rc on the cached hash without descending
+// into it (skyobject/unpack.go:156-167), so the underlying CXO
+// objects stay alive across publishes as long as each successive
+// Root references the same hash. Mutated sub-trees are re-encoded
+// via the slow path and recorded in freshSubs.
+func encodeNode(up registry.Pack, n *memNode, path []string, freshSubs *[]freshSub) (TreeNode, error) {
 	var node TreeNode
 
 	names := sortedNames(n)
@@ -795,14 +933,22 @@ func encodeNode(up registry.Pack, n *memNode, freshSubs *[]freshSub) (TreeNode, 
 				// Fast path: subtree unchanged since last publish.
 				entry.Sub = registry.Ref{Hash: sub.pubHash}
 			} else {
-				subNode, err := encodeNode(up, sub, freshSubs)
+				// Build the child's path by appending `name` to the
+				// parent's path. Allocate a fresh slice per recursion
+				// so the caller's freshSubs entries don't alias each
+				// other through a shared backing array.
+				childPath := make([]string, len(path)+1)
+				copy(childPath, path)
+				childPath[len(path)] = name
+
+				subNode, err := encodeNode(up, sub, childPath, freshSubs)
 				if err != nil {
 					return TreeNode{}, err
 				}
 				if err := entry.Sub.SetValue(up, &subNode); err != nil {
 					return TreeNode{}, err
 				}
-				*freshSubs = append(*freshSubs, freshSub{n: sub, hash: entry.Sub.Hash})
+				*freshSubs = append(*freshSubs, freshSub{path: childPath, hash: entry.Sub.Hash})
 			}
 		} else {
 			// Should not happen — memNode invariants keep names in
