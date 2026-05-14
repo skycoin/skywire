@@ -16,6 +16,7 @@ import (
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	cxo "github.com/skycoin/skywire/cmd/cxo/commands"
 	dmsg "github.com/skycoin/skywire/cmd/dmsg/dmsg/commands"
+	"github.com/skycoin/skywire/cmd/skywire/commands/doc"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -62,6 +63,7 @@ func init() {
 		dmsg.RootCmd,
 		cxo.RootCmd,
 		appsCmd,
+		doc.RootCmd,
 	)
 
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
