@@ -38,12 +38,18 @@ If two nodes; **A** and **B** establish a *Transport* between them (where **A** 
 
 Transport status is determined by the re-registration mechanism rather than explicit status updates:
 
-- Visors re-register their transports every **90 seconds** via `POST /v3/transports/`
-- Transport entries have a TTL of **2 minutes**
-- A transport that is not re-registered within the TTL is considered *down* and expires from the registry
-- Re-registration carries the bare entry (id, edges, type, label) — bandwidth and latency are no longer in the request body
+- Visors SHALL re-publish their live transport set every **90 seconds**.
+- Transport entries have a TTL of **2 minutes**; an entry not re-published within the TTL is considered *down* and expires from the registry.
+- The published payload is the bare entry (id, edges, type, label); bandwidth and latency are not carried in this channel.
 
-This approach simplifies the protocol and ensures transport status accurately reflects actual connectivity.
+**Registration Channels:**
+
+The Transport Discovery accepts a visor's live transport set over two parallel channels:
+
+- **CXO publisher subscription.** The TPD subscribes to each registered visor's CXO publisher feed (the same feed identity used for telemetry — see §07 Transport Management — *CXO Publisher*). Register and deregister events are mirrored to the feed as transport-entry leaves and consumed by the TPD's subscriber.
+- **HTTP POST `/v3/transports/`.** The authenticated v3 endpoint accepts a batch of bare entries from the registering visor.
+
+Implementations SHOULD treat the two channels as a dual-write contract: both paths converge on the same registry state, and the TPD MUST tolerate receiving the same register/deregister event on either or both. A visor MAY operate with only one channel available (e.g. CXO feed unreachable, or the TPD only exposed over DMSG-bound HTTP) and the TPD MUST still observe its liveness.
 
 **Bandwidth & Latency Aggregation:**
 
