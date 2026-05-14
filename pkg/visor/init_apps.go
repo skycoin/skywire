@@ -313,6 +313,34 @@ func (a *visorPingAdapter) SubscribeLogs(f logging.Filter, capacity int) (<-chan
 	return a.v.SubscribeLogs(f, capacity)
 }
 
+// SubscribeGroupMessages bridges visor's group inbox into rpcgrpc's
+// import-cycle-safe channel type. Spawns one goroutine per subscriber
+// that drains the inbox channel, converts each GroupMessage to the
+// rpcgrpc-local GroupMessageData mirror, and forwards on the returned
+// channel. The forwarding goroutine exits when the underlying inbox
+// channel closes (the cancel func calls inbox.unsubscribe, which
+// closes that channel) — which then closes the outbound forwarding
+// channel and signals stream end to the gRPC handler.
+func (a *visorPingAdapter) SubscribeGroupMessages(capacity int) (<-chan rpcgrpc.GroupMessageData, func() uint64) {
+	src, cancel := a.v.SubscribeGroupMessages(capacity)
+	if src == nil {
+		return nil, cancel
+	}
+	out := make(chan rpcgrpc.GroupMessageData, capacity)
+	go func() {
+		defer close(out)
+		for m := range src {
+			out <- rpcgrpc.GroupMessageData{
+				TimestampNs: m.TS.UnixNano(),
+				GroupID:     m.GroupID,
+				SenderPK:    m.SenderPK.Hex(),
+				Body:        m.Text,
+			}
+		}
+	}()
+	return out, cancel
+}
+
 func (a *visorPingAdapter) LocalPK() cipher.PubKey {
 	return a.v.LocalPK()
 }

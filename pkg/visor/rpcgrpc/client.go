@@ -444,3 +444,57 @@ func (c *PingClient) StreamRemoteSystemStats(ctx context.Context, remotePK strin
 		cb(stats)
 	}
 }
+
+// GroupMessageCallback is invoked for every group message the stream
+// delivers. The Subscribed-sentinel entry is filtered out by
+// StreamGroupMessages — callers only see real messages.
+type GroupMessageCallback func(e *GroupMessageEvent)
+
+// StreamGroupMessages opens a server-streaming subscription to the
+// visor's group inbox. Blocks until ctx is canceled or the stream
+// errors. Replaces the net/rpc GroupPoll loop in 'cli skychat group
+// listen', whose underlying conn was killed every 5 minutes by the
+// per-conn deadline at init_apps.go (the deadline exists to bound
+// unary RPC hang detection; it's the wrong tool for long-lived
+// listen-style RPCs).
+//
+// groupID, when non-empty, scopes the stream to one group (server-side
+// filter). Empty subscribes to every group the visor is in.
+//
+// sinceTimestampNs requests backlog replay of messages with TS
+// strictly greater than the value before live deliveries start. Zero
+// means live-only. (Backlog replay is currently honored on the wire
+// but the server-side implementation may be a no-op pending the
+// snapshotAfter accessor — see the server handler comment.)
+//
+// If subscribed is non-nil, it is closed once the server emits the
+// Subscribed sentinel — the same handshake pattern StreamAppLogs uses.
+// The sentinel itself is filtered and not delivered to cb.
+func (c *PingClient) StreamGroupMessages(ctx context.Context, groupID string, sinceTimestampNs int64, subscribed chan<- struct{}, cb GroupMessageCallback) error {
+	stream, err := c.client.StreamGroupMessages(ctx, &GroupMessagesRequest{
+		GroupId:          groupID,
+		SinceTimestampNs: sinceTimestampNs,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to start group message stream: %w", err)
+	}
+
+	signaled := false
+	for {
+		evt, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("stream error: %w", err)
+		}
+		if evt.Subscribed && !signaled {
+			signaled = true
+			if subscribed != nil {
+				close(subscribed)
+			}
+			continue
+		}
+		cb(evt)
+	}
+}
