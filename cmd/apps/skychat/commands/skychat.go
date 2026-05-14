@@ -261,9 +261,16 @@ var embededFiles embed.FS
 // sseSubscriberBufSize is the per-client outbound message buffer
 // depth. A slow SSE client (or a stalled browser tab) drops messages
 // once its buffer is full rather than blocking the producer; missed
-// messages are recoverable from history (when persistence is on) or
-// just dropped (when off).
+// messages are recoverable from the replay buffer on reconnect.
 const sseSubscriberBufSize = 64
+
+// sseReplayBufSize is the depth of the ring buffer of recent
+// broadcasts kept for replay to listeners that connect after the
+// messages were broadcast. Sized to cover a few minutes of typical
+// chat traffic so a CLI listener that disconnected briefly (visor
+// cycle, network blip) picks back up where it left off rather than
+// silently losing the window's messages.
+const sseReplayBufSize = 256
 
 // sseHub fans messages out to every connected SSE client. The
 // previous implementation used a single unbuffered channel, which
@@ -271,21 +278,57 @@ const sseSubscriberBufSize = 64
 // one tab was open, or a stale handler was leaked, every other tab
 // silently lost messages. The hub registers a per-client channel on
 // connect and broadcasts to all of them on each message.
+//
+// To make the "listener reconnected after disconnect" case lossless,
+// the hub also keeps a ring buffer of the last sseReplayBufSize
+// messages. New subscribers receive that history before live
+// broadcasts begin.
 type sseHub struct {
 	mu      sync.Mutex
 	clients map[chan string]struct{}
+
+	// Ring buffer for replay. `head` is the next write slot; `count`
+	// is how many slots are populated (saturates at len(replay)).
+	replay     []string
+	replayHead int
+	replayLen  int
 }
 
 func newSSEHub() *sseHub {
-	return &sseHub{clients: make(map[chan string]struct{})}
+	return &sseHub{
+		clients: make(map[chan string]struct{}),
+		replay:  make([]string, sseReplayBufSize),
+	}
 }
 
 // subscribe registers a fresh client channel and returns it plus an
 // unsubscribe func the caller MUST invoke on shutdown. The channel
 // is buffered so a producer never blocks on a slow consumer.
+//
+// Before live broadcasts start flowing, the new subscriber's buffer
+// is pre-filled with whatever messages remain in the hub's replay
+// ring — so a reconnecting CLI listener picks up the recent history
+// it missed during disconnect.
 func (h *sseHub) subscribe() (<-chan string, func()) {
 	ch := make(chan string, sseSubscriberBufSize)
 	h.mu.Lock()
+	// Drain replay buffer into the new client's channel. Order is
+	// oldest → newest. We bound by the channel's buffer size so we
+	// don't block; any overflow is silently truncated (rare, since
+	// sseReplayBufSize > sseSubscriberBufSize means only the most
+	// recent sseSubscriberBufSize messages survive).
+	if h.replayLen > 0 {
+		start := (h.replayHead - h.replayLen + len(h.replay)) % len(h.replay)
+	replayLoop:
+		for i := 0; i < h.replayLen; i++ {
+			idx := (start + i) % len(h.replay)
+			select {
+			case ch <- h.replay[idx]:
+			default:
+				break replayLoop
+			}
+		}
+	}
 	h.clients[ch] = struct{}{}
 	h.mu.Unlock()
 	return ch, func() {
@@ -308,18 +351,43 @@ func (h *sseHub) clientCount() int {
 
 // broadcast sends msg to every connected client. Drops to clients
 // whose buffer is full — bounded fan-out keeps a single stalled
-// client from holding back the whole stream. Each drop ticks
-// sseDropCount; a non-zero rate in /status means some listener
-// is reading slower than incoming-msg rate (or paused entirely).
+// client from holding back the whole stream. The msg is also
+// appended to the replay ring buffer so a future subscriber can
+// pick up history they missed during disconnect.
+//
+// When NO subscribers are connected at broadcast time, the message
+// still lands in the replay buffer (so a reconnecting listener
+// recovers it) but ALSO ticks sseDropCount by 1 to surface the
+// "listener was offline" condition in /status. Pre-fix the empty-
+// subscribers case was an invisible silent drop — operators saw
+// inbound_msg_count rise without sse_drop_count moving and assumed
+// reliable delivery; that was wrong.
 func (h *sseHub) broadcast(msg string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+
+	// Always record in the replay ring, regardless of live-subscriber
+	// state. The ring overwrites oldest-first when full.
+	h.replay[h.replayHead] = msg
+	h.replayHead = (h.replayHead + 1) % len(h.replay)
+	if h.replayLen < len(h.replay) {
+		h.replayLen++
+	}
+
 	var drops uint64
-	for ch := range h.clients {
-		select {
-		case ch <- msg:
-		default:
-			drops++
+	if len(h.clients) == 0 {
+		// No live readers right now. Replay buffer will catch any
+		// listener that reconnects within the next sseReplayBufSize
+		// messages; surface the "no subscribers" event in /status
+		// so the operator knows live-stream had a gap.
+		drops = 1
+	} else {
+		for ch := range h.clients {
+			select {
+			case ch <- msg:
+			default:
+				drops++
+			}
 		}
 	}
 	if drops > 0 {
