@@ -41,6 +41,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 )
@@ -196,8 +197,8 @@ func collect(cmd *cobra.Command, segs []string, out *[]page) {
 		long:    cmd.Long,
 		useLine: cmd.UseLine(),
 		example: cmd.Example,
-		local:   cmd.LocalFlags().FlagUsages(),
-		global:  cmd.InheritedFlags().FlagUsages(),
+		local:   flagUsagesIncludingHidden(cmd.LocalFlags()),
+		global:  flagUsagesIncludingHidden(cmd.InheritedFlags()),
 	}
 
 	subs := visibleChildren(cmd)
@@ -358,6 +359,33 @@ func truncateLines(s string, n int) string {
 // visibleChildren returns the subcommands we want to document, sorted
 // for determinism. Mirrors collect's skip rules so the rendered
 // "Subcommands:" list matches what actually gets generated.
+// flagUsagesIncludingHidden returns the same output as
+// pflag.FlagSet.FlagUsages() but does NOT skip flags marked Hidden.
+// Several skywire commands (notably `skywire visor` and `skywire cli
+// config gen`) mark most of their flags hidden by default and only
+// expose them when the operator passes `--all` — so the plain
+// `--help` output is a usability filter, not a complete reference.
+// The docs are a reference, not a CLI session, and must show
+// everything; this helper flips the Hidden bit while we render, then
+// restores it so the rest of the command still behaves correctly.
+func flagUsagesIncludingHidden(fs *pflag.FlagSet) string {
+	if fs == nil {
+		return ""
+	}
+	var hidden []*pflag.Flag
+	fs.VisitAll(func(f *pflag.Flag) {
+		if f.Hidden {
+			hidden = append(hidden, f)
+			f.Hidden = false
+		}
+	})
+	out := fs.FlagUsages()
+	for _, f := range hidden {
+		f.Hidden = true
+	}
+	return out
+}
+
 func visibleChildren(cmd *cobra.Command) []*cobra.Command {
 	var out []*cobra.Command
 	for _, c := range cmd.Commands() {

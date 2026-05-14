@@ -44,6 +44,7 @@ skywire cli visor ping [pk]
 ## Global Flags
 
 ```
+  -h, --help         show help menu
       --json         print output as JSON
       --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
 ```

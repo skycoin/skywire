@@ -13,18 +13,10 @@ skywire cli proxy status
 ## Global Flags
 
 ```
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-```
-
-## Sample output
-
-_Captured live from a running visor; output is truncated if it exceeds the per-command sample cap._
-
-```
----- All Proxy List -----------------------------------------------------
-
--------------------------------------------------------------------------
+  -h, --help          show help menu
+      --json          print output as JSON
+      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

@@ -54,6 +54,7 @@ skywire cli ssh <pk>@<host>[:<port>] [-- <command> [args...]]
 ## Global Flags
 
 ```
+  -h, --help   show help menu
       --json   print output as JSON
 ```
 

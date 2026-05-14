@@ -51,7 +51,15 @@ skywire cli
 ## Flags
 
 ```
-      --json   print output as JSON
+      --all           show all flags and subcommands (including hidden)
+      --json          print output as JSON
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+```
+
+## Global Flags
+
+```
+  -h, --help   show help menu
 ```
 
 ---

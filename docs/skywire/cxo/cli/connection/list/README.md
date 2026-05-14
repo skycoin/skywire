@@ -14,6 +14,7 @@ skywire cxo cli connection list
 
 ```
   -a, --address string   RPC address to connect to (default "[::]:8871")
+  -h, --help             show help menu
 ```
 
 ---

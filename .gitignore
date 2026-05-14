@@ -120,3 +120,4 @@ cli-comprehensive-test.md
 
 # Local MkDocs preview venv (created by docs-install-deps target)
 /.venv-docs/
+build-test/

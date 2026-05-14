@@ -27,6 +27,7 @@ skywire cli tp add edge <public-key>
 ## Global Flags
 
 ```
+  -h, --help   show help menu
       --json   print output as JSON
 ```
 
