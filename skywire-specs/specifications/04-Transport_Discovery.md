@@ -38,22 +38,24 @@ If two nodes; **A** and **B** establish a *Transport* between them (where **A** 
 
 Transport status is determined by the re-registration mechanism rather than explicit status updates:
 
-- Visors re-register their transports every **90 seconds** via `POST /v3/transports/`
-- Transport entries have a TTL of **2 minutes**
-- A transport that is not re-registered within the TTL is considered *down* and expires from the registry
-- Re-registration carries the bare entry (id, edges, type, label) — bandwidth and latency are no longer in the request body
+- Visors SHALL re-publish their live transport set every **90 seconds**.
+- Transport entries have a TTL of **2 minutes**; an entry not re-published within the TTL is considered *down* and expires from the registry.
+- The published payload is the bare entry (id, edges, type, label); bandwidth and latency are not carried in this channel.
 
-This approach simplifies the protocol and ensures transport status accurately reflects actual connectivity.
+**Registration Channels:**
+
+The Transport Discovery accepts a visor's live transport set over two parallel channels:
+
+- **CXO publisher subscription.** The TPD subscribes to each registered visor's CXO publisher feed (the same feed identity used for telemetry — see §07 Transport Management — *CXO Publisher*). Register and deregister events are mirrored to the feed as transport-entry leaves and consumed by the TPD's subscriber.
+- **HTTP POST `/v3/transports/`.** The authenticated v3 endpoint accepts a batch of bare entries from the registering visor.
+
+Implementations SHOULD treat the two channels as a dual-write contract: both paths converge on the same registry state, and the TPD MUST tolerate receiving the same register/deregister event on either or both. A visor MAY operate with only one channel available (e.g. CXO feed unreachable, or the TPD only exposed over DMSG-bound HTTP) and the TPD MUST still observe its liveness.
 
 **Bandwidth & Latency Aggregation:**
 
-The Transport Discovery acts as an aggregator for bandwidth and latency data; visors no longer push these metrics. Each visor maintains its own bbolt-backed telemetry store (see *Visor-Local Telemetry Store* in §07 Transport Management) and exposes daily rollups through a CXO publisher feed plus a whitelisted HTTP endpoint over DMSG.
+The Transport Discovery aggregates per-transport bandwidth and latency rollups published by each visor; the v3 register endpoint does not carry these metrics. Visors expose their daily rollups out of band — see *Visor-Local Telemetry Store* in §07 Transport Management for the visor-side contract.
 
-The visor's CXO publisher uses the visor's own keypair, so the feed PK is identical to the visor's PK — there is no separate identity to discover. The TPD already knows every visor's PK from the transport registry and subscribes directly via the existing `pkg/cxo/subscriber` primitive. Subscribed updates land in the TPD's redis store; the existing `/metric`, `/bandwidth/*`, `/metrics/*` endpoints read from those tables.
-
-Subscription is open: the data carried on the feed (per-transport daily rollups, three-tier uptime bitmaps, per-service uptime bitmaps) matches the public sensitivity of `/metric` and DHT `tp` entries today. The whitelist on the visor's HTTP-over-DMSG `/stats/*` endpoints exists only to bound arbitrary-range historical queries (DoS protection), not to gate confidentiality.
-
-The TPD no longer persists bandwidth or latency from the deprecated `SignedEntry.Bandwidth` / `SignedEntry.Latency` fields on the v2 register endpoint. Old visors that still send those fields are silently accepted (the bare entry is processed; the wrapper data is dropped).
+Bandwidth and latency carried on the deprecated `SignedEntry.Bandwidth` / `SignedEntry.Latency` fields of the v2 register endpoint SHALL be ignored. The bare entry SHALL still be processed for backward compatibility.
 
 **Obtaining Transports:**
 
@@ -103,15 +105,6 @@ Each operation should contain the following extra header entries:
 - `SW-Sig` - Specifies the hex-representation of the signature of the hash result of the concatenation of the *Incrementing Security Nonce* + Body of the request.
 
 If these values are not valid, the *Transport Discovery* should reject the request.
-
-## Code Structure
-
-The code should be in the `skywire-services` repository.
-
-- `/cmd/transport-discovery/transport-discovery.go` is the main executable for the *Transport Discovery*.
-- `/pkg/transport-discovery/api/` contains the RESTFUL API definitions.
-- `/pkg/transport-discovery/store/` contains the definition of the `Storer` interface and it's implementations.
-- `/pkg/transport-discovery/client/` contains the client library that interacts with the *Transport Discovery* server's RESTFUL API.
 
 ## Database
 
@@ -375,15 +368,7 @@ POST /transports/?sync=true
 |-----------|------|---------|-------------|
 | `sync` | boolean | false | When `true`, the response contains all registered transports instead of just the submitted entries. Used for local route calculation. |
 
-**TPD Data Sync:**
-
-When `sync=true` is specified, the Transport Discovery returns all registered transports in the response instead of echoing back the submitted entries. This enables visors to cache the full transport graph locally for:
-
-- **Local route calculation** - Computing routes without querying the Route Finder service
-- **Reduced API calls** - Obtaining transport data as a side-effect of periodic re-registration
-- **Offline route planning** - Building routes when external services are unavailable
-
-Visors with `sync_tpd_data` enabled in their configuration automatically use this parameter during the 90-second re-registration cycle.
+When `sync=true` is set, the response body SHALL contain every currently registered transport (the full registry snapshot) in place of the echoed submission. This permits a visor to obtain the transport graph as a side-effect of re-registration.
 
 **Request Body:**
 
