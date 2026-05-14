@@ -28,21 +28,28 @@
 package doc
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 )
 
 var (
-	outDir   string
-	dryRun   bool
-	maxLines int
+	outDir          string
+	dryRun          bool
+	maxLines        int
+	captureMode     bool
+	captureTimeout  time.Duration
+	captureSkipNote bool
 )
 
 func init() {
@@ -51,7 +58,13 @@ func init() {
 	RootCmd.Flags().BoolVar(&dryRun, "dry-run", false,
 		"print the list of files that would be written, don't write")
 	RootCmd.Flags().IntVar(&maxLines, "max-lines", 30,
-		"per-page line cap for captured command output (currently unused; reserved for state-capture mode)")
+		"per-page line cap for captured command output (--capture only)")
+	RootCmd.Flags().BoolVar(&captureMode, "capture", false,
+		"run allowlisted state-printing commands against the local visor and embed their (truncated) output as a 'Sample output' section. Requires a running visor on --rpc; commands that fail are silently omitted")
+	RootCmd.Flags().DurationVar(&captureTimeout, "capture-timeout", 5*time.Second,
+		"per-command timeout when --capture is set")
+	RootCmd.Flags().BoolVar(&captureSkipNote, "capture-skip-note", false,
+		"when --capture fails for a command, omit the explanatory note instead of including 'Sample output unavailable: ...'")
 }
 
 // RootCmd is mounted by cmd/skywire/commands/root.go. Hidden — users
@@ -71,7 +84,9 @@ Run from the repo root so the default --out path resolves:
 
   skywire doc                         # writes docs/skywire/...
   skywire doc --out /tmp/docs         # alternate output root
-  skywire doc --dry-run               # list files, don't write`,
+  skywire doc --dry-run               # list files, don't write
+  skywire doc --capture               # also embed live state output
+                                      # for allowlisted commands`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -127,6 +142,13 @@ type page struct {
 	local    string // LocalFlags().FlagUsages()
 	global   string // InheritedFlags().FlagUsages()
 	children []childRef
+
+	// capture is populated only when --capture is set AND segs match an
+	// entry in captureAllowlist. captureErr non-empty means we tried and
+	// failed (e.g., visor unreachable) — render embeds the explanatory
+	// note unless --capture-skip-note suppresses it.
+	capture    string
+	captureErr string
 }
 
 type childRef struct {
@@ -174,11 +196,104 @@ func collect(cmd *cobra.Command, segs []string, out *[]page) {
 	for _, c := range subs {
 		p.children = append(p.children, childRef{name: c.Name(), short: c.Short})
 	}
+
+	if captureMode {
+		if spec, ok := captureAllowlist[strings.Join(p.segs, " ")]; ok {
+			p.capture, p.captureErr = runCapture(spec)
+		}
+	}
+
 	*out = append(*out, p)
 
 	for _, c := range subs {
 		collect(c, append(segs, c.Name()), out)
 	}
+}
+
+// captureSpec describes one allowlisted command we'll run when
+// --capture is set. argv is everything AFTER the binary path; the
+// generator invokes `os.Args[0]` (whichever skywire it was launched as)
+// so the capture matches the running binary, not whatever's on PATH.
+type captureSpec struct {
+	argv  []string
+	extra []string // optional extras (typically --json or limit flags) — folded into argv at exec
+}
+
+// captureAllowlist maps "cli dmsg sessions" (the space-joined cobra
+// path under the root) to the args we pass to the binary. Keep this
+// conservative: only commands that print state, take no required args,
+// and complete quickly. State-changing commands (config gen, route
+// add, etc.) are NEVER in this list.
+var captureAllowlist = map[string]captureSpec{
+	"cli visor info":         {argv: []string{"cli", "visor", "info"}},
+	"cli visor pk":           {argv: []string{"cli", "visor", "pk"}},
+	"cli visor ver":          {argv: []string{"cli", "visor", "ver"}},
+	"cli visor ports":        {argv: []string{"cli", "visor", "ports"}},
+	"cli visor ip":           {argv: []string{"cli", "visor", "ip"}},
+	"cli visor dmsg-servers": {argv: []string{"cli", "visor", "dmsg-servers"}},
+	"cli visor app ls":       {argv: []string{"cli", "visor", "app", "ls"}},
+	"cli visor ready":        {argv: []string{"cli", "visor", "ready"}},
+	"cli visor user":         {argv: []string{"cli", "visor", "user"}},
+	"cli visor proxies":      {argv: []string{"cli", "visor", "proxies"}},
+	"cli dmsg sessions":      {argv: []string{"cli", "dmsg", "sessions"}},
+	"cli route groups":       {argv: []string{"cli", "route", "groups"}},
+	"cli rg ls":              {argv: []string{"cli", "rg", "ls"}},
+	"cli mdisc servers":      {argv: []string{"cli", "mdisc", "servers"}},
+	"cli reward rules":       {argv: []string{"cli", "reward", "rules"}},
+}
+
+// runCapture invokes the spec and returns (stdout-truncated, errMsg).
+// errMsg is empty on success; otherwise it's a short reason — used by
+// render to embed an explanatory note instead of fake output. We use
+// os.Args[0] so the capture matches the running binary; falls back to
+// PATH lookup of "skywire" if argv[0] is something else (e.g., during
+// `go run`).
+func runCapture(spec captureSpec) (string, string) {
+	binPath := os.Args[0]
+	if !strings.HasSuffix(binPath, "skywire") {
+		if p, err := exec.LookPath("skywire"); err == nil {
+			binPath = p
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), captureTimeout)
+	defer cancel()
+	args := append([]string{}, spec.argv...)
+	args = append(args, spec.extra...)
+	cmd := exec.CommandContext(ctx, binPath, args...) //nolint:gosec // allowlisted args only
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
+		return "", fmt.Sprintf("timed out after %s", captureTimeout)
+	}
+	if err != nil {
+		// Trim trailing newlines in stderr — keep the first line as
+		// the reason (visor RPC errors are typically one line).
+		reason := strings.TrimSpace(stderr.String())
+		if reason == "" {
+			reason = err.Error()
+		}
+		if i := strings.IndexByte(reason, '\n'); i > 0 {
+			reason = reason[:i]
+		}
+		return "", reason
+	}
+	return truncateLines(stdout.String(), maxLines), ""
+}
+
+// truncateLines caps captured output at n lines. When truncation
+// happens the cut is marked so readers know they're seeing a slice
+// rather than the full state.
+func truncateLines(s string, n int) string {
+	if n <= 0 {
+		return s
+	}
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) <= n {
+		return s
+	}
+	return strings.Join(lines[:n], "\n") + fmt.Sprintf("\n... (%d more lines)\n", len(lines)-n)
 }
 
 // visibleChildren returns the subcommands we want to document, sorted
@@ -257,6 +372,18 @@ func render(w io.Writer, p page) error {
 		b.WriteString("## Global Flags\n\n```\n")
 		b.WriteString(sanitize(strings.TrimRight(p.global, "\n")))
 		b.WriteString("\n```\n\n")
+	}
+
+	if p.capture != "" {
+		b.WriteString("## Sample output\n\n_Captured live from a running visor; truncated to ")
+		fmt.Fprintf(&b, "%d", maxLines)
+		b.WriteString(" lines._\n\n```\n")
+		b.WriteString(sanitize(strings.TrimRight(p.capture, "\n")))
+		b.WriteString("\n```\n\n")
+	} else if p.captureErr != "" && !captureSkipNote {
+		b.WriteString("## Sample output\n\n_Capture unavailable: ")
+		b.WriteString(sanitize(p.captureErr))
+		b.WriteString("._\n\n")
 	}
 
 	b.WriteString("---\n_Generated by `skywire doc` — do not edit by hand._\n")
