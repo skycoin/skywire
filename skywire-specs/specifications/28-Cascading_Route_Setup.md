@@ -5,7 +5,6 @@
 Cascading Route Setup eliminates the Route Setup Node's (RSN) dependency on DMSG for installing routing rules on intermediate hops. Instead of the RSN independently dialing every hop via DMSG, it constructs a nested message that cascades along the route's own pre-existing transports using the route ID 0 control channel.
 
 This specification also covers:
-- DHT synchronization over transports (same route ID 0 mechanism)
 - RSN standalone visor configuration with transport manager
 - Transport label "setup" for RSN transports
 
@@ -17,7 +16,6 @@ The cascade protocol moves route setup to the transport layer:
 - The RSN is reachable via transport-level relay (route ID 0)
 - Routing rules are installed hop-by-hop over the route's own transports
 - DMSG becomes a fallback, not a hard requirement
-- The same route ID 0 mechanism extends to DHT synchronization
 
 ## Design Principles
 
@@ -62,9 +60,8 @@ New packet types are added to the transport frame format, all using route ID 0:
 |------|-------|-------------|
 | `CascadeSetupPacket` | `10` | Carries a cascade setup message (reserve or install phase) |
 | `CascadeAckPacket` | `11` | Carries a cascade acknowledgment/confirmation |
-| `DHTPacket` | `12` | Carries a DHT RPC message (Ping, FindNode, GetValue, PutValue) |
 
-All three use route ID 0 and are intercepted at the transport layer before reaching the router. Old visors that don't recognize these types drop them silently (existing behavior for unknown packet types on route ID 0).
+Both use route ID 0 and are intercepted at the transport layer before reaching the router. Old visors that don't recognize these types drop them silently (existing behavior for unknown packet types on route ID 0).
 
 ### Capability Negotiation
 
@@ -226,21 +223,6 @@ When the route contains a mix of new visors (cascade-capable) and old visors (no
 
 This means: cascade what you can from the source, DMSG the rest from the break point onward. As the network updates, the break point moves further along the route until eventually the entire cascade completes without DMSG.
 
-## DHT Over Transports
-
-The same route ID 0 mechanism extends to DHT synchronization. Currently, DHT RPC (Ping, FindNode, GetValue, PutValue) runs exclusively over DMSG (port 100). A new `DHTPacket` type on route ID 0 allows DHT messages to hop between transport peers without DMSG.
-
-### Transport-Layer DHT
-
-Each visor's DHT node gains a second transport implementation (`TransportLayerDHT`) alongside the existing `DMSGTransport`:
-
-- DHT messages are sent on route ID 0 as `DHTPacket` frames
-- Each transport peer is a potential DHT peer
-- The routing table is populated from both DMSG-discovered peers and transport peers
-- Lookups try transport peers first, fall back to DMSG
-
-This means the DHT can bootstrap and sync purely over transports when DMSG is unavailable, making the entire network more resilient to DMSG outages.
-
 ## RSN Standalone Configuration
 
 ```json
@@ -317,11 +299,5 @@ Additionally, the RSN itself rejects any `AddIntermediaryRules` request — it n
 - Relay peer caching on visors
 - Multi-hop relay forwarding
 
-### Phase 3: DHT Over Transports
-- `DHTPacket` type on route ID 0
-- `TransportLayerDHT` transport implementation
-- Dual-transport DHT node (DMSG + transport layer)
-- Transport peer integration into DHT routing table
-
-### Phase 4: Privacy and Cleanup
+### Phase 3: Privacy and Cleanup
 - Deprecate embedded RSN (optional, once standalone cascade is proven)
