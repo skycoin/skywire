@@ -36,6 +36,32 @@ func NewHost(dmsgC *dmsg.Client, wl Whitelist) *Host {
 	return host
 }
 
+// ExecRemote runs a one-shot command on the remote dmsgpty host at
+// (rPK, rPort) using this host's dmsg client. Equivalent to what a CLI
+// client would obtain via the proxy path, but skips the local CLI
+// socket entirely — callers that already hold a Host (notably the
+// visor's own RPC layer) can drive Exec without the intermediate
+// unix-socket-or-tcp control listener. Same trust model: the remote's
+// whitelist gates the connection on its own PK admission.
+func (h *Host) ExecRemote(ctx context.Context, rPK cipher.PubKey, rPort uint16, req *CommandExecReq) (*CommandExecResult, error) {
+	if rPort == 0 {
+		rPort = DefaultPort
+	}
+	stream, err := h.dmsgC.DialStream(ctx, dmsg.Addr{PK: rPK, Port: rPort})
+	if err != nil {
+		return nil, fmt.Errorf("dmsgpty: dial %s:%d: %w", rPK, rPort, err)
+	}
+	defer stream.Close() //nolint:errcheck
+
+	ptyC, err := NewPtyClient(stream)
+	if err != nil {
+		return nil, fmt.Errorf("dmsgpty: new pty client: %w", err)
+	}
+	defer ptyC.Close() //nolint:errcheck
+
+	return ptyC.Exec(req)
+}
+
 // ServeCLI listens for CLI connections via the provided listener.
 func (h *Host) ServeCLI(ctx context.Context, lis net.Listener) error {
 

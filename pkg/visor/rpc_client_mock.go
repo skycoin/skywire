@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router"
@@ -950,6 +951,11 @@ func (mc *mockRPCClient) DeregisterService(_ []cipher.PubKey, _ string) error {
 // RemoteVisors implements API
 func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 	return []string{}, nil
+}
+
+// DmsgPtyExec implements API
+func (mc *mockRPCClient) DmsgPtyExec(_ DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error) {
+	return &dmsgpty.CommandExecResult{}, nil
 }
 
 // Ports implements API

@@ -220,7 +220,7 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 		if len(args) < 2 {
 			return fmt.Errorf("pty exec: <pk> <command> required (or use --via tcp://<pk>@<host:port>)")
 		}
-		cli := dmsgpty.DefaultCLI()
+		_ = ctx // ctx is consumed by the --via branch above; RPC path is synchronous
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		name := args[1]
@@ -229,7 +229,24 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 			cmdArgs = args[2:]
 		}
 
-		resp, err := cli.ExecRemote(ctx, addr, uint16(port), name, cmdArgs, ptyExecEnv, nil, timeout)
+		// Route through the visor RPC instead of the dmsgpty-host's
+		// own CLI listener. The visor exposes DmsgPtyExec as a
+		// first-class RPC method (see pkg/visor/rpc_visor.go), which
+		// drives Host.ExecRemote directly. This makes the integrated
+		// CLI follow whatever the visor RPC is configured at and
+		// removes the unix-socket-permission gate that the standalone
+		// dmsgpty-cli still hits.
+		rpcCli := ptyRPCClient(cmd.Flags())
+		resp, err := rpcCli.DmsgPtyExec(visor.DmsgPtyExecArgs{
+			RemotePK:   addr,
+			RemotePort: uint16(port),
+			Req: dmsgpty.CommandExecReq{
+				Name:      name,
+				Arg:       cmdArgs,
+				Env:       ptyExecEnv,
+				TimeoutMS: timeout.Milliseconds(),
+			},
+		})
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
 			os.Exit(1)
