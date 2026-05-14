@@ -22,13 +22,17 @@ type Config struct {
 	PK           string   `json:"pk"`
 	WL           []string `json:"wl"`
 
-	// TCPListen, when non-empty, brings up the direct-TCP entry point
+	// SshListen, when non-empty, brings up the direct-TCP entry point
 	// alongside the dmsg-overlay listener — same shape and semantics
 	// as the visor-embedded version (see pkg/visor/visorconfig:
-	// Dmsgpty.TCPListen). net.Listen syntax: ":2022",
+	// Dmsgpty.SshListen). net.Listen syntax: ":2022",
 	// "0.0.0.0:2022", "127.0.0.1:2022", IPv6 forms all work. Empty
 	// (default) disables the TCP entry point: only the dmsg-overlay
 	// path is served, matching legacy behavior.
+	//
+	// This is the surface that `skywire cli ssh` (client) and
+	// `skywire cli sshd` (server) expose as the OpenSSH-equivalent
+	// shell over skywire.
 	//
 	// Auth flow per accepted TCP connection:
 	//   1. XK noise handshake using this host's PK/SK. The client
@@ -37,7 +41,7 @@ type Config struct {
 	//   2. The handshake-derived client PK is checked against the
 	//      same whitelist the dmsg-overlay accept loop uses. No
 	//      separate ACL.
-	TCPListen string `json:"tcplisten,omitempty"`
+	SshListen string `json:"ssh_listen,omitempty"`
 }
 
 // DefaultConfig is used to populate the config struct with its default values

@@ -48,7 +48,7 @@ var (
 
 	// tcpListen, when non-empty, brings up the direct-TCP entry point
 	// (XK noise + dmsgpty whitelist gate) alongside the dmsg-overlay
-	// path. Mirrors the visor-embedded Dmsgpty.TCPListen config.
+	// path. Mirrors the visor-embedded Dmsgpty.SshListen config.
 	tcpListen string
 
 	// noDmsg, when true, skips the dmsg.Client + dmsg-listener setup
@@ -101,7 +101,7 @@ func init() {
 	RootCmd.Flags().StringVar(&cliNet, "clinet", cliNet, "network used for listening for cli connections")
 	RootCmd.Flags().StringVar(&cliAddr, "cliaddr", cliAddr, "address used for listening for cli connections")
 	RootCmd.Flags().StringVar(&tcpListen, "tcplisten", "",
-		"optional direct-TCP entry point address (e.g. ':2022'); empty disables. XK-noise + whitelist gated, mirrors the visor-embedded Dmsgpty.TCPListen.")
+		"optional direct-TCP entry point address (e.g. ':2022'); empty disables. XK-noise + whitelist gated, mirrors the visor-embedded Dmsgpty.SshListen. Exposed as 'skywire cli sshd'.")
 	RootCmd.Flags().BoolVar(&noDmsg, "no-dmsg", false,
 		"skip dmsg.Client + dmsg listener; run as TCP-only daemon (use with --tcplisten or --listen-fd)")
 	RootCmd.Flags().StringVar(&skFromVisor, "sk-from-visor", "",
@@ -250,13 +250,13 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Optional direct-TCP entry point (XK-noise + whitelist
-		// gated). Mirrors the visor-embedded Dmsgpty.TCPListen.
+		// gated). Mirrors the visor-embedded Dmsgpty.SshListen.
 		// Empty (default) skips it; non-empty brings the listener up
 		// alongside the dmsg-overlay path. The host's NewHost-wired wl
 		// is reused — no separate ACL.
 		tcpAddr := tcpListen
 		if tcpAddr == "" {
-			tcpAddr = conf.TCPListen
+			tcpAddr = conf.SshListen
 		}
 		if tcpAddr != "" {
 			wg.Add(1)

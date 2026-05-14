@@ -28,7 +28,7 @@ import (
 const tcpDialTimeout = 10 * time.Second
 
 // ExecRemoteTCP runs a one-shot command on a remote visor via the
-// dmsgpty-host's direct-TCP entry point (Dmsgpty.TCPListen).
+// dmsgpty-host's direct-TCP entry point (Dmsgpty.SshListen).
 // rPK is pinned during the noise handshake — equivalent to ssh's
 // host-key check. addr is `host:port` (any net.Dial-acceptable form).
 // localPK/localSK is the caller's identity; the remote's whitelist
