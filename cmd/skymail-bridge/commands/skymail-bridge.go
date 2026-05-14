@@ -56,8 +56,12 @@ func init() {
 }
 
 // RootCmd is the cobra entry for the standalone `skymail-bridge`.
+// The "smb" alias is short-hand for the subcommand surface
+// (`skywire dmsg smb`) — the canonical name stays the long form for
+// docs and the top-level binary.
 var RootCmd = &cobra.Command{
 	Use:                   "skymail-bridge",
+	Aliases:               []string{"smb"},
 	Short:                 "Standalone SMTP→dmsg bridge — relays *.skynet envelopes via own dmsg client",
 	Long:                  calvin.AsciiFont("skymail-bridge"),
 	SilenceErrors:         true,
