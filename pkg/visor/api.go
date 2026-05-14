@@ -389,8 +389,21 @@ type EmbeddedProxyStats struct {
 // resolving proxy. Separate fields (not a map) so the UI can treat
 // each proxy's presence/absence as a hard-coded toggle.
 type EmbeddedProxiesStatus struct {
-	DmsgWeb   *EmbeddedProxyInfo `json:"dmsg_web,omitempty"`
-	SkynetWeb *EmbeddedProxyInfo `json:"skynet_web,omitempty"`
+	DmsgWeb       *EmbeddedProxyInfo   `json:"dmsg_web,omitempty"`
+	SkynetWeb     *EmbeddedProxyInfo   `json:"skynet_web,omitempty"`
+	SkymailBridge *EmbeddedSkymailInfo `json:"skymail_bridge,omitempty"`
+}
+
+// EmbeddedSkymailInfo is the runtime snapshot for the in-process
+// SMTP bridge. Distinct from EmbeddedProxyInfo (which is SOCKS5-
+// shaped) because the bridge has no upstream-SOCKS concept and its
+// listener is an SMTP server, not a SOCKS5 proxy.
+type EmbeddedSkymailInfo struct {
+	Enabled bool   `json:"enabled"`
+	Running bool   `json:"running"`
+	Addr    string `json:"addr,omitempty"`
+	Mode    string `json:"mode,omitempty"`
+	Suffix  string `json:"suffix,omitempty"`
 }
 
 // TPSStatus contains the status of the embedded Transport Setup Node.

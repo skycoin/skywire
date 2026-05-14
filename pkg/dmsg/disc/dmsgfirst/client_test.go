@@ -5,8 +5,9 @@ import (
 	"errors"
 	"net"
 	"net/url"
-	"slices"
 	"testing"
+
+	"slices"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
