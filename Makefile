@@ -164,6 +164,9 @@ install-generate: ## Installs required execs for go generate.
 generate: ## Generate mocks and config README's
 	go generate ./...
 
+doc-gen: ## Regenerate docs/skywire/ from the live cobra command tree
+	go run ./cmd/skywire doc --out docs/skywire
+
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./build ./local
 
