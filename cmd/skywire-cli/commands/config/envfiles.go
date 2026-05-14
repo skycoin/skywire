@@ -138,6 +138,10 @@ const envfileLinux = `#
 #--	Skychat local address
 #SKYCHATADDR=':8001'
 
+#--	Skychat pair-RPC channel to visor (required for group chat).
+#--	Default: true. Set to false to disable group-chat plumbing.
+#SKYCHATPAIR=false
+
 #--	Whitelist public keys for the proxy server (empty = allow all)
 #PROXYSERVERWL=('')
 
@@ -391,6 +395,10 @@ const envfileWindows = `#
 
 #--	Skychat local address
 #$SKYCHATADDR=':8001'
+
+#--	Skychat pair-RPC channel to visor (required for group chat).
+#--	Default: true. Set to false to disable group-chat plumbing.
+#$SKYCHATPAIR=$false
 
 #--	Whitelist public keys for the proxy server (empty = allow all)
 #$PROXYSERVERWL=@('')
