@@ -276,24 +276,33 @@ func (m *Manager) SendToGroup(ctx context.Context, id, text string) error {
 	if !ok {
 		return fmt.Errorf("group: SendToGroup: no live session for %s", id)
 	}
-	switch sess.cfg.Record.Role {
-	case RoleOwner:
-		if err := sess.Send(text); err != nil {
-			return err
+	// Federated send: every member — owner OR member — publishes to
+	// their OWN feed. Other members observe directly via peerSubs.
+	// The relay-to-owner path (sess.SubmitToOwner) is retained as a
+	// fallback only when the local visor's publisher isn't healthy
+	// at send time; for steady-state groups every Send is direct.
+	//
+	// Pre-federated v1 routed every member message through the owner
+	// as a single-point-of-failure relay. The session-level
+	// infrastructure (per-member publishers, per-peer subscribers) was
+	// already in place before this change — the only behavioral
+	// difference is the manager's role dispatch here.
+	if err := sess.Send(text); err != nil {
+		// Fallback for the case where this visor's publisher isn't
+		// healthy enough to publish (e.g. CXO node mid-bootstrap).
+		// Only meaningful for member-role sessions — owner role has
+		// nowhere to fall back to.
+		if sess.cfg.Record.Role == RoleMember {
+			if relayErr := sess.SubmitToOwner(ctx, text); relayErr == nil {
+				m.kickReconnect(ctx, id)
+				_ = m.store.MarkMessage(id, time.Now().UTC()) //nolint:errcheck
+				return nil
+			}
 		}
-	case RoleMember:
-		if err := sess.SubmitToOwner(ctx, text); err != nil {
-			return err
-		}
-		// A successful relay submission proves the owner is reachable
-		// over at least one transport. If the subscriber side of this
-		// session is currently down (StatusPending after a transient
-		// Connect failure), now's a good moment to retry — don't wait
-		// up to 30s for the next reconnect tick.
-		m.kickReconnect(ctx, id)
-	default:
-		return fmt.Errorf("group: SendToGroup: unknown role %q", sess.cfg.Record.Role)
+		return err
 	}
+	_ = ctx //nolint:staticcheck // ctx kept in signature for the relay-fallback branch
+
 	_ = m.store.MarkMessage(id, time.Now().UTC()) //nolint:errcheck
 	return nil
 }
