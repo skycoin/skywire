@@ -826,6 +826,33 @@ func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.En
 	return v.logBcast.Subscribe(f, capacity)
 }
 
+// SubscribeGroupMessages registers a live subscriber on the visor's
+// group inbox. Every message delivered to the inbox from this point
+// forward is fanned out to the returned channel (bounded; bursts past
+// capacity are dropped and counted via the cancel-returned uint64).
+//
+// Powers the gRPC StreamGroupMessages handler — the long-lived
+// streaming replacement for the net/rpc GroupPoll loop. Backlog
+// (messages already buffered in the ring at subscribe time) is NOT
+// replayed; callers that want that should call GroupPoll with a
+// since-timestamp before subscribing.
+//
+// Returns nil channel + a no-op cancel when grouping is disabled on
+// this visor (e.g. early init or tests).
+func (v *Visor) SubscribeGroupMessages(capacity int) (<-chan GroupMessage, func() uint64) {
+	v.initLock.RLock()
+	inbox := v.grouping.inbox
+	v.initLock.RUnlock()
+	if inbox == nil {
+		return nil, func() uint64 { return 0 }
+	}
+	sub := inbox.subscribe(capacity)
+	return sub.ch, func() uint64 {
+		inbox.unsubscribe(sub)
+		return sub.dropCount.Load()
+	}
+}
+
 // tpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
