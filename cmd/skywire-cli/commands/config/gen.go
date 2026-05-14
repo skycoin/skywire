@@ -1652,6 +1652,19 @@ func configureApps(log *logging.Logger) {
 				Port:      routing.Port(skyenv.VPNServerPort),
 				Args:      []string{"app", "vpn-server"},
 			},
+			{
+				// skymail-bridge: SMTP→skywire bridge. Off by default
+				// — operators opt in by setting auto_start=true and
+				// adding the Postfix transport_map line. The Args
+				// here mirror the documented sender-side defaults
+				// from cmd/apps/skymail-bridge/README.md so a fresh
+				// config gen produces a runnable entry.
+				Name:      skyenv.SkymailBridgeName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkymailBridgePort),
+				Args:      []string{"app", "skymail-bridge", "--addr", skyenv.SkymailBridgeAddr, "--mode", "b"},
+			},
 		}
 		// Skycoin daemon — full node, syncs the chain locally. May
 		// emit one entry (legacy single-instance) or N (one per
@@ -1731,6 +1744,14 @@ func configureApps(log *logging.Logger) {
 				AutoStart: isVpnServerEnable,
 				Args:      []string{},
 				Port:      routing.Port(skyenv.VPNServerPort),
+			},
+			{
+				// skymail-bridge mirrors the external-apps entry — see
+				// the external branch comment above for rationale.
+				Name:      skyenv.SkymailBridgeName,
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkymailBridgePort),
+				Args:      []string{"--addr", skyenv.SkymailBridgeAddr, "--mode", "b"},
 			},
 		}
 	}
