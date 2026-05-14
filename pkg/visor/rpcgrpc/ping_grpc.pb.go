@@ -8,7 +8,6 @@ package rpcgrpc
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -30,6 +29,7 @@ const (
 	PingService_StreamRemoteSystemStats_FullMethodName = "/rpcgrpc.PingService/StreamRemoteSystemStats"
 	PingService_StreamAppLogs_FullMethodName           = "/rpcgrpc.PingService/StreamAppLogs"
 	PingService_StreamCalcRoutes_FullMethodName        = "/rpcgrpc.PingService/StreamCalcRoutes"
+	PingService_StreamGroupMessages_FullMethodName     = "/rpcgrpc.PingService/StreamGroupMessages"
 )
 
 // PingServiceClient is the client API for PingService service.
@@ -64,6 +64,15 @@ type PingServiceClient interface {
 	// incrementally and avoids accumulating every result in memory before
 	// returning — important when count is large or unbounded.
 	StreamCalcRoutes(ctx context.Context, in *CalcRoutesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[CalcRoute], error)
+	// StreamGroupMessages opens a long-lived stream of inbound group
+	// messages. The server holds a per-stream subscription to the
+	// visor's group inbox and pushes each delivered message to the
+	// client as it arrives. Replaces the net/rpc poll loop in
+	// 'cli skychat group listen', which would lose its underlying
+	// connection every 5 minutes to the per-conn deadline applied at
+	// init_apps.go for unary-RPC hang detection. Stream lifetime is
+	// the listen lifetime, no arbitrary ceiling.
+	StreamGroupMessages(ctx context.Context, in *GroupMessagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GroupMessageEvent], error)
 }
 
 type pingServiceClient struct {
@@ -246,6 +255,25 @@ func (c *pingServiceClient) StreamCalcRoutes(ctx context.Context, in *CalcRoutes
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamCalcRoutesClient = grpc.ServerStreamingClient[CalcRoute]
 
+func (c *pingServiceClient) StreamGroupMessages(ctx context.Context, in *GroupMessagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GroupMessageEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[8], PingService_StreamGroupMessages_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[GroupMessagesRequest, GroupMessageEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamGroupMessagesClient = grpc.ServerStreamingClient[GroupMessageEvent]
+
 // PingServiceServer is the server API for PingService service.
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility.
@@ -278,6 +306,15 @@ type PingServiceServer interface {
 	// incrementally and avoids accumulating every result in memory before
 	// returning — important when count is large or unbounded.
 	StreamCalcRoutes(*CalcRoutesRequest, grpc.ServerStreamingServer[CalcRoute]) error
+	// StreamGroupMessages opens a long-lived stream of inbound group
+	// messages. The server holds a per-stream subscription to the
+	// visor's group inbox and pushes each delivered message to the
+	// client as it arrives. Replaces the net/rpc poll loop in
+	// 'cli skychat group listen', which would lose its underlying
+	// connection every 5 minutes to the per-conn deadline applied at
+	// init_apps.go for unary-RPC hang detection. Stream lifetime is
+	// the listen lifetime, no arbitrary ceiling.
+	StreamGroupMessages(*GroupMessagesRequest, grpc.ServerStreamingServer[GroupMessageEvent]) error
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -317,6 +354,9 @@ func (UnimplementedPingServiceServer) StreamAppLogs(*AppLogStreamRequest, grpc.S
 }
 func (UnimplementedPingServiceServer) StreamCalcRoutes(*CalcRoutesRequest, grpc.ServerStreamingServer[CalcRoute]) error {
 	return status.Error(codes.Unimplemented, "method StreamCalcRoutes not implemented")
+}
+func (UnimplementedPingServiceServer) StreamGroupMessages(*GroupMessagesRequest, grpc.ServerStreamingServer[GroupMessageEvent]) error {
+	return status.Error(codes.Unimplemented, "method StreamGroupMessages not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
 func (UnimplementedPingServiceServer) testEmbeddedByValue()                     {}
@@ -463,6 +503,17 @@ func _PingService_StreamCalcRoutes_Handler(srv interface{}, stream grpc.ServerSt
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamCalcRoutesServer = grpc.ServerStreamingServer[CalcRoute]
 
+func _PingService_StreamGroupMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(GroupMessagesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamGroupMessages(m, &grpc.GenericServerStream[GroupMessagesRequest, GroupMessageEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamGroupMessagesServer = grpc.ServerStreamingServer[GroupMessageEvent]
+
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -518,6 +569,11 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamCalcRoutes",
 			Handler:       _PingService_StreamCalcRoutes_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamGroupMessages",
+			Handler:       _PingService_StreamGroupMessages_Handler,
 			ServerStreams: true,
 		},
 	},
