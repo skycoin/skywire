@@ -576,10 +576,11 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 	}
 }
 
-// detectStaleAndReconnect walks every member-role session and
-// triggers a reconnect attempt on any whose Session.LastInbound()
-// is older than subscriberStaleThreshold (or whose session has
-// never observed an inbound, indicated by a zero LastInbound).
+// detectStaleAndReconnect walks every session (both owner-role AND
+// member-role) and triggers a reconnect attempt on any whose
+// Session.LastInbound() is older than subscriberStaleThreshold (or
+// whose session has never observed an inbound, indicated by a zero
+// LastInbound).
 //
 // This is the recovery driver for the unified liveness signal:
 // IsSubscriberAlive is a pure function of LastInbound, and this
@@ -589,10 +590,27 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 // (joined/left/revoked), not subscriber health. Health is
 // computed live from LastInbound on every /status read.
 //
-// Skips: owner-role sessions (no subscriber), revoked records,
-// sessions without a corresponding live Session in m.sessions.
-// A zero LastInbound on a live session IS treated as stale —
-// we never saw the subscriber attach, so a reconnect is warranted.
+// Pre-#2580 only member-role sessions had subscribers needing
+// reconnect (owner just published, didn't subscribe). Post-#2580
+// (federated send) every session — owner included — has a
+// peerSubs map of per-PK subscribers to other members' feeds, and
+// those need the same auto-reconnect coverage. Without it, when a
+// peer restarts its publisher (e.g. operator does group leave +
+// rejoin to refresh a stale subscriber), the owner's peerSub to
+// that peer goes stale and never recovers until the owner halts
+// its own visor.
+//
+// Skips: revoked records, sessions without a corresponding live
+// Session in m.sessions. A zero LastInbound on a live session IS
+// treated as stale — we never saw any peer leaf arrive, so a
+// reconnect is warranted.
+//
+// Granularity note: LastInbound is per-session, not per-peerSub.
+// For owner sessions with multiple peers, a single chatty peer
+// keeps LastInbound fresh and masks the staleness of any silent
+// peer's peerSub. A future refinement would track per-peer
+// liveness; for now the per-session signal is strictly better
+// than the pre-fix "no reconnect coverage for owners at all".
 func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
@@ -603,9 +621,6 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 	}
 	now := time.Now().UTC()
 	for _, r := range records {
-		if r.Role != RoleMember {
-			continue
-		}
 		// Both Active and Pending records get the stale-check.
 		// Active records that drift stale + Pending records that
 		// never finished the initial Connect both want a kick from
