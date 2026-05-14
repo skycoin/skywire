@@ -41,6 +41,16 @@ service PingService {
   // incrementally and avoids accumulating every result in memory before
   // returning — important when count is large or unbounded.
   rpc StreamCalcRoutes(CalcRoutesRequest) returns (stream CalcRoute);
+
+  // StreamGroupMessages opens a long-lived stream of inbound group
+  // messages. The server holds a per-stream subscription to the
+  // visor's group inbox and pushes each delivered message to the
+  // client as it arrives. Replaces the net/rpc poll loop in
+  // 'cli skychat group listen', which would lose its underlying
+  // connection every 5 minutes to the per-conn deadline applied at
+  // init_apps.go for unary-RPC hang detection. Stream lifetime is
+  // the listen lifetime, no arbitrary ceiling.
+  rpc StreamGroupMessages(GroupMessagesRequest) returns (stream GroupMessageEvent);
 }
 
 message PingRequest {
@@ -262,6 +272,37 @@ message CalcHop {
   string tp_id = 1;
   string from = 2;
   string to = 3;
+}
+
+// GroupMessagesRequest configures a group-message stream subscription.
+message GroupMessagesRequest {
+  // GroupId filters to one group. Empty subscribes to every group
+  // the visor is currently in (the default 'cli skychat group listen'
+  // behavior).
+  string group_id = 1;
+  // SinceTimestampNs replays buffered messages with TS strictly
+  // greater than this value before live deliveries start. Zero
+  // means "live only" — drains nothing from history. Mirrors the
+  // 'since' arg the previous GroupPoll RPC accepted.
+  int64 since_timestamp_ns = 2;
+}
+
+// GroupMessageEvent is one inbound group message delivered to the
+// stream. Mirrors visor.GroupMessage one-for-one.
+message GroupMessageEvent {
+  // TimestampNs is the message Unix-nanos timestamp from the sender.
+  int64 timestamp_ns = 1;
+  // GroupId is the group the message arrived on.
+  string group_id = 2;
+  // SenderPk is the publishing member's hex public key.
+  string sender_pk = 3;
+  // Body is the message text (may contain embedded newlines —
+  // callers that need one-line-per-event should escape on display).
+  string body = 4;
+  // Subscribed is set on a sentinel sent immediately after the
+  // server registers the subscription. Lets clients gate downstream
+  // RPCs on subscription liveness — same pattern AppLogEntry uses.
+  bool subscribed = 5;
 }
 
 // ProcessStat contains information about a running process
