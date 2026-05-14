@@ -514,13 +514,13 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		peerSubs: make(map[cipher.PubKey]*treestore.Subscriber),
 	}
 
-	// D1 peer subscribers: every OTHER member (excluding self AND
-	// the owner — the owner's feed is already covered by the legacy
-	// `sub` above for backward-compat with non-migrated owners).
-	// When D4 retires the legacy path, this loop will include the
-	// owner PK too.
+	// Federated mode: subscribe to every OTHER member's feed,
+	// INCLUDING the owner's. The legacy `sub` field above remains
+	// wired as a backward-compat fallback for owners on pre-federated
+	// binaries, but new owners publish to their own feed just like
+	// every other member — so peerSubs covers them too.
 	for _, peerPK := range cfg.Record.Members {
-		if peerPK == cfg.MyPK || peerPK == cfg.Record.OwnerPK {
+		if peerPK == cfg.MyPK {
 			continue
 		}
 		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, treestore.SubConfig{Logger: log})
