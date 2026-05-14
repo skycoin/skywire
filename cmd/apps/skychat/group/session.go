@@ -1160,7 +1160,7 @@ func writeAndReadAck(c net.Conn, body []byte, msgID string) error {
 // astronomically unlikely.
 func newRelayMsgID() string {
 	var buf [8]byte
-	_, _ = cryptoRandRead(buf[:])
+	_, _ = cryptoRandRead(buf[:]) //nolint:errcheck // best-effort; tail of buf still random-enough for an id
 	return fmt.Sprintf("%016x", binary.BigEndian.Uint64(buf[:]))
 }
 

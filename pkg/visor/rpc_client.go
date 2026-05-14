@@ -1383,6 +1383,23 @@ func (rc *rpcClient) GroupLeave(id string) error {
 	return rc.Call("GroupLeave", &id, &struct{}{})
 }
 
+// GroupHistory implements API. Returns persisted group messages from
+// the visor's history store; returns the wrapped ErrGroupHistoryDisabled
+// when persistence is off.
+func (rc *rpcClient) GroupHistory(groupID string, limit int) ([]GroupMessage, error) {
+	var resp []GroupMessage
+	err := rc.Call("GroupHistory", &GroupHistoryRequest{GroupID: groupID, Limit: limit}, &resp)
+	return resp, err
+}
+
+// GroupHistoryGroups implements API. Returns the set of group IDs
+// that have any persisted messages on disk.
+func (rc *rpcClient) GroupHistoryGroups() ([]string, error) {
+	var resp []string
+	err := rc.Call("GroupHistoryGroups", &struct{}{}, &resp)
+	return resp, err
+}
+
 // TPSStatus returns the status of the embedded TPS.
 func (rc *rpcClient) TPSStatus() (*TPSStatus, error) {
 	var status TPSStatus

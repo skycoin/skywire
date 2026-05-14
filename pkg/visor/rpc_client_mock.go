@@ -1238,6 +1238,12 @@ func (mc *mockRPCClient) GroupDelete(_ string) error { return nil }
 // GroupLeave implements API.
 func (mc *mockRPCClient) GroupLeave(_ string) error { return nil }
 
+// GroupHistory implements API.
+func (mc *mockRPCClient) GroupHistory(_ string, _ int) ([]GroupMessage, error) { return nil, nil }
+
+// GroupHistoryGroups implements API.
+func (mc *mockRPCClient) GroupHistoryGroups() ([]string, error) { return nil, nil }
+
 // TPSStatus implements API.
 func (mc *mockRPCClient) TPSStatus() (*TPSStatus, error) {
 	return &TPSStatus{Enabled: false}, nil
