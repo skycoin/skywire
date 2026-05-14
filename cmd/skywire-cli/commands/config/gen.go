@@ -1594,7 +1594,16 @@ func configureApps(log *logging.Logger) {
 				Binary:    "skywire",
 				AutoStart: isSkychatEnable,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      append([]string{"app", "skychat"}, "--addr", chatAddr),
+				// --pair-enable opens the chat-app ↔ visor pair-RPC
+				// channel that group chat needs for the per-partner
+				// CXO feeds (#2580 federated send + #2585 admin mirror)
+				// and for `cli skychat group history` to work. Without
+				// it the chat-app's /status reports
+				// `groups_error: pair-rpc-disabled` and group SSE events
+				// don't reach listeners. Default-on here so a generated
+				// config "just works" for groups; operators who don't
+				// want pair-RPC can edit the args manually.
+				Args: append([]string{"app", "skychat"}, "--addr", chatAddr, "--pair-enable"),
 			},
 			{
 				Name:      skyenv.SkysocksName,
@@ -1673,7 +1682,11 @@ func configureApps(log *logging.Logger) {
 				Name:      skyenv.SkychatName,
 				AutoStart: isSkychatEnable,
 				Port:      routing.Port(skyenv.SkychatPort),
-				Args:      []string{"--addr", chatAddr},
+				// --pair-enable opens chat-app ↔ visor pair-RPC for
+				// group chat. See the external-apps branch above for
+				// the rationale; mirrored here so internal-apps
+				// generated configs behave the same.
+				Args: []string{"--addr", chatAddr, "--pair-enable"},
 			},
 			{
 				Name:      skyenv.SkysocksName,
