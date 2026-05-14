@@ -744,15 +744,38 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 // inbound yet". On error, lastInboundNs stays at whatever it was
 // (seeded from Record.LastMessageAt at Open) and the Manager's
 // background reconnect loop keeps retrying.
-func (s *Session) Connect() error {
+func (s *Session) Connect(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	// Owner-feed subscriber (legacy path) — only set on member sessions.
 	// Failure here is fatal for the member's read path TODAY since
 	// peerSubs may not be enough until every visor migrates. Once D4
 	// retires the relay/owner-feed flow we'll relax this to "any sub
 	// succeeded" semantics.
+	//
+	// pkg/cxo/treestore.Subscriber.Connect is NOT context-aware
+	// internally (it eventually calls dmsg.Client.ConnectPK which
+	// blocks on network IO without a ctx hook). To honor our outer
+	// deadline we wrap each Connect call in a goroutine and select
+	// on ctx — the goroutine's underlying dial may still run to
+	// completion in the background, but it won't block the outer
+	// caller past ctx's deadline. A future refinement plumbs ctx
+	// through Subscriber.Connect → dmsg.ConnectPK for true
+	// cancellation.
 	if s.sub != nil {
-		if err := s.sub.Connect(s.cfg.Record.OwnerPK); err != nil {
-			return fmt.Errorf("group: Connect: %w", err)
+		done := make(chan error, 1)
+		go func() { done <- s.sub.Connect(s.cfg.Record.OwnerPK) }()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-done:
+			if err != nil {
+				return fmt.Errorf("group: Connect: %w", err)
+			}
 		}
 	}
 	// D1 per-PK peer subscribers. Best-effort: if a single peer's
@@ -780,10 +803,27 @@ func (s *Session) Connect() error {
 	peerSuccessCount := 0
 	now := time.Now().UnixNano()
 	for pk, ps := range peers {
-		if err := ps.Connect(pk); err != nil {
-			s.log.WithError(err).WithField("peer", pk.String()).
-				Debug("group: Connect: peer-sub Connect failed; will retry on next reconnect tick")
-			continue
+		// Bail out between peers if the outer deadline expired —
+		// don't pile up more orphan goroutines than necessary.
+		if err := ctx.Err(); err != nil {
+			break
+		}
+		done := make(chan error, 1)
+		pkLocal, psLocal := pk, ps
+		go func() { done <- psLocal.Connect(pkLocal) }()
+		select {
+		case <-ctx.Done():
+			// Outer deadline fired mid-Connect. The goroutine will
+			// eventually return; the buffered channel keeps it from
+			// leaking memory. We stop iterating remaining peers so
+			// the reconnect tick honors the deadline.
+			return ctx.Err()
+		case err := <-done:
+			if err != nil {
+				s.log.WithError(err).WithField("peer", pk.String()).
+					Debug("group: Connect: peer-sub Connect failed; will retry on next reconnect tick")
+				continue
+			}
 		}
 		peerSuccessCount++
 		// Bump per-peer lastInbound on every successful per-peer
@@ -897,7 +937,22 @@ func (s *Session) PeerPKs() []cipher.PubKey {
 // honest.
 //
 // No-op + nil error if pk isn't a known peer of this session.
-func (s *Session) ReconnectPeer(pk cipher.PubKey) error {
+//
+// Honors the provided context: if ctx fires before the underlying
+// Subscriber.Connect returns, ReconnectPeer returns ctx.Err()
+// promptly. The Subscriber.Connect goroutine continues to run in
+// the background (since treestore.Subscriber isn't yet ctx-aware
+// internally — see Session.Connect's comment for the longer-term
+// fix) but the buffered done channel prevents goroutine leakage:
+// the goroutine completes and exits cleanly when the network IO
+// finishes.
+func (s *Session) ReconnectPeer(ctx context.Context, pk cipher.PubKey) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	s.peerSubsMu.RLock()
 	ps := s.peerSubs[pk]
 	a := s.peerLastInboundNs[pk]
@@ -905,8 +960,15 @@ func (s *Session) ReconnectPeer(pk cipher.PubKey) error {
 	if ps == nil {
 		return nil
 	}
-	if err := ps.Connect(pk); err != nil {
-		return err
+	done := make(chan error, 1)
+	go func() { done <- ps.Connect(pk) }()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
 	}
 	if a != nil {
 		a.Store(time.Now().UnixNano())
