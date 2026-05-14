@@ -1,98 +1,93 @@
 # HTTP Authorization Middleware
 
-Skywire is made up of multiple services and nodes. Some of these services/nodes communicate via restful interfaces, and some of the endpoints require authentication and authorization.
+Skywire is composed of multiple services and nodes. Some of these
+communicate via RESTful interfaces; some endpoints require
+authentication and authorization.
 
-As nodes in the Skywire network are identified via public keys, an appropriate approach to authentication and authorization is via public/private key cryptography. The curve to use is `secp256k1`, and when referenced by the RESTFUL endpoints, it is to be represented as a hexadecimal string format.
+Nodes are identified by public keys, so the authentication scheme
+is based on public/private key cryptography. The curve used for
+node identity is `secp256k1`; public keys are represented in RESTful
+endpoints as lowercase hexadecimal strings.
 
-These HTTP security middleware features should be implemented within the `/pkg/utils/httpauth` module of the `skywire` repository. This module not only provides server-side logic, but also client-side logic to make interaction with the server-side more streamlined.
+## Authorization protocol
 
-## Authorization Procedures
+To prevent replay attacks and unauthorized access, each remote
+entity (identified by its public key) is associated with a
+monotonically increasing *Security Nonce*. The remote entity SHALL
+sign the *Security Nonce* concatenated with the request body on
+every authenticated request.
 
-To avoid replay attacks and unauthorized access, each remote entity (represented by it's public key) is assigned an *Security Nonce* by the `httpauth` module. The remote entity is required to sign the *Security Nonce* alongside the request body on every request.
+The next expected *Security Nonce* SHALL increment by one for each
+request that the server processes successfully (HTTP 2xx response).
+On any non-2xx response, the next expected nonce SHALL NOT change.
 
-For each successful request, the next expected *Security Nonce* is to increment. The `httpauth` module is to provide an interface named `NonceStorer` to keep an record of "remote entity public key" to "next expected nonce" associations. The following is a proposed structure for `NonceStorer`;
+The initial next expected *Security Nonce* for a remote entity is
+zero. Servers MAY omit storage entries for remotes whose
+next-expected nonce is still zero.
 
-```golang
-// NonceStorer stores Incrementing Security Nonces.
-type NonceStorer interface {
+## Request headers
 
-    // IncrementNonce increments the nonce associated with the specified remote entity.
-    // It returns the next expected nonce after it has been incremented and returns error on failure.
-    IncrementNonce(ctx context.Context, remotePK cipher.PubKey) (nonce uint64, err error)
+An authenticated request SHALL carry the following headers (`SW`
+denotes Skywire):
 
-    // Nonce obtains the next expected nonce for a given remote entity (represented by public key).
-    // It returns error on failure.
-    Nonce(ctx context.Context, remotePK cipher.PubKey) (nonce uint64, err error)
+| Header      | Value |
+|-------------|-------|
+| `SW-Public` | The remote's public key, hexadecimal-encoded. |
+| `SW-Nonce`  | The current Security Nonce for this request, decimal-encoded. |
+| `SW-Sig`    | The signature, hexadecimal-encoded, over `SHA256(nonce_bytes \|\| body)`, where `nonce_bytes` is the 8-byte big-endian encoding of the nonce and `body` is the verbatim request body. |
 
-    // Count obtains the number of entries stored in the underlying database.
-    Count(ctx context.Context) (n int, err error)
-}
-```
+The server SHALL reject a request with HTTP 401 if any of the
+following hold:
 
-Take note that the only times the next-expected *Security Nonce* (for a given remote entity) is to increment, is when a successful request happens.
+- The public key in `SW-Public` is not whitelisted (when a
+  whitelist is configured).
+- The nonce in `SW-Nonce` does not match the server's next-expected
+  nonce for the entity.
+- The signature in `SW-Sig` does not verify against the
+  reconstructed `SHA256(nonce_bytes || body)` digest using the
+  declared public key.
+- The request body length exceeds the server's configured maximum
+  (when set).
 
-Initially (when no successful requests has been processed for a given remote entity), the next expected *Security Nonce* should always be zero. When it is this value, the underlying database for the `NonceStorer` implementation should not need an entry for it.
+## Nonce-recovery endpoint
 
-For every request that requires authentication and authorization in this manner, the structure `httpauth.Server` is to handle it. Specifically, it is to "wrap" the original `http.HandlerFunc` to add additional logic for checking the request. Consequently, the `httpauth.Client` appends the needed additional headers to the request.
-
-The following extra header values are required (`SW` stands for Skywire);
-
-- `SW-Public` - Specifies the public key (hexadecimal string representation) of the Skywire Node performing this operation.
-- `SW-Nonce` - Specifies the incrementing nonce provided by this operation.
-- `SW-Sig` - Specifies the of the signature (hexadecimal string representation) of the hash result of the concatenation of the Security Nonce + Body of the request.
-
-The `httpauth.Server` should also provide the `http.HandlerFunc` which obtains the next expected incrementing nonce for a given public key. This is required when a remote entity looses sync. A successful response of this call should look something of the following;
+The server SHALL expose an endpoint that returns the
+next-expected Security Nonce for a given public key, so a remote
+that has lost sync can recover without an out-of-band channel.
+The endpoint response body SHALL be:
 
 ```json
 {
-    "edge": "<public-key>",
-    "next_nonce": 0
+    "edge": "<public-key-hex>",
+    "next_nonce": <uint64>
 }
 ```
 
-The following is a proposed implementation of `httpauth.Server`;
+The nonce-recovery endpoint itself is not authenticated.
 
-```golang
-package httpauth
+## Storage contract
 
-// Server provides server-side logic for Skywire-related RESTFUL authorization and authentication.
-type Server struct {
-    // implementation ...
-}
+The server-side storage layer SHALL provide:
 
-// NewServer creates a new authentication server with the provided NonceStorer.
-func NewServer(store NonceStorer) *Server {
-    // implementation ...
-}
+- An operation to retrieve the next-expected nonce for a given
+  public key. The result SHALL be zero when no entry exists.
+- An atomic operation to retrieve-and-increment the next-expected
+  nonce for a public key in a single step, returning the
+  post-increment value. The atomicity guarantee is required to
+  prevent two concurrent requests from racing past the same nonce.
+- An operation to enumerate the number of stored entries (for
+  operational visibility).
 
-// WrapConfig configures the '(*Server).Wrap' function.
-type WrapConfig struct {
-    // MaxHTTPBodyLen specifies the max body length that is acceptable.
-    // No limit is set if the value is 0.
-    MaxHTTPBodyLen  int
+## Client contract
 
-    // PubKeyWhitelist specifies the whitelisted public keys.
-    // If value is nil, no whitelist rules are set.
-    PubKeyWhitelist []cipher.PubKey
-}
+A client implementation SHALL:
 
-// Wrap wraps a http.HandlerFunc and adds authentication logic.
-// The original http.HandlerFunc is responsible for setting the status code.
-// The middleware logic should only increment the security nonce if the status code
-// from the original http.HandlerFunc is of 2xx value (representing success).
-func (as *Server) Wrap(config *WrapConfig, original http.HandlerFunc) http.HandlerFunc {
-    // implementation ...
-}
-
-// HandleNextNonce returns a http handler that 
-func (as *Server) NextNonceHandler(remotePK cipher.PubKey) http.HandlerFunc {
-    // implementation ...
-}
-```
-
-Take note that for the `(*Server).Wrap` function, we will need to define a custom `http.ResponseWriter` to obtain the status code (https://www.reddit.com/r/golang/comments/7p35s4/how_do_i_get_the_response_status_for_my_middleware/).
-
-The `httpauth.Client` implementation is responsible for providing logic for the following actions;
-
-- Keep a local record of the next expected *Security Nonce*.
-- Adding security header values to a given request (`http.Request`).
+- Track the next-expected Security Nonce locally per server it
+  talks to.
+- On every authenticated request, set the three `SW-*` headers as
+  described above using the locally tracked nonce.
+- On a successful (2xx) response, increment its local nonce by one.
+- On HTTP 401 with a `next_nonce` mismatch, re-sync by calling the
+  nonce-recovery endpoint and retrying once. A second 401 indicates
+  a real authorization failure (key not whitelisted, signature
+  invalid) and SHALL NOT be retried automatically.

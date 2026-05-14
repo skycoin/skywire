@@ -1,5 +1,11 @@
 # `app2`
 
+> **STATUS: Draft proposal — non-normative.** This document is a
+> design proposal for a future refactor of the `app` module. It is
+> kept in the specifications directory for historical reference;
+> none of its requirements are binding on current implementations.
+> See `12-App_Server.md` for the normative app-server contract.
+
 The current `app` module of Skywire is a mess. It is hard to test and it's actual communication logic is split across multiple packages. This proposal details how I would envision an *ideal* `app` package, and also how we can migrate and eventually scrap the old `app` module.
 
 ## Overview
