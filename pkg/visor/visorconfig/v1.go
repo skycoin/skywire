@@ -21,19 +21,20 @@ type V1 struct {
 	*Common
 	mu sync.RWMutex
 
-	Dmsg          *dmsgc.DmsgConfig   `json:"dmsg"`
-	Dmsgpty       *Dmsgpty            `json:"dmsgpty,omitempty"`
-	Dmsgscp       *Dmsgscp            `json:"dmsgscp,omitempty"`
-	UIServer      *UIServer           `json:"ui_server,omitempty"`
-	LogServer     *LogServer          `json:"log_server,omitempty"`
-	DmsgWeb       *DmsgWebConfig      `json:"dmsg_web,omitempty"`
-	SkynetWeb     *SkynetWebConfig    `json:"skynet_web,omitempty"`
-	Rewards       *RewardsConfig      `json:"rewards,omitempty"`
-	STCP          *network.STCPConfig `json:"skywire-tcp,omitempty"`
-	Transport     *Transport          `json:"transport"`
-	Routing       *Routing            `json:"routing"`
-	UptimeTracker *UptimeTracker      `json:"uptime_tracker,omitempty"`
-	Launcher      *Launcher           `json:"launcher"`
+	Dmsg          *dmsgc.DmsgConfig    `json:"dmsg"`
+	Dmsgpty       *Dmsgpty             `json:"dmsgpty,omitempty"`
+	Dmsgscp       *Dmsgscp             `json:"dmsgscp,omitempty"`
+	UIServer      *UIServer            `json:"ui_server,omitempty"`
+	LogServer     *LogServer           `json:"log_server,omitempty"`
+	DmsgWeb       *DmsgWebConfig       `json:"dmsg_web,omitempty"`
+	SkynetWeb     *SkynetWebConfig     `json:"skynet_web,omitempty"`
+	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
+	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
+	STCP          *network.STCPConfig  `json:"skywire-tcp,omitempty"`
+	Transport     *Transport           `json:"transport"`
+	Routing       *Routing             `json:"routing"`
+	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
+	Launcher      *Launcher            `json:"launcher"`
 
 	// Stats configures the visor-local telemetry store. Nil/zero
 	// values use defaults; Disabled=true skips the store entirely.
@@ -275,6 +276,44 @@ type SkynetWebConfig struct {
 	// either is missing or unreadable; it does not refuse to start.
 	TLSCAPath    string `json:"tls_ca_path,omitempty"`
 	TLSCAKeyPath string `json:"tls_ca_key_path,omitempty"`
+}
+
+// SkymailBridgeConfig configures the embedded SMTP-aware bridge that
+// relays recipient envelopes of the form
+// user@<host>.<base32-pk>.skynet (mode b) or
+// user@<base32-pk>.skynet (mode a) to a peer visor's exposed SMTP
+// listener over the visor's existing dmsg session.
+//
+// Structurally parallel to DmsgWebConfig — runs inside the visor
+// process, lifecycled via RPC (SetEmbeddedProxyEnabled("bridge", …)),
+// no separate launcher app needed. Operators who don't run a full
+// visor can use the standalone binary at cmd/smb instead.
+type SkymailBridgeConfig struct {
+	// Enable must be true for the bridge to start.
+	Enable bool `json:"enable"`
+	// Addr is the local TCP listener Postfix's transport_map relays
+	// to (e.g. "127.0.0.1:1025"). Default "127.0.0.1:1025".
+	Addr string `json:"addr,omitempty"`
+	// Mode selects how the recipient is rewritten before relay:
+	//   "b" (default) — strip ".<pk><suffix>" from RCPT TO. Receiver
+	//                   keeps its existing domain identity.
+	//   "a"           — forward verbatim. Receiver's Postfix must
+	//                   accept "<pk><suffix>" in mydestination.
+	Mode string `json:"mode,omitempty"`
+	// Suffix is the TLD the bridge treats as a skywire-routed
+	// recipient. Defaults to ".skynet". Independent of the resolver's
+	// DomainSuffix — operators may serve mail under a different TLD
+	// than the resolver if they have reason to.
+	Suffix string `json:"suffix,omitempty"`
+	// HeloName is the EHLO/HELO greeting the bridge sends to the
+	// peer's Postfix. Mostly cosmetic (appears in Received: trace
+	// headers). Default "skymail-bridge.local".
+	HeloName string `json:"helo_name,omitempty"`
+	// RemotePort is the dmsg routing port to dial on the peer.
+	// Default 25 (matching the SMTP convention). Receiver must
+	// expose Postfix's smtpd on this port via
+	// `skywire cli serve add 25 --to 127.0.0.1:25`.
+	RemotePort uint16 `json:"remote_port,omitempty"`
 }
 
 // Transport defines a transport config.
