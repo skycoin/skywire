@@ -33,6 +33,7 @@ package group
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -53,6 +54,11 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
+
+// cryptoRandRead aliases crypto/rand.Read so newRelayMsgID reads
+// 8 bytes of entropy without re-importing the package's name at
+// each call site.
+var cryptoRandRead = cryptoRand.Read
 
 // MessagePathPrefix is the prefix used for message leaves within a
 // group feed. Matches the pairing analog so an operator who
@@ -258,6 +264,13 @@ const relayPortOffset uint16 = 1
 // group's Members allowlist, then re-publishes into the CXO feed
 // using SenderPK so the attribution survives the relay hop.
 //
+// MsgID, when set by the member, requests a RelayAck reply on the
+// same stream after the owner's publishAs succeeds. Pre-#group-
+// relay-ack members didn't set it; pre-#group-relay-ack owners
+// don't reply. Both directions are backward-compatible: a missing
+// MsgID just skips the ack roundtrip, a missing ack reply just
+// times out cleanly on the member's read.
+//
 // Note: this envelope is not encrypted on its own; for ModePrivate
 // groups, the owner AES-GCM-seals the Text before publishing to
 // the feed (same shape as a direct owner Send). The dmsg session
@@ -266,12 +279,38 @@ type RelayMessage struct {
 	SenderPK cipher.PubKey `json:"sender_pk"`
 	Text     string        `json:"text"`
 	TS       time.Time     `json:"ts"`
+	MsgID    string        `json:"msg_id,omitempty"`
+}
+
+// RelayAck is the owner's reply to a RelayMessage with MsgID set.
+// Written on the same stream after the owner's publishAs has
+// returned successfully — i.e. the owner has committed the leaf to
+// the CXO feed. The member receives RelayAck as positive
+// confirmation that the message reached the feed (not just that
+// the relay stream accepted the bytes).
+//
+// On the wire: same length-prefixed framing as RelayMessage, JSON
+// body with {ack: true, msg_id: <echoed>}. The Ack=true sentinel
+// distinguishes a RelayAck from any future stream-bound envelope
+// type the relay protocol may grow.
+type RelayAck struct {
+	Ack   bool   `json:"ack"`
+	MsgID string `json:"msg_id,omitempty"`
 }
 
 // relayMaxFrameSize bounds the claimed-length sanity check on the
 // owner's read side. 64 KiB matches every other framed-wire in the
 // skychat tree.
 const relayMaxFrameSize = 64 * 1024
+
+// relayAckReadTimeout caps how long the member waits for the
+// owner's RelayAck before giving up. Sized for "owner publishAs
+// completes in a normal CXO commit window" — bbolt-backed
+// publishers typically commit in tens of ms, but a cold-cache
+// commit or a slow disk can stretch. 5s is generous enough to
+// avoid spurious timeouts on healthy owners while still surfacing
+// a dead-owner case promptly.
+const relayAckReadTimeout = 5 * time.Second
 
 // Open constructs the session's CXO node and brings up the role-
 // appropriate publisher OR subscriber. For owner role, the
@@ -886,6 +925,25 @@ func (s *Session) handleRelay(c net.Conn) {
 		s.log.WithError(err).Debug("group: relay publish")
 		return
 	}
+	// Send a RelayAck back so the member can distinguish "I wrote
+	// bytes" from "owner committed the leaf to the CXO feed". Only
+	// when the member set MsgID — empty MsgID is a pre-ack member
+	// who can't parse the response, so writing one would be wasted
+	// bytes and risk confusing the read side. Best-effort: a failed
+	// ack write doesn't roll back the publish (the message IS in
+	// the feed), but the member will see ErrRelayNoAck and can
+	// decide policy.
+	if rm.MsgID != "" {
+		ack := RelayAck{Ack: true, MsgID: rm.MsgID}
+		body, err := json.Marshal(ack)
+		if err != nil {
+			s.log.WithError(err).Debug("group: relay ack marshal")
+			return
+		}
+		if err := writeFrame(c, body); err != nil {
+			s.log.WithError(err).Debug("group: relay ack write")
+		}
+	}
 }
 
 // isMember returns whether pk appears in the group's Members
@@ -1010,7 +1068,8 @@ func (s *Session) SubmitToOwner(ctx context.Context, text string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	rm := RelayMessage{SenderPK: s.cfg.MyPK, Text: text, TS: time.Now().UTC()}
+	msgID := newRelayMsgID()
+	rm := RelayMessage{SenderPK: s.cfg.MyPK, Text: text, TS: time.Now().UTC(), MsgID: msgID}
 	body, err := json.Marshal(rm)
 	if err != nil {
 		return fmt.Errorf("group: SubmitToOwner: marshal: %w", err)
@@ -1022,12 +1081,19 @@ func (s *Session) SubmitToOwner(ctx context.Context, text string) error {
 		Port:   routing.Port(relayPort),
 	}
 	if conn, dialErr := dialSkynetRelay(ctx, skyAddr); dialErr == nil {
-		writeErr := writeFrame(conn, body)
+		ackErr := writeAndReadAck(conn, body, msgID)
 		_ = conn.Close() //nolint:errcheck
-		if writeErr == nil {
+		if ackErr == nil {
 			return nil
 		}
-		s.log.WithError(writeErr).Debug("group: SubmitToOwner: skynet write failed, falling back to dmsg")
+		// A noAck error is a non-fatal: the bytes were written but
+		// the owner didn't reply (pre-#group-relay-ack binary, or
+		// owner's publishAs is slow). Surface as a soft error the
+		// caller can choose to treat as "delivered but unconfirmed."
+		if errors.Is(ackErr, ErrRelayNoAck) {
+			return ackErr
+		}
+		s.log.WithError(ackErr).Debug("group: SubmitToOwner: skynet write/ack failed, falling back to dmsg")
 	} else {
 		s.log.WithError(dialErr).Debug("group: SubmitToOwner: skynet dial failed, falling back to dmsg")
 	}
@@ -1039,10 +1105,63 @@ func (s *Session) SubmitToOwner(ctx context.Context, text string) error {
 		return fmt.Errorf("group: SubmitToOwner: dial owner relay (dmsg): %w", err)
 	}
 	defer stream.Close() //nolint:errcheck
-	if err := writeFrame(stream, body); err != nil {
+	if err := writeAndReadAck(stream, body, msgID); err != nil {
+		if errors.Is(err, ErrRelayNoAck) {
+			return err
+		}
 		return fmt.Errorf("group: SubmitToOwner: write (dmsg): %w", err)
 	}
 	return nil
+}
+
+// ErrRelayNoAck signals that the relay message bytes were written
+// successfully but no RelayAck arrived within relayAckReadTimeout
+// (or the owner is on a pre-ack binary). Caller can treat this as
+// "delivered to the owner's wire but not confirmed-published" —
+// e.g. surface to the operator as "sent (unconfirmed)" rather than
+// either a clean success or a hard failure.
+var ErrRelayNoAck = errors.New("group: relay: no ack within timeout (owner pre-ack or slow publish)")
+
+// writeAndReadAck writes the framed body to conn and, if msgID is
+// non-empty, attempts to read a framed RelayAck within
+// relayAckReadTimeout. Returns nil on confirmed ack, ErrRelayNoAck
+// on missing/timeout-out ack but successful write, or a wrapped
+// error on write failure.
+func writeAndReadAck(c net.Conn, body []byte, msgID string) error {
+	if err := writeFrame(c, body); err != nil {
+		return fmt.Errorf("write: %w", err)
+	}
+	if msgID == "" {
+		return nil
+	}
+	// Read-deadline scope: deadline applies only to this read, not
+	// to any future use of the conn. Caller closes the conn anyway,
+	// so we don't bother resetting the deadline on exit.
+	if dl, ok := c.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = dl.SetReadDeadline(time.Now().Add(relayAckReadTimeout)) //nolint:errcheck
+	}
+	payload, err := readFrame(c)
+	if err != nil {
+		return ErrRelayNoAck
+	}
+	var ack RelayAck
+	if err := json.Unmarshal(payload, &ack); err != nil {
+		return ErrRelayNoAck
+	}
+	if !ack.Ack || ack.MsgID != msgID {
+		return ErrRelayNoAck
+	}
+	return nil
+}
+
+// newRelayMsgID returns a hex-encoded 64-bit random identifier for
+// pairing a RelayMessage with its RelayAck. Cheap to generate, big
+// enough to make collisions across a session's relay traffic
+// astronomically unlikely.
+func newRelayMsgID() string {
+	var buf [8]byte
+	_, _ = cryptoRandRead(buf[:])
+	return fmt.Sprintf("%016x", binary.BigEndian.Uint64(buf[:]))
 }
 
 // dialSkynetRelay attempts the skynet dial with a 15s deadline.
