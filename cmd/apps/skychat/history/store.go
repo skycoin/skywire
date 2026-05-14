@@ -39,6 +39,12 @@ type BoltStore struct {
 
 const (
 	messagesBucket = "messages"
+	// groupsBucket is the parallel top-level bucket for group-chat
+	// messages. Nested buckets keyed by group ID (string), keys are
+	// big-endian 8-byte timestamps, values JSON GroupMessage. Kept
+	// schema-separate from 1:1 messages so a query like ListByPeer
+	// can't accidentally surface group traffic and vice versa.
+	groupsBucket = "groups"
 )
 
 // NewBoltStore opens (or creates) a BoltDB file at path and returns a Store.
@@ -59,7 +65,10 @@ func NewBoltStore(path string, limits Limits) (*BoltStore, error) {
 	}
 
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, e := tx.CreateBucketIfNotExists([]byte(messagesBucket))
+		if _, e := tx.CreateBucketIfNotExists([]byte(messagesBucket)); e != nil {
+			return e
+		}
+		_, e := tx.CreateBucketIfNotExists([]byte(groupsBucket))
 		return e
 	}); err != nil {
 		_ = db.Close() //nolint:errcheck
@@ -236,6 +245,146 @@ func (s *BoltStore) Peers() ([]string, error) {
 		})
 	})
 	return peers, err
+}
+
+// AppendGroup implements Store. Same limit semantics as Append, but the
+// rate-limit / whitelist key is the GroupID instead of a peer PK. Groups
+// are typically larger than 1:1 traffic (N senders fan in) so the
+// per-key cap is the most important guardrail here — TotalCapBytes
+// still applies globally across both 1:1 and group buckets.
+func (s *BoltStore) AppendGroup(msg GroupMessage) error {
+	if msg.GroupID == "" {
+		return ErrEmptyPeer
+	}
+	if msg.Timestamp.IsZero() {
+		msg.Timestamp = time.Now().UTC()
+	}
+
+	if s.limits.MaxMessageSize > 0 && len(msg.Text) > s.limits.MaxMessageSize {
+		return ErrTooLarge
+	}
+
+	if s.limits.WhitelistOnly {
+		if !s.limits.Whitelist[msg.GroupID] {
+			return ErrNotWhitelisted
+		}
+	}
+
+	if !s.acceptRate(msg.GroupID) {
+		return ErrRateLimited
+	}
+
+	if s.limits.TotalCapBytes > 0 {
+		if fi, err := os.Stat(s.db.Path()); err == nil {
+			if fi.Size() >= s.limits.TotalCapBytes {
+				return ErrStorageFull
+			}
+		}
+	}
+
+	raw, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("marshal group message: %w", err)
+	}
+
+	return s.db.Update(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(groupsBucket))
+		gBkt, err := root.CreateBucketIfNotExists([]byte(msg.GroupID))
+		if err != nil {
+			return err
+		}
+
+		key := tsKey(msg.Timestamp)
+		for gBkt.Get(key) != nil {
+			key = nextKey(key)
+		}
+		if err := gBkt.Put(key, raw); err != nil {
+			return err
+		}
+
+		if s.limits.PerPeerCap > 0 {
+			if err := evictOldest(gBkt, s.limits.PerPeerCap); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// ListByGroup implements Store. Returns up to limit most recent
+// messages for the named group, newest last. limit <= 0 returns all.
+// Empty groupID returns an empty slice (rather than scanning every
+// group; callers that want recent-across-groups should iterate Groups()
+// + per-group ListByGroup).
+func (s *BoltStore) ListByGroup(groupID string, limit int) ([]GroupMessage, error) {
+	if groupID == "" {
+		return nil, nil
+	}
+	var msgs []GroupMessage
+	err := s.db.View(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(groupsBucket))
+		gBkt := root.Bucket([]byte(groupID))
+		if gBkt == nil {
+			return nil
+		}
+		return iterateGroupForward(gBkt, limit, func(m GroupMessage) error {
+			msgs = append(msgs, m)
+			return nil
+		})
+	})
+	return msgs, err
+}
+
+// Groups implements Store. Returns the set of group IDs that have any
+// stored messages — symmetric with Peers() for the 1:1 store.
+func (s *BoltStore) Groups() ([]string, error) {
+	var groups []string
+	err := s.db.View(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(groupsBucket))
+		return root.ForEachBucket(func(k []byte) error {
+			groups = append(groups, string(k))
+			return nil
+		})
+	})
+	return groups, err
+}
+
+// iterateGroupForward mirrors iterateForward's tail-walk-then-reverse
+// pattern but decodes GroupMessage records. The two functions could be
+// merged with generics; kept parallel here for symmetry with the
+// existing 1:1 path and so callers can pass a typed callback.
+func iterateGroupForward(bkt *bolt.Bucket, limit int, fn func(GroupMessage) error) error {
+	if limit > 0 {
+		cur := bkt.Cursor()
+		var collected []GroupMessage
+		for k, v := cur.Last(); k != nil; k, v = cur.Prev() {
+			var m GroupMessage
+			if err := json.Unmarshal(v, &m); err != nil {
+				continue
+			}
+			collected = append(collected, m)
+			if len(collected) >= limit {
+				break
+			}
+		}
+		// Reverse so newest is last.
+		for i, j := 0, len(collected)-1; i < j; i, j = i+1, j-1 {
+			collected[i], collected[j] = collected[j], collected[i]
+		}
+		for _, m := range collected {
+			if err := fn(m); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return bkt.ForEach(func(_, v []byte) error {
+		var m GroupMessage
+		if err := json.Unmarshal(v, &m); err != nil {
+			return nil // skip unparseable
+		}
+		return fn(m)
+	})
 }
 
 // Close implements Store.

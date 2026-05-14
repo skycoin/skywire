@@ -82,6 +82,11 @@ type GroupSendArgs struct {
 // bolt store failed to open).
 var ErrGroupingDisabled = errors.New("grouping: manager not initialized")
 
+// ErrGroupHistoryDisabled is returned by Visor.GroupHistory /
+// GroupHistoryGroups when persistence is off (the default). Enable by
+// setting Skychat.GroupHistoryDB or the equivalent config knob.
+var ErrGroupHistoryDisabled = errors.New("grouping: history persistence not enabled")
+
 // ErrGroupNotFound is returned for an ID the local store doesn't
 // know about. Distinct from a generic error so the CLI can render
 // "no such group" vs a transport-layer failure.
@@ -231,6 +236,48 @@ func (v *Visor) GroupPoll(since time.Time) ([]GroupMessage, error) {
 	return inbox.snapshotAfter(since), nil
 }
 
+// GroupHistoryFetcher is the read side of the group history store.
+// Wired in init_group.go as an adapter around skychat/history.BoltStore
+// when persistence is enabled. nil when disabled — callers must
+// nil-check and return ErrGroupHistoryDisabled.
+type GroupHistoryFetcher interface {
+	// ListByGroup returns up to limit most recent messages for the
+	// named group, newest last. Limit <= 0 returns all stored.
+	ListByGroup(groupID string, limit int) ([]GroupMessage, error)
+	// Groups returns the set of group IDs that have any stored
+	// messages — useful for operator inspection ('cli skychat group
+	// history --list-groups' style introspection).
+	Groups() ([]string, error)
+}
+
+// GroupHistory returns up to limit most recent persisted messages for
+// the named group. Persistence is opt-in (see init_group.go's history
+// store wiring); when disabled, returns ErrGroupHistoryDisabled.
+// Mirrors GroupPoll's RPC shape but reads from disk instead of the
+// in-memory ring buffer — operators can recover messages across visor
+// restarts.
+func (v *Visor) GroupHistory(groupID string, limit int) ([]GroupMessage, error) {
+	v.initLock.RLock()
+	hist := v.grouping.history
+	v.initLock.RUnlock()
+	if hist == nil {
+		return nil, ErrGroupHistoryDisabled
+	}
+	return hist.ListByGroup(groupID, limit)
+}
+
+// GroupHistoryGroups lists every group ID that has stored messages.
+// Returns ErrGroupHistoryDisabled when persistence is off.
+func (v *Visor) GroupHistoryGroups() ([]string, error) {
+	v.initLock.RLock()
+	hist := v.grouping.history
+	v.initLock.RUnlock()
+	if hist == nil {
+		return nil, ErrGroupHistoryDisabled
+	}
+	return hist.Groups()
+}
+
 // GroupDelete tears down an owner-side group and marks it revoked.
 func (v *Visor) GroupDelete(id string) error {
 	mgr := v.groupManager()
@@ -295,6 +342,23 @@ type groupInbox struct {
 
 	subsMu sync.RWMutex
 	subs   map[*groupSub]struct{}
+
+	// hist, when non-nil, gets a copy of every delivered message for
+	// disk persistence. Best-effort: write errors are logged but never
+	// block the in-memory ring or the live subscriber fan-out. nil
+	// when persistence is disabled (the default).
+	hist groupHistorySink
+}
+
+// groupHistorySink is the interface the inbox uses to persist group
+// messages. Defined here (not imported from skychat/history) to keep
+// pkg/visor independent of cmd/apps/skychat at the type level — the
+// init_group.go wires an adapter that bridges to the concrete history
+// store.
+type groupHistorySink interface {
+	// AppendGroup stores one message. Returns nil on success, or an
+	// error that the caller should log but not propagate.
+	AppendGroup(groupID, senderPK, text string, ts time.Time, outgoing bool) error
 }
 
 // groupSub is a single live-subscription registered against the inbox.
@@ -352,6 +416,17 @@ func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychat
 		}
 	}
 	g.subsMu.RUnlock()
+
+	// Best-effort persist. Errors logged at the sink layer; this path
+	// never blocks delivery to the in-memory ring or the live
+	// subscriber fan-out.
+	if g.hist != nil {
+		// outgoing is determined upstream — this deliver is the
+		// inbound path, so messages here are by definition not from
+		// us. The hist sink's adapter can override if it ever wires
+		// the outbound side.
+		_ = g.hist.AppendGroup(groupID, senderPK.Hex(), msg.Text, msg.TS, false) //nolint:errcheck
+	}
 	// Belt-and-suspenders: also tick the persisted last_message_at on
 	// the manager. The wrapped MessageHandler installed by openLocked
 	// is supposed to do this too, but during the 3-agent coordination

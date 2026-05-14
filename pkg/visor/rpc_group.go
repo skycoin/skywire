@@ -155,3 +155,40 @@ func (r *RPC) GroupLeave(id *string, _ *struct{}) (err error) {
 	}
 	return r.visor.GroupLeave(*id)
 }
+
+// GroupHistoryRequest is the input shape for GroupHistory. GroupID is
+// required; Limit caps the result set (0 = all).
+type GroupHistoryRequest struct {
+	GroupID string `json:"group_id"`
+	Limit   int    `json:"limit"`
+}
+
+// GroupHistory returns persisted group messages for a given group.
+// Returns ErrGroupHistoryDisabled when persistence is off — operators
+// enable it via Skychat.GroupHistoryDB in the visor config. Unlike
+// GroupPoll (which drains the in-memory ring), this RPC reads from
+// disk and survives visor restarts.
+func (r *RPC) GroupHistory(req *GroupHistoryRequest, out *[]GroupMessage) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupHistory", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	msgs, err := r.visor.GroupHistory(req.GroupID, req.Limit)
+	if err != nil {
+		return err
+	}
+	*out = msgs
+	return nil
+}
+
+// GroupHistoryGroups returns every group ID that has stored messages.
+// Returns ErrGroupHistoryDisabled when persistence is off.
+func (r *RPC) GroupHistoryGroups(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupHistoryGroups", nil)(out, &err)
+	groups, err := r.visor.GroupHistoryGroups()
+	if err != nil {
+		return err
+	}
+	*out = groups
+	return nil
+}
