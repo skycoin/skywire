@@ -46,7 +46,7 @@ var (
 func init() {
 	RootCmd.Flags().StringVar(&bindAddr, "addr", "127.0.0.1:1025", "local SMTP listen address (Postfix transport_map target)")
 	RootCmd.Flags().StringVar(&suffix, "suffix", skymailbridge.DefaultSuffix, "TLD suffix routed over dmsg")
-	RootCmd.Flags().StringVar(&mode, "mode", "b", "envelope mode: a=verbatim, b=strip .<pk><suffix> from RCPT TO")
+	RootCmd.Flags().StringVar(&mode, "mode", "b", "envelope mode — a: verbatim; b: strip .<pk><suffix> when the recipient is host-prefixed, forward verbatim when bare-PK (strict superset of a)")
 	RootCmd.Flags().StringVar(&heloName, "helo", skymailbridge.DefaultHeloName, "HELO/EHLO name presented to the peer's Postfix")
 	RootCmd.Flags().Uint16Var(&remotePort, "remote-port", 25, "dmsg port to dial on the peer (where its Postfix smtpd is exposed)")
 	RootCmd.Flags().StringVar(&skHex, "sk", "", "secret key hex (env: SKYMAIL_SK). When empty + no --sk-file, an ephemeral key is generated")
