@@ -234,8 +234,24 @@ func (m *Manager) Join(inv Invite) (Record, error) {
 // already-terminal record.
 func (m *Manager) Leave(id string) error { return m.terminate(id, StatusLeft) }
 
-// Delete tears down an owner-side group and marks it revoked.
-func (m *Manager) Delete(id string) error { return m.terminate(id, StatusRevoked) }
+// Delete tears down an admin-side group and marks it revoked. Only
+// visors that IsAdmin on the record may delete; non-admin members
+// should call Leave instead. Returns an error for the wrong-role
+// case so a typo doesn't silently revoke a group that another
+// admin still owns.
+func (m *Manager) Delete(id string) error {
+	r, ok, err := m.store.Get(id)
+	if err != nil {
+		return fmt.Errorf("group: Delete: get: %w", err)
+	}
+	if !ok {
+		return nil // already gone — idempotent, matches terminate's contract
+	}
+	if !r.IsAdmin(m.myPK) {
+		return errors.New("group: Delete: only admins can revoke a group; use Leave to depart")
+	}
+	return m.terminate(id, StatusRevoked)
+}
 
 func (m *Manager) terminate(id string, status Status) error {
 	r, ok, err := m.store.Get(id)
@@ -317,8 +333,14 @@ func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
 	if !ok {
 		return Record{}, fmt.Errorf("group: AddMember: no record for %s", id)
 	}
-	if r.Role != RoleOwner {
-		return Record{}, errors.New("group: AddMember: only owner-role can edit")
+	// Post-#admin-roles: roster authority lives on the Admins set, not
+	// on Role. Role still distinguishes publisher (owner) from
+	// subscriber (member) infrastructure at session-open time, but
+	// "who can add members" is now any visor whose PK is in
+	// r.IsAdmin(). The founder check inside IsAdmin keeps the legacy
+	// owner-only behavior on records whose Admins slice is empty.
+	if !r.IsAdmin(m.myPK) {
+		return Record{}, errors.New("group: AddMember: only admins can edit roster")
 	}
 	for _, existing := range r.Members {
 		if existing == pk {
@@ -334,6 +356,93 @@ func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
 	m.mu.RUnlock()
 	if live {
 		_ = sess.SetAllowlist(r.Members) //nolint:errcheck
+	}
+	return r, nil
+}
+
+// PromoteAdmin adds pk to the group's Admins set. Callable by any
+// existing admin. Idempotent — promoting an already-admin returns the
+// current record without mutating storage. The promoted PK gains
+// roster authority (AddMember / BuildInvite / Delete / promote+demote)
+// from the moment this call returns successfully on this visor; other
+// visors learn of the change through the next out-of-band roster
+// gossip (admin-mirror PR adds the on-feed channel).
+//
+// Note: in the federated send architecture, the promoted PK does not
+// need to already be a Member — promotion is a roster-authority grant,
+// not a membership change. Practically, an admin who isn't also a
+// member is unusual; callers should treat that as a separate AddMember
+// step where they want it.
+func (m *Manager) PromoteAdmin(id string, pk cipher.PubKey) (Record, error) {
+	r, ok, err := m.store.Get(id)
+	if err != nil {
+		return Record{}, fmt.Errorf("group: PromoteAdmin: get: %w", err)
+	}
+	if !ok {
+		return Record{}, fmt.Errorf("group: PromoteAdmin: no record for %s", id)
+	}
+	if !r.IsAdmin(m.myPK) {
+		return Record{}, errors.New("group: PromoteAdmin: only admins can promote")
+	}
+	if pk == (cipher.PubKey{}) {
+		return Record{}, errors.New("group: PromoteAdmin: pk required")
+	}
+	if r.IsAdmin(pk) {
+		return r, nil // already admin (founder OR explicit) — idempotent
+	}
+	r.Admins = append(r.Admins, pk)
+	r.EnsureFounderInAdmins()
+	if err := m.store.Put(r); err != nil {
+		return Record{}, fmt.Errorf("group: PromoteAdmin: store: %w", err)
+	}
+	return r, nil
+}
+
+// DemoteAdmin removes pk from the group's Admins set. Refuses to
+// demote the founder (r.OwnerPK) — the founder is the immutable
+// recovery anchor and demoting them would lock the group out of
+// roster recovery if every other admin's visor went offline. Other
+// admins MAY demote each other (no protection beyond the founder
+// rule); the assumption is that admins trust each other by virtue of
+// having been promoted.
+//
+// Idempotent on a PK that wasn't an admin to begin with — returns the
+// current record without mutating storage. Errors only on store
+// failure, the founder-demote attempt, and the only-admins-can-demote
+// gate.
+func (m *Manager) DemoteAdmin(id string, pk cipher.PubKey) (Record, error) {
+	r, ok, err := m.store.Get(id)
+	if err != nil {
+		return Record{}, fmt.Errorf("group: DemoteAdmin: get: %w", err)
+	}
+	if !ok {
+		return Record{}, fmt.Errorf("group: DemoteAdmin: no record for %s", id)
+	}
+	if !r.IsAdmin(m.myPK) {
+		return Record{}, errors.New("group: DemoteAdmin: only admins can demote")
+	}
+	if pk == (cipher.PubKey{}) {
+		return Record{}, errors.New("group: DemoteAdmin: pk required")
+	}
+	if r.IsFounder(pk) {
+		return Record{}, errors.New("group: DemoteAdmin: cannot demote the founder")
+	}
+	out := r.Admins[:0]
+	mutated := false
+	for _, a := range r.Admins {
+		if a == pk {
+			mutated = true
+			continue
+		}
+		out = append(out, a)
+	}
+	if !mutated {
+		return r, nil // nothing to do — pk wasn't in the explicit Admins slice
+	}
+	r.Admins = out
+	r.EnsureFounderInAdmins()
+	if err := m.store.Put(r); err != nil {
+		return Record{}, fmt.Errorf("group: DemoteAdmin: store: %w", err)
 	}
 	return r, nil
 }
@@ -761,9 +870,11 @@ func (m *Manager) IsSubscriberAlive(id string) bool {
 // List returns every persisted record.
 func (m *Manager) List() ([]Record, error) { return m.store.List() }
 
-// BuildInvite encodes an invite link for an owner-side group. Returns
-// an error for member-side records (members can't invite in D1; only
-// the owner controls the allowlist).
+// BuildInvite encodes an invite link for an admin-side group. Any
+// visor that IsAdmin on the record can issue invites — the founder
+// implicitly, and explicit Admins entries (set via PromoteAdmin).
+// Non-admin members get an error so the legacy owner-only invariant
+// is preserved on records whose Admins slice is still founder-only.
 func (m *Manager) BuildInvite(id string) (string, error) {
 	r, ok, err := m.store.Get(id)
 	if err != nil {
@@ -772,8 +883,8 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("group: BuildInvite: no record for %s", id)
 	}
-	if r.Role != RoleOwner {
-		return "", errors.New("group: BuildInvite: only owners can issue invites")
+	if !r.IsAdmin(m.myPK) {
+		return "", errors.New("group: BuildInvite: only admins can issue invites")
 	}
 	return EncodeInvite(Invite{
 		ID:      r.ID,

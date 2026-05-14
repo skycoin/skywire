@@ -245,6 +245,8 @@ type API interface {
 	GroupGet(id string) (GroupInfo, error)
 	GroupInvite(id string) (string, error)
 	GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupSend(args GroupSendArgs) error
 	GroupPoll(since time.Time) ([]GroupMessage, error)
 	GroupDelete(id string) error
