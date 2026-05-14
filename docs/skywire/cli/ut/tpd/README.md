@@ -33,7 +33,7 @@ skywire cli ut tpd
       --json                 emit raw JSON
   -l, --list-versions        list version distribution (with --stats) or pk+version pairs
   -n, --min-daily int        only visors whose worst daily-uptime is >= this percent
-      --min-version string   filter visors with version >= this (e.g. <version>)
+      --min-version string   filter visors with version >= this (e.g. v1.3.40)
       --no-cxo               skip CXO subscriber-cache step
       --no-dmsg              skip direct DMSG HTTP step
       --no-http              skip direct HTTP fallback step

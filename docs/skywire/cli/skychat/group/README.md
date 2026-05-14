@@ -21,12 +21,15 @@ skywire cli skychat group
 - [add](add/README.md) — Owner: extend the group allowlist by one member PK
 - [create](create/README.md) — Create a new group (this visor becomes the owner)
 - [delete](delete/README.md) — Owner: delete a group (tears down the publisher)
+- [demote](demote/README.md) — Admin: revoke roster authority from PK (founder cannot be demoted)
+- [history](history/README.md) — Print persisted group messages from the visor's history store
 - [info](info/README.md) — Show one group's full record
 - [invite](invite/README.md) — Re-emit the invite link for an owner-side group
 - [join](join/README.md) — Join a group by invite link
 - [leave](leave/README.md) — Member: leave a group (tears down the subscriber)
 - [list](list/README.md) — List all groups this visor knows about
 - [listen](listen/README.md) — Stream inbound group messages (across every joined group)
+- [promote](promote/README.md) — Admin: grant roster authority (add/remove members, issue invites) to PK
 - [send](send/README.md) — Publish a message to a group (owner-only in v1)
 
 ## Global Flags

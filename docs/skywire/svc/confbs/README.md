@@ -21,11 +21,11 @@ GET /health - api.HealthCheckResponse
 [1m{[0m
       [1m[94m"build_info"[0m[1m:[0m [1m{[0m
         [1m[94m"commit"[0m[1m:[0m [32m"abc1234"[0m[1m,[0m
-        [1m[94m"date"[0m[1m:[0m [32m"<build-date>"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"<version>"[0m
+        [1m[94m"date"[0m[1m:[0m [32m"2024-01-15T10:30:00Z"[0m[1m,[0m
+        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
       [1m}[0m[1m,[0m
       [1m[94m"dmsg_address"[0m[1m:[0m [32m"02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5:80"[0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"<build-date>"[0m
+      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
     [1m}[0m
 
 GET / - visorconfig.Services

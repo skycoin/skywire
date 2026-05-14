@@ -17,15 +17,15 @@ GET /health - api.HealthCheckResponse
 [1m{[0m
       [1m[94m"build_info"[0m[1m:[0m [1m{[0m
         [1m[94m"commit"[0m[1m:[0m [32m"abc1234"[0m[1m,[0m
-        [1m[94m"date"[0m[1m:[0m [32m"<build-date>"[0m[1m,[0m
-        [1m[94m"version"[0m[1m:[0m [32m"<version>"[0m
+        [1m[94m"date"[0m[1m:[0m [32m"2024-01-15T10:30:00Z"[0m[1m,[0m
+        [1m[94m"version"[0m[1m:[0m [32m"v1.3.29"[0m
       [1m}[0m[1m,[0m
-      [1m[94m"started_at"[0m[1m:[0m [32m"<build-date>"[0m
+      [1m[94m"started_at"[0m[1m:[0m [32m"2024-01-15T10:00:00Z"[0m
     [1m}[0m
 
 GET /status - nm.Status
 [1m{[0m
-      [1m[94m"last_update"[0m[1m:[0m [32m"<build-date>"[0m[1m,[0m
+      [1m[94m"last_update"[0m[1m:[0m [32m"2024-01-15T10:30:00Z"[0m[1m,[0m
       [1m[94m"online_visors"[0m[1m:[0m [33m1542[0m[1m,[0m
       [1m[94m"alive_transports"[0m[1m:[0m [33m3256[0m[1m,[0m
       [1m[94m"available_vpn"[0m[1m:[0m [33m128[0m[1m,[0m

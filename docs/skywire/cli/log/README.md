@@ -26,7 +26,7 @@ skywire cli log
   -k, --pks string                   fetch only from specific public keys ; semicolon separated
   -d, --dir string                   save files to specified dir (default "log_collecting")
   -c, --clean                        delete files and folders on errors
-      --minv string                  minimum visor version to fetch from (default "<version>")
+      --minv string                  minimum visor version to fetch from (default "v1.3.19")
       --include-versions string      list of version that not satisfy our minimum version condition, but we want include them
   -n, --duration int                 number of days before today to fetch transport logs for
       --all                          consider all visors ; no version filtering
@@ -41,7 +41,7 @@ skywire cli log
       --cleanup                      run cleanup after collection (remove old/invalid files) (default true)
       --backup-dir string            backup directory to also clean (default "log_backups")
       --max-age int                  maximum age in days for files before deletion (default 7)
-      --prune-below-version string   during cleanup, also remove existing surveys whose skywire_version is below this (e.g. <version>)
+      --prune-below-version string   during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43)
       --rpc string                   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
 ```
 
