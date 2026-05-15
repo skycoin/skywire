@@ -110,7 +110,7 @@ type ServerConfig struct {
 }
 
 // RunClient starts the client-side bridge: UDP listener →
-// per-source stream → framer. Blocks until ctx is cancelled or the
+// per-source stream → framer. Blocks until ctx is canceled or the
 // underlying listener fails. The Dialer is invoked lazily on the
 // first datagram from each new source.
 func RunClient(ctx context.Context, cfg ClientConfig, dialer Dialer, log logrus.FieldLogger) error {
@@ -166,7 +166,7 @@ func RunClient(ctx context.Context, cfg ClientConfig, dialer Dialer, log logrus.
 
 // RunServer starts the server-side bridge: accept skywire streams,
 // read framed datagrams, forward via UDP. Blocks until ctx is
-// cancelled or the listener fails. accept is the inbound-stream
+// canceled or the listener fails. accept is the inbound-stream
 // accept function — provided by the caller because dmsg and
 // skywire-routing have different listen primitives.
 func RunServer(ctx context.Context, cfg ServerConfig, accept func() (net.Conn, error), log logrus.FieldLogger) error {
