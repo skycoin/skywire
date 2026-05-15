@@ -129,6 +129,24 @@ type DatagramRouteGroup struct {
 	// full when Handle tried to push. Surfaced via Stats() and
 	// useful for diagnosing slow consumers.
 	inboundDropped uint64 // atomic
+
+	// AEAD layer. outCipher seals outbound datagrams (called by
+	// WriteTo); inCipher opens inbound (called by Handle). Nil
+	// means the AEAD layer is bypassed — used by the existing
+	// Stage 2 unit tests that wire the type without crypto. Stage 4
+	// will require non-nil ciphers at construction time so production
+	// paths can't accidentally bypass the AEAD; the bypass mode is
+	// strictly for test convenience.
+	outCipher *DatagramCipher
+	inCipher  *DatagramCipher
+
+	// aeadAuthFailures counts inbound datagrams that failed to
+	// authenticate (forgery attempts, replay attempts, corrupted
+	// packets in flight). Surfaced via AEADAuthFailures() for
+	// diagnostics. Forged datagrams under load would otherwise be
+	// invisible to operators — this lets a monitor pick up an
+	// in-progress attack.
+	aeadAuthFailures uint64 // atomic
 }
 
 // NewDatagramRouteGroup constructs a DatagramRouteGroup. The
@@ -161,6 +179,20 @@ func NewDatagramRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing
 	}
 }
 
+// SetCiphers installs the per-direction AEAD ciphers. Called by the
+// setup-node integration in Stage 4 after the Noise handshake
+// produces the master key.
+//
+// Nil ciphers leave the AEAD layer bypassed (raw plaintext on the
+// wire) — only used by Stage 2 unit tests; the production path
+// MUST install ciphers before any traffic flows.
+func (dg *DatagramRouteGroup) SetCiphers(out, in *DatagramCipher) {
+	dg.mu.Lock()
+	defer dg.mu.Unlock()
+	dg.outCipher = out
+	dg.inCipher = in
+}
+
 // AddRule registers a (forward rule, transport, reverse rule)
 // triple. Called by the setup-node integration in Stage 4. Index
 // invariant: tps[i] is the transport for fwd[i]; rvs[i] is the
@@ -176,13 +208,21 @@ func (dg *DatagramRouteGroup) AddRule(fwd routing.Rule, tp *transport.ManagedTra
 	dg.rvs = append(dg.rvs, rv)
 }
 
-// MaxPayload returns the largest datagram size that WriteTo will
-// accept. In Stage 2 this is the raw wire cap (65535). Stage 3
-// will reduce it by the per-datagram AEAD overhead (8-byte nonce
-// counter + 16-byte Poly1305 tag = 24 bytes), at which point
-// MaxPayload returns 65511. Apps that consult this before sending
-// avoid the opaque-EMSGSIZE footgun.
+// MaxPayload returns the largest plaintext datagram that WriteTo
+// will accept. When AEAD is enabled (Stage 3 cipher installed via
+// SetCiphers) the cap is MaxDatagramPayload minus the 24-byte
+// per-datagram overhead (8-byte counter prefix + 16-byte Poly1305
+// tag) = 65511. When the cipher is unset the bypass mode returns
+// the raw wire cap.
+//
+// Apps consult this before sending to avoid the opaque-EMSGSIZE
+// footgun.
 func (dg *DatagramRouteGroup) MaxPayload() int {
+	dg.mu.Lock()
+	defer dg.mu.Unlock()
+	if dg.outCipher != nil {
+		return dg.outCipher.MaxPlaintext()
+	}
 	return MaxDatagramPayload
 }
 
@@ -212,9 +252,21 @@ func (dg *DatagramRouteGroup) WriteTo(data []byte, addr net.Addr) (int, error) {
 	}
 	rule := dg.fwd[0]
 	tp := dg.tps[0]
+	cipher := dg.outCipher
 	dg.mu.Unlock()
 
-	packet, err := routing.MakeDatagramPacket(rule.NextRouteID(), data)
+	// Wrap in AEAD if configured. Stage 4 will require this; Stage 2
+	// unit tests use the bypass path.
+	body := data
+	if cipher != nil {
+		sealed, err := cipher.Seal(uint32(rule.NextRouteID()), data)
+		if err != nil {
+			return 0, fmt.Errorf("datagram-route-group: seal: %w", err)
+		}
+		body = sealed
+	}
+
+	packet, err := routing.MakeDatagramPacket(rule.NextRouteID(), body)
 	if err != nil {
 		return 0, err
 	}
@@ -280,13 +332,32 @@ func (dg *DatagramRouteGroup) Handle(packet routing.Packet) error {
 	}
 	dg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
-	// Copy out the payload — the underlying packet buffer is owned
-	// by the read loop and may be reused for the next inbound
-	// frame. Without the copy a fast inbound rate would clobber
-	// queued datagrams before the app reads them.
-	payload := packet.Payload()
-	cp := make([]byte, len(payload))
-	copy(cp, payload)
+	// Resolve the inbound cipher under the mutex — Stage 4 may swap
+	// it on rekey concurrent with Handle.
+	dg.mu.Lock()
+	cipher := dg.inCipher
+	dg.mu.Unlock()
+
+	// Decrypt + verify under the AEAD layer if configured. Bypass
+	// mode is the Stage-2 unit-test path. Auth failures bump a
+	// counter and drop silently — surfacing the failure to the
+	// sender would expose timing signal to a forger.
+	var cp []byte
+	if cipher != nil {
+		pt, err := cipher.Open(uint32(packet.RouteID()), packet.Payload())
+		if err != nil {
+			atomic.AddUint64(&dg.aeadAuthFailures, 1)
+			return nil // drop silently
+		}
+		cp = pt
+	} else {
+		// Copy out the payload — the underlying packet buffer is
+		// owned by the read loop and may be reused for the next
+		// inbound frame.
+		payload := packet.Payload()
+		cp = make([]byte, len(payload))
+		copy(cp, payload)
+	}
 
 	select {
 	case dg.readCh <- cp:
@@ -371,6 +442,17 @@ func (dg *DatagramRouteGroup) IsAlive() bool {
 // diagnostics; not used in the hot path.
 func (dg *DatagramRouteGroup) InboundDropped() uint64 {
 	return atomic.LoadUint64(&dg.inboundDropped)
+}
+
+// AEADAuthFailures returns the count of inbound datagrams dropped
+// due to AEAD authentication failure since group construction.
+// Includes both forged datagrams and replay attempts; intentionally
+// not differentiated to avoid leaking timing signal to an attacker.
+// A rising counter under normal operation indicates either a
+// forgery attempt in progress or a peer-side cipher desync (often
+// a missed rekey).
+func (dg *DatagramRouteGroup) AEADAuthFailures() uint64 {
+	return atomic.LoadUint64(&dg.aeadAuthFailures)
 }
 
 // Compile-time assertion that DatagramRouteGroup satisfies the
