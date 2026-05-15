@@ -37,6 +37,7 @@ import (
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
@@ -613,6 +614,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 	}
 
 	connectPairRPC()
+	startPairRPCWatchdog(ctx)
+	defer stopPairRPCWatchdog()
 	startPairPoller(ctx)
 	defer stopPairPoller()
 
@@ -1486,10 +1489,15 @@ type groupHealth struct {
 //     means group support is disabled in the visor config, OR the
 //     RPC client has a transient connection issue).
 func collectGroupHealth() ([]groupHealth, string) {
-	if pairRPC == nil {
+	if !pairRPCAlive() {
 		return []groupHealth{}, "pair-rpc-disabled"
 	}
-	infos, err := pairRPC.GroupList()
+	var infos []visor.GroupInfo
+	err := pairRPCCall("GroupList", func(c visor.API) error {
+		out, e := c.GroupList()
+		infos = out
+		return e
+	})
 	if err != nil {
 		appCl.Log().Debugf("status: GroupList RPC failed: %v", err)
 		// Truncate the err so a long upstream chain doesn't bloat
