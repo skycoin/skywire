@@ -156,10 +156,10 @@ const (
 //
 // Single-direction; thread-safe.
 type DatagramCipher struct {
-	role     Role
-	destPK   cipher.PubKey // for AAD binding on outbound; sender's PK on inbound
-	aead     atomic.Pointer[cipherEpoch]
-	rekeyMu  sync.Mutex // serializes Rekey calls
+	role    Role
+	destPK  cipher.PubKey // for AAD binding on outbound; sender's PK on inbound
+	aead    atomic.Pointer[cipherEpoch]
+	rekeyMu sync.Mutex // serializes Rekey calls
 
 	// Outbound-only state. The atomic counter is the sender's
 	// next nonce; rekey resets it. Tracked separately from inbound
@@ -179,13 +179,13 @@ type DatagramCipher struct {
 // count thresholds for the current rekey epoch. Replaced atomically
 // on Rekey so in-flight Seal/Open calls observe a consistent epoch.
 type cipherEpoch struct {
-	aead         interface { // chacha20poly1305.New returns this shape
+	aead interface { // chacha20poly1305.New returns this shape
 		Seal(dst, nonce, plaintext, additionalData []byte) []byte
 		Open(dst, nonce, ciphertext, additionalData []byte) ([]byte, error)
 	}
-	openedAt     time.Time
-	timeLimit    time.Duration
-	packetLimit  uint64
+	openedAt    time.Time
+	timeLimit   time.Duration
+	packetLimit uint64
 }
 
 // NewDatagramCipher constructs an outbound-or-inbound cipher from a
