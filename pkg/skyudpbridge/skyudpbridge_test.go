@@ -131,7 +131,7 @@ func TestClientFramesDatagramsOntoStream(t *testing.T) {
 
 	payload := []byte("hello-skyudp")
 
-	// Resend until the client side has bound + dialled the pipe.
+	// Resend until the client side has bound + dialed the pipe.
 	// RunClient opens the UDP socket asynchronously, so the first
 	// few datagrams may be dropped before the listener is up.
 	var peerConn net.Conn
