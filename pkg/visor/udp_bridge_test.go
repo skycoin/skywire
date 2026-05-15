@@ -37,7 +37,7 @@ type pipePacketConn struct {
 	localAddr  net.Addr
 	remoteAddr net.Addr
 
-	readDeadline  time.Time
+	readDeadline time.Time
 }
 
 func newPipePacketConnPair() (a, b *pipePacketConn) {
@@ -147,7 +147,7 @@ func TestUDPBridgeLocalToSkynet(t *testing.T) {
 	buf := make([]byte, 1500)
 	done := make(chan struct{})
 	var (
-		n   int
+		n    int
 		rerr error
 	)
 	go func() {

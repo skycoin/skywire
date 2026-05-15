@@ -49,7 +49,7 @@ type fakePacketNetworker struct {
 	dialPacketAddr  Addr
 }
 
-func (f *fakePacketNetworker) Dial(_ Addr) (net.Conn, error)              { return nil, nil }
+func (f *fakePacketNetworker) Dial(_ Addr) (net.Conn, error) { return nil, nil }
 func (f *fakePacketNetworker) DialContext(_ context.Context, _ Addr) (net.Conn, error) {
 	return nil, nil
 }
@@ -72,7 +72,7 @@ func (f *fakePacketNetworker) DialPacketContext(_ context.Context, addr Addr) (D
 // PacketNetworker-not-supported error path.
 type fakeBaseNetworker struct{}
 
-func (f *fakeBaseNetworker) Dial(_ Addr) (net.Conn, error)              { return nil, nil }
+func (f *fakeBaseNetworker) Dial(_ Addr) (net.Conn, error) { return nil, nil }
 func (f *fakeBaseNetworker) DialContext(_ context.Context, _ Addr) (net.Conn, error) {
 	return nil, nil
 }
