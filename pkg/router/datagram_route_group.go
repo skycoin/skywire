@@ -89,8 +89,8 @@ var ErrClosed = errors.New("datagram-route-group: closed")
 //   - Close releases the readCh and marks the group dead. Idempotent.
 type DatagramRouteGroup struct {
 	// atomic; first for 64-bit alignment.
-	lastSent     int64
-	closeFlag    int32 // atomic; 1 once Close has run
+	lastSent                 int64
+	closeFlag                int32 // atomic; 1 once Close has run
 	consecutiveWriteFailures int32
 
 	mu sync.Mutex
