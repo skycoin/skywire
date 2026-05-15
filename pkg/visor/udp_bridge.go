@@ -60,7 +60,7 @@ type UDPBridge struct {
 	// until set. Multi-application fan-in on the local UDP socket
 	// is not supported in a single bridge; the listener loop must
 	// create one bridge per (local-app-addr, peer-pk) pair.
-	localPeer  net.Addr
+	localPeer   net.Addr
 	localPeerMu sync.Mutex
 
 	// skynetPeer is the remote address on the SKYNET side — i.e.
