@@ -215,3 +215,81 @@ func TestDatagramRouteGroupSatisfiesPacketConn(t *testing.T) {
 	var _ net.PacketConn = dg
 	var _ Group = dg
 }
+
+func TestDatagramRouteGroupWithCiphersRoundTrip(t *testing.T) {
+	// End-to-end test for the Stage 3 integration: install ciphers,
+	// craft a "sealed" inbound datagram with the correct counter +
+	// AEAD wrapping (matching what a peer would have sent), feed
+	// through Handle, and assert the plaintext lands on ReadFrom.
+	//
+	// Doesn't go through a real router/transport — that's Stage 4's
+	// scope. The point here is to prove the seal/open plumbing on
+	// DatagramRouteGroup is wired correctly.
+
+	dg := newTestDatagramGroup(t)
+	defer dg.Close() //nolint:errcheck
+
+	// Build a pair of ciphers — peer-side (sealer) and local-side
+	// (opener). Same master + bindPK; the bindPK is the local end's
+	// PK since Open will look it up in AAD.
+	out, in, _, _ := newTestPair(t, nil)
+	dg.SetCiphers(out, in)
+
+	// MaxPayload must now reflect the AEAD overhead.
+	assert.Equal(t, MaxDatagramPlaintext, dg.MaxPayload(),
+		"with cipher installed, MaxPayload should subtract AEAD overhead")
+
+	// Simulate an inbound datagram: peer sealed plaintext over
+	// route 1 with the matching out-cipher. We replay the seal here
+	// because the bindPK in our test ciphers happens to be the
+	// same; in production the peer's outbound matches our inbound
+	// via the role pairing in newTestPair.
+	plaintext := []byte("inbound-datagram-via-cipher")
+	sealed, err := out.Seal(1, plaintext)
+	require.NoError(t, err)
+
+	pkt, err := routing.MakeDatagramPacket(routing.RouteID(1), sealed)
+	require.NoError(t, err)
+
+	require.NoError(t, dg.Handle(pkt))
+
+	buf := make([]byte, 1500)
+	require.NoError(t, dg.SetReadDeadline(time.Now().Add(time.Second)))
+	n, _, err := dg.ReadFrom(buf)
+	require.NoError(t, err)
+	assert.Equal(t, plaintext, buf[:n])
+}
+
+func TestDatagramRouteGroupHandleAEADFailureDropsSilently(t *testing.T) {
+	dg := newTestDatagramGroup(t)
+	defer dg.Close() //nolint:errcheck
+
+	out, in, _, _ := newTestPair(t, nil)
+	dg.SetCiphers(out, in)
+
+	// Build a forged "sealed" payload — random bytes of the correct
+	// length. Auth tag will not verify.
+	forged := make([]byte, DatagramOverhead+16)
+	for i := range forged {
+		forged[i] = byte(i)
+	}
+	pkt, err := routing.MakeDatagramPacket(routing.RouteID(1), forged)
+	require.NoError(t, err)
+
+	// Handle must return nil (no error surfaced — leaking the
+	// failure to the sender would expose timing signal). The
+	// AEADAuthFailures counter must increment.
+	require.NoError(t, dg.Handle(pkt))
+	assert.Equal(t, uint64(1), dg.AEADAuthFailures(),
+		"forged datagram should bump aeadAuthFailures")
+
+	// And the readCh must remain empty — the forged datagram must
+	// NOT have been delivered.
+	require.NoError(t, dg.SetReadDeadline(time.Now().Add(50*time.Millisecond)))
+	buf := make([]byte, 1500)
+	_, _, err = dg.ReadFrom(buf)
+	require.Error(t, err)
+	var terr net.Error
+	require.ErrorAs(t, err, &terr)
+	assert.True(t, terr.Timeout())
+}
