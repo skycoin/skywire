@@ -77,7 +77,7 @@ type DatagramPacketConn interface {
 // datagrams stay valid — callers get ErrPacketNetworkerNotSupported
 // when they hit one of those.
 type PacketNetworker interface {
-	// DialPacketContext opens a datagram conn to addr. Cancelling
+	// DialPacketContext opens a datagram conn to addr. Canceling
 	// ctx during the dial returns ctx.Err. The returned conn is
 	// safe for concurrent use by multiple goroutines.
 	DialPacketContext(ctx context.Context, addr Addr) (DatagramPacketConn, error)

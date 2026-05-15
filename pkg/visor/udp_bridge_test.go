@@ -36,8 +36,6 @@ type pipePacketConn struct {
 
 	localAddr  net.Addr
 	remoteAddr net.Addr
-
-	readDeadline time.Time
 }
 
 func newPipePacketConnPair() (a, b *pipePacketConn) {
