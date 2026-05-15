@@ -35,7 +35,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"strings"
@@ -44,7 +43,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -142,21 +140,18 @@ func notifyInviteSSE(peerPK cipher.PubKey, kind string) {
 }
 
 // connectPairRPC dials the local visor's RPC and stores the client
-// in pairRPC. Best-effort — a failure logs and disables pairing for
-// this run rather than failing skychat startup.
+// in pairRPC. Best-effort — a failure logs and continues without
+// the pair RPC; the watchdog (startPairRPCWatchdog) will retry the
+// dial periodically. All actual mutation of pairRPC goes through
+// connectPairRPCLocked so the package-level pointer is guarded by
+// pairRPCMu.
 func connectPairRPC() {
 	if !pairEnable {
 		return
 	}
-	const dialTimeout = 5 * time.Second
-	conn, err := net.DialTimeout("tcp", pairRPCAddr, dialTimeout)
-	if err != nil {
-		appLog("Pairing: visor RPC dial %s failed: %v — pairing disabled", pairRPCAddr, err)
-		return
+	if connectPairRPCLocked("startup") == nil {
+		appLog("Pairing: initial visor RPC dial failed — watchdog will retry")
 	}
-	log := logging.MustGetLogger(fmt.Sprintf("skychat-pair-rpc://%s", pairRPCAddr))
-	pairRPC = visor.NewRPCClient(log, conn, visor.RPCPrefix, 30*time.Second)
-	appLog("Pairing: connected to visor RPC at %s", pairRPCAddr)
 }
 
 // startPairPoller bridges visor.PairPoll into the existing SSE
@@ -169,7 +164,7 @@ func connectPairRPC() {
 // inbox already protects against unbounded growth of buffered
 // messages.
 func startPairPoller(parent context.Context) {
-	if !pairEnable || pairRPC == nil {
+	if !pairEnable {
 		return
 	}
 	ctx, cancel := context.WithCancel(parent) //nolint:gosec
@@ -185,9 +180,16 @@ func startPairPoller(parent context.Context) {
 				return
 			case <-ticker.C:
 			}
-			msgs, err := pairRPC.PairPoll(since)
+			var msgs []visor.PairMessage
+			err := pairRPCCall("PairPoll", func(c visor.API) error {
+				out, e := c.PairPoll(since)
+				msgs = out
+				return e
+			})
 			if err != nil {
-				appLog("Pairing: PairPoll error: %v", err)
+				if !errors.Is(err, errPairRPCUnavailable) {
+					appLog("Pairing: PairPoll error: %v", err)
+				}
 				continue
 			}
 			for _, m := range msgs {
@@ -241,7 +243,7 @@ func registerPairHTTPHandlers(ctx context.Context, mux *http.ServeMux) {
 // invites.
 func pairInvitesListHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if pairRPC == nil {
+		if !pairRPCAlive() {
 			http.Error(w, "pairing disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
 			return
 		}
@@ -258,7 +260,7 @@ func pairInvitesListHandler() http.HandlerFunc {
 // POST /pair/invites/<pk>/decline.
 func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if pairRPC == nil {
+		if !pairRPCAlive() {
 			http.Error(w, "pairing disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
 			return
 		}
@@ -288,14 +290,14 @@ func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 			// Create the local pair (status starts at pending; the
 			// initiator's PairMarkActive on receiving our ack will
 			// flip them, but on this side we'd want active too).
-			if err := pairRPC.PairAdd(peer); err != nil {
+			if err := pairRPCCall("PairAdd", func(c visor.API) error { return c.PairAdd(peer) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 			// Mark our own side active immediately — the user
 			// just consented, so there's no further confirmation
 			// needed.
-			if err := pairRPC.PairMarkActive(peer); err != nil {
+			if err := pairRPCCall("PairMarkActive", func(c visor.API) error { return c.PairMarkActive(peer) }); err != nil {
 				appLog("Pairing: PairMarkActive after accept failed: %v", err)
 			}
 			pendingDelete(peer)
@@ -323,13 +325,18 @@ func pairInvitesItemHandler(ctx context.Context) http.HandlerFunc {
 // pairRootHandler serves POST /pair (add) and GET /pair (list).
 func pairRootHandler(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if pairRPC == nil {
+		if !pairRPCAlive() {
 			http.Error(w, "pairing disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
 			return
 		}
 		switch r.Method {
 		case http.MethodGet:
-			pairs, err := pairRPC.PairList()
+			var pairs []visor.PairInfo
+			err := pairRPCCall("PairList", func(c visor.API) error {
+				out, e := c.PairList()
+				pairs = out
+				return e
+			})
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -350,7 +357,7 @@ func pairRootHandler(ctx context.Context) http.HandlerFunc {
 				http.Error(w, "invalid peer_pk: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			if err := pairRPC.PairAdd(peer); err != nil {
+			if err := pairRPCCall("PairAdd", func(c visor.API) error { return c.PairAdd(peer) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -372,7 +379,7 @@ func pairRootHandler(ctx context.Context) http.HandlerFunc {
 // pairItemHandler serves DELETE /pair/{pk} and POST /pair/{pk}/message.
 func pairItemHandler(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if pairRPC == nil {
+		if !pairRPCAlive() {
 			http.Error(w, "pairing disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
 			return
 		}
@@ -393,7 +400,7 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 
 		switch {
 		case len(segments) == 1 && r.Method == http.MethodDelete:
-			if err := pairRPC.PairRemove(peer); err != nil {
+			if err := pairRPCCall("PairRemove", func(c visor.API) error { return c.PairRemove(peer) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -407,7 +414,7 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			if err := pairRPC.PairSend(peer, body.Text); err != nil {
+			if err := pairRPCCall("PairSend", func(c visor.API) error { return c.PairSend(peer, body.Text) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -427,7 +434,7 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 // malformed JSON, in which case handleConn falls through to the
 // legacy text path.
 func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byte) bool {
-	if !pairEnable || pairRPC == nil {
+	if !pairEnable || !pairRPCAlive() {
 		return false
 	}
 	// Quick reject: pair envelopes are objects, so a non-`{` first
@@ -458,7 +465,7 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 		// pending pair record to active so the UI shows it as
 		// confirmed.
 		appLog("Pairing: pair-ack from %s — peer accepted", peerPK.Hex())
-		if err := pairRPC.PairMarkActive(peerPK); err != nil {
+		if err := pairRPCCall("PairMarkActive", func(c visor.API) error { return c.PairMarkActive(peerPK) }); err != nil {
 			appLog("Pairing: PairMarkActive after ack failed: %v", err)
 		}
 		notifyInviteSSE(peerPK, "accepted")
@@ -468,7 +475,7 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 		// Initiator side: the peer declined our invite. Drop the
 		// pending pair record so it doesn't sit in pending forever.
 		appLog("Pairing: pair-decline from %s — peer declined", peerPK.Hex())
-		if err := pairRPC.PairRemove(peerPK); err != nil {
+		if err := pairRPCCall("PairRemove", func(c visor.API) error { return c.PairRemove(peerPK) }); err != nil {
 			appLog("Pairing: PairRemove after decline failed: %v", err)
 		}
 		notifyInviteSSE(peerPK, "declined")
