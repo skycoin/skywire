@@ -67,6 +67,52 @@ func TestMakeSequencedDataPacket(t *testing.T) {
 	assert.Equal(t, data, packet.DataPayloadAfterSeq())
 }
 
+func TestMakeDatagramPacket(t *testing.T) {
+	packet, err := MakeDatagramPacket(2, []byte("foo"))
+	require.NoError(t, err)
+
+	// DatagramPacket is the 18th value of the PacketType iota chain
+	// (index 17 = 0x11). Header layout matches DataPacket: type at
+	// offset 0, routeID big-endian uint32, payloadSize big-endian
+	// uint16, then payload. No prepended sequence number — the
+	// counter that makes datagrams replay-safe lives in the AEAD
+	// nonce constructed at the DatagramRouteGroup layer, not in
+	// the routing-packet body. Wire-byte assertion pins this.
+	expected := []byte{0x11, 0x0, 0x0, 0x0, 0x2, 0x0, 0x3, 0x66, 0x6f, 0x6f}
+
+	assert.Equal(t, expected, []byte(packet))
+	assert.Equal(t, DatagramPacket, packet.Type())
+	assert.Equal(t, uint16(3), packet.Size())
+	assert.Equal(t, RouteID(2), packet.RouteID())
+	assert.Equal(t, []byte("foo"), packet.Payload())
+}
+
+func TestMakeDatagramPacketEmpty(t *testing.T) {
+	// Zero-length payload is valid on the wire — a DatagramRouteGroup
+	// keep-alive datagram or a probe that carries only the AEAD tag.
+	packet, err := MakeDatagramPacket(9, nil)
+	require.NoError(t, err)
+	assert.Equal(t, DatagramPacket, packet.Type())
+	assert.Equal(t, uint16(0), packet.Size())
+	assert.Equal(t, RouteID(9), packet.RouteID())
+	assert.Equal(t, []byte{}, packet.Payload())
+}
+
+func TestMakeDatagramPacketTooBig(t *testing.T) {
+	// Payload size field is uint16 → max 65535. One byte over the
+	// limit must surface as ErrPayloadTooBig so the caller can fall
+	// back (e.g. drop the datagram with EMSGSIZE semantics rather
+	// than silently truncating).
+	oversized := make([]byte, 65536)
+	_, err := MakeDatagramPacket(1, oversized)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrPayloadTooBig)
+}
+
+func TestPacketTypeStringDatagram(t *testing.T) {
+	assert.Equal(t, "Datagram", DatagramPacket.String())
+}
+
 func TestMakePingPacket(t *testing.T) {
 	staticTime, _ := time.Parse(time.RFC3339, "2012-11-01T22:08:41+00:00") //nolint:errcheck
 	timestamp := staticTime.UTC().UnixNano() / int64(time.Millisecond)
