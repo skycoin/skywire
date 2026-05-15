@@ -432,7 +432,7 @@ func shiftLeft(w *[replayWindowWords]uint64, n uint) {
 	bitShift := n % 64
 	if wordShift > 0 {
 		for i := 0; i < replayWindowWords; i++ {
-			src := i + int(wordShift)
+			src := i + int(wordShift) //nolint:gosec // wordShift bounded by replayWindowWords (32) which fits in int
 			if src < replayWindowWords {
 				w[i] = w[src]
 			} else {
