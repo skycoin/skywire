@@ -7,7 +7,7 @@
 //
 // Two subcommands:
 //
-//	sub client   — local UDP listener → peer-dialled dmsg stream
+//	sub client   — local UDP listener → peer-dialed dmsg stream
 //	sub server   — accept dmsg streams → forward as UDP to target
 //
 // Plan B for UDP-over-skynet (TCP-over-UDP, reliable + in-order).
