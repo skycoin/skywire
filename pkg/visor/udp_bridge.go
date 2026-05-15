@@ -49,7 +49,7 @@ import (
 // closes both conns. Closing either end externally also stops the
 // bridge cleanly — ReadFrom on a closed conn surfaces an error,
 // the corresponding pump goroutine exits, and the second pump is
-// cancelled via the bridge's context.
+// canceled via the bridge's context.
 type UDPBridge struct {
 	local  net.PacketConn // typically *net.UDPConn
 	skynet net.PacketConn // typically *router.DatagramRouteGroup
@@ -102,7 +102,7 @@ func NewUDPBridge(local, skynet net.PacketConn, cfg UDPBridgeConfig) *UDPBridge 
 	if cfg.Logger == nil {
 		cfg.Logger = logging.MustGetLogger("udp-bridge")
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118 false positive: cancel stored on struct + invoked in Close()
 	return &UDPBridge{
 		local:      local,
 		skynet:     skynet,

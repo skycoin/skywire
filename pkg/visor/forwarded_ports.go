@@ -38,7 +38,7 @@ type ForwardedPort struct {
 	// reorder, per-datagram AEAD. For DNS / NTP / VoIP / gaming —
 	// anything where a late packet is worse than a lost one.
 	//
-	// Stage 4 of #2607: this field is recognised by the visor's
+	// Stage 4 of #2607: this field is recognized by the visor's
 	// forwarded-port listener loop, which binds a local UDP socket
 	// at EffectiveLocalPort() and pumps datagrams to/from the
 	// peer-side DatagramRouteGroup. The route-setup machinery that
