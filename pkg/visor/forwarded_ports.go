@@ -30,6 +30,21 @@ type ForwardedPort struct {
 	Whitelist     []cipher.PubKey `json:"whitelist,omitempty"` // empty = accessible to all authenticated peers
 	Skynet        bool            `json:"skynet"`              // forward over skynet (sky-forwarding server)
 	DMSG          bool            `json:"dmsg"`                // forward over DMSG (service registry)
+	// UDP, when true, enables UDP-datagram semantics on this
+	// forward rather than the default TCP-stream semantics.
+	// Implementation rides DatagramRouteGroup (see
+	// pkg/router/datagram_route_group.go and the faithful-UDP
+	// design in #2607): faithful loss, no head-of-line blocking on
+	// reorder, per-datagram AEAD. For DNS / NTP / VoIP / gaming —
+	// anything where a late packet is worse than a lost one.
+	//
+	// Stage 4 of #2607: this field is recognised by the visor's
+	// forwarded-port listener loop, which binds a local UDP socket
+	// at EffectiveLocalPort() and pumps datagrams to/from the
+	// peer-side DatagramRouteGroup. The route-setup machinery that
+	// constructs the DatagramRouteGroup itself lives in stage 5's
+	// app API.
+	UDP bool `json:"udp,omitempty"`
 	// ProxyAddr is an optional local address (e.g., "127.0.0.1:3000")
 	// to reverse-proxy to. For port 80, this replaces the visor's
 	// default landing page with content from the local service.
