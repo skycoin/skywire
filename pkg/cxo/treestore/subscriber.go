@@ -290,11 +290,35 @@ func (s *Subscriber) matchesPrefixLocked(path string) bool {
 // handleRootFilled is the OnRootFilled callback. Walks the tree
 // rooted at r, builds the new path→value snapshot, diffs against
 // the previous cache, and dispatches changes.
+//
+// FeedPK gate: when multiple subscribers share a CXO node (each
+// for a different feed PK — e.g. one peerSub per group member on
+// the owner's node), every subscriber's handleRootFilled fires on
+// every Root regardless of which feed produced it. Without this
+// gate, a Root for feed A causes subscriber B (which targets a
+// different feed) to walk A's tree and apply A's leaves to B's
+// snapshot cache. The next Root for feed B then diffs against the
+// polluted cache and emits spurious deletes for A's leaves plus
+// "new" events for B's leaves. The on-the-wire messages are still
+// correct (sender PK on the leaf JSON drives application routing),
+// but per-peer cache invariants and per-peer-staleness signals
+// are scrambled.
+//
+// Skip non-matching Roots cleanly. Same callback chain remains in
+// place so the next subscriber in the chain still receives the
+// Root (it'll do its own match check).
 func (s *Subscriber) handleRootFilled(r *registry.Root) {
 	if r == nil || len(r.Refs) == 0 {
 		// Root with no payload — could happen on startup before
 		// the publisher has put anything. Treat as empty.
 		s.applySnapshot(nil)
+		return
+	}
+	if r.Pub != skycipher.PubKey(s.feedPK) {
+		// Root is for a different feed than this subscriber tracks.
+		// The chained callback dispatcher fires every subscriber on
+		// every Root; without this check each subscriber would walk
+		// every feed's tree and corrupt its own cache.
 		return
 	}
 
