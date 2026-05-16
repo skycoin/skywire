@@ -16,6 +16,7 @@
 package pairing
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"sync"
@@ -111,7 +112,7 @@ func TestPairRoundTripOverDmsg(t *testing.T) {
 	connectWithRetry := func(p *Pair) error {
 		var lastErr error
 		for attempt := 0; attempt < 10; attempt++ {
-			if err := p.Connect(); err == nil {
+			if err := p.Connect(context.Background()); err == nil {
 				return nil
 			} else {
 				lastErr = err
