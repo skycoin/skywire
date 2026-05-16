@@ -90,6 +90,21 @@ func TestReconnectLegacySubNoopOnOwnerSession(t *testing.T) {
 	}
 }
 
+func TestReconnectLegacySubNoopDoesNotBumpSessionLastInbound(t *testing.T) {
+	// The no-op branch (s.sub == nil) must NOT bump lastInboundNs.
+	// Bumping it would phantom-mark an owner session as fresh on
+	// every reconnect tick and mask actual session-wide staleness
+	// from the legacy session-wide fallback path in
+	// detectStaleAndReconnect.
+	s := &Session{}
+	if err := s.ReconnectLegacySub(context.Background()); err != nil {
+		t.Errorf("ReconnectLegacySub on owner session: want nil err, got %v", err)
+	}
+	if !s.LastInbound().IsZero() {
+		t.Errorf("ReconnectLegacySub on owner session: must not bump lastInboundNs")
+	}
+}
+
 func TestReconnectLegacySubHonorsCanceledContext(t *testing.T) {
 	// A canceled context must return ctx.Err() without dialing —
 	// mirrors ReconnectPeer's pre-check. We can't exercise the
