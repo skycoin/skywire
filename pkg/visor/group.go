@@ -53,6 +53,16 @@ type GroupInfo struct {
 	// side. Populated by GroupList; left zero by other accessors that
 	// don't need it. See group.Manager.IsSubscriberAlive for semantics.
 	SubscriberAlive bool `json:"subscriber_alive"`
+
+	// PeerLastInbound is the per-peer last-inbound time, keyed by
+	// peer-PK hex. Populated by GroupList and GroupGet alongside
+	// SubscriberAlive. A zero time means the peerSub for that peer
+	// is connecting, silent since startup, or (legacy s.sub path)
+	// not individually tracked. Empty map for owner-role sessions
+	// that don't follow peer feeds. Operator-facing: lets `cli
+	// skychat group info` show which specific peer is stale in a
+	// group whose session-level SubscriberAlive is otherwise true.
+	PeerLastInbound map[string]time.Time `json:"peer_last_inbound,omitempty"`
 }
 
 // GroupMessage is one inbound message delivered through the visor's
@@ -152,6 +162,7 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 	for _, r := range all {
 		info := toInfo(r)
 		info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
+		info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 		out = append(out, info)
 	}
 	return out, nil
@@ -183,7 +194,24 @@ func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	}
 	info := toInfo(r)
 	info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
+	info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 	return info, nil
+}
+
+// peerLivenessHex converts the cipher-keyed Manager.PeerLiveness map
+// into a hex-keyed JSON-friendly map. Returns nil when the input map
+// is empty so the JSON omitempty tag drops the field entirely for
+// records with no peer-level telemetry (e.g. owner-role sessions, or
+// when no live session exists).
+func peerLivenessHex(in map[cipher.PubKey]time.Time) map[string]time.Time {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]time.Time, len(in))
+	for pk, ts := range in {
+		out[pk.Hex()] = ts
+	}
+	return out
 }
 
 // GroupInvite returns a freshly-encoded invite link for an
