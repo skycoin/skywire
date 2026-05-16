@@ -728,9 +728,25 @@ func (c *Conn) handleSub(seq uint32, sub *msg.Sub) (_ error) {
 		return errors.New("blank public key") // fatal (invalid request)
 	}
 
-	// check first
+	// Idempotent Subscribe: even when the conn is already registered for
+	// this feed, push the current Root again. Subscribers re-issue
+	// Subscribe on reconnect (via ReconnectPeer → conn.Subscribe), and
+	// the only signal they have that we accepted is Ok. Without a Root
+	// follow-up, a subscriber whose previous fill failed (transient
+	// dmsg blip, partial fetch) has no way to recover — it stays Ok'd
+	// with no backlog and only sees Roots published after its
+	// reconnect lands. Empirically observed: post-restart subscriber
+	// joined a publisher mid-burst, received probebX-19+ live but
+	// missed probeb-01..18 entirely because that initial fill aborted
+	// silently and the publisher never re-pushed.
+	//
+	// sendLastRoot is cheap — one fetch from the local Container plus
+	// one message send. Repeating it on duplicate subscribes is the
+	// minimum-surface fix that doesn't require new message types or
+	// subscriber-side recovery logic.
 	if c.n.fs.hasConnFeed(c, sub.Feed) == true { //nolint:staticcheck
-		c.sendOk(seq) // already subscribed
+		c.sendOk(seq)            // already subscribed
+		c.sendLastRoot(sub.Feed) // push current Root anyway
 		return nil
 	}
 
