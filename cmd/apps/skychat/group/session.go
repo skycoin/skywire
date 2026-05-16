@@ -397,6 +397,23 @@ type Session struct {
 	// same lock that protects peerSubs) — readers grab a snapshot under
 	// RLock and access the *atomic.Int64 entries lock-free.
 	peerLastInboundNs map[cipher.PubKey]*atomic.Int64
+
+	// subLastInboundNs is the per-s.sub liveness signal — the legacy
+	// owner-feed subscriber's counterpart to peerLastInboundNs. Bumped
+	// on every inbound UpdateEvent fanout via the legacy subscriber and
+	// on every successful s.sub.Connect. Member-role only; stays zero
+	// on owner sessions where s.sub is nil.
+	//
+	// Why separate from peerLastInboundNs: s.sub is the D1 single-
+	// subscriber legacy field tracked outside the peerSubs map (its
+	// merge into peerSubs is the deferred D4 cleanup). The per-peerSub
+	// liveness machinery from #2606 only covers peerSubs entries, so
+	// without this signal a wedged s.sub goes silently dead and
+	// detectStaleAndReconnect has nothing to fire on. After a chat-app
+	// or visor restart that doesn't re-run Open, the per-peerSub
+	// reconnects fire for everything in peerSubs but s.sub stays in
+	// whatever attached/dead state it landed in.
+	subLastInboundNs atomic.Int64
 }
 
 // subscriberStaleThreshold is defined in manager.go (it's used by
@@ -730,7 +747,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	if !cfg.Record.LastMessageAt.IsZero() {
 		s.lastInboundNs.Store(cfg.Record.LastMessageAt.UnixNano())
 	}
-	sub.OnUpdate(s.onUpdate)
+	sub.OnUpdate(s.makeLegacySubOnUpdate())
 	return s, nil
 }
 
@@ -777,6 +794,12 @@ func (s *Session) Connect(ctx context.Context) error {
 				return fmt.Errorf("group: Connect: %w", err)
 			}
 		}
+		// Bump per-s.sub liveness: a successful Connect is positive
+		// evidence the legacy owner-feed subscriber is attached, even
+		// before the first inbound leaf arrives. Lets the staleness
+		// window for s.sub start ticking from here, mirroring the
+		// per-peerSub Connect-bump behaviour below.
+		s.subLastInboundNs.Store(time.Now().UnixNano())
 	}
 	// D1 per-PK peer subscribers. Best-effort: if a single peer's
 	// publisher isn't reachable yet (e.g. they restarted), that one
@@ -874,6 +897,39 @@ func (s *Session) LastInbound() time.Time {
 		return time.Time{}
 	}
 	return time.Unix(0, ns).UTC()
+}
+
+// LegacySubLastInbound returns the time the legacy s.sub owner-feed
+// subscriber most recently observed an inbound CXO event (or a
+// successful Connect). Zero time on owner sessions (s.sub is nil),
+// freshly-opened member sessions that haven't yet had their first
+// Connect succeed, and torn-down sessions.
+//
+// Used by Manager.detectStaleAndReconnect to spot a wedged owner-feed
+// subscriber independently of the per-peerSub liveness map (#2606).
+// s.sub lives outside that map by design (deferred D4 cleanup), so it
+// needs its own staleness signal.
+func (s *Session) LegacySubLastInbound() time.Time {
+	if s.sub == nil {
+		return time.Time{}
+	}
+	ns := s.subLastInboundNs.Load()
+	if ns == 0 {
+		return time.Time{}
+	}
+	return time.Unix(0, ns).UTC()
+}
+
+// HasLegacySub reports whether this session carries an attached
+// legacy s.sub owner-feed subscriber. True only for member-role
+// sessions where openMember successfully created the legacy
+// subscriber; false on owner sessions and on member sessions whose
+// s.sub was torn down by Close.
+//
+// Used by detectStaleAndReconnect to skip the legacy-sub stale check
+// on sessions that have no legacy subscriber to begin with.
+func (s *Session) HasLegacySub() bool {
+	return s.sub != nil
 }
 
 // PeerLastInbound returns the per-peerSub last-inbound timestamp for
@@ -976,6 +1032,47 @@ func (s *Session) ReconnectPeer(ctx context.Context, pk cipher.PubKey) error {
 	return nil
 }
 
+// ReconnectLegacySub re-runs Connect on the legacy s.sub owner-feed
+// subscriber. Mirrors ReconnectPeer's shape but targets the s.sub
+// field rather than a peerSubs entry. No-op + nil error on owner-
+// role sessions and on sessions where s.sub is nil.
+//
+// On success: bumps subLastInboundNs to time.Now. Connect itself is
+// positive evidence the legacy subscriber is attached even before
+// the first inbound leaf arrives.
+//
+// On failure: returns Subscriber.Connect's error verbatim;
+// subLastInboundNs stays unchanged so the next detectStaleAndReconnect
+// tick still sees the session as stale and tries again.
+//
+// Honors the provided context: ctx cancellation returns ctx.Err()
+// promptly, with the same goroutine-leak protection used by Connect
+// + ReconnectPeer (buffered done channel, treestore.Subscriber is
+// not yet ctx-aware internally).
+func (s *Session) ReconnectLegacySub(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.sub == nil {
+		return nil
+	}
+	done := make(chan error, 1)
+	go func() { done <- s.sub.Connect(s.cfg.Record.OwnerPK) }()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		if err != nil {
+			return err
+		}
+	}
+	s.subLastInboundNs.Store(time.Now().UnixNano())
+	return nil
+}
+
 // makePeerOnUpdate wraps Session.onUpdate with per-peer lastInbound
 // bookkeeping. Each peerSub gets its own wrapper at registration time
 // (in newSession/openOwner/openMember/SetAllowlist) so onUpdate-firing
@@ -994,6 +1091,25 @@ func (s *Session) makePeerOnUpdate(pk cipher.PubKey) treestore.UpdateCallback {
 			if a != nil {
 				a.Store(time.Now().UnixNano())
 			}
+		}
+		s.onUpdate(events)
+	}
+}
+
+// makeLegacySubOnUpdate wraps Session.onUpdate with s.sub-specific
+// lastInbound bookkeeping. Mirrors makePeerOnUpdate's shape for the
+// legacy D1 owner-feed subscriber that lives outside the peerSubs map.
+//
+// Registered in place of the raw s.onUpdate on s.sub in openMember so
+// the per-s.sub staleness signal (subLastInboundNs) is bumped exactly
+// when an inbound CXO event arrives via the legacy path. Without this
+// wrapper, detectStaleAndReconnect has no way to tell s.sub apart from
+// the peerSubs and a wedged s.sub stays dead until the operator does
+// leave + rejoin.
+func (s *Session) makeLegacySubOnUpdate() treestore.UpdateCallback {
+	return func(events []treestore.UpdateEvent) {
+		if len(events) > 0 {
+			s.subLastInboundNs.Store(time.Now().UnixNano())
 		}
 		s.onUpdate(events)
 	}
