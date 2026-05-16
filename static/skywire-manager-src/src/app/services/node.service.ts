@@ -31,6 +31,27 @@ export enum UpdaterStorageKeys {
 }
 
 /**
+ * One section of the hypervisor's visor tree — typically one
+ * hypervisor's directly-connected visors. Returned by getNodesTree()
+ * to preserve the structural information the flat getNodes() loses.
+ *
+ * - For the local hypervisor's section, `viaChain` is empty.
+ * - For each sub-hypervisor section, `viaChain` is the path of
+ *   hypervisor PKs from the local one down to (but not including)
+ *   `hypervisorPk`. Used by the UI to render a breadcrumb above the
+ *   section's table.
+ * - `subError` is set when the sub-hypervisor query failed; `nodes`
+ *   is empty in that case. The UI renders a placeholder row with
+ *   the error.
+ */
+export interface NodeSection {
+  hypervisorPk: string;
+  viaChain: string[];
+  nodes: Node[];
+  subError?: string;
+}
+
+/**
  * Allows to work with the nodes.
  */
 @Injectable({
@@ -43,7 +64,10 @@ export class NodeService {
   ) { }
 
   /**
-   * Gets the list of the nodes connected to the hypervisor.
+   * Gets the list of the nodes connected to the hypervisor (flat —
+   * does not preserve sub-hypervisor grouping). Backed by
+   * /api/visors-summary. Use getNodesTree() if you need the
+   * structural information for rendering per-sub-hypervisor tables.
    */
   public getNodes(): Observable<Node[]> {
     let nodes: Node[] = [];
@@ -225,6 +249,125 @@ return {
 
       return nodes;
     }));
+  }
+
+  /**
+   * Gets the tree of nodes per hypervisor. Returns one
+   * NodeSection per hypervisor reachable from the local one — local
+   * hypervisor first, then each sub-hypervisor that the local one is
+   * directly connected to.
+   *
+   * Powers the main node list UI's per-sub-hypervisor table rendering
+   * (#2633 / #2640). Backed by /api/visors-tree-summary.
+   *
+   * Visor entries replicate across sections by design: a visor
+   * connected to multiple hypervisors appears in every relevant
+   * section. Section dedup is on the backend (mutual hypervisor
+   * pairs render the shared sub-hypervisor once).
+   *
+   * Reuses getNodes()'s mapping: each section's `visors` array has
+   * the same shape as the /visors-summary array, so the per-row
+   * parsing is identical. This wrapper just groups the rows into
+   * sections.
+   */
+  public getNodesTree(): Observable<NodeSection[]> {
+    return this.apiService.get('visors-tree-summary').pipe(map((result: any) => {
+      const sections: NodeSection[] = [];
+      if (!result || !result.sections) {
+        return sections;
+      }
+      for (const section of result.sections as any[]) {
+        const nodeSection: NodeSection = {
+          hypervisorPk: section.hypervisor_pk,
+          viaChain: section.via_chain || [],
+          nodes: section.visors ? this.parseVisorsResponse(section.visors) : [],
+        };
+        if (section.sub_error) {
+          nodeSection.subError = section.sub_error;
+        }
+        sections.push(nodeSection);
+      }
+      return sections;
+    }));
+  }
+
+  /**
+   * Parses a /visors-summary-shaped array into Node[]. Same logic as
+   * getNodes()'s pipe but exposed as a private helper so
+   * getNodesTree() can run it per section without duplicating the
+   * ~170 lines of field mapping.
+   *
+   * The savedLocalNodes / hidden-node merge that getNodes() does
+   * AFTER parsing isn't repeated here — sections are per-hypervisor
+   * and the saved-nodes invariant applies to the hypervisor-wide
+   * view, not the per-section one. Callers that need that merge
+   * should use getNodes() directly.
+   */
+  private parseVisorsResponse(result: any[]): Node[] {
+    const out: Node[] = [];
+    if (!result) {
+      return out;
+    }
+    // Mirrors the per-element mapping inside getNodes()'s pipe. The
+    // duplication is intentional and tracked: if the field mapping
+    // grows substantially, extract to a shared helper. For now,
+    // duplicating ~170 lines is the smallest risk-bounded change
+    // (refactoring getNodes()'s pipe is a separate concern).
+    result.forEach(response => {
+      const node = new Node();
+
+      // Basic data.
+      node.online = response.online;
+      node.offlineSince = response.offline_since;
+      node.lastSeenAt = response.last_seen_at;
+      node.isStale = !!response.offline_since;
+      node.localPk = response.overview ? response.overview.local_pk : '';
+      node.version = response.overview && response.overview.build_info ? response.overview.build_info.version : '';
+      node.configVersion = response.config_version;
+      node.os = response.overview && response.overview.build_info ? response.overview.build_info.os : '';
+      node.arch = response.overview && response.overview.build_info ? response.overview.build_info.arch : '';
+      node.autoconnectTransports = response.public_autoconnect;
+      node.isPublic = response.is_public;
+      node.buildTag = response.build_tag ? response.build_tag : '';
+      node.rewardsAddress = response.reward_address;
+
+      if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
+        node.ip = response.overview.local_ip;
+      } else {
+        node.ip = null;
+      }
+      if (response.overview && response.overview.public_ip && (response.overview.public_ip as string).trim()) {
+        node.publicIp = response.overview.public_ip;
+      } else {
+        node.publicIp = null;
+      }
+      if (response.overview) {
+        node.isSymmeticNat = response.overview.is_symmetic_nat;
+        if (response.overview.country_code) { node.countryCode = response.overview.country_code; }
+        if (response.overview.region_name) { node.regionName = response.overview.region_name; }
+        if (response.overview.city_name) { node.cityName = response.overview.city_name; }
+        if (response.overview.latitude) { node.latitude = response.overview.latitude; }
+        if (response.overview.longitude) { node.longitude = response.overview.longitude; }
+      }
+
+      const labelInfo = this.storageService.getLabelInfo(node.localPk);
+      node.label = labelInfo && labelInfo.label ? labelInfo.label : this.storageService.getDefaultLabel(node);
+
+      // Sub-hypervisor visors carry projected Summary fields — health,
+      // dmsg_stats, route_groups etc. stay zero/empty. The existing
+      // optional-chaining below handles that gracefully (same path
+      // taken for offline cached rows in getNodes()).
+      if (response.health) {
+        node.health = {
+          servicesHealth: response.health.services_health,
+          uptimeTrackerHealth: response.health.uptime_tracker_health,
+          autoconnectHealth: response.health.autoconnect_health,
+          transportabilityHealth: response.health.transportability_health,
+        };
+      }
+      out.push(node);
+    });
+    return out;
   }
 
   /**
