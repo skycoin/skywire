@@ -36,6 +36,7 @@ func init() {
 	hvCmd.AddCommand(hvStatusCmd)
 	hvCmd.AddCommand(hvAddCmd)
 	hvCmd.AddCommand(hvLsCmd)
+	hvCmd.AddCommand(hvTreeCmd)
 }
 
 var hvCmd = &cobra.Command{
@@ -255,5 +256,92 @@ transport count, and other details. The local visor is shown first.`,
 		}
 		tw.Flush() //nolint:errcheck,gosec
 		internal.PrintOutput(cmd.Flags(), entries, buf.String())
+	},
+}
+
+var hvTreeCmd = &cobra.Command{
+	Use:   "tree",
+	Short: "Tree view of visors per hypervisor (local + direct sub-hypervisors)",
+	Long: `Render the hypervisor structure as one section per hypervisor.
+
+The local hypervisor appears first with its directly-connected visors.
+Each sub-hypervisor connected to the local one appears as its own
+section with a chain breadcrumb and that hypervisor's directly-
+connected visors. A visor connected to multiple hypervisors will
+appear in every relevant section by design.
+
+Walks one level (local + direct sub-hypervisors). Sections dedup by
+hypervisor PK; a sub-hypervisor reachable via two paths renders once.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		tree, err := rpcClient.HVListVisorsTree()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to list visors tree: %w", err))
+		}
+
+		var buf strings.Builder
+		for sectionIdx, section := range tree.Sections {
+			if sectionIdx > 0 {
+				// Print breadcrumb chain for sub-hypervisors —
+				// ascii-tree style so the structure is obvious in
+				// plain terminals without needing UTF-8 box chars.
+				buf.WriteString("\n")
+				for chainIdx, chainPK := range section.ViaChain {
+					prefix := strings.Repeat("    ", chainIdx)
+					buf.WriteString(prefix + chainPK.String() + "\n")
+				}
+				prefix := strings.Repeat("    ", len(section.ViaChain)-1) + "└── "
+				buf.WriteString(prefix + section.HypervisorPK.String() + "\n")
+			} else {
+				buf.WriteString(section.HypervisorPK.String() + "\n")
+			}
+			if section.SubError != "" {
+				buf.WriteString("  (sub-hypervisor query error: " + section.SubError + ")\n")
+				continue
+			}
+			if len(section.Visors) == 0 {
+				buf.WriteString("  (no visors)\n")
+				continue
+			}
+			tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(tw, "  PK\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS") //nolint:errcheck
+			for _, e := range section.Visors {
+				pk := e.PK.String()
+				status := "ok"
+				if e.IsLocal {
+					status = "local"
+				}
+				if e.Error != "" {
+					status = e.Error
+					if len(status) > 25 {
+						status = status[:25] + "..."
+					}
+				}
+				ver := e.Version
+				if ver == "" {
+					ver = "-"
+				}
+				uptime := "-"
+				if e.Uptime > 0 {
+					uptime = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
+				}
+				ip := e.PublicIP
+				if ip == "" {
+					ip = "-"
+				}
+				cc := e.CountryCode
+				if cc == "" {
+					cc = "-"
+				}
+				fmt.Fprintf(tw, "  %s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", //nolint:errcheck
+					pk, ver, uptime, e.Transports, e.Apps, ip, cc, status)
+			}
+			tw.Flush() //nolint:errcheck,gosec
+		}
+		internal.PrintOutput(cmd.Flags(), tree, buf.String())
 	},
 }
