@@ -7,6 +7,7 @@ package visor
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -410,12 +411,32 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 // as a hypervisor" errors from HVListDirectVisors, so we can quietly
 // skip those remotes from the tree (every visor in a deployment that
 // ISN'T also a hypervisor would otherwise show up as a SubError row).
+//
+// Three distinct cases collapse into "not a hypervisor":
+//  1. "hypervisor not running" — remote is fully running but its
+//     hypervisor module never initialized (no config section).
+//  2. "hypervisor not enabled" — module initialized but the runtime
+//     toggle is off (operator disabled via `cli visor hv disable`).
+//  3. "rpc: can't find method app-visor.HVListDirectVisors" — remote
+//     is on a pre-#2633 binary that predates the new RPC method.
+//     Functionally indistinguishable from "not a hypervisor" until
+//     they update. Without this match, every plain visor in a
+//     deployment running an older binary noisily appears as a
+//     SubError row in `hv tree` output until everyone updates.
 func isNotHypervisorErr(err error) bool {
 	if err == nil {
 		return false
 	}
 	s := err.Error()
-	return s == "hypervisor not running" || s == "hypervisor not enabled"
+	if s == "hypervisor not running" || s == "hypervisor not enabled" {
+		return true
+	}
+	// "rpc: can't find method app-visor.HVListDirectVisors" — pre-#2633
+	// binary. The net/rpc layer formats unknown methods this way; match
+	// the suffix so any service-name prefix change in the future stays
+	// covered.
+	return strings.Contains(s, "can't find method HVListDirectVisors") ||
+		strings.HasSuffix(s, ".HVListDirectVisors")
 }
 
 // HVVisorSummary returns detailed info about a specific remote visor.
