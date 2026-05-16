@@ -22,6 +22,7 @@
 package pairing
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -171,11 +172,15 @@ func Open(cfg Config) (*Pair, error) {
 // Connect dials the peer's CXO node and starts the subscribe
 // handshake. Idempotent: returns nil if already connected.
 //
+// ctx bounds the dmsg dial — see Subscriber.Connect. Callers without
+// a natural ctx can pass context.Background(); the dial will then
+// rely on dmsg's own timeouts to escape a hung peer.
+//
 // Open + Connect are split so the pairing handshake can stage the
 // publisher before the peer is known to be ready, then activate the
 // inbound side once the peer's pair-ack arrives.
-func (p *Pair) Connect() error {
-	if err := p.sub.Connect(p.cfg.PeerPK); err != nil {
+func (p *Pair) Connect(ctx context.Context) error {
+	if err := p.sub.Connect(ctx, p.cfg.PeerPK); err != nil {
 		return fmt.Errorf("pairing: Connect: %w", err)
 	}
 	return nil

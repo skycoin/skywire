@@ -17,6 +17,7 @@
 package treestore
 
 import (
+	"context"
 	"sync"
 
 	skycipher "github.com/skycoin/skycoin/src/cipher"
@@ -182,13 +183,19 @@ func NewSubscriberOnNode(cxoNode *node.Node, feedPK cipher.PubKey, conf SubConfi
 // Connect dials the publisher over DMSG and subscribes to the feed
 // PK provided at construction. Updates begin flowing on the next
 // publish.
-func (s *Subscriber) Connect(publisherPK cipher.PubKey) error {
+//
+// ctx bounds the dial — when ctx is canceled or its deadline elapses
+// before the underlying DMSG handshake completes, Connect returns
+// ctx.Err() promptly instead of blocking on a half-dead transport.
+// Cancellation is plumbed all the way to dmsg.Client.Dial via the
+// (*DMSG).ConnectPK → (*DMSGFactory).Connect chain.
+func (s *Subscriber) Connect(ctx context.Context, publisherPK cipher.PubKey) error {
 	dmsgT := s.cxoNode.DMSG()
 	if dmsgT == nil {
 		return node.ErrAlreadyListen
 	}
 
-	conn, err := dmsgT.ConnectPK(publisherPK)
+	conn, err := dmsgT.ConnectPK(ctx, publisherPK)
 	if err != nil {
 		return err
 	}

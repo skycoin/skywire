@@ -125,19 +125,25 @@ const announceInterval = 30 * time.Second
 func runAnnounceLoop(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger) {
 	t := time.NewTicker(announceInterval)
 	defer t.Stop()
-	announceOnce(pub, tpdPK, log)
+	announceOnce(ctx, pub, tpdPK, log)
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			announceOnce(pub, tpdPK, log)
+			announceOnce(ctx, pub, tpdPK, log)
 		}
 	}
 }
 
-func announceOnce(pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger) {
-	if err := pub.AnnounceTo(tpdPK); err != nil {
+func announceOnce(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.PubKey, log *logging.Logger) {
+	// Per-attempt deadline bounds the dmsg dial: announceInterval is
+	// 30s, but the publisher's CXO ConnectPK can block on a half-dead
+	// transport much longer than that. Cap each attempt at half the
+	// interval so a stuck dial doesn't starve the next tick.
+	dctx, cancel := context.WithTimeout(ctx, announceInterval/2)
+	defer cancel()
+	if err := pub.AnnounceTo(dctx, tpdPK); err != nil {
 		// Trace-level: this races with TPD start-up and DMSG
 		// readiness; transient failures are normal.
 		log.WithError(err).WithField("tpd_pk", tpdPK).Trace("Stats: CXO announce to TPD failed")
