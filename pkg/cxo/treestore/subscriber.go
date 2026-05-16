@@ -131,6 +131,9 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
 		s.handleRootFilled(r)
 	}
+	cxoNode.Config().OnFillingBreaks = func(_ *node.Node, r *registry.Root, err error) {
+		s.handleFillingBreaks(r, err)
+	}
 	return s, nil
 }
 
@@ -164,6 +167,13 @@ func NewSubscriberOnNode(cxoNode *node.Node, feedPK cipher.PubKey, conf SubConfi
 		s.handleRootFilled(r)
 		if prev != nil {
 			prev(n, r)
+		}
+	}
+	prevFB := cxoNode.Config().OnFillingBreaks
+	cxoNode.Config().OnFillingBreaks = func(n *node.Node, r *registry.Root, err error) {
+		s.handleFillingBreaks(r, err)
+		if prevFB != nil {
+			prevFB(n, r, err)
 		}
 	}
 	return s, nil
@@ -342,6 +352,37 @@ func (s *Subscriber) handleRootFilled(r *registry.Root) {
 	}
 
 	s.applySnapshot(snap)
+}
+
+// handleFillingBreaks is the OnFillingBreaks callback. Fires when a
+// Root the subscriber received fails to fill — typically because a
+// transient dmsg blip during the post-Subscribe fetch interrupted the
+// recursive walk that resolves child objects. Before this hook was
+// wired, the failure was completely silent: the subscriber's filler
+// dropped the Root, no UpdateEvents fired, and the subscriber stayed
+// empty (or out-of-date) until the publisher pushed a new Root.
+//
+// FeedPK gate matches handleRootFilled — when multiple subscribers
+// share a CXO node, only the one tracking this Root's feed should
+// take the failure as its own.
+//
+// Today's behavior is log-only. Pairing this with #2647 (publisher
+// always pushes Root on duplicate Subscribe) covers the common
+// recovery path: subscriber's next reconnect-driven Subscribe gets
+// the Root pushed again. A more proactive recovery (subscriber
+// requests an immediate re-push from its CXO node here) is a future
+// follow-up.
+func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
+	if r == nil {
+		return
+	}
+	if r.Pub != skycipher.PubKey(s.feedPK) {
+		return
+	}
+	s.log.WithError(err).
+		WithField("feed", s.feedPK.Hex()).
+		WithField("seq", r.Seq).
+		Warn("treestore-sub: Root filling aborted; subscriber will miss this Root until publisher re-pushes")
 }
 
 // applySnapshot replaces the cache with snap and fires the change
