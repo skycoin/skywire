@@ -73,17 +73,12 @@ else follows.
   connectivity. NAT-indifferent, always-available baseline that
   works for endpoints which cannot reach each other directly.
 
-* **Skynet: peer-to-peer, multi-hop, and multiplexed routing that
-  bootstraps from DMSG.** Skynet auto-creates direct transports
-  between visors — STCPR (TCP relay) and SUDPH (UDP hole-punching)
-  — and builds single-hop or multi-hop routes across them with
-  Noise-encrypted packets end-to-end; intermediate visors see only
-  the previous and next hop. Multi-route mux groups parallel routes
-  between the same endpoints for higher bandwidth. The control-plane
-  services that make this possible — transport discovery, route
-  finder, service discovery, address resolver — are themselves
-  reached over DMSG, which is why DMSG bootstraps the routed
-  network.
+* **Skynet: peer-to-peer, multi-hop, and multiplexed routing.**
+  Routes carry Noise-encrypted packets end-to-end across one or
+  more direct transports between visors; intermediate visors see
+  only the previous and next hop. Multi-route mux groups parallel
+  routes between the same endpoints for higher aggregate
+  bandwidth.
 
 * **Remote monitoring and remote management over the overlay.**
   `skywire cli` reaches any visor over DMSG or Skynet for one-shot
