@@ -6,18 +6,28 @@ import { Node } from '../app.datatypes';
 import { processServiceError } from '../utils/errors';
 import { OperationError } from '../utils/operation-error';
 import { AppConfig } from '../app.config';
-import { NodeService } from './node.service';
+import { NodeService, NodeSection } from './node.service';
 
 /**
  * Data about the node list, returned by MultipleNodeDataService.
  */
 export class MultipleNodesBackendData {
   /**
-   * Node list. If the last operation for getting the data ended in an error, this property
-   * may still have a previously obtained value. If no data has already been obtained, it
-   * is null
+   * Flat node list, derived from sections by concatenating each
+   * section's nodes (with cross-section visor de-duplication kept by
+   * the consumer if needed — same visor PK can appear in multiple
+   * sections by design). Existing components that consume the flat
+   * list keep working unchanged.
    */
   data: Node[];
+  /**
+   * Per-hypervisor sections in tree form. First entry is the local
+   * hypervisor; subsequent entries are sub-hypervisors. Consumed by
+   * the main node list UI to render per-section tables with the
+   * breadcrumb between them. See NodeService.getNodesTree() for the
+   * source-of-truth contract.
+   */
+  sections: NodeSection[];
   /**
    * Error found while trying to get the data. It will only have a value if the last
    * try ended in an error.
@@ -110,12 +120,23 @@ export class MultipleNodeDataService {
         this.dataSubject.next(this.lastEmitedData);
       }),
       delay(120),
-      // Load the data.
-      mergeMap(() => this.nodeService.getNodes()))
-    .subscribe(result => {
+      // Load the data. Use the tree endpoint as the primary source —
+      // it carries the per-sub-hypervisor structure the UI needs to
+      // render multi-table layout. The flat `data` field is derived
+      // from sections by concatenating each section's nodes; consumers
+      // that don't care about sections keep working unchanged.
+      mergeMap(() => this.nodeService.getNodesTree()))
+    .subscribe((sections: NodeSection[]) => {
+      const flat: Node[] = [];
+      for (const s of sections) {
+        for (const n of s.nodes) {
+          flat.push(n);
+        }
+      }
       // Send the event.
       this.lastEmitedData = {
-        data: result,
+        data: flat,
+        sections: sections,
         error: null,
         momentOfLastCorrectUpdate: Date.now(),
         updating: false
@@ -130,6 +151,7 @@ export class MultipleNodeDataService {
       // Send the event.
       this.lastEmitedData = {
         data: this.lastEmitedData.data,
+        sections: this.lastEmitedData.sections,
         error: err,
         momentOfLastCorrectUpdate: this.lastEmitedData.momentOfLastCorrectUpdate,
         updating: false
