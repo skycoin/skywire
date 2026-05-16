@@ -67,16 +67,23 @@ else follows.
   overlay, and a SOCKS5 resolver translates `<pk>.skynet` /
   `<pk>.dmsg` URLs out of it.
 
-* **DMSG is the encrypted relay. Skynet is the peer-to-peer routing
-  that bootstraps from DMSG.** Visors connect as DMSG clients; DMSG
-  servers forward encrypted streams between them without seeing
-  contents and without either client needing direct connectivity.
-  From that baseline, Skynet auto-creates direct transports between
-  visors (STCPR over TCP, SUDPH over UDP hole-punching) and builds
-  single-hop or multi-hop routes across them. The control-plane
-  services that make Skynet routing possible — transport discovery,
-  route finder, service discovery, address resolver — are themselves
-  reached over DMSG.
+* **DMSG: the encrypted relay layer.** Visors connect as clients to
+  DMSG servers, which forward encrypted streams between them without
+  seeing contents and without either client needing direct
+  connectivity. NAT-indifferent, always-available baseline that
+  works for endpoints which cannot reach each other directly.
+
+* **Skynet: peer-to-peer, multi-hop, and multiplexed routing that
+  bootstraps from DMSG.** Skynet auto-creates direct transports
+  between visors — STCPR (TCP relay) and SUDPH (UDP hole-punching)
+  — and builds single-hop or multi-hop routes across them with
+  Noise-encrypted packets end-to-end; intermediate visors see only
+  the previous and next hop. Multi-route mux groups parallel routes
+  between the same endpoints for higher bandwidth. The control-plane
+  services that make this possible — transport discovery, route
+  finder, service discovery, address resolver — are themselves
+  reached over DMSG, which is why DMSG bootstraps the routed
+  network.
 
 * **Remote monitoring and remote management over the overlay.**
   `skywire cli` reaches any visor over DMSG or Skynet for one-shot
@@ -145,9 +152,9 @@ ultimate source or destination of the packet. These measures
 significantly mitigate the risk of metadata leakage or traffic
 analysis. When a transport is trafficking data from multiple sources
 and destinations, it becomes difficult to perform traffic correlation
-attacks or related exploits. Another planned feature is route
-multiplexing, which will multiplex multi-hop routes and permit more
-bandwidth between the source and destination — similar in concept to
+attacks or related exploits. Route multiplexing groups multiple
+parallel multi-hop routes between the same source and destination,
+permitting higher aggregate bandwidth — similar in concept to
 BitTorrent.
 
 ## Skywire Visor
