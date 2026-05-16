@@ -4,6 +4,7 @@
 package node
 
 import (
+	"context"
 	"errors"
 	"sync"
 
@@ -73,6 +74,14 @@ func (d *DMSG) Listen() error {
 // ConnectPK connects to a remote CXO node over DMSG by public key.
 // If a healthy connection already exists, returns the existing one.
 //
+// ctx bounds the underlying dmsg.Client.Dial — when ctx is canceled
+// or its deadline elapses before the dial completes, ConnectPK
+// returns ctx.Err() rather than blocking on a half-dead transport.
+// Pre-this-change the dmsg dial used context.Background(), so a
+// peer hung at the dmsg layer would survive the caller's deadline
+// (Manager.tryReconnectPeers, Session.ReconnectPeer, …) and pin a
+// goroutine in the dial until OS-level keepalive fired.
+//
 // Cached-Conn liveness gate: a cached Conn whose closeq is signaled
 // (run loop has observed the underlying transport going away, but
 // removeConn hasn't yet completed) OR whose underlying transport
@@ -102,7 +111,7 @@ func (d *DMSG) Listen() error {
 // network with no FIN/RST) — that path needs a separate liveness
 // pulse, deferred. For typical "peer's dmsg server flipped /
 // transport reset cleanly" failures this is sufficient.
-func (d *DMSG) ConnectPK(remotePK cipher.PubKey) (*Conn, error) {
+func (d *DMSG) ConnectPK(ctx context.Context, remotePK cipher.PubKey) (*Conn, error) {
 	d.n.Debugf(NewOutConnPin, "[dmsg:%s] connecting", remotePK.String())
 
 	// Check if connection already exists AND is alive.
@@ -119,7 +128,7 @@ func (d *DMSG) ConnectPK(remotePK cipher.PubKey) (*Conn, error) {
 	}
 
 	// Dial over DMSG
-	fc, err := d.DMSGFactory.Connect(remotePK)
+	fc, err := d.DMSGFactory.Connect(ctx, remotePK)
 	if err != nil {
 		return nil, err
 	}
