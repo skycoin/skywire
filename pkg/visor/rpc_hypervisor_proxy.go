@@ -55,6 +55,73 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 	entry.RewardAddress = summary.RewardAddress
 }
 
+// HVListDirectVisors returns summaries of visors DIRECTLY connected to
+// this hypervisor — does NOT walk sub-hypervisors. Used by the tree
+// builder to query each sub-hypervisor's own direct visors without
+// pulling its already-flattened sub-merge.
+//
+// Local visor is included first (with IsLocal=true) when this visor
+// has the hypervisor flag enabled, matching HVListVisors's shape.
+func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
+	if v.hvInstance == nil {
+		return nil, fmt.Errorf("hypervisor not running")
+	}
+	if !v.hvInstance.IsEnabled() {
+		return nil, fmt.Errorf("hypervisor not enabled")
+	}
+
+	hv := v.hvInstance
+	hv.mu.RLock()
+	type remote struct {
+		pk   cipher.PubKey
+		conn Conn
+	}
+	remotes := make([]remote, 0, len(hv.remoteVisors))
+	for pk, c := range hv.remoteVisors {
+		remotes = append(remotes, remote{pk, c})
+	}
+	hv.mu.RUnlock()
+
+	log := logging.MustGetLogger("hv_list_direct_visors")
+
+	results := make([]HVVisorEntry, len(remotes))
+	var wg sync.WaitGroup
+	wg.Add(len(remotes))
+	for i, e := range remotes {
+		go func(idx int, pk cipher.PubKey, api API) {
+			defer wg.Done()
+			entry := HVVisorEntry{PK: pk, Online: true}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				summary, err := api.Summary()
+				if err != nil {
+					entry.Error = err.Error()
+					return
+				}
+				populateEntryFromSummary(&entry, summary)
+			}()
+			select {
+			case <-done:
+			case <-time.After(10 * time.Second):
+				entry.Error = "timeout"
+				log.WithField("pk", pk.String()).Warn("HVListDirectVisors: visor query timed out")
+			}
+			results[idx] = entry
+		}(i, e.pk, e.conn.API)
+	}
+	wg.Wait()
+
+	if hv.visor != nil {
+		localEntry := HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		if localSummary, err := v.Summary(); err == nil {
+			populateEntryFromSummary(&localEntry, localSummary)
+		}
+		results = append([]HVVisorEntry{localEntry}, results...)
+	}
+	return results, nil
+}
+
 // HVListVisors returns summaries of all visors connected to this hypervisor.
 func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	if v.hvInstance == nil {
@@ -140,6 +207,15 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 			go func() {
 				sub, err := api.HVListVisors()
 				if err != nil {
+					// Errors swallowed silently here previously made
+					// "the feature didn't work" un-diagnosable from the
+					// caller's side. Most common reason: the remote
+					// isn't running as a hypervisor (`hv status:
+					// disabled`) and HVListVisors returns "hypervisor
+					// not enabled". Log so operators can see why a
+					// sub-hypervisor merge yielded nothing.
+					log.WithError(err).WithField("pk", hyperPK.String()).
+						Debug("HVListVisors: sub-hypervisor query failed (likely not a hypervisor)")
 					done <- nil
 					return
 				}
@@ -169,6 +245,177 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	}
 
 	return results, nil
+}
+
+// HVVisorTreeNode is one hypervisor's section in the tree response:
+// the hypervisor's PK, the chain of hypervisors from the local one
+// down to this one (empty for the local hypervisor itself), and the
+// visors directly connected to this hypervisor (NOT transitively
+// merged from any sub-hypervisors below it).
+//
+// Sub-hypervisors that fail to respond surface their error via the
+// SubError field instead of being silently dropped — the UI can
+// render a placeholder row with the error text, and operators can
+// tell "no sub-visors" from "query failed."
+type HVVisorTreeNode struct {
+	HypervisorPK cipher.PubKey   `json:"hypervisor_pk"`
+	ViaChain     []cipher.PubKey `json:"via_chain,omitempty"`
+	Visors       []HVVisorEntry  `json:"visors"`
+	SubError     string          `json:"sub_error,omitempty"`
+}
+
+// HVVisorTree is the structured response of HVListVisorsTree — a
+// flat list of hypervisor sections. The first entry is the local
+// hypervisor; subsequent entries are sub-hypervisors reachable from
+// it. Each section's `via_chain` documents the path from the local
+// hypervisor down to that sub-hypervisor, so the UI can render a
+// breadcrumb without recomputing.
+//
+// Visor entries replicate across sections: a visor V that's connected
+// to both the local hypervisor and a sub-hypervisor will appear in
+// BOTH sections — the semantics are "every table shows every visor
+// directly connected to that hypervisor," intentionally. Tables
+// themselves dedup: two paths to the same sub-hypervisor render once.
+type HVVisorTree struct {
+	Sections []HVVisorTreeNode `json:"sections"`
+}
+
+// HVListVisorsTree builds a tree-shaped response of every hypervisor
+// reachable from this one (local + direct sub-hypervisors only, depth
+// 2). Each section reports the visors DIRECTLY connected to that
+// hypervisor; cross-section dedup is the UI's job (visors with two
+// hypervisors appear in two sections by design).
+//
+// Cycle protection: tables dedup by hypervisor PK — if a sub-
+// hypervisor is reachable via two paths (e.g. via mutual hypervisor
+// pairs), its table renders once. Per-section query timeout (10s)
+// bounds wall time regardless of depth.
+//
+// Currently 1 level deep (local + direct sub-hypervisors). Walking
+// transitively to depth N would need a request-scoped visited-set
+// on the wire so each hop knows what NOT to recurse into;
+// out-of-scope for v1.
+func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
+	if v.hvInstance == nil {
+		return nil, fmt.Errorf("hypervisor not running")
+	}
+	if !v.hvInstance.IsEnabled() {
+		return nil, fmt.Errorf("hypervisor not enabled")
+	}
+
+	localPK := v.conf.PK
+	localVisors, err := v.HVListDirectVisors()
+	if err != nil {
+		return nil, err
+	}
+
+	sections := []HVVisorTreeNode{
+		{
+			HypervisorPK: localPK,
+			ViaChain:     nil,
+			Visors:       localVisors,
+		},
+	}
+
+	hv := v.hvInstance
+	hv.mu.RLock()
+	type remote struct {
+		pk   cipher.PubKey
+		conn Conn
+	}
+	remotes := make([]remote, 0, len(hv.remoteVisors))
+	for pk, c := range hv.remoteVisors {
+		remotes = append(remotes, remote{pk, c})
+	}
+	hv.mu.RUnlock()
+
+	log := logging.MustGetLogger("hv_list_visors_tree")
+
+	// Query each direct remote's HVListDirectVisors in parallel; only
+	// remotes that respond successfully are themselves hypervisors and
+	// contribute a section. Remotes that error (not a hypervisor / not
+	// reachable) are skipped; the error gets logged for operators.
+	type subResult struct {
+		hyperPK cipher.PubKey
+		visors  []HVVisorEntry
+		err     error
+	}
+	results := make([]subResult, len(remotes))
+	var wg sync.WaitGroup
+	wg.Add(len(remotes))
+	for i, e := range remotes {
+		go func(idx int, hyperPK cipher.PubKey, api API) {
+			defer wg.Done()
+			done := make(chan struct {
+				vs  []HVVisorEntry
+				err error
+			}, 1)
+			go func() {
+				vs, err := api.HVListDirectVisors()
+				done <- struct {
+					vs  []HVVisorEntry
+					err error
+				}{vs, err}
+			}()
+			select {
+			case r := <-done:
+				results[idx] = subResult{hyperPK, r.vs, r.err}
+			case <-time.After(10 * time.Second):
+				log.WithField("pk", hyperPK.String()).Warn("HVListVisorsTree: sub-hypervisor query timed out")
+				results[idx] = subResult{hyperPK, nil, fmt.Errorf("timeout")}
+			}
+		}(i, e.pk, e.conn.API)
+	}
+	wg.Wait()
+
+	// Dedup sub-hypervisors by PK. The local hypervisor is already in
+	// `sections[0]`; sub-hypervisor PKs that match the local PK (the
+	// mutual-hypervisor case) are skipped — they'd render the same
+	// table the local section already has.
+	rendered := map[cipher.PubKey]bool{localPK: true}
+	for _, r := range results {
+		if rendered[r.hyperPK] {
+			continue
+		}
+		if r.err != nil {
+			// Sub query failed but we still want to render a section
+			// so operators see WHICH sub-hypervisor failed and how.
+			// Skip if the remote simply isn't a hypervisor (the most
+			// common case — "hypervisor not enabled") to avoid noise.
+			if isNotHypervisorErr(r.err) {
+				log.WithError(r.err).WithField("pk", r.hyperPK.String()).
+					Debug("HVListVisorsTree: skipping non-hypervisor remote")
+				continue
+			}
+			rendered[r.hyperPK] = true
+			sections = append(sections, HVVisorTreeNode{
+				HypervisorPK: r.hyperPK,
+				ViaChain:     []cipher.PubKey{localPK},
+				SubError:     r.err.Error(),
+			})
+			continue
+		}
+		rendered[r.hyperPK] = true
+		sections = append(sections, HVVisorTreeNode{
+			HypervisorPK: r.hyperPK,
+			ViaChain:     []cipher.PubKey{localPK},
+			Visors:       r.visors,
+		})
+	}
+
+	return &HVVisorTree{Sections: sections}, nil
+}
+
+// isNotHypervisorErr identifies the well-known "remote isn't running
+// as a hypervisor" errors from HVListDirectVisors, so we can quietly
+// skip those remotes from the tree (every visor in a deployment that
+// ISN'T also a hypervisor would otherwise show up as a SubError row).
+func isNotHypervisorErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return s == "hypervisor not running" || s == "hypervisor not enabled"
 }
 
 // HVVisorSummary returns detailed info about a specific remote visor.
