@@ -569,12 +569,27 @@ func (n *Node) onConnInit(c *Conn) {
 }
 
 // removeConn reomoves connection from cache.
+//
+// Identity-checks the slot before deleting: when evictStalePeer
+// closes a stale Conn AND its run() drains past evictStalePeer's
+// timeout AND the handshake completes AND onConnInit overwrites
+// pkToConn[id] with a NEW Conn — all before the old run() finally
+// calls removeConn(old) — the old removeConn must NOT wipe the
+// slot now pointing at the live new Conn. Same shape for
+// addrToConn. Without the identity check, the late removeConn of
+// the evicted Conn silently strands the live one (hasPeer returns
+// false, feed routing skips the peer) until something else
+// re-registers.
 func (n *Node) removeConn(c *Conn) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
-	delete(n.addrToConn, c.Address())
-	delete(n.pkToConn, c.peerID)
+	if existing, ok := n.addrToConn[c.Address()]; ok && existing == c {
+		delete(n.addrToConn, c.Address())
+	}
+	if existing, ok := n.pkToConn[c.peerID]; ok && existing == c {
+		delete(n.pkToConn, c.peerID)
+	}
 
 	// Remove from feed tracking
 	n.fs.delConn(c)
