@@ -33,6 +33,19 @@ type Conn struct {
 	doneq  chan struct{}  // closed when run() has fully completed (maps cleaned, transport closed)
 	await  sync.WaitGroup // wait for all goroutines to exit
 
+	// lastActivityNs is the UnixNano of the most recent successful
+	// receiveMsg. Updated on every inbound message — chat traffic,
+	// heartbeats, request responses, anything. The idle watchdog
+	// goroutine (started in run()) closes the Conn when lastActivityNs
+	// has been stale longer than idleWatchdogThreshold, on the
+	// assumption that a half-dead underlying transport that never
+	// errors on Read would otherwise hold the Conn open indefinitely.
+	//
+	// Surfaces in PR #2643's `connIsAlive` chain — once the watchdog
+	// fires Close, closeq closes, connIsAlive returns false on next
+	// ConnectPK, fresh dial replaces the dead Conn.
+	lastActivityNs atomic.Int64
+
 	sendq chan<- []byte // channel from transport.Connection
 
 	// # stat
@@ -93,6 +106,21 @@ func (c *Conn) run() {
 		}
 	}()
 
+	// Idle watchdog — closes the Conn when receiveMsg hasn't seen
+	// inbound traffic for idleWatchdogThreshold. Targets the
+	// half-dead-underlying-transport case where the dmsg session is
+	// gone but io.ReadFull never returns an error (no FIN/RST
+	// propagation). Without this, reconnect attempts keep hitting
+	// PR #2643's connIsAlive check returning true (closeq still open,
+	// transport.IsClosed false) and getting back the same zombie Conn.
+	// Pairs with #2643: that PR evicts on next ConnectPK; this one
+	// makes sure the Conn actually goes dead so the eviction fires.
+	c.await.Add(1)
+	go func() {
+		defer c.await.Done()
+		c.idleWatchdog()
+	}()
+
 	// If OnConnect returns error, connection will be closed.
 	var occErr error
 	if occErr = c.n.onConnect(c); occErr != nil {
@@ -144,6 +172,60 @@ func (c *Conn) run() {
 
 	// Signal that the full cleanup is complete.
 	close(c.doneq)
+}
+
+// Idle watchdog timing constants. The threshold is set above any
+// realistic gap between heartbeats — a healthy publisher emits
+// heartbeats every 30s, and the watchdog fires only after roughly
+// three consecutive missed beats. That keeps false-positives away
+// from steady-state Conns while still catching half-dead transports
+// within ~2 ticks of going silent.
+//
+// Pick interval relative to threshold: 30s interval means worst-case
+// detection is threshold + 30s. With threshold=90s, worst case is
+// 120s (faster than the prior #2606 stale-detect+reconnect cycle's
+// ~150s recovery latency observed in T2-redux2-prep).
+const (
+	idleWatchdogThreshold = 90 * time.Second
+	idleWatchdogInterval  = 30 * time.Second
+)
+
+// idleWatchdog periodically checks whether receiveMsg has observed
+// any inbound traffic recently. Closes the Conn when activity has
+// been silent past idleWatchdogThreshold, on the assumption that a
+// healthy CXO peer with an active subscription would emit at least
+// heartbeats. Closing the Conn surfaces to PR #2643's connIsAlive
+// gate on the next ConnectPK call, which evicts the cached entry
+// and re-dials fresh.
+//
+// Exits cleanly on closeq close (either Close() called externally
+// or receiveMsg observed its own error). No-op call to Close on
+// closeq-already-signaled paths; idempotent.
+func (c *Conn) idleWatchdog() {
+	t := time.NewTicker(idleWatchdogInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-c.closeq:
+			return
+		case <-t.C:
+			last := c.lastActivityNs.Load()
+			if last == 0 {
+				// Watchdog ticked before receiveMsg seeded lastActivityNs.
+				// Skip this tick — receiveMsg seeds the timestamp on
+				// entry, so by the next tick we'll have a real value
+				// (or the Conn will have closed if receive errored).
+				continue
+			}
+			idle := time.Since(time.Unix(0, last))
+			if idle < idleWatchdogThreshold {
+				continue
+			}
+			c.n.Debugf(ConnPin, "[%s] idle watchdog: %s since last inbound, closing", c.String(), idle)
+			c.Close() //nolint:errcheck,gosec
+			return
+		}
+	}
 }
 
 func (c *Conn) decodeRaw(raw []byte) (seq, rseq uint32, m msg.Msg, err error) {
@@ -528,6 +610,12 @@ func (c *Conn) receiveMsg() error {
 
 	receiveq := c.GetChanIn()
 
+	// Initialize activity timestamp so the watchdog has a starting
+	// point — without this, a Conn that handshakes but never receives
+	// chat traffic looks idle from t=0 and the watchdog would fire
+	// the moment it starts.
+	c.lastActivityNs.Store(time.Now().UnixNano())
+
 	// Read raw messages from transport.Connection.
 	// Terminate if connection is closed or if close signal is sent.
 	for {
@@ -536,6 +624,11 @@ func (c *Conn) receiveMsg() error {
 			if ok == false { //nolint:staticcheck
 				return errors.New("connection closed")
 			}
+
+			// Bump activity on every inbound — chat traffic, heartbeats,
+			// request responses. The watchdog reads this to decide whether
+			// the Conn has gone idle past the threshold.
+			c.lastActivityNs.Store(time.Now().UnixNano())
 
 			// Check message size.
 			// [ 4 seq ][ 4 rseq ][ 1 msg type ]
