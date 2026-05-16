@@ -39,18 +39,13 @@ func init() {
 
 	RootCmd.AddCommand(srvCmd)
 	dmsgclient.InitFlags(srvCmd)
-	srvCmd.Flags().UintSliceVarP(&localPort, "lport", "p", localPort, "local application interface port(s)\033[0m\n\r")
-	srvCmd.Flags().UintSliceVarP(&dmsgPort, "dport", "d", dmsgPort, "DMSG port(s) to serve\033[0m\n\r")
-	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes"+func() string {
-		if len(wl) > 0 {
-			return "\033[0m\n\r"
-		}
-		return ""
-	}())
+	srvCmd.Flags().UintSliceVarP(&localPort, "lport", "p", localPort, "local application interface port(s)")
+	srvCmd.Flags().UintSliceVarP(&dmsgPort, "dport", "d", dmsgPort, "DMSG port(s) to serve")
+	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes")
 	srvCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", proxyAddr, "connect to DMSG via proxy (e.g., '127.0.0.1:1080')")
-	srvCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
+	srvCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]")
 	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
-	srvCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	srvCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified")
 	srvCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
 	srvCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 	srvCmd.CompletionOptions.DisableDefaultCmd = true

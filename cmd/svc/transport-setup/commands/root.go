@@ -46,7 +46,7 @@ func exampleJSON(v interface{}) string {
 	if err != nil {
 		return ""
 	}
-	return string(pretty.Color(b, nil))
+	return string(b)
 }
 
 // generateExamples creates example responses from actual struct types
