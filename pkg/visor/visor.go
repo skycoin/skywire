@@ -903,6 +903,39 @@ func (v *Visor) SnapshotGroupMessagesAfter(since time.Time) []GroupMessage {
 	return inbox.snapshotAfter(since)
 }
 
+// SnapshotGroupHistoryAfter returns persisted group messages with
+// TS > since from the durable history sink (if configured). Powers
+// the gRPC streaming handler's history-fallback path: when a
+// subscriber's reconnect gap is longer than the in-memory inbox
+// ring (groupInboxCap = 256 messages) can cover, the handler falls
+// through to this method to backfill from bbolt. The two sources
+// are merged + dedup'd at the handler layer.
+//
+// Returns nil + nil error when no history sink is configured
+// (operator hasn't set GroupHistoryDB), an unknown group, or no
+// messages newer than `since`. nil-vs-empty is not distinguished;
+// callers treat both as "no history backfill available, stick with
+// inbox-only".
+//
+// Filter contract matches SnapshotGroupMessagesAfter: strict
+// greater-than (TS > since). The handler's lastSentNs dedup
+// depends on it.
+func (v *Visor) SnapshotGroupHistoryAfter(groupID string, since time.Time) []GroupMessage {
+	v.initLock.RLock()
+	hist := v.grouping.history
+	v.initLock.RUnlock()
+	if hist == nil {
+		return nil
+	}
+	msgs, err := hist.ListGroupSince(groupID, since)
+	if err != nil {
+		v.log.WithError(err).WithField("group", groupID).
+			Debug("grouping: history-since fetch failed; stream falls back to inbox-only")
+		return nil
+	}
+	return msgs
+}
+
 // tpDiscClient is a convenience function to obtain transport discovery client.
 func (v *Visor) tpDiscClient() transport.DiscoveryClient {
 	return v.tpM.Conf.DiscoveryClient
