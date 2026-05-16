@@ -41,12 +41,7 @@ func init() {
 	dmsgclient.InitFlags(srvCmd)
 	srvCmd.Flags().UintSliceVarP(&localPort, "lport", "p", localPort, "local application interface port(s)")
 	srvCmd.Flags().UintSliceVarP(&dmsgPort, "dport", "d", dmsgPort, "DMSG port(s) to serve")
-	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes"+func() string {
-		if len(wl) > 0 {
-			return ""
-		}
-		return ""
-	}())
+	srvCmd.Flags().StringSliceVarP(&wl, "wl", "w", wl, "whitelisted keys for DMSG authenticated routes")
 	srvCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", proxyAddr, "connect to DMSG via proxy (e.g., '127.0.0.1:1080')")
 	srvCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]")
 	srvCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
