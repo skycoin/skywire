@@ -107,50 +107,37 @@ else follows.
 
 ## Skywire Control and Data Planes
 
-[Skywire](https://skycoin.com/skywire) uses [dmsg](https://github.com/skycoin/dmsg)
-as a control plane to enable all Skywire visors to connect to each
-other and to deployment services provided by the public
-[Skywire Network](https://conf.skywire.skycoin.com) (or a user-hosted
-deployment). DMSG (Read as: `D-message`) functions as a simple relay
-system and **encrypted** transport implementation, facilitating
-anonymous connections between dmsg clients (i.e., encrypted pubkey-
-based automatic routing), mediated by the dmsg server. Skywire expands
-upon this by creating a data plane of direct, secure, encrypted peer-
-to-peer transports between visors, which may then be used for routes.
+[dmsg](https://github.com/skycoin/dmsg) (read "D-message") is the
+**control plane** — the always-on relay layer over which visors
+reach the public
+[Skywire Network's](https://conf.skywire.skycoin.com) discovery
+services, or a self-hosted equivalent. Skynet is the **data
+plane** — direct peer-to-peer transports between visors and the
+routes built across them.
 
 ## Skywire Network and Transports
 
-A Skywire visor is identified by its public key. Skywire transports
-are encrypted via the public keys of the visors on each side of the
-transport. Skywire uses a whitelist system to enable trusted nodes
-(route setup nodes) to set up routes as calculated by the route finder
-service through established
-[transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports).
+Direct transports between visors come in two types: **STCPR**
+(Skywire TCP Relay) and **SUDPH** (Skywire UDP Hole-punching).
 An [automatic transport creation mechanism](pkg/visor/autoconnect.go),
-enabled by default, is used to establish transports to
-[public visors](https://sd.skycoin.com/api/services?type=visor) via
-STCPR (Skywire TCP Relay) transports, and to visors connected to
-public visors via SUDPH (Skywire UDP Hole-punching) transports. This
-auto-transport mechanism is designed to create adequate transports for
-multi-hop routing.
+enabled by default, establishes STCPR transports to
+[public visors](https://sd.skycoin.com/api/services?type=visor)
+and SUDPH transports to visors connected to those public visors,
+populating each visor with enough transports for multi-hop
+routing. Routes are set up by trusted route-setup nodes that
+consult the route finder service over
+[transports registered in the transport discovery](https://tpd.skywire.skycoin.com/all-transports).
 
 ## Skywire Routing
 
-Skywire routes consist of one or more transports. A Skywire route may
-not transit the same public key twice, in order to prevent data loops.
-The Skywire routing system is designed with privacy in mind to defeat
-data snooping efforts. Packets are encrypted using the Noise Protocol
-(ChaCha20-Poly1305), making their contents appear as random data to
-observers. A visor handling transports where data flows is only aware
-of the public key of the previous hop and the next hop — not the
-ultimate source or destination of the packet. These measures
-significantly mitigate the risk of metadata leakage or traffic
-analysis. When a transport is trafficking data from multiple sources
-and destinations, it becomes difficult to perform traffic correlation
-attacks or related exploits. Route multiplexing groups multiple
-parallel multi-hop routes between the same source and destination,
-permitting higher aggregate bandwidth — similar in concept to
-BitTorrent.
+A route is a chain of one or more transports between visors and
+may not transit the same public key twice, preventing data loops.
+When a transport simultaneously carries data for multiple
+unrelated source/destination pairs, traffic-correlation attacks
+become correspondingly harder — compounding the per-hop visibility
+limit the routing model already imposes. Route multiplexing
+between the same endpoints is similar in concept to BitTorrent's
+piece-level parallelism.
 
 ## Skywire Visor
 
@@ -179,46 +166,32 @@ Full reference: [docs/skywire/cli/](docs/skywire/cli/README.md).
 
 ## Skywire Apps
 
-Skywire visors include native VPN and SOCKS5 proxy server and client
-applications, as well as a messenger application, which are started
-and managed by the visor. When a server application is started, it
-registers itself in the service discovery as a
-[proxy server](https://sd.skycoin.com/api/services?type=proxy) or
-[VPN server](https://sd.skycoin.com/api/services?type=proxy). These
-services may then be consumed by respective client applications via
-either a direct or multi-hop route.
+Server-side apps auto-register in the
+[proxy server](https://sd.skycoin.com/api/services?type=proxy) /
+[VPN server](https://sd.skycoin.com/api/services?type=proxy)
+service discovery on startup; clients dial them by pubkey over a
+direct or multi-hop route.
 
 Operator guides: [vpn](docs/guides/vpn.md), [socks5](docs/guides/socks5.md), [skynet](docs/guides/skynet.md).
 
 ## DmsgWeb – Anonymous port forwarding over DMSG
 
-The `skywire dmsg web` and `skywire dmsg web srv` subcommands allow
-port forwarding over DMSG. Additionally, DmsgWeb provides a resolving
-SOCKS5 proxy, similar to and inspired by I2P, which permits convenient
-configuration of a web browser to access DMSG websites. With
-additional proxy configuration, all browser traffic can be routed
-through a Skywire SOCKS5 proxy connection. With Skywire's advanced
-routing, the already anonymous DMSG utilities can be made even more
-private by routing them through a Skywire SOCKS5 proxy connection.
+`skywire dmsg web` (client) and `skywire dmsg web srv` (server)
+forward TCP ports over DMSG; the resolving SOCKS5 side was
+inspired by I2P. Chaining a browser through a Skywire SOCKS5
+proxy on top composes DMSG's relay anonymity with Skynet's
+multi-hop routing.
 
 ## SkyNet – P2P port forwarding over Skywire
 
-SkyNet is the Skywire counterpart to DmsgWeb — facilitating port
-forwarding over Skywire's peer-to-peer transport types and advanced
-routing, without transiting a DMSG server. With SkyNet, you can:
-
-* **Expose local ports**: Run a SkyNet server to make local TCP services accessible to other Skywire visors
-* **Connect to remote services**: Use the SkyNet client to forward remote ports to your localhost
-* **Access control**: Whitelist specific public keys to restrict who can connect to your server
-* **Multiple instances**: Run multiple server and client instances simultaneously with unique names
+SkyNet is the counterpart to DmsgWeb — port forwarding over
+Skynet routes (direct + multi-hop) rather than over a DMSG relay.
+Server-side: expose local TCP services on the visor's pubkey,
+with per-pubkey whitelisting for access control. Client-side:
+forward a remote pubkey:port to a local port. Multiple server and
+client instances run simultaneously under unique names.
 
 Operator usage: [docs/guides/skynet.md](docs/guides/skynet.md).
-
-## Skywire Deployment Services
-
-Skywire enables users to create their own network if desired. The
-implementation is fully open source.
-[Documentation for making a custom Skywire deployment is here.](https://github.com/skycoin/skywire-deployment)
 
 ## Skywire Rewards
 
