@@ -335,6 +335,57 @@ func (s *BoltStore) ListByGroup(groupID string, limit int) ([]GroupMessage, erro
 	return msgs, err
 }
 
+// ListGroupSince implements Store. The bolt bucket is keyed by
+// tsKey(Timestamp), so we Seek to since's tsKey and walk forward —
+// O(messages-since) instead of O(all-messages-in-group). Returns
+// nil for an unknown group; an empty (non-nil error) result for a
+// group with messages but none newer than `since`.
+//
+// The Seek key is the exclusive boundary: messages with
+// Timestamp.Equal(since) are NOT included (since they're already
+// known to the caller — that's the cursor they passed). Anything
+// strictly newer surfaces. Matches the inbox snapshotAfter's TS.After
+// semantics.
+func (s *BoltStore) ListGroupSince(groupID string, since time.Time) ([]GroupMessage, error) {
+	if groupID == "" {
+		return nil, nil
+	}
+	var msgs []GroupMessage
+	err := s.db.View(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(groupsBucket))
+		gBkt := root.Bucket([]byte(groupID))
+		if gBkt == nil {
+			return nil
+		}
+		cur := gBkt.Cursor()
+		var k, v []byte
+		if since.IsZero() || since.UnixNano() < 0 {
+			// "From the beginning" mode. uint64(negative-nano) wraps
+			// to a huge value whose tsKey sorts AFTER every real key,
+			// which would silently return zero results — so the seek
+			// path skipped here and we just walk from the first key.
+			k, v = cur.First()
+		} else {
+			// Seek to the smallest key strictly greater than tsKey(since).
+			// nextKey is the +1 byte-increment of tsKey(since); a
+			// cursor.Seek to it lands on the first key with TS > since
+			// (bolt keys are byte-lex ordered and tsKey is monotonic
+			// in time across the positive-Unix-nano range).
+			boundary := nextKey(tsKey(since))
+			k, v = cur.Seek(boundary)
+		}
+		for ; k != nil; k, v = cur.Next() {
+			var m GroupMessage
+			if err := json.Unmarshal(v, &m); err != nil {
+				continue
+			}
+			msgs = append(msgs, m)
+		}
+		return nil
+	})
+	return msgs, err
+}
+
 // Groups implements Store. Returns the set of group IDs that have any
 // stored messages — symmetric with Peers() for the 1:1 store.
 func (s *BoltStore) Groups() ([]string, error) {
