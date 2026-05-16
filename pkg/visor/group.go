@@ -63,6 +63,37 @@ type GroupInfo struct {
 	// skychat group info` show which specific peer is stale in a
 	// group whose session-level SubscriberAlive is otherwise true.
 	PeerLastInbound map[string]time.Time `json:"peer_last_inbound,omitempty"`
+
+	// SubDropCount is the running total of inbox-to-stream drops
+	// across every live + torn-down gRPC StreamGroupMessages
+	// subscriber on THIS VISOR. Bumped in groupInbox.deliver's
+	// select+default branch when a subscriber's bounded channel is
+	// full (per-subscriber 256-message buffer set by the gRPC
+	// handler); persisted across unsubscribe so a single rolling
+	// total survives stream restarts.
+	//
+	// Inbox-wide, not group-scoped — the inbox fans every message
+	// to every live subscriber regardless of group, so a drop is
+	// "this subscriber couldn't keep up" rather than "this group is
+	// noisy". Repeated across every GroupInfo here for operator
+	// convenience; cross-checking the value between two groups in
+	// the same /status response always returns the same number.
+	//
+	// Distinct from the inbox ring's overflow drop semantics — the
+	// ring keeps the most-recent groupInboxCap (1024) messages
+	// regardless of subscriber draining. SubDropCount only counts
+	// messages that reached deliver's fan-out but failed to enqueue
+	// onto a particular subscriber's channel; the ring still has
+	// them and the next StreamGroupMessages reconnect's backlog
+	// replay picks them up via SinceTimestampNs (#2630/#2659).
+	//
+	// Surfaced live so the chat-app's /status can flag a busy group
+	// whose subscriber side is silently dropping under burst — pre-
+	// fix the count was only readable at unsubscribe time, leaving a
+	// gap where an operator watching /status saw subscriber_alive=true
+	// and last_message_at advancing but the CLI listener pipe
+	// missing messages.
+	SubDropCount uint64 `json:"sub_drop_count"`
 }
 
 // GroupMessage is one inbound message delivered through the visor's
@@ -158,14 +189,36 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	subDrop := v.groupSubDropCount()
 	out := make([]GroupInfo, 0, len(all))
 	for _, r := range all {
 		info := toInfo(r)
 		info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
 		info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
+		info.SubDropCount = subDrop
 		out = append(out, info)
 	}
 	return out, nil
+}
+
+// groupSubDropCount returns the inbox-wide running total of drops on
+// the gRPC StreamGroupMessages fan-out path. Returns 0 when the
+// grouping subsystem is uninitialized or has no inbox attached
+// (matches the existing pattern for nil-state graceful degradation).
+//
+// Repeated across every GroupInfo in GroupList / GroupGet rather
+// than living in its own RPC because operators viewing per-group
+// /status entries shouldn't have to make a separate call to find
+// the drop count. The value is the same across all groups on this
+// visor — see GroupInfo.SubDropCount docstring.
+func (v *Visor) groupSubDropCount() uint64 {
+	v.initLock.RLock()
+	inbox := v.grouping.inbox
+	v.initLock.RUnlock()
+	if inbox == nil {
+		return 0
+	}
+	return inbox.SubDropCount()
 }
 
 // GroupGet returns the info for a specific group, or ErrGroupNotFound.
@@ -195,6 +248,7 @@ func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	info := toInfo(r)
 	info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
 	info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
+	info.SubDropCount = v.groupSubDropCount()
 	return info, nil
 }
 
@@ -416,6 +470,13 @@ type groupInbox struct {
 	subsMu sync.RWMutex
 	subs   map[*groupSub]struct{}
 
+	// subDropTotal is the running accumulator of drop counts harvested
+	// from torn-down subscribers at unsubscribe time. The live-counter
+	// reads in SubDropCount sum this with each live sub's atomic.Uint64,
+	// keeping the total monotonic across stream restarts. Atomic so
+	// the read path doesn't need the subsMu write lock.
+	subDropTotal atomic.Uint64
+
 	// hist, when non-nil, gets a copy of every delivered message for
 	// disk persistence. Best-effort: write errors are logged but never
 	// block the in-memory ring or the live subscriber fan-out. nil
@@ -560,7 +621,35 @@ func (g *groupInbox) unsubscribe(sub *groupSub) {
 	g.subsMu.Lock()
 	if _, ok := g.subs[sub]; ok {
 		delete(g.subs, sub)
+		// Accumulate the departing subscriber's drop count into the
+		// inbox-wide total so SubDropCount stays monotonic across
+		// stream restarts. Doing it under subsMu keeps the live-sum
+		// + accumulator from racing: a fresh subscribe is also
+		// behind the mutex, so the read-then-accumulate sequence on
+		// the same sub-instance is serialized.
+		g.subDropTotal.Add(sub.dropCount.Load())
 		close(sub.ch)
 	}
 	g.subsMu.Unlock()
+}
+
+// SubDropCount returns the rolling total of inbox-to-stream drops
+// across every live + torn-down subscriber on this inbox. Drops
+// happen in deliver's select+default when a subscriber's bounded
+// channel is full; this method sums the live subscribers' running
+// counters with the accumulator that carries the count forward
+// across unsubscribe events. Inbox-wide (not per-group).
+//
+// Surfaced via GroupInfo.SubDropCount on every GroupList /
+// GroupGet result; the chat-app's /status renders it alongside
+// subscriber_alive + last_message_at so an operator can spot a
+// silently-dropping stream under burst without reading visor logs.
+func (g *groupInbox) SubDropCount() uint64 {
+	total := g.subDropTotal.Load()
+	g.subsMu.RLock()
+	for sub := range g.subs {
+		total += sub.dropCount.Load()
+	}
+	g.subsMu.RUnlock()
+	return total
 }
