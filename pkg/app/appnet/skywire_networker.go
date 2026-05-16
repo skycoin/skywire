@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -25,7 +26,10 @@ var (
 	// ErrPortAlreadyBound is being returned when the desired port is already bound to.
 	ErrPortAlreadyBound = errors.New("port already bound")
 	// ErrClosedConn is being returned when we are listening on a closed connection.
-	ErrClosedConn = errors.New("listening on closed connection")
+	// Wraps net.ErrClosed so generic accept loops that check the standard
+	// sentinel (e.g. dmsgctrl.ServeListener) recognize this as terminal
+	// instead of spin-logging on shutdown.
+	ErrClosedConn = fmt.Errorf("listening on closed connection: %w", net.ErrClosed)
 )
 
 // SkywireNetworker implements `Networker` for skynet.
