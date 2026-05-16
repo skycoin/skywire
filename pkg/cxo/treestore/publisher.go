@@ -286,10 +286,12 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 	// walking it back into the memNode keeps publish continuity across
 	// process boundaries. Errors here degrade to the empty-tree fallback
 	// (the existing behavior) so a corrupted on-disk state can't block
-	// the publisher from coming up.
+	// the publisher from coming up — but log at Warn so the operator-
+	// visible signal is loud enough to investigate: silent fallback
+	// looks exactly like the pre-fix bug from a subscriber's perspective.
 	if err := p.hydrateFromContainer(); err != nil {
 		conf.Logger.WithError(err).
-			Debug("treestore-pub: hydrate from container skipped; starting with empty tree")
+			Warn("treestore-pub: hydrate from container failed; starting with empty tree (any previously-published leaves will not be in the next published Root)")
 	}
 	go p.runLoop()
 	go p.runCleanupLoop()
