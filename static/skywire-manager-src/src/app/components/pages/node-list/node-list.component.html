@@ -34,6 +34,17 @@
       <!-- Header. -->
       <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': numberOfPages > 1}">
         <div class="title">
+          @if (localHypervisorPk) {
+            <!-- Local hypervisor PK label. Populated from the tree
+                 response's local section (sections[0]). The next-step
+                 PR adds per-sub-hypervisor table sections below the
+                 main table; this is the title bar piece per #2640's
+                 design. -->
+            <div class="hypervisor-pk-label transparent-50" [matTooltip]="localHypervisorPk">
+              <mat-icon class="small-icon" [inline]="true">star_outline</mat-icon>
+              <span class="ml-1">{{ localHypervisorPk }}</span>
+            </div>
+          }
           @if (dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0) {
             <div class="filter-label subtle-transparent-button cursor-pointer" (click)="dataFilterer.removeFilters()">
               @for (filterTexts of dataFilterer.currentFiltersTexts; track filterTexts) {
