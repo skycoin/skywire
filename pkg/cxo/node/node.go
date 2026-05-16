@@ -687,6 +687,35 @@ func (n *Node) hasPeer(id cipher.PubKey) (c *Conn, yep bool) { //nolint:unparam
 	return
 }
 
+// evictStalePeer closes the existing Conn for `id` and waits up to
+// the response timeout for run() to clean up (removeConn clears the
+// pkToConn slot). Used by handshake when a peer's fresh SYN/Ack
+// names the same NodeID as a Conn we already track — that record
+// is, by construction, stale (the peer wouldn't be redialing if
+// the old session were healthy on their side). The wait bounds
+// the race window before the caller registers the new Conn via
+// onConnInit; if cleanup overruns the timeout we proceed anyway
+// and accept the pkToConn slot being overwritten by onConnInit.
+func (n *Node) evictStalePeer(existing *Conn, id cipher.PubKey) {
+	if existing == nil {
+		return
+	}
+	n.Debugf(ConnHskPin, "[%s] evicting stale Conn for peer %s on rejoin",
+		existing.String(), id.Hex())
+	existing.Close() //nolint:errcheck,gosec
+	rt := n.config.TCP.ResponseTimeout
+	if existing.IsTCP() == false { //nolint:staticcheck
+		rt = n.config.UDP.ResponseTimeout
+	}
+	if rt <= 0 {
+		rt = 5 * time.Second
+	}
+	select {
+	case <-existing.Done():
+	case <-time.After(rt):
+	}
+}
+
 // A Stat represents Node stat
 type Stat struct {
 	*skyobject.Stat
