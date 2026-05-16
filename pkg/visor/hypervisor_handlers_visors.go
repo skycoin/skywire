@@ -2,10 +2,13 @@
 package visor
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -73,6 +76,219 @@ func (hv *Hypervisor) getVisors() http.HandlerFunc {
 
 		httputil.WriteJSON(w, r, http.StatusOK, overviews)
 	}
+}
+
+// VisorTreeSection is one hypervisor's section in the tree response.
+// Same shape as HVVisorTreeNode in the visor RPC, but rehydrates each
+// HVVisorEntry into the richer Summary the UI's table already knows
+// how to render. Visor entries replicate across sections by design;
+// sections themselves dedup.
+type VisorTreeSection struct {
+	HypervisorPK cipher.PubKey   `json:"hypervisor_pk"`
+	ViaChain     []cipher.PubKey `json:"via_chain,omitempty"`
+	Visors       []Summary       `json:"visors"`
+	SubError     string          `json:"sub_error,omitempty"`
+}
+
+// VisorTreeResponse wraps the tree sections for the UI's main node
+// list endpoint.
+type VisorTreeResponse struct {
+	Sections []VisorTreeSection `json:"sections"`
+}
+
+// getVisorsTreeSummary returns the structured tree of hypervisor
+// sections for the UI's main node list. The local hypervisor's
+// section is built using the existing getAllVisorsSummary path (with
+// the summary cache + dead-visor cleanup) so the local table renders
+// identically to today. Sub-hypervisor sections query each direct
+// remote hypervisor for its own direct visors via RPC.
+//
+// Visor entries replicate across sections when a visor is connected
+// to multiple hypervisors (intentional — every table shows every
+// visor directly connected to that hypervisor). Sections themselves
+// dedup by hypervisor PK.
+func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		localPK := hv.visor.conf.PK
+
+		// Build the local section by reusing the same Summary
+		// machinery as /visors-summary — same fields, same cache,
+		// same offline-row semantics.
+		localVisors := hv.collectLocalVisorSummaries()
+		sections := []VisorTreeSection{{
+			HypervisorPK: localPK,
+			ViaChain:     nil,
+			Visors:       localVisors,
+		}}
+
+		// Snapshot direct remotes for the sub-hypervisor walk. Each
+		// remote that's itself a hypervisor contributes a section;
+		// non-hypervisors are silently skipped (every visor in a
+		// deployment would otherwise show as a "this isn't a
+		// hypervisor" placeholder).
+		hv.mu.RLock()
+		type remote struct {
+			pk   cipher.PubKey
+			conn Conn
+		}
+		remotes := make([]remote, 0, len(hv.remoteVisors))
+		for pk, c := range hv.remoteVisors {
+			remotes = append(remotes, remote{pk, c})
+		}
+		hv.mu.RUnlock()
+
+		type subResult struct {
+			hyperPK cipher.PubKey
+			entries []HVVisorEntry
+			err     error
+		}
+		results := make([]subResult, len(remotes))
+		var wg sync.WaitGroup
+		wg.Add(len(remotes))
+		for i, e := range remotes {
+			go func(idx int, pk cipher.PubKey, api API) {
+				defer wg.Done()
+				done := make(chan struct {
+					vs  []HVVisorEntry
+					err error
+				}, 1)
+				go func() {
+					vs, err := api.HVListDirectVisors()
+					done <- struct {
+						vs  []HVVisorEntry
+						err error
+					}{vs, err}
+				}()
+				select {
+				case r := <-done:
+					results[idx] = subResult{pk, r.vs, r.err}
+				case <-time.After(10 * time.Second):
+					results[idx] = subResult{pk, nil, fmt.Errorf("timeout")}
+				}
+			}(i, e.pk, e.conn.API)
+		}
+		wg.Wait()
+
+		rendered := map[cipher.PubKey]bool{localPK: true}
+		for _, sr := range results {
+			if rendered[sr.hyperPK] {
+				continue
+			}
+			if sr.err != nil {
+				// Skip remotes that simply aren't hypervisors (the
+				// most common case — every plain visor in the
+				// deployment would otherwise show as a no-op error
+				// row in the tree).
+				es := sr.err.Error()
+				if es == "hypervisor not running" || es == "hypervisor not enabled" {
+					continue
+				}
+				rendered[sr.hyperPK] = true
+				sections = append(sections, VisorTreeSection{
+					HypervisorPK: sr.hyperPK,
+					ViaChain:     []cipher.PubKey{localPK},
+					SubError:     es,
+				})
+				continue
+			}
+			rendered[sr.hyperPK] = true
+			// Project HVVisorEntry → Summary so the UI's existing
+			// table renderer works identically across all sections.
+			// Sub-hypervisor visors don't carry the full Summary
+			// shape (health, dmsg stats, etc.) — those fields stay
+			// zero/empty. The basic fields the table cares about
+			// (PK, version, uptime, transports, apps, IP, country)
+			// come through populateEntryFromSummary on the remote
+			// side, here projected back.
+			visors := make([]Summary, 0, len(sr.entries))
+			for _, e := range sr.entries {
+				visors = append(visors, projectEntryToSummary(e))
+			}
+			sections = append(sections, VisorTreeSection{
+				HypervisorPK: sr.hyperPK,
+				ViaChain:     []cipher.PubKey{localPK},
+				Visors:       visors,
+			})
+		}
+
+		httputil.WriteJSON(w, r, http.StatusOK, VisorTreeResponse{Sections: sections})
+	}
+}
+
+// collectLocalVisorSummaries returns the Summary slice this
+// hypervisor's main node list shows, reusing the existing fetch /
+// cache / dead-visor cleanup logic. Extracted from
+// getAllVisorsSummary so the tree endpoint can build the local
+// section without duplicating that wiring.
+func (hv *Hypervisor) collectLocalVisorSummaries() []Summary {
+	// Reuse the existing handler's wire by serving it to a discard
+	// writer — keeps the cleanup + caching invariants intact. The
+	// summary set is small enough that the extra encode/decode is
+	// not a concern; alternative is a bigger refactor pulling the
+	// fetch logic into a shared helper.
+	rec := newBufferingResponseRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/visors-summary", nil) //nolint:errcheck
+	hv.getAllVisorsSummary()(rec, req)
+	var out []Summary
+	if err := rec.decode(&out); err != nil {
+		hv.logger.WithError(err).Warn("getVisorsTreeSummary: failed to decode local section")
+		return nil
+	}
+	return out
+}
+
+// projectEntryToSummary fills the Summary fields the main node list's
+// table consumes from an HVVisorEntry. Fields the table doesn't
+// render (health, dmsg stats, route group info, etc.) stay zero —
+// the UI's per-row code already guards on field presence (see
+// node.service.ts comments around "Offline rows from the hypervisor
+// cache still carry the visor's last-known fields").
+func projectEntryToSummary(e HVVisorEntry) Summary {
+	overview := &Overview{
+		PubKey:         e.PK,
+		LocalIP:        e.LocalIP,
+		PublicIP:       e.PublicIP,
+		CountryCode:    e.CountryCode,
+		IsSymmetricNAT: e.IsSymmetricNAT,
+		BuildInfo: &buildinfo.Info{
+			Version: e.Version,
+		},
+	}
+	return Summary{
+		Overview:      overview,
+		BuildTag:      e.BuildTag,
+		Uptime:        e.Uptime,
+		Online:        e.Online,
+		IsHypervisor:  false,
+		RewardAddress: e.RewardAddress,
+		ConfigVersion: e.ConfigVersion,
+	}
+}
+
+// bufferingResponseRecorder is a minimal http.ResponseWriter that
+// captures the body so collectLocalVisorSummaries can decode it.
+// Avoids pulling in net/http/httptest just for one internal call.
+type bufferingResponseRecorder struct {
+	hdr  http.Header
+	code int
+	body []byte
+}
+
+func newBufferingResponseRecorder() *bufferingResponseRecorder {
+	return &bufferingResponseRecorder{hdr: http.Header{}}
+}
+
+func (r *bufferingResponseRecorder) Header() http.Header  { return r.hdr }
+func (r *bufferingResponseRecorder) WriteHeader(code int) { r.code = code }
+func (r *bufferingResponseRecorder) Write(b []byte) (int, error) {
+	r.body = append(r.body, b...)
+	return len(b), nil
+}
+func (r *bufferingResponseRecorder) decode(v interface{}) error {
+	if len(r.body) == 0 {
+		return fmt.Errorf("empty body")
+	}
+	return json.Unmarshal(r.body, v)
 }
 
 // provides overview of single visor.

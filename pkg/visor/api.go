@@ -302,6 +302,8 @@ type API interface {
 	ARSelfInfo() (*ARSelfRegistration, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
 	HVListVisors() ([]HVVisorEntry, error)
+	HVListDirectVisors() ([]HVVisorEntry, error)
+	HVListVisorsTree() (*HVVisorTree, error)
 	HVVisorSummary(pk cipher.PubKey) (*Summary, error)
 	HVStartApp(pk cipher.PubKey, appName string) error
 	HVStopApp(pk cipher.PubKey, appName string) error
