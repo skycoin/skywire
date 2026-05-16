@@ -341,6 +341,29 @@ func (a *visorPingAdapter) SubscribeGroupMessages(capacity int) (<-chan rpcgrpc.
 	return out, cancel
 }
 
+// SnapshotGroupMessagesAfterNs bridges Visor.SnapshotGroupMessagesAfter
+// (time.Time arg, returns []GroupMessage) into rpcgrpc's import-cycle-
+// safe shape (UnixNano arg, returns []GroupMessageData). Empty slice
+// when grouping isn't initialized — matches the SubscribeGroupMessages
+// (nil channel) convention.
+func (a *visorPingAdapter) SnapshotGroupMessagesAfterNs(sinceNs int64) []rpcgrpc.GroupMessageData {
+	since := time.Unix(0, sinceNs)
+	src := a.v.SnapshotGroupMessagesAfter(since)
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]rpcgrpc.GroupMessageData, 0, len(src))
+	for _, m := range src {
+		out = append(out, rpcgrpc.GroupMessageData{
+			TimestampNs: m.TS.UnixNano(),
+			GroupID:     m.GroupID,
+			SenderPK:    m.SenderPK.Hex(),
+			Body:        m.Text,
+		})
+	}
+	return out
+}
+
 func (a *visorPingAdapter) LocalPK() cipher.PubKey {
 	return a.v.LocalPK()
 }
