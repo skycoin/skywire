@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/rpc"
@@ -364,7 +365,10 @@ type DMSGRPC struct {
 	n *Node
 }
 
-// Connect to a remote CXO node over DMSG by public key.
+// Connect to a remote CXO node over DMSG by public key. net/rpc's
+// method signature doesn't carry a ctx, so the dial is bounded only
+// by the dmsg client's own timeouts. Callers that need cancellation
+// must reach (*DMSG).ConnectPK directly with their own context.
 func (d *DMSGRPC) Connect(pk cipher.PubKey, _ *struct{}) error {
 	dmsgT := d.n.DMSG()
 	if dmsgT == nil {
@@ -373,7 +377,7 @@ func (d *DMSGRPC) Connect(pk cipher.PubKey, _ *struct{}) error {
 	// Convert skycoin cipher.PubKey to skywire cipher.PubKey
 	var swPK swcipher.PubKey
 	copy(swPK[:], pk[:])
-	_, err := dmsgT.ConnectPK(swPK)
+	_, err := dmsgT.ConnectPK(context.Background(), swPK)
 	return err
 }
 

@@ -20,6 +20,7 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -114,7 +115,12 @@ func (v *Visor) ensureTPDMetricsSubscriber() (*tpdMetricsSubscriber, error) {
 		}
 		v.tpdMetricsSubMu.Unlock()
 	})
-	if err := sub.Connect(tpdPK); err != nil {
+	// Per-attempt deadline on the dmsg dial — Subscriber.Connect's ctx
+	// is plumbed all the way to dmsg.Client.Dial post-T2a.
+	dctx, dcancel := context.WithTimeout(context.Background(), pairConnectTimeout)
+	err = sub.Connect(dctx, tpdPK)
+	dcancel()
+	if err != nil {
 		_ = sub.Close() //nolint:errcheck
 		return nil, fmt.Errorf("dial tpd metrics publisher: %w", err)
 	}

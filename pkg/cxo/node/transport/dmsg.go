@@ -84,10 +84,14 @@ func (f *DMSGFactory) Address() string {
 	return ""
 }
 
-// Connect dials a remote CXO node over DMSG by public key.
-func (f *DMSGFactory) Connect(remotePK cipher.PubKey) (*Connection, error) {
+// Connect dials a remote CXO node over DMSG by public key. ctx is
+// passed straight to dmsg.Client.Dial — a canceled or expired ctx
+// aborts the dial and returns ctx.Err() (wrapped). Callers that
+// don't need cancellation can pass context.Background(); the
+// (*DMSG).ConnectPK wrapper threads its caller's ctx through here.
+func (f *DMSGFactory) Connect(ctx context.Context, remotePK cipher.PubKey) (*Connection, error) {
 	addr := dmsg.Addr{PK: remotePK, Port: f.port}
-	conn, err := f.dmsgC.Dial(context.Background(), addr)
+	conn, err := f.dmsgC.Dial(ctx, addr)
 	if err != nil {
 		return nil, fmt.Errorf("dmsg dial %v: %w", addr, err)
 	}

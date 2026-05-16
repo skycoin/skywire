@@ -12,6 +12,7 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"sort"
 	"sync"
@@ -20,6 +21,13 @@ import (
 	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cipher"
 )
+
+// pairConnectTimeout bounds the dmsg dial in PairAdd. PairAdd is
+// operator-initiated (HTTP from the chat-app), so a single
+// unreachable peer shouldn't block the HTTP request beyond this
+// window. The publisher side is up regardless; the subscriber side
+// reconnects on next Resume.
+const pairConnectTimeout = 15 * time.Second
 
 // PairInfo is the public summary of a chat pair, returned by PairList
 // and used as the poll cursor for PairPoll.
@@ -66,7 +74,13 @@ func (v *Visor) PairAdd(peerPK cipher.PubKey) error {
 	if err != nil {
 		return err
 	}
-	if err := p.Connect(); err != nil {
+	// Bound the dial: PairAdd is operator-initiated (HTTP from the
+	// chat-app), so a single unreachable peer shouldn't block the
+	// HTTP request beyond the per-attempt window. Subscriber.Connect's
+	// ctx is plumbed all the way to dmsg.Client.Dial post-T2a.
+	dctx, dcancel := context.WithTimeout(context.Background(), pairConnectTimeout)
+	defer dcancel()
+	if err := p.Connect(dctx); err != nil {
 		// Connect-failure is non-fatal — the publisher side is up,
 		// and Resume on a future restart (or a manual retry) will
 		// pick up the subscriber side once the peer is reachable.
