@@ -172,9 +172,68 @@ var groupInfoCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		body, _ := json.MarshalIndent(info, "", "  ") //nolint:errcheck
-		internal.PrintOutput(cmd.Flags(), info, string(body)+"\n")
+		// JSON path stays unchanged: tooling and the prior
+		// human-readable-was-JSON behavior are preserved when --json
+		// is set. The default human path renders a labeled summary
+		// plus a per-peer liveness table when peer_last_inbound has
+		// entries — the operator-facing surface for the telemetry
+		// added in #2628.
+		human := renderGroupInfo(info)
+		internal.PrintOutput(cmd.Flags(), info, human)
 	},
+}
+
+// renderGroupInfo formats a GroupInfo for the operator-facing
+// `cli skychat group info` default (non-JSON) output. The shape
+// mirrors `group list` columns for the header fields, then adds
+// a per-peer last-inbound table when the visor populated
+// peer_last_inbound (group is a live member-side session with one
+// or more peerSubs). A zero time is rendered as "never" to make
+// "subscriber up, this peer is silent" obvious vs an absent row.
+func renderGroupInfo(info visor.GroupInfo) string {
+	var buf strings.Builder
+	last := "-"
+	if !info.LastMessageAt.IsZero() {
+		last = info.LastMessageAt.UTC().Format(time.RFC3339)
+	}
+	fmt.Fprintf(&buf, "id:                %s\n", info.ID)                                   //nolint:errcheck
+	fmt.Fprintf(&buf, "name:              %s\n", info.Name)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "owner:             %s\n", info.OwnerPK)                              //nolint:errcheck
+	fmt.Fprintf(&buf, "port:              %d\n", info.Port)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "mode:              %s\n", info.Mode)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "role:              %s\n", info.Role)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "status:            %s\n", info.Status)                               //nolint:errcheck
+	fmt.Fprintf(&buf, "created_at:        %s\n", info.CreatedAt.UTC().Format(time.RFC3339)) //nolint:errcheck
+	fmt.Fprintf(&buf, "joined_at:         %s\n", info.JoinedAt.UTC().Format(time.RFC3339))  //nolint:errcheck
+	fmt.Fprintf(&buf, "last_message_at:   %s\n", last)                                      //nolint:errcheck
+	fmt.Fprintf(&buf, "subscriber_alive:  %t\n", info.SubscriberAlive)                      //nolint:errcheck
+	fmt.Fprintf(&buf, "members (%d):\n", len(info.Members))                                 //nolint:errcheck
+	for _, pk := range info.Members {
+		fmt.Fprintf(&buf, "  %s\n", pk) //nolint:errcheck
+	}
+	if len(info.Admins) > 0 {
+		fmt.Fprintf(&buf, "admins (%d):\n", len(info.Admins)) //nolint:errcheck
+		for _, pk := range info.Admins {
+			fmt.Fprintf(&buf, "  %s\n", pk) //nolint:errcheck
+		}
+	}
+	if len(info.PeerLastInbound) > 0 {
+		fmt.Fprintf(&buf, "peer_last_inbound (%d):\n", len(info.PeerLastInbound)) //nolint:errcheck
+		w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "  PEER\tLAST_INBOUND\tAGE") //nolint:errcheck
+		now := time.Now().UTC()
+		for pk, ts := range info.PeerLastInbound {
+			when := "never"
+			age := "-"
+			if !ts.IsZero() {
+				when = ts.UTC().Format(time.RFC3339)
+				age = now.Sub(ts.UTC()).Truncate(time.Second).String()
+			}
+			fmt.Fprintf(w, "  %s\t%s\t%s\n", pk, when, age) //nolint:errcheck
+		}
+		_ = w.Flush() //nolint:errcheck
+	}
+	return buf.String()
 }
 
 var groupInviteCmd = &cobra.Command{
