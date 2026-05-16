@@ -1119,7 +1119,24 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 	if ch == nil {
 		return fmt.Errorf("group inbox not available on this visor")
 	}
-	defer cancel()
+	// On tear-down, log the subscriber's final dropCount at WARN if
+	// non-zero. Pre-fix this number was silently discarded, leaving a
+	// gap where an operator watching subscriber_alive=true could
+	// reasonably believe the receive path was healthy while the CLI
+	// listener was actually missing messages dropped between
+	// inbox.deliver and the gRPC stream's bounded channel. Inbox-
+	// wide rolling total is also surfaced live via GroupInfo
+	// .SubDropCount (#groupInbox.SubDropCount); the per-subscriber
+	// number from cancel() is the just-departing stream's
+	// contribution, useful for correlating a specific reconnect's
+	// shape with the rolling visor-wide total.
+	defer func() {
+		dropped := cancel()
+		if dropped > 0 {
+			s.log.Warnf("gRPC StreamGroupMessages: subscriber teardown drop_count=%d group_id=%q (inbox→stream channel was full during fan-out; messages survive in the inbox ring + history sink, reconnect with SinceTimestampNs replays them)",
+				dropped, req.GroupId)
+		}
+	}()
 
 	s.log.Debugf("gRPC StreamGroupMessages: subscribed group_id=%q since_ns=%d", req.GroupId, req.SinceTimestampNs)
 
