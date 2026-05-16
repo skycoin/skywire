@@ -275,9 +275,108 @@ func New(cxoNode *node.Node, sk cipher.SecKey, conf Config) (*Publisher, error) 
 		cleanupNudge: make(chan struct{}, 1),
 		cleanupDone:  make(chan struct{}),
 	}
+	// Hydrate the in-memory tree from the previously-published Root on
+	// the underlying CXO node, if one exists. Without this, every
+	// process restart starts from an empty memNode — the next Put
+	// publishes a Root whose Refs point to a TreeNode containing only
+	// that one new leaf, and subscribers' applySnapshot replaces their
+	// cache with the truncated tree (every historical leaf gets emitted
+	// as a delete event). The bbolt-persisted CXO objects survive the
+	// restart, so the previous Root is reachable via Container.LastRoot;
+	// walking it back into the memNode keeps publish continuity across
+	// process boundaries. Errors here degrade to the empty-tree fallback
+	// (the existing behavior) so a corrupted on-disk state can't block
+	// the publisher from coming up.
+	if err := p.hydrateFromContainer(); err != nil {
+		conf.Logger.WithError(err).
+			Debug("treestore-pub: hydrate from container skipped; starting with empty tree")
+	}
 	go p.runLoop()
 	go p.runCleanupLoop()
 	return p, nil
+}
+
+// hydrateFromContainer walks the previously-published Root for this
+// publisher's feed (if any) and rebuilds p.root from it. Returns nil
+// when the feed has no prior state (fresh publisher); a non-nil error
+// is logged but doesn't block publisher startup (caller falls back to
+// the empty-tree default).
+//
+// Idempotent — safe to call before goroutines start (Publisher.New
+// pattern) and serves as the recovery path for any future "wipe the
+// in-memory tree and rebuild" use case. Locking is intentionally
+// absent: callers hold the only reference to p.root at this point.
+func (p *Publisher) hydrateFromContainer() error {
+	c := p.cxoNode.Container()
+	skyPK := skycipher.PubKey(p.pk)
+	nonce := c.ActiveHead(skyPK)
+	if nonce == 0 {
+		// No active head for this feed — fresh publisher state, no
+		// hydration needed. Not an error.
+		return nil
+	}
+	r, err := c.LastRoot(skyPK, nonce)
+	if err != nil {
+		return fmt.Errorf("LastRoot: %w", err)
+	}
+	if r == nil || len(r.Refs) == 0 {
+		return nil
+	}
+	skyfromCipher := skycipher.SecKey(p.sk)
+	up, err := c.Unpack(skyfromCipher, Registry)
+	if err != nil {
+		return fmt.Errorf("Unpack: %w", err)
+	}
+	defer up.Close() //nolint:errcheck
+
+	var rootNode TreeNode
+	if err := r.Refs[0].Value(up, &rootNode); err != nil {
+		return fmt.Errorf("decode root TreeNode: %w", err)
+	}
+	hydrated := newMemNode()
+	if err := hydrateMemNode(up, &rootNode, hydrated); err != nil {
+		return fmt.Errorf("walk: %w", err)
+	}
+	p.root = hydrated
+	return nil
+}
+
+// hydrateMemNode is the publisher-side counterpart to subscriber.go's
+// walkTree: same TreeNode decode loop, but builds a memNode tree
+// (with sub-nodes nested by name) instead of a flat path→value map.
+// The shape matches what encodeNode produces, so a subsequent publish
+// against the hydrated tree round-trips through publishRoot and
+// produces a Root identical to the one we just read — until a Put
+// mutates a path, after which the dirty-path-only re-encode keeps
+// the unchanged subtrees stable.
+func hydrateMemNode(up registry.Pack, node *TreeNode, dest *memNode) error {
+	n, err := node.Children.Len(up)
+	if err != nil {
+		return err
+	}
+	for i := 0; i < n; i++ {
+		var entry TreeEntry
+		if _, err := node.Children.ValueByIndex(up, i, &entry); err != nil {
+			return err
+		}
+		if len(entry.Leaf) > 0 {
+			dest.leaves[entry.Name] = append([]byte(nil), entry.Leaf...)
+			continue
+		}
+		if entry.Sub.Hash == (skycipher.SHA256{}) {
+			continue
+		}
+		var sub TreeNode
+		if err := entry.Sub.Value(up, &sub); err != nil {
+			return err
+		}
+		child := newMemNode()
+		if err := hydrateMemNode(up, &sub, child); err != nil {
+			return err
+		}
+		dest.subs[entry.Name] = child
+	}
+	return nil
 }
 
 // Feed returns the public key of the feed. Subscribers connect using
