@@ -84,6 +84,17 @@ type Store interface {
 	// group, newest last. If limit <= 0, returns all.
 	ListByGroup(groupID string, limit int) ([]GroupMessage, error)
 
+	// ListGroupSince returns every stored group message whose Timestamp
+	// is strictly after `since`, oldest first. Returns nil for an
+	// unknown group or for a group with no messages newer than `since`.
+	//
+	// Used by the gRPC StreamGroupMessages handler to backfill a
+	// reconnecting subscriber whose disconnect gap is longer than the
+	// in-memory inbox ring can cover. The bbolt key is the message
+	// timestamp (see tsKey), so the lookup is a cursor Seek + forward
+	// walk — no full-bucket scan even on a long-running group.
+	ListGroupSince(groupID string, since time.Time) ([]GroupMessage, error)
+
 	// Groups returns the set of group IDs that have any stored messages.
 	Groups() ([]string, error)
 

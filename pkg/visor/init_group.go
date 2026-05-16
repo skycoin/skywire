@@ -222,3 +222,36 @@ func (a *groupHistoryAdapter) ListByGroup(groupID string, limit int) ([]GroupMes
 func (a *groupHistoryAdapter) Groups() ([]string, error) {
 	return a.store.Groups()
 }
+
+// ListGroupSince implements groupHistorySink (read path beyond the
+// inbox ring). Walks the bolt store from the first message with TS
+// strictly after `since`, returning visor-shaped GroupMessage values
+// in chronological order. The bolt key is the message timestamp so
+// the underlying call is a cursor Seek + forward walk — bounded by
+// "messages since the cursor" rather than "all messages in the
+// group" even on long-running groups.
+//
+// Invalid-PK records on disk are skipped with a debug log (same
+// defense-in-depth as ListByGroup); the rest of the result stream
+// is preserved.
+func (a *groupHistoryAdapter) ListGroupSince(groupID string, since time.Time) ([]GroupMessage, error) {
+	hMsgs, err := a.store.ListGroupSince(groupID, since)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]GroupMessage, 0, len(hMsgs))
+	for _, m := range hMsgs {
+		var senderPK cipher.PubKey
+		if err := senderPK.Set(m.SenderPK); err != nil {
+			a.log.WithError(err).WithField("group", groupID).Debug("grouping: history-since skip bad pk")
+			continue
+		}
+		out = append(out, GroupMessage{
+			GroupID:  m.GroupID,
+			SenderPK: senderPK,
+			Text:     m.Text,
+			TS:       m.Timestamp,
+		})
+	}
+	return out, nil
+}
