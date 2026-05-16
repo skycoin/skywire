@@ -41,11 +41,11 @@ var (
 func InitFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVarP(&UseHTTP, "http", "Z", UseHTTP, "use regular http to connect to DMSG Discovery")
 	cmd.Flags().BoolVarP(&UseDC, "direct", "B", UseDC, "use dmsg-direct client & don't connect to DMSG Discovery")
-	cmd.Flags().StringVarP(&DmsgDiscURL, "disc-url", "U", DmsgDiscURL, "DMSG Discovery URL\033[0m\n\r")
-	cmd.Flags().StringVarP(&DmsgDiscAddr, "disc-addr", "A", DmsgDiscAddr, "DMSG Discovery dmsg address\033[0m\n\r")
+	cmd.Flags().StringVarP(&DmsgDiscURL, "disc-url", "U", DmsgDiscURL, "DMSG Discovery URL")
+	cmd.Flags().StringVarP(&DmsgDiscAddr, "disc-addr", "A", DmsgDiscAddr, "DMSG Discovery dmsg address")
 	cmd.Flags().StringVarP(&DmsgHTTPPath, "dmsgconf", "D", "", "dmsghttp-config path")
-	cmd.Flags().IntVarP(&DmsgSessions, "sess", "e", DmsgSessions, "number of DMSG Servers to connect to\033[0m\n\r")
-	cmd.Flags().StringVarP(&DmsgServerAddr, "srv", "S", "", "connect via specific dmsg server `pk@ip:port`\033[0m\n\r")
+	cmd.Flags().IntVarP(&DmsgSessions, "sess", "e", DmsgSessions, "number of DMSG Servers to connect to")
+	cmd.Flags().StringVarP(&DmsgServerAddr, "srv", "S", "", "connect via specific dmsg server `pk@ip:port`")
 }
 
 // ParseServerAddr parses the --srv flag value into a disc.Entry.

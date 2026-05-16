@@ -43,14 +43,14 @@ func init() {
 	RootCmd.Flags().SortFlags = false
 	dmsgclient.InitFlags(RootCmd)
 	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "p", proxyAddr, "connect to DMSG via proxy (i.e. '127.0.0.1:1080')")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
-	RootCmd.Flags().StringVarP(&serveDir, "dir", "r", ".", "local dir to serve via dmsghttp\033[0m\n\r")
-	RootCmd.Flags().UintVarP(&dmsgPort, "port", "d", 80, "DMSG port to serve from\033[0m\n\r")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]")
+	RootCmd.Flags().StringVarP(&serveDir, "dir", "r", ".", "local dir to serve via dmsghttp")
+	RootCmd.Flags().UintVarP(&dmsgPort, "port", "d", 80, "DMSG port to serve from")
 	RootCmd.Flags().StringSliceVarP(&wl, "wl", "w", []string{}, "whitelist keys to access server, comma separated")
 	if os.Getenv("DMSGHTTP_SK") != "" {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint
 	}
-	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified")
 	RootCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
