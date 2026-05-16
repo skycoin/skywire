@@ -569,12 +569,27 @@ func (n *Node) onConnInit(c *Conn) {
 }
 
 // removeConn reomoves connection from cache.
+//
+// Identity-checks the slot before deleting: when evictStalePeer
+// closes a stale Conn AND its run() drains past evictStalePeer's
+// timeout AND the handshake completes AND onConnInit overwrites
+// pkToConn[id] with a NEW Conn — all before the old run() finally
+// calls removeConn(old) — the old removeConn must NOT wipe the
+// slot now pointing at the live new Conn. Same shape for
+// addrToConn. Without the identity check, the late removeConn of
+// the evicted Conn silently strands the live one (hasPeer returns
+// false, feed routing skips the peer) until something else
+// re-registers.
 func (n *Node) removeConn(c *Conn) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
 
-	delete(n.addrToConn, c.Address())
-	delete(n.pkToConn, c.peerID)
+	if existing, ok := n.addrToConn[c.Address()]; ok && existing == c {
+		delete(n.addrToConn, c.Address())
+	}
+	if existing, ok := n.pkToConn[c.peerID]; ok && existing == c {
+		delete(n.pkToConn, c.peerID)
+	}
 
 	// Remove from feed tracking
 	n.fs.delConn(c)
@@ -685,6 +700,35 @@ func (n *Node) hasPeer(id cipher.PubKey) (c *Conn, yep bool) { //nolint:unparam
 
 	c, yep = n.pkToConn[id]
 	return
+}
+
+// evictStalePeer closes the existing Conn for `id` and waits up to
+// the response timeout for run() to clean up (removeConn clears the
+// pkToConn slot). Used by handshake when a peer's fresh SYN/Ack
+// names the same NodeID as a Conn we already track — that record
+// is, by construction, stale (the peer wouldn't be redialing if
+// the old session were healthy on their side). The wait bounds
+// the race window before the caller registers the new Conn via
+// onConnInit; if cleanup overruns the timeout we proceed anyway
+// and accept the pkToConn slot being overwritten by onConnInit.
+func (n *Node) evictStalePeer(existing *Conn, id cipher.PubKey) {
+	if existing == nil {
+		return
+	}
+	n.Debugf(ConnHskPin, "[%s] evicting stale Conn for peer %s on rejoin",
+		existing.String(), id.Hex())
+	existing.Close() //nolint:errcheck,gosec
+	rt := n.config.TCP.ResponseTimeout
+	if existing.IsTCP() == false { //nolint:staticcheck
+		rt = n.config.UDP.ResponseTimeout
+	}
+	if rt <= 0 {
+		rt = 5 * time.Second
+	}
+	select {
+	case <-existing.Done():
+	case <-time.After(rt):
+	}
 }
 
 // A Stat represents Node stat
