@@ -710,7 +710,27 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 				stalePeers = append(stalePeers, pk)
 			}
 		}
-		if len(stalePeers) == 0 {
+		// Legacy s.sub staleness check — separate field, separate
+		// liveness signal. Member sessions where openMember attached
+		// the legacy owner-feed subscriber can have every peerSub
+		// alive (so the per-peer loop above produces an empty
+		// stalePeers list) while s.sub is silently wedged. The
+		// per-peerSub liveness map from #2606 doesn't cover s.sub
+		// because it lives outside peerSubs (deferred D4 cleanup),
+		// so without this branch a wedged s.sub stays dead until the
+		// operator does leave + rejoin.
+		legacySubStale := false
+		if sess.HasLegacySub() {
+			last := sess.LegacySubLastInbound()
+			var lag time.Duration
+			if last.IsZero() {
+				lag = subscriberStaleThreshold + time.Second
+			} else {
+				lag = now.Sub(last)
+			}
+			legacySubStale = lag > subscriberStaleThreshold
+		}
+		if len(stalePeers) == 0 && !legacySubStale {
 			continue
 		}
 		// Honor the per-group backoff so a wedged group doesn't
@@ -718,12 +738,20 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 		if !m.reconnectShouldAttempt(r.ID, now) {
 			continue
 		}
-		m.log.WithField("id", r.ID).
-			WithField("stale_peers", len(stalePeers)).
-			WithField("total_peers", len(peers)).
-			WithField("status", string(r.Status)).
-			Debug("group: per-peer stale; kicking per-peer reconnects")
-		m.tryReconnectPeers(ctx, sess, r.ID, stalePeers)
+		if len(stalePeers) > 0 {
+			m.log.WithField("id", r.ID).
+				WithField("stale_peers", len(stalePeers)).
+				WithField("total_peers", len(peers)).
+				WithField("status", string(r.Status)).
+				Debug("group: per-peer stale; kicking per-peer reconnects")
+			m.tryReconnectPeers(ctx, sess, r.ID, stalePeers)
+		}
+		if legacySubStale {
+			m.log.WithField("id", r.ID).
+				WithField("status", string(r.Status)).
+				Debug("group: legacy s.sub stale; kicking owner-feed reconnect")
+			m.tryReconnectLegacySub(ctx, sess, r.ID)
+		}
 	}
 }
 
@@ -813,6 +841,48 @@ func (m *Manager) tryReconnectPeers(ctx context.Context, sess *Session, id strin
 	if lastErr != nil {
 		m.reconnectRecordFailure(id, lastErr)
 	}
+}
+
+// tryReconnectLegacySub runs one ReconnectLegacySub attempt for the
+// session's legacy s.sub owner-feed subscriber. Counterpart to
+// tryReconnectPeers but for the single legacy subscriber that lives
+// outside the peerSubs map (deferred D4 cleanup). No-op on owner
+// sessions and on member sessions where s.sub is nil.
+//
+// On success: clears per-group failure state and promotes Status →
+// StatusActive (same shape as tryReconnect / tryReconnectPeers).
+// Session.ReconnectLegacySub bumps subLastInboundNs internally so the
+// next detectStaleAndReconnect tick correctly sees the session as
+// fresh. On failure: records via reconnectRecordFailure so the
+// per-group backoff engages.
+//
+// Deliberately separate from tryReconnectPeers — they target
+// different subscribers (s.sub vs. peerSubs[ownerPK]) which can
+// independently go stale, and routing through a single helper would
+// blur which one a given log line refers to.
+func (m *Manager) tryReconnectLegacySub(ctx context.Context, sess *Session, id string) {
+	if !sess.HasLegacySub() {
+		return
+	}
+	m.log.WithField("id", id).
+		Debug("group: reconnect: attempting legacy owner-feed subscribe")
+	timeoutCtx, cancel := context.WithTimeout(ctx, reconnectAttemptTimeout)
+	defer cancel()
+	if err := sess.ReconnectLegacySub(timeoutCtx); err != nil {
+		m.log.WithError(err).WithField("id", id).
+			Debug("group: reconnect: legacy owner-feed subscribe failed")
+		m.reconnectRecordFailure(id, err)
+		return
+	}
+	m.reconnectMu.Lock()
+	delete(m.reconnectState, id)
+	m.reconnectMu.Unlock()
+	if sErr := m.store.SetStatus(id, StatusActive); sErr != nil {
+		m.log.WithError(sErr).WithField("id", id).
+			Warn("group: reconnect: SetStatus active failed")
+	}
+	m.log.WithField("id", id).
+		Info("group: reconnect: legacy owner-feed subscribe restored")
 }
 
 // reconnectShouldAttempt returns false when the per-group nextAttempt
