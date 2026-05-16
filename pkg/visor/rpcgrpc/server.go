@@ -68,6 +68,13 @@ type VisorAPI interface {
 	// inbox ring capacity (long disconnect → only the tail is
 	// recoverable).
 	SnapshotGroupMessagesAfterNs(sinceNs int64) []GroupMessageData
+	// SnapshotGroupHistoryAfterNs returns durably-persisted group
+	// messages with TS > sinceNs for the named group. Powers the
+	// history-fallback path that backfills a subscriber whose
+	// reconnect gap exceeds the in-memory inbox ring. Empty when the
+	// operator hasn't enabled GroupHistoryDB, when the group has no
+	// stored messages, or when no messages newer than sinceNs exist.
+	SnapshotGroupHistoryAfterNs(groupID string, sinceNs int64) []GroupMessageData
 	// LocalPK returns the visor's own public key. Used by route-calc
 	// gRPC handlers that default the src PK to the local visor.
 	LocalPK() cipher.PubKey
@@ -1041,6 +1048,67 @@ func (s *PingServer) StreamRemoteSystemStats(req *RemoteSystemStatsRequest, stre
 //
 // Filter: req.GroupId, when set, scopes the stream to one group. Empty
 // matches every group the visor is in.
+// mergeGroupBacklog interleaves the durable history snapshot with the
+// in-memory inbox snapshot in TimestampNs order, dropping the
+// duplicates that result from the inbox-and-history both observing
+// the same delivery. Output is chronological (oldest first) so the
+// streaming handler's lastSentNs gate emits each message exactly
+// once.
+//
+// Dedup key: (GroupID, TimestampNs, SenderPK). The deliver path
+// writes one history record + one inbox entry per Message, both
+// carrying the same triple — exact-match dedup is sufficient. Body
+// is not part of the key because (a) it's expensive to compare on a
+// hot path and (b) two messages with the same triple but different
+// bodies would already be a corruption signal worth surfacing
+// upstream rather than silently merging.
+//
+// Pre-condition: each input is itself in TimestampNs ascending order.
+// The history walker (BoltStore.ListGroupSince) walks the bbolt
+// cursor forward from a tsKey-based Seek; the inbox snapshot iterates
+// the ring forward. Both satisfy the pre-condition by construction.
+func mergeGroupBacklog(history, inbox []GroupMessageData) []GroupMessageData {
+	if len(history) == 0 {
+		return inbox
+	}
+	if len(inbox) == 0 {
+		return history
+	}
+	out := make([]GroupMessageData, 0, len(history)+len(inbox))
+	seen := make(map[backlogKey]struct{}, len(history)+len(inbox))
+	emit := func(m GroupMessageData) {
+		k := backlogKey{group: m.GroupID, ts: m.TimestampNs, sender: m.SenderPK}
+		if _, dup := seen[k]; dup {
+			return
+		}
+		seen[k] = struct{}{}
+		out = append(out, m)
+	}
+	i, j := 0, 0
+	for i < len(history) && j < len(inbox) {
+		if history[i].TimestampNs <= inbox[j].TimestampNs {
+			emit(history[i])
+			i++
+		} else {
+			emit(inbox[j])
+			j++
+		}
+	}
+	for ; i < len(history); i++ {
+		emit(history[i])
+	}
+	for ; j < len(inbox); j++ {
+		emit(inbox[j])
+	}
+	return out
+}
+
+type backlogKey struct {
+	group  string
+	ts     int64
+	sender string
+}
+
 func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingService_StreamGroupMessagesServer) error {
 	if req == nil {
 		return fmt.Errorf("nil request")
@@ -1076,15 +1144,43 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 	// Backlog replay. Skips when client didn't pass a since (fresh
 	// listen — current behavior, only live messages).
 	if req.SinceTimestampNs > 0 {
+		// Two-source backlog:
+		//   inbox    — in-memory ring (~256 messages, every group),
+		//              bounded by groupInboxCap; long disconnects roll past.
+		//   history  — durable bbolt sink (per-group buckets), opt-in via
+		//              the operator's GroupHistoryDB config. nil/empty
+		//              when persistence is off.
+		//
+		// Strategy: query both, merge by TimestampNs, dedup against
+		// lastSentNs. The inbox is a strict superset of "messages
+		// landed since this visor's startup"; history is a strict
+		// superset of "messages landed since persistence began".
+		// In steady state every inbox entry is also in history (same
+		// deliver path writes both), so the merge mostly de-dupes
+		// at the lastSentNs gate. The gain is correctness on
+		// disconnect gaps longer than the inbox ring — without
+		// history, those messages were silently lost from the
+		// replay even though they survived on disk.
+		//
+		// History is queried only when the request scopes to a single
+		// group (req.GroupId set). The history store is per-group; a
+		// "stream every group" request fans across an unbounded set,
+		// which would defeat the bounded-cost intent of the inbox
+		// fallback. Streaming-every-group is the same case
+		// pre-this-PR — inbox only — and that's the right default
+		// without operator opt-in to broader replay.
+		var history []GroupMessageData
+		if req.GroupId != "" {
+			history = s.visor.SnapshotGroupHistoryAfterNs(req.GroupId, req.SinceTimestampNs)
+		}
 		backlog := s.visor.SnapshotGroupMessagesAfterNs(req.SinceTimestampNs)
-		// Diagnostic log: an empty backlog (len == 0) is ambiguous
-		// without it — either nothing landed since the cursor, OR
-		// the disconnect outlasted the ring-buffer turnover. Operators
-		// staring at a "quiet" group post-reconnect need to tell
-		// those cases apart from the log.
-		s.log.Debugf("gRPC StreamGroupMessages: replay since_ns=%d returned=%d messages (groupInboxCap bounds long-disconnect recovery)",
-			req.SinceTimestampNs, len(backlog))
-		for _, m := range backlog {
+		merged := mergeGroupBacklog(history, backlog)
+		// Diagnostic log: tell history-hit, inbox-hit, and merged
+		// counts apart so operators can confirm the history fallback
+		// actually fired when the gap was long.
+		s.log.Debugf("gRPC StreamGroupMessages: replay since_ns=%d group=%q inbox=%d history=%d merged=%d",
+			req.SinceTimestampNs, req.GroupId, len(backlog), len(history), len(merged))
+		for _, m := range merged {
 			if req.GroupId != "" && m.GroupID != req.GroupId {
 				continue
 			}
