@@ -1081,6 +1081,32 @@ func (m *Manager) IsSubscriberAlive(id string) bool {
 	return sess.IsSubscriberAlive()
 }
 
+// PeerLiveness returns the per-peer last-inbound timestamps for the
+// given group, keyed by peer PK. Empty map if no live session, or for
+// owner-role sessions that don't follow peer feeds. Zero time for a
+// peer indicates the peerSub has never observed an inbound (either
+// peerSub is connecting, the peer is silent, or — until #2620 — the
+// legacy s.sub subscriber hasn't covered this peer's traffic).
+//
+// Used by Visor.GroupGet/GroupList to surface per-peer telemetry so
+// operators can identify a single silent peer in an otherwise healthy
+// group, rather than chasing the session-level SubscriberAlive=true
+// while one member's messages quietly never arrive.
+func (m *Manager) PeerLiveness(id string) map[cipher.PubKey]time.Time {
+	m.mu.RLock()
+	sess, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok || sess == nil {
+		return map[cipher.PubKey]time.Time{}
+	}
+	peers := sess.PeerPKs()
+	out := make(map[cipher.PubKey]time.Time, len(peers))
+	for _, pk := range peers {
+		out[pk] = sess.PeerLastInbound(pk)
+	}
+	return out
+}
+
 // List returns every persisted record.
 func (m *Manager) List() ([]Record, error) { return m.store.List() }
 
