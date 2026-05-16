@@ -624,7 +624,7 @@ func (m *CXOSubscriptionManager) syncOnce(ctx context.Context, fk CXOFeed, f *ma
 		}
 	})
 
-	if err := sub.Connect(peerPK); err != nil {
+	if err := sub.Connect(ctx, peerPK); err != nil {
 		_ = sub.Close() //nolint:errcheck
 		f.recordErr(fmt.Errorf("dial publisher: %w", err))
 		return
