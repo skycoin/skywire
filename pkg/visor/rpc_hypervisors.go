@@ -23,6 +23,39 @@ func (r *RPC) HVListVisors(_ *struct{}, out *[]HVVisorEntry) (err error) {
 	return nil
 }
 
+// HVListDirectVisors returns summaries of visors DIRECTLY connected
+// to this hypervisor (no sub-hypervisor merging). Powers the tree
+// builder's per-sub-hypervisor section.
+func (r *RPC) HVListDirectVisors(_ *struct{}, out *[]HVVisorEntry) (err error) {
+	defer rpcutil.LogCall(r.log, "HVListDirectVisors", nil)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	entries, lErr := v.HVListDirectVisors()
+	if lErr != nil {
+		return lErr
+	}
+	*out = entries
+	return nil
+}
+
+// HVListVisorsTree returns the structured tree of hypervisor sections
+// for the UI's main node list.
+func (r *RPC) HVListVisorsTree(_ *struct{}, out *HVVisorTree) (err error) {
+	defer rpcutil.LogCall(r.log, "HVListVisorsTree", nil)(out, &err)
+	v, ok := r.visor.(*Visor)
+	if !ok {
+		return fmt.Errorf("not a visor instance")
+	}
+	tree, tErr := v.HVListVisorsTree()
+	if tErr != nil {
+		return tErr
+	}
+	*out = *tree
+	return nil
+}
+
 // HVVisorSummary returns a detailed summary of a specific remote visor.
 func (r *RPC) HVVisorSummary(pk *cipher.PubKey, out *Summary) (err error) {
 	defer rpcutil.LogCall(r.log, "HVVisorSummary", pk)(out, &err)
