@@ -206,8 +206,15 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	fmt.Fprintf(&buf, "created_at:        %s\n", info.CreatedAt.UTC().Format(time.RFC3339)) //nolint:errcheck
 	fmt.Fprintf(&buf, "joined_at:         %s\n", info.JoinedAt.UTC().Format(time.RFC3339))  //nolint:errcheck
 	fmt.Fprintf(&buf, "last_message_at:   %s\n", last)                                      //nolint:errcheck
-	fmt.Fprintf(&buf, "subscriber_alive:  %t\n", info.SubscriberAlive)                      //nolint:errcheck
-	fmt.Fprintf(&buf, "members (%d):\n", len(info.Members))                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "subscriber_alive:  %t\n", info.SubscriberAlive) //nolint:errcheck
+	// SubDropCount is inbox-wide (same value on every group); show it
+	// here so operators querying `group info` for chat-health don't
+	// need a separate /status call. Only when non-zero to keep healthy
+	// output unchanged. See visor.GroupInfo.SubDropCount for semantics.
+	if info.SubDropCount > 0 {
+		fmt.Fprintf(&buf, "sub_drop_count:    %d (visor-wide gRPC fan-out)\n", info.SubDropCount) //nolint:errcheck
+	}
+	fmt.Fprintf(&buf, "members (%d):\n", len(info.Members)) //nolint:errcheck
 	for _, pk := range info.Members {
 		fmt.Fprintf(&buf, "  %s\n", pk) //nolint:errcheck
 	}
