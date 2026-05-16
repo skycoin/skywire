@@ -798,7 +798,7 @@ func (s *Session) Connect(ctx context.Context) error {
 		// evidence the legacy owner-feed subscriber is attached, even
 		// before the first inbound leaf arrives. Lets the staleness
 		// window for s.sub start ticking from here, mirroring the
-		// per-peerSub Connect-bump behaviour below.
+		// per-peerSub Connect-bump behavior below.
 		s.subLastInboundNs.Store(time.Now().UnixNano())
 	}
 	// D1 per-PK peer subscribers. Best-effort: if a single peer's
