@@ -364,6 +364,31 @@ func (a *visorPingAdapter) SnapshotGroupMessagesAfterNs(sinceNs int64) []rpcgrpc
 	return out
 }
 
+// SnapshotGroupHistoryAfterNs bridges Visor.SnapshotGroupHistoryAfter
+// into rpcgrpc's import-cycle-safe shape (UnixNano arg, []GroupMessageData
+// return). Empty slice when grouping is uninitialized or no
+// GroupHistoryDB is configured — the StreamGroupMessages handler
+// treats nil as "no history backfill available, stick with inbox-only"
+// which preserves the existing behavior for operators who haven't
+// opted into persistence.
+func (a *visorPingAdapter) SnapshotGroupHistoryAfterNs(groupID string, sinceNs int64) []rpcgrpc.GroupMessageData {
+	since := time.Unix(0, sinceNs)
+	src := a.v.SnapshotGroupHistoryAfter(groupID, since)
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]rpcgrpc.GroupMessageData, 0, len(src))
+	for _, m := range src {
+		out = append(out, rpcgrpc.GroupMessageData{
+			TimestampNs: m.TS.UnixNano(),
+			GroupID:     m.GroupID,
+			SenderPK:    m.SenderPK.Hex(),
+			Body:        m.Text,
+		})
+	}
+	return out
+}
+
 func (a *visorPingAdapter) LocalPK() cipher.PubKey {
 	return a.v.LocalPK()
 }
