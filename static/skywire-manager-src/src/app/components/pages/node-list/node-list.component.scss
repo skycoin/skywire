@@ -1,5 +1,20 @@
 @import "variables";
 
+// Local hypervisor PK label shown in the main node list title bar.
+// Renders as small monospace text with a star icon. The full PK is
+// only legible at larger viewports; on narrow screens it truncates
+// with ellipsis but stays expandable via the matTooltip on hover.
+.hypervisor-pk-label {
+  display: inline-flex;
+  align-items: center;
+  font-family: monospace;
+  font-size: 12px;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .labels {
   width: 15%;
 }

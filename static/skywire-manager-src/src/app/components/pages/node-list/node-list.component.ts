@@ -4,7 +4,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
 import { TranslateService } from '@ngx-translate/core';
 
-import { NodeService, KnownHealthStatuses } from '../../../services/node.service';
+import { NodeService, NodeSection, KnownHealthStatuses } from '../../../services/node.service';
 import { Node } from '../../../app.datatypes';
 import { AuthService, AuthStates } from '../../../services/auth.service';
 import { EditLabelComponent } from '../../layout/edit-label/edit-label.component';
@@ -83,6 +83,15 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
+
+  // Per-hypervisor sections from the tree endpoint (#2633). The
+  // template currently renders the flat `allNodes` table; sections
+  // is consumed by the header (to show local hypervisor PK) and is
+  // available for the per-section table refactor (#2640).
+  sections: NodeSection[] = [];
+  // Local hypervisor PK — convenience accessor for the title bar
+  // (derived from sections[0]). Empty until first data arrives.
+  localHypervisorPk = '';
 
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[] = [
@@ -427,6 +436,19 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         if (result.data && !result.error) {
           this.allNodes = result.data as Node[];
           this.dataFilterer.setData(this.allNodes);
+
+          // Tree shape from #2633's /api/visors-tree-summary. Populates
+          // `sections` for the next-step multi-table render. Header
+          // shows the local hypervisor PK; if the response is empty
+          // (older backend, or pre-init), fall back to whatever the
+          // first node's PK is so the header isn't blank.
+          if (result.sections && result.sections.length > 0) {
+            this.sections = result.sections;
+            this.localHypervisorPk = result.sections[0].hypervisorPk;
+          } else {
+            this.sections = [];
+            this.localHypervisorPk = '';
+          }
 
           // Fetch reward data if on the rewards tab and not yet loaded
           if (this.showRewardsInfo && !this.rewardDataLoaded && !this.rewardDataLoading) {
