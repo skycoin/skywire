@@ -36,15 +36,15 @@ func init() {
 	pk, _ = sk.PubKey() //nolint
 
 	dmsgclient.InitFlags(RootCmd)
-	RootCmd.Flags().StringVarP(&filterDomainSuffix, "filter", "f", ".dmsg", "domain suffix to filter\033[0m\n\r")
-	RootCmd.Flags().UintVarP(&proxyPort, "socks", "q", proxyPort, "port to serve the socks5 proxy\033[0m\n\r")
-	RootCmd.Flags().StringVarP(&addProxy, "addproxy", "r", addProxy, "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)\033[0m\n\r")
-	RootCmd.Flags().UintSliceVarP(&webPort, "port", "p", webPort, "port(s) to serve the web application\033[0m\n\r")
-	RootCmd.Flags().StringSliceVarP(&resolveDmsgAddr, "resolve", "t", resolveDmsgAddr, "resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy\033[0m\n\r")
-	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "connect to DMSG via proxy (i.e. '127.0.0.1:1080')\033[0m\n\r")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
+	RootCmd.Flags().StringVarP(&filterDomainSuffix, "filter", "f", ".dmsg", "domain suffix to filter")
+	RootCmd.Flags().UintVarP(&proxyPort, "socks", "q", proxyPort, "port to serve the socks5 proxy")
+	RootCmd.Flags().StringVarP(&addProxy, "addproxy", "r", addProxy, "configure additional socks5 proxy for dmsgweb (i.e. 127.0.0.1:1080)")
+	RootCmd.Flags().UintSliceVarP(&webPort, "port", "p", webPort, "port(s) to serve the web application")
+	RootCmd.Flags().StringSliceVarP(&resolveDmsgAddr, "resolve", "t", resolveDmsgAddr, "resolve the specified dmsg address:port on the local port as a raw TCP tunnel & disable proxy")
+	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "connect to DMSG via proxy (i.e. '127.0.0.1:1080')")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "debug", "[ debug | warn | error | fatal | panic | trace | info ]")
 	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r")
-	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file\033[0m\n\r")
+	RootCmd.Flags().BoolVarP(&isEnvs, "envs", "E", false, "show example .conf file")
 	RootCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
 	RootCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
