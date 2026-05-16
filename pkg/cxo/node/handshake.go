@@ -68,9 +68,14 @@ func (c *Conn) performHandshake() error {
 
 		switch x := m.(type) {
 		case *msg.Ack:
-			// Check if node already has connection with peer.
-			if _, ok := c.n.hasPeer(x.NodeID); ok {
-				return ErrAlreadyHaveConnection
+			// A stale Conn for this peer (whose run() loop wedged or whose
+			// receiveMsg is blocked on a half-dead transport) silently
+			// rejects every rejoin attempt with ErrAlreadyHaveConnection.
+			// On a fresh SYN from the same peer, evict the prior record:
+			// the new conn is the source of truth and the old will tear
+			// itself down via Close → receiveMsg unblock → removeConn.
+			if existing, ok := c.n.hasPeer(x.NodeID); ok {
+				c.n.evictStalePeer(existing, x.NodeID)
 			}
 			c.peerID = x.NodeID
 
@@ -144,20 +149,14 @@ func (c *Conn) acceptHandshake() (err error) {
 			return err
 		}
 
-		// Check if node already has connection with peer.
-		if _, ok := c.n.hasPeer(syn.NodeID); ok {
-			var (
-				err = ErrAlreadyHaveConnection
-
-				errMsg = &msg.Err{
-					Err: err.Error(),
-				}
-			)
-			if sendErr := c.sendMsg(c.nextSeq(), seq, errMsg); sendErr != nil { //nolint:errcheck,gosec
-				c.n.Error(sendErr, "faield to send err message")
-			}
-
-			return err
+		// A stale Conn for this peer (whose run() loop wedged or whose
+		// receiveMsg is blocked on a half-dead transport) silently
+		// rejects every rejoin attempt with ErrAlreadyHaveConnection.
+		// On a fresh SYN from the same peer, evict the prior record:
+		// the new conn is the source of truth and the old will tear
+		// itself down via Close → receiveMsg unblock → removeConn.
+		if existing, ok := c.n.hasPeer(syn.NodeID); ok {
+			c.n.evictStalePeer(existing, syn.NodeID)
 		}
 
 		// Send Ack message.
