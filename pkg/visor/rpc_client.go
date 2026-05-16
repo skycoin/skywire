@@ -1597,6 +1597,26 @@ func (rc *rpcClient) HVListVisors() ([]HVVisorEntry, error) {
 	return out, nil
 }
 
+// HVListDirectVisors returns summaries of visors DIRECTLY connected
+// to this hypervisor (no sub-hypervisor merging).
+func (rc *rpcClient) HVListDirectVisors() ([]HVVisorEntry, error) {
+	var out []HVVisorEntry
+	if err := rc.Call("HVListDirectVisors", &struct{}{}, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// HVListVisorsTree returns the structured tree of hypervisor sections
+// (local + direct sub-hypervisors, depth 2).
+func (rc *rpcClient) HVListVisorsTree() (*HVVisorTree, error) {
+	var out HVVisorTree
+	if err := rc.Call("HVListVisorsTree", &struct{}{}, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // HVVisorSummary returns a detailed summary of a specific remote visor.
 func (rc *rpcClient) HVVisorSummary(pk cipher.PubKey) (*Summary, error) {
 	var out Summary

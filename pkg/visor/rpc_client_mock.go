@@ -1350,6 +1350,16 @@ func (mc *mockRPCClient) HVListVisors() ([]HVVisorEntry, error) {
 	return nil, fmt.Errorf("not supported in mock")
 }
 
+// HVListDirectVisors implements API.
+func (mc *mockRPCClient) HVListDirectVisors() ([]HVVisorEntry, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
+// HVListVisorsTree implements API.
+func (mc *mockRPCClient) HVListVisorsTree() (*HVVisorTree, error) {
+	return nil, fmt.Errorf("not supported in mock")
+}
+
 // HVVisorSummary implements API.
 func (mc *mockRPCClient) HVVisorSummary(_ cipher.PubKey) (*Summary, error) {
 	return nil, fmt.Errorf("not supported in mock")
