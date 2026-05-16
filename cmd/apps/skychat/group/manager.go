@@ -534,10 +534,26 @@ const reconnectInterval = 30 * time.Second
 // chat messages, and the single threshold applies to both.
 const subscriberStaleThreshold = 100 * time.Second
 
-// reconnectAttemptTimeout bounds the per-Connect call so the
+// reconnectAttemptTimeout bounds each per-peer Connect call so the
 // reconnect loop can't get stuck on a single slow group while other
-// pending groups starve.
-const reconnectAttemptTimeout = 5 * time.Second
+// pending groups starve. Post-#2608 the deadline is threaded as a
+// context all the way to ps.Connect, so the bound is enforced cleanly
+// rather than as a goroutine outer-wait that orphaned its inner work.
+//
+// Sized for the cold-start case: each per-peer attempt must complete
+// dmsg-dial + noise XK handshake + initial subscribe-state exchange
+// within this budget. On a freshly-restarted visor with no warmed-up
+// dmsg session to the peer's delegated server, the dial alone can
+// take ~1-2s; the noise handshake adds another 0.5-1.5s; the
+// subscribe-state exchange another 0.5-1s. 5s — the pre-bump value —
+// was just-enough on a healthy network and routinely deadline-
+// exceeded after a router-reset or a fresh-cold-restart, putting the
+// session into the 10-fail backoff schedule for no real reason. 15s
+// is comfortable headroom while still small enough that per-peer
+// stalls don't dominate the reconnect loop's wall time across a
+// group of N=10 members (worst case N*15s = 150s, still inside
+// subscriberStaleThreshold's reconnect cadence).
+const reconnectAttemptTimeout = 15 * time.Second
 
 // Backoff transition thresholds. After this many consecutive
 // failures on a given group, the per-group nextAttempt is bumped
