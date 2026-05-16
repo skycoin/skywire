@@ -278,8 +278,8 @@ func newBufferingResponseRecorder() *bufferingResponseRecorder {
 	return &bufferingResponseRecorder{hdr: http.Header{}}
 }
 
-func (r *bufferingResponseRecorder) Header() http.Header        { return r.hdr }
-func (r *bufferingResponseRecorder) WriteHeader(code int)       { r.code = code }
+func (r *bufferingResponseRecorder) Header() http.Header  { return r.hdr }
+func (r *bufferingResponseRecorder) WriteHeader(code int) { r.code = code }
 func (r *bufferingResponseRecorder) Write(b []byte) (int, error) {
 	r.body = append(r.body, b...)
 	return len(b), nil
