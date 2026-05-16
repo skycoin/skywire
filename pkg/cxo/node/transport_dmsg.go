@@ -71,13 +71,51 @@ func (d *DMSG) Listen() error {
 }
 
 // ConnectPK connects to a remote CXO node over DMSG by public key.
-// If a connection already exists, returns the existing one.
+// If a healthy connection already exists, returns the existing one.
+//
+// Cached-Conn liveness gate: a cached Conn whose closeq is signaled
+// (run loop has observed the underlying transport going away, but
+// removeConn hasn't yet completed) OR whose underlying transport
+// reports IsClosed() is evicted here and re-dialed. Without this
+// gate, the symmetric peer-side bug fixed in #2625's
+// acceptHandshake also manifested on the dial side: a half-dead
+// Conn whose run loop is stuck in receiveMsg's select on a transport
+// that will never return — closeq not closed yet — would be returned
+// from this cache. Subsequent Subscribe calls on the dead Conn hang,
+// reconnect timeouts pile up, and the visor's peerSubs go silent
+// indefinitely.
+//
+// Concretely observed in production (2026-05-16): after an Alpha
+// visor restart, all 3 peerSubs to remote group members appeared
+// healthy for ~35 seconds, then went silent. The per-peer reconnect
+// loop from #2606 fired every 30s but every attempt timed out at 15s
+// with "context deadline exceeded" — because every ConnectPK
+// returned the same dead cached Conn, Subscribe hung on it, the
+// outer 15s deadline fired. Forty-five minutes of silent stale
+// peerSubs until manual halt+restart cleared the cache. This fix
+// makes ConnectPK self-heal on the next reconnect tick.
+//
+// The closeq check catches the explicit-close case; the IsClosed()
+// check catches the case where the underlying transport's close
+// was observed but run loop hasn't yet propagated. Neither catches
+// the truly-half-dead-but-not-yet-erroring case (e.g. a wedged
+// network with no FIN/RST) — that path needs a separate liveness
+// pulse, deferred. For typical "peer's dmsg server flipped /
+// transport reset cleanly" failures this is sufficient.
 func (d *DMSG) ConnectPK(remotePK cipher.PubKey) (*Conn, error) {
 	d.n.Debugf(NewOutConnPin, "[dmsg:%s] connecting", remotePK.String())
 
-	// Check if connection already exists
+	// Check if connection already exists AND is alive.
 	if c := d.getConn(remotePK); c != nil {
-		return c, nil
+		if connIsAlive(c) {
+			return c, nil
+		}
+		// Stale cached conn: evict before re-dialing so the new Conn
+		// can replace it cleanly. closeConn deletes from d.cs and
+		// closes the underlying transport; safe to call on an already-
+		// closing Conn.
+		d.n.Debugf(NewOutConnPin, "[dmsg:%s] cached conn is stale; evicting before re-dial", remotePK.String())
+		d.closeConn(c)
 	}
 
 	// Dial over DMSG
@@ -158,6 +196,33 @@ func (d *DMSG) closeConn(c *Conn) {
 	if !c.Connection.IsClosed() {
 		c.Connection.Close()
 	}
+}
+
+// connIsAlive returns false if c looks dead — either the run loop's
+// closeq channel is closed (an error was observed but removeConn
+// hasn't completed) or the underlying transport.Connection reports
+// IsClosed(). Returns true otherwise. Used by ConnectPK to decide
+// whether to return a cached Conn or evict and re-dial.
+//
+// Limitations: a truly half-dead conn (transport reads block forever
+// without erroring — e.g. wedged network, dropped FIN/RST) escapes
+// this check. For that case the caller still needs an outer deadline.
+// What this catches: explicit close-in-progress (most common
+// half-dead source — peer's dmsg session reset cleanly, but our
+// removeConn is racing with the next reconnect tick).
+func connIsAlive(c *Conn) bool {
+	if c == nil {
+		return false
+	}
+	select {
+	case <-c.closeq:
+		return false
+	default:
+	}
+	if c.Connection != nil && c.Connection.IsClosed() {
+		return false
+	}
+	return true
 }
 
 // CloseConn closes a connection by remote public key.
