@@ -1037,12 +1037,18 @@ func (s *Session) ReconnectPeer(ctx context.Context, pk cipher.PubKey) error {
 // field rather than a peerSubs entry. No-op + nil error on owner-
 // role sessions and on sessions where s.sub is nil.
 //
-// On success: bumps subLastInboundNs to time.Now. Connect itself is
-// positive evidence the legacy subscriber is attached even before
-// the first inbound leaf arrives.
+// On success: bumps both subLastInboundNs and the session-wide
+// lastInboundNs. Connect itself is positive evidence the legacy
+// subscriber is attached even before the first inbound leaf arrives,
+// and on member sessions s.sub being healthy is sufficient to
+// declare the session as a whole healthy — same rationale as
+// Session.Connect's bump-on-success path. Skipping the session-wide
+// bump would leave subscriber_alive=false after a successful
+// reconnect until the next heartbeat or chat message arrives, which
+// is the symptom this fix is meant to remove.
 //
 // On failure: returns Subscriber.Connect's error verbatim;
-// subLastInboundNs stays unchanged so the next detectStaleAndReconnect
+// neither timestamp is bumped so the next detectStaleAndReconnect
 // tick still sees the session as stale and tries again.
 //
 // Honors the provided context: ctx cancellation returns ctx.Err()
@@ -1069,7 +1075,9 @@ func (s *Session) ReconnectLegacySub(ctx context.Context) error {
 			return err
 		}
 	}
-	s.subLastInboundNs.Store(time.Now().UnixNano())
+	now := time.Now().UnixNano()
+	s.subLastInboundNs.Store(now)
+	s.lastInboundNs.Store(now)
 	return nil
 }
 
