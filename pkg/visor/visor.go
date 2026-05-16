@@ -845,8 +845,9 @@ func (v *Visor) SubscribeLogs(f logging.Filter, capacity int) (<-chan *logrus.En
 // Powers the gRPC StreamGroupMessages handler — the long-lived
 // streaming replacement for the net/rpc GroupPoll loop. Backlog
 // (messages already buffered in the ring at subscribe time) is NOT
-// replayed; callers that want that should call GroupPoll with a
-// since-timestamp before subscribing.
+// replayed by this method; callers that want that should call
+// SnapshotGroupMessagesAfter alongside Subscribe (the streaming
+// handler does exactly that to replay missed events on reconnect).
 //
 // Returns nil channel + a no-op cancel when grouping is disabled on
 // this visor (e.g. early init or tests).
@@ -862,6 +863,27 @@ func (v *Visor) SubscribeGroupMessages(capacity int) (<-chan GroupMessage, func(
 		inbox.unsubscribe(sub)
 		return sub.dropCount.Load()
 	}
+}
+
+// SnapshotGroupMessagesAfter returns the ring-buffered group inbox
+// snapshot of messages with TS > since. Used by the gRPC streaming
+// handler to replay events that landed during a client's reconnect
+// window — the CLI tracks the last-seen timestamp and the server
+// drains anything newer from the buffer before entering the live
+// dispatch loop. Returns nil when grouping is disabled.
+//
+// Buffer size bounds the replay depth; see groupInboxCap. A client
+// that's been disconnected longer than the buffer turnover will see
+// only the most recent groupInboxCap messages, not the full gap.
+// Same limitation as PairPoll/snapshotAfter.
+func (v *Visor) SnapshotGroupMessagesAfter(since time.Time) []GroupMessage {
+	v.initLock.RLock()
+	inbox := v.grouping.inbox
+	v.initLock.RUnlock()
+	if inbox == nil {
+		return nil
+	}
+	return inbox.snapshotAfter(since)
 }
 
 // tpDiscClient is a convenience function to obtain transport discovery client.
