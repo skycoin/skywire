@@ -70,6 +70,13 @@ type Manager struct {
 	reconnectWG     sync.WaitGroup
 	reconnectMu     sync.Mutex
 	reconnectState  map[string]*reconnectState // keyed by group ID
+	// peerReconnectState tracks per-(group, peer) backoff for the
+	// tryReconnectPeers path so one wedged peer's failures don't
+	// engage a session-level backoff that locks out healthy peers'
+	// reconnect attempts. Parallel to reconnectState; the session-
+	// level map still backs tryReconnect (full Connect) and
+	// tryReconnectLegacySub. Outer key = group ID, inner key = peer PK.
+	peerReconnectState map[string]map[cipher.PubKey]*reconnectState
 }
 
 // reconnectState tracks per-group consecutive-failure backoff so a
@@ -123,16 +130,17 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		log = logging.MustGetLogger("skychat-group-manager")
 	}
 	return &Manager{
-		store:             cfg.Store,
-		dmsgC:             cfg.DmsgC,
-		myPK:              cfg.MyPK,
-		mySK:              cfg.MySK,
-		dataDir:           cfg.DataDir,
-		log:               log,
-		portAlloc:         defaultPortAlloc,
-		sessions:          make(map[string]*Session),
-		heartbeatInterval: cfg.HeartbeatInterval,
-		reconnectState:    make(map[string]*reconnectState),
+		store:              cfg.Store,
+		dmsgC:              cfg.DmsgC,
+		myPK:               cfg.MyPK,
+		mySK:               cfg.MySK,
+		dataDir:            cfg.DataDir,
+		log:                log,
+		portAlloc:          defaultPortAlloc,
+		sessions:           make(map[string]*Session),
+		heartbeatInterval:  cfg.HeartbeatInterval,
+		reconnectState:     make(map[string]*reconnectState),
+		peerReconnectState: make(map[string]map[cipher.PubKey]*reconnectState),
 	}, nil
 }
 
@@ -278,6 +286,14 @@ func (m *Manager) terminate(id string, status Status) error {
 	if live {
 		_ = sess.Close() //nolint:errcheck
 	}
+	// Drop all per-peer reconnect state for this group — the session
+	// (and its peerSubs) are gone, so any remaining (id, peer) entries
+	// in peerReconnectState would be unreachable memory until next
+	// process restart.
+	m.reconnectMu.Lock()
+	delete(m.reconnectState, id)
+	delete(m.peerReconnectState, id)
+	m.reconnectMu.Unlock()
 	_ = m.store.SetStatus(r.ID, status) //nolint:errcheck
 	return nil
 }
@@ -749,11 +765,13 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 		if len(stalePeers) == 0 && !legacySubStale {
 			continue
 		}
-		// Honor the per-group backoff so a wedged group doesn't
-		// churn the reconnect machinery once per tick per peer.
-		if !m.reconnectShouldAttempt(r.ID, now) {
-			continue
-		}
+		// Per-peer path: tryReconnectPeers consults peerReconnectShouldAttempt
+		// internally for each peer individually, so the per-peer
+		// branch deliberately bypasses the session-level
+		// reconnectShouldAttempt gate. Pre-T2b that gate sat HERE
+		// and a single wedged peer's session-level backoff would
+		// suppress every peer's reconnect attempts for the entire
+		// 5min/30min window.
 		if len(stalePeers) > 0 {
 			m.log.WithField("id", r.ID).
 				WithField("stale_peers", len(stalePeers)).
@@ -762,7 +780,14 @@ func (m *Manager) detectStaleAndReconnect(ctx context.Context) {
 				Debug("group: per-peer stale; kicking per-peer reconnects")
 			m.tryReconnectPeers(ctx, sess, r.ID, stalePeers)
 		}
+		// Legacy s.sub path: still gated by the session-level
+		// reconnectShouldAttempt, since s.sub failures feed into
+		// reconnectRecordFailure(id, ...) which is the session-level
+		// backoff. Per-peer state lives in a separate map.
 		if legacySubStale {
+			if !m.reconnectShouldAttempt(r.ID, now) {
+				continue
+			}
 			m.log.WithField("id", r.ID).
 				WithField("status", string(r.Status)).
 				Debug("group: legacy s.sub stale; kicking owner-feed reconnect")
@@ -820,11 +845,25 @@ func (m *Manager) tryReconnect(ctx context.Context, sess *Session, id string) {
 // N × reconnectAttemptTimeout, which is acceptable for typical
 // group sizes (≤ 10 members).
 func (m *Manager) tryReconnectPeers(ctx context.Context, sess *Session, id string, peers []cipher.PubKey) {
+	now := time.Now().UTC()
 	successes := 0
-	var lastErr error
+	skipped := 0
 	for _, pk := range peers {
 		if ctx.Err() != nil {
 			return
+		}
+		// Per-peer backoff gate: a single wedged peer in 5min/30min
+		// backoff doesn't lock out the other stale peers' attempts.
+		// Pre-T2b this gate lived at the session level above the
+		// whole tryReconnectPeers call, so any one peer accumulating
+		// reconnectBackoffFailures1 failures suppressed reconnects
+		// for every peer in the session for the entire backoff
+		// window. Per-peer state fixes that.
+		if !m.peerReconnectShouldAttempt(id, pk, now) {
+			skipped++
+			m.log.WithField("id", id).WithField("peer", pk.String()).
+				Debug("group: reconnect: peer in backoff window, skipping this tick")
+			continue
 		}
 		m.log.WithField("id", id).WithField("peer", pk.String()).
 			Debug("group: reconnect: attempting peer subscribe")
@@ -836,14 +875,20 @@ func (m *Manager) tryReconnectPeers(ctx context.Context, sess *Session, id strin
 		cancel()
 		if err == nil {
 			successes++
+			m.peerReconnectClear(id, pk)
 			m.log.WithField("id", id).WithField("peer", pk.String()).
 				Info("group: reconnect: peer subscribe restored")
 			continue
 		}
-		lastErr = err
-		m.log.WithError(err).WithField("id", id).WithField("peer", pk.String()).
-			Debug("group: reconnect: peer subscribe failed")
+		m.peerReconnectRecordFailure(id, pk, err)
 	}
+	// Session-level state still tracks "at least one peer reconnect
+	// succeeded this tick" so the SetStatus(Active) promotion fires
+	// when the session as a whole is recovering. We clear the
+	// session-level reconnectState entry on any success to keep
+	// parity with the legacy session-level backoff path used by
+	// tryReconnect (full Connect) — that entry continues to gate
+	// THAT path even if all per-peer attempts are skipped.
 	if successes > 0 {
 		m.reconnectMu.Lock()
 		delete(m.reconnectState, id)
@@ -852,11 +897,12 @@ func (m *Manager) tryReconnectPeers(ctx context.Context, sess *Session, id strin
 			m.log.WithError(sErr).WithField("id", id).
 				Warn("group: reconnect: SetStatus active failed")
 		}
-		return
 	}
-	if lastErr != nil {
-		m.reconnectRecordFailure(id, lastErr)
-	}
+	// No session-level reconnectRecordFailure on the per-peer path:
+	// per-peer failures are recorded against their own entries
+	// inside the loop. The session-level backoff schedule is reserved
+	// for tryReconnect (full Connect failure) and tryReconnectLegacySub.
+	_ = skipped // tracked in log lines, no further bookkeeping
 }
 
 // tryReconnectLegacySub runs one ReconnectLegacySub attempt for the
@@ -904,10 +950,36 @@ func (m *Manager) tryReconnectLegacySub(ctx context.Context, sess *Session, id s
 // reconnectShouldAttempt returns false when the per-group nextAttempt
 // is still in the future (i.e. we're in a backoff window). True when
 // there's no state (first attempt) or when the backoff has elapsed.
+//
+// Gates tryReconnect (full Session.Connect) and tryReconnectLegacySub;
+// the per-peer path (tryReconnectPeers) uses peerReconnectShouldAttempt
+// instead so a wedged session-wide backoff doesn't lock out healthy
+// peers' independent reconnect attempts.
 func (m *Manager) reconnectShouldAttempt(id string, now time.Time) bool {
 	m.reconnectMu.Lock()
 	defer m.reconnectMu.Unlock()
 	st, ok := m.reconnectState[id]
+	if !ok {
+		return true
+	}
+	return !st.nextAttempt.After(now)
+}
+
+// peerReconnectShouldAttempt is the per-peer counterpart to
+// reconnectShouldAttempt. Returns true when (id, peer) has no
+// recorded failures or when the per-peer backoff window has elapsed.
+// Lets tryReconnectPeers skip just the wedged peer rather than the
+// whole session, so a single permanently-unreachable peer cannot
+// engage a session-level backoff that locks out healthy peers'
+// reconnect attempts.
+func (m *Manager) peerReconnectShouldAttempt(id string, pk cipher.PubKey, now time.Time) bool {
+	m.reconnectMu.Lock()
+	defer m.reconnectMu.Unlock()
+	peers, ok := m.peerReconnectState[id]
+	if !ok {
+		return true
+	}
+	st, ok := peers[pk]
 	if !ok {
 		return true
 	}
@@ -927,21 +999,7 @@ func (m *Manager) reconnectRecordFailure(id string, attemptErr error) {
 		m.reconnectState[id] = st
 	}
 	st.failures++
-	var transition string
-	switch {
-	case st.failures == reconnectBackoffFailures2:
-		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval2)
-		transition = reconnectBackoffInterval2.String()
-	case st.failures == reconnectBackoffFailures1:
-		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval1)
-		transition = reconnectBackoffInterval1.String()
-	case st.failures > reconnectBackoffFailures2:
-		// Stay at the 30min cadence for any subsequent failures.
-		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval2)
-	case st.failures > reconnectBackoffFailures1:
-		// Stay at the 5min cadence between the two thresholds.
-		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval1)
-	}
+	transition := applyBackoffTransition(st)
 	failures := st.failures
 	m.reconnectMu.Unlock()
 	if transition != "" {
@@ -954,6 +1012,83 @@ func (m *Manager) reconnectRecordFailure(id string, attemptErr error) {
 			WithField("failures", failures).
 			Debug("group: reconnect: attempt failed")
 	}
+}
+
+// peerReconnectRecordFailure is the per-peer counterpart to
+// reconnectRecordFailure. Increments the (id, peer) counter and
+// applies the same backoff threshold transitions independently of
+// any other peer's failure history. Lets one wedged peer accumulate
+// its own backoff schedule (5min, 30min) without dragging the rest
+// of the session into the same schedule.
+func (m *Manager) peerReconnectRecordFailure(id string, pk cipher.PubKey, attemptErr error) {
+	m.reconnectMu.Lock()
+	peers, ok := m.peerReconnectState[id]
+	if !ok {
+		peers = make(map[cipher.PubKey]*reconnectState)
+		m.peerReconnectState[id] = peers
+	}
+	st, ok := peers[pk]
+	if !ok {
+		st = &reconnectState{}
+		peers[pk] = st
+	}
+	st.failures++
+	transition := applyBackoffTransition(st)
+	failures := st.failures
+	m.reconnectMu.Unlock()
+	if transition != "" {
+		m.log.WithError(attemptErr).WithField("id", id).
+			WithField("peer", pk.String()).
+			WithField("failures", failures).
+			WithField("next_interval", transition).
+			Warn("group: reconnect: extending per-peer backoff")
+	} else {
+		m.log.WithError(attemptErr).WithField("id", id).
+			WithField("peer", pk.String()).
+			WithField("failures", failures).
+			Debug("group: reconnect: per-peer attempt failed")
+	}
+}
+
+// peerReconnectClear drops the per-peer backoff state for (id, peer).
+// Called on per-peer reconnect success and on peer eviction
+// (SetAllowlist removing a member) so the entry doesn't outlive its
+// peerSub.
+func (m *Manager) peerReconnectClear(id string, pk cipher.PubKey) {
+	m.reconnectMu.Lock()
+	defer m.reconnectMu.Unlock()
+	peers, ok := m.peerReconnectState[id]
+	if !ok {
+		return
+	}
+	delete(peers, pk)
+	if len(peers) == 0 {
+		delete(m.peerReconnectState, id)
+	}
+}
+
+// applyBackoffTransition extends st.nextAttempt according to the same
+// failure-count thresholds reconnectRecordFailure and
+// peerReconnectRecordFailure both use. Caller holds reconnectMu.
+// Returns the human-readable transition interval if a threshold was
+// crossed in this call, or "" otherwise. Extracted so the per-group
+// and per-peer paths share one backoff schedule.
+func applyBackoffTransition(st *reconnectState) string {
+	switch {
+	case st.failures == reconnectBackoffFailures2:
+		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval2)
+		return reconnectBackoffInterval2.String()
+	case st.failures == reconnectBackoffFailures1:
+		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval1)
+		return reconnectBackoffInterval1.String()
+	case st.failures > reconnectBackoffFailures2:
+		// Stay at the 30min cadence for any subsequent failures.
+		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval2)
+	case st.failures > reconnectBackoffFailures1:
+		// Stay at the 5min cadence between the two thresholds.
+		st.nextAttempt = time.Now().UTC().Add(reconnectBackoffInterval1)
+	}
+	return ""
 }
 
 // kickReconnect is the opportunistic-retry hook: when a member-side
