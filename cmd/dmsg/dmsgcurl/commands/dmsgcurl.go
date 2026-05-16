@@ -50,17 +50,17 @@ func init() {
 	RootCmd.Flags().SortFlags = false
 	dmsgclient.InitFlags(RootCmd)
 	RootCmd.Flags().StringVarP(&proxyAddr, "proxy", "p", proxyAddr, "connect to DMSG via proxy (i.e. '127.0.0.1:1080')")
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "fatal", "[ debug | warn | error | fatal | panic | trace | info ]")
 	RootCmd.Flags().StringVarP(&dmsgcurlData, "data", "d", "", "dmsghttp POST data")
 	RootCmd.Flags().StringVarP(&dmsgcurlOutput, "out", "o", "", "output filepath")
 	RootCmd.Flags().BoolVarP(&replace, "replace", "r", false, "replace existing file with new downloaded")
-	RootCmd.Flags().IntVarP(&dmsgcurlTries, "try", "t", 1, "download attempts (0 unlimits)\033[0m\n\r")
+	RootCmd.Flags().IntVarP(&dmsgcurlTries, "try", "t", 1, "download attempts (0 unlimits)")
 	RootCmd.Flags().IntVarP(&dmsgcurlWait, "wait", "w", 0, "time to wait between requests")
-	RootCmd.Flags().StringVarP(&dmsgcurlAgent, "agent", "a", "dmsgcurl/"+buildinfo.Version(), "identify as `AGENT`\033[0m\n\r")
+	RootCmd.Flags().StringVarP(&dmsgcurlAgent, "agent", "a", "dmsgcurl/"+buildinfo.Version(), "identify as `AGENT`")
 	if os.Getenv("DMSGCURL_SK") != "" {
 		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint
 	}
-	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified")
 }
 
 // RootCmd contains the root cli command
