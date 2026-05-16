@@ -1196,6 +1196,9 @@ func (s *Session) Send(text string) error {
 // SetAllowlist updates the publisher's subscriber allowlist AND the
 // owner-side relay-gate's view of the member set, both live. Owner-
 // side only. Used when an invite is issued or a member is removed.
+// Returns the list of peers whose peerSubs were torn down — the
+// caller (Manager) is responsible for clearing any state keyed by
+// (group ID, peer PK), e.g. the per-peer reconnect backoff map.
 //
 // Two gates that both need refreshing:
 //
@@ -1212,9 +1215,9 @@ func (s *Session) Send(text string) error {
 // Visible symptom: member sends silently dropped on the owner; the
 // member's local Record.Members showing the original allowlist while
 // the owner had since added more peers.
-func (s *Session) SetAllowlist(members []cipher.PubKey) error {
+func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error) {
 	if s.pub == nil || s.cfg.Record.Role != RoleOwner {
-		return errors.New("group: SetAllowlist: only owner-role sessions have an allowlist")
+		return nil, errors.New("group: SetAllowlist: only owner-role sessions have an allowlist")
 	}
 	snap := append([]cipher.PubKey(nil), members...)
 	s.pub.SetAllowlist(append([]cipher.PubKey(nil), members...))
@@ -1232,6 +1235,16 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 		}
 		desired[pk] = struct{}{}
 	}
+	// evicted tracks peers whose peerSubs we just tore down; returned
+	// to the caller so Manager state keyed by (id, peerPK) — the
+	// per-peer reconnect backoff map in particular — can be cleaned
+	// up alongside the session-side eviction. Without this, evicted
+	// peers' backoff state could outlive its peerSub: harmless if
+	// the peer is never re-added (the entry just consumes a few bytes
+	// until session close), confusing if the same peer is later
+	// re-added because the stale backoff window suppresses reconnect
+	// attempts to a fresh peerSub.
+	var evicted []cipher.PubKey
 	s.peerSubsMu.Lock()
 	// Drop removed peers — close their subs while still holding the
 	// lock so a racing Connect doesn't pick up a half-torn sub.
@@ -1240,6 +1253,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 			_ = ps.Close() //nolint:errcheck,gosec
 			delete(s.peerSubs, pk)
 			delete(s.peerLastInboundNs, pk)
+			evicted = append(evicted, pk)
 		}
 	}
 	// Add new peers.
@@ -1268,7 +1282,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) error {
 		s.peerSubs[pk] = ps
 	}
 	s.peerSubsMu.Unlock()
-	return nil
+	return evicted, nil
 }
 
 // Close tears down the subscriber + publisher (and the underlying
