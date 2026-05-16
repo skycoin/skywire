@@ -18,43 +18,90 @@ software to be developed and tested in real-world conditions, with
 [daily rewards in Skycoin](rewards/mainnet_rules.md) ($SKY) distributed
 to eligible participants.
 
+## Why Skywire
+
+The Internet's security stack is a thirty-year pile of patches over a
+network that was designed without any. TCP/IP assumed a trusted
+backbone. SMTP, DNS, and HTTP shipped plaintext. Every fix since —
+TLS, X.509, Certificate Authorities, DNSSEC, DKIM, SPF, DMARC, HSTS,
+CT logs — bolts confidentiality, identity, or authenticity onto a
+layer that lacks it, via yet another layer that barely knows about the
+ones above and below. CAs get compromised. DNS hijacks break TLS. BGP
+hijacks break DNS. The address, the identity, and the name live in
+three separate systems, and the browser juggles them on every page
+load to keep the illusion together.
+
+Skywire starts from a different premise: **the address is the
+cryptographic identity.** From that one decision almost everything
+else follows.
+
 ## Major features
 
-Skywire visors are reachable over two distinct encrypted networks,
-both addressed by 33-byte public keys:
+* **Skywire is encrypted UDP & TCP.** Every byte between visors is
+  wrapped in the Noise Protocol (ChaCha20-Poly1305). There is no
+  plaintext mode, no opt-in TLS layer, no CA system; encryption is
+  not a feature, it is a property of the network. Both TCP services
+  and UDP datagrams carry end-to-end on the encrypted overlay.
 
-- **Skywire** — a peer-to-peer routing network. Visors establish
-  encrypted transports directly with each other (STCPR over TCP, SUDPH
-  over UDP hole-punching) and build single-hop or multi-hop routes
-  across them using the Noise Protocol; intermediate visors see only
-  the previous and next hop.
-- **DMSG** — a relay-based messaging network. Visors connect as
-  clients to DMSG servers, which relay encrypted streams between them
-  on the clients' behalf; the two endpoints never need direct
-  connectivity to each other.
+  **For comparison — stream encryption at roughly this level:**
+  - **cjdns / Yggdrasil** — encrypted IPv6 mesh, pubkey-derived
+    address, no CA. Closest in design philosophy.
+  - **Tor / I2P / Lokinet** — encrypted overlays focused on
+    anonymity rather than general-purpose private transport.
+  - **WireGuard / Nebula / Tailscale** — pubkey identity, AEAD
+    over UDP, but per-pair configured rather than address-as-key.
+  - **QUIC / HTTPS** — mandatory transport encryption, but identity
+    is still bolted on via X.509 because IP addresses are not
+    identities.
 
-The two networks share the same pubkey identity space and can be used
-independently or together — every feature below works over either.
+* **The public key is the address.** A 33-byte pubkey is what a peer
+  dials; the Noise handshake proves the remote side holds the
+  matching private key. Authentication is implicit because the name
+  *is* the key — there is no external naming authority to consult,
+  and no certificate to validate.
 
-* **P2P port forwarding over Skywire and DMSG** — host websites and TCP services on your visor's public key.
-  -- [SkyNet](#skynet--p2p-port-forwarding-over-skywire) forwards over Skywire routes.
-  -- [DmsgWeb](#dmsgweb--anonymous-port-forwarding-over-dmsg) forwards over a DMSG relay.
-* **`.skynet` / `.dmsg` resolving SOCKS5 proxy** — point a browser at the visor's local resolver to reach `<pk>.skynet` and `<pk>.dmsg` URLs directly.
-  -- Subdomain prefix on the URL (`example.com.<pk>.skynet`) lets vhost-capable backends like Caddy / nginx dispatch by `Host` header through the visor's port forwarder.
-  -- Optional TLS-MITM mode mints leaf certs from a locally-installed name-constrained CA so HTTPS sites work in the browser without warnings.
-* **Direct, multi-hop, and multiplexed pubkey-encrypted routing** — NAT-traversing transports plus DMSG fallback mean no public IP is required.
-  -- STCPR (TCP relay) and SUDPH (UDP hole-punching) auto-create transports between visors.
-  -- Routes use the Noise Protocol (ChaCha20-Poly1305) end-to-end; intermediate visors only know the previous and next hop.
-  -- Multi-route mux groups multiple parallel routes between the same endpoints for higher bandwidth.
-* **Native apps** — managed by the visor and registered into service discovery.
-  -- VPN client and server.
-  -- SOCKS5 proxy client and server (skysocks / skysocks-client).
-  -- skychat messenger with persistent chat history via CXO + bbolt — messages survive restarts.
-* **Remote terminal, monitoring, and management over DMSG / SkyNet** — access any visor's terminal, runtime logs, and live stats from anywhere.
-  -- `skywire cli` over DMSG / SkyNet for scripting and one-shot commands.
-  -- Hypervisor browser UI for clusters; everything tunnels over the same pubkey-authenticated transports.
-* **Custom / corporate / private network deployments** — run your own service stack (transport discovery, route finder, service discovery, address resolver, etc.) using [skywire-deployment](https://github.com/skycoin/skywire-deployment), or layer additional deployments on top of the public network for segmented environments.
-* **Decentralized standalone operation** — hypervisor-embedded DMSG server lets a Skywire network keep running without an active connection to the public deployment after the initial config and bootstrap; useful for air-gapped, LAN-only, or self-hosted networks.
+* **A virtual address space.** Skywire has its own routable address
+  space alongside the Internet's; every visor is reachable at
+  `<pubkey>.skynet` and `<pubkey>.dmsg`. The visor binds this space
+  to localhost in both directions — local ports forward into the
+  overlay, and a SOCKS5 resolver translates `<pk>.skynet` /
+  `<pk>.dmsg` URLs out of it.
+
+* **DMSG is the encrypted relay. Skynet is the peer-to-peer routing
+  that bootstraps from DMSG.** Visors connect as DMSG clients; DMSG
+  servers forward encrypted streams between them without seeing
+  contents and without either client needing direct connectivity.
+  From that baseline, Skynet auto-creates direct transports between
+  visors (STCPR over TCP, SUDPH over UDP hole-punching) and builds
+  single-hop or multi-hop routes across them. The control-plane
+  services that make Skynet routing possible — transport discovery,
+  route finder, service discovery, address resolver — are themselves
+  reached over DMSG.
+
+* **Remote monitoring and remote management over the overlay.**
+  `skywire cli` reaches any visor over DMSG or Skynet for one-shot
+  commands and scripts; the hypervisor browser UI manages clusters
+  over the same encrypted, pubkey-authenticated transports. Runtime
+  logs, live stats, and a remote terminal (`dmsgpty`) are available
+  from anywhere — no public IP, no SSH key sprawl, no jump host.
+
+* **Native applications, managed by the visor.** Bundled apps
+  register into service discovery and inherit the overlay's
+  encryption and pubkey identity: VPN client and server; SOCKS5
+  proxy client and server (skysocks / skysocks-client); skychat, a
+  messenger with persistent history (CXO + bbolt), group support,
+  and a `skymail-bridge` for crossing into the legacy SMTP world.
+
+* **Custom, private, and multi-deployment networks.** The whole
+  service stack (transport discovery, route finder, service
+  discovery, address resolver, DMSG discovery) is reproducible by a
+  third party via
+  [skywire-deployment](https://github.com/skycoin/skywire-deployment)
+  — private Skywire networks can run on independent infrastructure,
+  or additional deployments can layer on top of the public one for
+  segmented or air-gapped environments. A hypervisor-embedded DMSG
+  server keeps a private network running with no public deployment
+  dependency after bootstrap.
 
 ## Skywire Control and Data Planes
 
