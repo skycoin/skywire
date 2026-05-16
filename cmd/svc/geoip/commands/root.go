@@ -19,7 +19,6 @@ import (
 	"github.com/oschwald/geoip2-golang/v2"
 	"github.com/skycoin/skycoin/src/util/logging"
 	"github.com/spf13/cobra"
-	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
@@ -47,7 +46,7 @@ func exampleJSON(v interface{}) string {
 	if err != nil {
 		return ""
 	}
-	return string(pretty.Color(b, nil))
+	return string(b)
 }
 
 // generateExamples creates example responses from actual struct types

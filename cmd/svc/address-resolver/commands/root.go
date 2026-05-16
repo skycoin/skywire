@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tidwall/pretty"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/address-resolver/api"
@@ -54,7 +53,7 @@ func exampleJSON(v interface{}) string {
 	if err != nil {
 		return ""
 	}
-	return string(pretty.Color(b, nil))
+	return string(b)
 }
 
 func generateExamples() string {

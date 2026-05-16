@@ -50,28 +50,28 @@ func init() {
 		proxyCmd,
 	)
 
-	serveCmd.Flags().Uint16VarP(&dmsgPort, "dport", "q", 1081, "dmsg port to serve socks5\033[0m\n\r")
-	serveCmd.Flags().StringVarP(&wl, "wl", "w", "", "whitelist keys, comma separated\033[0m\n\r")
-	serveCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "F", "", "dmsghttp-config path\033[0m\n\r")
-	serveCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "dmsg discovery url\033[0m\n\r")
-	serveCmd.Flags().BoolVarP(&useHTTP, "http", "z", false, "use regular http to connect to dmsg discovery\033[0m\n\r")
+	serveCmd.Flags().Uint16VarP(&dmsgPort, "dport", "q", 1081, "dmsg port to serve socks5")
+	serveCmd.Flags().StringVarP(&wl, "wl", "w", "", "whitelist keys, comma separated")
+	serveCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "F", "", "dmsghttp-config path")
+	serveCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "dmsg discovery url")
+	serveCmd.Flags().BoolVarP(&useHTTP, "http", "z", false, "use regular http to connect to dmsg discovery")
 	if os.Getenv("DMSGSK") != "" {
 		sk.Set(os.Getenv("DMSGSK")) //nolint
 	}
-	serveCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	serveCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified")
 	serveCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
 	serveCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
-	proxyCmd.Flags().IntVarP(&proxyPort, "port", "p", 1081, "TCP port to serve SOCKS5 proxy locally\033[0m\n\r")
-	proxyCmd.Flags().Uint16VarP(&dmsgPort, "dport", "q", 1081, "dmsg port to connect to socks5 server\033[0m\n\r")
-	proxyCmd.Flags().StringVarP(&pubk, "pk", "k", "", "dmsg socks5 proxy server public key to connect to\033[0m\n\r")
-	proxyCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "F", "", "dmsghttp-config path\033[0m\n\r")
-	proxyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "dmsg discovery url\033[0m\n\r")
-	proxyCmd.Flags().BoolVarP(&useHTTP, "http", "z", false, "use regular http to connect to dmsg discovery\033[0m\n\r")
+	proxyCmd.Flags().IntVarP(&proxyPort, "port", "p", 1081, "TCP port to serve SOCKS5 proxy locally")
+	proxyCmd.Flags().Uint16VarP(&dmsgPort, "dport", "q", 1081, "dmsg port to connect to socks5 server")
+	proxyCmd.Flags().StringVarP(&pubk, "pk", "k", "", "dmsg socks5 proxy server public key to connect to")
+	proxyCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "F", "", "dmsghttp-config path")
+	proxyCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDisc, "dmsg discovery url")
+	proxyCmd.Flags().BoolVarP(&useHTTP, "http", "z", false, "use regular http to connect to dmsg discovery")
 	if os.Getenv("DMSGSK") != "" {
 		sk.Set(os.Getenv("DMSGSK")) //nolint
 	}
-	proxyCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\033[0m\n\r")
+	proxyCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified")
 	proxyCmd.Flags().StringVar(&pprofMode, "pprofmode", "", "[ cpu | mem | mutex | block | trace | http ]")
 	proxyCmd.Flags().StringVar(&pprofAddr, "pprofaddr", "localhost:6060", "pprof http port")
 
