@@ -1457,6 +1457,15 @@ type groupHealth struct {
 	LastMessageAt   time.Time `json:"last_message_at,omitempty"`
 	LagSeconds      *int64    `json:"lag_seconds"`
 	SubscriberAlive bool      `json:"subscriber_alive"`
+	// SubDropCount is the inbox→stream fan-out drop tally surfaced
+	// from the visor's group inbox. See visor.GroupInfo.SubDropCount
+	// for the full semantics. Repeated across every group entry in
+	// this list because the underlying counter is inbox-wide, not
+	// per-group — a busy stream that backpressures up to the
+	// channel-full default branch drops messages destined for every
+	// group, but operators looking at one group's /status entry
+	// shouldn't have to know that to find the number.
+	SubDropCount uint64 `json:"sub_drop_count"`
 }
 
 // collectGroupHealth queries the visor's GroupList RPC and renders
@@ -1519,6 +1528,7 @@ func collectGroupHealth() ([]groupHealth, string) {
 			MembersCount:    len(g.Members),
 			LastMessageAt:   g.LastMessageAt,
 			SubscriberAlive: g.SubscriberAlive,
+			SubDropCount:    g.SubDropCount,
 		}
 		if !g.LastMessageAt.IsZero() {
 			lag := int64(now.Sub(g.LastMessageAt).Seconds())
