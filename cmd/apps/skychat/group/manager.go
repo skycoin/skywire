@@ -130,12 +130,12 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		log = logging.MustGetLogger("skychat-group-manager")
 	}
 	return &Manager{
-		store:             cfg.Store,
-		dmsgC:             cfg.DmsgC,
-		myPK:              cfg.MyPK,
-		mySK:              cfg.MySK,
-		dataDir:           cfg.DataDir,
-		log:               log,
+		store:              cfg.Store,
+		dmsgC:              cfg.DmsgC,
+		myPK:               cfg.MyPK,
+		mySK:               cfg.MySK,
+		dataDir:            cfg.DataDir,
+		log:                log,
 		portAlloc:          defaultPortAlloc,
 		sessions:           make(map[string]*Session),
 		heartbeatInterval:  cfg.HeartbeatInterval,
