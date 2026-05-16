@@ -111,6 +111,12 @@ type Client struct {
 	LookupHTTPHits   atomic.Int64 // resolved from HTTP discovery
 	LookupHTTPMisses atomic.Int64 // HTTP discovery returned not found
 
+	// pinnedFailures counts consecutive failed Serve-loop passes
+	// while in pinned mode (--dmsg-server / ctx.Value("dmsgServer")
+	// set). The visor polls PinnedFailureCount() during startup to
+	// decide when to abort. Resets to zero on successful session.
+	pinnedFailures atomic.Int64
+
 	errCh chan error
 	done  chan struct{}
 	once  sync.Once
@@ -237,22 +243,60 @@ func (ce *Client) Serve(ctx context.Context) {
 		var entries []*disc.Entry
 		var err error
 		ce.log.Debug("Discovering dmsg servers...")
-		if ctx.Value("dmsgServer") != nil {
+		pinned := ctx.Value("dmsgServer") != nil
+		pinnedAddr, _ := ctx.Value("dmsgServerAddr").(string)
+		if pinned && pinnedAddr != "" {
+			// pk@host:port form: skip discovery entirely. We have
+			// everything dialSession needs (PK + TCP address) right
+			// here, so don't burn an HTTP round-trip on dmsg-discovery
+			// — that may be unreachable in the bootstrap scenarios
+			// this mode exists for. A bad PK falls through to "No
+			// entries found" and gets counted as a pinned failure.
+			if dmsgServer, ok := ctx.Value("dmsgServer").(string); ok {
+				var pk cipher.PubKey
+				if err := pk.Set(dmsgServer); err != nil {
+					ce.log.WithError(err).
+						WithField("dmsg_server", dmsgServer).
+						Warn("Pinned dmsg server PK invalid; will retry.")
+					entries = nil
+				} else {
+					entries = []*disc.Entry{{
+						Static: pk,
+						Server: &disc.Server{Address: pinnedAddr},
+					}}
+				}
+			}
+		} else if pinned {
 			entries, err = ce.discoverServers(cancellabelCtx, true)
 			if err != nil {
 				ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
 				if err == context.Canceled || err == context.DeadlineExceeded {
 					return
 				}
+				ce.pinnedFailures.Add(1)
 				ce.serveWait()
 				continue
 			}
 
-			for ind, entry := range entries {
-				if dmsgServer, ok := ctx.Value("dmsgServer").(string); ok && entry.Static.Hex() == dmsgServer {
-					entries = entries[ind : ind+1]
-					break
+			// Strict pinning: keep only the requested server. If it's
+			// not in discovery (typo, not registered, etc.), drop to
+			// empty entries so the outer loop hits the "No entries
+			// found" retry path instead of silently connecting to a
+			// different server.
+			matched := false
+			if dmsgServer, ok := ctx.Value("dmsgServer").(string); ok {
+				for ind, entry := range entries {
+					if entry.Static.Hex() == dmsgServer {
+						entries = entries[ind : ind+1]
+						matched = true
+						break
+					}
 				}
+			}
+			if !matched {
+				ce.log.WithField("dmsg_server", ctx.Value("dmsgServer")).
+					Warn("Pinned dmsg server not in discovery; will retry.")
+				entries = nil
 			}
 		} else if ctx.Value("setupNode") != nil {
 			entries, err = ce.discoverServers(cancellabelCtx, true)
@@ -277,6 +321,9 @@ func (ce *Client) Serve(ctx context.Context) {
 		}
 		if len(entries) == 0 {
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
+			if pinned {
+				ce.pinnedFailures.Add(1)
+			}
 			ce.serveWait()
 			continue
 		}
@@ -352,6 +399,9 @@ func (ce *Client) Serve(ctx context.Context) {
 					// Only backoff after all servers have been tried
 					ce.log.WithField("current_backoff", ce.bo.String()).
 						Warn("All servers failed, backing off.")
+					if pinned {
+						ce.pinnedFailures.Add(1)
+					}
 					ce.serveWait()
 				}
 				ce.log.WithField("remote_pk", entry.Static).WithError(err).
@@ -359,6 +409,9 @@ func (ce *Client) Serve(ctx context.Context) {
 			} else {
 				// Reset backoff on successful session establishment.
 				ce.bo = ce.initBO
+				if pinned {
+					ce.pinnedFailures.Store(0)
+				}
 			}
 		}
 
@@ -391,6 +444,16 @@ func (ce *Client) Serve(ctx context.Context) {
 // dmsg discovery.
 func (ce *Client) Ready() <-chan struct{} {
 	return ce.ready
+}
+
+// PinnedFailureCount returns the number of consecutive failed
+// Serve-loop passes while the client is pinned to a single dmsg
+// server via the "dmsgServer" context value. Reset to 0 whenever a
+// session is successfully established. Callers (the visor's startup
+// path) use this to bound how long the visor waits for a pinned
+// server before aborting startup.
+func (ce *Client) PinnedFailureCount() int64 {
+	return ce.pinnedFailures.Load()
 }
 
 func (ce *Client) discoverServers(ctx context.Context, all bool) (entries []*disc.Entry, err error) {
