@@ -32,9 +32,9 @@ var (
 
 func init() {
 	dmsgclient.InitFlags(RootCmd)
-	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[ debug | warn | error | fatal | panic | trace | info ]\033[0m\n\r")
-	RootCmd.Flags().IntVarP(&waitTime, "wait", "w", 0, "wait time in seconds before disconnecting\n\r\033[0m")
-	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified\n\r\033[0m")
+	RootCmd.Flags().StringVarP(&logLvl, "loglvl", "l", "info", "[ debug | warn | error | fatal | panic | trace | info ]")
+	RootCmd.Flags().IntVarP(&waitTime, "wait", "w", 0, "wait time in seconds before disconnecting")
+	RootCmd.Flags().VarP(&sk, "sk", "s", "a random key is generated if unspecified")
 }
 
 // RootCmd contains the root dmsgcurl command
