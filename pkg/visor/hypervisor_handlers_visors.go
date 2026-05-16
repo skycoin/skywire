@@ -178,11 +178,12 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 				// Skip remotes that simply aren't hypervisors (the
 				// most common case — every plain visor in the
 				// deployment would otherwise show as a no-op error
-				// row in the tree).
-				es := sr.err.Error()
-				if es == "hypervisor not running" || es == "hypervisor not enabled" {
+				// row in the tree). Mirrors isNotHypervisorErr() in
+				// rpc_hypervisor_proxy.go — kept in sync there.
+				if isNotHypervisorErr(sr.err) {
 					continue
 				}
+				es := sr.err.Error()
 				rendered[sr.hyperPK] = true
 				sections = append(sections, VisorTreeSection{
 					HypervisorPK: sr.hyperPK,
