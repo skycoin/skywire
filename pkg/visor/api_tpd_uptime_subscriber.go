@@ -21,6 +21,7 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -144,11 +145,15 @@ func (v *Visor) ensureTPDUptimeSubscriber() (*tpdUptimeSubscriber, error) {
 	})
 
 	// Connect can hang indefinitely when the publisher's listener is
-	// down (e.g. TPD is panicking). Run it in a goroutine and bound
-	// the wait — anything past connectTimeout is treated as a cache
-	// miss so the handler chain falls through to DMSG-HTTP / HTTP.
+	// down (e.g. TPD is panicking). Bound the dial via the ctx that
+	// Subscriber.Connect now threads to dmsg.Client.Dial (post-T2a),
+	// and keep the goroutine+select wrapper as belt-and-suspenders
+	// so the outer time.After fires reliably even if a future
+	// regression removes the ctx-honoring in the dmsg layer.
+	dctx, dcancel := context.WithTimeout(context.Background(), connectTimeout)
+	defer dcancel()
 	done := make(chan error, 1)
-	go func() { done <- sub.Connect(tpdPK) }()
+	go func() { done <- sub.Connect(dctx, tpdPK) }()
 	select {
 	case err := <-done:
 		if err != nil {

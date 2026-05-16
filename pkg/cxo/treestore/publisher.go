@@ -11,6 +11,7 @@
 package treestore
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sort"
@@ -341,7 +342,7 @@ func (p *Publisher) AllowsSubscriber(pk cipher.PubKey) bool {
 // then sees the inbound conn and subscribes to the visor's feed
 // (PK = visor PK = the publisher feed). Idempotent: returns nil for
 // an existing live conn, redials if the previous conn has dropped.
-func (p *Publisher) AnnounceTo(peerPK cipher.PubKey) error {
+func (p *Publisher) AnnounceTo(ctx context.Context, peerPK cipher.PubKey) error {
 	if p.cxoNode == nil {
 		return errors.New("treestore: publisher has no cxo node")
 	}
@@ -349,7 +350,7 @@ func (p *Publisher) AnnounceTo(peerPK cipher.PubKey) error {
 	if dmsgT == nil {
 		return errors.New("treestore: publisher has no dmsg transport")
 	}
-	_, err := dmsgT.ConnectPK(peerPK)
+	_, err := dmsgT.ConnectPK(ctx, peerPK)
 	return err
 }
 
