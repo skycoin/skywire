@@ -379,7 +379,16 @@ func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
 	sess, live := m.sessions[id]
 	m.mu.RUnlock()
 	if live {
-		_ = sess.SetAllowlist(r.Members) //nolint:errcheck
+		// AddMember is additive so evicted is typically empty here,
+		// but route the result through peerReconnectClear anyway so
+		// the cleanup invariant holds uniformly for every code path
+		// that calls SetAllowlist — a future RemoveMember (or any
+		// caller that shrinks the allowlist) gets the per-peer
+		// backoff state dropped automatically.
+		evicted, _ := sess.SetAllowlist(r.Members) //nolint:errcheck
+		for _, pk := range evicted {
+			m.peerReconnectClear(id, pk)
+		}
 	}
 	return r, nil
 }
