@@ -872,6 +872,11 @@ func (v *Visor) SubscribeGroupMessages(capacity int) (<-chan GroupMessage, func(
 // drains anything newer from the buffer before entering the live
 // dispatch loop. Returns nil when grouping is disabled.
 //
+// Filter contract: strict greater-than (TS > since). The streaming
+// handler's lastSentNs dedup assumes this — a >= filter would
+// quietly reintroduce duplicate cursor-message delivery. Do not
+// relax to >= without auditing every caller.
+//
 // Buffer size bounds the replay depth; see groupInboxCap. A client
 // that's been disconnected longer than the buffer turnover will see
 // only the most recent groupInboxCap messages, not the full gap.

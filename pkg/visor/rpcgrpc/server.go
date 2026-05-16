@@ -1077,6 +1077,13 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 	// listen — current behavior, only live messages).
 	if req.SinceTimestampNs > 0 {
 		backlog := s.visor.SnapshotGroupMessagesAfterNs(req.SinceTimestampNs)
+		// Diagnostic log: an empty backlog (len == 0) is ambiguous
+		// without it — either nothing landed since the cursor, OR
+		// the disconnect outlasted the ring-buffer turnover. Operators
+		// staring at a "quiet" group post-reconnect need to tell
+		// those cases apart from the log.
+		s.log.Debugf("gRPC StreamGroupMessages: replay since_ns=%d returned=%d messages (groupInboxCap bounds long-disconnect recovery)",
+			req.SinceTimestampNs, len(backlog))
 		for _, m := range backlog {
 			if req.GroupId != "" && m.GroupID != req.GroupId {
 				continue
