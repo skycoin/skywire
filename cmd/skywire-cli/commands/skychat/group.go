@@ -196,18 +196,18 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	if !info.LastMessageAt.IsZero() {
 		last = info.LastMessageAt.UTC().Format(time.RFC3339)
 	}
-	fmt.Fprintf(&buf, "id:                %s\n", info.ID)            //nolint:errcheck
-	fmt.Fprintf(&buf, "name:              %s\n", info.Name)          //nolint:errcheck
-	fmt.Fprintf(&buf, "owner:             %s\n", info.OwnerPK)       //nolint:errcheck
-	fmt.Fprintf(&buf, "port:              %d\n", info.Port)          //nolint:errcheck
-	fmt.Fprintf(&buf, "mode:              %s\n", info.Mode)          //nolint:errcheck
-	fmt.Fprintf(&buf, "role:              %s\n", info.Role)          //nolint:errcheck
-	fmt.Fprintf(&buf, "status:            %s\n", info.Status)        //nolint:errcheck
-	fmt.Fprintf(&buf, "created_at:        %s\n", info.CreatedAt.UTC().Format(time.RFC3339))  //nolint:errcheck
-	fmt.Fprintf(&buf, "joined_at:         %s\n", info.JoinedAt.UTC().Format(time.RFC3339))   //nolint:errcheck
-	fmt.Fprintf(&buf, "last_message_at:   %s\n", last)               //nolint:errcheck
-	fmt.Fprintf(&buf, "subscriber_alive:  %t\n", info.SubscriberAlive) //nolint:errcheck
-	fmt.Fprintf(&buf, "members (%d):\n", len(info.Members))          //nolint:errcheck
+	fmt.Fprintf(&buf, "id:                %s\n", info.ID)                                   //nolint:errcheck
+	fmt.Fprintf(&buf, "name:              %s\n", info.Name)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "owner:             %s\n", info.OwnerPK)                              //nolint:errcheck
+	fmt.Fprintf(&buf, "port:              %d\n", info.Port)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "mode:              %s\n", info.Mode)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "role:              %s\n", info.Role)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "status:            %s\n", info.Status)                               //nolint:errcheck
+	fmt.Fprintf(&buf, "created_at:        %s\n", info.CreatedAt.UTC().Format(time.RFC3339)) //nolint:errcheck
+	fmt.Fprintf(&buf, "joined_at:         %s\n", info.JoinedAt.UTC().Format(time.RFC3339))  //nolint:errcheck
+	fmt.Fprintf(&buf, "last_message_at:   %s\n", last)                                      //nolint:errcheck
+	fmt.Fprintf(&buf, "subscriber_alive:  %t\n", info.SubscriberAlive)                      //nolint:errcheck
+	fmt.Fprintf(&buf, "members (%d):\n", len(info.Members))                                 //nolint:errcheck
 	for _, pk := range info.Members {
 		fmt.Fprintf(&buf, "  %s\n", pk) //nolint:errcheck
 	}
