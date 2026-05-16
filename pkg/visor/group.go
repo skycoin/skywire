@@ -314,6 +314,12 @@ type GroupHistoryFetcher interface {
 	// messages — useful for operator inspection ('cli skychat group
 	// history --list-groups' style introspection).
 	Groups() ([]string, error)
+	// ListGroupSince returns every stored message for the named
+	// group with TS strictly after `since`, oldest first. Powers the
+	// gRPC StreamGroupMessages history-fallback path that backfills
+	// a reconnecting subscriber whose disconnect gap is longer than
+	// the in-memory inbox ring can cover.
+	ListGroupSince(groupID string, since time.Time) ([]GroupMessage, error)
 }
 
 // GroupHistory returns up to limit most recent persisted messages for
