@@ -60,6 +60,14 @@ type VisorAPI interface {
 	// Returns (nil, no-op) when grouping is not yet initialized on
 	// the visor or running in a test harness.
 	SubscribeGroupMessages(capacity int) (<-chan GroupMessageData, func() uint64)
+	// SnapshotGroupMessagesAfterNs returns inbox-buffered group
+	// messages with TS > sinceNs (UnixNano). Used by
+	// StreamGroupMessages to replay events that landed during a
+	// client's reconnect gap before entering the live dispatch loop.
+	// Empty slice when grouping is uninitialized; bounded by the
+	// inbox ring capacity (long disconnect → only the tail is
+	// recoverable).
+	SnapshotGroupMessagesAfterNs(sinceNs int64) []GroupMessageData
 	// LocalPK returns the visor's own public key. Used by route-calc
 	// gRPC handlers that default the src PK to the local visor.
 	LocalPK() cipher.PubKey
@@ -1014,17 +1022,22 @@ func (s *PingServer) StreamRemoteSystemStats(req *RemoteSystemStatsRequest, stre
 // pattern is exactly what this RPC was added to escape).
 //
 // Sequence:
-//  1. Register the subscription on the inbox (bounded buffer).
+//  1. Register the subscription on the inbox (bounded buffer). This
+//     happens BEFORE the backlog snapshot — any message arriving
+//     during the snapshot read is captured by the live channel and
+//     deduped against the backlog via lastSentNs.
 //  2. Send a Subscribed sentinel so the client can confirm the stream
 //     is live before downstream actions (mirrors the AppLogStream
 //     pattern; lets the CLI gate Ctrl+C handler installation, etc.).
-//  3. If req.SinceTimestampNs > 0, drain backlog from a one-shot
-//     GroupPoll-style call via the existing inbox snapshot — NOT done
-//     here yet; the simplest live-only path is enough for the v1 CLI
-//     replacement. Backlog replay is a follow-up (handler would need
-//     a SnapshotAfter accessor on the adapter).
+//  3. If req.SinceTimestampNs > 0, drain inbox-buffered messages with
+//     TS > since via SnapshotGroupMessagesAfterNs. Each replayed
+//     message bumps lastSentNs so the same message arriving on the
+//     live channel (the subscribe/snapshot race window) is suppressed.
+//     Bounded by the inbox ring size (groupInboxCap) — a client
+//     disconnected longer than the ring turnover gets only the tail.
 //  4. Loop: select on stream.Context().Done() or the subscription
-//     channel; forward each message to the wire.
+//     channel; forward each message to the wire when m.TimestampNs >
+//     lastSentNs.
 //
 // Filter: req.GroupId, when set, scopes the stream to one group. Empty
 // matches every group the visor is in.
@@ -1053,6 +1066,36 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 		return err
 	}
 
+	// lastSentNs deduplicates between the backlog snapshot and the
+	// live channel for messages that landed in the
+	// subscribe-but-not-yet-read window. Initialized to the client's
+	// since cursor so old messages already seen on a prior stream
+	// are never re-emitted.
+	lastSentNs := req.SinceTimestampNs
+
+	// Backlog replay. Skips when client didn't pass a since (fresh
+	// listen — current behavior, only live messages).
+	if req.SinceTimestampNs > 0 {
+		backlog := s.visor.SnapshotGroupMessagesAfterNs(req.SinceTimestampNs)
+		for _, m := range backlog {
+			if req.GroupId != "" && m.GroupID != req.GroupId {
+				continue
+			}
+			if m.TimestampNs <= lastSentNs {
+				continue
+			}
+			if err := stream.Send(&GroupMessageEvent{
+				TimestampNs: m.TimestampNs,
+				GroupId:     m.GroupID,
+				SenderPk:    m.SenderPK,
+				Body:        m.Body,
+			}); err != nil {
+				return err
+			}
+			lastSentNs = m.TimestampNs
+		}
+	}
+
 	for {
 		select {
 		case <-stream.Context().Done():
@@ -1067,6 +1110,14 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 			if req.GroupId != "" && m.GroupID != req.GroupId {
 				continue
 			}
+			// Dedup against the backlog replay above. A message
+			// landing in the inbox during the subscribe-but-not-yet-
+			// snapshot window is delivered on the live channel AND
+			// captured in the snapshot; lastSentNs ensures it goes
+			// out exactly once.
+			if m.TimestampNs <= lastSentNs {
+				continue
+			}
 			if err := stream.Send(&GroupMessageEvent{
 				TimestampNs: m.TimestampNs,
 				GroupId:     m.GroupID,
@@ -1075,6 +1126,7 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 			}); err != nil {
 				return err
 			}
+			lastSentNs = m.TimestampNs
 		}
 	}
 }
