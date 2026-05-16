@@ -68,7 +68,9 @@ func TestPublisherHydrateFreshNodeNoOp(t *testing.T) {
 	_, sk := cipher.GenerateKeyPair()
 
 	n := fileBackedNode(t, filepath.Join(dir, "node"), sk)
-	defer func() { _ = n.Close() }()
+	defer func() {
+		_ = n.Close() //nolint:errcheck
+	}()
 
 	p, err := New(n, sk, Config{BatchWindow: 10 * time.Millisecond})
 	if err != nil {
@@ -102,7 +104,7 @@ func TestPublisherHydrateRebuildsTreeAcrossRestart(t *testing.T) {
 	n1 := fileBackedNode(t, nodeDir, sk)
 	p1, err := New(n1, sk, Config{BatchWindow: 10 * time.Millisecond})
 	if err != nil {
-		_ = n1.Close()
+		_ = n1.Close() //nolint:errcheck
 		t.Fatalf("New (instance 1): %v", err)
 	}
 	puts := []struct {
@@ -115,18 +117,18 @@ func TestPublisherHydrateRebuildsTreeAcrossRestart(t *testing.T) {
 	}
 	for _, put := range puts {
 		if err := p1.Put(put.path, put.value); err != nil {
-			_ = p1.Close()
-			_ = n1.Close()
+			_ = p1.Close() //nolint:errcheck
+			_ = n1.Close() //nolint:errcheck
 			t.Fatalf("Put(%q): %v", put.path, err)
 		}
 	}
 	if err := p1.Flush(); err != nil {
-		_ = p1.Close()
-		_ = n1.Close()
+		_ = p1.Close() //nolint:errcheck
+		_ = n1.Close() //nolint:errcheck
 		t.Fatalf("Flush: %v", err)
 	}
 	if err := p1.Close(); err != nil {
-		_ = n1.Close()
+		_ = n1.Close() //nolint:errcheck
 		t.Fatalf("publisher.Close: %v", err)
 	}
 	if err := n1.Close(); err != nil {
@@ -137,7 +139,9 @@ func TestPublisherHydrateRebuildsTreeAcrossRestart(t *testing.T) {
 	// in-memory tree should be rebuilt from the previously-published
 	// Root before runLoop starts.
 	n2 := fileBackedNode(t, nodeDir, sk)
-	defer func() { _ = n2.Close() }()
+	defer func() {
+		_ = n2.Close() //nolint:errcheck
+	}()
 	p2, err := New(n2, sk, Config{BatchWindow: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("New (instance 2): %v", err)
@@ -173,26 +177,28 @@ func TestPublisherHydrateNextPublishContainsHistoricalLeaves(t *testing.T) {
 	n1 := fileBackedNode(t, nodeDir, sk)
 	p1, err := New(n1, sk, Config{BatchWindow: 10 * time.Millisecond})
 	if err != nil {
-		_ = n1.Close()
+		_ = n1.Close() //nolint:errcheck
 		t.Fatalf("New (instance 1): %v", err)
 	}
 	for _, path := range []string{"msgs/one", "msgs/two"} {
 		if err := p1.Put(path, []byte(path+"-body")); err != nil {
-			_ = p1.Close()
-			_ = n1.Close()
+			_ = p1.Close() //nolint:errcheck
+			_ = n1.Close() //nolint:errcheck
 			t.Fatalf("Put(%q): %v", path, err)
 		}
 	}
 	if err := p1.Flush(); err != nil {
-		_ = p1.Close()
-		_ = n1.Close()
+		_ = p1.Close() //nolint:errcheck
+		_ = n1.Close() //nolint:errcheck
 		t.Fatalf("Flush: %v", err)
 	}
-	_ = p1.Close()
-	_ = n1.Close()
+	_ = p1.Close() //nolint:errcheck
+	_ = n1.Close() //nolint:errcheck
 
 	n2 := fileBackedNode(t, nodeDir, sk)
-	defer func() { _ = n2.Close() }()
+	defer func() {
+		_ = n2.Close() //nolint:errcheck
+	}()
 	p2, err := New(n2, sk, Config{BatchWindow: 10 * time.Millisecond})
 	if err != nil {
 		t.Fatalf("New (instance 2): %v", err)
@@ -228,7 +234,9 @@ func TestPublisherHydrateNextPublishContainsHistoricalLeaves(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unpack: %v", err)
 	}
-	defer func() { _ = up.Close() }()
+	defer func() {
+		_ = up.Close() //nolint:errcheck
+	}()
 
 	var rootNode TreeNode
 	if err := r.Refs[0].Value(up, &rootNode); err != nil {
@@ -272,14 +280,18 @@ func TestHydrateMemNodeWalksLeavesAndSubTrees(t *testing.T) {
 	_, sk := cipher.GenerateKeyPair()
 
 	n := fileBackedNode(t, dir, sk)
-	defer func() { _ = n.Close() }()
+	defer func() {
+		_ = n.Close() //nolint:errcheck
+	}()
 
 	c := n.Container()
 	up, err := c.Unpack(skycipher.SecKey(sk), Registry)
 	if err != nil {
 		t.Fatalf("Unpack: %v", err)
 	}
-	defer func() { _ = up.Close() }()
+	defer func() {
+		_ = up.Close() //nolint:errcheck
+	}()
 
 	// Build inner TreeNode (one leaf), then outer TreeNode (one leaf
 	// at the root + an entry whose Sub points at inner).
