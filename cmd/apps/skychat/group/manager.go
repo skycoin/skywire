@@ -447,6 +447,17 @@ func (m *Manager) PromoteAdmin(id string, pk cipher.PubKey) (Record, error) {
 	sess, live := m.sessions[id]
 	m.mu.RUnlock()
 	if live {
+		// Admin-aggregator topology hook (#2685 admin-aggregator
+		// design): the live session's peerSubs depend on the admin
+		// set. A promote means a non-admin member that previously
+		// skipped this peer must now subscribe; an admin member's
+		// set is unchanged but the call is cheap and idempotent.
+		// SetAdminRoster is best-effort — errors are logged at
+		// Debug, the next call will reconcile.
+		if _, sarErr := sess.SetAdminRoster(append([]cipher.PubKey(nil), r.Admins...)); sarErr != nil {
+			m.log.WithError(sarErr).WithField("id", id).WithField("peer", pk.String()).
+				Debug("group: PromoteAdmin: SetAdminRoster failed; live session may be slow to pick up the new admin's feed until next reconnect tick")
+		}
 		if _, err := sess.PublishAdminMutation(AdminOpPromote, pk, 0); err != nil {
 			m.log.WithError(err).WithField("id", id).WithField("peer", pk.String()).
 				Debug("group: PromoteAdmin: gossip emit failed; local state still consistent")
@@ -506,6 +517,15 @@ func (m *Manager) DemoteAdmin(id string, pk cipher.PubKey) (Record, error) {
 	sess, live := m.sessions[id]
 	m.mu.RUnlock()
 	if live {
+		// Admin-aggregator topology hook (#2685 admin-aggregator
+		// design): a demote means non-admin members must drop the
+		// peerSub to the demoted PK (their leaves no longer reach
+		// non-admins directly — only via the still-admins' republish).
+		// See SetAdminRoster docstring.
+		if _, sarErr := sess.SetAdminRoster(append([]cipher.PubKey(nil), r.Admins...)); sarErr != nil {
+			m.log.WithError(sarErr).WithField("id", id).WithField("peer", pk.String()).
+				Debug("group: DemoteAdmin: SetAdminRoster failed; live session may continue subscribing to the demoted PK until next admin-roster change")
+		}
 		if _, err := sess.PublishAdminMutation(AdminOpDemote, pk, 0); err != nil {
 			m.log.WithError(err).WithField("id", id).WithField("peer", pk.String()).
 				Debug("group: DemoteAdmin: gossip emit failed; local state still consistent")
