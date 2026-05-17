@@ -844,7 +844,7 @@ func (s *Session) Connect(ctx context.Context) error {
 	// goroutine that runs to completion before discarding its result.
 	if s.sub != nil {
 		done := make(chan error, 1)
-		go func() { done <- s.sub.Connect(ctx, s.cfg.Record.OwnerPK) }()
+		go func() { done <- s.sub.ConnectAndWaitForRoot(ctx, s.cfg.Record.OwnerPK) }()
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -892,7 +892,7 @@ func (s *Session) Connect(ctx context.Context) error {
 		}
 		done := make(chan error, 1)
 		pkLocal, psLocal := pk, ps
-		go func() { done <- psLocal.Connect(ctx, pkLocal) }()
+		go func() { done <- psLocal.ConnectAndWaitForRoot(ctx, pkLocal) }()
 		select {
 		case <-ctx.Done():
 			// Outer deadline fired mid-Connect. The goroutine will
@@ -1076,7 +1076,7 @@ func (s *Session) ReconnectPeer(ctx context.Context, pk cipher.PubKey) error {
 		return nil
 	}
 	done := make(chan error, 1)
-	go func() { done <- ps.Connect(ctx, pk) }()
+	go func() { done <- ps.ConnectAndWaitForRoot(ctx, pk) }()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -1125,7 +1125,7 @@ func (s *Session) ReconnectLegacySub(ctx context.Context) error {
 		return nil
 	}
 	done := make(chan error, 1)
-	go func() { done <- s.sub.Connect(ctx, s.cfg.Record.OwnerPK) }()
+	go func() { done <- s.sub.ConnectAndWaitForRoot(ctx, s.cfg.Record.OwnerPK) }()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -1364,7 +1364,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 		// in the allowlist doesn't block roster expansion. The retry
 		// loop will pick it up on a later tick with its own deadline.
 		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-		err = ps.Connect(dctx, pk)
+		err = ps.ConnectAndWaitForRoot(dctx, pk)
 		dcancel()
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
@@ -1499,7 +1499,7 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 		// SetAllowlist. A peer that's offline now will be picked up
 		// on the next reconnect tick once the publisher comes back.
 		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-		err = ps.Connect(dctx, pk)
+		err = ps.ConnectAndWaitForRoot(dctx, pk)
 		dcancel()
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
