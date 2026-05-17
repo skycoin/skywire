@@ -33,6 +33,7 @@ var (
 	sendNet      string
 	sendWait     time.Duration
 	sendRetries  int
+	sendVerbose  bool
 	listenNet    string
 	listenFrom   string
 	listenRaw    bool
@@ -58,6 +59,7 @@ func init() {
 	sendCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type: skynet or dmsg")
 	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 5*time.Second, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 disables wait and returns success on WriteFrame (fire-and-forget). Default 5s gives delivery confirmation.")
 	sendCmd.Flags().IntVarP(&sendRetries, "retries", "r", 1, "extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried.")
+	sendCmd.Flags().BoolVar(&sendVerbose, "verbose", false, "surface per-layer detail to stderr: POST request URL+payload, HTTP response status+headers, ack timing, /status counter deltas (outbound_msg_count / fail / retry / fallback). Use to debug send failures.")
 	sendCmd.MarkFlagRequired("to")  //nolint:errcheck,gosec
 	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
 
@@ -137,15 +139,49 @@ Outcomes (--wait > 0):
 		if attempts < 1 {
 			attempts = 1
 		}
+		errOut := cmd.ErrOrStderr()
+		var preCounters *statusCounters
+		if sendVerbose {
+			fmt.Fprintf(errOut, "[verbose] target: %s\n", pk.String())                 //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] network: %s\n", sendNet)                    //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] msg bytes: %d\n", len(message))             //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] wait timeout: %s\n", sendWait)              //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] retries on transport fail: %d\n", attempts) //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] chat-app addr: http://%s/message\n", httpAddr)
+			if c, err := fetchStatusCounters(httpAddr); err == nil {
+				preCounters = c
+				fmt.Fprintf(errOut, "[verbose] pre-send counters: %s\n", c.summary()) //nolint:errcheck
+			} else {
+				fmt.Fprintf(errOut, "[verbose] pre-send counters: <fetch failed: %v>\n", err) //nolint:errcheck
+			}
+		}
 		var ack *AckResponse
 		for i := 0; i < attempts; i++ {
+			if sendVerbose && i > 0 {
+				fmt.Fprintf(errOut, "[verbose] retry attempt %d/%d (backoff fired)\n", i+1, attempts) //nolint:errcheck
+			}
 			ack, err = postMessage(httpAddr, pk.String(), message, sendNet, sendWait)
+			if sendVerbose {
+				if err != nil {
+					fmt.Fprintf(errOut, "[verbose] attempt %d: error: %v\n", i+1, err) //nolint:errcheck
+				} else if ack != nil {
+					fmt.Fprintf(errOut, "[verbose] attempt %d: ack=%v ms=%d id=%s reason=%q\n", i+1, ack.Acked, ack.MS, ack.ID, ack.Reason) //nolint:errcheck
+				} else {
+					fmt.Fprintf(errOut, "[verbose] attempt %d: post OK (fire-and-forget, no ack)\n", i+1) //nolint:errcheck
+				}
+			}
 			if err == nil {
 				break
 			}
 			if i+1 < attempts {
 				backoff := time.Duration(200*(i+1)) * time.Millisecond
 				time.Sleep(backoff)
+			}
+		}
+		if sendVerbose && preCounters != nil {
+			if c, err := fetchStatusCounters(httpAddr); err == nil {
+				fmt.Fprintf(errOut, "[verbose] post-send counters: %s\n", c.summary()) //nolint:errcheck
+				fmt.Fprintf(errOut, "[verbose] delta: %s\n", c.delta(preCounters))     //nolint:errcheck
 			}
 		}
 		if err != nil {
