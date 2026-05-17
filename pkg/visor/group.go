@@ -118,6 +118,31 @@ type GroupInfo struct {
 	// Repeated across every GroupInfo for operator convenience.
 	DeliverCount uint64 `json:"deliver_count"`
 
+	// StreamSendCount is the running total of successful stream.Send
+	// calls on rpcgrpc.StreamGroupMessages across both PingServer
+	// instances (local CLI + dmsg-RPC). Counts data events only;
+	// the Subscribed sentinel that the handler emits before entering
+	// the dispatch loop is NOT included.
+	//
+	// Pairs with DeliverCount to localize drops between the inbox
+	// layer and the CLI listener:
+	//   DeliverCount    > StreamSendCount  → drops between inbox and
+	//                                        stream (SubDropCount accounts
+	//                                        for some; rest are adapter
+	//                                        backpressure or stream
+	//                                        flow-control on the gRPC
+	//                                        send buffer).
+	//   DeliverCount   ==  StreamSendCount → everything that landed
+	//                                        in the inbox was sent to
+	//                                        the wire; any operator-
+	//                                        observed loss is downstream
+	//                                        of stream.Send (gRPC client
+	//                                        recv, CLI buffering, or
+	//                                        Monitor task wrapper).
+	//
+	// Visor-wide, not group-scoped. Reset only on visor restart.
+	StreamSendCount uint64 `json:"stream_send_count"`
+
 	// PeerUpdateCount is the per-peer count of treestore subscriber
 	// OnUpdate callbacks observed by Session.makePeerOnUpdate, keyed
 	// by peer-PK hex. Populated alongside PeerLastInbound. Bumped on
@@ -229,6 +254,7 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 	}
 	subDrop := v.groupSubDropCount()
 	deliverCount := v.groupDeliverCount()
+	streamSendCount := v.groupStreamSendCount()
 	out := make([]GroupInfo, 0, len(all))
 	for _, r := range all {
 		info := toInfo(r)
@@ -236,6 +262,7 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 		info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 		info.SubDropCount = subDrop
 		info.DeliverCount = deliverCount
+		info.StreamSendCount = streamSendCount
 		info.PeerUpdateCount = peerUpdateCountHex(mgr.PeerUpdateCount(r.ID))
 		out = append(out, info)
 	}
@@ -260,6 +287,18 @@ func (v *Visor) groupSubDropCount() uint64 {
 		return 0
 	}
 	return inbox.SubDropCount()
+}
+
+// groupStreamSendCount returns the running total of successful
+// stream.Send calls on rpcgrpc.StreamGroupMessages across both
+// PingServer instances (local CLI + dmsg-RPC). Surfaced via
+// GroupInfo.StreamSendCount; visor-wide, not group-scoped (matches
+// the other layer counters' semantics).
+//
+// Subscribed sentinels are NOT counted. The counter is monotonic
+// across the visor's lifetime; reset only on visor restart.
+func (v *Visor) groupStreamSendCount() uint64 {
+	return v.groupStreamSendCounter.Load()
 }
 
 // groupDeliverCount returns the running total of groupInbox.deliver()
@@ -309,6 +348,7 @@ func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 	info.SubDropCount = v.groupSubDropCount()
 	info.DeliverCount = v.groupDeliverCount()
+	info.StreamSendCount = v.groupStreamSendCount()
 	info.PeerUpdateCount = peerUpdateCountHex(mgr.PeerUpdateCount(r.ID))
 	return info, nil
 }

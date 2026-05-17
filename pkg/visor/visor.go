@@ -231,6 +231,15 @@ type Visor struct {
 	// init_group.go. nil when group chat is disabled.
 	grouping groupState
 
+	// groupStreamSendCounter ticks once per successful stream.Send on
+	// any rpcgrpc.StreamGroupMessages stream. Bumped from the gRPC
+	// adapter (visorPingAdapter.IncGroupStreamSend) so the counter
+	// aggregates across both PingServer instances (local CLI + dmsg
+	// remote). Surfaced via GroupInfo.StreamSendCount alongside
+	// DeliverCount + SubDropCount to localize drops between the
+	// inbox layer and the CLI listener pipe.
+	groupStreamSendCounter atomic.Uint64
+
 	// Embedded DMSG Web resolver (nil if dmsg_web.enable is false).
 	// Provides a localhost SOCKS5 proxy that resolves .dmsg hosts.
 	embeddedDmsgWeb *EmbeddedDmsgWeb
