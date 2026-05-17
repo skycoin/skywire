@@ -699,6 +699,18 @@ func (p *Publisher) Close() error {
 // the LRU cache.
 func (p *Publisher) runCleanupLoop() {
 	defer close(p.cleanupDone)
+	// Periodic forced sweep — catches orphans (rc==0 entries not in
+	// the LRU cache) that the per-publish nudge missed. Per-publish
+	// cleanup can leave residue when DelRoot's rc-decrement walk
+	// aborts mid-tree (a missing hash short-circuits the walk; every
+	// undecremented sibling stays at rc≥1). Those orphans are
+	// invisible to the rc==0 sweep, but a subsequent publish
+	// republishing the same hashes can drive rc to zero, at which
+	// point only an unconditional sweep collects them. The interval
+	// is intentionally long — the per-publish path remains the fast
+	// case; this is the backstop, not the steady-state sweeper.
+	t := time.NewTicker(cleanupForceInterval)
+	defer t.Stop()
 	for {
 		select {
 		case <-p.done:
@@ -707,9 +719,19 @@ func (p *Publisher) runCleanupLoop() {
 			return
 		case <-p.cleanupNudge:
 			p.runCleanup()
+		case <-t.C:
+			p.runCleanup()
 		}
 	}
 }
+
+// cleanupForceInterval is how often the publisher's cleanup loop
+// runs an unconditional sweep even without a publish nudge. 10 min
+// is well below the timescale on which production leaks were
+// observed (~hours-to-days) and well above any sane publish tick
+// (60s for TPD's publishers), so it never piles up on top of a
+// nudge-driven cleanup that just ran.
+const cleanupForceInterval = 10 * time.Minute
 
 func (p *Publisher) runCleanup() {
 	c := p.cxoNode.Container()
