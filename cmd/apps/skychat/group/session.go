@@ -618,6 +618,14 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 	// of the offline member's leaves keeps the message reachable.
 	// onUpdate's dedup set collapses the (primary + N mirror copies)
 	// fan-in to a single delivery per source leaf.
+	//
+	// Admin-aggregator note (#2685 signed leaves): owners are
+	// always admins by the IsAdmin contract, so they always sit on
+	// the "subscribe to every member" side of the new topology.
+	// The non-admin filtering applied in openMember does not apply
+	// here — see openMember for the role-conditional rule, and
+	// SetAdminRoster for the dynamic re-evaluation on PromoteAdmin
+	// / DemoteAdmin.
 	for _, peerPK := range cfg.Record.Members {
 		if peerPK == cfg.MyPK {
 			continue
@@ -745,15 +753,34 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		dedup:             newRecentSet(inboxDedupCap),
 	}
 
-	// Federated mode: subscribe to every OTHER member's feed,
-	// INCLUDING the owner's. The legacy `sub` field above remains
-	// wired as a backward-compat fallback for owners on pre-federated
-	// binaries, but new owners publish to their own feed just like
-	// every other member — so peerSubs covers them too.
-	for _, peerPK := range cfg.Record.Members {
-		if peerPK == cfg.MyPK {
-			continue
-		}
+	// Admin-aggregator topology (post-#2685 signed leaves):
+	//
+	//   - If THIS visor is an admin (owner OR in Record.Admins), it is
+	//     an input-pipe + republisher: subscribe to every OTHER
+	//     member's feed so we observe every signed leaf and can
+	//     republish it onto our own canonical feed for the
+	//     non-admin members that follow us.
+	//
+	//   - If THIS visor is NOT an admin, subscribe ONLY to admin
+	//     members' canonical feeds. The admins republish every
+	//     signed leaf verbatim, so following them is sufficient to
+	//     see all messages — without paying the quadratic N×N
+	//     subscription cost. Verification is unchanged: Session
+	//     onUpdate runs the leaf-signature check on every leaf
+	//     regardless of which feed it came from, so an admin
+	//     republishing a tampered leaf would be rejected with the
+	//     same error path as a direct peer leaf.
+	//
+	// The legacy `sub` field above stays wired for the owner-relay
+	// fallback path; it subscribes to OwnerPK specifically (the
+	// founder is always an admin by IsAdmin contract), so non-admin
+	// members are always covered for the owner's republished view
+	// even before peerSubs to other admins finish Connect.
+	// desiredPeerSubsForRole encodes the admin-aggregator rule;
+	// see its docstring. Iterating the pure-function output keeps
+	// the openMember vs SetAdminRoster behavior in lockstep.
+	desired := desiredPeerSubsForRole(cfg.Record, cfg.MyPK)
+	for peerPK := range desired {
 		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, treestore.SubConfig{Logger: log})
 		if err != nil {
 			log.WithError(err).WithField("peer", peerPK.String()).
@@ -1342,6 +1369,141 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Debug("group: SetAllowlist: peer-sub Connect failed; will retry on next reconnect tick")
+		} else if a := s.peerLastInboundNs[pk]; a != nil {
+			a.Store(time.Now().UnixNano())
+		}
+		s.peerSubs[pk] = ps
+	}
+	s.peerSubsMu.Unlock()
+	return evicted, nil
+}
+
+// desiredPeerSubsForRole computes the set of peer PKs this visor
+// should hold per-peer CXO subscriptions for, under the admin-
+// aggregator topology (#2685):
+//
+//	desired = { pk in r.Members : pk != myPK AND (r.IsAdmin(myPK) OR r.IsAdmin(pk)) }
+//
+// Admins follow every member (input pipe + republish). Non-admins
+// follow only admins (the admin canonical feed receives every
+// signed leaf verbatim). The legacy s.sub subscription to OwnerPK
+// is independent of this set; non-admins always have the owner
+// covered via legacy s.sub plus (transitively) via owner-as-admin
+// membership in this set.
+//
+// Pure function: no Session state, no CXO. Used at openMember and
+// SetAdminRoster so the rule has one source of truth.
+func desiredPeerSubsForRole(r Record, myPK cipher.PubKey) map[cipher.PubKey]struct{} {
+	iAmAdmin := r.IsAdmin(myPK)
+	out := make(map[cipher.PubKey]struct{}, len(r.Members))
+	for _, pk := range r.Members {
+		if pk == myPK {
+			continue
+		}
+		if !iAmAdmin && !r.IsAdmin(pk) {
+			continue
+		}
+		out[pk] = struct{}{}
+	}
+	return out
+}
+
+// SetAdminRoster re-evaluates this session's peerSubs against a new
+// admin set under the admin-aggregator topology (#2685). Idempotent
+// add/remove of per-peer subscriptions to match the rule:
+//
+//	desired_set = { pk in Members : pk != MyPK AND (iAmAdmin OR pk in Admins) }
+//
+// Hooks Manager.PromoteAdmin / Manager.DemoteAdmin: when a peer's
+// admin status flips, the live session's input topology must follow
+// or the peer's leaves stop reaching non-admin members. Mirrors
+// SetAllowlist's structure (compute desired, drop removed, add new)
+// and returns the evicted peers so the caller can clean
+// (groupID, peerPK)-keyed state (per-peer reconnect backoff, etc.).
+//
+// admins is the new admin set; cfg.Record.Members is read live so the
+// member-set side of the desired computation reflects whatever the
+// most recent SetAllowlist landed. Founder admin status is implicit
+// — the IsAdmin check uses the union of the founder PK and Admins.
+//
+// Owner-role sessions: this is a no-op because openOwner already
+// subscribes to every non-self member (owners are always admins by
+// IsAdmin contract, so the rule degenerates to "subscribe to all").
+// Member-role admin status can change at runtime; that's the case
+// this function handles.
+//
+// Errors: returns (evicted, error). Connect failures on newly-added
+// peers are logged at Debug and the entry stays in peerSubs — the
+// background reconnect loop picks them up on the next tick. Returns
+// an error only if the session has no node to attach subs to (a
+// torn-down session) or the receiver is nil; per-peer subscriber
+// creation errors are logged + skipped, matching SetAllowlist's
+// best-effort contract.
+func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error) {
+	if s == nil || s.pub == nil {
+		return nil, errors.New("group: SetAdminRoster: nil session or no publisher attached")
+	}
+	// Cache the snapshot under cfg.Record.Admins so iAmAdmin /
+	// IsAdmin checks elsewhere (publish path, openOwner doc, etc.)
+	// see the new view too. Founder PK stays where it is on
+	// cfg.Record.OwnerPK; IsAdmin's union semantics handle it.
+	adminSnap := append([]cipher.PubKey(nil), admins...)
+	s.cfg.Record.Admins = adminSnap
+
+	// members snapshot read under membersMu where one exists (owner
+	// role); on member-role sessions the field is nil and we fall
+	// back to cfg.Record.Members which never mutates after Open.
+	// Splice the live snapshot into a temporary Record for the pure
+	// helper — we already mutated cfg.Record.Admins above so the
+	// IsAdmin contract reads the new view.
+	r := s.cfg.Record
+	s.membersMu.RLock()
+	if s.members != nil {
+		r.Members = append([]cipher.PubKey(nil), s.members...)
+	} else {
+		r.Members = append([]cipher.PubKey(nil), s.cfg.Record.Members...)
+	}
+	s.membersMu.RUnlock()
+	desired := desiredPeerSubsForRole(r, s.cfg.MyPK)
+
+	var evicted []cipher.PubKey
+	s.peerSubsMu.Lock()
+	// Drop peers no longer desired — close their subs while still
+	// holding the lock so a racing Connect doesn't pick up a
+	// half-torn sub (same pattern as SetAllowlist).
+	for pk, ps := range s.peerSubs {
+		if _, keep := desired[pk]; !keep {
+			_ = ps.Close() //nolint:errcheck,gosec
+			delete(s.peerSubs, pk)
+			delete(s.peerLastInboundNs, pk)
+			delete(s.peerUpdateCount, pk)
+			evicted = append(evicted, pk)
+		}
+	}
+	// Add newly-desired peers.
+	for pk := range desired {
+		if _, exists := s.peerSubs[pk]; exists {
+			continue
+		}
+		ps, err := treestore.NewSubscriberOnNode(s.pub.Node(), pk, treestore.SubConfig{Logger: s.log})
+		if err != nil {
+			s.log.WithError(err).WithField("peer", pk.String()).
+				Warn("group: SetAdminRoster: peer-sub create failed; will retry on next admin-roster change")
+			continue
+		}
+		ps.SetPrefixes([]string{MessagePathPrefix})
+		s.peerLastInboundNs[pk] = new(atomic.Int64)
+		s.peerUpdateCount[pk] = new(atomic.Uint64)
+		ps.OnUpdate(s.makePeerOnUpdate(pk))
+		// Best-effort connect — same per-peer retry contract as
+		// SetAllowlist. A peer that's offline now will be picked up
+		// on the next reconnect tick once the publisher comes back.
+		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
+		err = ps.Connect(dctx, pk)
+		dcancel()
+		if err != nil {
+			s.log.WithError(err).WithField("peer", pk.String()).
+				Debug("group: SetAdminRoster: peer-sub Connect failed; will retry on next reconnect tick")
 		} else if a := s.peerLastInboundNs[pk]; a != nil {
 			a.Store(time.Now().UnixNano())
 		}
