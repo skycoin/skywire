@@ -221,6 +221,12 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	// zero". See visor.GroupInfo.DeliverCount for the delta calculus
 	// against PeerUpdateCount and SubDropCount.
 	fmt.Fprintf(&buf, "deliver_count:     %d (visor-wide inbox enqueues)\n", info.DeliverCount) //nolint:errcheck
+	// StreamSendCount closes the diagnostic ladder (per #2665): per
+	// visor.GroupInfo doc, DeliverCount == StreamSendCount means every
+	// inbox enqueue made it to the gRPC wire; DeliverCount >
+	// StreamSendCount localizes drops to the inbox→stream seam.
+	// Visor-wide; rendered as a labeled line on every group's info.
+	fmt.Fprintf(&buf, "stream_send_count: %d (visor-wide stream.Send)\n", info.StreamSendCount) //nolint:errcheck
 	fmt.Fprintf(&buf, "members (%d):\n", len(info.Members))                                     //nolint:errcheck
 	for _, pk := range info.Members {
 		fmt.Fprintf(&buf, "  %s\n", pk) //nolint:errcheck
