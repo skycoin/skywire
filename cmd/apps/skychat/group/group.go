@@ -228,4 +228,23 @@ type Message struct {
 	// requires.
 	Ciphertext []byte `json:"ciphertext,omitempty"`
 	Nonce      []byte `json:"nonce,omitempty"`
+
+	// Signature binds (SenderPK, TS, Text|Ciphertext|Nonce) to the
+	// sender's identity via secp256k1 over the canonical-bytes
+	// layout in signing.go. Verified on every inbound leaf so an
+	// admin-aggregator republishing this Message verbatim cannot
+	// tamper with the body or the sender claim — the worst they can
+	// do is omit, which is detectable by cross-admin divergence.
+	//
+	// Zero value (cipher.Sig{}) means "unsigned legacy leaf" — a
+	// publisher predating the admin-aggregator design. VerifyMessage
+	// returns ErrLeafUnsignedLegacy for this case so the inbox path
+	// can downgrade to accept-with-warning during the deprecation
+	// window, then flip to strict-reject once those publishers
+	// have aged out.
+	//
+	// JSON `omitempty` is honored when the field is exactly the
+	// zero value, keeping pre-signing leaves on disk byte-identical
+	// to what they were before this field was introduced.
+	Signature cipher.Sig `json:"signature,omitempty"`
 }
