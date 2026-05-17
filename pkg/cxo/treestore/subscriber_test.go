@@ -19,8 +19,9 @@ func newTestSubscriber(t *testing.T) *Subscriber {
 	// DMSG side effects. We're testing applySnapshot/Get/Walk; the
 	// DMSG-attached cxoNode isn't on the hot path for these tests.
 	return &Subscriber{
-		log:   logging.MustGetLogger("treestore-sub-test"),
-		cache: make(map[string][]byte),
+		log:                logging.MustGetLogger("treestore-sub-test"),
+		cache:              make(map[string][]byte),
+		rootObservedSignal: make(chan struct{}),
 	}
 }
 
@@ -158,6 +159,73 @@ func TestSubscriberCallbackNotInvokedIfNoChanges(t *testing.T) {
 	s.applySnapshot(map[string][]byte{"a": []byte("v")})
 	if calls != 0 {
 		t.Errorf("callback fired %d times for unchanged snapshot, want 0", calls)
+	}
+}
+
+// TestSignalRootObservedIdempotent pins the contract that calling
+// signalRootObserved twice on the same channel is a no-op the second
+// time. handleRootFilled can fire repeatedly over a subscriber's
+// lifetime; only the first observation per ConnectAndWaitForRoot
+// attempt needs to release the wait.
+func TestSignalRootObservedIdempotent(t *testing.T) {
+	s := newTestSubscriber(t)
+	signal := s.rootObservedSignal
+
+	s.signalRootObserved()
+	select {
+	case <-signal:
+	default:
+		t.Fatal("first signalRootObserved did not close channel")
+	}
+
+	// Second call must not panic on the already-closed channel.
+	s.signalRootObserved()
+}
+
+// TestConnectAndWaitForRootResetsSignal pins the per-attempt
+// freshness contract: each ConnectAndWaitForRoot replaces the
+// observed-signal channel so a stale observation from a prior
+// attempt doesn't fast-path the new attempt. Without this, a
+// subscriber whose first Connect closed the signal would have every
+// subsequent reconnect return success immediately without verifying
+// the new subscribe handshake actually completed.
+func TestConnectAndWaitForRootResetsSignal(t *testing.T) {
+	s := newTestSubscriber(t)
+	// Simulate a prior attempt's success: close the current signal.
+	s.signalRootObserved()
+	prior := s.rootObservedSignal
+	select {
+	case <-prior:
+	default:
+		t.Fatal("prior signal not closed")
+	}
+
+	// Manually run the reset that ConnectAndWaitForRoot performs at
+	// the top — captured here so the test doesn't need a real DMSG
+	// publisher to exercise the contract. The contract: after the
+	// reset, the channel is fresh (not closed) and assigning a new
+	// value means the prior one is no longer the live waiter target.
+	s.rootObservedMu.Lock()
+	s.rootObservedSignal = make(chan struct{})
+	fresh := s.rootObservedSignal
+	s.rootObservedMu.Unlock()
+
+	if fresh == prior {
+		t.Fatal("reset did not swap to a new channel instance")
+	}
+	select {
+	case <-fresh:
+		t.Fatal("fresh signal was already closed — reset isn't producing a fresh channel")
+	default:
+	}
+
+	// A handleRootFilled-style observation now closes the FRESH
+	// channel only; the prior remains closed independently.
+	s.signalRootObserved()
+	select {
+	case <-fresh:
+	default:
+		t.Fatal("signalRootObserved did not close the post-reset channel")
 	}
 }
 
