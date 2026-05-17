@@ -60,10 +60,20 @@ type V1 struct {
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	ConfService          string                           `json:"conf_service,omitempty"`      // HTTP URL for config bootstrap service
 	ConfServiceDmsg      string                           `json:"conf_service_dmsg,omitempty"` // DMSG URL for config bootstrap service
-	RewardAddress        string                           `json:"reward_address,omitempty"`
-	RewardSystem         string                           `json:"reward_system,omitempty"`
-	RewardSystemDmsg     string                           `json:"reward_system_dmsg,omitempty"`
-	MemoryLimit          string                           `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 60% of available RAM)
+	// SurveyClientSK is the CLI-side identity used by
+	// `skywire cli log <subcommand>` to authenticate against remote
+	// visors' survey_whitelist gates (visor logserver port 80 over
+	// dmsg). When non-empty, parses as a hex SecKey; the derived PK
+	// is the identity the remote checks against its survey_whitelist.
+	// Empty (default) falls through to --sk flag → DMSGCURL_SK env →
+	// ephemeral random keypair. Server-side: never read; the visor
+	// ignores this field entirely.
+	SurveyClientSK string `json:"survey_client_sk,omitempty"`
+
+	RewardAddress    string `json:"reward_address,omitempty"`
+	RewardSystem     string `json:"reward_system,omitempty"`
+	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
+	MemoryLimit      string `json:"memory_limit,omitempty"` // Go memory limit (e.g., "256MiB", "auto" for 60% of available RAM)
 
 	Hypervisor *HypervisorConfig `json:"hypervisor,omitempty"`
 }
