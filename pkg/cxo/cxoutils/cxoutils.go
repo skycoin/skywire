@@ -28,27 +28,26 @@ import (
 //
 // If a feed contains more then one head, then the method
 // keeps last n-th Root objects of every head.
-func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) {
+func RemoveRootObjects(c *skyobject.Container, keepLast int) error {
 
 	for _, pk := range c.Feeds() {
 
-		var heads []uint64
-		if heads, err = c.Heads(pk); err != nil {
+		heads, err := c.Heads(pk)
+		if err != nil {
 			return err
 		}
 
 		for _, nonce := range heads {
-			var seq uint64
-			if seq, err = c.LastRootSeq(pk, nonce); err != nil {
-				err = nil // clear
-				continue  // not a real error
+			seq, err := c.LastRootSeq(pk, nonce)
+			if err != nil {
+				continue // empty head — not a real error
 			}
 
 			if seq < uint64(keepLast) { //nolint:gosec
 				continue
 			}
 
-			var goDown = seq - uint64(keepLast) //nolint:gosec // positive
+			goDown := seq - uint64(keepLast) //nolint:gosec // positive
 
 			// Walk every seq from goDown down to (and including) 0.
 			// ErrNotFound on an intermediate seq is expected (prior
@@ -65,21 +64,13 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) {
 			// every publish, and the GC-saturation cascade that
 			// starves Node.mu and chokes every dmsg handshake.
 			for ; goDown > 0; goDown-- {
-				if err = c.DelRoot(pk, nonce, goDown); err != nil {
-					if err == data.ErrNotFound {
-						err = nil // already deleted; keep going
-						continue
-					}
+				if err := c.DelRoot(pk, nonce, goDown); err != nil && err != data.ErrNotFound {
 					return err // a real failure (CXDS not found error?)
 				}
 			}
 
 			// seq = 0 (goDown == 0)
-			if err = c.DelRoot(pk, nonce, 0); err != nil {
-				if err == data.ErrNotFound {
-					err = nil // clear error
-					continue
-				}
+			if err := c.DelRoot(pk, nonce, 0); err != nil && err != data.ErrNotFound {
 				return err
 			}
 
@@ -87,7 +78,7 @@ func RemoveRootObjects(c *skyobject.Container, keepLast int) (err error) {
 
 	} // feed loop
 
-	return err
+	return nil
 }
 
 // RemoveObjects deletes every CXDS object whose reference count has
