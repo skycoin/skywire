@@ -142,11 +142,11 @@ Outcomes (--wait > 0):
 		errOut := cmd.ErrOrStderr()
 		var preCounters *statusCounters
 		if sendVerbose {
-			fmt.Fprintf(errOut, "[verbose] target: %s\n", pk.String())                 //nolint:errcheck
-			fmt.Fprintf(errOut, "[verbose] network: %s\n", sendNet)                    //nolint:errcheck
-			fmt.Fprintf(errOut, "[verbose] msg bytes: %d\n", len(message))             //nolint:errcheck
-			fmt.Fprintf(errOut, "[verbose] wait timeout: %s\n", sendWait)              //nolint:errcheck
-			fmt.Fprintf(errOut, "[verbose] retries on transport fail: %d\n", attempts) //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] target: %s\n", pk.String())                    //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] network: %s\n", sendNet)                       //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] msg bytes: %d\n", len(message))                //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] wait timeout: %s\n", sendWait)                 //nolint:errcheck
+			fmt.Fprintf(errOut, "[verbose] retries on transport fail: %d\n", attempts)    //nolint:errcheck
 			fmt.Fprintf(errOut, "[verbose] chat-app addr: http://%s/message\n", httpAddr) //nolint:errcheck
 			if c, err := fetchStatusCounters(httpAddr); err == nil {
 				preCounters = c
