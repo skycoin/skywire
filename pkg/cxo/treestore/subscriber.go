@@ -60,6 +60,30 @@ type Subscriber struct {
 	prefixes []string // declared filter; empty = match all
 	callback UpdateCallback
 
+	// rootObservedMu guards rootObservedSignal so callers waiting on
+	// a Root observation see a consistent channel even when a fresh
+	// Connect resets the signal. Without the lock, a reconnect that
+	// swaps the channel while handleRootFilled is mid-close would
+	// race with a concurrent waiter reading the old reference.
+	rootObservedMu sync.Mutex
+	// rootObservedSignal closes once when a Root for this subscriber's
+	// feedPK is filled. ConnectAndWaitForRoot resets it (creates a
+	// fresh channel) before each Connect attempt so each connect/
+	// reconnect cycle waits for its own Root observation, not stale
+	// success from an earlier attempt.
+	//
+	// Pre-fix: Subscriber.Connect returned as soon as the underlying
+	// Subscribe call queued the frame, with no guarantee a Root would
+	// follow. Callers (peerSubs reconnect loop in skychat-group) saw
+	// "success" + bumped their peer_last_inbound timestamp on a
+	// half-attached state where the publisher never sent or the fill
+	// walk never completed. ConnectAndWaitForRoot closes this
+	// observation gap by waiting for the actual fill before
+	// returning success — and resets per-attempt so an earlier Root
+	// observation doesn't fast-path a fresh reconnect that hasn't
+	// re-verified the channel.
+	rootObservedSignal chan struct{}
+
 	closed   bool
 	closeMu  sync.Mutex
 	closeErr error
@@ -122,11 +146,12 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 	}
 
 	s := &Subscriber{
-		log:      conf.Logger,
-		cxoNode:  cxoNode,
-		ownsNode: true,
-		feedPK:   feedPK,
-		cache:    make(map[string][]byte),
+		log:                conf.Logger,
+		cxoNode:            cxoNode,
+		ownsNode:           true,
+		feedPK:             feedPK,
+		cache:              make(map[string][]byte),
+		rootObservedSignal: make(chan struct{}),
 	}
 
 	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
@@ -157,11 +182,12 @@ func NewSubscriberOnNode(cxoNode *node.Node, feedPK cipher.PubKey, conf SubConfi
 		conf.Logger = logging.MustGetLogger("cxo-treestore-sub")
 	}
 	s := &Subscriber{
-		log:      conf.Logger,
-		cxoNode:  cxoNode,
-		ownsNode: false,
-		feedPK:   feedPK,
-		cache:    make(map[string][]byte),
+		log:                conf.Logger,
+		cxoNode:            cxoNode,
+		ownsNode:           false,
+		feedPK:             feedPK,
+		cache:              make(map[string][]byte),
+		rootObservedSignal: make(chan struct{}),
 	}
 	prev := cxoNode.Config().OnRootFilled
 	cxoNode.Config().OnRootFilled = func(n *node.Node, r *registry.Root) {
@@ -200,6 +226,54 @@ func (s *Subscriber) Connect(ctx context.Context, publisherPK cipher.PubKey) err
 		return err
 	}
 	return conn.Subscribe(skycipher.PubKey(s.feedPK))
+}
+
+// ConnectAndWaitForRoot is the atomic-subscribe variant of Connect:
+// it dials, sends the subscribe frame, AND waits until the first Root
+// for this subscriber's feedPK is filled (success) or ctx expires
+// (failure). Returns nil only when a Root has actually been received
+// and walked — the subscription is verifiably live at that point, not
+// just "subscribe frame queued."
+//
+// Why this exists: plain Connect returns as soon as the underlying
+// Subscribe call queues a frame. There's no guarantee the publisher
+// ever responds, that the response reaches a healthy Conn, or that
+// the fill walk completes. Callers that need a verified-live
+// subscription (notably the per-peer reconnect loop in skychat-group's
+// session.go, where a Connect-success bumps peer_last_inbound and is
+// then assumed to mean "data is flowing") get half-attached zombies
+// otherwise — the symptom seen across 2026-05-16/17 reliability runs
+// where peerSub.Connect returned success but no events flowed for
+// minutes after, until something kicked the state machine.
+//
+// Cancellation: if ctx expires before the first Root fills, the
+// subscription frame may already be in-flight (we can't unsend it),
+// but Connect-side bookkeeping won't have observed a successful
+// re-attach. The caller should treat ctx-err returns as failure and
+// retry via the standard reconnect backoff. If the late Root arrives
+// after ctx-err return, it still fires handleRootFilled normally —
+// it's only the synchronous-wait side that gave up.
+func (s *Subscriber) ConnectAndWaitForRoot(ctx context.Context, publisherPK cipher.PubKey) error {
+	// Reset the signal for THIS attempt before subscribing. Each
+	// reconnect cycle expects a fresh Root push (post-#2647 the
+	// publisher pushes a Root on every Subscribe); the previous
+	// attempt's signal may have already closed, which would let
+	// this attempt fast-path success without verifying the new
+	// subscribe handshake actually completed.
+	s.rootObservedMu.Lock()
+	s.rootObservedSignal = make(chan struct{})
+	signal := s.rootObservedSignal
+	s.rootObservedMu.Unlock()
+
+	if err := s.Connect(ctx, publisherPK); err != nil {
+		return err
+	}
+	select {
+	case <-signal:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // SetPrefixes restricts which paths surface via Get / Walk / the
@@ -327,8 +401,15 @@ func (s *Subscriber) matchesPrefixLocked(path string) bool {
 func (s *Subscriber) handleRootFilled(r *registry.Root) {
 	if r == nil || len(r.Refs) == 0 {
 		// Root with no payload — could happen on startup before
-		// the publisher has put anything. Treat as empty.
+		// the publisher has put anything. Treat as empty AND
+		// signal first-root so ConnectAndWaitForRoot doesn't
+		// block forever on a publisher whose tree is genuinely
+		// empty (the subscription IS live; there's just nothing
+		// to fill yet).
 		s.applySnapshot(nil)
+		if r != nil && r.Pub == skycipher.PubKey(s.feedPK) {
+			s.signalRootObserved()
+		}
 		return
 	}
 	if r.Pub != skycipher.PubKey(s.feedPK) {
@@ -359,6 +440,27 @@ func (s *Subscriber) handleRootFilled(r *registry.Root) {
 	}
 
 	s.applySnapshot(snap)
+	// Signal any ConnectAndWaitForRoot caller blocked on this
+	// subscriber that a Root was received and the fill walk
+	// completed — the subscription is verifiably live now.
+	s.signalRootObserved()
+}
+
+// signalRootObserved closes the current rootObservedSignal channel
+// if not already closed. Idempotent per-channel: a reconnect that
+// reset the signal via ConnectAndWaitForRoot would have already
+// swapped to a fresh channel by the time the previous Root's late
+// fill triggered handleRootFilled, so closing the old channel here
+// is harmless. Used by handleRootFilled's match-feed branches.
+func (s *Subscriber) signalRootObserved() {
+	s.rootObservedMu.Lock()
+	defer s.rootObservedMu.Unlock()
+	select {
+	case <-s.rootObservedSignal:
+		// already closed; nothing to do
+	default:
+		close(s.rootObservedSignal)
+	}
 }
 
 // handleFillingBreaks is the OnFillingBreaks callback. Fires when a
