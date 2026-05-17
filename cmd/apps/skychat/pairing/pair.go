@@ -179,7 +179,13 @@ func Open(cfg Config) (*Pair, error) {
 // Open + Connect are split so the pairing handshake can stage the
 // publisher before the peer is known to be ready, then activate the
 // inbound side once the peer's pair-ack arrives.
+//
+// Returns ErrPairClosed if Close has already torn down the
+// subscriber. Pre-fix this nil-deref'd on p.sub.Connect.
 func (p *Pair) Connect(ctx context.Context) error {
+	if p.sub == nil {
+		return ErrPairClosed
+	}
 	if err := p.sub.Connect(ctx, p.cfg.PeerPK); err != nil {
 		return fmt.Errorf("pairing: Connect: %w", err)
 	}
@@ -202,6 +208,13 @@ func (p *Pair) SetMessageHandler(h MessageHandler) {
 	p.handler = h
 }
 
+// ErrPairClosed is returned by Send / Connect when the pair has
+// already been Closed. Surfaces the post-close state as a clean
+// error instead of a nil-pointer panic on p.pub / p.sub. Sentinel
+// so callers can distinguish closed-pair from transient publisher
+// errors via errors.Is(err, ErrPairClosed).
+var ErrPairClosed = errors.New("pairing: pair is closed")
+
 // Send publishes a message to this side's outbox feed. The peer's
 // subscriber will see it on the next CXO publish-batch cycle.
 //
@@ -209,7 +222,13 @@ func (p *Pair) SetMessageHandler(h MessageHandler) {
 // before being stored as the leaf value, so anyone who breaches
 // the publisher allowlist still cannot read message content.
 // The path itself (timestamp + seq) stays plaintext.
+//
+// Returns ErrPairClosed if Close has already torn down the
+// publisher. Pre-fix this nil-deref'd on p.pub.Put.
 func (p *Pair) Send(text string) error {
+	if p.pub == nil {
+		return ErrPairClosed
+	}
 	now := time.Now().UTC()
 	msg := Message{Text: text, TS: now}
 	body, err := json.Marshal(msg)
