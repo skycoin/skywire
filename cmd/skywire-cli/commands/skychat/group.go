@@ -214,7 +214,14 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	if info.SubDropCount > 0 {
 		fmt.Fprintf(&buf, "sub_drop_count:    %d (visor-wide gRPC fan-out)\n", info.SubDropCount) //nolint:errcheck
 	}
-	fmt.Fprintf(&buf, "members (%d):\n", len(info.Members)) //nolint:errcheck
+	// DeliverCount is the running total of inbox.deliver() invocations
+	// across all groups on this visor; same value on every group's info
+	// (per #2664). Always render — zero here is meaningful evidence
+	// that the inbox layer hasn't been hit, distinct from "drops are
+	// zero". See visor.GroupInfo.DeliverCount for the delta calculus
+	// against PeerUpdateCount and SubDropCount.
+	fmt.Fprintf(&buf, "deliver_count:     %d (visor-wide inbox enqueues)\n", info.DeliverCount) //nolint:errcheck
+	fmt.Fprintf(&buf, "members (%d):\n", len(info.Members))                                     //nolint:errcheck
 	for _, pk := range info.Members {
 		fmt.Fprintf(&buf, "  %s\n", pk) //nolint:errcheck
 	}
@@ -227,7 +234,10 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	if len(info.PeerLastInbound) > 0 {
 		fmt.Fprintf(&buf, "peer_last_inbound (%d):\n", len(info.PeerLastInbound)) //nolint:errcheck
 		w := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(w, "  PEER\tLAST_INBOUND\tAGE") //nolint:errcheck
+		// UPDATES = PeerUpdateCount[pk] from #2664. Same map keying as
+		// PeerLastInbound; a missing entry renders as 0 so old visors
+		// that don't populate the field render zeros without a NPE.
+		fmt.Fprintln(w, "  PEER\tLAST_INBOUND\tAGE\tUPDATES") //nolint:errcheck
 		now := time.Now().UTC()
 		for pk, ts := range info.PeerLastInbound {
 			when := "never"
@@ -236,7 +246,7 @@ func renderGroupInfo(info visor.GroupInfo) string {
 				when = ts.UTC().Format(time.RFC3339)
 				age = now.Sub(ts.UTC()).Truncate(time.Second).String()
 			}
-			fmt.Fprintf(w, "  %s\t%s\t%s\n", pk, when, age) //nolint:errcheck
+			fmt.Fprintf(w, "  %s\t%s\t%s\t%d\n", pk, when, age, info.PeerUpdateCount[pk]) //nolint:errcheck
 		}
 		_ = w.Flush() //nolint:errcheck
 	}
