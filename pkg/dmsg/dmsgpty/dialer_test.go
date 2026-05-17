@@ -8,7 +8,9 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
@@ -172,4 +174,71 @@ type captureDialer struct {
 func (c *captureDialer) DialStream(_ context.Context, _ cipher.PubKey, _ uint16) (net.Conn, error) {
 	c.count++
 	return c.conn, c.err
+}
+
+// memListener is a minimal net.Listener that yields a single
+// in-memory pipe conn on its first Accept and blocks until ctx
+// expires. Lets us drive ListenAndServeNet through one accept cycle
+// to exercise the extractor branch.
+type memListener struct {
+	conn     net.Conn
+	served   bool
+	done     chan struct{}
+	closeOne sync.Once
+}
+
+func newMemListener(conn net.Conn) *memListener {
+	return &memListener{conn: conn, done: make(chan struct{})}
+}
+
+func (l *memListener) Accept() (net.Conn, error) {
+	if l.served {
+		<-l.done
+		return nil, net.ErrClosed
+	}
+	l.served = true
+	return l.conn, nil
+}
+
+// Close is idempotent — ListenAndServeNet's ctx-done goroutine and
+// the test cleanup both call Close, so double-close must not panic.
+func (l *memListener) Close() error {
+	l.closeOne.Do(func() { close(l.done) })
+	return nil
+}
+
+func (l *memListener) Addr() net.Addr { return &net.TCPAddr{} }
+
+func TestListenAndServeNet_RejectsConnWhenExtractorReturnsFalse(t *testing.T) {
+	// Defense-in-depth: a conn whose extractor returns ok=false is
+	// closed before any pty handshake. Whitelist isn't even
+	// consulted — the conn type itself is foreign and shouldn't
+	// reach the trust gate.
+	server, client := net.Pipe()
+	defer client.Close() //nolint:errcheck
+
+	h := NewHostWithDialer(nil, NewMemoryWhitelist(), &fakeDialer{})
+	lis := newMemListener(server)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	// Extractor returns false → conn must be closed without
+	// authorize() being reached.
+	done := make(chan error, 1)
+	go func() {
+		done <- h.ListenAndServeNet(ctx, lis, func(net.Conn) (cipher.PubKey, bool) {
+			return cipher.PubKey{}, false
+		})
+	}()
+
+	// Wait for the server-side conn to be closed by the handler.
+	buf := make([]byte, 1)
+	_ = server.SetReadDeadline(time.Now().Add(150 * time.Millisecond)) //nolint:errcheck,gosec
+	_, err := server.Read(buf)
+	if err == nil {
+		t.Error("server conn was not closed; extractor-false should drop the conn")
+	}
+	_ = lis.Close() //nolint:errcheck,gosec
+	<-done
 }
