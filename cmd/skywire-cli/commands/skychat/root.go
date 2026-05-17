@@ -147,7 +147,7 @@ Outcomes (--wait > 0):
 			fmt.Fprintf(errOut, "[verbose] msg bytes: %d\n", len(message))             //nolint:errcheck
 			fmt.Fprintf(errOut, "[verbose] wait timeout: %s\n", sendWait)              //nolint:errcheck
 			fmt.Fprintf(errOut, "[verbose] retries on transport fail: %d\n", attempts) //nolint:errcheck
-			fmt.Fprintf(errOut, "[verbose] chat-app addr: http://%s/message\n", httpAddr)
+			fmt.Fprintf(errOut, "[verbose] chat-app addr: http://%s/message\n", httpAddr) //nolint:errcheck
 			if c, err := fetchStatusCounters(httpAddr); err == nil {
 				preCounters = c
 				fmt.Fprintf(errOut, "[verbose] pre-send counters: %s\n", c.summary()) //nolint:errcheck
