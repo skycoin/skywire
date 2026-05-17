@@ -82,3 +82,94 @@ func TestHost_ExecRemote_DefaultPortFallback(t *testing.T) {
 		t.Errorf("port with rPort=0: got %d, want DefaultPort=%d", got, DefaultPort)
 	}
 }
+
+// stubConn is a minimal net.Conn just to give MultiDialer something
+// non-nil to return on the success path. No I/O is performed.
+type stubConn struct{ net.Conn }
+
+func TestMultiDialer_FirstSuccessWins(t *testing.T) {
+	// First strategy succeeds → later strategies must not be invoked.
+	// Pins the short-circuit: if skynet routes succeed, dmsg fallback
+	// shouldn't open a parallel stream.
+	pk, _ := cipher.GenerateKeyPair()
+	stub := &stubConn{}
+	first := &captureDialer{conn: stub}
+	second := &captureDialer{err: errors.New("must-not-be-called")}
+
+	conn, err := MultiDialer{first, second}.DialStream(context.Background(), pk, 22)
+	if err != nil {
+		t.Fatalf("DialStream: unexpected err %v", err)
+	}
+	if conn != stub {
+		t.Errorf("DialStream returned %v, want stub conn", conn)
+	}
+	if first.count != 1 {
+		t.Errorf("first.count = %d, want 1", first.count)
+	}
+	if second.count != 0 {
+		t.Errorf("second.count = %d, want 0 (later strategy must short-circuit on first success)", second.count)
+	}
+}
+
+func TestMultiDialer_FallsThroughOnError(t *testing.T) {
+	// First strategy errors → next strategy is tried. Pins the
+	// transport-fallback behavior (skynet fails → dmsg succeeds).
+	pk, _ := cipher.GenerateKeyPair()
+	stub := &stubConn{}
+	first := &captureDialer{err: errors.New("skynet unreachable")}
+	second := &captureDialer{conn: stub}
+
+	conn, err := MultiDialer{first, second}.DialStream(context.Background(), pk, 22)
+	if err != nil {
+		t.Fatalf("DialStream: unexpected err %v", err)
+	}
+	if conn != stub {
+		t.Errorf("DialStream returned %v, want stub conn", conn)
+	}
+	if first.count != 1 || second.count != 1 {
+		t.Errorf("call counts: first=%d second=%d, want 1/1", first.count, second.count)
+	}
+}
+
+func TestMultiDialer_AllFailJoinsErrors(t *testing.T) {
+	// Every strategy errors → caller gets every strategy's error
+	// for diagnostics (errors.Join surface). Operators need to see
+	// "skynet timed out AND dmsg refused" not just one.
+	pk, _ := cipher.GenerateKeyPair()
+	errA := errors.New("skynet timeout")
+	errB := errors.New("dmsg refused")
+	a := &captureDialer{err: errA}
+	b := &captureDialer{err: errB}
+
+	_, err := MultiDialer{a, b}.DialStream(context.Background(), pk, 22)
+	if err == nil {
+		t.Fatal("DialStream: want error, got nil")
+	}
+	if !errors.Is(err, errA) || !errors.Is(err, errB) {
+		t.Errorf("joined err missing a sub-error: %v (want both %v and %v)", err, errA, errB)
+	}
+}
+
+func TestMultiDialer_EmptyErrors(t *testing.T) {
+	// An empty MultiDialer is a configuration bug, not a runtime
+	// crash. Errors cleanly so the caller sees the misconfiguration.
+	pk, _ := cipher.GenerateKeyPair()
+	_, err := MultiDialer{}.DialStream(context.Background(), pk, 22)
+	if err == nil {
+		t.Fatal("DialStream: empty MultiDialer should error, got nil")
+	}
+}
+
+// captureDialer counts invocations and returns a fixed (conn, err).
+// Distinct from fakeDialer above: that one captures full call args
+// (pk, port) which the MultiDialer tests don't need.
+type captureDialer struct {
+	conn  net.Conn
+	err   error
+	count int
+}
+
+func (c *captureDialer) DialStream(_ context.Context, _ cipher.PubKey, _ uint16) (net.Conn, error) {
+	c.count++
+	return c.conn, c.err
+}
