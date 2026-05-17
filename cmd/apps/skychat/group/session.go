@@ -48,6 +48,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
@@ -86,6 +88,20 @@ const MessagePathPrefix = "msgs"
 // can SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
 // to consume both kinds of leaves from the same feed.
 const MirrorPathPrefix = "mirror"
+
+// RosterPathPrefix is the prefix used for signed roster-mutation
+// envelopes within a group feed (cross-visor admin/roster gossip —
+// RFC at docs/skychat_group_gossip_rfc.md, types in gossip.go).
+// Every roster mutation issued by an admin lands at
+// "<RosterPathPrefix>/<seq>" on that admin's own publisher feed;
+// other members' subscribers pick it up and apply through the
+// reconciler (PR-3 of the gossip impl).
+const RosterPathPrefix = "roster"
+
+// AdminPathPrefix is the parallel prefix for signed admin-mutation
+// envelopes (promote / demote). Same per-feed seq scheme as
+// RosterPathPrefix.
+const AdminPathPrefix = "admin"
 
 // dedupKey reduces a leaf path to its content-identity suffix —
 // the canonical "<senderPK>/<ts>/<seq>" tail that both the primary
@@ -430,6 +446,24 @@ type Session struct {
 	// reconnects fire for everything in peerSubs but s.sub stays in
 	// whatever attached/dead state it landed in.
 	subLastInboundNs atomic.Int64
+
+	// rosterSeq and adminSeq are the per-feed monotonic sequence
+	// counters appended to gossip-mutation leaf paths
+	// (RosterPathPrefix/<seq>, AdminPathPrefix/<seq>). Initialized
+	// to zero; first mutation publishes at seq=1. Atomic.Add()
+	// returns the post-increment value, so each PublishRoster /
+	// PublishAdmin call gets a fresh seq via a single CAS. The
+	// counter is per-Session because it's per-publisher-feed; cross-
+	// visor convergence happens in the reconciler via ParentSeq.
+	//
+	// Not persisted: on restart the counter resets to zero, which
+	// is fine — the publisher rehydrates its tree (#2651) and the
+	// next mutation lands at roster/00001 (or wherever the highest
+	// existing seq + 1 is, once the rehydrate path observes it).
+	// Subscribers dedup via the canonical-bytes signature, so a
+	// post-restart seq collision is at worst a no-op replay.
+	rosterSeq atomic.Uint64
+	adminSeq  atomic.Uint64
 }
 
 // subscriberStaleThreshold is defined in manager.go (it's used by
@@ -1338,6 +1372,85 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 	}
 	s.peerSubsMu.Unlock()
 	return evicted, nil
+}
+
+// PublishRosterMutation signs op+peerPK as a RosterMutation envelope
+// (per docs/skychat_group_gossip_rfc.md) and writes it to this
+// session's publisher under RosterPathPrefix/<seq>. Subscribers on
+// other visors observe the leaf via their normal OnUpdate path; the
+// reconciler (step 3 of the gossip impl) decodes, verifies, and
+// applies.
+//
+// Caller is responsible for ensuring this visor has roster authority
+// to issue the mutation (Manager.AddMember already gates on
+// r.IsAdmin(myPK) before calling this). The envelope's IssuerPK is
+// always this session's MyPK; signature uses MySK.
+//
+// parentSeq is the highest roster-mutation seq THIS issuer has
+// observed before issuing — used by the reconciler to void mutations
+// from a since-demoted admin. Callers that don't track parent_seq
+// can pass 0; the reconciler treats parent_seq=0 as "no causal
+// constraint" and applies the mutation if signature + admin-set
+// gate pass.
+//
+// Returns the seq the mutation was published at (>=1), or an error
+// if signing or Put fails. The session must have a live publisher
+// (s.pub != nil) — sessions opened in a degenerate state (no DMSG)
+// have nil publishers and return an error here.
+func (s *Session) PublishRosterMutation(op RosterOp, peerPK cipher.PubKey, parentSeq uint64) (uint64, error) {
+	if s == nil || s.pub == nil {
+		return 0, errors.New("group: PublishRosterMutation: no live publisher")
+	}
+	seq := s.rosterSeq.Add(1)
+	m := RosterMutation{
+		GroupID:   uuid.MustParse(s.cfg.Record.ID),
+		Op:        op,
+		PeerPK:    peerPK,
+		ParentSeq: parentSeq,
+		IssuedAt:  time.Now().UTC(),
+	}
+	if err := SignRoster(&m, s.cfg.MySK); err != nil {
+		return 0, fmt.Errorf("group: PublishRosterMutation: sign: %w", err)
+	}
+	body, err := MarshalRoster(m)
+	if err != nil {
+		return 0, fmt.Errorf("group: PublishRosterMutation: marshal: %w", err)
+	}
+	path := fmt.Sprintf("%s/%05d", RosterPathPrefix, seq)
+	if err := s.pub.Put(path, body); err != nil {
+		return 0, fmt.Errorf("group: PublishRosterMutation: Put %s: %w", path, err)
+	}
+	return seq, nil
+}
+
+// PublishAdminMutation is the parallel emitter for AdminMutation —
+// promote / demote of a peer's admin authority. Same envelope shape
+// and semantics as PublishRosterMutation, scoped to the admin-feed
+// path (AdminPathPrefix/<seq>) and using s.adminSeq.
+func (s *Session) PublishAdminMutation(op AdminOp, peerPK cipher.PubKey, parentSeq uint64) (uint64, error) {
+	if s == nil || s.pub == nil {
+		return 0, errors.New("group: PublishAdminMutation: no live publisher")
+	}
+	seq := s.adminSeq.Add(1)
+	m := AdminMutation{
+		GroupID:   uuid.MustParse(s.cfg.Record.ID),
+		Op:        op,
+		PeerPK:    peerPK,
+		ParentSeq: parentSeq,
+		IssuedAt:  time.Now().UTC(),
+	}
+	if err := SignAdmin(&m, s.cfg.MySK); err != nil {
+		return 0, fmt.Errorf("group: PublishAdminMutation: sign: %w", err)
+	}
+	body, err := MarshalAdmin(m)
+	if err != nil {
+		return 0, fmt.Errorf("group: PublishAdminMutation: marshal: %w", err)
+	}
+	path := fmt.Sprintf("%s/%05d", AdminPathPrefix, seq)
+	if err := s.pub.Put(path, body); err != nil {
+		return 0, fmt.Errorf("group: PublishAdminMutation: Put %s: %w", path, err)
+	}
+	return seq, nil
 }
 
 // Close tears down the subscriber + publisher (and the underlying
