@@ -10,7 +10,9 @@
 // resolves to the same target.
 package cmdutil
 
-import "github.com/spf13/pflag"
+import (
+	"github.com/spf13/pflag"
+)
 
 // legacyFlagAliases maps deprecated flag names → current canonical name.
 // Add an entry here whenever a flag gets renamed in a backward-incompatible
