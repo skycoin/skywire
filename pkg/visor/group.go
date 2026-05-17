@@ -94,6 +94,44 @@ type GroupInfo struct {
 	// and last_message_at advancing but the CLI listener pipe
 	// missing messages.
 	SubDropCount uint64 `json:"sub_drop_count"`
+
+	// DeliverCount is the running total of groupInbox.deliver()
+	// invocations since visor startup — every message that landed
+	// at the inbox layer, regardless of downstream consumption.
+	//
+	// Combined with PeerUpdateCount (per-peer) and SubDropCount,
+	// localizes drops along the receive path:
+	//   PeerUpdateCount[peer]  =  CXO peerSub → Session callback fired
+	//   DeliverCount           =  Session → inbox.deliver() enqueued
+	//   SubDropCount           =  inbox → gRPC subscriber channel dropped
+	//
+	// Deltas tell where messages are lost:
+	//   peerUpdate_sum < deliverCount  → impossible (deliver is downstream)
+	//   peerUpdate_sum > deliverCount  → drops in Session.makePeerOnUpdate's
+	//                                    deliver call site (per-peer callback fired
+	//                                    but message never reached inbox)
+	//   deliverCount > rcvd_at_client  → drops between inbox and the CLI listener
+	//                                    (subDropCount accounts for some; the rest
+	//                                    are gRPC adapter or stream.Send)
+	//
+	// Visor-wide, not group-scoped (matches SubDropCount semantics).
+	// Repeated across every GroupInfo for operator convenience.
+	DeliverCount uint64 `json:"deliver_count"`
+
+	// PeerUpdateCount is the per-peer count of treestore subscriber
+	// OnUpdate callbacks observed by Session.makePeerOnUpdate, keyed
+	// by peer-PK hex. Populated alongside PeerLastInbound. Bumped on
+	// every events>0 callback (the same seam that bumps the
+	// peerLastInboundNs liveness signal).
+	//
+	// Empty map for owner-role sessions that don't follow peer feeds.
+	// Operator-facing: an idle peer with PeerLastInbound zero AND
+	// PeerUpdateCount zero has never been heard from; an idle peer
+	// with PeerLastInbound stale but PeerUpdateCount > 0 went silent
+	// after a known interaction. Comparing PeerUpdateCount sums to
+	// DeliverCount localizes drops upstream vs downstream of the
+	// inbox enqueue.
+	PeerUpdateCount map[string]uint64 `json:"peer_update_count,omitempty"`
 }
 
 // GroupMessage is one inbound message delivered through the visor's
@@ -190,12 +228,15 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 		return nil, err
 	}
 	subDrop := v.groupSubDropCount()
+	deliverCount := v.groupDeliverCount()
 	out := make([]GroupInfo, 0, len(all))
 	for _, r := range all {
 		info := toInfo(r)
 		info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
 		info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 		info.SubDropCount = subDrop
+		info.DeliverCount = deliverCount
+		info.PeerUpdateCount = peerUpdateCountHex(mgr.PeerUpdateCount(r.ID))
 		out = append(out, info)
 	}
 	return out, nil
@@ -219,6 +260,24 @@ func (v *Visor) groupSubDropCount() uint64 {
 		return 0
 	}
 	return inbox.SubDropCount()
+}
+
+// groupDeliverCount returns the running total of groupInbox.deliver()
+// invocations since the visor started — i.e. every message that
+// landed at the inbox layer, regardless of downstream consumption.
+// Operator-facing: the (deliverCount) − (per-peer update count
+// sum) delta tells you what fraction of messages reached the inbox
+// vs. were lost between the CXO peer-subscriber's OnUpdate and the
+// inbox enqueue. Returns 0 on uninitialized grouping. Visor-wide,
+// not per-group (matches SubDropCount semantics).
+func (v *Visor) groupDeliverCount() uint64 {
+	v.initLock.RLock()
+	inbox := v.grouping.inbox
+	v.initLock.RUnlock()
+	if inbox == nil {
+		return 0
+	}
+	return inbox.deliverCount.Load()
 }
 
 // GroupGet returns the info for a specific group, or ErrGroupNotFound.
@@ -249,6 +308,8 @@ func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
 	info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 	info.SubDropCount = v.groupSubDropCount()
+	info.DeliverCount = v.groupDeliverCount()
+	info.PeerUpdateCount = peerUpdateCountHex(mgr.PeerUpdateCount(r.ID))
 	return info, nil
 }
 
@@ -264,6 +325,20 @@ func peerLivenessHex(in map[cipher.PubKey]time.Time) map[string]time.Time {
 	out := make(map[string]time.Time, len(in))
 	for pk, ts := range in {
 		out[pk.Hex()] = ts
+	}
+	return out
+}
+
+// peerUpdateCountHex is the parallel converter for the per-peer
+// OnUpdate-callback counts from Manager.PeerUpdateCount. Same
+// empty-input → nil → JSON-omitted convention.
+func peerUpdateCountHex(in map[cipher.PubKey]uint64) map[string]uint64 {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]uint64, len(in))
+	for pk, c := range in {
+		out[pk.Hex()] = c
 	}
 	return out
 }
@@ -477,6 +552,16 @@ type groupInbox struct {
 	// the read path doesn't need the subsMu write lock.
 	subDropTotal atomic.Uint64
 
+	// deliverCount ticks once per groupInbox.deliver() call — i.e. every
+	// time a message lands in this visor's group inbox, regardless of
+	// whether any live subscriber consumed it or any history sink
+	// captured it. Operators use the (deliver_count) − (per-sub
+	// receive_count) delta to localize whether drops are at the
+	// inbox→sub fan-out (subDropCount visible) or further upstream
+	// (peer-subscriber OnUpdate count vs deliver_count). Monotonic
+	// across the inbox's lifetime; reset only on visor restart.
+	deliverCount atomic.Uint64
+
 	// hist, when non-nil, gets a copy of every delivered message for
 	// disk persistence. Best-effort: write errors are logged but never
 	// block the in-memory ring or the live subscriber fan-out. nil
@@ -527,6 +612,7 @@ func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychat
 		Text:     msg.Text,
 		TS:       msg.TS,
 	}
+	g.deliverCount.Add(1)
 	g.mu.Lock()
 	g.buf = append(g.buf, gm)
 	if len(g.buf) > g.cap {
