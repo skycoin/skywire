@@ -317,7 +317,17 @@ func (c *Container) rootByHash(
 		return
 	}
 
-	r, err = registry.DecodeRoot(val)
+	// Latent nil-deref companion to Index.LastRoot's panic site:
+	// DecodeRoot returns (nil, err) on a malformed payload, and the
+	// pre-fix `r.Hash = hash` on the next line panicked with
+	// "invalid memory address or nil pointer dereference". Couldn't
+	// fire when CXDS retention was broken (every byte ever Set was
+	// still resolvable, so DecodeRoot was being fed valid input);
+	// post-#2676 the bytes can actually be missing, and any path
+	// that lands on a stale-but-truncated payload would crash here.
+	if r, err = registry.DecodeRoot(val); err != nil {
+		return
+	}
 	r.Hash = hash
 	return
 }

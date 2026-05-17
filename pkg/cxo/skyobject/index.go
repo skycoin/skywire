@@ -2,6 +2,7 @@ package skyobject
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -558,7 +559,25 @@ func (i *Index) LastRoot(
 		return
 	}
 
-	r, err = i.c.rootByHash(lr.Hash)
+	// rootByHash can return (nil, ErrNotFound) when the idx still
+	// references a hash whose CXDS bytes have been swept — a real
+	// inconsistency post-#2676 / #2677 now that the cleanup paths
+	// actually remove entries. Pre-fix the immediate r.IsFull / r.Sig
+	// assignments below nil-derefed the moment cleanup outran the
+	// idx-update, panicking every Publisher.hydrateFromContainer on
+	// startup and crashlooping the visor. Returning the err lets the
+	// caller fall back (Publisher.New logs Warn and starts with empty
+	// tree) instead of taking down the process. r==nil + err==nil
+	// shouldn't happen — DecodeRoot returns either (val, nil) or
+	// (nil, err) — but guard it anyway so a future refactor doesn't
+	// reintroduce the panic shape.
+	if r, err = i.c.rootByHash(lr.Hash); err != nil {
+		return
+	}
+	if r == nil {
+		err = fmt.Errorf("LastRoot: rootByHash returned nil with no error for hash %s (idx-CXDS inconsistency)", lr.Hash.Hex())
+		return
+	}
 
 	r.IsFull = true
 	r.Sig = lr.Sig
