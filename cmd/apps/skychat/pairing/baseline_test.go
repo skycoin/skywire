@@ -299,7 +299,9 @@ func TestPairCloseIsIdempotent(t *testing.T) {
 	require.NoError(t, rig.pairA.Close())
 }
 
-// errPairClosedSatisfiesErrorsIs is a compile-time check that the
-// sentinel is reachable from this test package — guards against a
-// future rename moving ErrPairClosed out of the public surface.
-var errPairClosedSatisfiesErrorsIs = errors.Is(ErrPairClosed, ErrPairClosed)
+// Compile-time check that the sentinel is reachable from this test
+// package — guards against a future rename moving ErrPairClosed
+// out of the public surface. Anonymous to avoid an unused-var
+// flag from the linter while still failing the build if the
+// symbol disappears.
+var _ = errors.Is(ErrPairClosed, ErrPairClosed)
