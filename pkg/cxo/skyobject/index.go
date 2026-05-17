@@ -556,7 +556,7 @@ func (i *Index) LastRoot(
 
 	var lr *data.Root
 	if lr, err = i.lastRoot(pk, nonce); err != nil {
-		return
+		return nil, err
 	}
 
 	// rootByHash can return (nil, ErrNotFound) when the idx still
@@ -572,16 +572,15 @@ func (i *Index) LastRoot(
 	// (nil, err) — but guard it anyway so a future refactor doesn't
 	// reintroduce the panic shape.
 	if r, err = i.c.rootByHash(lr.Hash); err != nil {
-		return
+		return r, err
 	}
 	if r == nil {
-		err = fmt.Errorf("LastRoot: rootByHash returned nil with no error for hash %s (idx-CXDS inconsistency)", lr.Hash.Hex())
-		return
+		return nil, fmt.Errorf("LastRoot: rootByHash returned nil with no error for hash %s (idx-CXDS inconsistency)", lr.Hash.Hex())
 	}
 
 	r.IsFull = true
 	r.Sig = lr.Sig
-	return
+	return r, nil
 }
 
 // delFeed deletes feed from IdxDB and from the Index
