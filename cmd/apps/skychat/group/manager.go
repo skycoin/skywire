@@ -389,6 +389,17 @@ func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
 		for _, pk := range evicted {
 			m.peerReconnectClear(id, pk)
 		}
+		// Federated gossip emit (step 2 of #2636 RFC): publish a
+		// signed RosterMutation onto THIS visor's publisher feed so
+		// other visors' subscribers learn of the roster change
+		// without an explicit invite re-issuance. Best-effort — a
+		// failure here doesn't roll back the local store change;
+		// the operator can re-trigger emission by re-calling
+		// AddMember (idempotent) once the publisher is healthy.
+		if _, err := sess.PublishRosterMutation(RosterOpAdd, pk, 0); err != nil {
+			m.log.WithError(err).WithField("id", id).WithField("peer", pk.String()).
+				Debug("group: AddMember: gossip emit failed; local state still consistent")
+		}
 	}
 	return r, nil
 }
@@ -427,6 +438,19 @@ func (m *Manager) PromoteAdmin(id string, pk cipher.PubKey) (Record, error) {
 	r.EnsureFounderInAdmins()
 	if err := m.store.Put(r); err != nil {
 		return Record{}, fmt.Errorf("group: PromoteAdmin: store: %w", err)
+	}
+	// Federated gossip emit (step 2 of #2636 RFC). See AddMember
+	// for rationale. Member-side roster derivation needs to know
+	// the promoted PK is an admin so its mutations are accepted by
+	// the reconciler downstream.
+	m.mu.RLock()
+	sess, live := m.sessions[id]
+	m.mu.RUnlock()
+	if live {
+		if _, err := sess.PublishAdminMutation(AdminOpPromote, pk, 0); err != nil {
+			m.log.WithError(err).WithField("id", id).WithField("peer", pk.String()).
+				Debug("group: PromoteAdmin: gossip emit failed; local state still consistent")
+		}
 	}
 	return r, nil
 }
@@ -476,6 +500,16 @@ func (m *Manager) DemoteAdmin(id string, pk cipher.PubKey) (Record, error) {
 	r.EnsureFounderInAdmins()
 	if err := m.store.Put(r); err != nil {
 		return Record{}, fmt.Errorf("group: DemoteAdmin: store: %w", err)
+	}
+	// Federated gossip emit (step 2 of #2636 RFC). See PromoteAdmin.
+	m.mu.RLock()
+	sess, live := m.sessions[id]
+	m.mu.RUnlock()
+	if live {
+		if _, err := sess.PublishAdminMutation(AdminOpDemote, pk, 0); err != nil {
+			m.log.WithError(err).WithField("id", id).WithField("peer", pk.String()).
+				Debug("group: DemoteAdmin: gossip emit failed; local state still consistent")
+		}
 	}
 	return r, nil
 }
