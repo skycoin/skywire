@@ -20,18 +20,43 @@ import (
 )
 
 // Host represents the main instance of dmsgpty.
+//
+// dmsgC is kept for the listening side (ListenAndServe) and logger
+// access; the outbound proxy-dial side now goes through `dialer` so
+// callers can plug in a transport-aware StreamDialer. NewHost wires
+// the default dmsg adapter so behavior is unchanged when callers
+// don't opt in.
 type Host struct {
-	dmsgC *dmsg.Client
-	wl    Whitelist
+	dmsgC  *dmsg.Client
+	dialer StreamDialer
+	wl     Whitelist
 
 	cliN  int32
 	connN int32
 }
 
-// NewHost creates a new dmsgpty.Host with a given dmsg.Client and whitelist.
+// NewHost creates a new dmsgpty.Host with a given dmsg.Client and
+// whitelist. Outbound proxy dials go over dmsg via the default
+// adapter (pre-refactor behavior). Callers that want the outbound
+// side to use a different transport — typically the visor with its
+// transport.Manager — should use NewHostWithDialer instead.
 func NewHost(dmsgC *dmsg.Client, wl Whitelist) *Host {
+	return NewHostWithDialer(dmsgC, wl, dmsgDialer{c: dmsgC})
+}
+
+// NewHostWithDialer constructs a Host with an explicit outbound
+// StreamDialer. dmsgC is still required for the listening side
+// (ListenAndServe binds the dmsg port for incoming proxy requests)
+// and for logger plumbing — only the OUTBOUND proxy dial flows
+// through the supplied dialer.
+//
+// Pass dmsgDialer{c: dmsgC} to keep dmsg-only outbound (equivalent
+// to NewHost). Pass a transport-aware adapter (Phase 2) to let
+// `cli dmsg pty start` ride the visor's existing transports.
+func NewHostWithDialer(dmsgC *dmsg.Client, wl Whitelist, dialer StreamDialer) *Host {
 	host := new(Host)
 	host.dmsgC = dmsgC
+	host.dialer = dialer
 	host.wl = wl
 	return host
 }
@@ -47,7 +72,7 @@ func (h *Host) ExecRemote(ctx context.Context, rPK cipher.PubKey, rPort uint16, 
 	if rPort == 0 {
 		rPort = DefaultPort
 	}
-	stream, err := h.dmsgC.DialStream(ctx, dmsg.Addr{PK: rPK, Port: rPort})
+	stream, err := h.dialer.DialStream(ctx, rPK, rPort)
 	if err != nil {
 		return nil, fmt.Errorf("dmsgpty: dial %s:%d: %w", rPK, rPort, err)
 	}
@@ -273,7 +298,7 @@ func handleProxy(h *Host) handleFunc {
 		}
 
 		// Proxy request.
-		stream, err := h.dmsgC.DialStream(ctx, dmsg.Addr{PK: pk, Port: port})
+		stream, err := h.dialer.DialStream(ctx, pk, port)
 		if err != nil {
 			return err
 		}
