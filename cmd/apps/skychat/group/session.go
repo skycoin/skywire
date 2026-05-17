@@ -68,25 +68,28 @@ var cryptoRandRead = cryptoRand.Read
 // understands one understands both.
 const MessagePathPrefix = "msgs"
 
-// MirrorPathPrefix is the prefix used for admin-mirrored leaves
-// within a group feed. An admin observes a peer's primary "msgs/"
-// leaf via its peerSubs subscriber, then re-publishes the leaf body
-// verbatim under "mirror/" on its OWN publisher. The mirror leaf's
-// path suffix preserves the original "/<senderPK>/<ts>/<seq>" so
-// multiple admins re-publishing the same source leaf land on the
-// same content-addressed location — making cross-admin dedup a
-// straightforward path-equality check (handled member-side in the
-// next PR of the admin-mirror series).
+// MirrorPathPrefix WAS the prefix admins used to re-publish observed
+// peer leaves as a redundancy strategy for offline senders (#2584).
+// The publish-on-receive loop + dual-prefix peerSubs subscription
+// it required doubled the per-peer subscription count in any
+// group with admins. During the 2026-05-16/17 reliability runs the
+// extra subscriptions accounted for the bulk of the failure-mode
+// surface: each subscriber's state machine multiplied the chances
+// some path was wedged at any moment.
 //
-// The body bytes are copied unmodified, so Message.SenderPK retains
-// the original author and Message.TS retains the original send time.
-// Path is the only piece that changes (prefix swap msgs→mirror).
+// Removed in this PR. The offline-sender use case the mirroring
+// was meant to address is now covered by per-peer history replay
+// on reconnect (#2659) — a re-attaching subscriber walks the
+// publisher's CXO tree from SinceTimestampNs and gets every leaf
+// the publisher still has, no admin redundancy needed.
 //
-// Why a distinct prefix instead of a separate feed: the admin's
-// publisher already exists for that visor's own sends — reusing it
-// avoids doubling bbolt overhead and dial state. Subscribers (PR-3)
-// can SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
-// to consume both kinds of leaves from the same feed.
+// The const stays exported so legacy on-disk data referencing the
+// prefix parses cleanly. Current peerSubs no longer subscribe to
+// it and no one publishes under it; leaves left on legacy
+// publishers go unread until publisher restart clears them.
+//
+// Deprecated: not used by current code; removal scheduled after
+// legacy-publisher TTL elapses.
 const MirrorPathPrefix = "mirror"
 
 // RosterPathPrefix is the prefix used for signed roster-mutation
@@ -104,51 +107,25 @@ const RosterPathPrefix = "roster"
 const AdminPathPrefix = "admin"
 
 // dedupKey reduces a leaf path to its content-identity suffix —
-// the canonical "<senderPK>/<ts>/<seq>" tail that both the primary
-// (msgs/<...>) and any admin's mirror copy (mirror/<...>) share.
-// Two leaves with the same dedup key are byte-equal in body too,
-// because the mirror code path copies the original body verbatim
-// (deriveMirrorPath only swaps the path prefix).
+// the canonical "<senderPK>/<ts>/<seq>" tail. Pre-#2584-removal
+// this also collapsed mirror/ copies into the same key so
+// admin-mirrored duplicates of a primary leaf delivered once;
+// with admin mirroring gone there's no cross-prefix duplicate to
+// collapse, but the function stays as defense-in-depth for any
+// future cross-source duplicate path (e.g. a leaf observed via
+// both a direct peerSub and a legacy s.sub during the D4
+// transition window) and to keep the recentSet hot for the inbox-
+// replay path.
 //
-// Returns "" for paths under neither prefix — those are non-message
-// leaves (heartbeats live under MessagePathPrefix; future subtrees
-// like config / state would land here) and shouldn't participate in
-// the inbox dedup window.
-//
-// Used in two places:
-//   - onUpdate: skip handler fan-out + lastInboundNs bookkeeping on
-//     a leaf this session has already delivered to the user
-//   - ReplayHistoryThrough: collapse duplicate (primary + N mirror)
-//     copies of the same source message during startup replay so a
-//     resumed session doesn't see the same message N+1 times across
-//     the admin-mirrored sources
+// Returns "" for paths NOT under MessagePathPrefix — non-message
+// subtrees (heartbeats, roster/admin gossip envelopes) shouldn't
+// participate in the inbox dedup window.
 func dedupKey(path string) string {
-	for _, prefix := range []string{MessagePathPrefix + "/", MirrorPathPrefix + "/"} {
-		if strings.HasPrefix(path, prefix) {
-			return path[len(prefix):]
-		}
+	prefix := MessagePathPrefix + "/"
+	if strings.HasPrefix(path, prefix) {
+		return path[len(prefix):]
 	}
 	return ""
-}
-
-// deriveMirrorPath returns the mirror-prefixed equivalent of an
-// originally msgs-prefixed leaf path. The second return is false
-// when origPath is NOT a msgs/ path — used to skip mirror writes
-// for paths the admin shouldn't re-publish:
-//
-//   - already-mirrored leaves observed from another admin's feed
-//     (path starts with "mirror/") — re-mirroring would loop
-//   - heartbeats / config / future non-message subtrees that share
-//     the publisher but aren't part of the chat-message channel
-//
-// Pure function; exported lowercase so the unit test next to it can
-// exercise the prefix logic without spinning up a Session.
-func deriveMirrorPath(origPath string) (string, bool) {
-	prefix := MessagePathPrefix + "/"
-	if !strings.HasPrefix(origPath, prefix) {
-		return "", false
-	}
-	return MirrorPathPrefix + "/" + origPath[len(prefix):], true
 }
 
 // inboxDedupCap bounds the per-session recent-message-set used to
@@ -651,7 +628,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 				Warn("group: owner peer-sub create failed; group still usable via legacy relay path")
 			continue
 		}
-		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
+		ps.SetPrefixes([]string{MessagePathPrefix})
 		s.peerLastInboundNs[peerPK] = new(atomic.Int64)
 		s.peerUpdateCount[peerPK] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
@@ -759,7 +736,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		_ = pub.Close() //nolint:errcheck
 		return nil, fmt.Errorf("group: Open member: attach subscriber: %w", err)
 	}
-	sub.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
+	sub.SetPrefixes([]string{MessagePathPrefix})
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log,
 		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
@@ -786,7 +763,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		// Subscribe to both primary (peer's own sends) AND mirror
 		// (admin-relayed copies of other members' sends) — see the
 		// openOwner equivalent for the full rationale.
-		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
+		ps.SetPrefixes([]string{MessagePathPrefix})
 		s.peerUpdateCount[peerPK] = new(atomic.Uint64)
 		s.peerLastInboundNs[peerPK] = new(atomic.Int64)
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
@@ -1349,7 +1326,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 				Warn("group: SetAllowlist: peer-sub create failed; will retry on next allowlist change")
 			continue
 		}
-		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
+		ps.SetPrefixes([]string{MessagePathPrefix})
 		s.peerLastInboundNs[pk] = new(atomic.Int64)
 		s.peerUpdateCount[pk] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(pk))
@@ -1670,47 +1647,6 @@ func (s *Session) isMember(pk cipher.PubKey) bool {
 		}
 	}
 	return false
-}
-
-// mirrorBatch re-publishes every msgs-prefixed leaf in the batch to
-// this session's own publisher under MirrorPathPrefix. The body bytes
-// are copied verbatim — Message.SenderPK + TS + content all survive
-// the mirror unchanged, so subscribers see the original author
-// regardless of which admin's feed served the leaf.
-//
-// Skips:
-//   - nil-bodied events (deletion / placeholder leaves)
-//   - paths NOT under MessagePathPrefix (heartbeats, future subtrees,
-//     and notably leaves already under MirrorPathPrefix — guards
-//     against the mirror-of-mirror loop when admin-A subscribes to
-//     admin-B's mirror leaves indirectly)
-//   - already-locally-mirrored paths (idempotent under double
-//     observation; treestore.Put on an existing path is a no-op for
-//     content-equal bodies but we save the round trip)
-//
-// Failures are logged at debug and never propagate — the user-facing
-// inbox fan-out in onUpdate must not be gated on the mirror write
-// succeeding. A stuck publisher will surface through the regular
-// liveness machinery (publishAs heartbeat failure, IsSubscriberAlive
-// turning false elsewhere); mirror is opportunistic redundancy, not
-// a critical path.
-func (s *Session) mirrorBatch(events []treestore.UpdateEvent) {
-	if s.pub == nil {
-		return
-	}
-	for _, ev := range events {
-		if ev.Value == nil {
-			continue
-		}
-		mirrorPath, ok := deriveMirrorPath(ev.Path)
-		if !ok {
-			continue
-		}
-		if err := s.pub.Put(mirrorPath, ev.Value); err != nil {
-			s.log.WithError(err).WithField("path", mirrorPath).
-				Debug("group: mirror put failed")
-		}
-	}
 }
 
 // publishAs is the shared write path used by:
@@ -2115,24 +2051,18 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 	if len(events) > 0 {
 		s.lastInboundNs.Store(time.Now().UnixNano())
 	}
-	// Admin-mirror side-effect: re-publish every observed primary-feed
-	// leaf onto this visor's own publisher under MirrorPathPrefix so
-	// the group stays reachable through this admin whenever the
-	// original sender's visor is offline. Runs before the handler
-	// fan-out below; failures are logged-and-dropped so a wedged
-	// mirror write doesn't starve the user-facing inbox path. Skips
-	// when this visor isn't an admin on the record.
-	//
-	// The IsAdmin check reads the snapshot captured at Open time
-	// (cfg.Record.Admins) — a runtime PromoteAdmin/DemoteAdmin
-	// against this session won't be reflected until the session is
-	// reopened. That's a deliberate scope cut for this PR: re-keying
-	// a live session's admin status requires teardown coordination
-	// the federated-send work didn't establish, and the typical
-	// promote-then-restart flow is fine for D1.
-	if len(events) > 0 && s.cfg.Record.IsAdmin(s.cfg.MyPK) {
-		s.mirrorBatch(events)
-	}
+	// Admin-mirror side-effect removed: pre-simplification, admins
+	// re-published every observed leaf under MirrorPathPrefix so an
+	// offline original-sender wouldn't take the message with them.
+	// In practice the redundancy doubled the per-peer subscription
+	// count (each peer fanned out to msgs/ AND mirror/ prefixes) and
+	// added a publish-on-receive feedback loop that obscured the
+	// failure-mode picture during reliability runs. The same
+	// offline-sender use case is now covered by per-peer history
+	// replay on reconnect (#2659): when a member re-attaches, the
+	// per-peer subscriber walks the publisher's CXO tree from
+	// SinceTimestampNs and gets every leaf the publisher still has,
+	// without needing a separate admin-driven mirror.
 	h := s.handler
 	if h == nil {
 		return
