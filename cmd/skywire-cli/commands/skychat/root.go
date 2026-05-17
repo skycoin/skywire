@@ -33,6 +33,7 @@ var (
 	sendNet      string
 	sendWait     time.Duration
 	sendRetries  int
+	sendVerbose  bool
 	listenNet    string
 	listenFrom   string
 	listenRaw    bool
@@ -58,6 +59,7 @@ func init() {
 	sendCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type: skynet or dmsg")
 	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 5*time.Second, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 disables wait and returns success on WriteFrame (fire-and-forget). Default 5s gives delivery confirmation.")
 	sendCmd.Flags().IntVarP(&sendRetries, "retries", "r", 1, "extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried.")
+	sendCmd.Flags().BoolVarP(&sendVerbose, "verbose", "v", false, "print per-stage diagnostics to stderr: HTTP request shape, response status, decoded ack timing, per-attempt latency. Use when troubleshooting a flaky send or filing a bug — Phase 0 baseline observability layer.")
 	sendCmd.MarkFlagRequired("to")  //nolint:errcheck,gosec
 	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
 
@@ -137,14 +139,28 @@ Outcomes (--wait > 0):
 		if attempts < 1 {
 			attempts = 1
 		}
+		var verboseW io.Writer
+		if sendVerbose {
+			verboseW = cmd.ErrOrStderr()
+		}
 		var ack *AckResponse
 		for i := 0; i < attempts; i++ {
-			ack, err = postMessage(httpAddr, pk.String(), message, sendNet, sendWait)
+			if verboseW != nil {
+				fmt.Fprintf(verboseW, "verbose: attempt %d/%d addr=%s to=%s net=%s wait=%s msg_bytes=%d\n",
+					i+1, attempts, httpAddr, pk.String(), sendNet, sendWait, len(message)) //nolint:errcheck
+			}
+			ack, err = postMessageVerbose(httpAddr, pk.String(), message, sendNet, sendWait, verboseW)
 			if err == nil {
 				break
 			}
+			if verboseW != nil {
+				fmt.Fprintf(verboseW, "verbose: attempt %d/%d err=%v\n", i+1, attempts, err) //nolint:errcheck
+			}
 			if i+1 < attempts {
 				backoff := time.Duration(200*(i+1)) * time.Millisecond
+				if verboseW != nil {
+					fmt.Fprintf(verboseW, "verbose: retry backoff %s\n", backoff) //nolint:errcheck
+				}
 				time.Sleep(backoff)
 			}
 		}
@@ -396,7 +412,36 @@ type AckResponse struct {
 // HTTP layer or the chat-app surfaced a 4xx/5xx that's not the
 // 504-on-timeout case (which is returned as a non-nil ack with
 // Acked=false).
+//
+// Thin wrapper over postMessageVerbose with no diagnostic output.
+// Kept stable so external callers (TUI, scripted) aren't affected by
+// the verbose-flag plumbing.
 func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*AckResponse, error) {
+	return postMessageVerbose(addr, recipientPK, msg, network, wait, nil)
+}
+
+// postMessageVerbose is postMessage with optional per-stage stderr-
+// shaped diagnostics. When verboseW is non-nil, it gets one line per
+// observable step (marshal / POST / response-status / decode / final),
+// each annotated with the relevant key=val context. Use for the
+// `cli skychat send --verbose` operator path and for tests that want
+// to assert the diagnostic output's shape.
+//
+// Format: `verbose: <stage> key=val key=val ...` — grep-friendly,
+// stable enough for shell pipelines, NOT a wire-format contract.
+// Adding fields is backwards-compat; renaming is a behavior change.
+//
+// The verbose target is io.Writer (rather than e.g. a structured
+// logger) so callers can pipe to stderr, a buffer for tests, /dev/null,
+// or a tee — keeping the dependency surface tiny.
+func postMessageVerbose(addr, recipientPK, msg, network string, wait time.Duration, verboseW io.Writer) (*AckResponse, error) {
+	vfprintf := func(format string, args ...interface{}) {
+		if verboseW == nil {
+			return
+		}
+		fmt.Fprintf(verboseW, format, args...) //nolint:errcheck
+	}
+
 	payload := map[string]interface{}{
 		"recipient": recipientPK,
 		"message":   msg,
@@ -407,6 +452,7 @@ func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*A
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
+		vfprintf("verbose: marshal err=%v\n", err)
 		return nil, fmt.Errorf("marshal request: %w", err)
 	}
 	url := fmt.Sprintf("http://%s/message", addr)
@@ -418,33 +464,44 @@ func postMessage(addr, recipientPK, msg, network string, wait time.Duration) (*A
 	if wait <= 0 {
 		hc.Timeout = 30 * time.Second
 	}
+	vfprintf("verbose: POST url=%s body_bytes=%d http_timeout=%s\n", url, len(body), hc.Timeout)
+	postStart := time.Now()
 	resp, err := hc.Post(url, "application/json", bytes.NewReader(body)) //nolint:gosec
 	if err != nil {
+		vfprintf("verbose: POST err=%v elapsed=%s\n", err, time.Since(postStart))
 		return nil, fmt.Errorf("post: %w", err)
 	}
 	defer resp.Body.Close() //nolint:errcheck
+	vfprintf("verbose: response status=%d elapsed=%s content_type=%q\n",
+		resp.StatusCode, time.Since(postStart), resp.Header.Get("Content-Type"))
 
 	// 504 carries a non-nil AckResponse{Acked:false, Reason:"timeout"}
 	// — surfaced to the caller, not treated as a server error.
 	if resp.StatusCode == http.StatusGatewayTimeout {
 		var ack AckResponse
 		if err := json.NewDecoder(resp.Body).Decode(&ack); err == nil {
+			vfprintf("verbose: 504-decoded acked=%v id=%s ms=%d reason=%q\n", ack.Acked, ack.ID, ack.MS, ack.Reason)
 			return &ack, nil
 		}
+		vfprintf("verbose: 504-decode-failed; synthesizing timeout ack\n")
 		return &AckResponse{Acked: false, Reason: "timeout"}, nil
 	}
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if wait > 0 {
 			var ack AckResponse
 			if err := json.NewDecoder(resp.Body).Decode(&ack); err != nil {
+				vfprintf("verbose: 2xx-decode-err=%v\n", err)
 				return nil, fmt.Errorf("decode ack: %w", err)
 			}
+			vfprintf("verbose: ack acked=%v id=%s ms=%d reason=%q\n", ack.Acked, ack.ID, ack.MS, ack.Reason)
 			return &ack, nil
 		}
+		vfprintf("verbose: 2xx no-wait (fire-and-forget) success\n")
 		return nil, nil
 	}
 	var errBody bytes.Buffer
 	_, _ = errBody.ReadFrom(resp.Body) //nolint:errcheck
+	vfprintf("verbose: server-error status=%d body=%q\n", resp.StatusCode, strings.TrimSpace(errBody.String()))
 	return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, strings.TrimSpace(errBody.String()))
 }
 
