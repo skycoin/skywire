@@ -1678,6 +1678,27 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 		msg.Ciphertext = ct
 		msg.Nonce = nonce
 	}
+	// Sign with this session's SK. publishAs accepts a parametric
+	// senderPK (the relay path needs to publish as someone else),
+	// but the SIGNATURE is always over (senderPK, msg) with this
+	// session's SK — i.e., the signer asserts "I, this session,
+	// republished this Message and I take responsibility for it".
+	// In the steady-state federated case where senderPK == MyPK, the
+	// signature is the original author's own signature.
+	//
+	// The relay path (handleRelay → owner publishes member's text)
+	// produces a signature where senderPK != MyPK; subscribers
+	// verifying see a signature that DOESN'T bind to the claimed
+	// SenderPK and reject the leaf. This is intentional: post-D1
+	// federated send is the norm, and the legacy relay path is a
+	// pre-D1 fallback. A signed legacy-relay leaf would let the
+	// owner forge messages as any member. Forcing relay leaves to
+	// fail Verify pushes operators toward the federated path; we
+	// can add a separate "owner-asserts-by-relay" envelope type
+	// later if the legacy path needs to survive past TTL.
+	if err := SignMessage(&msg, s.cfg.MySK); err != nil {
+		return fmt.Errorf("group: publishAs: sign: %w", err)
+	}
 	body, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("group: publishAs: marshal: %w", err)
@@ -2089,6 +2110,30 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 			s.log.WithError(err).WithField("path", ev.Path).
 				Debug("group: ignoring undecodable leaf")
 			continue
+		}
+		// Verify the leaf's signature against the claimed SenderPK.
+		// Admin-aggregator republishes are accepted iff the original
+		// author's signature still verifies — admins can omit but not
+		// alter. Backward-compat: pre-signing publishers produce
+		// unsigned leaves (Signature == cipher.Sig{}); these surface
+		// as ErrLeafUnsignedLegacy which we accept-with-warning during
+		// the deprecation window, then flip to strict-reject once
+		// publisher TTL elapses. Any other VerifyMessage error
+		// (forged signature, wrong PK, unknown canonical version) is
+		// a strict reject right now — the leaf is silently dropped
+		// at debug log because an honest admin shouldn't be
+		// republishing leaves that don't verify and we don't want a
+		// noisy log surface for what's effectively an attack signal.
+		if err := VerifyMessage(msg); err != nil {
+			if errors.Is(err, ErrLeafUnsignedLegacy) {
+				s.log.WithField("path", ev.Path).WithField("sender_pk", msg.SenderPK.String()).
+					Debug("group: accepting unsigned legacy leaf (deprecated; publisher predates signing)")
+				// Fall through — accept the leaf.
+			} else {
+				s.log.WithError(err).WithField("path", ev.Path).WithField("sender_pk", msg.SenderPK.String()).
+					Debug("group: rejecting leaf with bad signature")
+				continue
+			}
 		}
 		if s.cfg.Record.Mode == ModePrivate {
 			plain, err := Decrypt(s.cfg.Record.AESKey, msg.Ciphertext, msg.Nonce)
