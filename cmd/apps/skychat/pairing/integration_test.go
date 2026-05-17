@@ -159,7 +159,11 @@ func TestPairRoundTripOverDmsg(t *testing.T) {
 	}))
 }
 
-func waitDmsgReady(t *testing.T, c *dmsg.Client, timeout time.Duration) {
+// waitDmsgReady blocks until c.Ready() fires or the supplied
+// timeout elapses (then t.Fatal). All current callers pass 10s;
+// the parameter is retained so an outlier slower-network case can
+// override without adding a second helper.
+func waitDmsgReady(t *testing.T, c *dmsg.Client, timeout time.Duration) { //nolint:unparam
 	t.Helper()
 	select {
 	case <-c.Ready():
