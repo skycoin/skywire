@@ -484,8 +484,18 @@ func (n *Node) initConn(
 		if isIncoming {
 			return nil, errors.New("already have incoming pending connection")
 		}
+		// Wait for the in-flight isNew goroutine to publish the init
+		// result on c.initq. If it fails, that goroutine has already
+		// called onConnInitErr (deletes from pendConns, sets initErr,
+		// closes initq). The waiter must only propagate the error —
+		// pre-fix a redundant onConnInitErr call here double-closed
+		// c.initq and panicked the visor with "close of closed channel"
+		// under sustained handshake failure (peer offline / dmsg
+		// transport CPU-starved). The idempotency guard added in
+		// onConnInitErr below makes this defense-in-depth, but the
+		// behavioral contract is: waiter propagates, handshaker
+		// publishes.
 		if err = c.waitForInit(); err != nil {
-			n.onConnInitErr(c, err)
 			return nil, err
 		}
 		return c, nil
@@ -541,11 +551,19 @@ func (n *Node) onNewConn(
 	return c, true, false, nil
 }
 
-// onConnInitErr atomically removes pending
-// connection and signals about initConn failure.
+// onConnInitErr atomically removes pending connection and signals
+// about initConn failure. Idempotent: c.initClosed gates the close
+// of initq so a double-call (which pre-fix the isPending branch of
+// initConn triggered, double-closing initq and panicking the visor
+// under handshake-failure load) becomes a no-op after the first.
 func (n *Node) onConnInitErr(c *Conn, initErr error) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
+
+	if c.initClosed {
+		return
+	}
+	c.initClosed = true
 
 	delete(n.pendConns, c.Address())
 
@@ -556,9 +574,18 @@ func (n *Node) onConnInitErr(c *Conn, initErr error) {
 // onConnInit atomically moves pending connection to cache
 // and signals about initConn success. It also chekcs if
 // peer's pubkey, receieved during hanshake is duplicate.
+//
+// Mirrors onConnInitErr's c.initClosed gate: success and failure
+// must publish exactly one close of initq, regardless of which
+// goroutine wins the race for the final write.
 func (n *Node) onConnInit(c *Conn) {
 	n.mx.Lock()
 	defer n.mx.Unlock()
+
+	if c.initClosed {
+		return
+	}
+	c.initClosed = true
 
 	delete(n.pendConns, c.Address())
 
