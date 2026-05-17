@@ -812,7 +812,20 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	pty := dmsgpty.NewHost(dmsgC, wl)
+	// Route the dmsgpty Host's OUTBOUND proxy dial through a
+	// MultiDialer chain so future strategies (skynet routes /
+	// stcpr) can be plugged in without revisiting this site. Phase
+	// 2 ships a single-strategy chain that only wraps the existing
+	// dmsg path — behavior is bit-for-bit unchanged. Phase 3 will
+	// prepend a transport-aware strategy so `cli dmsg pty start`
+	// rides the visor's already-negotiated transports first and
+	// falls through to dmsg when there's no route. Adding here
+	// rather than at NewHost preserves backward compatibility for
+	// every other NewHost caller (cmd/dmsg/dmsgpty-host, sshd CLI,
+	// tests).
+	pty := dmsgpty.NewHostWithDialer(dmsgC, wl, dmsgpty.MultiDialer{
+		dmsgpty.NewDmsgDialer(dmsgC),
+	})
 	// Expose the Host on the visor so the RPC layer can drive Exec
 	// directly (see pkg/visor/rpc_visor.go DmsgPtyExec). Without this
 	// the integrated `skywire cli dmsg pty exec` path is forced
