@@ -2135,6 +2135,44 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 				continue
 			}
 		}
+		// Admin-aggregator republish (Beta slice): if this session is
+		// an admin on the group record, write the verified leaf
+		// VERBATIM (same path, same body bytes) onto this admin's own
+		// publisher feed. Non-admin members in the admin-aggregator
+		// topology subscribe to admin canonical feeds rather than to
+		// every peer's per-peer feed, so this republish is what makes
+		// the source leaf reachable through this admin when the
+		// original sender's publisher is offline.
+		//
+		// Gating:
+		//   - VerifyMessage above succeeded (or was the unsigned-legacy
+		//     accept-with-warning) — admins act as gatekeepers, not as
+		//     forwarders of forged input. ErrLeafBadSignature already
+		//     continued out of the loop above.
+		//   - s.pub != nil — degraded sessions (e.g. the test fixture
+		//     with no publisher) skip cleanly instead of panicking.
+		//   - msg.SenderPK != s.cfg.MyPK — our own publishAs already
+		//     wrote this leaf on our publisher at this path; a second
+		//     Put is a content-equal no-op but skip the round-trip.
+		//   - !IsHeartbeat(msg) — heartbeats are per-publisher liveness
+		//     probes; non-admin subscribers get liveness from the
+		//     admin's OWN heartbeats, no need to mirror others'.
+		//   - dedup.Add returned true above (line ~2104) — protects
+		//     against cross-admin republish loops: when admin-A and
+		//     admin-B both observe sender-C's leaf, whichever observes
+		//     first republishes; the other's observation (via its own
+		//     peerSub or via cross-admin subscription) finds the leaf
+		//     already in the dedup set and skips here too.
+		//
+		// Failures are debug-logged, not propagated. Admin republish is
+		// opportunistic redundancy — the user-facing inbox fan-out
+		// below MUST NOT be gated on the republish Put succeeding.
+		if s.pub != nil && !IsHeartbeat(msg) && msg.SenderPK != s.cfg.MyPK && s.cfg.Record.IsAdmin(s.cfg.MyPK) {
+			if err := s.pub.Put(ev.Path, ev.Value); err != nil {
+				s.log.WithError(err).WithField("path", ev.Path).WithField("sender_pk", msg.SenderPK.String()).
+					Debug("group: admin-republish put failed")
+			}
+		}
 		if s.cfg.Record.Mode == ModePrivate {
 			plain, err := Decrypt(s.cfg.Record.AESKey, msg.Ciphertext, msg.Nonce)
 			if err != nil {
