@@ -7,19 +7,19 @@
 // in both directions, ciphertext-at-rest, allowlist enforcement.
 // This file adds the COVERAGE GAPS the operator's reset surfaced:
 //
-//   1. Reconnect after close. The production failure mode all three
-//      agents hit on 2026-05-17 21:10Z: a subscriber closes (visor
-//      restart, session reopen, network blip), reattaches via fresh
-//      Connect, and silently misses messages published in the gap.
-//      Pair-level test should be the first place this regression
-//      shows up — pairs are 1:1, no admin/topology in the way.
+//  1. Reconnect after close. The production failure mode all three
+//     agents hit on 2026-05-17 21:10Z: a subscriber closes (visor
+//     restart, session reopen, network blip), reattaches via fresh
+//     Connect, and silently misses messages published in the gap.
+//     Pair-level test should be the first place this regression
+//     shows up — pairs are 1:1, no admin/topology in the way.
 //
-//   2. CXO replay value-prop. The operator's "what does CXO solve
-//      vs. what does it cost" question. CXO's claim is that a
-//      re-subscribing peer catches up on the publisher's history
-//      that landed during the gap, without needing per-message
-//      retry logic in the chat-app. The test below proves that
-//      claim or falsifies it.
+//  2. CXO replay value-prop. The operator's "what does CXO solve
+//     vs. what does it cost" question. CXO's claim is that a
+//     re-subscribing peer catches up on the publisher's history
+//     that landed during the gap, without needing per-message
+//     retry logic in the chat-app. The test below proves that
+//     claim or falsifies it.
 //
 // Built on integration_test.go's helpers (testInbox, waitDmsgReady,
 // connectWithRetry pattern) — keeps this file focused on the new
