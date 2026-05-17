@@ -145,56 +145,10 @@ func TestDecryptRejectsWrongKey(t *testing.T) {
 	}
 }
 
-func TestDeriveMirrorPath(t *testing.T) {
-	cases := []struct {
-		name    string
-		in      string
-		wantOK  bool
-		wantOut string
-	}{
-		{
-			name:    "msgs leaf rewrites to mirror",
-			in:      "msgs/02abcdef00112233445566778899aabbccddeeff00112233445566778899aabbcc/1700000000000000000/1",
-			wantOK:  true,
-			wantOut: "mirror/02abcdef00112233445566778899aabbccddeeff00112233445566778899aabbcc/1700000000000000000/1",
-		},
-		{
-			name:    "already-mirrored leaf is rejected (loop guard)",
-			in:      "mirror/02abcdef00112233445566778899aabbccddeeff00112233445566778899aabbcc/1700000000000000000/1",
-			wantOK:  false,
-			wantOut: "",
-		},
-		{
-			name:    "non-message subtree is rejected",
-			in:      "config/heartbeat/whatever",
-			wantOK:  false,
-			wantOut: "",
-		},
-		{
-			name:    "bare msgs without slash is rejected (would otherwise produce mirror/ root)",
-			in:      "msgs",
-			wantOK:  false,
-			wantOut: "",
-		},
-		{
-			name:    "empty input is rejected",
-			in:      "",
-			wantOK:  false,
-			wantOut: "",
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := deriveMirrorPath(tc.in)
-			if ok != tc.wantOK {
-				t.Fatalf("deriveMirrorPath(%q): ok=%v, want %v", tc.in, ok, tc.wantOK)
-			}
-			if got != tc.wantOut {
-				t.Errorf("deriveMirrorPath(%q): got %q, want %q", tc.in, got, tc.wantOut)
-			}
-		})
-	}
-}
+// TestDeriveMirrorPath removed alongside deriveMirrorPath itself
+// (admin mirroring dropped; per-peer history replay #2659 covers
+// the offline-sender redundancy case). See MirrorPathPrefix const
+// for context.
 
 func TestDedupKey(t *testing.T) {
 	cases := []struct {
@@ -208,9 +162,16 @@ func TestDedupKey(t *testing.T) {
 			want: "02abcdef/1700000000000000000/1",
 		},
 		{
-			name: "mirror leaf collapses to identical suffix",
+			// Legacy mirror leaves (left on disk by pre-removal
+			// publishers) no longer participate in dedup — they're
+			// not subscribed to and won't reach dedupKey anyway.
+			// Returning "" treats them as "non-message" which is
+			// the conservative behavior: any stray legacy leaf
+			// that does sneak through won't compete with a primary
+			// leaf for the dedup slot.
+			name: "legacy mirror leaf no longer treated as message",
 			in:   "mirror/02abcdef/1700000000000000000/1",
-			want: "02abcdef/1700000000000000000/1",
+			want: "",
 		},
 		{
 			name: "non-message subtree returns empty",
@@ -234,11 +195,6 @@ func TestDedupKey(t *testing.T) {
 				t.Errorf("dedupKey(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
-	}
-	// Cross-check the core invariant the dedup logic depends on:
-	// msgs/X and mirror/X must collapse to byte-identical suffixes.
-	if a, b := dedupKey("msgs/foo/bar"), dedupKey("mirror/foo/bar"); a != b {
-		t.Errorf("primary/mirror suffix mismatch: %q vs %q", a, b)
 	}
 }
 
