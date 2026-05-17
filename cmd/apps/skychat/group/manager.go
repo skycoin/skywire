@@ -1251,6 +1251,25 @@ func (m *Manager) PeerLiveness(id string) map[cipher.PubKey]time.Time {
 	return out
 }
 
+// PeerUpdateCount returns the per-peer count of OnUpdate-callback
+// invocations observed by Session.makePeerOnUpdate for the given
+// group. Parallel to PeerLiveness — same shape, same lifetime,
+// same nil-on-no-session graceful degradation. Empty map for
+// owner-role sessions that don't follow peer feeds.
+//
+// Used by Visor.GroupGet / GroupList to surface the count alongside
+// PeerLastInbound so operators can localize drops across the
+// receive cascade.
+func (m *Manager) PeerUpdateCount(id string) map[cipher.PubKey]uint64 {
+	m.mu.RLock()
+	sess, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok || sess == nil {
+		return map[cipher.PubKey]uint64{}
+	}
+	return sess.PeerUpdateCounts()
+}
+
 // List returns every persisted record.
 func (m *Manager) List() ([]Record, error) { return m.store.List() }
 
