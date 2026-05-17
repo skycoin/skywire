@@ -207,6 +207,96 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 	}
 }
 
+// PKExtractor pulls the remote public key from an accepted conn so
+// ListenAndServeNet can drive whitelist authorization on transports
+// that aren't dmsg. Returns (pk, true) on success; (zero, false)
+// causes the conn to be rejected before any pty handshake happens
+// — the same defense-in-depth that the dmsg path's whitelist check
+// provides. Callers wrap their listener's conn type (typically
+// appnet.SkywireConn) and read the embedded address.
+type PKExtractor func(conn net.Conn) (cipher.PubKey, bool)
+
+// ListenAndServeNet serves dmsgpty over an arbitrary net.Listener.
+// Generic counterpart of ListenAndServe (which is hard-bound to
+// dmsg.Listener for AcceptStream + dmsg-specific error sentinels);
+// this method handles only the generic surface: accept → extract PK
+// → authorize → fan out to serveConn.
+//
+// Use case: visor wires a parallel listener on appnet.SkywireNetworker
+// so dmsgpty traffic can ride skynet routes in addition to dmsg.
+// Each transport gets its own listener call and they run in
+// parallel — accepted conns are served via the same mux as the
+// dmsg path, so the wire protocol is identical regardless of
+// transport.
+//
+// extractPK must be non-nil; nil short-circuits to a rejected conn
+// because skipping whitelist enforcement would silently weaken the
+// dmsgpty trust model.
+func (h *Host) ListenAndServeNet(ctx context.Context, lis net.Listener, extractPK PKExtractor) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	mux := dmsgEndpoints(h)
+
+	log := logging.MustGetLogger("dmsg_pty_net")
+	if h.dmsgC != nil {
+		if ml := h.dmsgC.MasterLogger(); ml != nil {
+			log = ml.PackageLogger("dmsg_pty_net")
+		}
+	}
+
+	go func() {
+		<-ctx.Done()
+		log.WithError(lis.Close()).Debug("ListenAndServeNet() ended.")
+	}()
+
+	for {
+		conn, err := lis.Accept()
+		if err != nil {
+			log := log.WithError(err)
+			if netErr, ok := err.(net.Error); ok && netErr.Temporary() { //nolint:staticcheck
+				log.Warn("Failed to accept net.Conn with temporary error, continuing...")
+				time.Sleep(50 * time.Millisecond)
+				continue
+			}
+			if err == io.ErrClosedPipe || errors.Is(err, net.ErrClosed) {
+				log.Debug("Cleanly stopped serving.")
+				return nil
+			}
+			log.Error("Failed to accept net.Conn with permanent error.")
+			return err
+		}
+
+		var rPK cipher.PubKey
+		var ok bool
+		if extractPK != nil {
+			rPK, ok = extractPK(conn)
+		}
+		if !ok {
+			log.Warn("Accepted conn rejected: PK extraction failed (nil extractor or non-skywire conn).")
+			_ = conn.Close() //nolint:errcheck,gosec
+			continue
+		}
+
+		logC := log.WithField("remote_pk", rPK.String())
+		if !h.authorize(logC, rPK) {
+			err := writeResponse(conn, errors.New("net stream rejected by whitelist"))
+			logC.WithError(err).Warn()
+			if err := conn.Close(); err != nil {
+				logC.WithError(err).Warn("Conn closed with error.")
+			}
+			continue
+		}
+
+		logC = logC.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
+		logC.Debug("net.Conn accepted.")
+		go func() {
+			h.serveConn(ctx, logC, &mux, conn)
+			atomic.AddInt32(&h.connN, -1)
+		}()
+	}
+}
+
 // serveConn serves a CLI connection or dmsg stream.
 func (h *Host) serveConn(ctx context.Context, log logrus.FieldLogger, mux *hostMux, conn net.Conn) {
 	ctx, cancel := context.WithCancel(ctx)

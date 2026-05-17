@@ -812,20 +812,15 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return err
 	}
 
-	// Route the dmsgpty Host's OUTBOUND proxy dial through a
-	// MultiDialer chain so future strategies (skynet routes /
-	// stcpr) can be plugged in without revisiting this site. Phase
-	// 2 ships a single-strategy chain that only wraps the existing
-	// dmsg path — behavior is bit-for-bit unchanged. Phase 3 will
-	// prepend a transport-aware strategy so `cli dmsg pty start`
-	// rides the visor's already-negotiated transports first and
-	// falls through to dmsg when there's no route. Adding here
-	// rather than at NewHost preserves backward compatibility for
-	// every other NewHost caller (cmd/dmsg/dmsgpty-host, sshd CLI,
-	// tests).
-	pty := dmsgpty.NewHostWithDialer(dmsgC, wl, dmsgpty.MultiDialer{
-		dmsgpty.NewDmsgDialer(dmsgC),
-	})
+	// Route the dmsgpty Host's OUTBOUND proxy dial through the
+	// MultiDialer chain built in init_dmsg_skywire.go. Strategy
+	// order is skywire-first / dmsg-fallback so `cli dmsg pty
+	// start` rides the visor's already-negotiated transports when
+	// a route exists, then falls through to dmsg on miss. Adding
+	// the chain here rather than at NewHost preserves backward
+	// compat for every other NewHost caller (cmd/dmsg/dmsgpty-host,
+	// sshd CLI, tests).
+	pty := dmsgpty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
 	// Expose the Host on the visor so the RPC layer can drive Exec
 	// directly (see pkg/visor/rpc_visor.go DmsgPtyExec). Without this
 	// the integrated `skywire cli dmsg pty exec` path is forced
@@ -851,6 +846,18 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 			wg.Wait()
 			return nil
 		})
+
+		// Parallel skynet listener — accepts dmsgpty over
+		// appnet.SkywireNetworker so remote peers that have a
+		// negotiated route to us can reach the pty service without
+		// opening a fresh dmsg stream. Returns nil close-func when
+		// the skynet networker isn't wired yet (init ordering) or
+		// when Listen fails; in either case the dmsg listener
+		// above keeps the service functional.
+		runtimeErrors := getErrors(ctx)
+		if closer := startSkywirePtyListener(context.Background(), pty, v.conf.PK, ptyPort, runtimeErrors); closer != nil {
+			v.pushCloseStack("dmsgpty.skywire.serve", closer)
+		}
 
 	}
 
