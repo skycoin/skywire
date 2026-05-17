@@ -190,9 +190,21 @@ func (s *cliRPCStats) snapshot() (active int32, total uint64, errors uint64, pea
 	return s.activeConns, s.totalConns, s.totalErrors, s.peakConns, s.lastError, s.lastErrorTime
 }
 
-// visorPingAdapter wraps a Visor to implement rpcgrpc.VisorAPI
+// visorPingAdapter wraps a Visor to implement rpcgrpc.VisorAPI.
+// The adapter is shared across both PingServer instances (local CLI
+// gRPC + dmsg-RPC gRPC) so any counter on the adapter aggregates
+// across both transports.
 type visorPingAdapter struct {
 	v *Visor
+}
+
+// IncGroupStreamSend implements rpcgrpc.VisorAPI. Called once per
+// successful stream.Send by StreamGroupMessages; surfaced back into
+// pkg/visor.GroupInfo.StreamSendCount via Visor.groupStreamSendCount.
+// Subscribed sentinels are NOT counted — operators care about data
+// events.
+func (a *visorPingAdapter) IncGroupStreamSend() {
+	a.v.groupStreamSendCounter.Add(1)
 }
 
 func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
