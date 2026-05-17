@@ -389,6 +389,14 @@ func (a *visorPingAdapter) SnapshotGroupHistoryAfterNs(groupID string, sinceNs i
 	return out
 }
 
+// RecordGroupStreamSend bridges the rpcgrpc handler's per-Send
+// counter bump into the visor's groupInbox.streamSendCount. No-op
+// when grouping is uninitialized (matches the rest of the adapter's
+// graceful-degradation pattern).
+func (a *visorPingAdapter) RecordGroupStreamSend() {
+	a.v.recordGroupStreamSend()
+}
+
 func (a *visorPingAdapter) LocalPK() cipher.PubKey {
 	return a.v.LocalPK()
 }

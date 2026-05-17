@@ -132,6 +132,24 @@ type GroupInfo struct {
 	// DeliverCount localizes drops upstream vs downstream of the
 	// inbox enqueue.
 	PeerUpdateCount map[string]uint64 `json:"peer_update_count,omitempty"`
+
+	// StreamSendCount is the running total of successful gRPC
+	// rpcgrpc.StreamGroupMessages stream.Send invocations to live CLI
+	// subscribers since visor startup. Closes the last layer in the
+	// per-layer ladder begun by PeerUpdateCount / DeliverCount /
+	// SubDropCount: a message that reaches inbox.deliver and isn't
+	// dropped at sub.ch must be Send'd exactly once per subscriber.
+	//
+	// Includes one Send per subscription startup (the Subscribed
+	// sentinel) plus one Send per message dispatched. Operators
+	// localizing a drop walk the delta:
+	//   DeliverCount − SubDropCount  =  expected per-subscriber Sends
+	//   actual StreamSendCount        =  observed Sends
+	// A gap (DeliverCount − SubDropCount > StreamSendCount, modulo
+	// active-subscription sentinels) localizes the drop to the gRPC
+	// Send seam itself — slow transport, EOF mid-Send, context
+	// cancellation before flush. Visor-wide, not group-scoped.
+	StreamSendCount uint64 `json:"stream_send_count"`
 }
 
 // GroupMessage is one inbound message delivered through the visor's
@@ -229,6 +247,7 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 	}
 	subDrop := v.groupSubDropCount()
 	deliverCount := v.groupDeliverCount()
+	streamSend := v.groupStreamSendCount()
 	out := make([]GroupInfo, 0, len(all))
 	for _, r := range all {
 		info := toInfo(r)
@@ -237,6 +256,7 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 		info.SubDropCount = subDrop
 		info.DeliverCount = deliverCount
 		info.PeerUpdateCount = peerUpdateCountHex(mgr.PeerUpdateCount(r.ID))
+		info.StreamSendCount = streamSend
 		out = append(out, info)
 	}
 	return out, nil
@@ -280,6 +300,37 @@ func (v *Visor) groupDeliverCount() uint64 {
 	return inbox.deliverCount.Load()
 }
 
+// groupStreamSendCount returns the inbox-wide rolling total of
+// successful gRPC stream.Send invocations from
+// rpcgrpc.StreamGroupMessages. Returns 0 when grouping is
+// uninitialized. Visor-wide; see GroupInfo.StreamSendCount docstring
+// for the layer-9 role in the per-layer counter ladder.
+func (v *Visor) groupStreamSendCount() uint64 {
+	v.initLock.RLock()
+	inbox := v.grouping.inbox
+	v.initLock.RUnlock()
+	if inbox == nil {
+		return 0
+	}
+	return inbox.StreamSendCount()
+}
+
+// recordGroupStreamSend bumps the inbox-wide stream.Send counter.
+// Wired into the rpcgrpc.VisorAPI adapter so the gRPC handler can
+// increment without importing pkg/visor; matches the indirection
+// pattern used by SubscribeGroupMessages. No-op when grouping is
+// uninitialized so test harnesses without a fully-wired visor don't
+// have to mock the counter side too.
+func (v *Visor) recordGroupStreamSend() {
+	v.initLock.RLock()
+	inbox := v.grouping.inbox
+	v.initLock.RUnlock()
+	if inbox == nil {
+		return
+	}
+	inbox.RecordStreamSend()
+}
+
 // GroupGet returns the info for a specific group, or ErrGroupNotFound.
 //
 // Populates SubscriberAlive the same way GroupList does — without
@@ -310,6 +361,7 @@ func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	info.SubDropCount = v.groupSubDropCount()
 	info.DeliverCount = v.groupDeliverCount()
 	info.PeerUpdateCount = peerUpdateCountHex(mgr.PeerUpdateCount(r.ID))
+	info.StreamSendCount = v.groupStreamSendCount()
 	return info, nil
 }
 
@@ -562,6 +614,20 @@ type groupInbox struct {
 	// across the inbox's lifetime; reset only on visor restart.
 	deliverCount atomic.Uint64
 
+	// streamSendCount ticks once per successful gRPC
+	// rpcgrpc.StreamGroupMessages stream.Send to a CLI subscriber.
+	// Incremented from the rpcgrpc handler (not from inside the inbox)
+	// via RecordStreamSend — counter lives here for proximity to
+	// deliverCount and subDropTotal so the per-layer delta calculus
+	// (DeliverCount − SubDropCount ≈ StreamSendCount for the
+	// single-subscriber steady state) reads from a single struct.
+	// Closes the last hop in the 9-layer counter ladder: peer-update
+	// → inbox.deliver → sub.ch fan-out → stream.Send to CLI. Includes
+	// the per-subscription "Subscribed" sentinel send so the count
+	// reflects every successful Send invocation (one per subscription
+	// startup, plus one per message dispatched).
+	streamSendCount atomic.Uint64
+
 	// hist, when non-nil, gets a copy of every delivered message for
 	// disk persistence. Best-effort: write errors are logged but never
 	// block the in-memory ring or the live subscriber fan-out. nil
@@ -738,4 +804,26 @@ func (g *groupInbox) SubDropCount() uint64 {
 	}
 	g.subsMu.RUnlock()
 	return total
+}
+
+// RecordStreamSend bumps the inbox-wide successful-stream.Send counter.
+// Called by rpcgrpc.StreamGroupMessages after every successful Send to
+// a CLI subscriber (including the per-subscription Subscribed sentinel).
+// The counter is the layer-9 end of the per-layer ladder: peer-update
+// → inbox.deliver → sub.ch fan-out → stream.Send, surfaced as
+// GroupInfo.StreamSendCount so an operator can localize whether a
+// missing message dropped at the bounded sub.ch (subDropCount) or
+// somewhere downstream of the inbox→stream handoff.
+func (g *groupInbox) RecordStreamSend() {
+	g.streamSendCount.Add(1)
+}
+
+// StreamSendCount returns the rolling total of successful gRPC
+// stream.Send invocations to live CLI subscribers since this inbox
+// (and therefore this visor's grouping subsystem) initialized.
+// Includes the per-subscription Subscribed sentinel; subtract one
+// per active subscription if the operator needs the message-only
+// count. Visor-wide, not per-group.
+func (g *groupInbox) StreamSendCount() uint64 {
+	return g.streamSendCount.Load()
 }

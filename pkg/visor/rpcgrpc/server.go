@@ -75,6 +75,15 @@ type VisorAPI interface {
 	// operator hasn't enabled GroupHistoryDB, when the group has no
 	// stored messages, or when no messages newer than sinceNs exist.
 	SnapshotGroupHistoryAfterNs(groupID string, sinceNs int64) []GroupMessageData
+	// RecordGroupStreamSend bumps the visor's inbox-wide successful-
+	// gRPC-stream.Send counter. StreamGroupMessages calls this after
+	// every successful stream.Send to a CLI subscriber (including the
+	// Subscribed sentinel). Surfaced as GroupInfo.StreamSendCount;
+	// closes the layer-9 hop in the per-layer counter ladder so an
+	// operator can localize a drop to the stream.Send seam vs the
+	// upstream inbox→sub.ch fan-out (SubDropCount) or the inbox layer
+	// itself (DeliverCount). No-op when grouping is uninitialized.
+	RecordGroupStreamSend()
 	// LocalPK returns the visor's own public key. Used by route-calc
 	// gRPC handlers that default the src PK to the local visor.
 	LocalPK() cipher.PubKey
@@ -1150,6 +1159,7 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 	}); err != nil {
 		return err
 	}
+	s.visor.RecordGroupStreamSend()
 
 	// lastSentNs deduplicates between the backlog snapshot and the
 	// live channel for messages that landed in the
@@ -1212,6 +1222,7 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 			}); err != nil {
 				return err
 			}
+			s.visor.RecordGroupStreamSend()
 			lastSentNs = m.TimestampNs
 		}
 	}
@@ -1246,6 +1257,7 @@ func (s *PingServer) StreamGroupMessages(req *GroupMessagesRequest, stream PingS
 			}); err != nil {
 				return err
 			}
+			s.visor.RecordGroupStreamSend()
 			lastSentNs = m.TimestampNs
 		}
 	}
