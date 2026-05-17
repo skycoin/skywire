@@ -28,6 +28,7 @@ package pairing
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -233,3 +234,72 @@ func TestPairReceivesMessagesPublishedDuringSubscriberGap(t *testing.T) {
 		return false
 	}), "post-reconnect live send must arrive on the re-Added pair")
 }
+
+// TestPairSendAfterCloseReturnsClosedError exercises an error
+// surface gap surfaced by the operator's reset: pre-fix, calling
+// Send after Close nil-deref'd on p.pub.Put because Close set p.pub
+// = nil without guarding subsequent operations. The fix lifts the
+// failure into a clean sentinel error (ErrPairClosed) callers can
+// branch on via errors.Is — matches every other "this resource is
+// gone" error pattern in skywire and gives a meaningful surface to
+// the --verbose flag Alpha's #2693 wires up.
+func TestPairSendAfterCloseReturnsClosedError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test; skipped under -short")
+	}
+	rig := newPairTestRig(t)
+
+	// Sanity: a healthy Send works before Close.
+	require.NoError(t, rig.pairA.Send("pre-close"))
+
+	// Close the pair. mgrA.Remove tears down both publisher and
+	// subscriber and nils them out internally.
+	require.NoError(t, rig.mgrA.Remove(rig.pkB))
+
+	// The Pair pointer the test still holds is now closed. Send
+	// MUST return ErrPairClosed, not panic.
+	err := rig.pairA.Send("post-close")
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrPairClosed,
+		"Send after Close must return ErrPairClosed, got: %v", err)
+}
+
+// TestPairConnectAfterCloseReturnsClosedError mirrors the Send case
+// for the Connect side: Close nils p.sub; a later Connect would
+// nil-deref. Same fix shape: explicit guard + ErrPairClosed.
+func TestPairConnectAfterCloseReturnsClosedError(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test; skipped under -short")
+	}
+	rig := newPairTestRig(t)
+
+	// Close pairA's underlying pair via the manager. The cached
+	// rig.pairA pointer now references a closed Pair.
+	require.NoError(t, rig.mgrA.Remove(rig.pkB))
+
+	err := rig.pairA.Connect(context.Background())
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrPairClosed,
+		"Connect after Close must return ErrPairClosed, got: %v", err)
+}
+
+// TestPairCloseIsIdempotent confirms the documented "Close may be
+// called multiple times safely" contract still holds after the
+// nil-guard additions. Defensive: a future refactor that adds state
+// to the close path could break this without a test.
+func TestPairCloseIsIdempotent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test; skipped under -short")
+	}
+	rig := newPairTestRig(t)
+
+	require.NoError(t, rig.pairA.Close())
+	// Second Close must not panic and must return nil — there's
+	// nothing left to tear down.
+	require.NoError(t, rig.pairA.Close())
+}
+
+// errPairClosedSatisfiesErrorsIs is a compile-time check that the
+// sentinel is reachable from this test package — guards against a
+// future rename moving ErrPairClosed out of the public surface.
+var errPairClosedSatisfiesErrorsIs = errors.Is(ErrPairClosed, ErrPairClosed)
