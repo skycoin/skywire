@@ -184,7 +184,25 @@ func (m *memoryCXDS) Inc(
 	return
 }
 
-// Del deletes value unconditionally
+// Del deletes value unconditionally.
+//
+// Pre-fix this function decremented the amountAll / volumeAll
+// bookkeeping counters but never executed `delete(m.kvs, key)`, so
+// every Del leaked the entry's value bytes into the map forever.
+// Latent since the file was first vendored; surfaced in production
+// once Publisher.runCleanupLoop started invoking RemoveObjects (which
+// drives Del for every rc=0 orphan after each publish) on long-running
+// services like dmsg-discovery that use the in-memory CXDS as the
+// publisher backing store. Heap pprof on a 16-hour-old dmsg-discovery
+// process showed 1 GB live, 67% in encoder.Serialize and 29% in
+// memoryCXDS.Set with no offsetting Del — the death spiral was 70% of
+// CPU in runtime.scanObject / findObject / sweep, scanning the bloated
+// kvs map every GC cycle.
+//
+// IterateDel on the same struct correctly deletes from the map (see
+// the `delete(m.kvs, k)` call below); only the one-arg Del was missing
+// it. Keep this comment in place so a future refactor that splits
+// bookkeeping out doesn't drop the map delete a second time.
 func (m *memoryCXDS) Del(key cipher.SHA256) (_ error) {
 	m.mx.Lock()
 	defer m.mx.Unlock()
@@ -202,6 +220,8 @@ func (m *memoryCXDS) Del(key cipher.SHA256) (_ error) {
 
 	m.amountAll--
 	m.voluemAll -= len(mo.val)
+
+	delete(m.kvs, key)
 
 	return
 }
