@@ -80,6 +80,12 @@ func newFramedConn(c net.Conn) *framedConn { return &framedConn{Conn: c} }
 
 // WriteFrame writes a length-prefixed message. Returns an error
 // if the payload is empty or exceeds skychatMaxFrameSize.
+//
+// Unbounded — if the underlying net.Conn's Write blocks (peer not
+// draining, transport stuck), the call blocks indefinitely and the
+// caller's request goroutine is wedged. messageHandler uses
+// WriteFrameDeadline below instead so a slow peer can't pin the
+// /message handler forever.
 func (c *framedConn) WriteFrame(payload []byte) error {
 	if len(payload) == 0 {
 		return errors.New("skychat: empty payload")
@@ -89,6 +95,77 @@ func (c *framedConn) WriteFrame(payload []byte) error {
 	}
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) //nolint:gosec
+	if _, err := c.Conn.Write(hdr[:]); err != nil {
+		return err
+	}
+	_, err := c.Conn.Write(payload)
+	return err
+}
+
+// messageWriteTimeout bounds a single WriteFrame call from the
+// /message HTTP handler. Picked above the typical successful-send
+// latency (low-ms) and below the operator-facing default ack budget
+// (5–10 s), so a slow peer hits the deadline well before the caller
+// gives up on the HTTP request entirely.
+//
+// Pre-fix the chat-app had no per-write deadline anywhere — a peer
+// whose underlying transport stalled (e.g. dmsg session half-dead
+// because the peer's visor was crashlooping) would pin the
+// /message handler's goroutine indefinitely on the inner
+// c.Conn.Write(). The hung handler held c.writeMu, so every
+// subsequent send on the SAME conn queued behind it. Worse,
+// observed cross-peer wedge: a single Beta-send hang at 20:20Z
+// preceded every subsequent /message request — to Alpha, Beta,
+// any peer — timing out at the HTTP context-deadline (~30 s) for
+// hours afterward. Bounding the inner Write lets the handler
+// surface a clean timeout, the writeMu releases, and the next
+// caller's send is freed.
+const messageWriteTimeout = 5 * time.Second
+
+// WriteFrameDeadline is the bounded variant used from
+// messageHandler. Sets a write deadline on the underlying net.Conn
+// for the duration of this Write call, then resets it on the way
+// out — so the deadline scope is exactly the framed write and
+// future calls aren't accidentally pre-expired by a lingering
+// deadline. A net.Conn-level timeout surfaces as an error from
+// Write whose Timeout() method returns true, which the caller can
+// distinguish from a connection-reset or peer-close.
+//
+// timeout must be > 0; pass 0 to fall back to plain WriteFrame
+// (no deadline). The reset uses time.Time{} which net.Conn
+// documents as "no deadline".
+func (c *framedConn) WriteFrameDeadline(payload []byte, timeout time.Duration) error {
+	if timeout <= 0 {
+		return c.WriteFrame(payload)
+	}
+	// Acquire writeMu BEFORE setting the deadline so the deadline
+	// scope tracks the actual on-wire write rather than including
+	// time spent waiting behind a concurrent same-peer writer. If
+	// the wait itself wedges, the caller's HTTP context-deadline
+	// is the outer ceiling.
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+
+	if err := c.Conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		// SetWriteDeadline failure is rare on a healthy net.Conn;
+		// fall through to a best-effort unbounded write rather
+		// than blocking the message entirely on a metadata error.
+		// Subsequent SetWriteDeadline(time.Time{}) reset on the
+		// way out is also best-effort.
+		_ = err //nolint:errcheck
+	}
+	defer func() {
+		_ = c.Conn.SetWriteDeadline(time.Time{}) //nolint:errcheck
+	}()
+
+	if len(payload) == 0 {
+		return errors.New("skychat: empty payload")
+	}
+	if len(payload) > skychatMaxFrameSize {
+		return fmt.Errorf("skychat: payload %d > max %d", len(payload), skychatMaxFrameSize)
+	}
 	var hdr [4]byte
 	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) //nolint:gosec
 	if _, err := c.Conn.Write(hdr[:]); err != nil {
@@ -950,7 +1027,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		// A fresh-dial write failure isn't retried (a second dial
 		// of the same network in the same handler tick won't help).
 		writeStart := time.Now()
-		err := conn.WriteFrame(wirePayload)
+		err := conn.WriteFrameDeadline(wirePayload, messageWriteTimeout)
 		if err != nil && cached {
 			// Stale-conn auto-retry: a cached conn whose underlying
 			// transport has gone stale (peer chat-app restart,
@@ -979,7 +1056,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				http.Error(w, fmt.Sprintf("redial after write %v: %v", err, derr), http.StatusBadRequest)
 				return
 			}
-			if werr := newConn.WriteFrame(wirePayload); werr != nil {
+			if werr := newConn.WriteFrameDeadline(wirePayload, messageWriteTimeout); werr != nil {
 				connsMu.Lock()
 				if conns[pk] == newConn {
 					delete(conns, pk)
@@ -1025,7 +1102,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			// the transport / route to the peer on that network.
 			fallbackOK := false
 			if fbConn, fbAddr := tryNetworkFallback(ctx, pk, netType); fbConn != nil {
-				if werr := fbConn.WriteFrame(wirePayload); werr == nil {
+				if werr := fbConn.WriteFrameDeadline(wirePayload, messageWriteTimeout); werr == nil {
 					counterMu.Lock()
 					outboundFallbackCount++
 					counterMu.Unlock()
