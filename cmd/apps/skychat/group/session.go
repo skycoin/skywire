@@ -398,6 +398,22 @@ type Session struct {
 	// RLock and access the *atomic.Int64 entries lock-free.
 	peerLastInboundNs map[cipher.PubKey]*atomic.Int64
 
+	// peerUpdateCount is the per-peerSub count of OnUpdate callbacks
+	// observed with events>0 (matches the seam that bumps
+	// peerLastInboundNs). Parallel to peerLastInboundNs in lifetime
+	// and locking: added in SetAllowlist when a peerSub is created,
+	// removed when the peerSub is deleted, guarded by peerSubsMu.
+	//
+	// Operator-facing surface exposed via Manager.PeerUpdateCount and
+	// downstream in pkg/visor.GroupInfo.PeerUpdateCount. The delta
+	// against pkg/visor.GroupInfo.DeliverCount localizes drops: an
+	// individual peer with UpdateCount near zero while DeliverCount
+	// advances is the peerSub-not-firing case (a CXO subscriber
+	// handshake / Conn-level failure); UpdateCount sum approaching
+	// DeliverCount means all peer-subscribers fire but later layers
+	// (sub channel, gRPC stream) drop.
+	peerUpdateCount map[cipher.PubKey]*atomic.Uint64
+
 	// subLastInboundNs is the per-s.sub liveness signal — the legacy
 	// owner-feed subscriber's counterpart to peerLastInboundNs. Bumped
 	// on every inbound UpdateEvent fanout via the legacy subscriber and
@@ -574,6 +590,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		relayCtx: ctx, relayCancel: cancel,
 		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
 		peerLastInboundNs: make(map[cipher.PubKey]*atomic.Int64),
+		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
 		dedup:             newRecentSet(inboxDedupCap),
 	}
 
@@ -602,6 +619,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		}
 		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
 		s.peerLastInboundNs[peerPK] = new(atomic.Int64)
+		s.peerUpdateCount[peerPK] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
 		s.peerSubs[peerPK] = ps
 	}
@@ -712,6 +730,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log,
 		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
 		peerLastInboundNs: make(map[cipher.PubKey]*atomic.Int64),
+		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
 		dedup:             newRecentSet(inboxDedupCap),
 	}
 
@@ -734,6 +753,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		// (admin-relayed copies of other members' sends) — see the
 		// openOwner equivalent for the full rationale.
 		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
+		s.peerUpdateCount[peerPK] = new(atomic.Uint64)
 		s.peerLastInboundNs[peerPK] = new(atomic.Int64)
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
 		s.peerSubs[peerPK] = ps
@@ -1096,13 +1116,39 @@ func (s *Session) makePeerOnUpdate(pk cipher.PubKey) treestore.UpdateCallback {
 		if len(events) > 0 {
 			s.peerSubsMu.RLock()
 			a := s.peerLastInboundNs[pk]
+			c := s.peerUpdateCount[pk]
 			s.peerSubsMu.RUnlock()
 			if a != nil {
 				a.Store(time.Now().UnixNano())
 			}
+			if c != nil {
+				c.Add(1)
+			}
 		}
 		s.onUpdate(events)
 	}
+}
+
+// PeerUpdateCounts returns a snapshot of the per-peer OnUpdate-callback
+// count map. Counts are monotonic across the session's lifetime;
+// readers may compare deltas across two snapshots to measure inbound
+// activity per peer over an interval.
+//
+// Empty map for owner-role sessions (no peerSubs). The returned map
+// is a copy — the caller can read it without holding peerSubsMu.
+func (s *Session) PeerUpdateCounts() map[cipher.PubKey]uint64 {
+	s.peerSubsMu.RLock()
+	defer s.peerSubsMu.RUnlock()
+	if len(s.peerUpdateCount) == 0 {
+		return nil
+	}
+	out := make(map[cipher.PubKey]uint64, len(s.peerUpdateCount))
+	for pk, c := range s.peerUpdateCount {
+		if c != nil {
+			out[pk] = c.Load()
+		}
+	}
+	return out
 }
 
 // makeLegacySubOnUpdate wraps Session.onUpdate with s.sub-specific
@@ -1254,6 +1300,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 			_ = ps.Close() //nolint:errcheck,gosec
 			delete(s.peerSubs, pk)
 			delete(s.peerLastInboundNs, pk)
+			delete(s.peerUpdateCount, pk)
 			evicted = append(evicted, pk)
 		}
 	}
@@ -1270,6 +1317,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 		}
 		ps.SetPrefixes([]string{MessagePathPrefix, MirrorPathPrefix})
 		s.peerLastInboundNs[pk] = new(atomic.Int64)
+		s.peerUpdateCount[pk] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(pk))
 		// Best-effort connect — same semantics as Connect's per-peer
 		// retry: a peer that's offline now will be picked up on the
