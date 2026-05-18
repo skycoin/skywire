@@ -8,7 +8,6 @@
 // publisher mirrors that as a TreeStore feed:
 //
 //	clients-by-server/<server-pk>/<client-pk>/entry        // JSON disc.Entry
-//	clients-by-server/<server-pk>/<client-pk>/tombstone    // JSON {"deleted_at": "..."}
 //
 // We deliberately do NOT publish a separate entries/<pk> tree (the
 // non-denormalized form) because no consumer we know of subscribes
@@ -20,9 +19,18 @@
 // list against the old (if any) and emits:
 //   - Put on clients-by-server/<server>/<client>/entry for every
 //     server in the new list.
-//   - Tombstone on clients-by-server/<server>/<client>/tombstone for
-//     every server that was in the old list but not the new (the
-//     client moved off that server).
+//   - Delete on clients-by-server/<server>/<client>/entry for every
+//     server that was in the old list but not the new (the client
+//     moved off that server). Subscribers learn of removals through
+//     CXO's standard leaf-disappearance event; pre-2026-05-18 we also
+//     wrote a tombstone leaf carrying DeletedAt, but no consumer in
+//     the codebase reads tombstone bodies (tpviz and visor/autoconnect
+//     both explicitly skip them) and the leaves accumulated forever in
+//     the publisher's in-memory CXDS, driving runaway RAM growth on
+//     the deployment box (observed: 327 MB → 921 MB over 12h, with
+//     ~70% of heap in cipher/encoder.Serialize / memoryCXDS.Set under
+//     Refs.AppendValues). Dropping the tombstone write closes the
+//     leak without losing any semantics that's currently read.
 //
 // Server entries are ignored by this publisher — a server PK is the
 // path-prefix bucket, not a member of the view.
@@ -41,7 +49,6 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -207,16 +214,6 @@ func (p *ClientsByServerCXOPublisher) PublishSetEntry(oldEntry, newEntry *disc.E
 		return
 	}
 
-	// Marshal the tombstone now so the worker doesn't redo it for
-	// each dropped server.
-	tomb, err := json.Marshal(struct {
-		DeletedAt time.Time `json:"deleted_at"`
-	}{DeletedAt: time.Now().UTC()})
-	if err != nil {
-		p.log.WithError(err).Debug("Failed to marshal clients-by-server tombstone")
-		return
-	}
-
 	p.submit(func() {
 		// Put / re-Put for every server in the new list. CXO is
 		// content-addressed so unchanged bytes are wire-no-ops.
@@ -227,15 +224,21 @@ func (p *ClientsByServerCXOPublisher) PublishSetEntry(oldEntry, newEntry *disc.E
 				p.recordError(err)
 				continue
 			}
-			// Clear any prior tombstone for this (server, client)
-			// pair — re-delegation should leave only the live leaf.
+			// Defensive: also Delete any tombstone left from an
+			// older binary that wrote them. Idempotent — no-op if
+			// none exists. Avoids a stale tombstone surviving the
+			// upgrade and confusing a future consumer that does
+			// read them.
 			if err := p.pub.Delete(tombstoneLeafPath(srv, clientPK)); err != nil {
-				p.log.WithError(err).Debug("Failed to clear prior clients-by-server tombstone")
+				p.log.WithError(err).Debug("Failed to clear legacy clients-by-server tombstone")
 			}
 		}
 
-		// Tombstone every server that was in the old list but not
-		// the new.
+		// Delete the leaf for every server that was in the old list
+		// but not the new. Subscribers see the leaf disappear via
+		// CXO's normal update channel; we deliberately don't write a
+		// tombstone leaf — see the package docstring for the leak
+		// rationale.
 		for srv := range oldServers {
 			if _, kept := newServers[srv]; kept {
 				continue
@@ -245,20 +248,19 @@ func (p *ClientsByServerCXOPublisher) PublishSetEntry(oldEntry, newEntry *disc.E
 				p.log.WithError(err).WithField("path", entryPath).
 					Debug("Failed to delete dropped clients-by-server entry leaf")
 			}
-			tombPath := tombstoneLeafPath(srv, clientPK)
-			if err := p.pub.Put(tombPath, tomb); err != nil {
-				p.log.WithError(err).WithField("path", tombPath).
-					Debug("Failed to publish clients-by-server tombstone")
-				p.recordError(err)
-			}
 		}
 	})
 }
 
-// PublishDelEntry mirrors a full client-entry delete: tombstones for
-// every server the client was previously delegated to. oldEntry is
-// the entry being deleted (caller fetches it from store before the
-// DelEntry call). Non-blocking.
+// PublishDelEntry mirrors a full client-entry delete: deletes the
+// (server, client) entry leaves for every server the client was
+// previously delegated to. oldEntry is the entry being deleted
+// (caller fetches it from store before the DelEntry call).
+// Non-blocking.
+//
+// Pre-2026-05-18 this also wrote a tombstone leaf per server; see
+// the package docstring for why tombstones were dropped (write-only
+// across the codebase + unbounded in-memory growth).
 func (p *ClientsByServerCXOPublisher) PublishDelEntry(oldEntry *disc.Entry) {
 	if p == nil || p.pub == nil || oldEntry == nil || oldEntry.Client == nil {
 		return
@@ -268,23 +270,16 @@ func (p *ClientsByServerCXOPublisher) PublishDelEntry(oldEntry *disc.Entry) {
 	if len(servers) == 0 {
 		return
 	}
-	tomb, err := json.Marshal(struct {
-		DeletedAt time.Time `json:"deleted_at"`
-	}{DeletedAt: time.Now().UTC()})
-	if err != nil {
-		p.log.WithError(err).Debug("Failed to marshal clients-by-server tombstone")
-		return
-	}
 	p.submit(func() {
 		for srv := range servers {
 			entryPath := entryLeafPath(srv, clientPK)
 			if err := p.pub.Delete(entryPath); err != nil {
 				p.log.WithError(err).Debug("Failed to delete clients-by-server entry leaf on full delete")
 			}
-			tombPath := tombstoneLeafPath(srv, clientPK)
-			if err := p.pub.Put(tombPath, tomb); err != nil {
-				p.log.WithError(err).Debug("Failed to publish clients-by-server tombstone on full delete")
-				p.recordError(err)
+			// Defensive: clear any tombstone left from an older
+			// binary; idempotent if none exists.
+			if err := p.pub.Delete(tombstoneLeafPath(srv, clientPK)); err != nil {
+				p.log.WithError(err).Debug("Failed to clear legacy clients-by-server tombstone on full delete")
 			}
 		}
 	})
