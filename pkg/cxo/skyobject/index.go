@@ -924,6 +924,25 @@ func (i *Index) delPackWalkFunc(
 		// if it will be deleted by the -1
 
 		if val, rc, err = i.c.getNoCache(hash, -1); err != nil {
+			// Best-effort decrement (#2678 root-cause fix). The
+			// previous shape returned the error here, which made
+			// walkRoot abort the entire tree-walk on the first
+			// missing hash. In practice that's a sibling/sub-tree
+			// already swept by an earlier RemoveObjects pass — the
+			// orphaned-bytes signature the production TPD leak
+			// reported: every undecremented sibling stays at
+			// rc>=1 forever, and no later cleanup retries because
+			// the parent seq has been removed from idx.
+			//
+			// Swallow ErrNotFound: the missing hash has nothing
+			// for us to decrement, but the rest of the tree still
+			// does. Any non-NotFound error (real DB failure)
+			// continues to bubble up — those are bugs we want
+			// loud.
+			if errors.Is(err, data.ErrNotFound) {
+				err = nil
+				return deepper, err
+			}
 			return deepper, err
 		}
 
