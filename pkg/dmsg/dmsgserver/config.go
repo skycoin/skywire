@@ -50,11 +50,12 @@ type PeerConfig struct {
 // `dmsg://<PK>:<port>`); there is no separate PK field. Callers
 // extract it on demand for dmsgfirst registration.
 type Deployment struct {
-	Discovery         string        `json:"discovery,omitempty"`
-	DiscoveryDmsg     string        `json:"discovery_dmsg,omitempty"`
-	SessionsCount     int           `json:"sessions_count,omitempty"`
-	Servers           []*disc.Entry `json:"servers,omitempty"`
-	AdvertisedAddress string        `json:"advertised_address,omitempty"`
+	Discovery           string        `json:"discovery,omitempty"`
+	DiscoveryDmsg       string        `json:"discovery_dmsg,omitempty"`
+	SessionsCount       int           `json:"sessions_count,omitempty"`
+	Servers             []*disc.Entry `json:"servers,omitempty"`
+	AdvertisedAddress   string        `json:"advertised_address,omitempty"`
+	AdvertisedAddressV6 string        `json:"advertised_address_v6,omitempty"`
 }
 
 // DmsgConfig is the per-server `dmsg` block. JSON polymorphism
@@ -109,9 +110,17 @@ type Config struct {
 	// DiscoveryDmsg is set (URL form `dmsg://<PK>:<port>`), the PK is
 	// extracted automatically and used to upgrade registration from
 	// plain HTTP to dmsgfirst.
-	Discovery        string        `json:"discovery,omitempty"`
-	DiscoveryDmsg    string        `json:"discovery_dmsg,omitempty"`
-	PublicAddress    string        `json:"public_address,omitempty"`
+	Discovery     string `json:"discovery,omitempty"`
+	DiscoveryDmsg string `json:"discovery_dmsg,omitempty"`
+	PublicAddress string `json:"public_address,omitempty"`
+	// PublicAddressV6 is the optional IPv6 advertised endpoint. When
+	// non-empty, the server registers AddressV6 alongside Address in
+	// its disc.Entry so dual-stack peers can dial it over IPv6 (the
+	// dialer's Happy Eyeballs in Phase 3 picks v6 first when both are
+	// present). The local TCP listener is unchanged — wildcard binds
+	// already accept both families; this field is purely a discovery
+	// advertisement.
+	PublicAddressV6  string        `json:"public_address_v6,omitempty"`
 	LocalAddress     string        `json:"local_address"`
 	HTTPAddress      string        `json:"health_endpoint_address"`
 	LogLevel         string        `json:"log_level"`
@@ -166,6 +175,14 @@ func (c *Config) NormalizedDeployments() []Deployment {
 	for i, d := range src {
 		if d.AdvertisedAddress == "" {
 			d.AdvertisedAddress = c.PublicAddress
+		}
+		// Mirror the v4 fold for the optional v6 endpoint: a non-
+		// empty per-deployment AdvertisedAddressV6 wins; otherwise
+		// the top-level PublicAddressV6 is used. Empty after both
+		// layers leaves the deployment v4-only — disc.Server's
+		// AddressV6 stays omitempty-elided.
+		if d.AdvertisedAddressV6 == "" {
+			d.AdvertisedAddressV6 = c.PublicAddressV6
 		}
 		out[i] = d
 	}
