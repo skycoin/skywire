@@ -76,9 +76,21 @@ type APIClient interface {
 }
 
 // VisorData stores visor data.
+//
+// RemoteAddr is the visor's reachable IPv4 endpoint ("host:port"),
+// observed by the AR server from the bind request's source socket
+// (or carried via the visor's declared PublicIP). RemoteAddrV6 is
+// the optional IPv6 counterpart, populated when the visor binds
+// over an IPv6 HTTP client. A dual-stack visor calls bind twice
+// (once per family) and the AR server merges into a single record;
+// peers Resolve once and the dialer picks a family (v6 first per
+// RFC 8305 with v4 fallback). Backward-compat: v4-only visors and
+// older AR servers emit/store an empty RemoteAddrV6 and the rest
+// of the pipeline behaves exactly as today.
 type VisorData struct {
-	RemoteAddr string `json:"remote_addr"`
-	IsLocal    bool   `json:"is_local,omitempty"`
+	RemoteAddr   string `json:"remote_addr"`
+	RemoteAddrV6 string `json:"remote_addr_v6,omitempty"`
+	IsLocal      bool   `json:"is_local,omitempty"`
 	LocalAddresses
 }
 
