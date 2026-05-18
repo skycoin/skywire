@@ -34,7 +34,7 @@ services:
   dmsg-discovery:
     build:
       context: ..
-      dockerfile: docker/images/dmsg-discovery/Dockerfile
+      dockerfile: images/dmsg-discovery/Dockerfile
     container_name: "dmsg-e2e-v6-discovery"
     hostname: dmsg-discovery
     networks:
@@ -50,7 +50,7 @@ services:
   dmsg-server:
     build:
       context: ..
-      dockerfile: docker/images/dmsg-server/Dockerfile
+      dockerfile: images/dmsg-server/Dockerfile
     container_name: "dmsg-e2e-v6-server"
     hostname: dmsg-server
     networks:
@@ -61,16 +61,18 @@ services:
       - "8081:8080"
     depends_on:
       - dmsg-discovery
-    # Mounts the v6-aware server config that sets both PublicAddress
-    # and PublicAddressV6 (the Phase 2a #2716 fields). The dual-stack
-    # bridge above is what makes the v6 advertisement reachable from
-    # peers in the same compose stack.
+    volumes:
+      # Mounts the v6-aware server config that sets both PublicAddress
+      # and PublicAddressV6 (the Phase 2a #2716 fields). The dual-stack
+      # bridge above is what makes the v6 advertisement reachable from
+      # peers in the same compose stack.
+      - ../config/dmsg-server-v6.json:/e2e/dmsg-server-v6.json:ro
     command: ["start", "/e2e/dmsg-server-v6.json"]
 
   dmsg-client:
     build:
       context: ..
-      dockerfile: docker/images/dmsg-client/Dockerfile
+      dockerfile: dmsg/images/dmsg-client/Dockerfile
     container_name: "dmsg-e2e-v6-client"
     hostname: dmsg-client
     networks:
