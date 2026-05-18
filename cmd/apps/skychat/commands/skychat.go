@@ -1063,6 +1063,21 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		connsMu.Unlock()
 
 		if !cached {
+			// In --standalone mode appCl is nil — dialAndCache would
+			// panic on appCl.Dial(). Skynet/dmsg listenLoops are off
+			// in standalone (see RunSkychat above), so the only way
+			// /message can reach a peer is through an already-cached
+			// TCP-direct conn (populated by --tcp-peer outbound or
+			// --tcp-listen accept). Surface a clean 503 with the
+			// fix-it-yourself hint instead of a panic.
+			if appCl == nil {
+				http.Error(w,
+					fmt.Sprintf("standalone mode: no cached tcp-direct conn to %s "+
+						"(use --tcp-peer to establish a persistent outbound, "+
+						"or 'skywire cli skychat send --via tcp://<pk>@host:port' to dial directly)", pk),
+					http.StatusServiceUnavailable)
+				return
+			}
 			var err error
 			conn, err = dialAndCache(ctx, pk, addr)
 			if err != nil {
