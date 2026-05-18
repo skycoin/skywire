@@ -32,7 +32,7 @@ func TestNewV6ForcedHTTPClient_BuildsNonNil(t *testing.T) {
 // TestNewV6ForcedHTTPClient_DialContextWired verifies the Transport's
 // DialContext is wired through (not nil — Go's http.Transport defaults
 // to a generic family-agnostic dialer when DialContext is nil, which
-// would silently bypass the v6 force). Pre-cancelled ctx ensures we
+// would silently bypass the v6 force). Pre-canceled ctx ensures we
 // don't touch the network — we only check the dialer's plumbed in.
 func TestNewV6ForcedHTTPClient_DialContextWired(t *testing.T) {
 	c := newV6ForcedHTTPClient()
@@ -42,7 +42,7 @@ func TestNewV6ForcedHTTPClient_DialContextWired(t *testing.T) {
 	}
 	assert.NotNil(t, tr.DialContext, "DialContext must be set so 'tcp6' force is honored on every dial")
 
-	// Sanity: pre-cancelled ctx returns immediately. Confirms the
+	// Sanity: pre-canceled ctx returns immediately. Confirms the
 	// dialer call path itself doesn't panic on the v6 force, and
 	// respects caller-supplied ctx. We deliberately don't make a
 	// real network call (no portable v6 fixture in this unit test).
@@ -50,6 +50,6 @@ func TestNewV6ForcedHTTPClient_DialContextWired(t *testing.T) {
 	cancel()
 	_, err := tr.DialContext(ctx, "tcp", "127.0.0.1:1")
 	if err == nil {
-		t.Fatal("expected pre-cancelled DialContext to error, got nil")
+		t.Fatal("expected pre-canceled DialContext to error, got nil")
 	}
 }
