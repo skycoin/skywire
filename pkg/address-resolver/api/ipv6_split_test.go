@@ -14,10 +14,10 @@ import (
 
 func TestSplitFamilyAddr(t *testing.T) {
 	cases := []struct {
-		name      string
-		in        string
-		wantV4    string
-		wantV6    string
+		name   string
+		in     string
+		wantV4 string
+		wantV6 string
 	}{
 		// STCPR-style bare host inputs.
 		{"v4 bare host", "203.0.113.5", "203.0.113.5", ""},
