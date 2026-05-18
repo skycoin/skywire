@@ -282,6 +282,36 @@ func (a *API) logger(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
+// splitFamilyAddr returns the IPv4 and IPv6 RemoteAddr values for an
+// observed bind source address. Exactly one of the return values is
+// non-empty; family is inferred by parsing the host portion of addr.
+// addr may be either a bare host ("1.2.3.4" / "::1" — STCPR style)
+// or host:port ("1.2.3.4:5060" / "[::1]:5060" — SUDPH style); both
+// are accepted. An unparseable input (host that isn't a valid IP)
+// falls through to v4 to match historical behavior where any
+// non-empty observed RemoteAddr went into the single RemoteAddr
+// field unchanged.
+//
+// Paired with the per-family merge in store.Bind: a dual-stack
+// visor's two binds (one over IPv4 HTTP, one over IPv6 HTTP) each
+// populate one of v4/v6 here, and the store merges them into a
+// single record. See pkg/transport/network/addrresolver.VisorData
+// and #1525 for the full design.
+func splitFamilyAddr(addr string) (v4, v6 string) {
+	if addr == "" {
+		return "", ""
+	}
+	host := addr
+	if h, _, err := net.SplitHostPort(addr); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || ip.To4() != nil {
+		return addr, ""
+	}
+	return "", addr
+}
+
 func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 	remoteAddr := httpauth.GetRemoteAddr(r)
 	a.logger(r).Infof("New POST /bind/stcpr request from %v", remoteAddr)
@@ -340,8 +370,10 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	v4Addr, v6Addr := splitFamilyAddr(remoteAddr)
 	visorData := addrresolver.VisorData{
-		RemoteAddr:     remoteAddr,
+		RemoteAddr:     v4Addr,
+		RemoteAddrV6:   v6Addr,
 		LocalAddresses: localAddresses,
 	}
 
@@ -813,8 +845,10 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 		}
 	}
 
+	v4SUDPH, v6SUDPH := splitFamilyAddr(effectiveRemoteAddr)
 	visorData := addrresolver.VisorData{
-		RemoteAddr:     effectiveRemoteAddr,
+		RemoteAddr:     v4SUDPH,
+		RemoteAddrV6:   v6SUDPH,
 		LocalAddresses: localAddresses,
 	}
 
@@ -864,8 +898,10 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 			// Handle re-registration: try to unmarshal as LocalAddresses
 			var localAddresses addrresolver.LocalAddresses
 			if err := json.Unmarshal(data, &localAddresses); err == nil && localAddresses.Port != "" {
+				v4Re, v6Re := splitFamilyAddr(fromAddr)
 				newVisorData := addrresolver.VisorData{
-					RemoteAddr:     fromAddr,
+					RemoteAddr:     v4Re,
+					RemoteAddrV6:   v6Re,
 					LocalAddresses: localAddresses,
 				}
 				if err := a.store.Bind(context.Background(), types.SUDPH, pk, newVisorData); err != nil {
