@@ -1,0 +1,99 @@
+# Phase 5 of the #1525 IPv6 plan: a CI lane that exercises the
+# dual-stack dmsg-server + Happy Eyeballs dialer path end-to-end on
+# the docker bridge configured for both IPv4 and IPv6.
+#
+# Runs in addition to the existing Test lane in test.yml; the v4-only
+# path there continues to validate the backward-compat case (visor
+# with no RemoteAddrV6, server with no AddressV6 — the pre-#1525
+# semantics).
+#
+# Trigger: PRs that touch the IPv6 surface, or anything under
+# pkg/dmsg / pkg/address-resolver / pkg/transport/network / the
+# v6-aware compose + workflow files themselves. Avoids waking this
+# lane for changes that can't affect v6 (docs, CI for other lanes).
+
+on:
+  pull_request:
+    paths:
+      - 'pkg/dmsg/**'
+      - 'pkg/address-resolver/**'
+      - 'pkg/transport/network/**'
+      - 'docker/dmsg/docker-compose.e2e-v6.yml'
+      - 'docker/config/dmsg-server-v6.json'
+      - '.github/workflows/test-ipv6.yml'
+  workflow_dispatch:
+
+name: Test IPv6 dual-stack
+
+jobs:
+  ipv6-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+          cache: true
+          cache-dependency-path: go.sum
+
+      # Docker has IPv6 support compiled in but daemon-level IPv6 is
+      # off by default on ubuntu-latest runners. Enable it before
+      # `docker compose config` parses + validates the v6 bridge spec
+      # (and before the full e2e follow-up tries to actually allocate
+      # v6 addresses on the bridge).
+      - name: Enable Docker IPv6
+        run: |
+          set -eux
+          sudo bash -c 'cat > /etc/docker/daemon.json <<EOF
+          {
+            "ipv6": true,
+            "fixed-cidr-v6": "fd00:dead:cafe::/64",
+            "experimental": false
+          }
+          EOF'
+          sudo systemctl restart docker
+          docker info | grep -i ipv6 || true
+
+      # First-stage validation: parse the compose file, resolve
+      # dockerfile + config-file paths, confirm the v6 subnet syntax
+      # is well-formed. Cheap, fast, and catches the most common
+      # regression (broken context-relative dockerfile paths) without
+      # the full build cost. The actual build + run + wire-level
+      # assertion follows in a separate step that's allowed to
+      # short-circuit until the docker_build.sh integration lands
+      # (see "deferred to follow-up" below).
+      - name: Validate dual-stack compose syntax
+        working-directory: docker/dmsg
+        run: |
+          set -eux
+          docker compose -f docker-compose.e2e-v6.yml config > /tmp/compose-rendered.yml
+          # Sanity: rendered output mentions both address families.
+          grep -q '172.21.0.4' /tmp/compose-rendered.yml
+          grep -q 'fd00:dead:beef::4' /tmp/compose-rendered.yml
+          # Both dockerfile context paths must resolve to real files
+          # on disk (compose resolves them lazily at build-time, so
+          # the parser doesn't catch this for us).
+          test -f ../images/dmsg-discovery/Dockerfile
+          test -f ../images/dmsg-server/Dockerfile
+          test -f ./images/dmsg-client/Dockerfile
+          # The v6 server config must exist where the volume mount
+          # expects it.
+          test -f ../config/dmsg-server-v6.json
+          grep -q '"public_address_v6"' ../config/dmsg-server-v6.json
+
+      # Full e2e build + run is deferred — the existing dmsg-server +
+      # dmsg-discovery images are built via docker/docker_build.sh
+      # with multi-stage build args (image_tag + base_image) that a
+      # plain `docker compose up --build` can't supply. The lane
+      # plumbing to invoke docker_build.sh as a prerequisite + then
+      # `compose up` against the locally-tagged images is a focused
+      # follow-up. Tracking via the #1525 thread.
+      - name: Note follow-up scope
+        run: |
+          echo "Compose syntax + paths validated. Full v6 e2e build+run lane is a"
+          echo "follow-up — needs docker_build.sh integration to supply image_tag"
+          echo "and base_image build args. See #1525 for tracking."
