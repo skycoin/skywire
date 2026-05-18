@@ -14,6 +14,7 @@
 package pairing
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -23,6 +24,13 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// resumeConnectTimeout bounds each Pair.Connect dial during Resume.
+// Picked to match pkg/visor's pairConnectTimeout so the resume path
+// has the same per-peer dial budget the operator-initiated PairAdd
+// path uses; deviating here would surprise debug sessions that
+// expect identical behavior across the two entry points.
+const resumeConnectTimeout = 15 * time.Second
 
 // Manager owns the persistent record set and live Pair instances.
 // Safe for concurrent use.
@@ -199,7 +207,11 @@ func (m *Manager) Resume() (resumed int, err error) {
 		return 0, fmt.Errorf("pairing: Resume: list: %w", err)
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	// Collect resumed pairs so we can Connect them after releasing
+	// m.mu. Holding the lock across Connect would serialize dmsg
+	// dials behind it and turn a flaky peer into a startup stall;
+	// release first and dial concurrently per pair.
+	var toConnect []*Pair
 	for _, rec := range records {
 		if rec.Status == StatusRevoked {
 			continue
@@ -216,6 +228,34 @@ func (m *Manager) Resume() (resumed int, err error) {
 		}
 		m.pairs[rec.PeerPK] = p
 		resumed++
+		toConnect = append(toConnect, p)
+	}
+	m.mu.Unlock()
+
+	// Connect each resumed pair's subscriber to the peer's publisher.
+	// WITHOUT this, the subscriber sits idle — its OnUpdate callback
+	// never fires for peer-published messages, so the visor's pair
+	// inbox stays empty and PairPoll returns nothing. Pre-fix, the
+	// only working path was PairAdd (initial pairing) which already
+	// calls Connect; every subsequent visor restart silently broke
+	// inbound pair messages until the operator re-added the pair.
+	//
+	// Done off the main resume path so a slow / unreachable peer
+	// doesn't block visor startup — Connect failures are non-fatal
+	// (same as PairAdd's best-effort dial); the pair record stays
+	// in m.pairs and the next manual retry or peer reachability will
+	// pick it up via a fresh PairAdd-style flow at the operator
+	// layer. Per-dial bound by resumeConnectTimeout.
+	for _, p := range toConnect {
+		go func(p *Pair) {
+			ctx, cancel := context.WithTimeout(context.Background(), resumeConnectTimeout)
+			defer cancel()
+			if cerr := p.Connect(ctx); cerr != nil {
+				m.log.WithError(cerr).
+					WithField("peer", p.cfg.PeerPK.Hex()).
+					Debug("pairing: Resume: subscriber Connect failed; pair record kept")
+			}
+		}(p)
 	}
 	return resumed, nil
 }
