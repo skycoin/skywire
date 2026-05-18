@@ -26,9 +26,10 @@ import (
 // PK so the entity can recognize an inbound session as originating
 // from that discovery and trigger an immediate registration push.
 type discoveryEndpoint struct {
-	Client         disc.APIClient
-	AdvertisedAddr string
-	PK             cipher.PubKey
+	Client           disc.APIClient
+	AdvertisedAddr   string
+	AdvertisedAddrV6 string
+	PK               cipher.PubKey
 }
 
 // EntityCommon contains the common fields and methods for server and client entities.
@@ -111,21 +112,26 @@ func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClien
 
 // addDiscovery appends an additional dmsg-discovery to register with.
 // advertisedAddr, when non-empty, overrides the entity's default addr
-// for this discovery (servers only — clients should pass empty). pk,
-// when non-zero, identifies the discovery's own dmsg-server PK so the
-// entity can detect inbound sessions from this discovery.
+// for this discovery (servers only — clients should pass empty).
+// advertisedAddrV6, when non-empty, is the optional IPv6 endpoint
+// counterpart to advertisedAddr — stored in disc.Server.AddressV6 on
+// the next updateServerEntry tick. Empty preserves single-stack v4
+// advertisement (the pre-#1525 default). pk, when non-zero, identifies
+// the discovery's own dmsg-server PK so the entity can detect inbound
+// sessions from this discovery.
 //
 // Safe to call after init/Serve has started — subsequent
 // updateServerEntryLoop iterations will pick up the new endpoint.
-func (c *EntityCommon) addDiscovery(client disc.APIClient, advertisedAddr string, pk cipher.PubKey) {
+func (c *EntityCommon) addDiscovery(client disc.APIClient, advertisedAddr, advertisedAddrV6 string, pk cipher.PubKey) {
 	if client == nil {
 		return
 	}
 	c.discoveriesMx.Lock()
 	c.discoveries = append(c.discoveries, &discoveryEndpoint{
-		Client:         client,
-		AdvertisedAddr: advertisedAddr,
-		PK:             pk,
+		Client:           client,
+		AdvertisedAddr:   advertisedAddr,
+		AdvertisedAddrV6: advertisedAddrV6,
+		PK:               pk,
 	})
 	c.discoveriesMx.Unlock()
 }
@@ -285,7 +291,7 @@ func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
 // If 'addr' is an empty string AND no endpoint provides its own
 // advertised address, no update is performed for that endpoint
 // (preserving the legacy "empty addr = skip update" semantics).
-func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSessions int, authPassphrase string) (err error) {
+func (c *EntityCommon) updateServerEntry(ctx context.Context, addr, addrV6 string, maxSessions int, authPassphrase string) (err error) {
 	endpoints := c.snapshotDiscoveries()
 	if len(endpoints) == 0 {
 		return errors.New("updateServerEntry: no discoveries configured")
@@ -319,7 +325,16 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 		if epAddr == "" {
 			continue
 		}
-		if updateErr := c.updateServerEntryOnEndpoint(ctx, ep, epAddr, availableSessions, authPassphrase); updateErr != nil {
+		// V6 follows the same per-endpoint-override semantics as v4:
+		// a non-empty per-endpoint AdvertisedAddrV6 wins; otherwise
+		// fall back to the entity-level addrV6 (empty when the
+		// server isn't dual-stack-configured). Empty addrV6 → v4-only
+		// entry, preserving backward compat for pre-#1525 servers.
+		epAddrV6 := addrV6
+		if ep.AdvertisedAddrV6 != "" {
+			epAddrV6 = ep.AdvertisedAddrV6
+		}
+		if updateErr := c.updateServerEntryOnEndpoint(ctx, ep, epAddr, epAddrV6, availableSessions, authPassphrase); updateErr != nil {
 			if firstErr == nil {
 				firstErr = updateErr
 			}
@@ -335,11 +350,15 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr string, maxSe
 }
 
 // updateServerEntryOnEndpoint runs the read-modify-write registration
-// cycle against a single discovery endpoint.
-func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, addr string, availableSessions int, authPassphrase string) error {
+// cycle against a single discovery endpoint. addrV6 is the optional
+// IPv6 counterpart to addr — empty when the server is v4-only, which
+// keeps the entry's AddressV6 field omitempty-elided exactly as
+// pre-#1525.
+func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, addr, addrV6 string, availableSessions int, authPassphrase string) error {
 	entry, err := ep.Client.Entry(ctx, c.pk)
 	if err != nil {
 		entry = disc.NewServerEntry(c.pk, 0, addr, availableSessions)
+		entry.Server.AddressV6 = addrV6
 		entry.Server.DHTBootstrap = c.dhtBootstrap
 		if err := entry.Sign(c.sk); err != nil {
 			return err
@@ -357,9 +376,10 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 
 	sessionsDelta := entry.Server.AvailableSessions != availableSessions
 	addrDelta := entry.Server.Address != addr
+	addrV6Delta := entry.Server.AddressV6 != addrV6
 
 	// No update needed if entry has no delta AND update is not due.
-	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !due {
+	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !due {
 		return nil
 	}
 
@@ -372,6 +392,10 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		entry.Server.Address = addr
 		log = log.WithField("addr", entry.Server.Address)
 	}
+	if addrV6Delta {
+		entry.Server.AddressV6 = addrV6
+		log = log.WithField("addr_v6", entry.Server.AddressV6)
+	}
 	// Propagate DHT bootstrap status to discovery entry.
 	entry.Server.DHTBootstrap = c.dhtBootstrap
 	log.Debug("Updating entry.\n")
@@ -379,7 +403,7 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	return ep.Client.PutEntry(ctx, c.sk, entry)
 }
 
-func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, maxSessions int, authPassphrase string) {
+func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr, addrV6 string, maxSessions int, authPassphrase string) {
 	t := time.NewTimer(c.updateInterval)
 	defer t.Stop()
 
@@ -394,7 +418,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 				continue
 			}
 
-			err := c.updateServerEntry(ctx, addr, maxSessions, authPassphrase)
+			err := c.updateServerEntry(ctx, addr, addrV6, maxSessions, authPassphrase)
 			if err != nil {
 				c.log.WithError(err).Warn("Failed to update discovery entry.")
 			}
@@ -417,7 +441,7 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr string, m
 				}
 			}
 		serverUpdate:
-			err := c.updateServerEntry(ctx, addr, maxSessions, authPassphrase)
+			err := c.updateServerEntry(ctx, addr, addrV6, maxSessions, authPassphrase)
 			if err != nil {
 				c.log.WithError(err).Warn("Failed to update discovery entry (nudge).")
 			}
