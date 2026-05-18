@@ -130,13 +130,36 @@ func (s *redisStore) resolve(ctx context.Context, key string) (addrresolver.Viso
 // bindWithIndex pipelines the per-PK Set with an SAdd to the per-netType
 // index set. The SAdd is idempotent on re-bind (90 s refresh cadence), so
 // the index converges to the live set without explicit dedup.
+//
+// Family merge: a dual-stack visor binds twice (once per IPv4 / IPv6
+// HTTP socket). Each call sets exactly one of RemoteAddr / RemoteAddrV6
+// (the family the AR server observed). We Get the existing record first
+// and preserve whichever family addr the new payload didn't touch, so
+// the dual-stack record converges to {v4, v6} both populated. Naive
+// overwrite would clobber the prior family for ~90s until the next
+// refresh — operators dialing during that window would see only one
+// family even though the visor offers both.
+//
+// The Get + Set is NOT atomic; two concurrent binds for the same PK
+// over different families can race and lose one update. The 90 s
+// refresh cycle naturally heals such a race within one period, so we
+// accept the simpler implementation rather than a WATCH/MULTI loop.
 func (s *redisStore) bindWithIndex(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
+	key := getKey(string(netType), pk)
+	if existing, err := s.resolve(ctx, key); err == nil {
+		if visorData.RemoteAddr == "" && existing.RemoteAddr != "" {
+			visorData.RemoteAddr = existing.RemoteAddr
+		}
+		if visorData.RemoteAddrV6 == "" && existing.RemoteAddrV6 != "" {
+			visorData.RemoteAddrV6 = existing.RemoteAddrV6
+		}
+	}
 	raw, err := json.Marshal(visorData)
 	if err != nil {
 		return err
 	}
 	pipe := s.client.Pipeline()
-	pipe.Set(ctx, getKey(string(netType), pk), string(raw), s.ttl)
+	pipe.Set(ctx, key, string(raw), s.ttl)
 	pipe.SAdd(ctx, indexKey(string(netType)), pk.String())
 	_, err = pipe.Exec(ctx)
 	return err
