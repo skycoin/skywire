@@ -47,11 +47,18 @@ func (v *Visor) CheckAREntry(pk string) ([]string, error) {
 
 // ARSelfEntry is one transport-type-row of this visor's own AR registration:
 // the IP:port it is reachable on according to the address-resolver.
+//
+// RemoteAddrV6 is the optional IPv6 counterpart of RemoteAddr, populated
+// when this visor has bound the AR over an IPv6 HTTP client (#2719's
+// secondary bind). Empty for v4-only deployments and on older AR servers
+// that don't capture family — same backward-compat shape as the underlying
+// addrresolver.VisorData (#2715).
 type ARSelfEntry struct {
-	Type       string   `json:"type"`                  // "stcpr" or "sudph"
-	RemoteAddr string   `json:"remote_addr,omitempty"` // public IP as AR sees the visor
-	Port       string   `json:"port,omitempty"`        // listen port
-	Addresses  []string `json:"addresses,omitempty"`   // local interface addresses the visor advertised
+	Type         string   `json:"type"`                     // "stcpr" or "sudph"
+	RemoteAddr   string   `json:"remote_addr,omitempty"`    // public IPv4 as AR sees the visor
+	RemoteAddrV6 string   `json:"remote_addr_v6,omitempty"` // public IPv6 as AR sees the visor (#1525 Phase 4a)
+	Port         string   `json:"port,omitempty"`           // listen port
+	Addresses    []string `json:"addresses,omitempty"`      // local interface addresses the visor advertised
 }
 
 // ARSelfRegistration is the visor's own AR record across transport types.
@@ -124,10 +131,11 @@ func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
 			continue
 		}
 		out.Entries = append(out.Entries, ARSelfEntry{
-			Type:       tpType,
-			RemoteAddr: d.RemoteAddr,
-			Port:       d.Port,
-			Addresses:  append([]string(nil), d.Addresses...),
+			Type:         tpType,
+			RemoteAddr:   d.RemoteAddr,
+			RemoteAddrV6: d.RemoteAddrV6,
+			Port:         d.Port,
+			Addresses:    append([]string(nil), d.Addresses...),
 		})
 	}
 	return out, nil
