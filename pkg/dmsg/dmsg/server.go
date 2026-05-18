@@ -58,7 +58,15 @@ type Server struct {
 
 	// Public TCP address which the dmsg server advertises itself as.
 	// This should only be set once. Once set, addrDone closes.
+	//
+	// addr is the IPv4 endpoint (legacy single-stack contract); addrV6
+	// is the optional IPv6 endpoint, set independently via
+	// SetAdvertisedAddrV6 before Serve when the operator wants the
+	// server discoverable over both families. Empty addrV6 keeps the
+	// pre-#1525 single-stack behavior — disc.Server.AddressV6 stays
+	// empty and v4-only clients see no change.
 	addr     string
+	addrV6   string
 	addrDone chan struct{}
 
 	maxSessions int
@@ -236,13 +244,13 @@ func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
 		// updateServerEntry takes sessionsMx internally only for the
 		// session-count snapshot; do NOT hold it across this call —
 		// see the comment in EntityCommon.updateServerEntry.
-		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.maxSessions, s.authPassphrase)
+		return s.updateServerEntry(ctx, s.AdvertisedAddr(), s.AdvertisedAddrV6(), s.maxSessions, s.authPassphrase)
 	})
 	if err != nil {
 		return err
 	}
 
-	go s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.maxSessions, s.authPassphrase)
+	go s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.AdvertisedAddrV6(), s.maxSessions, s.authPassphrase)
 	return nil
 }
 
@@ -251,6 +259,15 @@ func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
 func (s *Server) AdvertisedAddr() string {
 	<-s.addrDone
 	return s.addr
+}
+
+// AdvertisedAddrV6 returns the optional IPv6 TCP address the dmsg server
+// is advertised as. Empty when the server hasn't been configured for
+// IPv6 (the default — preserves the pre-#1525 single-stack contract).
+// Does NOT block on addrDone: v6 advertisement is independent of the
+// primary v4 advertisement and may legitimately remain empty.
+func (s *Server) AdvertisedAddrV6() string {
+	return s.addrV6
 }
 
 // AddDiscovery registers an additional dmsg-discovery this server
@@ -264,7 +281,18 @@ func (s *Server) AdvertisedAddr() string {
 // Safe to call before or after Serve. Subsequent updateServerEntry
 // iterations pick up the new endpoint automatically.
 func (s *Server) AddDiscovery(client disc.APIClient, advertisedAddr string, discPK cipher.PubKey) {
-	s.addDiscovery(client, advertisedAddr, discPK)
+	s.addDiscovery(client, advertisedAddr, "", discPK)
+}
+
+// AddDiscoveryDualStack is the dual-stack variant of AddDiscovery —
+// adds an additional v6 endpoint advertised to this discovery alongside
+// advertisedAddr. Empty advertisedAddrV6 is equivalent to calling
+// AddDiscovery (v4-only for this endpoint). Use this when the same
+// server should expose distinct {v4, v6} addresses to a particular
+// discovery (e.g. LAN-v6 to a local discovery while still v4-public
+// elsewhere).
+func (s *Server) AddDiscoveryDualStack(client disc.APIClient, advertisedAddr, advertisedAddrV6 string, discPK cipher.PubKey) {
+	s.addDiscovery(client, advertisedAddr, advertisedAddrV6, discPK)
 }
 
 // SetDiscoveryClients replaces the underlying disc.APIClient on each
@@ -288,6 +316,16 @@ func (s *Server) SetAdvertisedAddr(lis net.Listener, addr *string) {
 	}
 	s.addr = *addr
 	close(s.addrDone)
+}
+
+// SetAdvertisedAddrV6 sets the optional IPv6 advertised address. Must
+// be called BEFORE Serve so the first updateServerEntry tick already
+// carries the v6 endpoint. Empty addr is a no-op (leaves the server
+// IPv4-only). Independent of SetAdvertisedAddr — they can be called in
+// either order, and the absence of a v6 SetAdvertisedAddrV6 call is
+// the default "no v6 advertisement" behavior for backward compat.
+func (s *Server) SetAdvertisedAddrV6(addr string) {
+	s.addrV6 = addr
 }
 
 // Ready returns a chan which blocks until the server begins serving.
