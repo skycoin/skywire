@@ -224,12 +224,23 @@ func (s *service) Run(ctx context.Context) error {
 
 	for i := 1; i < len(deployments); i++ {
 		extra := deployments[i]
-		srv.AddDiscovery(
+		srv.AddDiscoveryDualStack(
 			disc.NewHTTP(extra.Discovery, &http.Client{}, log),
 			extra.AdvertisedAddress,
+			extra.AdvertisedAddressV6,
 			dmsgserver.PKFromDmsgURL(extra.DiscoveryDmsg),
 		)
 	}
+
+	// Primary deployment's v6 endpoint goes through SetAdvertisedAddrV6
+	// since the existing ListenAndServe contract carries only the v4
+	// pAddr. Empty primaryAdvertisedV6 keeps the pre-#1525 behavior
+	// (server registers AddressV6="" → discovery omits the field).
+	primaryAdvertisedV6 := deployments[0].AdvertisedAddressV6
+	if primaryAdvertisedV6 == "" {
+		primaryAdvertisedV6 = cfg.PublicAddressV6
+	}
+	srv.SetAdvertisedAddrV6(primaryAdvertisedV6)
 
 	srvAPI.SetDmsgServer(srv)
 
