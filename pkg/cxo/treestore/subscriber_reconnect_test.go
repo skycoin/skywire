@@ -36,7 +36,7 @@ func newReconnectTestSubscriber(t *testing.T) *Subscriber {
 	if err != nil {
 		t.Fatalf("NewNode: %v", err)
 	}
-	t.Cleanup(func() { _ = cxoNode.Close() })
+	t.Cleanup(func() { _ = cxoNode.Close() }) //nolint:errcheck
 
 	s := &Subscriber{
 		log:                logging.MustGetLogger("treestore-sub-reconnect-test"),
