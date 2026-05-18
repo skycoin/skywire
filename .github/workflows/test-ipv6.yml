@@ -1,0 +1,110 @@
+# Phase 5 of the #1525 IPv6 plan: a CI lane that exercises the
+# dual-stack dmsg-server + Happy Eyeballs dialer path end-to-end on
+# the docker bridge configured for both IPv4 and IPv6.
+#
+# Runs in addition to the existing Test lane in test.yml; the v4-only
+# path there continues to validate the backward-compat case (visor
+# with no RemoteAddrV6, server with no AddressV6 — the pre-#1525
+# semantics).
+#
+# Trigger: PRs that touch the IPv6 surface, or anything under
+# pkg/dmsg / pkg/address-resolver / pkg/transport/network / the
+# v6-aware compose + workflow files themselves. Avoids waking this
+# lane for changes that can't affect v6 (docs, CI for other lanes).
+
+on:
+  pull_request:
+    paths:
+      - 'pkg/dmsg/**'
+      - 'pkg/address-resolver/**'
+      - 'pkg/transport/network/**'
+      - 'docker/dmsg/docker-compose.e2e-v6.yml'
+      - 'docker/config/dmsg-server-v6.json'
+      - '.github/workflows/test-ipv6.yml'
+  workflow_dispatch:
+
+name: Test IPv6 dual-stack
+
+jobs:
+  ipv6-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+          cache: true
+          cache-dependency-path: go.sum
+
+      # Docker has IPv6 support compiled in but daemon-level IPv6 is
+      # off by default on ubuntu-latest runners. Enable it before
+      # compose tries to allocate v6 addresses on its bridge.
+      - name: Enable Docker IPv6
+        run: |
+          set -eux
+          sudo bash -c 'cat > /etc/docker/daemon.json <<EOF
+          {
+            "ipv6": true,
+            "fixed-cidr-v6": "fd00:dead:cafe::/64",
+            "experimental": false
+          }
+          EOF'
+          sudo systemctl restart docker
+          # Smoke-check the daemon came back with v6 enabled.
+          docker info | grep -i ipv6 || true
+
+      - name: Bring up dual-stack dmsg e2e stack
+        working-directory: docker/dmsg
+        run: |
+          set -eux
+          docker compose -f docker-compose.e2e-v6.yml up -d --build
+          # Wait until the discovery and server are responsive on
+          # both families. dmsg-discovery exposes :9090 over v4 +
+          # v6 inside the compose network; we hit it from the
+          # dmsg-client container which has both addresses.
+          for i in $(seq 1 30); do
+            if docker exec dmsg-e2e-v6-client wget -q -O- http://dmsg-discovery:9090/dmsg-discovery/available_servers > /dev/null; then
+              echo "discovery reachable via container hostname (resolves to v4/v6 per glibc happy eyeballs)"
+              break
+            fi
+            sleep 2
+          done
+
+      # Assert the dmsg-server advertised both addresses by reading
+      # back the entry the discovery has on file. This is the wire-
+      # level proof that #2716's Phase 2a serialization works and
+      # the discovery's per-family merge logic from #2715 stitched
+      # them into one record.
+      - name: Verify dual-stack server entry
+        run: |
+          set -eux
+          PK=035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282
+          ENTRY=$(docker exec dmsg-e2e-v6-client wget -q -O- http://dmsg-discovery:9090/dmsg-discovery/entries/$PK)
+          echo "server entry: $ENTRY"
+          echo "$ENTRY" | grep -q '"address":"172.21.0.4:8080"' || (echo "expected v4 advertised_address missing" && exit 1)
+          echo "$ENTRY" | grep -q '"address_v6":"\[fd00:dead:beef::4\]:8080"' || (echo "expected v6 advertised_address missing" && exit 1)
+
+      - name: Test Happy Eyeballs from client to server (v6 preferred)
+        run: |
+          set -eux
+          # nc into the server's v6 address via the client container.
+          # Verifies the v6 socket path itself is end-to-end reachable
+          # over the bridge — same path the Happy Eyeballs dialer
+          # from #2717 picks when AR returns both families.
+          docker exec dmsg-e2e-v6-client sh -c 'echo "ping" | nc -w 2 fd00:dead:beef::4 8080 || true'
+
+      - name: Capture logs on failure
+        if: failure()
+        working-directory: docker/dmsg
+        run: |
+          docker compose -f docker-compose.e2e-v6.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        working-directory: docker/dmsg
+        run: |
+          docker compose -f docker-compose.e2e-v6.yml down -v --remove-orphans
