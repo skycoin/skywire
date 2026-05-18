@@ -28,6 +28,22 @@ func (s *memStore) Bind(_ context.Context, netType types.Type, pk cipher.PubKey,
 		s.visorData[netType] = make(map[string]addrresolver.VisorData)
 	}
 
+	// Preserve the other-family RemoteAddr when this bind only carries
+	// one of the two. A dual-stack visor calls Bind twice — once over
+	// IPv4 HTTP (sets RemoteAddr only) and once over IPv6 HTTP (sets
+	// RemoteAddrV6 only). Naive overwrite would clobber the prior
+	// family's record and force-back to single-stack until the next
+	// 90s refresh cycle. Merge preserves whichever family addr the
+	// new payload didn't touch.
+	if existing, ok := s.visorData[netType][pk.String()]; ok {
+		if visorData.RemoteAddr == "" && existing.RemoteAddr != "" {
+			visorData.RemoteAddr = existing.RemoteAddr
+		}
+		if visorData.RemoteAddrV6 == "" && existing.RemoteAddrV6 != "" {
+			visorData.RemoteAddrV6 = existing.RemoteAddrV6
+		}
+	}
+
 	s.visorData[netType][pk.String()] = visorData
 
 	return nil
