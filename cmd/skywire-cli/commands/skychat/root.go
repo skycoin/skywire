@@ -16,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
 var (
@@ -57,16 +58,19 @@ func init() {
 		aliasCmd,
 	)
 
-	sendCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (required)")
+	sendCmd.Flags().StringVarP(&recipient, "to", "t", "", "recipient public key (optional when --via tcp://<pk>@host:port is set — the PK in --via is used)")
 	sendCmd.Flags().StringVarP(&message, "msg", "m", "", "message to send (required)")
 	sendCmd.Flags().StringVarP(&sendNet, "net", "n", "skynet", "network type: skynet or dmsg")
 	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 5*time.Second, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 disables wait and returns success on WriteFrame (fire-and-forget). Default 5s gives delivery confirmation.")
 	sendCmd.Flags().IntVarP(&sendRetries, "retries", "r", 1, "extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried.")
 	sendCmd.Flags().BoolVar(&sendVerbose, "verbose", false, "surface per-layer detail to stderr: POST request URL+payload, HTTP response status+headers, ack timing, /status counter deltas (outbound_msg_count / fail / retry / fallback). Use to debug send failures.")
-	sendCmd.Flags().StringVar(&sendVia, "via", "", "bypass local chat-app and dial the remote chat-app directly via noise-TCP: tcp://<pk>@host:port. Survives visor / dmsg outages. Use --sk / -c / DMSGCURL_SK for identity.")
+	sendCmd.Flags().StringVar(&sendVia, "via", "", "bypass local chat-app and dial the remote chat-app directly via noise-TCP: tcp://<pk>@host:port. Survives visor / dmsg outages. Use --sk / -c / DMSGCURL_SK for identity. When set, --to becomes optional (the PK in --via is used).")
 	sendCmd.Flags().StringVar(&tcpViaSK, "sk", "", "identity SK for --via tcp (hex). Overrides env + config.")
 	sendCmd.Flags().StringVarP(&tcpViaConfig, "config", "c", "", "skywire.json path — only sk field read, for --via tcp identity")
-	sendCmd.MarkFlagRequired("to")  //nolint:errcheck,gosec
+	// --to is NOT MarkFlagRequired anymore: when --via tcp://<pk>@host:port
+	// is set, the PK comes from --via and -t is redundant. The Run func
+	// below enforces "either --to or --via" at runtime so both can't be
+	// omitted together.
 	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
 
 	listenCmd.Flags().StringVarP(&listenNet, "net", "n", "", "filter by network type (optional; default = all)")
@@ -127,9 +131,34 @@ Outcomes (--wait > 0):
                          delivered but the peer can't ack. Use
                          --wait=0 against known-old peers.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		pk, err := resolveTarget(recipient)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
+		// Recipient resolution. Two valid inputs:
+		//   1. --to <pk-or-alias> — resolved via alias lookup
+		//   2. --via tcp://<pk>@host:port — PK comes from the URL,
+		//      no --to needed (and if both set, the existing
+		//      sendViaTCP cross-validation enforces they match)
+		// Bail with one clear error when neither is provided.
+		if recipient == "" && sendVia == "" {
+			internal.PrintFatalError(cmd.Flags(),
+				errors.New("either --to <pk> or --via tcp://<pk>@host:port is required"))
+		}
+		var pk cipher.PubKey
+		var err error
+		if recipient != "" {
+			pk, err = resolveTarget(recipient)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+		} else {
+			// --via supplies the PK; parse it here so the verbose
+			// log + post-send "Acked by <pk>" line have a value to
+			// render. parseViaTCPSpec is shared with sendViaTCP, so
+			// any spec error surfaces consistently here.
+			var rpk cipher.PubKey
+			rpk, _, err = parseViaTCPSpec(sendVia)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			pk = rpk
 		}
 		// --via tcp://<pk>@host:port short-circuits the entire HTTP /
 		// chat-app path: dial the remote chat-app's noise-TCP listener
