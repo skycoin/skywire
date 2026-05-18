@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/AudriusButkevicius/pfilter"
+	"github.com/sirupsen/logrus"
 	"github.com/xtaci/kcp-go"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -95,10 +96,20 @@ type VisorData struct {
 }
 
 // httpClient implements APIClient for address resolver API.
+//
+// httpClientV6 is the optional IPv6-family-forced HTTP transport
+// added in #1525 Phase 2b: when the operator's AR URL resolves to
+// both v4 and v6 (i.e. has both A and AAAA records), the visor
+// fires a SECONDARY BindSTCPR POST over this client so the AR
+// server captures the visor's v6 source via splitFamilyAddr and
+// stores RemoteAddrV6 alongside RemoteAddr. nil when the AR is
+// reached via dmsg, when v6 init failed, or when the caller didn't
+// supply a v6 client — preserves pre-#1525 v4-only behavior.
 type httpClient struct {
 	log            *logging.Logger
 	mLog           *logging.MasterLogger
 	httpClient     *httpauthclient.Client
+	httpClientV6   *httpauthclient.Client
 	pk             cipher.PubKey
 	sk             cipher.SecKey
 	remoteHTTPAddr string
@@ -126,7 +137,7 @@ type httpClient struct {
 // (udp_address field) once the auth client is ready. ARs that don't
 // publish udp_address simply leave SUDPH unavailable to dmsg-only
 // callers — the same behavior as before this change.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.Client, clientPublicIP string, log *logging.Logger, mLog *logging.MasterLogger) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC, httpCV6 *http.Client, clientPublicIP string, log *logging.Logger, mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
@@ -155,12 +166,12 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC *http.
 
 	client.log.Debugf("Remote UDP server: %q", remoteUDP)
 
-	go client.initHTTPClient(httpC)
+	go client.initHTTPClient(httpC, httpCV6)
 
 	return client, nil
 }
 
-func (c *httpClient) initHTTPClient(httpC *http.Client) {
+func (c *httpClient) initHTTPClient(httpC, httpCV6 *http.Client) {
 	httpAuthClient, err := httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
 	if err != nil {
 		c.log.WithError(err).
@@ -181,6 +192,22 @@ func (c *httpClient) initHTTPClient(httpC *http.Client) {
 	}
 
 	c.httpClient = httpAuthClient
+
+	// #1525 Phase 2b: initialize the optional v6-forced auth client.
+	// Best-effort, NO retry: a v6 init failure (no AAAA record on the
+	// AR, no v6 connectivity from the visor, AR not listening on v6)
+	// leaves httpClientV6 nil and the visor proceeds v4-only — same
+	// behavior as a pre-#1525 build. The retry+fatal contract from the
+	// primary client doesn't apply here: v6 is additive, not required.
+	if httpCV6 != nil {
+		v6AuthClient, v6Err := httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpCV6, c.clientPublicIP, c.mLog)
+		if v6Err != nil {
+			c.log.WithError(v6Err).Debug("v6 address-resolver init failed; proceeding v4-only")
+		} else {
+			c.httpClientV6 = v6AuthClient
+			c.log.Debug("v6 address-resolver init ok; BindSTCPR will dual-stack")
+		}
+	}
 
 	// dmsg:// URL has no IP for SUDPH — pull AR's public UDP address
 	// from /health (set by --public-udp-address on the server). Best
@@ -398,7 +425,52 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
 	}
 
+	// #1525 Phase 2b: when v6 is available, fire a SECONDARY POST over
+	// the v6-forced auth client. The AR's bind handler captures the
+	// connecting socket's family via splitFamilyAddr (#2715 Phase 1)
+	// and stores RemoteAddrV6 alongside the v4 RemoteAddr we just
+	// wrote — both addresses end up in a single VisorData record for
+	// peers to Resolve. Best-effort: a v6 POST failure (e.g. AR
+	// momentarily unreachable over v6) is logged at debug and doesn't
+	// affect the v4 bind result. The 90s refresh cycle re-tries on the
+	// next tick. Pre-#1525 v4-only visors (httpClientV6 nil) skip this
+	// entirely.
+	c.postV6BindSTCPR(ctx, localAddresses, log)
+
 	return nil
+}
+
+// postV6BindSTCPR fires the secondary v6 BindSTCPR POST. No-op when
+// the v6 client is nil (AR v6-init failed or operator didn't configure
+// v6 — same code path as a pre-#1525 build). Errors are logged at
+// debug and discarded: the v4 bind's success is the primary outcome
+// and a v6 hiccup shouldn't surface as a startup-fatal error.
+func (c *httpClient) postV6BindSTCPR(ctx context.Context, payload LocalAddresses, log *logrus.Entry) {
+	if c.httpClientV6 == nil {
+		return
+	}
+	body := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(body).Encode(payload); err != nil {
+		log.WithError(err).Debug("v6 BindSTCPR: encode payload failed")
+		return
+	}
+	addr := c.httpClientV6.Addr() + stcprBindPath
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, addr, body)
+	if err != nil {
+		log.WithError(err).Debug("v6 BindSTCPR: build request failed")
+		return
+	}
+	resp, err := c.httpClientV6.Do(req)
+	if err != nil {
+		log.WithError(err).Debug("v6 BindSTCPR: POST failed (AR v6 transient unreachable; v4 bind already succeeded)")
+		return
+	}
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		log.WithField("status", resp.StatusCode).Debug("v6 BindSTCPR: non-OK status (v4 bind already succeeded)")
+		return
+	}
+	log.Debug("v6 BindSTCPR: ok — AR will populate RemoteAddrV6")
 }
 
 // delBindSTCPR uinbinds STCPR entry PK to IP:port on address resolver.
