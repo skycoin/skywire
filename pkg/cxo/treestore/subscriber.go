@@ -19,6 +19,8 @@ package treestore
 import (
 	"context"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	skycipher "github.com/skycoin/skycoin/src/cipher"
 
@@ -30,6 +32,28 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// reconnectQuietThreshold is how long the subscriber must see no
+// Root activity before the watchdog assumes the connection is dead
+// and re-Connects. Issue #2713: a peer's visor restart drops the
+// existing dmsg session; the subscriber doesn't observe the close
+// (the dmsg layer silently fails to surface it up to treestore) so
+// the subscription stays "live" but nothing flows. 60s is well above
+// any reasonable pair-batch publish cadence (today ~60s ticker on
+// active feeds) but short enough that a peer-restart-stalled
+// subscriber heals within ~90s end-to-end.
+const reconnectQuietThreshold = 60 * time.Second
+
+// reconnectWatchdogTick is the watchdog's poll interval. Half the
+// quiet threshold so a stall is caught within at most threshold +
+// tick. Cheap — one map read + one timestamp comparison per tick.
+const reconnectWatchdogTick = 30 * time.Second
+
+// reconnectConnectTimeout bounds each watchdog-triggered Connect
+// attempt. Matches the deadline pairing.Manager.PairAdd uses for
+// the initial Connect; we don't want a hung dial to wedge the
+// watchdog goroutine.
+const reconnectConnectTimeout = 15 * time.Second
 
 // UpdateEvent describes a single leaf change observed by the
 // subscriber. Value is nil when the leaf was deleted (path missing
@@ -83,6 +107,33 @@ type Subscriber struct {
 	// observation doesn't fast-path a fresh reconnect that hasn't
 	// re-verified the channel.
 	rootObservedSignal chan struct{}
+
+	// lastUpdateNs is the unix-nano timestamp of the most recent
+	// successful handleRootFilled call (i.e. the last time data
+	// flowed end-to-end from publisher → subscriber). The reconnect
+	// watchdog reads this; handleRootFilled bumps it. atomic.Int64
+	// because reads happen on the watchdog goroutine while writes
+	// happen on the CXO filler goroutine.
+	lastUpdateNs atomic.Int64
+
+	// publisherPK stores the most recent Connect target PK so the
+	// watchdog has somewhere to re-Connect to. nil until first
+	// Connect succeeds.
+	publisherPK atomic.Pointer[cipher.PubKey]
+
+	// reconnectStop, when closed, terminates the watchdog. Created
+	// when Connect is first called; closed by Close. Idempotent
+	// close via reconnectOnce.
+	reconnectStop chan struct{}
+	reconnectOnce sync.Once
+	// reconnectStartOnce guards starting the watchdog: we only spawn
+	// the goroutine on the first successful Connect, not every
+	// subsequent reconnect.
+	reconnectStartOnce sync.Once
+	// reconnectAttempts counts watchdog-triggered Connect attempts
+	// (incremented BEFORE the Connect call regardless of outcome).
+	// Surfaced only for tests; treat as opaque metric otherwise.
+	reconnectAttempts atomic.Int64
 
 	closed   bool
 	closeMu  sync.Mutex
@@ -235,7 +286,93 @@ func (s *Subscriber) Connect(ctx context.Context, publisherPK cipher.PubKey) err
 	if err != nil {
 		return err
 	}
-	return conn.Subscribe(skycipher.PubKey(s.feedPK))
+	if err := conn.Subscribe(skycipher.PubKey(s.feedPK)); err != nil {
+		return err
+	}
+
+	// Remember the publisher for the watchdog. Stored as a copy so
+	// the watchdog goroutine doesn't alias a caller-owned variable.
+	pk := publisherPK
+	s.publisherPK.Store(&pk)
+	// Reset the activity clock — a fresh subscribe should not count
+	// as "stale" for the watchdog. handleRootFilled will bump it on
+	// real updates.
+	s.lastUpdateNs.Store(time.Now().UnixNano())
+	// Start the watchdog on the FIRST successful Connect only.
+	s.reconnectStartOnce.Do(func() {
+		s.reconnectStop = make(chan struct{})
+		go s.runReconnectWatchdog()
+	})
+	return nil
+}
+
+// runReconnectWatchdog polls for stalled subscriptions and re-Connects
+// when the local subscriber has gone quiet for longer than the
+// threshold. Fix for issue #2713: when a peer restarts, the dmsg
+// session backing this subscription silently dies — the subscriber
+// keeps thinking it's attached but no Root push arrives. The watchdog
+// detects the silence and forces a fresh Connect to the peer's new
+// publisher.
+//
+// Lifecycle: started on first successful Connect, stopped by Close.
+// Safe to run on naturally-quiet feeds — Connect is idempotent
+// (Subscribe-frame is harmless on a healthy connection), so a
+// wasted reconnect on a feed that's just sleeping costs one dmsg
+// dial + one Subscribe frame, no data loss.
+func (s *Subscriber) runReconnectWatchdog() {
+	s.runReconnectWatchdogWith(reconnectWatchdogTick, reconnectQuietThreshold)
+}
+
+// runReconnectWatchdogWith is the tickable inner loop used by both
+// the production watchdog and tests that need to drive the loop with
+// small intervals.
+func (s *Subscriber) runReconnectWatchdogWith(tickEvery, quietThreshold time.Duration) {
+	tick := time.NewTicker(tickEvery)
+	defer tick.Stop()
+	for {
+		select {
+		case <-s.reconnectStop:
+			return
+		case <-tick.C:
+		}
+		// Snapshot last activity; if zero (no Root ever seen) we
+		// skip the reconnect — the initial subscription may still
+		// be settling.
+		last := s.lastUpdateNs.Load()
+		if last == 0 {
+			continue
+		}
+		quiet := time.Since(time.Unix(0, last))
+		if quiet < quietThreshold {
+			continue
+		}
+		pkPtr := s.publisherPK.Load()
+		if pkPtr == nil {
+			continue
+		}
+		// Bounded Connect so a hung dial doesn't wedge the watchdog
+		// past the next tick. ConnectAndWaitForRoot would be more
+		// thorough (it confirms the new subscription actually
+		// delivers a Root) but here we want a non-blocking refresh —
+		// the next tick will catch a still-quiet feed.
+		s.reconnectAttempts.Add(1)
+		ctx, cancel := context.WithTimeout(context.Background(), reconnectConnectTimeout)
+		err := s.Connect(ctx, *pkPtr)
+		cancel()
+		if err != nil {
+			if s.log != nil {
+				s.log.WithError(err).WithField("publisher_pk", pkPtr.Hex()[:8]).
+					WithField("quiet_seconds", quiet.Seconds()).
+					Debug("treestore: reconnect-watchdog Connect failed; will retry next tick")
+			}
+			continue
+		}
+		if s.log != nil {
+			s.log.WithField("publisher_pk", pkPtr.Hex()[:8]).
+				WithField("quiet_seconds", quiet.Seconds()).
+				Info("treestore: reconnect-watchdog re-Connected after quiet period")
+		}
+	}
 }
 
 // ConnectAndWaitForRoot is the atomic-subscribe variant of Connect:
@@ -368,6 +505,15 @@ func (s *Subscriber) Close() error {
 		return s.closeErr
 	}
 	s.closed = true
+	// Stop the reconnect watchdog before tearing down the node so a
+	// concurrent reconnect attempt doesn't observe a half-closed
+	// node mid-Connect. Idempotent — channel may already be nil if
+	// Connect was never called.
+	s.reconnectOnce.Do(func() {
+		if s.reconnectStop != nil {
+			close(s.reconnectStop)
+		}
+	})
 	if s.ownsNode {
 		s.closeErr = s.cxoNode.Close()
 	}
@@ -450,6 +596,11 @@ func (s *Subscriber) handleRootFilled(r *registry.Root) {
 	}
 
 	s.applySnapshot(snap)
+	// Mark "data flowed" for the reconnect watchdog (#2713). Bumped
+	// only on a feed-matching Root that walked successfully — non-
+	// matching Roots or walk-failures don't count as live activity
+	// for THIS subscriber's purposes.
+	s.lastUpdateNs.Store(time.Now().UnixNano())
 	// Signal any ConnectAndWaitForRoot caller blocked on this
 	// subscriber that a Root was received and the fill walk
 	// completed — the subscription is verifiably live now.
