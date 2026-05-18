@@ -1,0 +1,83 @@
+# Dual-stack (IPv4 + IPv6) e2e environment for the #1525 IPv6 lane.
+# Mirrors docker-compose.e2e.yml but enables IPv6 on the bridge and
+# assigns each container both an IPv4 and IPv6 address. The dmsg-server
+# config exercises the IPv6 advertisement path added in Phase 2a (#2716);
+# the dmsg-client dials over the v6 path verified by Phase 3's Happy
+# Eyeballs (#2717).
+#
+# Bridge network uses ULA range (fd00:dead:beef::/64) — no global v6
+# routing required, just docker's userland v6 stack.
+
+networks:
+  dmsg:
+    driver: "bridge"
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16
+        - subnet: fd00:dead:beef::/64
+    driver_opts:
+      com.docker.network.bridge.name: br-dmsg-e2e-v6
+
+services:
+  redis:
+    image: "redis:alpine"
+    container_name: "dmsg-e2e-v6-redis"
+    hostname: redis
+    networks:
+      dmsg:
+        ipv4_address: 172.21.0.2
+        ipv6_address: fd00:dead:beef::2
+    ports:
+      - "6381:6379"
+
+  dmsg-discovery:
+    build:
+      context: ..
+      dockerfile: docker/images/dmsg-discovery/Dockerfile
+    container_name: "dmsg-e2e-v6-discovery"
+    hostname: dmsg-discovery
+    networks:
+      dmsg:
+        ipv4_address: 172.21.0.3
+        ipv6_address: fd00:dead:beef::3
+    ports:
+      - "9091:9090"
+    depends_on:
+      - redis
+    command: ["--addr", ":9090", "--redis", "redis://redis:6379", "--sk", "b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714", "-t"]
+
+  dmsg-server:
+    build:
+      context: ..
+      dockerfile: docker/images/dmsg-server/Dockerfile
+    container_name: "dmsg-e2e-v6-server"
+    hostname: dmsg-server
+    networks:
+      dmsg:
+        ipv4_address: 172.21.0.4
+        ipv6_address: fd00:dead:beef::4
+    ports:
+      - "8081:8080"
+    depends_on:
+      - dmsg-discovery
+    # Mounts the v6-aware server config that sets both PublicAddress
+    # and PublicAddressV6 (the Phase 2a #2716 fields). The dual-stack
+    # bridge above is what makes the v6 advertisement reachable from
+    # peers in the same compose stack.
+    command: ["start", "/e2e/dmsg-server-v6.json"]
+
+  dmsg-client:
+    build:
+      context: ..
+      dockerfile: docker/images/dmsg-client/Dockerfile
+    container_name: "dmsg-e2e-v6-client"
+    hostname: dmsg-client
+    networks:
+      dmsg:
+        ipv4_address: 172.21.0.5
+        ipv6_address: fd00:dead:beef::5
+    depends_on:
+      - dmsg-server
+    entrypoint: ["/bin/sh"]
+    command: ["-c", "sleep infinity"]
