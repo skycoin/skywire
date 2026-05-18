@@ -62,6 +62,14 @@ type Node struct {
 	maxFillingParallel int     // copy of c.Config().MaxFillingParallel
 	rollAvgSamples     int     //nolint:unused // copy of c.Config().RollAvgSamples
 
+	// callbackMu guards the mutable callback fields on config that
+	// pkg/cxo/treestore's Subscriber chains onto post-construction
+	// (OnRootFilled, OnFillingBreaks). Without it, the close-and-
+	// reopen pattern (subscriber.Close + NewSubscriberOnNode again)
+	// races with the head goroutine's onRootFilled read — surfaced
+	// by treestore TestPeerSubMissesAfterReattach under -race.
+	callbackMu sync.RWMutex
+
 	//
 	// stat
 	//
@@ -706,18 +714,46 @@ func (n *Node) onRootReceived(c *Conn, r *registry.Root) (err error) {
 
 func (n *Node) onRootFilled(r *registry.Root) {
 
-	if orf := n.config.OnRootFilled; orf != nil {
+	n.callbackMu.RLock()
+	orf := n.config.OnRootFilled
+	n.callbackMu.RUnlock()
+	if orf != nil {
 		orf(n, r)
 	}
 
 }
 
+// SwapOnRootFilled atomically replaces the OnRootFilled callback and
+// returns the previous value. Used by pkg/cxo/treestore's Subscriber
+// to chain its handler in front of any pre-existing one without
+// racing the head goroutine's read at onRootFilled.
+func (n *Node) SwapOnRootFilled(next func(*Node, *registry.Root)) (prev func(*Node, *registry.Root)) {
+	n.callbackMu.Lock()
+	defer n.callbackMu.Unlock()
+	prev = n.config.OnRootFilled
+	n.config.OnRootFilled = next
+	return prev
+}
+
 func (n *Node) onFillingBreaks(r *registry.Root, reason error) {
 
-	if brk := n.config.OnFillingBreaks; brk != nil {
+	n.callbackMu.RLock()
+	brk := n.config.OnFillingBreaks
+	n.callbackMu.RUnlock()
+	if brk != nil {
 		brk(n, r, reason)
 	}
 
+}
+
+// SwapOnFillingBreaks atomically replaces the OnFillingBreaks callback
+// and returns the previous value. Mirror of SwapOnRootFilled.
+func (n *Node) SwapOnFillingBreaks(next func(*Node, *registry.Root, error)) (prev func(*Node, *registry.Root, error)) {
+	n.callbackMu.Lock()
+	defer n.callbackMu.Unlock()
+	prev = n.config.OnFillingBreaks
+	n.config.OnFillingBreaks = next
+	return prev
 }
 
 // has connection to peer with given id (pk)

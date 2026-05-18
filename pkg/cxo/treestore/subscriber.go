@@ -154,12 +154,16 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 		rootObservedSignal: make(chan struct{}),
 	}
 
-	cxoNode.Config().OnRootFilled = func(_ *node.Node, r *registry.Root) {
+	// Use Swap helpers (synchronized) instead of direct Config()
+	// mutation. The single-subscriber-per-node case still races with
+	// the head goroutine's onRootFilled reader without sync — exposed
+	// by treestore TestPeerSubMissesAfterReattach.
+	cxoNode.SwapOnRootFilled(func(_ *node.Node, r *registry.Root) {
 		s.handleRootFilled(r)
-	}
-	cxoNode.Config().OnFillingBreaks = func(_ *node.Node, r *registry.Root, err error) {
+	})
+	cxoNode.SwapOnFillingBreaks(func(_ *node.Node, r *registry.Root, err error) {
 		s.handleFillingBreaks(r, err)
-	}
+	})
 	return s, nil
 }
 
@@ -189,20 +193,26 @@ func NewSubscriberOnNode(cxoNode *node.Node, feedPK cipher.PubKey, conf SubConfi
 		cache:              make(map[string][]byte),
 		rootObservedSignal: make(chan struct{}),
 	}
-	prev := cxoNode.Config().OnRootFilled
-	cxoNode.Config().OnRootFilled = func(n *node.Node, r *registry.Root) {
+	// SwapOnRootFilled / SwapOnFillingBreaks are atomic under
+	// callbackMu, so a re-attach (Close then NewSubscriberOnNode)
+	// doesn't race with the head goroutine's read at onRootFilled.
+	// Pre-fix: TestPeerSubMissesAfterReattach surfaced the race
+	// (treestore/peersub_reattach_test.go:337 re-attach call vs
+	// node.go onRootFilled at the same instant).
+	var prev func(*node.Node, *registry.Root)
+	prev = cxoNode.SwapOnRootFilled(func(n *node.Node, r *registry.Root) {
 		s.handleRootFilled(r)
 		if prev != nil {
 			prev(n, r)
 		}
-	}
-	prevFB := cxoNode.Config().OnFillingBreaks
-	cxoNode.Config().OnFillingBreaks = func(n *node.Node, r *registry.Root, err error) {
+	})
+	var prevFB func(*node.Node, *registry.Root, error)
+	prevFB = cxoNode.SwapOnFillingBreaks(func(n *node.Node, r *registry.Root, err error) {
 		s.handleFillingBreaks(r, err)
 		if prevFB != nil {
 			prevFB(n, r, err)
 		}
-	}
+	})
 	return s, nil
 }
 
