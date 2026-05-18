@@ -250,7 +250,7 @@ func tryNetworkFallback(ctx context.Context, pk cipher.PubKey, currentNet appnet
 	altAddr := appnet.Addr{Net: altNet, PubKey: pk, Port: 1}
 	conn, err := dialAndCache(ctx, pk, altAddr)
 	if err != nil {
-		appCl.Log().Debugf("Network-fallback dial %s → %s failed: %v", currentNet, altNet, err)
+		chatLog.Debugf("Network-fallback dial %s → %s failed: %v", currentNet, altNet, err)
 		return nil, altAddr
 	}
 	return conn, altAddr
@@ -280,11 +280,18 @@ func (c *framedConn) ReadFrame() ([]byte, error) {
 }
 
 var (
-	addr      string
-	appCl     *app.Client
-	appLog    func(format string, args ...interface{}) // App logger function
-	hub       *sseHub                                  // SSE broadcast registry; see sse.go-like helpers below
-	conns     map[cipher.PubKey]*framedConn            // Chat connections
+	addr   string
+	appCl  *app.Client
+	appLog func(format string, args ...interface{}) // App logger function
+	// chatLog is the package-level logrus logger every code path can
+	// reach without going through appCl. In visor-launched mode it
+	// proxies through appCl.Log(); in --standalone mode appCl is nil
+	// and chatLog holds the stderr logrus instance directly. HTTP
+	// handlers + SSE pumps + accept loops use chatLog to avoid the
+	// nil-deref crash class on standalone.
+	chatLog   logrus.FieldLogger
+	hub       *sseHub                       // SSE broadcast registry; see sse.go-like helpers below
+	conns     map[cipher.PubKey]*framedConn // Chat connections
 	connsMu   sync.Mutex
 	appPort   uint16
 	useSkynet bool
@@ -680,13 +687,14 @@ func RunSkychat(ctx context.Context, args []string) error {
 			ForceColors:        true,
 			TimestampFormat:    "2006-01-02T15:04:05.0000Z07:00",
 		})
-		standaloneFieldLog := standaloneLog.WithField("_module", "skychat-standalone")
+		chatLog = standaloneLog.WithField("_module", "skychat-standalone")
 		appLog = func(format string, args ...interface{}) {
-			standaloneFieldLog.Infof(format, args...)
+			chatLog.Infof(format, args...)
 		}
 	} else {
 		appCl = app.NewClient(nil)
 		defer appCl.Close()
+		chatLog = appCl.Log()
 		appLog = func(format string, args ...interface{}) {
 			appCl.Log().Infof(format, args...)
 		}
@@ -1034,9 +1042,15 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		// client, and the local listener accepts it. The dial here is
 		// the real network path — no local short-circuit. Same for
 		// skynet (router builds a 2-hop self-ping loopback).
-		isSelf := pk == appCl.Config().VisorPK
+		// Self-detection requires the visor-supplied VisorPK; in
+		// --standalone mode appCl is nil and there's no self-loop
+		// path to special-case (TCP-direct handles loopback by host:port).
+		isSelf := false
+		if appCl != nil {
+			isSelf = pk == appCl.Config().VisorPK
+		}
 		if isSelf {
-			appCl.Log().Infof("Self-send via %s on port %d", netType, addr.Port)
+			chatLog.Infof("Self-send via %s on port %d", netType, addr.Port)
 		}
 
 		// cached tells the write path whether the conn came from
@@ -1053,9 +1067,9 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			conn, err = dialAndCache(ctx, pk, addr)
 			if err != nil {
 				if isSelf {
-					appCl.Log().WithError(err).Errorf("Self-dial via %s failed", netType)
+					chatLog.WithError(err).Errorf("Self-dial via %s failed", netType)
 				} else {
-					appCl.Log().WithError(err).Warnf("Dial to %s via %s failed", pk, netType)
+					chatLog.WithError(err).Warnf("Dial to %s via %s failed", pk, netType)
 				}
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -1116,7 +1130,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			}
 			connsMu.Unlock()
 
-			appCl.Log().Debugf("Stale-conn write to %s via %s: %v — redialing", pk, netType, err)
+			chatLog.Debugf("Stale-conn write to %s via %s: %v — redialing", pk, netType, err)
 			newConn, derr := dialAndCache(ctx, pk, addr)
 			if derr != nil {
 				counterMu.Lock()
@@ -1189,7 +1203,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 						delete(conns, pk)
 					}
 					connsMu.Unlock()
-					appCl.Log().Debugf("Network-fallback write to %s via %s also failed: %v",
+					chatLog.Debugf("Network-fallback write to %s via %s also failed: %v",
 						pk, fbAddr.Net, werr)
 				}
 			}
@@ -1327,7 +1341,7 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 		// we can still serve — just slightly more aggressive close
 		// behavior if the operator runs an old server. Debug-log
 		// rather than failing the connection.
-		appCl.Log().Debugf("SSE SetWriteDeadline: %v", err)
+		chatLog.Debugf("SSE SetWriteDeadline: %v", err)
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -1343,7 +1357,7 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 	if historyStore != nil && persistSeedCount > 0 {
 		recent, err := historyStore.ListRecent(persistSeedCount)
 		if err != nil {
-			appCl.Log().Debugf("SSE seed list failed: %v", err)
+			chatLog.Debugf("SSE seed list failed: %v", err)
 		} else {
 			for _, m := range recent {
 				sender := m.From
@@ -1368,7 +1382,7 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 	// message arrives. Browsers (EventSource) and our CLI listen
 	// both treat lines beginning with `:` as no-ops.
 	if _, err := fmt.Fprint(w, ": connected\n\n"); err != nil {
-		appCl.Log().Debugf("SSE initial keepalive write failed: %v", err)
+		chatLog.Debugf("SSE initial keepalive write failed: %v", err)
 		return
 	}
 	f.Flush()
@@ -1386,20 +1400,20 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 				// Client gone (write to a closed conn) — exit so the
 				// hub deregisters this subscriber and stops buffering
 				// messages it can't deliver.
-				appCl.Log().Debugf("SSE write failed, dropping subscriber: %v", err)
+				chatLog.Debugf("SSE write failed, dropping subscriber: %v", err)
 				return
 			}
 			f.Flush()
 
 		case <-keepalive.C:
 			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
-				appCl.Log().Debugf("SSE keepalive write failed: %v", err)
+				chatLog.Debugf("SSE keepalive write failed: %v", err)
 				return
 			}
 			f.Flush()
 
 		case <-req.Context().Done():
-			appCl.Log().Debug("SSE connection was closed.")
+			chatLog.Debug("SSE connection was closed.")
 			return
 		}
 	}
@@ -1654,7 +1668,7 @@ func collectGroupHealth() ([]groupHealth, string) {
 		return e
 	})
 	if err != nil {
-		appCl.Log().Debugf("status: GroupList RPC failed: %v", err)
+		chatLog.Debugf("status: GroupList RPC failed: %v", err)
 		// Truncate the err so a long upstream chain doesn't bloat
 		// /status responses or wrap unprintable bytes through HTTP.
 		es := err.Error()
@@ -1701,7 +1715,7 @@ func persistMessage(msg history.Message) {
 			errors.Is(err, history.ErrTooLarge),
 			errors.Is(err, history.ErrStorageFull),
 			errors.Is(err, history.ErrNotWhitelisted):
-			appCl.Log().Debugf("history: dropped %s (%v)", msg.Peer, err)
+			chatLog.Debugf("history: dropped %s (%v)", msg.Peer, err)
 		default:
 			appLog("history: backend error: %v", err)
 		}
@@ -1712,7 +1726,13 @@ func persistMessage(msg history.Message) {
 func openHistoryStore() error {
 	dbPath := persistDBPath
 	if dbPath == "" {
-		workDir := appCl.Config().ProcWorkDir
+		// In --standalone mode appCl is nil and ProcWorkDir is
+		// unavailable; fall back to skyenv.LocalPath which is the
+		// same default the visor-launcher would have set anyway.
+		var workDir string
+		if appCl != nil {
+			workDir = appCl.Config().ProcWorkDir
+		}
 		if workDir == "" {
 			workDir = skyenv.LocalPath
 		}
