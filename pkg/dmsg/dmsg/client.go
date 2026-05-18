@@ -133,7 +133,7 @@ type Client struct {
 // Safe to call before or after Serve. Subsequent updateClientEntry
 // iterations pick up the new endpoint automatically.
 func (c *Client) AddDiscovery(client disc.APIClient, discPK cipher.PubKey) {
-	c.addDiscovery(client, "", discPK)
+	c.addDiscovery(client, "", "", discPK)
 }
 
 // SetDiscoveryClients replaces the underlying disc.APIClient on each
