@@ -37,6 +37,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -236,7 +237,72 @@ func registerPairHTTPHandlers(ctx context.Context, mux *http.ServeMux) {
 	mux.HandleFunc("/pair", requireAuthFunc(pairRootHandler(ctx)))
 	mux.HandleFunc("/pair/invites", requireAuthFunc(pairInvitesListHandler()))
 	mux.HandleFunc("/pair/invites/", requireAuthFunc(pairInvitesItemHandler(ctx)))
+	mux.HandleFunc("/pair/inbox", requireAuthFunc(pairInboxHandler()))
 	mux.HandleFunc("/pair/", requireAuthFunc(pairItemHandler(ctx)))
+}
+
+// pairInboxHandler serves GET /pair/inbox — snapshot of inbound pair
+// messages newer than ?since=<RFC3339>, capped at ?limit=N (default
+// 100, max 1000). Non-destructive; the visor's pairInbox keeps the
+// ring intact across reads, so this endpoint and the SSE-bridge
+// poller co-exist without consuming each other's view.
+//
+// Pairs with the CLI's `cli skychat pair poll` command (#2699), which
+// hits this exact URL shape and decodes the response as a JSON array
+// of visor.PairMessage. Without this handler the path falls into the
+// /pair/<pk> catchall and is rejected as an invalid peer-pk.
+func pairInboxHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !pairRPCAlive() {
+			http.Error(w, "pairing disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		q := r.URL.Query()
+		limit := 100
+		if s := q.Get("limit"); s != "" {
+			n, err := strconv.Atoi(s)
+			if err != nil || n < 1 || n > 1000 {
+				http.Error(w, "limit must be 1-1000", http.StatusBadRequest)
+				return
+			}
+			limit = n
+		}
+		var since time.Time
+		if s := q.Get("since"); s != "" {
+			t, err := time.Parse(time.RFC3339Nano, s)
+			if err != nil {
+				// Fall back to plain RFC3339 for callers without sub-second precision.
+				t, err = time.Parse(time.RFC3339, s)
+				if err != nil {
+					http.Error(w, "since must be RFC3339", http.StatusBadRequest)
+					return
+				}
+			}
+			since = t
+		}
+		var msgs []visor.PairMessage
+		if err := pairRPCCall("PairPoll", func(c visor.API) error {
+			out, e := c.PairPoll(since)
+			msgs = out
+			return e
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Take the newest `limit` entries when the ring window is
+		// larger than the caller wants. snapshotAfter returns oldest-
+		// first; the CLI prints oldest-first too, so truncating the
+		// HEAD (newest) would surprise it — drop the OLDEST extras.
+		if len(msgs) > limit {
+			msgs = msgs[len(msgs)-limit:]
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(msgs) //nolint:errcheck
+	}
 }
 
 // pairInvitesListHandler serves GET /pair/invites — current pending
