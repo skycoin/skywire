@@ -110,9 +110,9 @@ type Config struct {
 	// DiscoveryDmsg is set (URL form `dmsg://<PK>:<port>`), the PK is
 	// extracted automatically and used to upgrade registration from
 	// plain HTTP to dmsgfirst.
-	Discovery        string        `json:"discovery,omitempty"`
-	DiscoveryDmsg    string        `json:"discovery_dmsg,omitempty"`
-	PublicAddress    string        `json:"public_address,omitempty"`
+	Discovery     string `json:"discovery,omitempty"`
+	DiscoveryDmsg string `json:"discovery_dmsg,omitempty"`
+	PublicAddress string `json:"public_address,omitempty"`
 	// PublicAddressV6 is the optional IPv6 advertised endpoint. When
 	// non-empty, the server registers AddressV6 alongside Address in
 	// its disc.Entry so dual-stack peers can dial it over IPv6 (the
