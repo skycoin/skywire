@@ -14,6 +14,7 @@
 package pairing
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -23,6 +24,13 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// resumeConnectTimeout bounds the dmsg dial when Resume re-attaches a
+// pair's subscriber to the peer's CXO publisher feed after a visor
+// restart. Matches pkg/visor's pairConnectTimeout intentionally —
+// resume-on-startup and operator-driven PairAdd have the same "single
+// unreachable peer shouldn't block forever" property.
+const resumeConnectTimeout = 15 * time.Second
 
 // Manager owns the persistent record set and live Pair instances.
 // Safe for concurrent use.
@@ -216,6 +224,32 @@ func (m *Manager) Resume() (resumed int, err error) {
 		}
 		m.pairs[rec.PeerPK] = p
 		resumed++
+
+		// Reconnect the subscriber to the peer's CXO publisher feed.
+		// openPair builds the publisher + subscriber and registers
+		// the onUpdate callback, but does NOT dial peer — that's
+		// Pair.Connect's job, and prior to this fix Resume left
+		// every restored pair with a live publisher and a dead
+		// subscriber. The on-the-wire symptom (verified live with
+		// 3-agent skychat-pair-poll empty across multiple visor
+		// restarts on 2026-05-18): outbound pair-Sends work
+		// (publisher's local Put), inbound onUpdate never fires
+		// (subscriber never subscribed), and pair-poll inbox stays
+		// empty forever.
+		//
+		// Connect-failure here is intentionally non-fatal — it
+		// matches the visor's PairAdd semantics exactly (peer
+		// temporarily unreachable shouldn't block startup; the
+		// reconcile loops + future operator-driven retry will heal).
+		// Pending records still get a Connect attempt so the moment
+		// the peer accepts and starts publishing, we observe it.
+		dctx, dcancel := context.WithTimeout(context.Background(), resumeConnectTimeout)
+		if connErr := p.Connect(dctx); connErr != nil {
+			m.log.WithError(connErr).
+				WithField("peer", rec.PeerPK.Hex()).
+				Debug("pairing: Resume: subscriber Connect failed; pair record kept (will heal on next operator action)")
+		}
+		dcancel()
 	}
 	return resumed, nil
 }
