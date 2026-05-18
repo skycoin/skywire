@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,7 +115,21 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		}
 	}
 
-	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, pIP, log, v.MasterLogger())
+	// #1525 Phase 2b: when the AR URL is plain HTTP (not dmsg://),
+	// build a SECOND http.Client whose Transport.DialContext forces
+	// "tcp6". The AR client uses it to fire a secondary BindSTCPR
+	// POST so the AR server captures the visor's v6 source family
+	// (via splitFamilyAddr) and stores RemoteAddrV6 alongside
+	// RemoteAddr. nil for dmsg://-routed AR — v6 forcing is
+	// meaningless when the transport is a dmsg stream rather than
+	// raw TCP. Also nil if the operator builds a custom httpC that
+	// already specifies its own Transport, since we don't want to
+	// silently override their dial choice.
+	var httpCV6 *http.Client
+	if arURL := arURL; strings.HasPrefix(arURL, "http://") || strings.HasPrefix(arURL, "https://") {
+		httpCV6 = newV6ForcedHTTPClient()
+	}
+	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, httpCV6, pIP, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -994,4 +1011,24 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 	}
 
 	return tpdC, nil
+}
+
+// newV6ForcedHTTPClient returns an *http.Client whose underlying
+// Transport.DialContext forces "tcp6" for every dial. Used by
+// initTransport when the operator's AR URL is plain HTTP, to bind
+// the AR over a v6 socket so the AR server captures RemoteAddrV6
+// per #1525 Phase 2b. The 10s dial timeout matches the visor's
+// general AR-reach budget; the 30s overall timeout is conservative
+// for a small POST (bind payload). When the AR has no AAAA record
+// or the host has no v6 connectivity, dials fail quickly and the
+// AR client falls through to v4-only behavior — see
+// addrresolver.httpClient.initHTTPClient's best-effort v6 init.
+func newV6ForcedHTTPClient() *http.Client {
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	tr := &http.Transport{
+		DialContext: func(ctx context.Context, _ string, addr string) (net.Conn, error) {
+			return dialer.DialContext(ctx, "tcp6", addr)
+		},
+	}
+	return &http.Client{Transport: tr, Timeout: 30 * time.Second}
 }
