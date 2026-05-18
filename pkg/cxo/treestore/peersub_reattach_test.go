@@ -225,6 +225,10 @@ func (vm *reattachVisor) rcvCountFrom(peer cipher.PubKey) int {
 // rcvBodiesFrom returns a snapshot copy of every body vm has observed
 // from peer. Returns a fresh slice so the caller can compare without
 // holding rcvMu.
+//
+//nolint:unused // retained for follow-up reattach scenarios that
+// compare received-body content (vs the current Test*'s count-only
+// assertions); dropping here would force the next test to re-add it.
 func (vm *reattachVisor) rcvBodiesFrom(peer cipher.PubKey) [][]byte {
 	vm.rcvMu.Lock()
 	defer vm.rcvMu.Unlock()
