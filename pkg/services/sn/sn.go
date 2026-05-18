@@ -217,10 +217,15 @@ func (s *service) startCascade(
 		if hcErr != nil {
 			log.WithError(hcErr).Warn("Failed to build AR HTTP client — AR disabled")
 		} else {
+			// sn is a server-side proxy / forwarder; it doesn't
+			// register itself as a visor at the AR, so the v6 HTTP
+			// client is intentionally nil here. The visor-side
+			// init_transport supplies httpCV6 when the operator's AR
+			// URL is plain HTTP.
 			arC, _ = addrresolver.NewHTTP( //nolint:errcheck
 				conf.Transport.AddressResolver,
 				conf.PK, conf.SK,
-				httpC, "",
+				httpC, nil, "",
 				log, mLog,
 			)
 		}
