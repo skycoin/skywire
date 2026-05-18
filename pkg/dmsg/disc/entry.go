@@ -168,8 +168,22 @@ func (c *Client) String() string {
 
 // Server contains parameters for Server instances.
 type Server struct {
-	// IPv4 or IPv6 public address of the DMSG Server.
+	// Address is the DMSG Server's reachable endpoint ("host:port").
+	// Historically an IPv4 or IPv6 address could go in this field
+	// either-or; with the dual-stack-within-record design (see #1525)
+	// Address now canonically carries the IPv4 endpoint and
+	// AddressV6 carries the IPv6 counterpart. Servers listening on
+	// only one family leave the other blank; servers listening on
+	// both populate both. Dialers prefer v6 with v4 fallback per
+	// RFC 8305.
 	Address string `json:"address"`
+
+	// AddressV6 is the optional IPv6 ("[host]:port") endpoint for
+	// dual-stack DMSG servers. Empty when the server is v4-only.
+	// Backward-compat: older servers omit this field; older clients
+	// ignore it; either side absent the field falls through to
+	// Address as today.
+	AddressV6 string `json:"address_v6,omitempty"`
 
 	// AvailableSessions is the number of available sessions that the server can currently accept.
 	AvailableSessions int `json:"availableSessions"`
