@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -401,12 +402,78 @@ func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial 
 		}
 	}
 
-	addr := visorData.RemoteAddr
-	if _, _, err := net.SplitHostPort(addr); err != nil {
-		addr = net.JoinHostPort(addr, visorData.Port)
+	// Happy Eyeballs (#1525 Phase 3): when AR has both a v6 and v4
+	// public address for the peer, try v6 first; fall back to v4 on
+	// any v6 failure (refused, timeout, unreachable). Sequential —
+	// no parallel race, no double-noise-handshake risk. The v6 attempt
+	// gets a bounded window (v6HeadStart) so a black-holed v6 route
+	// doesn't extend the overall dial materially beyond the v4 path's
+	// own connect time.
+	//
+	// Backward-compat: v6-only and v4-only peers are dispatched
+	// directly (no head-start cost). The pre-#1525 single-stack
+	// behavior — "RemoteAddrV6 is empty" — falls through the
+	// addrV6 == "" branch and dials RemoteAddr exactly like before.
+	addrV4 := canonicalAddr(visorData.RemoteAddr, visorData.Port)
+	addrV6 := canonicalAddr(visorData.RemoteAddrV6, visorData.Port)
+	switch {
+	case addrV6 != "" && addrV4 != "":
+		c.log.Debugf("Happy Eyeballs: dual-stack %s (v6) / %s (v4)", addrV6, addrV4)
+		return happyEyeballsDial(ctx, addrV6, addrV4, dial, c.log)
+	case addrV6 != "":
+		c.log.Debugf("Dialing v6-only public address: %s", addrV6)
+		return dial(ctx, addrV6)
+	case addrV4 != "":
+		c.log.Debugf("Dialing v4-only public address: %s", addrV4)
+		return dial(ctx, addrV4)
+	default:
+		return nil, fmt.Errorf("visor data has neither RemoteAddr nor RemoteAddrV6")
 	}
-	c.log.Debugf("Dialing public address: %s", addr)
-	return dial(ctx, addr)
+}
+
+// v6HeadStart bounds the v6 attempt in happyEyeballsDial. Modeled
+// on RFC 8305's 250ms head-start, widened to 1s to give a slow but
+// reachable v6 route a fair chance before falling back to v4. A
+// black-holed v6 route still bounds the extra latency to this much.
+const v6HeadStart = time.Second
+
+// canonicalAddr returns "" when raw is empty (lets the caller branch
+// on "v6 unavailable"), otherwise appends port when raw is bare-host.
+// Mirrors the inline check the pre-#1525 dialer did so the v4/v6
+// branches stay symmetric.
+func canonicalAddr(raw, port string) string {
+	if raw == "" {
+		return ""
+	}
+	if _, _, err := net.SplitHostPort(raw); err != nil {
+		return net.JoinHostPort(raw, port)
+	}
+	return raw
+}
+
+// happyEyeballsDial tries v6 first with a v6HeadStart-bounded sub-ctx,
+// falls back to v4 on any v6 failure. Sequential by design: one
+// socket + one noise handshake in flight at a time. Caller-supplied
+// ctx still bounds the overall dial; the v6 sub-ctx only narrows the
+// v6 attempt's deadline within ctx's window.
+func happyEyeballsDial(ctx context.Context, addrV6, addrV4 string, dial dialFunc, log *logging.Logger) (net.Conn, error) {
+	v6Ctx, cancel := context.WithTimeout(ctx, v6HeadStart)
+	conn, v6Err := dial(v6Ctx, addrV6)
+	cancel()
+	if v6Err == nil {
+		log.Debugf("Happy Eyeballs: v6 connected: %s", addrV6)
+		return conn, nil
+	}
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("happy eyeballs: ctx done during v6 attempt: %w", ctx.Err())
+	}
+	log.WithError(v6Err).Debugf("Happy Eyeballs: v6 %s failed, falling back to v4 %s", addrV6, addrV4)
+	conn, v4Err := dial(ctx, addrV4)
+	if v4Err != nil {
+		return nil, fmt.Errorf("happy eyeballs: v6 (%s) failed: %v; v4 (%s) failed: %w", addrV6, v6Err, addrV4, v4Err)
+	}
+	log.Debugf("Happy Eyeballs: v4 fallback connected: %s", addrV4)
+	return conn, nil
 }
 
 // isPrivateIP checks if an IP address is in a private range
