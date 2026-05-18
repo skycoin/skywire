@@ -23,6 +23,7 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
@@ -34,6 +35,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -287,6 +289,15 @@ var (
 	appPort   uint16
 	useSkynet bool
 	useDmsg   bool
+
+	// standalone mode: skip the visor app-launcher handshake
+	// (PROC_CONFIG env, app.NewClient) entirely. Skynet + dmsg
+	// transports become no-ops (they need the visor RPC channel);
+	// TCP-direct + the HTTP control surface remain functional. Used
+	// to run a long-lived chat-app process that survives visor
+	// restarts — the reliability-floor recipe per Alpha's
+	// 2026-05-18 design + #2707 noise-TCP listener.
+	standalone bool
 
 	// Optional HTTP password gate. When --password-file points at a
 	// file containing a bcrypt hash, every HTTP endpoint requires
@@ -581,6 +592,7 @@ func init() {
 	RootCmd.Flags().StringVar(&tcpWhitelist, "tcp-whitelist", "", "comma-separated peer PKs allowed to connect via --tcp-listen (empty rejects all)")
 	RootCmd.Flags().StringVar(&tcpSKFlag, "sk", "", "identity SK for TCP-direct (hex). Overrides env + config.")
 	RootCmd.Flags().StringVarP(&tcpConfigPath, "config", "c", "", "path to skywire.json — only the sk field is read, for TCP-direct identity")
+	RootCmd.Flags().BoolVar(&standalone, "standalone", false, "run without a parent visor: skip PROC_CONFIG handshake, disable skynet/dmsg listenLoops, keep --tcp-listen/--tcp-peer + the HTTP control surface. Pair-RPC endpoints become 503 (no visor pair-rpc to relay through). Use this to run a long-lived chat-app that survives visor restarts — reachable via TCP-direct only.")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -649,16 +661,43 @@ func RunSkychat(ctx context.Context, args []string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	appCl = app.NewClient(nil)
-	defer appCl.Close()
-
-	// Set up app logger
-	appLog = func(format string, args ...interface{}) {
-		appCl.Log().Infof(format, args...)
+	if standalone {
+		// Standalone: don't talk to the visor app-launcher at all.
+		// PROC_CONFIG isn't present, the visor's appserver isn't
+		// reachable, and the only valid transports are TCP-direct
+		// (--tcp-listen / --tcp-peer). Force skynet/dmsg off so the
+		// listenLoop attempts don't try to acquire a nil rpcC.
+		useSkynet = false
+		useDmsg = false
+		standaloneLog := logrus.New()
+		standaloneLog.SetOutput(os.Stderr)
+		standaloneLog.SetFormatter(&logging.TextFormatter{
+			FullTimestamp:      true,
+			AlwaysQuoteStrings: true,
+			QuoteEmptyFields:   true,
+			ForceFormatting:    true,
+			DisableColors:      false,
+			ForceColors:        true,
+			TimestampFormat:    "2006-01-02T15:04:05.0000Z07:00",
+		})
+		standaloneFieldLog := standaloneLog.WithField("_module", "skychat-standalone")
+		appLog = func(format string, args ...interface{}) {
+			standaloneFieldLog.Infof(format, args...)
+		}
+	} else {
+		appCl = app.NewClient(nil)
+		defer appCl.Close()
+		appLog = func(format string, args ...interface{}) {
+			appCl.Log().Infof(format, args...)
+		}
 	}
 
 	appLog("Build info: %s", buildinfo.Version())
-	appLog("Successfully started skychat.")
+	if standalone {
+		appLog("Successfully started skychat in --standalone mode (no visor handshake; TCP-direct + HTTP control surface only).")
+	} else {
+		appLog("Successfully started skychat.")
+	}
 
 	if persistEnabled {
 		if err := openHistoryStore(); err != nil {
@@ -676,10 +715,19 @@ func RunSkychat(ctx context.Context, args []string) error {
 
 	hub = newSSEHub()
 
-	port := appCl.Config().RoutingPort
-	if appPort != 0 {
+	// In standalone mode there is no visor-assigned routing port and
+	// no AppCl to register a port with. Set a placeholder so any code
+	// that reads `port` for log lines stays well-defined; nothing in
+	// the standalone code path actually dials via this number.
+	var port routing.Port
+	if appCl != nil {
+		port = appCl.Config().RoutingPort
+		if appPort != 0 {
+			port = routing.Port(appPort)
+			setAppPort(appCl, port)
+		}
+	} else if appPort != 0 {
 		port = routing.Port(appPort)
-		setAppPort(appCl, port)
 	}
 
 	conns = make(map[cipher.PubKey]*framedConn)
@@ -1746,19 +1794,31 @@ func handleIPCSignal(client *ipc.Client) {
 	client.Close()
 }
 
+// setApp* helpers tolerate a nil appCl (standalone mode). Without the
+// guards the visor-RPC path would nil-panic the moment we tried to
+// surface app-state to a visor that isn't there.
 func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
+	if appCl == nil {
+		return
+	}
 	if err := appCl.SetDetailedStatus(string(status)); err != nil {
 		appCl.Log().Errorf("Failed to set status %v: %v", status, err)
 	}
 }
 
 func setAppError(appCl *app.Client, appErr error) {
+	if appCl == nil {
+		return
+	}
 	if err := appCl.SetError(appErr.Error()); err != nil {
 		appCl.Log().Errorf("Failed to set error %v: %v", appErr, err)
 	}
 }
 
 func setAppPort(appCl *app.Client, port routing.Port) {
+	if appCl == nil {
+		return
+	}
 	if err := appCl.SetAppPort(port); err != nil {
 		appCl.Log().Errorf("Failed to set port %v: %v", port, err)
 	}
