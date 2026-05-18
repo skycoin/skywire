@@ -40,24 +40,24 @@
 // in dmsgtest. To turn this scaffolding into a fail-then-pass repro,
 // Gamma's assertion-helper commit needs one of:
 //
-//   (a) Test the property directly — after Connect returns, assert
-//       Subscriber.rootObservedSignal has been closed. Pre-Phase-C
-//       this assertion is FALSE (Connect returns before the signal);
-//       post-Phase-C call sites switch to ConnectAndWaitForRoot which
-//       makes it TRUE. This is the load-bearing property the bug
-//       hinges on, and it's testable without needing real network
-//       latency.
+//	(a) Test the property directly — after Connect returns, assert
+//	    Subscriber.rootObservedSignal has been closed. Pre-Phase-C
+//	    this assertion is FALSE (Connect returns before the signal);
+//	    post-Phase-C call sites switch to ConnectAndWaitForRoot which
+//	    makes it TRUE. This is the load-bearing property the bug
+//	    hinges on, and it's testable without needing real network
+//	    latency.
 //
-//   (b) Inject a synthetic delay between subscribe-frame queue and
-//       the publisher's broadcast fan-out. Doable via a
-//       Subscriber.testHookOnSubscribeQueued field the test sets;
-//       less clean than (a) but more directly mirrors the production
-//       timeline.
+//	(b) Inject a synthetic delay between subscribe-frame queue and
+//	    the publisher's broadcast fan-out. Doable via a
+//	    Subscriber.testHookOnSubscribeQueued field the test sets;
+//	    less clean than (a) but more directly mirrors the production
+//	    timeline.
 //
-//   (c) Accept the in-process limit and target the test at a layer
-//       where the race is structural (e.g. assert the Subscriber
-//       observes a Root that arrived strictly AFTER subscribe-queued
-//       — which the current Connect doesn't guarantee).
+//	(c) Accept the in-process limit and target the test at a layer
+//	    where the race is structural (e.g. assert the Subscriber
+//	    observes a Root that arrived strictly AFTER subscribe-queued
+//	    — which the current Connect doesn't guarantee).
 //
 // Until that lands, the scaffolding below validates the lifecycle
 // (publishers / subscribers / attach / close / reattach all work
@@ -226,9 +226,10 @@ func (vm *reattachVisor) rcvCountFrom(peer cipher.PubKey) int {
 // from peer. Returns a fresh slice so the caller can compare without
 // holding rcvMu.
 //
-//nolint:unused // retained for follow-up reattach scenarios that
 // compare received-body content (vs the current Test*'s count-only
 // assertions); dropping here would force the next test to re-add it.
+//
+//nolint:unused // retained for follow-up reattach scenarios that
 func (vm *reattachVisor) rcvBodiesFrom(peer cipher.PubKey) [][]byte {
 	vm.rcvMu.Lock()
 	defer vm.rcvMu.Unlock()
