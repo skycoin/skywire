@@ -132,7 +132,9 @@ func TestPairInboxHandler_LimitTruncatesOldestFirst(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
 	var got []visor.PairMessage
-	_ = json.Unmarshal(rr.Body.Bytes(), &got)
+	if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v\nbody=%q", err, rr.Body.String())
+	}
 	if len(got) != 2 {
 		t.Fatalf("len(got) = %d, want 2", len(got))
 	}
