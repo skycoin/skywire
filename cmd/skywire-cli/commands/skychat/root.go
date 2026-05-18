@@ -34,6 +34,9 @@ var (
 	sendWait     time.Duration
 	sendRetries  int
 	sendVerbose  bool
+	sendVia      string // --via tcp://<pk>@host:port (bypasses local chat-app)
+	tcpViaSK     string // --sk for --via tcp identity
+	tcpViaConfig string // -c / --config for --via tcp identity
 	listenNet    string
 	listenFrom   string
 	listenRaw    bool
@@ -60,6 +63,9 @@ func init() {
 	sendCmd.Flags().DurationVarP(&sendWait, "wait", "w", 5*time.Second, "wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 disables wait and returns success on WriteFrame (fire-and-forget). Default 5s gives delivery confirmation.")
 	sendCmd.Flags().IntVarP(&sendRetries, "retries", "r", 1, "extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried.")
 	sendCmd.Flags().BoolVar(&sendVerbose, "verbose", false, "surface per-layer detail to stderr: POST request URL+payload, HTTP response status+headers, ack timing, /status counter deltas (outbound_msg_count / fail / retry / fallback). Use to debug send failures.")
+	sendCmd.Flags().StringVar(&sendVia, "via", "", "bypass local chat-app and dial the remote chat-app directly via noise-TCP: tcp://<pk>@host:port. Survives visor / dmsg outages. Use --sk / -c / DMSGCURL_SK for identity.")
+	sendCmd.Flags().StringVar(&tcpViaSK, "sk", "", "identity SK for --via tcp (hex). Overrides env + config.")
+	sendCmd.Flags().StringVarP(&tcpViaConfig, "config", "c", "", "skywire.json path — only sk field read, for --via tcp identity")
 	sendCmd.MarkFlagRequired("to")  //nolint:errcheck,gosec
 	sendCmd.MarkFlagRequired("msg") //nolint:errcheck,gosec
 
@@ -124,6 +130,42 @@ Outcomes (--wait > 0):
 		pk, err := resolveTarget(recipient)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		// --via tcp://<pk>@host:port short-circuits the entire HTTP /
+		// chat-app path: dial the remote chat-app's noise-TCP listener
+		// directly, write a chat-msg envelope, optionally wait for ack.
+		// Bypasses the local chat-app entirely — useful when the local
+		// visor is down OR when dmsg-disc / skynet are misbehaving.
+		// --net is ignored in this path; the noise XK handshake pins
+		// the PK from --via, not from --to.
+		if sendVia != "" {
+			errOut := cmd.ErrOrStderr()
+			if sendVerbose {
+				fmt.Fprintf(errOut, "[verbose] via: %s\n", sendVia)                           //nolint:errcheck
+				fmt.Fprintf(errOut, "[verbose] msg bytes: %d\n", len(message))                //nolint:errcheck
+				fmt.Fprintf(errOut, "[verbose] wait timeout: %s\n", sendWait)                 //nolint:errcheck
+				fmt.Fprintf(errOut, "[verbose] mode: noise-TCP direct (no local chat-app)\n") //nolint:errcheck
+			}
+			ack, err := sendViaTCP(sendVia, recipient, message, sendWait)
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			if sendWait > 0 {
+				if ack != nil && ack.Acked {
+					internal.PrintOutput(cmd.Flags(), nil,
+						fmt.Sprintf("Acked by %s in %dms (id=%s, via tcp)\n", pk.String(), ack.MS, ack.ID))
+					return
+				}
+				reason := "no ack"
+				if ack != nil && ack.Reason != "" {
+					reason = ack.Reason
+				}
+				internal.PrintFatalError(cmd.Flags(),
+					fmt.Errorf("send to %s via tcp not acked: %s", pk.String(), reason))
+			}
+			internal.PrintOutput(cmd.Flags(), nil,
+				fmt.Sprintf("Message sent to %s via tcp\n", pk.String()))
+			return
 		}
 		if err := validateNetwork(sendNet); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)

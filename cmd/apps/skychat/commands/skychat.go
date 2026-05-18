@@ -574,6 +574,13 @@ func init() {
 	RootCmd.Flags().BoolVar(&pairEnable, "pair-enable", false, "enable per-partner CXO pair feeds (HTTP /pair endpoints + handshake)")
 	RootCmd.Flags().StringVar(&pairRPCAddr, "pair-rpc", "localhost:3435", "visor RPC address used by the pair manager")
 	RootCmd.Flags().DurationVar(&pairPollInterval, "pair-poll-interval", time.Second, "how often skychat drains the visor's pair-message inbox onto the SSE stream")
+
+	// TCP-direct entry points — see tcp_direct.go. Defaults disabled.
+	RootCmd.Flags().StringVar(&tcpListen, "tcp-listen", "", "accept noise-XK on TCP (e.g. ':8800'); requires --tcp-whitelist + an identity (--sk/-c/env). Bidirectional once established.")
+	RootCmd.Flags().StringSliceVar(&tcpPeers, "tcp-peer", nil, "persistent outbound TCP-direct peer: tcp://<pk>@host:port (repeat for many). For NAT-side hosts that dial out to public-IP peers.")
+	RootCmd.Flags().StringVar(&tcpWhitelist, "tcp-whitelist", "", "comma-separated peer PKs allowed to connect via --tcp-listen (empty rejects all)")
+	RootCmd.Flags().StringVar(&tcpSKFlag, "sk", "", "identity SK for TCP-direct (hex). Overrides env + config.")
+	RootCmd.Flags().StringVarP(&tcpConfigPath, "config", "c", "", "path to skywire.json — only the sk field is read, for TCP-direct identity")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -626,6 +633,13 @@ func RunSkychat(ctx context.Context, args []string) error {
 		fs.BoolVar(&pairEnable, "pair-enable", false, "enable per-partner CXO pair feeds")
 		fs.StringVar(&pairRPCAddr, "pair-rpc", "localhost:3435", "visor RPC address for pair manager")
 		fs.DurationVar(&pairPollInterval, "pair-poll-interval", time.Second, "pair inbox poll interval")
+		// TCP-direct flags must be parseable in the visor-launched
+		// path too — visor passes args verbatim from skywire.json.
+		fs.StringVar(&tcpListen, "tcp-listen", "", "TCP-direct listen addr")
+		fs.StringSliceVar(&tcpPeers, "tcp-peer", nil, "tcp://<pk>@host:port (repeatable)")
+		fs.StringVar(&tcpWhitelist, "tcp-whitelist", "", "comma-separated allowed peer PKs")
+		fs.StringVar(&tcpSKFlag, "sk", "", "TCP-direct identity SK (hex)")
+		fs.StringVarP(&tcpConfigPath, "config", "c", "", "skywire.json path for SK")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -676,7 +690,14 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if useDmsg {
 		go listenLoop(appnet.TypeDmsg, port)
 	}
-	if !useSkynet && !useDmsg {
+	// TCP-direct entry point — independent of useSkynet/useDmsg.
+	// Operator opts in via --tcp-listen / --tcp-peer; nil-effect
+	// when both are empty so existing visor-managed setups are
+	// unaffected. See tcp_direct.go for the accept/dial loops.
+	if err := startTCPDirect(ctx); err != nil {
+		appLog("skychat: tcp-direct startup failed: %v — continuing with dmsg/skynet only", err)
+	}
+	if !useSkynet && !useDmsg && tcpListen == "" && len(tcpPeers) == 0 {
 		appLog("Warning: no network types enabled, skychat will not accept connections")
 	}
 
