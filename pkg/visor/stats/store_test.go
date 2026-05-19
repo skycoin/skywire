@@ -1,7 +1,9 @@
 package stats
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,6 +41,59 @@ func TestStoreOpenIsIdempotent(t *testing.T) {
 	if err := s2.Close(); err != nil {
 		t.Errorf("second close: %v", err)
 	}
+}
+
+func TestOpenStoreRepairsCorruptFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stats.db")
+
+	// Plant a "corrupt" bbolt file by writing garbage to the path.
+	// bbolt.Open will fail on the magic number / header check, which
+	// is one of the failure modes repairIfCorrupt has to handle (the
+	// other being a successful Open that fails tx.Check — harder to
+	// fabricate without exercising bbolt internals, so this test
+	// covers the open-side path).
+	if err := os.WriteFile(path, []byte("not a bbolt file at all, just bytes"), 0600); err != nil {
+		t.Fatalf("plant garbage: %v", err)
+	}
+
+	s, err := OpenStore(path)
+	if err != nil {
+		t.Fatalf("OpenStore on corrupt path should auto-recover, got: %v", err)
+	}
+	defer s.Close() //nolint:errcheck
+
+	// Verify a .corrupt.<unix> sibling was created.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	var foundBak bool
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "stats.db.corrupt.") {
+			foundBak = true
+			break
+		}
+	}
+	if !foundBak {
+		t.Errorf("expected a stats.db.corrupt.* sibling alongside the recreated store; got %v",
+			dirNames(entries))
+	}
+
+	// And the recreated store works for normal round-trips.
+	id := uuid.New()
+	rec := &TransportRecord{ID: id, Type: "stcpr"}
+	if err := s.PutTransportRecord(rec); err != nil {
+		t.Errorf("Put after repair: %v", err)
+	}
+}
+
+func dirNames(entries []os.DirEntry) []string {
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e.Name())
+	}
+	return out
 }
 
 func TestPutGetTransportRecord(t *testing.T) {
