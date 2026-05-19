@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"sort"
 	"time"
 
@@ -41,7 +42,23 @@ type Store struct {
 // first run; on subsequent opens the version is verified — a mismatch
 // returns ErrSchemaMismatch so the caller can decide whether to
 // migrate or refuse.
+//
+// Before the open OpenStore runs an integrity check on the existing
+// file (if any). bbolt's own consistency-check (tx.Check) walks pages
+// + freelist + bucket inodes and surfaces problems like the
+// "circular dependency" assertion that bbolt would otherwise panic
+// on during a later commit — a panic that fires in bbolt's internal
+// batch goroutine and is therefore not recoverable from caller code.
+// Treating a corrupt stats DB as "delete + recreate" is safe because
+// the store is local telemetry; everything it holds is regenerated
+// from runtime samples.
 func OpenStore(path string) (*Store, error) {
+	if err := repairIfCorrupt(path); err != nil {
+		// repairIfCorrupt only fails when it cannot move the file
+		// aside (permission, ENOSPC). Surface to caller — opening a
+		// known-corrupt file would just defer the panic.
+		return nil, fmt.Errorf("stats: integrity-check %s: %w", path, err)
+	}
 	db, err := bbolt.Open(path, 0600, &bbolt.Options{
 		NoSync:  false,
 		Timeout: 5 * time.Second,
@@ -441,4 +458,81 @@ func (s *Store) PruneBitmaps(cutoff time.Time) (int, error) {
 		return nil
 	})
 	return removed, err
+}
+
+// repairIfCorrupt opens the bbolt file at path (if it exists), runs
+// bbolt's built-in tx.Check() consistency check, and — if any problem
+// is found — moves the file aside with a timestamped .corrupt.<unix>
+// suffix so the subsequent bbolt.Open creates a fresh, empty file.
+// Returns nil when the file doesn't exist, when it passes the check,
+// or when a corrupt file was successfully moved aside. Returns an
+// error only when the corrupt file CANNOT be moved aside (permission,
+// disk full), since opening a known-bad file would just defer a
+// process-killing panic to first write.
+//
+// The check has to use a writable open: bbolt opens the freelist
+// during init and ReadOnly mode skips that, missing exactly the
+// inconsistencies we're trying to detect. We immediately close the
+// handle, so the writable open is brief and doesn't fight the caller's
+// real open that follows.
+func repairIfCorrupt(path string) error {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("stat %s: %w", path, err)
+	}
+
+	db, openErr := bbolt.Open(path, 0600, &bbolt.Options{
+		Timeout: 5 * time.Second,
+	})
+	if openErr != nil {
+		// File exists but bbolt won't open it — header corruption,
+		// truncation, or unrelated I/O error. Move aside and try to
+		// recover from scratch; if the move itself fails, surface.
+		return moveCorruptAside(path, fmt.Errorf("open: %w", openErr))
+	}
+
+	// Collect ALL problems Check reports rather than short-circuiting
+	// on the first — useful diagnostic context in the bak-file move
+	// message even if we only fix-by-deletion. Cap at the first few
+	// problems to keep the error message bounded.
+	var problems []error
+	const maxProblemsKept = 5
+	viewErr := db.View(func(tx *bbolt.Tx) error {
+		for e := range tx.Check() {
+			if len(problems) < maxProblemsKept {
+				problems = append(problems, e)
+			}
+		}
+		return nil
+	})
+	closeErr := db.Close()
+	if viewErr != nil {
+		return moveCorruptAside(path, fmt.Errorf("check view: %w", viewErr))
+	}
+	if closeErr != nil {
+		// Not necessarily corruption — but we already saw a clean
+		// Check pass; treat as non-fatal.
+		return nil
+	}
+	if len(problems) > 0 {
+		return moveCorruptAside(path, fmt.Errorf("bbolt check found %d problems (first: %v)", len(problems), problems[0]))
+	}
+	return nil
+}
+
+// moveCorruptAside renames the bbolt file at path to
+// path + .corrupt.<unix-ts> so the caller can proceed to open a fresh
+// file. Returns an error only when the rename itself fails — at that
+// point opening the existing file would just defer the panic, so
+// callers should propagate.
+func moveCorruptAside(path string, reason error) error {
+	bak := fmt.Sprintf("%s.corrupt.%d", path, time.Now().Unix())
+	if err := os.Rename(path, bak); err != nil {
+		return fmt.Errorf("bbolt at %s corrupt (%v); also failed to move aside to %s: %w", path, reason, bak, err)
+	}
+	// Successful repair — caller will recreate. Caller is responsible
+	// for logging the recovery; this package's API doesn't carry a
+	// logger.
+	return nil
 }
