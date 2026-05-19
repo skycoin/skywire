@@ -11,6 +11,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/skycoin/skywire/pkg/cxo/data"
+	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
 
 var (
@@ -77,6 +78,25 @@ func NewDriveCXDSWithOptions(fileName string, opts DriveOptions) (ds data.CXDS, 
 
 	_, err = os.Stat(fileName)
 	created = os.IsNotExist(err)
+
+	// Probe-and-repair before the real open. RepairIfCorrupt returns
+	// nil when the file is absent, healthy, or successfully renamed
+	// aside as ".corrupt.<unix-ts>" — in the latter case the bolt.Open
+	// below proceeds to create a fresh empty CXDS. This guards against
+	// a commit-time panic later (bbolt's "circular dependency"
+	// assertion fires in an internal batch goroutine and is not
+	// recoverable from caller code). Treating CXDS corruption as
+	// recreate-empty is safe: CXDS is content-addressed and any leaf
+	// lost in a torn write is re-fetched from peers on the next CXO
+	// subscription cycle.
+	if rErr := bbolthealth.RepairIfCorrupt(fileName); rErr != nil {
+		return nil, fmt.Errorf("cxds: integrity-check %s: %w", fileName, rErr)
+	}
+	if !created {
+		if _, statErr := os.Stat(fileName); os.IsNotExist(statErr) {
+			created = true
+		}
+	}
 
 	var b *bolt.DB
 	b, err = bolt.Open(fileName, 0644, &bolt.Options{
