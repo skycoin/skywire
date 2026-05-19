@@ -1,0 +1,7 @@
+{
+  "_comment": "Reference baseline for mux-probe-assert. Record this from a SINGLE-LEG (routes=1) probe run before exercising mux fanout, so the throughput-ratio assertion has a real reference point. The .example.json suffix is intentional — keep the live baseline (mux-baseline.json) gitignored so per-environment numbers don't drift into the repo.",
+  "throughput_kbps": 1000,
+  "throughput_threshold_pct": 70,
+  "rtt_p99_ceiling_ms": 500,
+  "skychat_ack_rate_min_pct": 90
+}
