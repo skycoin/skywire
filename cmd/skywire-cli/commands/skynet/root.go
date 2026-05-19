@@ -29,6 +29,7 @@ var (
 	useInternal   bool
 	useExternal   bool
 	clientName    string // optional custom name for the client instance
+	startRoutes   int    // number of parallel skynet mux routes (0/1 = single route)
 )
 
 func init() {
@@ -46,6 +47,7 @@ func init() {
 	startCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "custom name for this client instance (default: skynet-client-<local-port>)")
+	startCmd.Flags().IntVar(&startRoutes, "routes", 0, "number of parallel skynet mux routes (0 or 1 = single route)")
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the client instance to stop")
@@ -117,6 +119,10 @@ var startCmd = &cobra.Command{
 
 		if clientAppPort != 0 {
 			arguments["appPort"] = clientAppPort
+		}
+
+		if startRoutes > 1 {
+			arguments["--routes"] = fmt.Sprintf("%d", startRoutes)
 		}
 
 		err = rpcClient.DoCustomSetting(appName, arguments)
