@@ -102,6 +102,40 @@ func TestRPCIngressClient_Dial(t *testing.T) {
 	})
 }
 
+func TestRPCIngressClient_DialWithOptions(t *testing.T) {
+	t.Run("ok with muxRoutes", func(t *testing.T) {
+		rpcL, closeL := prepListener(t)
+		defer closeL()
+
+		rpcS := prepRPCServer(t, NewRPCGateway(nil, nil))
+		go rpcS.Accept(rpcL)
+
+		rpcC := prepRPCClient(t, rpcL.Addr().Network(), rpcL.Addr().String())
+
+		dmsgLocal, dmsgRemote, _, remote := prepAddrs()
+
+		dialCtx := context.Background()
+		dialConn := &appcommon.MockConn{}
+		dialConn.On("LocalAddr").Return(dmsgLocal)
+		dialConn.On("RemoteAddr").Return(dmsgRemote)
+
+		n := &appnet.MockNetworker{}
+		n.On("DialContext", dialCtx, remote).Return(dialConn, testhelpers.NoErr)
+
+		appnet.ClearNetworkers()
+		require.NoError(t, appnet.AddNetworker(appnet.TypeDmsg, n))
+
+		// muxRoutes=4 but no SkywireNetworker registered → server falls
+		// back to plain DialContext; the round-trip still succeeds and
+		// returns a valid ConnID. We're pinning the wire shape, not the
+		// router-level mux behavior (which is integration-tested).
+		connID, localPort, err := rpcC.DialWithOptions(remote, 4)
+		require.NoError(t, err)
+		require.Equal(t, uint16(1), connID)
+		require.Equal(t, routing.Port(dmsgLocal.Port), localPort)
+	})
+}
+
 func TestRPCIngressClient_Listen(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		s := prepRPCServer(t, NewRPCGateway(nil, nil))
