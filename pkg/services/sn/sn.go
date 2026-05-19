@@ -225,7 +225,7 @@ func (s *service) startCascade(
 			arC, _ = addrresolver.NewHTTP( //nolint:errcheck
 				conf.Transport.AddressResolver,
 				conf.PK, conf.SK,
-				httpC, nil, "",
+				httpC, nil, "", "",
 				log, mLog,
 			)
 		}
