@@ -51,7 +51,7 @@ func TestClientAuth(t *testing.T) {
 	defer srv.Close()
 	log := logging.MustGetLogger("test_client_auth")
 
-	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, nil, ip, log, masterLogger)
+	apiClient, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, nil, ip, "", log, masterLogger)
 	require.NoError(t, err)
 
 	c := apiClient.(*httpClient)
@@ -80,7 +80,7 @@ func TestBind(t *testing.T) {
 
 	defer srv.Close()
 	log := logging.MustGetLogger("test_bind")
-	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, nil, ip, log, masterLogger)
+	c, err := NewHTTP(srv.URL, testPubKey, testSecKey, &http.Client{}, nil, ip, "", log, masterLogger)
 	require.NoError(t, err)
 
 	err = c.BindSTCPR(context.TODO(), "1234")
