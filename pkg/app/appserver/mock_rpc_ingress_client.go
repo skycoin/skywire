@@ -123,6 +123,41 @@ func (_m *MockRPCIngressClient) Dial(remote appnet.Addr) (uint16, routing.Port, 
 	return r0, r1, r2
 }
 
+// DialWithOptions provides a mock function with given fields: remote, muxRoutes
+func (_m *MockRPCIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes int) (uint16, routing.Port, error) {
+	ret := _m.Called(remote, muxRoutes)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DialWithOptions")
+	}
+
+	var r0 uint16
+	var r1 routing.Port
+	var r2 error
+	if rf, ok := ret.Get(0).(func(appnet.Addr, int) (uint16, routing.Port, error)); ok {
+		return rf(remote, muxRoutes)
+	}
+	if rf, ok := ret.Get(0).(func(appnet.Addr, int) uint16); ok {
+		r0 = rf(remote, muxRoutes)
+	} else {
+		r0 = ret.Get(0).(uint16)
+	}
+
+	if rf, ok := ret.Get(1).(func(appnet.Addr, int) routing.Port); ok {
+		r1 = rf(remote, muxRoutes)
+	} else {
+		r1 = ret.Get(1).(routing.Port)
+	}
+
+	if rf, ok := ret.Get(2).(func(appnet.Addr, int) error); ok {
+		r2 = rf(remote, muxRoutes)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
 // Listen provides a mock function with given fields: local
 func (_m *MockRPCIngressClient) Listen(local appnet.Addr) (uint16, error) {
 	ret := _m.Called(local)
