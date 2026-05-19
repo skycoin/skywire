@@ -276,6 +276,7 @@ pre_rg="$("${CLI[@]}" rg ls --json 2>/dev/null || echo '[]')"
 pre_rg_count=$(printf '%s' "$pre_rg" | jq '. // [] | length')
 
 tmpdir=$(mktemp -d -t muxprobe.XXXXXX)
+# shellcheck disable=SC2329 # invoked via trap, not direct call
 cleanup() {
     rm -rf "$tmpdir"
     # Restore route minhops if --avoid-direct mutated it. Always
