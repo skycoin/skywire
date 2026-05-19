@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 
@@ -35,6 +36,11 @@ var (
 	localPort int
 	// appPort is the routing port for the app
 	appPort uint16
+	// routes is the number of parallel skynet mux routes to use for the
+	// underlying app-level conn. 0 or 1 = single route (legacy Dial
+	// path); N > 1 = router establishes N parallel mux routes and the
+	// app sees a single conn whose payload is striped across them.
+	routes int
 )
 
 func init() {
@@ -43,6 +49,7 @@ func init() {
 	RootCmd.Flags().IntVar(&remotePort, "remote", 0, "remote port to forward")
 	RootCmd.Flags().IntVar(&localPort, "local", 0, "local port to listen on")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
+	RootCmd.Flags().IntVar(&routes, "routes", 0, "number of parallel skynet mux routes (0 or 1 = single route)")
 }
 
 // RootCmd is the root command for skynet-client
@@ -72,6 +79,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.IntVar(&remotePort, "remote", 0, "remote port")
 		fs.IntVar(&localPort, "local", 0, "local port")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		fs.IntVar(&routes, "routes", 0, "number of parallel skynet mux routes")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -126,9 +134,22 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		Port:   routing.Port(skyenv.SkyForwardingServerPort),
 	}
 
-	appCl.Log().Infof("Dialing %s on port %d", remotePK.Hex(), skyenv.SkyForwardingServerPort)
+	if routes > 1 {
+		appCl.Log().Infof("Dialing %s on port %d with %d parallel mux routes",
+			remotePK.Hex(), skyenv.SkyForwardingServerPort, routes)
+	} else {
+		appCl.Log().Infof("Dialing %s on port %d", remotePK.Hex(), skyenv.SkyForwardingServerPort)
+	}
 
-	conn, err := appCl.Dial(connApp)
+	var (
+		conn net.Conn
+		err  error
+	)
+	if routes > 1 {
+		conn, err = appCl.DialWithOptions(connApp, routes)
+	} else {
+		conn, err = appCl.Dial(connApp)
+	}
 	if err != nil {
 		setAppError(appCl, fmt.Errorf("failed to connect to server: %w", err))
 		return fmt.Errorf("failed to connect to server: %w", err)

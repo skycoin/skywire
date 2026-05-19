@@ -168,6 +168,73 @@ func testRPCIngressGatewayDialErrorWrappingConn(t *testing.T, l *logging.Logger,
 	require.Equal(t, err, appnet.ErrUnknownAddrType)
 }
 
+func TestRPCIngressGateway_DialWithOptions(t *testing.T) {
+	l := logging.MustGetLogger("rpc_gateway")
+	nType := appnet.TypeDmsg
+	dialAddr := prepAddr(nType)
+
+	t.Run("nil request", func(t *testing.T) {
+		rpc := NewRPCGateway(l, nil)
+		var resp DialResp
+		err := rpc.DialWithOptions(nil, &resp)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "nil request")
+	})
+
+	t.Run("muxRoutes 0 falls through to legacy dial", func(t *testing.T) {
+		appnet.ClearNetworkers()
+
+		const localPort routing.Port = 200
+
+		dialCtx := context.Background()
+		dialConn := &appcommon.MockConn{}
+		dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
+		dialConn.On("RemoteAddr").Return(dmsg.Addr{})
+
+		n := &appnet.MockNetworker{}
+		n.On("DialContext", dialCtx, dialAddr).Return(dialConn, error(nil))
+
+		require.NoError(t, appnet.AddNetworker(nType, n))
+
+		rpc := NewRPCGateway(l, nil)
+
+		var resp DialResp
+		req := &DialOptionsReq{Addr: dialAddr, MuxRoutes: 0}
+		require.NoError(t, rpc.DialWithOptions(req, &resp))
+		require.Equal(t, uint16(1), resp.ConnID)
+		require.Equal(t, localPort, resp.LocalPort)
+		n.AssertExpectations(t)
+	})
+
+	t.Run("muxRoutes N on non-skywire networker falls back to DialContext", func(t *testing.T) {
+		appnet.ClearNetworkers()
+
+		const localPort routing.Port = 201
+
+		dialCtx := context.Background()
+		dialConn := &appcommon.MockConn{}
+		dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
+		dialConn.On("RemoteAddr").Return(dmsg.Addr{})
+
+		n := &appnet.MockNetworker{}
+		n.On("DialContext", dialCtx, dialAddr).Return(dialConn, error(nil))
+
+		require.NoError(t, appnet.AddNetworker(nType, n))
+
+		rpc := NewRPCGateway(l, nil)
+
+		var resp DialResp
+		req := &DialOptionsReq{Addr: dialAddr, MuxRoutes: 4}
+		require.NoError(t, rpc.DialWithOptions(req, &resp))
+		require.Equal(t, uint16(1), resp.ConnID)
+		require.Equal(t, localPort, resp.LocalPort)
+		// Confirms the type-assertion guard works: with no *SkywireNetworker
+		// registered we silently degrade to plain DialContext rather than
+		// erroring; the mux-routes hint is dropped.
+		n.AssertExpectations(t)
+	})
+}
+
 func TestRPCIngressGateway_Listen(t *testing.T) {
 	l := logging.MustGetLogger("rpc_gateway")
 	nType := appnet.TypeDmsg
