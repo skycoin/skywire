@@ -817,6 +817,22 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 }
 
 func formatARAddr(e visor.ARSelfEntry) string {
+	v4 := formatARAddrV4(e)
+	if e.RemoteAddrV6 == "" {
+		return v4
+	}
+	// Dual-stack — surface both addresses with explicit family
+	// labels. The v6 side is rendered verbatim from RemoteAddrV6
+	// (already host:port from splitFamilyAddr in #2715) so the
+	// bracketed form is preserved.
+	return fmt.Sprintf("%s [v4] / %s [v6]", v4, e.RemoteAddrV6)
+}
+
+// formatARAddrV4 renders just the IPv4 portion. Split out from
+// formatARAddr so dual-stack rendering can reuse the existing logic
+// without duplicating it. Pre-#1525 callers see no behavior change
+// (formatARAddr falls through to this when no v6 is set).
+func formatARAddrV4(e visor.ARSelfEntry) string {
 	if e.RemoteAddr == "" && e.Port == "" {
 		return "(unknown)"
 	}
