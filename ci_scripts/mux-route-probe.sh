@@ -34,11 +34,21 @@
 #                              visor (the half-path we can observe).
 #                              The other half (intermediate→endpoint-b)
 #                              cannot be verified from here.
-#   --avoid-direct           — pre-flight aborts if a direct (non-DMSG)
-#                              transport exists between endpoint-a and
-#                              endpoint-b. Used by the BETA↔GAMMA mux
-#                              fan-out test to force routes via the
-#                              intermediate pool.
+#   --avoid-direct           — exclude the direct endpoint-a→endpoint-b
+#                              edge from route construction by bumping
+#                              the visor's runtime routing.min_hops to
+#                              2 for the duration of the run (the EXIT
+#                              trap restores to 1, skywire's default).
+#                              The direct transport is NOT removed —
+#                              just unselectable by the route-finder
+#                              while min_hops=2. Used by the BETA↔GAMMA
+#                              mux fan-out test to force every route
+#                              through an intermediate. Caveat: the
+#                              runner has no getter for the current
+#                              min_hops, so a non-default setting on
+#                              the visor will not survive the run —
+#                              opting in to --avoid-direct accepts
+#                              that mutation.
 #
 # Env / positional overrides (unchanged from #2723):
 #   ROUTES     — requested mux-leg count (default 2)
@@ -183,28 +193,33 @@ EOF
     exit 2
 fi
 
-# --avoid-direct: forbid a direct non-DMSG edge between endpoint-a
-# and endpoint-b. The BETA↔GAMMA mux-fanout test wants every route to
-# go through an intermediate; a direct STCPR/SUDPH would let route-
-# finder pick the 1-hop path and defeat the experiment. Detection:
-# look for endpoint-b's PK in our tp ls under a non-DMSG type column.
+# --avoid-direct: exclude the direct endpoint-a→endpoint-b edge from
+# route construction without removing the transport. Implementation:
+# bump the visor's runtime routing.min_hops to 2, which forces the
+# route-finder to skip any 1-hop path (i.e., the direct edge) and
+# pick a chain through an intermediate. The mutation is in-memory
+# only (cli route minhops doesn't touch the config file) and is
+# restored to skywire's default of 1 in the EXIT trap below.
+#
+# Why not pre-flight-reject when a direct transport exists: per
+# Alpha's 2026-05-19 16:38Z design clarification, the operator's
+# framing 'avoid direct beta-gamma' means EXCLUDE FROM ROUTE
+# CONSTRUCTION, not REFUSE-TO-RUN. The direct transport stays in
+# place (it's still useful for other tests, single-hop baselines,
+# etc.); we just don't want this particular run picking it.
+prev_minhops_unset=0
 if [[ "$avoid_direct" -eq 1 ]]; then
-    direct_hit=$(printf '%s\n' "$tp_summary" | awk -v pk="$endpoint_b" '
-        $1 ~ /^(stcpr|sudph|stcp)$/ && index($0, pk) { print }
-    ')
-    if [[ -n "$direct_hit" ]]; then
-        cat <<EOF >&2
-ABORT: --avoid-direct set but a direct non-DMSG transport between
-endpoint-a ($endpoint_a) and endpoint-b ($endpoint_b) already exists:
-
-  $direct_hit
-
-Remove it (skywire cli tp rm <id>) so the route-finder is forced to
-chain through an intermediate, then re-run.
-EOF
-        exit 2
+    # No getter for current min_hops via cli — set the new value and
+    # mark for restore. Operator opt-in via --avoid-direct accepts
+    # the mutation; we always restore to 1 (skywire's documented
+    # default) on exit so a sustained custom-min-hops setting would
+    # not survive across the run.
+    if ! "${CLI[@]}" route minhops 2 >/dev/null 2>&1; then
+        echo "pre-flight: failed to set route minhops=2 for --avoid-direct" >&2
+        exit 1
     fi
-    log "pre-flight: --avoid-direct verified — no direct $endpoint_a→$endpoint_b transport"
+    prev_minhops_unset=1
+    log "pre-flight: --avoid-direct set route minhops=2 (will restore to 1 on exit)"
 fi
 
 # --intermediate-pool: verify each pool member is reachable from this
@@ -261,7 +276,17 @@ pre_rg="$("${CLI[@]}" rg ls --json 2>/dev/null || echo '[]')"
 pre_rg_count=$(printf '%s' "$pre_rg" | jq '. // [] | length')
 
 tmpdir=$(mktemp -d -t muxprobe.XXXXXX)
-trap 'rm -rf "$tmpdir"' EXIT
+cleanup() {
+    rm -rf "$tmpdir"
+    # Restore route minhops if --avoid-direct mutated it. Always
+    # restore to 1 (skywire's default) — the runner has no getter for
+    # the previous value, so a non-default setting on the visor would
+    # not survive the run. Document this in --avoid-direct's contract.
+    if [[ "${prev_minhops_unset:-0}" -eq 1 ]]; then
+        "${CLI[@]}" route minhops 1 >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup EXIT
 
 # Throughput leg — dmsg cat is the closest existing tool to a
 # multi-hop byte-pipe with explicit routes control. Replace with a
