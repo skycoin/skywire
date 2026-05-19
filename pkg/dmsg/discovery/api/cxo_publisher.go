@@ -207,6 +207,20 @@ func (p *ClientsByServerCXOPublisher) PublishSetEntry(oldEntry, newEntry *disc.E
 		oldServers = pkSet(oldEntry.Client.DelegatedServers)
 	}
 
+	// Heartbeat short-circuit. clients-by-server subscribers consume
+	// (server, client) membership; Sequence/Timestamp/Signature bumps
+	// on otherwise-unchanged entries don't change that view. Under
+	// prod heartbeat load (~160 POST /entry/ per second observed
+	// 2026-05-19) re-publishing every refresh pegged dmsg-discovery
+	// at one full CPU core (13537 cpu-sec over 13309 wall-sec since
+	// startup, with 89% of inuse heap under
+	// Refs.AppendValues -> encoder.Serialize). Skipping when the
+	// materially-visible content is unchanged keeps the leaf set
+	// stable while removing the dominant publish work.
+	if oldEntry != nil && entryContentEqual(oldEntry, newEntry) {
+		return
+	}
+
 	body, err := json.Marshal(newEntry)
 	if err != nil {
 		p.log.WithError(err).Debug("Failed to marshal client entry leaf")
@@ -322,4 +336,36 @@ func pkSet(pks []cipher.PubKey) map[cipher.PubKey]struct{} {
 		out[pk] = struct{}{}
 	}
 	return out
+}
+
+// entryContentEqual reports whether two entries are identical from
+// the clients-by-server view's perspective. Deliberately excludes
+// Sequence, Timestamp, and Signature because those bump on every
+// heartbeat re-signature without changing the delegated-server
+// membership that subscribers consume.
+func entryContentEqual(a, b *disc.Entry) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	if a.Version != b.Version || a.ClientType != b.ClientType || a.Protocol != b.Protocol {
+		return false
+	}
+	if a.Static != b.Static {
+		return false
+	}
+	if (a.Client == nil) != (b.Client == nil) {
+		return false
+	}
+	if a.Client != nil {
+		if len(a.Client.DelegatedServers) != len(b.Client.DelegatedServers) {
+			return false
+		}
+		set := pkSet(a.Client.DelegatedServers)
+		for _, pk := range b.Client.DelegatedServers {
+			if _, ok := set[pk]; !ok {
+				return false
+			}
+		}
+	}
+	return true
 }
