@@ -251,44 +251,56 @@ func scanInt64(out *int64, s string) error {
 	return nil
 }
 
+// emitf/emitln wrap fmt.Fprintf/Fprintln on an io.Writer and discard
+// the return so callers don't have to litter _, _ = on every trace
+// line. The Writer here is stderr (or a test buffer); a write error
+// is not actionable from the harness's perspective.
+func emitf(w io.Writer, format string, args ...any) {
+	_, _ = fmt.Fprintf(w, format, args...) //nolint:errcheck
+}
+
+func emitln(w io.Writer, s string) {
+	_, _ = fmt.Fprintln(w, s) //nolint:errcheck
+}
+
 // assertTally applies the scope-agreement thresholds and returns the
 // exit code. Writes a one-line summary per assertion to w so a CI
 // lane log shows the full pass/fail trace, not just the exit code.
 func assertTally(t Tally, b Baseline, w io.Writer) int {
-	fmt.Fprintf(w, "mux-probe-assert: target=%s routes_req=%d routes_act=%d throughput=%dKB/s p50=%dms p99=%dms\n",
+	emitf(w, "mux-probe-assert: target=%s routes_req=%d routes_act=%d throughput=%dKB/s p50=%dms p99=%dms\n",
 		t.TargetPK, t.RoutesReq, t.RoutesAct, t.ThroughputKBPS, t.RTTp50ms, t.RTTp99ms)
 
 	// (a) routes_act ≥ routes_req — the methodology gap.
 	if t.RoutesAct < t.RoutesReq {
-		fmt.Fprintf(w, "FAIL: topology degrade — routes_act %d < routes_req %d\n", t.RoutesAct, t.RoutesReq)
+		emitf(w, "FAIL: topology degrade — routes_act %d < routes_req %d\n", t.RoutesAct, t.RoutesReq)
 		return exitTopologyDegrade
 	}
-	fmt.Fprintf(w, "PASS: fanout took (routes_act %d ≥ routes_req %d)\n", t.RoutesAct, t.RoutesReq)
+	emitf(w, "PASS: fanout took (routes_act %d ≥ routes_req %d)\n", t.RoutesAct, t.RoutesReq)
 
 	// (c) throughput ≥ threshold% of baseline.
 	if b.ThroughputKBPS > 0 {
 		floor := b.ThroughputKBPS * b.ThroughputThresholdPct / 100
 		if t.ThroughputKBPS < floor {
-			fmt.Fprintf(w, "FAIL: throughput regression — %d KB/s < %d KB/s (%d%% of baseline %d KB/s)\n",
+			emitf(w, "FAIL: throughput regression — %d KB/s < %d KB/s (%d%% of baseline %d KB/s)\n",
 				t.ThroughputKBPS, floor, b.ThroughputThresholdPct, b.ThroughputKBPS)
 			return exitThroughputRegress
 		}
-		fmt.Fprintf(w, "PASS: throughput %d KB/s ≥ floor %d KB/s (baseline %d KB/s @ %d%%)\n",
+		emitf(w, "PASS: throughput %d KB/s ≥ floor %d KB/s (baseline %d KB/s @ %d%%)\n",
 			t.ThroughputKBPS, floor, b.ThroughputKBPS, b.ThroughputThresholdPct)
 	} else {
-		fmt.Fprintln(w, "SKIP: throughput check disabled (baseline.throughput_kbps == 0)")
+		emitln(w, "SKIP: throughput check disabled (baseline.throughput_kbps == 0)")
 	}
 
 	// (d) p99 ≤ ceiling. Operator-picked absolute bound, not
 	// baseline-relative — a mux run shouldn't bloat the tail.
 	if b.RTTp99CeilingMs > 0 {
 		if t.RTTp99ms > b.RTTp99CeilingMs {
-			fmt.Fprintf(w, "FAIL: p99 RTT %d ms > ceiling %d ms\n", t.RTTp99ms, b.RTTp99CeilingMs)
+			emitf(w, "FAIL: p99 RTT %d ms > ceiling %d ms\n", t.RTTp99ms, b.RTTp99CeilingMs)
 			return exitThroughputRegress // grouped with throughput-class regressions
 		}
-		fmt.Fprintf(w, "PASS: p99 RTT %d ms ≤ ceiling %d ms\n", t.RTTp99ms, b.RTTp99CeilingMs)
+		emitf(w, "PASS: p99 RTT %d ms ≤ ceiling %d ms\n", t.RTTp99ms, b.RTTp99CeilingMs)
 	} else {
-		fmt.Fprintln(w, "SKIP: p99 ceiling check disabled (baseline.rtt_p99_ceiling_ms == 0)")
+		emitln(w, "SKIP: p99 ceiling check disabled (baseline.rtt_p99_ceiling_ms == 0)")
 	}
 
 	// Skychat ack-rate floor. Independent of routes/throughput —
@@ -297,11 +309,11 @@ func assertTally(t Tally, b Baseline, w io.Writer) int {
 	if b.SkychatAckRateMinPct > 0 && t.SkychatSent > 0 {
 		ackPct := t.SkychatAcked * 100 / t.SkychatSent
 		if ackPct < b.SkychatAckRateMinPct {
-			fmt.Fprintf(w, "FAIL: skychat ack rate %d%% < min %d%% (%d/%d)\n",
+			emitf(w, "FAIL: skychat ack rate %d%% < min %d%% (%d/%d)\n",
 				ackPct, b.SkychatAckRateMinPct, t.SkychatAcked, t.SkychatSent)
 			return exitThroughputRegress
 		}
-		fmt.Fprintf(w, "PASS: skychat ack rate %d%% ≥ min %d%% (%d/%d)\n",
+		emitf(w, "PASS: skychat ack rate %d%% ≥ min %d%% (%d/%d)\n",
 			ackPct, b.SkychatAckRateMinPct, t.SkychatAcked, t.SkychatSent)
 	}
 
@@ -310,7 +322,7 @@ func assertTally(t Tally, b Baseline, w io.Writer) int {
 	// correlation between skychat-RTT and skysocks-throughput can't
 	// be computed here. Pairs with a future runner enhancement that
 	// emits a CSV of (send_ts, ack_ts, concurrent_throughput).
-	fmt.Fprintln(w, "SKIP: head-of-line correlation check (runner doesn't emit per-message data yet)")
+	emitln(w, "SKIP: head-of-line correlation check (runner doesn't emit per-message data yet)")
 
 	return exitOK
 }
