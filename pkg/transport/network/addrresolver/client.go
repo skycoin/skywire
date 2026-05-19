@@ -106,22 +106,23 @@ type VisorData struct {
 // reached via dmsg, when v6 init failed, or when the caller didn't
 // supply a v6 client — preserves pre-#1525 v4-only behavior.
 type httpClient struct {
-	log            *logging.Logger
-	mLog           *logging.MasterLogger
-	httpClient     *httpauthclient.Client
-	httpClientV6   *httpauthclient.Client
-	pk             cipher.PubKey
-	sk             cipher.SecKey
-	remoteHTTPAddr string
-	remoteHTTPURL  *url.URL
-	remoteUDPAddr  string
-	sudphConn      net.PacketConn
-	sudphArConn    net.Conn
-	sudphLocalAddr LocalAddresses
-	clientPublicIP string
-	ready          chan struct{}
-	closed         chan struct{}
-	delBindSudphWg sync.WaitGroup
+	log              *logging.Logger
+	mLog             *logging.MasterLogger
+	httpClient       *httpauthclient.Client
+	httpClientV6     *httpauthclient.Client
+	pk               cipher.PubKey
+	sk               cipher.SecKey
+	remoteHTTPAddr   string
+	remoteHTTPURL    *url.URL
+	remoteUDPAddr    string
+	sudphConn        net.PacketConn
+	sudphArConn      net.Conn
+	sudphLocalAddr   LocalAddresses
+	clientPublicIP   string
+	clientPublicIPv6 string
+	ready            chan struct{}
+	closed           chan struct{}
+	delBindSudphWg   sync.WaitGroup
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -137,7 +138,7 @@ type httpClient struct {
 // (udp_address field) once the auth client is ready. ARs that don't
 // publish udp_address simply leave SUDPH unavailable to dmsg-only
 // callers — the same behavior as before this change.
-func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC, httpCV6 *http.Client, clientPublicIP string, log *logging.Logger, mLog *logging.MasterLogger) (APIClient, error) {
+func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC, httpCV6 *http.Client, clientPublicIP, clientPublicIPv6 string, log *logging.Logger, mLog *logging.MasterLogger) (APIClient, error) {
 	remoteURL, err := url.Parse(remoteAddr)
 	if err != nil {
 		return nil, fmt.Errorf("parse URL: %w", err)
@@ -152,16 +153,17 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC, httpC
 	}
 
 	client := &httpClient{
-		log:            log,
-		mLog:           mLog,
-		pk:             pk,
-		sk:             sk,
-		remoteHTTPAddr: remoteAddr,
-		remoteHTTPURL:  remoteURL,
-		remoteUDPAddr:  remoteUDP,
-		clientPublicIP: clientPublicIP,
-		ready:          make(chan struct{}),
-		closed:         make(chan struct{}),
+		log:              log,
+		mLog:             mLog,
+		pk:               pk,
+		sk:               sk,
+		remoteHTTPAddr:   remoteAddr,
+		remoteHTTPURL:    remoteURL,
+		remoteUDPAddr:    remoteUDP,
+		clientPublicIP:   clientPublicIP,
+		clientPublicIPv6: clientPublicIPv6,
+		ready:            make(chan struct{}),
+		closed:           make(chan struct{}),
 	}
 
 	client.log.Debugf("Remote UDP server: %q", remoteUDP)
@@ -332,16 +334,29 @@ type BindRequest struct {
 type LocalAddresses struct {
 	Port      string   `json:"port"`
 	Addresses []string `json:"addresses"`
-	// PublicIP is the visor's STUN- or dmsg-derived public IP, if known.
-	// AR uses this to override the observed source IP when the latter is
-	// non-public (e.g., a visor running on the same Docker host as AR
-	// reaches it via hairpin SNAT, so AR's UDP socket sees the docker
-	// bridge gateway IP — 172.x.y.z — instead of the visor's actual public
-	// IP). Old visors that don't set this field leave AR's behavior
-	// unchanged: AR falls back to the observed source IP, which is
-	// correct for any visor whose path to AR is not NAT'd into a private
-	// space. Empty string means "let AR decide."
+	// PublicIP is the visor's STUN- or dmsg-derived public IPv4 address,
+	// if known. AR uses this to override the observed source IP when the
+	// latter is non-public (e.g., a visor running on the same Docker host
+	// as AR reaches it via hairpin SNAT, so AR's UDP socket sees the
+	// docker bridge gateway IP — 172.x.y.z — instead of the visor's
+	// actual public IP). Old visors that don't set this field leave AR's
+	// behavior unchanged: AR falls back to the observed source IP, which
+	// is correct for any visor whose path to AR is not NAT'd into a
+	// private space. Empty string means "let AR decide."
+	//
+	// Historical note: pre-#1525 this field carried either v4 or v6
+	// indiscriminately. With Phase 2c, the convention is v4-only here;
+	// PublicIPv6 carries v6. AR still accepts v6 in this field for
+	// backward-compat with pre-Phase-2c visors.
 	PublicIP string `json:"public_ip,omitempty"`
+	// PublicIPv6 is the visor's declared IPv6 public address. Added in
+	// #1525 Phase 2c so visors reaching AR via the dmsg-routed default
+	// path (where AR observes the dmsg-bridge's source, not the visor's
+	// own family) can still register their v6 endpoint. The AR populates
+	// VisorData.RemoteAddrV6 from this field when the observed remote
+	// source isn't v6. Empty when the visor is v4-only — preserves the
+	// pre-Phase-2c single-stack contract.
+	PublicIPv6 string `json:"public_ip_v6,omitempty"`
 }
 
 func (c *httpClient) Addresses(_ context.Context) string {
@@ -401,9 +416,10 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	}
 
 	localAddresses := LocalAddresses{
-		Addresses: addresses,
-		Port:      port,
-		PublicIP:  c.LocalPublicIP(),
+		Addresses:  addresses,
+		Port:       port,
+		PublicIP:   c.LocalPublicIP(),
+		PublicIPv6: c.clientPublicIPv6,
 	}
 	log.Debugf("Address resolver binding with: %v", addresses)
 	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
@@ -584,9 +600,10 @@ func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (n
 	}
 
 	localAddresses := LocalAddresses{
-		Addresses: addresses,
-		Port:      localPort,
-		PublicIP:  c.LocalPublicIP(),
+		Addresses:  addresses,
+		Port:       localPort,
+		PublicIP:   c.LocalPublicIP(),
+		PublicIPv6: c.clientPublicIPv6,
 	}
 
 	laData, err := json.Marshal(localAddresses)
