@@ -9,12 +9,38 @@
 # them. `cli rg ls` is the only reliable source of ground truth.
 #
 # Usage:
-#   mux-route-probe.sh <target_pk> [routes=N] [duration=Ns]
+#   mux-route-probe.sh <endpoint_b_pk> [routes=N] [duration=Ns]
+#   mux-route-probe.sh --endpoint-b <pk> [--endpoint-a <pk>]
+#                      [--intermediate-pool pk1,pk2,...]
+#                      [--avoid-direct]
+#                      [routes=N] [duration=Ns]
 #
 # Required:
-#   target_pk  — destination visor PK (the far end of the route)
+#   --endpoint-b <pk>  — destination visor PK (the far end of the route).
+#                        Positional form (first arg) is accepted for
+#                        backward compatibility with the original
+#                        single-target invocation.
 #
-# Optional (env or positional after target_pk):
+# Optional flags:
+#   --endpoint-a <pk>        — local-side endpoint PK; defaults to
+#                              self_pk. If set, must equal self_pk
+#                              (the script dials from the local visor).
+#                              Present for naming consistency with the
+#                              endpoint-pair experiment design (post-
+#                              2026-05-19 BETA↔GAMMA refinement).
+#   --intermediate-pool <l>  — comma-separated list of intermediate-
+#                              visor PKs. Pre-flight verifies each is
+#                              reachable as a transport peer from this
+#                              visor (the half-path we can observe).
+#                              The other half (intermediate→endpoint-b)
+#                              cannot be verified from here.
+#   --avoid-direct           — pre-flight aborts if a direct (non-DMSG)
+#                              transport exists between endpoint-a and
+#                              endpoint-b. Used by the BETA↔GAMMA mux
+#                              fan-out test to force routes via the
+#                              intermediate pool.
+#
+# Env / positional overrides (unchanged from #2723):
 #   ROUTES     — requested mux-leg count (default 2)
 #   DURATION   — sustained traffic window in seconds (default 60)
 #   SKYCHAT_RATE — messages per second on skychat low-rate stream
@@ -45,7 +71,12 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF' >&2
-Usage: mux-route-probe.sh <target_pk> [routes=N] [duration=Ns]
+Usage:
+  mux-route-probe.sh <endpoint_b_pk> [routes=N] [duration=Ns]
+  mux-route-probe.sh --endpoint-b <pk> [--endpoint-a <pk>]
+                     [--intermediate-pool pk1,pk2,...]
+                     [--avoid-direct]
+                     [routes=N] [duration=Ns]
 
 env: ROUTES, DURATION, SKYCHAT_RATE, RPC_ADDR override defaults.
 See script header for full spec.
@@ -55,22 +86,46 @@ EOF
 
 # --- parse args / env ---------------------------------------------------
 
-target_pk="${1:-}"
-[[ -z "$target_pk" ]] && usage
-
 routes="${ROUTES:-2}"
 duration="${DURATION:-60}"
 skychat_rate="${SKYCHAT_RATE:-5}"
 rpc_addr="${RPC_ADDR:-localhost:3435}"
+endpoint_a=""
+endpoint_b=""
+intermediate_pool=""
+avoid_direct=0
 
-# Permit positional overrides too.
-for arg in "${@:2}"; do
-    case "$arg" in
-        routes=*) routes="${arg#routes=}" ;;
-        duration=*) duration="${arg#duration=}" ;;
-        skychat_rate=*) skychat_rate="${arg#skychat_rate=}" ;;
+# Hybrid arg parsing: support BOTH the original positional target_pk
+# form and the post-2026-05-19 flag form. The first positional non-
+# flag arg is treated as endpoint_b when --endpoint-b isn't provided.
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --endpoint-a) endpoint_a="$2"; shift 2 ;;
+        --endpoint-b) endpoint_b="$2"; shift 2 ;;
+        --intermediate-pool) intermediate_pool="$2"; shift 2 ;;
+        --avoid-direct) avoid_direct=1; shift ;;
+        routes=*) routes="${1#routes=}"; shift ;;
+        duration=*) duration="${1#duration=}"; shift ;;
+        skychat_rate=*) skychat_rate="${1#skychat_rate=}"; shift ;;
+        -h|--help) usage ;;
+        --*) echo "unknown flag: $1" >&2; usage ;;
+        *)
+            # First non-flag positional fills endpoint_b for backward
+            # compatibility with the single-target #2723 form.
+            if [[ -z "$endpoint_b" ]]; then
+                endpoint_b="$1"
+            else
+                echo "unexpected positional arg: $1" >&2; usage
+            fi
+            shift
+            ;;
     esac
 done
+
+[[ -z "$endpoint_b" ]] && usage
+# Expose target_pk as the legacy name so the rest of the script (and
+# any external diff against #2723's runner) keeps reading naturally.
+target_pk="$endpoint_b"
 
 case "$routes" in
     ''|*[!0-9]*) echo "routes must be a positive integer, got: $routes" >&2; usage ;;
@@ -95,6 +150,16 @@ if ! self_pk="$("${CLI[@]}" visor pk 2>/dev/null)"; then
 fi
 log "pre-flight: self_pk=$self_pk"
 
+# --endpoint-a sanity: the script always dials from the local visor, so
+# endpoint_a (if provided) must equal self_pk. Default it when blank.
+if [[ -z "$endpoint_a" ]]; then
+    endpoint_a="$self_pk"
+elif [[ "$endpoint_a" != "$self_pk" ]]; then
+    echo "pre-flight: --endpoint-a ($endpoint_a) does not match this visor's self_pk ($self_pk). Run the script ON endpoint-a." >&2
+    exit 1
+fi
+log "pre-flight: endpoint_a=$endpoint_a endpoint_b=$endpoint_b"
+
 # --- topology assertion -------------------------------------------------
 # The methodology gap: if no non-DMSG path exists between us and the
 # target, --routes>1 will silently degrade. Check transport types
@@ -116,6 +181,62 @@ transport before re-running:
     skywire cli visor transport add <peer_pk> stcpr
 EOF
     exit 2
+fi
+
+# --avoid-direct: forbid a direct non-DMSG edge between endpoint-a
+# and endpoint-b. The BETA↔GAMMA mux-fanout test wants every route to
+# go through an intermediate; a direct STCPR/SUDPH would let route-
+# finder pick the 1-hop path and defeat the experiment. Detection:
+# look for endpoint-b's PK in our tp ls under a non-DMSG type column.
+if [[ "$avoid_direct" -eq 1 ]]; then
+    direct_hit=$(printf '%s\n' "$tp_summary" | awk -v pk="$endpoint_b" '
+        $1 ~ /^(stcpr|sudph|stcp)$/ && index($0, pk) { print }
+    ')
+    if [[ -n "$direct_hit" ]]; then
+        cat <<EOF >&2
+ABORT: --avoid-direct set but a direct non-DMSG transport between
+endpoint-a ($endpoint_a) and endpoint-b ($endpoint_b) already exists:
+
+  $direct_hit
+
+Remove it (skywire cli tp rm <id>) so the route-finder is forced to
+chain through an intermediate, then re-run.
+EOF
+        exit 2
+    fi
+    log "pre-flight: --avoid-direct verified — no direct $endpoint_a→$endpoint_b transport"
+fi
+
+# --intermediate-pool: verify each pool member is reachable from this
+# visor (i.e., we have a transport to it). This is the half-path we
+# can observe; the other half (intermediate→endpoint-b) lives on the
+# intermediate's tp ls and is out of scope for the runner — the
+# slice (b) harness or operator must spot-check.
+if [[ -n "$intermediate_pool" ]]; then
+    IFS=',' read -r -a pool_pks <<< "$intermediate_pool"
+    missing=()
+    for pk in "${pool_pks[@]}"; do
+        # awk against the first column (type) and any-column match on
+        # the PK keeps the check tolerant of formatting drift.
+        if ! printf '%s\n' "$tp_summary" | awk -v pk="$pk" 'index($0, pk) { found=1 } END { exit !found }'; then
+            missing+=( "$pk" )
+        fi
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        cat <<EOF >&2
+ABORT: --intermediate-pool members not reachable as transport peers
+from endpoint-a ($endpoint_a):
+
+$(printf '  %s\n' "${missing[@]}")
+
+Add transports to these intermediates before re-running. Note: the
+script can only verify endpoint-a's half of each path; the other
+half (intermediate→endpoint-b, ${endpoint_b}) must be confirmed
+separately on endpoint-b.
+EOF
+        exit 2
+    fi
+    log "pre-flight: --intermediate-pool verified — ${#pool_pks[@]} intermediates reachable from endpoint-a"
 fi
 
 # --- run the dial -------------------------------------------------------
@@ -232,18 +353,27 @@ else
 fi
 
 # --- emit tally -------------------------------------------------------
+# Output format is keyword-line stable so Beta's slice (b) Go assertion
+# harness can grep/parse without modification. The new endpoint_a /
+# endpoint_b / intermediate_pool / avoid_direct lines are additive —
+# the original target_pk / self_pk lines remain so older harnesses keep
+# working (target_pk == endpoint_b for any single-run invocation).
 cat <<EOF
 === mux-route-probe tally ===
-target_pk:      $target_pk
-self_pk:        $self_pk
-routes_req:     $routes
-routes_act:     $delta_rg
-duration:       ${duration}s
-throughput:     ${throughput_kbps} KB/s ($throughput_bytes bytes)
-skychat_sent:   $sent
-skychat_acked:  $n
-rtt_p50:        ${p50_ms} ms
-rtt_p99:        ${p99_ms} ms
+target_pk:        $target_pk
+self_pk:          $self_pk
+endpoint_a:       $endpoint_a
+endpoint_b:       $endpoint_b
+intermediate_pool: ${intermediate_pool:-(none)}
+avoid_direct:     $avoid_direct
+routes_req:       $routes
+routes_act:       $delta_rg
+duration:         ${duration}s
+throughput:       ${throughput_kbps} KB/s ($throughput_bytes bytes)
+skychat_sent:     $sent
+skychat_acked:    $n
+rtt_p50:          ${p50_ms} ms
+rtt_p99:          ${p99_ms} ms
 EOF
 
 # Operator-decidable: throughput/RTT-correlation/integrity checks live
