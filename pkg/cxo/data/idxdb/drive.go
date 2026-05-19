@@ -2,6 +2,7 @@ package idxdb
 
 import (
 	"encoding/binary"
+	"fmt"
 	"os"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/skycoin/skywire/pkg/cxo/data"
+	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
 
 var (
@@ -53,6 +55,29 @@ func NewDriveIdxDBWithOptions(fileName string, opts DriveOptions) (idx data.IdxD
 
 	_, err = os.Stat(fileName)
 	created = os.IsNotExist(err) // set the created var
+
+	// Probe-and-repair before the real open. RepairIfCorrupt returns
+	// nil when the file is absent, healthy, or successfully renamed
+	// aside as ".corrupt.<unix-ts>" — in the latter case the bolt.Open
+	// below proceeds to create a fresh empty IdxDB. This guards the
+	// caller against a panic-on-commit later (bbolt's "circular
+	// dependency" assertion fires in an internal batch goroutine and
+	// is not recoverable from caller code). Treating index corruption
+	// as recreate-empty is safe: the IdxDB is a cache of CXO index
+	// metadata that is rebuilt from peer sync / publisher republish
+	// on the next subscription cycle.
+	if rErr := bbolthealth.RepairIfCorrupt(fileName); rErr != nil {
+		return nil, fmt.Errorf("idxdb: integrity-check %s: %w", fileName, rErr)
+	}
+	// If the repair just moved the file aside, the stat above became
+	// stale — re-evaluate so the "created" branch fires for the fresh
+	// open below. (Cheap; bypasses unnecessary work when the file was
+	// actually healthy.)
+	if !created {
+		if _, statErr := os.Stat(fileName); os.IsNotExist(statErr) {
+			created = true
+		}
+	}
 
 	var b *bolt.DB
 
