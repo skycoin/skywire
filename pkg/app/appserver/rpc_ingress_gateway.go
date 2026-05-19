@@ -12,6 +12,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/idmanager"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
@@ -113,10 +114,50 @@ type DialResp struct {
 	LocalPort routing.Port
 }
 
+// DialOptionsReq carries a dial request with extra per-call options.
+// Used by DialWithOptions for app paths that need to request specific
+// router behavior (currently: N parallel mux routes for the skynet
+// transport). Zero / unset MuxRoutes preserves the single-route
+// default — equivalent to plain Dial.
+//
+// Added for #1525-adjacent skywire-cli mux-route testing per the
+// operator's 2026-05-19 ask. Generalizes the per-call route count
+// already plumbed through VisorCat (pkg/visor/api_visor_cat.go) into
+// the app-net surface so apps like skynet-client can request N routes
+// at dial time without needing a parallel "cli skynet cat"-style RPC.
+type DialOptionsReq struct {
+	Addr      appnet.Addr
+	MuxRoutes int
+}
+
 // Dial dials to the remote.
 func (r *RPCIngressGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error) {
 	defer rpcutil.LogCall(r.log, "Dial", remote)(resp, &err)
+	return r.dialInternal(*remote, 0, resp)
+}
 
+// DialWithOptions dials to the remote honoring per-call dial options.
+// Currently the only honored option is MuxRoutes — when > 1 and the
+// destination transport is skynet, the router establishes N parallel
+// mux routes via SkywireNetworker.DialContextWithOptions instead of
+// the single-route DialContext. Mirrors the per-call Routes path
+// already exposed via VisorCat. Falls back to plain Dial semantics
+// (single route) when MuxRoutes <= 1 OR the registered networker for
+// the address family isn't *SkywireNetworker (e.g. dmsg, where mux is
+// inherent to the session and the routes count is a no-op).
+func (r *RPCIngressGateway) DialWithOptions(req *DialOptionsReq, resp *DialResp) (err error) {
+	defer rpcutil.LogCall(r.log, "DialWithOptions", req)(resp, &err)
+	if req == nil {
+		return errors.New("DialWithOptions: nil request")
+	}
+	return r.dialInternal(req.Addr, req.MuxRoutes, resp)
+}
+
+// dialInternal is the common dial body shared by Dial + DialWithOptions.
+// muxRoutes <= 1 means "no mux", which is the existing Dial behavior;
+// muxRoutes > 1 triggers the SkywireNetworker.DialContextWithOptions
+// path for skynet destinations.
+func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, muxRoutes int, resp *DialResp) error {
 	reservedConnID, free, err := r.cm.ReserveNextID()
 	if err != nil {
 		return err
@@ -131,7 +172,7 @@ func (r *RPCIngressGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error
 		appName = r.proc.conf.AppName
 	}
 	dialCtx := appnet.WithAppName(context.Background(), appName)
-	conn, err := appnet.DialContext(dialCtx, *remote)
+	conn, err := dialWithMuxRoutes(dialCtx, remote, muxRoutes)
 	if err != nil {
 		free()
 		return err
@@ -157,6 +198,32 @@ func (r *RPCIngressGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error
 	resp.LocalPort = localAddr.Port
 
 	return nil
+}
+
+// dialWithMuxRoutes dials remote either via the single-route default
+// path (appnet.DialContext) or via the SkywireNetworker mux-routes
+// path when muxRoutes > 1 and the registered networker for the addr's
+// family is the real *SkywireNetworker. The type-assertion fallback to
+// the default path matches VisorCat's contract (a test-mock or future
+// alternative networker silently degrades to single-route, preserving
+// correctness with no extra plumbing).
+func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, muxRoutes int) (net.Conn, error) {
+	if muxRoutes <= 1 {
+		return appnet.DialContext(ctx, remote)
+	}
+	nw, err := appnet.ResolveNetworker(remote.Net)
+	if err != nil {
+		return nil, err
+	}
+	sw, ok := nw.(*appnet.SkywireNetworker)
+	if !ok {
+		// Non-skynet networker (e.g. dmsg) — mux-routes is a no-op
+		// concept at this layer. Fall through to the default dial.
+		return appnet.DialContext(ctx, remote)
+	}
+	opts := router.DefaultDialOptions()
+	opts.MuxRoutes = muxRoutes
+	return sw.DialContextWithOptions(ctx, remote, opts)
 }
 
 // Listen starts listening.
