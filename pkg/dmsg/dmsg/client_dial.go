@@ -464,6 +464,58 @@ func (ce *Client) LookupIP(ctx context.Context, servers []cipher.PubKey) (myIP n
 	return nil, ErrCannotConnectToDelegated
 }
 
+// LookupIPsByFamily iterates the client's connected dmsg sessions,
+// calls LookupIP on each, and collects ONE public IP per family.
+// Used by the visor to learn BOTH its IPv4 and IPv6 public addresses
+// when its dmsg-client has sessions over both families — typically
+// because at least one dmsg-server has AddressV6 set (Phase 2a) and
+// Phase 3's happy-eyeballs dialed it via IPv6.
+//
+// Each returned IP is validated via netutil.IsPublicIP; non-public
+// values are skipped. Iteration stops once both families are
+// populated; if only one is available, the other return value is nil.
+// Both nil indicates no public IPs could be learned (no sessions, or
+// all sessions returned non-public addresses).
+//
+// This is family-aware in the SOURCE direction (the visor's own IP
+// observed by each dmsg-server). The session's outbound family — v4
+// or v6 — determines what LookupIP returns for that session. A
+// dual-stack visor with a v6-dmsg-server session AND a v4-dmsg-server
+// session learns both addresses in a single iteration. Phase 2c uses
+// these to populate LocalAddresses.PublicIP / PublicIPv6 declared
+// fields in AR bind payloads, so the AR can register both family
+// records even when reached via a dmsg-bridge that hides the visor's
+// actual source family.
+func (ce *Client) LookupIPsByFamily(_ context.Context) (v4, v6 net.IP) {
+	sessions := ce.AllSessions()
+	if len(sessions) == 0 {
+		return nil, nil
+	}
+	testMode := ce.conf != nil && ce.conf.ClientType == "test"
+	for _, s := range sessions {
+		if v4 != nil && v6 != nil {
+			break
+		}
+		ip, err := s.LookupIP(Addr{PK: s.RemotePK(), Port: 1})
+		if err != nil || ip == nil {
+			continue
+		}
+		if !testMode && !netutil.IsPublicIP(ip) {
+			continue
+		}
+		if ip.To4() != nil {
+			if v4 == nil {
+				v4 = ip
+			}
+		} else {
+			if v6 == nil {
+				v6 = ip
+			}
+		}
+	}
+	return v4, v6
+}
+
 // AllStreams returns all the streams of the current client.
 func (ce *Client) AllStreams() (out []*Stream) {
 	fn := func(port uint16, pv netutil.PorterValue) (next bool) { //nolint
