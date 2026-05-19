@@ -10,7 +10,9 @@ package visor
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -38,9 +40,17 @@ func initStats(_ context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	path := statsPath(v, conf)
+	// OpenStore's repair-on-corrupt path silently moves a bad file
+	// aside; surface the rename to the operator log so a quietly
+	// vanished telemetry DB is at least findable in the log.
+	prevBakSet := corruptBakSet(path)
 	store, err := stats.OpenStore(path)
 	if err != nil {
 		return fmt.Errorf("stats: open store at %s: %w", path, err)
+	}
+	if newBak := newCorruptBak(path, prevBakSet); newBak != "" {
+		log.WithField("path", path).WithField("moved_to", newBak).
+			Warn("Stats: bbolt store was corrupt; moved aside and recreated empty")
 	}
 
 	publishWindow := publishWindowDays(conf)
@@ -262,6 +272,48 @@ func statsPath(v *Visor, conf *visorconfig.Stats) string {
 		return conf.Path
 	}
 	return filepath.Join(v.conf.LocalPath, "stats.db")
+}
+
+// corruptBakSet snapshots the names of any pre-existing
+// "<path>.corrupt.<ts>" siblings so newCorruptBak can detect ones
+// created by the current OpenStore invocation. The set is a closed
+// snapshot — anything created by another process concurrently won't
+// be falsely attributed to OpenStore.
+func corruptBakSet(path string) map[string]struct{} {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path) + ".corrupt."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	out := make(map[string]struct{})
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), base) {
+			out[e.Name()] = struct{}{}
+		}
+	}
+	return out
+}
+
+// newCorruptBak returns the basename of any .corrupt.* sibling that
+// was created since the pre-snapshot, or "" when no new sibling
+// appeared (i.e. OpenStore did not invoke the repair path).
+func newCorruptBak(path string, prev map[string]struct{}) string {
+	dir := filepath.Dir(path)
+	base := filepath.Base(path) + ".corrupt."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !strings.HasPrefix(e.Name(), base) {
+			continue
+		}
+		if _, existed := prev[e.Name()]; !existed {
+			return e.Name()
+		}
+	}
+	return ""
 }
 
 func sampleInterval(conf *visorconfig.Stats) time.Duration {
