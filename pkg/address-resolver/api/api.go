@@ -282,6 +282,32 @@ func (a *API) logger(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)
 }
 
+// isPublicIPv6 reports whether an IP is a globally-routable IPv6
+// address. netutil.IsPublicIP is v4-only (any v6 input falls through
+// to the final "return false"), so #1525 Phase 2c needs its own
+// validator for declared PublicIPv6 fields. Rejects loopback, link-
+// local (uni/multi), and ULA (fc00::/7 via net.IP.IsPrivate); accepts
+// every other v6 address. Documentation ranges (2001:db8::/32) are
+// intentionally NOT rejected here — Go's stdlib doesn't have a flag
+// for them; operators using documentation addresses in real configs
+// is a config bug not worth specially handling. Returns false for
+// nil and for v4 inputs (caller is expected to gate on family).
+func isPublicIPv6(ip net.IP) bool {
+	if ip == nil || ip.To4() != nil {
+		return false
+	}
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		return false
+	}
+	if ip.IsUnspecified() { // "::" — the v6 all-zeros sentinel, not routable
+		return false
+	}
+	if ip.IsPrivate() { // fc00::/7 (ULA)
+		return false
+	}
+	return true
+}
+
 // splitFamilyAddr returns the IPv4 and IPv6 RemoteAddr values for an
 // observed bind source address. Exactly one of the return values is
 // non-empty; family is inferred by parsing the host portion of addr.
@@ -371,6 +397,22 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 	}
 
 	v4Addr, v6Addr := splitFamilyAddr(remoteAddr)
+	// #1525 Phase 2c: when the visor declares an IPv6 public address in
+	// LocalAddresses.PublicIPv6, populate RemoteAddrV6 from it. This is
+	// the critical path for dmsg-routed AR (the production default): the
+	// observed remoteAddr is the dmsg-bridge's source, NOT the visor's
+	// own family — so splitFamilyAddr on the observed source gives the
+	// dmsg-bridge's family, not the visor's. The declared PublicIPv6
+	// fills the gap so dual-stack visors over dmsg can register both
+	// families. We validate the declared value as a public IPv6 to
+	// avoid honoring spoofed/loopback declarations.
+	if localAddresses.PublicIPv6 != "" {
+		if isPublicIPv6(net.ParseIP(localAddresses.PublicIPv6)) {
+			v6Addr = localAddresses.PublicIPv6
+		} else {
+			a.logger(r).Debugf("STCPR: ignoring declared PublicIPv6 %q (not a public IPv6)", localAddresses.PublicIPv6)
+		}
+	}
 	visorData := addrresolver.VisorData{
 		RemoteAddr:     v4Addr,
 		RemoteAddrV6:   v6Addr,

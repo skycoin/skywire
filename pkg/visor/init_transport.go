@@ -94,6 +94,34 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		}
 	}
 
+	// #1525 Phase 2c: learn BOTH families of the visor's public IP by
+	// iterating connected dmsg sessions and asking each server for the
+	// visor's source IP. The legacy LookupIPGeo above returns a single
+	// family (whichever session it happened to pick first). The result
+	// drives LocalAddresses.PublicIP / PublicIPv6 in subsequent AR
+	// binds, so the AR can register both family endpoints even when
+	// reached via the dmsg-routed default path where the AR observes
+	// the dmsg-bridge's source IP rather than the visor's actual family.
+	//
+	// Best-effort: requires the dmsg-client to have sessions over both
+	// families. A v4-only visor (or a dual-stack visor whose only
+	// reachable dmsg-server is v4) leaves pIPv6 empty and the visor
+	// proceeds without a v6 declaration — same as pre-Phase-2c.
+	var pIPv6 string
+	if v.dmsgC != nil {
+		v4FamilyIP, v6FamilyIP := v.dmsgC.LookupIPsByFamily(ctx)
+		// Prefer the family-aware results when populated; fall back to
+		// the legacy LookupIPGeo's pIP for the v4 slot when v4FamilyIP
+		// is empty (rare — would indicate no v4 dmsg session at all).
+		if v4FamilyIP != nil {
+			pIP = v4FamilyIP.String()
+		}
+		if v6FamilyIP != nil {
+			pIPv6 = v6FamilyIP.String()
+			log.WithField("public_ip_v6", pIPv6).Debug("Got public IPv6 from dmsg server (Phase 2c family-aware lookup)")
+		}
+	}
+
 	geoData := serverGeo
 	if geoData == nil {
 		if local := LookupGeo(pIP); local != nil {
@@ -129,7 +157,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	if arURL := arURL; strings.HasPrefix(arURL, "http://") || strings.HasPrefix(arURL, "https://") {
 		httpCV6 = newV6ForcedHTTPClient()
 	}
-	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, httpCV6, pIP, log, v.MasterLogger())
+	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, httpCV6, pIP, pIPv6, log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
