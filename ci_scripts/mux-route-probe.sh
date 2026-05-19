@@ -195,7 +195,7 @@ throughput_kbps=$((throughput_bytes / duration / 1024))
 
 # Latency distribution from the skychat ACKs.
 if (( ${#acks[@]} > 0 )); then
-    sorted=( $(printf '%s\n' "${acks[@]}" | sort -n) )
+    mapfile -t sorted < <(printf '%s\n' "${acks[@]}" | sort -n)
     n=${#sorted[@]}
     p50_idx=$((n / 2))
     p99_idx=$((n * 99 / 100))
