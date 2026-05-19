@@ -100,8 +100,12 @@ log "pre-flight: self_pk=$self_pk"
 # target, --routes>1 will silently degrade. Check transport types
 # available before dialing.
 
-tp_summary="$("${CLI[@]}" visor transport ls 2>&1 || true)"
-non_dmsg_paths=$(printf '%s\n' "$tp_summary" | grep -cE '\b(stcpr|sudph|stcp)\b' || true)
+# The CLI subcommand is `tp ls`, not `visor transport ls` — fix per
+# Beta's 2026-05-19 #2723 review (the original was always falling
+# through to the abort path because the wrong command emitted help
+# text with no transport-type tokens).
+tp_summary="$("${CLI[@]}" tp ls 2>&1 || true)"
+non_dmsg_paths=$(printf '%s\n' "$tp_summary" | awk '$1 ~ /^(stcpr|sudph|stcp)$/' | wc -l)
 if [[ "$routes" -gt 1 && "$non_dmsg_paths" -eq 0 ]]; then
     cat <<EOF >&2
 ABORT: requested $routes mux legs but no non-DMSG transports exist on
@@ -122,10 +126,18 @@ fi
 # stdout for byte-count integrity.
 
 # Snapshot the route-group state before the dial so we can diff and
-# attribute new groups to this probe.
-pre_rg="$("${CLI[@]}" dmsg cat --help >/dev/null 2>&1 && \
-    "${CLI[@]}" rg ls --json 2>/dev/null || echo '[]')"
-pre_rg_count=$(printf '%s' "$pre_rg" | tr -cd '{' | wc -c)
+# attribute new groups to this probe. Use jq for length — brace-
+# counting is fragile because nested objects (per-app stats inside
+# the route-group records) contain extra braces (Beta's #2723 review).
+require_jq() {
+    if ! command -v jq >/dev/null 2>&1; then
+        echo "FATAL: jq is required for rg-count assertions" >&2
+        exit 1
+    fi
+}
+require_jq
+pre_rg="$("${CLI[@]}" rg ls --json 2>/dev/null || echo '[]')"
+pre_rg_count=$(printf '%s' "$pre_rg" | jq '. // [] | length')
 
 tmpdir=$(mktemp -d -t muxprobe.XXXXXX)
 trap 'rm -rf "$tmpdir"' EXIT
@@ -134,6 +146,15 @@ trap 'rm -rf "$tmpdir"' EXIT
 # multi-hop byte-pipe with explicit routes control. Replace with a
 # skysocks-client invocation when the runner is wired into an e2e
 # topology that has skysocks-server stood up on target_pk.
+#
+# KNOWN LIMITATION (Beta's #2723 review): this captures bytes coming
+# BACK from target (the dmsg cat process writes its peer's output to
+# throughput.bin). If target_pk has no listener that echoes/streams
+# back, throughput will read 0 even though our stdin was consumed by
+# the route. For an honest one-way send-side throughput measurement
+# the receiving end must be standing up a dmsg-listener that echoes
+# or sinks at a known rate — out-of-scope for this initial runner,
+# tracked for the follow-up Go harness.
 log "starting throughput leg (dmsg cat --routes=$routes)…"
 {
     "${CLI[@]}" dmsg cat "$target_pk:80" --transport=skynet --routes="$routes" \
@@ -147,7 +168,7 @@ sleep 3
 
 # --- assert fanout actually took ---------------------------------------
 post_rg_json="$("${CLI[@]}" rg ls --json 2>/dev/null || echo '[]')"
-post_rg_count=$(printf '%s' "$post_rg_json" | tr -cd '{' | wc -c)
+post_rg_count=$(printf '%s' "$post_rg_json" | jq '. // [] | length')
 delta_rg=$((post_rg_count - pre_rg_count))
 log "rg delta: pre=$pre_rg_count post=$post_rg_count new=$delta_rg (requested=$routes)"
 
