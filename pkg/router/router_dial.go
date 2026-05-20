@@ -508,7 +508,78 @@ fetchRoutesAgain:
 
 	log.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
 
-	return paths[forward][0], paths[backward][0], nil
+	// DisjointMux post-filter: if the caller populated
+	// ExcludeIntermediatePKs (typically the mux loop tracking
+	// intermediates of already-established routes), iterate the
+	// route-finder's response and return the first path whose
+	// intermediates don't overlap with the exclude set. The
+	// route-finder doesn't natively know about this constraint, so
+	// we filter client-side. Source + destination are NOT considered
+	// "intermediates" (they're endpoints).
+	fwdPath, revPath, ok := pickDisjointPath(paths[forward], paths[backward], opts.ExcludeIntermediatePKs)
+	if !ok {
+		log.Debugf("No route-finder path avoids the %d excluded intermediates; trying local route calc fallback", len(opts.ExcludeIntermediatePKs))
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
+		if localErr == nil {
+			return localFwd, localRev, nil
+		}
+		return nil, nil, ErrNoRouteFound
+	}
+	return fwdPath, revPath, nil
+}
+
+// pickDisjointPath walks the parallel forward/reverse-path slices the
+// route-finder returned (paired by index) and returns the first
+// forward/reverse pair whose intermediate hops do not contain any PK
+// in exclude. When exclude is empty (the common single-route case),
+// returns paths[0]. ok=false means every candidate touched the
+// exclude set — the caller should fall back to local route calc or
+// surface ErrNoRouteFound.
+func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey) ([]routing.Hop, []routing.Hop, bool) {
+	if len(forward) == 0 || len(reverse) == 0 {
+		return nil, nil, false
+	}
+	if len(exclude) == 0 {
+		// Hot path: no constraint, keep the existing first-element
+		// behavior so back-compat single-route callers are unaffected.
+		return forward[0], reverse[0], true
+	}
+	excludeSet := make(map[cipher.PubKey]struct{}, len(exclude))
+	for _, pk := range exclude {
+		excludeSet[pk] = struct{}{}
+	}
+	// Iterate paired indices. Empirically the route-finder returns
+	// equal-length slices; defensively cap by min(len).
+	n := len(forward)
+	if len(reverse) < n {
+		n = len(reverse)
+	}
+	for i := 0; i < n; i++ {
+		if !pathTouchesIntermediate(forward[i], excludeSet) &&
+			!pathTouchesIntermediate(reverse[i], excludeSet) {
+			return forward[i], reverse[i], true
+		}
+	}
+	return nil, nil, false
+}
+
+// pathTouchesIntermediate reports whether route hops contain any PK
+// in the exclude set, considering only INTERMEDIATE hops — the first
+// hop's From is the source and the last hop's To is the destination;
+// both are endpoints, not intermediates.
+func pathTouchesIntermediate(path []routing.Hop, exclude map[cipher.PubKey]struct{}) bool {
+	if len(path) == 0 {
+		return false
+	}
+	// Intermediate PKs are the "To" of every hop except the last,
+	// which is the destination endpoint. Equivalently: the "From" of
+	// every hop except the first (which is the source endpoint).
+	for i := 0; i < len(path)-1; i++ {
+		if _, hit := exclude[path[i].To]; hit {
+			return true
+		}
+	}
+	return false
 }
 
 // calculateLocalRoutes attempts to calculate routes locally using the transport manager
@@ -671,9 +742,27 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		return nil, nil, errors.New("self-ping: no 2-hop loopback route found through transport partners")
 	}
 
+	// Build the ExcludeIntermediatePKs lookup set once outside the
+	// hot 2-hop loop. Empty set when DisjointMux is off (the common
+	// single-route case), so the per-candidate check is one map miss.
+	var excludeIntermediates map[cipher.PubKey]struct{}
+	if dialOpts != nil && len(dialOpts.ExcludeIntermediatePKs) > 0 {
+		excludeIntermediates = make(map[cipher.PubKey]struct{}, len(dialOpts.ExcludeIntermediatePKs))
+		for _, pk := range dialOpts.ExcludeIntermediatePKs {
+			excludeIntermediates[pk] = struct{}{}
+		}
+	}
+
 	// Try 2-hop routes through intermediate visors
 	for _, tp := range localTps {
 		intermediatePK := tp.remotePK
+
+		// DisjointMux: skip candidates routed through an intermediate
+		// that's already used by another route in the mux set.
+		if _, hit := excludeIntermediates[intermediatePK]; hit {
+			log.Debugf("Skipping intermediate %s (in ExcludeIntermediatePKs)", intermediatePK)
+			continue
+		}
 
 		// Look up transports from cache (built from single GetAllTransports call)
 		intermediateEntries := transportsByEdge[intermediatePK]
@@ -743,15 +832,28 @@ func (r *router) establishMuxRoutes(
 	rPK := forwardDesc.DstPK()
 	excludeIDs := []uuid.UUID{primaryTpID}
 
+	// DisjointMux: accumulate intermediate PKs of routes already
+	// established so the next route is constructed through a
+	// different intermediate path. Only populated when the primary
+	// dial set DisjointMux=true; remains nil otherwise so today's
+	// behavior is unchanged for callers that didn't opt in.
+	var excludePKs []cipher.PubKey
+	if opts != nil && opts.DisjointMux {
+		// Seed with the primary route's intermediate hops so the
+		// auxiliary routes don't reuse them.
+		excludePKs = intermediatesOfRouteGroup(nrg, lPK, rPK)
+	}
+
 	for i := 1; i < muxCount; i++ {
 		muxOpts := &DialOptions{
-			MinForwardRts:       1,
-			MaxForwardRts:       1,
-			MinConsumeRts:       1,
-			MaxConsumeRts:       1,
-			Retries:             1,
-			ExcludeTransportIDs: excludeIDs,
-			ExcludeDMSG:         true,
+			MinForwardRts:          1,
+			MaxForwardRts:          1,
+			MinConsumeRts:          1,
+			MaxConsumeRts:          1,
+			Retries:                1,
+			ExcludeTransportIDs:    excludeIDs,
+			ExcludeIntermediatePKs: excludePKs,
+			ExcludeDMSG:            true,
 		}
 
 		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
@@ -783,6 +885,65 @@ func (r *router) establishMuxRoutes(
 		}
 
 		excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
+		// Accumulate this route's intermediate hops into the
+		// exclude-PK set so subsequent aux routes avoid them.
+		if opts != nil && opts.DisjointMux {
+			excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
+		}
 		log.Infof("Mux route %d/%d established via transport %s", i+1, muxCount, muxRules.Forward.NextTransportID())
 	}
+}
+
+// intermediatesOfHops extracts the set of intermediate-visor PKs
+// from a forward hop sequence, excluding source (lPK) and destination
+// (rPK). For a 1-hop path src->dst the returned slice is empty (no
+// intermediates). For a 2-hop path src->X->dst the returned slice is
+// [X]. Helpers below operate on either a raw []routing.Hop or a
+// constructed *NoiseRouteGroup.
+func intermediatesOfHops(hops []routing.Hop, src, dst cipher.PubKey) []cipher.PubKey {
+	if len(hops) <= 1 {
+		return nil
+	}
+	out := make([]cipher.PubKey, 0, len(hops)-1)
+	for i := 0; i < len(hops)-1; i++ {
+		pk := hops[i].To
+		if pk == src || pk == dst {
+			continue
+		}
+		out = append(out, pk)
+	}
+	return out
+}
+
+// intermediatesOfRouteGroup pulls intermediate-visor PKs from the
+// transports currently registered in a NoiseRouteGroup. Used to seed
+// the DisjointMux exclude set with the primary route's intermediates
+// before the auxiliary routes are dialed.
+//
+// The primary route may already be appended by the time we reach the
+// mux loop (it's the route_group's first transport); inspecting the
+// transport-manager records gives us the same hop information that
+// the original fetchBestRoutes call returned.
+func intermediatesOfRouteGroup(nrg *NoiseRouteGroup, src, dst cipher.PubKey) []cipher.PubKey {
+	if nrg == nil {
+		return nil
+	}
+	nrg.rg.mu.Lock()
+	defer nrg.rg.mu.Unlock()
+	var out []cipher.PubKey
+	for _, tp := range nrg.rg.tps {
+		if tp == nil {
+			continue
+		}
+		// Both edges of a transport are PKs; one is us, the other is
+		// the next-hop visor. Add the non-self edge if it's not the
+		// final destination.
+		for _, pk := range tp.Entry.Edges {
+			if pk == src || pk == dst {
+				continue
+			}
+			out = append(out, pk)
+		}
+	}
+	return out
 }
