@@ -598,6 +598,14 @@ type PingConfig struct {
 	TransportID string         // Optional: use specific transport (skips route calculation)
 	ForwardHops []RouteHopInfo // Optional: explicit forward route (skips route calculation)
 	ReverseHops []RouteHopInfo // Optional: explicit reverse route (skips route calculation)
+	// RouteIndex identifies which of multiple parallel routes to the
+	// same peer this PingConfig refers to. Zero (the default) means
+	// "primary / single route" and preserves all legacy single-route
+	// behavior. Non-zero values are used by mux-aware callers
+	// (`cli visor ping mux-bw`) to dial multiple routes to the same
+	// target without their conns trampling each other in the visor's
+	// per-route conn map. See PingRouteRef in pkg/visor/ping.go.
+	RouteIndex int
 }
 
 // TestResult type of test result

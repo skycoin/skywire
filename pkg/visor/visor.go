@@ -311,9 +311,12 @@ type Visor struct {
 	tpdUptimeLastFail atomic.Int64
 }
 
-// pingState manages Skywire transport ping connections.
+// pingState manages Skywire transport ping connections. Keyed by
+// PingRouteRef (PK + RouteIndex) so multiple parallel routes to the
+// same peer can coexist without overwriting each other — single-route
+// callers use PingRoutePrimary(pk) (RouteIndex=0) and see no change.
 type pingState struct {
-	conns    map[cipher.PubKey]ping
+	conns    map[PingRouteRef]ping
 	mu       *sync.Mutex
 	pcktSize int
 }
@@ -582,7 +585,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		},
 		arSelf: newARSelfState(),
 		ping: pingState{
-			conns: make(map[cipher.PubKey]ping),
+			conns: make(map[PingRouteRef]ping),
 			mu:    new(sync.Mutex),
 		},
 		dmsgPing: dmsgPingState{
