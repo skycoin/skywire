@@ -8,7 +8,6 @@ package rpcgrpc
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -31,6 +30,7 @@ const (
 	PingService_StreamAppLogs_FullMethodName           = "/rpcgrpc.PingService/StreamAppLogs"
 	PingService_StreamCalcRoutes_FullMethodName        = "/rpcgrpc.PingService/StreamCalcRoutes"
 	PingService_StreamGroupMessages_FullMethodName     = "/rpcgrpc.PingService/StreamGroupMessages"
+	PingService_StreamPingTree_FullMethodName          = "/rpcgrpc.PingService/StreamPingTree"
 )
 
 // PingServiceClient is the client API for PingService service.
@@ -74,6 +74,31 @@ type PingServiceClient interface {
 	// init_apps.go for unary-RPC hang detection. Stream lifetime is
 	// the listen lifetime, no arbitrary ceiling.
 	StreamGroupMessages(ctx context.Context, in *GroupMessagesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[GroupMessageEvent], error)
+	// StreamPingTree walks the visor's neighborhood breadth-first and
+	// streams discovery + ping events as they happen. Replaces the
+	// client-side BFS in 'cli visor ping tree' — server-side has
+	// direct access to TransportSummary.LatencyMS (the smoothed per-
+	// transport RTT measured continuously by the transport layer),
+	// the route-finder, and the local tpM, so it can:
+	//   - Skip live pings at level 1 when the transport already has a
+	//     warmed latency cache (use_transport_latency flag);
+	//   - Walk tpM.WalkTransports directly without the snapshot
+	//     allocation cost that the unary Transports() RPC imposes
+	//     on visors with hundreds of transports;
+	//   - Observe cancellation at every BFS iteration so a client
+	//     disconnect tears down the walk within one in-flight ping.
+	//
+	// Result events arrive in chunk-complete-by-completion order, NOT
+	// deterministically grouped per peer — consumers that want
+	// (level, parent_pk, remote_pk) grouping must sort/bucket on
+	// receive. Server-side per-level concurrency means events for
+	// level N+1 never appear before level N's LevelDone.
+	//
+	// Authorization: the handler gates on the same whitelist used by
+	// dmsgscp (hypervisors + own PK + Dmsgpty.Whitelist). On a public
+	// visor with hundreds of transports, an unauthenticated caller
+	// could trigger a many-target ping storm; the gate prevents that.
+	StreamPingTree(ctx context.Context, in *PingTreeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PingTreeEvent], error)
 }
 
 type pingServiceClient struct {
@@ -275,6 +300,25 @@ func (c *pingServiceClient) StreamGroupMessages(ctx context.Context, in *GroupMe
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamGroupMessagesClient = grpc.ServerStreamingClient[GroupMessageEvent]
 
+func (c *pingServiceClient) StreamPingTree(ctx context.Context, in *PingTreeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PingTreeEvent], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[9], PingService_StreamPingTree_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[PingTreeRequest, PingTreeEvent]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamPingTreeClient = grpc.ServerStreamingClient[PingTreeEvent]
+
 // PingServiceServer is the server API for PingService service.
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility.
@@ -316,6 +360,31 @@ type PingServiceServer interface {
 	// init_apps.go for unary-RPC hang detection. Stream lifetime is
 	// the listen lifetime, no arbitrary ceiling.
 	StreamGroupMessages(*GroupMessagesRequest, grpc.ServerStreamingServer[GroupMessageEvent]) error
+	// StreamPingTree walks the visor's neighborhood breadth-first and
+	// streams discovery + ping events as they happen. Replaces the
+	// client-side BFS in 'cli visor ping tree' — server-side has
+	// direct access to TransportSummary.LatencyMS (the smoothed per-
+	// transport RTT measured continuously by the transport layer),
+	// the route-finder, and the local tpM, so it can:
+	//   - Skip live pings at level 1 when the transport already has a
+	//     warmed latency cache (use_transport_latency flag);
+	//   - Walk tpM.WalkTransports directly without the snapshot
+	//     allocation cost that the unary Transports() RPC imposes
+	//     on visors with hundreds of transports;
+	//   - Observe cancellation at every BFS iteration so a client
+	//     disconnect tears down the walk within one in-flight ping.
+	//
+	// Result events arrive in chunk-complete-by-completion order, NOT
+	// deterministically grouped per peer — consumers that want
+	// (level, parent_pk, remote_pk) grouping must sort/bucket on
+	// receive. Server-side per-level concurrency means events for
+	// level N+1 never appear before level N's LevelDone.
+	//
+	// Authorization: the handler gates on the same whitelist used by
+	// dmsgscp (hypervisors + own PK + Dmsgpty.Whitelist). On a public
+	// visor with hundreds of transports, an unauthenticated caller
+	// could trigger a many-target ping storm; the gate prevents that.
+	StreamPingTree(*PingTreeRequest, grpc.ServerStreamingServer[PingTreeEvent]) error
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -358,6 +427,9 @@ func (UnimplementedPingServiceServer) StreamCalcRoutes(*CalcRoutesRequest, grpc.
 }
 func (UnimplementedPingServiceServer) StreamGroupMessages(*GroupMessagesRequest, grpc.ServerStreamingServer[GroupMessageEvent]) error {
 	return status.Error(codes.Unimplemented, "method StreamGroupMessages not implemented")
+}
+func (UnimplementedPingServiceServer) StreamPingTree(*PingTreeRequest, grpc.ServerStreamingServer[PingTreeEvent]) error {
+	return status.Error(codes.Unimplemented, "method StreamPingTree not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
 func (UnimplementedPingServiceServer) testEmbeddedByValue()                     {}
@@ -515,6 +587,17 @@ func _PingService_StreamGroupMessages_Handler(srv interface{}, stream grpc.Serve
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type PingService_StreamGroupMessagesServer = grpc.ServerStreamingServer[GroupMessageEvent]
 
+func _PingService_StreamPingTree_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(PingTreeRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PingServiceServer).StreamPingTree(m, &grpc.GenericServerStream[PingTreeRequest, PingTreeEvent]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type PingService_StreamPingTreeServer = grpc.ServerStreamingServer[PingTreeEvent]
+
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -575,6 +658,11 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "StreamGroupMessages",
 			Handler:       _PingService_StreamGroupMessages_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "StreamPingTree",
+			Handler:       _PingService_StreamPingTree_Handler,
 			ServerStreams: true,
 		},
 	},
