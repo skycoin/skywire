@@ -83,6 +83,54 @@
         </span>
       </div>
 
+      <!-- Hypervisors — configured + currently-connected list. Only
+           rendered when the visor has at least one entry of either
+           kind, so the card is invisible on a standalone visor that
+           isn't owned by any hypervisor. -->
+      @if ((node.hypervisors && node.hypervisors.length > 0) || (node.connectedHypervisors && node.connectedHypervisors.length > 0)) {
+        <div class="info-card hypervisor-card">
+          <span class="section-title">{{ 'node.details.node-info.hypervisors-section' | translate }}</span>
+          @if (node.hypervisors && node.hypervisors.length > 0) {
+            <span class="info-line">
+              <span class="title">{{ 'node.details.node-info.hypervisors-configured' | translate }} </span>
+              {{ node.hypervisors.length }}
+            </span>
+            <div class="hypervisor-list">
+              @for (hv of node.hypervisors; track hv) {
+                <div class="hypervisor-item">
+                  <app-copy-to-clipboard-text text="{{ hv }}"></app-copy-to-clipboard-text>
+                  @if (node.connectedHypervisors && node.connectedHypervisors.indexOf(hv) >= 0) {
+                    <span class="hypervisor-state hypervisor-state-online">
+                      {{ 'node.details.node-info.hypervisor-connected' | translate }}
+                    </span>
+                  } @else {
+                    <span class="hypervisor-state hypervisor-state-offline">
+                      {{ 'node.details.node-info.hypervisor-disconnected' | translate }}
+                    </span>
+                  }
+                </div>
+              }
+            </div>
+          }
+          <!-- Surface connected-but-not-configured PKs separately.
+               A connected hypervisor that's not in the config list
+               usually means an admin attached at runtime via cli;
+               showing it here keeps that visible to the operator. -->
+          @if (node.connectedHypervisors) {
+            @for (hv of node.connectedHypervisors; track hv) {
+              @if (!node.hypervisors || node.hypervisors.indexOf(hv) < 0) {
+                <div class="hypervisor-item">
+                  <app-copy-to-clipboard-text text="{{ hv }}"></app-copy-to-clipboard-text>
+                  <span class="hypervisor-state hypervisor-state-runtime">
+                    {{ 'node.details.node-info.hypervisor-runtime' | translate }}
+                  </span>
+                </div>
+              }
+            }
+          }
+        </div>
+      }
+
       <!-- DMSG — server count + per-server list. The list is the
            bulky element on a healthy visor (8+ servers); giving it
            its own card keeps the Network card readable. -->

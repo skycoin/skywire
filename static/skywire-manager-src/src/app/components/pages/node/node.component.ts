@@ -186,14 +186,20 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   private processRouteUpdate() {
-    console.log('[HV-DIAG] processRouteUpdate called, instance id:', this.instanceId);
     NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
     if (this.nodeActionsHelper) {
       this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
     }
     this.updateTabBar();
     this.maybeBuildTerminalUrl();
-    this.navigationsSubscription.unsubscribe();
+
+    // navigationsSubscription is unsubscribed in ngOnDestroy. Don't
+    // unsubscribe here — Angular's RouteReuseStrategy reuses the
+    // NodeComponent instance across tab nav (info → routing → apps),
+    // so we need the subscription to keep firing for every
+    // intra-component navigation. Otherwise selectedTabIndex never
+    // updates (info stays highlighted), and maybeBuildTerminalUrl
+    // never fires on /terminal.
 
     // Load the data.
     this.startGettingData(true);
