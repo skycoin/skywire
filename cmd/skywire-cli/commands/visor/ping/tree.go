@@ -28,6 +28,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -193,6 +194,14 @@ func runPingTree(cmd *cobra.Command, _ []string) {
 		fmt.Fprintf(os.Stderr, "ping tree: TUI: %v\n", err)
 		os.Exit(1)
 	}
+
+	// tea.WithAltScreen restores the pre-TUI screen contents on
+	// exit, which wipes the tree the operator just spent time on.
+	// Print the final state to stdout so it lands in terminal
+	// scrollback regardless of whether the run completed or the
+	// operator hit Ctrl+C / q mid-stream.
+	fmt.Print(model.renderTree())
+	fmt.Println(model.statsLine())
 }
 
 func buildPingTreeRequest() *rpcgrpc.PingTreeRequest {
@@ -654,89 +663,137 @@ func (m *pingTreeModel) statsLine() string {
 	return stats
 }
 
-// renderTree builds the scrollable viewport content. Sections per
-// level, sorted by latency within each level (succeeded ascending,
-// then pending, then failed). Final RunDone summary at the bottom.
+// renderTree builds the scrollable viewport content. Per level we
+// group entries by parentPK so each subtree is rendered as
+//
+//	<parent-PK>
+//	├─ <child entry>
+//	├─ <child entry>
+//	└─ <child entry>
+//
+// Within each subtree entries are sorted: succeeded by ascending
+// avg ms, then pending (discovery order), then failed. Final
+// RunDone summary at the bottom.
 func (m *pingTreeModel) renderTree() string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// Group entries by level.
-	byLevel := make(map[int][]*treeEntry)
-	for _, tpID := range m.entryOrder {
-		e := m.entries[tpID]
-		byLevel[e.level] = append(byLevel[e.level], e)
+	if len(m.entryOrder) == 0 {
+		return "Discovering network topology...\n"
 	}
 
-	// Sort levels ascending so the renderer walks 1, 2, 3, ...
+	// level → parentPK → ordered entries
+	byLevel := make(map[int]map[string][]*treeEntry)
+	for _, tpID := range m.entryOrder {
+		e := m.entries[tpID]
+		if _, ok := byLevel[e.level]; !ok {
+			byLevel[e.level] = make(map[string][]*treeEntry)
+		}
+		byLevel[e.level][e.parentPK] = append(byLevel[e.level][e.parentPK], e)
+	}
+
 	levelKeys := make([]int, 0, len(byLevel))
 	for k := range byLevel {
 		levelKeys = append(levelKeys, k)
 	}
 	sort.Ints(levelKeys)
 
-	out := ""
 	headStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	rootStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("87")).Bold(true)
+	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
 	cacheStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
 	liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
 	failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 	pendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 
+	var sb strings.Builder
+
 	for _, lv := range levelKeys {
-		entries := byLevel[lv]
-		levelHeader := fmt.Sprintf("=== Level %d (%d entries", lv, len(entries))
+		parents := byLevel[lv]
+		totalEntries := 0
+		for _, es := range parents {
+			totalEntries += len(es)
+		}
+
+		levelHeader := fmt.Sprintf("=== Level %d (%d entries", lv, totalEntries)
 		if info, ok := m.levels[int32(lv)]; ok && info.done { //nolint:gosec
-			levelHeader += fmt.Sprintf(" — cached:%d live:%d failed:%d", info.skippedCached, info.succeeded-info.skippedCached, info.failed)
+			levelHeader += fmt.Sprintf(" — cached:%d live:%d failed:%d",
+				info.skippedCached, info.succeeded-info.skippedCached, info.failed)
 		}
 		levelHeader += ") ==="
-		out += headStyle.Render(levelHeader) + "\n"
+		sb.WriteString(headStyle.Render(levelHeader))
+		sb.WriteString("\n")
 
-		// Sort: succeeded by ascending avg ms, then pending, then failed.
-		sort.SliceStable(entries, func(i, j int) bool {
-			ai, aj := entries[i], entries[j]
-			cati := entryCategory(ai)
-			catj := entryCategory(aj)
-			if cati != catj {
-				return cati < catj
-			}
-			if cati == 0 { // succeeded — sort by avg ms
-				return ai.pingAvgMs < aj.pingAvgMs
-			}
-			// pending / failed — sort by discovery time
-			return ai.ts.Before(aj.ts)
-		})
-
-		for _, e := range entries {
-			line := formatEntryLine(e)
-			switch entryCategory(e) {
-			case 0:
-				if e.latencySource == "transport_summary" {
-					line = cacheStyle.Render(line)
-				} else {
-					line = liveStyle.Render(line)
-				}
-			case 1:
-				line = pendStyle.Render(line)
-			case 2:
-				line = failStyle.Render(line)
-			}
-			out += line + "\n"
+		// Stable subtree order: sort parent PKs alphabetically so the
+		// frame-to-frame layout doesn't reshuffle when new entries arrive.
+		parentKeys := make([]string, 0, len(parents))
+		for pk := range parents {
+			parentKeys = append(parentKeys, pk)
 		}
-		out += "\n"
+		sort.Strings(parentKeys)
+
+		for _, parentPK := range parentKeys {
+			entries := parents[parentPK]
+
+			sort.SliceStable(entries, func(i, j int) bool {
+				ai, aj := entries[i], entries[j]
+				cati := entryCategory(ai)
+				catj := entryCategory(aj)
+				if cati != catj {
+					return cati < catj
+				}
+				if cati == 0 {
+					return ai.pingAvgMs < aj.pingAvgMs
+				}
+				return ai.ts.Before(aj.ts)
+			})
+
+			rootLabel := rootStyle.Render(parentPK)
+			if lv == 1 {
+				rootLabel += " " + branchStyle.Render("(local)")
+			}
+			sb.WriteString(rootLabel)
+			sb.WriteString("\n")
+
+			for i, e := range entries {
+				connector := "├─ "
+				if i == len(entries)-1 {
+					connector = "└─ "
+				}
+				line := formatEntryLine(e)
+				switch entryCategory(e) {
+				case 0:
+					if e.latencySource == "transport_summary" {
+						line = cacheStyle.Render(line)
+					} else {
+						line = liveStyle.Render(line)
+					}
+				case 1:
+					line = pendStyle.Render(line)
+				case 2:
+					line = failStyle.Render(line)
+				}
+				sb.WriteString(branchStyle.Render(connector))
+				sb.WriteString(line)
+				sb.WriteString("\n")
+			}
+			sb.WriteString("\n")
+		}
 	}
 
 	if m.runDone != nil {
-		out += headStyle.Render("=== Run Summary ===") + "\n"
-		out += fmt.Sprintf(
+		sb.WriteString(headStyle.Render("=== Run Summary ==="))
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf(
 			"discovered=%d pinged=%d succeeded=%d failed=%d skipped_cached=%d\n"+
 				"wall_time=%dms peak_in_flight=%d termination=%s\n",
 			m.runDone.totalDiscovered, m.runDone.totalPinged,
 			m.runDone.totalSucceeded, m.runDone.totalFailed,
 			m.runDone.totalSkippedCached, m.runDone.wallMs,
 			m.runDone.peakInFlight, m.runDone.terminationReason,
-		)
+		))
 	}
-	return out
+	return sb.String()
 }
 
 // entryCategory returns 0 for successful pings, 1 for pending
@@ -752,11 +809,28 @@ func entryCategory(e *treeEntry) int {
 	return 0
 }
 
+// formatEntryLine renders a single entry as one row. Full 66-char
+// remotePK and full UUID tpID are emitted unredacted — PK truncation
+// in operator-facing output is a hard no, and the tpID is the only
+// stable handle for the (local, remote, transport-type) edge so we
+// surface it alongside the PK.
+//
+// Layout (the renderer prepends ├─/└─ branch characters):
+//
+//	<glyph> <remotePK 66> <tpID 36> <tpType 6> [tag] <latency block | error>
 func formatEntryLine(e *treeEntry) string {
+	// glyph + status block
+	var glyph, block string
 	switch entryCategory(e) {
 	case 1: // pending
-		return fmt.Sprintf("  · %s  %s  (pending)", e.remotePK[:12], e.tpType)
+		glyph = "·"
+		block = "(pending)"
 	case 2: // failed
+		if e.canceled {
+			glyph = "⊘"
+		} else {
+			glyph = "✗"
+		}
 		errMsg := e.setupErr
 		if errMsg == "" {
 			errMsg = e.pingErr
@@ -764,30 +838,29 @@ func formatEntryLine(e *treeEntry) string {
 		if errMsg == "" {
 			errMsg = e.calcErr
 		}
-		if len(errMsg) > 60 {
-			errMsg = errMsg[:60] + "..."
+		block = errMsg
+	default: // succeeded
+		glyph = "✓"
+		srcTag := "[live] "
+		if e.latencySource == "transport_summary" {
+			srcTag = "[cache]"
 		}
-		prefix := "✗"
-		if e.canceled {
-			prefix = "⊘" // canceled glyph
+		if e.sampleCount > 1 {
+			block = fmt.Sprintf(
+				"%s avg=%6.1fms p50=%6.1fms p99=%6.1fms jit=%5.1fms n=%d setup=%5.1fms",
+				srcTag, e.pingAvgMs, e.pingP50Ms, e.pingP99Ms, e.jitterMs, e.sampleCount, e.setupLatencyMs,
+			)
+		} else {
+			block = fmt.Sprintf(
+				"%s avg=%6.1fms setup=%5.1fms n=%d",
+				srcTag, e.pingAvgMs, e.setupLatencyMs, e.sampleCount,
+			)
 		}
-		return fmt.Sprintf("  %s %s  %s  %s", prefix, e.remotePK[:12], e.tpType, errMsg)
 	}
-	// succeeded — distinguish cache vs live in the prefix
-	srcTag := "live"
-	if e.latencySource == "transport_summary" {
-		srcTag = "cache"
-	}
-	if e.sampleCount > 1 {
-		return fmt.Sprintf(
-			"  ✓ %s  %-6s [%s] avg=%6.1fms p50=%6.1fms p99=%6.1fms jit=%5.1fms n=%d setup=%5.1fms",
-			e.remotePK[:12], e.tpType, srcTag,
-			e.pingAvgMs, e.pingP50Ms, e.pingP99Ms, e.jitterMs, e.sampleCount, e.setupLatencyMs,
-		)
-	}
-	return fmt.Sprintf(
-		"  ✓ %s  %-6s [%s] avg=%6.1fms setup=%5.1fms n=%d",
-		e.remotePK[:12], e.tpType, srcTag,
-		e.pingAvgMs, e.setupLatencyMs, e.sampleCount,
-	)
+
+	// %-66s remotePK, %-36s tpID, %-6s tpType — fixed widths so the
+	// columns line up across rows. lipgloss color escapes are added
+	// downstream around the whole row, so width math stays correct.
+	return fmt.Sprintf("%s %-66s %-36s %-6s %s",
+		glyph, e.remotePK, e.tpID, e.tpType, block)
 }
