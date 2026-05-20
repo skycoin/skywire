@@ -51,7 +51,16 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	var err error
 	var conn net.Conn
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Caller-supplied setup timeout — falls back to the legacy 30s
+	// ceiling when conf.SetupTimeout is zero. mux-bw passes its
+	// per-route setup-timeout flag here so multi-hop routes (4+
+	// intermediates) can complete the saveRouteGroupRules retries
+	// that routinely exceed 30s.
+	setupTimeout := 30 * time.Second
+	if conf.SetupTimeout > 0 {
+		setupTimeout = conf.SetupTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), setupTimeout)
 	defer cancel()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {

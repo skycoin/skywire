@@ -616,6 +616,13 @@ type PingConfig struct {
 	// dial to use the direct stcpr whenever one existed. 0 = inherit
 	// visor-global setting.
 	MinHops int
+	// SetupTimeout, when > 0, overrides DialPing's hardcoded 30s
+	// dial timeout. Multi-hop route setup through 4+ intermediates
+	// can take 30-120s (route-finder + setup-node round trips +
+	// saveRouteGroupRules retries), exceeding the legacy 30s
+	// ceiling. mux-bw passes its cfg.SetupTimeout here. 0 falls
+	// back to the existing 30s default.
+	SetupTimeout time.Duration
 }
 
 // TestResult type of test result
