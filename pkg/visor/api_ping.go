@@ -87,7 +87,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	}
 
 	v.ping.mu.Lock()
-	v.ping.conns[conf.PK] = ping{
+	v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}] = ping{
 		conn:     conn,
 		hops:     hops,
 		hopInfos: hopInfos,
@@ -102,9 +102,9 @@ func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.ping.conns[conf.PK]
+	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
 	if !ok {
-		return nil, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+		return nil, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
 
 	return doPingRoundTrips(pingEntry.conn, conf)
@@ -168,9 +168,9 @@ func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.ping.conns[conf.PK]
+	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
 	if !ok {
-		return 0, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+		return 0, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
 
 	data := make([]byte, conf.PcktSize*1024)
@@ -231,9 +231,9 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.ping.conns[conf.PK]
+	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
 	if !ok {
-		return 0, 0, 0, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+		return 0, 0, 0, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
 
 	data := make([]byte, conf.PcktSize*1024)
@@ -310,24 +310,53 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 }
 
 // StopPing implements API.
+//
+// Tears down ALL routes to the given peer (every PingRouteRef whose
+// PK matches). Callers that want to tear down a single route in a
+// mux-set must use StopPingRoute(ref) instead. The legacy semantics
+// (single PK = single connection) are preserved for the common
+// case where no aux routes exist.
 func (v *Visor) StopPing(pk cipher.PubKey) error {
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.ping.conns[pk]
-	if !ok || pingEntry.conn == nil {
-		// Already stopped or never started
-		delete(v.ping.conns, pk)
+	var firstErr error
+	for ref, entry := range v.ping.conns {
+		if ref.PK != pk {
+			continue
+		}
+		if entry.conn != nil {
+			if err := entry.conn.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+		delete(v.ping.conns, ref)
+	}
+	return firstErr
+}
+
+// StopPingRoute closes a single route in a mux-set without
+// touching the other parallel routes to the same peer. Used by
+// `cli visor ping mux-bw` when one of N parallel routes fails
+// mid-pump and we want to keep the others alive, and by future
+// mux-aware proxies that want to drop one leg of a multi-route
+// session.
+//
+// Returns nil if the ref doesn't match any known conn (idempotent —
+// safe to call from cleanup paths that aren't sure whether the route
+// was ever established).
+func (v *Visor) StopPingRoute(ref PingRouteRef) error {
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
+
+	entry, ok := v.ping.conns[ref]
+	if !ok || entry.conn == nil {
+		delete(v.ping.conns, ref)
 		return nil
 	}
-	err := pingEntry.conn.Close()
-	if err != nil {
-		// Still delete the entry even if close fails
-		delete(v.ping.conns, pk)
-		return err
-	}
-	delete(v.ping.conns, pk)
-	return nil
+	err := entry.conn.Close()
+	delete(v.ping.conns, ref)
+	return err
 }
 
 // StopAllPings stops all active ping connections and cleans up their routes.
@@ -339,38 +368,54 @@ func (v *Visor) StopAllPings() (int, []string, error) {
 	var errs []string
 	count := 0
 
-	for pk, pingEntry := range v.ping.conns {
+	for ref, pingEntry := range v.ping.conns {
 		if pingEntry.conn != nil {
 			if err := pingEntry.conn.Close(); err != nil {
-				errs = append(errs, fmt.Sprintf("failed to close ping to %s: %v", pk, err))
+				errs = append(errs, fmt.Sprintf("failed to close ping to %s: %v", ref, err))
 			}
 		}
-		delete(v.ping.conns, pk)
+		delete(v.ping.conns, ref)
 		count++
 	}
 
 	return count, errs, nil
 }
 
-// GetPingRoute returns the route hops for an established ping connection.
-// Returns nil if no ping connection exists for the given public key.
+// GetPingRoute returns the route hops for the primary ping
+// connection to a peer (RouteIndex 0). For aux routes in a mux-set
+// use GetPingRouteAt(ref).
 func (v *Visor) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
+	return v.GetPingRouteAt(PingRoutePrimary(pk))
+}
+
+// GetPingRouteAt returns the route hops for a specific ping route.
+func (v *Visor) GetPingRouteAt(ref PingRouteRef) []cipher.PubKey {
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	if pingEntry, ok := v.ping.conns[pk]; ok {
+	if pingEntry, ok := v.ping.conns[ref]; ok {
 		return pingEntry.hops
 	}
 	return nil
 }
 
-// GetPingRouteDetails returns detailed route information for a ping connection,
-// including transport IDs and types for each hop.
+// GetPingRouteDetails returns detailed route information for the
+// PRIMARY ping connection to a peer (RouteIndex 0), including
+// transport IDs and types for each hop. For aux routes use
+// GetPingRouteDetailsAt(ref).
 func (v *Visor) GetPingRouteDetails(pk cipher.PubKey) []router.RouteHopInfo {
+	return v.GetPingRouteDetailsAt(PingRoutePrimary(pk))
+}
+
+// GetPingRouteDetailsAt returns detailed route information for a
+// specific ping route. Used by mux-aware callers (mux-bw) to surface
+// the hops of each parallel route — the primary-keyed accessor
+// can't distinguish among them.
+func (v *Visor) GetPingRouteDetailsAt(ref PingRouteRef) []router.RouteHopInfo {
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	if pingEntry, ok := v.ping.conns[pk]; ok {
+	if pingEntry, ok := v.ping.conns[ref]; ok {
 		return pingEntry.hopInfos
 	}
 	return nil
@@ -395,8 +440,11 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 		LocalRoute: conf.LocalRoute,
 	}
 
+	// BandwidthTest is a single-route caller; use the primary slot.
+	primary := PingRoutePrimary(conf.PK)
+
 	v.ping.mu.Lock()
-	_, exists := v.ping.conns[conf.PK]
+	_, exists := v.ping.conns[primary]
 	v.ping.mu.Unlock()
 
 	if !exists {
@@ -406,7 +454,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 	}
 
 	v.ping.mu.Lock()
-	pingEntry, ok := v.ping.conns[conf.PK]
+	pingEntry, ok := v.ping.conns[primary]
 	if !ok {
 		v.ping.mu.Unlock()
 		return BandwidthResult{}, fmt.Errorf("no ping connection for %s", conf.PK)
