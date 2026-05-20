@@ -373,11 +373,22 @@ func (r *SkywireNetworker) PingContextWithOpts(ctx context.Context, pk cipher.Pu
 		opts = router.DefaultDialOptions()
 	}
 
-	if directConn, ok := r.tryDirectPingDial(addr, opts); ok {
-		return &SkywireConn{
-			Conn:     directConn,
-			freePort: freePort,
-		}, nil
+	// Skip the direct-vstream shortcut when the caller has demanded a
+	// multi-hop path (mux-bw --min-hops 2, etc.). Without this guard
+	// the direct dial sneaks past router.DialRoutes' MinHops
+	// enforcement, defeating the constraint silently. Also note:
+	// the direct path returns a SkywireConn with nrg=nil, which
+	// makes RouteHopDetails() come back empty — so anything that
+	// later inspects the chosen path (mux-bw's MuxRouteEstablished
+	// .Hops field, ping tree's per-row hop list) would see no
+	// hops. Forcing the route-setup path keeps both pieces honest.
+	if opts.MinHops <= 1 {
+		if directConn, ok := r.tryDirectPingDial(addr, opts); ok {
+			return &SkywireConn{
+				Conn:     directConn,
+				freePort: freePort,
+			}, nil
+		}
 	}
 
 	conn, err := r.r.PingRoute(ctx, pk, routing.Port(localPort), addr.Port, opts)
