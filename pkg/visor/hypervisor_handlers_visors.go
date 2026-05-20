@@ -487,6 +487,36 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			hv.mu.Unlock()
 		}
 
+		// Surface stale cache rows for PKs that didn't make it into
+		// summaries this round. The above loop only consults the cache
+		// for visors still present in remoteVisors at fetch time, so
+		// once a visor's been cleaned up after its first transient RPC
+		// failure, subsequent refreshes would drop the row entirely —
+		// operators saw nodes disappearing from the list rather than
+		// staying as offline. Sweeping the cache here makes the offline
+		// state durable across cleanups; rows reappear as live when the
+		// visor reconnects and the cache is overwritten with fresh data.
+		rendered := make(map[cipher.PubKey]struct{}, len(summaries))
+		for _, s := range summaries {
+			if s.Overview != nil {
+				rendered[s.Overview.PubKey] = struct{}{}
+			}
+		}
+		hv.summaryCacheMx.RLock()
+		for pk, cached := range hv.summaryCache {
+			if _, already := rendered[pk]; already {
+				continue
+			}
+			stale := *cached.sum
+			offlineSince := time.Now().UTC()
+			resp := makeSummaryResp(false, false, &stale)
+			seenAt := cached.seenAt
+			resp.LastSeenAt = &seenAt
+			resp.OfflineSince = &offlineSince
+			summaries = append(summaries, resp)
+		}
+		hv.summaryCacheMx.RUnlock()
+
 		// Attach DMSG stats
 		for i := 0; i < len(summaries); i++ {
 			if stat, ok := dmsgStats[summaries[i].Overview.PubKey.String()]; ok {

@@ -365,6 +365,13 @@ return {
           transportabilityHealth: response.health.transportability_health,
         };
       }
+
+      // is_hypervisor flags the local visor (the one this UI is
+      // hosted on). Drives the per-row ★ icon in node-list. The
+      // flat getNodes() path sets this too; mirroring it here so the
+      // tree-based path doesn't drop it.
+      node.isHypervisor = response.is_hypervisor;
+
       out.push(node);
     });
     return out;
