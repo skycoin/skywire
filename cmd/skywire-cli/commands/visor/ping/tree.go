@@ -838,6 +838,17 @@ func formatEntryLine(e *treeEntry) string {
 		if errMsg == "" {
 			errMsg = e.calcErr
 		}
+		// Cap the error message so a verbose setup-error doesn't
+		// blow the row past its single-line budget. Visor-side
+		// errors can be arbitrarily long (wrapped error chains,
+		// raw remote responses); the row's fixed-width prefix is
+		// ~113 chars, leaving ~85 chars for the payload before we
+		// start needing horizontal scroll. The regression test in
+		// tree_test.go pins total line width < 200 chars.
+		const maxErrBlock = 80
+		if len(errMsg) > maxErrBlock {
+			errMsg = errMsg[:maxErrBlock-3] + "..."
+		}
 		block = errMsg
 	default: // succeeded
 		glyph = "✓"
