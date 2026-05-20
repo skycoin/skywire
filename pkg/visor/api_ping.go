@@ -55,7 +55,8 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	defer cancel()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
-		if len(conf.ForwardHops) > 0 && len(conf.ReverseHops) > 0 {
+		switch {
+		case len(conf.ForwardHops) > 0 && len(conf.ReverseHops) > 0:
 			// Use explicit route (skips route calculation)
 			fwdHops := make([]appnet.RouteHopInfo, len(conf.ForwardHops))
 			for i, h := range conf.ForwardHops {
@@ -66,10 +67,17 @@ func (v *Visor) DialPing(conf PingConfig) error {
 				revHops[i] = appnet.RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
 			}
 			conn, err = appnet.PingContextWithRoute(ctx, conf.PK, addr, fwdHops, revHops)
-		} else if conf.TransportID != "" {
+		case conf.TransportID != "":
 			// Use specific transport (skips route calculation)
 			conn, err = appnet.PingContextWithTransport(ctx, conf.PK, addr, conf.TransportID)
-		} else {
+		case conf.MinHops > 0:
+			// Constrain the route-finder to multi-hop paths only.
+			// This is what `mux-bw --min-hops N` rides — without
+			// this branch the router would short-circuit to the
+			// direct transport whenever one existed, making the
+			// flag a no-op.
+			conn, err = appnet.PingContextWithMinHops(ctx, conf.PK, addr, conf.MinHops)
+		default:
 			conn, err = appnet.PingContext(ctx, conf.PK, addr)
 		}
 		return err

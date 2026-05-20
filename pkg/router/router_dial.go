@@ -52,9 +52,14 @@ func (r *router) DialRoutes(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
-	// check if transport exist, then skip minhop value and consider it equal 0
+	// check if transport exist, then skip minhop value and consider it equal 0.
+	// Per-call opts.MinHops > 1 suppresses this downgrade: the caller has
+	// explicitly demanded a multi-hop path, and silently routing through the
+	// direct transport when one happens to exist would defeat the constraint
+	// (this was the symptom of `mux-bw --min-hops 2` riding direct stcpr
+	// instead of going via intermediates).
 	defaultMinHops := r.conf.MinHops
-	if r.isTpdExist(rPK) {
+	if r.isTpdExist(rPK) && (opts == nil || opts.MinHops <= 1) {
 		r.conf.MinHops = 1
 	}
 
@@ -457,8 +462,15 @@ fetchRoutesAgain:
 		return nil, nil, fmt.Errorf("context canceled before route fetch: %w", err)
 	}
 
+	// Per-call MinHops override takes precedence over visor-global
+	// Config.MinHops. Set by callers like mux-bw that want to test
+	// a multi-hop path without bumping the visor's static config.
+	rfMinHops := r.conf.MinHops
+	if opts.MinHops > 0 {
+		rfMinHops = uint16(opts.MinHops) //nolint:gosec // bounded by caller; CLI flag values are small
+	}
 	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
-		&rfclient.RouteOptions{MinHops: r.conf.MinHops, MaxHops: r.conf.MaxHops})
+		&rfclient.RouteOptions{MinHops: rfMinHops, MaxHops: r.conf.MaxHops})
 
 	if err == rfclient.ErrTransportNotFound {
 		// Try local route calculation - may find a local transport that's not yet in TPD
@@ -640,8 +652,16 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 
 	log.Debugf("Found %d local transports", len(localTps))
 
+	// Skip the direct (1-hop) probe when the caller asked for
+	// MinHops >= 2 — they want a non-direct path. The intermediate
+	// route search below will be the only candidate generator.
+	allowDirect := dialOpts == nil || dialOpts.MinHops <= 1
+
 	// Check for direct (1-hop) route first
 	for _, tp := range localTps {
+		if !allowDirect {
+			break
+		}
 		if tp.remotePK == dst {
 			// Skip DMSG transports for mux (DMSG is a relay, not suitable for multiplexing)
 			if dialOpts != nil && dialOpts.ExcludeDMSG && tp.tpType == "dmsg" {
