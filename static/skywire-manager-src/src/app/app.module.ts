@@ -67,8 +67,6 @@ import { SnackbarComponent } from './components/layout/snack-bar/snack-bar.compo
 import { InitialSetupComponent } from './components/pages/login/initial-setup/initial-setup.component';
 import { ProxySettingsComponent } from './components/pages/node/actions/proxy-settings/proxy-settings.component';
 import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
-import { DmsgComponent } from './components/pages/node/dmsg/dmsg.component';
-import { ReachabilityComponent } from './components/pages/node/reachability/reachability.component';
 import { SelectLanguageComponent } from './components/layout/select-language/select-language.component';
 import { LangButtonComponent } from './components/layout/lang-button/lang-button.component';
 import { TruncatedTextComponent } from './components/layout/truncated-text/truncated-text.component';
@@ -161,8 +159,6 @@ const globalRippleConfig: RippleGlobalOptions = {
         InitialSetupComponent,
         ProxySettingsComponent,
         SkynetComponent,
-        DmsgComponent,
-        ReachabilityComponent,
         SelectLanguageComponent,
         LangButtonComponent,
         TruncatedTextComponent,
