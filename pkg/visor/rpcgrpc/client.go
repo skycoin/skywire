@@ -60,6 +60,14 @@ func (c *PingClient) StreamPingTree(ctx context.Context, req *PingTreeRequest) (
 	return c.client.StreamPingTree(ctx, req)
 }
 
+// StreamMuxBandwidth opens the multiplexed-route bandwidth + RTT
+// probe stream. Same event-level-control rationale as
+// StreamPingTree — the CLI consumer drives Recv() and the harness
+// path consumes the raw events.
+func (c *PingClient) StreamMuxBandwidth(ctx context.Context, req *MuxBandwidthRequest) (PingService_StreamMuxBandwidthClient, error) {
+	return c.client.StreamMuxBandwidth(ctx, req)
+}
+
 // StreamPing performs pings and calls the callback for each result
 // timeout applies only to the ping phase (after route setup), 0 means no timeout
 // setupTimeout applies to route setup phase, 0 means no timeout
