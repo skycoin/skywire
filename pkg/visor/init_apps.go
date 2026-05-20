@@ -22,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
@@ -234,6 +235,7 @@ func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
 		TransportID: conf.TransportID,
 		ForwardHops: forwardHops,
 		ReverseHops: reverseHops,
+		RouteIndex:  conf.RouteIndex,
 	})
 }
 
@@ -243,6 +245,7 @@ func (a *visorPingAdapter) PingOnce(conf rpcgrpc.PingConf) (time.Duration, error
 		Tries:      conf.Tries,
 		PcktSize:   conf.PcktSize,
 		LocalRoute: conf.LocalRoute,
+		RouteIndex: conf.RouteIndex,
 	})
 }
 
@@ -250,26 +253,45 @@ func (a *visorPingAdapter) StopPing(pk cipher.PubKey) error {
 	return a.v.StopPing(pk)
 }
 
+// StopPingRoute crosses the rpcgrpc → visor boundary by converting
+// the rpcgrpc-local PingRouteRef into the visor-package PingRouteRef.
+// The rpcgrpc-side struct exists only to keep that package free of
+// pkg/visor imports.
+func (a *visorPingAdapter) StopPingRoute(ref rpcgrpc.PingRouteRef) error {
+	return a.v.StopPingRoute(PingRouteRef{PK: ref.PK, Index: ref.Index})
+}
+
 func (a *visorPingAdapter) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
 	return a.v.GetPingRoute(pk)
 }
 
 func (a *visorPingAdapter) GetPingRouteDetails(pk cipher.PubKey) []rpcgrpc.RouteHopInfo {
-	details := a.v.GetPingRouteDetails(pk)
+	return convertHopInfos(a.v.GetPingRouteDetails(pk))
+}
+
+// GetPingRouteDetailsAt — per-route variant used by mux-bw to fill
+// MuxRouteEstablished.hops at setup time. See StopPingRoute for the
+// boundary-cross note.
+func (a *visorPingAdapter) GetPingRouteDetailsAt(ref rpcgrpc.PingRouteRef) []rpcgrpc.RouteHopInfo {
+	return convertHopInfos(a.v.GetPingRouteDetailsAt(PingRouteRef{PK: ref.PK, Index: ref.Index}))
+}
+
+// convertHopInfos is the router.RouteHopInfo → rpcgrpc.RouteHopInfo
+// projection shared by the two GetPingRouteDetails* paths.
+func convertHopInfos(details []router.RouteHopInfo) []rpcgrpc.RouteHopInfo {
 	if details == nil {
 		return nil
 	}
-	// Convert router.RouteHopInfo to rpcgrpc.RouteHopInfo
-	result := make([]rpcgrpc.RouteHopInfo, len(details))
+	out := make([]rpcgrpc.RouteHopInfo, len(details))
 	for i, d := range details {
-		result[i] = rpcgrpc.RouteHopInfo{
+		out[i] = rpcgrpc.RouteHopInfo{
 			TpID:   d.TpID,
 			From:   d.From,
 			To:     d.To,
 			TpType: d.TpType,
 		}
 	}
-	return result
+	return out
 }
 
 func (a *visorPingAdapter) GetLastRouteCalcTime() time.Duration {
