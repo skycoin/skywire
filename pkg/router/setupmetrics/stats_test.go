@@ -290,6 +290,81 @@ func TestCollector_CircuitBreaker_DestinationUnreachable(t *testing.T) {
 	}
 }
 
+// TestCollector_CircuitBreaker_IntermediateUnreachable verifies that
+// when the failed dial PK was an intermediate hop (neither src nor
+// dst), the destination's breaker stays closed and the
+// intermediate's own breaker accumulates instead. Regression test
+// for the disjoint-mux pathology: N parallel routes through N
+// different intermediates would accumulate dst breaker hits per bad
+// intermediate, locking out all attempts even via healthy
+// intermediates.
+func TestCollector_CircuitBreaker_IntermediateUnreachable(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+	interPK, _ := cipher.GenerateKeyPair()
+
+	// Fail circuitFailureThreshold+2 times, each time with the
+	// INTERMEDIATE as the failed dial target.
+	for i := 0; i < circuitFailureThreshold+2; i++ {
+		e := fmt.Errorf("failed to instantiate route id reserver: a dial attempt failed with: %w",
+			&dialErrStub{pk: interPK, msg: "dial " + interPK.String() + "@136: dmsg error 202"})
+		c.RecordRouteContext(context.Background(), srcPK, dstPK, 2)(&e)
+	}
+
+	if ok, reason := c.AllowDestination(dstPK); !ok {
+		t.Fatalf("intermediate-side failures should NOT trip dst breaker, got denied: %q", reason)
+	}
+	if ok, _ := c.AllowIntermediate(interPK); ok {
+		t.Fatal("intermediate-side failures should trip the intermediate's breaker")
+	}
+
+	snap := c.Snapshot()
+	if got := snap.FailuresByReason[ReasonIntermediateUnreachable]; got != circuitFailureThreshold+2 {
+		t.Errorf("intermediate_unreachable count=%d, want %d", got, circuitFailureThreshold+2)
+	}
+	if got := snap.FailuresByReason[ReasonIDReservation]; got != 0 {
+		t.Errorf("id_reservation count=%d, want 0 (all should reclass to intermediate_unreachable)", got)
+	}
+	// Destination's Failed counter should not have been incremented.
+	for _, d := range snap.TopDestinations {
+		if d.PK == dstPK.String() && d.Failed != 0 {
+			t.Errorf("dst Failed=%d, want 0 (intermediate failures shouldn't blame the dst)", d.Failed)
+		}
+	}
+}
+
+// TestCollector_CircuitBreaker_IntermediateBreakerNotPoisoningDst
+// asserts the asymmetry: an intermediate breaker tripping leaves the
+// dst breaker closed, so routes through OTHER intermediates can
+// still set up. Without this property the disjoint-mux fanout would
+// be useless under any rate of intermediate flakiness.
+func TestCollector_CircuitBreaker_IntermediateBreakerNotPoisoningDst(t *testing.T) {
+	c := NewCollector(CollectorConfig{})
+	srcPK, _ := cipher.GenerateKeyPair()
+	dstPK, _ := cipher.GenerateKeyPair()
+	badInter, _ := cipher.GenerateKeyPair()
+	goodInter, _ := cipher.GenerateKeyPair()
+
+	// Trip the bad intermediate's breaker.
+	for i := 0; i < circuitFailureThreshold; i++ {
+		e := fmt.Errorf("failed to instantiate route id reserver: a dial attempt failed with: %w",
+			&dialErrStub{pk: badInter, msg: "dial " + badInter.String() + "@136: timeout"})
+		c.RecordRouteContext(context.Background(), srcPK, dstPK, 2)(&e)
+	}
+
+	// Bad intermediate denied; good intermediate + dst still allowed.
+	if ok, _ := c.AllowIntermediate(badInter); ok {
+		t.Fatal("bad intermediate breaker should be open")
+	}
+	if ok, _ := c.AllowIntermediate(goodInter); !ok {
+		t.Fatal("good intermediate breaker should be closed")
+	}
+	if ok, _ := c.AllowDestination(dstPK); !ok {
+		t.Fatal("dst breaker should be closed (intermediate failures must not poison it)")
+	}
+}
+
 // TestCollector_CircuitBreakerOnlyIDReservation verifies that other
 // failure reasons do not trip the breaker — only dial-path failures
 // should, because the others are local config / rule problems that

@@ -444,6 +444,20 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 			log.Debugf("circuit breaker: %s", reason)
 			return routing.EdgeRules{}, fmt.Errorf("%w: %s", ErrCircuitOpen, reason)
 		}
+		// Also short-circuit if any intermediate on the forward path
+		// has an open breaker. Skipping the last Forward hop's .To
+		// (that's the destination, already checked above). The
+		// pre-check saves the ~10s id_reservation timeout per known-
+		// bad intermediate, which is the whole point of breakers.
+		for i, h := range biRt.Forward {
+			if i == len(biRt.Forward)-1 {
+				break
+			}
+			if ok, reason := collector.AllowIntermediate(h.To); !ok {
+				log.Debugf("circuit breaker (intermediate): %s", reason)
+				return routing.EdgeRules{}, fmt.Errorf("%w: intermediate %s", ErrCircuitOpen, reason)
+			}
+		}
 	}
 
 	// Ensure bi routes input is valid.
