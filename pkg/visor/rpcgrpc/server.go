@@ -93,6 +93,11 @@ type VisorAPI interface {
 	// the visor's existing discovery client. The route-calc gRPC
 	// handler builds the BFS graph from this slice.
 	FetchAllTransportEntries(ctx context.Context) ([]*transport.Entry, error)
+	// GetTransportLatencyByRemotePK returns the smoothed avg RTT (ms)
+	// for the local managed transport to remotePK, or 0 if no such
+	// transport exists or its latency is not yet sampled. Powers the
+	// ping-tree UseTransportLatency fast-path at level-1.
+	GetTransportLatencyByRemotePK(remotePK cipher.PubKey) float64
 }
 
 // GroupMessageData mirrors visor.GroupMessage one-for-one but lives in
