@@ -252,3 +252,68 @@ func TestPingTreeTotalsBumpInFlight(t *testing.T) {
 		t.Errorf("current = %d, want 0 (balanced bumps)", tot.currentInFlight)
 	}
 }
+
+// TestTransportLatencyResult pins the numeric conversion + skip
+// table for the use_transport_latency fast path. Tests the pure
+// half of tryTransportLatencyFastPath so a regression doesn't need
+// a VisorAPI mock to catch.
+func TestTransportLatencyResult(t *testing.T) {
+	cand := pingTreeCandidate{
+		tpID:     uuid.NewString(),
+		tpType:   string(tptypes.STCPR),
+		remotePK: "030c42c98b6bf4a85aa09dbea39872ed94c57c673992810e58ad809d8f586e4444",
+		parentPK: "020e26d9f0da46daec8d3dccff5c100dd03685f7cbe608d93a8e8190892979f2a0",
+		level:    1,
+	}
+
+	t.Run("zero latency falls through to live ping", func(t *testing.T) {
+		r, ok := transportLatencyResult(cand, 0)
+		if ok || r != nil {
+			t.Errorf("zero latency: got (%+v, %v); want (nil, false)", r, ok)
+		}
+	})
+
+	t.Run("negative latency falls through (sentinel for unsampled)", func(t *testing.T) {
+		r, ok := transportLatencyResult(cand, -1.5)
+		if ok || r != nil {
+			t.Errorf("negative latency: got (%+v, %v); want (nil, false)", r, ok)
+		}
+	})
+
+	t.Run("12.5 ms maps to 12_500_000 ns across all three percentiles", func(t *testing.T) {
+		r, ok := transportLatencyResult(cand, 12.5)
+		if !ok || r == nil {
+			t.Fatalf("expected fast-path hit, got (%+v, %v)", r, ok)
+		}
+		const wantNs = 12_500_000
+		if r.PingAvgNs != wantNs || r.PingP50Ns != wantNs || r.PingP99Ns != wantNs {
+			t.Errorf("ns conversion: avg=%d p50=%d p99=%d, want %d each",
+				r.PingAvgNs, r.PingP50Ns, r.PingP99Ns, wantNs)
+		}
+		if r.LatencySource != "transport_summary" {
+			t.Errorf("LatencySource = %q, want %q", r.LatencySource, "transport_summary")
+		}
+		if r.SampleCount != 1 {
+			t.Errorf("SampleCount = %d, want 1 (single smoothed sample)", r.SampleCount)
+		}
+		if r.Level != 1 {
+			t.Errorf("Level = %d, want 1 (fast path is level-1 only)", r.Level)
+		}
+		if r.RemotePk != cand.remotePK || r.TpId != cand.tpID {
+			t.Errorf("candidate fields not preserved: pk=%q tpID=%q", r.RemotePk, r.TpId)
+		}
+	})
+
+	t.Run("sub-millisecond latency rounds to ns floor", func(t *testing.T) {
+		// 0.5 ms = 500_000 ns. The int64 truncation is intentional;
+		// transport-level smoothing already has sub-ms-grained
+		// values clamped by SmoothedRTT's resolution.
+		r, ok := transportLatencyResult(cand, 0.5)
+		if !ok || r == nil {
+			t.Fatalf("expected fast-path hit on 0.5ms")
+		}
+		if r.PingAvgNs != 500_000 {
+			t.Errorf("0.5ms → %d ns, want 500_000", r.PingAvgNs)
+		}
+	})
+}
