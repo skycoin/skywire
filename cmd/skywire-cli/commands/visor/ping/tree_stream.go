@@ -1,21 +1,21 @@
 // Package ping — cmd/skywire-cli/commands/visor/ping/tree_stream.go:
 // thin gRPC client for the StreamPingTree RPC. The visor does the
 // BFS server-side and pushes PingTreeEvents over the stream; this
-// command renders each event as one NDJSON line on stdout.
+// command renders each event either as a human-readable row
+// (default) or as one NDJSON object per stdout line (--json).
 //
-// Why separate from tree.go: the Bubble Tea TUI in tree.go has its
-// own model + render loop that the next iteration will rewire onto
-// this same stream. Until that lands, the new server-side gRPC path
-// gets its own subcommand so the existing TUI keeps working
-// unchanged for interactive users while harness consumers + coding
-// agents drive the new RPC.
+// Default output is built for direct human consumption — including
+// a final aggregation table (avg/p50/p99/jitter grouped by hop
+// count) so the latency-vs-hops measurement Synth asked about
+// doesn't need a follow-up jq pipeline.
 //
-// Output: one JSON object per stdout line. Top-level fields:
+// --json switches to the NDJSON wire format consumed by external
+// harnesses + coding agents:
 //
-//	{"ts":"<RFC3339Nano>", "type":"discovered|ping_result|level_done|run_done|status_update|server_error", "data":{...}}
+//	{"ts":"<RFC3339Nano>","type":"<event>","data":{...}}
 //
 // `data` is the marshaled oneof payload with proto's snake_case
-// field names preserved. NDJSON consumers can `jq -c .` to filter,
+// field names preserved. NDJSON consumers can `jq -c .` to filter
 // or stream-decode into the wire types via protojson.
 package ping
 
@@ -23,9 +23,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
+	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -51,6 +55,9 @@ var (
 	streamDryRun      bool
 	streamTimeout     time.Duration
 	streamSetupTO     time.Duration
+	streamJSON        bool
+	streamQuiet       bool
+	streamOutFile     string
 )
 
 func init() {
@@ -82,24 +89,38 @@ func init() {
 		"per-ping timeout (after route setup)")
 	pingTreeStreamCmd.Flags().DurationVar(&streamSetupTO, "setup-timeout", 30*time.Second,
 		"per-transport route-setup timeout")
+	pingTreeStreamCmd.Flags().BoolVar(&streamJSON, "json", false,
+		"emit NDJSON on stdout (default: human-readable rows + per-hop summary)")
+	pingTreeStreamCmd.Flags().BoolVarP(&streamQuiet, "quiet", "q", false,
+		"in human mode: suppress per-event rows and print only the final summary")
+	pingTreeStreamCmd.Flags().StringVarP(&streamOutFile, "output", "O", "",
+		"append NDJSON of every event to FILE (independent of stdout mode)")
 
 	RootCmd.AddCommand(pingTreeStreamCmd)
 }
 
 var pingTreeStreamCmd = &cobra.Command{
 	Use:   "tree-stream",
-	Short: "Stream a server-side BFS ping-tree as NDJSON (for harness consumers + coding agents)",
-	Long: `Stream a server-side BFS ping-tree as NDJSON to stdout.
+	Short: "Stream a server-side BFS ping-tree as human-readable rows + summary (or NDJSON with --json)",
+	Long: `Stream a server-side BFS ping-tree.
 
 The visor walks its own neighborhood breadth-first and streams one
 event per discovered transport, per ping result, per level boundary,
-and a final run summary. Each event is one JSON object per stdout
-line (NDJSON).
+plus a final run summary.
 
-Wire format (top-level fields per line):
+Default stdout: human-readable rows + a final aggregation table
+showing succeeded / failed counts and avg/p50/p99/jitter grouped by
+hop count. The Synth-directive latency-vs-hops measurement reads
+directly from this table — no jq pipeline required.
+
+--json: emit NDJSON instead. One JSON object per stdout line:
   {"ts":"<RFC3339Nano>","type":"<event>","data":{...}}
 
-Event types:
+--output FILE: write the NDJSON to FILE regardless of stdout mode,
+so harness consumers can capture machine-readable data while the
+operator watches the human stream.
+
+Event types (visible in --json or in --output FILE):
   discovered     — BFS added (transport, peer) to the level-N candidate set
   ping_result    — ping (or transport_summary cache hit) completed
   level_done     — every transport at level N has resolved
@@ -109,28 +130,30 @@ Event types:
 
 Examples:
 
-  # Hop-level latency measurement (synth's directive):
-  skywire cli visor ping tree-stream --hops 1 --tries 5 | jq -c 'select(.type=="ping_result")'
-  skywire cli visor ping tree-stream --hops 2 --tries 5 -l 2 | tee hops-2.ndjson
-  skywire cli visor ping tree-stream --hops 3 --tries 5 -l 3 | tee hops-3.ndjson
+  # Latency + jitter as a function of hops (Synth's directive):
+  skywire cli visor ping tree-stream --hops 1 --tries 5
+  skywire cli visor ping tree-stream --hops 2 --tries 5 -l 2
+  skywire cli visor ping tree-stream --hops 3 --tries 5 -l 3
+
+  # Same as above but keep only the summary table:
+  skywire cli visor ping tree-stream --hops 2 --tries 5 -l 2 --quiet
+
+  # Capture NDJSON for offline analysis while watching live rows:
+  skywire cli visor ping tree-stream --tries 5 --output /tmp/tree.ndjson
 
   # Discovery only, no pings (visualize the reachable graph):
   skywire cli visor ping tree-stream --dry-run --max-level 2
 
-  # Aggregate latency across all reachable levels:
-  skywire cli visor ping tree-stream --tries 3 | jq -c 'select(.type=="ping_result") | {level:.data.level, avg_ms:(.data.ping_avg_ns/1e6)}'
-
-The TUI variant of this command is still 'cli visor ping tree' —
-that one keeps the Bubble Tea interactive surface and will be
-rewired onto this same stream in a follow-up.`,
+The TUI variant is 'cli visor ping tree' for interactive use.`,
 	Run: runPingTreeStream,
 }
 
 // runPingTreeStream connects to the local visor's gRPC server,
-// invokes StreamPingTree with the flag-derived request, and writes
-// one NDJSON line per event to stdout until the stream closes
-// (RunDone, ServerError, or ctx-cancel from Ctrl+C).
-func runPingTreeStream(cmd *cobra.Command, _ []string) {
+// invokes StreamPingTree with the flag-derived request, and dispatches
+// each event to (a) human rows on stdout, (b) NDJSON on stdout, and
+// (c) NDJSON to --output FILE — modes (a)/(b) are mutually exclusive
+// via --json; (c) is always-on when --output is set.
+func runPingTreeStream(_ *cobra.Command, _ []string) {
 	ctx, cancel := signalContext()
 	defer cancel()
 
@@ -168,32 +191,282 @@ func runPingTreeStream(cmd *cobra.Command, _ []string) {
 		os.Exit(1)
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	// protojson preserves snake_case field names; conversion from
-	// proto-Message to encoding/json marshaler goes through
-	// protojson.Marshal → []byte → json.RawMessage so the outer
-	// envelope can carry the data unmolested.
+	// File tee (always NDJSON when --output is set).
+	var fileEnc *json.Encoder
+	if streamOutFile != "" {
+		f, fErr := os.OpenFile(streamOutFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644) //nolint:gosec
+		if fErr != nil {
+			fmt.Fprintf(os.Stderr, "error: open --output file: %v\n", fErr)
+			os.Exit(1)
+		}
+		defer f.Close() //nolint:errcheck
+		fileEnc = json.NewEncoder(f)
+	}
+
+	stdoutEnc := json.NewEncoder(os.Stdout)
 	marshaler := protojson.MarshalOptions{
 		UseProtoNames:   true, // snake_case fields, matches proto declarations
 		EmitUnpopulated: false,
+	}
+
+	stats := newPingTreeStats()
+	startedAt := time.Now()
+
+	if !streamJSON && !streamQuiet {
+		fmt.Fprintln(os.Stderr, treeStreamHumanHeader(req))
 	}
 
 	for {
 		ev, recvErr := stream.Recv()
 		if recvErr != nil {
 			// EOF is normal stream-end; everything else is a problem.
-			if recvErr.Error() == "EOF" || recvErr == context.Canceled {
-				return
+			if recvErr == io.EOF || recvErr == context.Canceled {
+				break
 			}
 			fmt.Fprintf(os.Stderr, "error: stream recv: %v\n", recvErr)
 			os.Exit(1)
 		}
-		if err := emitOne(enc, marshaler, ev); err != nil {
-			fmt.Fprintf(os.Stderr, "error: emit: %v\n", err)
-			os.Exit(1)
+
+		// Always update stats so the summary is correct regardless of
+		// stdout mode.
+		stats.record(ev)
+
+		// File tee always emits NDJSON.
+		if fileEnc != nil {
+			if err := emitOne(fileEnc, marshaler, ev); err != nil {
+				fmt.Fprintf(os.Stderr, "error: emit to file: %v\n", err)
+				os.Exit(1)
+			}
+		}
+
+		// Stdout mode dispatch.
+		switch {
+		case streamJSON:
+			if err := emitOne(stdoutEnc, marshaler, ev); err != nil {
+				fmt.Fprintf(os.Stderr, "error: emit: %v\n", err)
+				os.Exit(1)
+			}
+		case streamQuiet:
+			// Suppress per-event rows; summary still prints at end.
+		default:
+			emitHumanRow(os.Stdout, ev, startedAt)
 		}
 	}
+
+	// Final summary in human modes (default + --quiet). In --json
+	// mode the consumer parses run_done out of the NDJSON stream.
+	if !streamJSON {
+		stats.printSummary(os.Stdout)
+	}
 }
+
+// ---------------------------------------------------------------------------
+// Human output
+// ---------------------------------------------------------------------------
+
+// treeStreamHumanHeader is the one-line banner printed to stderr at
+// the start of a human-mode run. Goes to stderr so it doesn't leak
+// into the summary table when stdout is redirected to a file.
+func treeStreamHumanHeader(req *rpcgrpc.PingTreeRequest) string {
+	var parts []string
+	if req.Hops > 0 {
+		parts = append(parts, fmt.Sprintf("hops=%d", req.Hops))
+	}
+	if req.MaxLevel > 0 {
+		parts = append(parts, fmt.Sprintf("max-level=%d", req.MaxLevel))
+	}
+	if req.Tries > 0 {
+		parts = append(parts, fmt.Sprintf("tries=%d", req.Tries))
+	}
+	if req.DryRun {
+		parts = append(parts, "dry-run")
+	}
+	return fmt.Sprintf("ping tree-stream → %s", strings.Join(parts, " "))
+}
+
+// emitHumanRow prints one event as a single line on the given writer.
+// Discovered events are intentionally skipped — they fire in bulk at
+// BFS-expansion time and would drown out the ping_result rows the
+// operator actually wants to see. They're still in the --output file
+// for offline analysis.
+func emitHumanRow(w io.Writer, ev *rpcgrpc.PingTreeEvent, start time.Time) {
+	elapsed := time.Since(start).Seconds()
+	switch p := ev.Payload.(type) {
+	case *rpcgrpc.PingTreeEvent_PingResult:
+		r := p.PingResult
+		glyph := "✓"
+		if r.Canceled {
+			glyph = "⊘"
+		} else if r.Failed {
+			glyph = "✗"
+		}
+		srcTag := "[live ]"
+		if r.LatencySource == "transport_summary" {
+			srcTag = "[cache]"
+		} else if r.LatencySource == "skipped" {
+			srcTag = "[skip ]"
+		}
+		statsBlock := ""
+		if r.Failed {
+			msg := r.PingErr
+			if msg == "" {
+				msg = r.SetupErr
+			}
+			if msg == "" {
+				msg = r.CalcErr
+			}
+			statsBlock = msg
+		} else if r.SampleCount > 1 {
+			statsBlock = fmt.Sprintf("avg=%.1fms p50=%.1fms p99=%.1fms jit=%.1fms n=%d",
+				float64(r.PingAvgNs)/1e6,
+				float64(r.PingP50Ns)/1e6,
+				float64(r.PingP99Ns)/1e6,
+				float64(r.JitterNs)/1e6,
+				r.SampleCount)
+		} else {
+			statsBlock = fmt.Sprintf("avg=%.1fms n=%d",
+				float64(r.PingAvgNs)/1e6, r.SampleCount)
+		}
+		//nolint:errcheck // human-mode log write; errors here aren't actionable
+		fmt.Fprintf(w, "[+%6.2fs] %s L%d hops=%d %s  %s  %s  %s\n",
+			elapsed, glyph, r.Level, hopsFromLevel(r.Level), r.RemotePk, r.TpType, srcTag, statsBlock)
+	case *rpcgrpc.PingTreeEvent_LevelDone:
+		l := p.LevelDone
+		//nolint:errcheck // human-mode log write; errors here aren't actionable
+		fmt.Fprintf(w, "[+%6.2fs] --- level %d done: attempted=%d succeeded=%d failed=%d skipped_cached=%d ---\n",
+			elapsed, l.Level, l.Attempted, l.Succeeded, l.Failed, l.SkippedCached)
+	case *rpcgrpc.PingTreeEvent_RunDone:
+		r := p.RunDone
+		//nolint:errcheck // human-mode log write; errors here aren't actionable
+		fmt.Fprintf(w, "[+%6.2fs] === run done: discovered=%d pinged=%d succ=%d fail=%d wall=%dms (%s) ===\n",
+			elapsed, r.TotalDiscovered, r.TotalPinged, r.TotalSucceeded, r.TotalFailed,
+			r.WallTimeNs/1e6, r.TerminationReason)
+	case *rpcgrpc.PingTreeEvent_ServerError:
+		e := p.ServerError
+		fmt.Fprintf(w, "[+%6.2fs] !!! server error: %s: %s\n", elapsed, e.Code, e.Message) //nolint:errcheck
+	}
+}
+
+// hopsFromLevel converts a BFS level (1-indexed) into a hop count.
+// BFS level 1 is "direct neighbor" — one transport edge between
+// local and remote, which is 1 hop.
+func hopsFromLevel(level int32) int32 {
+	return level
+}
+
+// ---------------------------------------------------------------------------
+// Aggregation (per-hops summary)
+// ---------------------------------------------------------------------------
+
+// hopAgg accumulates the per-hop-count stats the run-end summary
+// table reports. Only successful pings (not failed / not canceled /
+// not skipped) contribute to the latency-distribution averages —
+// failures only count toward attempted / failed.
+type hopAgg struct {
+	attempted     int
+	succeeded     int
+	failed        int
+	skippedCached int
+	avgSum        float64
+	p50Sum        float64
+	p99Sum        float64
+	jitterSum     float64
+	avgN          int
+}
+
+type pingTreeStats struct {
+	perHops map[int32]*hopAgg
+	runDone *rpcgrpc.PingTreeRunDone
+}
+
+func newPingTreeStats() *pingTreeStats {
+	return &pingTreeStats{perHops: make(map[int32]*hopAgg)}
+}
+
+func (s *pingTreeStats) record(ev *rpcgrpc.PingTreeEvent) {
+	switch p := ev.Payload.(type) {
+	case *rpcgrpc.PingTreeEvent_PingResult:
+		r := p.PingResult
+		h := s.bucket(r.Level)
+		h.attempted++
+		switch {
+		case r.Failed || r.Canceled:
+			h.failed++
+		case r.LatencySource == "skipped":
+			h.skippedCached++
+		default:
+			h.succeeded++
+			if r.LatencySource == "transport_summary" {
+				h.skippedCached++
+			}
+			h.avgSum += float64(r.PingAvgNs) / 1e6
+			h.p50Sum += float64(r.PingP50Ns) / 1e6
+			h.p99Sum += float64(r.PingP99Ns) / 1e6
+			h.jitterSum += float64(r.JitterNs) / 1e6
+			h.avgN++
+		}
+	case *rpcgrpc.PingTreeEvent_RunDone:
+		s.runDone = p.RunDone
+	}
+}
+
+func (s *pingTreeStats) bucket(level int32) *hopAgg {
+	if h, ok := s.perHops[level]; ok {
+		return h
+	}
+	h := &hopAgg{}
+	s.perHops[level] = h
+	return h
+}
+
+// printSummary writes the per-hop-count aggregation table — the
+// data Synth's directive asked for. Columns are right-aligned via
+// text/tabwriter for clean alignment across viewport widths.
+func (s *pingTreeStats) printSummary(w io.Writer) {
+	if len(s.perHops) == 0 {
+		fmt.Fprintln(w, "\n(no ping results)") //nolint:errcheck
+		return
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "\n=== Per-hop summary (avg across entries) ===")                                 //nolint:errcheck
+	fmt.Fprintln(tw, "hops\tattempted\tsucceeded\tfailed\tcached\tavg_ms\tp50_ms\tp99_ms\tjitter_ms") //nolint:errcheck
+
+	keys := make([]int32, 0, len(s.perHops))
+	for k := range s.perHops {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+
+	for _, k := range keys {
+		h := s.perHops[k]
+		var avgStr, p50Str, p99Str, jitStr string
+		if h.avgN > 0 {
+			avgStr = fmt.Sprintf("%.2f", h.avgSum/float64(h.avgN))
+			p50Str = fmt.Sprintf("%.2f", h.p50Sum/float64(h.avgN))
+			p99Str = fmt.Sprintf("%.2f", h.p99Sum/float64(h.avgN))
+			jitStr = fmt.Sprintf("%.2f", h.jitterSum/float64(h.avgN))
+		} else {
+			avgStr, p50Str, p99Str, jitStr = "-", "-", "-", "-"
+		}
+		//nolint:errcheck // human-mode summary; errors here aren't actionable
+		fmt.Fprintf(tw, "%d\t%d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\n",
+			hopsFromLevel(k), h.attempted, h.succeeded, h.failed, h.skippedCached,
+			avgStr, p50Str, p99Str, jitStr)
+	}
+	tw.Flush() //nolint:errcheck,gosec
+
+	if s.runDone != nil {
+		//nolint:errcheck // human-mode summary; errors here aren't actionable
+		fmt.Fprintf(w, "\ntotals: discovered=%d pinged=%d succeeded=%d failed=%d wall=%dms reason=%s\n",
+			s.runDone.TotalDiscovered, s.runDone.TotalPinged,
+			s.runDone.TotalSucceeded, s.runDone.TotalFailed,
+			s.runDone.WallTimeNs/1e6, s.runDone.TerminationReason)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// NDJSON wire (--json + --output)
+// ---------------------------------------------------------------------------
 
 // emitOne writes one NDJSON line: envelope with type+ts+data.
 func emitOne(enc *json.Encoder, m protojson.MarshalOptions, ev *rpcgrpc.PingTreeEvent) error {
