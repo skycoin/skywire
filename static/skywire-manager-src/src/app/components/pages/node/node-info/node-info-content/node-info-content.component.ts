@@ -1,6 +1,6 @@
-import { Component, Input, OnDestroy } from '@angular/core';
+import { Component, Input, OnDestroy, NgZone } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
-import { Subscription } from 'rxjs';
+import { Subscription, interval } from 'rxjs';
 
 import { Node } from '../../../../../app.datatypes';
 import { EditLabelComponent } from 'src/app/components/layout/edit-label/edit-label.component';
@@ -26,12 +26,27 @@ import { ApiService, RequestOptions, RequestTypes } from 'src/app/services/api.s
 export class NodeInfoContentComponent implements OnDestroy {
   @Input() set nodeInfo(val: Node) {
     this.node = val;
-    this.timeOnline = TimeUtils.getElapsedTime(val.secondsOnline);
+    // Reset the live-timer baseline whenever new data arrives.
+    // baselineSeconds is the canonical secondsOnline from the
+    // backend; nodeFetchedAt is the wall-clock moment that value
+    // applied. The 1Hz tick (see ctor) advances from there.
+    this.baselineSecondsOnline = val.secondsOnline ?? 0;
+    this.nodeFetchedAt = Date.now();
+    this.recomputeTimeOnline();
     this.fetchPorts(val.localPk);
   }
 
   node: Node;
   timeOnline: ElapsedTime;
+
+  // Live-counter state for "Time online". The backend refreshes the
+  // visor's seconds_online roughly every 10s; the local 1Hz tick
+  // fills the gaps so the operator sees the counter advance rather
+  // than freezing on the last refresh. Drift between ticks is
+  // corrected on the next backend refresh (nodeInfo setter).
+  private baselineSecondsOnline = 0;
+  private nodeFetchedAt = 0;
+  private timeTickSub?: Subscription;
   ports: { name: string, value: string }[] = [];
   showPorts = false;
   rawConfig = '';
@@ -73,10 +88,37 @@ export class NodeInfoContentComponent implements OnDestroy {
     public storageService: StorageService,
     private snackbarService: SnackbarService,
     private apiService: ApiService,
-  ) {}
+    private ngZone: NgZone,
+  ) {
+    // 1Hz tick for the live online-time counter. Runs outside
+    // Angular's zone so the periodic emission doesn't cause an
+    // app-wide change-detection sweep — we re-enter the zone only
+    // when we have a new value to render. Negligible CPU.
+    this.ngZone.runOutsideAngular(() => {
+      this.timeTickSub = interval(1000).subscribe(() => {
+        this.ngZone.run(() => this.recomputeTimeOnline());
+      });
+    });
+  }
 
   ngOnDestroy() {
-    // Nothing to unsubscribe — fetchPorts/fetchConfig use one-shot HTTP.
+    this.timeTickSub?.unsubscribe();
+  }
+
+  private recomputeTimeOnline() {
+    if (!this.nodeFetchedAt) { return; }
+    const elapsedSeconds = this.baselineSecondsOnline
+      + Math.floor((Date.now() - this.nodeFetchedAt) / 1000);
+    this.timeOnline = TimeUtils.getElapsedTime(elapsedSeconds);
+  }
+
+  /**
+   * True when `pk` matches the hypervisor that's serving this UI.
+   * Used by the template to render ★ next to the local hypervisor
+   * in the per-visor "Connected hypervisors" list.
+   */
+  isLocalHypervisor(pk: string): boolean {
+    return !!pk && pk === this.storageService.getLocalHypervisorPk();
   }
 
   showEditLabelDialog() {
