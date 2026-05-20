@@ -236,6 +236,7 @@ func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
 		ForwardHops: forwardHops,
 		ReverseHops: reverseHops,
 		RouteIndex:  conf.RouteIndex,
+		MinHops:     conf.MinHops,
 	})
 }
 
@@ -246,6 +247,7 @@ func (a *visorPingAdapter) PingOnce(conf rpcgrpc.PingConf) (time.Duration, error
 		PcktSize:   conf.PcktSize,
 		LocalRoute: conf.LocalRoute,
 		RouteIndex: conf.RouteIndex,
+		MinHops:    conf.MinHops,
 	})
 }
 
