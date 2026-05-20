@@ -38,6 +38,12 @@ export class Node {
   dmsgServers?: DMSGServerInfo[];  // DMSG servers with per-server latencies
   roundTripPing?: string;
   isHypervisor?: boolean;
+  // hypervisors = configured (from skywire-config.json's hypervisors[]);
+  // connectedHypervisors = currently connected sessions reported by
+  // the visor. Both are 66-char hex PKs. Surfaced on the Info tab so
+  // operators can see which hypervisors a visor reports to.
+  hypervisors?: string[];
+  connectedHypervisors?: string[];
   buildTag: string;
   skybianBuildVersion?: string;
   autoconnectTransports: boolean;
