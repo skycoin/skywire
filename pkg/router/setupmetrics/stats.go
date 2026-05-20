@@ -30,17 +30,18 @@ type FailureReason string
 // through to ReasonUnknown and the raw error message is still captured
 // in the RecentFailures ring buffer for investigation.
 const (
-	ReasonInvalidRoute      FailureReason = "invalid_route"      // BidirectionalRoute.Check failed
-	ReasonRuleGeneration    FailureReason = "rule_generation"    // GenerateRules returned ErrNoKey etc.
-	ReasonIDReservation     FailureReason = "id_reservation"     // ReserveRouteIDs failed dialing the destination / an intermediary
-	ReasonSourceUnreachable FailureReason = "source_unreachable" // ReserveRouteIDs could not reach the SOURCE visor (not the dst's fault)
-	ReasonIntermediaryRules FailureReason = "intermediary_rules" // BroadcastIntermediaryRules failed
-	ReasonDestinationRules  FailureReason = "destination_rules"  // AddEdgeRules on destination router failed
-	ReasonContextDeadline   FailureReason = "context_deadline"   // overall request timed out
-	ReasonContextCanceled   FailureReason = "context_canceled"   // caller canceled before completion
-	ReasonConcurrencyLimit  FailureReason = "concurrency_limit"  // dropped at the accept loop backpressure check
-	ReasonCircuitOpen       FailureReason = "circuit_open"       // per-destination breaker short-circuited the setup
-	ReasonUnknown           FailureReason = "unknown"            // failure classifier could not decide
+	ReasonInvalidRoute            FailureReason = "invalid_route"            // BidirectionalRoute.Check failed
+	ReasonRuleGeneration          FailureReason = "rule_generation"          // GenerateRules returned ErrNoKey etc.
+	ReasonIDReservation           FailureReason = "id_reservation"           // ReserveRouteIDs failed dialing the destination
+	ReasonSourceUnreachable       FailureReason = "source_unreachable"       // ReserveRouteIDs could not reach the SOURCE visor (not the dst's fault)
+	ReasonIntermediateUnreachable FailureReason = "intermediate_unreachable" // ReserveRouteIDs could not reach an INTERMEDIATE visor (not the dst's fault)
+	ReasonIntermediaryRules       FailureReason = "intermediary_rules"       // BroadcastIntermediaryRules failed
+	ReasonDestinationRules        FailureReason = "destination_rules"        // AddEdgeRules on destination router failed
+	ReasonContextDeadline         FailureReason = "context_deadline"         // overall request timed out
+	ReasonContextCanceled         FailureReason = "context_canceled"         // caller canceled before completion
+	ReasonConcurrencyLimit        FailureReason = "concurrency_limit"        // dropped at the accept loop backpressure check
+	ReasonCircuitOpen             FailureReason = "circuit_open"             // per-destination breaker short-circuited the setup
+	ReasonUnknown                 FailureReason = "unknown"                  // failure classifier could not decide
 )
 
 // FailureEvent captures a single failed setup attempt with enough
@@ -257,8 +258,33 @@ func NewCollector(cfg CollectorConfig) *Collector {
 // half-open and allow the current probe through. A subsequent success
 // will close the breaker (via finish); a failure re-opens it and
 // resets the 60-second timer.
+//
+// AllowIntermediate is the per-intermediate sibling — see below.
 func (c *Collector) AllowDestination(dstPK cipher.PubKey) (bool, string) {
-	pk := dstPK.String()
+	return c.allowPK(dstPK)
+}
+
+// AllowIntermediate reports whether a route candidate whose path
+// traverses interPK should be allowed to proceed. Intermediate
+// breakers are populated by id_reservation failures attributed to
+// the intermediate (see the default branch in finish()). Callers
+// that have already computed a candidate route's intermediates
+// (typically the route-setup-node, or a router that wants to
+// pre-filter route-finder output) can call this for each hop and
+// reject the route early if any intermediate's breaker is open —
+// avoiding a ~10s id-reservation timeout per known-bad hop.
+//
+// Uses the same allowPK helper as AllowDestination; intermediate
+// breakers live in the same map as destination breakers (keyed by
+// PK string), which keeps the bookkeeping uniform.
+func (c *Collector) AllowIntermediate(interPK cipher.PubKey) (bool, string) {
+	return c.allowPK(interPK)
+}
+
+// allowPK is the shared half-open transition machinery for
+// destinations and intermediates.
+func (c *Collector) allowPK(pubKey cipher.PubKey) (bool, string) {
+	pk := pubKey.String()
 	if pk == "" {
 		return true, ""
 	}
@@ -395,17 +421,29 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 	// modes like rule_generation reflect local config problems that
 	// won't self-heal by waiting, so they shouldn't trip the breaker.
 	//
-	// Critically: id_reservation can fail because the SOURCE visor is
-	// unreachable (MakeMap dials every hop — src, dst, intermediaries).
-	// A flaky source visor would otherwise poison the destination's
-	// breaker, blocking all requests to a healthy destination just
-	// because a few source visors were unreachable. We extract the PK
-	// that actually failed to dial (from router.DialError) and only
-	// trip the destination's breaker when it matches the destination.
-	// Source-side failures are reclassified as source_unreachable so
-	// the ring buffer and reason counts tell the real story, and the
-	// destination's Failed counter is NOT incremented for them so the
-	// Top-Failed-Destinations table stops fingering innocent dsts.
+	// Critically: id_reservation can fail because the SOURCE visor or
+	// an INTERMEDIATE visor is unreachable (MakeMap dials every hop —
+	// src, dst, intermediaries). A flaky source/intermediate visor
+	// would otherwise poison the destination's breaker, blocking all
+	// requests to a healthy destination just because some other visor
+	// in the path was unreachable. We extract the PK that actually
+	// failed to dial (from router.DialError) and only trip the
+	// destination's breaker when it matches the destination.
+	//
+	// Source-side failures are reclassified as source_unreachable.
+	// Intermediate-side failures are reclassified as
+	// intermediate_unreachable; the intermediate's own breaker is
+	// tripped so the next route-finder pick that traverses this
+	// intermediate can be short-circuited via AllowIntermediate.
+	// In both cases the destination's Failed counter is NOT
+	// incremented so the Top-Failed-Destinations table stops
+	// fingering innocent dsts.
+	//
+	// The mux-disjoint case (N routes through N different
+	// intermediates) is the motivating scenario: under the old
+	// behavior, even one bad intermediate per route would accumulate
+	// circuitFailureThreshold hits on the dst and lock all parallel
+	// attempts out — including ones through healthy intermediates.
 	reason := classifyError(ctx, err)
 	blameDst := true
 	if reason == ReasonIDReservation {
@@ -425,10 +463,17 @@ func (c *Collector) finish(ctx context.Context, srcPK, dstPK cipher.PubKey, hopC
 			reason = ReasonSourceUnreachable
 			blameDst = false
 		default:
-			// Intermediary hop failed; treat it like a dst failure for
-			// breaker purposes — the destination can't be reached via
-			// this intermediary regardless.
-			c.recordCircuitFailureLocked(dstStr)
+			// Intermediate hop failed. Do NOT blame the dst — a
+			// disjoint-mux scenario can have N parallel routes through
+			// N different intermediates, and one bad intermediate
+			// shouldn't lock the dst out for the other (N-1) good
+			// ones. Track failures against the intermediate's own
+			// breaker so future setups can short-circuit on a known-
+			// bad intermediate.
+			reason = ReasonIntermediateUnreachable
+			blameDst = false
+			c.touchDest(failedPK.String()) // ensure breaker entry exists
+			c.recordCircuitFailureLocked(failedPK.String())
 		}
 	}
 	if blameDst && destStat != nil {
