@@ -47,6 +47,19 @@ func (c *PingClient) Close() error {
 	return c.conn.Close()
 }
 
+// StreamPingTree opens the server-side BFS ping-tree stream. The
+// caller drives the returned stream via Recv() and is responsible
+// for handling the io.EOF terminus + any wire errors. Unlike the
+// other PingClient methods this returns the raw protoc-generated
+// stream type because callers want event-level control (e.g. the
+// 'cli visor ping tree-stream' command emits NDJSON envelopes, the
+// upcoming Bubble Tea TUI rewire will drive its own update loop).
+// Wrapping in a callback pattern here would force every consumer to
+// re-marshal back to the event type.
+func (c *PingClient) StreamPingTree(ctx context.Context, req *PingTreeRequest) (PingService_StreamPingTreeClient, error) {
+	return c.client.StreamPingTree(ctx, req)
+}
+
 // StreamPing performs pings and calls the callback for each result
 // timeout applies only to the ping phase (after route setup), 0 means no timeout
 // setupTimeout applies to route setup phase, 0 means no timeout
