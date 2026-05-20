@@ -120,8 +120,25 @@ type DialOptions struct {
 	ReverseHops         []routing.Hop // If set, use these hops for reverse path (skips route calculation)
 	MuxRoutes           int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
 	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
-	ExcludeDMSG         bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
-	KeepAlive           time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
+	// ExcludeIntermediatePKs lists intermediate-visor PKs that route-
+	// finder paths must NOT contain. Source + destination are never
+	// excluded (they're endpoints, not intermediates). The mux loop
+	// populates this with the intermediates of routes already
+	// established so that subsequent routes are constructed through
+	// different intermediate paths — disjoint in the intermediate-PK
+	// set sense. Applied in both the HTTP route-finder path (post-
+	// filter response) and the local route-calc fallback (filter
+	// candidates).
+	//
+	// Disjoint-intermediate routing is AUTOMATIC for the mux loop
+	// (MuxRoutes > 1). Callers that want overlapping intermediates
+	// must dial with explicit ForwardHops/ReverseHops (which bypass
+	// the route-finder entirely). This field is also exposed so
+	// callers outside the mux loop can pre-populate exclusions if
+	// they have constraints to express.
+	ExcludeIntermediatePKs []cipher.PubKey
+	ExcludeDMSG            bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
+	KeepAlive              time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
 	// AppName is the originating app's name. Set by appnet's
 	// DialContextWithOptions when the caller threaded a context
 	// carrying it (RPCIngressGateway.Dial uses appnet.WithAppName).
