@@ -345,12 +345,13 @@ func (s *PingServer) muxBwSetupRoute(
 	emit func(isMuxBandwidthEvent_Payload),
 ) {
 	conf := PingConf{
-		PK:         cfg.TargetPK,
-		Tries:      1,
-		PcktSize:   cfg.PacketSizeKb,
-		LocalRoute: cfg.LocalRoute,
-		RouteIndex: rs.index,
-		MinHops:    cfg.MinHops, // enforce --min-hops at the router-finder layer
+		PK:             cfg.TargetPK,
+		Tries:          1,
+		PcktSize:       cfg.PacketSizeKb,
+		LocalRoute:     cfg.LocalRoute,
+		RouteIndex:     rs.index,
+		MinHops:        cfg.MinHops, // enforce --min-hops at the router-finder layer
+		SetupTimeoutNs: cfg.SetupTimeout.Nanoseconds(),
 	}
 	setupCtx, cancel := context.WithTimeout(ctx, cfg.SetupTimeout)
 	defer cancel()
