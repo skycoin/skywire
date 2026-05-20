@@ -2929,9 +2929,20 @@ type MuxBandwidthRequest struct {
 	// LocalRoute uses local route calculation (cached TPD data)
 	// instead of querying the route-finder service. Mirrors
 	// BandwidthRequest.LocalRoute.
-	LocalRoute    bool `protobuf:"varint,10,opt,name=local_route,json=localRoute,proto3" json:"local_route,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LocalRoute bool `protobuf:"varint,10,opt,name=local_route,json=localRoute,proto3" json:"local_route,omitempty"`
+	// IdleBaselineDurationNs, when > 0, inserts a quiescent probe
+	// phase between route setup and the bulk pump. During the phase
+	// the same probe loop fires (rate = probe_interval_ns) but no
+	// pump goroutines run — so the RTT samples reflect the route
+	// with zero contention. The aggregated distribution comes back
+	// in MuxBandwidthDone.idle_probe_* fields, and the queueing
+	// delay computed by callers is (loaded_pXX - idle_pXX). 0 = no
+	// idle phase (skip the baseline measurement). Implies ProbeRtt =
+	// true at the handler — without probes there's nothing to
+	// measure.
+	IdleBaselineDurationNs int64 `protobuf:"varint,11,opt,name=idle_baseline_duration_ns,json=idleBaselineDurationNs,proto3" json:"idle_baseline_duration_ns,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *MuxBandwidthRequest) Reset() {
@@ -3032,6 +3043,13 @@ func (x *MuxBandwidthRequest) GetLocalRoute() bool {
 		return x.LocalRoute
 	}
 	return false
+}
+
+func (x *MuxBandwidthRequest) GetIdleBaselineDurationNs() int64 {
+	if x != nil {
+		return x.IdleBaselineDurationNs
+	}
+	return 0
 }
 
 // MuxBandwidthEvent is one entry on the stream. Exactly one oneof
@@ -3475,8 +3493,9 @@ type MuxBandwidthDone struct {
 	RoutesRequested   int32   `protobuf:"varint,9,opt,name=routes_requested,json=routesRequested,proto3" json:"routes_requested,omitempty"`
 	RoutesEstablished int32   `protobuf:"varint,10,opt,name=routes_established,json=routesEstablished,proto3" json:"routes_established,omitempty"`
 	SetupTotalNs      int64   `protobuf:"varint,11,opt,name=setup_total_ns,json=setupTotalNs,proto3" json:"setup_total_ns,omitempty"`
-	// RTT distribution across all probes (when ProbeRtt was set).
-	// Zero when no probes ran. Jitter is population stddev — same
+	// RTT distribution under load — across all probes that fired
+	// during the bulk pump phase. Zero when no probes ran or
+	// ProbeRtt was false. Jitter is population stddev — same
 	// formula as PingTreeResult.jitter_ns.
 	ProbeCount    int32 `protobuf:"varint,12,opt,name=probe_count,json=probeCount,proto3" json:"probe_count,omitempty"`
 	ProbeAvgNs    int64 `protobuf:"varint,13,opt,name=probe_avg_ns,json=probeAvgNs,proto3" json:"probe_avg_ns,omitempty"`
@@ -3485,6 +3504,17 @@ type MuxBandwidthDone struct {
 	ProbeJitterNs int64 `protobuf:"varint,16,opt,name=probe_jitter_ns,json=probeJitterNs,proto3" json:"probe_jitter_ns,omitempty"`
 	// TerminationReason: "duration" | "context_cancel" | "all_routes_failed" | "error".
 	TerminationReason string `protobuf:"bytes,17,opt,name=termination_reason,json=terminationReason,proto3" json:"termination_reason,omitempty"`
+	// RTT distribution under no contention — across all probes that
+	// fired during the IdleBaselineDuration phase BEFORE the bulk
+	// pump. Zero when idle_baseline_duration_ns was 0 or no probes
+	// landed in the window. Operators compute the queueing delay
+	// as (probe_pXX - idle_probe_pXX); the CLI's summary prints
+	// this delta directly when both distributions are present.
+	IdleProbeCount    int32 `protobuf:"varint,18,opt,name=idle_probe_count,json=idleProbeCount,proto3" json:"idle_probe_count,omitempty"`
+	IdleProbeAvgNs    int64 `protobuf:"varint,19,opt,name=idle_probe_avg_ns,json=idleProbeAvgNs,proto3" json:"idle_probe_avg_ns,omitempty"`
+	IdleProbeP50Ns    int64 `protobuf:"varint,20,opt,name=idle_probe_p50_ns,json=idleProbeP50Ns,proto3" json:"idle_probe_p50_ns,omitempty"`
+	IdleProbeP99Ns    int64 `protobuf:"varint,21,opt,name=idle_probe_p99_ns,json=idleProbeP99Ns,proto3" json:"idle_probe_p99_ns,omitempty"`
+	IdleProbeJitterNs int64 `protobuf:"varint,22,opt,name=idle_probe_jitter_ns,json=idleProbeJitterNs,proto3" json:"idle_probe_jitter_ns,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -3636,6 +3666,41 @@ func (x *MuxBandwidthDone) GetTerminationReason() string {
 		return x.TerminationReason
 	}
 	return ""
+}
+
+func (x *MuxBandwidthDone) GetIdleProbeCount() int32 {
+	if x != nil {
+		return x.IdleProbeCount
+	}
+	return 0
+}
+
+func (x *MuxBandwidthDone) GetIdleProbeAvgNs() int64 {
+	if x != nil {
+		return x.IdleProbeAvgNs
+	}
+	return 0
+}
+
+func (x *MuxBandwidthDone) GetIdleProbeP50Ns() int64 {
+	if x != nil {
+		return x.IdleProbeP50Ns
+	}
+	return 0
+}
+
+func (x *MuxBandwidthDone) GetIdleProbeP99Ns() int64 {
+	if x != nil {
+		return x.IdleProbeP99Ns
+	}
+	return 0
+}
+
+func (x *MuxBandwidthDone) GetIdleProbeJitterNs() int64 {
+	if x != nil {
+		return x.IdleProbeJitterNs
+	}
+	return 0
 }
 
 // MuxBandwidthError signals an unrecoverable condition. Last event
@@ -3955,7 +4020,7 @@ const file_ping_proto_rawDesc = "" +
 	"\amessage\x18\x04 \x01(\tR\amessage\"C\n" +
 	"\x13PingTreeServerError\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\xee\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xa9\x03\n" +
 	"\x13MuxBandwidthRequest\x12\x1b\n" +
 	"\ttarget_pk\x18\x01 \x01(\tR\btargetPk\x12\x16\n" +
 	"\x06routes\x18\x02 \x01(\x05R\x06routes\x12\x1f\n" +
@@ -3969,7 +4034,8 @@ const file_ping_proto_rawDesc = "" +
 	"\x12sample_interval_ns\x18\t \x01(\x03R\x10sampleIntervalNs\x12\x1f\n" +
 	"\vlocal_route\x18\n" +
 	" \x01(\bR\n" +
-	"localRoute\"\xdf\x02\n" +
+	"localRoute\x129\n" +
+	"\x19idle_baseline_duration_ns\x18\v \x01(\x03R\x16idleBaselineDurationNs\"\xdf\x02\n" +
 	"\x11MuxBandwidthEvent\x12!\n" +
 	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12K\n" +
 	"\x11route_established\x18\n" +
@@ -4005,7 +4071,7 @@ const file_ping_proto_rawDesc = "" +
 	"latency_ns\x18\x02 \x01(\x03R\tlatencyNs\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x1d\n" +
 	"\n" +
-	"elapsed_ns\x18\x04 \x01(\x03R\telapsedNs\"\x9c\x05\n" +
+	"elapsed_ns\x18\x04 \x01(\x03R\telapsedNs\"\xf8\x06\n" +
 	"\x10MuxBandwidthDone\x12(\n" +
 	"\x10total_bytes_sent\x18\x01 \x01(\x04R\x0etotalBytesSent\x120\n" +
 	"\x14total_bytes_received\x18\x02 \x01(\x04R\x12totalBytesReceived\x12 \n" +
@@ -4032,7 +4098,12 @@ const file_ping_proto_rawDesc = "" +
 	"\fprobe_p99_ns\x18\x0f \x01(\x03R\n" +
 	"probeP99Ns\x12&\n" +
 	"\x0fprobe_jitter_ns\x18\x10 \x01(\x03R\rprobeJitterNs\x12-\n" +
-	"\x12termination_reason\x18\x11 \x01(\tR\x11terminationReason\"A\n" +
+	"\x12termination_reason\x18\x11 \x01(\tR\x11terminationReason\x12(\n" +
+	"\x10idle_probe_count\x18\x12 \x01(\x05R\x0eidleProbeCount\x12)\n" +
+	"\x11idle_probe_avg_ns\x18\x13 \x01(\x03R\x0eidleProbeAvgNs\x12)\n" +
+	"\x11idle_probe_p50_ns\x18\x14 \x01(\x03R\x0eidleProbeP50Ns\x12)\n" +
+	"\x11idle_probe_p99_ns\x18\x15 \x01(\x03R\x0eidleProbeP99Ns\x12/\n" +
+	"\x14idle_probe_jitter_ns\x18\x16 \x01(\x03R\x11idleProbeJitterNs\"A\n" +
 	"\x11MuxBandwidthError\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage2\xdc\a\n" +
