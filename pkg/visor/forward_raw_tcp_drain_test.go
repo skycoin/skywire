@@ -48,7 +48,7 @@ func newPipedConns(t *testing.T) (client, server net.Conn) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	defer func() { _ = l.Close() }()
+	defer func() { _ = l.Close() }() //nolint:errcheck
 
 	type result struct {
 		c   net.Conn
@@ -77,7 +77,7 @@ func newPipedConns(t *testing.T) (client, server net.Conn) {
 // future refactors might bypass the half-close path.
 func TestHalfCloseWriteOrClose_PrefersCloseWriteWhenSupported(t *testing.T) {
 	a, _ := newPipedConns(t)
-	defer func() { _ = a.Close() }()
+	defer func() { _ = a.Close() }() //nolint:errcheck
 
 	bc := &bufferedConn{Conn: a}
 	log := logging.MustGetLogger("forward-test")
@@ -142,7 +142,7 @@ func TestForwardRawTCP_DrainsBufferedBytesAfterLocalEOF(t *testing.T) {
 	if err != nil {
 		t.Fatalf("local listen: %v", err)
 	}
-	defer func() { _ = lLn.Close() }()
+	defer func() { _ = lLn.Close() }() //nolint:errcheck
 
 	const payloadSize = 1 << 20 // 1 MB
 	payload := make([]byte, payloadSize)
@@ -178,7 +178,7 @@ func TestForwardRawTCP_DrainsBufferedBytesAfterLocalEOF(t *testing.T) {
 	// fast write + immediate Close on remoteConn would drop bytes
 	// beyond the smux/TCP send buffer.
 	got := make([]byte, 0, payloadSize)
-	_ = remoteForPeer.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_ = remoteForPeer.SetReadDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck
 	buf := make([]byte, 32*1024)
 	for len(got) < payloadSize {
 		n, rerr := remoteForPeer.Read(buf)
@@ -189,7 +189,7 @@ func TestForwardRawTCP_DrainsBufferedBytesAfterLocalEOF(t *testing.T) {
 			break
 		}
 	}
-	_ = remoteForPeer.Close()
+	_ = remoteForPeer.Close() //nolint:errcheck
 
 	select {
 	case <-done:
