@@ -51,6 +51,32 @@ service PingService {
   // init_apps.go for unary-RPC hang detection. Stream lifetime is
   // the listen lifetime, no arbitrary ceiling.
   rpc StreamGroupMessages(GroupMessagesRequest) returns (stream GroupMessageEvent);
+
+  // StreamPingTree walks the visor's neighborhood breadth-first and
+  // streams discovery + ping events as they happen. Replaces the
+  // client-side BFS in 'cli visor ping tree' — server-side has
+  // direct access to TransportSummary.LatencyMS (the smoothed per-
+  // transport RTT measured continuously by the transport layer),
+  // the route-finder, and the local tpM, so it can:
+  //   - Skip live pings at level 1 when the transport already has a
+  //     warmed latency cache (use_transport_latency flag);
+  //   - Walk tpM.WalkTransports directly without the snapshot
+  //     allocation cost that the unary Transports() RPC imposes
+  //     on visors with hundreds of transports;
+  //   - Observe cancellation at every BFS iteration so a client
+  //     disconnect tears down the walk within one in-flight ping.
+  //
+  // Result events arrive in chunk-complete-by-completion order, NOT
+  // deterministically grouped per peer — consumers that want
+  // (level, parent_pk, remote_pk) grouping must sort/bucket on
+  // receive. Server-side per-level concurrency means events for
+  // level N+1 never appear before level N's LevelDone.
+  //
+  // Authorization: the handler gates on the same whitelist used by
+  // dmsgscp (hypervisors + own PK + Dmsgpty.Whitelist). On a public
+  // visor with hundreds of transports, an unauthenticated caller
+  // could trigger a many-target ping storm; the gate prevents that.
+  rpc StreamPingTree(PingTreeRequest) returns (stream PingTreeEvent);
 }
 
 message PingRequest {
@@ -314,4 +340,199 @@ message ProcessStat {
   uint64 memory_rss = 5;      // Resident set size in bytes
   string username = 6;        // Username running the process
   string status = 7;          // Process status (running, sleeping, etc.)
+}
+
+// PingTreeRequest configures a server-side BFS ping-tree walk.
+// All durations are in nanoseconds (proto convention used throughout
+// this service). All "0 = default" fields fall back to handler-side
+// constants documented inline.
+message PingTreeRequest {
+  // MaxLevel caps BFS depth. 0 = unlimited until expansion exhausts.
+  int32 max_level = 1;
+  // Hops, when > 0, pings ONLY entries at exactly N hops. The BFS
+  // still discovers intermediate levels (so it can reach the target),
+  // but no PingResult fires for non-target levels. Synth's "latency
+  // as a function of hop count" measurement uses this.
+  int32 hops = 2;
+  // Tries is the per-transport ping count. The PingResult carries
+  // the aggregated stats (avg, p50, p99, jitter) over all tries.
+  // 0 falls back to 1.
+  int32 tries = 3;
+  // PacketSizeKb is the per-ping packet size. 0 falls back to 2 KB.
+  int32 packet_size_kb = 4;
+  // PingTimeoutNs bounds each individual ping (after route setup).
+  // 0 falls back to 30s.
+  int64 ping_timeout_ns = 5;
+  // SetupTimeoutNs bounds the route-setup phase per transport.
+  // 0 falls back to 30s.
+  int64 setup_timeout_ns = 6;
+  // Concurrency limits in-flight pings per level. The cap resets
+  // between levels (level 2 starts with a fresh budget after level 1
+  // drains) — predictable LevelDone semantics + bounded fan-out at
+  // deep levels. 0 falls back to 16.
+  int32 concurrency = 7;
+  // OnlineOnly filters discovered visors via the uptime tracker.
+  bool online_only = 8;
+  // MinVersion filters by minimum visor version (semver). Empty = no
+  // filter.
+  string min_version = 9;
+  // UseTransportLatency turns on the level-1 fast path: when a
+  // direct transport already has a non-zero smoothed
+  // TransportSummary.LatencyMS, the handler emits a PingResult with
+  // latency_source="transport_summary" and skips the live ping.
+  // Saves traffic + makes level 1 instant for warm transports.
+  // Deeper levels always live-ping (no transport-level latency for
+  // multi-hop routes).
+  bool use_transport_latency = 10;
+  // DmsgOnly forces the ping to ride the DMSG path instead of the
+  // skywire router. Mirrors `cli visor ping --dmsg`.
+  bool dmsg_only = 11;
+  // DmsgPreCheck probes DMSG reachability before attempting a
+  // route ping. Discards unreachable visors early.
+  bool dmsg_pre_check = 12;
+  // Retries adds N retry attempts on failed pings. 0 = no retry.
+  int32 retries = 13;
+  // DryRun runs the BFS discovery but emits no PingResult events;
+  // useful for visualizing the reachable graph without traffic.
+  bool dry_run = 14;
+}
+
+// PingTreeEvent is one entry on the stream. Exactly one oneof
+// payload is set per message. Consumers switch on the payload type;
+// the top-level timestamp_ns is server-side wall time at emit.
+message PingTreeEvent {
+  int64 timestamp_ns = 1;
+  oneof payload {
+    PingTreeDiscovered discovered = 10;
+    PingTreeResult ping_result = 11;
+    PingTreeLevelDone level_done = 12;
+    PingTreeRunDone run_done = 13;
+    PingTreeStatusUpdate status_update = 14;
+    // ServerError is a terminal event: the handler is about to
+    // close the stream because of an unrecoverable condition
+    // (e.g. proto break, internal panic recovered). Clients should
+    // treat receipt as equivalent to stream-EOF with a known cause.
+    PingTreeServerError server_error = 15;
+  }
+}
+
+// Discovered fires when the BFS adds a (transport, peer) pair to the
+// candidate set at level N. Fires BEFORE the corresponding PingResult.
+message PingTreeDiscovered {
+  string tp_id = 1;
+  string tp_type = 2;
+  string remote_pk = 3;
+  string parent_pk = 4;
+  int32 level = 5;
+}
+
+// PingResult fires when a transport's ping (or the cache fast-path)
+// completes. Both success and failure produce a PingResult; consumers
+// switch on the failed bool. Latency stats are aggregated across the
+// per-tries sample series.
+message PingTreeResult {
+  string tp_id = 1;
+  string tp_type = 2;
+  string remote_pk = 3;
+  string parent_pk = 4;
+  int32 level = 5;
+  bool failed = 6;
+  // Canceled distinguishes ctx-canceled-mid-flight from genuine
+  // failure. Set when ctx.Err() != nil at the time the result was
+  // finalized. Different operator action: retry vs investigate.
+  bool canceled = 7;
+  // SetupLatencyNs is the route-setup phase time. Excluded from the
+  // ping_*_ns aggregations below — those are per-ping post-setup.
+  int64 setup_latency_ns = 8;
+  // SampleCount is the number of successful pings (out of Tries).
+  // Zero when failed.
+  int32 sample_count = 9;
+  // PingAvgNs / PingP50Ns / PingP99Ns / JitterNs are aggregations
+  // over the sample series. Jitter is the population stddev:
+  // sqrt(sum((x - mean)^2) / N). Zero when sample_count < 2 (no
+  // stddev defined for a single sample).
+  int64 ping_avg_ns = 10;
+  int64 ping_p50_ns = 11;
+  int64 ping_p99_ns = 12;
+  int64 jitter_ns = 13;
+  // SetupErr / PingErr / CalcErr surface the most-recent error from
+  // each phase. Multiple may be set when multiple phases failed.
+  string setup_err = 14;
+  string ping_err = 15;
+  string calc_err = 16;
+  // LatencySource carries the provenance of the latency stats:
+  //   "live_ping"          — measured by an actual ping just now
+  //   "transport_summary"  — pulled from TransportSummary.LatencyMS
+  //                          (smoothed cache, level-1 fast path)
+  //   "skipped"            — entry was --hops mismatch or --dry-run
+  // Consumers use this to weight stale-cache values vs fresh probes.
+  string latency_source = 17;
+  // Route is the hop sequence used for this ping. Empty for the
+  // transport_summary fast-path (no route was constructed).
+  repeated RouteHop route = 18;
+}
+
+// LevelDone fires after every transport at level N has either
+// completed its ping or been skipped. Always fires before the next
+// level's Discovered events. Counts are authoritative for the harness.
+message PingTreeLevelDone {
+  int32 level = 1;
+  // Attempted = sum of (succeeded + failed + skipped_cached + skipped_dry).
+  int32 attempted = 2;
+  int32 succeeded = 3;
+  int32 failed = 4;
+  // SkippedCached is the count of entries where the
+  // use_transport_latency fast-path fired. Lets harnesses compute
+  // cache hit rate.
+  int32 skipped_cached = 5;
+}
+
+// RunDone is the terminal event before stream close. Fires exactly
+// once per StreamPingTree call.
+message PingTreeRunDone {
+  int32 total_discovered = 1;
+  int32 total_pinged = 2;
+  int32 total_succeeded = 3;
+  int32 total_failed = 4;
+  int32 total_skipped_cached = 5;
+  int64 wall_time_ns = 6;
+  // PeakInFlight is the highest concurrent ping count observed
+  // during the run. Useful for tuning concurrency.
+  int32 peak_in_flight = 7;
+  // TerminationReason is one of:
+  //   "max_level"          — hit cfg.MaxLevel
+  //   "no_neighbors"       — BFS exhausted before MaxLevel
+  //   "hops_target"        — reached cfg.Hops target level
+  //   "context_cancel"     — client disconnect / server shutdown
+  //   "error"              — see ServerError preceding this event
+  string termination_reason = 8;
+}
+
+// StatusUpdate is a low-priority informational event (e.g. "expanding
+// level 3", "draining in-flight"). The handler MUST prefer dropping
+// StatusUpdate over PingResult under backpressure — never trade
+// measurement data for status text.
+message PingTreeStatusUpdate {
+  // Phase is one of: "discovering" | "pinging_level_N" | "finalizing".
+  string phase = 1;
+  // InFlight is the count of currently-active ping goroutines.
+  int32 in_flight = 2;
+  // Pending is the count of queued-but-not-started pings.
+  int32 pending = 3;
+  // Message is an optional human-readable hint (e.g. "waiting on 3
+  // slow pings at level 2"). Empty for routine progress.
+  string message = 4;
+}
+
+// ServerError signals an unrecoverable condition that's about to
+// close the stream. Clients receive it as the last event before
+// stream-EOF; preserves a known cause vs an opaque transport error.
+message PingTreeServerError {
+  // Code is a short stable identifier (e.g. "auth_denied",
+  // "internal_panic", "tpm_unavailable"). Suitable for grep / metric
+  // labeling.
+  string code = 1;
+  // Message carries operator-readable detail. Not stable across
+  // versions.
+  string message = 2;
 }
