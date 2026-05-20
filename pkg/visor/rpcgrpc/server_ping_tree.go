@@ -379,9 +379,13 @@ func (s *PingServer) sendServerError(stream PingService_StreamPingTreeServer, co
 // complete (success, failure, or ctx-cancel). Updates totals
 // atomically; emits one PingResult per candidate.
 //
-// First cut: live-ping only via DialPing + PingOnce. The
-// use_transport_latency fast path that consults
-// TransportSummary.LatencyMS is a follow-up (Beta's slice).
+// When UseTransportLatency is set and level == 1, candidates whose
+// remote PK has a local managed transport with a non-zero smoothed
+// RTT are short-circuited: a PingResult with
+// LatencySource="transport_summary" is emitted without sending a
+// live ping. Saves a full setup+ping cycle on direct neighbors the
+// visor is already measuring. Candidates without a known transport
+// latency fall through to the live-ping path.
 func (s *PingServer) pingTreePingLevel(
 	ctx context.Context,
 	cfg *pingTreeCfg,
@@ -401,6 +405,25 @@ func (s *PingServer) pingTreePingLevel(
 		if ctx.Err() != nil {
 			break
 		}
+
+		// UseTransportLatency fast-path: only at level-1 (direct
+		// neighbors). Beyond level-1 there's no local transport to
+		// the candidate — must live-ping through intermediates.
+		if level == 1 && cfg.UseTransportLatency {
+			if result, hit := s.tryTransportLatencyFastPath(c); hit {
+				emit(&PingTreeEvent_PingResult{PingResult: result})
+				atomic.AddInt32(&totals.skippedCached, 1)
+				atomic.AddInt32(&pending, -1)
+				emitStatus(
+					"pinging_level_"+itoa(level),
+					atomic.LoadInt32(&totals.currentInFlight),
+					atomic.LoadInt32(&pending),
+					"",
+				)
+				continue
+			}
+		}
+
 		sem <- struct{}{}
 		wg.Add(1)
 		atomic.AddInt32(&pending, -1)
@@ -429,6 +452,47 @@ func (s *PingServer) pingTreePingLevel(
 	}
 
 	wg.Wait()
+}
+
+// tryTransportLatencyFastPath returns (result, true) when the
+// candidate's remote PK has a local managed transport with a
+// non-zero smoothed RTT; the result is a PingTreeResult with
+// LatencySource="transport_summary" suitable for emission. Returns
+// (nil, false) when no such transport exists, the PK is malformed,
+// or the transport's latency has not yet been sampled — caller
+// should fall through to live-ping.
+func (s *PingServer) tryTransportLatencyFastPath(cand pingTreeCandidate) (*PingTreeResult, bool) {
+	var pk cipher.PubKey
+	if err := pk.Set(cand.remotePK); err != nil {
+		return nil, false
+	}
+	latencyMS := s.visor.GetTransportLatencyByRemotePK(pk)
+	return transportLatencyResult(cand, latencyMS)
+}
+
+// transportLatencyResult is the pure-data half of the fast path:
+// given a candidate and a smoothed RTT in milliseconds, return the
+// PingTreeResult to emit, or (nil, false) when the latency value is
+// not usable. Split out from tryTransportLatencyFastPath so the
+// numeric conversion + skip-condition logic is unit-testable
+// without constructing a full VisorAPI mock.
+func transportLatencyResult(cand pingTreeCandidate, latencyMS float64) (*PingTreeResult, bool) {
+	if latencyMS <= 0 {
+		return nil, false
+	}
+	pingNs := int64(latencyMS * float64(time.Millisecond))
+	return &PingTreeResult{
+		TpId:          cand.tpID,
+		TpType:        cand.tpType,
+		RemotePk:      cand.remotePK,
+		ParentPk:      cand.parentPK,
+		Level:         int32(cand.level), //nolint:gosec // BFS level fits int32
+		LatencySource: "transport_summary",
+		PingAvgNs:     pingNs,
+		PingP50Ns:     pingNs,
+		PingP99Ns:     pingNs,
+		SampleCount:   1,
+	}, true
 }
 
 // pingOneTransport runs a single transport's worth of pings (tries
