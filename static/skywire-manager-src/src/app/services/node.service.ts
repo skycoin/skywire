@@ -412,6 +412,19 @@ return {
         node.isPublic = response.is_public;
         node.rewardsAddress = response.reward_address;
 
+        // Hypervisor relationships. `hypervisors` are the PKs the
+        // visor was configured to report to (from skywire-config);
+        // `connected_hypervisor` are the sessions the visor reports
+        // as actively connected right now. Both are surfaced on the
+        // Info tab so the operator can see which hypervisor(s) own
+        // this visor and which ones are currently online.
+        node.hypervisors = Array.isArray(response.overview.hypervisors)
+          ? (response.overview.hypervisors as string[])
+          : [];
+        node.connectedHypervisors = Array.isArray(response.overview.connected_hypervisor)
+          ? (response.overview.connected_hypervisor as string[])
+          : [];
+
         // Geolocation data.
         if (response.overview.country_code) {
           node.countryCode = response.overview.country_code;
