@@ -606,6 +606,16 @@ type PingConfig struct {
 	// target without their conns trampling each other in the visor's
 	// per-route conn map. See PingRouteRef in pkg/visor/ping.go.
 	RouteIndex int
+	// MinHops, when > 0, forces the route-finder to skip paths with
+	// fewer than this many hops on THIS dial — overrides the visor-
+	// global routing.min_hops config for the duration of the call.
+	// Plumbed straight into router.DialOptions.MinHops. Used by
+	// `cli visor ping mux-bw --min-hops N` to verify the operator's
+	// "mux via intermediates > direct" hypothesis: without it, the
+	// router's direct-transport fast path would short-circuit every
+	// dial to use the direct stcpr whenever one existed. 0 = inherit
+	// visor-global setting.
+	MinHops int
 }
 
 // TestResult type of test result
