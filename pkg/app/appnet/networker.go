@@ -116,6 +116,25 @@ func PingContext(ctx context.Context, pk cipher.PubKey, addr Addr) (net.Conn, er
 	return n.PingContext(ctx, pk, addr)
 }
 
+// PingContextWithMinHops dials the remote `addr` constrained to
+// paths of at least `minHops` hops. Used by mux-bw's --min-hops
+// flag to force non-direct routing even when a direct transport
+// exists. Falls back to plain PingContext when the resolved
+// networker isn't a SkywireNetworker (DMSG, etc).
+func PingContextWithMinHops(ctx context.Context, pk cipher.PubKey, addr Addr, minHops int) (net.Conn, error) {
+	n, err := ResolveNetworker(addr.Net)
+	if err != nil {
+		return nil, err
+	}
+	sn, ok := n.(*SkywireNetworker)
+	if !ok || minHops <= 0 {
+		return n.PingContext(ctx, pk, addr)
+	}
+	opts := router.DefaultDialOptions()
+	opts.MinHops = minHops
+	return sn.PingContextWithOpts(ctx, pk, addr, opts)
+}
+
 // PingContextWithTransport dials the remote `addr` using a specific transport.
 // This skips route calculation and uses the provided transport directly.
 // Only works with TypeSkynet networker.

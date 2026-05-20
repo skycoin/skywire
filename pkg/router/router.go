@@ -120,6 +120,21 @@ type DialOptions struct {
 	ReverseHops         []routing.Hop // If set, use these hops for reverse path (skips route calculation)
 	MuxRoutes           int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
 	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
+	// MinHops, when > 0, is the per-call minimum hop count constraint.
+	// Overrides Config.MinHops for this dial only — needed by callers
+	// that want a non-direct path even when the visor's global
+	// min_hops is 1 (e.g. `cli visor ping mux-bw --min-hops 2`, which
+	// must force every dial through an intermediate to test the
+	// "mux via intermediates > direct" bandwidth hypothesis without
+	// requiring the operator to bump visor-global config).
+	//
+	// Setting MinHops >= 2 also suppresses the direct-transport
+	// fast path inside DialRoutes (the existing
+	// "if r.isTpdExist(rPK) { MinHops = 1 }" downgrade is skipped),
+	// since the caller has explicitly asked NOT to use direct.
+	//
+	// 0 = inherit Config.MinHops (legacy / single-route callers).
+	MinHops int
 	// ExcludeIntermediatePKs lists intermediate-visor PKs that route-
 	// finder paths must NOT contain. Source + destination are never
 	// excluded (they're endpoints, not intermediates). The mux loop

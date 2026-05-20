@@ -143,6 +143,10 @@ type PingConf struct {
 	// Zero = primary / single-route (legacy behavior). Mirrors
 	// visor.PingConfig.RouteIndex; the adapter passes it through.
 	RouteIndex int
+	// MinHops is the per-call route-finder min-hops constraint.
+	// Mirrors visor.PingConfig.MinHops; adapter passes it through.
+	// 0 = inherit visor-global routing.min_hops.
+	MinHops int
 }
 
 // PingServer implements the gRPC PingService
