@@ -999,14 +999,36 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 	return nil
 }
 
-func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
-
+func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 	// in this case remote is already closed, and `readCh` is closed too,
 	// but some packets may still reach the rg causing panic on writing
 	// to `readCh`, so we simple omit such packets
 	if rg.isRemoteClosed() {
 		return nil
 	}
+
+	// Belt-and-suspenders against the close-readCh race:
+	//
+	// The selects below send to rg.readCh and check rg.closed +
+	// rg.remoteClosed. But Go's select randomizes among ready
+	// cases — if a closer goroutine reaches close(rg.readCh) (line
+	// in close()) in the same Go-scheduling instant that this
+	// goroutine's select picks the send-to-readCh case, the send
+	// hits a closed channel and panics. That panic was crashing
+	// the entire visor (2026-05-19 repro) because nothing higher
+	// up in the packet-dispatch chain recovers.
+	//
+	// The send-to-closed-readCh case is benign at this point: the
+	// packet would have been discarded by the now-defunct route
+	// group anyway. Recovering it keeps the router goroutine alive
+	// to serve other route groups.
+	defer func() {
+		if r := recover(); r != nil {
+			rg.logger.WithField("recover", r).Debug("handleDataPacket: recovered from send-on-closed-readCh during close race")
+			err = io.ErrClosedPipe
+		}
+	}()
+
 	rg.networkStats.AddBandwidthReceived(uint64(packet.Size()))
 
 	// Per-mux-leg recv counter. We resolve the leg from the
@@ -1037,8 +1059,15 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 		}
 
 		for _, d := range delivered {
+			// Both rg.closed (local-initiated close) and
+			// rg.remoteClosed (remote-initiated close) must be
+			// watched here; the latter was previously missing
+			// and caused the send-on-closed-channel panic
+			// documented in the function-level defer.
 			select {
 			case <-rg.closed:
+				return io.ErrClosedPipe
+			case <-rg.remoteClosed:
 				return io.ErrClosedPipe
 			case rg.readCh <- d:
 			case <-time.After(30 * time.Second):
@@ -1051,6 +1080,8 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) error {
 	// Legacy path: deliver payload directly
 	select {
 	case <-rg.closed:
+		return io.ErrClosedPipe
+	case <-rg.remoteClosed:
 		return io.ErrClosedPipe
 	case rg.readCh <- packet.Payload():
 	case <-time.After(30 * time.Second):
