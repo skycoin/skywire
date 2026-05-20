@@ -147,6 +147,10 @@ type PingConf struct {
 	// Mirrors visor.PingConfig.MinHops; adapter passes it through.
 	// 0 = inherit visor-global routing.min_hops.
 	MinHops int
+	// SetupTimeoutNs is the dial-setup ceiling in nanoseconds.
+	// Mirrors visor.PingConfig.SetupTimeout; adapter converts to
+	// time.Duration. 0 falls back to DialPing's 30s default.
+	SetupTimeoutNs int64
 }
 
 // PingServer implements the gRPC PingService

@@ -228,15 +228,16 @@ func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
 		})
 	}
 	return a.v.DialPing(PingConfig{
-		PK:          conf.PK,
-		Tries:       conf.Tries,
-		PcktSize:    conf.PcktSize,
-		LocalRoute:  conf.LocalRoute,
-		TransportID: conf.TransportID,
-		ForwardHops: forwardHops,
-		ReverseHops: reverseHops,
-		RouteIndex:  conf.RouteIndex,
-		MinHops:     conf.MinHops,
+		PK:           conf.PK,
+		Tries:        conf.Tries,
+		PcktSize:     conf.PcktSize,
+		LocalRoute:   conf.LocalRoute,
+		TransportID:  conf.TransportID,
+		ForwardHops:  forwardHops,
+		ReverseHops:  reverseHops,
+		RouteIndex:   conf.RouteIndex,
+		MinHops:      conf.MinHops,
+		SetupTimeout: time.Duration(conf.SetupTimeoutNs),
 	})
 }
 
