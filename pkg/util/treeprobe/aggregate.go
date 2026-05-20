@@ -147,7 +147,7 @@ func (a *Aggregator) CacheHitRate() float64 {
 	if a.runDone == nil {
 		return 0
 	}
-	denom := int32(a.runDone.TotalPinged) + a.runDone.TotalSkippedCached
+	denom := a.runDone.TotalPinged + a.runDone.TotalSkippedCached
 	if denom == 0 {
 		return 0
 	}
