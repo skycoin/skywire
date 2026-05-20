@@ -117,7 +117,7 @@ func runMuxBandwidthTUI(_ *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	model := newMuxBwTUIModel(ctx, cancel, targetPK, *req)
+	model := newMuxBwTUIModel(ctx, cancel, targetPK, req)
 	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithContext(ctx))
 	go muxBwConsumeStream(stream, p)
 
@@ -200,7 +200,11 @@ type muxBwTUIModel struct {
 	autoScroll bool
 
 	targetPK string
-	req      rpcgrpc.MuxBandwidthRequest
+	// req is held by pointer because rpcgrpc.MuxBandwidthRequest
+	// embeds a protoimpl.MessageState that contains a sync.Mutex —
+	// passing/storing by value triggers go vet's copylocks check.
+	// The TUI never mutates the request, only reads its fields.
+	req *rpcgrpc.MuxBandwidthRequest
 
 	mu sync.RWMutex
 
@@ -236,7 +240,7 @@ type muxBwTUIModel struct {
 	cancel context.CancelFunc
 }
 
-func newMuxBwTUIModel(ctx context.Context, cancel context.CancelFunc, targetPK string, req rpcgrpc.MuxBandwidthRequest) *muxBwTUIModel {
+func newMuxBwTUIModel(ctx context.Context, cancel context.CancelFunc, targetPK string, req *rpcgrpc.MuxBandwidthRequest) *muxBwTUIModel {
 	sp := spinner.New()
 	sp.Spinner = spinner.Line
 	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
