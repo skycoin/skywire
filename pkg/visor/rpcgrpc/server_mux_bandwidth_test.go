@@ -5,6 +5,48 @@ import (
 	"time"
 )
 
+// TestNormalizeMuxBwRequestIdleBaselineImpliesProbeRtt pins the
+// implies-relationship: setting idle_baseline_duration_ns > 0 turns
+// ProbeRTT on at the handler regardless of what the caller passed.
+// Without this, an operator who sets --idle-baseline but forgets
+// --probe-rtt would get zero idle probes — no queueing-delay
+// signal, and the failure mode would be silent (no error, just
+// empty distributions in Done).
+func TestNormalizeMuxBwRequestIdleBaselineImpliesProbeRtt(t *testing.T) {
+	pk := "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c"
+
+	t.Run("idle_baseline > 0 forces ProbeRTT on", func(t *testing.T) {
+		c, err := normalizeMuxBwRequest(&MuxBandwidthRequest{
+			TargetPk:               pk,
+			IdleBaselineDurationNs: (5 * time.Second).Nanoseconds(),
+			ProbeRtt:               false, // operator forgot to set it
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if !c.ProbeRTT {
+			t.Errorf("IdleBaselineDuration > 0 should force ProbeRTT = true")
+		}
+		if c.IdleBaselineDuration != 5*time.Second {
+			t.Errorf("IdleBaselineDuration = %v, want 5s", c.IdleBaselineDuration)
+		}
+	})
+
+	t.Run("idle_baseline = 0 leaves ProbeRTT alone", func(t *testing.T) {
+		c, err := normalizeMuxBwRequest(&MuxBandwidthRequest{
+			TargetPk:               pk,
+			IdleBaselineDurationNs: 0,
+			ProbeRtt:               false,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if c.ProbeRTT {
+			t.Errorf("ProbeRTT should stay false when IdleBaseline=0 and caller didn't set it")
+		}
+	})
+}
+
 // TestNormalizeMuxBwRequest pins the default-fallback table. Without
 // these, a zero-valued request would dial zero routes (no work),
 // pump for zero duration (no measurement), and emit zero samples
