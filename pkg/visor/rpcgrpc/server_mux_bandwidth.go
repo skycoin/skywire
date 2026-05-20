@@ -350,6 +350,7 @@ func (s *PingServer) muxBwSetupRoute(
 		PcktSize:   cfg.PacketSizeKb,
 		LocalRoute: cfg.LocalRoute,
 		RouteIndex: rs.index,
+		MinHops:    cfg.MinHops, // enforce --min-hops at the router-finder layer
 	}
 	setupCtx, cancel := context.WithTimeout(ctx, cfg.SetupTimeout)
 	defer cancel()
