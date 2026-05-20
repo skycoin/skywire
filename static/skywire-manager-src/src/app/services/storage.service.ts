@@ -109,6 +109,17 @@ export class StorageService {
    */
   private savedVisibleLocalNodes = new Set<string>();
 
+  /**
+   * Returns the PK of the hypervisor this UI is hosted on. Set by
+   * initialize() during app startup from /api/about. Components
+   * comparing a visor row's connected-hypervisor list against the
+   * local hypervisor (e.g. to render a ★ next to it) use this
+   * getter so they don't have to round-trip /api/about themselves.
+   */
+  public getLocalHypervisorPk(): string {
+    return this.hypervisorPk;
+  }
+
   initialize(hypervisorPk: string) {
     this.storage = localStorage;
     this.hypervisorPk = hypervisorPk;
