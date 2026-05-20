@@ -107,8 +107,8 @@ type PingResult struct {
 	ParentPK string `json:"parent_pk"`
 	Level    int32  `json:"level"`
 	// Proto field name is "canceled" (en-US per misspell linter,
-	// renamed from initial "cancelled" during 2026-05-20 design
-	// review).
+	// renamed from initial pre-review spelling during 2026-05-20
+	// design review).
 	Canceled bool `json:"canceled"`
 
 	SampleCount  int32       `json:"sample_count"`
