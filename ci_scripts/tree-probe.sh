@@ -99,7 +99,7 @@ for h in "${hops_arr[@]}"; do
     log "hop=$h: emitted $nrows CSV rows → $csv"
 done
 
-log "sweep complete: $(ls "$outdir"/tree-probe-hops*.csv 2>/dev/null | wc -l) CSV files in $outdir"
+log "sweep complete: $(find "$outdir" -maxdepth 1 -name 'tree-probe-hops*.csv' 2>/dev/null | wc -l) CSV files in $outdir"
 
 if [[ $rpc_fail -ne 0 ]]; then
     exit 2
