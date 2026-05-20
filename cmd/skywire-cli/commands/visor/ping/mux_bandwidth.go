@@ -61,6 +61,7 @@ var (
 	muxBwProbeInterval  time.Duration
 	muxBwSampleInterval time.Duration
 	muxBwLocalRoute     bool
+	muxBwIdleBaseline   time.Duration
 	muxBwJSON           bool
 	muxBwQuiet          bool
 	muxBwOutFile        string
@@ -85,6 +86,8 @@ func init() {
 		"interval between MuxBandwidthSample events")
 	muxBandwidthCmd.Flags().BoolVar(&muxBwLocalRoute, "local-route", false,
 		"use locally-cached TPD data for route calculation (faster setup; may be stale)")
+	muxBandwidthCmd.Flags().DurationVar(&muxBwIdleBaseline, "idle-baseline", 0,
+		"run an idle RTT-probe phase of this duration BEFORE the bulk pump; the summary then prints queueing delay = loaded_pXX - idle_pXX (implies --probe-rtt)")
 	muxBandwidthCmd.Flags().BoolVar(&muxBwJSON, "json", false,
 		"emit NDJSON on stdout (default: human-readable rows + summary)")
 	muxBandwidthCmd.Flags().BoolVarP(&muxBwQuiet, "quiet", "q", false,
@@ -151,16 +154,17 @@ func runMuxBandwidth(_ *cobra.Command, args []string) {
 	defer client.Close() //nolint:errcheck
 
 	req := &rpcgrpc.MuxBandwidthRequest{
-		TargetPk:         targetPK,
-		Routes:           int32(muxBwRoutes), //nolint:gosec
-		DurationNs:       muxBwDuration.Nanoseconds(),
-		PacketSizeKb:     int32(muxBwPacketSizeKb), //nolint:gosec
-		MinHops:          int32(muxBwMinHops),      //nolint:gosec
-		SetupTimeoutNs:   muxBwSetupTimeout.Nanoseconds(),
-		ProbeRtt:         muxBwProbeRTT,
-		ProbeIntervalNs:  muxBwProbeInterval.Nanoseconds(),
-		SampleIntervalNs: muxBwSampleInterval.Nanoseconds(),
-		LocalRoute:       muxBwLocalRoute,
+		TargetPk:               targetPK,
+		Routes:                 int32(muxBwRoutes), //nolint:gosec
+		DurationNs:             muxBwDuration.Nanoseconds(),
+		PacketSizeKb:           int32(muxBwPacketSizeKb), //nolint:gosec
+		MinHops:                int32(muxBwMinHops),      //nolint:gosec
+		SetupTimeoutNs:         muxBwSetupTimeout.Nanoseconds(),
+		ProbeRtt:               muxBwProbeRTT || muxBwIdleBaseline > 0,
+		ProbeIntervalNs:        muxBwProbeInterval.Nanoseconds(),
+		SampleIntervalNs:       muxBwSampleInterval.Nanoseconds(),
+		LocalRoute:             muxBwLocalRoute,
+		IdleBaselineDurationNs: muxBwIdleBaseline.Nanoseconds(),
 	}
 
 	stream, err := client.StreamMuxBandwidth(ctx, req)
@@ -244,6 +248,9 @@ func muxBwHumanHeader(targetPK string, req *rpcgrpc.MuxBandwidthRequest) string 
 	}
 	if req.ProbeRtt {
 		parts = append(parts, "probe-rtt")
+	}
+	if req.IdleBaselineDurationNs > 0 {
+		parts = append(parts, fmt.Sprintf("idle-baseline=%s", time.Duration(req.IdleBaselineDurationNs)))
 	}
 	return fmt.Sprintf("mux-bw → %s  %s", targetPK, strings.Join(parts, " "))
 }
@@ -394,12 +401,31 @@ func (t *muxBwTracker) printSummary(w io.Writer) {
 	//nolint:errcheck // human-mode summary; errors here aren't actionable
 	fmt.Fprintf(w, "recv:      %s  avg=%s  peak=%s\n",
 		fmtBytes(d.TotalBytesReceived), fmtBps(d.AvgRecvBps), fmtBps(d.PeakRecvBps))
+	if d.IdleProbeCount > 0 {
+		//nolint:errcheck // human-mode summary; errors here aren't actionable
+		fmt.Fprintf(w, "rtt idle:  n=%d  avg=%s  p50=%s  p99=%s  jitter=%s\n",
+			d.IdleProbeCount,
+			fmtNs(d.IdleProbeAvgNs), fmtNs(d.IdleProbeP50Ns),
+			fmtNs(d.IdleProbeP99Ns), fmtNs(d.IdleProbeJitterNs))
+	}
 	if d.ProbeCount > 0 {
 		//nolint:errcheck // human-mode summary; errors here aren't actionable
 		fmt.Fprintf(w, "rtt load:  n=%d  avg=%s  p50=%s  p99=%s  jitter=%s\n",
 			d.ProbeCount,
 			fmtNs(d.ProbeAvgNs), fmtNs(d.ProbeP50Ns),
 			fmtNs(d.ProbeP99Ns), fmtNs(d.ProbeJitterNs))
+	}
+	// Queueing-delay summary: only valid when BOTH distributions are
+	// non-empty. The headline is the p99 delta (worst-case under
+	// load) but all four percentile deltas are surfaced so the
+	// operator can read whichever matches their SLO.
+	if d.IdleProbeCount > 0 && d.ProbeCount > 0 {
+		//nolint:errcheck // human-mode summary; errors here aren't actionable
+		fmt.Fprintf(w, "queueing:  Δavg=%s  Δp50=%s  Δp99=%s  Δjitter=%s\n",
+			fmtNs(d.ProbeAvgNs-d.IdleProbeAvgNs),
+			fmtNs(d.ProbeP50Ns-d.IdleProbeP50Ns),
+			fmtNs(d.ProbeP99Ns-d.IdleProbeP99Ns),
+			fmtNs(d.ProbeJitterNs-d.IdleProbeJitterNs))
 	}
 	fmt.Fprintf(w, "reason:    %s\n", d.TerminationReason) //nolint:errcheck
 }

@@ -623,6 +623,18 @@ message MuxBandwidthRequest {
   // instead of querying the route-finder service. Mirrors
   // BandwidthRequest.LocalRoute.
   bool local_route = 10;
+
+  // IdleBaselineDurationNs, when > 0, inserts a quiescent probe
+  // phase between route setup and the bulk pump. During the phase
+  // the same probe loop fires (rate = probe_interval_ns) but no
+  // pump goroutines run — so the RTT samples reflect the route
+  // with zero contention. The aggregated distribution comes back
+  // in MuxBandwidthDone.idle_probe_* fields, and the queueing
+  // delay computed by callers is (loaded_pXX - idle_pXX). 0 = no
+  // idle phase (skip the baseline measurement). Implies ProbeRtt =
+  // true at the handler — without probes there's nothing to
+  // measure.
+  int64 idle_baseline_duration_ns = 11;
 }
 
 // MuxBandwidthEvent is one entry on the stream. Exactly one oneof
@@ -720,8 +732,9 @@ message MuxBandwidthDone {
   int32 routes_requested = 9;
   int32 routes_established = 10;
   int64 setup_total_ns = 11;
-  // RTT distribution across all probes (when ProbeRtt was set).
-  // Zero when no probes ran. Jitter is population stddev — same
+  // RTT distribution under load — across all probes that fired
+  // during the bulk pump phase. Zero when no probes ran or
+  // ProbeRtt was false. Jitter is population stddev — same
   // formula as PingTreeResult.jitter_ns.
   int32 probe_count = 12;
   int64 probe_avg_ns = 13;
@@ -730,6 +743,18 @@ message MuxBandwidthDone {
   int64 probe_jitter_ns = 16;
   // TerminationReason: "duration" | "context_cancel" | "all_routes_failed" | "error".
   string termination_reason = 17;
+
+  // RTT distribution under no contention — across all probes that
+  // fired during the IdleBaselineDuration phase BEFORE the bulk
+  // pump. Zero when idle_baseline_duration_ns was 0 or no probes
+  // landed in the window. Operators compute the queueing delay
+  // as (probe_pXX - idle_probe_pXX); the CLI's summary prints
+  // this delta directly when both distributions are present.
+  int32 idle_probe_count = 18;
+  int64 idle_probe_avg_ns = 19;
+  int64 idle_probe_p50_ns = 20;
+  int64 idle_probe_p99_ns = 21;
+  int64 idle_probe_jitter_ns = 22;
 }
 
 // MuxBandwidthError signals an unrecoverable condition. Last event
