@@ -52,16 +52,17 @@ const (
 // muxBwCfg is the normalized request. Pass this around inside the
 // handler instead of the raw proto.
 type muxBwCfg struct {
-	TargetPK       cipher.PubKey
-	Routes         int
-	Duration       time.Duration
-	PacketSizeKb   int
-	MinHops        int
-	SetupTimeout   time.Duration
-	ProbeRTT       bool
-	ProbeInterval  time.Duration
-	SampleInterval time.Duration
-	LocalRoute     bool
+	TargetPK             cipher.PubKey
+	Routes               int
+	Duration             time.Duration
+	PacketSizeKb         int
+	MinHops              int
+	SetupTimeout         time.Duration
+	ProbeRTT             bool
+	ProbeInterval        time.Duration
+	SampleInterval       time.Duration
+	LocalRoute           bool
+	IdleBaselineDuration time.Duration // 0 = no pre-pump idle probe phase
 }
 
 func normalizeMuxBwRequest(req *MuxBandwidthRequest) (muxBwCfg, error) {
@@ -78,6 +79,14 @@ func normalizeMuxBwRequest(req *MuxBandwidthRequest) (muxBwCfg, error) {
 	c.ProbeInterval = time.Duration(req.ProbeIntervalNs)
 	c.SampleInterval = time.Duration(req.SampleIntervalNs)
 	c.LocalRoute = req.LocalRoute
+	c.IdleBaselineDuration = time.Duration(req.IdleBaselineDurationNs)
+
+	// Idle baseline only makes sense when probes are running — force
+	// ProbeRTT on so the operator gets the queueing-delay comparison
+	// they asked for without remembering to pass both flags.
+	if c.IdleBaselineDuration > 0 {
+		c.ProbeRTT = true
+	}
 
 	if c.Routes <= 0 {
 		c.Routes = defaultMuxBwRoutes
@@ -180,6 +189,31 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		return <-sendErrCh
 	}
 
+	// Phase 1.5: optional idle-baseline probe. Runs the probe loop
+	// only (no pump goroutines, no sampler) for IdleBaselineDuration.
+	// Captures a clean RTT distribution on the same routes the pump
+	// will load — letting the caller compute queueing delay as
+	// (loaded_pXX - idle_pXX) over identical paths. We bookend it
+	// inside a small WaitGroup so the probe goroutine exits cleanly
+	// before the pump phase starts.
+	idleProbeSamples := make([]int64, 0)
+	var idleProbesMu sync.Mutex
+	if cfg.IdleBaselineDuration > 0 && cfg.ProbeRTT {
+		idleCtx, idleCancel := context.WithTimeout(ctx, cfg.IdleBaselineDuration)
+		idleStart := time.Now()
+		idleWg := &sync.WaitGroup{}
+		idleWg.Add(1)
+		go func() {
+			defer idleWg.Done()
+			// Reuse the existing probe loop; it doesn't care whether
+			// a pump is concurrently running — passing only the idle
+			// samples slice means accumulator-direction is correct.
+			s.muxBwProbeLoop(idleCtx, &cfg, idleStart, &idleProbesMu, &idleProbeSamples, emit)
+		}()
+		idleWg.Wait()
+		idleCancel()
+	}
+
 	// Phase 2: pump bytes through each established route + run the
 	// sampler + optional probe. All goroutines share the eventCh
 	// via the emit closure.
@@ -248,11 +282,18 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		avgRecvBps = float64(totalRecv*8) / pumpSec
 	}
 
-	// RTT stats over all probes.
+	// RTT stats over loaded probes (during the pump).
 	probesMu.Lock()
 	probeCount := len(probeSamples)
 	probeAvg, probeP50, probeP99, probeJitter := aggregatePingSamples(int64ToFloat(probeSamples))
 	probesMu.Unlock()
+
+	// RTT stats over idle probes (Phase 1.5 baseline). Zero when no
+	// idle-baseline phase ran.
+	idleProbesMu.Lock()
+	idleCount := len(idleProbeSamples)
+	idleAvg, idleP50, idleP99, idleJitter := aggregatePingSamples(int64ToFloat(idleProbeSamples))
+	idleProbesMu.Unlock()
 
 	terminationReason := "duration"
 	if ctx.Err() != nil {
@@ -276,6 +317,11 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		ProbeP50Ns:         probeP50,
 		ProbeP99Ns:         probeP99,
 		ProbeJitterNs:      probeJitter,
+		IdleProbeCount:     int32(idleCount), //nolint:gosec
+		IdleProbeAvgNs:     idleAvg,
+		IdleProbeP50Ns:     idleP50,
+		IdleProbeP99Ns:     idleP99,
+		IdleProbeJitterNs:  idleJitter,
 		TerminationReason:  terminationReason,
 	}})
 
