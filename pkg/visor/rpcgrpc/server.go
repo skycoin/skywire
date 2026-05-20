@@ -31,14 +31,32 @@ type RouteHopInfo struct {
 	TpType string
 }
 
+// PingRouteRef identifies a specific route in a mux-set. Mirrors
+// visor.PingRouteRef across the package boundary to avoid the
+// rpcgrpc → visor import cycle. The visorPingAdapter converts at
+// the boundary.
+type PingRouteRef struct {
+	PK    cipher.PubKey
+	Index int
+}
+
 // VisorAPI defines the interface for visor ping operations
 type VisorAPI interface {
 	DialPing(conf PingConf) error
 	PingOnce(conf PingConf) (time.Duration, error)
 	PingOnceWithEcho(conf PingConf, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error)
 	StopPing(pk cipher.PubKey) error
+	// StopPingRoute tears down a single route in a mux-set without
+	// touching the peer's other parallel routes. Used by
+	// StreamMuxBandwidth to drop a failed aux route mid-pump.
+	StopPingRoute(ref PingRouteRef) error
 	GetPingRoute(pk cipher.PubKey) []cipher.PubKey
 	GetPingRouteDetails(pk cipher.PubKey) []RouteHopInfo
+	// GetPingRouteDetailsAt returns the hops for a specific route in
+	// a mux-set. The peer-keyed accessor (GetPingRouteDetails) can't
+	// distinguish among N parallel routes to the same target, so
+	// per-route emit paths (MuxRouteEstablished.hops) ride this.
+	GetPingRouteDetailsAt(ref PingRouteRef) []RouteHopInfo
 	GetLastRouteCalcTime() time.Duration
 	DialDmsgPing(pk cipher.PubKey) error
 	DialDmsgPingViaServer(pk cipher.PubKey, serverPK cipher.PubKey) error
@@ -121,6 +139,10 @@ type PingConf struct {
 	TransportID string         // Optional: use specific transport (skips route calculation)
 	ForwardHops []RouteHopInfo // Optional: explicit forward route (skips route calculation)
 	ReverseHops []RouteHopInfo // Optional: explicit reverse route (skips route calculation)
+	// RouteIndex selects among N parallel routes to the same peer.
+	// Zero = primary / single-route (legacy behavior). Mirrors
+	// visor.PingConfig.RouteIndex; the adapter passes it through.
+	RouteIndex int
 }
 
 // PingServer implements the gRPC PingService

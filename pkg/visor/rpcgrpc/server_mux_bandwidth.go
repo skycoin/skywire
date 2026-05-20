@@ -285,10 +285,13 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 
 // muxBwSetupRoute dials one route + emits a RouteEstablished event.
 // Marks rs.established on success so the pump phase knows which
-// routes to spin up. The dial uses DialPing — currently shared across
-// all StreamMuxBandwidth routes (no per-route differentiation today;
-// future work: feed MinHops + route-finder constraints through here
-// once the visor's DialPing API gains those knobs).
+// routes to spin up.
+//
+// Each route uses a distinct RouteIndex (0..N-1) — the visor's
+// per-route conn map (keyed by PingRouteRef) keeps the N parallel
+// conns separate. Previously the conn map was keyed by PK alone, so
+// concurrent DialPing calls to the same target overwrote each other
+// and "N parallel routes" was N parallel uses of one conn.
 func (s *PingServer) muxBwSetupRoute(
 	ctx context.Context,
 	cfg *muxBwCfg,
@@ -300,6 +303,7 @@ func (s *PingServer) muxBwSetupRoute(
 		Tries:      1,
 		PcktSize:   cfg.PacketSizeKb,
 		LocalRoute: cfg.LocalRoute,
+		RouteIndex: rs.index,
 	}
 	setupCtx, cancel := context.WithTimeout(ctx, cfg.SetupTimeout)
 	defer cancel()
@@ -323,18 +327,26 @@ func (s *PingServer) muxBwSetupRoute(
 	ev := &MuxRouteEstablished{
 		RouteIndex:     int32(rs.index), //nolint:gosec
 		SetupLatencyNs: setupLatency.Nanoseconds(),
-		// Hops field is left empty here — surfacing the chosen route
-		// hops requires GetPingRouteDetails(pk) and the route is
-		// keyed by target PK, so multiple parallel routes to the
-		// same PK can't be distinguished by that API today. A
-		// follow-up: extend GetPingRouteDetails to take a route
-		// index when N>1.
 	}
 	if dialErr != nil {
 		ev.Failed = true
 		ev.SetupErr = dialErr.Error()
 	} else {
 		rs.established.Store(true)
+		// Surface the chosen hops for this specific route. Now that
+		// the conn map is keyed by PingRouteRef, GetPingRouteDetailsAt
+		// can pick out this route's hops without ambiguity. Consumers
+		// (mux-bw NDJSON, mux-bw-tui dashboard, treeprobe harness)
+		// can verify route diversity from this field.
+		ref := PingRouteRef{PK: cfg.TargetPK, Index: rs.index}
+		for _, h := range s.visor.GetPingRouteDetailsAt(ref) {
+			ev.Hops = append(ev.Hops, &RouteHop{
+				TpId:   h.TpID,
+				From:   h.From,
+				To:     h.To,
+				TpType: h.TpType,
+			})
+		}
 	}
 	emit(&MuxBandwidthEvent_RouteEstablished{RouteEstablished: ev})
 }
@@ -353,14 +365,15 @@ func (s *PingServer) muxBwPumpRoute(
 		Tries:      1,
 		PcktSize:   cfg.PacketSizeKb,
 		LocalRoute: cfg.LocalRoute,
+		RouteIndex: rs.index,
 	}
 	defer func() {
-		// Best-effort tear-down. StopPing is currently keyed by
-		// target PK only — calling it once at end of pump tears
-		// down ALL parallel connections to that PK, which is fine
-		// as a teardown but means we can't tear down individual
-		// routes mid-run. Future: per-route teardown handles.
-		_ = s.visor.StopPing(cfg.TargetPK) //nolint:errcheck
+		// Per-route teardown — closes JUST this route's conn, not
+		// the other parallel routes to the same target. Without
+		// this, the first pump goroutine to finish would tear down
+		// every aux route's conn, leaving the other pump goroutines
+		// chasing closed conns.
+		_ = s.visor.StopPingRoute(PingRouteRef{PK: cfg.TargetPK, Index: rs.index}) //nolint:errcheck
 	}()
 
 	for {
@@ -459,10 +472,12 @@ func (s *PingServer) muxBwSamplerLoop(
 }
 
 // muxBwProbeLoop runs a small-packet RTT probe concurrently with
-// the bulk pump. Each tick uses PingOnce on the target PK; the
-// underlying connection is shared with the pump (StopPing is keyed
-// by PK only) so the probe rides the same first route. Accumulates
-// samples into probesOut for the Done aggregation.
+// the bulk pump. The probe rides RouteIndex 0 (the primary pump's
+// route) — they serialize via the visor's ping mutex so protocol
+// framing stays well-formed even though they share the conn.
+// Adding a dedicated probe-only route (e.g. RouteIndex = N) is a
+// future optimization. Accumulates samples into probesOut for the
+// Done aggregation.
 func (s *PingServer) muxBwProbeLoop(
 	ctx context.Context,
 	cfg *muxBwCfg,

@@ -2,12 +2,42 @@
 package visor
 
 import (
+	"fmt"
 	"net"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/router"
 )
+
+// PingRouteRef identifies a specific route to a peer. Index 0 is
+// the primary/legacy route used by single-route callers; aux routes
+// (1..N-1) are added by callers that establish multiple parallel
+// routes to the same target — currently only `cli visor ping mux-bw`,
+// future mux-aware proxies will join.
+//
+// The route map is keyed by this struct rather than by bare PK so
+// that N parallel DialPing calls to the same peer can coexist
+// without overwriting each other's conn / route hops. Legacy
+// single-route callers stay PK-only via PingRoutePrimary(pk) or by
+// leaving PingConfig.RouteIndex at its zero value.
+type PingRouteRef struct {
+	PK    cipher.PubKey
+	Index int
+}
+
+// PingRoutePrimary returns the PingRouteRef for the primary route
+// to a peer. Call sites that don't care about multi-route semantics
+// pass this — keeps the existing single-route fast path unambiguous.
+func PingRoutePrimary(pk cipher.PubKey) PingRouteRef {
+	return PingRouteRef{PK: pk, Index: 0}
+}
+
+// String renders as "<pk>#<index>" — useful for logs and the
+// rpc-grpc dmsg-port handler's per-route debug output.
+func (r PingRouteRef) String() string {
+	return fmt.Sprintf("%s#%d", r.PK, r.Index)
+}
 
 type ping struct {
 	conn     net.Conn
