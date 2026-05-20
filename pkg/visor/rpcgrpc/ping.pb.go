@@ -7,12 +7,11 @@
 package rpcgrpc
 
 import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -1917,6 +1916,969 @@ func (x *ProcessStat) GetStatus() string {
 	return ""
 }
 
+// PingTreeRequest configures a server-side BFS ping-tree walk.
+// All durations are in nanoseconds (proto convention used throughout
+// this service). All "0 = default" fields fall back to handler-side
+// constants documented inline.
+type PingTreeRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// MaxLevel caps BFS depth. 0 = unlimited until expansion exhausts.
+	MaxLevel int32 `protobuf:"varint,1,opt,name=max_level,json=maxLevel,proto3" json:"max_level,omitempty"`
+	// Hops, when > 0, pings ONLY entries at exactly N hops. The BFS
+	// still discovers intermediate levels (so it can reach the target),
+	// but no PingResult fires for non-target levels. Synth's "latency
+	// as a function of hop count" measurement uses this.
+	Hops int32 `protobuf:"varint,2,opt,name=hops,proto3" json:"hops,omitempty"`
+	// Tries is the per-transport ping count. The PingResult carries
+	// the aggregated stats (avg, p50, p99, jitter) over all tries.
+	// 0 falls back to 1.
+	Tries int32 `protobuf:"varint,3,opt,name=tries,proto3" json:"tries,omitempty"`
+	// PacketSizeKb is the per-ping packet size. 0 falls back to 2 KB.
+	PacketSizeKb int32 `protobuf:"varint,4,opt,name=packet_size_kb,json=packetSizeKb,proto3" json:"packet_size_kb,omitempty"`
+	// PingTimeoutNs bounds each individual ping (after route setup).
+	// 0 falls back to 30s.
+	PingTimeoutNs int64 `protobuf:"varint,5,opt,name=ping_timeout_ns,json=pingTimeoutNs,proto3" json:"ping_timeout_ns,omitempty"`
+	// SetupTimeoutNs bounds the route-setup phase per transport.
+	// 0 falls back to 30s.
+	SetupTimeoutNs int64 `protobuf:"varint,6,opt,name=setup_timeout_ns,json=setupTimeoutNs,proto3" json:"setup_timeout_ns,omitempty"`
+	// Concurrency limits in-flight pings per level. The cap resets
+	// between levels (level 2 starts with a fresh budget after level 1
+	// drains) — predictable LevelDone semantics + bounded fan-out at
+	// deep levels. 0 falls back to 16.
+	Concurrency int32 `protobuf:"varint,7,opt,name=concurrency,proto3" json:"concurrency,omitempty"`
+	// OnlineOnly filters discovered visors via the uptime tracker.
+	OnlineOnly bool `protobuf:"varint,8,opt,name=online_only,json=onlineOnly,proto3" json:"online_only,omitempty"`
+	// MinVersion filters by minimum visor version (semver). Empty = no
+	// filter.
+	MinVersion string `protobuf:"bytes,9,opt,name=min_version,json=minVersion,proto3" json:"min_version,omitempty"`
+	// UseTransportLatency turns on the level-1 fast path: when a
+	// direct transport already has a non-zero smoothed
+	// TransportSummary.LatencyMS, the handler emits a PingResult with
+	// latency_source="transport_summary" and skips the live ping.
+	// Saves traffic + makes level 1 instant for warm transports.
+	// Deeper levels always live-ping (no transport-level latency for
+	// multi-hop routes).
+	UseTransportLatency bool `protobuf:"varint,10,opt,name=use_transport_latency,json=useTransportLatency,proto3" json:"use_transport_latency,omitempty"`
+	// DmsgOnly forces the ping to ride the DMSG path instead of the
+	// skywire router. Mirrors `cli visor ping --dmsg`.
+	DmsgOnly bool `protobuf:"varint,11,opt,name=dmsg_only,json=dmsgOnly,proto3" json:"dmsg_only,omitempty"`
+	// DmsgPreCheck probes DMSG reachability before attempting a
+	// route ping. Discards unreachable visors early.
+	DmsgPreCheck bool `protobuf:"varint,12,opt,name=dmsg_pre_check,json=dmsgPreCheck,proto3" json:"dmsg_pre_check,omitempty"`
+	// Retries adds N retry attempts on failed pings. 0 = no retry.
+	Retries int32 `protobuf:"varint,13,opt,name=retries,proto3" json:"retries,omitempty"`
+	// DryRun runs the BFS discovery but emits no PingResult events;
+	// useful for visualizing the reachable graph without traffic.
+	DryRun        bool `protobuf:"varint,14,opt,name=dry_run,json=dryRun,proto3" json:"dry_run,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingTreeRequest) Reset() {
+	*x = PingTreeRequest{}
+	mi := &file_ping_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingTreeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingTreeRequest) ProtoMessage() {}
+
+func (x *PingTreeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingTreeRequest.ProtoReflect.Descriptor instead.
+func (*PingTreeRequest) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *PingTreeRequest) GetMaxLevel() int32 {
+	if x != nil {
+		return x.MaxLevel
+	}
+	return 0
+}
+
+func (x *PingTreeRequest) GetHops() int32 {
+	if x != nil {
+		return x.Hops
+	}
+	return 0
+}
+
+func (x *PingTreeRequest) GetTries() int32 {
+	if x != nil {
+		return x.Tries
+	}
+	return 0
+}
+
+func (x *PingTreeRequest) GetPacketSizeKb() int32 {
+	if x != nil {
+		return x.PacketSizeKb
+	}
+	return 0
+}
+
+func (x *PingTreeRequest) GetPingTimeoutNs() int64 {
+	if x != nil {
+		return x.PingTimeoutNs
+	}
+	return 0
+}
+
+func (x *PingTreeRequest) GetSetupTimeoutNs() int64 {
+	if x != nil {
+		return x.SetupTimeoutNs
+	}
+	return 0
+}
+
+func (x *PingTreeRequest) GetConcurrency() int32 {
+	if x != nil {
+		return x.Concurrency
+	}
+	return 0
+}
+
+func (x *PingTreeRequest) GetOnlineOnly() bool {
+	if x != nil {
+		return x.OnlineOnly
+	}
+	return false
+}
+
+func (x *PingTreeRequest) GetMinVersion() string {
+	if x != nil {
+		return x.MinVersion
+	}
+	return ""
+}
+
+func (x *PingTreeRequest) GetUseTransportLatency() bool {
+	if x != nil {
+		return x.UseTransportLatency
+	}
+	return false
+}
+
+func (x *PingTreeRequest) GetDmsgOnly() bool {
+	if x != nil {
+		return x.DmsgOnly
+	}
+	return false
+}
+
+func (x *PingTreeRequest) GetDmsgPreCheck() bool {
+	if x != nil {
+		return x.DmsgPreCheck
+	}
+	return false
+}
+
+func (x *PingTreeRequest) GetRetries() int32 {
+	if x != nil {
+		return x.Retries
+	}
+	return 0
+}
+
+func (x *PingTreeRequest) GetDryRun() bool {
+	if x != nil {
+		return x.DryRun
+	}
+	return false
+}
+
+// PingTreeEvent is one entry on the stream. Exactly one oneof
+// payload is set per message. Consumers switch on the payload type;
+// the top-level timestamp_ns is server-side wall time at emit.
+type PingTreeEvent struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	TimestampNs int64                  `protobuf:"varint,1,opt,name=timestamp_ns,json=timestampNs,proto3" json:"timestamp_ns,omitempty"`
+	// Types that are valid to be assigned to Payload:
+	//
+	//	*PingTreeEvent_Discovered
+	//	*PingTreeEvent_PingResult
+	//	*PingTreeEvent_LevelDone
+	//	*PingTreeEvent_RunDone
+	//	*PingTreeEvent_StatusUpdate
+	//	*PingTreeEvent_ServerError
+	Payload       isPingTreeEvent_Payload `protobuf_oneof:"payload"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingTreeEvent) Reset() {
+	*x = PingTreeEvent{}
+	mi := &file_ping_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingTreeEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingTreeEvent) ProtoMessage() {}
+
+func (x *PingTreeEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingTreeEvent.ProtoReflect.Descriptor instead.
+func (*PingTreeEvent) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *PingTreeEvent) GetTimestampNs() int64 {
+	if x != nil {
+		return x.TimestampNs
+	}
+	return 0
+}
+
+func (x *PingTreeEvent) GetPayload() isPingTreeEvent_Payload {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+func (x *PingTreeEvent) GetDiscovered() *PingTreeDiscovered {
+	if x != nil {
+		if x, ok := x.Payload.(*PingTreeEvent_Discovered); ok {
+			return x.Discovered
+		}
+	}
+	return nil
+}
+
+func (x *PingTreeEvent) GetPingResult() *PingTreeResult {
+	if x != nil {
+		if x, ok := x.Payload.(*PingTreeEvent_PingResult); ok {
+			return x.PingResult
+		}
+	}
+	return nil
+}
+
+func (x *PingTreeEvent) GetLevelDone() *PingTreeLevelDone {
+	if x != nil {
+		if x, ok := x.Payload.(*PingTreeEvent_LevelDone); ok {
+			return x.LevelDone
+		}
+	}
+	return nil
+}
+
+func (x *PingTreeEvent) GetRunDone() *PingTreeRunDone {
+	if x != nil {
+		if x, ok := x.Payload.(*PingTreeEvent_RunDone); ok {
+			return x.RunDone
+		}
+	}
+	return nil
+}
+
+func (x *PingTreeEvent) GetStatusUpdate() *PingTreeStatusUpdate {
+	if x != nil {
+		if x, ok := x.Payload.(*PingTreeEvent_StatusUpdate); ok {
+			return x.StatusUpdate
+		}
+	}
+	return nil
+}
+
+func (x *PingTreeEvent) GetServerError() *PingTreeServerError {
+	if x != nil {
+		if x, ok := x.Payload.(*PingTreeEvent_ServerError); ok {
+			return x.ServerError
+		}
+	}
+	return nil
+}
+
+type isPingTreeEvent_Payload interface {
+	isPingTreeEvent_Payload()
+}
+
+type PingTreeEvent_Discovered struct {
+	Discovered *PingTreeDiscovered `protobuf:"bytes,10,opt,name=discovered,proto3,oneof"`
+}
+
+type PingTreeEvent_PingResult struct {
+	PingResult *PingTreeResult `protobuf:"bytes,11,opt,name=ping_result,json=pingResult,proto3,oneof"`
+}
+
+type PingTreeEvent_LevelDone struct {
+	LevelDone *PingTreeLevelDone `protobuf:"bytes,12,opt,name=level_done,json=levelDone,proto3,oneof"`
+}
+
+type PingTreeEvent_RunDone struct {
+	RunDone *PingTreeRunDone `protobuf:"bytes,13,opt,name=run_done,json=runDone,proto3,oneof"`
+}
+
+type PingTreeEvent_StatusUpdate struct {
+	StatusUpdate *PingTreeStatusUpdate `protobuf:"bytes,14,opt,name=status_update,json=statusUpdate,proto3,oneof"`
+}
+
+type PingTreeEvent_ServerError struct {
+	// ServerError is a terminal event: the handler is about to
+	// close the stream because of an unrecoverable condition
+	// (e.g. proto break, internal panic recovered). Clients should
+	// treat receipt as equivalent to stream-EOF with a known cause.
+	ServerError *PingTreeServerError `protobuf:"bytes,15,opt,name=server_error,json=serverError,proto3,oneof"`
+}
+
+func (*PingTreeEvent_Discovered) isPingTreeEvent_Payload() {}
+
+func (*PingTreeEvent_PingResult) isPingTreeEvent_Payload() {}
+
+func (*PingTreeEvent_LevelDone) isPingTreeEvent_Payload() {}
+
+func (*PingTreeEvent_RunDone) isPingTreeEvent_Payload() {}
+
+func (*PingTreeEvent_StatusUpdate) isPingTreeEvent_Payload() {}
+
+func (*PingTreeEvent_ServerError) isPingTreeEvent_Payload() {}
+
+// Discovered fires when the BFS adds a (transport, peer) pair to the
+// candidate set at level N. Fires BEFORE the corresponding PingResult.
+type PingTreeDiscovered struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TpId          string                 `protobuf:"bytes,1,opt,name=tp_id,json=tpId,proto3" json:"tp_id,omitempty"`
+	TpType        string                 `protobuf:"bytes,2,opt,name=tp_type,json=tpType,proto3" json:"tp_type,omitempty"`
+	RemotePk      string                 `protobuf:"bytes,3,opt,name=remote_pk,json=remotePk,proto3" json:"remote_pk,omitempty"`
+	ParentPk      string                 `protobuf:"bytes,4,opt,name=parent_pk,json=parentPk,proto3" json:"parent_pk,omitempty"`
+	Level         int32                  `protobuf:"varint,5,opt,name=level,proto3" json:"level,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingTreeDiscovered) Reset() {
+	*x = PingTreeDiscovered{}
+	mi := &file_ping_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingTreeDiscovered) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingTreeDiscovered) ProtoMessage() {}
+
+func (x *PingTreeDiscovered) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingTreeDiscovered.ProtoReflect.Descriptor instead.
+func (*PingTreeDiscovered) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *PingTreeDiscovered) GetTpId() string {
+	if x != nil {
+		return x.TpId
+	}
+	return ""
+}
+
+func (x *PingTreeDiscovered) GetTpType() string {
+	if x != nil {
+		return x.TpType
+	}
+	return ""
+}
+
+func (x *PingTreeDiscovered) GetRemotePk() string {
+	if x != nil {
+		return x.RemotePk
+	}
+	return ""
+}
+
+func (x *PingTreeDiscovered) GetParentPk() string {
+	if x != nil {
+		return x.ParentPk
+	}
+	return ""
+}
+
+func (x *PingTreeDiscovered) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
+// PingResult fires when a transport's ping (or the cache fast-path)
+// completes. Both success and failure produce a PingResult; consumers
+// switch on the failed bool. Latency stats are aggregated across the
+// per-tries sample series.
+type PingTreeResult struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	TpId     string                 `protobuf:"bytes,1,opt,name=tp_id,json=tpId,proto3" json:"tp_id,omitempty"`
+	TpType   string                 `protobuf:"bytes,2,opt,name=tp_type,json=tpType,proto3" json:"tp_type,omitempty"`
+	RemotePk string                 `protobuf:"bytes,3,opt,name=remote_pk,json=remotePk,proto3" json:"remote_pk,omitempty"`
+	ParentPk string                 `protobuf:"bytes,4,opt,name=parent_pk,json=parentPk,proto3" json:"parent_pk,omitempty"`
+	Level    int32                  `protobuf:"varint,5,opt,name=level,proto3" json:"level,omitempty"`
+	Failed   bool                   `protobuf:"varint,6,opt,name=failed,proto3" json:"failed,omitempty"`
+	// Canceled distinguishes ctx-canceled-mid-flight from genuine
+	// failure. Set when ctx.Err() != nil at the time the result was
+	// finalized. Different operator action: retry vs investigate.
+	Canceled bool `protobuf:"varint,7,opt,name=canceled,proto3" json:"canceled,omitempty"`
+	// SetupLatencyNs is the route-setup phase time. Excluded from the
+	// ping_*_ns aggregations below — those are per-ping post-setup.
+	SetupLatencyNs int64 `protobuf:"varint,8,opt,name=setup_latency_ns,json=setupLatencyNs,proto3" json:"setup_latency_ns,omitempty"`
+	// SampleCount is the number of successful pings (out of Tries).
+	// Zero when failed.
+	SampleCount int32 `protobuf:"varint,9,opt,name=sample_count,json=sampleCount,proto3" json:"sample_count,omitempty"`
+	// PingAvgNs / PingP50Ns / PingP99Ns / JitterNs are aggregations
+	// over the sample series. Jitter is the population stddev:
+	// sqrt(sum((x - mean)^2) / N). Zero when sample_count < 2 (no
+	// stddev defined for a single sample).
+	PingAvgNs int64 `protobuf:"varint,10,opt,name=ping_avg_ns,json=pingAvgNs,proto3" json:"ping_avg_ns,omitempty"`
+	PingP50Ns int64 `protobuf:"varint,11,opt,name=ping_p50_ns,json=pingP50Ns,proto3" json:"ping_p50_ns,omitempty"`
+	PingP99Ns int64 `protobuf:"varint,12,opt,name=ping_p99_ns,json=pingP99Ns,proto3" json:"ping_p99_ns,omitempty"`
+	JitterNs  int64 `protobuf:"varint,13,opt,name=jitter_ns,json=jitterNs,proto3" json:"jitter_ns,omitempty"`
+	// SetupErr / PingErr / CalcErr surface the most-recent error from
+	// each phase. Multiple may be set when multiple phases failed.
+	SetupErr string `protobuf:"bytes,14,opt,name=setup_err,json=setupErr,proto3" json:"setup_err,omitempty"`
+	PingErr  string `protobuf:"bytes,15,opt,name=ping_err,json=pingErr,proto3" json:"ping_err,omitempty"`
+	CalcErr  string `protobuf:"bytes,16,opt,name=calc_err,json=calcErr,proto3" json:"calc_err,omitempty"`
+	// LatencySource carries the provenance of the latency stats:
+	//
+	//	"live_ping"          — measured by an actual ping just now
+	//	"transport_summary"  — pulled from TransportSummary.LatencyMS
+	//	                       (smoothed cache, level-1 fast path)
+	//	"skipped"            — entry was --hops mismatch or --dry-run
+	//
+	// Consumers use this to weight stale-cache values vs fresh probes.
+	LatencySource string `protobuf:"bytes,17,opt,name=latency_source,json=latencySource,proto3" json:"latency_source,omitempty"`
+	// Route is the hop sequence used for this ping. Empty for the
+	// transport_summary fast-path (no route was constructed).
+	Route         []*RouteHop `protobuf:"bytes,18,rep,name=route,proto3" json:"route,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingTreeResult) Reset() {
+	*x = PingTreeResult{}
+	mi := &file_ping_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingTreeResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingTreeResult) ProtoMessage() {}
+
+func (x *PingTreeResult) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingTreeResult.ProtoReflect.Descriptor instead.
+func (*PingTreeResult) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *PingTreeResult) GetTpId() string {
+	if x != nil {
+		return x.TpId
+	}
+	return ""
+}
+
+func (x *PingTreeResult) GetTpType() string {
+	if x != nil {
+		return x.TpType
+	}
+	return ""
+}
+
+func (x *PingTreeResult) GetRemotePk() string {
+	if x != nil {
+		return x.RemotePk
+	}
+	return ""
+}
+
+func (x *PingTreeResult) GetParentPk() string {
+	if x != nil {
+		return x.ParentPk
+	}
+	return ""
+}
+
+func (x *PingTreeResult) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
+func (x *PingTreeResult) GetFailed() bool {
+	if x != nil {
+		return x.Failed
+	}
+	return false
+}
+
+func (x *PingTreeResult) GetCanceled() bool {
+	if x != nil {
+		return x.Canceled
+	}
+	return false
+}
+
+func (x *PingTreeResult) GetSetupLatencyNs() int64 {
+	if x != nil {
+		return x.SetupLatencyNs
+	}
+	return 0
+}
+
+func (x *PingTreeResult) GetSampleCount() int32 {
+	if x != nil {
+		return x.SampleCount
+	}
+	return 0
+}
+
+func (x *PingTreeResult) GetPingAvgNs() int64 {
+	if x != nil {
+		return x.PingAvgNs
+	}
+	return 0
+}
+
+func (x *PingTreeResult) GetPingP50Ns() int64 {
+	if x != nil {
+		return x.PingP50Ns
+	}
+	return 0
+}
+
+func (x *PingTreeResult) GetPingP99Ns() int64 {
+	if x != nil {
+		return x.PingP99Ns
+	}
+	return 0
+}
+
+func (x *PingTreeResult) GetJitterNs() int64 {
+	if x != nil {
+		return x.JitterNs
+	}
+	return 0
+}
+
+func (x *PingTreeResult) GetSetupErr() string {
+	if x != nil {
+		return x.SetupErr
+	}
+	return ""
+}
+
+func (x *PingTreeResult) GetPingErr() string {
+	if x != nil {
+		return x.PingErr
+	}
+	return ""
+}
+
+func (x *PingTreeResult) GetCalcErr() string {
+	if x != nil {
+		return x.CalcErr
+	}
+	return ""
+}
+
+func (x *PingTreeResult) GetLatencySource() string {
+	if x != nil {
+		return x.LatencySource
+	}
+	return ""
+}
+
+func (x *PingTreeResult) GetRoute() []*RouteHop {
+	if x != nil {
+		return x.Route
+	}
+	return nil
+}
+
+// LevelDone fires after every transport at level N has either
+// completed its ping or been skipped. Always fires before the next
+// level's Discovered events. Counts are authoritative for the harness.
+type PingTreeLevelDone struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Level int32                  `protobuf:"varint,1,opt,name=level,proto3" json:"level,omitempty"`
+	// Attempted = sum of (succeeded + failed + skipped_cached + skipped_dry).
+	Attempted int32 `protobuf:"varint,2,opt,name=attempted,proto3" json:"attempted,omitempty"`
+	Succeeded int32 `protobuf:"varint,3,opt,name=succeeded,proto3" json:"succeeded,omitempty"`
+	Failed    int32 `protobuf:"varint,4,opt,name=failed,proto3" json:"failed,omitempty"`
+	// SkippedCached is the count of entries where the
+	// use_transport_latency fast-path fired. Lets harnesses compute
+	// cache hit rate.
+	SkippedCached int32 `protobuf:"varint,5,opt,name=skipped_cached,json=skippedCached,proto3" json:"skipped_cached,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingTreeLevelDone) Reset() {
+	*x = PingTreeLevelDone{}
+	mi := &file_ping_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingTreeLevelDone) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingTreeLevelDone) ProtoMessage() {}
+
+func (x *PingTreeLevelDone) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingTreeLevelDone.ProtoReflect.Descriptor instead.
+func (*PingTreeLevelDone) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *PingTreeLevelDone) GetLevel() int32 {
+	if x != nil {
+		return x.Level
+	}
+	return 0
+}
+
+func (x *PingTreeLevelDone) GetAttempted() int32 {
+	if x != nil {
+		return x.Attempted
+	}
+	return 0
+}
+
+func (x *PingTreeLevelDone) GetSucceeded() int32 {
+	if x != nil {
+		return x.Succeeded
+	}
+	return 0
+}
+
+func (x *PingTreeLevelDone) GetFailed() int32 {
+	if x != nil {
+		return x.Failed
+	}
+	return 0
+}
+
+func (x *PingTreeLevelDone) GetSkippedCached() int32 {
+	if x != nil {
+		return x.SkippedCached
+	}
+	return 0
+}
+
+// RunDone is the terminal event before stream close. Fires exactly
+// once per StreamPingTree call.
+type PingTreeRunDone struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	TotalDiscovered    int32                  `protobuf:"varint,1,opt,name=total_discovered,json=totalDiscovered,proto3" json:"total_discovered,omitempty"`
+	TotalPinged        int32                  `protobuf:"varint,2,opt,name=total_pinged,json=totalPinged,proto3" json:"total_pinged,omitempty"`
+	TotalSucceeded     int32                  `protobuf:"varint,3,opt,name=total_succeeded,json=totalSucceeded,proto3" json:"total_succeeded,omitempty"`
+	TotalFailed        int32                  `protobuf:"varint,4,opt,name=total_failed,json=totalFailed,proto3" json:"total_failed,omitempty"`
+	TotalSkippedCached int32                  `protobuf:"varint,5,opt,name=total_skipped_cached,json=totalSkippedCached,proto3" json:"total_skipped_cached,omitempty"`
+	WallTimeNs         int64                  `protobuf:"varint,6,opt,name=wall_time_ns,json=wallTimeNs,proto3" json:"wall_time_ns,omitempty"`
+	// PeakInFlight is the highest concurrent ping count observed
+	// during the run. Useful for tuning concurrency.
+	PeakInFlight int32 `protobuf:"varint,7,opt,name=peak_in_flight,json=peakInFlight,proto3" json:"peak_in_flight,omitempty"`
+	// TerminationReason is one of:
+	//
+	//	"max_level"          — hit cfg.MaxLevel
+	//	"no_neighbors"       — BFS exhausted before MaxLevel
+	//	"hops_target"        — reached cfg.Hops target level
+	//	"context_cancel"     — client disconnect / server shutdown
+	//	"error"              — see ServerError preceding this event
+	TerminationReason string `protobuf:"bytes,8,opt,name=termination_reason,json=terminationReason,proto3" json:"termination_reason,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *PingTreeRunDone) Reset() {
+	*x = PingTreeRunDone{}
+	mi := &file_ping_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingTreeRunDone) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingTreeRunDone) ProtoMessage() {}
+
+func (x *PingTreeRunDone) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingTreeRunDone.ProtoReflect.Descriptor instead.
+func (*PingTreeRunDone) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *PingTreeRunDone) GetTotalDiscovered() int32 {
+	if x != nil {
+		return x.TotalDiscovered
+	}
+	return 0
+}
+
+func (x *PingTreeRunDone) GetTotalPinged() int32 {
+	if x != nil {
+		return x.TotalPinged
+	}
+	return 0
+}
+
+func (x *PingTreeRunDone) GetTotalSucceeded() int32 {
+	if x != nil {
+		return x.TotalSucceeded
+	}
+	return 0
+}
+
+func (x *PingTreeRunDone) GetTotalFailed() int32 {
+	if x != nil {
+		return x.TotalFailed
+	}
+	return 0
+}
+
+func (x *PingTreeRunDone) GetTotalSkippedCached() int32 {
+	if x != nil {
+		return x.TotalSkippedCached
+	}
+	return 0
+}
+
+func (x *PingTreeRunDone) GetWallTimeNs() int64 {
+	if x != nil {
+		return x.WallTimeNs
+	}
+	return 0
+}
+
+func (x *PingTreeRunDone) GetPeakInFlight() int32 {
+	if x != nil {
+		return x.PeakInFlight
+	}
+	return 0
+}
+
+func (x *PingTreeRunDone) GetTerminationReason() string {
+	if x != nil {
+		return x.TerminationReason
+	}
+	return ""
+}
+
+// StatusUpdate is a low-priority informational event (e.g. "expanding
+// level 3", "draining in-flight"). The handler MUST prefer dropping
+// StatusUpdate over PingResult under backpressure — never trade
+// measurement data for status text.
+type PingTreeStatusUpdate struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Phase is one of: "discovering" | "pinging_level_N" | "finalizing".
+	Phase string `protobuf:"bytes,1,opt,name=phase,proto3" json:"phase,omitempty"`
+	// InFlight is the count of currently-active ping goroutines.
+	InFlight int32 `protobuf:"varint,2,opt,name=in_flight,json=inFlight,proto3" json:"in_flight,omitempty"`
+	// Pending is the count of queued-but-not-started pings.
+	Pending int32 `protobuf:"varint,3,opt,name=pending,proto3" json:"pending,omitempty"`
+	// Message is an optional human-readable hint (e.g. "waiting on 3
+	// slow pings at level 2"). Empty for routine progress.
+	Message       string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingTreeStatusUpdate) Reset() {
+	*x = PingTreeStatusUpdate{}
+	mi := &file_ping_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingTreeStatusUpdate) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingTreeStatusUpdate) ProtoMessage() {}
+
+func (x *PingTreeStatusUpdate) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingTreeStatusUpdate.ProtoReflect.Descriptor instead.
+func (*PingTreeStatusUpdate) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *PingTreeStatusUpdate) GetPhase() string {
+	if x != nil {
+		return x.Phase
+	}
+	return ""
+}
+
+func (x *PingTreeStatusUpdate) GetInFlight() int32 {
+	if x != nil {
+		return x.InFlight
+	}
+	return 0
+}
+
+func (x *PingTreeStatusUpdate) GetPending() int32 {
+	if x != nil {
+		return x.Pending
+	}
+	return 0
+}
+
+func (x *PingTreeStatusUpdate) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// ServerError signals an unrecoverable condition that's about to
+// close the stream. Clients receive it as the last event before
+// stream-EOF; preserves a known cause vs an opaque transport error.
+type PingTreeServerError struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Code is a short stable identifier (e.g. "auth_denied",
+	// "internal_panic", "tpm_unavailable"). Suitable for grep / metric
+	// labeling.
+	Code string `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// Message carries operator-readable detail. Not stable across
+	// versions.
+	Message       string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingTreeServerError) Reset() {
+	*x = PingTreeServerError{}
+	mi := &file_ping_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingTreeServerError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingTreeServerError) ProtoMessage() {}
+
+func (x *PingTreeServerError) ProtoReflect() protoreflect.Message {
+	mi := &file_ping_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingTreeServerError.ProtoReflect.Descriptor instead.
+func (*PingTreeServerError) Descriptor() ([]byte, []int) {
+	return file_ping_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *PingTreeServerError) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *PingTreeServerError) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
 var File_ping_proto protoreflect.FileDescriptor
 
 const file_ping_proto_rawDesc = "" +
@@ -2098,7 +3060,89 @@ const file_ping_proto_rawDesc = "" +
 	"\n" +
 	"memory_rss\x18\x05 \x01(\x04R\tmemoryRss\x12\x1a\n" +
 	"\busername\x18\x06 \x01(\tR\busername\x12\x16\n" +
-	"\x06status\x18\a \x01(\tR\x06status2\xc4\x06\n" +
+	"\x06status\x18\a \x01(\tR\x06status\"\xde\x03\n" +
+	"\x0fPingTreeRequest\x12\x1b\n" +
+	"\tmax_level\x18\x01 \x01(\x05R\bmaxLevel\x12\x12\n" +
+	"\x04hops\x18\x02 \x01(\x05R\x04hops\x12\x14\n" +
+	"\x05tries\x18\x03 \x01(\x05R\x05tries\x12$\n" +
+	"\x0epacket_size_kb\x18\x04 \x01(\x05R\fpacketSizeKb\x12&\n" +
+	"\x0fping_timeout_ns\x18\x05 \x01(\x03R\rpingTimeoutNs\x12(\n" +
+	"\x10setup_timeout_ns\x18\x06 \x01(\x03R\x0esetupTimeoutNs\x12 \n" +
+	"\vconcurrency\x18\a \x01(\x05R\vconcurrency\x12\x1f\n" +
+	"\vonline_only\x18\b \x01(\bR\n" +
+	"onlineOnly\x12\x1f\n" +
+	"\vmin_version\x18\t \x01(\tR\n" +
+	"minVersion\x122\n" +
+	"\x15use_transport_latency\x18\n" +
+	" \x01(\bR\x13useTransportLatency\x12\x1b\n" +
+	"\tdmsg_only\x18\v \x01(\bR\bdmsgOnly\x12$\n" +
+	"\x0edmsg_pre_check\x18\f \x01(\bR\fdmsgPreCheck\x12\x18\n" +
+	"\aretries\x18\r \x01(\x05R\aretries\x12\x17\n" +
+	"\adry_run\x18\x0e \x01(\bR\x06dryRun\"\xb5\x03\n" +
+	"\rPingTreeEvent\x12!\n" +
+	"\ftimestamp_ns\x18\x01 \x01(\x03R\vtimestampNs\x12=\n" +
+	"\n" +
+	"discovered\x18\n" +
+	" \x01(\v2\x1b.rpcgrpc.PingTreeDiscoveredH\x00R\n" +
+	"discovered\x12:\n" +
+	"\vping_result\x18\v \x01(\v2\x17.rpcgrpc.PingTreeResultH\x00R\n" +
+	"pingResult\x12;\n" +
+	"\n" +
+	"level_done\x18\f \x01(\v2\x1a.rpcgrpc.PingTreeLevelDoneH\x00R\tlevelDone\x125\n" +
+	"\brun_done\x18\r \x01(\v2\x18.rpcgrpc.PingTreeRunDoneH\x00R\arunDone\x12D\n" +
+	"\rstatus_update\x18\x0e \x01(\v2\x1d.rpcgrpc.PingTreeStatusUpdateH\x00R\fstatusUpdate\x12A\n" +
+	"\fserver_error\x18\x0f \x01(\v2\x1c.rpcgrpc.PingTreeServerErrorH\x00R\vserverErrorB\t\n" +
+	"\apayload\"\x92\x01\n" +
+	"\x12PingTreeDiscovered\x12\x13\n" +
+	"\x05tp_id\x18\x01 \x01(\tR\x04tpId\x12\x17\n" +
+	"\atp_type\x18\x02 \x01(\tR\x06tpType\x12\x1b\n" +
+	"\tremote_pk\x18\x03 \x01(\tR\bremotePk\x12\x1b\n" +
+	"\tparent_pk\x18\x04 \x01(\tR\bparentPk\x12\x14\n" +
+	"\x05level\x18\x05 \x01(\x05R\x05level\"\xaf\x04\n" +
+	"\x0ePingTreeResult\x12\x13\n" +
+	"\x05tp_id\x18\x01 \x01(\tR\x04tpId\x12\x17\n" +
+	"\atp_type\x18\x02 \x01(\tR\x06tpType\x12\x1b\n" +
+	"\tremote_pk\x18\x03 \x01(\tR\bremotePk\x12\x1b\n" +
+	"\tparent_pk\x18\x04 \x01(\tR\bparentPk\x12\x14\n" +
+	"\x05level\x18\x05 \x01(\x05R\x05level\x12\x16\n" +
+	"\x06failed\x18\x06 \x01(\bR\x06failed\x12\x1a\n" +
+	"\bcanceled\x18\a \x01(\bR\bcanceled\x12(\n" +
+	"\x10setup_latency_ns\x18\b \x01(\x03R\x0esetupLatencyNs\x12!\n" +
+	"\fsample_count\x18\t \x01(\x05R\vsampleCount\x12\x1e\n" +
+	"\vping_avg_ns\x18\n" +
+	" \x01(\x03R\tpingAvgNs\x12\x1e\n" +
+	"\vping_p50_ns\x18\v \x01(\x03R\tpingP50Ns\x12\x1e\n" +
+	"\vping_p99_ns\x18\f \x01(\x03R\tpingP99Ns\x12\x1b\n" +
+	"\tjitter_ns\x18\r \x01(\x03R\bjitterNs\x12\x1b\n" +
+	"\tsetup_err\x18\x0e \x01(\tR\bsetupErr\x12\x19\n" +
+	"\bping_err\x18\x0f \x01(\tR\apingErr\x12\x19\n" +
+	"\bcalc_err\x18\x10 \x01(\tR\acalcErr\x12%\n" +
+	"\x0elatency_source\x18\x11 \x01(\tR\rlatencySource\x12'\n" +
+	"\x05route\x18\x12 \x03(\v2\x11.rpcgrpc.RouteHopR\x05route\"\xa4\x01\n" +
+	"\x11PingTreeLevelDone\x12\x14\n" +
+	"\x05level\x18\x01 \x01(\x05R\x05level\x12\x1c\n" +
+	"\tattempted\x18\x02 \x01(\x05R\tattempted\x12\x1c\n" +
+	"\tsucceeded\x18\x03 \x01(\x05R\tsucceeded\x12\x16\n" +
+	"\x06failed\x18\x04 \x01(\x05R\x06failed\x12%\n" +
+	"\x0eskipped_cached\x18\x05 \x01(\x05R\rskippedCached\"\xd4\x02\n" +
+	"\x0fPingTreeRunDone\x12)\n" +
+	"\x10total_discovered\x18\x01 \x01(\x05R\x0ftotalDiscovered\x12!\n" +
+	"\ftotal_pinged\x18\x02 \x01(\x05R\vtotalPinged\x12'\n" +
+	"\x0ftotal_succeeded\x18\x03 \x01(\x05R\x0etotalSucceeded\x12!\n" +
+	"\ftotal_failed\x18\x04 \x01(\x05R\vtotalFailed\x120\n" +
+	"\x14total_skipped_cached\x18\x05 \x01(\x05R\x12totalSkippedCached\x12 \n" +
+	"\fwall_time_ns\x18\x06 \x01(\x03R\n" +
+	"wallTimeNs\x12$\n" +
+	"\x0epeak_in_flight\x18\a \x01(\x05R\fpeakInFlight\x12-\n" +
+	"\x12termination_reason\x18\b \x01(\tR\x11terminationReason\"}\n" +
+	"\x14PingTreeStatusUpdate\x12\x14\n" +
+	"\x05phase\x18\x01 \x01(\tR\x05phase\x12\x1b\n" +
+	"\tin_flight\x18\x02 \x01(\x05R\binFlight\x12\x18\n" +
+	"\apending\x18\x03 \x01(\x05R\apending\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\"C\n" +
+	"\x13PingTreeServerError\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\x8a\a\n" +
 	"\vPingService\x129\n" +
 	"\n" +
 	"StreamPing\x12\x14.rpcgrpc.PingRequest\x1a\x13.rpcgrpc.PingResult0\x01\x12=\n" +
@@ -2111,7 +3155,8 @@ const file_ping_proto_rawDesc = "" +
 	"\x17StreamRemoteSystemStats\x12!.rpcgrpc.RemoteSystemStatsRequest\x1a\x14.rpcgrpc.SystemStats0\x01\x12E\n" +
 	"\rStreamAppLogs\x12\x1c.rpcgrpc.AppLogStreamRequest\x1a\x14.rpcgrpc.AppLogEntry0\x01\x12D\n" +
 	"\x10StreamCalcRoutes\x12\x1a.rpcgrpc.CalcRoutesRequest\x1a\x12.rpcgrpc.CalcRoute0\x01\x12R\n" +
-	"\x13StreamGroupMessages\x12\x1d.rpcgrpc.GroupMessagesRequest\x1a\x1a.rpcgrpc.GroupMessageEvent0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
+	"\x13StreamGroupMessages\x12\x1d.rpcgrpc.GroupMessagesRequest\x1a\x1a.rpcgrpc.GroupMessageEvent0\x01\x12D\n" +
+	"\x0eStreamPingTree\x12\x18.rpcgrpc.PingTreeRequest\x1a\x16.rpcgrpc.PingTreeEvent0\x01B.Z,github.com/skycoin/skywire/pkg/visor/rpcgrpcb\x06proto3"
 
 var (
 	file_ping_proto_rawDescOnce sync.Once
@@ -2125,7 +3170,7 @@ func file_ping_proto_rawDescGZIP() []byte {
 	return file_ping_proto_rawDescData
 }
 
-var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_ping_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_ping_proto_goTypes = []any{
 	(*PingRequest)(nil),              // 0: rpcgrpc.PingRequest
 	(*PingResult)(nil),               // 1: rpcgrpc.PingResult
@@ -2151,7 +3196,15 @@ var file_ping_proto_goTypes = []any{
 	(*GroupMessagesRequest)(nil),     // 21: rpcgrpc.GroupMessagesRequest
 	(*GroupMessageEvent)(nil),        // 22: rpcgrpc.GroupMessageEvent
 	(*ProcessStat)(nil),              // 23: rpcgrpc.ProcessStat
-	nil,                              // 24: rpcgrpc.AppLogEntry.FieldsEntry
+	(*PingTreeRequest)(nil),          // 24: rpcgrpc.PingTreeRequest
+	(*PingTreeEvent)(nil),            // 25: rpcgrpc.PingTreeEvent
+	(*PingTreeDiscovered)(nil),       // 26: rpcgrpc.PingTreeDiscovered
+	(*PingTreeResult)(nil),           // 27: rpcgrpc.PingTreeResult
+	(*PingTreeLevelDone)(nil),        // 28: rpcgrpc.PingTreeLevelDone
+	(*PingTreeRunDone)(nil),          // 29: rpcgrpc.PingTreeRunDone
+	(*PingTreeStatusUpdate)(nil),     // 30: rpcgrpc.PingTreeStatusUpdate
+	(*PingTreeServerError)(nil),      // 31: rpcgrpc.PingTreeServerError
+	nil,                              // 32: rpcgrpc.AppLogEntry.FieldsEntry
 }
 var file_ping_proto_depIdxs = []int32{
 	4,  // 0: rpcgrpc.PingRequest.forward_hops:type_name -> rpcgrpc.RouteHop
@@ -2165,35 +3218,44 @@ var file_ping_proto_depIdxs = []int32{
 	14, // 8: rpcgrpc.SystemStats.network:type_name -> rpcgrpc.NetworkStat
 	15, // 9: rpcgrpc.SystemStats.temps:type_name -> rpcgrpc.TempStat
 	23, // 10: rpcgrpc.SystemStats.processes:type_name -> rpcgrpc.ProcessStat
-	24, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
+	32, // 11: rpcgrpc.AppLogEntry.fields:type_name -> rpcgrpc.AppLogEntry.FieldsEntry
 	20, // 12: rpcgrpc.CalcRoute.hops:type_name -> rpcgrpc.CalcHop
-	0,  // 13: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
-	0,  // 14: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
-	5,  // 15: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	5,  // 16: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
-	2,  // 17: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
-	7,  // 18: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	7,  // 19: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
-	8,  // 20: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
-	16, // 21: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
-	18, // 22: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
-	21, // 23: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
-	1,  // 24: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
-	1,  // 25: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
-	6,  // 26: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	6,  // 27: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
-	3,  // 28: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
-	9,  // 29: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 30: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
-	9,  // 31: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
-	17, // 32: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
-	19, // 33: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
-	22, // 34: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
-	24, // [24:35] is the sub-list for method output_type
-	13, // [13:24] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	26, // 13: rpcgrpc.PingTreeEvent.discovered:type_name -> rpcgrpc.PingTreeDiscovered
+	27, // 14: rpcgrpc.PingTreeEvent.ping_result:type_name -> rpcgrpc.PingTreeResult
+	28, // 15: rpcgrpc.PingTreeEvent.level_done:type_name -> rpcgrpc.PingTreeLevelDone
+	29, // 16: rpcgrpc.PingTreeEvent.run_done:type_name -> rpcgrpc.PingTreeRunDone
+	30, // 17: rpcgrpc.PingTreeEvent.status_update:type_name -> rpcgrpc.PingTreeStatusUpdate
+	31, // 18: rpcgrpc.PingTreeEvent.server_error:type_name -> rpcgrpc.PingTreeServerError
+	4,  // 19: rpcgrpc.PingTreeResult.route:type_name -> rpcgrpc.RouteHop
+	0,  // 20: rpcgrpc.PingService.StreamPing:input_type -> rpcgrpc.PingRequest
+	0,  // 21: rpcgrpc.PingService.StreamDmsgPing:input_type -> rpcgrpc.PingRequest
+	5,  // 22: rpcgrpc.PingService.StreamBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	5,  // 23: rpcgrpc.PingService.StreamDmsgBandwidthTest:input_type -> rpcgrpc.BandwidthRequest
+	2,  // 24: rpcgrpc.PingService.GetRemoteDmsgServers:input_type -> rpcgrpc.DmsgServersRequest
+	7,  // 25: rpcgrpc.PingService.StreamSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	7,  // 26: rpcgrpc.PingService.GetSystemStats:input_type -> rpcgrpc.SystemStatsRequest
+	8,  // 27: rpcgrpc.PingService.StreamRemoteSystemStats:input_type -> rpcgrpc.RemoteSystemStatsRequest
+	16, // 28: rpcgrpc.PingService.StreamAppLogs:input_type -> rpcgrpc.AppLogStreamRequest
+	18, // 29: rpcgrpc.PingService.StreamCalcRoutes:input_type -> rpcgrpc.CalcRoutesRequest
+	21, // 30: rpcgrpc.PingService.StreamGroupMessages:input_type -> rpcgrpc.GroupMessagesRequest
+	24, // 31: rpcgrpc.PingService.StreamPingTree:input_type -> rpcgrpc.PingTreeRequest
+	1,  // 32: rpcgrpc.PingService.StreamPing:output_type -> rpcgrpc.PingResult
+	1,  // 33: rpcgrpc.PingService.StreamDmsgPing:output_type -> rpcgrpc.PingResult
+	6,  // 34: rpcgrpc.PingService.StreamBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	6,  // 35: rpcgrpc.PingService.StreamDmsgBandwidthTest:output_type -> rpcgrpc.BandwidthProgress
+	3,  // 36: rpcgrpc.PingService.GetRemoteDmsgServers:output_type -> rpcgrpc.DmsgServersResponse
+	9,  // 37: rpcgrpc.PingService.StreamSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 38: rpcgrpc.PingService.GetSystemStats:output_type -> rpcgrpc.SystemStats
+	9,  // 39: rpcgrpc.PingService.StreamRemoteSystemStats:output_type -> rpcgrpc.SystemStats
+	17, // 40: rpcgrpc.PingService.StreamAppLogs:output_type -> rpcgrpc.AppLogEntry
+	19, // 41: rpcgrpc.PingService.StreamCalcRoutes:output_type -> rpcgrpc.CalcRoute
+	22, // 42: rpcgrpc.PingService.StreamGroupMessages:output_type -> rpcgrpc.GroupMessageEvent
+	25, // 43: rpcgrpc.PingService.StreamPingTree:output_type -> rpcgrpc.PingTreeEvent
+	32, // [32:44] is the sub-list for method output_type
+	20, // [20:32] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_ping_proto_init() }
@@ -2201,13 +3263,21 @@ func file_ping_proto_init() {
 	if File_ping_proto != nil {
 		return
 	}
+	file_ping_proto_msgTypes[25].OneofWrappers = []any{
+		(*PingTreeEvent_Discovered)(nil),
+		(*PingTreeEvent_PingResult)(nil),
+		(*PingTreeEvent_LevelDone)(nil),
+		(*PingTreeEvent_RunDone)(nil),
+		(*PingTreeEvent_StatusUpdate)(nil),
+		(*PingTreeEvent_ServerError)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ping_proto_rawDesc), len(file_ping_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   25,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
