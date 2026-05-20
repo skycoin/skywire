@@ -832,17 +832,17 @@ func (r *router) establishMuxRoutes(
 	rPK := forwardDesc.DstPK()
 	excludeIDs := []uuid.UUID{primaryTpID}
 
-	// DisjointMux: accumulate intermediate PKs of routes already
-	// established so the next route is constructed through a
-	// different intermediate path. Only populated when the primary
-	// dial set DisjointMux=true; remains nil otherwise so today's
-	// behavior is unchanged for callers that didn't opt in.
-	var excludePKs []cipher.PubKey
-	if opts != nil && opts.DisjointMux {
-		// Seed with the primary route's intermediate hops so the
-		// auxiliary routes don't reuse them.
-		excludePKs = intermediatesOfRouteGroup(nrg, lPK, rPK)
-	}
+	// Disjoint-intermediate routing is the default for multiplexed
+	// routes: routes 2..N must NOT share intermediate visors with
+	// any earlier route (primary or aux). Operators who want
+	// overlapping intermediates must dial with explicit
+	// ForwardHops/ReverseHops, which bypasses this path entirely.
+	//
+	// Seed with the primary route's intermediates so the first aux
+	// route picks a disjoint path; accumulate each successful aux
+	// route's intermediates into the same exclude set so subsequent
+	// aux routes diverge from ALL prior ones.
+	excludePKs := intermediatesOfRouteGroup(nrg, lPK, rPK)
 
 	for i := 1; i < muxCount; i++ {
 		muxOpts := &DialOptions{
@@ -887,9 +887,7 @@ func (r *router) establishMuxRoutes(
 		excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
 		// Accumulate this route's intermediate hops into the
 		// exclude-PK set so subsequent aux routes avoid them.
-		if opts != nil && opts.DisjointMux {
-			excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
-		}
+		excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
 		log.Infof("Mux route %d/%d established via transport %s", i+1, muxCount, muxRules.Forward.NextTransportID())
 	}
 }

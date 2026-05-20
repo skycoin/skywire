@@ -122,27 +122,23 @@ type DialOptions struct {
 	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
 	// ExcludeIntermediatePKs lists intermediate-visor PKs that route-
 	// finder paths must NOT contain. Source + destination are never
-	// excluded (they're endpoints, not intermediates). Used together
-	// with DisjointMux: the mux loop populates this with the
-	// intermediates of routes already established so that the next
-	// route is constructed through a different intermediate path —
-	// "disjoint" in the intermediate-PK set sense. Applied in both
-	// the HTTP route-finder path (post-filter response) and the
-	// local route-calc fallback (filter candidates).
+	// excluded (they're endpoints, not intermediates). The mux loop
+	// populates this with the intermediates of routes already
+	// established so that subsequent routes are constructed through
+	// different intermediate paths — disjoint in the intermediate-PK
+	// set sense. Applied in both the HTTP route-finder path (post-
+	// filter response) and the local route-calc fallback (filter
+	// candidates).
+	//
+	// Disjoint-intermediate routing is AUTOMATIC for the mux loop
+	// (MuxRoutes > 1). Callers that want overlapping intermediates
+	// must dial with explicit ForwardHops/ReverseHops (which bypass
+	// the route-finder entirely). This field is also exposed so
+	// callers outside the mux loop can pre-populate exclusions if
+	// they have constraints to express.
 	ExcludeIntermediatePKs []cipher.PubKey
-	// DisjointMux, when true on the PRIMARY dial, instructs the mux
-	// loop (router_dial.go) to enforce disjoint-intermediate routing
-	// across the auxiliary routes (routes 2..N). The primary route
-	// (route 0) is unconstrained — it still picks the best path the
-	// route-finder offers (which may be the direct edge). Matches
-	// operator's "have the option, don't make automatic" framing:
-	// callers that want strict diversity opt in; callers that want
-	// today's behavior get it by default. CLI surfaces:
-	// cli visor ping mux-bw --strict-disjoint (default true), other
-	// --routes N apps add their own flag (default false).
-	DisjointMux bool
-	ExcludeDMSG bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
-	KeepAlive   time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
+	ExcludeDMSG            bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
+	KeepAlive              time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
 	// AppName is the originating app's name. Set by appnet's
 	// DialContextWithOptions when the caller threaded a context
 	// carrying it (RPCIngressGateway.Dial uses appnet.WithAppName).
