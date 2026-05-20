@@ -409,6 +409,10 @@ func (a *visorPingAdapter) FetchAllTransportEntries(ctx context.Context) ([]*tra
 	return a.v.FetchAllTransportEntries(ctx)
 }
 
+func (a *visorPingAdapter) GetTransportLatencyByRemotePK(remotePK cipher.PubKey) float64 {
+	return a.v.GetTransportLatencyByRemotePK(remotePK)
+}
+
 func (a *visorPingAdapter) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
 	return a.v.DialDmsgRPC(pk)
 }

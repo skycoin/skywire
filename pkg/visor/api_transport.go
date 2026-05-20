@@ -261,6 +261,32 @@ func (v *Visor) RemoveAllTransports() error {
 	return nil
 }
 
+// GetTransportLatencyByRemotePK returns the smoothed average RTT
+// in milliseconds for the local managed transport to remotePK, or
+// 0 if no such transport exists or its latency is not yet sampled.
+//
+// Used by the ping-tree streaming RPC's UseTransportLatency
+// fast-path: at level-1 (direct neighbors) the visor already has
+// continuously-sampled transport-level RTT; re-pinging would
+// duplicate work without adding signal. Returning 0 lets the
+// caller fall back to a live ping when the transport doesn't yet
+// have measurements (e.g. just-established).
+//
+// O(N) over local transports. Stops on first match. Callers should
+// not invoke per-packet — this is intended for the BFS level-1
+// pass where N is the direct-neighbor count.
+func (v *Visor) GetTransportLatencyByRemotePK(remotePK cipher.PubKey) float64 {
+	var latency float64
+	v.tpM.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		if tp.Remote() == remotePK {
+			latency = tp.GetLatency()
+			return false // stop walk
+		}
+		return true
+	})
+	return latency
+}
+
 // DiscoverTransportsByPK implements API.
 func (v *Visor) DiscoverTransportsByPK(pk cipher.PubKey) ([]*transport.Entry, error) {
 	tpD := v.tpDiscClient()
