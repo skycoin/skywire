@@ -550,6 +550,16 @@ func (s *PingServer) muxBwProbeLoop(
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			// Re-check ctx after the ticker fires. Without this, a
+			// ticker that landed in the same scheduler window as
+			// ctx.Done() causes the probe to call PingOnce *after*
+			// the pump goroutines' StopPingRoute defer has torn
+			// down the conn — producing trailing "no ping
+			// connection for ... call DialPing first" events at
+			// every run-end. Cosmetic but noisy.
+			if ctx.Err() != nil {
+				return
+			}
 			sequence++
 			latency, err := s.visor.PingOnce(probeConf)
 			elapsed := time.Since(pumpStart)
