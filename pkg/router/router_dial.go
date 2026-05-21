@@ -825,8 +825,32 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		return seed[i].pk.String() < seed[j].pk.String()
 	})
 
+	// pkInPath returns true if pk already appears as a From or To in
+	// the path (loop prevention). Per-path membership, not global —
+	// the same intermediate can appear in different paths at
+	// different depths.
+	pkInPath := func(pk cipher.PubKey, path []routing.Hop) bool {
+		if len(path) > 0 && path[0].From == pk {
+			return true
+		}
+		for _, h := range path {
+			if h.To == pk {
+				return true
+			}
+		}
+		return false
+	}
+
+	// expandedAtDepth caches which (pk, depth) pairs we've already
+	// expanded — avoids redundant work when multiple inbound paths
+	// converge on the same node at the same depth. State capped to
+	// O(|visors| × MaxHops), bounded by Config.MaxHops. Without this
+	// the search could revisit identical (node, depth) combinations
+	// exponentially; with it, each (node, depth) is expanded at most
+	// once and the BFS stays linear in graph size.
+	expandedAtDepth := make(map[cipher.PubKey]map[int]bool)
+
 	queue := seed
-	visited := map[cipher.PubKey]bool{src: true} // don't revisit src
 	for level := 1; level <= maxHops && len(queue) > 0; level++ {
 		nextQueue := make([]bfsNode, 0)
 		for _, node := range queue {
@@ -840,16 +864,22 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 			if level >= maxHops {
 				continue
 			}
-			// Don't revisit nodes (avoids loops; BFS preserves
-			// shortest-path so any later visit would be longer).
-			if visited[node.pk] {
-				continue
-			}
-			visited[node.pk] = true
 			// Skip excluded intermediates (DisjointMux).
 			if _, hit := excludeIntermediates[node.pk]; hit {
 				continue
 			}
+			// Skip if we've already expanded this (pk, depth) — same
+			// children would be produced. Different from the previous
+			// global visited[pk] check, which (incorrectly) blocked
+			// the same node at OTHER depths and could shadow longer
+			// paths when a shorter one existed.
+			if expandedAtDepth[node.pk][level] {
+				continue
+			}
+			if expandedAtDepth[node.pk] == nil {
+				expandedAtDepth[node.pk] = make(map[int]bool)
+			}
+			expandedAtDepth[node.pk][level] = true
 			// Expand: every transport from this node to a new neighbor
 			// becomes a candidate next node, sorted by remote-PK for
 			// deterministic order.
@@ -860,7 +890,11 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 					continue
 				}
 				nextPK := entry.RemoteEdge(node.pk)
-				if visited[nextPK] {
+				// Loop prevention: skip when the next PK is already
+				// part of this path. Per-path check (not global) —
+				// the same intermediate may legitimately appear in
+				// other paths at other depths.
+				if pkInPath(nextPK, node.path) {
 					continue
 				}
 				newPath := make([]routing.Hop, len(node.path), len(node.path)+1)
