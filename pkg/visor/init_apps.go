@@ -319,6 +319,8 @@ func (a *visorPingAdapter) PingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool
 		Tries:      conf.Tries,
 		PcktSize:   conf.PcktSize,
 		LocalRoute: conf.LocalRoute,
+		RouteIndex: conf.RouteIndex,
+		MinHops:    conf.MinHops,
 	}, echoFull)
 }
 
