@@ -193,11 +193,15 @@ func (v *Visor) GetRemoteDmsgServers(pk cipher.PubKey) ([]cipher.PubKey, error) 
 }
 
 // DmsgPing implements API. Measures round-trip time over dmsg connection.
+//
+// Mutex scope: same pattern as the skynet-side Ping — hold
+// dmsgPing.mu only for the map lookup, release before wire I/O.
+// Lets concurrent DmsgPing calls on different PKs proceed in
+// parallel instead of serializing through one global lock.
 func (v *Visor) DmsgPing(conf PingConfig) ([]time.Duration, error) {
 	v.dmsgPing.mu.Lock()
-	defer v.dmsgPing.mu.Unlock()
-
 	pingEntry, ok := v.dmsgPing.conns[conf.PK]
+	v.dmsgPing.mu.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
 	}
@@ -229,11 +233,12 @@ func (v *Visor) DmsgPingViaServer(conf PingConfig, serverPK cipher.PubKey) ([]ti
 }
 
 // DmsgPingOnce implements API. Performs a single ping over dmsg connection.
+//
+// See DmsgPing for mutex-scoping rationale.
 func (v *Visor) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
 	v.dmsgPing.mu.Lock()
-	defer v.dmsgPing.mu.Unlock()
-
 	pingEntry, ok := v.dmsgPing.conns[conf.PK]
+	v.dmsgPing.mu.Unlock()
 	if !ok {
 		return 0, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
 	}
@@ -292,11 +297,12 @@ func (v *Visor) DmsgPingOnce(conf PingConfig) (time.Duration, error) {
 // DmsgPingOnceWithEcho performs a single dmsg ping with optional full echo.
 // Returns bytes sent, bytes received, latency, and error.
 // If echoFull is true, server echoes full payload (for bandwidth testing).
+//
+// See DmsgPing for mutex-scoping rationale.
 func (v *Visor) DmsgPingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
 	v.dmsgPing.mu.Lock()
-	defer v.dmsgPing.mu.Unlock()
-
 	dmsgEntry, ok := v.dmsgPing.conns[conf.PK]
+	v.dmsgPing.mu.Unlock()
 	if !ok {
 		return 0, 0, 0, fmt.Errorf("no dmsg ping connection for %s, call DialDmsgPing first", conf.PK)
 	}

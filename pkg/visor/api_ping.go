@@ -115,11 +115,22 @@ func (v *Visor) DialPing(conf PingConfig) error {
 
 // Ping implements API.
 // Measures round-trip time by sending ping data and waiting for an echo response.
+//
+// The ping.mu lock protects v.ping.conns (a map) and is released
+// before any wire I/O so concurrent Ping/PingOnceWithEcho calls on
+// DIFFERENT PingRouteRefs (the mux-bw N-routes scenario) don't
+// serialize through one global mutex. The contract for callers
+// using the same RouteRef from multiple goroutines remains
+// "serialize externally" — the conn itself is a net.Conn and the
+// ping protocol's size→ack→data→echo handshake assumes a single
+// writer/reader pair per call. StopPing concurrent with this
+// method's wire I/O will close the conn; the resulting Read/Write
+// errors are caller-visible (and surfaced via MuxRouteFailure
+// for mux-bw — see #2756) rather than indefinite-block.
 func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	v.ping.mu.Lock()
-	defer v.ping.mu.Unlock()
-
 	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
+	v.ping.mu.Unlock()
 	if !ok {
 		return nil, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
@@ -181,11 +192,13 @@ func doPingRoundTrips(conn net.Conn, conf PingConfig) ([]time.Duration, error) {
 
 // PingOnce implements API.
 // Performs a single ping and returns the round-trip time.
+//
+// See Ping for the mutex-scoping rationale — same pattern: hold
+// ping.mu only for the map lookup, do wire I/O without the lock.
 func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 	v.ping.mu.Lock()
-	defer v.ping.mu.Unlock()
-
 	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
+	v.ping.mu.Unlock()
 	if !ok {
 		return 0, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
@@ -244,11 +257,21 @@ func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 // PingOnceWithEcho performs a single ping with optional full echo.
 // Returns bytes sent, bytes received, latency, and error.
 // If echoFull is true, server echoes full payload (for bandwidth testing).
+//
+// HOT PATH for mux-bw bandwidth measurements. Previously held
+// ping.mu for the entire wire roundtrip (~287ms at 2-hop with
+// 32 KB payloads), which globally serialized all N parallel pump
+// goroutines through one mutex — bytes-aggregate-across-N didn't
+// scale and per-route avg stayed pinned at ~351 kbps even though
+// peak per-call could hit ~1.7 Mbps. After this PR, the lock is
+// held only for the conns-map lookup; wire I/O on the chosen
+// conn runs unlocked, letting N pump goroutines on DIFFERENT
+// PingRouteRefs run truly in parallel. See Ping doc comment for
+// the conn-lifecycle contract.
 func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
 	v.ping.mu.Lock()
-	defer v.ping.mu.Unlock()
-
 	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
+	v.ping.mu.Unlock()
 	if !ok {
 		return 0, 0, 0, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
