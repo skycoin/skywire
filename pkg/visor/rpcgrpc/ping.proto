@@ -658,6 +658,13 @@ message MuxBandwidthEvent {
     // Error signals an unrecoverable condition. Last event before
     // stream close; same shape semantics as PingTreeServerError.
     MuxBandwidthError error = 14;
+    // RouteFailure fires when a route's pump goroutine exits with an
+    // error AFTER the route was established. Distinct from
+    // MuxRouteEstablished{failed:true,setup_err:...} which covers
+    // setup-phase failures. Carries the partial bytes shipped before
+    // the pump goroutine died so the consumer can attribute throughput
+    // contributions accurately.
+    MuxRouteFailure route_failure = 15;
   }
 }
 
@@ -676,6 +683,34 @@ message MuxRouteEstablished {
   // pump phase but kept in the event log for diagnostics.
   bool failed = 4;
   string setup_err = 5;
+}
+
+// MuxRouteFailure records a route's pump-phase exit-with-error.
+// Distinct from MuxRouteEstablished{failed:true} which covers
+// setup-phase failures. Pre-this event, pump goroutines that hit
+// PingOnceWithEcho errors silently exited and the route's bytes
+// contribution stopped accruing — operator-visible only as a
+// drop in MuxBandwidthSample.active_routes with no explanation.
+//
+// This event surfaces the cause: the first PingOnceWithEcho call
+// that fails terminates the route's pump goroutine, and we emit
+// one of these with the bytes shipped before the failure so the
+// consumer can compute per-route effective throughput.
+message MuxRouteFailure {
+  // RouteIndex is the same 0..Routes-1 index from the matching
+  // MuxRouteEstablished event.
+  int32 route_index = 1;
+  // ErrorMessage is the formatted error returned by the pump call.
+  string error_message = 2;
+  // BytesSentBeforeFailure / BytesReceivedBeforeFailure are the
+  // cumulative bytes the route had pumped up to the failure point.
+  // Zero is meaningful — indicates the first call after route
+  // establishment failed before any bytes shipped.
+  uint64 bytes_sent_before_failure = 3;
+  uint64 bytes_received_before_failure = 4;
+  // ElapsedNs is time since pump-start when the failure happened.
+  // Same epoch as MuxBandwidthSample.ElapsedNs.
+  int64 elapsed_ns = 5;
 }
 
 // MuxBandwidthSample is a periodic throughput snapshot. Cumulative
