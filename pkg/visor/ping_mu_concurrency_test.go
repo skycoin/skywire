@@ -54,6 +54,7 @@ func TestPingOnceWithEcho_DoesNotSerializeAcrossRouteIndexes(t *testing.T) {
 	for i := 0; i < goroutines; i++ {
 		go func(idx int) {
 			defer wg.Done()
+			//nolint:errcheck // intentionally discarded — this test asserts on wall-clock concurrency, not per-call success
 			_, _, _, _ = v.PingOnceWithEcho(PingConfig{
 				PK:         pk,
 				RouteIndex: idx, // distinct ref → distinct lookup
@@ -91,6 +92,7 @@ func TestPingMu_NotHeldDuringConnAbsentCallpath(t *testing.T) {
 	v := &Visor{ping: pingState{conns: make(map[PingRouteRef]ping), mu: &sync.Mutex{}}}
 	pk, _ := cipher.GenerateKeyPair()
 
+	//nolint:errcheck // intentionally discarded — this test asserts the mutex was released after return, not on the call result
 	_, _, _, _ = v.PingOnceWithEcho(PingConfig{PK: pk, RouteIndex: 0, PcktSize: 1}, false)
 
 	// Lock should be acquirable immediately. Use a short timeout
