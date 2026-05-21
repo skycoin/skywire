@@ -122,6 +122,17 @@ type pingTreeTotals struct {
 	currentInFlight int32 // tracked via atomic, snapshot to peak under mu
 }
 
+// levelStats accumulates per-BFS-level counters consumed by
+// levelDoneFor when emitting a LevelDone event. Separate from the
+// run-wide pingTreeTotals so each level's LevelDone reflects only
+// that level's results (was previously zero-filled because the
+// per-level breakdown wasn't being tracked anywhere).
+type levelStats struct {
+	succeeded     int32
+	failed        int32
+	skippedCached int32
+}
+
 func (t *pingTreeTotals) bumpInFlight(delta int32) {
 	cur := atomic.AddInt32(&t.currentInFlight, delta)
 	if delta > 0 {
@@ -227,11 +238,13 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 	}
 
 	// Ping level 1.
+	var level1Stats *levelStats
 	if !cfg.DryRun {
-		s.pingTreePingLevel(ctx, &cfg, 1, level1, totals, emit, emitStatus)
+		level1Stats = s.pingTreePingLevel(ctx, &cfg, 1, level1, totals, emit, emitStatus)
 	} else {
 		// Dry-run: mark every level-1 entry as "skipped" so the
 		// totals still tally.
+		level1Stats = &levelStats{}
 		for _, c := range level1 {
 			emit(&PingTreeEvent_PingResult{
 				PingResult: &PingTreeResult{
@@ -244,9 +257,10 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 				},
 			})
 			atomic.AddInt32(&totals.skippedCached, 1)
+			atomic.AddInt32(&level1Stats.skippedCached, 1)
 		}
 	}
-	level1Done := levelDoneFor(level1, 1)
+	level1Done := levelDoneFor(level1, 1, level1Stats)
 	emit(&PingTreeEvent_LevelDone{LevelDone: level1Done})
 
 	// Check ctx between levels — client-disconnect tear-down.
@@ -299,9 +313,11 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 			// the target level; everything in between is discovered
 			// for BFS continuation but not pinged.
 			shouldPing := !cfg.DryRun && (cfg.Hops == 0 || cfg.Hops == level)
+			var levelNStats *levelStats
 			if shouldPing {
-				s.pingTreePingLevel(ctx, &cfg, level, levelN, totals, emit, emitStatus)
+				levelNStats = s.pingTreePingLevel(ctx, &cfg, level, levelN, totals, emit, emitStatus)
 			} else {
+				levelNStats = &levelStats{}
 				for _, c := range levelN {
 					emit(&PingTreeEvent_PingResult{
 						PingResult: &PingTreeResult{
@@ -314,9 +330,10 @@ func (s *PingServer) StreamPingTree(req *PingTreeRequest, stream PingService_Str
 						},
 					})
 					atomic.AddInt32(&totals.skippedCached, 1)
+					atomic.AddInt32(&levelNStats.skippedCached, 1)
 				}
 			}
-			emit(&PingTreeEvent_LevelDone{LevelDone: levelDoneFor(levelN, level)})
+			emit(&PingTreeEvent_LevelDone{LevelDone: levelDoneFor(levelN, level, levelNStats)})
 
 			parentsByLevel[level] = pksFromCandidates(levelN)
 			// Free the previous level's parent set; not needed again.
@@ -394,9 +411,10 @@ func (s *PingServer) pingTreePingLevel(
 	totals *pingTreeTotals,
 	emit func(isPingTreeEvent_Payload),
 	emitStatus func(string, int32, int32, string),
-) {
+) *levelStats {
 	sem := make(chan struct{}, cfg.Concurrency)
 	var wg sync.WaitGroup
+	stats := &levelStats{}
 
 	var pending = int32(len(candidates)) //nolint:gosec // candidate count is bounded by BFS frontier, fits int32
 	emitStatus("pinging_level_"+itoa(level), 0, pending, "")
@@ -413,6 +431,7 @@ func (s *PingServer) pingTreePingLevel(
 			if result, hit := s.tryTransportLatencyFastPath(c); hit {
 				emit(&PingTreeEvent_PingResult{PingResult: result})
 				atomic.AddInt32(&totals.skippedCached, 1)
+				atomic.AddInt32(&stats.skippedCached, 1)
 				atomic.AddInt32(&pending, -1)
 				emitStatus(
 					"pinging_level_"+itoa(level),
@@ -445,13 +464,16 @@ func (s *PingServer) pingTreePingLevel(
 			atomic.AddInt32(&totals.pinged, 1)
 			if result.Failed {
 				atomic.AddInt32(&totals.failed, 1)
+				atomic.AddInt32(&stats.failed, 1)
 			} else {
 				atomic.AddInt32(&totals.succeeded, 1)
+				atomic.AddInt32(&stats.succeeded, 1)
 			}
 		}(c)
 	}
 
 	wg.Wait()
+	return stats
 }
 
 // tryTransportLatencyFastPath returns (result, true) when the
@@ -747,21 +769,17 @@ func pksFromCandidates(cs []pingTreeCandidate) map[string]bool {
 	return out
 }
 
-func levelDoneFor(candidates []pingTreeCandidate, level int) *PingTreeLevelDone {
-	// Note: at the moment we don't track per-level success/failure on
-	// totals (only run-wide). For LevelDone we compute the
-	// per-candidate-count as proxy for "attempted" — the per-level
-	// success/failed breakout would require an additional
-	// per-level totals struct. Acceptable initial fidelity; harness
-	// consumers can derive the same values by counting PingResult
-	// events between LevelDone boundaries.
-	return &PingTreeLevelDone{
+func levelDoneFor(candidates []pingTreeCandidate, level int, stats *levelStats) *PingTreeLevelDone {
+	ev := &PingTreeLevelDone{
 		Level:     int32(level),           //nolint:gosec // BFS level int fits int32
 		Attempted: int32(len(candidates)), //nolint:gosec // candidate count fits int32
-		// TODO: tally per-level Succeeded/Failed/SkippedCached when
-		// the use_transport_latency fast-path lands and the
-		// per-level distinction matters for that PR's tests.
 	}
+	if stats != nil {
+		ev.Succeeded = atomic.LoadInt32(&stats.succeeded)
+		ev.Failed = atomic.LoadInt32(&stats.failed)
+		ev.SkippedCached = atomic.LoadInt32(&stats.skippedCached)
+	}
+	return ev
 }
 
 // itoa is a 1-allocation int-to-string used in StatusUpdate phase
