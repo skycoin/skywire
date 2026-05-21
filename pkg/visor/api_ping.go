@@ -298,8 +298,15 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 
 	start := time.Now()
 
-	// Send size message
+	// Send size message. Write deadline matches the read deadline
+	// below — without it, a blocked TCP send buffer causes the
+	// call to hang indefinitely. That was the silent-pump-stall
+	// (task #127): mux-bw runs with 0 bytes pumped + 0
+	// MuxRouteFailure events emitted, because PingOnceWithEcho was
+	// stuck inside the Write rather than returning with an error.
+	conn.SetWriteDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	if _, err = conn.Write(size); err != nil {
+		conn.SetWriteDeadline(time.Time{}) //nolint:errcheck,gosec
 		return 0, 0, 0, fmt.Errorf("write size: %w", err)
 	}
 	bytesSent += uint64(len(size))
@@ -309,14 +316,17 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 	buf := make([]byte, 32*1024)
 	n, err := conn.Read(buf)
 	if err != nil {
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		conn.SetReadDeadline(time.Time{})  //nolint:errcheck,gosec
+		conn.SetWriteDeadline(time.Time{}) //nolint:errcheck,gosec
 		return bytesSent, bytesReceived, 0, fmt.Errorf("read ack: %w", err)
 	}
 	bytesReceived += uint64(n) //nolint:gosec
 
-	// Send ping data
+	// Send ping data. Same write-deadline rationale as above.
+	conn.SetWriteDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	if _, err = conn.Write(ping); err != nil {
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+		conn.SetReadDeadline(time.Time{})  //nolint:errcheck,gosec
+		conn.SetWriteDeadline(time.Time{}) //nolint:errcheck,gosec
 		return bytesSent, bytesReceived, 0, fmt.Errorf("write ping: %w", err)
 	}
 	bytesSent += uint64(len(ping))
@@ -344,7 +354,8 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 		}
 		bytesReceived += uint64(n) //nolint:gosec
 	}
-	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
+	conn.SetReadDeadline(time.Time{})  //nolint:errcheck,gosec
+	conn.SetWriteDeadline(time.Time{}) //nolint:errcheck,gosec
 
 	return bytesSent, bytesReceived, time.Since(start), nil
 }
