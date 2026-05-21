@@ -773,6 +773,17 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		}
 	}
 
+	// Skip the 2-hop fallback when the caller demands >2 hops.
+	// calculateLocalRoutes only knows how to build 1-hop and 2-hop
+	// paths; returning a 2-hop path here when min-hops>=3 was asked
+	// would silently violate the constraint (this was task #123 —
+	// the mux-bw --min-hops 3/4 runs that came back with hops_count=2
+	// despite the route-finder service having longer paths available).
+	if dialOpts != nil && dialOpts.MinHops > 2 {
+		return nil, nil, fmt.Errorf("local route calc cannot satisfy min_hops=%d (supports up to 2-hop only)",
+			dialOpts.MinHops)
+	}
+
 	// Try 2-hop routes through intermediate visors
 	for _, tp := range localTps {
 		intermediatePK := tp.remotePK
