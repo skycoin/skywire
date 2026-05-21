@@ -302,6 +302,13 @@ func muxBwEmitHumanRow(w io.Writer, ev *rpcgrpc.MuxBandwidthEvent, start time.Ti
 	case *rpcgrpc.MuxBandwidthEvent_Error:
 		e := p.Error
 		fmt.Fprintf(w, "[+%6.2fs] !!! error: %s: %s\n", elapsed, e.Code, e.Message) //nolint:errcheck
+	case *rpcgrpc.MuxBandwidthEvent_RouteFailure:
+		f := p.RouteFailure
+		//nolint:errcheck // human-mode log write; errors here aren't actionable
+		fmt.Fprintf(w, "[+%6.2fs] R%d ✗ pump-failed before=%s/%s err=%s\n",
+			elapsed, f.RouteIndex,
+			fmtBytes(f.BytesSentBeforeFailure), fmtBytes(f.BytesReceivedBeforeFailure),
+			f.ErrorMessage)
 	}
 }
 
@@ -326,9 +333,10 @@ func muxBwRenderHopPath(hops []*rpcgrpc.RouteHop) string {
 // ---------------------------------------------------------------------------
 
 type muxBwTracker struct {
-	routeSet []*rpcgrpc.MuxRouteEstablished
-	done     *rpcgrpc.MuxBandwidthDone
-	srvErr   string
+	routeSet     []*rpcgrpc.MuxRouteEstablished
+	routeFailure []*rpcgrpc.MuxRouteFailure
+	done         *rpcgrpc.MuxBandwidthDone
+	srvErr       string
 }
 
 func newMuxBwTracker() *muxBwTracker {
@@ -339,6 +347,8 @@ func (t *muxBwTracker) record(ev *rpcgrpc.MuxBandwidthEvent) {
 	switch p := ev.Payload.(type) {
 	case *rpcgrpc.MuxBandwidthEvent_RouteEstablished:
 		t.routeSet = append(t.routeSet, p.RouteEstablished)
+	case *rpcgrpc.MuxBandwidthEvent_RouteFailure:
+		t.routeFailure = append(t.routeFailure, p.RouteFailure)
 	case *rpcgrpc.MuxBandwidthEvent_Done:
 		t.done = p.Done
 	case *rpcgrpc.MuxBandwidthEvent_Error:
@@ -514,6 +524,8 @@ func classifyMuxBwEvent(ev *rpcgrpc.MuxBandwidthEvent) (string, proto.Message) {
 		return "done", p.Done
 	case *rpcgrpc.MuxBandwidthEvent_Error:
 		return "error", p.Error
+	case *rpcgrpc.MuxBandwidthEvent_RouteFailure:
+		return "route_failure", p.RouteFailure
 	}
 	return "unknown", &rpcgrpc.MuxBandwidthError{}
 }
