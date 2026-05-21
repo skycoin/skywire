@@ -235,7 +235,7 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		go func(rs *muxBwRouteState) {
 			defer pumpWg.Done()
 			defer rs.activeFlag.Store(false)
-			s.muxBwPumpRoute(pumpCtx, &cfg, rs)
+			s.muxBwPumpRoute(pumpCtx, &cfg, rs, pumpStart, emit)
 		}(r)
 	}
 
@@ -407,6 +407,8 @@ func (s *PingServer) muxBwPumpRoute(
 	ctx context.Context,
 	cfg *muxBwCfg,
 	rs *muxBwRouteState,
+	pumpStart time.Time,
+	emit func(isMuxBandwidthEvent_Payload),
 ) {
 	conf := PingConf{
 		PK:         cfg.TargetPK,
@@ -433,16 +435,45 @@ func (s *PingServer) muxBwPumpRoute(
 		bytesSent, bytesRecvd, _, err := s.visor.PingOnceWithEcho(conf, true)
 		if err != nil {
 			// One stalled route doesn't tear down the run — the
-			// other routes can keep pumping. Log via the visor's
-			// own logger (handler is server-side; no per-route
-			// emit channel to surface this without adding event
-			// noise). A future enhancement could emit a
-			// route-level error event.
+			// other routes can keep pumping. Surface the failure
+			// via a MuxRouteFailure event so the consumer can see
+			// WHY this route's contribution stopped (previously
+			// silently logged to the visor's debug log only — the
+			// 2026-05-21 mux-via-intermediates measurement was
+			// blocked because pump errors were invisible on the
+			// wire, leaving the operator unable to attribute zero
+			// throughput to a specific cause).
+			//
+			// ctx.Err() != nil indicates the pump's deadline fired
+			// while the call was in-flight — that's not a route
+			// failure, it's a clean shutdown. Skip the event in
+			// that case.
+			if ctx.Err() == nil {
+				emit(&MuxBandwidthEvent_RouteFailure{
+					RouteFailure: buildRouteFailureEvent(rs, err, pumpStart),
+				})
+			}
 			s.log.Debugf("StreamMuxBandwidth: route %d pump error: %v", rs.index, err)
 			return
 		}
 		rs.bytesSent.Add(bytesSent)
 		rs.bytesRecv.Add(bytesRecvd)
+	}
+}
+
+// buildRouteFailureEvent constructs a MuxRouteFailure proto from the
+// pump-route state + the error that caused pumpRoute to exit. Split
+// out from the inline emit site so the field-population semantics
+// are unit-testable without standing up a PingServer + VisorAPI
+// mock. ElapsedNs is captured at emit time so the consumer can see
+// where in the pump window the failure landed.
+func buildRouteFailureEvent(rs *muxBwRouteState, err error, pumpStart time.Time) *MuxRouteFailure {
+	return &MuxRouteFailure{
+		RouteIndex:                 int32(rs.index), //nolint:gosec // route index fits int32
+		ErrorMessage:               err.Error(),
+		BytesSentBeforeFailure:     rs.bytesSent.Load(),
+		BytesReceivedBeforeFailure: rs.bytesRecv.Load(),
+		ElapsedNs:                  time.Since(pumpStart).Nanoseconds(),
 	}
 }
 
