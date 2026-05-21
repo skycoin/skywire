@@ -439,6 +439,24 @@ func (m *muxBwTUIModel) applyEvent(ev *rpcgrpc.MuxBandwidthEvent) {
 		e := p.Error
 		m.serverError = fmt.Sprintf("%s: %s", e.Code, e.Message)
 		m.appendEvent(0, "error", e.Message)
+
+	case *rpcgrpc.MuxBandwidthEvent_RouteFailure:
+		f := p.RouteFailure
+		// Mark the route as no-longer-pumping in the per-route
+		// state so the operator sees R3 transition out of
+		// "established" status with an explicit reason rather
+		// than silently dropping from active_routes.
+		if int(f.RouteIndex) >= 0 && int(f.RouteIndex) < len(m.routes) {
+			m.routes[f.RouteIndex].failed = true
+			m.routes[f.RouteIndex].established = false
+			m.routes[f.RouteIndex].setupErr = f.ErrorMessage
+		}
+		m.appendEvent(f.ElapsedNs, "route_failure",
+			fmt.Sprintf("R%d pump-failed (sent=%s recv=%s before fail): %s",
+				f.RouteIndex,
+				formatBytes(f.BytesSentBeforeFailure),
+				formatBytes(f.BytesReceivedBeforeFailure),
+				f.ErrorMessage))
 	}
 }
 

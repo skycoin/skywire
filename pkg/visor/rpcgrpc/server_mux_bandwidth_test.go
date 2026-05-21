@@ -1,6 +1,7 @@
 package rpcgrpc
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -192,4 +193,61 @@ func TestMuxBwRouteStateAtomics(t *testing.T) {
 	if rs.activeFlag.Load() {
 		t.Errorf("activeFlag should be false after Store(false)")
 	}
+}
+
+// TestBuildRouteFailureEvent pins the field-population semantics of
+// the MuxRouteFailure builder. The builder is the only logic between
+// detecting PingOnceWithEcho's error and emitting the route_failure
+// event on the wire — testing it directly avoids standing up a full
+// VisorAPI mock just to verify field shapes.
+//
+// Regression target: pre-this-event, pump errors were silently
+// logged to s.log.Debugf and the pump goroutine returned, leaving
+// the operator unable to distinguish "established but never
+// delivered bytes" from "delivered some bytes then died" — both
+// surfaced as a drop in active_routes with no event.
+func TestBuildRouteFailureEvent(t *testing.T) {
+	t.Run("populates index + error + cumulative bytes", func(t *testing.T) {
+		rs := &muxBwRouteState{index: 3}
+		rs.bytesSent.Store(12345)
+		rs.bytesRecv.Store(11000)
+
+		ev := buildRouteFailureEvent(rs, errors.New("EOF"), time.Now().Add(-2*time.Second))
+		if ev.RouteIndex != 3 {
+			t.Errorf("RouteIndex = %d, want 3", ev.RouteIndex)
+		}
+		if ev.ErrorMessage != "EOF" {
+			t.Errorf("ErrorMessage = %q, want %q", ev.ErrorMessage, "EOF")
+		}
+		if ev.BytesSentBeforeFailure != 12345 {
+			t.Errorf("BytesSentBeforeFailure = %d, want 12345", ev.BytesSentBeforeFailure)
+		}
+		if ev.BytesReceivedBeforeFailure != 11000 {
+			t.Errorf("BytesReceivedBeforeFailure = %d, want 11000", ev.BytesReceivedBeforeFailure)
+		}
+		// Should reflect ~2s elapsed since pumpStart (loose bound for clock variance).
+		if ev.ElapsedNs < int64(1500*time.Millisecond) || ev.ElapsedNs > int64(3*time.Second) {
+			t.Errorf("ElapsedNs = %d (~%.2fs), want ≈ 2s", ev.ElapsedNs, float64(ev.ElapsedNs)/1e9)
+		}
+	})
+
+	t.Run("zero bytes before first-call failure is the common case", func(t *testing.T) {
+		// First PingOnceWithEcho returns err before any bytes shipped.
+		// This is the dominant repro on the 2026-05-21 mux-via-
+		// intermediates measurements: route established, pump enters
+		// loop, first call fails with "no route" / "i/o timeout" /
+		// "route_group closed". Consumers need to distinguish
+		// "established but never delivered" from "delivered some
+		// bytes then died" — both happen but have different
+		// implications for the operator's tuning decisions.
+		rs := &muxBwRouteState{index: 0}
+		ev := buildRouteFailureEvent(rs, errors.New("route_group closed"), time.Now())
+		if ev.BytesSentBeforeFailure != 0 || ev.BytesReceivedBeforeFailure != 0 {
+			t.Errorf("expected zero bytes for first-call failure; got sent=%d recv=%d",
+				ev.BytesSentBeforeFailure, ev.BytesReceivedBeforeFailure)
+		}
+		if ev.ErrorMessage == "" {
+			t.Error("ErrorMessage must be populated even when bytes are zero")
+		}
+	})
 }
