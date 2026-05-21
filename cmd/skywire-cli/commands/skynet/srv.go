@@ -191,7 +191,13 @@ Examples:
 
 			stopped := 0
 			for _, state := range states {
-				if strings.HasPrefix(state.Name, "skynet-") && state.Status == appserver.AppStatusRunning {
+				// Match by Binary so custom-named srv instances are
+				// included AND skynet-client apps (which also start
+				// with "skynet-") are excluded. Same fix as the status
+				// listing — and important here because a bulk `srv
+				// stop` was previously also stopping any running
+				// skynet-client apps under default naming.
+				if state.Binary == skynetBinaryName && state.Status == appserver.AppStatusRunning {
 					if err := rpcClient.StopApp(state.Name); err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to stop %s: %v\n", state.Name, err)
 					} else {
@@ -252,18 +258,26 @@ Examples:
 		found := false
 
 		for _, state := range states {
-			// Match skynet-* apps or exact filter match
-			isSkynetServer := strings.HasPrefix(state.Name, "skynet-") || state.Name == "skynet"
+			// Match by Binary field so the listing finds custom-
+			// named srv instances started with `cli skynet srv start
+			// --name X`. Also tightens against false positives — the
+			// name-prefix "skynet-" matched any app starting with
+			// that string (including skynet-client clients started
+			// with default naming), surfacing CLIENT apps in the SRV
+			// status output.
+			isSkynetServer := state.Binary == skynetBinaryName
 			matchesFilter := filterName == "" || state.Name == filterName
 
 			if isSkynetServer && matchesFilter {
 				found = true
 				status := "stopped"
-				if state.Status == appserver.AppStatusRunning {
+				switch state.Status {
+				case appserver.AppStatusRunning:
 					status = "running"
-				}
-				if state.Status == appserver.AppStatusErrored {
+				case appserver.AppStatusErrored:
 					status = "errored"
+				case appserver.AppStatusStarting:
+					status = "starting"
 				}
 
 				jsonStatus := serverStatus{

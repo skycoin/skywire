@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -225,7 +224,9 @@ Examples:
 
 			stopped := 0
 			for _, state := range states {
-				if strings.HasPrefix(state.Name, "skynet-client-") && state.Status == appserver.AppStatusRunning {
+				// Match by Binary so custom-named clients (--name) are
+				// included — same fix as the status listing.
+				if state.Binary == skynetClientBinaryName && state.Status == appserver.AppStatusRunning {
 					if err := rpcClient.StopApp(state.Name); err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to stop %s: %v\n", state.Name, err)
 					} else {
@@ -286,18 +287,27 @@ Examples:
 		found := false
 
 		for _, state := range states {
-			// Match skynet-client-* apps or exact filter match
-			isSkynetClient := strings.HasPrefix(state.Name, "skynet-client-") || state.Name == "skynet-client"
+			// Match by Binary field — AddApp sets AppConfig.Binary
+			// to the literal binary name regardless of the operator-
+			// provided --name. The legacy name-prefix match missed
+			// any client started with `cli skynet start --name X`
+			// where X doesn't start with "skynet-client-" — so the
+			// status listing claimed "No skynet clients configured"
+			// while `cli visor app ls` clearly showed a running
+			// skynet-client app under the operator's chosen name.
+			isSkynetClient := state.Binary == skynetClientBinaryName
 			matchesFilter := filterName == "" || state.Name == filterName
 
 			if isSkynetClient && matchesFilter {
 				found = true
 				status := "stopped"
-				if state.Status == appserver.AppStatusRunning {
+				switch state.Status {
+				case appserver.AppStatusRunning:
 					status = "running"
-				}
-				if state.Status == appserver.AppStatusErrored {
+				case appserver.AppStatusErrored:
 					status = "errored"
+				case appserver.AppStatusStarting:
+					status = "starting"
 				}
 
 				jsonStatus := clientStatus{
