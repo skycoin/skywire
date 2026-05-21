@@ -136,6 +136,8 @@ func formatAppList(states []*appserver.AppState) ([]appLsState, string) {
 			status = "running"
 		case appserver.AppStatusErrored:
 			status = "errored"
+		case appserver.AppStatusStarting:
+			status = "starting"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%t\t%s\t%s\n", //nolint:errcheck
 			state.Name, strconv.Itoa(int(state.Port)),
