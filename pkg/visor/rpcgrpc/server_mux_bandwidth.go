@@ -199,19 +199,32 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 	idleProbeSamples := make([]int64, 0)
 	var idleProbesMu sync.Mutex
 	if cfg.IdleBaselineDuration > 0 && cfg.ProbeRTT {
-		idleCtx, idleCancel := context.WithTimeout(ctx, cfg.IdleBaselineDuration)
-		idleStart := time.Now()
-		idleWg := &sync.WaitGroup{}
-		idleWg.Add(1)
-		go func() {
-			defer idleWg.Done()
-			// Reuse the existing probe loop; it doesn't care whether
-			// a pump is concurrently running — passing only the idle
-			// samples slice means accumulator-direction is correct.
-			s.muxBwProbeLoop(idleCtx, &cfg, idleStart, &idleProbesMu, &idleProbeSamples, emit)
-		}()
-		idleWg.Wait()
-		idleCancel()
+		// Find the first established route for the idle probe.
+		// Same selection as the loaded-phase probe below — we want
+		// both phases riding the same route so the queueing-delay
+		// comparison is apples-to-apples.
+		idleProbeIndex := -1
+		for _, r := range routes {
+			if r.established.Load() {
+				idleProbeIndex = r.index
+				break
+			}
+		}
+		if idleProbeIndex >= 0 {
+			idleCtx, idleCancel := context.WithTimeout(ctx, cfg.IdleBaselineDuration)
+			idleStart := time.Now()
+			idleWg := &sync.WaitGroup{}
+			idleWg.Add(1)
+			go func() {
+				defer idleWg.Done()
+				// Reuse the existing probe loop; it doesn't care whether
+				// a pump is concurrently running — passing only the idle
+				// samples slice means accumulator-direction is correct.
+				s.muxBwProbeLoop(idleCtx, &cfg, idleProbeIndex, idleStart, &idleProbesMu, &idleProbeSamples, emit)
+			}()
+			idleWg.Wait()
+			idleCancel()
+		}
 	}
 
 	// Phase 2: pump bytes through each established route + run the
@@ -248,7 +261,12 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 
 	// Probe (optional).
 	if cfg.ProbeRTT {
-		// Find first established route for the probe.
+		// Find first established route for the probe — pass its
+		// RouteIndex into muxBwProbeLoop so the probe rides the
+		// same conn as the actual established route. Previously the
+		// probe hardcoded RouteIndex 0; when only a non-zero route
+		// established (e.g. Phase D where only R2 came up out of
+		// N=8) every probe failed with "no ping connection".
 		var probeTarget *muxBwRouteState
 		for _, r := range routes {
 			if r.established.Load() {
@@ -258,10 +276,10 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		}
 		if probeTarget != nil {
 			pumpWg.Add(1)
-			go func() {
+			go func(idx int) {
 				defer pumpWg.Done()
-				s.muxBwProbeLoop(pumpCtx, &cfg, pumpStart, &probesMu, &probeSamples, emit)
-			}()
+				s.muxBwProbeLoop(pumpCtx, &cfg, idx, pumpStart, &probesMu, &probeSamples, emit)
+			}(probeTarget.index)
 		}
 	}
 
@@ -560,6 +578,7 @@ func (s *PingServer) muxBwSamplerLoop(
 func (s *PingServer) muxBwProbeLoop(
 	ctx context.Context,
 	cfg *muxBwCfg,
+	routeIndex int,
 	pumpStart time.Time,
 	probesMu *sync.Mutex,
 	probesOut *[]int64,
@@ -573,6 +592,13 @@ func (s *PingServer) muxBwProbeLoop(
 		Tries:      1,
 		PcktSize:   1, // 1 KB probe — small enough to not contribute meaningfully to load
 		LocalRoute: cfg.LocalRoute,
+		// Probe must use the same RouteIndex as the established
+		// route being measured. Hardcoding RouteIndex 0 made every
+		// probe fail with "no ping connection" whenever the first
+		// established route happened to be at a non-zero index
+		// (Phase D's 1-of-8 case where only R2 came up). Caller
+		// passes the route index it picked.
+		RouteIndex: routeIndex,
 	}
 	var sequence int64
 
