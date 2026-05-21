@@ -115,8 +115,8 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		return err
 	}
 
-	appCl.Log().Infof("Connecting to %s:%d, forwarding to localhost:%d",
-		remotePK.Hex(), remotePort, localPort)
+	appCl.Log().Infof("Setting up accept loop on localhost:%d → %s:%d",
+		localPort, remotePK.Hex(), remotePort)
 
 	// Set routing port if specified
 	if appPort != 0 {
@@ -125,9 +125,14 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 
 	setAppStatus(appCl, appserver.AppDetailedStatusStarting)
 
-	// Connect to remote skynet server
-	// Use SkyForwardingServerPort (47) which is the built-in visor service
-	// This avoids noise handshake race conditions that occur with app-layer connections
+	// Build a dial factory the client calls per-accept. The factory
+	// captures appCl + remote endpoint so each local connection gets
+	// its own independent remote tunnel — necessary because the
+	// skynet wire is raw bytes with no per-connection framing, so
+	// concurrent (or even tightly-sequenced) local conns sharing a
+	// single remoteConn would interleave their payloads. Using
+	// SkyForwardingServerPort (47, built-in visor service) avoids
+	// the noise-handshake race condition that hits app-layer dials.
 	connApp := appnet.Addr{
 		Net:    netType,
 		PubKey: remotePK,
@@ -135,37 +140,25 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	}
 
 	if routes > 1 {
-		appCl.Log().Infof("Dialing %s on port %d with %d parallel mux routes",
+		appCl.Log().Infof("Per-accept dial shape: %s on port %d with %d parallel mux routes",
 			remotePK.Hex(), skyenv.SkyForwardingServerPort, routes)
 	} else {
-		appCl.Log().Infof("Dialing %s on port %d", remotePK.Hex(), skyenv.SkyForwardingServerPort)
+		appCl.Log().Infof("Per-accept dial shape: %s on port %d",
+			remotePK.Hex(), skyenv.SkyForwardingServerPort)
 	}
 
-	var (
-		conn net.Conn
-		err  error
-	)
-	if routes > 1 {
-		conn, err = appCl.DialWithOptions(connApp, routes)
-	} else {
-		conn, err = appCl.Dial(connApp)
-	}
-	if err != nil {
-		setAppError(appCl, fmt.Errorf("failed to connect to server: %w", err))
-		return fmt.Errorf("failed to connect to server: %w", err)
+	dialRemote := func() (net.Conn, error) {
+		if routes > 1 {
+			return appCl.DialWithOptions(connApp, routes)
+		}
+		return appCl.Dial(connApp)
 	}
 
-	// Create client
-	client := skynet.NewClient(appCl.Log(), remotePK, remotePort, localPort)
+	// Create client with the dial factory; Serve binds the local
+	// listener and runs the accept loop.
+	client := skynet.NewClient(appCl.Log(), remotePK, remotePort, localPort, dialRemote)
 
-	// Connect (send request to server)
-	if err := client.Connect(conn); err != nil {
-		setAppError(appCl, err)
-		appCl.Log().WithError(err).Error("Failed to connect to remote server")
-		return err
-	}
-
-	appCl.Log().Info("Connected to remote skynet server")
+	appCl.Log().Info("Skynet client ready — waiting for local connections")
 	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
 
 	// Handle shutdown
