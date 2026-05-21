@@ -596,7 +596,11 @@ func pathTouchesIntermediate(path []routing.Hop, exclude map[cipher.PubKey]struc
 
 // calculateLocalRoutes attempts to calculate routes locally using the transport manager
 // and transport discovery data, without relying on the route finder service.
-// It supports 1-hop (direct), 2-hop routes, and self-ping (src == dst).
+// Supports 1-hop (direct), self-ping (src == dst), and N-hop routes via BFS over
+// the local transport graph (bounded by Config.MaxHops). MinHops/ExcludeIntermediatePKs
+// from DialOptions are honored — set MinHops > 1 to skip direct, and populate
+// ExcludeIntermediatePKs to enforce DisjointMux. BFS expansion ordering is
+// deterministic (sorted by remote-PK string) so the same inputs yield the same path.
 func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
 	if log == nil {
 		log = r.logger
@@ -773,58 +777,139 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		}
 	}
 
-	// Skip the 2-hop fallback when the caller demands >2 hops.
-	// calculateLocalRoutes only knows how to build 1-hop and 2-hop
-	// paths; returning a 2-hop path here when min-hops>=3 was asked
-	// would silently violate the constraint (this was task #123 —
-	// the mux-bw --min-hops 3/4 runs that came back with hops_count=2
-	// despite the route-finder service having longer paths available).
-	if dialOpts != nil && dialOpts.MinHops > 2 {
-		return nil, nil, fmt.Errorf("local route calc cannot satisfy min_hops=%d (supports up to 2-hop only)",
-			dialOpts.MinHops)
+	// BFS over the local transport graph to find a path whose length
+	// is within [minHops, maxHops]. Replaces the previous "1-hop or
+	// 2-hop only" logic so the local-route fast path can serve
+	// deterministic multi-hop runs (mux-bw --local-route --min-hops 3+
+	// for hop-by-hop measurement work). The BFS visits levels in
+	// increasing order of hop count and returns the FIRST path
+	// satisfying minHops, so paths returned are always shortest-
+	// acceptable. Determinism: at each expansion the children are
+	// sorted by intermediate-PK string before enqueueing, so the
+	// same (src, dst, minHops, maxHops, transport graph) tuple
+	// always yields the same path.
+	minHops := 2
+	if dialOpts != nil && dialOpts.MinHops > 0 {
+		minHops = dialOpts.MinHops
+	}
+	// MaxHops is taken from the router-wide config (DialOptions
+	// doesn't currently expose a per-call ceiling). Default to 7 if
+	// somehow zero — bounds the BFS so it can't run away over a
+	// large transport graph.
+	maxHops := int(r.conf.MaxHops)
+	if maxHops == 0 {
+		maxHops = 7
 	}
 
-	// Try 2-hop routes through intermediate visors
+	type bfsNode struct {
+		pk   cipher.PubKey
+		path []routing.Hop
+	}
+
+	// Seed the BFS with the local transports (each is a 1-hop path
+	// from src to a direct neighbor). Sort for determinism — same
+	// seeding order across calls means same expansion order.
+	seed := make([]bfsNode, 0, len(localTps))
 	for _, tp := range localTps {
-		intermediatePK := tp.remotePK
-
-		// DisjointMux: skip candidates routed through an intermediate
-		// that's already used by another route in the mux set.
-		if _, hit := excludeIntermediates[intermediatePK]; hit {
-			log.Debugf("Skipping intermediate %s (in ExcludeIntermediatePKs)", intermediatePK)
+		if _, hit := excludeIntermediates[tp.remotePK]; hit {
 			continue
 		}
+		seed = append(seed, bfsNode{
+			pk: tp.remotePK,
+			path: []routing.Hop{
+				{TpID: tp.id, From: src, To: tp.remotePK},
+			},
+		})
+	}
+	sort.SliceStable(seed, func(i, j int) bool {
+		return seed[i].pk.String() < seed[j].pk.String()
+	})
 
-		// Look up transports from cache (built from single GetAllTransports call)
-		intermediateEntries := transportsByEdge[intermediatePK]
-		if len(intermediateEntries) == 0 {
-			continue
-		}
-
-		// Check if any of the intermediate visor's transports connect to our destination
-		for _, entry := range intermediateEntries {
-			if entry == nil {
+	queue := seed
+	visited := map[cipher.PubKey]bool{src: true} // don't revisit src
+	for level := 1; level <= maxHops && len(queue) > 0; level++ {
+		nextQueue := make([]bfsNode, 0)
+		for _, node := range queue {
+			// Did we reach the destination at an acceptable depth?
+			if node.pk == dst && level >= minHops {
+				log.Debugf("Local BFS found %d-hop route via %v", level, hopPath(node.path))
+				return node.path, reverseHops(node.path), nil
+			}
+			// Stop expanding nodes already at maxHops — children would
+			// exceed the cap.
+			if level >= maxHops {
 				continue
 			}
-			// Check if this transport connects to our destination
-			remotePK := entry.RemoteEdge(intermediatePK)
-			if remotePK == dst {
-				log.Debugf("Found 2-hop route via %s (tp1=%s, tp2=%s)", intermediatePK, tp.id, entry.ID)
-
-				// Build forward route: src -> intermediate -> dst
-				fwdHop1 := routing.Hop{TpID: tp.id, From: src, To: intermediatePK}
-				fwdHop2 := routing.Hop{TpID: entry.ID, From: intermediatePK, To: dst}
-
-				// Build reverse route: dst -> intermediate -> src
-				revHop1 := routing.Hop{TpID: entry.ID, From: dst, To: intermediatePK}
-				revHop2 := routing.Hop{TpID: tp.id, From: intermediatePK, To: src}
-
-				return []routing.Hop{fwdHop1, fwdHop2}, []routing.Hop{revHop1, revHop2}, nil
+			// Don't revisit nodes (avoids loops; BFS preserves
+			// shortest-path so any later visit would be longer).
+			if visited[node.pk] {
+				continue
 			}
+			visited[node.pk] = true
+			// Skip excluded intermediates (DisjointMux).
+			if _, hit := excludeIntermediates[node.pk]; hit {
+				continue
+			}
+			// Expand: every transport from this node to a new neighbor
+			// becomes a candidate next node, sorted by remote-PK for
+			// deterministic order.
+			entries := transportsByEdge[node.pk]
+			children := make([]bfsNode, 0, len(entries))
+			for _, entry := range entries {
+				if entry == nil {
+					continue
+				}
+				nextPK := entry.RemoteEdge(node.pk)
+				if visited[nextPK] {
+					continue
+				}
+				newPath := make([]routing.Hop, len(node.path), len(node.path)+1)
+				copy(newPath, node.path)
+				newPath = append(newPath, routing.Hop{
+					TpID: entry.ID,
+					From: node.pk,
+					To:   nextPK,
+				})
+				children = append(children, bfsNode{pk: nextPK, path: newPath})
+			}
+			sort.SliceStable(children, func(i, j int) bool {
+				return children[i].pk.String() < children[j].pk.String()
+			})
+			nextQueue = append(nextQueue, children...)
 		}
+		queue = nextQueue
 	}
 
-	return nil, nil, errors.New("no route found through local transports")
+	return nil, nil, fmt.Errorf("local BFS found no path to %s with min_hops=%d max_hops=%d", dst, minHops, maxHops)
+}
+
+// reverseHops builds the reverse path of a forward route by walking
+// the forward hops in reverse order and swapping From/To on each.
+// Used by calculateLocalRoutes since the local BFS only produces the
+// forward direction.
+func reverseHops(fwd []routing.Hop) []routing.Hop {
+	rev := make([]routing.Hop, len(fwd))
+	for i, h := range fwd {
+		rev[len(fwd)-1-i] = routing.Hop{
+			TpID: h.TpID,
+			From: h.To,
+			To:   h.From,
+		}
+	}
+	return rev
+}
+
+// hopPath renders a hops list as "pk1→pk2→…→pkN" for log lines.
+// Used to make BFS-found routes inspectable in the visor journal.
+func hopPath(path []routing.Hop) string {
+	if len(path) == 0 {
+		return ""
+	}
+	out := path[0].From.String()
+	for _, h := range path {
+		out += "→" + h.To.String()
+	}
+	return out
 }
 
 // establishMuxRoutes attempts to establish additional parallel routes for a mux-enabled
