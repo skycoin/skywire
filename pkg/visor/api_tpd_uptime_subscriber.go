@@ -1,189 +1,51 @@
 // Package visor pkg/visor/api_tpd_uptime_subscriber.go
 //
-// Visor-side CXO subscriber for TPD's network-wide visor-uptime
-// feed (the publisher lives in
-// pkg/transport-discovery/api/cxo_uptime_publisher.go and serves on
-// skyenv.DmsgTPDUptimeCXOPort).
+// Reader-side helper for TPD's network-wide visor-uptime feed. The
+// CXO subscription lives in the unified CXOSubscriptionManager (see
+// cxo_subscription_manager.go); this file is a thin facade that
+// AcquireFor's the relevant tab and serves the cached blob.
 //
-// Lazily-created the first time the hvui Network Uptime tab asks
-// for fleet uptime; once running it stays connected and receives
-// Root updates on the publisher's recompute cadence (~60s). The
-// hvui handler reads via FetchVisorUptimeCXO; on a cache miss the
-// handler falls back to DMSG-HTTP and finally HTTP, so the tab
-// works on every deployment regardless of whether the publisher is
-// available.
-//
-// "Run on demand" semantics: nothing dials TPD until a hypervisor
-// actually asks for fleet uptime data. After the first dial the
-// subscriber sticks around so subsequent fetches are a local
-// memory read; the alternative — a fresh dial-and-tear-down per
-// hvui open — would burn a DMSG handshake every minute.
+// Pre-task-#134 this file owned its own standalone Subscriber that
+// bound DmsgTPDUptimeCXOPort directly. That subscriber raced with
+// the unified manager for the same DMSG port, causing one of them
+// to fail with "dmsg listen on port 52: port already occupied". The
+// duplication is gone now — there's a single subscriber per CXO
+// port, owned by the manager.
 package visor
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/skycoin/skywire/pkg/cxo/treestore"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-// connectTimeout bounds how long we'll block in the CXO Connect dial
-// before treating it as a cache miss. The publisher's listener
-// shouldn't take more than a single dmsg round-trip to ack, so 3s
-// is generous. When TPD's CXO publisher is down (e.g. TPD is
-// panicking) the dial otherwise hangs indefinitely under
-// dmsg.ConnectPK — and the surrounding handler chain never falls
-// through to its DMSG-HTTP / HTTP fallbacks. Keeping it short means
-// the operator's first hvui open during a TPD outage costs ~3s
-// rather than 5s before falling through.
-const connectTimeout = 3 * time.Second
-
-// connectCooldown throttles re-dials after a failed Connect. Without
-// it every hvui open of the Network Uptime tab would re-trigger the
-// 5s wait while the publisher is still down — burning the operator's
-// time and adding flap pressure.
-const connectCooldown = 30 * time.Second
-
 // ErrTPDUptimeNotReady is returned by FetchVisorUptimeCXO when the
-// local subscriber hasn't received a payload for the requested day
-// window yet (subscriber not yet running, hasn't received any Root,
-// or TPD hasn't published this window). Callers should fall back
-// to the HTTP path on this error.
+// local manager has no snapshot for the requested day window yet
+// (manager not initialized, first cycle hasn't completed, or TPD
+// hasn't published that window). Callers should fall back to the
+// HTTP path on this error.
 var ErrTPDUptimeNotReady = errors.New("tpd uptime: cxo cache miss")
 
-// tpdUptimeSubscriber is the long-lived state for the TPD-uptime
-// subscriber. Created lazily on the first FetchVisorUptimeCXO call
-// (via ensureTPDUptimeSubscriber) and kept alive for the visor's
-// lifetime.
-type tpdUptimeSubscriber struct {
-	sub        *treestore.Subscriber
-	lastRootAt time.Time
-}
-
 // FetchVisorUptimeCXO returns the cached visor-uptime blob for the
-// given day window from the TPD CXO subscriber. (bytes, lastRootAt,
-// nil) on a hit; (nil, zero, ErrTPDUptimeNotReady) when the cache
-// has nothing for that path yet.
+// given day window. (bytes, lastRootAt, nil) on a hit; (nil, zero,
+// ErrTPDUptimeNotReady) when the cache has nothing for that path
+// yet.
 //
 // `days` should be one of the values the TPD publisher writes
 // (currently 1, 7, 30); other values always miss because the
 // publisher doesn't write them.
 func (v *Visor) FetchVisorUptimeCXO(days int) ([]byte, time.Time, error) {
-	state, err := v.ensureTPDUptimeSubscriber()
-	if err != nil {
-		return nil, time.Time{}, err
-	}
-	if state == nil || state.sub == nil {
+	mgr := v.CXOSubMgr()
+	if mgr == nil {
 		return nil, time.Time{}, ErrTPDUptimeNotReady
 	}
+	mgr.AcquireFor(TabUptime)
+	defer mgr.ReleaseFor(TabUptime)
+
 	path := fmt.Sprintf("uptimes/days/%d", days)
-	body, ok := state.sub.Get(path)
+	body, ts, ok := mgr.Get(FeedTPDUptime, path)
 	if !ok || len(body) == 0 {
 		return nil, time.Time{}, ErrTPDUptimeNotReady
 	}
-	v.tpdUptimeSubMu.RLock()
-	ts := state.lastRootAt
-	v.tpdUptimeSubMu.RUnlock()
 	return body, ts, nil
-}
-
-// ensureTPDUptimeSubscriber lazily constructs the subscriber on
-// first use. Returns nil + nil when the visor has no DMSG client or
-// no parseable TPD CXO peer (the caller treats both as a cache miss
-// and falls through to HTTP). When a recent Connect attempt failed
-// we short-circuit on the cooldown so successive hvui opens don't
-// re-pay the connectTimeout while TPD's publisher is still down.
-func (v *Visor) ensureTPDUptimeSubscriber() (*tpdUptimeSubscriber, error) {
-	v.tpdUptimeSubMu.RLock()
-	state := v.tpdUptimeSub
-	v.tpdUptimeSubMu.RUnlock()
-	if state != nil {
-		return state, nil
-	}
-
-	// Cooldown check — read the last failure timestamp without taking
-	// the mutex so a hung previous attempt doesn't serialize hvui
-	// requests.
-	if last := v.tpdUptimeLastFail.Load(); last > 0 {
-		if time.Since(time.Unix(0, last)) < connectCooldown {
-			return nil, fmt.Errorf("dial tpd uptime publisher: cooling down")
-		}
-	}
-
-	v.tpdUptimeSubMu.Lock()
-	defer v.tpdUptimeSubMu.Unlock()
-	if v.tpdUptimeSub != nil {
-		return v.tpdUptimeSub, nil
-	}
-	if v.dmsgC == nil {
-		return nil, nil //nolint:nilnil // intentional sentinel for caller
-	}
-	tpdPK, ok := tpdCXOPeer(v)
-	if !ok {
-		return nil, nil //nolint:nilnil
-	}
-
-	sub, err := treestore.NewSubscriber(v.dmsgC, tpdPK, treestore.SubConfig{
-		InMemoryDB: true,
-		DmsgPort:   skyenv.DmsgTPDUptimeCXOPort,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("create tpd uptime subscriber: %w", err)
-	}
-
-	state = &tpdUptimeSubscriber{sub: sub}
-	sub.SetPrefixes([]string{"uptimes/days/"})
-	sub.OnUpdate(func(_ []treestore.UpdateEvent) {
-		v.tpdUptimeSubMu.Lock()
-		if v.tpdUptimeSub != nil {
-			v.tpdUptimeSub.lastRootAt = time.Now()
-		}
-		v.tpdUptimeSubMu.Unlock()
-	})
-
-	// Connect can hang indefinitely when the publisher's listener is
-	// down (e.g. TPD is panicking). Bound the dial via the ctx that
-	// Subscriber.Connect now threads to dmsg.Client.Dial (post-T2a),
-	// and keep the goroutine+select wrapper as belt-and-suspenders
-	// so the outer time.After fires reliably even if a future
-	// regression removes the ctx-honoring in the dmsg layer.
-	dctx, dcancel := context.WithTimeout(context.Background(), connectTimeout)
-	defer dcancel()
-	done := make(chan error, 1)
-	go func() { done <- sub.Connect(dctx, tpdPK) }()
-	select {
-	case err := <-done:
-		if err != nil {
-			_ = sub.Close() //nolint:errcheck
-			v.tpdUptimeLastFail.Store(time.Now().UnixNano())
-			return nil, fmt.Errorf("dial tpd uptime publisher: %w", err)
-		}
-	case <-time.After(connectTimeout):
-		// Close the subscriber so its listener releases port
-		// DmsgTPDUptimeCXOPort — otherwise the next ensure call
-		// would fail with "port already occupied" forever. The
-		// in-flight Connect goroutine sees the underlying transport
-		// close and unwinds; that's the standard treestore shutdown
-		// path. The cooldown above prevents a tight retry loop.
-		_ = sub.Close() //nolint:errcheck
-		v.tpdUptimeLastFail.Store(time.Now().UnixNano())
-		return nil, fmt.Errorf("dial tpd uptime publisher: timeout after %s", connectTimeout)
-	}
-	v.tpdUptimeSub = state
-	return state, nil
-}
-
-// closeTPDUptimeSubscriber tears down the subscriber on visor close.
-// Safe to call multiple times.
-func (v *Visor) closeTPDUptimeSubscriber() {
-	v.tpdUptimeSubMu.Lock()
-	state := v.tpdUptimeSub
-	v.tpdUptimeSub = nil
-	v.tpdUptimeSubMu.Unlock()
-	if state != nil && state.sub != nil {
-		_ = state.sub.Close() //nolint:errcheck
-	}
 }
