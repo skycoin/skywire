@@ -462,11 +462,16 @@ func (s *PingServer) muxBwPumpRoute(
 			// wire, leaving the operator unable to attribute zero
 			// throughput to a specific cause).
 			//
-			// ctx.Err() != nil indicates the pump's deadline fired
-			// while the call was in-flight — that's not a route
-			// failure, it's a clean shutdown. Skip the event in
-			// that case.
-			if ctx.Err() == nil {
+			// Emit when (a) pumpCtx is still alive (clear in-run
+			// failure), OR (b) we never moved a byte — a clean
+			// shutdown of a healthy pump has bytes > 0, so a
+			// zero-bytes exit is unambiguous "route never worked"
+			// regardless of pumpCtx timing. Pre-task-#131 this
+			// guard suppressed failures when pumpCtx and the
+			// per-call deadline expired in the same instant,
+			// leaving the operator with no MuxRouteFailure event
+			// to explain bytes=0.
+			if ctx.Err() == nil || rs.bytesSent.Load() == 0 {
 				emit(&MuxBandwidthEvent_RouteFailure{
 					RouteFailure: buildRouteFailureEvent(rs, err, pumpStart),
 				})
