@@ -41,6 +41,14 @@ var (
 	// path); N > 1 = router establishes N parallel mux routes and the
 	// app sees a single conn whose payload is striped across them.
 	routes int
+	// minHops, when >= 2, forces the router to find non-direct paths
+	// (rejecting any direct transport between this visor and the
+	// remote). Needed in combination with routes > 1 to actually
+	// exercise the mux>direct hypothesis end-to-end: without
+	// min-hops, the router happily picks the direct transport for
+	// every mux route, so N mux streams ride one TCP socket and
+	// nothing is multiplexed across intermediates.
+	minHops int
 )
 
 func init() {
@@ -50,6 +58,7 @@ func init() {
 	RootCmd.Flags().IntVar(&localPort, "local", 0, "local port to listen on")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().IntVar(&routes, "routes", 0, "number of parallel skynet mux routes (0 or 1 = single route)")
+	RootCmd.Flags().IntVar(&minHops, "min-hops", 0, "force routes through at least this many intermediates (>=2 rejects direct paths)")
 }
 
 // RootCmd is the root command for skynet-client
@@ -80,6 +89,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.IntVar(&localPort, "local", 0, "local port")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.IntVar(&routes, "routes", 0, "number of parallel skynet mux routes")
+		fs.IntVar(&minHops, "min-hops", 0, "minimum hop count (>=2 rejects direct paths)")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -139,17 +149,24 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		Port:   routing.Port(skyenv.SkyForwardingServerPort),
 	}
 
-	if routes > 1 {
+	switch {
+	case routes > 1 && minHops > 1:
+		appCl.Log().Infof("Per-accept dial shape: %s on port %d with %d parallel mux routes, min-hops=%d",
+			remotePK.Hex(), skyenv.SkyForwardingServerPort, routes, minHops)
+	case routes > 1:
 		appCl.Log().Infof("Per-accept dial shape: %s on port %d with %d parallel mux routes",
 			remotePK.Hex(), skyenv.SkyForwardingServerPort, routes)
-	} else {
+	case minHops > 1:
+		appCl.Log().Infof("Per-accept dial shape: %s on port %d with min-hops=%d",
+			remotePK.Hex(), skyenv.SkyForwardingServerPort, minHops)
+	default:
 		appCl.Log().Infof("Per-accept dial shape: %s on port %d",
 			remotePK.Hex(), skyenv.SkyForwardingServerPort)
 	}
 
 	dialRemote := func() (net.Conn, error) {
-		if routes > 1 {
-			return appCl.DialWithOptions(connApp, routes)
+		if routes > 1 || minHops > 1 {
+			return appCl.DialWithOptions(connApp, routes, minHops)
 		}
 		return appCl.Dial(connApp)
 	}
