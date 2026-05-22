@@ -106,34 +106,41 @@ func (c *Client) SetAppPort(appPort routing.Port) error {
 
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
-	return c.dial(remote, 0)
+	return c.dial(remote, 0, 0)
 }
 
-// DialWithOptions dials remote with per-call dial options. The only
-// currently-honored option is muxRoutes: when > 1 and the remote's
-// transport family routes through the visor's SkywireNetworker, the
-// underlying router establishes N parallel mux routes. muxRoutes <= 1
-// is semantically equivalent to Dial. Apps requesting multi-route
-// dials (e.g. skynet-client with the --routes flag for #1525-adjacent
-// mux-route testing) call this instead of Dial; non-mux callers keep
-// using Dial unchanged.
-func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes int) (net.Conn, error) {
-	return c.dial(remote, muxRoutes)
+// DialWithOptions dials remote with per-call dial options.
+// Honored options:
+//   - muxRoutes: when > 1 and the remote's transport family routes
+//     through SkywireNetworker, the router establishes N parallel
+//     mux routes.
+//   - minHops: when >= 2, the router rejects the direct path and
+//     finds routes through that many intermediates. Needed in
+//     combination with muxRoutes > 1 to actually exercise the
+//     mux>direct hypothesis, since muxRoutes alone still picks the
+//     existing direct transport for every route.
+//
+// Both <= 1 is semantically equivalent to Dial. Apps requesting these
+// dial shapes (e.g. skynet-client with --routes / --min-hops flags
+// for #1525-adjacent mux-route testing) call this instead of Dial;
+// non-mux callers keep using Dial unchanged.
+func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops int) (net.Conn, error) {
+	return c.dial(remote, muxRoutes, minHops)
 }
 
 // dial is the common body for Dial + DialWithOptions. muxRoutes <= 1
-// invokes the original rpcC.Dial path (preserving the existing wire
-// shape for non-mux callers); muxRoutes > 1 sends the DialWithOptions
-// request so the server-side knows to take the SkywireNetworker
-// mux-routes path.
-func (c *Client) dial(remote appnet.Addr, muxRoutes int) (net.Conn, error) {
+// AND minHops <= 1 invokes the original rpcC.Dial path (preserving the
+// existing wire shape for non-mux callers); otherwise sends the
+// DialWithOptions request so the server-side knows to take the
+// SkywireNetworker per-call-opts path.
+func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops int) (net.Conn, error) {
 	var (
 		connID    uint16
 		localPort routing.Port
 		err       error
 	)
-	if muxRoutes > 1 {
-		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes)
+	if muxRoutes > 1 || minHops > 1 {
+		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes, minHops)
 	} else {
 		connID, localPort, err = c.rpcC.Dial(remote)
 	}
