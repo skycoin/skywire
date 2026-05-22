@@ -233,6 +233,33 @@ func TestRPCIngressGateway_DialWithOptions(t *testing.T) {
 		// erroring; the mux-routes hint is dropped.
 		n.AssertExpectations(t)
 	})
+
+	t.Run("minHops N on non-skywire networker falls back to DialContext", func(t *testing.T) {
+		appnet.ClearNetworkers()
+
+		const localPort routing.Port = 202
+
+		dialCtx := context.Background()
+		dialConn := &appcommon.MockConn{}
+		dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
+		dialConn.On("RemoteAddr").Return(dmsg.Addr{})
+
+		n := &appnet.MockNetworker{}
+		n.On("DialContext", dialCtx, dialAddr).Return(dialConn, error(nil))
+
+		require.NoError(t, appnet.AddNetworker(nType, n))
+
+		rpc := NewRPCGateway(l, nil)
+
+		var resp DialResp
+		req := &DialOptionsReq{Addr: dialAddr, MinHops: 2}
+		require.NoError(t, rpc.DialWithOptions(req, &resp))
+		require.Equal(t, uint16(1), resp.ConnID)
+		require.Equal(t, localPort, resp.LocalPort)
+		// Symmetric to the muxRoutes-fallthrough case: MinHops set alone
+		// on a non-skynet family is silently dropped.
+		n.AssertExpectations(t)
+	})
 }
 
 func TestRPCIngressGateway_Listen(t *testing.T) {

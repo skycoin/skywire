@@ -21,11 +21,13 @@ type RPCIngressClient interface {
 	SetAppPort(appPort routing.Port) error
 	Dial(remote appnet.Addr) (connID uint16, localPort routing.Port, err error)
 	// DialWithOptions asks the server to dial remote with per-call
-	// options. The only currently-honored option is MuxRoutes: when
-	// > 1 and the remote's family routes through SkywireNetworker,
-	// the router establishes N parallel mux routes. MuxRoutes <= 1
-	// is equivalent to plain Dial.
-	DialWithOptions(remote appnet.Addr, muxRoutes int) (connID uint16, localPort routing.Port, err error)
+	// options. Honored fields: muxRoutes (>1 = N parallel mux routes)
+	// and minHops (>=2 = force routes through that many intermediates,
+	// excluding the direct path). Both <= 1 is equivalent to plain Dial.
+	// The two together unblock the operator's mux>direct hypothesis
+	// test via real data-plane apps: muxRoutes alone still picks the
+	// existing direct transport for every route.
+	DialWithOptions(remote appnet.Addr, muxRoutes, minHops int) (connID uint16, localPort routing.Port, err error)
 	Listen(local appnet.Addr) (uint16, error)
 	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
 	Write(connID uint16, b []byte) (int, error)
@@ -91,10 +93,11 @@ func (c *rpcIngressClient) Dial(remote appnet.Addr) (connID uint16, localPort ro
 }
 
 // DialWithOptions sends `DialWithOptions` command to the server.
-// muxRoutes <= 1 falls through to plain Dial semantics on the server
-// side (no extra round-trip cost beyond the slightly larger request).
-func (c *rpcIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes int) (connID uint16, localPort routing.Port, err error) {
-	req := DialOptionsReq{Addr: remote, MuxRoutes: muxRoutes}
+// muxRoutes <= 1 AND minHops <= 1 falls through to plain Dial
+// semantics on the server side (no extra round-trip cost beyond
+// the slightly larger request).
+func (c *rpcIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes, minHops int) (connID uint16, localPort routing.Port, err error) {
+	req := DialOptionsReq{Addr: remote, MuxRoutes: muxRoutes, MinHops: minHops}
 	var resp DialResp
 	if err := c.rpc.Call(c.formatMethod("DialWithOptions"), &req, &resp); err != nil {
 		return 0, 0, RPCErr{err.Error()}
