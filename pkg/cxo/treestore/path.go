@@ -55,8 +55,25 @@ func JoinPath(segs ...string) (string, error) {
 //
 // "tiers/dmsg" is considered a prefix of "tiers/dmsg/2026-04-27" but
 // NOT of "tiers/dmsg2" — segment-aware prefix, not byte-prefix.
+//
+// A trailing '/' on the prefix is normalized away: HasPrefix
+// behaves identically for "foo/bar" and "foo/bar/". Without this
+// every caller that wrote prefixes as "directories" (with trailing
+// slash) tripped the segment-aware check below — the char after a
+// trailing-slash prefix is a real path segment char, not '/',
+// so the comparison returned false for paths that should clearly
+// match. All five CXO feeds in the visor's CXOSubscriptionManager
+// hit this and the subscriber-side snapshots were empty even when
+// the publisher's Root contained the expected leaves.
 func HasPrefix(path, prefix string) bool {
 	if prefix == "" {
+		return true
+	}
+	if prefix[len(prefix)-1] == '/' {
+		prefix = prefix[:len(prefix)-1]
+	}
+	if prefix == "" {
+		// Caller passed "/" — treat as "match anything".
 		return true
 	}
 	if path == prefix {
