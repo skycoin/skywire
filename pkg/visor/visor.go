@@ -283,20 +283,6 @@ type Visor struct {
 	// STCP PK table for runtime address injection (tp add -t stcp --addr)
 	stcpTable stcp.PKTable
 
-	// Lazy-initialized CXO subscriber for TPD's network-wide
-	// transport-metrics feed. Created on the first hvui-driven
-	// FetchTransportMetricsCXO call and kept alive thereafter; the
-	// hvui handler reads cached values via Subscriber.Get and falls
-	// back to HTTP /metrics when a path hasn't been published yet.
-	tpdMetricsSub   *tpdMetricsSubscriber
-	tpdMetricsSubMu sync.RWMutex
-
-	// Same lazy-on-demand pattern for TPD's network-wide visor-uptime
-	// feed (the /uptimes?v=v3 mirror). Drives the hvui Network Uptime
-	// tab. Falls back to DMSG-HTTP / HTTP when the cache misses.
-	tpdUptimeSub   *tpdUptimeSubscriber
-	tpdUptimeSubMu sync.RWMutex
-
 	// cxoSubMgr is the on-demand CXO subscription manager that owns
 	// the network-visualizer / metrics-tab data feeds (SD services,
 	// DMSG-D clients-by-server, TPD aggregates). Constructed in
@@ -304,11 +290,6 @@ type Visor struct {
 	// nil otherwise. Tabs that source CXO data call AcquireFor on
 	// open and ReleaseFor on close.
 	cxoSubMgr *CXOSubscriptionManager
-	// Records the last unix-nano time a Connect attempt failed so we
-	// can throttle re-dials while TPD's publisher is down. Read
-	// lock-free on the hot path (atomic), written from inside the
-	// connect-fail branch under the outer mutex.
-	tpdUptimeLastFail atomic.Int64
 }
 
 // pingState manages Skywire transport ping connections. Keyed by
@@ -776,11 +757,6 @@ func (v *Visor) Close() error {
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
 
-	// Tear down lazy CXO subscribers (TPD metrics + uptime) before
-	// the closeStack runs, since they hold dmsg conns that closeStack
-	// also touches via the dmsg client shutdown.
-	v.closeTPDMetricsSubscriber()
-	v.closeTPDUptimeSubscriber()
 	if v.cxoSubMgr != nil {
 		v.cxoSubMgr.Close()
 	}
