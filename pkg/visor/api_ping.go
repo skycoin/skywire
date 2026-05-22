@@ -263,11 +263,20 @@ func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 // 32 KB payloads), which globally serialized all N parallel pump
 // goroutines through one mutex — bytes-aggregate-across-N didn't
 // scale and per-route avg stayed pinned at ~351 kbps even though
-// peak per-call could hit ~1.7 Mbps. After this PR, the lock is
+// peak per-call could hit ~1.7 Mbps. After PR #2761, the lock is
 // held only for the conns-map lookup; wire I/O on the chosen
 // conn runs unlocked, letting N pump goroutines on DIFFERENT
 // PingRouteRefs run truly in parallel. See Ping doc comment for
 // the conn-lifecycle contract.
+//
+// The entire call is bounded by a single 10s conn.SetDeadline at
+// entry (cleared on return). Previously each of the 4 wire steps
+// (write size, read ack, write ping, read echo) had its own 30s
+// deadline, so a single stuck step could hang up to 30s — racing
+// the mux-bw pumpCtx's default 30s duration and causing the pump
+// to suppress the resulting MuxRouteFailure event (task #131).
+// 10s gives the pump 3+ failed iterations within its window so a
+// stuck-route error reliably reaches the consumer.
 func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
 	v.ping.mu.Lock()
 	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
@@ -296,66 +305,52 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 		return 0, 0, 0, err
 	}
 
+	// Cap the entire call at 10s. With separate per-step 30s
+	// deadlines, a stuck Write could hang the full 30s — racing
+	// the mux-bw pumpCtx (default 30s duration) so that the
+	// pump's `if ctx.Err() == nil` guard suppressed the
+	// MuxRouteFailure event (task #131). Capping at 10s gives the
+	// pump 3+ iterations within its 30s budget to surface a real
+	// error before pumpCtx expires.
+	conn.SetDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck,gosec
+	defer conn.SetDeadline(time.Time{})                //nolint:errcheck,gosec
+
 	start := time.Now()
 
-	// Send size message. Write deadline matches the read deadline
-	// below — without it, a blocked TCP send buffer causes the
-	// call to hang indefinitely. That was the silent-pump-stall
-	// (task #127): mux-bw runs with 0 bytes pumped + 0
-	// MuxRouteFailure events emitted, because PingOnceWithEcho was
-	// stuck inside the Write rather than returning with an error.
-	conn.SetWriteDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	if _, err = conn.Write(size); err != nil {
-		conn.SetWriteDeadline(time.Time{}) //nolint:errcheck,gosec
 		return 0, 0, 0, fmt.Errorf("write size: %w", err)
 	}
 	bytesSent += uint64(len(size))
 
-	// Read "ok" ack with timeout
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	buf := make([]byte, 32*1024)
 	n, err := conn.Read(buf)
 	if err != nil {
-		conn.SetReadDeadline(time.Time{})  //nolint:errcheck,gosec
-		conn.SetWriteDeadline(time.Time{}) //nolint:errcheck,gosec
 		return bytesSent, bytesReceived, 0, fmt.Errorf("read ack: %w", err)
 	}
 	bytesReceived += uint64(n) //nolint:gosec
 
-	// Send ping data. Same write-deadline rationale as above.
-	conn.SetWriteDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	if _, err = conn.Write(ping); err != nil {
-		conn.SetReadDeadline(time.Time{})  //nolint:errcheck,gosec
-		conn.SetWriteDeadline(time.Time{}) //nolint:errcheck,gosec
 		return bytesSent, bytesReceived, 0, fmt.Errorf("write ping: %w", err)
 	}
 	bytesSent += uint64(len(ping))
 
-	// Read echo response with timeout
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	if echoFull {
-		// Read full payload echo
 		var received int
 		for received < len(ping) {
 			n, err = conn.Read(buf)
 			if err != nil {
-				conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 				return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
 			}
 			received += n
 			bytesReceived += uint64(n) //nolint:gosec
 		}
 	} else {
-		// Read simple "pong" response
 		n, err = conn.Read(buf)
 		if err != nil {
-			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
 		}
 		bytesReceived += uint64(n) //nolint:gosec
 	}
-	conn.SetReadDeadline(time.Time{})  //nolint:errcheck,gosec
-	conn.SetWriteDeadline(time.Time{}) //nolint:errcheck,gosec
 
 	return bytesSent, bytesReceived, time.Since(start), nil
 }
