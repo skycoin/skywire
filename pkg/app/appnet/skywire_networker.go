@@ -114,11 +114,20 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		opts.AppName = AppNameFromContext(ctx)
 	}
 
-	if directConn, ok := r.tryDirectDial(addr); ok {
-		return &SkywireConn{
-			Conn:     directConn,
-			freePort: freePort,
-		}, nil
+	// Only take the direct shortcut when the caller is fine with a
+	// single 0-hop conn. opts.MinHops > 1 means the caller wants
+	// intermediates (direct is 0 hops); opts.MuxRoutes > 1 means the
+	// caller wants N parallel routes (direct returns one conn).
+	// Without this gate, --routes N / --min-hops K on a skynet
+	// client were silently dropped whenever AppDirectMux had a
+	// transport — see ping-path counterpart #2751.
+	if opts.MinHops <= 1 && opts.MuxRoutes <= 1 {
+		if directConn, ok := r.tryDirectDial(addr); ok {
+			return &SkywireConn{
+				Conn:     directConn,
+				freePort: freePort,
+			}, nil
+		}
 	}
 
 	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, opts)
