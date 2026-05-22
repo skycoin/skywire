@@ -485,6 +485,33 @@ func (s *Subscriber) Walk(prefix string, fn func(path string, value []byte) bool
 	}
 }
 
+// CacheSizeAndSampleKeys returns (totalCacheEntries, firstMaxSampleKeys).
+// Operator-visibility helper: a non-zero cache total combined with a
+// zero post-Walk snapshot means either the manager's prefix filter
+// dropped everything (subscriber declared a too-narrow prefix), or
+// the snapshot copy on the manager side has a bug. A zero cache
+// total means the publisher's Root really was empty (or only filling
+// reached this subscriber before the inspection ran).
+func (s *Subscriber) CacheSizeAndSampleKeys(maxSample int) (int, []string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	size := len(s.cache)
+	if maxSample <= 0 {
+		return size, nil
+	}
+	if maxSample > size {
+		maxSample = size
+	}
+	out := make([]string, 0, maxSample)
+	for k := range s.cache {
+		if len(out) >= maxSample {
+			break
+		}
+		out = append(out, k)
+	}
+	return size, out
+}
+
 // OnUpdate registers (or replaces) the change callback. Pass nil to
 // clear. The callback is invoked under the subscriber's lock — keep
 // it short or copy state out before blocking.

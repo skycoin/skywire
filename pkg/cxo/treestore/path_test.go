@@ -55,6 +55,20 @@ func TestHasPrefix(t *testing.T) {
 		{"tier", "tiers", false},
 		{"", "", true},
 		{"a", "a/b", false},
+		// Trailing-slash form must match the same paths as the no-slash
+		// form. Pre-fix this returned false for every case below — the
+		// segment-aware check tripped on the char after a /-suffixed
+		// prefix being a real path char rather than '/'. Bug surfaced as
+		// every CXO subscription manager feed (metrics/days/, uptimes/
+		// days/, services/, clients-by-server/, transports/all/) walking
+		// empty even when the publisher had Put leaves.
+		{"metrics/days/1", "metrics/days/", true},
+		{"transports/all/with-self", "transports/all/", true},
+		{"services/proxy/abc/entry", "services/", true},
+		{"tiers/dmsg/2026-04-27", "tiers/", true},
+		{"tiers/dmsg2", "tiers/dmsg/", false}, // still segment-aware after strip
+		{"tiers/dmsg", "tiers/dmsg/", true},   // exact match after strip
+		{"a", "/", true},                      // root-only prefix matches anything
 	}
 	for _, c := range cases {
 		if got := HasPrefix(c.path, c.prefix); got != c.want {
