@@ -111,7 +111,7 @@ func formatCXOStatus(st []visor.FeedStatus) string {
 	}
 	var b bytes.Buffer
 	w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "feed\tpaths\tbytes\trefcnt\tcycle\tlast_sync\tlast_err\tpeer\tspec_err") //nolint:errcheck
+	fmt.Fprintln(w, "feed\tpaths\tcache\tbytes\trefcnt\tcycle\tlast_sync\tlast_err\tpeer\tspec_err") //nolint:errcheck
 	for _, s := range st {
 		last := "(never)"
 		if !s.LastSyncAt.IsZero() {
@@ -129,9 +129,15 @@ func formatCXOStatus(st []visor.FeedStatus) string {
 		if specErr == "" {
 			specErr = "-"
 		}
-		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%t\t%s\t%s\t%s\t%s\n", //nolint:errcheck
-			s.Feed, s.SnapshotPaths, s.SnapshotBytes, s.Refcount, s.CycleRunning,
-			last, lastErr, peer, specErr)
+		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%t\t%s\t%s\t%s\t%s\n", //nolint:errcheck
+			s.Feed, s.SnapshotPaths, s.LastSyncCachePaths, s.SnapshotBytes,
+			s.Refcount, s.CycleRunning, last, lastErr, peer, specErr)
+	}
+	for _, s := range st {
+		if len(s.LastSyncCacheSampleKeys) == 0 {
+			continue
+		}
+		fmt.Fprintf(w, "  %s sample keys:\t%s\n", s.Feed, strings.Join(s.LastSyncCacheSampleKeys, ", ")) //nolint:errcheck
 	}
 	w.Flush() //nolint:errcheck,gosec
 	return b.String()
