@@ -116,48 +116,53 @@ type DialResp struct {
 
 // DialOptionsReq carries a dial request with extra per-call options.
 // Used by DialWithOptions for app paths that need to request specific
-// router behavior (currently: N parallel mux routes for the skynet
-// transport). Zero / unset MuxRoutes preserves the single-route
-// default — equivalent to plain Dial.
+// router behavior. Zero / unset fields preserve the single-route,
+// router-picks-freely default — equivalent to plain Dial.
 //
 // Added for #1525-adjacent skywire-cli mux-route testing per the
 // operator's 2026-05-19 ask. Generalizes the per-call route count
 // already plumbed through VisorCat (pkg/visor/api_visor_cat.go) into
 // the app-net surface so apps like skynet-client can request N routes
 // at dial time without needing a parallel "cli skynet cat"-style RPC.
+//
+// MinHops mirrors the same field on router.DialOptions and is needed
+// to actually exercise the mux>direct hypothesis end-to-end via real
+// data-plane apps: without it, MuxRoutes > 1 still picks the existing
+// direct transport for every route (N mux streams on one TCP socket),
+// not N routes through N intermediates.
 type DialOptionsReq struct {
 	Addr      appnet.Addr
 	MuxRoutes int
+	MinHops   int
 }
 
 // Dial dials to the remote.
 func (r *RPCIngressGateway) Dial(remote *appnet.Addr, resp *DialResp) (err error) {
 	defer rpcutil.LogCall(r.log, "Dial", remote)(resp, &err)
-	return r.dialInternal(*remote, 0, resp)
+	return r.dialInternal(*remote, 0, 0, resp)
 }
 
 // DialWithOptions dials to the remote honoring per-call dial options.
-// Currently the only honored option is MuxRoutes — when > 1 and the
-// destination transport is skynet, the router establishes N parallel
-// mux routes via SkywireNetworker.DialContextWithOptions instead of
-// the single-route DialContext. Mirrors the per-call Routes path
-// already exposed via VisorCat. Falls back to plain Dial semantics
-// (single route) when MuxRoutes <= 1 OR the registered networker for
-// the address family isn't *SkywireNetworker (e.g. dmsg, where mux is
-// inherent to the session and the routes count is a no-op).
+// Honored options: MuxRoutes (N parallel mux routes) + MinHops (require
+// N intermediates between source and destination). Together these
+// exercise the operator's mux>direct hypothesis: MuxRoutes > 1 with
+// MinHops >= 2 forces the router to find N disjoint non-direct paths.
+// Falls back to plain Dial semantics when both are <= 1 OR the
+// registered networker for the address family isn't *SkywireNetworker
+// (e.g. dmsg, where mux is inherent to the session).
 func (r *RPCIngressGateway) DialWithOptions(req *DialOptionsReq, resp *DialResp) (err error) {
 	defer rpcutil.LogCall(r.log, "DialWithOptions", req)(resp, &err)
 	if req == nil {
 		return errors.New("DialWithOptions: nil request")
 	}
-	return r.dialInternal(req.Addr, req.MuxRoutes, resp)
+	return r.dialInternal(req.Addr, req.MuxRoutes, req.MinHops, resp)
 }
 
 // dialInternal is the common dial body shared by Dial + DialWithOptions.
-// muxRoutes <= 1 means "no mux", which is the existing Dial behavior;
-// muxRoutes > 1 triggers the SkywireNetworker.DialContextWithOptions
-// path for skynet destinations.
-func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, muxRoutes int, resp *DialResp) error {
+// muxRoutes <= 1 AND minHops <= 1 means "plain Dial" (existing
+// behavior). Anything else triggers the SkywireNetworker.
+// DialContextWithOptions path so the opts surface is honored.
+func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, muxRoutes, minHops int, resp *DialResp) error {
 	reservedConnID, free, err := r.cm.ReserveNextID()
 	if err != nil {
 		return err
@@ -172,7 +177,7 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, muxRoutes int, resp
 		appName = r.proc.conf.AppName
 	}
 	dialCtx := appnet.WithAppName(context.Background(), appName)
-	conn, err := dialWithMuxRoutes(dialCtx, remote, muxRoutes)
+	conn, err := dialWithMuxRoutes(dialCtx, remote, muxRoutes, minHops)
 	if err != nil {
 		free()
 		return err
@@ -201,14 +206,14 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, muxRoutes int, resp
 }
 
 // dialWithMuxRoutes dials remote either via the single-route default
-// path (appnet.DialContext) or via the SkywireNetworker mux-routes
-// path when muxRoutes > 1 and the registered networker for the addr's
-// family is the real *SkywireNetworker. The type-assertion fallback to
-// the default path matches VisorCat's contract (a test-mock or future
-// alternative networker silently degrades to single-route, preserving
-// correctness with no extra plumbing).
-func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, muxRoutes int) (net.Conn, error) {
-	if muxRoutes <= 1 {
+// path (appnet.DialContext) or via the SkywireNetworker DialOptions
+// path when the caller requested any per-call opts (mux routes OR
+// minimum hops). The type-assertion fallback to the default path
+// matches VisorCat's contract (a test-mock or future alternative
+// networker silently degrades to single-route, preserving correctness
+// with no extra plumbing).
+func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, muxRoutes, minHops int) (net.Conn, error) {
+	if muxRoutes <= 1 && minHops <= 1 {
 		return appnet.DialContext(ctx, remote)
 	}
 	nw, err := appnet.ResolveNetworker(remote.Net)
@@ -217,12 +222,13 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, muxRoutes int) (
 	}
 	sw, ok := nw.(*appnet.SkywireNetworker)
 	if !ok {
-		// Non-skynet networker (e.g. dmsg) — mux-routes is a no-op
-		// concept at this layer. Fall through to the default dial.
+		// Non-skynet networker (e.g. dmsg) — mux-routes / min-hops are
+		// no-op concepts at this layer. Fall through to the default dial.
 		return appnet.DialContext(ctx, remote)
 	}
 	opts := router.DefaultDialOptions()
 	opts.MuxRoutes = muxRoutes
+	opts.MinHops = minHops
 	return sw.DialContextWithOptions(ctx, remote, opts)
 }
 
