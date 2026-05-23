@@ -127,12 +127,16 @@ export class MultipleNodeDataService {
       // that don't care about sections keep working unchanged.
       mergeMap(() => this.nodeService.getNodesTree()))
     .subscribe((sections: NodeSection[]) => {
-      const flat: Node[] = [];
-      for (const s of sections) {
-        for (const n of s.nodes) {
-          flat.push(n);
-        }
-      }
+      // Flat list = section 0 (LOCAL hypervisor's directly-connected
+      // visors) only. Visors connected only to a sub-hypervisor live
+      // in their own section's table, never in the main flat list —
+      // a visor should appear in the list of the hypervisor it's
+      // actually connected to and nowhere else. Concatenating
+      // sub-sections into the flat list caused visors connected to
+      // both local and a sub-hyp to render twice in the main table,
+      // and dragged the section's own ★ flag into the main table
+      // where it was visually wrong.
+      const flat: Node[] = sections.length > 0 ? sections[0].nodes.slice() : [];
       // Send the event.
       this.lastEmitedData = {
         data: flat,
