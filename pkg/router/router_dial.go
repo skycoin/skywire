@@ -1029,6 +1029,21 @@ func (r *router) establishMuxRoutes(
 	// aux routes diverge from ALL prior ones.
 	excludePKs := intermediatesOfRouteGroup(nrg, lPK, rPK)
 
+	// Thread MinHops + AppName from the parent dial through to each
+	// aux route. Without MinHops, fetchBestRoutes for the aux dial
+	// drops back to r.conf.MinHops (usually 1) and the route-finder
+	// happily returns the direct transport — so a `--routes N
+	// --min-hops 2` call would establish route 0 multi-hop but routes
+	// 1..N-1 over the direct stcpr, defeating the disjoint-mux intent.
+	// AppName is threaded for log-attribution consistency across the
+	// aux routes (the scoped logger keys on app name).
+	parentMinHops := 0
+	parentAppName := ""
+	if opts != nil {
+		parentMinHops = opts.MinHops
+		parentAppName = opts.AppName
+	}
+
 	for i := 1; i < muxCount; i++ {
 		muxOpts := &DialOptions{
 			MinForwardRts:          1,
@@ -1036,11 +1051,24 @@ func (r *router) establishMuxRoutes(
 			MinConsumeRts:          1,
 			MaxConsumeRts:          1,
 			Retries:                1,
+			MinHops:                parentMinHops,
+			AppName:                parentAppName,
 			ExcludeTransportIDs:    excludeIDs,
 			ExcludeIntermediatePKs: excludePKs,
 			ExcludeDMSG:            true,
 		}
 
+		// NOTE: aux mux routes deliberately DO NOT use #2774's
+		// retry-with-exclude-on-failure loop. The mux design is
+		// graceful degradation — if aux route i can't establish (no
+		// disjoint candidate found, or its dial fails), we stop
+		// trying to add more aux routes but the PRIMARY route is
+		// already up and the app is serviceable. A reject-the-whole-
+		// dial retry loop would punish the user for transient aux
+		// flakiness when the primary is healthy. For mux-bw style
+		// callers that DO want strict N-route guarantees, the failure
+		// surfaces via MuxRouteEstablished events (#2756) and the
+		// caller can decide whether to fail or accept partial mux.
 		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
 			log.Debugf("Mux route %d/%d: no additional route found: %v", i+1, muxCount, err)
