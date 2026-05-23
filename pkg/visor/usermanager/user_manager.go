@@ -332,6 +332,31 @@ func (s *UserManager) Close() error {
 	return s.db.Close()
 }
 
+// ChangeAdminPassword updates the password for the "admin" account
+// without requiring an HTTP session — intended for the local RPC
+// path (skywire cli visor hv passwd) which is already privileged.
+// Verifies the old password before writing the new one, enforces
+// the same checkPasswordFormat rules ChangePassword does, and
+// invalidates every active session for the user so old cookies
+// can't be replayed.
+func (s *UserManager) ChangeAdminPassword(oldPassword, newPassword string) error {
+	user, err := s.db.User("admin")
+	if err != nil {
+		return err
+	}
+	if !user.VerifyPassword(oldPassword) {
+		return ErrBadLogin
+	}
+	if err := user.SetPassword(newPassword); err != nil {
+		return err
+	}
+	if err := s.db.SetUser(*user); err != nil {
+		return err
+	}
+	s.delAllSessionsOfUser(user.Name)
+	return nil
+}
+
 func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {
