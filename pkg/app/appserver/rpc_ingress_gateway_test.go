@@ -260,6 +260,35 @@ func TestRPCIngressGateway_DialWithOptions(t *testing.T) {
 		// on a non-skynet family is silently dropped.
 		n.AssertExpectations(t)
 	})
+
+	t.Run("ForwardMinHops/ReverseMinHops fall through to default dial on non-skywire networker", func(t *testing.T) {
+		appnet.ClearNetworkers()
+
+		const localPort routing.Port = 203
+
+		dialCtx := context.Background()
+		dialConn := &appcommon.MockConn{}
+		dialConn.On("LocalAddr").Return(dmsg.Addr{Port: uint16(localPort)})
+		dialConn.On("RemoteAddr").Return(dmsg.Addr{})
+
+		n := &appnet.MockNetworker{}
+		n.On("DialContext", dialCtx, dialAddr).Return(dialConn, error(nil))
+
+		require.NoError(t, appnet.AddNetworker(nType, n))
+
+		rpc := NewRPCGateway(l, nil)
+
+		// Asymmetric: only ReverseMinHops set. The non-skywire networker
+		// can't honor per-direction opts; falls through to DialContext.
+		// Pins that the DialWithOptions path accepts the new fields
+		// on the wire and routes them to the right server-side helper.
+		var resp DialResp
+		req := &DialOptionsReq{Addr: dialAddr, ReverseMinHops: 2}
+		require.NoError(t, rpc.DialWithOptions(req, &resp))
+		require.Equal(t, uint16(1), resp.ConnID)
+		require.Equal(t, localPort, resp.LocalPort)
+		n.AssertExpectations(t)
+	})
 }
 
 func TestRPCIngressGateway_Listen(t *testing.T) {
