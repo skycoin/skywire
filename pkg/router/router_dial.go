@@ -1058,6 +1058,17 @@ func (r *router) establishMuxRoutes(
 			ExcludeDMSG:            true,
 		}
 
+		// NOTE: aux mux routes deliberately DO NOT use #2774's
+		// retry-with-exclude-on-failure loop. The mux design is
+		// graceful degradation — if aux route i can't establish (no
+		// disjoint candidate found, or its dial fails), we stop
+		// trying to add more aux routes but the PRIMARY route is
+		// already up and the app is serviceable. A reject-the-whole-
+		// dial retry loop would punish the user for transient aux
+		// flakiness when the primary is healthy. For mux-bw style
+		// callers that DO want strict N-route guarantees, the failure
+		// surfaces via MuxRouteEstablished events (#2756) and the
+		// caller can decide whether to fail or accept partial mux.
 		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
 			log.Debugf("Mux route %d/%d: no additional route found: %v", i+1, muxCount, err)
