@@ -131,6 +131,20 @@ func (r *router) DialRoutes(
 
 		rules, connectedNode, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
 		if err != nil {
+			// On dial failure, attribute to the intermediate that broke
+			// id_reservation and exclude it from the NEXT fetchBestRoutes
+			// pick. The router.DialError carries the PK that failed.
+			// Source / destination PKs are excluded from the exclude-set
+			// (the dst can't be subbed out, and src failures are local).
+			// This composes with #2750's per-intermediate breaker: the
+			// intermediate's breaker counter ticks on this failure too,
+			// so repeated failures eventually short-circuit it via
+			// AllowIntermediate.
+			if failedPK, ok := extractFailedIntermediatePK(err, lPK, rPK); ok {
+				opts = appendExcludeIntermediate(opts, failedPK)
+				log.WithError(err).Warnf("Route setup failed on intermediate %s (attempt %d/%d); excluding from next route-finder pick",
+					failedPK, attempt, maxRetries)
+			}
 			if attempt < maxRetries {
 				log.WithError(err).Warnf("Route setup failed (attempt %d/%d), retrying with fresh route...", attempt, maxRetries)
 				continue
@@ -362,6 +376,16 @@ func (r *router) PingRoute(
 		conn, err := r.setupPingRoute(ctx, forwardDesc, forwardPath, reversePath, rPK, opts)
 		if err != nil {
 			lastErr = err
+			// Same retry-with-exclude pattern as DialRoutes — see the
+			// note there for the composition with #2750's per-intermediate
+			// breaker. The intermediate identified here gets added to
+			// opts.ExcludeIntermediatePKs so fetchBestRoutes' next
+			// pickDisjointPath call avoids it.
+			if failedPK, ok := extractFailedIntermediatePK(err, lPK, rPK); ok {
+				opts = appendExcludeIntermediate(opts, failedPK)
+				log.WithError(err).Warnf("Ping route setup failed on intermediate %s (attempt %d/%d); excluding from next route-finder pick",
+					failedPK, attempt, maxRetries)
+			}
 			if attempt < maxRetries {
 				log.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
 				continue
@@ -1094,4 +1118,52 @@ func intermediatesOfRouteGroup(nrg *NoiseRouteGroup, src, dst cipher.PubKey) []c
 		}
 	}
 	return out
+}
+
+// extractFailedIntermediatePK walks an error chain looking for a
+// router.DialError and returns its PK if and only if the PK is an
+// INTERMEDIATE (i.e., neither the local source nor the remote
+// destination). Returns (PK, true) on a real intermediate failure;
+// (zero, false) otherwise.
+//
+// Used by the DialRoutes / PingRoute retry loops to remember which
+// intermediates have just failed during id_reservation so the next
+// fetchBestRoutes call can route around them via the existing
+// ExcludeIntermediatePKs filter (#2746) without a second route-finder
+// candidate-selection algorithm. Composes with #2750's per-intermediate
+// breaker — that fix tracks repeated failures across calls; this fix
+// handles fast within-call fallback.
+func extractFailedIntermediatePK(err error, src, dst cipher.PubKey) (cipher.PubKey, bool) {
+	if err == nil {
+		return cipher.PubKey{}, false
+	}
+	var de *DialError
+	if !errors.As(err, &de) {
+		return cipher.PubKey{}, false
+	}
+	failed := de.PK
+	if failed == src || failed == dst {
+		return cipher.PubKey{}, false
+	}
+	return failed, true
+}
+
+// appendExcludeIntermediate returns a (potentially new) DialOptions
+// with pk added to ExcludeIntermediatePKs. Returns opts unchanged when
+// pk is already in the slice (idempotent: re-failure of the same
+// intermediate within a single retry cycle won't compound).
+//
+// opts is guaranteed non-nil on return so the caller can pass it
+// straight back into fetchBestRoutes without a nil check.
+func appendExcludeIntermediate(opts *DialOptions, pk cipher.PubKey) *DialOptions {
+	if opts == nil {
+		opts = DefaultDialOptions()
+	}
+	for _, existing := range opts.ExcludeIntermediatePKs {
+		if existing == pk {
+			return opts
+		}
+	}
+	opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, pk)
+	return opts
 }
