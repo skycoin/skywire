@@ -184,6 +184,41 @@ func (a *API) SetClientsByServerCXOPublisher(p *ClientsByServerCXOPublisher) {
 	a.cxoPublisher = p
 }
 
+// WarmCXOFromStore pre-populates the CXO publisher's tree from the
+// current set of client entries in the store. Without this, the
+// publisher only Puts on register / heartbeat events — so right
+// after a dmsg-discovery restart the publisher's tree is empty
+// until the first event lands, and any subscriber that connects in
+// the post-restart gap times out at firstSyncTimeout (10s) with
+// "timeout waiting for Root".
+//
+// Mirrors the existing BackfillDHTMirror pattern: walk AllClientEntries
+// and replay each as a fresh SetEntry (oldEntry=nil so the heartbeat
+// skip in PublishSetEntry doesn't elide the Put). Best-effort —
+// per-entry errors don't abort the warm.
+func (a *API) WarmCXOFromStore(ctx context.Context, log logrus.FieldLogger) {
+	if a == nil || a.cxoPublisher == nil {
+		return
+	}
+	entries, err := a.db.AllClientEntries(ctx)
+	if err != nil {
+		log.WithError(err).Warn("CXO warm: failed to list client entries")
+		return
+	}
+	warmed := 0
+	for _, entry := range entries {
+		if ctx.Err() != nil {
+			break
+		}
+		if entry == nil || entry.Client == nil {
+			continue
+		}
+		a.cxoPublisher.PublishSetEntry(nil, entry)
+		warmed++
+	}
+	log.WithField("entries", warmed).Info("CXO warm: pre-populated publisher tree from store")
+}
+
 // BackfillDHTMirror iterates all existing entries in the store and
 // mirrors them to the DHT. This ensures the DHT has the full dataset
 // on startup, not just entries updated since the last restart.
