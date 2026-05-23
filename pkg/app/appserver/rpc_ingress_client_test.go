@@ -129,7 +129,7 @@ func TestRPCIngressClient_DialWithOptions(t *testing.T) {
 		// back to plain DialContext; the round-trip still succeeds and
 		// returns a valid ConnID. We're pinning the wire shape, not the
 		// router-level mux behavior (which is integration-tested).
-		connID, localPort, err := rpcC.DialWithOptions(remote, 4, 0, 0, 0)
+		connID, localPort, err := rpcC.DialWithOptions(remote, 4, 0, 0, 0, 0, 0)
 		require.NoError(t, err)
 		require.Equal(t, uint16(1), connID)
 		require.Equal(t, routing.Port(dmsgLocal.Port), localPort)
@@ -160,7 +160,7 @@ func TestRPCIngressClient_DialWithOptions(t *testing.T) {
 		// minHops=2 over a non-skynet networker — same fallthrough as
 		// the muxRoutes case. Pins that MinHops is wire-carried through
 		// DialOptionsReq even when the destination family ignores it.
-		connID, localPort, err := rpcC.DialWithOptions(remote, 0, 2, 0, 0)
+		connID, localPort, err := rpcC.DialWithOptions(remote, 0, 2, 0, 0, 0, 0)
 		require.NoError(t, err)
 		require.Equal(t, uint16(1), connID)
 		require.Equal(t, routing.Port(dmsgLocal.Port), localPort)
