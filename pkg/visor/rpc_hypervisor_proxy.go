@@ -35,7 +35,16 @@ type HVVisorEntry struct {
 	Apps           int           `json:"apps"`
 	RewardAddress  string        `json:"reward_address,omitempty"`
 	ConfigVersion  string        `json:"config_version,omitempty"`
-	Error          string        `json:"error,omitempty"`
+	// ServicesHealth is the remote visor's most recent
+	// HealthInfo.ServicesHealth ("healthy", "unhealthy",
+	// "connecting", ""). Carried so the hvui's tree-summary
+	// sub-section can render the same green / yellow / gray status
+	// dot that the local section's main table does — without this,
+	// every sub-section row falls through to nodeStatusClass's
+	// "online but health unknown" branch and renders as a gray
+	// outline circle even when the visor is fully healthy.
+	ServicesHealth string `json:"services_health,omitempty"`
+	Error          string `json:"error,omitempty"`
 	// ProxiedVia is set when this entry was discovered through a connected
 	// sub-hypervisor rather than a direct connection. The value is the PK
 	// of the sub-hypervisor that proxies operations on this visor.
@@ -54,6 +63,9 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 	entry.Apps = len(summary.Overview.Apps)
 	entry.ConfigVersion = summary.ConfigVersion
 	entry.RewardAddress = summary.RewardAddress
+	if summary.Health != nil {
+		entry.ServicesHealth = summary.Health.ServicesHealth
+	}
 }
 
 // HVListDirectVisors returns summaries of visors DIRECTLY connected to
