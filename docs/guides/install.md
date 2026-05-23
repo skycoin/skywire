@@ -12,8 +12,8 @@ $ go run github.com/skycoin/skywire@develop
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-v1.3.50
-built with go1.25.6
+v1.3.54
+built with go1.26.3
 
 Available Commands:
   visor     Skywire Visor
