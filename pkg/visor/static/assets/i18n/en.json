@@ -156,6 +156,7 @@
         "symmetic-nat-info": "Whether this visor is behind a symmetric NAT. Symmetric NAT prevents direct UDP hole-punching (sudph) — only DMSG and stcpr can be used. Detected via STUN.",
         "label": "Label:",
         "public-key": "Public key:",
+        "hostname": "Hostname:",
         "symmetic-nat": "Symmetic NAT:",
         "public-ip": "Public IP:",
         "ip": "IP:",
