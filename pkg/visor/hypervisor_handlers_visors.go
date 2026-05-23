@@ -292,12 +292,31 @@ func projectEntryToSummary(e HVVisorEntry) Summary {
 	// the HVVisorEntry round-trip from the remote hypervisor. That's
 	// enough for nodeStatusClass to choose between dot-green
 	// (healthy), dot-yellow (unhealthy), and dot-outline-gray
-	// (unknown). The other Health fields stay zero — the UI's
-	// per-row template guards on field presence (see node-list's
-	// nodeStatusClass).
+	// (unknown).
+	//
+	// Defaulting: when the remote reports Online=true but doesn't
+	// populate ServicesHealth, we synthesize "healthy" here. Two
+	// scenarios this covers:
+	//
+	//   1. Mixed-version deploy where the remote sub-hypervisor
+	//      predates #2784 — its HVVisorEntry has no ServicesHealth
+	//      field. Without this default the operator would see an
+	//      indefinite gray-outline-circle "unknown" dot across the
+	//      sub-section until every hypervisor in the deployment
+	//      updates.
+	//   2. Future paths where Summary.Health is nil on the remote
+	//      side (e.g. a visor still mid-startup whose health probes
+	//      haven't run yet). "Online + healthy" is a closer
+	//      approximation than "Online + unknown" — the remote
+	//      hypervisor's Online=true means it CAN talk to the visor.
+	//
+	// Offline (Online=false) keeps the empty Health so the UI's red
+	// dot path triggers.
 	var health *HealthInfo
 	if e.ServicesHealth != "" {
 		health = &HealthInfo{ServicesHealth: e.ServicesHealth}
+	} else if e.Online {
+		health = &HealthInfo{ServicesHealth: "healthy"}
 	}
 	return Summary{
 		Overview:      overview,
