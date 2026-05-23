@@ -35,9 +35,20 @@ func init() {
 	hvDisableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvStatusCmd)
 	hvCmd.AddCommand(hvAddCmd)
+	hvCmd.AddCommand(hvRmCmd)
+	hvRmCmd.Flags().BoolVar(&hvRmAll, "all", false, "remove every runtime-added hypervisor connection")
 	hvCmd.AddCommand(hvLsCmd)
 	hvCmd.AddCommand(hvTreeCmd)
+	hvCmd.AddCommand(hvPasswdCmd)
+	hvPasswdCmd.Flags().StringVar(&hvPasswdOld, "old", "", "current password (prompts if unset)")
+	hvPasswdCmd.Flags().StringVar(&hvPasswdNew, "new", "", "new password (prompts if unset)")
 }
+
+var (
+	hvRmAll     bool
+	hvPasswdOld string
+	hvPasswdNew string
+)
 
 var hvCmd = &cobra.Command{
 	Use:   "hv",
@@ -194,6 +205,78 @@ via DMSG. Not persisted — use SKYENV HYPERVISORPKS for persistence.`,
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		fmt.Printf("Connected to hypervisor %s\n", pk)
+	},
+}
+
+var hvRmCmd = &cobra.Command{
+	Use:   "rm [public-key]",
+	Short: "Disconnect from a remote hypervisor at runtime",
+	Long: `Tear down a runtime-added hypervisor connection. Mirrors hv add
+— only affects connections created via AddHypervisor (this RPC or
+the corresponding CLI). Config-loaded hypervisors aren't affected;
+edit SKYENV HYPERVISORPKS and restart the visor to remove those.
+
+Pass --all to disconnect every runtime-added hypervisor in one
+call. Without --all, exactly one <public-key> argument is
+required.`,
+	Args: func(cmd *cobra.Command, args []string) error {
+		if hvRmAll {
+			if len(args) > 0 {
+				return fmt.Errorf("--all takes no positional arguments")
+			}
+			return nil
+		}
+		if len(args) != 1 {
+			return fmt.Errorf("exactly one <public-key> argument required (or pass --all)")
+		}
+		return nil
+	},
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if hvRmAll {
+			n, err := rpcClient.RemoveAllHypervisors()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			fmt.Printf("Disconnected from %d runtime-added hypervisor(s)\n", n)
+			return
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(args[0]); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid public key: %w", err))
+		}
+		if err := rpcClient.RemoveHypervisor(pk); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		fmt.Printf("Disconnected from hypervisor %s\n", pk)
+	},
+}
+
+var hvPasswdCmd = &cobra.Command{
+	Use:   "passwd",
+	Short: "Change the hypervisor UI admin password",
+	Long: `Change the password for the hypervisor UI's "admin" account.
+Mirrors the /api/change-password endpoint the UI uses, but without
+the HTTP session check (RPC is local-only and already privileged).
+
+Both --old and --new are required. Use the value-only form (avoid
+shell history capturing the password) by sourcing them from an
+env-var or a process-substitution.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		if hvPasswdOld == "" || hvPasswdNew == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("both --old and --new are required"))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.SetHypervisorPassword(hvPasswdOld, hvPasswdNew); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		fmt.Println("Hypervisor UI password updated; all existing sessions invalidated.")
 	},
 }
 

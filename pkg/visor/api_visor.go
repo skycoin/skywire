@@ -189,6 +189,10 @@ func (v *Visor) Summary() (*Summary, error) {
 		DmsgStats:            dmsgStatValue,
 		ConnectedDmsgServers: connectedDmsgServers,
 		DMSGServers:          dmsgServers,
+		IsHypervisor:         v.IsHypervisorEnabled(),
+	}
+	if v.conf.Hypervisor != nil {
+		summary.HypervisorAddr = v.conf.Hypervisor.HTTPAddr
 	}
 
 	return summary, nil
