@@ -170,6 +170,14 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 		wg.Wait()
 
 		rendered := map[cipher.PubKey]bool{localPK: true}
+		// subHyperPKs collects every hypervisor PK that gets its own
+		// section below the local one. Used to scrub the local
+		// section's visor list — a hypervisor that has its own
+		// section shouldn't ALSO appear as a row in the local
+		// section's table, because the UI tabs render each section
+		// independently and the operator perceives the duplicate
+		// hypervisor row as a bug ("the visor shows twice").
+		subHyperPKs := make(map[cipher.PubKey]struct{}, len(results))
 		for _, sr := range results {
 			if rendered[sr.hyperPK] {
 				continue
@@ -185,6 +193,7 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 				}
 				es := sr.err.Error()
 				rendered[sr.hyperPK] = true
+				subHyperPKs[sr.hyperPK] = struct{}{}
 				sections = append(sections, VisorTreeSection{
 					HypervisorPK: sr.hyperPK,
 					ViaChain:     []cipher.PubKey{localPK},
@@ -193,6 +202,7 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 				continue
 			}
 			rendered[sr.hyperPK] = true
+			subHyperPKs[sr.hyperPK] = struct{}{}
 			// Project HVVisorEntry → Summary so the UI's existing
 			// table renderer works identically across all sections.
 			// Sub-hypervisor visors don't carry the full Summary
@@ -210,6 +220,29 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 				ViaChain:     []cipher.PubKey{localPK},
 				Visors:       visors,
 			})
+		}
+
+		// Scrub the local section: drop any visor row whose PK has
+		// its own subsequent sub-hypervisor section. Without this,
+		// a hypervisor that's both connected to AND served by this
+		// visor shows up in both the local section (as a plain
+		// connected visor) and its own section (as the section's
+		// hypervisor) — duplicate rows from the operator's POV.
+		// Doesn't touch the local hypervisor's own row at index 0
+		// (it's hv.visor.conf.PK, never in subHyperPKs).
+		if len(subHyperPKs) > 0 && len(sections) > 0 {
+			scrubbed := make([]Summary, 0, len(sections[0].Visors))
+			for _, v := range sections[0].Visors {
+				if v.Overview == nil {
+					scrubbed = append(scrubbed, v)
+					continue
+				}
+				if _, isSub := subHyperPKs[v.Overview.PubKey]; isSub {
+					continue
+				}
+				scrubbed = append(scrubbed, v)
+			}
+			sections[0].Visors = scrubbed
 		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, VisorTreeResponse{Sections: sections})
