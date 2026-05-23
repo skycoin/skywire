@@ -341,13 +341,19 @@ func projectEntryToSummary(e HVVisorEntry) Summary {
 	} else if e.Online {
 		health = &HealthInfo{ServicesHealth: "healthy"}
 	}
+	// IsHypervisor: the only sub-section row that's actually its
+	// section's hypervisor is the one whose PK matches the
+	// sub-hypervisor itself — flagged with IsLocal on the remote's
+	// HVListDirectVisors response. Setting this drives the ★ icon on
+	// the sub-hypervisor's own row in its own section. Other rows
+	// (regular visors connected to that sub-hypervisor) stay false.
 	return Summary{
 		Overview:      overview,
 		Health:        health,
 		BuildTag:      e.BuildTag,
 		Uptime:        e.Uptime,
 		Online:        e.Online,
-		IsHypervisor:  false,
+		IsHypervisor:  e.IsLocal,
 		RewardAddress: e.RewardAddress,
 		ConfigVersion: e.ConfigVersion,
 	}
