@@ -1510,6 +1510,21 @@ func (mc *mockRPCClient) AddHypervisor(_ cipher.PubKey) error {
 	return nil
 }
 
+// RemoveHypervisor implements API.
+func (mc *mockRPCClient) RemoveHypervisor(_ cipher.PubKey) error {
+	return nil
+}
+
+// RemoveAllHypervisors implements API.
+func (mc *mockRPCClient) RemoveAllHypervisors() (int, error) {
+	return 0, nil
+}
+
+// SetHypervisorPassword implements API.
+func (mc *mockRPCClient) SetHypervisorPassword(string, string) error {
+	return nil
+}
+
 // DmsgSetMinSessions implements API.
 func (mc *mockRPCClient) DmsgSetMinSessions(_ int) error {
 	return nil
