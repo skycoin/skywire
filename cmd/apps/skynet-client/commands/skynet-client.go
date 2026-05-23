@@ -56,6 +56,13 @@ var (
 	// lets forward stay direct while reverse is forced multi-hop.
 	fwdMinHops int
 	revMinHops int
+	// fwdMux / revMux are per-direction MuxRoutes overrides. When > 0
+	// they win over --routes for THAT direction's route count.
+	// Canonical download-heavy shape: --forward-mux 1 --reverse-mux 4
+	// yields 1 forward leg (cheap upstream) + 4 reverse legs that
+	// aggregate the bulk payload.
+	fwdMux int
+	revMux int
 )
 
 func init() {
@@ -68,6 +75,8 @@ func init() {
 	RootCmd.Flags().IntVar(&minHops, "min-hops", 0, "force routes through at least this many intermediates (>=2 rejects direct paths)")
 	RootCmd.Flags().IntVar(&fwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override (>=2 forces multi-hop on forward direction only)")
 	RootCmd.Flags().IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse direction only)")
+	RootCmd.Flags().IntVar(&fwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
+	RootCmd.Flags().IntVar(&revMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (>0 sets reverse leg count; canonical download-heavy shape: --forward-mux 1 --reverse-mux N)")
 }
 
 // RootCmd is the root command for skynet-client
@@ -101,6 +110,8 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.IntVar(&minHops, "min-hops", 0, "minimum hop count (>=2 rejects direct paths)")
 		fs.IntVar(&fwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override")
 		fs.IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override")
+		fs.IntVar(&fwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override")
+		fs.IntVar(&revMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -176,11 +187,17 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	if revMinHops > 1 {
 		dialShape += fmt.Sprintf(" reverse-min-hops=%d", revMinHops)
 	}
+	if fwdMux > 0 {
+		dialShape += fmt.Sprintf(" forward-mux=%d", fwdMux)
+	}
+	if revMux > 0 {
+		dialShape += fmt.Sprintf(" reverse-mux=%d", revMux)
+	}
 	appCl.Log().Infof("Per-accept dial shape: %s", dialShape)
 
 	dialRemote := func() (net.Conn, error) {
-		if routes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 {
-			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops)
+		if routes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
+			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux)
 		}
 		return appCl.Dial(connApp)
 	}

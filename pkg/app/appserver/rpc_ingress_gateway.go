@@ -137,12 +137,20 @@ type DialResp struct {
 // MinHops for that direction only. Zero = inherit MinHops. Setting
 // just ReverseMinHops=2 with MinHops=0 lets forward stay direct while
 // reverse is forced multi-hop — the canonical asymmetric test shape.
+//
+// ForwardMuxRoutes / ReverseMuxRoutes are per-direction overrides for
+// MuxRoutes. Setting ForwardMuxRoutes=1 + ReverseMuxRoutes=4 yields
+// 1 forward leg + 4 reverse legs — the canonical asymmetric-count
+// shape (download-heavy workload aggregating only the reverse
+// direction).
 type DialOptionsReq struct {
-	Addr           appnet.Addr
-	MuxRoutes      int
-	MinHops        int
-	ForwardMinHops int
-	ReverseMinHops int
+	Addr             appnet.Addr
+	MuxRoutes        int
+	MinHops          int
+	ForwardMinHops   int
+	ReverseMinHops   int
+	ForwardMuxRoutes int
+	ReverseMuxRoutes int
 }
 
 // Dial dials to the remote.
@@ -226,7 +234,9 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 // mock or future alternative networker silently degrades to single-
 // route, preserving correctness with no extra plumbing).
 func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptionsReq) (net.Conn, error) {
-	if req == nil || (req.MuxRoutes <= 1 && req.MinHops <= 1 && req.ForwardMinHops <= 1 && req.ReverseMinHops <= 1) {
+	if req == nil || (req.MuxRoutes <= 1 && req.MinHops <= 1 &&
+		req.ForwardMinHops <= 1 && req.ReverseMinHops <= 1 &&
+		req.ForwardMuxRoutes <= 1 && req.ReverseMuxRoutes <= 1) {
 		return appnet.DialContext(ctx, remote)
 	}
 	nw, err := appnet.ResolveNetworker(remote.Net)
@@ -244,6 +254,8 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	opts.MinHops = req.MinHops
 	opts.ForwardMinHops = req.ForwardMinHops
 	opts.ReverseMinHops = req.ReverseMinHops
+	opts.ForwardMuxRoutes = req.ForwardMuxRoutes
+	opts.ReverseMuxRoutes = req.ReverseMuxRoutes
 	return sw.DialContextWithOptions(ctx, remote, opts)
 }
 

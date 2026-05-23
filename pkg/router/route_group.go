@@ -1426,6 +1426,51 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 	}
 }
 
+// appendForwardLeg adds a forward leg (rule + transport) WITHOUT a
+// matching reverse rule. Used by asymmetric mux setups where the
+// ForwardMuxRoutes count exceeds ReverseMuxRoutes — e.g. a workload
+// with bulk upstream but tiny downstream. The reverse-direction
+// rule from the same setup-node call is discarded by the caller
+// (router.appendRouteAsymmetric) so it doesn't leak in the routing
+// table.
+//
+// Mirrors appendRules' tps[]+fwd[] parallel maintenance but leaves
+// rvs[] untouched. Mux weight + per-leg counter bookkeeping treats
+// this as a new forward leg.
+func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.ManagedTransport) {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	rg.fwd = append(rg.fwd, forward)
+	rg.tps = append(rg.tps, tp)
+
+	if rg.mux != nil && len(rg.tps) > 1 {
+		rg.mux.rebuildWeights(rg.tps)
+	}
+	if rg.mux != nil {
+		rg.mux.growLegs(len(rg.tps))
+	}
+}
+
+// appendReverseLeg adds a reverse rule WITHOUT a paired forward
+// rule + transport. Used by asymmetric mux setups where
+// ReverseMuxRoutes exceeds ForwardMuxRoutes — the operator's
+// canonical bandwidth-asymmetric case (1 forward + N reverse for
+// download-heavy workloads).
+//
+// rvs[] grows independently of tps[]/fwd[]; the read path is by
+// route-id lookup (not slice-indexed) so this works without further
+// data-plane changes. Per-leg counter slots (mux.legs) are NOT
+// extended here — they are parallel to tps[] and the reverse-only
+// leg doesn't add a forward transport. Per-direction recv-byte
+// attribution for reverse-only legs is a separate refinement.
+func (rg *RouteGroup) appendReverseLeg(reverse routing.Rule) {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	rg.rvs = append(rg.rvs, reverse)
+}
+
 func chanClosed(ch chan struct{}) bool {
 	select {
 	case <-ch:

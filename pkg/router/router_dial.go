@@ -1216,6 +1216,16 @@ func hopPath(path []routing.Hop) string {
 
 // establishMuxRoutes attempts to establish additional parallel routes for a mux-enabled
 // route group. Called after the primary route is established in DialRoutes.
+//
+// Supports asymmetric mux counts: ForwardMuxRoutes / ReverseMuxRoutes
+// override the symmetric MuxRoutes for that direction (see
+// DialOptions.EffectiveMuxRoutes). The loop runs max(fwd, rev) - 1
+// iterations; per iteration, the aux route's forward leg is appended
+// only if i < fwdCount and the reverse leg only if i < revCount. The
+// unused direction's rule is deleted from the routing table to avoid
+// stale-entry leaks. The most useful case is fwd=1 + rev=N for
+// download-heavy workloads (1 forward upstream + N reverse legs that
+// aggregate the bulk payload).
 func (r *router) establishMuxRoutes(
 	ctx context.Context,
 	nrg *NoiseRouteGroup,
@@ -1224,11 +1234,21 @@ func (r *router) establishMuxRoutes(
 	primaryTpID uuid.UUID,
 ) {
 	log := r.scopedLogForOpts(opts, forwardDesc.SrcPort())
-	muxCount := 1
-	if opts != nil && opts.MuxRoutes > 1 {
-		muxCount = opts.MuxRoutes
+	fwdCount := 1
+	revCount := 1
+	if opts != nil {
+		if eff := opts.EffectiveMuxRoutes(true); eff > 1 {
+			fwdCount = eff
+		}
+		if eff := opts.EffectiveMuxRoutes(false); eff > 1 {
+			revCount = eff
+		}
 	}
-	if muxCount <= 1 || nrg.rg.mux == nil {
+	maxCount := fwdCount
+	if revCount > maxCount {
+		maxCount = revCount
+	}
+	if maxCount <= 1 || nrg.rg.mux == nil {
 		return
 	}
 
@@ -1284,7 +1304,19 @@ func (r *router) establishMuxRoutes(
 		parentAppName = opts.AppName
 	}
 
-	for i := 1; i < muxCount; i++ {
+	for i := 1; i < maxCount; i++ {
+		// Per-iteration direction selection: extend forward only when
+		// this leg is needed for fwdCount, reverse only when needed
+		// for revCount. When both are false we skip the entire setup
+		// (rare; only happens if asymmetric counts disagree on which
+		// side is bigger mid-loop, which can't with the current
+		// max() shape — but the guard is cheap).
+		addFwd := i < fwdCount
+		addRev := i < revCount
+		if !addFwd && !addRev {
+			continue
+		}
+
 		muxOpts := &DialOptions{
 			MinForwardRts:          1,
 			MaxForwardRts:          1,
@@ -1313,7 +1345,7 @@ func (r *router) establishMuxRoutes(
 		// caller can decide whether to fail or accept partial mux.
 		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
-			log.Debugf("Mux route %d/%d: no additional route found: %v", i+1, muxCount, err)
+			log.Debugf("Mux route %d/%d: no additional route found: %v", i+1, maxCount, err)
 			break
 		}
 
@@ -1330,20 +1362,32 @@ func (r *router) establishMuxRoutes(
 
 		muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, muxReq)
 		if err != nil {
-			log.Debugf("Mux route %d/%d: setup failed: %v", i+1, muxCount, err)
+			log.Debugf("Mux route %d/%d: setup failed: %v", i+1, maxCount, err)
 			break
 		}
 
-		if err := r.appendRouteToGroup(nrg, muxRules); err != nil {
-			log.Debugf("Mux route %d/%d: append failed: %v", i+1, muxCount, err)
+		if err := r.appendRouteAsymmetric(nrg, muxRules, addFwd, addRev); err != nil {
+			log.Debugf("Mux route %d/%d: append failed (addFwd=%v addRev=%v): %v", i+1, maxCount, addFwd, addRev, err)
 			break
 		}
 
-		excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
-		// Accumulate this route's intermediate hops into the
-		// exclude-PK set so subsequent aux routes avoid them.
-		excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
-		log.Infof("Mux route %d/%d established via transport %s", i+1, muxCount, muxRules.Forward.NextTransportID())
+		// Track this route's forward TpID + intermediate-PK set ONLY
+		// when we actually appended the forward direction (the
+		// reverse-only case doesn't contribute to forward-side
+		// disjointness exclusion, since no forward transport was
+		// added). For reverse-only legs we still want disjoint reverse
+		// paths but the exclude set is the union of all-direction
+		// intermediates — accumulating the reverse path's
+		// intermediates handles that.
+		if addFwd {
+			excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
+			excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
+		}
+		if addRev {
+			excludePKs = append(excludePKs, intermediatesOfHops(muxRev, rPK, lPK)...)
+		}
+		log.Infof("Mux route %d/%d established (fwd=%v rev=%v) via tp %s",
+			i+1, maxCount, addFwd, addRev, muxRules.Forward.NextTransportID())
 	}
 }
 

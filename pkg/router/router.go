@@ -177,6 +177,24 @@ type DialOptions struct {
 	// Config.MinHops; else the global default.
 	ForwardMinHops int
 	ReverseMinHops int
+
+	// ForwardMuxRoutes / ReverseMuxRoutes are per-direction overrides
+	// for MuxRoutes. When > 1 they take precedence over the symmetric
+	// MuxRoutes field for THAT direction's route count.
+	//
+	// Use case: the operator's "direct upstream + multi-hop downstream"
+	// test — set ForwardMuxRoutes=1 and ReverseMuxRoutes=4 to open a
+	// single forward leg (the GET request rides one TCP socket) while
+	// the reverse direction aggregates the bulk payload across 4
+	// multi-hop legs. The data plane already supports rg.fwd[] and
+	// rg.rvs[] being different lengths (the read path is by route-id
+	// lookup, not slice index), so this is purely a setup-side change.
+	//
+	// 0 (the default) means "inherit MuxRoutes" for that direction.
+	// When the caller wants strictly N=1 on a side they should set it
+	// to 1 explicitly (not 0) since 0 still falls through to MuxRoutes.
+	ForwardMuxRoutes int
+	ReverseMuxRoutes int
 }
 
 // DefaultDialOptions returns default dial options.
@@ -215,6 +233,31 @@ func (o *DialOptions) EffectiveMinHops(forward bool) int {
 		}
 	}
 	return o.MinHops
+}
+
+// EffectiveMuxRoutes returns the per-direction mux-route count:
+// forward=true → ForwardMuxRoutes if > 0 else MuxRoutes; forward=false →
+// ReverseMuxRoutes if > 0 else MuxRoutes. Callers (establishMuxRoutes,
+// the dial-shape logger) read this once per direction to support
+// asymmetric mux topologies — most commonly 1 forward + N reverse
+// for download-heavy workloads.
+//
+// Returns 0 when opts is nil or all relevant fields are 0; preserves
+// the "single route" default behavior.
+func (o *DialOptions) EffectiveMuxRoutes(forward bool) int {
+	if o == nil {
+		return 0
+	}
+	if forward {
+		if o.ForwardMuxRoutes > 0 {
+			return o.ForwardMuxRoutes
+		}
+	} else {
+		if o.ReverseMuxRoutes > 0 {
+			return o.ReverseMuxRoutes
+		}
+	}
+	return o.MuxRoutes
 }
 
 // AnyMinHopsConstraint reports whether the caller has set any min-hops
