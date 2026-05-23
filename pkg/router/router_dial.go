@@ -582,32 +582,40 @@ fetchRoutesAgain:
 	return fwdPath, revPath, nil
 }
 
-// pickDisjointPath walks the parallel forward/reverse-path slices the
-// route-finder returned (paired by index) and returns the
-// forward/reverse pair whose intermediate hops do not contain any PK
-// in exclude AND whose total measured latency is lowest.
+// pickDisjointPath returns the forward/reverse path pair whose
+// intermediate hops do not contain any PK in exclude AND whose
+// per-direction latency is lowest. Forward and reverse are RANKED
+// INDEPENDENTLY — the route-finder returns each direction as its own
+// candidate slice (PathEdges{forward, backward} at the FindRoutes call
+// site) and the data plane stores fwd / rvs as separate rule chains
+// (route_group.fwd / route_group.rvs), so there's no requirement that
+// the two paths share the same intermediates.
 //
-// latencyFor is a per-TpID latency lookup (avg-ms; 0 = unknown). Pairs
-// containing any unknown-latency hop are still considered, but unknown
-// hops are treated as a high cost so KNOWN-good paths are preferred
-// when available. Pass nil to disable latency ranking (legacy
-// first-acceptable behavior).
+// Pre-#2782 this function paired by index (forward[i], reverse[i]),
+// which threw away the independent-direction signal: if forward had
+// a great candidate at index 2 but the best reverse was at index 0,
+// pairing-by-index would force forward[0] + reverse[0] (or whatever
+// matching pair scored lowest combined). Unpairing closes that gap.
+//
+// latencyFor is a per-TpID latency lookup (avg-ms; 0 = unknown). Hops
+// with unknown latency are treated as a high cost so paths with
+// measured signal outrank paths with no signal at all. Pass nil to
+// disable latency ranking (legacy first-acceptable behavior).
 //
 // When exclude is empty AND latencyFor is nil: returns paths[0] (the
-// pre-existing hot-path single-route behavior — back-compat).
+// pre-existing hot-path single-route behavior — back-compat for tests
+// and any caller that doesn't opt in to ranking).
 //
-// ok=false means every candidate touched the exclude set — the caller
-// should fall back to local route calc or surface ErrNoRouteFound.
+// ok=false means every candidate in at least one direction touched
+// the exclude set — caller should fall back to local route calc or
+// surface ErrNoRouteFound.
 //
-// Rationale for ranking by latency: prior to this, the route-finder's
-// first-returned candidate was selected even when alternative
-// candidates had measurably better RTT. The empirical 2026-05-23
-// bilateral ss-tinp capture showed a route-finder pick going through a
-// geo-distant Indonesia intermediate (cwnd:2 ssthresh:2 10-18% retx)
-// while a much healthier candidate was available in the same response
-// — TPD already carries that latency signal end-to-end via the CXO
-// telemetry feed and aggregator (pkg/transport-discovery/cxoaggregator).
-// Visor-side ranking on top of the existing data closes the loop.
+// Rationale for asymmetric ranking (operator framing 2026-05-23):
+// most real workloads are bandwidth-asymmetric (HTTP GET = tiny
+// upstream + bulk downstream). Allowing forward and reverse to use
+// different intermediates means each direction can pick its best
+// available wire, not the best PAIR — which is strictly weaker when
+// the per-direction optimums sit at different indices.
 func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey, latencyFor func(uuid.UUID) float64) ([]routing.Hop, []routing.Hop, bool) {
 	if len(forward) == 0 || len(reverse) == 0 {
 		return nil, nil, false
@@ -622,40 +630,39 @@ func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey,
 	for _, pk := range exclude {
 		excludeSet[pk] = struct{}{}
 	}
-	// Iterate paired indices. Empirically the route-finder returns
-	// equal-length slices; defensively cap by min(len).
-	n := len(forward)
-	if len(reverse) < n {
-		n = len(reverse)
+	fwdPath, fwdOK := pickBestDirection(forward, excludeSet, latencyFor)
+	revPath, revOK := pickBestDirection(reverse, excludeSet, latencyFor)
+	if !fwdOK || !revOK {
+		return nil, nil, false
 	}
-	// Collect acceptable candidates (passing the disjointness check),
-	// then pick the lowest-latency pair. When latencyFor is nil OR
-	// every candidate has fully-unknown latency, ties resolve to the
-	// first-encountered candidate — the legacy behavior.
+	return fwdPath, revPath, true
+}
+
+// pickBestDirection returns the lowest-latency-scoring candidate from
+// a single direction's path slice that doesn't touch the exclude set.
+// When latencyFor is nil, returns the first acceptable candidate (the
+// legacy first-after-exclude behavior — preserved for callers that
+// don't opt into ranking, e.g. the existing tests).
+func pickBestDirection(paths [][]routing.Hop, excludeSet map[cipher.PubKey]struct{}, latencyFor func(uuid.UUID) float64) ([]routing.Hop, bool) {
 	bestIdx := -1
 	bestScore := 0.0
-	for i := 0; i < n; i++ {
-		if pathTouchesIntermediate(forward[i], excludeSet) ||
-			pathTouchesIntermediate(reverse[i], excludeSet) {
+	for i, p := range paths {
+		if pathTouchesIntermediate(p, excludeSet) {
 			continue
 		}
 		if latencyFor == nil {
-			// No ranker — first acceptable wins.
-			return forward[i], reverse[i], true
+			return p, true
 		}
-		score := pathLatencyScore(forward[i], latencyFor) + pathLatencyScore(reverse[i], latencyFor)
+		score := pathLatencyScore(p, latencyFor)
 		if bestIdx < 0 || score < bestScore {
 			bestIdx = i
 			bestScore = score
 		}
 	}
 	if bestIdx < 0 {
-		return nil, nil, false
+		return nil, false
 	}
-	// bestIdx is set only by the loop above where 0 <= i < n =
-	// min(len(forward), len(reverse)), so both indexes are in-bounds.
-	// gosec can't track the cross-slice min, hence the explicit nolint.
-	return forward[bestIdx], reverse[bestIdx], true //nolint:gosec
+	return paths[bestIdx], true
 }
 
 // pathLatencyScore returns the sum of per-hop avg-latency-ms across a
