@@ -11,6 +11,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/rewards"
 )
@@ -271,6 +272,27 @@ func (hv *Hypervisor) collectLocalVisorSummaries() []Summary {
 	return out
 }
 
+// projectEntryTransports returns the per-transport detail the
+// node-list's Transports column iterates. Prefers the full
+// TransportSummaries field populated post-#2789. Falls back to a slice
+// of placeholder TransportSummary entries sized to the count field
+// when the remote sub-hypervisor predates #2789 and only sent the
+// count — the per-type breakdown is unknown but the operator at
+// least sees the right total instead of a "-" dash.
+func projectEntryTransports(e HVVisorEntry) []*TransportSummary {
+	if len(e.TransportSummaries) > 0 {
+		return e.TransportSummaries
+	}
+	if e.Transports <= 0 {
+		return nil
+	}
+	out := make([]*TransportSummary, e.Transports)
+	for i := range out {
+		out[i] = &TransportSummary{Type: types.Type("?")}
+	}
+	return out
+}
+
 // projectEntryToSummary fills the Summary fields the main node list's
 // table consumes from an HVVisorEntry. Fields the table doesn't
 // render (health, dmsg stats, route group info, etc.) stay zero —
@@ -287,6 +309,7 @@ func projectEntryToSummary(e HVVisorEntry) Summary {
 		BuildInfo: &buildinfo.Info{
 			Version: e.Version,
 		},
+		Transports: projectEntryTransports(e),
 	}
 	// Health is partial here — only ServicesHealth carries through
 	// the HVVisorEntry round-trip from the remote hypervisor. That's
