@@ -213,7 +213,12 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 			// come through populateEntryFromSummary on the remote
 			// side, here projected back.
 			visors := make([]Summary, 0, len(sr.entries))
-			for _, e := range sr.entries {
+			type fetchTarget struct {
+				idx int
+				pk  cipher.PubKey
+			}
+			var fetchTargets []fetchTarget
+			for i, e := range sr.entries {
 				s := projectEntryToSummary(e)
 				// The sub-section's ★ icon should appear on the
 				// section's own hypervisor row and nowhere else.
@@ -227,6 +232,56 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 				// row is the section's hypervisor."
 				s.IsHypervisor = e.PK == sr.hyperPK
 				visors = append(visors, s)
+				// Pre-#2789 sub-hypervisors return HVVisorEntry with
+				// only the transport COUNT, no per-transport detail.
+				// projectEntryTransports synthesizes typeless "?"
+				// placeholders so the count renders; the frontend
+				// filters those out for cleanliness — net effect is
+				// "Total: N" with no per-type breakdown. Fall back
+				// to HVVisorSummary (which routes through the
+				// proxy chain and ultimately calls the visor's real
+				// Summary()) so the per-type breakdown surfaces
+				// regardless of the sub-hypervisor's version.
+				if e.Online && len(e.TransportSummaries) == 0 && e.Transports > 0 {
+					fetchTargets = append(fetchTargets, fetchTarget{i, e.PK})
+				}
+			}
+			// Fan-out the fallback Summary fetches in parallel,
+			// bounded by a per-call timeout so a slow visor doesn't
+			// hold the entire tree response. Failures are silently
+			// tolerated — the placeholder row is still rendered as
+			// "Total: N" via projectEntryTransports, so the
+			// per-type breakdown just stays missing if the deeper
+			// query times out or errors.
+			if len(fetchTargets) > 0 && hv.visor != nil {
+				var fwg sync.WaitGroup
+				fwg.Add(len(fetchTargets))
+				for _, ft := range fetchTargets {
+					go func(idx int, pk cipher.PubKey) {
+						defer fwg.Done()
+						done := make(chan *Summary, 1)
+						go func() {
+							s, err := hv.visor.HVVisorSummary(pk)
+							if err != nil {
+								done <- nil
+								return
+							}
+							done <- s
+						}()
+						select {
+						case full := <-done:
+							if full == nil || full.Overview == nil || len(full.Overview.Transports) == 0 {
+								return
+							}
+							if visors[idx].Overview == nil {
+								return
+							}
+							visors[idx].Overview.Transports = full.Overview.Transports
+						case <-time.After(5 * time.Second):
+						}
+					}(ft.idx, ft.pk)
+				}
+				fwg.Wait()
 			}
 			sections = append(sections, VisorTreeSection{
 				HypervisorPK: sr.hyperPK,
