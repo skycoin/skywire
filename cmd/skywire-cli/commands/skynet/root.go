@@ -21,12 +21,12 @@ const (
 )
 
 var (
-	remotePort    int
-	remotePk      string
-	localPort     int
-	clientAppPort uint16
-	useInternal   bool
-	useExternal   bool
+	remotePort      int
+	remotePk        string
+	localPort       int
+	clientAppPort   uint16
+	useInternal     bool
+	useExternal     bool
 	clientName      string // optional custom name for the client instance
 	startRoutes     int    // number of parallel skynet mux routes (0/1 = single route)
 	startMinHops    int    // minimum-hop constraint (>=2 rejects direct paths)
