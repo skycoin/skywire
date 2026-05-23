@@ -555,15 +555,22 @@ fetchRoutesAgain:
 
 	log.Debugf("Found routes Forward: %s. Reverse %s", paths[forward], paths[backward])
 
-	// DisjointMux post-filter: if the caller populated
-	// ExcludeIntermediatePKs (typically the mux loop tracking
-	// intermediates of already-established routes), iterate the
-	// route-finder's response and return the first path whose
-	// intermediates don't overlap with the exclude set. The
-	// route-finder doesn't natively know about this constraint, so
-	// we filter client-side. Source + destination are NOT considered
-	// "intermediates" (they're endpoints).
-	fwdPath, revPath, ok := pickDisjointPath(paths[forward], paths[backward], opts.ExcludeIntermediatePKs)
+	// DisjointMux post-filter + latency ranking: iterate the route-
+	// finder's response and return the path whose intermediates don't
+	// overlap with opts.ExcludeIntermediatePKs AND whose total per-hop
+	// avg latency is lowest among acceptable candidates. The route-
+	// finder service doesn't sort by latency at query time today; the
+	// visor has the same TPD latency data available in-memory (own
+	// transports via tm.GetLatencyStats) + via TPD entries (already
+	// aggregated by pkg/transport-discovery/cxoaggregator from the
+	// CXO telemetry feed). Building the lookup here puts the ranking
+	// in the dial hot path with no extra round-trip cost — local-
+	// transport latency is a constant-time map read; non-local hops
+	// fall back to GetTransport's cached entry. Pass-through when
+	// the route-finder returned a single candidate (lookup is built
+	// but never iterated).
+	latencyFor := r.buildLatencyLookup(ctx, paths[forward], paths[backward])
+	fwdPath, revPath, ok := pickDisjointPath(paths[forward], paths[backward], opts.ExcludeIntermediatePKs, latencyFor)
 	if !ok {
 		log.Debugf("No route-finder path avoids the %d excluded intermediates; trying local route calc fallback", len(opts.ExcludeIntermediatePKs))
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, src, dst, opts)
@@ -576,19 +583,39 @@ fetchRoutesAgain:
 }
 
 // pickDisjointPath walks the parallel forward/reverse-path slices the
-// route-finder returned (paired by index) and returns the first
+// route-finder returned (paired by index) and returns the
 // forward/reverse pair whose intermediate hops do not contain any PK
-// in exclude. When exclude is empty (the common single-route case),
-// returns paths[0]. ok=false means every candidate touched the
-// exclude set — the caller should fall back to local route calc or
-// surface ErrNoRouteFound.
-func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey) ([]routing.Hop, []routing.Hop, bool) {
+// in exclude AND whose total measured latency is lowest.
+//
+// latencyFor is a per-TpID latency lookup (avg-ms; 0 = unknown). Pairs
+// containing any unknown-latency hop are still considered, but unknown
+// hops are treated as a high cost so KNOWN-good paths are preferred
+// when available. Pass nil to disable latency ranking (legacy
+// first-acceptable behavior).
+//
+// When exclude is empty AND latencyFor is nil: returns paths[0] (the
+// pre-existing hot-path single-route behavior — back-compat).
+//
+// ok=false means every candidate touched the exclude set — the caller
+// should fall back to local route calc or surface ErrNoRouteFound.
+//
+// Rationale for ranking by latency: prior to this, the route-finder's
+// first-returned candidate was selected even when alternative
+// candidates had measurably better RTT. The empirical 2026-05-23
+// bilateral ss-tinp capture showed a route-finder pick going through a
+// geo-distant Indonesia intermediate (cwnd:2 ssthresh:2 10-18% retx)
+// while a much healthier candidate was available in the same response
+// — TPD already carries that latency signal end-to-end via the CXO
+// telemetry feed and aggregator (pkg/transport-discovery/cxoaggregator).
+// Visor-side ranking on top of the existing data closes the loop.
+func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey, latencyFor func(uuid.UUID) float64) ([]routing.Hop, []routing.Hop, bool) {
 	if len(forward) == 0 || len(reverse) == 0 {
 		return nil, nil, false
 	}
-	if len(exclude) == 0 {
-		// Hot path: no constraint, keep the existing first-element
-		// behavior so back-compat single-route callers are unaffected.
+	if len(exclude) == 0 && latencyFor == nil {
+		// Hot path: no constraint, no ranker. Preserve the original
+		// first-element behavior so back-compat single-route callers
+		// are unaffected (tests that don't pass a latencyFor).
 		return forward[0], reverse[0], true
 	}
 	excludeSet := make(map[cipher.PubKey]struct{}, len(exclude))
@@ -601,13 +628,110 @@ func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey)
 	if len(reverse) < n {
 		n = len(reverse)
 	}
+	// Collect acceptable candidates (passing the disjointness check),
+	// then pick the lowest-latency pair. When latencyFor is nil OR
+	// every candidate has fully-unknown latency, ties resolve to the
+	// first-encountered candidate — the legacy behavior.
+	bestIdx := -1
+	bestScore := 0.0
 	for i := 0; i < n; i++ {
-		if !pathTouchesIntermediate(forward[i], excludeSet) &&
-			!pathTouchesIntermediate(reverse[i], excludeSet) {
+		if pathTouchesIntermediate(forward[i], excludeSet) ||
+			pathTouchesIntermediate(reverse[i], excludeSet) {
+			continue
+		}
+		if latencyFor == nil {
+			// No ranker — first acceptable wins.
 			return forward[i], reverse[i], true
 		}
+		score := pathLatencyScore(forward[i], latencyFor) + pathLatencyScore(reverse[i], latencyFor)
+		if bestIdx < 0 || score < bestScore {
+			bestIdx = i
+			bestScore = score
+		}
 	}
-	return nil, nil, false
+	if bestIdx < 0 {
+		return nil, nil, false
+	}
+	return forward[bestIdx], reverse[bestIdx], true
+}
+
+// pathLatencyScore returns the sum of per-hop avg-latency-ms across a
+// path, treating unknown latencies (latencyFor returning 0) as a high
+// cost so paths with measured latency outrank paths with no signal at
+// all. The penalty (unknownLatencyCostMs) is set above the practical
+// upper bound of healthy single-hop latency — currently 1000ms — so a
+// single unknown hop already loses to a known 500ms hop, but a path
+// composed entirely of unknown hops is still preferred over no path.
+func pathLatencyScore(path []routing.Hop, latencyFor func(uuid.UUID) float64) float64 {
+	const unknownLatencyCostMs = 1000.0
+	var total float64
+	for _, h := range path {
+		ms := latencyFor(h.TpID)
+		if ms <= 0 {
+			total += unknownLatencyCostMs
+			continue
+		}
+		total += ms
+	}
+	return total
+}
+
+// buildLatencyLookup constructs a TpID → avg-latency-ms lookup over
+// the union of TpIDs appearing in fwd and rev path candidates.
+// Sources, in preference order:
+//
+//  1. Local transport manager — `tm.GetLatencyStats().Avg` for any
+//     transport this visor holds. Constant-time map read; reflects the
+//     freshest measured RSN-ping value, including transports that
+//     haven't yet propagated to TPD.
+//  2. TPD `GetTransport(tpID)` — entries the local visor doesn't own
+//     (the intermediate-to-intermediate hops). Latency hydrated by
+//     pkg/transport-discovery/cxoaggregator from the per-visor CXO
+//     telemetry feed.
+//
+// Returns a closure rather than a map so the caller pays for lookups
+// only for hops actually visited during ranking; the candidate slice
+// is typically 2-3 paths × ≤6 hops = small.
+func (r *router) buildLatencyLookup(ctx context.Context, fwd, rev [][]routing.Hop) func(uuid.UUID) float64 {
+	// Single dial's candidate set is small — collect unique TpIDs first
+	// so we don't double-fetch when an intermediate appears in both
+	// forward and reverse paths.
+	unique := make(map[uuid.UUID]struct{})
+	for _, paths := range [][][]routing.Hop{fwd, rev} {
+		for _, p := range paths {
+			for _, h := range p {
+				unique[h.TpID] = struct{}{}
+			}
+		}
+	}
+	cache := make(map[uuid.UUID]float64, len(unique))
+	for id := range unique {
+		// Local transport first — freshest signal, no TPD round-trip.
+		if r.tm != nil {
+			if tp := r.tm.Transport(id); tp != nil {
+				if stats := tp.GetLatencyStats(); stats.Avg > 0 {
+					cache[id] = stats.Avg
+					continue
+				}
+			}
+		}
+		// Fall through to TPD: hydrated latency from the CXO aggregator.
+		// Errors are logged at debug and treated as unknown — ranker's
+		// unknownLatencyCostMs penalty handles missing data.
+		if r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil {
+			entry, err := r.tm.Conf.DiscoveryClient.GetTransportByID(ctx, id)
+			if err != nil {
+				r.logger.WithError(err).Debugf("buildLatencyLookup: GetTransportByID failed for %s — treating as unknown latency", id)
+				continue
+			}
+			if entry != nil && entry.Latency > 0 {
+				cache[id] = entry.Latency
+			}
+		}
+	}
+	return func(id uuid.UUID) float64 {
+		return cache[id]
+	}
 }
 
 // pathTouchesIntermediate reports whether route hops contain any PK
@@ -885,14 +1009,34 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// once and the BFS stays linear in graph size.
 	expandedAtDepth := make(map[cipher.PubKey]map[int]bool)
 
+	// Per-TpID latency lookup over the entries we just fetched —
+	// hydrated by the CXO telemetry aggregator on TPD's side. Used to
+	// rank multiple same-level dst-hits below.
+	tpLatencyMs := make(map[uuid.UUID]float64)
+	for _, entry := range allEntries {
+		if entry == nil {
+			continue
+		}
+		if entry.Latency > 0 {
+			tpLatencyMs[entry.ID] = entry.Latency
+		}
+	}
+	localLatencyFor := func(id uuid.UUID) float64 { return tpLatencyMs[id] }
+
 	queue := seed
 	for level := 1; level <= maxHops && len(queue) > 0; level++ {
 		nextQueue := make([]bfsNode, 0)
+		// Collect ALL dst-hits at this level, then pick the lowest-
+		// latency among them. Pre-fix this loop returned on the first
+		// hit, leaving the BFS's deterministic-by-PK ordering as the
+		// only tiebreaker — which empirically picked geo-distant
+		// intermediates over healthier same-hop-count alternatives.
+		var dstCandidates [][]routing.Hop
 		for _, node := range queue {
 			// Did we reach the destination at an acceptable depth?
 			if node.pk == dst && level >= minHops {
-				log.Debugf("Local BFS found %d-hop route via %v", level, hopPath(node.path))
-				return node.path, reverseHops(node.path), nil
+				dstCandidates = append(dstCandidates, node.path)
+				continue
 			}
 			// Stop expanding nodes already at maxHops — children would
 			// exceed the cap.
@@ -945,6 +1089,24 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 				return children[i].pk.String() < children[j].pk.String()
 			})
 			nextQueue = append(nextQueue, children...)
+		}
+		// If any dst-candidates were collected at this level, pick the
+		// lowest-latency one and return. BFS continues to higher levels
+		// only when no dst-hit happened — shorter paths still beat
+		// longer ones, as before; the change is purely a tiebreaker
+		// among same-hop-count candidates.
+		if len(dstCandidates) > 0 {
+			best := dstCandidates[0]
+			bestScore := pathLatencyScore(best, localLatencyFor)
+			for _, p := range dstCandidates[1:] {
+				if s := pathLatencyScore(p, localLatencyFor); s < bestScore {
+					best = p
+					bestScore = s
+				}
+			}
+			log.Debugf("Local BFS found %d-hop route via %v (best of %d same-level candidates, score=%.1fms)",
+				level, hopPath(best), len(dstCandidates), bestScore)
+			return best, reverseHops(best), nil
 		}
 		queue = nextQueue
 	}
