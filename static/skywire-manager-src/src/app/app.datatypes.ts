@@ -54,6 +54,12 @@ export class Node {
   cityName?: string;
   latitude?: number;
   longitude?: number;
+  // OS hostname of the host the visor runs on, populated from
+  // os.Hostname() server-side. Surfaced on the Node Info tab and
+  // used by storageService.getDefaultLabel() as the preferred
+  // fallback when no explicit label is set (more operator-readable
+  // than the visor's local IP or PK).
+  hostname?: string;
 }
 
 export interface Application {
