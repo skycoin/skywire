@@ -152,6 +152,9 @@ absorption.
 -   `fix(router)`: plumb opts.MinHops + AppName into establishMuxRoutes aux muxOpts  [#2776](https://github.com/skycoin/skywire/pull/2776)
 -   `fix(skynet-srv)`: half-close forwardRawTCP before close — drains buffered bytes  [#2735](https://github.com/skycoin/skywire/pull/2735)
 -   `fix(router)`: handleDataPacket panic on send-to-closed-readCh during remote close  [#2730](https://github.com/skycoin/skywire/pull/2730)
+-   `feat(router)`: rank route candidates by measured per-hop latency  [#2782](https://github.com/skycoin/skywire/pull/2782)
+-   `feat(router)`: unpair forward/reverse candidate selection  [#2785](https://github.com/skycoin/skywire/pull/2785)
+-   `feat(router)`: per-direction MinHops for asymmetric routing  [#2792](https://github.com/skycoin/skywire/pull/2792)
 
 ### CXO reliability
 
@@ -268,6 +271,20 @@ absorption.
 -   `fix(hv)`: restore local-hypervisor ★ + keep transient-offline visors visible  [#2742](https://github.com/skycoin/skywire/pull/2742)
 -   `fix(hv-ui)`: drop DMSG + Reachability tabs; terminal tab now works  [#2743](https://github.com/skycoin/skywire/pull/2743)
 -   `feat(hv-ui)`: hypervisor list under PK, live online-time, ping/NAT tooltips  [#2744](https://github.com/skycoin/skywire/pull/2744)
+-   `feat(visor/hv)`: runtime management — rm/--all/passwd CLI, hypervisor section on visor info  [#2779](https://github.com/skycoin/skywire/pull/2779)
+-   `fix(hv)`: dedup hypervisor visor rows in tree-summary local section + surface Hostname  [#2780](https://github.com/skycoin/skywire/pull/2780)
+-   `feat(hvui)`: default node label to hostname; surface hostname on node info tab  [#2781](https://github.com/skycoin/skywire/pull/2781)
+-   `feat(hvui/node-list)`: render per-sub-hypervisor sections below the main table  [#2783](https://github.com/skycoin/skywire/pull/2783)
+-   `fix(hv)`: propagate ServicesHealth through HVVisorEntry → sub-section status dots  [#2784](https://github.com/skycoin/skywire/pull/2784)
+-   `fix(hvui/node-list)`: sub-section tables now use the full-fat main-table styling  [#2786](https://github.com/skycoin/skywire/pull/2786)
+-   `feat(hv)`: proxy visor RPC through a sub-hypervisor for drill-down access  [#2787](https://github.com/skycoin/skywire/pull/2787)
+-   `fix(hv)`: default sub-section Online visors to healthy when ServicesHealth empty  [#2788](https://github.com/skycoin/skywire/pull/2788)
+-   `fix(hv)`: surface sub-section visor transports column  [#2789](https://github.com/skycoin/skywire/pull/2789)
+-   `fix(hvui)`: parse transports in sub-section tree response  [#2790](https://github.com/skycoin/skywire/pull/2790)
+-   `fix(hv)`: sub-section ★ icon + clean placeholder transport rows  [#2791](https://github.com/skycoin/skywire/pull/2791)
+-   `fix(hv)`: only star sub-section row matching the section's hypervisor PK  [#2793](https://github.com/skycoin/skywire/pull/2793)
+-   `fix(hvui)`: main flat list = section 0 only; visors per their own hypervisor  [#2794](https://github.com/skycoin/skywire/pull/2794)
+-   `fix(hv)`: sub-section transports fallback via HVVisorSummary  [#2795](https://github.com/skycoin/skywire/pull/2795)
 
 ### Skymail bridge
 
