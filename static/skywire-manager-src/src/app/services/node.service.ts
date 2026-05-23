@@ -87,6 +87,7 @@ export class NodeService {
           node.lastSeenAt = response.last_seen_at;
           node.isStale = !!response.offline_since;
           node.localPk = response.overview.local_pk;
+          node.hostname = response.overview.hostname;
           node.version = response.overview.build_info.version;
           node.configVersion = response.config_version;
           node.os = response.overview.build_info.os;
@@ -322,6 +323,7 @@ return {
       node.lastSeenAt = response.last_seen_at;
       node.isStale = !!response.offline_since;
       node.localPk = response.overview ? response.overview.local_pk : '';
+      node.hostname = response.overview ? response.overview.hostname : undefined;
       node.version = response.overview && response.overview.build_info ? response.overview.build_info.version : '';
       node.configVersion = response.config_version;
       node.os = response.overview && response.overview.build_info ? response.overview.build_info.os : '';
@@ -404,6 +406,7 @@ return {
 
         // Basic data.
         node.localPk = response.overview.local_pk;
+        node.hostname = response.overview.hostname;
         node.version = response.overview.build_info.version;
         node.configVersion = response.config_version;
         node.os = response.overview.build_info.os;

@@ -21,6 +21,12 @@
           <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
           <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
         </span>
+        @if (node.hostname) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.hostname' | translate }} </span>
+            <app-copy-to-clipboard-text text="{{ node.hostname }}"></app-copy-to-clipboard-text>
+          </span>
+        }
         <!-- Connected hypervisors live right under the visor PK so
              the relationship is visually obvious. Each row carries a
              ★ when the hypervisor PK matches the one serving this
