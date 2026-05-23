@@ -323,6 +323,8 @@
     "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
+    "subhypervisor-error": "Could not query this hypervisor",
+    "subhypervisor-empty": "No visors directly connected to this hypervisor.",
     "ip": "IP",
     "lan-ip": "LAN IP",
     "public-ip": "Public IP",
