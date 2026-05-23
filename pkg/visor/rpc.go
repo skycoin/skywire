@@ -409,6 +409,40 @@ func (r *RPC) AddHypervisor(in *cipher.PubKey, _ *struct{}) (err error) {
 	return r.visor.AddHypervisor(*in)
 }
 
+// RemoveHypervisor tears down a runtime-added hypervisor connection
+// by PK. Idempotent: succeeds with nil if the PK is not currently a
+// runtime-added hypervisor on this visor (covers double-rm, rm of a
+// config-loaded hypervisor, and rm of an already-disconnected PK).
+func (r *RPC) RemoveHypervisor(in *cipher.PubKey, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoveHypervisor", in)(nil, &err)
+	return r.visor.RemoveHypervisor(*in)
+}
+
+// RemoveAllHypervisors tears down every runtime-added hypervisor
+// connection on this visor. Returns the count disconnected.
+func (r *RPC) RemoveAllHypervisors(_ *struct{}, out *int) (err error) {
+	defer rpcutil.LogCall(r.log, "RemoveAllHypervisors", nil)(out, &err)
+	n, err := r.visor.RemoveAllHypervisors()
+	*out = n
+	return err
+}
+
+// HypervisorPasswordChangeIn carries the old + new password for the
+// hypervisor UI "admin" account. Mirrors the shape of
+// usermanager.ChangePassword and SkychatPasswordChangeIn.
+type HypervisorPasswordChangeIn struct {
+	OldPassword string
+	NewPassword string
+}
+
+// SetHypervisorPassword changes the hypervisor UI admin password.
+// Local-only RPC; the HTTP session check that /api/change-password
+// enforces is intentionally absent here.
+func (r *RPC) SetHypervisorPassword(in *HypervisorPasswordChangeIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetHypervisorPassword", nil)(nil, &err)
+	return r.visor.SetHypervisorPassword(in.OldPassword, in.NewPassword)
+}
+
 type DHTSyncRequest struct {
 	RemotePK string `json:"remote_pk"`
 	Salt     string `json:"salt"`

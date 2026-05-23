@@ -1565,6 +1565,27 @@ func (rc *rpcClient) AddHypervisor(pk cipher.PubKey) error {
 	return rc.Call("AddHypervisor", &pk, &struct{}{})
 }
 
+// RemoveHypervisor tears down a runtime-added hypervisor connection.
+func (rc *rpcClient) RemoveHypervisor(pk cipher.PubKey) error {
+	return rc.Call("RemoveHypervisor", &pk, &struct{}{})
+}
+
+// RemoveAllHypervisors tears down every runtime-added hypervisor
+// connection. Returns the count disconnected.
+func (rc *rpcClient) RemoveAllHypervisors() (int, error) {
+	var out int
+	err := rc.Call("RemoveAllHypervisors", &struct{}{}, &out)
+	return out, err
+}
+
+// SetHypervisorPassword changes the hypervisor UI admin password.
+func (rc *rpcClient) SetHypervisorPassword(oldPassword, newPassword string) error {
+	return rc.Call("SetHypervisorPassword", &HypervisorPasswordChangeIn{
+		OldPassword: oldPassword,
+		NewPassword: newPassword,
+	}, &struct{}{})
+}
+
 // DmsgSetMinSessions updates the minimum DMSG session count.
 func (rc *rpcClient) DmsgSetMinSessions(n int) error {
 	return rc.Call("DmsgSetMinSessions", &n, &struct{}{})
