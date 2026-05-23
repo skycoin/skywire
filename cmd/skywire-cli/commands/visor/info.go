@@ -170,6 +170,7 @@ var summaryCmd = &cobra.Command{
 		}
 		outputJSON := struct {
 			PublicKey            string                    `json:"public_key"`
+			Hostname             string                    `json:"hostname,omitempty"`
 			IsSymmetricNAT       bool                      `json:"symmetric_nat"`
 			LocalIP              string                    `json:"local_ip"`
 			PublicIP             string                    `json:"public_ip"`
@@ -190,6 +191,7 @@ var summaryCmd = &cobra.Command{
 			ConnectedHypervisors []string                  `json:"connected_hypervisors,omitempty"`
 		}{
 			PublicKey:            summary.Overview.PubKey.String(),
+			Hostname:             summary.Overview.Hostname,
 			IsSymmetricNAT:       summary.Overview.IsSymmetricNAT,
 			LocalIP:              summary.Overview.LocalIP,
 			PublicIP:             summary.Overview.PublicIP,
@@ -760,8 +762,12 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 		geoStr = strings.Join(parts, ", ")
 	}
 
-	msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\nSymmetric NAT: %t\nLocal IP: %s\nPublic IP: %s\n",
-		summary.Overview.PubKey, summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
+	msg := fmt.Sprintf(".:: Visor Summary ::.\nPublic key: %q\n", summary.Overview.PubKey)
+	if summary.Overview.Hostname != "" {
+		msg += fmt.Sprintf("Hostname: %s\n", summary.Overview.Hostname)
+	}
+	msg += fmt.Sprintf("Symmetric NAT: %t\nLocal IP: %s\nPublic IP: %s\n",
+		summary.Overview.IsSymmetricNAT, summary.Overview.LocalIP, summary.Overview.PublicIP)
 
 	if geoStr != "" {
 		msg += fmt.Sprintf("Location: %s\n", geoStr)
