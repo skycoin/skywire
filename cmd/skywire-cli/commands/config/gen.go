@@ -2015,6 +2015,25 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 		"reward":  "REWARDSKYADDR",
 	}
 
+	// Array-shaped flags map to bash-array env vars of the form
+	// KEY=('a' 'b' 'c'). Values come in comma-separated form from the
+	// CLI (`--hvpks PK1,PK2`); we split on comma, trim each entry,
+	// drop empties, and emit the canonical single-quoted-space-joined
+	// bash-array form. Mirrors how SkyenvArray decodes the same lines
+	// back out — round-trip safe.
+	arrayFlagToEnv := map[string]string{
+		"hvpks":           "HYPERVISORPKS",
+		"dmsgpty":         "DMSGPTYPKS",
+		"survey":          "SURVEYPKS",
+		"url":             "SVCCONFADDR",
+		"tpsetup":         "TPSETUPPKS",
+		"routesetup":      "ROUTESETUPPKS",
+		"vpnwl":           "VPNSERVERWL",
+		"proxywl":         "PROXYSERVERWL",
+		"skycoinwebnodes": "SKYCOINWEBNODES",
+		"stun":            "STUNSERVERS",
+	}
+
 	lines := strings.Split(conf, "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -2035,6 +2054,36 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 					lines[i] = envKey + "='" + val + "'"
 				}
 			}
+		}
+		// Check array flags (bash-array form: KEY=('a' 'b' 'c'))
+		for flagName, envKey := range arrayFlagToEnv {
+			if !cmd.Flags().Changed(flagName) {
+				continue
+			}
+			val, _ := cmd.Flags().GetString(flagName) //nolint:errcheck
+			if val == "" {
+				continue
+			}
+			// Match either the empty template form (#KEY=('')) or a
+			// previously-set non-empty form (#KEY=('foo')) so re-runs
+			// of -q with new flag values overwrite the prior line.
+			commentedKey := "#" + envKey + "="
+			if !strings.HasPrefix(trimmed, commentedKey) {
+				continue
+			}
+			parts := strings.Split(val, ",")
+			out := make([]string, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p == "" {
+					continue
+				}
+				out = append(out, "'"+p+"'")
+			}
+			if len(out) == 0 {
+				continue
+			}
+			lines[i] = envKey + "=(" + strings.Join(out, " ") + ")"
 		}
 	}
 	return strings.Join(lines, "\n")
