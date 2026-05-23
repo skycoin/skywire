@@ -32,9 +32,16 @@ type HVVisorEntry struct {
 	CountryCode    string        `json:"country_code,omitempty"`
 	IsSymmetricNAT bool          `json:"symmetric_nat,omitempty"`
 	Transports     int           `json:"transports"`
-	Apps           int           `json:"apps"`
-	RewardAddress  string        `json:"reward_address,omitempty"`
-	ConfigVersion  string        `json:"config_version,omitempty"`
+	// TransportSummaries is the full per-transport detail (type,
+	// remote PK, sent/recv counters, etc.) the hvui's node-list
+	// table needs to render its Transports column. Populated by
+	// populateEntryFromSummary from summary.Overview.Transports.
+	// omitempty so older sub-hypervisor binaries that don't fill
+	// this field don't blow the JSON shape.
+	TransportSummaries []*TransportSummary `json:"transport_summaries,omitempty"`
+	Apps               int                 `json:"apps"`
+	RewardAddress      string              `json:"reward_address,omitempty"`
+	ConfigVersion      string              `json:"config_version,omitempty"`
 	// ServicesHealth is the remote visor's most recent
 	// HealthInfo.ServicesHealth ("healthy", "unhealthy",
 	// "connecting", ""). Carried so the hvui's tree-summary
@@ -60,6 +67,7 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 	entry.CountryCode = summary.Overview.CountryCode
 	entry.IsSymmetricNAT = summary.Overview.IsSymmetricNAT
 	entry.Transports = len(summary.Overview.Transports)
+	entry.TransportSummaries = summary.Overview.Transports
 	entry.Apps = len(summary.Overview.Apps)
 	entry.ConfigVersion = summary.ConfigVersion
 	entry.RewardAddress = summary.RewardAddress
