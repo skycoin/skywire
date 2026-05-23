@@ -463,10 +463,24 @@ export class StorageService {
 
   /**
    * Returns the default label for a node.
+   *
+   * Priority: hostname > local IP > public key. The hostname is the
+   * most operator-readable identifier when no explicit label has
+   * been set — most deployments name their boxes meaningfully
+   * (`raspi-3`, `home-server`, ...), so falling back to that beats
+   * showing a `192.168.x.y` LAN IP or the raw 66-char PK. Empty
+   * hostname (visor running in a container/sandbox without
+   * os.Hostname() support, or older visor binary without the
+   * Overview.Hostname field) falls through to the IP path
+   * unchanged.
    */
   getDefaultLabel(node: Node): string {
     if (!node) {
       return '';
+    }
+
+    if (node.hostname) {
+      return node.hostname;
     }
 
     if (node.ip) {
