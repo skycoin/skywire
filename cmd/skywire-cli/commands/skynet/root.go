@@ -32,6 +32,8 @@ var (
 	startMinHops    int    // minimum-hop constraint (>=2 rejects direct paths)
 	startFwdMinHops int    // per-direction forward MinHops override
 	startRevMinHops int    // per-direction reverse MinHops override
+	startFwdMux     int    // per-direction forward MuxRoutes override
+	startRevMux     int    // per-direction reverse MuxRoutes override
 )
 
 func init() {
@@ -53,6 +55,8 @@ func init() {
 	startCmd.Flags().IntVar(&startMinHops, "min-hops", 0, "force routes through at least this many intermediates (>=2 rejects direct paths)")
 	startCmd.Flags().IntVar(&startFwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override (>=2 forces multi-hop on forward only)")
 	startCmd.Flags().IntVar(&startRevMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse only; combine with low/0 --min-hops for direct-upstream + multi-hop-downstream)")
+	startCmd.Flags().IntVar(&startFwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
+	startCmd.Flags().IntVar(&startRevMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)")
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the client instance to stop")
@@ -140,6 +144,14 @@ var startCmd = &cobra.Command{
 
 		if startRevMinHops > 1 {
 			arguments["--reverse-min-hops"] = fmt.Sprintf("%d", startRevMinHops)
+		}
+
+		if startFwdMux > 0 {
+			arguments["--forward-mux"] = fmt.Sprintf("%d", startFwdMux)
+		}
+
+		if startRevMux > 0 {
+			arguments["--reverse-mux"] = fmt.Sprintf("%d", startRevMux)
 		}
 
 		err = rpcClient.DoCustomSetting(appName, arguments)
