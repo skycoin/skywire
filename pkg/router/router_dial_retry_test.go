@@ -73,15 +73,15 @@ func TestExtractFailedIntermediatePK_DialErrorAtSrc(t *testing.T) {
 func TestExtractFailedIntermediatePK_DialErrorAtIntermediate(t *testing.T) {
 	src := mustPK(t)
 	dst := mustPK(t)
-	interm := mustPK(t)
+	intermediate := mustPK(t)
 
-	err := &DialError{PK: interm, Err: errors.New("connection is shut down")}
+	err := &DialError{PK: intermediate, Err: errors.New("connection is shut down")}
 	gotPK, ok := extractFailedIntermediatePK(err, src, dst)
 	if !ok {
 		t.Fatalf("intermediate DialError: ok=false, want true")
 	}
-	if gotPK != interm {
-		t.Errorf("intermediate DialError: pk=%v, want %v", gotPK, interm)
+	if gotPK != intermediate {
+		t.Errorf("intermediate DialError: pk=%v, want %v", gotPK, intermediate)
 	}
 }
 
@@ -91,9 +91,9 @@ func TestExtractFailedIntermediatePK_WrappedDialError(t *testing.T) {
 	// the DialError via errors.As regardless of depth.
 	src := mustPK(t)
 	dst := mustPK(t)
-	interm := mustPK(t)
+	intermediate := mustPK(t)
 
-	dialErr := &DialError{PK: interm, Err: errors.New("connection is shut down")}
+	dialErr := &DialError{PK: intermediate, Err: errors.New("connection is shut down")}
 	wrapped := fmt.Errorf("route setup: failed to reserve route ids: %w", dialErr)
 	wrappedTwice := fmt.Errorf("Dial: %w", wrapped)
 
@@ -101,8 +101,8 @@ func TestExtractFailedIntermediatePK_WrappedDialError(t *testing.T) {
 	if !ok {
 		t.Fatalf("wrapped DialError: ok=false, want true")
 	}
-	if gotPK != interm {
-		t.Errorf("wrapped DialError: pk=%v, want %v", gotPK, interm)
+	if gotPK != intermediate {
+		t.Errorf("wrapped DialError: pk=%v, want %v", gotPK, intermediate)
 	}
 }
 
