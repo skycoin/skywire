@@ -387,9 +387,14 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		arLimit = v.conf.Transport.ARTransportLimit
 	}
 	tpMConf := transport.ManagerConfig{
-		PubKey:                    v.conf.PK,
-		SecKey:                    v.conf.SK,
-		DiscoveryClient:           tpdC,
+		PubKey: v.conf.PK,
+		SecKey: v.conf.SK,
+		// Wrap the HTTP-backed discovery client so GetAllTransports
+		// reads the CXO tpd-all-transports snapshot first, falling
+		// back to HTTP on miss. The bulk-fetch path is what
+		// calculateLocalRoutes / autoconnect / hvui burn round-trips
+		// on; per-edge lookups keep going to HTTP.
+		DiscoveryClient:           wrapDiscoveryClientWithCXO(tpdC, v),
 		LogStore:                  logS,
 		PersistentTransportsCache: pTps,
 		Version:                   buildinfo.Version(),
