@@ -20,6 +20,48 @@ func (hv *Hypervisor) visorConn(pk cipher.PubKey) (Conn, bool) {
 	return conn, ok
 }
 
+// proxiedVisorConn looks up pk among the visors reachable through
+// any connected sub-hypervisor. When found, returns a Conn whose
+// API is a proxiedVisorAPI that re-routes each operator action
+// through the sub-hypervisor's HVxxx RPC. Returns ok=false when no
+// sub-hypervisor reports the PK as directly connected to it.
+//
+// Walks each direct remote that's also a hypervisor (i.e. has the
+// HVListDirectVisors method) and asks for its visor list. Skips
+// sub-hypervisors that timeout or aren't running as hypervisors.
+// Bounded by hv.mu / RPC timeouts; the goroutine fan-out matches
+// the pattern HVListVisors uses internally so the latency is
+// comparable to one sub-hypervisor round-trip.
+func (hv *Hypervisor) proxiedVisorConn(pk cipher.PubKey) (Conn, bool) {
+	hv.mu.RLock()
+	remotes := make(map[cipher.PubKey]Conn, len(hv.remoteVisors))
+	for hk, hc := range hv.remoteVisors {
+		remotes[hk] = hc
+	}
+	hv.mu.RUnlock()
+
+	for _, hyperConn := range remotes {
+		if hyperConn.API == nil {
+			continue
+		}
+		subEntries, err := hyperConn.API.HVListDirectVisors()
+		if err != nil {
+			// Most common: remote isn't a hypervisor. Quietly skip.
+			continue
+		}
+		for _, e := range subEntries {
+			if e.PK != pk {
+				continue
+			}
+			return Conn{
+				Addr: hyperConn.Addr,
+				API:  newProxiedVisorAPI(pk, hyperConn.API),
+			}, true
+		}
+	}
+	return Conn{}, false
+}
+
 func (hv *Hypervisor) withCtx(vFunc valuesFunc, hFunc handlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		rv, ok := vFunc(w, r)
@@ -76,16 +118,29 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 
 	if pk != hv.c.PK {
 		v, ok := hv.visorConn(pk)
-
-		if !ok {
-			httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
-			return nil, false
+		if ok {
+			return &httpCtx{
+				Conn:     v,
+				isRemote: true,
+			}, true
 		}
 
-		return &httpCtx{
-			Conn:     v,
-			isRemote: true,
-		}, true
+		// Not directly connected. Check whether one of our connected
+		// sub-hypervisors has this visor, and if so wrap their API
+		// in a proxiedVisorAPI so the operator can drill into the
+		// node via this hypervisor's UI even though the routing
+		// goes via the sub-hypervisor. Read-side methods become
+		// HVVisorSummary projections; write-side methods route
+		// through the corresponding HVxxx RPCs.
+		if proxyConn, ok := hv.proxiedVisorConn(pk); ok {
+			return &httpCtx{
+				Conn:     proxyConn,
+				isRemote: true,
+			}, true
+		}
+
+		httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
+		return nil, false
 	}
 	hv.mu.Lock()
 	conn := hv.selfConn
