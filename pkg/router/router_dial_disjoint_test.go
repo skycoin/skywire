@@ -357,3 +357,81 @@ func TestPickDisjointPath_NoLatencyRankerLegacyBehavior(t *testing.T) {
 		t.Errorf("nil-ranker + non-empty exclude: want first acceptable (mid1), got %v", f[0].To)
 	}
 }
+
+func TestPickDisjointPath_AsymmetricForwardReverse(t *testing.T) {
+	// Forward and reverse should be ranked INDEPENDENTLY. Constructed
+	// case: fwd[0] is slow, fwd[1] is fast; rev[0] is fast, rev[1] is
+	// slow. Pre-unpair behavior would have paired (fwd[i], rev[i]) and
+	// picked whichever index minimized the SUM — here either pair has
+	// the same sum (slow+fast), so paired-by-index would have returned
+	// the first one. Post-unpair: picks fwd[1] AND rev[0], which is
+	// the strictly-better choice (fast in both directions).
+	src := mustPK(t)
+	midFastFwd := mustPK(t)
+	midSlowFwd := mustPK(t)
+	midFastRev := mustPK(t)
+	midSlowRev := mustPK(t)
+	dst := mustPK(t)
+
+	hSlowFwd0 := hop(src, midSlowFwd)
+	hSlowFwd1 := hop(midSlowFwd, dst)
+	hFastFwd0 := hop(src, midFastFwd)
+	hFastFwd1 := hop(midFastFwd, dst)
+	hFastRev0 := hop(dst, midFastRev)
+	hFastRev1 := hop(midFastRev, src)
+	hSlowRev0 := hop(dst, midSlowRev)
+	hSlowRev1 := hop(midSlowRev, src)
+
+	fwd := [][]routing.Hop{
+		{hSlowFwd0, hSlowFwd1}, // index 0 slow
+		{hFastFwd0, hFastFwd1}, // index 1 fast
+	}
+	rev := [][]routing.Hop{
+		{hFastRev0, hFastRev1}, // index 0 fast
+		{hSlowRev0, hSlowRev1}, // index 1 slow
+	}
+
+	latency := map[uuid.UUID]float64{
+		hSlowFwd0.TpID: 300, hSlowFwd1.TpID: 300, // 600ms total
+		hFastFwd0.TpID: 30, hFastFwd1.TpID: 30, // 60ms total
+		hFastRev0.TpID: 30, hFastRev1.TpID: 30, // 60ms total
+		hSlowRev0.TpID: 300, hSlowRev1.TpID: 300, // 600ms total
+	}
+
+	f, r, ok := pickDisjointPath(fwd, rev, nil, func(id uuid.UUID) float64 { return latency[id] })
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	if f[0].To != midFastFwd {
+		t.Errorf("forward: expected midFastFwd (%v), got %v", midFastFwd, f[0].To)
+	}
+	if r[0].To != midFastRev {
+		t.Errorf("reverse: expected midFastRev (%v), got %v", midFastRev, r[0].To)
+	}
+}
+
+func TestPickDisjointPath_AsymmetricExcludeIntersection(t *testing.T) {
+	// Exclude check applies per-direction. If midX is excluded:
+	//   - any forward path passing through midX is rejected
+	//   - any reverse path passing through midX is rejected independently
+	// So a path pair where forward[i] is acceptable but every reverse[j]
+	// touches the exclude set should yield ok=false.
+	src := mustPK(t)
+	mid := mustPK(t)
+	dst := mustPK(t)
+
+	// Forward has one good option (no excluded intermediate).
+	fwd := [][]routing.Hop{
+		{hop(src, mustPK(t)), hop(mustPK(t), dst)},
+	}
+	// Reverse: every candidate touches `mid` (which is excluded).
+	rev := [][]routing.Hop{
+		{hop(dst, mid), hop(mid, src)},
+		{hop(dst, mid), hop(mid, src)},
+	}
+
+	_, _, ok := pickDisjointPath(fwd, rev, []cipher.PubKey{mid}, nil)
+	if ok {
+		t.Error("expected ok=false when every reverse candidate touches exclude set")
+	}
+}
