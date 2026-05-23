@@ -735,6 +735,16 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     const counts: {[key: string]: number} = {};
     node.transports.forEach(t => {
       const tp = (t.type || 'unknown').toUpperCase();
+      // Skip the "?" placeholder type emitted by sub-hypervisors that
+      // predate the TransportSummaries field (#2789) — they only send
+      // the count and the backend synthesizes typeless placeholders to
+      // keep node.transports.length right. Including "?" as a per-type
+      // row clutters the cell ("?: 35"). The template still renders
+      // the Total line from node.transports.length so the operator
+      // sees the count.
+      if (tp === '?') {
+        return;
+      }
       counts[tp] = (counts[tp] || 0) + 1;
     });
     return Object.keys(counts).sort().map(k => ({type: k, count: counts[k]}));
