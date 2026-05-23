@@ -652,7 +652,10 @@ func pickDisjointPath(forward, reverse [][]routing.Hop, exclude []cipher.PubKey,
 	if bestIdx < 0 {
 		return nil, nil, false
 	}
-	return forward[bestIdx], reverse[bestIdx], true
+	// bestIdx is set only by the loop above where 0 <= i < n =
+	// min(len(forward), len(reverse)), so both indexes are in-bounds.
+	// gosec can't track the cross-slice min, hence the explicit nolint.
+	return forward[bestIdx], reverse[bestIdx], true //nolint:gosec
 }
 
 // pathLatencyScore returns the sum of per-hop avg-latency-ms across a
