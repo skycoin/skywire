@@ -208,6 +208,12 @@ func (s *service) startServicesCXO(
 		return
 	}
 	sdAPI.SetServicesCXOPublisher(pub)
+	// Pre-warm the publisher's tree from the existing redis store so
+	// the publisher's first Root carries the active service list
+	// instead of being empty until the next register/heartbeat event
+	// — without this a subscriber that connects in the post-restart
+	// gap times out at firstSyncTimeout (10s).
+	sdAPI.WarmCXOFromStore(ctx)
 	go func() {
 		<-ctx.Done()
 		pub.Close() //nolint:errcheck,gosec
