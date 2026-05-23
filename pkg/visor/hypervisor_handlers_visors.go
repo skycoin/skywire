@@ -214,7 +214,19 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 			// side, here projected back.
 			visors := make([]Summary, 0, len(sr.entries))
 			for _, e := range sr.entries {
-				visors = append(visors, projectEntryToSummary(e))
+				s := projectEntryToSummary(e)
+				// The sub-section's ★ icon should appear on the
+				// section's own hypervisor row and nowhere else.
+				// Override IsHypervisor (which projectEntryToSummary
+				// sets from e.IsLocal) with strict PK-equality
+				// against this section's HypervisorPK. Defends
+				// against any path that might mistakenly mark a
+				// non-local entry with IsLocal=true on the remote
+				// side, and matches the semantic the hvui's
+				// node-list uses for the local section: "star = this
+				// row is the section's hypervisor."
+				s.IsHypervisor = e.PK == sr.hyperPK
+				visors = append(visors, s)
 			}
 			sections = append(sections, VisorTreeSection{
 				HypervisorPK: sr.hyperPK,
