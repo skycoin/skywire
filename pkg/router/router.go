@@ -161,6 +161,22 @@ type DialOptions struct {
 	// since DialRoutes is invoked with an ephemeral source port that
 	// isn't the app's registered SetAppPort value.
 	AppName string
+
+	// ForwardMinHops / ReverseMinHops are per-direction overrides for
+	// MinHops. When > 0 they take precedence over the symmetric
+	// MinHops field for THAT direction only. Use case: bandwidth-
+	// asymmetric workloads (HTTP GET = tiny upstream, bulk downstream)
+	// where the user wants e.g. direct stcpr for the forward leg but
+	// multi-hop for the reverse-direction bulk payload.
+	//
+	// 0 (the default) means "inherit MinHops" — back-compat for
+	// callers that only care about symmetric routes.
+	//
+	// Resolution at use site (see resolveDirMinHops): if the per-
+	// direction override is > 0 it wins; else MinHops; else
+	// Config.MinHops; else the global default.
+	ForwardMinHops int
+	ReverseMinHops int
 }
 
 // DefaultDialOptions returns default dial options.
@@ -173,6 +189,44 @@ func DefaultDialOptions() *DialOptions {
 		MaxConsumeRts: 1,
 		Retries:       3,
 	}
+}
+
+// EffectiveMinHops returns the per-direction min-hops constraint:
+// forward=true → ForwardMinHops if > 0 else MinHops; forward=false →
+// ReverseMinHops if > 0 else MinHops. Callers (the route-finder query
+// site + the local-BFS fallback) read this once per direction to
+// support bandwidth-asymmetric workloads where forward (small uplink)
+// can use direct/short paths while reverse (bulk downlink) is forced
+// onto multi-hop.
+//
+// Returns 0 when opts is nil or both per-direction + symmetric fields
+// are 0 — preserves the caller's "inherit Config.MinHops" semantic.
+func (o *DialOptions) EffectiveMinHops(forward bool) int {
+	if o == nil {
+		return 0
+	}
+	if forward {
+		if o.ForwardMinHops > 0 {
+			return o.ForwardMinHops
+		}
+	} else {
+		if o.ReverseMinHops > 0 {
+			return o.ReverseMinHops
+		}
+	}
+	return o.MinHops
+}
+
+// AnyMinHopsConstraint reports whether the caller has set any min-hops
+// constraint (symmetric or per-direction). Used at the direct-tp
+// downgrade site in DialRoutes: if either direction wants multi-hop,
+// the "transport-exists → drop MinHops to 1" optimization should be
+// suppressed (mirroring the existing opts.MinHops > 1 check).
+func (o *DialOptions) AnyMinHopsConstraint() bool {
+	if o == nil {
+		return false
+	}
+	return o.MinHops > 1 || o.ForwardMinHops > 1 || o.ReverseMinHops > 1
 }
 
 // Router is responsible for creating and keeping track of routes.
