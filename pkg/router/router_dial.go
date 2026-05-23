@@ -140,6 +140,17 @@ func (r *router) DialRoutes(
 			// intermediate's breaker counter ticks on this failure too,
 			// so repeated failures eventually short-circuit it via
 			// AllowIntermediate.
+			//
+			// We exclude only the SINGLE intermediate identified by the
+			// DialError's PK per attempt — not the entire failed path.
+			// id_reservation hops sequentially and fails fast on the
+			// first unreachable peer, so the DialError's PK pinpoints
+			// the actual blocker. Excluding the rest of the path's
+			// intermediates would over-narrow the route-finder's
+			// candidate set on multi-hop paths where ALL intermediates
+			// except one might be healthy. If the next pick happens to
+			// reuse one of those still-healthy intermediates, that's a
+			// feature: cheap path through a known-good node.
 			if failedPK, ok := extractFailedIntermediatePK(err, lPK, rPK); ok {
 				opts = appendExcludeIntermediate(opts, failedPK)
 				log.WithError(err).Warnf("Route setup failed on intermediate %s (attempt %d/%d); excluding from next route-finder pick",
@@ -1152,6 +1163,13 @@ func extractFailedIntermediatePK(err error, src, dst cipher.PubKey) (cipher.PubK
 // with pk added to ExcludeIntermediatePKs. Returns opts unchanged when
 // pk is already in the slice (idempotent: re-failure of the same
 // intermediate within a single retry cycle won't compound).
+//
+// MUTATES opts when opts is non-nil — ExcludeIntermediatePKs is grown
+// in place via append. Callers that need to preserve the original opts
+// must clone before calling. The current call sites (DialRoutes /
+// PingRoute retry loops) operate on a single opts value across
+// iterations and intentionally want the in-place mutation: carrying
+// excluded PKs forward to the next iteration IS the point.
 //
 // opts is guaranteed non-nil on return so the caller can pass it
 // straight back into fetchBestRoutes without a nil check.
