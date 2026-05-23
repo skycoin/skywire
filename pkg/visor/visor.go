@@ -150,6 +150,14 @@ type Visor struct {
 	isTransportabilityHealthy *internalHealthInfo
 	remoteVisors              map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors      map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
+	// hypervisorCancels holds the per-hypervisor context.CancelFunc
+	// installed by AddHypervisor, keyed by the remote hypervisor PK.
+	// RemoveHypervisor looks up the cancel func and invokes it; the
+	// goroutine's deferred delete from connectedHypervisors completes
+	// the teardown. Populated only for runtime-added hypervisors
+	// (those that came through AddHypervisor / RPC); config-loaded
+	// hypervisors take a different path that doesn't enter this map.
+	hypervisorCancels map[cipher.PubKey]context.CancelFunc
 
 	// Allowed ports for app connections (legacy — being replaced by forwardedPorts)
 	allowed allowedPortsState
@@ -551,6 +559,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		isAutoconnectHealthy:      newInternalHealthInfo(),
 		isTransportabilityHealthy: newInternalHealthInfo(),
 		connectedHypervisors:      make(map[cipher.PubKey]bool),
+		hypervisorCancels:         make(map[cipher.PubKey]context.CancelFunc),
 		allowed: allowedPortsState{
 			ports: make(map[int]bool),
 			mu:    new(sync.RWMutex),
