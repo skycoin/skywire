@@ -160,38 +160,54 @@ var summaryCmd = &cobra.Command{
 			internal.PrintFatalRPCError(cmd.Flags(), err)
 		}
 
+		hvPKs := make([]string, 0, len(summary.Overview.Hypervisors))
+		for _, pk := range summary.Overview.Hypervisors {
+			hvPKs = append(hvPKs, pk.String())
+		}
+		connectedHvPKs := make([]string, 0, len(summary.Overview.ConnectedHypervisor))
+		for _, pk := range summary.Overview.ConnectedHypervisor {
+			connectedHvPKs = append(connectedHvPKs, pk.String())
+		}
 		outputJSON := struct {
-			PublicKey      string                    `json:"public_key"`
-			IsSymmetricNAT bool                      `json:"symmetric_nat"`
-			LocalIP        string                    `json:"local_ip"`
-			PublicIP       string                    `json:"public_ip"`
-			CountryCode    string                    `json:"country_code,omitempty"`
-			RegionName     string                    `json:"region_name,omitempty"`
-			CityName       string                    `json:"city_name,omitempty"`
-			DMSGServers    []visor.DMSGServerInfo    `json:"dmsg_servers"`
-			DmsgLatency    string                    `json:"dmsg_latency"`
-			VisorVersion   string                    `json:"visor_version"`
-			ConfigVersion  string                    `json:"config_version"`
-			UptimeTracker  string                    `json:"uptime_tracker"`
-			TimeOnline     float64                   `json:"time_online"`
-			BuildTag       string                    `json:"build_tag"`
-			ARRegistration *visor.ARSelfRegistration `json:"ar_registration,omitempty"`
+			PublicKey            string                    `json:"public_key"`
+			IsSymmetricNAT       bool                      `json:"symmetric_nat"`
+			LocalIP              string                    `json:"local_ip"`
+			PublicIP             string                    `json:"public_ip"`
+			CountryCode          string                    `json:"country_code,omitempty"`
+			RegionName           string                    `json:"region_name,omitempty"`
+			CityName             string                    `json:"city_name,omitempty"`
+			DMSGServers          []visor.DMSGServerInfo    `json:"dmsg_servers"`
+			DmsgLatency          string                    `json:"dmsg_latency"`
+			VisorVersion         string                    `json:"visor_version"`
+			ConfigVersion        string                    `json:"config_version"`
+			UptimeTracker        string                    `json:"uptime_tracker"`
+			TimeOnline           float64                   `json:"time_online"`
+			BuildTag             string                    `json:"build_tag"`
+			ARRegistration       *visor.ARSelfRegistration `json:"ar_registration,omitempty"`
+			IsHypervisor         bool                      `json:"is_hypervisor"`
+			HypervisorAddr       string                    `json:"hypervisor_addr,omitempty"`
+			Hypervisors          []string                  `json:"hypervisors,omitempty"`
+			ConnectedHypervisors []string                  `json:"connected_hypervisors,omitempty"`
 		}{
-			PublicKey:      summary.Overview.PubKey.String(),
-			IsSymmetricNAT: summary.Overview.IsSymmetricNAT,
-			LocalIP:        summary.Overview.LocalIP,
-			PublicIP:       summary.Overview.PublicIP,
-			CountryCode:    summary.Overview.CountryCode,
-			RegionName:     summary.Overview.RegionName,
-			CityName:       summary.Overview.CityName,
-			DMSGServers:    summary.DMSGServers,
-			DmsgLatency:    summary.DmsgStats.RoundTrip.String(),
-			VisorVersion:   summary.Overview.BuildInfo.Version,
-			ConfigVersion:  summary.ConfigVersion,
-			UptimeTracker:  summary.Health.ServicesHealth,
-			TimeOnline:     summary.Uptime,
-			BuildTag:       summary.BuildTag,
-			ARRegistration: arSelf,
+			PublicKey:            summary.Overview.PubKey.String(),
+			IsSymmetricNAT:       summary.Overview.IsSymmetricNAT,
+			LocalIP:              summary.Overview.LocalIP,
+			PublicIP:             summary.Overview.PublicIP,
+			CountryCode:          summary.Overview.CountryCode,
+			RegionName:           summary.Overview.RegionName,
+			CityName:             summary.Overview.CityName,
+			DMSGServers:          summary.DMSGServers,
+			DmsgLatency:          summary.DmsgStats.RoundTrip.String(),
+			VisorVersion:         summary.Overview.BuildInfo.Version,
+			ConfigVersion:        summary.ConfigVersion,
+			UptimeTracker:        summary.Health.ServicesHealth,
+			TimeOnline:           summary.Uptime,
+			BuildTag:             summary.BuildTag,
+			ARRegistration:       arSelf,
+			IsHypervisor:         summary.IsHypervisor,
+			HypervisorAddr:       summary.HypervisorAddr,
+			Hypervisors:          hvPKs,
+			ConnectedHypervisors: connectedHvPKs,
 		}
 		internal.PrintOutput(cmd.Flags(), outputJSON, msg)
 	},
@@ -789,6 +805,33 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 			}
 		} else {
 			msg += "AR Registration: (none)\n"
+		}
+	}
+
+	// Hypervisor section: (a) whether this visor serves the
+	// hypervisor UI and at what bind address, (b) configured remote
+	// hypervisors from the static config, (c) the runtime-connected
+	// subset. Renders all three so the operator can see both the
+	// declared intent and the live state in one place.
+	if summary.IsHypervisor {
+		if summary.HypervisorAddr != "" {
+			msg += fmt.Sprintf("Hypervisor UI: enabled at %s\n", summary.HypervisorAddr)
+		} else {
+			msg += "Hypervisor UI: enabled\n"
+		}
+	} else {
+		msg += "Hypervisor UI: disabled\n"
+	}
+	if len(summary.Overview.Hypervisors) > 0 {
+		msg += fmt.Sprintf("Remote Hypervisors (configured, %d):\n", len(summary.Overview.Hypervisors))
+		for _, pk := range summary.Overview.Hypervisors {
+			msg += "  " + pk.String() + "\n"
+		}
+	}
+	if len(summary.Overview.ConnectedHypervisor) > 0 {
+		msg += fmt.Sprintf("Remote Hypervisors (connected, %d):\n", len(summary.Overview.ConnectedHypervisor))
+		for _, pk := range summary.Overview.ConnectedHypervisor {
+			msg += "  " + pk.String() + "\n"
 		}
 	}
 
