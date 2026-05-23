@@ -177,7 +177,6 @@ type DialOptions struct {
 	// Config.MinHops; else the global default.
 	ForwardMinHops int
 	ReverseMinHops int
-
 }
 
 // DefaultDialOptions returns default dial options.
