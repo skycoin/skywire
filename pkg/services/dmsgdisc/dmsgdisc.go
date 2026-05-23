@@ -267,6 +267,12 @@ func (s *service) runDMSG(
 		log.WithError(perr).Error("Failed to start CXO clients-by-server publisher, continuing without it")
 	} else {
 		a.SetClientsByServerCXOPublisher(pub)
+		// Pre-warm the publisher's tree from existing redis entries so
+		// the first Root carries the live (server, client) map instead
+		// of being empty until the next set/del event — without this a
+		// subscriber connecting in the post-restart gap times out at
+		// firstSyncTimeout (10s).
+		a.WarmCXOFromStore(ctx, log)
 		go func() {
 			<-ctx.Done()
 			pub.Close() //nolint:errcheck,gosec
