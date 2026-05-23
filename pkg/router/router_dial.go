@@ -59,7 +59,11 @@ func (r *router) DialRoutes(
 	// (this was the symptom of `mux-bw --min-hops 2` riding direct stcpr
 	// instead of going via intermediates).
 	defaultMinHops := r.conf.MinHops
-	if r.isTpdExist(rPK) && (opts == nil || opts.MinHops <= 1) {
+	// Suppress the direct-tp downgrade when ANY min-hops constraint is
+	// set (symmetric or per-direction). Even if only ReverseMinHops > 1,
+	// downgrading globally to 1 would defeat that constraint for the
+	// reverse direction's route-finder query below.
+	if r.isTpdExist(rPK) && !opts.AnyMinHopsConstraint() {
 		r.conf.MinHops = 1
 	}
 
@@ -500,12 +504,48 @@ fetchRoutesAgain:
 	// Per-call MinHops override takes precedence over visor-global
 	// Config.MinHops. Set by callers like mux-bw that want to test
 	// a multi-hop path without bumping the visor's static config.
-	rfMinHops := r.conf.MinHops
-	if opts.MinHops > 0 {
-		rfMinHops = uint16(opts.MinHops) //nolint:gosec // bounded by caller; CLI flag values are small
+	//
+	// Per-direction overrides (ForwardMinHops / ReverseMinHops) win
+	// over the symmetric MinHops when set. When the two directions
+	// differ we split into two route-finder queries — the rfclient
+	// applies one MinHops to all PathEdges in a single call, so
+	// asymmetric constraints can't be expressed in one round-trip.
+	fwdEff := opts.EffectiveMinHops(true)
+	revEff := opts.EffectiveMinHops(false)
+	fwdMinHops := r.conf.MinHops
+	revMinHops := r.conf.MinHops
+	if fwdEff > 0 {
+		fwdMinHops = uint16(fwdEff) //nolint:gosec // bounded by caller; CLI flag values are small
 	}
-	paths, err := r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
-		&rfclient.RouteOptions{MinHops: rfMinHops, MaxHops: r.conf.MaxHops})
+	if revEff > 0 {
+		revMinHops = uint16(revEff) //nolint:gosec // bounded by caller; CLI flag values are small
+	}
+
+	var paths map[routing.PathEdges][][]routing.Hop
+	if fwdMinHops == revMinHops {
+		// Common path: single query covers both directions.
+		paths, err = r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
+			&rfclient.RouteOptions{MinHops: fwdMinHops, MaxHops: r.conf.MaxHops})
+	} else {
+		// Asymmetric: two queries with different MinHops per direction.
+		// Merge their results into a single map keyed by PathEdges.
+		var fwdPaths, revPaths map[routing.PathEdges][][]routing.Hop
+		fwdPaths, err = r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward},
+			&rfclient.RouteOptions{MinHops: fwdMinHops, MaxHops: r.conf.MaxHops})
+		if err == nil {
+			revPaths, err = r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{backward},
+				&rfclient.RouteOptions{MinHops: revMinHops, MaxHops: r.conf.MaxHops})
+		}
+		if err == nil {
+			paths = make(map[routing.PathEdges][][]routing.Hop, 2)
+			for k, v := range fwdPaths {
+				paths[k] = v
+			}
+			for k, v := range revPaths {
+				paths[k] = v
+			}
+		}
+	}
 
 	if err == rfclient.ErrTransportNotFound {
 		// Try local route calculation - may find a local transport that's not yet in TPD
@@ -826,9 +866,24 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	log.Debugf("Found %d local transports", len(localTps))
 
 	// Skip the direct (1-hop) probe when the caller asked for
-	// MinHops >= 2 — they want a non-direct path. The intermediate
-	// route search below will be the only candidate generator.
-	allowDirect := dialOpts == nil || dialOpts.MinHops <= 1
+	// MinHops >= 2 — they want a non-direct path. Use the MAX of
+	// per-direction MinHops since local-BFS mirrors forward to reverse
+	// (reverseHops) — both directions share one path here, so we must
+	// satisfy whichever direction has the higher constraint. Callers
+	// that need genuinely asymmetric local paths must use the
+	// route-finder service (fetchBestRoutes path) which queries each
+	// direction independently.
+	bfsMinHops := 0
+	if dialOpts != nil {
+		bfsMinHops = dialOpts.MinHops
+		if fwdEff := dialOpts.EffectiveMinHops(true); fwdEff > bfsMinHops {
+			bfsMinHops = fwdEff
+		}
+		if revEff := dialOpts.EffectiveMinHops(false); revEff > bfsMinHops {
+			bfsMinHops = revEff
+		}
+	}
+	allowDirect := bfsMinHops <= 1
 
 	// Check for direct (1-hop) route first
 	for _, tp := range localTps {
@@ -958,7 +1013,13 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// same (src, dst, minHops, maxHops, transport graph) tuple
 	// always yields the same path.
 	minHops := 2
-	if dialOpts != nil && dialOpts.MinHops > 0 {
+	// Use bfsMinHops computed above (max across symmetric + per-
+	// direction). Local-BFS mirrors forward→reverse so both directions
+	// share one path; satisfying the higher constraint ensures the
+	// stricter direction is honored.
+	if bfsMinHops > 0 {
+		minHops = bfsMinHops
+	} else if dialOpts != nil && dialOpts.MinHops > 0 {
 		minHops = dialOpts.MinHops
 	}
 	// MaxHops is taken from the router-wide config (DialOptions
@@ -1207,12 +1268,19 @@ func (r *router) establishMuxRoutes(
 	// happily returns the direct transport — so a `--routes N
 	// --min-hops 2` call would establish route 0 multi-hop but routes
 	// 1..N-1 over the direct stcpr, defeating the disjoint-mux intent.
-	// AppName is threaded for log-attribution consistency across the
-	// aux routes (the scoped logger keys on app name).
+	// Per-direction MinHops (Forward/ReverseMinHops) is threaded too
+	// so asymmetric mux dials honor the same per-direction constraints
+	// the parent set. AppName is threaded for log-attribution
+	// consistency across the aux routes (the scoped logger keys on
+	// app name).
 	parentMinHops := 0
+	parentFwdMinHops := 0
+	parentRevMinHops := 0
 	parentAppName := ""
 	if opts != nil {
 		parentMinHops = opts.MinHops
+		parentFwdMinHops = opts.ForwardMinHops
+		parentRevMinHops = opts.ReverseMinHops
 		parentAppName = opts.AppName
 	}
 
@@ -1224,6 +1292,8 @@ func (r *router) establishMuxRoutes(
 			MaxConsumeRts:          1,
 			Retries:                1,
 			MinHops:                parentMinHops,
+			ForwardMinHops:         parentFwdMinHops,
+			ReverseMinHops:         parentRevMinHops,
 			AppName:                parentAppName,
 			ExcludeTransportIDs:    excludeIDs,
 			ExcludeIntermediatePKs: excludePKs,
