@@ -374,6 +374,26 @@ return {
       // tree-based path doesn't drop it.
       node.isHypervisor = response.is_hypervisor;
 
+      // Transports. Mirrors the parsing in getNodes() — the
+      // node-list Transports column iterates node.transports by type
+      // to render the "tcp: N / dmsg: M / Total: N+M" cell. Without
+      // this assignment the field is undefined and the template's
+      // !node.transports branch renders a "-" dash.
+      node.transports = [];
+      if (response.overview && response.overview.transports) {
+        (response.overview.transports as any[]).forEach(transport => {
+          node.transports.push({
+            id: transport.id,
+            localPk: transport.local_pk,
+            remotePk: transport.remote_pk,
+            type: transport.type,
+            recv: transport.log ? transport.log.recv : 0,
+            sent: transport.log ? transport.log.sent : 0,
+            latencyMs: transport.latency_ms || 0,
+          });
+        });
+      }
+
       out.push(node);
     });
     return out;
