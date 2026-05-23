@@ -450,6 +450,14 @@ type Overview struct {
 	Longitude           float64               `json:"longitude,omitempty"`
 	Hypervisors         []cipher.PubKey       `json:"hypervisors"`
 	ConnectedHypervisor []cipher.PubKey       `json:"connected_hypervisor"`
+	// Hostname is the operating-system hostname the visor process
+	// sees at the time of the Overview call. Best-effort:
+	// os.Hostname() failures (sandbox / containerized environments
+	// missing the syscall) yield an empty string rather than
+	// erroring out the whole Overview. Surfaced to operators in the
+	// hypervisor UI as the default label fallback when no explicit
+	// label is set, and shown in `cli visor info`.
+	Hostname string `json:"hostname,omitempty"`
 }
 
 // Summary provides detailed info including overview and health of the visor.
