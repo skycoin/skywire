@@ -89,10 +89,6 @@ type Manager struct {
 	routeChecker   RouteChecker
 	routeCheckerMu sync.RWMutex
 
-	// tpdCache stores the cached transport discovery data for local route calculation
-	tpdCache   []*Entry
-	tpdCacheMu sync.RWMutex
-
 	// tpdLeafPub mirrors register / deregister to the visor's CXO
 	// stats publisher tree (the same tree that already carries
 	// transports/<uuid>/current and timeline leaves). Set lazily by
@@ -746,21 +742,6 @@ func (tm *Manager) hasActiveRoutes(tpID uuid.UUID) bool {
 		return false
 	}
 	return rc(tpID)
-}
-
-// SetTPDCache updates the cached TPD data for local route calculation.
-func (tm *Manager) SetTPDCache(entries []*Entry) {
-	tm.tpdCacheMu.Lock()
-	defer tm.tpdCacheMu.Unlock()
-	tm.tpdCache = entries
-	tm.Logger.Debugf("TPD cache updated with %d entries", len(entries))
-}
-
-// GetTPDCache returns the cached TPD data.
-func (tm *Manager) GetTPDCache() []*Entry {
-	tm.tpdCacheMu.RLock()
-	defer tm.tpdCacheMu.RUnlock()
-	return tm.tpdCache
 }
 
 // InitClient initilizes a network client
