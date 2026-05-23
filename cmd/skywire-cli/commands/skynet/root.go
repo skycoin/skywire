@@ -29,6 +29,7 @@ var (
 	useExternal   bool
 	clientName    string // optional custom name for the client instance
 	startRoutes   int    // number of parallel skynet mux routes (0/1 = single route)
+	startMinHops  int    // minimum-hop constraint (>=2 rejects direct paths)
 )
 
 func init() {
@@ -47,6 +48,7 @@ func init() {
 	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "custom name for this client instance (default: skynet-client-<local-port>)")
 	startCmd.Flags().IntVar(&startRoutes, "routes", 0, "number of parallel skynet mux routes (0 or 1 = single route)")
+	startCmd.Flags().IntVar(&startMinHops, "min-hops", 0, "force routes through at least this many intermediates (>=2 rejects direct paths)")
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the client instance to stop")
@@ -122,6 +124,10 @@ var startCmd = &cobra.Command{
 
 		if startRoutes > 1 {
 			arguments["--routes"] = fmt.Sprintf("%d", startRoutes)
+		}
+
+		if startMinHops > 1 {
+			arguments["--min-hops"] = fmt.Sprintf("%d", startMinHops)
 		}
 
 		err = rpcClient.DoCustomSetting(appName, arguments)
