@@ -538,6 +538,74 @@
             </div>
           </div>
         }
+
+        <!-- Sub-hypervisor sections. One panel per remote
+             hypervisor this visor knows about, showing the visors
+             that hypervisor reports as directly connected to it
+             (sourced via HVListDirectVisors over RPC). Local
+             section (sections[0]) is rendered by the main table
+             above; subSections covers sections[1..] so operators
+             can see other hypervisors' rosters in the same view.
+             #2780 deduped the local section's visor list so
+             hypervisors with their own sub-section here don't
+             also appear as a plain row above. -->
+        @if (subSections.length > 0) {
+          @for (section of subSections; track section.hypervisorPk) {
+            <div class="rounded-elevated-box mt-3">
+              <div class="box-internal-container full-node-list-margins">
+                <div class="generic-title-container">
+                  <div class="title">
+                    <div class="hypervisor-pk-label transparent-50" [matTooltip]="section.hypervisorPk">
+                      <mat-icon class="small-icon" [inline]="true">star_outline</mat-icon>
+                      <span class="ml-1">{{ section.hypervisorPk }}</span>
+                    </div>
+                  </div>
+                </div>
+                @if (section.subError) {
+                  <div class="font-sm mt-2">
+                    <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
+                    <span class="font-sm ml-1">{{ 'nodes.subhypervisor-error' | translate }}: {{ section.subError }}</span>
+                  </div>
+                } @else if (!section.nodes || section.nodes.length === 0) {
+                  <div class="font-sm mt-2">
+                    <mat-icon [inline]="true" class="alert-icon">info_outline</mat-icon>
+                    <span class="font-sm ml-1">{{ 'nodes.subhypervisor-empty' | translate }}</span>
+                  </div>
+                } @else {
+                  <table class="responsive-table-translucid d-none d-md-table" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <th class="small-column"><span class="dot-outline-gray"></span></th>
+                      <th class="labels">{{ 'nodes.label' | translate }}</th>
+                      <th>{{ 'nodes.key' | translate }}</th>
+                    </tr>
+                    @for (node of section.nodes; track node.localPk) {
+                      <a
+                        [ngClass]="{'click-effect': true}"
+                        class="selectable link-row"
+                        [routerLink]="['/nodes', node.localPk, 'info']">
+                        <td>
+                          <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
+                        </td>
+                        <td>{{ node.label }}</td>
+                        <td>{{ node.localPk }}</td>
+                      </a>
+                    }
+                  </table>
+                  <!-- Mobile fallback: stacked list when the table view collapses. -->
+                  <div class="d-md-none">
+                    @for (node of section.nodes; track node.localPk) {
+                      <a class="selectable link-row d-block py-1" [routerLink]="['/nodes', node.localPk, 'info']">
+                        <span [class]="nodeStatusClass(node, true)"></span>
+                        <span class="ml-1">{{ node.label }}</span>
+                        <span class="transparent-50 ml-2 font-sm">{{ node.localPk }}</span>
+                      </a>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
       </div>
     </div>
   }

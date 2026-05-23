@@ -85,13 +85,27 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   currentPageInUrl = 1;
 
   // Per-hypervisor sections from the tree endpoint (#2633). The
-  // template currently renders the flat `allNodes` table; sections
-  // is consumed by the header (to show local hypervisor PK) and is
-  // available for the per-section table refactor (#2640).
+  // flat main table renders sections[0] (local) + every remote
+  // visor; sub-sections (sections[1..]) get their own header +
+  // compact node list below the main table so operators see each
+  // remote hypervisor's directly-connected visors at a glance.
   sections: NodeSection[] = [];
   // Local hypervisor PK — convenience accessor for the title bar
   // (derived from sections[0]). Empty until first data arrives.
   localHypervisorPk = '';
+
+  /**
+   * Sub-hypervisor sections (everything beyond the local one).
+   * Returns sections[1..] so the template can iterate without
+   * needing per-row $index checks. Empty until the tree response
+   * lands or when only the local section exists (no remote
+   * hypervisors connected). Filtering out `subError` sections is
+   * intentionally skipped here — even an unreachable sub-hypervisor
+   * is informative to display, with its error rendered inline.
+   */
+  get subSections(): NodeSection[] {
+    return this.sections.length > 1 ? this.sections.slice(1) : [];
+  }
 
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[] = [
