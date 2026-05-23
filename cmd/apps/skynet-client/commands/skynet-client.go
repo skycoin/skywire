@@ -49,6 +49,13 @@ var (
 	// every mux route, so N mux streams ride one TCP socket and
 	// nothing is multiplexed across intermediates.
 	minHops int
+	// fwdMinHops / revMinHops are per-direction MinHops overrides for
+	// bandwidth-asymmetric workloads (HTTP GET = tiny upstream + bulk
+	// downstream). When > 0 they win over min-hops for THAT direction.
+	// Canonical asymmetric test: --forward-min-hops 0 --reverse-min-hops 2
+	// lets forward stay direct while reverse is forced multi-hop.
+	fwdMinHops int
+	revMinHops int
 )
 
 func init() {
@@ -59,6 +66,8 @@ func init() {
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().IntVar(&routes, "routes", 0, "number of parallel skynet mux routes (0 or 1 = single route)")
 	RootCmd.Flags().IntVar(&minHops, "min-hops", 0, "force routes through at least this many intermediates (>=2 rejects direct paths)")
+	RootCmd.Flags().IntVar(&fwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override (>=2 forces multi-hop on forward direction only)")
+	RootCmd.Flags().IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse direction only)")
 }
 
 // RootCmd is the root command for skynet-client
@@ -90,6 +99,8 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.IntVar(&routes, "routes", 0, "number of parallel skynet mux routes")
 		fs.IntVar(&minHops, "min-hops", 0, "minimum hop count (>=2 rejects direct paths)")
+		fs.IntVar(&fwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override")
+		fs.IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -149,24 +160,27 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		Port:   routing.Port(skyenv.SkyForwardingServerPort),
 	}
 
-	switch {
-	case routes > 1 && minHops > 1:
-		appCl.Log().Infof("Per-accept dial shape: %s on port %d with %d parallel mux routes, min-hops=%d",
-			remotePK.Hex(), skyenv.SkyForwardingServerPort, routes, minHops)
-	case routes > 1:
-		appCl.Log().Infof("Per-accept dial shape: %s on port %d with %d parallel mux routes",
-			remotePK.Hex(), skyenv.SkyForwardingServerPort, routes)
-	case minHops > 1:
-		appCl.Log().Infof("Per-accept dial shape: %s on port %d with min-hops=%d",
-			remotePK.Hex(), skyenv.SkyForwardingServerPort, minHops)
-	default:
-		appCl.Log().Infof("Per-accept dial shape: %s on port %d",
-			remotePK.Hex(), skyenv.SkyForwardingServerPort)
+	// Build a single log line describing the dial shape (mux + min-hops
+	// + per-direction). Suppress unset fields so the common case stays
+	// short.
+	dialShape := fmt.Sprintf("%s on port %d", remotePK.Hex(), skyenv.SkyForwardingServerPort)
+	if routes > 1 {
+		dialShape += fmt.Sprintf(" with %d parallel mux routes", routes)
 	}
+	if minHops > 1 {
+		dialShape += fmt.Sprintf(" min-hops=%d", minHops)
+	}
+	if fwdMinHops > 1 {
+		dialShape += fmt.Sprintf(" forward-min-hops=%d", fwdMinHops)
+	}
+	if revMinHops > 1 {
+		dialShape += fmt.Sprintf(" reverse-min-hops=%d", revMinHops)
+	}
+	appCl.Log().Infof("Per-accept dial shape: %s", dialShape)
 
 	dialRemote := func() (net.Conn, error) {
-		if routes > 1 || minHops > 1 {
-			return appCl.DialWithOptions(connApp, routes, minHops)
+		if routes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 {
+			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops)
 		}
 		return appCl.Dial(connApp)
 	}
