@@ -288,8 +288,20 @@ func projectEntryToSummary(e HVVisorEntry) Summary {
 			Version: e.Version,
 		},
 	}
+	// Health is partial here — only ServicesHealth carries through
+	// the HVVisorEntry round-trip from the remote hypervisor. That's
+	// enough for nodeStatusClass to choose between dot-green
+	// (healthy), dot-yellow (unhealthy), and dot-outline-gray
+	// (unknown). The other Health fields stay zero — the UI's
+	// per-row template guards on field presence (see node-list's
+	// nodeStatusClass).
+	var health *HealthInfo
+	if e.ServicesHealth != "" {
+		health = &HealthInfo{ServicesHealth: e.ServicesHealth}
+	}
 	return Summary{
 		Overview:      overview,
+		Health:        health,
 		BuildTag:      e.BuildTag,
 		Uptime:        e.Uptime,
 		Online:        e.Online,
