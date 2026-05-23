@@ -298,6 +298,9 @@ type API interface {
 	DmsgReconnect() (int, error)
 	DmsgSetMinSessions(n int) error
 	AddHypervisor(pk cipher.PubKey) error
+	RemoveHypervisor(pk cipher.PubKey) error
+	RemoveAllHypervisors() (int, error)
+	SetHypervisorPassword(oldPassword, newPassword string) error
 	CheckAREntry(pk string) ([]string, error)
 	ARSelfInfo() (*ARSelfRegistration, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
@@ -451,12 +454,17 @@ type Overview struct {
 
 // Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	Overview             *Overview                      `json:"overview"`
-	Health               *HealthInfo                    `json:"health"`
-	Uptime               float64                        `json:"uptime"`
-	Routes               []routingRuleResp              `json:"routes"`
-	RouteGroups          []RouteGroupInfo               `json:"route_groups,omitempty"`
-	IsHypervisor         bool                           `json:"is_hypervisor,omitempty"`
+	Overview     *Overview         `json:"overview"`
+	Health       *HealthInfo       `json:"health"`
+	Uptime       float64           `json:"uptime"`
+	Routes       []routingRuleResp `json:"routes"`
+	RouteGroups  []RouteGroupInfo  `json:"route_groups,omitempty"`
+	IsHypervisor bool              `json:"is_hypervisor,omitempty"`
+	// HypervisorAddr is the host:port the hypervisor UI is bound to
+	// when IsHypervisor=true. Empty when this visor isn't hosting a
+	// hypervisor (or when v.conf.Hypervisor is nil). Sourced from
+	// v.conf.Hypervisor.HTTPAddr.
+	HypervisorAddr       string                         `json:"hypervisor_addr,omitempty"`
 	DmsgStats            *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 	ConnectedDmsgServers []string                       `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
 	DMSGServers          []DMSGServerInfo               `json:"dmsg_servers"`           // Connected DMSG servers with latencies
