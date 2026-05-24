@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.55
+
+Patch release. Two PRs on top of v1.3.54.
+
+### Multihop + multiplexed routing
+
+-   `feat(router)`: per-direction MuxRoutes for asymmetric route counts  [#2797](https://github.com/skycoin/skywire/pull/2797)
+
+### Packaging + config UX
+
+-   `fix(autoconfig,cli/config/gen)`: quiet gen subprocess + clean flag descs  [#2798](https://github.com/skycoin/skywire/pull/2798)
+
+Companion AUR change (skycoin/aur, not in this repo): try-restart loop in deb postinst + arch post_upgrade so every package-shipped service that's currently active picks up the new binary on `apt upgrade` / `pacman -Syu` without operator intervention.
+
 ## 1.3.54
 
 Multihop + multiplexed routing is operator-facing now. A new
