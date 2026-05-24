@@ -40,6 +40,14 @@ import (
 // long enough for a routed dial to succeed on a healthy network.
 const skynetFirstDialTimeout = 2 * time.Second
 
+// dmsgFallbackDialTimeout caps the dmsg fallback so the dialer
+// can't hang the UI forever if dmsg has trouble reaching the peer
+// (slow dmsg-discovery, dead relay, partitioned network, etc.).
+// The previous behavior — context.Background() with no deadline —
+// stranded the hvui at "Dialing…" indefinitely when both transports
+// were sluggish.
+const dmsgFallbackDialTimeout = 15 * time.Second
+
 // errNilDmsgClient guards against SkynetFirstUIDialer being constructed
 // without the dmsg fallback in place.
 var errNilDmsgClient = errors.New("skynet-first ui dialer: nil dmsg client")
@@ -64,24 +72,56 @@ func (d *skynetFirstUIDialer) Dial() (net.Conn, error) {
 		return nil, errNilDmsgClient
 	}
 
-	// Try skynet first. Bounded by skynetFirstDialTimeout to keep the
-	// fallback responsive — the call site is interactive (operator
-	// clicks "Open terminal" in the hvui and waits).
-	skyAddr := appnet.Addr{
-		Net:    appnet.TypeSkynet,
-		PubKey: d.rAddr.PK,
-		Port:   routing.Port(d.rAddr.Port),
+	// Skynet attempt in a goroutine with a HARD outer ceiling. We
+	// can't count on appnet.DialContext to honor context cancellation
+	// in all code paths — the AppDirectMux direct-dial branch and
+	// parts of the route-setup path do I/O that's not always
+	// ctx-bound. Wrapping the call + a separate timer gives us a
+	// strict upper bound at the cost of a possibly-leaked goroutine
+	// if the skynet dial eventually returns after we've fallen back
+	// to dmsg. The leaked goroutine closes the conn it gets if the
+	// outer dial has already moved on.
+	type skyResult struct {
+		conn net.Conn
+		err  error
 	}
-	skyCtx, skyCancel := context.WithTimeout(context.Background(), skynetFirstDialTimeout)
-	conn, err := appnet.DialContext(skyCtx, skyAddr)
-	skyCancel()
-	if err == nil {
-		return conn, nil
+	skyCh := make(chan skyResult, 1)
+	go func() {
+		skyAddr := appnet.Addr{
+			Net:    appnet.TypeSkynet,
+			PubKey: d.rAddr.PK,
+			Port:   routing.Port(d.rAddr.Port),
+		}
+		skyCtx, skyCancel := context.WithTimeout(context.Background(), skynetFirstDialTimeout)
+		defer skyCancel()
+		conn, err := appnet.DialContext(skyCtx, skyAddr)
+		select {
+		case skyCh <- skyResult{conn, err}:
+		default:
+			// Outer waiter gave up; clean up the conn rather than
+			// leaking it past this goroutine's lifetime.
+			if err == nil && conn != nil {
+				_ = conn.Close() //nolint:errcheck
+			}
+		}
+	}()
+
+	select {
+	case r := <-skyCh:
+		if r.err == nil {
+			return r.conn, nil
+		}
+	case <-time.After(skynetFirstDialTimeout):
+		// Skynet attempt exceeded its budget — fall through to dmsg.
 	}
 
-	// Fall back to dmsg. Errors here are surfaced to the operator
-	// (the original DmsgUIDialer behavior).
-	return d.dmsgC.Dial(context.Background(), d.rAddr)
+	// dmsg fallback. Use a bounded ctx so the UI gets a real error
+	// instead of hanging forever when dmsg-discovery is slow, the
+	// chosen relay is unreachable, or the remote PK simply isn't
+	// online.
+	dmsgCtx, dmsgCancel := context.WithTimeout(context.Background(), dmsgFallbackDialTimeout)
+	defer dmsgCancel()
+	return d.dmsgC.Dial(dmsgCtx, d.rAddr)
 }
 
 func (d *skynetFirstUIDialer) AddrString() string {

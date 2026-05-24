@@ -39,18 +39,45 @@ func isDone(ctx context.Context) bool {
 // autoUpgradeHypervisorTransport), the skynet path lets RPC traffic
 // flow over the fast p2p path instead of the dmsg relay.
 func dialHypervisorRPC(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Client, rAddr dmsg.Addr) (net.Conn, error) {
-	skyAddr := appnet.Addr{
-		Net:    appnet.TypeSkynet,
-		PubKey: rAddr.PK,
-		Port:   routing.Port(rAddr.Port),
+	// Skynet attempt in a goroutine with a hard outer ceiling.
+	// appnet.DialContext doesn't reliably honor context cancellation
+	// in all code paths (the AppDirectMux direct-dial branch and
+	// parts of route setup do I/O that's not always ctx-bound), so
+	// we wrap with an external timer. The goroutine closes any conn
+	// it gets if the outer dial has already moved on.
+	type skyResult struct {
+		conn net.Conn
+		err  error
 	}
-	skyCtx, skyCancel := context.WithTimeout(ctx, rpcSkynetDialTimeout)
-	conn, err := appnet.DialContext(skyCtx, skyAddr)
-	skyCancel()
-	if err == nil {
-		log.WithField("via", "skynet").Info("Dialed.")
-		return conn, nil
+	skyCh := make(chan skyResult, 1)
+	go func() {
+		skyAddr := appnet.Addr{
+			Net:    appnet.TypeSkynet,
+			PubKey: rAddr.PK,
+			Port:   routing.Port(rAddr.Port),
+		}
+		skyCtx, skyCancel := context.WithTimeout(ctx, rpcSkynetDialTimeout)
+		defer skyCancel()
+		conn, err := appnet.DialContext(skyCtx, skyAddr)
+		select {
+		case skyCh <- skyResult{conn, err}:
+		default:
+			if err == nil && conn != nil {
+				_ = conn.Close() //nolint:errcheck
+			}
+		}
+	}()
+
+	select {
+	case r := <-skyCh:
+		if r.err == nil {
+			log.WithField("via", "skynet").Info("Dialed.")
+			return r.conn, nil
+		}
+	case <-time.After(rpcSkynetDialTimeout):
+		// Skynet attempt exceeded its budget — fall through to dmsg.
 	}
+
 	log.WithField("via", "dmsg").Info("Dialing...")
 	return dmsgC.Dial(ctx, rAddr)
 }
