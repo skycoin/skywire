@@ -185,7 +185,13 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		}()
 
 		// urlCommands joins any ?commands= query into one bash chain.
-		ptyC.Write([]byte(urlCommands(r, customCommands))) //nolint
+		// Skip the write entirely when there's nothing to send — a
+		// bare "\n" gets interpreted by the pty as Enter and the
+		// shell re-renders the prompt, producing a doubled-prompt
+		// on every fresh session.
+		if cmdStr := urlCommands(r, customCommands); cmdStr != "" {
+			ptyC.Write([]byte(cmdStr)) //nolint
+		}
 
 		// Create WebSocket reader that handles resize messages
 		wsReader := newWSReader(ws, ptyC, log, r)
@@ -270,9 +276,10 @@ func urlCommands(r *http.Request, customCommands map[string][]string) string {
 			commands[i] = strings.Join(val, " && ")
 		}
 	}
-	stringCommands := strings.Join(commands, " && ")
-	stringCommands += "\n"
-	return stringCommands
+	if len(commands) == 0 {
+		return ""
+	}
+	return strings.Join(commands, " && ") + "\n"
 }
 
 // resizeMsg represents a terminal resize message from the client.
