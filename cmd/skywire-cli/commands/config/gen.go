@@ -142,7 +142,7 @@ func init() {
 		msg += ": " + skyenv.ConfigName
 	}
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"")
-	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "dont print the config to the terminal :: show errors with -n flag")
+	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "suppress config output to terminal")
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the conf template (reflects flags passed)")
 	genConfigCmd.Flags().StringVarP(&envfileOut, "envout", "Q", "", "write conf template to file (reflects flags passed)")
@@ -150,20 +150,20 @@ func init() {
 	// Config generation flags
 	genConfigCmd.Flags().BoolVarP(&isForce, "force", "f", false, "remove pre-existing config")
 	gHiddenFlags = append(gHiddenFlags, "force")
-	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "re-generate existing config & retain keys")
+	genConfigCmd.Flags().BoolVarP(&isRegen, "regen", "r", false, "regenerate existing config and retain keys")
 	genConfigCmd.Flags().BoolVarP(&isRetainHypervisors, "retainhv", "x", false, "retain existing hypervisors with regen")
 	gHiddenFlags = append(gHiddenFlags, "retainhv")
 
 	// Network and deployment flags
 	genConfigCmd.Flags().StringVarP(&serviceConfURL, "url", "a", scriptExecArray(fmt.Sprintf("${SVCCONFADDR[@]-%s}", serviceConfURL)), "services conf url\n\r")
 	gHiddenFlags = append(gHiddenFlags, "url")
-	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment\n\r(ports are offset +10000 to allow running alongside prod)")
+	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment (ports offset +10000 from prod)")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg connection to skywire services (no http fallback)")
-	genConfigCmd.Flags().BoolVar(&isHTTPOnly, "http", false, "use only http connection to skywire services (no dmsg)")
+	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg for skywire services (no http)")
+	genConfigCmd.Flags().BoolVar(&isHTTPOnly, "http", false, "use only http for skywire services (no dmsg)")
 	genConfigCmd.MarkFlagsMutuallyExclusive("dmsghttp", "http")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
-	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp-config path")
+	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp config path")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
 	// Note: the historical `BESTPROTO=true` knob was a China-only
 	// dmsghttp-fallback path that fired only when ipinfo.io reported
@@ -189,9 +189,9 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
-	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "set tcp transport listening port - 0 for random")
+	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "tcp transport listening port (0 = random)")
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
-	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "set udp transport listening port - 0 for random")
+	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "udp transport listening port (0 = random)")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
 
 	// Routing flags
@@ -261,7 +261,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "disableapps")
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor native apps")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
-	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-true}"), "autostart vpn server (default: true)")
+	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-true}"), "autostart vpn server")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 
 	// VPN flags
@@ -270,7 +270,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "killsw")
 	genConfigCmd.Flags().StringVar(&addVPNClientSrv, "addvpn", scriptExecString("${ADDVPNPK}"), "set vpn server public key for vpn client")
 	gHiddenFlags = append(gHiddenFlags, "addvpn")
-	genConfigCmd.Flags().StringVar(&addVPNServerWhitelist, "vpnwl", scriptExecArray("${VPNSERVERWL[@]}"), "comma-separated list of public keys allowed to connect to vpn server (empty = allow all)")
+	genConfigCmd.Flags().StringVar(&addVPNServerWhitelist, "vpnwl", scriptExecArray("${VPNSERVERWL[@]}"), "vpn server whitelist (comma separated; empty allows all)")
 	genConfigCmd.Flags().StringVar(&setVPNServerSecure, "secure", scriptExecString("${VPNSEVERSECURE}"), "change secure mode status of vpn server")
 	gHiddenFlags = append(gHiddenFlags, "secure")
 	genConfigCmd.Flags().StringVar(&setVPNServerNetIfc, "netifc", scriptExecString("${VPNSEVERNETIFC}"), "VPN Server network interface (detected: "+getInterfaceNames()+")")
@@ -281,8 +281,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "proxyclientpk")
 	genConfigCmd.Flags().BoolVar(&enableProxyClientAutostart, "startproxyclient", scriptExecBool("${STARTPROXYCLIENT:-false}"), "autostart proxy client")
 	gHiddenFlags = append(gHiddenFlags, "startproxyclient")
-	genConfigCmd.Flags().BoolVar(&isProxyServerEnable, "serveproxy", scriptExecBool("${PROXYSERVER:-true}"), "autostart proxy server (default: true)")
-	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecArray("${PROXYSERVERWL[@]}"), "comma-separated list of public keys allowed to connect to proxy server (empty = allow all)")
+	genConfigCmd.Flags().BoolVar(&isProxyServerEnable, "serveproxy", scriptExecBool("${PROXYSERVER:-true}"), "autostart proxy server")
+	genConfigCmd.Flags().StringVar(&proxyServerWhitelist, "proxywl", scriptExecArray("${PROXYSERVERWL[@]}"), "proxy server whitelist (comma separated; empty allows all)")
 
 	// Embedded resolving-proxy flags. Browsers point a single SOCKS5
 	// at the dmsgweb listener and `.dmsg` / `.skynet` URLs resolve.
@@ -290,17 +290,17 @@ func init() {
 	// upstream → skynetweb so one entry covers both TLDs.
 	genConfigCmd.Flags().BoolVar(&enableDmsgWeb, "dmsgweb", scriptExecBool("${DMSGWEB:-false}"), "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445")
 	genConfigCmd.Flags().BoolVar(&enableSkynetWeb, "skynetweb", scriptExecBool("${SKYNETWEB:-false}"), "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446")
-	genConfigCmd.Flags().BoolVar(&enableSkymailBridge, "skymail-bridge", scriptExecBool("${SKYMAILBRIDGE:-false}"), "enable embedded SMTP→skywire bridge on 127.0.0.1:1025 (relays *.skynet recipients over dmsg)")
-	genConfigCmd.Flags().StringVar(&dmsgWebUpstreamSOCKS, "dmsgweb-upstream", scriptExecString("${DMSGWEBUPSTREAM}"), "upstream SOCKS5 for non-.dmsg traffic (e.g. 127.0.0.1:1080); empty + skynetweb on = auto-chain to skynetweb")
+	genConfigCmd.Flags().BoolVar(&enableSkymailBridge, "skymail-bridge", scriptExecBool("${SKYMAILBRIDGE:-false}"), "enable SMTP to skywire bridge on 127.0.0.1:1025")
+	genConfigCmd.Flags().StringVar(&dmsgWebUpstreamSOCKS, "dmsgweb-upstream", scriptExecString("${DMSGWEBUPSTREAM}"), "upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)")
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-upstream")
-	genConfigCmd.Flags().StringVar(&skynetWebUpstreamSOCKS, "skynetweb-upstream", scriptExecString("${SKYNETWEBUPSTREAM}"), "upstream SOCKS5 for non-.skynet traffic (e.g. 127.0.0.1:1080)")
+	genConfigCmd.Flags().StringVar(&skynetWebUpstreamSOCKS, "skynetweb-upstream", scriptExecString("${SKYNETWEBUPSTREAM}"), "upstream SOCKS5 for non .skynet traffic")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-upstream")
 
 	// Skychat flags
-	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat (default: true)")
+	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat")
 	genConfigCmd.Flags().StringVar(&skychatAddr, "chataddr", scriptExecString("${SKYCHATADDR:-"+skyenv.SkychatAddr+"}"), "skychat local address")
 	gHiddenFlags = append(gHiddenFlags, "chataddr")
-	genConfigCmd.Flags().BoolVar(&isSkychatPairEnable, "servechatpair", scriptExecBool("${SKYCHATPAIR:-true}"), "skychat: enable pair-RPC channel to visor (required for group chat)")
+	genConfigCmd.Flags().BoolVar(&isSkychatPairEnable, "servechatpair", scriptExecBool("${SKYCHATPAIR:-true}"), "skychat pair RPC channel (required for group chat)")
 	gHiddenFlags = append(gHiddenFlags, "servechatpair")
 
 	// Skycoin embedded apps. Default-off for both — operator opts in
@@ -309,12 +309,12 @@ func init() {
 	// touches the operator's ~/.skycoin/wallets dir, so when the
 	// visor itself runs as _skywire the wallet should be configured
 	// to drop to the operator's UID.
-	genConfigCmd.Flags().BoolVar(&isSkycoinDaemonEnable, "skycoind", scriptExecBool("${SKYCOIND:-false}"), "autostart skycoin daemon (full node) — single-instance legacy path; superseded by --skycoindinstances when set")
-	genConfigCmd.Flags().StringVar(&skycoinDaemonFiber, "skycoindfiber", scriptExecString("${SKYCOIND_FIBER_TOML}"), "legacy single-instance FIBER_TOML; superseded by --skycoindinstances")
+	genConfigCmd.Flags().BoolVar(&isSkycoinDaemonEnable, "skycoind", scriptExecBool("${SKYCOIND:-false}"), "autostart skycoin daemon (legacy single instance)")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonFiber, "skycoindfiber", scriptExecString("${SKYCOIND_FIBER_TOML}"), "legacy FIBER_TOML path (single instance)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindfiber")
-	genConfigCmd.Flags().StringVar(&skycoinDaemonAPISets, "skycoindapi", scriptExecString("${SKYCOIND_API_SETS}"), "legacy single-instance --enable-gui-api-sets; superseded by --skycoindflags")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonAPISets, "skycoindapi", scriptExecString("${SKYCOIND_API_SETS}"), "legacy api sets (single instance)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindapi")
-	genConfigCmd.Flags().StringVar(&skycoinDaemonUser, "skycoindUSER", scriptExecString("${SKYCOIND_USER}"), "drop skycoin daemon to this user via launcher external-mode (applies to every instance)")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonUser, "skycoindUSER", scriptExecString("${SKYCOIND_USER}"), "skycoin daemon UID (applies to every instance)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindUSER")
 	// Multi-instance: SKYCOIND_INSTANCES is a bash array. Entries
 	// are either the literal "skycoin" (built-in defaults, no
@@ -322,27 +322,27 @@ func init() {
 	// expands ${VAR[@]} into a CSV string here; gen splits on commas
 	// at render time and emits one AppConfig per entry with auto-
 	// allocated --port (base 6420 +2N) and --data-dir.
-	genConfigCmd.Flags().StringVar(&skycoinDaemonInstances, "skycoindinstances", scriptExecArray("${SKYCOIND_INSTANCES[@]}"), "comma-separated list of skycoin-daemon instances; entries are either 'skycoin' (built-in defaults) or a fiber.toml path. Empty = use the legacy single-instance path driven by --skycoind / --skycoindfiber.")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonInstances, "skycoindinstances", scriptExecArray("${SKYCOIND_INSTANCES[@]}"), "skycoin daemon instances (comma separated; skycoin or fiber.toml path)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindinstances")
-	genConfigCmd.Flags().StringVar(&skycoinDaemonFlags, "skycoindflags", scriptExecString("${SKYCOIND_FLAGS}"), "extra flags appended to every skycoin-daemon instance (e.g. '--enable-gui-api-sets READ,STATUS'); --port and --data-dir are auto-allocated and must not appear here")
+	genConfigCmd.Flags().StringVar(&skycoinDaemonFlags, "skycoindflags", scriptExecString("${SKYCOIND_FLAGS}"), "extra flags appended to every skycoin daemon (port and data dir auto allocated)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindflags")
-	genConfigCmd.Flags().BoolVar(&isSkycoinWebEnable, "skycoinweb", scriptExecBool("${SKYCOINWEB:-false}"), "autostart skycoin-web thin-client wallet")
+	genConfigCmd.Flags().BoolVar(&isSkycoinWebEnable, "skycoinweb", scriptExecBool("${SKYCOINWEB:-false}"), "autostart skycoin web wallet (thin client)")
 	// 8002 to avoid colliding with skychat's default at 127.0.0.1:8001.
 	// Both apps' upstream defaults happen to be 8001; skychat got there
 	// first in skywire so skycoin-web shifts up by one. Operator can
 	// override via SKYCOINWEBADDR or the universal settings panel.
-	genConfigCmd.Flags().StringVar(&skycoinWebAddr, "skycoinwebaddr", scriptExecString("${SKYCOINWEBADDR:-127.0.0.1:8002}"), "skycoin-web bind address (host:port)")
+	genConfigCmd.Flags().StringVar(&skycoinWebAddr, "skycoinwebaddr", scriptExecString("${SKYCOINWEBADDR:-127.0.0.1:8002}"), "skycoin web bind address (host:port)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebaddr")
 	// SKYCOINWEBNODES is a bash array (multiple node URLs supported
 	// — one per fibercoin the wallet is meant to multi-coin-browse).
 	// scriptExecArray expands ${VAR[@]} into a CSV string here; we
 	// re-split on commas at AppConfig render time and emit repeated
 	// --node-url flags as skycoin-web's StringArrayVar expects.
-	genConfigCmd.Flags().StringVar(&skycoinWebNodeURLs, "skycoinwebnodes", scriptExecArray("${SKYCOINWEBNODES[@]}"), "comma-separated node URLs the skycoin-web wallet talks to (empty = upstream default at https://node.skycoin.com)")
+	genConfigCmd.Flags().StringVar(&skycoinWebNodeURLs, "skycoinwebnodes", scriptExecArray("${SKYCOINWEBNODES[@]}"), "node URLs the skycoin web wallet talks to (comma separated)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebnodes")
-	genConfigCmd.Flags().StringVar(&skycoinWebWalletDir, "skycoinwebwallet", scriptExecString("${SKYCOINWEBWALLET}"), "skycoin-web --wallet-dir override (empty = upstream default at ~/.skycoin/wallets)")
+	genConfigCmd.Flags().StringVar(&skycoinWebWalletDir, "skycoinwebwallet", scriptExecString("${SKYCOINWEBWALLET}"), "skycoin web wallet dir override")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebwallet")
-	genConfigCmd.Flags().StringVar(&skycoinWebUser, "skycoinwebuser", scriptExecString("${SKYCOINWEBUSER}"), "drop skycoin-web to this user via launcher external-mode (POSIX setuid; empty = inherit visor UID)")
+	genConfigCmd.Flags().StringVar(&skycoinWebUser, "skycoinwebuser", scriptExecString("${SKYCOINWEBUSER}"), "skycoin web UID (empty inherits visor UID)")
 	gHiddenFlags = append(gHiddenFlags, "skycoinwebuser")
 
 	// Reward address
