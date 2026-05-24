@@ -13,9 +13,28 @@ mkdir -p "${skywire_dir}"
 
 chown -R "${USER}" "$skywire_dir"
 
+# Operator-editable env file. macOS analog of /etc/skywire.conf
+# (Linux) and %ProgramData%\Skywire\skywire.conf (Windows). Lives
+# next to the JSON config so it survives `Remove Skywire` — the
+# uninstaller's remove_scripts/postinstall only nukes
+# ${skywire_dir}/local, not the whole dir. Generate the template
+# here on first install only; the update_scripts/postinstall
+# doesn't recreate it, so operator edits persist across upgrades.
+export SKYENV="${skywire_dir}/skywire.conf"
+if [[ ! -f "${SKYENV}" ]]; then
+  /Applications/Skywire.app/Contents/MacOS/skywire cli config gen -pqQ "${SKYENV}"
+  chown "${USER}" "${SKYENV}"
+fi
+
 echo "generating skywire config if it doesn't exist"
+# `-b` used to map to BESTPROTO; removed in #2536. Passing it to
+# current binaries makes cobra reject the whole command line — the
+# gen never ran, and the visor's own bootstrap then generated a
+# fresh SK on every schema change between releases. Dropped here so
+# the gen actually runs. Also picks up operator-edited values from
+# ${SKYENV} via cli's scriptExecBool / scriptExecString.
 if [[ ! -f "${skywire_dir}"/skywire-config.json ]]; then
-  /Applications/Skywire.app/Contents/MacOS/skywire cli config gen --loglvl info -bpio "${skywire_dir}"/skywire-config.json
+  /Applications/Skywire.app/Contents/MacOS/skywire cli config gen --loglvl info -pio "${skywire_dir}"/skywire-config.json
 fi
 chown "${USER}" "${skywire_dir}"/skywire-config.json
 
