@@ -873,7 +873,13 @@ type dmsgPtyUI struct {
 }
 
 func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
-	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
+	// SkynetFirstUIDialer tries appnet.Dial(skynet) before falling
+	// back to dmsg. The remote visor dual-listens for dmsgpty on
+	// dmsg + skynet at the same port (init_dmsg_skywire.go's
+	// startSkywirePtyListener), so the skynet path lets the pty
+	// stream ride a stcpr / sudph transport when one exists between
+	// us and the visor.
+	ptyDialer := SkynetFirstUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
 	return &dmsgPtyUI{
 		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
 	}
