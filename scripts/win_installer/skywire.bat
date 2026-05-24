@@ -42,6 +42,28 @@ if exist "%HOMEPATH%\skywire-config.json" (
 	move /Y "%HOMEPATH%\skywire-config.json" . >nul 2>&1
 )
 
+:: Windows-side equivalent of Linux's /etc/skywire.conf. Lives under
+:: %ProgramData% (typically C:\ProgramData\Skywire\) so operator
+:: edits survive MSI upgrades — the MSI installs into Program Files
+:: but doesn't touch ProgramData. `defaultSkyenvPath` in
+:: cmd/skywire/commands/autoconfig.go points at the same path; the
+:: SKYENV env var here makes cli + autoconfig pick the file up
+:: regardless of CWD.
+set "SKYENV=%ProgramData%\Skywire\skywire.conf"
+if not exist "%ProgramData%\Skywire\" (
+    mkdir "%ProgramData%\Skywire" >nul 2>&1
+)
+
+:: Generate the env-file template ONLY if missing. -p forces the
+:: package-mode defaults (paths under C:\Program Files\Skywire), -q
+:: prints the template, -Q writes to the file. Mirrors the deb/arch
+:: `[[ ! -f /etc/skywire.conf ]] && skywire cli config gen -pqQ ...`
+:: pattern from PR #2796 — once the file exists, every subsequent
+:: install / upgrade leaves operator edits intact.
+if not exist "%SKYENV%" (
+    skywire cli config gen -pqQ "%SKYENV%" >nul 2>&1
+)
+
 :: Config generation. The `-b` flag used to map to a removed
 :: BESTPROTO knob; passing it to current binaries makes cobra reject
 :: the entire command line ("unknown shorthand flag: 'b'") and the
@@ -53,6 +75,8 @@ if exist "%HOMEPATH%\skywire-config.json" (
 :: post_install logic).
 ::
 :: First install (no skywire-config.json yet) — generate fresh.
+:: cli reads %SKYENV% via the SKYENV env var; its PKGENV / HYPERVISORPKS
+:: / DISABLEPUBLICAUTOCONN / etc. settings are picked up here.
 if not exist "skywire-config.json" (
     skywire cli config gen -irpw --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info >nul 2>&1
 )
@@ -61,7 +85,8 @@ if not exist "skywire-config.json" (
 :: The regen path reads the existing skywire-config.json, extracts
 :: the SK, then writes a fresh config carrying that same SK. `-x`
 :: also preserves the existing hypervisor PK list. SK preserved
-:: across every MSI update.
+:: across every MSI update. cli still reads %SKYENV% for any
+:: operator-edited knobs in skywire.conf.
 if exist "new.update" (
     skywire cli config gen -irpwx --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info >nul 2>&1
     del new.update >nul 2>&1
