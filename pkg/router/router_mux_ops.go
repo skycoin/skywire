@@ -13,6 +13,77 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
+// appendRouteAsymmetric adds an aux mux leg, selectively appending
+// the forward and/or reverse direction. addFwd=true && addRev=true is
+// equivalent to appendRouteToGroup. When either flag is false, the
+// corresponding rule is deleted from the routing table immediately
+// (the setup-node always creates both sides; this is the cleanup for
+// the unused side so it doesn't accumulate stale entries).
+//
+// Used by establishMuxRoutes when ForwardMuxRoutes != ReverseMuxRoutes
+// to construct asymmetric mux topologies (e.g. 1 forward + N reverse
+// for download-heavy workloads).
+func (r *router) appendRouteAsymmetric(nrg *NoiseRouteGroup, rules routing.EdgeRules, addFwd, addRev bool) error {
+	if !addFwd && !addRev {
+		// Neither direction wanted — delete both rules and skip.
+		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+		return nil
+	}
+
+	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {
+		return fmt.Errorf("SaveRoutingRules: %w", err)
+	}
+
+	// Forward leg requires the transport (writes) + DMSG safety check.
+	if addFwd {
+		nextTpID := rules.Forward.NextTransportID()
+		tp := r.tm.Transport(nextTpID)
+		if tp == nil {
+			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+			return fmt.Errorf("transport %s not found for additional mux route", nextTpID)
+		}
+		if tp.Entry.Type == tptypes.DMSG {
+			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+			return errors.New("refusing to append DMSG transport to mux route group")
+		}
+		nrg.rg.mu.Lock()
+		for _, existing := range nrg.rg.tps {
+			if existing != nil && existing.Entry.Type == tptypes.DMSG {
+				nrg.rg.mu.Unlock()
+				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
+				return errors.New("refusing to mux: route group already contains a DMSG transport")
+			}
+		}
+		nrg.rg.mu.Unlock()
+		nrg.rg.appendForwardLeg(rules.Forward, tp)
+
+		// Send handshake on the new forward transport.
+		rg := nrg.rg
+		rg.mu.Lock()
+		lastIdx := len(rg.tps) - 1
+		lastTp := rg.tps[lastIdx]
+		lastRule := rg.fwd[lastIdx]
+		rg.mu.Unlock()
+		packet := routing.MakeHandshakePacket(lastRule.NextRouteID(), rg.encrypt, routing.CapMux|routing.CapSACK)
+		if err := rg.writePacket(context.Background(), lastTp, packet, lastRule.KeyRouteID()); err != nil {
+			r.logger.WithError(err).Warn("Failed to send handshake on additional mux transport")
+		}
+	} else {
+		// Forward not wanted — drop the forward rule from routing table.
+		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID()})
+	}
+
+	if addRev {
+		nrg.rg.appendReverseLeg(rules.Reverse)
+	} else {
+		// Reverse not wanted — drop the reverse rule from routing table.
+		r.rt.DelRules([]routing.RouteID{rules.Reverse.KeyRouteID()})
+	}
+
+	r.logger.Debugf("Appended asymmetric mux route (fwd=%v rev=%v) to RouteGroup %s", addFwd, addRev, &rules.Desc)
+	return nil
+}
+
 // appendRouteToGroup adds an additional transport/rule pair to an existing
 // mux-enabled NoiseRouteGroup. Used for establishing additional parallel routes.
 func (r *router) appendRouteToGroup(nrg *NoiseRouteGroup, rules routing.EdgeRules) error {
