@@ -21,6 +21,23 @@ if [[ -L /usr/local/bin/skywire-cli ]]; then
   unlink /usr/local/bin/skywire-cli
 fi
 
-/Applications/Skywire.app/Contents/MacOS/skywire cli config gen --loglvl info -bprio "${skywire_dir}"/skywire-config.json
+# `-b` used to map to BESTPROTO; removed in #2536. Passing it to
+# current binaries makes cobra reject the whole command line, the
+# gen never ran, and `-r` (regenerate-with-key-retention) was
+# never applied — operators report their visor SK changing on
+# every macOS update. Dropping `-b` lets gen actually run; `-r`
+# then reads the existing skywire-config.json, extracts the SK,
+# and writes a new config carrying that same SK. (Mirrors the
+# Linux deb / arch post_install fix from #2796 and the Windows
+# MSI fix in this PR.)
+#
+# Point SKYENV at the operator's env file so cli picks up
+# PKGENV / ISHYPERVISOR / HYPERVISORPKS / DISABLEPUBLICAUTOCONN /
+# etc. from it. The file was created by install_scripts on first
+# install; this script doesn't touch it, so operator edits
+# persist across every macOS update.
+export SKYENV="${skywire_dir}/skywire.conf"
+
+/Applications/Skywire.app/Contents/MacOS/skywire cli config gen --loglvl info -prio "${skywire_dir}"/skywire-config.json
 chown "${USER}" "${skywire_dir}"/skywire-config.json
 
