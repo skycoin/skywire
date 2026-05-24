@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.56
+
+Patch release. Three PRs on top of v1.3.55.
+
+The big-picture pieces: hypervisor↔visor data-plane now upgrades to a fast p2p transport (stcpr / sudph) automatically once the dmsg session is up; RPC + skypty dial through skynet when a route exists, with dmsg as the bootstrap + fallback. The skypty UI banner is rebranded (skypty-ui, dropped the box that overflowed on the 66-char PK lines), DMSGPTYTERM=1 export is gone — operators wanting "install without auto-restart from inside a pty session" use `NOAUTOCONFIG=true` instead, which the Go autoconfig already honors. The Windows MSI and macOS .pkg installers finally match the deb / arch package post_install pattern from #2796: SK preserved across upgrades (the `-b` flag was rejected by current binaries since #2536's BESTPROTO cleanup, which silently broke the `-r` retain-keys path), and a persistent operator-knobs env file (`%ProgramData%\Skywire\skywire.conf` on Windows, `~/Library/Application Support/Skywire/skywire.conf` on macOS) generated on first install only and untouched on every upgrade.
+
+### Multihop + multiplexed routing
+
+-   `feat(visor)`: auto-upgrade visor↔hypervisor to skynet for RPC + skypty  [#2802](https://github.com/skycoin/skywire/pull/2802)
+
+### dmsg utility belt
+
+-   `feat(dmsgpty/ui)`: skypty-ui rebrand + drop box overflow + drop DMSGPTYTERM  [#2801](https://github.com/skycoin/skywire/pull/2801)
+
+### Packaging + config UX
+
+-   `fix(installers)`: preserve SK + add skywire.conf env file on win + mac  [#2803](https://github.com/skycoin/skywire/pull/2803)
+
 ## 1.3.55
 
 Patch release. Two PRs on top of v1.3.54.
