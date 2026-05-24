@@ -34,6 +34,35 @@ func TestDialOptions_EffectiveMinHops(t *testing.T) {
 	}
 }
 
+func TestDialOptions_EffectiveMuxRoutes(t *testing.T) {
+	cases := []struct {
+		name    string
+		opts    *DialOptions
+		forward bool
+		want    int
+	}{
+		{"nil opts forward", nil, true, 0},
+		{"nil opts reverse", nil, false, 0},
+		{"symmetric only forward", &DialOptions{MuxRoutes: 4}, true, 4},
+		{"symmetric only reverse", &DialOptions{MuxRoutes: 4}, false, 4},
+		{"per-direction wins forward", &DialOptions{MuxRoutes: 4, ForwardMuxRoutes: 1}, true, 1},
+		{"per-direction wins reverse", &DialOptions{MuxRoutes: 4, ReverseMuxRoutes: 8}, false, 8},
+		{"per-direction does NOT affect other forward", &DialOptions{MuxRoutes: 4, ReverseMuxRoutes: 8}, true, 4},
+		{"per-direction does NOT affect other reverse", &DialOptions{MuxRoutes: 4, ForwardMuxRoutes: 1}, false, 4},
+		// Canonical asymmetric download shape: fwd=1, rev=N.
+		{"asymmetric: fwd=1 rev=4 fwd", &DialOptions{ForwardMuxRoutes: 1, ReverseMuxRoutes: 4}, true, 1},
+		{"asymmetric: fwd=1 rev=4 rev", &DialOptions{ForwardMuxRoutes: 1, ReverseMuxRoutes: 4}, false, 4},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := c.opts.EffectiveMuxRoutes(c.forward)
+			if got != c.want {
+				t.Errorf("EffectiveMuxRoutes(%v) = %d, want %d", c.forward, got, c.want)
+			}
+		})
+	}
+}
+
 func TestDialOptions_AnyMinHopsConstraint(t *testing.T) {
 	cases := []struct {
 		name string
