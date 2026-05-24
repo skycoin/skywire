@@ -42,14 +42,28 @@ if exist "%HOMEPATH%\skywire-config.json" (
 	move /Y "%HOMEPATH%\skywire-config.json" . >nul 2>&1
 )
 
-:: Generating new config file if not exist
+:: Config generation. The `-b` flag used to map to a removed
+:: BESTPROTO knob; passing it to current binaries makes cobra reject
+:: the entire command line ("unknown shorthand flag: 'b'") and the
+:: gen never ran. With the gen short-circuited, the visor's own
+:: bootstrap fell through to fresh-key generation on every schema
+:: change, which is what operators were reporting as "my SK changed
+:: on update". Dropping `-b` lets gen actually run; `-r` then
+:: preserves the SK from the existing config (mirrors the deb/arch
+:: post_install logic).
+::
+:: First install (no skywire-config.json yet) — generate fresh.
 if not exist "skywire-config.json" (
-    skywire cli config gen -birpw --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info >nul 2>&1
+    skywire cli config gen -irpw --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info >nul 2>&1
 )
 
-:: Regenerating config file after update and install new version of Skywire
+:: Upgrade marker (new.update shipped in MSI) — regenerate with `-r`.
+:: The regen path reads the existing skywire-config.json, extracts
+:: the SK, then writes a fresh config carrying that same SK. `-x`
+:: also preserves the existing hypervisor PK list. SK preserved
+:: across every MSI update.
 if exist "new.update" (
-    skywire cli config gen -birpwx >nul 2>&1
+    skywire cli config gen -irpwx --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info >nul 2>&1
     del new.update >nul 2>&1
 )
 
