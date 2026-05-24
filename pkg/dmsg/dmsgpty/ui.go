@@ -70,18 +70,23 @@ func (ui *UI) SetLogger(log logrus.FieldLogger) {
 }
 
 func (ui *UI) writeBanner(w io.Writer, uiAddr string, sID int32) error {
+	// ANSI Shadow font (https://patorjk.com/software/taag/?f=ANSI%20Shadow).
+	// No enclosing box around the header values — the PTY-HOST (66-char
+	// PK) and UI-URL (PK embedded in the URL) overflow any reasonable
+	// fixed-width box. Drop the box; print the header values flush-left
+	// with a blank-line gap above and below.
 	format := `
-██████╗ ███╗   ███╗███████╗ ██████╗ ██████╗ ████████╗██╗   ██╗     ██╗   ██╗██╗
-██╔══██╗████╗ ████║██╔════╝██╔════╝ ██╔══██╗╚══██╔══╝╚██╗ ██╔╝     ██║   ██║██║
-██║  ██║██╔████╔██║███████╗██║  ███╗██████╔╝   ██║    ╚████╔╝█████╗██║   ██║██║
-██║  ██║██║╚██╔╝██║╚════██║██║   ██║██╔═══╝    ██║     ╚██╔╝ ╚════╝██║   ██║██║
-██████╔╝██║ ╚═╝ ██║███████║╚██████╔╝██║        ██║      ██║        ╚██████╔╝██║
-╚═════╝ ╚═╝     ╚═╝╚══════╝ ╚═════╝ ╚═╝        ╚═╝      ╚═╝         ╚═════╝ ╚═╝
-╔═════════════════════════════════════════════════════════════════════════════╗
-║ PTY-HOST : %s
-║   UI-URL : %s
-║   UI-SID : %d
-╚═════════════════════════════════════════════════════════════════════════════╝
+███████╗██╗  ██╗██╗   ██╗██████╗ ████████╗██╗   ██╗     ██╗   ██╗██╗
+██╔════╝██║ ██╔╝╚██╗ ██╔╝██╔══██╗╚══██╔══╝╚██╗ ██╔╝     ██║   ██║██║
+███████╗█████╔╝  ╚████╔╝ ██████╔╝   ██║    ╚████╔╝█████╗██║   ██║██║
+╚════██║██╔═██╗   ╚██╔╝  ██╔═══╝    ██║     ╚██╔╝ ╚════╝██║   ██║██║
+███████║██║  ██╗   ██║   ██║        ██║      ██║        ╚██████╔╝██║
+╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝        ╚═╝      ╚═╝         ╚═════╝ ╚═╝
+
+  PTY-HOST  %s
+  UI-URL    %s
+  UI-SID    %d
+
 `
 	var b bytes.Buffer
 	if _, err := fmt.Fprintf(&b, format, ui.dialer.AddrString(), uiAddr, sID); err != nil {
@@ -179,8 +184,14 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 			}
 		}()
 
-		// urlCommands from URL | set DMSGPTYTERM=1 all times
-		ptyC.Write([]byte(urlCommands(r, customCommands))) //nolint
+		// urlCommands joins any ?commands= query into one bash chain.
+		// Skip the write entirely when there's nothing to send — a
+		// bare "\n" gets interpreted by the pty as Enter and the
+		// shell re-renders the prompt, producing a doubled-prompt
+		// on every fresh session.
+		if cmdStr := urlCommands(r, customCommands); cmdStr != "" {
+			ptyC.Write([]byte(cmdStr)) //nolint
+		}
 
 		// Create WebSocket reader that handles resize messages
 		wsReader := newWSReader(ws, ptyC, log, r)
@@ -219,14 +230,14 @@ type ErrorJSON struct {
 }
 
 func logWS(conn net.Conn, msg string) {
-	_, _ = fmt.Fprintf(conn, "[dmsgpty-ui] Status: %s\r", msg) //nolint:errcheck
+	_, _ = fmt.Fprintf(conn, "[skypty-ui] Status: %s\r", msg) //nolint:errcheck
 }
 
 func writeWSError(log logrus.FieldLogger, wsConn net.Conn, err error) {
 	log.WithError(err).
 		WithField("remote_addr", wsConn.RemoteAddr()).
 		Error()
-	errB := append([]byte("[dmsgpty-ui] Error: "+err.Error()), '\n', '\r')
+	errB := append([]byte("[skypty-ui] Error: "+err.Error()), '\n', '\r')
 	if _, err := wsConn.Write(errB); err != nil {
 		log.WithError(err).Error("Failed to write error msg to ws conn.")
 	}
@@ -245,7 +256,15 @@ func writeError(log logrus.FieldLogger, w http.ResponseWriter, r *http.Request, 
 }
 
 func urlCommands(r *http.Request, customCommands map[string][]string) string {
-	commands := []string{"export DMSGPTYTERM=1"}
+	// DMSGPTYTERM=1 used to be exported here as a marker the legacy
+	// bash autoconfig checked to skip its own service-restart step
+	// (avoiding a self-interrupt when operators installed skywire from
+	// inside a dmsgpty session). Replaced by NOAUTOCONFIG=true, which
+	// the Go autoconfig honors at the top of its Run handler — set it
+	// before `apt install` / `yay -S` to install without auto-restart,
+	// then run `systemctl start skywire-autoconfig.service` from
+	// outside the pty to configure + restart.
+	var commands []string
 	if commandsQuery, ok := r.URL.Query()["commands"]; ok {
 		if len(commandsQuery[0]) > 0 {
 			commands = append(commands, strings.Split(commandsQuery[0], ",")...)
@@ -257,9 +276,10 @@ func urlCommands(r *http.Request, customCommands map[string][]string) string {
 			commands[i] = strings.Join(val, " && ")
 		}
 	}
-	stringCommands := strings.Join(commands, " && ")
-	stringCommands += "\n"
-	return stringCommands
+	if len(commands) == 0 {
+		return ""
+	}
+	return strings.Join(commands, " && ") + "\n"
 }
 
 // resizeMsg represents a terminal resize message from the client.
