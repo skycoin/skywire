@@ -26,6 +26,7 @@
 package commands
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -463,71 +464,71 @@ func resolveConfig() resolvedConfig {
 	return r
 }
 
-// generateConfig invokes `skywire cli config gen` with the mode
-// flag (-p or -u) matching what resolveConfig already decided. We
-// intentionally do NOT let the subprocess redo the resolution —
-// autoconfig has an implicit "euid==0 → PKGENV" fallback when the
-// env file leaves both PKGENV and USRENV commented out, but
-// `cli config gen` does not, so without explicit -p/-u the
-// subprocess writes the config to gen's own default path (working-
-// directory ./skywire-config.json) instead of the system path
-// autoconfig is expecting at r.configPath. The mismatch surfaces
-// later as the FATAL `expected config file not found` from
-// autoconfig's post-Stat check and aborts the postinst with
-// exit 100. Propagating the resolved mode explicitly closes the gap.
+// generateConfig invokes `skywire cli config gen` with regen +
+// hide flags. -p/-u are NOT passed: cli config gen reads PKGENV /
+// USRENV from the SKYENV file via scriptExecBool, so the env-var
+// path picks up the same resolution autoconfig made — without
+// hard-coding the mode in the args (the operator's intent lives in
+// /etc/skywire.conf, not in this Cmd line).
 func generateConfig(r resolvedConfig, hvArg string) error {
-	// `-w` / `--hide` suppresses the generated config from being
-	// echoed to stdout. autoconfig is meant for unattended
-	// systemd/postinst invocation — dumping the visor's SK + every
-	// service URL through the terminal at every install is both
-	// noisy (the file is the authoritative copy) and a perceived
-	// secret-leak risk on shared terminals / CI logs. The Stdout
-	// pipe we hook up below is still useful for errors; `-w` only
-	// hides the success-path JSON dump.
-	args := []string{"cli", "config", "gen", "-r", "-w"}
+	// printableArgs is what we PRINT for the operator to copy-paste.
+	// Intentionally omits -w (we suppress the noisy fetch logs
+	// ourselves) and -p/-u (resolved via SKYENV vars). If the
+	// install fails, the operator can paste this exact line and see
+	// the full debug logging that we hid.
+	printableArgs := []string{"cli", "config", "gen", "-r"}
 
-	switch {
-	case r.pkgEnv:
-		args = append(args, "-p")
-	case r.usrEnv:
-		args = append(args, "-u")
-	}
+	// args is what we ACTUALLY pass. -w suppresses the success-path
+	// JSON dump (echoing the SK + every service URL on every install
+	// is noisy and a perceived secret-leak risk on shared terminals).
+	args := []string{"cli", "config", "gen", "-r", "-w"}
 
 	switch hvArg {
 	case "0":
 		args = append(args, "-i")
+		printableArgs = append(printableArgs, "-i")
 	case "1":
 		// no hypervisor
 	case "":
 		// New install? Default to enabling the local hypervisor.
 		if _, err := os.Stat(r.configPath); os.IsNotExist(err) {
 			args = append(args, "-i")
+			printableArgs = append(printableArgs, "-i")
 		}
 	default:
 		args = append(args, "-j", hvArg)
+		printableArgs = append(printableArgs, "-j", hvArg)
 	}
 
 	envPrefix := ""
 	if r.skyenvPath != "" {
 		envPrefix = fmt.Sprintf("SKYENV=%s ", r.skyenvPath)
 	}
-	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(args, " "), colorReset))
+	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(printableArgs, " "), colorReset))
 
-	// Forward stdout and stderr to the parent so any error from
-	// `cli config gen` (missing service-config.json, bad SK, write
-	// permission denied, etc.) reaches the operator's apt output /
-	// journalctl. Previously these were both /dev/null'd, so a
-	// failing gen exited 0-or-noise and autoconfig only noticed
-	// downstream — by the time the FATAL Stat fired, the actual
-	// cause was lost.
+	// Suppress the subprocess's stdout/stderr by default. The DMSG
+	// fetch chatter ([INFO]/[DEBUG] lines) and -w's hidden JSON dump
+	// both go through here and are noise on the happy path. Buffer
+	// stderr; on failure flush it so the operator can see what
+	// broke (missing service-config.json, bad SK, write permission
+	// denied, etc.). If the operator wants the verbose path, the
+	// printableArgs above show the same command without -w to paste
+	// into a terminal.
+	var stderrBuf bytes.Buffer
 	cmd := exec.Command("skywire", args...) //nolint:gosec
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = &stderrBuf
 	cmd.Env = os.Environ()
 	if r.skyenvPath != "" {
 		cmd.Env = append(cmd.Env, "SKYENV="+r.skyenvPath)
 	}
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		if stderrBuf.Len() > 0 {
+			fmt.Fprint(os.Stderr, stderrBuf.String())
+		}
+		return err
+	}
+	return nil
 }
 
 // writeSystemdDropIn writes a one-section drop-in that pins User=
