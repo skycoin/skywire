@@ -709,7 +709,7 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 			//			}
 			defer delete(v.connectedHypervisors, hvPK)
 			v.connectedHypervisors[hvPK] = true
-			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
 			//			ServeRPCClient(ctx, log, autoPeerIP, v.dmsgC, rpcS, addr, hvErrs)
 
 		}(hvErrs)
