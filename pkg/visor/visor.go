@@ -269,6 +269,16 @@ type Visor struct {
 	// through the setup-node-mediated route group machinery. Falls
 	// back to router.DialRoutes when no direct transport exists.
 	appDirectMux *transport.VStreamMux
+	// Shared VStreamMux for visor RPC over transport (VisorRPCPacket,
+	// route ID 0). Used by BOTH the TransportRPCServer's Accept loop
+	// AND by TransportRPCCall's outbound dial. Sharing one mux per
+	// (tm, packet_type) is required because the transport.Manager
+	// only routes incoming VisorRPCPacket frames to a single
+	// registered handler (the mux's HandlePacket) — separate dial-side
+	// muxes wouldn't receive response packets and would hang
+	// indefinitely, which was the cause of every tp-rpc call timing
+	// out before this was fixed.
+	transportRPCMux *transport.VStreamMux
 
 	// Hypervisor instance (nil if never initialized; may be enabled/disabled at runtime)
 	hvInstance *Hypervisor
