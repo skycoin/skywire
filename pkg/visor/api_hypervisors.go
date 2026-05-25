@@ -49,7 +49,7 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 		v.connectedHypervisors[hvPK] = true
 		v.hypervisorCancels[hvPK] = cancel
 		v.initLock.Unlock()
-		ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
+		ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
 	}()
 
 	v.pushCloseStack("hypervisor.runtime."+hvPK.String()[:shortHashLen], func() error {
