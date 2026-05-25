@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/xxxserxxx/gotop/v4/utils"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"
 )
 
 type processList struct {
