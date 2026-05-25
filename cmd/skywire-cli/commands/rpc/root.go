@@ -55,11 +55,21 @@ func getDefaultRPCAddr() string {
 	return skyenv.RPCAddr
 }
 
-// Client is used by other skywire-cli commands to query the visor rpc.
-// Supported address schemes:
-//   - "localhost:3435" (default) — direct TCP to local visor
-//   - "tp://<pk>" via --rpc flag — proxy through local visor's transport to remote visor
-//   - VisorPK via --visor flag — connect over DMSG
+// Client is used by other skywire-cli commands to query a visor RPC.
+// The --rpc flag supports several schemes:
+//
+//   - "host:port" (default "localhost:3435") — direct TCP to the
+//     local visor.
+//   - "skynet://<pk>" — route the call to a REMOTE visor over a
+//     skywire transport (stcpr/sudph). The CLI dials the local
+//     visor as usual; every typed visor.API method gets transparently
+//     proxied through the local visor's TransportRPCCall. The local
+//     visor's PK must be in the remote visor's hypervisor or
+//     dmsgpty whitelist. Transport is auto-created (stcpr→sudph
+//     fallback) if one doesn't exist yet.
+//   - "dmsg://<pk>" — direct dmsg dial to the remote visor's RPC
+//     server. Currently NOT implemented (requires a server-side
+//     listener that doesn't exist yet); returns an explicit error.
 //
 // On dial failure, prints the error to stderr via internal.PrintError
 // so one-shot callers see the cause. Long-running reconnect loops
@@ -84,15 +94,30 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 		return DmsgClient(cmdFlags)
 	}
 
-	// Check for tp:// scheme — transport proxy through local visor
-	if strings.HasPrefix(Addr, "tp://") {
+	// skynet://<pk> — route every method via the local visor's
+	// TransportRPCCall. CLI still connects to localhost:3435; the
+	// proxy hook in rpcClient.Call rewrites each call.
+	if strings.HasPrefix(Addr, "skynet://") {
+		return skynetProxyClient(cmdFlags, strings.TrimPrefix(Addr, "skynet://"), quiet)
+	}
+
+	// dmsg://<pk> — direct dmsg dial to a server-side rpc.Server
+	// listener. Not yet implemented (no such listener exists on the
+	// visor today). Surface an explicit error rather than a confusing
+	// timeout when a future operator tries this.
+	if strings.HasPrefix(Addr, "dmsg://") {
 		if !quiet {
 			internal.PrintError(cmdFlags, fmt.Errorf(
-				"tp:// scheme detected. Use 'skywire cli visor tp-rpc %s <method>' instead.\n"+
-					"Example: skywire cli visor tp-rpc %s Overview",
-				Addr[5:], Addr[5:]))
+				"--rpc dmsg://<pk> requires a server-side visor-rpc listener over dmsg that hasn't been implemented yet. "+
+					"Use --rpc skynet://<pk> instead, which proxies through the local visor's transport-RPC."))
 		}
-		return nil, fmt.Errorf("tp:// not supported as --rpc address; use 'visor tp-rpc' command")
+		return nil, fmt.Errorf("--rpc dmsg:// not yet supported")
+	}
+
+	// tp:// kept as an alias for skynet:// to ease migration. Same
+	// proxy behavior; same auth requirements.
+	if strings.HasPrefix(Addr, "tp://") {
+		return skynetProxyClient(cmdFlags, strings.TrimPrefix(Addr, "tp://"), quiet)
 	}
 
 	// Default: TCP connection to local RPC
@@ -109,6 +134,43 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 	// Use logger with RPC address as tag for better identification
 	rpcLogger := logging.MustGetLogger(fmt.Sprintf("rpc://%s", Addr))
 	return visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
+}
+
+// skynetProxyClient connects to the LOCAL visor at the default RPC
+// address and returns an API where every method is transparently
+// routed to remotePK over the local visor's TransportRPCCall. See
+// NewProxyRPCClient in pkg/visor/rpc_client.go for the routing
+// mechanism.
+func skynetProxyClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor.API, error) {
+	var remotePK cipher.PubKey
+	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
+		if !quiet {
+			internal.PrintError(cmdFlags, fmt.Errorf("invalid PK after scheme: %w", err))
+		}
+		return nil, err
+	}
+
+	// Connect to the local visor at its default TCP RPC. The
+	// proxy hook in NewProxyRPCClient overrides each Call to
+	// route via TransportRPCCall instead of dispatching locally.
+	localAddr := DefaultRPCAddr
+	if Addr != "" && !strings.Contains(Addr, "://") {
+		localAddr = Addr
+	}
+	const rpcDialTimeout = time.Second * 5
+	conn, err := net.DialTimeout("tcp", localAddr, rpcDialTimeout)
+	if err != nil {
+		if !quiet {
+			internal.PrintError(cmdFlags, fmt.Errorf(
+				"--rpc skynet://%s needs a local visor RPC; dial %s failed: %w",
+				pkStr, localAddr, err))
+		}
+		return nil, err
+	}
+
+	rpcCallTimeout := time.Duration(Timeout) * time.Second
+	rpcLogger := logging.MustGetLogger(fmt.Sprintf("skynet://%s", pkStr))
+	return visor.NewProxyRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout, remotePK), nil
 }
 
 // DmsgClient creates an RPC client over dmsg
