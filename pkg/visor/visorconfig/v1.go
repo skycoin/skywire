@@ -49,6 +49,14 @@ type V1 struct {
 	UserSurveyWhitelist []cipher.PubKey `json:"user_survey_whitelist,omitempty"` // user-added keys, preserved across config refresh
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
 	CLIAddr             string          `json:"cli_addr"`
+	// DmsgBridgeAddr is the local TCP listener address for the
+	// CLI's `--rpc dmsg://<pk>` proxy bridge. The CLI dials this
+	// address, writes a 35-byte target-PK/port header, and the
+	// visor proxies bytes between the TCP conn and a dmsg stream
+	// it opens to the named peer using its own dmsg identity. Empty
+	// disables the bridge. Default skyenv.DmsgBridgeAddr is
+	// "localhost:3437".
+	DmsgBridgeAddr string `json:"dmsg_bridge_addr,omitempty"`
 
 	LogLevel             string                           `json:"log_level"`
 	LocalPath            string                           `json:"local_path"`
