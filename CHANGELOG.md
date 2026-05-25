@@ -6,6 +6,39 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.57
+
+Patch release. Fifteen PRs on top of v1.3.56.
+
+The big-picture pieces: visor↔hypervisor RPC self-heals on degraded sessions where it used to silently strand. The skynet-preferred dial from #2802 is now actually skynet-*preferred* rather than skynet-*first* — dmsg is the always-available baseline, skynet kicks in when a real transport exists, and a cooldown drops back to dmsg after any skynet failure. The TransportRPCServer init-order bug (it never started on any visor, silently) is fixed; combined with a shared `VStreamMux` and auto-create-transport, transport-RPC actually works end-to-end. `TCP_NODELAY` is now set on every TCP transport — hvui skypty drops from "laggy at every keystroke" to local-feeling. Hypervisor tree-summary surfaces sub-hypervisor sections correctly (Hostname propagated through HVVisorEntry, managed-sub-hypervisors no longer scrubbed from the local section, ghost rows on failed Summary fetches are gone). Remote-RPC UX is unified: `skywire cli <anything> --via dmsg://<pk>` or `--via skynet://<pk>` routes any CLI command through the local visor to a remote one — no separate CLI keypair, no special-case subcommand (`tp-rpc` is removed). Release workflow auto-publishes the draft once every artifact uploads.
+
+### Hypervisor RPC reliability
+
+-   `fix(visor)`: skypty + RPC dialer hard-timeout the skynet attempt  [#2805](https://github.com/skycoin/skywire/pull/2805)
+-   `fix(visor+hypervisor)`: self-heal orphan RPC conns on degraded dmsg  [#2806](https://github.com/skycoin/skywire/pull/2806)
+-   `fix(visor)`: skynet-preferred (not skynet-first) for hypervisor RPC conn  [#2807](https://github.com/skycoin/skywire/pull/2807)
+-   `fix(visor)`: transport-RPC actually works — shared mux + init order + auto-create transport  [#2810](https://github.com/skycoin/skywire/pull/2810)
+-   `fix(transport,dmsg)`: TCP_NODELAY on all interactive paths  [#2818](https://github.com/skycoin/skywire/pull/2818)
+
+### Hypervisor UI tree summary
+
+-   `fix(hypervisor)`: preserve Hostname + dual-list managed sub-hypervisors  [#2808](https://github.com/skycoin/skywire/pull/2808)
+-   `fix(hypervisor)`: bridge Hostname from summaryCache for cross-version sub-sections  [#2809](https://github.com/skycoin/skywire/pull/2809)
+-   `fix(hypervisor)`: no ghost rows on failed Summary + remove data race  [#2817](https://github.com/skycoin/skywire/pull/2817)
+
+### Remote RPC / `--via` flag
+
+-   `feat(cli)`: unify --rpc with skynet://<pk> + delete tp-rpc subcommand  [#2811](https://github.com/skycoin/skywire/pull/2811)
+-   `feat(visor,cli)`: dmsg-direct visor-RPC listener + --rpc dmsg://<pk>  [#2812](https://github.com/skycoin/skywire/pull/2812)
+-   `feat(visor,cli)`: dmsg-bridge for --rpc dmsg://<pk> (no separate CLI keypair needed)  [#2813](https://github.com/skycoin/skywire/pull/2813)
+-   `feat(visor,cli)`: fold dmsg bridge into RPC port + --via <scheme>://<pk>  [#2814](https://github.com/skycoin/skywire/pull/2814)
+-   `feat(visor,cli)`: unify dmsg + skynet bridges; --via skynet:// works end-to-end  [#2815](https://github.com/skycoin/skywire/pull/2815)
+-   `fix(cli)`: parse :port from --via URL  [#2816](https://github.com/skycoin/skywire/pull/2816)
+
+### Release ops
+
+-   `chore(release)`: auto-publish draft when all artifacts upload  [#2819](https://github.com/skycoin/skywire/pull/2819)
+
 ## 1.3.56
 
 Patch release. Three PRs on top of v1.3.55.
