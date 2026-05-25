@@ -7,8 +7,8 @@ import (
 
 	"github.com/xxxserxxx/lingo/v2"
 
-	"github.com/xxxserxxx/gotop/v4"
-	"github.com/xxxserxxx/gotop/v4/widgets"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/widgets"
 
 	ui "github.com/gizak/termui/v3"
 )

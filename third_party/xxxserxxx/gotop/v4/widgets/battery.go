@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/VictoriaMetrics/metrics"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/distatus/battery"
 
-	ui "github.com/xxxserxxx/gotop/v4/termui"
+	ui "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 )
 
 type BatteryWidget struct {
