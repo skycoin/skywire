@@ -218,6 +218,13 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 			}
 			return err
 		}
+		// TCP_NODELAY on accepted visor sessions — symmetric with the
+		// dial-side fix in client_sessions.go. Without matching it
+		// here, response packets from server to visor would still
+		// Nagle-batch even if the visor's outbound side was clean.
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+		}
 
 		if s.SessionCount() >= s.maxSessions {
 			s.log.
@@ -445,6 +452,13 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 				bo = time.Duration(float64(bo) * 1.5)
 			}
 			continue
+		}
+		// TCP_NODELAY on the server↔server peer link. Same rationale
+		// as the visor↔server side: small interactive payloads
+		// routed across the dmsg mesh shouldn't pay 40–200ms of
+		// Nagle batching at each hop.
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			_ = tcpConn.SetNoDelay(true) //nolint:errcheck
 		}
 
 		ses := new(SessionCommon)

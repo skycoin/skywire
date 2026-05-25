@@ -117,6 +117,18 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			return ClientSession{}, fmt.Errorf("failed to dial: %w", err)
 		}
 	}
+	// TCP_NODELAY on the visor→dmsg-server TCP socket. The dmsg
+	// session carries all dmsg streams (skypty traffic, dmsg-HTTP,
+	// visor-RPC over dmsg, skychat, etc.). Without this, Nagle's
+	// algorithm batches small writes — per-keystroke pty bytes
+	// from the hypervisor UI's skypty hit 40–200ms of delay each,
+	// felt as lag on every key press. dmsg streams demux many
+	// logical flows onto one TCP conn; the demux-side throughput
+	// gains of Nagle aren't material for skywire's mix, and the
+	// interactive-latency loss is severe.
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+	}
 
 	dSes, err := makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static)
 	if err != nil {
