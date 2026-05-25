@@ -997,10 +997,28 @@ var ErrNotFound = errors.New("transport not found")
 var ErrUnknownNetwork = errors.New("unknown network type")
 
 // IsKnownNetwork returns true when netName is a known
-// network type that we are able to operate in
+// network type that we are able to operate in.
+//
+// Wrapper around the lockless helper for external callers. Methods
+// that already hold tm.mx (read or write) MUST call
+// isKnownNetworkLocked directly — calling this exported wrapper
+// from inside a held read lock deadlocks against any pending
+// writer (Go's RWMutex prioritizes pending writers to prevent
+// writer starvation, so a recursive RLock attempt blocks when a
+// writer is waiting). Production case that bit us: GetTransport
+// previously called IsKnownNetwork from inside its own RLock; with
+// cleanupTransports or acceptTransport pending the write lock, the
+// recursive read attempt deadlocked, freezing every subsequent
+// transport operation including ServeRPCClient's redial attempts.
 func (tm *Manager) IsKnownNetwork(netName types.Type) bool {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
+	return tm.isKnownNetworkLocked(netName)
+}
+
+// isKnownNetworkLocked is the lockless variant of IsKnownNetwork.
+// Caller must hold tm.mx (read or write).
+func (tm *Manager) isKnownNetworkLocked(netName types.Type) bool {
 	_, ok := tm.netClients[netName]
 	return ok
 }
@@ -1009,7 +1027,7 @@ func (tm *Manager) IsKnownNetwork(netName types.Type) bool {
 func (tm *Manager) GetTransport(remote cipher.PubKey, netType types.Type) (*ManagedTransport, error) {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
-	if !tm.IsKnownNetwork(netType) {
+	if !tm.isKnownNetworkLocked(netType) {
 		return nil, ErrUnknownNetwork
 	}
 
