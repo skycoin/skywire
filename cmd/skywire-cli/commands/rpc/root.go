@@ -144,28 +144,41 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 }
 
 // viaClient dispatches a `--via <scheme>://<pk>` request to the
-// matching transport-specific helper.
+// shared bridge helper with the appropriate scheme byte.
+//
+// Both dmsg and skynet schemes ride the SAME byte-bridge mechanism
+// (the visor's rpc_bridge.go selects which stream type to open
+// based on the scheme byte we send). The CLI's rpc.Client speaks
+// straight gob to the remote's rpc.Server through the bridge —
+// no protocol translation, no JSON-vs-gob wire format issues, all
+// 167 typed visor.API methods work transparently.
 func viaClient(cmdFlags *pflag.FlagSet, via string, quiet bool) (visor.API, error) {
+	var pkStr string
+	var scheme byte
 	switch {
 	case strings.HasPrefix(via, "dmsg://"):
-		return dmsgBridgeClient(cmdFlags, strings.TrimPrefix(via, "dmsg://"), quiet)
+		pkStr = strings.TrimPrefix(via, "dmsg://")
+		scheme = 0 // bridgeSchemeDmsg
 	case strings.HasPrefix(via, "skynet://"):
-		return skynetProxyClient(cmdFlags, strings.TrimPrefix(via, "skynet://"), quiet)
+		pkStr = strings.TrimPrefix(via, "skynet://")
+		scheme = 1 // bridgeSchemeSkynet
+	default:
+		if !quiet {
+			internal.PrintError(cmdFlags, fmt.Errorf(
+				"--via must be dmsg://<pk> or skynet://<pk>; got %q", via))
+		}
+		return nil, fmt.Errorf("unsupported --via scheme: %q", via)
 	}
-	if !quiet {
-		internal.PrintError(cmdFlags, fmt.Errorf(
-			"--via must be dmsg://<pk> or skynet://<pk>; got %q", via))
-	}
-	return nil, fmt.Errorf("unsupported --via scheme: %q", via)
+	return bridgeClient(cmdFlags, scheme, pkStr, quiet)
 }
 
-// dmsgBridgeClient dials --rpc Addr (default localhost:3435),
-// sends the bridge magic prefix + header so the visor opens a
-// dmsg stream to remotePK:DmsgVisorRPCPort using its own identity,
-// then returns an rpc.Client running directly over the bridged
-// conn. The remote's rpc.Server is on the other end of the dmsg
-// stream; both sides speak gob. No separate CLI keypair needed.
-func dmsgBridgeClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor.API, error) {
+// bridgeClient dials the local visor's CLI RPC port (default
+// localhost:3435), sends the bridge magic + header (with the
+// scheme byte selecting dmsg or skynet), and returns an
+// rpc.Client running over the bridged conn. The visor opens the
+// underlying stream using its own identity — no separate CLI
+// keypair needed.
+func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, quiet bool) (visor.API, error) {
 	var remotePK cipher.PubKey
 	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
 		if !quiet {
@@ -183,64 +196,36 @@ func dmsgBridgeClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor.
 	if err != nil {
 		if !quiet {
 			internal.PrintError(cmdFlags, fmt.Errorf(
-				"--via dmsg://%s needs the local visor RPC at %s; dial failed: %w",
-				pkStr, localAddr, err))
+				"--via needs the local visor RPC at %s; dial failed: %w",
+				localAddr, err))
 		}
 		return nil, err
 	}
 
-	// Bridge handshake: 6-byte magic + 33-byte target PK + 2-byte
-	// little-endian dmsg port. cmux on the visor side matches the
-	// magic prefix and routes the conn to the dmsg-bridge handler;
-	// the handler reads the remaining 35 bytes and opens the stream.
-	header := make([]byte, 6+33+2)
+	// Header: 6 magic + 1 scheme + 33 PK + 2 LE port = 42 bytes.
+	// cmux on the visor side matches the magic prefix and routes
+	// the conn to the bridge handler; handler reads the remaining
+	// 36 bytes and opens the appropriate stream type.
+	header := make([]byte, 6+1+33+2)
 	copy(header[:6], dmsgBridgeMagic)
-	copy(header[6:39], remotePK[:])
-	binary.LittleEndian.PutUint16(header[39:41], skyenv.DmsgVisorRPCPort)
+	header[6] = scheme
+	copy(header[7:40], remotePK[:])
+	binary.LittleEndian.PutUint16(header[40:42], skyenv.DmsgVisorRPCPort)
 	if _, err := conn.Write(header); err != nil {
 		conn.Close() //nolint:errcheck,gosec
 		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf("dmsg bridge: write header: %w", err))
+			internal.PrintError(cmdFlags, fmt.Errorf("bridge: write header: %w", err))
 		}
 		return nil, err
 	}
 
 	rpcCallTimeout := time.Duration(Timeout) * time.Second
-	rpcLogger := logging.MustGetLogger(fmt.Sprintf("dmsg://%s", pkStr))
+	schemeName := "dmsg"
+	if scheme == 1 {
+		schemeName = "skynet"
+	}
+	rpcLogger := logging.MustGetLogger(fmt.Sprintf("%s://%s", schemeName, pkStr))
 	return visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
-}
-
-// skynetProxyClient connects to --rpc Addr (the local visor) and
-// returns an API where every method is transparently routed to
-// remotePK over the local visor's TransportRPCCall. See
-// NewProxyRPCClient in pkg/visor/rpc_client.go.
-func skynetProxyClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor.API, error) {
-	var remotePK cipher.PubKey
-	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
-		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf("invalid PK after scheme: %w", err))
-		}
-		return nil, err
-	}
-
-	localAddr := Addr
-	if localAddr == "" || strings.Contains(localAddr, "://") {
-		localAddr = DefaultRPCAddr
-	}
-	const rpcDialTimeout = time.Second * 5
-	conn, err := net.DialTimeout("tcp", localAddr, rpcDialTimeout)
-	if err != nil {
-		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf(
-				"--via skynet://%s needs a local visor RPC at %s; dial failed: %w",
-				pkStr, localAddr, err))
-		}
-		return nil, err
-	}
-
-	rpcCallTimeout := time.Duration(Timeout) * time.Second
-	rpcLogger := logging.MustGetLogger(fmt.Sprintf("skynet://%s", pkStr))
-	return visor.NewProxyRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout, remotePK), nil
 }
 
 // DmsgClient creates an RPC client over dmsg
