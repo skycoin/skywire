@@ -46,7 +46,20 @@ var (
 	VisorPK string
 	// CliSK is the secret key for authenticating CLI over dmsg
 	CliSK string
+	// Via, when non-empty, requests proxy to a remote visor through
+	// the local visor named by --rpc. Supported schemes:
+	//   - "dmsg://<pk>" — local visor opens a dmsg stream to <pk>:44
+	//     and bridges bytes back to this CLI (multiplexed onto the
+	//     existing --rpc port via cmux + magic-byte prefix).
+	//   - "skynet://<pk>" — local visor proxies via TransportRPCCall
+	//     (route ID 0 / VisorRPCPacket).
+	Via string
 )
+
+// dmsgBridgeMagic must match the visor's pkg/visor/dmsg_bridge.go
+// const of the same name. Kept as a literal here to avoid a CLI
+// import of the visor package's internal constants.
+const dmsgBridgeMagic = "SKYBRI"
 
 // getDefaultRPCAddr returns the RPC address from environment variable or the default value
 func getDefaultRPCAddr() string {
@@ -90,37 +103,28 @@ func ClientQuiet(cmdFlags *pflag.FlagSet) (visor.API, error) {
 }
 
 func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
-	// If VisorPK is provided, use dmsg connection
-	if VisorPK != "" {
-		return DmsgClient(cmdFlags)
+	// --via takes precedence over --rpc scheme shortcuts. Schemes
+	// on --rpc are kept as aliases for backward compat (a brief
+	// transition; remove in a later release).
+	via := Via
+	switch {
+	case via != "":
+		// fall through to via dispatch below
+	case strings.HasPrefix(Addr, "dmsg://"):
+		via = Addr
+		Addr = DefaultRPCAddr
+	case strings.HasPrefix(Addr, "skynet://"), strings.HasPrefix(Addr, "tp://"):
+		via = strings.Replace(Addr, "tp://", "skynet://", 1)
+		Addr = DefaultRPCAddr
 	}
 
-	// skynet://<pk> — route every method via the local visor's
-	// TransportRPCCall. CLI still connects to localhost:3435; the
-	// proxy hook in rpcClient.Call rewrites each call.
-	if strings.HasPrefix(Addr, "skynet://") {
-		return skynetProxyClient(cmdFlags, strings.TrimPrefix(Addr, "skynet://"), quiet)
+	// VisorPK (set by old --visor flag path) routes the same as --via dmsg://
+	if VisorPK != "" && via == "" {
+		via = "dmsg://" + VisorPK
 	}
 
-	// dmsg://<pk> — bridge through the local visor's running dmsg
-	// client to reach the visor's net/rpc server on
-	// DmsgVisorRPCPort. The CLI dials skyenv.DmsgBridgeAddr on the
-	// local visor; the visor opens a dmsg stream to the target
-	// peer using ITS OWN identity (no separate CLI keypair needed),
-	// then proxies bytes between the TCP socket and the dmsg
-	// stream. The CLI runs rpc.Client on the TCP conn; the remote
-	// runs rpc.Server on its end of the dmsg stream; bridge is
-	// transparent. Auth on the remote uses the visor's identity,
-	// which is in the remote's hypervisor/dmsgpty whitelist when
-	// the remote reports to this visor as a hypervisor.
-	if strings.HasPrefix(Addr, "dmsg://") {
-		return dmsgBridgeClient(cmdFlags, strings.TrimPrefix(Addr, "dmsg://"), quiet)
-	}
-
-	// tp:// kept as an alias for skynet:// to ease migration. Same
-	// proxy behavior; same auth requirements.
-	if strings.HasPrefix(Addr, "tp://") {
-		return skynetProxyClient(cmdFlags, strings.TrimPrefix(Addr, "tp://"), quiet)
+	if via != "" {
+		return viaClient(cmdFlags, via, quiet)
 	}
 
 	// Default: TCP connection to local RPC
@@ -139,12 +143,28 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 	return visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
 
-// dmsgBridgeClient connects to the local visor's dmsg bridge TCP
-// listener and asks it to open a dmsg stream to remotePK on
-// DmsgVisorRPCPort. The bridge proxies bytes; the returned API is
-// an rpc.Client running directly over the bridged conn, talking
-// gob to the remote visor's rpc.Server. No separate CLI keypair
-// needed — the local visor's identity is what the remote sees.
+// viaClient dispatches a `--via <scheme>://<pk>` request to the
+// matching transport-specific helper.
+func viaClient(cmdFlags *pflag.FlagSet, via string, quiet bool) (visor.API, error) {
+	switch {
+	case strings.HasPrefix(via, "dmsg://"):
+		return dmsgBridgeClient(cmdFlags, strings.TrimPrefix(via, "dmsg://"), quiet)
+	case strings.HasPrefix(via, "skynet://"):
+		return skynetProxyClient(cmdFlags, strings.TrimPrefix(via, "skynet://"), quiet)
+	}
+	if !quiet {
+		internal.PrintError(cmdFlags, fmt.Errorf(
+			"--via must be dmsg://<pk> or skynet://<pk>; got %q", via))
+	}
+	return nil, fmt.Errorf("unsupported --via scheme: %q", via)
+}
+
+// dmsgBridgeClient dials --rpc Addr (default localhost:3435),
+// sends the bridge magic prefix + header so the visor opens a
+// dmsg stream to remotePK:DmsgVisorRPCPort using its own identity,
+// then returns an rpc.Client running directly over the bridged
+// conn. The remote's rpc.Server is on the other end of the dmsg
+// stream; both sides speak gob. No separate CLI keypair needed.
 func dmsgBridgeClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor.API, error) {
 	var remotePK cipher.PubKey
 	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
@@ -154,23 +174,29 @@ func dmsgBridgeClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor.
 		return nil, err
 	}
 
+	localAddr := Addr
+	if localAddr == "" || strings.Contains(localAddr, "://") {
+		localAddr = DefaultRPCAddr
+	}
 	const dialTimeout = time.Second * 5
-	conn, err := net.DialTimeout("tcp", skyenv.DmsgBridgeAddr, dialTimeout)
+	conn, err := net.DialTimeout("tcp", localAddr, dialTimeout)
 	if err != nil {
 		if !quiet {
 			internal.PrintError(cmdFlags, fmt.Errorf(
-				"--rpc dmsg://%s needs the local visor's dmsg bridge at %s; dial failed: %w",
-				pkStr, skyenv.DmsgBridgeAddr, err))
+				"--via dmsg://%s needs the local visor RPC at %s; dial failed: %w",
+				pkStr, localAddr, err))
 		}
 		return nil, err
 	}
 
-	// Write the 35-byte header: 33-byte target PK + 2-byte target
-	// port (little-endian). Bridge reads this and opens the dmsg
-	// stream; after that the conn carries gob-encoded rpc traffic.
-	header := make([]byte, 35)
-	copy(header[:33], remotePK[:])
-	binary.LittleEndian.PutUint16(header[33:35], skyenv.DmsgVisorRPCPort)
+	// Bridge handshake: 6-byte magic + 33-byte target PK + 2-byte
+	// little-endian dmsg port. cmux on the visor side matches the
+	// magic prefix and routes the conn to the dmsg-bridge handler;
+	// the handler reads the remaining 35 bytes and opens the stream.
+	header := make([]byte, 6+33+2)
+	copy(header[:6], dmsgBridgeMagic)
+	copy(header[6:39], remotePK[:])
+	binary.LittleEndian.PutUint16(header[39:41], skyenv.DmsgVisorRPCPort)
 	if _, err := conn.Write(header); err != nil {
 		conn.Close() //nolint:errcheck,gosec
 		if !quiet {
@@ -184,11 +210,10 @@ func dmsgBridgeClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor.
 	return visor.NewRPCClient(rpcLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
 
-// skynetProxyClient connects to the LOCAL visor at the default RPC
-// address and returns an API where every method is transparently
-// routed to remotePK over the local visor's TransportRPCCall. See
-// NewProxyRPCClient in pkg/visor/rpc_client.go for the routing
-// mechanism.
+// skynetProxyClient connects to --rpc Addr (the local visor) and
+// returns an API where every method is transparently routed to
+// remotePK over the local visor's TransportRPCCall. See
+// NewProxyRPCClient in pkg/visor/rpc_client.go.
 func skynetProxyClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor.API, error) {
 	var remotePK cipher.PubKey
 	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
@@ -198,19 +223,16 @@ func skynetProxyClient(cmdFlags *pflag.FlagSet, pkStr string, quiet bool) (visor
 		return nil, err
 	}
 
-	// Connect to the local visor at its default TCP RPC. The
-	// proxy hook in NewProxyRPCClient overrides each Call to
-	// route via TransportRPCCall instead of dispatching locally.
-	localAddr := DefaultRPCAddr
-	if Addr != "" && !strings.Contains(Addr, "://") {
-		localAddr = Addr
+	localAddr := Addr
+	if localAddr == "" || strings.Contains(localAddr, "://") {
+		localAddr = DefaultRPCAddr
 	}
 	const rpcDialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", localAddr, rpcDialTimeout)
 	if err != nil {
 		if !quiet {
 			internal.PrintError(cmdFlags, fmt.Errorf(
-				"--rpc skynet://%s needs a local visor RPC; dial %s failed: %w",
+				"--via skynet://%s needs a local visor RPC at %s; dial failed: %w",
 				pkStr, localAddr, err))
 		}
 		return nil, err
