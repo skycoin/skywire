@@ -5,6 +5,8 @@ import (
 	"context"
 	"net"
 	"net/rpc"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -20,6 +22,27 @@ import (
 // stall the visor's reconnect loop; long enough for a routed dial
 // to succeed on a healthy network.
 const rpcSkynetDialTimeout = 2 * time.Second
+
+// hypervisorRPCIdleTimeout is the maximum time the visor will hold
+// an idle (no traffic in either direction) served RPC conn to its
+// hypervisor before closing it and redialing. The hypervisor polls
+// us with Summary RPC calls on its UI refresh cadence; under normal
+// operation those polls happen well within this window and the
+// idle timer never fires.
+//
+// This timeout exists for the case where the dmsg session (or the
+// skywire route) underneath the conn dies silently — the hypervisor's
+// next poll fails, its rpc.Client.Close() runs but can't deliver a
+// close frame over the broken session, and our blocking Read on the
+// served end of the conn stays parked indefinitely. Without this
+// timer the visor sits with an orphaned conn for the rest of the
+// process lifetime; the hypervisor sees it as "last seen N minutes
+// ago" with no recovery short of a visor restart.
+//
+// 10 min is a tradeoff: long enough that normal UI-idle periods
+// don't cause reconnect churn, short enough that operators don't
+// stare at stale "last seen" rows for hours.
+const hypervisorRPCIdleTimeout = 10 * time.Minute
 
 func isDone(ctx context.Context) bool {
 	select {
@@ -110,15 +133,96 @@ func ServeRPCClient(ctx context.Context, log logrus.FieldLogger, dmsgC *dmsg.Cli
 		}
 
 		log.Info("Serving RPC client...")
+		// Wrap the conn so an extended idle period (no read or write
+		// activity for hypervisorRPCIdleTimeout) forces the conn closed
+		// and triggers a redial. Guards against silently-dead dmsg /
+		// route sessions where the hypervisor's close on a failed poll
+		// can't reach us. See the const doc for the full rationale.
+		idleConn := newIdleConn(conn, hypervisorRPCIdleTimeout, log)
 		connCtx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel is called when ServeConn returns
 		go func() {
-			rpcS.ServeConn(conn)
+			rpcS.ServeConn(idleConn)
 			cancel()
 		}()
 		<-connCtx.Done()
+		idleConn.stop()
 
 		log.WithError(conn.Close()).
 			WithField("context_done", isDone(ctx)).
 			Debug("Conn closed. Redialing...")
+	}
+}
+
+// idleConn wraps a net.Conn and closes it if no Read or Write
+// activity occurs within idleTimeout. The wrapped Read / Write
+// stamp lastActivity on every successful byte transfer; a watcher
+// goroutine ticks every idleTimeout/4 and closes the conn when the
+// stamp is older than idleTimeout.
+//
+// Close on idle is the safe action — the consumer (rpcS.ServeConn)
+// sees the close as a Read error, returns, and the outer
+// ServeRPCClient loop redials. There's no false-positive harm:
+// reconnect to the hypervisor is cheap relative to staying
+// stranded.
+type idleConn struct {
+	net.Conn
+	lastActivity atomic.Int64 // unix nanos
+	idleTimeout  time.Duration
+	stopOnce     sync.Once
+	stopped      chan struct{}
+	log          logrus.FieldLogger
+}
+
+func newIdleConn(c net.Conn, idleTimeout time.Duration, log logrus.FieldLogger) *idleConn {
+	ic := &idleConn{
+		Conn:        c,
+		idleTimeout: idleTimeout,
+		stopped:     make(chan struct{}),
+		log:         log,
+	}
+	ic.lastActivity.Store(time.Now().UnixNano())
+	go ic.watch()
+	return ic
+}
+
+func (c *idleConn) Read(p []byte) (int, error) {
+	n, err := c.Conn.Read(p)
+	if n > 0 {
+		c.lastActivity.Store(time.Now().UnixNano())
+	}
+	return n, err
+}
+
+func (c *idleConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	if n > 0 {
+		c.lastActivity.Store(time.Now().UnixNano())
+	}
+	return n, err
+}
+
+// stop tells the watcher to exit. Called from ServeRPCClient after
+// the ServeConn goroutine returns, so we don't leak the watcher
+// past the conn's lifetime.
+func (c *idleConn) stop() {
+	c.stopOnce.Do(func() { close(c.stopped) })
+}
+
+func (c *idleConn) watch() {
+	t := time.NewTicker(c.idleTimeout / 4)
+	defer t.Stop()
+	for {
+		select {
+		case <-c.stopped:
+			return
+		case now := <-t.C:
+			last := time.Unix(0, c.lastActivity.Load())
+			if now.Sub(last) >= c.idleTimeout {
+				c.log.WithField("idle_for", now.Sub(last)).
+					Info("Hypervisor RPC conn idle past threshold; closing to force redial.")
+				_ = c.Conn.Close() //nolint:errcheck
+				return
+			}
+		}
 	}
 }
