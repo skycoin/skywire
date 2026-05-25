@@ -220,19 +220,12 @@ const (
 
 	// RPC constants.
 
-	// RPCAddr for skywire-cli to access skywire-visor
+	// RPCAddr for skywire-cli to access skywire-visor. Also hosts
+	// the dmsg-bridge protocol (cmux-multiplexed) when the CLI is
+	// invoked with `--via dmsg://<pk>`. A connection whose first
+	// bytes match dmsgBridgeMagic gets routed to the bridge
+	// handler; everything else falls through to gRPC or net/rpc.
 	RPCAddr = "localhost:3435"
-
-	// DmsgBridgeAddr is where the visor exposes a TCP bridge for
-	// the CLI's `--rpc dmsg://<pk>` path. The CLI dials this
-	// address, sends a 35-byte header (33 PK bytes + 2 port bytes),
-	// and the visor proxies bytes between the TCP conn and a dmsg
-	// stream it opens to the target. The CLI then runs its rpc.Client
-	// on the TCP conn, talking to the remote visor's rpc.Server
-	// transparently. Lets the CLI inherit the visor's dmsg identity
-	// (and thus the visor's whitelist eligibility on remote peers)
-	// without needing a separate CLI keypair.
-	DmsgBridgeAddr = "localhost:3437"
 
 	// RPCTimeout timeout of rpc requests
 	RPCTimeout = 20 * time.Second
