@@ -113,27 +113,44 @@ func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
 
 	log := logging.MustGetLogger("hv_list_direct_visors")
 
+	type sumResult struct {
+		summary *Summary
+		err     error
+	}
 	results := make([]HVVisorEntry, len(remotes))
 	var wg sync.WaitGroup
 	wg.Add(len(remotes))
 	for i, e := range remotes {
 		go func(idx int, pk cipher.PubKey, api API) {
 			defer wg.Done()
-			entry := HVVisorEntry{PK: pk, Online: true}
-			done := make(chan struct{})
+			// Buffered so the Summary goroutine never blocks on
+			// send — if we time out, the late result is just gc'd.
+			// Also avoids the data race the previous shared-entry
+			// pattern had (both the Summary goroutine and the
+			// timeout branch could write the same struct).
+			sumCh := make(chan sumResult, 1)
 			go func() {
-				defer close(done)
 				summary, err := api.Summary()
-				if err != nil {
-					entry.Error = err.Error()
-					return
-				}
-				populateEntryFromSummary(&entry, summary)
+				sumCh <- sumResult{summary, err}
 			}()
+
+			entry := HVVisorEntry{PK: pk}
 			select {
-			case <-done:
+			case r := <-sumCh:
+				if r.err != nil {
+					entry.Error = r.err.Error()
+				} else if r.summary != nil {
+					// Online ONLY when we actually got a Summary
+					// back. Hardcoded Online=true previously left
+					// failed-fetch entries showing as healthy in
+					// the tree-summary table with no other fields
+					// populated — the "ghost row" rendering an
+					// operator reported.
+					entry.Online = true
+					populateEntryFromSummary(&entry, r.summary)
+				}
 			case <-time.After(10 * time.Second):
-				entry.Error = "timeout"
+				entry.Error = "timeout (10s)"
 				log.WithField("pk", pk.String()).Warn("HVListDirectVisors: visor query timed out")
 			}
 			results[idx] = entry
@@ -179,26 +196,35 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	var wg sync.WaitGroup
 	wg.Add(len(remotes))
 
+	type sumResult struct {
+		summary *Summary
+		err     error
+	}
 	for i, e := range remotes {
 		go func(idx int, pk cipher.PubKey, api API) {
 			defer wg.Done()
-			entry := HVVisorEntry{PK: pk, Online: true}
-
-			done := make(chan struct{})
+			// Same pattern as HVListDirectVisors above: buffered
+			// channel avoids the previous data race where both the
+			// Summary goroutine and the timeout branch could write
+			// the shared entry struct. Online is only set when we
+			// actually got a Summary — fixes ghost-row rendering.
+			sumCh := make(chan sumResult, 1)
 			go func() {
-				defer close(done)
 				summary, err := api.Summary()
-				if err != nil {
-					entry.Error = err.Error()
-					return
-				}
-				populateEntryFromSummary(&entry, summary)
+				sumCh <- sumResult{summary, err}
 			}()
 
+			entry := HVVisorEntry{PK: pk}
 			select {
-			case <-done:
+			case r := <-sumCh:
+				if r.err != nil {
+					entry.Error = r.err.Error()
+				} else if r.summary != nil {
+					entry.Online = true
+					populateEntryFromSummary(&entry, r.summary)
+				}
 			case <-time.After(10 * time.Second):
-				entry.Error = "timeout"
+				entry.Error = "timeout (10s)"
 				log.WithField("pk", pk.String()).Warn("HVListVisors: visor query timed out")
 			}
 			results[idx] = entry
