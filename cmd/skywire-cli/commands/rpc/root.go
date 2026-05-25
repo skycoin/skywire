@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -153,23 +154,43 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 // no protocol translation, no JSON-vs-gob wire format issues, all
 // 167 typed visor.API methods work transparently.
 func viaClient(cmdFlags *pflag.FlagSet, via string, quiet bool) (visor.API, error) {
-	var pkStr string
+	var rest string
 	var scheme byte
 	switch {
 	case strings.HasPrefix(via, "dmsg://"):
-		pkStr = strings.TrimPrefix(via, "dmsg://")
+		rest = strings.TrimPrefix(via, "dmsg://")
 		scheme = 0 // bridgeSchemeDmsg
 	case strings.HasPrefix(via, "skynet://"):
-		pkStr = strings.TrimPrefix(via, "skynet://")
+		rest = strings.TrimPrefix(via, "skynet://")
 		scheme = 1 // bridgeSchemeSkynet
 	default:
 		if !quiet {
 			internal.PrintError(cmdFlags, fmt.Errorf(
-				"--via must be dmsg://<pk> or skynet://<pk>; got %q", via))
+				"--via must be dmsg://<pk>[:<port>] or skynet://<pk>; got %q", via))
 		}
 		return nil, fmt.Errorf("unsupported --via scheme: %q", via)
 	}
-	return bridgeClient(cmdFlags, scheme, pkStr, quiet)
+
+	// Split <pk>[:<port>]. Port is optional; defaults to
+	// DmsgVisorRPCPort. For skynet the port byte in the bridge
+	// header is ignored (VStream has no port concept on route ID 0),
+	// but we still parse a trailing port for shape consistency —
+	// an operator passing skynet://<pk>:<port> gets the port
+	// silently discarded by the visor bridge.
+	pkStr := rest
+	port := skyenv.DmsgVisorRPCPort
+	if idx := strings.Index(rest, ":"); idx >= 0 {
+		pkStr = rest[:idx]
+		p, err := strconv.ParseUint(rest[idx+1:], 10, 16)
+		if err != nil {
+			if !quiet {
+				internal.PrintError(cmdFlags, fmt.Errorf("invalid port in --via: %w", err))
+			}
+			return nil, err
+		}
+		port = uint16(p)
+	}
+	return bridgeClient(cmdFlags, scheme, pkStr, port, quiet)
 }
 
 // bridgeClient dials the local visor's CLI RPC port (default
@@ -178,7 +199,7 @@ func viaClient(cmdFlags *pflag.FlagSet, via string, quiet bool) (visor.API, erro
 // rpc.Client running over the bridged conn. The visor opens the
 // underlying stream using its own identity — no separate CLI
 // keypair needed.
-func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, quiet bool) (visor.API, error) {
+func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint16, quiet bool) (visor.API, error) {
 	var remotePK cipher.PubKey
 	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
 		if !quiet {
@@ -210,7 +231,7 @@ func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, quiet bool
 	copy(header[:6], dmsgBridgeMagic)
 	header[6] = scheme
 	copy(header[7:40], remotePK[:])
-	binary.LittleEndian.PutUint16(header[40:42], skyenv.DmsgVisorRPCPort)
+	binary.LittleEndian.PutUint16(header[40:42], port)
 	if _, err := conn.Write(header); err != nil {
 		conn.Close() //nolint:errcheck,gosec
 		if !quiet {
