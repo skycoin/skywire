@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -69,9 +70,31 @@ func BootstrapDmsg(
 		}
 	}
 
-	// Create direct client with embedded/fetched servers
+	// Create direct client pre-loaded with the bootstrap server entries.
+	// Its only job is to serve AllServers / AvailableServers from memory
+	// so the dmsg client can dial the embedded set without an HTTP round
+	// trip — useful when the dmsg-discovery's HTTP endpoint is briefly
+	// unreachable (offline install, DNS failure, Caddy outage).
 	keys := cipher.PubKeys{pk}
-	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
+	directDClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
+
+	// Wrap the direct client with an HTTP-discovery fallback so per-PK
+	// Entry() lookups query the real dmsg-discovery instead of the
+	// in-memory bootstrap set. Without this, dmsg.DialStream returned
+	// "dmsg error 100 - entry is not found in discovery" for every PK
+	// not in the embedded server list — even though direct.Client never
+	// actually contacts a discovery service. AllServers / PostEntry
+	// stay on the direct client so the bootstrap phase is unchanged;
+	// only the Entry() path now consults real discovery.
+	//
+	// When dmsgDisc is empty the caller has explicitly opted out of
+	// HTTP discovery (e.g. fully air-gapped deployments) — keep the
+	// direct-only behavior in that case.
+	var dClient disc.APIClient = directDClient
+	if dmsgDisc != "" {
+		httpDiscClient := disc.NewHTTP(dmsgDisc, &http.Client{Timeout: 30 * time.Second}, log)
+		dClient = dmsgclient.NewFallbackDiscClient(directDClient, httpDiscClient, log)
+	}
 
 	config := &dmsg.Config{
 		MinSessions:          0, // 0 = connect to all available servers
@@ -84,7 +107,9 @@ func BootstrapDmsg(
 		return nil, err
 	}
 
-	// Background: refresh servers — try DMSG first, fall back to HTTP
+	// Background: refresh servers — try DMSG first, fall back to HTTP.
+	// Updates are PostEntry'd into the direct client so AllServers stays
+	// current; the fallback wrapper delegates PostEntry to direct.
 	go updateServersDmsgFirst(ctx, dClient, dmsgDC, dmsgDisc, dmsgServerType, log)
 
 	return &DmsgBootstrap{
