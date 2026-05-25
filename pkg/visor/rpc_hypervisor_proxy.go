@@ -51,7 +51,14 @@ type HVVisorEntry struct {
 	// "online but health unknown" branch and renders as a gray
 	// outline circle even when the visor is fully healthy.
 	ServicesHealth string `json:"services_health,omitempty"`
-	Error          string `json:"error,omitempty"`
+	// Hostname is the visor's os.Hostname(). The hvui's main node
+	// list uses this as the default Label when no explicit label is
+	// set; without it, sub-section rows render with an empty Label
+	// column even though the visor itself reports a valid hostname.
+	// Carried separately from PK because Overview.Hostname doesn't
+	// survive the HVVisorEntry round-trip otherwise.
+	Hostname string `json:"hostname,omitempty"`
+	Error    string `json:"error,omitempty"`
 	// ProxiedVia is set when this entry was discovered through a connected
 	// sub-hypervisor rather than a direct connection. The value is the PK
 	// of the sub-hypervisor that proxies operations on this visor.
@@ -71,6 +78,7 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 	entry.Apps = len(summary.Overview.Apps)
 	entry.ConfigVersion = summary.ConfigVersion
 	entry.RewardAddress = summary.RewardAddress
+	entry.Hostname = summary.Overview.Hostname
 	if summary.Health != nil {
 		entry.ServicesHealth = summary.Health.ServicesHealth
 	}
