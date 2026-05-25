@@ -273,6 +273,29 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 				}
 				fwg.Wait()
 			}
+
+			// Enrich Hostname from the local summaryCache when the
+			// sub-hypervisor's HVVisorEntry round-trip didn't carry it
+			// — happens when the sub-hypervisor predates the
+			// Hostname-on-HVVisorEntry change (PR #2808). The local
+			// section already polls Summary for any PK we have a
+			// direct conn to, and that Summary's Overview.Hostname is
+			// the source of truth. Without this bridge, sub-section
+			// rows show LAN IP as the default label until the
+			// sub-hypervisor itself updates.
+			hv.summaryCacheMx.RLock()
+			for i := range visors {
+				if visors[i].Overview == nil || visors[i].Overview.Hostname != "" {
+					continue
+				}
+				cached, ok := hv.summaryCache[visors[i].Overview.PubKey]
+				if !ok || cached.sum == nil || cached.sum.Overview == nil {
+					continue
+				}
+				visors[i].Overview.Hostname = cached.sum.Overview.Hostname
+			}
+			hv.summaryCacheMx.RUnlock()
+
 			sections = append(sections, VisorTreeSection{
 				HypervisorPK: sr.hyperPK,
 				ViaChain:     []cipher.PubKey{localPK},
