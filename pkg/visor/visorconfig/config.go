@@ -73,6 +73,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		Addr: services.UptimeTracker,
 	}
 	conf.CLIAddr = skyenv.RPCAddr
+	conf.DmsgBridgeAddr = skyenv.DmsgBridgeAddr
 	conf.LogLevel = skyenv.LogLevel
 	conf.LocalPath = skyenv.LocalPath
 	conf.StunServers = services.StunServers
