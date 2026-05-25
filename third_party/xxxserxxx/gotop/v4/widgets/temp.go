@@ -6,11 +6,11 @@ import (
 	"sort"
 	"time"
 
-	"github.com/VictoriaMetrics/metrics"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	ui "github.com/gizak/termui/v3"
 
-	"github.com/xxxserxxx/gotop/v4/devices"
-	"github.com/xxxserxxx/gotop/v4/utils"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"
 )
 
 type TempScale rune

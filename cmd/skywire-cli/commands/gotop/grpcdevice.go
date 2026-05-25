@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xxxserxxx/gotop/v4/devices"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
