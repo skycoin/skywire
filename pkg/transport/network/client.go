@@ -204,6 +204,17 @@ func (c *genericClient) acceptTransport() error {
 	if err != nil {
 		return err
 	}
+	// TCP_NODELAY on inbound TCP transports (stcpr/stcp) so the
+	// accepting end doesn't Nagle-batch responses to small
+	// interactive payloads (per-keystroke skypty bytes, small RPC
+	// replies). The dial side sets the same flag in stcpr.go /
+	// stcp.go; without matching it here, the lag re-appears on the
+	// reverse direction of any interactive stream. UDP-based
+	// sudph isn't affected (no Nagle); the type assertion is a
+	// no-op for non-TCP listeners.
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+	}
 	remoteAddr := conn.RemoteAddr()
 	c.log.Debugf("Accepted connection from %v", remoteAddr)
 
