@@ -594,10 +594,23 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 						live = true
 					}
 				case <-time.After(5 * time.Second):
-					hv.logger.WithField("pk", pk).Warn("Remote visor summary RPC timed out (5s)")
-					mu.Lock()
-					deadVisors = append(deadVisors, pk)
-					mu.Unlock()
+					// Outer timeout: render the UI snappy by falling
+					// through to the cache fallback below, but DON'T
+					// evict the visor on a single slow round. The
+					// Summary goroutine continues running with its
+					// 20s inner ctx (skyenv.RPCTimeout); if the conn
+					// is genuinely broken, that ctx fires, closes the
+					// conn from rpc_client.go:104, and the NEXT poll
+					// round sees rpcErr != nil (write-to-closed-conn)
+					// and properly evicts. Eviction on outer timeout
+					// alone was over-aggressive — it dropped visors
+					// that were merely slow (dmsg jitter, route flap,
+					// transient load) and stranded them in stale-row
+					// state because most visors don't yet have the
+					// idle-detect fix in ServeRPCClient that would
+					// otherwise let them recover by redialing.
+					hv.logger.WithField("pk", pk).
+						Warn("Remote visor summary RPC slow (>5s); using cache, will re-poll next round")
 				}
 
 				if live {
