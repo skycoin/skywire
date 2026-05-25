@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
@@ -176,29 +175,20 @@ func (r *RPC) SetExistingTPOnly(enabled *bool, _ *struct{}) (err error) {
 // specified method. The local visor acts as a proxy — it opens a VStream
 // over an existing transport to the remote visor and forwards the RPC.
 // The remote visor must have this visor's PK in its hypervisor/dmsgpty whitelist.
+//
+// Thin RPC handler: delegates to v.TransportRPCCall so the mux-sharing
+// and error-handling logic stays in one place (rpc_transport_proxy.go).
+// See the comment there for why we use a shared mux.
 func (r *RPC) TransportRPCCall(req *TransportRPCCallRequest, out *json.RawMessage) (err error) {
 	defer rpcutil.LogCall(r.log, "TransportRPCCall", req)(out, &err)
 
 	v, ok := r.visor.(*Visor)
-	if !ok || v.tpM == nil {
+	if !ok {
 		return fmt.Errorf("transport manager not available")
 	}
-
-	log := logging.MustGetLogger("transport_rpc_proxy")
-	rpcC, dialErr := DialTransportRPC(req.RemotePK, v.tpM, log)
-	if dialErr != nil {
-		return dialErr
-	}
-	defer rpcC.Close() //nolint:errcheck,gosec
-
-	// Call the remote method, get raw JSON result.
-	var rpcArgs interface{} = &struct{}{}
-	if len(req.Args) > 0 {
-		rpcArgs = &req.Args
-	}
-	var result json.RawMessage
-	if callErr := rpcC.Call(req.Method, rpcArgs, &result); callErr != nil {
-		return fmt.Errorf("remote RPC %s: %w", req.Method, callErr)
+	result, callErr := v.TransportRPCCall(req.RemotePK, req.Method, req.Args)
+	if callErr != nil {
+		return callErr
 	}
 	*out = result
 	return nil
