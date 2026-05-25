@@ -582,6 +582,89 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
+	// Serve visor net/rpc over dmsg (and skynet mirror) on
+	// DmsgVisorRPCPort. Same auth gate as TransportRPCServer:
+	// hypervisor PKs + dmsgpty whitelist. Reached via
+	// `skywire cli ... --rpc dmsg://<pk>` from a CLI that holds an
+	// authorized SK.
+	if v.dmsgC != nil {
+		dmsgRPCLog := v.MasterLogger().PackageLogger("dmsg_visor_rpc")
+
+		authorizedPKs := make(map[cipher.PubKey]bool)
+		for _, pk := range v.conf.Hypervisors {
+			authorizedPKs[pk] = true
+		}
+		if v.conf.Dmsgpty != nil {
+			for _, pk := range v.conf.Dmsgpty.Whitelist {
+				authorizedPKs[pk] = true
+			}
+		}
+
+		if len(authorizedPKs) == 0 {
+			dmsgRPCLog.Info("No hypervisor PKs or dmsgpty whitelist; dmsg visor-RPC server disabled")
+		} else {
+			dmsgRPCS, dmsgRPCErr := newRPCServer(v, "DmsgRPC")
+			if dmsgRPCErr != nil {
+				log.WithError(dmsgRPCErr).Warn("Failed to create dmsg visor-RPC server")
+			} else if dmsgRPCL, err := v.dmsgC.Listen(skyenv.DmsgVisorRPCPort); err != nil {
+				dmsgRPCLog.WithError(err).Warn("Failed to listen on dmsg visor-RPC port")
+			} else {
+				authL := &authorizedDmsgListener{
+					Listener:      dmsgRPCL,
+					authorizedPKs: authorizedPKs,
+					log:           dmsgRPCLog,
+				}
+				v.pushCloseStack("dmsg.visor_rpc.listener", dmsgRPCL.Close)
+
+				go func() {
+					dmsgRPCLog.Infof("Dmsg visor-RPC server listening on port %d (%d authorized PKs)", skyenv.DmsgVisorRPCPort, len(authorizedPKs))
+					for {
+						conn, err := authL.Accept()
+						if err != nil {
+							if errors.Is(err, net.ErrClosed) ||
+								strings.Contains(err.Error(), "closed") {
+								return
+							}
+							dmsgRPCLog.WithError(err).Debug("dmsg visor-RPC accept error")
+							continue
+						}
+						go func(c net.Conn) {
+							defer c.Close() //nolint:errcheck,gosec
+							dmsgRPCS.ServeConn(c)
+						}(conn)
+					}
+				}()
+
+				// Skynet mirror of the visor-RPC server at the same
+				// port. Same authorizedDmsgListener wrapper enforces
+				// the whitelist on the skynet side.
+				goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgVisorRPCPort, "dmsg_visor_rpc", dmsgRPCLog,
+					func(skyLis net.Listener) {
+						authSky := &authorizedDmsgListener{
+							Listener:      skyLis,
+							authorizedPKs: authorizedPKs,
+							log:           dmsgRPCLog,
+						}
+						for {
+							conn, err := authSky.Accept()
+							if err != nil {
+								if errors.Is(err, net.ErrClosed) ||
+									strings.Contains(err.Error(), "closed") {
+									return
+								}
+								dmsgRPCLog.WithError(err).Debug("skynet visor-RPC accept error")
+								continue
+							}
+							go func(c net.Conn) {
+								defer c.Close() //nolint:errcheck,gosec
+								dmsgRPCS.ServeConn(c)
+							}(conn)
+						}
+					})
+			}
+		}
+	}
+
 	// Use cmux to multiplex gRPC and standard RPC on same port
 	mux := cmux.New(cliL)
 	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))

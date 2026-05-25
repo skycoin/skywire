@@ -26,6 +26,18 @@ const (
 	// DmsgSetupPort Listening port of a setup node.
 	DmsgSetupPort uint16 = 36
 
+	// DmsgVisorRPCPort is the dmsg port where a visor exposes its
+	// full net/rpc API for remote CLI access. Mirrored on skynet via
+	// goServeSkynetMirror. Authentication uses the visor's
+	// hypervisor + dmsgpty whitelist (the same gate as
+	// TransportRPCServer). Drives `skywire cli ... --rpc dmsg://<pk>`.
+	//
+	// Distinct from DmsgHypervisorPort (46) — that's the direction
+	// visor-dials-hypervisor (visor side serves rpc.Server, hypervisor
+	// side runs rpc.Client). Here the visor itself serves rpc.Server
+	// to whoever's authorized to dial in.
+	DmsgVisorRPCPort uint16 = 44
+
 	// DmsgHypervisorPort Listening port of a hypervisor for incoming RPC visor connections over dmsg.
 	DmsgHypervisorPort uint16 = 46
 
