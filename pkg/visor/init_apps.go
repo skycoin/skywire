@@ -677,20 +677,20 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// requests, everything else falls through to gRPC or rpc.
 	mux := cmux.New(cliL)
 	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
-	bridgeL := mux.Match(cmux.PrefixMatcher(dmsgBridgeMagic))
+	bridgeL := mux.Match(cmux.PrefixMatcher(bridgeMagic))
 	rpcL := mux.Match(cmux.Any()) // All other connections go to standard RPC
 
-	// Start dmsg bridge accept loop on the bridge-matched listener.
-	// Lets the CLI's `--via dmsg://<pk>` flow inherit the visor's
-	// dmsg identity by going through the visor's already-running
-	// dmsg client — no separate CLI keypair, no PK conflict with
-	// dmsg-discovery. Implementation in dmsg_bridge.go.
-	if v.dmsgC != nil {
-		bridgeLog := v.MasterLogger().PackageLogger("dmsg_bridge")
-		go serveDmsgBridge(ctx, bridgeLog, bridgeL, v.dmsgC)
-		bridgeLog.WithField("addr", v.conf.CLIAddr).
-			Info("Dmsg bridge multiplexed onto CLI RPC port")
-	}
+	// Start the RPC bridge accept loop on the bridge-matched
+	// listener. Handles both `--via dmsg://<pk>` and `--via
+	// skynet://<pk>` — the header's scheme byte selects which
+	// stream type the visor opens to the target. Lets the CLI
+	// inherit the visor's dmsg/skynet identity (and its whitelist
+	// eligibility on remote peers) without needing a separate CLI
+	// keypair. Implementation in rpc_bridge.go.
+	bridgeLog := v.MasterLogger().PackageLogger("rpc_bridge")
+	go serveRPCBridge(ctx, bridgeLog, bridgeL, v)
+	bridgeLog.WithField("addr", v.conf.CLIAddr).
+		Info("RPC bridge multiplexed onto CLI RPC port (dmsg + skynet schemes)")
 
 	// Connection limiting and stats for standard RPC
 	const maxConcurrentConns = 50
