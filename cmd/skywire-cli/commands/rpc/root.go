@@ -101,17 +101,13 @@ func clientImpl(cmdFlags *pflag.FlagSet, quiet bool) (visor.API, error) {
 		return skynetProxyClient(cmdFlags, strings.TrimPrefix(Addr, "skynet://"), quiet)
 	}
 
-	// dmsg://<pk> — direct dmsg dial to a server-side rpc.Server
-	// listener. Not yet implemented (no such listener exists on the
-	// visor today). Surface an explicit error rather than a confusing
-	// timeout when a future operator tries this.
+	// dmsg://<pk> — direct dmsg dial to the visor's net/rpc server
+	// on DmsgVisorRPCPort. The CLI uses a standalone dmsg client
+	// (ephemeral keypair unless --cli SK is provided). The remote
+	// visor's PK whitelist (hypervisors + dmsgpty) gates access.
 	if strings.HasPrefix(Addr, "dmsg://") {
-		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf(
-				"--rpc dmsg://<pk> requires a server-side visor-rpc listener over dmsg that hasn't been implemented yet. "+
-					"Use --rpc skynet://<pk> instead, which proxies through the local visor's transport-RPC."))
-		}
-		return nil, fmt.Errorf("--rpc dmsg:// not yet supported")
+		VisorPK = strings.TrimPrefix(Addr, "dmsg://")
+		return DmsgClient(cmdFlags)
 	}
 
 	// tp:// kept as an alias for skynet:// to ease migration. Same
@@ -182,7 +178,18 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 		return nil, err
 	}
 
-	// Parse CLI secret key (if provided)
+	// Parse CLI secret key. The standalone dmsg client needs a
+	// keypair distinct from the local visor's — dmsg-discovery
+	// rejects duplicate PK registrations, so reusing the visor's
+	// SK from /opt/skywire/skywire.json on the same host hits a
+	// PK-already-registered EOF before any stream can open.
+	//
+	// In practice this means operators have to add a dedicated
+	// CLI keypair to the remote visor's dmsgpty whitelist and
+	// pass --cli <sk> here. The future bridge architecture (CLI
+	// borrows the local visor's dmsg client via an RPC proxy
+	// method) will lift this requirement; until then the explicit
+	// --cli flag is the auth path.
 	var cliPK cipher.PubKey
 	var cliSK cipher.SecKey
 	if CliSK != "" {
@@ -196,11 +203,10 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 			internal.PrintError(cmdFlags, fmt.Errorf("failed to derive public key: %v", err))
 			return nil, err
 		}
-		logger.Infof("Using CLI key: %s", cliPK)
+		logger.Infof("Using --cli key: %s", cliPK)
 	} else {
-		// Generate ephemeral keypair if no secret key provided
 		cliPK, cliSK = cipher.GenerateKeyPair()
-		logger.Warnf("No --cli key provided, using ephemeral key (will fail if visor has whitelist): %s", cliPK)
+		logger.Warnf("No --cli key provided, using ephemeral key (rejected by any whitelisted listener): %s", cliPK)
 	}
 
 	// Create dmsg client
@@ -227,9 +233,15 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 		return nil, ctx.Err()
 	}
 
-	// Dial visor over dmsg
-	addr := dmsg.Addr{PK: visorPubKey, Port: skyenv.DmsgHypervisorPort}
-	logger.Infof("Dialing visor %s over dmsg on port %d...", visorPubKey, skyenv.DmsgHypervisorPort)
+	// Dial visor over dmsg at the visor-RPC port. Previously this
+	// dialed DmsgHypervisorPort 46 which is wrong-direction (visors
+	// DIAL hypervisors there; the hypervisor side runs rpc.Client,
+	// not rpc.Server). DmsgVisorRPCPort 44 is the correct port —
+	// visor runs rpc.Server.ServeConn on accepted streams there,
+	// gated by the same hypervisor + dmsgpty whitelist as
+	// TransportRPCServer.
+	addr := dmsg.Addr{PK: visorPubKey, Port: skyenv.DmsgVisorRPCPort}
+	logger.Infof("Dialing visor %s over dmsg on port %d...", visorPubKey, skyenv.DmsgVisorRPCPort)
 
 	conn, err := dmsgC.Dial(ctx, addr)
 	if err != nil {
@@ -244,6 +256,7 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	dmsgLogger := logging.MustGetLogger(fmt.Sprintf("dmsg://%s", VisorPK))
 	return visor.NewRPCClient(dmsgLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
+
 
 var (
 	// NoCXO disables the CXO subscriber step in FetchServiceURL.
