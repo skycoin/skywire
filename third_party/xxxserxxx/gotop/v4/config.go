@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/shibukawa/configdir"
-	"github.com/xxxserxxx/gotop/v4/colorschemes"
-	"github.com/xxxserxxx/gotop/v4/widgets"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/colorschemes"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/widgets"
 	"github.com/xxxserxxx/lingo/v2"
 )
 
