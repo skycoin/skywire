@@ -458,55 +458,11 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.pushCloseStack("cli.listener", cliL.Close)
 
-	// Dmsg bridge: a local-only TCP listener that the CLI dials
-	// when invoked with `--rpc dmsg://<pk>`. Lets the CLI inherit
-	// the visor's dmsg identity (and thus its whitelist
-	// eligibility on remote peers) without needing a separate CLI
-	// keypair — the running visor and the CLI on the same host
-	// can't both register the same PK with dmsg-discovery, so the
-	// CLI's standalone dmsg path needs a distinct key, but going
-	// through the visor's already-running dmsg client sidesteps
-	// the conflict entirely.
-	//
-	// Protocol on the bridge socket:
-	//   1. CLI writes 33-byte target PK + 2-byte target port (LE).
-	//   2. Visor opens a dmsg stream to that target, runs a
-	//      bidirectional io.Copy between the TCP conn and the
-	//      dmsg stream. The CLI then runs its rpc.Client on the
-	//      TCP conn; remote runs rpc.Server on the dmsg stream;
-	//      both speak gob, no protocol translation in the middle.
-	//
-	// Local-only by default: skyenv.DmsgBridgeAddr is
-	// "localhost:3437". The bridge intentionally has NO auth on
-	// the TCP side — any process that can reach localhost:3437
-	// can dial dmsg under the visor's identity. That mirrors the
-	// existing assumption around RPCAddr (localhost:3435 trusts
-	// any local caller). Operators concerned about local-process
-	// trust should sandbox the visor's user account.
-	if v.dmsgC != nil {
-		// Empty in config (e.g., older configs that predate this
-		// field) falls back to the skyenv default so operators
-		// don't have to regen their config to get the bridge.
-		// Set to "off" / "disabled" to explicitly turn it off.
-		bridgeAddr := v.conf.DmsgBridgeAddr
-		if bridgeAddr == "" {
-			bridgeAddr = skyenv.DmsgBridgeAddr
-		}
-		if bridgeAddr != "off" && bridgeAddr != "disabled" {
-			bridgeLog := v.MasterLogger().PackageLogger("dmsg_bridge")
-			bridgeL, berr := net.Listen("tcp", bridgeAddr)
-			if berr != nil {
-				bridgeLog.WithError(berr).
-					WithField("addr", bridgeAddr).
-					Warn("Failed to start dmsg bridge listener")
-			} else {
-				v.pushCloseStack("dmsg.bridge.listener", bridgeL.Close)
-				go serveDmsgBridge(ctx, bridgeLog, bridgeL, v.dmsgC)
-				bridgeLog.WithField("addr", bridgeAddr).
-					Info("Dmsg bridge listener started")
-			}
-		}
-	}
+	// (Dmsg bridge was previously a dedicated localhost:3437
+	// listener. It's now multiplexed onto v.conf.CLIAddr via cmux
+	// — see the bridgeL match below. One local port for operators
+	// to think about, one config field. The bridge protocol /
+	// security model is unchanged; see pkg/visor/dmsg_bridge.go.)
 
 	rpcS, err := newRPCServer(v, "CLI")
 	if err != nil {
@@ -715,10 +671,26 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	// Use cmux to multiplex gRPC and standard RPC on same port
+	// Use cmux to multiplex gRPC, the dmsg-bridge protocol, and
+	// standard RPC on the same port. The bridge matcher peeks for
+	// a fixed magic prefix; conns starting with it are dmsg-bridge
+	// requests, everything else falls through to gRPC or rpc.
 	mux := cmux.New(cliL)
 	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+	bridgeL := mux.Match(cmux.PrefixMatcher(dmsgBridgeMagic))
 	rpcL := mux.Match(cmux.Any()) // All other connections go to standard RPC
+
+	// Start dmsg bridge accept loop on the bridge-matched listener.
+	// Lets the CLI's `--via dmsg://<pk>` flow inherit the visor's
+	// dmsg identity by going through the visor's already-running
+	// dmsg client — no separate CLI keypair, no PK conflict with
+	// dmsg-discovery. Implementation in dmsg_bridge.go.
+	if v.dmsgC != nil {
+		bridgeLog := v.MasterLogger().PackageLogger("dmsg_bridge")
+		go serveDmsgBridge(ctx, bridgeLog, bridgeL, v.dmsgC)
+		bridgeLog.WithField("addr", v.conf.CLIAddr).
+			Info("Dmsg bridge multiplexed onto CLI RPC port")
+	}
 
 	// Connection limiting and stats for standard RPC
 	const maxConcurrentConns = 50
