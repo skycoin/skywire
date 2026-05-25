@@ -182,8 +182,17 @@ func registerModules(logger *logging.MasterLogger) {
 	// skynetweb depends on the router being up, unlike dmsgweb.
 	embSkynetWeb = maker("embedded_skynetweb", initEmbeddedSkynetWeb, &rt)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
-	cli = maker("cli", initCLI)
-	hvs = maker("hypervisors", initHypervisors, &dmsgC)
+	// cli depends on tr so v.tpM is set when initCLI wires up the
+	// shared VStreamMux for transport-RPC (registered as the manager's
+	// VisorRPCPacket handler). Without this dep, initCLI could run
+	// before initTransport, the mux would be skipped, and every
+	// TransportRPCCall would error with "transport RPC not initialized".
+	cli = maker("cli", initCLI, &tr)
+	// hvs depends on tr for the same reason: ServeRPCClient takes
+	// v.tpM to gate its skynet-preferred dial path. Without this dep
+	// the dial would always fall through to dmsg even when a fast
+	// transport exists.
+	hvs = maker("hypervisors", initHypervisors, &dmsgC, &tr)
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)

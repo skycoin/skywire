@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
@@ -544,20 +545,36 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	// Serve visor RPC over transports (route ID 0, VisorRPCPacket).
-	// Uses the same whitelist as DMSG gRPC: hypervisor PKs + dmsgpty whitelist.
+	// The mux is always created when a transport manager exists — it
+	// supports BOTH outbound TransportRPCCall dials (used by every
+	// CLI invocation against a remote visor) AND inbound accepts
+	// from whitelisted peers (hypervisor PKs + dmsgpty whitelist).
+	// The accept loop only runs when there's something to whitelist.
 	if v.tpM != nil {
+		tpRPCLog := v.MasterLogger().PackageLogger("transport_rpc")
+		// One VStreamMux per (tm, packet_type). Registered as the
+		// transport manager's VisorRPCPacket handler so EVERY inbound
+		// frame routes here — both accept-side (new streams from
+		// peers) and dial-side (response frames for streams we opened
+		// via TransportRPCCall). Stored on the visor so
+		// TransportRPCCall can use the same mux for its outbound
+		// dials. Sharing this mux is required: the manager only
+		// routes inbound VisorRPCPacket frames to a single handler.
+		v.transportRPCMux = transport.NewVStreamMux(v.tpM, routing.VisorRPCPacket, tpRPCLog)
+		v.tpM.SetVisorRPCHandler(v.transportRPCMux.HandlePacket)
+		v.pushCloseStack("transport_rpc.mux", v.transportRPCMux.Close)
+
 		whitelistPKs := append([]cipher.PubKey{}, v.conf.Hypervisors...)
 		if v.conf.Dmsgpty != nil {
 			whitelistPKs = append(whitelistPKs, v.conf.Dmsgpty.Whitelist...)
 		}
 		if len(whitelistPKs) > 0 {
-			tpRPCLog := v.MasterLogger().PackageLogger("transport_rpc")
 			tpRPCS, tpRPCErr := newRPCServer(v, "TransportRPC")
 			if tpRPCErr != nil {
 				log.WithError(tpRPCErr).Warn("Failed to create transport RPC server")
 			} else {
-				tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, whitelistPKs, v.tpM)
-				v.pushCloseStack("transport_rpc", tpRPCSrv.Close)
+				tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, whitelistPKs, v.transportRPCMux)
+				v.pushCloseStack("transport_rpc.server", tpRPCSrv.Close)
 				go tpRPCSrv.Serve()
 				tpRPCLog.WithField("whitelist_pks", len(whitelistPKs)).
 					Info("Transport RPC server started (VisorRPCPacket on route ID 0)")
