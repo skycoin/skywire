@@ -320,7 +320,7 @@ github.com/gabriel-vasile/mimetype/internal/scan
 # github.com/gdamore/encoding v1.0.1
 ## explicit; go 1.9
 github.com/gdamore/encoding
-# github.com/gdamore/tcell/v2 v2.13.9
+# github.com/gdamore/tcell/v2 v2.13.10
 ## explicit; go 1.24.0
 github.com/gdamore/tcell/v2
 github.com/gdamore/tcell/v2/terminfo
@@ -373,8 +373,8 @@ github.com/gin-gonic/gin/render
 github.com/gizak/termui/v3
 github.com/gizak/termui/v3/drawille
 github.com/gizak/termui/v3/widgets
-# github.com/go-chi/chi/v5 v5.2.5
-## explicit; go 1.22
+# github.com/go-chi/chi/v5 v5.3.0
+## explicit; go 1.23
 github.com/go-chi/chi/v5
 github.com/go-chi/chi/v5/middleware
 # github.com/go-chi/cors v1.2.2
@@ -664,11 +664,11 @@ github.com/opencontainers/image-spec/specs-go/v1
 # github.com/orandin/lumberjackrus v1.0.1
 ## explicit
 github.com/orandin/lumberjackrus
-# github.com/oschwald/geoip2-golang/v2 v2.1.0
-## explicit; go 1.24.0
+# github.com/oschwald/geoip2-golang/v2 v2.2.0
+## explicit; go 1.25.0
 github.com/oschwald/geoip2-golang/v2
-# github.com/oschwald/maxminddb-golang/v2 v2.2.0
-## explicit; go 1.24.0
+# github.com/oschwald/maxminddb-golang/v2 v2.3.0
+## explicit; go 1.25.0
 github.com/oschwald/maxminddb-golang/v2
 github.com/oschwald/maxminddb-golang/v2/internal/decoder
 github.com/oschwald/maxminddb-golang/v2/internal/mmdberrors
@@ -706,7 +706,7 @@ github.com/pterm/pterm/putils
 # github.com/quic-go/qpack v0.6.0
 ## explicit; go 1.24
 github.com/quic-go/qpack
-# github.com/quic-go/quic-go v0.59.0
+# github.com/quic-go/quic-go v0.59.1
 ## explicit; go 1.24
 github.com/quic-go/quic-go
 github.com/quic-go/quic-go/http3
@@ -904,11 +904,11 @@ github.com/tidwall/pretty
 # github.com/tjfoc/gmsm v1.4.1
 ## explicit; go 1.14
 github.com/tjfoc/gmsm/sm4
-# github.com/tklauser/go-sysconf v0.3.16
-## explicit; go 1.24.0
+# github.com/tklauser/go-sysconf v0.4.0
+## explicit; go 1.25.0
 github.com/tklauser/go-sysconf
-# github.com/tklauser/numcpus v0.11.0
-## explicit; go 1.24.0
+# github.com/tklauser/numcpus v0.12.0
+## explicit; go 1.25.0
 github.com/tklauser/numcpus
 # github.com/toqueteos/webbrowser v1.2.1
 ## explicit; go 1.12
@@ -1045,7 +1045,7 @@ go.yaml.in/yaml/v3
 # golang.org/x/arch v0.27.0
 ## explicit; go 1.25.0
 golang.org/x/arch/x86/x86asm
-# golang.org/x/crypto v0.51.0
+# golang.org/x/crypto v0.52.0
 ## explicit; go 1.25.0
 golang.org/x/crypto/blake2b
 golang.org/x/crypto/blake2s
@@ -1066,7 +1066,7 @@ golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
 # golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 ## explicit; go 1.25.0
-# golang.org/x/image v0.40.0
+# golang.org/x/image v0.41.0
 ## explicit; go 1.25.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
@@ -1076,7 +1076,7 @@ golang.org/x/image/tiff/lzw
 golang.org/x/image/vp8
 golang.org/x/image/vp8l
 golang.org/x/image/webp
-# golang.org/x/net v0.54.0
+# golang.org/x/net v0.55.0
 ## explicit; go 1.25.0
 golang.org/x/net/bpf
 golang.org/x/net/context
@@ -1102,7 +1102,7 @@ golang.org/x/net/trace
 ## explicit; go 1.25.0
 golang.org/x/sync/errgroup
 golang.org/x/sync/semaphore
-# golang.org/x/sys v0.44.0
+# golang.org/x/sys v0.45.0
 ## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/plan9
@@ -1138,7 +1138,7 @@ golang.org/x/time/rate
 # golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
 ## explicit; go 1.17
 golang.zx2c4.com/wintun
-# golang.zx2c4.com/wireguard v0.0.0-20250521234502-f333402bd9cb
+# golang.zx2c4.com/wireguard v0.0.0-20260522210424-ecfc5a8d5446
 ## explicit; go 1.23.1
 golang.zx2c4.com/wireguard/conn
 golang.zx2c4.com/wireguard/conn/winrio
@@ -1146,10 +1146,10 @@ golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 # google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9
 ## explicit; go 1.25.0
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20260504160031-60b97b32f348
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260523011958-0a33c5d7ca68
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.81.0
+# google.golang.org/grpc v1.81.1
 ## explicit; go 1.25.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
