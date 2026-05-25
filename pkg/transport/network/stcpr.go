@@ -54,7 +54,23 @@ func (c *stcprClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16)
 func (c *stcprClient) dial(ctx context.Context, addr string) (net.Conn, error) {
 	c.eb.SendTCPDial(context.Background(), string(types.STCPR), addr)
 	dialer := net.Dialer{}
-	return dialer.DialContext(ctx, "tcp", addr)
+	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	// TCP_NODELAY for interactive traffic. Without this, Nagle's
+	// algorithm batches small writes (e.g., per-keystroke pty bytes
+	// from the hypervisor UI's skypty terminal) with 40–200ms of
+	// delay each, manifesting as per-keystroke lag for operators
+	// using the web pty. Skywire's interactive paths (skypty, ssh
+	// app, remote shells, RPC calls with small request payloads)
+	// all benefit from disabling Nagle; bulk transfers don't lose
+	// anything meaningful (modern TCP segmentation handles
+	// throughput-side packaging at the kernel level).
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+	}
+	return conn, nil
 }
 
 // Start implements Client interface
