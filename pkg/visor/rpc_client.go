@@ -48,6 +48,15 @@ type rpcClient struct {
 	client  *rpc.Client
 	prefix  string
 	FixGob  bool
+
+	// proxyTarget, when non-nil, rewrites every Call so the request
+	// goes to the LOCAL visor's TransportRPCCall method (over the
+	// existing rc.client connection), which then proxies the call to
+	// the named remote visor over a skywire transport. All 167
+	// typed visor.API methods funnel through rc.Call, so setting
+	// proxyTarget once routes ALL of them to the remote visor —
+	// no per-method wrapper code. Used by CLI's --rpc skynet://<pk>.
+	proxyTarget *cipher.PubKey
 }
 
 // NewRPCClient creates a new API.
@@ -61,6 +70,35 @@ func NewRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string
 		conn:    conn,
 		client:  rpc.NewClient(conn),
 		prefix:  prefix,
+	}
+}
+
+// NewProxyRPCClient wraps a local rpc.Client connection so that
+// every Call against the returned API is transparently routed to a
+// remote visor via the local visor's TransportRPCCall method.
+//
+// Use case: `skywire cli visor info --rpc skynet://<pk>` — the CLI
+// dials the LOCAL visor as usual, but every typed method (Summary,
+// Health, Overview, ...) gets dispatched on the remote visor
+// identified by remotePK. Auth: the local visor's PK must be in
+// the remote's hypervisor or dmsgpty whitelist (TransportRPCServer
+// enforces this on the receiving side).
+//
+// Limitation: methods with structured Go args (AddTransport,
+// SetMinHops, etc.) don't currently survive the TransportRPCCall
+// JSON-bytes wire format. No-arg query methods (the bulk of what
+// the CLI does) work directly.
+func NewProxyRPCClient(log logrus.FieldLogger, conn io.ReadWriteCloser, prefix string, timeout time.Duration, remotePK cipher.PubKey) API {
+	if log == nil {
+		log = logging.MustGetLogger("visor_rpc_client_proxy")
+	}
+	return &rpcClient{
+		log:         log,
+		timeout:     timeout,
+		conn:        conn,
+		client:      rpc.NewClient(conn),
+		prefix:      prefix,
+		proxyTarget: &remotePK,
 	}
 }
 
@@ -78,7 +116,20 @@ func (rc *rpcClient) Close() error {
 }
 
 // Call calls the internal rpc.Client with the serviceMethod arg prefixed.
+//
+// When proxyTarget is set (constructor was NewProxyRPCClient), the
+// call is rewritten to TransportRPCCall on the underlying
+// connection — the local visor will open a VStream to the remote
+// peer and dispatch the call there, returning the JSON-encoded
+// result. This is what makes `--rpc skynet://<pk>` route every
+// typed visor.API method through the local visor without writing
+// 167 per-method wrappers: each typed method delegates to Call,
+// and Call routes based on proxyTarget.
 func (rc *rpcClient) Call(method string, args, reply interface{}) error {
+	if rc.proxyTarget != nil {
+		return rc.callViaProxy(method, args, reply)
+	}
+
 	ctx := context.Background()
 	timeout := rc.timeout
 
@@ -106,6 +157,64 @@ func (rc *rpcClient) Call(method string, args, reply interface{}) error {
 		}
 		return ctx.Err()
 	}
+}
+
+// callViaProxy rewrites a typed RPC call into a TransportRPCCall
+// against the local visor. JSON is used as the wire format for
+// args/reply because TransportRPCCall takes json.RawMessage bytes
+// and the remote visor's TransportRPCServer dispatches the call
+// through net/rpc on its side. No-arg methods (most query methods —
+// Summary, Health, Overview, etc.) work unconditionally. Methods
+// with structured args may not encode cleanly through the JSON
+// roundtrip — see the NewProxyRPCClient doc comment.
+func (rc *rpcClient) callViaProxy(method string, args, reply interface{}) error {
+	argsBytes, err := json.Marshal(args)
+	if err != nil {
+		return fmt.Errorf("proxy rpc: marshal args for %s: %w", method, err)
+	}
+	// "{}" is the empty-struct case — TransportRPCCall's no-arg path
+	// expects empty bytes, not the literal "{}". Normalize so
+	// rpc_transport_proxy.go's `if len(args) > 0` branch picks the
+	// right code path.
+	if string(argsBytes) == "{}" {
+		argsBytes = nil
+	}
+
+	ctx := context.Background()
+	timeout := rc.timeout
+	if timeout != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, time.Now().Add(timeout))
+		defer cancel()
+	}
+
+	req := &TransportRPCCallRequest{
+		RemotePK: *rc.proxyTarget,
+		Method:   rc.prefix + "." + method,
+		Args:     argsBytes,
+	}
+	var resultBytes json.RawMessage
+	select {
+	case call := <-rc.client.Go(rc.prefix+".TransportRPCCall", req, &resultBytes, nil).Done:
+		if call.Error != nil {
+			return call.Error
+		}
+	case <-ctx.Done():
+		if err := rc.conn.Close(); err != nil {
+			rc.log.WithError(err).Warn("Failed to close rpc client after proxy timeout.")
+		}
+		return ctx.Err()
+	}
+
+	// Empty result is valid (no-reply methods like Disable). Skip
+	// unmarshal in that case.
+	if len(resultBytes) == 0 || string(resultBytes) == "null" {
+		return nil
+	}
+	if err := json.Unmarshal(resultBytes, reply); err != nil {
+		return fmt.Errorf("proxy rpc: unmarshal reply for %s: %w", method, err)
+	}
+	return nil
 }
 
 // Summary calls Summary.
