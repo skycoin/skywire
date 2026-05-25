@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/VictoriaMetrics/metrics"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	psNet "github.com/shirou/gopsutil/v3/net"
 
-	ui "github.com/xxxserxxx/gotop/v4/termui"
-	"github.com/xxxserxxx/gotop/v4/utils"
+	ui "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"
 )
 
 const (

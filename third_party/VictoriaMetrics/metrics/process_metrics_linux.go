@@ -320,7 +320,15 @@ func psiTotalSecs(microsecs uint64) float64 {
 var psiMetricsStart = func() *psiMetrics {
 	m, err := getPSIMetrics()
 	if err != nil {
-		log.Printf("INFO: metrics: disable exposing PSI metrics because of failed init: %s", err)
+		// Skywire patch (issue #2800): PSI metrics rely on /proc/pressure/*
+		// which is unavailable on kernels < 4.20, in unprivileged containers,
+		// and on most non-server Linux distros. Upstream logged this
+		// unconditionally on init, producing one INFO line on every CLI
+		// invocation. Gated behind an env var so it stays available for
+		// debugging without polluting normal output.
+		if os.Getenv("VICTORIA_METRICS_PSI_LOG") == "1" {
+			log.Printf("INFO: metrics: disable exposing PSI metrics because of failed init: %s", err)
+		}
 		return nil
 	}
 	return m

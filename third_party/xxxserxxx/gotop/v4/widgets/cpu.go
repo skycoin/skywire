@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/VictoriaMetrics/metrics"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/VividCortex/ewma"
-	"github.com/xxxserxxx/gotop/v4/devices"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 
 	"github.com/gizak/termui/v3"
-	ui "github.com/xxxserxxx/gotop/v4/termui"
+	ui "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 )
 
 // TODO Maybe group CPUs in columns if space permits

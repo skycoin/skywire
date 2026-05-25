@@ -7,7 +7,7 @@ import (
 
 	. "github.com/gizak/termui/v3"
 	rw "github.com/mattn/go-runewidth"
-	"github.com/xxxserxxx/gotop/v4/utils"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"
 )
 
 const (

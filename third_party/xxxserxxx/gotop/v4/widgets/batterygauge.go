@@ -6,10 +6,10 @@ import (
 
 	"time"
 
-	"github.com/VictoriaMetrics/metrics"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/distatus/battery"
 
-	"github.com/xxxserxxx/gotop/v4/termui"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 )
 
 type BatteryGauge struct {

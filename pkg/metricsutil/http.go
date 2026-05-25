@@ -9,7 +9,7 @@ import (
 	"net/http/pprof"
 	"time"
 
-	"github.com/VictoriaMetrics/metrics"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
