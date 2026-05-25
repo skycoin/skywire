@@ -1,20 +1,30 @@
 // Package visor pkg/visor/dmsg_bridge.go
 //
-// TCP→dmsg bridge for the CLI's `--rpc dmsg://<pk>` flow.
+// TCP→dmsg bridge for the CLI's `--via dmsg://<pk>` flow.
 //
-// The CLI opens a TCP connection to skyenv.DmsgBridgeAddr on the
-// local visor, writes a 35-byte header (33 PK bytes + 2 LE port
-// bytes), and the visor opens a dmsg stream to the named target.
-// After that, bytes flow bidirectionally between the TCP conn and
-// the dmsg stream — the CLI runs its rpc.Client over the TCP
-// conn, the remote visor runs rpc.Server over its end of the dmsg
-// stream, and the bridge is transparent to both.
+// The bridge is multiplexed onto the visor's existing CLI RPC port
+// (v.conf.CLIAddr, default localhost:3435) using cmux. A conn that
+// starts with the magic prefix dmsgBridgeMagic is treated as a
+// bridge request; anything else falls through to gRPC or the
+// standard rpc.Server.
 //
-// The CLI inherits the visor's dmsg identity for the dial, which
-// means a CLI running on the same host as the local hypervisor
-// can reach any remote visor that lists the local PK as a
-// hypervisor — without needing a dedicated CLI keypair in the
-// remote's dmsgpty whitelist.
+// Protocol on a bridge conn (after cmux has handed it to us):
+//
+//   1. CLI has already sent the magic prefix (cmux consumed nothing,
+//      it's still in the conn buffer).
+//   2. CLI writes the 35-byte body: 33-byte target PK + 2-byte
+//      little-endian dmsg port. We read magic+body together as
+//      6+35 = 41 bytes.
+//   3. Visor opens a dmsg stream to (target PK, target port) using
+//      its own dmsg client.
+//   4. Visor bidirectionally io.Copy's between the TCP conn and
+//      the dmsg stream until either side closes.
+//
+// The CLI runs rpc.Client over the TCP conn; remote visor runs
+// rpc.Server on its dmsg listener (DmsgVisorRPCPort). Both speak
+// gob, no protocol translation. CLI inherits the visor's dmsg
+// identity, which is in the remote's whitelist when the remote
+// reports to it as hypervisor.
 package visor
 
 import (
@@ -31,27 +41,31 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
+// dmsgBridgeMagic is the 6-byte prefix the CLI sends to identify
+// a connection as a dmsg-bridge request (vs. gRPC or rpc). cmux's
+// PrefixMatcher peeks for this and routes the conn here. Chosen so
+// it can't collide with the first bytes of net/rpc's gob protocol
+// or HTTP2's gRPC preface.
+const dmsgBridgeMagic = "SKYBRI"
+
 const (
-	// dmsgBridgeHeaderSize is 33 bytes (PK) + 2 bytes (uint16
-	// little-endian port) = 35 bytes total.
-	dmsgBridgeHeaderSize = 35
-	// dmsgBridgeHeaderTimeout caps the time the bridge waits for
-	// the CLI to send its 35-byte header. A real client sends
-	// it immediately after connecting; a stalled connection
-	// without the header is a misbehaving caller and should be
-	// closed quickly.
+	// dmsgBridgeHeaderSize is the FULL bridge handshake size:
+	// 6 magic + 33 PK + 2 LE port = 41 bytes. cmux's PrefixMatcher
+	// peeks the 6 magic bytes but doesn't consume them, so we read
+	// the full 41 bytes ourselves before doing the dmsg dial.
+	dmsgBridgeHeaderSize = 41
+	// dmsgBridgeHeaderTimeout caps how long we'll wait for the
+	// header. A real CLI sends it immediately after connecting.
 	dmsgBridgeHeaderTimeout = 5 * time.Second
-	// dmsgBridgeDialTimeout caps the time the bridge spends
-	// opening the dmsg stream to the target peer. dmsg-discovery
-	// resolution + relay handshake usually take well under this;
-	// a longer wait means the target is offline or unreachable.
+	// dmsgBridgeDialTimeout caps the dmsg dial. dmsg-discovery +
+	// relay handshake usually take well under this.
 	dmsgBridgeDialTimeout = 15 * time.Second
 )
 
-// serveDmsgBridge accepts TCP connections on lis, reads the
-// 35-byte header from each, opens a dmsg stream to the target,
-// and proxies bytes between the two. Returns when the listener is
-// closed or ctx is canceled.
+// serveDmsgBridge accepts conns on lis (which was matched by the
+// dmsgBridgeMagic prefix via cmux), reads the rest of the header,
+// opens a dmsg stream to the target, and bridges bytes between the
+// conn and the stream. Returns when the listener is closed.
 func serveDmsgBridge(ctx context.Context, log *logging.Logger, lis net.Listener, dmsgC *dmsg.Client) {
 	for {
 		conn, err := lis.Accept()
@@ -85,9 +99,17 @@ func handleDmsgBridgeConn(ctx context.Context, log *logging.Logger, tcpConn net.
 		return
 	}
 
+	// Validate magic. cmux already peeked it, so any mismatch here
+	// means cmux misrouted (shouldn't happen) — log + drop.
+	if string(header[:6]) != dmsgBridgeMagic {
+		log.WithField("got", string(header[:6])).
+			Warn("dmsg bridge: magic prefix mismatch")
+		return
+	}
+
 	var targetPK cipher.PubKey
-	copy(targetPK[:], header[:33])
-	targetPort := binary.LittleEndian.Uint16(header[33:35])
+	copy(targetPK[:], header[6:39])
+	targetPort := binary.LittleEndian.Uint16(header[39:41])
 
 	dialCtx, cancel := context.WithTimeout(ctx, dmsgBridgeDialTimeout)
 	dmsgConn, err := dmsgC.Dial(dialCtx, dmsg.Addr{PK: targetPK, Port: targetPort})
@@ -105,10 +127,9 @@ func handleDmsgBridgeConn(ctx context.Context, log *logging.Logger, tcpConn net.
 		WithField("target_port", targetPort).
 		Debug("dmsg bridge: stream established, bridging bytes")
 
-	// Bidirectional copy. Either direction closing closes both,
-	// which is what we want — the CLI hanging up tears down the
-	// dmsg stream, and the remote closing the stream propagates
-	// EOF back to the CLI.
+	// Bidirectional copy. Either direction closing tears down the
+	// other — the CLI hanging up closes the dmsg stream, remote
+	// closing the stream propagates EOF back to the CLI.
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
