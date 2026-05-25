@@ -15,7 +15,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -32,19 +31,25 @@ type TransportRPCServer struct {
 // NewTransportRPCServer creates a transport-level RPC server.
 // rpcServer is the visor's existing RPC server (same one that serves localhost).
 // whitelistPKs controls who can connect — typically the hypervisor PKs.
+//
+// mux MUST be the same VStreamMux that's registered as the transport
+// manager's VisorRPCPacket handler (via tm.SetVisorRPCHandler) AND is
+// used by TransportRPCCall's outbound dial path. The transport
+// manager only routes VisorRPCPacket frames to a single handler;
+// dial-side muxes that aren't that handler never receive responses
+// and hang. Caller (initApps in init_apps.go) is responsible for
+// creating the mux once and threading it through both the server
+// (here) and the Visor struct so dial paths use it too.
 func NewTransportRPCServer(
 	log *logging.Logger,
 	rpcServer *rpc.Server,
 	whitelistPKs []cipher.PubKey,
-	tm *transport.Manager,
+	mux *transport.VStreamMux,
 ) *TransportRPCServer {
 	wl := make(map[cipher.PubKey]struct{}, len(whitelistPKs))
 	for _, pk := range whitelistPKs {
 		wl[pk] = struct{}{}
 	}
-
-	mux := transport.NewVStreamMux(tm, routing.VisorRPCPacket, log)
-	tm.SetVisorRPCHandler(mux.HandlePacket)
 
 	srv := &TransportRPCServer{
 		log:       log,
