@@ -513,10 +513,23 @@ type HealthInfo struct {
 // defaults to dmsgpty.DefaultPort (22) when zero. Req carries the
 // command, arguments, optional environment overrides, optional stdin,
 // and per-call timeout — see dmsgpty.CommandExecReq.
+//
+// Scheme overrides the dialer choice. The visor's dmsgpty Host is
+// wired with a MultiDialer that tries skynet first (transport-aware,
+// rides existing transports for low latency) and falls back to dmsg
+// on miss. That ordering breaks down when skynet's dial blocks past
+// the caller's ctx without honoring it — dmsg never gets tried and
+// the whole exec hangs. Operators who know the peer has a working
+// dmsg session can pass Scheme="dmsg" to skip skynet entirely. Empty
+// keeps the default MultiDialer behavior.
 type DmsgPtyExecArgs struct {
 	RemotePK   cipher.PubKey
 	RemotePort uint16
 	Req        dmsgpty.CommandExecReq
+	// Scheme: "" (default — MultiDialer chain), "dmsg" (force dmsg
+	// only), or "skynet" (force skynet only). Unknown values
+	// return a clear error rather than silently falling back.
+	Scheme string
 }
 
 // UptimeHistoryArgs is the request shape for API.UptimeHistory. All
