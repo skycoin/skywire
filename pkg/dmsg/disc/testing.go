@@ -1,4 +1,10 @@
+//go:build !js
+
 // Package disc pkg/disc/testing.go
+//
+// Mock APIClient for tests. Build-tag-gated because it imports
+// net/http (for status-code constants). See interface.go for the
+// rationale on splitting net/http-using code from the WASM build.
 package disc
 
 import (

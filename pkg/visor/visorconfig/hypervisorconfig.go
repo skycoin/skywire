@@ -1,4 +1,10 @@
 // Package visorconfig pkg/visor/visorconfig/hypergo
+//
+// The CookieConfig.SameSite() method (which returns http.SameSite)
+// is the only net/http user in this file; it's moved to
+// hypervisorconfig_native.go under //go:build !js so this file
+// compiles cleanly for js/wasm. See services.go's package doc for
+// the broader rationale.
 package visorconfig
 
 import (
@@ -6,7 +12,6 @@ import (
 	"encoding/json"
 	"io/fs"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -226,7 +231,7 @@ func (c *CookieConfig) HTTPOnly() bool {
 }
 
 // SameSite gets cookie's `SameSite` value.
-func (c *CookieConfig) SameSite() http.SameSite {
-	// using default value for now
-	return http.SameSiteDefaultMode
-}
+//
+// Implementation lives in hypervisorconfig_native.go under
+// //go:build !js — see services.go's package doc for the
+// rationale on keeping net/http out of the WASM build graph.
