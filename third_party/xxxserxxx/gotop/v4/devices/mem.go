@@ -19,10 +19,8 @@ func RegisterMem(f func(map[string]MemoryInfo) map[string]error) {
 func UpdateMem(mem map[string]MemoryInfo) {
 	for _, f := range memFuncs {
 		errs := f(mem)
-		if errs != nil {
-			for k, e := range errs {
-				log.Printf("%s: %s", k, e)
-			}
+		for k, e := range errs {
+			log.Printf("%s: %s", k, e)
 		}
 	}
 }

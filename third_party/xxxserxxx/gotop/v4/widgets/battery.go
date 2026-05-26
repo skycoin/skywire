@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/distatus/battery"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 
 	ui "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 )
@@ -45,10 +45,10 @@ func NewBatteryWidget(horizontalScale int) *BatteryWidget {
 func (b *BatteryWidget) EnableMetric() {
 	bats, err := battery.GetAll()
 	if err != nil {
-		log.Printf(tr.Value("error.metricsetup", "batt", err.Error()))
+		log.Print(tr.Value("error.metricsetup", "batt", err.Error()))
 		return
 	}
-	for i, _ := range bats {
+	for i := range bats {
 		id := makeID(i)
 		metrics.NewGauge(makeName("battery", i), func() float64 {
 			if ds, ok := b.Data[id]; ok {
@@ -72,7 +72,7 @@ func (b *BatteryWidget) update() {
 	if err != nil {
 		switch errt := err.(type) {
 		case battery.ErrFatal:
-			log.Printf(tr.Value("error.fatalfetch", "batt", err.Error()))
+			log.Print(tr.Value("error.fatalfetch", "batt", err.Error()))
 			return
 		case battery.Errors:
 			batts := make([]*battery.Battery, 0)
@@ -80,7 +80,7 @@ func (b *BatteryWidget) update() {
 				if e == nil {
 					batts = append(batts, batteries[i])
 				} else {
-					log.Printf(tr.Value("error.recovfetch"), "batt", e.Error())
+					log.Print(tr.Value("error.recovfetch", "batt", e.Error()))
 				}
 			}
 			if len(batts) < 1 {

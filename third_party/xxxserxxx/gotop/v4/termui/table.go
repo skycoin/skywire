@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"image"
 	"log"
-	"strings"
 	"strconv"
+	"strings"
 
-	. "github.com/gizak/termui/v3"
+	ui "github.com/gizak/termui/v3"
 	"github.com/xxxserxxx/lingo/v2"
 )
 
 type Table struct {
-	*Block
+	*ui.Block
 
 	Header []string
 	Rows   [][]string
@@ -22,7 +22,7 @@ type Table struct {
 	PadLeft   int
 
 	ShowCursor  bool
-	CursorColor Color
+	CursorColor ui.Color
 
 	ShowLocation bool
 
@@ -39,7 +39,7 @@ type Table struct {
 // NewTable returns a new Table instance
 func NewTable() *Table {
 	return &Table{
-		Block:       NewBlock(),
+		Block:       ui.NewBlock(),
 		SelectedRow: 0,
 		TopRow:      0,
 		UniqueCol:   0,
@@ -47,99 +47,99 @@ func NewTable() *Table {
 	}
 }
 
-func (self *Table) Draw(buf *Buffer) {
-	self.Block.Draw(buf)
+func (t *Table) Draw(buf *ui.Buffer) {
+	t.Block.Draw(buf)
 
-	if self.ShowLocation {
-		self.drawLocation(buf)
+	if t.ShowLocation {
+		t.drawLocation(buf)
 	}
 
-	self.ColResizer()
+	t.ColResizer()
 
 	// finds exact column starting position
 	colXPos := []int{}
-	cur := 1 + self.PadLeft
-	for _, w := range self.ColWidths {
+	cur := 1 + t.PadLeft
+	for _, w := range t.ColWidths {
 		colXPos = append(colXPos, cur)
 		cur += w
-		cur += self.ColGap
+		cur += t.ColGap
 	}
 
 	// prints header
-	for i, h := range self.Header {
-		width := self.ColWidths[i]
+	for i, h := range t.Header {
+		width := t.ColWidths[i]
 		if width == 0 {
 			continue
 		}
 		// don't render column if it doesn't fit in widget
-		if width > (self.Inner.Dx()-colXPos[i])+1 {
+		if width > (t.Inner.Dx()-colXPos[i])+1 {
 			continue
 		}
 		buf.SetString(
 			h,
-			NewStyle(Theme.Default.Fg, ColorClear, ModifierBold),
-			image.Pt(self.Inner.Min.X+colXPos[i]-1, self.Inner.Min.Y),
+			ui.NewStyle(ui.Theme.Default.Fg, ui.ColorClear, ui.ModifierBold),
+			image.Pt(t.Inner.Min.X+colXPos[i]-1, t.Inner.Min.Y),
 		)
 	}
 
-	if self.TopRow < 0 {
-		r := strconv.Itoa(self.TopRow)
-		log.Printf(self.Tr.Value("error.table", r))
+	if t.TopRow < 0 {
+		r := strconv.Itoa(t.TopRow)
+		log.Print(t.Tr.Value("error.table", r))
 		return
 	}
 
 	// prints each row
-	for rowNum := self.TopRow; rowNum < self.TopRow+self.Inner.Dy()-1 && rowNum < len(self.Rows); rowNum++ {
-		row := self.Rows[rowNum]
-		y := (rowNum + 2) - self.TopRow
+	for rowNum := t.TopRow; rowNum < t.TopRow+t.Inner.Dy()-1 && rowNum < len(t.Rows); rowNum++ {
+		row := t.Rows[rowNum]
+		y := (rowNum + 2) - t.TopRow
 
 		// prints cursor
-		style := NewStyle(Theme.Default.Fg)
-		if self.ShowCursor {
-			if (self.SelectedItem == "" && rowNum == self.SelectedRow) || (self.SelectedItem != "" && self.SelectedItem == row[self.UniqueCol]) {
-				style.Fg = self.CursorColor
-				style.Modifier = ModifierReverse
-				for _, width := range self.ColWidths {
+		style := ui.NewStyle(ui.Theme.Default.Fg)
+		if t.ShowCursor {
+			if (t.SelectedItem == "" && rowNum == t.SelectedRow) || (t.SelectedItem != "" && t.SelectedItem == row[t.UniqueCol]) {
+				style.Fg = t.CursorColor
+				style.Modifier = ui.ModifierReverse
+				for _, width := range t.ColWidths {
 					if width == 0 {
 						continue
 					}
 					buf.SetString(
-						strings.Repeat(" ", self.Inner.Dx()),
+						strings.Repeat(" ", t.Inner.Dx()),
 						style,
-						image.Pt(self.Inner.Min.X, self.Inner.Min.Y+y-1),
+						image.Pt(t.Inner.Min.X, t.Inner.Min.Y+y-1),
 					)
 				}
-				self.SelectedItem = row[self.UniqueCol]
-				self.SelectedRow = rowNum
+				t.SelectedItem = row[t.UniqueCol]
+				t.SelectedRow = rowNum
 			}
 		}
 
 		// prints each col of the row
-		for i, width := range self.ColWidths {
+		for i, width := range t.ColWidths {
 			if width == 0 {
 				continue
 			}
 			// don't render column if width is greater than distance to end of widget
-			if width > (self.Inner.Dx()-colXPos[i])+1 {
+			if width > (t.Inner.Dx()-colXPos[i])+1 {
 				continue
 			}
-			r := TrimString(row[i], width)
+			r := ui.TrimString(row[i], width)
 			buf.SetString(
 				r,
 				style,
-				image.Pt(self.Inner.Min.X+colXPos[i]-1, self.Inner.Min.Y+y-1),
+				image.Pt(t.Inner.Min.X+colXPos[i]-1, t.Inner.Min.Y+y-1),
 			)
 		}
 	}
 }
 
-func (self *Table) drawLocation(buf *Buffer) {
-	total := len(self.Rows)
-	topRow := self.TopRow + 1
+func (t *Table) drawLocation(buf *ui.Buffer) {
+	total := len(t.Rows)
+	topRow := t.TopRow + 1
 	if topRow > total {
 		topRow = total
 	}
-	bottomRow := self.TopRow + self.Inner.Dy() - 1
+	bottomRow := t.TopRow + t.Inner.Dy() - 1
 	if bottomRow > total {
 		bottomRow = total
 	}
@@ -147,75 +147,75 @@ func (self *Table) drawLocation(buf *Buffer) {
 	loc := fmt.Sprintf(" %d - %d of %d ", topRow, bottomRow, total)
 
 	width := len(loc)
-	buf.SetString(loc, self.TitleStyle, image.Pt(self.Max.X-width-2, self.Min.Y))
+	buf.SetString(loc, t.TitleStyle, image.Pt(t.Max.X-width-2, t.Min.Y))
 }
 
 // Scrolling ///////////////////////////////////////////////////////////////////
 
 // calcPos is used to calculate the cursor position and the current view into the table.
-func (self *Table) calcPos() {
-	self.SelectedItem = ""
+func (t *Table) calcPos() {
+	t.SelectedItem = ""
 
-	if self.SelectedRow < 0 {
-		self.SelectedRow = 0
+	if t.SelectedRow < 0 {
+		t.SelectedRow = 0
 	}
-	if self.SelectedRow < self.TopRow {
-		self.TopRow = self.SelectedRow
+	if t.SelectedRow < t.TopRow {
+		t.TopRow = t.SelectedRow
 	}
 
-	if self.SelectedRow > len(self.Rows)-1 {
-		self.SelectedRow = len(self.Rows) - 1
+	if t.SelectedRow > len(t.Rows)-1 {
+		t.SelectedRow = len(t.Rows) - 1
 	}
-	if self.SelectedRow > self.TopRow+(self.Inner.Dy()-2) {
-		self.TopRow = self.SelectedRow - (self.Inner.Dy() - 2)
+	if t.SelectedRow > t.TopRow+(t.Inner.Dy()-2) {
+		t.TopRow = t.SelectedRow - (t.Inner.Dy() - 2)
 	}
 }
 
-func (self *Table) ScrollUp() {
-	self.SelectedRow--
-	self.calcPos()
+func (t *Table) ScrollUp() {
+	t.SelectedRow--
+	t.calcPos()
 }
 
-func (self *Table) ScrollDown() {
-	self.SelectedRow++
-	self.calcPos()
+func (t *Table) ScrollDown() {
+	t.SelectedRow++
+	t.calcPos()
 }
 
-func (self *Table) ScrollTop() {
-	self.SelectedRow = 0
-	self.calcPos()
+func (t *Table) ScrollTop() {
+	t.SelectedRow = 0
+	t.calcPos()
 }
 
-func (self *Table) ScrollBottom() {
-	self.SelectedRow = len(self.Rows) - 1
-	self.calcPos()
+func (t *Table) ScrollBottom() {
+	t.SelectedRow = len(t.Rows) - 1
+	t.calcPos()
 }
 
-func (self *Table) ScrollHalfPageUp() {
-	self.SelectedRow = self.SelectedRow - (self.Inner.Dy()-2)/2
-	self.calcPos()
+func (t *Table) ScrollHalfPageUp() {
+	t.SelectedRow = t.SelectedRow - (t.Inner.Dy()-2)/2
+	t.calcPos()
 }
 
-func (self *Table) ScrollHalfPageDown() {
-	self.SelectedRow = self.SelectedRow + (self.Inner.Dy()-2)/2
-	self.calcPos()
+func (t *Table) ScrollHalfPageDown() {
+	t.SelectedRow = t.SelectedRow + (t.Inner.Dy()-2)/2
+	t.calcPos()
 }
 
-func (self *Table) ScrollPageUp() {
-	self.SelectedRow -= (self.Inner.Dy() - 2)
-	self.calcPos()
+func (t *Table) ScrollPageUp() {
+	t.SelectedRow -= (t.Inner.Dy() - 2)
+	t.calcPos()
 }
 
-func (self *Table) ScrollPageDown() {
-	self.SelectedRow += (self.Inner.Dy() - 2)
-	self.calcPos()
+func (t *Table) ScrollPageDown() {
+	t.SelectedRow += (t.Inner.Dy() - 2)
+	t.calcPos()
 }
 
-func (self *Table) HandleClick(x, y int) {
-	x = x - self.Min.X
-	y = y - self.Min.Y
-	if (x > 0 && x <= self.Inner.Dx()) && (y > 0 && y <= self.Inner.Dy()) {
-		self.SelectedRow = (self.TopRow + y) - 2
-		self.calcPos()
+func (t *Table) HandleClick(x, y int) {
+	x = x - t.Min.X
+	y = y - t.Min.Y
+	if (x > 0 && x <= t.Inner.Dx()) && (y > 0 && y <= t.Inner.Dy()) {
+		t.SelectedRow = (t.TopRow + y) - 2
+		t.calcPos()
 	}
 }

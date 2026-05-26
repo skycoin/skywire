@@ -96,7 +96,7 @@ func (s *Set) WritePrometheus(w io.Writer) {
 		}
 		bb.Write(metricsWithMetadataBuf.Bytes())
 	}
-	w.Write(bb.Bytes())
+	_, _ = w.Write(bb.Bytes()) //nolint:errcheck
 
 	for _, writeMetrics := range metricsWriters {
 		writeMetrics(w)
@@ -574,9 +574,9 @@ func (s *Set) registerMetric(name string, m metric) {
 //
 // Panics if the given name was already registered before.
 func (s *Set) mustRegisterLocked(name string, m metric, isAux bool) {
-	nm, ok := s.m[name]
+	_, ok := s.m[name]
 	if !ok {
-		nm = &namedMetric{
+		nm := &namedMetric{
 			name:   name,
 			metric: m,
 			isAux:  isAux,
@@ -606,10 +606,11 @@ func (s *Set) UnregisterMetric(name string) bool {
 		// Such metrics must be deleted via parent metric name, e.g. summary_metric .
 		return false
 	}
-	return s.unregisterMetricLocked(nm)
+	s.unregisterMetricLocked(nm)
+	return true
 }
 
-func (s *Set) unregisterMetricLocked(nm *namedMetric) bool {
+func (s *Set) unregisterMetricLocked(nm *namedMetric) {
 	name := nm.name
 	delete(s.m, name)
 
@@ -629,7 +630,7 @@ func (s *Set) unregisterMetricLocked(nm *namedMetric) bool {
 	sm, ok := nm.metric.(*Summary)
 	if !ok {
 		// There is no need in cleaning up non-summary metrics.
-		return true
+		return
 	}
 
 	// cleanup registry from per-quantile metrics
@@ -652,7 +653,6 @@ func (s *Set) unregisterMetricLocked(nm *namedMetric) bool {
 		panic(fmt.Errorf("BUG: cannot find summary %q in the list of registered summaries", name))
 	}
 	unregisterSummary(sm)
-	return true
 }
 
 // UnregisterAllMetrics de-registers all metrics registered in s.

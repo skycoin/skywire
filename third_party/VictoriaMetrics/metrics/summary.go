@@ -111,11 +111,11 @@ func (sm *Summary) marshalTo(prefix string, w io.Writer) {
 		name, filters := splitMetricName(prefix)
 		if float64(int64(sum)) == sum {
 			// Marshal integer sum without scientific notation
-			fmt.Fprintf(w, "%s_sum%s %d\n", name, filters, int64(sum))
+			_, _ = fmt.Fprintf(w, "%s_sum%s %d\n", name, filters, int64(sum)) //nolint:errcheck
 		} else {
-			fmt.Fprintf(w, "%s_sum%s %g\n", name, filters, sum)
+			_, _ = fmt.Fprintf(w, "%s_sum%s %g\n", name, filters, sum) //nolint:errcheck
 		}
-		fmt.Fprintf(w, "%s_count%s %d\n", name, filters, count)
+		_, _ = fmt.Fprintf(w, "%s_count%s %d\n", name, filters, count) //nolint:errcheck
 	}
 }
 
@@ -174,7 +174,7 @@ func GetOrCreateSummaryExt(name string, window time.Duration, quantiles []float6
 }
 
 func isEqualQuantiles(a, b []float64) bool {
-	// Do not use relfect.DeepEqual, since it is slower than the direct comparison.
+	// Do not use reflect.DeepEqual, since it is slower than the direct comparison.
 	if len(a) != len(b) {
 		return false
 	}
@@ -196,7 +196,7 @@ func (qv *quantileValue) marshalTo(prefix string, w io.Writer) {
 	v := qv.sm.quantileValues[qv.idx]
 	qv.sm.mu.Unlock()
 	if !math.IsNaN(v) {
-		fmt.Fprintf(w, "%s %g\n", prefix, v)
+		_, _ = fmt.Fprintf(w, "%s %g\n", prefix, v) //nolint:errcheck
 	}
 }
 

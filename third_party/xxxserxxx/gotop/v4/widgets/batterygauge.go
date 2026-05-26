@@ -6,8 +6,8 @@ import (
 
 	"time"
 
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/distatus/battery"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 )
@@ -51,7 +51,7 @@ func (b *BatteryGauge) update() {
 		}
 	}
 	if len(bats) < 1 {
-		b.Label = fmt.Sprintf("N/A")
+		b.Label = "N/A"
 		return
 	}
 	mx := 0.0
@@ -72,7 +72,7 @@ func (b *BatteryGauge) update() {
 		}
 	}
 	tn := (mx - cu) / rate
-	d, _ := time.ParseDuration(fmt.Sprintf("%fh", tn))
+	d, _ := time.ParseDuration(fmt.Sprintf("%fh", tn)) //nolint:errcheck
 	b.Percent = int((cu / mx) * 100.0)
 	b.Label = fmt.Sprintf(charging, b.Percent, d.Truncate(time.Minute))
 }

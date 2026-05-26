@@ -41,7 +41,7 @@ func NewCanvas() Canvas {
 
 func (c Canvas) MaxY() int {
 	max := 0
-	for k, _ := range c.chars {
+	for k := range c.chars {
 		if k > max {
 			max = k
 		}
@@ -51,7 +51,7 @@ func (c Canvas) MaxY() int {
 
 func (c Canvas) MinY() int {
 	min := 0
-	for k, _ := range c.chars {
+	for k := range c.chars {
 		if k < min {
 			min = k
 		}
@@ -62,7 +62,7 @@ func (c Canvas) MinY() int {
 func (c Canvas) MaxX() int {
 	max := 0
 	for _, v := range c.chars {
-		for k, _ := range v {
+		for k := range v {
 			if k > max {
 				max = k
 			}
@@ -74,7 +74,7 @@ func (c Canvas) MaxX() int {
 func (c Canvas) MinX() int {
 	min := 0
 	for _, v := range c.chars {
-		for k, _ := range v {
+		for k := range v {
 			if k < min {
 				min = k
 			}
@@ -145,7 +145,7 @@ func (c Canvas) Get(x, y int) bool {
 
 // GetScreenCharacter gets character at the given screen coordinates
 func (c Canvas) GetScreenCharacter(x, y int) rune {
-	return rune(c.chars[y][x] + braille_char_offset)
+	return rune(c.chars[y][x] + braille_char_offset) //nolint:gosec // upstream code; safe under documented invariants
 }
 
 // GetCharacter gets character for the given pixel
@@ -163,7 +163,7 @@ func (c Canvas) Rows(minX, minY, maxX, maxY int) []string {
 		row := ""
 		for x := mincol; x < (maxcol + 1); x = x + 1 {
 			char := c.chars[rownum][x]
-			row += string(rune(char + braille_char_offset))
+			row += string(rune(char + braille_char_offset)) //nolint:gosec // upstream code; safe under documented invariants
 		}
 		ret = append(ret, row)
 	}
@@ -247,17 +247,6 @@ func (c *Canvas) DrawPolygon(center_x, center_y, sides, radius float64) {
 
 func radians(d float64) float64 {
 	return d * (math.Pi / 180)
-}
-
-func round(x float64) int {
-	return int(x + 0.5)
-}
-
-func min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
 }
 
 func max(x, y int) int {

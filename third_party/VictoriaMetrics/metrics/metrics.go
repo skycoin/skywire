@@ -104,7 +104,7 @@ func WritePrometheus(w io.Writer, exposeProcessMetrics bool) {
 	registeredSetsLock.Unlock()
 
 	sort.Slice(sets, func(i, j int) bool {
-		return uintptr(unsafe.Pointer(sets[i])) < uintptr(unsafe.Pointer(sets[j]))
+		return uintptr(unsafe.Pointer(sets[i])) < uintptr(unsafe.Pointer(sets[j])) //nolint:gosec // upstream code; safe under documented invariants
 	})
 	for _, s := range sets {
 		s.WritePrometheus(w)
@@ -343,12 +343,12 @@ func WriteCounterFloat64(w io.Writer, name string, value float64) {
 
 func writeMetricUint64(w io.Writer, metricName, metricType string, value uint64) {
 	WriteMetadataIfNeeded(w, metricName, metricType)
-	fmt.Fprintf(w, "%s %d\n", metricName, value)
+	_, _ = fmt.Fprintf(w, "%s %d\n", metricName, value) //nolint:errcheck
 }
 
 func writeMetricFloat64(w io.Writer, metricName, metricType string, value float64) {
 	WriteMetadataIfNeeded(w, metricName, metricType)
-	fmt.Fprintf(w, "%s %g\n", metricName, value)
+	_, _ = fmt.Fprintf(w, "%s %g\n", metricName, value) //nolint:errcheck
 }
 
 // WriteMetadataIfNeeded writes HELP and TYPE metadata for the given metricName and metricType if this is globally enabled via ExposeMetadata().
@@ -363,8 +363,8 @@ func WriteMetadataIfNeeded(w io.Writer, metricName, metricType string) {
 }
 
 func writeMetadata(w io.Writer, metricFamily, metricType string) {
-	fmt.Fprintf(w, "# HELP %s\n", metricFamily)
-	fmt.Fprintf(w, "# TYPE %s %s\n", metricFamily, metricType)
+	_, _ = fmt.Fprintf(w, "# HELP %s\n", metricFamily)                //nolint:errcheck
+	_, _ = fmt.Fprintf(w, "# TYPE %s %s\n", metricFamily, metricType) //nolint:errcheck
 }
 
 func getMetricFamily(metricName string) string {

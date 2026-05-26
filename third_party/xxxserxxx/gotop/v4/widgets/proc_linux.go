@@ -1,7 +1,7 @@
 package widgets
 
 import (
-	"fmt"
+	"errors"
 	"log"
 	"os/exec"
 	"strconv"
@@ -9,9 +9,9 @@ import (
 )
 
 func getProcs() ([]Proc, error) {
-	output, err := exec.Command("ps", "-axo", "pid:10,comm:50,pcpu:5,pmem:5,args").Output()
+	output, err := exec.Command("ps", "-axo", "pid:10,comm:50,pcpu:5,pmem:5,args").Output() //nolint:gosec // upstream code; safe under documented invariants
 	if err != nil {
-		return nil, fmt.Errorf(tr.Value("widget.proc.err.ps", err.Error()))
+		return nil, errors.New(tr.Value("widget.proc.err.ps", err.Error()))
 	}
 
 	// converts to []string, removing trailing newline and header

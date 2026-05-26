@@ -4,9 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -21,6 +21,7 @@ import (
 )
 
 // FIXME github action uses old(er) Go version that doesn't have embed
+//
 //go:embed "dicts/*.toml"
 var Dicts embed.FS
 
@@ -54,7 +55,7 @@ type Config struct {
 // FIXME parsing can't handle blank lines
 func NewConfig() Config {
 	cd := configdir.New("", "gotop")
-	cd.LocalPath, _ = filepath.Abs(".")
+	cd.LocalPath, _ = filepath.Abs(".") //nolint:errcheck
 	conf := Config{
 		ConfigDir:            cd,
 		GraphHorizontalScale: 7,
@@ -69,7 +70,7 @@ func NewConfig() Config {
 		Layout:               "default",
 		ExtensionVars:        make(map[string]string),
 	}
-	conf.Colorscheme, _ = colorschemes.FromName(conf.ConfigDir, "default")
+	conf.Colorscheme, _ = colorschemes.FromName(conf.ConfigDir, "default") //nolint:errcheck
 	folder := conf.ConfigDir.QueryFolderContainsFile(CONFFILE)
 	if folder != nil {
 		conf.ConfigFile = filepath.Join(folder.Path, CONFFILE)
@@ -91,7 +92,7 @@ func (conf *Config) Load() error {
 		}
 		conf.ConfigFile = filepath.Join(folder.Path, conf.ConfigFile)
 	}
-	if in, err = ioutil.ReadFile(conf.ConfigFile); err != nil {
+	if in, err = os.ReadFile(conf.ConfigFile); err != nil { //nolint:gosec // upstream code; safe under documented invariants
 		return err
 	}
 	return load(bytes.NewReader(in), conf)
@@ -107,7 +108,7 @@ func load(in io.Reader, conf *Config) error {
 		}
 		kv := strings.Split(l, "=")
 		if len(kv) != 2 {
-			return fmt.Errorf(conf.Tr.Value("config.err.configsyntax", l))
+			return errors.New(conf.Tr.Value("config.err.configsyntax", l))
 		}
 		key := strings.ToLower(kv[0])
 		ln := strconv.Itoa(lineNo)
@@ -115,7 +116,7 @@ func load(in io.Reader, conf *Config) error {
 		default:
 			conf.ExtensionVars[key] = kv[1]
 		case "configdir", "logdir", "logfile":
-			log.Printf(conf.Tr.Value("config.err.deprecation", ln, key, kv[1]))
+			log.Print(conf.Tr.Value("config.err.deprecation", ln, key, kv[1]))
 		case graphhorizontalscale:
 			iv, err := strconv.Atoi(kv[1])
 			if err != nil {
@@ -125,31 +126,31 @@ func load(in io.Reader, conf *Config) error {
 		case helpvisible:
 			bv, err := strconv.ParseBool(kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.HelpVisible = bv
 		case colorscheme:
 			cs, err := colorschemes.FromName(conf.ConfigDir, kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.Colorscheme = cs
 		case updateinterval:
 			iv, err := strconv.Atoi(kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.UpdateInterval = time.Duration(iv)
 		case averagecpu:
 			bv, err := strconv.ParseBool(kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.AverageLoad = bv
 		case percpuload:
 			bv, err := strconv.ParseBool(kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.PercpuLoad = bv
 		case tempscale:
@@ -160,12 +161,12 @@ func load(in io.Reader, conf *Config) error {
 				conf.TempScale = 'F'
 			default:
 				conf.TempScale = 'C'
-				return fmt.Errorf(conf.Tr.Value("config.err.tempscale", kv[1]))
+				return errors.New(conf.Tr.Value("config.err.tempscale", kv[1]))
 			}
 		case statusbar:
 			bv, err := strconv.ParseBool(kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.Statusbar = bv
 		case netinterface:
@@ -175,7 +176,7 @@ func load(in io.Reader, conf *Config) error {
 		case maxlogsize:
 			iv, err := strconv.Atoi(kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.MaxLogSize = int64(iv)
 		case export:
@@ -187,13 +188,13 @@ func load(in io.Reader, conf *Config) error {
 		case nvidia:
 			nv, err := strconv.ParseBool(kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.Nvidia = nv
 		case nvidiarefresh:
 			d, err := time.ParseDuration(kv[1])
 			if err != nil {
-				return fmt.Errorf(conf.Tr.Value("config.err.line", ln, err.Error()))
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.NvidiaRefresh = d
 		}
@@ -209,24 +210,24 @@ func load(in io.Reader, conf *Config) error {
 // if one is set; otherwise, it'll create one in the user's config directory.
 func (conf *Config) Write() (string, error) {
 	var dir *configdir.Config
-	var file string = CONFFILE
+	var file = CONFFILE
 	if conf.ConfigFile == "" {
 		ds := conf.ConfigDir.QueryFolders(configdir.Global)
 		if len(ds) == 0 {
 			ds = conf.ConfigDir.QueryFolders(configdir.Local)
 			if len(ds) == 0 {
-				return "", fmt.Errorf("error locating config folders")
+				return "", errors.New("error locating config folders")
 			}
 		}
-		ds[0].CreateParentDir(CONFFILE)
+		_ = ds[0].CreateParentDir(CONFFILE) //nolint:errcheck
 		dir = ds[0]
 	} else {
 		dir = &configdir.Config{}
 		dir.Path = filepath.Dir(conf.ConfigFile)
 		file = filepath.Base(conf.ConfigFile)
 	}
-	marshalled := marshal(conf)
-	err := dir.WriteFile(file, marshalled)
+	marshaled := marshal(conf)
+	err := dir.WriteFile(file, marshaled)
 	if err != nil {
 		return "", err
 	}
