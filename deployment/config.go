@@ -1,11 +1,22 @@
 // Package deployment github.com/skycoin/skywire/deployment/config.go
+//
+// The init() that populates Prod / Test / ProdConf / TestConf lives
+// in two build-tag-gated files: config_native.go (//go:build !js)
+// unmarshals the embedded services-config.json via encoding/json
+// with SKYDEPLOY override support; config_js.go (//go:build js)
+// copies from static Go literals in data_static_js.go (generated
+// from the same JSON by deployment/internal/gen — see that
+// package's doc for the why-and-how). Reason for the split:
+// encoding/json pulls reflect.unsafe_New / mapassign / etc. that
+// TinyGo's stdlib doesn't provide, which blocked TinyGo from
+// compiling the install-page WASM (pkg/skywireconfig/genvisor +
+// autoconfigcmd).
 package deployment
+
+//go:generate go run ./cmd/gen
 
 import (
 	_ "embed"
-	"encoding/json"
-	"log"
-	"os"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -30,11 +41,11 @@ custom deployment configuration (e.g., for private networks or testing).
 //go:embed services-config.json
 var ServicesJSON []byte
 
-// EnvServices is the wrapper struct for the outer JSON - i.e. 'prod' or 'test' deployment config
-type EnvServices struct {
-	Test json.RawMessage `json:"test"`
-	Prod json.RawMessage `json:"prod"`
-}
+// EnvServices is defined in config_native.go (lives there because
+// its json.RawMessage fields need encoding/json, which is
+// build-tag-gated off the WASM path). The type is still exported
+// for callers under the !js build tag that need to read JSON
+// fragments — see config_native.go for the definition.
 
 // DmsgServerEntry represents a DMSG server with its public key and address.
 // This is a simplified representation that avoids importing dmsg/disc.
@@ -132,36 +143,8 @@ var Test Services
 // TestConf is the service configuration address / URL for the skywire test deployment
 var TestConf Conf
 
-func init() {
-	// SKYDEPLOY overrides the embedded deployment config with a user-supplied file.
-	// This supports private networks, corporate deployments, and test environments.
-	if path := os.Getenv("SKYDEPLOY"); path != "" {
-		data, err := os.ReadFile(path) //nolint:gosec
-		if err != nil {
-			log.Panicf("SKYDEPLOY=%s: %v", path, err) //nolint:gosec
-		}
-		ServicesJSON = data
-	}
-
-	var envServices EnvServices
-	err := json.Unmarshal(ServicesJSON, &envServices)
-	if err != nil {
-		log.Panic("services-config.json: ", err)
-	}
-	if envServices.Prod != nil {
-		if err = json.Unmarshal(envServices.Prod, &Prod); err != nil {
-			log.Panic(err)
-		}
-		if err = json.Unmarshal(envServices.Prod, &ProdConf); err != nil {
-			log.Panic(err)
-		}
-	}
-	if envServices.Test != nil {
-		if err = json.Unmarshal(envServices.Test, &Test); err != nil {
-			log.Panic(err)
-		}
-		if err = json.Unmarshal(envServices.Test, &TestConf); err != nil {
-			log.Panic(err)
-		}
-	}
-}
+// init() that populates Prod / Test / ProdConf / TestConf lives in
+// the build-tag-gated config_native.go (!js, uses encoding/json
+// + SKYDEPLOY override) and config_js.go (js, copies from the
+// generated static literals). See the package doc above for the
+// rationale on the split.

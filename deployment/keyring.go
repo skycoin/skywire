@@ -1,4 +1,12 @@
+//go:build !js
+
 // Package deployment keyring.go
+//
+// Build-tag-gated off the WASM path: imports encoding/json for
+// Marshal/Unmarshal of the keyring file. Keyring tooling is
+// deploy-operator scope (running locally to mint a new deployment),
+// not visor-runtime — and definitely not WASM, where there's no
+// filesystem to hold a keyring file anyway.
 //
 // Keyring is a single JSON file that holds all public/secret key pairs
 // for a skywire deployment — services, dmsg servers, route setup nodes,
