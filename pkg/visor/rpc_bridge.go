@@ -37,6 +37,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/soheilhy/cmux"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -74,7 +76,7 @@ func serveRPCBridge(ctx context.Context, log *logging.Logger, lis net.Listener, 
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
-			if errors.Is(err, net.ErrClosed) || ctx.Err() != nil {
+			if isShutdownAcceptErr(err) || ctx.Err() != nil {
 				return
 			}
 			log.WithError(err).Debug("rpc bridge accept error")
@@ -82,6 +84,31 @@ func serveRPCBridge(ctx context.Context, log *logging.Logger, lis net.Listener, 
 		}
 		go handleBridgeConn(ctx, log, conn, v)
 	}
+}
+
+// isShutdownAcceptErr returns true for the family of accept-loop
+// errors that indicate normal shutdown rather than a real fault.
+// Without matching all of these, visor shutdown produces dozens of
+// DEBUG-level "rpc bridge accept error" log lines (cmux returns one
+// per pending accept when its parent listener closes) that drown the
+// genuine shutdown trace.
+//
+// Two layers of matching:
+//   - errors.Is against the exported sentinels (cmux exports both
+//     ErrListenerClosed and ErrServerClosed; net.ErrClosed is the
+//     stdlib equivalent for the underlying listener).
+//   - String suffix fallback for cmux's internal-wrap paths — its
+//     errListenerClosed is a string-typed value but a future
+//     refactor that wraps it via fmt.Errorf("...: %w", err) would
+//     break errors.Is. The string match keeps the quieting robust.
+func isShutdownAcceptErr(err error) bool {
+	if errors.Is(err, net.ErrClosed) ||
+		errors.Is(err, cmux.ErrListenerClosed) ||
+		errors.Is(err, cmux.ErrServerClosed) {
+		return true
+	}
+	s := err.Error()
+	return s == "mux: listener closed" || s == "mux: server closed"
 }
 
 func handleBridgeConn(ctx context.Context, log *logging.Logger, tcpConn net.Conn, v *Visor) {
