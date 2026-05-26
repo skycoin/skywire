@@ -1,4 +1,12 @@
+//go:build !js
+
 // Package routing pkg/routing/cascade.go
+//
+// Build-tag-gated off the WASM path because it imports
+// github.com/google/uuid (which transitively pulls encoding/json
+// and the reflect runtime helpers TinyGo's stdlib lacks).
+// CascadeSetup is data-plane runtime; the WASM install-page graph
+// only needs the primitive routing.Port type from addr.go.
 //
 // CascadeSetup and CascadeAck define the wire format for the cascade
 // route setup protocol. Messages are nested (Russian-doll style) so

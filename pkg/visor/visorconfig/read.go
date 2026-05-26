@@ -1,4 +1,14 @@
+//go:build !js
+
 // Package visorconfig pkg/visor/visorconfig/read.go
+//
+// Reader / ReadFile / ReadRaw load a V1 config from disk or an
+// io.Reader. All three pull encoding/json and os.ReadFile, neither
+// of which is reachable from the install-page WASM — browsers
+// don't have filesystems, and TinyGo's stdlib can't link
+// encoding/json's reflect runtime helpers anyway. Build-tag-gated
+// off the WASM path; callers under js construct V1 in memory via
+// genvisor.Generate.
 package visorconfig
 
 import (
