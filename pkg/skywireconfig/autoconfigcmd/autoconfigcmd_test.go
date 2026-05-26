@@ -5,30 +5,68 @@ import (
 	"testing"
 )
 
-// TestNew_AllFlagsRegistered asserts every flag the pre-factory
-// autoconfig command exposed is registered by New(). The list is
-// hard-coded — adding a new flag means appending to both the
-// factory and this test, which is the intent: the test guards
-// against accidental flag drops, not against intentional adds.
+// allFlags is the canonical list of every flag the factory exposes.
+// Centralized so the registration + envMap + negation tests all
+// agree on the same source of truth. Adding a new flag means adding
+// it here AND to the factory; CI catches drift between the two.
+var allFlags = []string{
+	"verbose",
+	// Hypervisor / identity
+	"hvpks", "ishv", "no-ishv", "hvaddr", "sk", "version",
+	// Visor public/private + autoconnect
+	"rewardaddr", "public", "no-public", "publicip", "disable-public-autoconn",
+	// Service discovery / deployment
+	"testenv", "dmsghttp", "dmsgconf", "url", "svcconf", "minsess", "stun",
+	// Transport ports
+	"stcpr", "sudph", "lan-dmsg-port", "lan-dmsg-public",
+	// Whitelists
+	"dmsgpty-pks", "survey", "routesetup", "tpsetup",
+	// Route calculation
+	"calculate-routes",
+	// VPN server
+	"vpnserver", "no-vpnserver", "killsw", "addvpn", "vpnwl", "secure", "netifc",
+	// Proxy
+	"proxyserver", "no-proxyserver", "proxyclientpk", "startproxyclient", "proxywl",
+	// SOCKS5 web bridges
+	"dmsgweb", "no-dmsgweb", "skynetweb", "no-skynetweb", "dmsgweb-upstream", "skynetweb-upstream",
+	// Skychat
+	"skychat", "no-skychat", "chataddr", "servechatpair", "no-servechatpair",
+	// Skymail bridge
+	"skymail-bridge", "no-skymail-bridge",
+	// Skycoin daemon
+	"skycoind", "no-skycoind", "skycoindfiber", "skycoindapi", "skycoindUSER", "skycoindinstances", "skycoindflags",
+	// Skycoin web wallet
+	"skycoinweb", "no-skycoinweb", "skycoinwebaddr", "skycoinwebnodes", "skycoinwebwallet", "skycoinwebuser",
+	// Visor runtime
+	"binpath", "loglvl", "timeout", "regtimeout",
+}
+
+// negationPairs enumerates every positive/negation flag pair. The
+// negation flag's envMap entry must have Negate=true and share the
+// same Key. allBoolPairFlags is derived from this for the
+// TestEnvMap_Coverage check.
+var negationPairs = []struct {
+	pos, neg string
+}{
+	{"ishv", "no-ishv"},
+	{"public", "no-public"},
+	{"vpnserver", "no-vpnserver"},
+	{"proxyserver", "no-proxyserver"},
+	{"skychat", "no-skychat"},
+	{"dmsgweb", "no-dmsgweb"},
+	{"skynetweb", "no-skynetweb"},
+	{"servechatpair", "no-servechatpair"},
+	{"skymail-bridge", "no-skymail-bridge"},
+	{"skycoind", "no-skycoind"},
+	{"skycoinweb", "no-skycoinweb"},
+}
+
+// TestNew_AllFlagsRegistered asserts every flag in allFlags is
+// registered by New(). Adding a new flag means appending to the
+// allFlags list AND to the factory; this test catches drift.
 func TestNew_AllFlagsRegistered(t *testing.T) {
-	want := []string{
-		"verbose",
-		"hvpks",
-		"ishv", "no-ishv",
-		"rewardaddr",
-		"public", "no-public",
-		"stcpr", "sudph",
-		"lan-dmsg-port", "lan-dmsg-public",
-		"dmsgpty-pks",
-		"vpnserver", "no-vpnserver",
-		"proxyserver", "no-proxyserver",
-		"skychat", "no-skychat",
-		"dmsgweb", "no-dmsgweb",
-		"skynetweb", "no-skynetweb",
-		"disable-public-autoconn",
-	}
 	cmd := New(&Values{})
-	for _, name := range want {
+	for _, name := range allFlags {
 		if cmd.Flags().Lookup(name) == nil {
 			t.Errorf("missing flag --%s", name)
 		}
@@ -52,27 +90,35 @@ func TestNew_ShortNames(t *testing.T) {
 // TestNew_BindingsTrackValues asserts the returned command's flag
 // bindings actually write into the Values struct fields. Catches
 // the class of bug where the factory wires a flag to a local that
-// gets garbage-collected after New() returns.
+// gets garbage-collected after New() returns. A few representative
+// flags from different value-types cover the typical breakage modes
+// (string-bool-int / pre-and-post-expansion field positions).
 func TestNew_BindingsTrackValues(t *testing.T) {
 	v := &Values{}
 	cmd := New(v)
-	if err := cmd.Flags().Set("hvpks", "0123,4567"); err != nil {
-		t.Fatalf("Set hvpks: %v", err)
+	cases := []struct {
+		flag, val string
+		check     func() bool
+	}{
+		{"hvpks", "0123,4567", func() bool { return v.Hvpks == "0123,4567" }},
+		{"ishv", "true", func() bool { return v.Ishv }},
+		{"stcpr", "7777", func() bool { return v.StcprPort == 7777 }},
+		// New flags from the parity expansion: cover one per group.
+		{"testenv", "true", func() bool { return v.TestEnv }},
+		{"minsess", "5", func() bool { return v.MinSess == 5 }},
+		{"survey", "abc,def", func() bool { return v.SurveyPks == "abc,def" }},
+		{"killsw", "/etc/foo", func() bool { return v.VpnKillSw == "/etc/foo" }},
+		{"skycoindinstances", "a,b", func() bool { return v.SkycoindInstances == "a,b" }},
+		{"loglvl", "debug", func() bool { return v.LogLevel == "debug" }},
+		{"sk", "01" + strings.Repeat("0", 62), func() bool { return v.SecretKey == "01"+strings.Repeat("0", 62) }},
 	}
-	if v.Hvpks != "0123,4567" {
-		t.Errorf("Values.Hvpks = %q after Set; want %q", v.Hvpks, "0123,4567")
-	}
-	if err := cmd.Flags().Set("ishv", "true"); err != nil {
-		t.Fatalf("Set ishv: %v", err)
-	}
-	if !v.Ishv {
-		t.Errorf("Values.Ishv = false after Set; want true")
-	}
-	if err := cmd.Flags().Set("stcpr", "7777"); err != nil {
-		t.Fatalf("Set stcpr: %v", err)
-	}
-	if v.StcprPort != 7777 {
-		t.Errorf("Values.StcprPort = %d after Set; want 7777", v.StcprPort)
+	for _, c := range cases {
+		if err := cmd.Flags().Set(c.flag, c.val); err != nil {
+			t.Fatalf("Set %s=%q: %v", c.flag, c.val, err)
+		}
+		if !c.check() {
+			t.Errorf("Values field for --%s did not pick up Set value %q", c.flag, c.val)
+		}
 	}
 }
 
@@ -84,22 +130,10 @@ func TestNew_BindingsTrackValues(t *testing.T) {
 // about it.
 func TestEnvMap_Coverage(t *testing.T) {
 	m := EnvMap()
-	want := []string{
-		"hvpks",
-		"ishv", "no-ishv",
-		"rewardaddr",
-		"public", "no-public",
-		"stcpr", "sudph",
-		"lan-dmsg-port", "lan-dmsg-public",
-		"dmsgpty-pks",
-		"vpnserver", "no-vpnserver",
-		"proxyserver", "no-proxyserver",
-		"skychat", "no-skychat",
-		"dmsgweb", "no-dmsgweb",
-		"skynetweb", "no-skynetweb",
-		"disable-public-autoconn",
-	}
-	for _, name := range want {
+	for _, name := range allFlags {
+		if name == "verbose" {
+			continue
+		}
 		if _, ok := m[name]; !ok {
 			t.Errorf("envMap missing entry for --%s", name)
 		}
@@ -107,6 +141,13 @@ func TestEnvMap_Coverage(t *testing.T) {
 	// --verbose must NOT be in envMap (display-only flag).
 	if _, ok := m["verbose"]; ok {
 		t.Errorf("envMap should NOT have --verbose entry; that flag has no .conf effect")
+	}
+	// And every envMap key should be a registered flag.
+	cmd := New(&Values{})
+	for k := range m {
+		if cmd.Flags().Lookup(k) == nil {
+			t.Errorf("envMap has --%s but factory does not register it", k)
+		}
 	}
 }
 
@@ -117,18 +158,7 @@ func TestEnvMap_Coverage(t *testing.T) {
 // the inverse of the operator's intent.
 func TestEnvMap_NegationInversion(t *testing.T) {
 	m := EnvMap()
-	pairs := []struct {
-		pos, neg string
-	}{
-		{"ishv", "no-ishv"},
-		{"public", "no-public"},
-		{"vpnserver", "no-vpnserver"},
-		{"proxyserver", "no-proxyserver"},
-		{"skychat", "no-skychat"},
-		{"dmsgweb", "no-dmsgweb"},
-		{"skynetweb", "no-skynetweb"},
-	}
-	for _, p := range pairs {
+	for _, p := range negationPairs {
 		pos, ok := m[p.pos]
 		if !ok {
 			t.Errorf("envMap missing positive flag --%s", p.pos)
@@ -151,6 +181,25 @@ func TestEnvMap_NegationInversion(t *testing.T) {
 	}
 }
 
+// TestEnvMap_UniqueKeys asserts the SKYENV variable names are
+// unique across positive flags — two distinct positive flags
+// pointing at the same SKYENV key would silently shadow each
+// other when both are passed. Negation flags share keys with
+// their positive partners by design and are excluded here.
+func TestEnvMap_UniqueKeys(t *testing.T) {
+	m := EnvMap()
+	seen := map[string]string{}
+	for flag, mapping := range m {
+		if mapping.Negate {
+			continue
+		}
+		if other, dup := seen[mapping.Key]; dup {
+			t.Errorf("SKYENV key %q is written by both --%s and --%s (positive flags must be unique)", mapping.Key, other, flag)
+		}
+		seen[mapping.Key] = flag
+	}
+}
+
 // TestNew_UsageString_RendersWithoutError asserts cobra's help
 // rendering doesn't panic and produces a non-empty string. The
 // WASM consumer (apt-repo install page) relies on this to render
@@ -161,8 +210,9 @@ func TestNew_UsageString_RendersWithoutError(t *testing.T) {
 	if usage == "" {
 		t.Fatal("UsageString returned empty")
 	}
-	// Sanity: every flag should appear in the help text.
-	for _, name := range []string{"hvpks", "ishv", "rewardaddr"} {
+	// Sanity: every registered flag should appear in the help text.
+	// (We sample a few to keep the failure message readable.)
+	for _, name := range []string{"hvpks", "ishv", "rewardaddr", "testenv", "skycoindinstances", "loglvl"} {
 		if !strings.Contains(usage, "--"+name) {
 			t.Errorf("UsageString missing --%s", name)
 		}
