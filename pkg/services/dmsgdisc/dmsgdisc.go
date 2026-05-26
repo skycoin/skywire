@@ -243,44 +243,6 @@ func (s *service) runDMSG(
 		}
 	}()
 
-	// Self-publish dmsg-discovery's own client entry into its store so
-	// peers' DMSG dials to this PK resolve to the current set of
-	// connected servers. Without this, dmsgfirst.fallbackClient always
-	// falls back to plain HTTP because the discovery's own entry is
-	// missing from its own DB (404), making "DMSG-first" toothless for
-	// the most-trafficked PK in the deployment. 5s cadence matches
-	// dmsg.DefaultUpdateInterval for client entries.
-	go func() {
-		const selfPublishInterval = 5 * time.Second
-		t := time.NewTicker(selfPublishInterval)
-		defer t.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				serverHex := dmsgDC.ConnectedServersPK()
-				if len(serverHex) == 0 {
-					continue
-				}
-				servers := make([]cipher.PubKey, 0, len(serverHex))
-				for _, h := range serverHex {
-					var pk cipher.PubKey
-					if err := pk.UnmarshalText([]byte(h)); err != nil {
-						continue
-					}
-					servers = append(servers, pk)
-				}
-				if len(servers) == 0 {
-					continue
-				}
-				if err := a.PublishSelfEntry(ctx, sk, servers); err != nil {
-					log.WithError(err).Debug("self-publish dmsg-discovery entry failed")
-				}
-			}
-		}
-	}()
-
 	go updateServers(ctx, a, dClient, dmsgDC, cfg.DmsgServerType, log)
 
 	go func() {
