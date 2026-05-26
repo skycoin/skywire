@@ -46,7 +46,7 @@ func writeProcessMetrics(w io.Writer) {
 	var mc processMemoryCounters
 	r1, _, err := procGetProcessMemoryInfo.Call( //nolint:gosec // upstream code; safe under documented invariants
 		uintptr(h),
-		uintptr(unsafe.Pointer(&mc)),
+		uintptr(unsafe.Pointer(&mc)), //nolint:gosec // Win32 syscall ABI requires raw pointer; mc is a stack local that outlives the call
 		unsafe.Sizeof(mc),
 	)
 	if r1 != 1 {
@@ -70,7 +70,7 @@ func writeFDMetrics(w io.Writer) {
 	var count uint32
 	r1, _, err := procGetProcessHandleCount.Call( //nolint:gosec // upstream code; safe under documented invariants
 		uintptr(h),
-		uintptr(unsafe.Pointer(&count)),
+		uintptr(unsafe.Pointer(&count)), //nolint:gosec // Win32 syscall ABI requires raw pointer; count is a stack local that outlives the call
 	)
 	if r1 != 1 {
 		log.Printf("ERROR: metrics: cannot determine open file descriptors count: %s", err)
