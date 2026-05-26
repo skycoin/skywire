@@ -1,4 +1,8 @@
+//go:build !js
+
 // Package logging pkg/logging/formatter.go
+//
+// Tagged off WASM — see logging_js.go for the build-tag rationale.
 package logging
 
 import (
