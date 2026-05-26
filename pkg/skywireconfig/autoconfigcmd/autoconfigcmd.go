@@ -62,29 +62,29 @@ type EnvMapping struct {
 // package-level var in cmd/skywire/commands/autoconfig.go) so that
 // post-parse reads stay simple field access — no double-indirection.
 type Values struct {
-	Verbose         bool
-	Hvpks           string
-	Ishv            bool
-	NoIshv          bool
-	RewardAddr      string
-	Public          bool
-	NoPublic        bool
-	StcprPort       int
-	SudphPort       int
-	LanDmsgPort     int
-	LanDmsgPublic   string
-	DmsgptyPks      string
-	VpnServer       bool
-	NoVpnServer     bool
-	ProxyServer     bool
-	NoProxyServer   bool
-	Skychat         bool
-	NoSkychat       bool
-	Dmsgweb         bool
-	NoDmsgweb       bool
-	Skynetweb       bool
-	NoSkynetweb     bool
-	DisablePubAuto  bool
+	Verbose        bool
+	Hvpks          string
+	Ishv           bool
+	NoIshv         bool
+	RewardAddr     string
+	Public         bool
+	NoPublic       bool
+	StcprPort      int
+	SudphPort      int
+	LanDmsgPort    int
+	LanDmsgPublic  string
+	DmsgptyPks     string
+	VpnServer      bool
+	NoVpnServer    bool
+	ProxyServer    bool
+	NoProxyServer  bool
+	Skychat        bool
+	NoSkychat      bool
+	Dmsgweb        bool
+	NoDmsgweb      bool
+	Skynetweb      bool
+	NoSkynetweb    bool
+	DisablePubAuto bool
 }
 
 // New returns a freshly-constructed autoconfig cobra command with

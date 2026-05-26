@@ -168,4 +168,3 @@ func TestNew_UsageString_RendersWithoutError(t *testing.T) {
 		}
 	}
 }
-
