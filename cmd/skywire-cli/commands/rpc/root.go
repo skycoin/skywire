@@ -337,7 +337,6 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	return visor.NewRPCClient(dmsgLogger, conn, visor.RPCPrefix, rpcCallTimeout), nil
 }
 
-
 var (
 	// NoCXO disables the CXO subscriber step in FetchServiceURL.
 	NoCXO bool
