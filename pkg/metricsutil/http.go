@@ -9,10 +9,10 @@ import (
 	"net/http/pprof"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 )
@@ -89,7 +89,7 @@ func ServeHTTPMetrics(log logrus.FieldLogger, addr string) {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 

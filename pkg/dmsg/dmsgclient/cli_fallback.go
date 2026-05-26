@@ -129,7 +129,7 @@ func StartDmsgWithDirectClient(ctx context.Context, dlog *logging.Logger, pk cip
 	httpDiscClient := disc.NewHTTP(DmsgDiscURL, &http.Client{}, dlog)
 
 	// Wrap with fallback client that tries direct first, then HTTP discovery
-	fallbackClient := newFallbackDiscClient(directClient, httpDiscClient, dlog)
+	fallbackClient := NewFallbackDiscClient(directClient, httpDiscClient, dlog)
 
 	dmsgC = dmsg.NewClient(pk, sk, fallbackClient, &dmsg.Config{MinSessions: dmsgSessions})
 	dlog.Debug("Created dmsg client with fallback discovery client (direct + HTTP).")
@@ -227,8 +227,11 @@ type fallbackDiscClient struct {
 	log    *logging.Logger
 }
 
-// newFallbackDiscClient creates a discovery client that tries direct first, then HTTP
-func newFallbackDiscClient(direct, http disc.APIClient, log *logging.Logger) disc.APIClient {
+// NewFallbackDiscClient creates a discovery client that tries direct first, then HTTP.
+// Used by callers that need to dial arbitrary client PKs registered in the real
+// dmsg-discovery while keeping a pre-loaded direct.Client for the bootstrap server
+// list (and any synthetic/seeded entries the caller wants to short-circuit).
+func NewFallbackDiscClient(direct, http disc.APIClient, log *logging.Logger) disc.APIClient {
 	return &fallbackDiscClient{
 		direct: direct,
 		http:   http,
