@@ -103,29 +103,34 @@ func New(v *Values) *cobra.Command {
 		Long:  longDesc,
 	}
 
+	// Flag descriptions mirror `skywire cli config gen`'s equivalent
+	// flag where one exists, so the autoconfig surface and the
+	// config-gen surface stay in sync. Operators (and the WASM-
+	// rendered install-page form) see what the flag actually DOES,
+	// not just which env var it writes.
 	cmd.Flags().BoolVarP(&v.Verbose, "verbose", "v", false, "show reward address, support links, and other details")
-	cmd.Flags().StringVar(&v.Hvpks, "hvpks", "", "set HYPERVISORPKS in skywire.conf (comma-separated PKs)")
-	cmd.Flags().BoolVar(&v.Ishv, "ishv", false, "set ISHYPERVISOR=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoIshv, "no-ishv", false, "set ISHYPERVISOR=false in skywire.conf")
-	cmd.Flags().StringVar(&v.RewardAddr, "rewardaddr", "", "set REWARDSKYADDR in skywire.conf")
-	cmd.Flags().BoolVar(&v.Public, "public", false, "set VISORISPUBLIC=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoPublic, "no-public", false, "set VISORISPUBLIC=false in skywire.conf")
-	cmd.Flags().IntVar(&v.StcprPort, "stcpr", 0, "set STCPRPORT in skywire.conf (0 = leave unchanged)")
-	cmd.Flags().IntVar(&v.SudphPort, "sudph", 0, "set SUDPHPORT in skywire.conf (0 = leave unchanged)")
-	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "set LANDMSGPORT in skywire.conf (0 = leave unchanged)")
-	cmd.Flags().StringVar(&v.LanDmsgPublic, "lan-dmsg-public", "", "set LANDMSGPUBLIC in skywire.conf (host:port)")
-	cmd.Flags().StringVar(&v.DmsgptyPks, "dmsgpty-pks", "", "set DMSGPTYPKS in skywire.conf (comma-separated PKs)")
-	cmd.Flags().BoolVar(&v.VpnServer, "vpnserver", false, "set VPNSERVER=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoVpnServer, "no-vpnserver", false, "set VPNSERVER=false in skywire.conf")
-	cmd.Flags().BoolVar(&v.ProxyServer, "proxyserver", false, "set PROXYSERVER=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoProxyServer, "no-proxyserver", false, "set PROXYSERVER=false in skywire.conf")
-	cmd.Flags().BoolVar(&v.Skychat, "skychat", false, "set SKYCHAT=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoSkychat, "no-skychat", false, "set SKYCHAT=false in skywire.conf")
-	cmd.Flags().BoolVar(&v.Dmsgweb, "dmsgweb", false, "set DMSGWEB=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoDmsgweb, "no-dmsgweb", false, "set DMSGWEB=false in skywire.conf")
-	cmd.Flags().BoolVar(&v.Skynetweb, "skynetweb", false, "set SKYNETWEB=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.NoSkynetweb, "no-skynetweb", false, "set SKYNETWEB=false in skywire.conf")
-	cmd.Flags().BoolVar(&v.DisablePubAuto, "disable-public-autoconn", false, "set DISABLEPUBLICAUTOCONN=true in skywire.conf")
+	cmd.Flags().StringVar(&v.Hvpks, "hvpks", "", "comma-separated remote hypervisor PKs to dial — writes HYPERVISORPKS in skywire.conf")
+	cmd.Flags().BoolVar(&v.Ishv, "ishv", false, "enable local hypervisor — writes ISHYPERVISOR=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoIshv, "no-ishv", false, "disable local hypervisor — writes ISHYPERVISOR=false in skywire.conf")
+	cmd.Flags().StringVar(&v.RewardAddr, "rewardaddr", "", "skycoin reward address or xpub key — writes REWARDSKYADDR in skywire.conf")
+	cmd.Flags().BoolVar(&v.Public, "public", false, "publicize visor in service discovery — writes VISORISPUBLIC=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoPublic, "no-public", false, "unpublish visor from service discovery — writes VISORISPUBLIC=false in skywire.conf")
+	cmd.Flags().IntVar(&v.StcprPort, "stcpr", 0, "stcp transport listening port (0 = leave unchanged, random at runtime) — writes STCPRPORT in skywire.conf")
+	cmd.Flags().IntVar(&v.SudphPort, "sudph", 0, "sudp transport listening port (0 = leave unchanged, random at runtime) — writes SUDPHPORT in skywire.conf")
+	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "LAN dmsg-server listening port (0 = leave unchanged) — writes LANDMSGPORT in skywire.conf")
+	cmd.Flags().StringVar(&v.LanDmsgPublic, "lan-dmsg-public", "", "public host:port for the LAN dmsg-server entry in dmsg discovery — writes LANDMSGPUBLIC in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgptyPks, "dmsgpty-pks", "", "additional dmsgpty-whitelist PKs (hypervisor PKs are already implicit) — writes DMSGPTYPKS in skywire.conf")
+	cmd.Flags().BoolVar(&v.VpnServer, "vpnserver", false, "autostart vpn-server — writes VPNSERVER=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoVpnServer, "no-vpnserver", false, "do not autostart vpn-server — writes VPNSERVER=false in skywire.conf")
+	cmd.Flags().BoolVar(&v.ProxyServer, "proxyserver", false, "autostart skysocks (proxy server) — writes PROXYSERVER=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoProxyServer, "no-proxyserver", false, "do not autostart skysocks — writes PROXYSERVER=false in skywire.conf")
+	cmd.Flags().BoolVar(&v.Skychat, "skychat", false, "autostart skychat — writes SKYCHAT=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoSkychat, "no-skychat", false, "do not autostart skychat — writes SKYCHAT=false in skywire.conf")
+	cmd.Flags().BoolVar(&v.Dmsgweb, "dmsgweb", false, "enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445 — writes DMSGWEB=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoDmsgweb, "no-dmsgweb", false, "disable embedded .dmsg resolving SOCKS5 proxy — writes DMSGWEB=false in skywire.conf")
+	cmd.Flags().BoolVar(&v.Skynetweb, "skynetweb", false, "enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446 — writes SKYNETWEB=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoSkynetweb, "no-skynetweb", false, "disable embedded .skynet resolving SOCKS5 proxy — writes SKYNETWEB=false in skywire.conf")
+	cmd.Flags().BoolVar(&v.DisablePubAuto, "disable-public-autoconn", false, "disable autoconnect to public visors — writes DISABLEPUBLICAUTOCONN=true in skywire.conf")
 
 	return cmd
 }
