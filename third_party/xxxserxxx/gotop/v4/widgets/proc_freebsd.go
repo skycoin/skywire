@@ -2,6 +2,7 @@ package widgets
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
@@ -26,13 +27,13 @@ type processList struct {
 func getProcs() ([]Proc, error) {
 	output, err := exec.Command("ps", "-axo pid,comm,%cpu,%mem,args", "--libxo", "json").Output()
 	if err != nil {
-		return nil, fmt.Errorf(tr.Value("widget.proc.err.ps", err.Error()))
+		return nil, errors.New(tr.Value("widget.proc.err.ps", err.Error()))
 	}
 
 	list := processList{}
 	err = json.Unmarshal(output, &list)
 	if err != nil {
-		return nil, fmt.Errorf(tr.Value("widget.proc.err.parse", err.Error()))
+		return nil, errors.New(tr.Value("widget.proc.err.parse", err.Error()))
 	}
 	procs := []Proc{}
 
@@ -43,17 +44,17 @@ func getProcs() ([]Proc, error) {
 		pid, err := strconv.Atoi(strings.TrimSpace(process.Pid))
 		if err != nil {
 			sp := fmt.Sprintf("%v", process)
-			log.Printf(tr.Value("widget.proc.err.pidconv", err.Error(), sp))
+			log.Print(tr.Value("widget.proc.err.pidconv", err.Error(), sp))
 		}
 		cpu, err := strconv.ParseFloat(utils.ConvertLocalizedString(process.CPU), 32)
 		if err != nil {
 			sp := fmt.Sprintf("%v", process)
-			log.Printf(tr.Value("widget.proc.err.cpuconv", err.Error(), sp))
+			log.Print(tr.Value("widget.proc.err.cpuconv", err.Error(), sp))
 		}
 		mem, err := strconv.ParseFloat(utils.ConvertLocalizedString(process.Mem), 32)
 		if err != nil {
 			sp := fmt.Sprintf("%v", process)
-			log.Printf(tr.Value("widget.proc.err.memconv", err.Error(), sp))
+			log.Print(tr.Value("widget.proc.err.memconv", err.Error(), sp))
 		}
 		proc := Proc{
 			Pid:         pid,

@@ -16,7 +16,6 @@ import (
 var nameP *string
 var remoteUrlP *string
 var sleepP *string
-var sleep time.Duration
 var remoteLock sync.Mutex
 
 // FIXME Widgets don't align values
@@ -108,9 +107,8 @@ func startup(vars map[string]string) error {
 					} else {
 						log.Print("error processing remote URL")
 					}
-				} else {
 				}
-				res.Body.Close()
+				_ = res.Body.Close() //nolint:errcheck
 				if wg != nil {
 					wg.Done()
 					wg = nil
@@ -150,7 +148,7 @@ func process(host string, data *bufio.Scanner) {
 		case strings.HasPrefix(sub, _net): // int gotop_net_recv
 			parts := strings.Split(sub[5:], " ")
 			if len(parts) < 2 {
-				log.Printf(`bad data; not enough columns in "%s"`, line)
+				log.Printf(`bad data; not enough columns in "%s"`, line) //nolint:gosec // upstream code; safe under documented invariants
 				continue
 			}
 			val, err := strconv.ParseFloat(parts[1], 64)
@@ -162,7 +160,7 @@ func process(host string, data *bufio.Scanner) {
 		case strings.HasPrefix(sub, _disk): // float % gotop_disk_:dev:mmcblk0p1
 			parts := strings.Split(sub[5:], " ")
 			if len(parts) < 2 {
-				log.Printf(`bad data; not enough columns in "%s"`, line)
+				log.Printf(`bad data; not enough columns in "%s"`, line) //nolint:gosec // upstream code; safe under documented invariants
 				continue
 			}
 			val, err := strconv.ParseFloat(parts[1], 64)
@@ -174,7 +172,7 @@ func process(host string, data *bufio.Scanner) {
 		case strings.HasPrefix(sub, _mem): // float % gotop_memory_Main
 			parts := strings.Split(sub[7:], " ")
 			if len(parts) < 2 {
-				log.Printf(`bad data; not enough columns in "%s"`, line)
+				log.Printf(`bad data; not enough columns in "%s"`, line) //nolint:gosec // upstream code; safe under documented invariants
 				continue
 			}
 			val, err := strconv.ParseFloat(parts[1], 64)
@@ -197,7 +195,7 @@ func process(host string, data *bufio.Scanner) {
 func procInt(host, line, sub string, data map[string]int) {
 	parts := strings.Split(sub, " ")
 	if len(parts) < 2 {
-		log.Printf(`bad data; not enough columns in "%s"`, line)
+		log.Printf(`bad data; not enough columns in "%s"`, line) //nolint:gosec // upstream code; safe under documented invariants
 		return
 	}
 	val, err := strconv.Atoi(parts[1])

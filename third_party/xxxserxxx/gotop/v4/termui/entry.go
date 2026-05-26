@@ -5,7 +5,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	. "github.com/gizak/termui/v3"
+	ui "github.com/gizak/termui/v3"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"
 )
@@ -16,9 +16,9 @@ const (
 )
 
 type Entry struct {
-	Block
+	ui.Block
 
-	Style Style
+	Style ui.Style
 
 	Label          string
 	Value          string
@@ -28,84 +28,84 @@ type Entry struct {
 	editing bool
 }
 
-func (self *Entry) SetEditing(editing bool) {
-	self.editing = editing
+func (e *Entry) SetEditing(editing bool) {
+	e.editing = editing
 }
 
-func (self *Entry) update() {
-	if self.UpdateCallback != nil {
-		self.UpdateCallback(self.Value)
+func (e *Entry) update() {
+	if e.UpdateCallback != nil {
+		e.UpdateCallback(e.Value)
 	}
 }
 
 // HandleEvent handles input events if the entry is being edited.
 // Returns true if the event was handled.
-func (self *Entry) HandleEvent(e Event) bool {
-	if !self.editing {
+func (e *Entry) HandleEvent(ev ui.Event) bool {
+	if !e.editing {
 		return false
 	}
-	if utf8.RuneCountInString(e.ID) == 1 {
-		self.Value += e.ID
-		self.update()
+	if utf8.RuneCountInString(ev.ID) == 1 {
+		e.Value += ev.ID
+		e.update()
 		return true
 	}
-	switch e.ID {
+	switch ev.ID {
 	case "<C-c>", "<Escape>":
-		self.Value = ""
-		self.editing = false
-		self.update()
+		e.Value = ""
+		e.editing = false
+		e.update()
 	case "<Enter>":
-		self.editing = false
+		e.editing = false
 	case "<Backspace>":
-		if self.Value != "" {
-			r := []rune(self.Value)
-			self.Value = string(r[:len(r)-1])
-			self.update()
+		if e.Value != "" {
+			r := []rune(e.Value)
+			e.Value = string(r[:len(r)-1])
+			e.update()
 		}
 	case "<Space>":
-		self.Value += " "
-		self.update()
+		e.Value += " "
+		e.update()
 	default:
 		return false
 	}
 	return true
 }
 
-func (self *Entry) Draw(buf *Buffer) {
-	if self.Value == "" && !self.editing && !self.ShowWhenEmpty {
+func (e *Entry) Draw(buf *ui.Buffer) {
+	if e.Value == "" && !e.editing && !e.ShowWhenEmpty {
 		return
 	}
 
-	style := self.Style
-	label := self.Label
-	if self.editing {
+	style := e.Style
+	label := e.Label
+	if e.editing {
 		label += "["
-		style = NewStyle(style.Fg, style.Bg, ModifierBold)
+		style = ui.NewStyle(style.Fg, style.Bg, ui.ModifierBold)
 	}
-	cursorStyle := NewStyle(style.Bg, style.Fg, ModifierClear)
+	cursorStyle := ui.NewStyle(style.Bg, style.Fg, ui.ModifierClear)
 
-	p := image.Pt(self.Min.X, self.Min.Y)
+	p := image.Pt(e.Min.X, e.Min.Y)
 	buf.SetString(label, style, p)
 	p.X += rw.StringWidth(label)
 
 	tail := " "
-	if self.editing {
+	if e.editing {
 		tail = "] "
 	}
 
-	maxLen := self.Max.X - p.X - rw.StringWidth(tail)
-	if self.editing {
+	maxLen := e.Max.X - p.X - rw.StringWidth(tail)
+	if e.editing {
 		maxLen -= 1 // for cursor
 	}
-	value := utils.TruncateFront(self.Value, maxLen, ELLIPSIS)
-	buf.SetString(value, self.Style, p)
+	value := utils.TruncateFront(e.Value, maxLen, ELLIPSIS)
+	buf.SetString(value, e.Style, p)
 	p.X += rw.StringWidth(value)
 
-	if self.editing {
+	if e.editing {
 		buf.SetString(CURSOR, cursorStyle, p)
 		p.X += rw.StringWidth(CURSOR)
 		if remaining := maxLen - rw.StringWidth(value); remaining > 0 {
-			buf.SetString(strings.Repeat(" ", remaining), self.TitleStyle, p)
+			buf.SetString(strings.Repeat(" ", remaining), e.TitleStyle, p)
 			p.X += remaining
 		}
 	}

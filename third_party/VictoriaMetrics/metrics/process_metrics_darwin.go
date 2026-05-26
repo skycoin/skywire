@@ -69,7 +69,7 @@ func getOpenFileCount() (float64, error) {
 	if dir, err := os.Open("/dev/fd"); err != nil {
 		return 0.0, err
 	} else {
-		defer dir.Close()
+		defer func() { _ = dir.Close() }() //nolint:errcheck // close ignored: read-only fd inspection
 
 		// Avoid ReadDir(), as it calls stat(2) on each descriptor.  Not only is
 		// that info not used, but KQUEUE descriptors fail stat(2), which causes
@@ -93,13 +93,14 @@ func getSoftLimit(which int) (uint64, error) {
 	return rlimit.Cur, nil
 }
 
+//nolint:unused // upstream code; kept for parity
 func getProcessStartTime() (float64, error) {
 	// Call sysctl to get kinfo_proc for current process
-	mib := []int32{1 /* CTL_KERN */, 14 /* KERN_PROC */, 1 /* KERN_PROC_PID */, int32(os.Getpid())}
+	mib := []int32{1 /* CTL_KERN */, 14 /* KERN_PROC */, 1 /* KERN_PROC_PID */, int32(os.Getpid())} //nolint:gosec // upstream code; safe under documented invariants
 
 	// First call to get the size
 	n := uintptr(0)
-	_, _, errno := syscall.Syscall6(
+	_, _, errno := syscall.Syscall6( //nolint:gosec // upstream code; safe under documented invariants
 		syscall.SYS___SYSCTL,
 		uintptr(unsafe.Pointer(&mib[0])),
 		uintptr(len(mib)),
@@ -117,7 +118,7 @@ func getProcessStartTime() (float64, error) {
 
 	// Second call to get the actual data
 	buf := make([]byte, n)
-	_, _, errno = syscall.Syscall6(
+	_, _, errno = syscall.Syscall6( //nolint:gosec // upstream code; safe under documented invariants
 		syscall.SYS___SYSCTL,
 		uintptr(unsafe.Pointer(&mib[0])),
 		uintptr(len(mib)),
@@ -140,8 +141,8 @@ func getProcessStartTime() (float64, error) {
 	}
 
 	// Read tv_sec (8 bytes) and tv_usec (4 bytes)
-	tvSec := int64(binary.LittleEndian.Uint64(buf[startTimeOffset:]))
-	tvUsec := int32(binary.LittleEndian.Uint32(buf[startTimeOffset+8:]))
+	tvSec := int64(binary.LittleEndian.Uint64(buf[startTimeOffset:]))    //nolint:gosec // upstream code; safe under documented invariants
+	tvUsec := int32(binary.LittleEndian.Uint32(buf[startTimeOffset+8:])) //nolint:gosec // upstream code; safe under documented invariants
 
 	startTime := float64(tvSec) + float64(tvUsec)/1e6
 	return startTime, nil
