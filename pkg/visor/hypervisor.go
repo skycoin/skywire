@@ -465,7 +465,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(middleware.RealIP) //nolint:staticcheck
 
 	if hv.visor != nil {
 		if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {

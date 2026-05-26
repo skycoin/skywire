@@ -8,13 +8,13 @@
 //
 // Header (sent by the CLI after cmux matched the magic prefix):
 //
-//   6 bytes — magic ("SKYBRI"). cmux peeks this but doesn't
-//             consume it, so we read all 42 bytes ourselves.
-//   1 byte  — scheme: 0 = dmsg, 1 = skynet
-//   33 bytes — target visor PK
-//   2 bytes — little-endian uint16. Dmsg port for scheme=0
-//             (typically DmsgVisorRPCPort = 44). Ignored for
-//             scheme=1.
+//	6 bytes — magic ("SKYBRI"). cmux peeks this but doesn't
+//	          consume it, so we read all 42 bytes ourselves.
+//	1 byte  — scheme: 0 = dmsg, 1 = skynet
+//	33 bytes — target visor PK
+//	2 bytes — little-endian uint16. Dmsg port for scheme=0
+//	          (typically DmsgVisorRPCPort = 44). Ignored for
+//	          scheme=1.
 //
 // Total: 42 bytes.
 //
