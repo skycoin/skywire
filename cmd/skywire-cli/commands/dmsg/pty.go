@@ -220,7 +220,19 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 		if len(args) < 2 {
 			return fmt.Errorf("pty exec: <pk> <command> required (or use --via tcp://<pk>@<host:port>)")
 		}
-		_ = ctx // ctx is consumed by the --via branch above; RPC path is synchronous
+		// net/rpc's synchronous Call doesn't honor ctx, so wire SIGINT
+		// to a hard exit. The visor side bounds its own dial budget
+		// (api_services.go DmsgPtyExec) so a leaked goroutine there
+		// drains within ~15s + the user's --timeout; without this
+		// goroutine, an unresponsive dial would leave the CLI process
+		// hung past Ctrl-C with no way for the user to recover except
+		// SIGKILL — combined with `timeout(1)` wrappers that send only
+		// SIGTERM, the process would leak indefinitely.
+		go func() {
+			<-ctx.Done()
+			fmt.Fprintln(cmd.ErrOrStderr(), "exec: interrupted") //nolint:errcheck
+			os.Exit(130)
+		}()
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		name := args[1]
