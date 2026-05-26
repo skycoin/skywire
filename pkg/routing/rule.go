@@ -1,4 +1,11 @@
+//go:build !js
+
 // Package routing pkg/routing/rule.go
+//
+// Build-tag-gated off the WASM path because it imports
+// github.com/google/uuid (which transitively pulls encoding/json
+// and reflect helpers TinyGo's stdlib lacks). Rules are router
+// data-plane state; the WASM install-page graph doesn't need them.
 package routing
 
 import (
@@ -44,11 +51,14 @@ import (
 // RuleHeaderSize represents the base size of a rule.
 // All rules should be at-least this size.
 const (
-	RuleHeaderSize      = 8 + 1 + 4
-	pkSize              = len(cipher.PubKey{})
-	uuidSize            = len(uuid.UUID{})
-	routeDescriptorSize = pkSize*2 + 2*2
+	RuleHeaderSize = 8 + 1 + 4
+	uuidSize       = len(uuid.UUID{})
 )
+
+// pkSize and routeDescriptorSize live in route_descriptor.go so
+// that file (untagged) can use them in the array-length expression
+// for the RouteDescriptor type. Both are referenced from rule.go
+// (!js) too, which is fine — !js files see no-tag consts.
 
 // RuleType defines type of a routing rule
 type RuleType byte

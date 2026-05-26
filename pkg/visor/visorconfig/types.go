@@ -1,9 +1,13 @@
 // Package visorconfig pkg/visor/visorconfig/types.go
+//
+// The Duration type's MarshalJSON / UnmarshalJSON live in
+// types_native.go under //go:build !js because encoding/json
+// drags the reflect runtime helpers TinyGo's stdlib lacks. Under
+// js V1 is never (de)serialized, so the absence of those methods
+// causes no functional change.
 package visorconfig
 
 import (
-	"encoding/json"
-	"errors"
 	"time"
 )
 
@@ -20,37 +24,10 @@ const (
 	DefaultLogRotationInterval = Duration(time.Hour * 24 * 7)
 )
 
-// Duration wraps around time.Duration to allow parsing from and to JSON
+// Duration wraps around time.Duration to allow parsing from and to JSON.
+//
+// The Marshal/Unmarshal methods live in types_native.go (!js) —
+// browsers never (de)serialize V1, so dropping the methods under
+// js doesn't change observable behavior; it just frees TinyGo
+// from linking encoding/json's reflect path.
 type Duration time.Duration
-
-// MarshalJSON implements json marshaling
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
-}
-
-// UnmarshalJSON implements unmarshal from json
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	if len(b) == 0 {
-		*d = 0
-		return nil
-	}
-
-	var v interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
-	}
-	switch value := v.(type) {
-	case float64:
-		*d = Duration(time.Duration(value))
-		return nil
-	case string:
-		tmp, err := time.ParseDuration(value)
-		if err != nil {
-			return err
-		}
-		*d = Duration(tmp)
-		return nil
-	default:
-		return errors.New("invalid duration")
-	}
-}

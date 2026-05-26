@@ -8,6 +8,17 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
+const (
+	// pkSize is the byte size of a cipher.PubKey, used to fix
+	// RouteDescriptor's array length. Lives in this no-build-tag
+	// file (rather than rule.go, which is !js-tagged) so the
+	// RouteDescriptor type definition resolves under js too.
+	pkSize = len(cipher.PubKey{})
+	// routeDescriptorSize is the byte-size of a RouteDescriptor.
+	// Same rationale as pkSize for the file placement.
+	routeDescriptorSize = pkSize*2 + 2*2
+)
+
 // RouteDescriptor describes a route (from the perspective of the source and destination edges).
 type RouteDescriptor [routeDescriptorSize]byte
 
