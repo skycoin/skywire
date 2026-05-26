@@ -1,5 +1,13 @@
+//go:build !js
+
 // Package routing defines routing related entities and management
 // operations.
+//
+// route.go is build-tag-gated off the WASM path because it imports
+// encoding/json (Route.String / EdgeRules.String render via
+// json.MarshalIndent) and github.com/google/uuid (transitively
+// from rule.go). The install-page WASM only needs routing.Port
+// from addr.go.
 package routing
 
 import (

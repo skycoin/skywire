@@ -23,8 +23,6 @@
 package spec
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/url"
 	"strings"
 
@@ -89,41 +87,12 @@ type DmsgConfig struct {
 	HypervisorDiscovery  string        `json:"-"`
 }
 
-// UnmarshalJSON accepts either a single Deployment object or an array
-// of Deployments and populates Deployments + the legacy top-level
-// mirror fields accordingly.
-func (c *DmsgConfig) UnmarshalJSON(data []byte) error {
-	trimmed := bytes.TrimLeft(data, " \t\n\r")
-	if len(trimmed) > 0 && trimmed[0] == '[' {
-		if err := json.Unmarshal(data, &c.Deployments); err != nil {
-			return err
-		}
-	} else {
-		var single Deployment
-		if err := json.Unmarshal(data, &single); err != nil {
-			return err
-		}
-		c.Deployments = []Deployment{single}
-	}
-	c.mirrorPrimary()
-	return nil
-}
-
-// MarshalJSON emits the single-deployment object shape when there is
-// exactly one deployment, otherwise the array shape. When Deployments
-// is empty but the top-level fields are populated (e.g. a writer that
-// only set Discovery + Servers directly), a one-element Deployments
-// is synthesized from the mirror fields so the JSON output is correct.
-func (c DmsgConfig) MarshalJSON() ([]byte, error) {
-	deployments := c.Deployments
-	if len(deployments) == 0 && (c.Discovery != "" || c.DiscoveryDmsg != "" || len(c.Servers) > 0 || c.SessionsCount != 0 || c.ConnectedServersType != "" || c.Protocol != "" || len(c.LANServers) > 0 || c.HypervisorDiscovery != "") {
-		deployments = []Deployment{c.toDeployment()}
-	}
-	if len(deployments) == 1 {
-		return json.Marshal(deployments[0])
-	}
-	return json.Marshal(deployments)
-}
+// MarshalJSON and UnmarshalJSON live in spec_native.go under
+// //go:build !js. encoding/json's reflect-based codec drags
+// runtime helpers TinyGo's stdlib lacks; the WASM install-page
+// path doesn't need to (de)serialize DmsgConfig — it composes
+// the V1 in memory and emits it through genvisor.MustMarshalJSON
+// (which itself is build-tag-split for the same reason).
 
 // mirrorPrimary copies Deployments[0] into the legacy top-level fields
 // so existing readers keep working in the single-deployment case. For

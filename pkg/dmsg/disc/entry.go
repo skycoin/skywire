@@ -227,46 +227,12 @@ func NewServerEntry(pk cipher.PubKey, seq uint64, addr string, availableSessions
 	}
 }
 
-// VerifySignature check if signature matches to Entry's PubKey.
-func (e *Entry) VerifySignature() error {
-	entry := *e
-
-	// Get and parse signature
-	signature := cipher.Sig{}
-	err := signature.UnmarshalText([]byte(e.Signature))
-	if err != nil {
-		return err
-	}
-
-	// Set signature field to zero-value
-	entry.Signature = ""
-
-	// Get hash of the entry
-	entryJSON, err := json.Marshal(entry)
-	if err != nil {
-		return err
-	}
-
-	return cipher.VerifyPubKeySignedPayload(e.Static, signature, entryJSON)
-}
-
-// Sign signs Entry with provided SecKey.
-func (e *Entry) Sign(sk cipher.SecKey) error {
-	// Clear previous signature, in case there was any
-	e.Signature = ""
-
-	entryJSON, err := json.Marshal(e)
-	if err != nil {
-		return err
-	}
-
-	sig, err := cipher.SignPayload(entryJSON, sk)
-	if err != nil {
-		return err
-	}
-	e.Signature = sig.Hex()
-	return nil
-}
+// VerifySignature and Sign live in entry_native.go (//go:build !js)
+// because their implementations call json.Marshal on the Entry to
+// produce the signed payload. encoding/json drags reflect runtime
+// helpers TinyGo's stdlib can't link; signing isn't reachable from
+// the install-page WASM either way, so the build-tag split is a
+// pure WASM-bundle reduction with no functional cost.
 
 // Validate checks if entry is valid.
 func (e *Entry) Validate(validateTimestamp bool) error {
