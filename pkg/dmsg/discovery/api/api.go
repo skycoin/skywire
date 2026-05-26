@@ -184,6 +184,71 @@ func (a *API) SetClientsByServerCXOPublisher(p *ClientsByServerCXOPublisher) {
 	a.cxoPublisher = p
 }
 
+// PublishSelfEntry writes (or refreshes) dmsg-discovery's own Client
+// entry directly into its store, so peers looking up the discovery's
+// PK find a non-empty delegated_servers list and can dial it over
+// DMSG instead of always falling back to plain HTTP via dmsgfirst.
+//
+// dmsg-discovery is itself a dmsg.Client (it runs dmsghttp.ListenAndServe
+// on its PK over dmsgDC), but it never PUTs its own entry through the
+// public HTTP API the way other clients do. Without this self-publish,
+// every dmsgfirst primary call to dmsg-discovery returns "dmsg error
+// 202 - cannot connect to delegated server" — the lookup of its own
+// entry returns 404, so the dial has no server to relay through.
+//
+// Writes go straight to the store (a.db.SetEntry) because we already
+// hold the canonical state. The signature is still attached so the
+// stored entry round-trips identically to one set via the public
+// HTTP path.
+//
+// Skips the write when delegated_servers hasn't changed since the
+// last publish — avoids redis churn on the steady-state loop.
+func (a *API) PublishSelfEntry(ctx context.Context, sk cipher.SecKey, delegatedServers []cipher.PubKey) error {
+	pk, err := sk.PubKey()
+	if err != nil {
+		return err
+	}
+	existing, dbErr := a.db.Entry(ctx, pk)
+	var seq uint64
+	switch {
+	case dbErr == disc.ErrKeyNotFound:
+		seq = 0
+	case dbErr != nil:
+		return dbErr
+	default:
+		// Suppress write when delegated_servers unchanged.
+		if existing.Client != nil && samePKSet(existing.Client.DelegatedServers, delegatedServers) {
+			return nil
+		}
+		seq = existing.Sequence + 1
+	}
+	entry := disc.NewClientEntry(pk, seq, delegatedServers)
+	if signErr := entry.Sign(sk); signErr != nil {
+		return signErr
+	}
+	return a.db.SetEntry(ctx, entry, a.clientEntryTTL)
+}
+
+// samePKSet reports whether a and b contain the same set of public
+// keys, ignoring order and duplicates. dmsg.Client.ConnectedServersPK
+// returns slices that can re-order between polls; we don't want to
+// treat that as a real change.
+func samePKSet(a, b []cipher.PubKey) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[cipher.PubKey]struct{}, len(a))
+	for _, pk := range a {
+		seen[pk] = struct{}{}
+	}
+	for _, pk := range b {
+		if _, ok := seen[pk]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // WarmCXOFromStore pre-populates the CXO publisher's tree from the
 // current set of client entries in the store. Without this, the
 // publisher only Puts on register / heartbeat events — so right
