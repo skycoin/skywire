@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -27,11 +28,11 @@ const reconnectPhaseDelay = 10 * time.Second
 const reconnectRemoteTimeout = 3 * time.Second
 const transportReRegisterInterval = 90 * time.Second
 
-// PersistentTransports is a persistent transports description
-type PersistentTransports struct {
-	PK      cipher.PubKey `json:"pk"`
-	NetType types.Type    `json:"type"`
-}
+// PersistentTransports is the wire-format pinning entry. Aliased
+// from pkg/transport/spec so existing callers writing
+// `transport.PersistentTransports{...}` keep compiling, while the
+// canonical (WASM-clean) definition lives in the spec leaf package.
+type PersistentTransports = tspec.PersistentTransports
 
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {

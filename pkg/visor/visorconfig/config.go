@@ -6,10 +6,9 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
-	"github.com/skycoin/skywire/pkg/dmsgc"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/transport/network"
+	tnspec "github.com/skycoin/skywire/pkg/transport/network/spec"
 )
 
 // MakeBaseConfig returns a visor config with 'enforced' fields only.
@@ -37,7 +36,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	if common != nil {
 		conf.Common = common
 	}
-	conf.Dmsg = &dmsgc.DmsgConfig{
+	conf.Dmsg = &dmsgspec.DmsgConfig{
 		Discovery:            services.DmsgDiscovery,
 		SessionsCount:        1,
 		Servers:              []*disc.Entry{},
@@ -90,10 +89,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	conf.Dmsgpty = &Dmsgpty{
 		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DmsgPtyCLINet,
-		CLIAddr:  dmsgpty.DefaultCLIAddr(),
+		CLIAddr:  defaultDmsgPtyCLIAddr(),
 	}
 
-	conf.STCP = &network.STCPConfig{
+	conf.STCP = &tnspec.STCPConfig{
 		ListeningAddress: skyenv.STCPAddr,
 		PKTable:          nil,
 	}
@@ -133,6 +132,17 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		conf.GeoIP = deployment.Prod.GeoIP
 	}
 	return conf
+}
+
+// defaultDmsgPtyCLIAddr is the conventional unix-style temp-socket
+// path the visor's dmsgpty Host listens on. Hardcoded here rather
+// than calling pkg/dmsg/dmsgpty.DefaultCLIAddr so config.go stays
+// WASM-clean (dmsgpty's pty.go pulls in syscall.TIOCGWINSZ + friends
+// that don't exist under GOOS=js). Operators on Windows get the
+// right path written by cmd/skywire-cli/commands/config/gen.go,
+// which still calls dmsgpty.DefaultCLIAddr() in its native build.
+func defaultDmsgPtyCLIAddr() string {
+	return "/tmp/dmsgpty.sock"
 }
 
 // DmsgHTTPServers struct use to unmarshal dmsghttp file

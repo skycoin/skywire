@@ -8,15 +8,16 @@ import (
 	"net"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport/network/spec"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// STCPConfig defines config for Skywire-TCP network.
-type STCPConfig struct {
-	PKTable          map[cipher.PubKey]string `json:"pk_table"`
-	ListeningAddress string                   `json:"listening_address"`
-}
+// STCPConfig is the wire-format type for Skywire-TCP configuration.
+// Aliased from pkg/transport/network/spec so existing callers
+// writing `network.STCPConfig{...}` keep compiling, while the
+// canonical (WASM-clean) definition lives in the spec leaf package.
+type STCPConfig = spec.STCPConfig
 
 type stcpClient struct {
 	*genericClient
