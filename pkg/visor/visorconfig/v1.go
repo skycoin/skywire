@@ -44,16 +44,16 @@ type V1 struct {
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
 	CLIAddr             string          `json:"cli_addr"`
 
-	LogLevel             string                           `json:"log_level"`
-	LocalPath            string                           `json:"local_path"`
-	StunServers          []string                         `json:"stun_servers"`
-	ShutdownTimeout      Duration                         `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
-	IsPublic             bool                             `json:"is_public"`
-	PublicVisorConfig    *PublicVisorConfig               `json:"public_visor,omitempty"`
-	GeoIP                string                           `json:"geoip"`
+	LogLevel             string                       `json:"log_level"`
+	LocalPath            string                       `json:"local_path"`
+	StunServers          []string                     `json:"stun_servers"`
+	ShutdownTimeout      Duration                     `json:"shutdown_timeout,omitempty"` // time value, examples: 10s, 1m, etc
+	IsPublic             bool                         `json:"is_public"`
+	PublicVisorConfig    *PublicVisorConfig           `json:"public_visor,omitempty"`
+	GeoIP                string                       `json:"geoip"`
 	PersistentTransports []tspec.PersistentTransports `json:"persistent_transports"`
-	ConfService          string                           `json:"conf_service,omitempty"`      // HTTP URL for config bootstrap service
-	ConfServiceDmsg      string                           `json:"conf_service_dmsg,omitempty"` // DMSG URL for config bootstrap service
+	ConfService          string                       `json:"conf_service,omitempty"`      // HTTP URL for config bootstrap service
+	ConfServiceDmsg      string                       `json:"conf_service_dmsg,omitempty"` // DMSG URL for config bootstrap service
 	// SurveyClientSK is the CLI-side identity used by
 	// `skywire cli log <subcommand>` to authenticate against remote
 	// visors' survey_whitelist gates (visor logserver port 80 over
@@ -443,7 +443,6 @@ func (v1 *V1) Flush() error {
 	return v1.Common.flush(v1)
 }
 
-
 // UpdateMinHops updates min_hops config
 func (v1 *V1) UpdateMinHops(hops uint16) error {
 	v1.mu.Lock()
@@ -509,6 +508,7 @@ func (v1 *V1) GetCalculateRoutes() bool {
 	defer v1.mu.RUnlock()
 	return v1.Routing.CalculateRoutes
 }
+
 // mergePubKeys returns the union of the given public key slices, preserving
 // the order of the first slice and appending any unique keys from the second.
 // nil slices are handled transparently.

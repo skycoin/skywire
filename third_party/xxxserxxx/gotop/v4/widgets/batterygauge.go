@@ -3,12 +3,11 @@ package widgets
 import (
 	"fmt"
 	"log"
-
 	"time"
 
 	"github.com/distatus/battery"
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 )
 

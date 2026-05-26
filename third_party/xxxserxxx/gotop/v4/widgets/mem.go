@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
-
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 	ui "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"

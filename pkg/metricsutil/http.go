@@ -12,9 +12,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/sirupsen/logrus"
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 )
 
 // AddMetricsHandler adds a prometheus-format Handle at '/metrics' to the provided serve mux.

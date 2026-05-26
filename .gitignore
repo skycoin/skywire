@@ -91,6 +91,7 @@ e2e-test.log
 # Build artifacts and local files
 /skywire
 *.bak
+.make-check.lock
 /help_output/
 /go-files-by-lines.txt
 node_modules/

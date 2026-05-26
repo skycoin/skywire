@@ -4,7 +4,9 @@
 // GET should be able to use direct upstream + multi-hop downstream).
 package router
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestDialOptions_EffectiveMinHops(t *testing.T) {
 	cases := []struct {
