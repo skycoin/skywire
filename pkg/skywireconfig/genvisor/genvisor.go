@@ -27,7 +27,6 @@
 package genvisor
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -142,10 +141,10 @@ func hypervisorConfigDefault() *visorconfig.HypervisorConfig {
 // conditions. The convenience wrapper is here so the WASM caller
 // doesn't have to handle an impossible error in its js.FuncOf
 // adapter.
-func MustMarshalJSON(v *visorconfig.V1) []byte {
-	buf, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		panic("genvisor: V1.MarshalJSON failed: " + err.Error())
-	}
-	return buf
-}
+//
+// Implementation lives in genvisor_native.go (//go:build !js) and
+// genvisor_js.go (//go:build js). The two variants exist because
+// encoding/json (and its reflect runtime helpers) is the single
+// largest blocker for TinyGo-compiling the install-page WASM.
+// Under js the implementation walks V1's exported fields via a
+// hand-rolled streaming serializer that doesn't touch reflect.
