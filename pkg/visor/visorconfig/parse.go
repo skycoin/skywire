@@ -1,4 +1,12 @@
+//go:build !js
+
 // Package visorconfig pkg/visor/visorconfig/parse.go
+//
+// Parse wraps Reader (from read.go, also !js-tagged) and adds
+// version-compat checking via blang/semver. Both deps (encoding/
+// json transitively, and blang/semver which imports json itself)
+// stay out of the WASM build. Browser-side WASM never parses an
+// on-disk config; it constructs V1 in memory via genvisor.Generate.
 package visorconfig
 
 import (
