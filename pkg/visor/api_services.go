@@ -487,7 +487,25 @@ func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, e
 	callTimeout := time.Duration(req.TimeoutMS)*time.Millisecond + dialBudget
 	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
 	defer cancel()
-	return v.dmsgPty.ExecRemote(ctx, args.RemotePK, args.RemotePort, &req)
+
+	// Scheme selects a specific dialer over the Host's default
+	// MultiDialer chain. Useful when skynet's dial hangs without
+	// honoring ctx and the operator knows dmsg is reachable —
+	// passing Scheme="dmsg" skips skynet entirely. Empty keeps the
+	// default chain (skynet first, dmsg fallback).
+	switch args.Scheme {
+	case "":
+		return v.dmsgPty.ExecRemote(ctx, args.RemotePK, args.RemotePort, &req)
+	case "dmsg":
+		if v.dmsgC == nil {
+			return nil, fmt.Errorf("dmsgpty: dmsg scheme requested but dmsg client not initialized")
+		}
+		return v.dmsgPty.ExecRemoteVia(ctx, dmsgpty.NewDmsgDialer(v.dmsgC), args.RemotePK, args.RemotePort, &req)
+	case "skynet":
+		return v.dmsgPty.ExecRemoteVia(ctx, skywireDialer{}, args.RemotePK, args.RemotePort, &req)
+	default:
+		return nil, fmt.Errorf("dmsgpty: unknown scheme %q (want \"\", \"dmsg\", or \"skynet\")", args.Scheme)
+	}
 }
 
 // Ports return list of all ports used by visor services and apps
