@@ -1,8 +1,16 @@
 // Package buildinfo pkg/skywire-utilities/pkg/buildinfo/buildinfo.go
+//
+// The encoding/json-using init() that parses ldflags-injected
+// `go list -m -json` output lives in buildinfo_native.go (!js).
+// Under js/wasm, ldflags injection is not the typical path —
+// the install-page WASM is rebuilt against the latest skywire
+// dependency, not with custom -X overrides — so the json parse
+// is effectively dead code there. Build-tag-gating it lets
+// TinyGo strip encoding/json's reflect runtime helpers from the
+// WASM bundle.
 package buildinfo
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"regexp"
@@ -41,26 +49,17 @@ type ModuleInfo struct {
 var commitRegex = regexp.MustCompile(`[a-f0-9]{12,}$`) // <-- match commit from end of string
 var dateRegex = regexp.MustCompile(`\d{14}`)           // <-- match date anywhere
 
-func init() {
-	// Always read build info — needed for DepVersion even when version
-	// is provided via ldflags.
+// init() is split across buildinfo_native.go (!js) and
+// buildinfo_js.go (js). The !js variant parses ldflags-injected
+// `golist` via json.Unmarshal; the js variant skips that branch
+// (no encoding/json in the WASM build graph). Both call
+// readDebugBuildInfo to populate `bi` + `goversion`.
+//
+// readDebugBuildInfo is shared between the two — no json, just
+// debug.ReadBuildInfo plus the version/commit/date extraction.
+func readDebugBuildInfo() {
 	var ok bool
 	bi, ok = debug.ReadBuildInfo()
-
-	// Use ldflags-provided `golist` info if available
-	if golist != "" {
-		var mInfo ModuleInfo
-		if err := json.Unmarshal([]byte(golist), &mInfo); err == nil {
-			if mInfo.Version != "" && version == unknown {
-				version = mInfo.Version
-			}
-			if mInfo.Origin.Hash != "" && commit == unknown {
-				commit = mInfo.Origin.Hash
-			}
-		}
-	}
-
-	// If version is still unknown, try reading from runtime build info
 	if version == unknown || version == "" {
 		if ok {
 			if bi.Main.Version != "" {

@@ -1,4 +1,11 @@
+//go:build !js
+
 // Package disc — fallback discovery client.
+//
+// Build-tag-gated off the WASM path because it imports pkg/logging
+// (which wraps logrus, which transitively pulls encoding/json).
+// FallbackClient is constructed only from pkg/dmsgc at visor
+// runtime; the WASM install-page graph doesn't reach it.
 //
 // FallbackClient wraps two APIClients (primary + fallback) and tries
 // the primary first; on error it transparently retries the same call
