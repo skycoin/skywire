@@ -90,7 +90,7 @@ func BootstrapDmsg(
 	// When dmsgDisc is empty the caller has explicitly opted out of
 	// HTTP discovery (e.g. fully air-gapped deployments) — keep the
 	// direct-only behavior in that case.
-	var dClient disc.APIClient = directDClient
+	dClient := directDClient
 	if dmsgDisc != "" {
 		httpDiscClient := disc.NewHTTP(dmsgDisc, &http.Client{Timeout: 30 * time.Second}, log)
 		dClient = dmsgclient.NewFallbackDiscClient(directDClient, httpDiscClient, log)
