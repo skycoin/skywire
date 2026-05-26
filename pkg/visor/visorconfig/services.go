@@ -1,57 +1,19 @@
 // Package visorconfig pkg/visor/visorconfig/services.go
+//
+// Defines the Services struct that mirrors the deployment.Services
+// JSON shape and is embedded in V1. The runtime-only HTTP-fetch
+// helper Fetch() lives in services_native.go under a //go:build !js
+// constraint so the WASM build graph (genvisor, autoconfigcmd,
+// install-page) doesn't pull in net/http — TinyGo 0.41.1's stdlib
+// can't compile net/http when our transitive surface widens.
 package visorconfig
 
 import (
 	"encoding/json"
-	"io"
-	"net/http"
-	"time"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/logging"
 )
-
-// Fetch fetches the service URLs & ip:ports from the config service endpoint
-func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (services *Services) {
-
-	client := http.Client{
-		Timeout: time.Second * 15, // Timeout after 15 seconds
-	}
-	//create the http request
-	req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
-	if err != nil {
-		mLog.WithError(err).Fatal("Failed to create http request\n")
-	}
-	req.Header.Add("Cache-Control", "no-cache")
-	//check for errors in the response
-	res, err := client.Do(req)
-	if err != nil {
-		//silence errors for stdout
-		if !stdout {
-			mLog.WithError(err).Error("Failed to fetch servers\n")
-			mLog.Warn("Falling back on hardcoded servers")
-		}
-	} else {
-		// nil error from client.Do(req)
-		if res.Body != nil {
-			defer res.Body.Close() //nolint:errcheck
-		}
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			mLog.WithError(err).Fatal("Failed to read response\n")
-		}
-		//fill in services struct with the response
-		err = json.Unmarshal(body, &services)
-		if err != nil {
-			mLog.WithError(err).Fatal("Failed to unmarshal json response\n")
-		}
-		if !stdout {
-			mLog.Infof("Fetched service endpoints from '%s'", serviceConf)
-		}
-	}
-	return services
-}
 
 // EnvServices is the struct for the outer JSON
 type EnvServices struct {
