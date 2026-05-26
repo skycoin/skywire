@@ -1,7 +1,9 @@
 package drawille
 
 //import "code.google.com/p/goncurses"
-import "math"
+import (
+	"math"
+)
 
 var pixel_map = [4][2]int{
 	{0x1, 0x8},

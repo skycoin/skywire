@@ -116,7 +116,7 @@ require (
 	atomicgo.dev/schedule v0.1.0 // indirect
 	github.com/ActiveState/termtest/conpty v0.5.0
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
-	github.com/BurntSushi/toml v1.6.0
+	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/MichaelMure/go-term-text v0.3.1 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/NYTimes/gziphandler v1.1.1 // indirect

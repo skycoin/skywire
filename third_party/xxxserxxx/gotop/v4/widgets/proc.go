@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tui "github.com/gizak/termui/v3"
+
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 	ui "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"

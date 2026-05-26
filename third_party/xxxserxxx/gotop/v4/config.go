@@ -15,9 +15,10 @@ import (
 	"time"
 
 	"github.com/shibukawa/configdir"
+	"github.com/xxxserxxx/lingo/v2"
+
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/colorschemes"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/widgets"
-	"github.com/xxxserxxx/lingo/v2"
 )
 
 // FIXME github action uses old(er) Go version that doesn't have embed

@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -12,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"compress/gzip"
 )
 
 // PushOptions is the list of options, which may be applied to InitPushWithOptions().
