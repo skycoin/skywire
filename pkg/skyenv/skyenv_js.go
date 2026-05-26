@@ -20,3 +20,11 @@ const SkywirePath = ""
 // emits the config as a downloadable blob rather than writing it
 // to a host path.
 const ConfigJSON = ""
+
+// PackageConfig returns an empty PkgConfig under js/wasm. There's
+// no host install root in a browser, so all PkgConfig fields are
+// just zero values. Operational callers should never invoke this
+// from WASM — it exists for type compilation only.
+func PackageConfig() PkgConfig {
+	return PkgConfig{}
+}

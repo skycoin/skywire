@@ -3,19 +3,18 @@ package visorconfig
 
 import (
 	"os"
-	"os/exec"
-	"strings"
-
-	"github.com/bitfield/script"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
-	// DmsgHTTPPort Listening port for dmsghttp logserver.
-	DmsgHTTPPort = dmsg.DefaultDmsgHTTPPort
+	// DmsgHTTPPort Listening port for dmsghttp logserver. Set to
+	// pkg/dmsg/dmsg.DefaultDmsgHTTPPort's value (80). Hardcoded here
+	// rather than imported so values.go stays WASM-clean — the dmsg
+	// client package pulls in unrelated heavy deps that the
+	// in-browser config-generator doesn't need.
+	DmsgHTTPPort = uint16(80)
 
 	// PublicVisorMaxTransports is the max transport count before deregistering
 	PublicVisorMaxTransports = 1000
@@ -26,22 +25,15 @@ func SkywireConfig() string {
 	return skyenv.SkywirePath + "/" + skyenv.ConfigJSON
 }
 
-// Version gets the version of the installation for the config
+// Version gets the version of the installation for the config.
+//
+// The runtime version-discovery path (git-describe fallback when
+// buildinfo.Version() returns "unknown") lives in values_native.go
+// behind a !js build tag — it shells out to `git`, which is
+// nonsensical in a browser WASM context. Under js the returned value
+// is just buildinfo.Version() with no fallback.
 func Version() string {
-	u := buildinfo.Version()
-	v := u
-	if u == "unknown" {
-		//check for .git folder for versioning
-		if _, err := os.Stat(".git"); err == nil {
-			//attempt to version from git sources
-			if _, err = exec.LookPath("git"); err == nil {
-				if v, err = script.Exec(`git describe --always`).String(); err == nil {
-					v = strings.TrimSpace(v)
-				}
-			}
-		}
-	}
-	return v
+	return resolveVersion(buildinfo.Version())
 }
 
 // HomePath gets the current user's home folder
