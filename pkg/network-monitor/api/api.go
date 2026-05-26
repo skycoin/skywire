@@ -101,7 +101,7 @@ func New(s store.Store, logger *logging.Logger, urls ServicesURLs, config Networ
 	r := chi.NewRouter()
 	r.Use(
 		middleware.RequestID,
-		middleware.RealIP,
+		middleware.RealIP, //nolint:staticcheck
 		middleware.Logger,
 		middleware.Recoverer,
 		httputil.SetLoggerMiddleware(logger),
