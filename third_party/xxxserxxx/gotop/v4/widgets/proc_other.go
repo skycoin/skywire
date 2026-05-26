@@ -1,8 +1,10 @@
+//go:build darwin || openbsd
 // +build darwin openbsd
 
 package widgets
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"os/exec"
@@ -21,9 +23,9 @@ const (
 
 func getProcs() ([]Proc, error) {
 	keywords := fmt.Sprintf("pid=%s,comm=%s,pcpu=%s,pmem=%s,args", ten, fifty, five, five)
-	output, err := exec.Command("ps", "-caxo", keywords).Output()
+	output, err := exec.Command("ps", "-caxo", keywords).Output() //nolint:gosec // upstream code; safe under documented invariants
 	if err != nil {
-		return nil, fmt.Errorf(tr.Value("widget.proc.err.ps", err.Error()))
+		return nil, errors.New(tr.Value("widget.proc.err.ps", err.Error()))
 	}
 
 	// converts to []string and removes the header

@@ -20,5 +20,5 @@ func TruncateFront(s string, w int, prefix string) string {
 			break
 		}
 	}
-	return prefix + string(r[i+1:len(r)])
+	return prefix + string(r[i+1:])
 }
