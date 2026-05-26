@@ -102,10 +102,10 @@ func getProcessStartTime() (float64, error) {
 	n := uintptr(0)
 	_, _, errno := syscall.Syscall6( //nolint:gosec // upstream code; safe under documented invariants
 		syscall.SYS___SYSCTL,
-		uintptr(unsafe.Pointer(&mib[0])),
+		uintptr(unsafe.Pointer(&mib[0])), //nolint:gosec // unsafe ptr to fixed-size mib array
 		uintptr(len(mib)),
 		0,
-		uintptr(unsafe.Pointer(&n)),
+		uintptr(unsafe.Pointer(&n)), //nolint:gosec // unsafe ptr to stack-allocated uintptr
 		0,
 		0,
 	)
@@ -120,10 +120,10 @@ func getProcessStartTime() (float64, error) {
 	buf := make([]byte, n)
 	_, _, errno = syscall.Syscall6( //nolint:gosec // upstream code; safe under documented invariants
 		syscall.SYS___SYSCTL,
-		uintptr(unsafe.Pointer(&mib[0])),
+		uintptr(unsafe.Pointer(&mib[0])), //nolint:gosec // unsafe ptr to fixed-size mib array
 		uintptr(len(mib)),
-		uintptr(unsafe.Pointer(&buf[0])),
-		uintptr(unsafe.Pointer(&n)),
+		uintptr(unsafe.Pointer(&buf[0])), //nolint:gosec // unsafe ptr to caller-sized buffer
+		uintptr(unsafe.Pointer(&n)),      //nolint:gosec // unsafe ptr to stack-allocated uintptr
 		0,
 		0,
 	)

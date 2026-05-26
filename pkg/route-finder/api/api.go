@@ -55,7 +55,7 @@ func New(s store.Store, logger logrus.FieldLogger, enableMetrics bool, dmsgAddr 
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	if enableMetrics {
