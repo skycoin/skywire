@@ -1,8 +1,8 @@
 package devices
 
 import (
-	"log"
 	"github.com/xxxserxxx/lingo/v2"
+	"log"
 )
 
 const (

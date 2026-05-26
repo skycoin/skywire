@@ -3,7 +3,6 @@ package devices
 import (
 	"bytes"
 	"encoding/csv"
-	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -75,9 +74,8 @@ func startNVidia(vars map[string]string) error {
 	}
 	_, err := exec.Command("nvidia-smi", "-L").Output()
 	if err != nil {
-		return errors.New(fmt.Sprintf("NVidia GPU error: %s", err))
+		return fmt.Errorf("NVidia GPU error: %s", err)
 	}
-	_errors = make(map[string]error)
 	_temps = make(map[string]int)
 	_mems = make(map[string]MemoryInfo)
 	_cpus = make(map[string]int)
@@ -171,8 +169,8 @@ func updateNvidia() {
 			_errors[name] = err
 		}
 		_mems[name] = MemoryInfo{
-			Total:       1048576 * uint64(t),
-			Used:        1048576 * uint64(u),
+			Total:       1048576 * uint64(t), //nolint:gosec // upstream code; safe under documented invariants
+			Used:        1048576 * uint64(u), //nolint:gosec // upstream code; safe under documented invariants
 			UsedPercent: (float64(u) / float64(t)) * 100.0,
 		}
 	}

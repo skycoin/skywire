@@ -2,12 +2,12 @@ package colorschemes
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"path/filepath"
 	"strings"
 
-	"github.com/xxxserxxx/lingo/v2"
 	"github.com/shibukawa/configdir"
+	"github.com/xxxserxxx/lingo/v2"
 )
 
 var registry map[string]Colorscheme
@@ -57,15 +57,15 @@ func getCustomColorscheme(confDir configdir.ConfigDir, name string) (Colorscheme
 		for _, d := range confDir.QueryFolders(configdir.Existing) {
 			paths = append(paths, d.Path)
 		}
-		return cs, fmt.Errorf(tr.Value("error.colorschemefile", fn, strings.Join(paths, ", ")))
+		return cs, errors.New(tr.Value("error.colorschemefile", fn, strings.Join(paths, ", ")))
 	}
 	dat, err := folder.ReadFile(fn)
 	if err != nil {
-		return cs, fmt.Errorf(tr.Value("error.colorschemeload", filepath.Join(folder.Path, fn), err.Error()))
+		return cs, errors.New(tr.Value("error.colorschemeload", filepath.Join(folder.Path, fn), err.Error()))
 	}
 	err = json.Unmarshal(dat, &cs)
 	if err != nil {
-		return cs, fmt.Errorf(tr.Value("error.colorschemeparse", err.Error()))
+		return cs, errors.New(tr.Value("error.colorschemeparse", err.Error()))
 	}
 	return cs, nil
 }
