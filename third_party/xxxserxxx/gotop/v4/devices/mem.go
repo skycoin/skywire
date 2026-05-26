@@ -1,6 +1,8 @@
 package devices
 
-import "log"
+import (
+	"log"
+)
 
 var memFuncs []func(map[string]MemoryInfo) map[string]error
 

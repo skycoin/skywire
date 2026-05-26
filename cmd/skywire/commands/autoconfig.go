@@ -40,8 +40,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -339,9 +339,9 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
 	}
 
-if autoconfigVals.Verbose {
-	printWelcome(pubkey, isHypervisor)
-}
+	if autoconfigVals.Verbose {
+		printWelcome(pubkey, isHypervisor)
+	}
 }
 
 // defaultSkyenvPath returns the canonical SKYENV file location for

@@ -8,7 +8,9 @@
 
 package treeprobe
 
-import "sort"
+import (
+	"sort"
+)
 
 // CellKey identifies one (level, parent_pk, remote_pk) tuple.
 // Used as a map key on the aggregator + as the CSV row identity.
