@@ -69,10 +69,22 @@ func NewHostWithDialer(dmsgC *dmsg.Client, wl Whitelist, dialer StreamDialer) *H
 // unix-socket-or-tcp control listener. Same trust model: the remote's
 // whitelist gates the connection on its own PK admission.
 func (h *Host) ExecRemote(ctx context.Context, rPK cipher.PubKey, rPort uint16, req *CommandExecReq) (*CommandExecResult, error) {
+	return h.ExecRemoteVia(ctx, h.dialer, rPK, rPort, req)
+}
+
+// ExecRemoteVia runs ExecRemote against the supplied dialer instead
+// of the Host's configured one. Used when the caller wants to pin
+// the transport (e.g. dmsg-only / skynet-only) rather than ride the
+// Host's MultiDialer chain. Pass dmsgpty.NewDmsgDialer(c) to force
+// dmsg, or the visor's skywireDialer to force skynet.
+//
+// Same protocol, same wire shape — the dialer only changes the
+// underlying transport that carries the dmsgpty stream.
+func (h *Host) ExecRemoteVia(ctx context.Context, dialer StreamDialer, rPK cipher.PubKey, rPort uint16, req *CommandExecReq) (*CommandExecResult, error) {
 	if rPort == 0 {
 		rPort = DefaultPort
 	}
-	stream, err := h.dialer.DialStream(ctx, rPK, rPort)
+	stream, err := dialer.DialStream(ctx, rPK, rPort)
 	if err != nil {
 		return nil, fmt.Errorf("dmsgpty: dial %s:%d: %w", rPK, rPort, err)
 	}
