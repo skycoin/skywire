@@ -297,7 +297,6 @@ jobs:
           echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Fetch Windows installer files
-        if: matrix.arch != 'arm64'
         shell: pwsh
         run: |
           $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/win_installer"
@@ -390,7 +389,6 @@ jobs:
           Get-ChildItem "dist\" -Exclude "*.zip","*.sha256" | Remove-Item
 
       - name: Create MSI installer
-        if: matrix.arch != 'arm64'
         shell: pwsh
         run: |
           $MSI_NAME = "skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}"
