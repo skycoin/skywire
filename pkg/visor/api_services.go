@@ -476,7 +476,18 @@ func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, e
 		return nil, fmt.Errorf("dmsgpty: remote_pk required")
 	}
 	req := args.Req
-	return v.dmsgPty.ExecRemote(context.Background(), args.RemotePK, args.RemotePort, &req)
+	// Bound the whole call: Req.TimeoutMS covers the remote command's
+	// execution; we add a 15s dial/handshake budget on top so an
+	// unreachable target (stale dmsg discovery, downed peer, etc.)
+	// doesn't hang this RPC goroutine indefinitely. Without the bound,
+	// the dmsg client's dial blocks in a syscall that doesn't unwind
+	// on RPC-side cancellation, leaking a goroutine per attempt and
+	// preventing the caller's `timeout` wrapper from ever returning.
+	const dialBudget = 15 * time.Second
+	callTimeout := time.Duration(req.TimeoutMS)*time.Millisecond + dialBudget
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+	return v.dmsgPty.ExecRemote(ctx, args.RemotePK, args.RemotePort, &req)
 }
 
 // Ports return list of all ports used by visor services and apps
