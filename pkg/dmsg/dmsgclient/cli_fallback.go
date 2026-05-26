@@ -257,9 +257,19 @@ func (f *fallbackDiscClient) PostEntry(ctx context.Context, entry *disc.Entry) e
 	return f.direct.PostEntry(ctx, entry)
 }
 
-// PutEntry delegates to HTTP client (direct client doesn't support updates)
+// PutEntry delegates to the direct client (which no-ops). Services
+// using this fallback wrapper run as direct dmsg clients and are not
+// supposed to register themselves in dmsg-discovery — they are
+// reachable equally through any dmsg server via the consumer's
+// preloaded direct.Client. Routing PutEntry to HTTP caused TD/SD/
+// dmsg-disc to publish themselves on every dmsg.Client UpdateInterval
+// (5 min default for clients), producing entries with seq numbers
+// growing into the hundreds and pointless write traffic against
+// dmsg-discovery; consumers gain nothing from those entries because
+// the visor's direct.Client already knows the service PK → all-servers
+// mapping at startup.
 func (f *fallbackDiscClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *disc.Entry) error {
-	return f.http.PutEntry(ctx, sk, entry)
+	return f.direct.PutEntry(ctx, sk, entry)
 }
 
 // DelEntry delegates to direct client
