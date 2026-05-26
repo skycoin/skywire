@@ -2,9 +2,7 @@
 package visorconfig
 
 import (
-	"encoding/json"
 	"errors"
-	"os"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -82,29 +80,9 @@ func (c *Common) ensureKeys() error {
 	return nil
 }
 
-func (c *Common) flush(v interface{}) (err error) {
-	switch c.path {
-	case "":
-		return ErrNoConfigPath
-	case Stdin:
-		return nil
-	}
-
-	log := c.log.
-		PackageLogger("visor:config").
-		WithField("filepath", c.path).
-		WithField("config_version", c.Version)
-	log.Info("Flushing config to file.")
-	defer func() {
-		if err != nil {
-			log.WithError(err).Error("Failed to flush config to file.")
-		}
-	}()
-
-	raw, err := json.MarshalIndent(v, "", "\t")
-	if err != nil {
-		return err
-	}
-	const filePerm = 0644
-	return os.WriteFile(c.path, raw, filePerm)
-}
+// flush serializes v as JSON and writes it to the Common's
+// on-disk path. Implementation lives in common_native.go under
+// //go:build !js because it pulls encoding/json (which drags the
+// reflect runtime helpers TinyGo's stdlib lacks) and os.WriteFile
+// (no-op in a browser anyway). Callers under js/wasm can't reach
+// this method; any flush attempt panics with a clear error.

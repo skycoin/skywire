@@ -1,4 +1,13 @@
+//go:build !js
+
 // Package deployment deploy_config.go
+//
+// Build-tag-gated off the WASM path: imports encoding/json
+// (DeployConfig.Save uses json.NewEncoder) and references
+// EnvServices (only available under !js, since EnvServices's
+// json.RawMessage field needs encoding/json). The install-page
+// WASM doesn't need DeployConfig — it only consumes the embedded
+// Prod / Test bundles.
 //
 // DeployConfig defines the unified JSON configuration format for a skywire
 // deployment. It extends the existing services-config.json (which defines

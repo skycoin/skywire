@@ -2,8 +2,6 @@
 package visorconfig
 
 import (
-	"encoding/json"
-
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
@@ -16,20 +14,19 @@ import (
 // This function always returns the latest config version.
 func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Services, dmsgHTTPServersList *DmsgHTTPServers) *V1 {
 
-	//check if any services were passed
+	// Pick the deployment-default Services bundle when the caller
+	// didn't supply one. Previously this re-unmarshalled
+	// deployment.ServicesJSON via encoding/json; the deployment
+	// package's init() already does that work and exposes the
+	// result as deployment.Prod / deployment.Test, so we just point
+	// at those structs. Eliminates two json.Unmarshal calls from
+	// the WASM build graph (visorconfig.Services is now a type
+	// alias to deployment.Services — same memory shape).
 	if services == nil {
-		var envServices deployment.EnvServices
-		if err := json.Unmarshal(deployment.ServicesJSON, &envServices); err != nil {
-			return nil
-		}
-		if !testEnv {
-			if err := json.Unmarshal(envServices.Prod, &services); err != nil {
-				return nil
-			}
+		if testEnv {
+			services = &deployment.Test
 		} else {
-			if err := json.Unmarshal(envServices.Test, &services); err != nil {
-				return nil
-			}
+			services = &deployment.Prod
 		}
 	}
 	conf := new(V1)

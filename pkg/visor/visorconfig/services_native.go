@@ -15,8 +15,15 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// EnvServices is the wrapper struct for the outer JSON. Aliased to
+// deployment.EnvServices (only defined under !js — see deployment's
+// config.go package doc for the WASM-stripping rationale). Consumers
+// using visorconfig.EnvServices keep working under non-WASM builds.
+type EnvServices = deployment.EnvServices
 
 // Fetch fetches the service URLs & ip:ports from the config service
 // endpoint over HTTP. Used by the visor's CLI config-gen path; not
