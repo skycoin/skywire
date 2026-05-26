@@ -7,6 +7,7 @@ import (
 	"unicode"
 
 	ui "github.com/gizak/termui/v3"
+
 	drawille "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui/drawille-go"
 )
 

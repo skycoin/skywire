@@ -11,7 +11,9 @@
 // situation.
 package netutil
 
-import "errors"
+import (
+	"errors"
+)
 
 // DefaultNetworkInterface returns an "unsupported on this
 // platform" sentinel error. There's no concept of "the default
