@@ -84,11 +84,19 @@ func init() {
 // of edits to apply to /etc/skywire.conf. Only flags the operator
 // actually passed are included — un-passed flags leave the
 // corresponding lines untouched.
+//
+// The flag → SKYENV mapping is authoritatively defined in
+// pkg/skywireconfig/autoconfigcmd.EnvMap(); for the actual
+// VALUES we read from autoconfigVals via tiny switch helpers.
+// Keeping the mapping there means the WASM consumer (apt-repo
+// install page) and this Run-path agree on which env var each
+// flag writes.
 func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	var edits []skyenvEdit
+
 	// Bool-pair helper: --flag wins over --no-flag if both somehow set,
 	// but cobra normally only sees one per invocation.
-	addBool := func(key string, onName, offName string, on, off bool) {
+	addBool := func(key, onName, offName string, on, off bool) {
 		switch {
 		case cmd.Flags().Changed(onName) && on:
 			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(true)})
@@ -96,38 +104,113 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(false)})
 		}
 	}
+	addSoloBool := func(key, name string, val bool) {
+		if cmd.Flags().Changed(name) {
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(val)})
+		}
+	}
+	addString := func(key, name, val string) {
+		if cmd.Flags().Changed(name) {
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvString(val)})
+		}
+	}
+	addArray := func(key, name, val string) {
+		if cmd.Flags().Changed(name) {
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBashArray(val)})
+		}
+	}
+	addInt := func(key, name string, val int) {
+		if cmd.Flags().Changed(name) {
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvInt(val)})
+		}
+	}
 
-	if cmd.Flags().Changed("hvpks") {
-		edits = append(edits, skyenvEdit{Key: "HYPERVISORPKS", Value: formatSkyenvBashArray(autoconfigVals.Hvpks)})
-	}
+	// Hypervisor / identity
+	addArray("HYPERVISORPKS", "hvpks", autoconfigVals.Hvpks)
 	addBool("ISHYPERVISOR", "ishv", "no-ishv", autoconfigVals.Ishv, autoconfigVals.NoIshv)
-	if cmd.Flags().Changed("rewardaddr") {
-		edits = append(edits, skyenvEdit{Key: "REWARDSKYADDR", Value: formatSkyenvString(autoconfigVals.RewardAddr)})
-	}
+	addString("HVHTTPADDR", "hvaddr", autoconfigVals.HvAddr)
+	addString("SK", "sk", autoconfigVals.SecretKey)
+	addString("VERSION", "version", autoconfigVals.Version)
+
+	// Visor public/private + autoconnect
+	addString("REWARDSKYADDR", "rewardaddr", autoconfigVals.RewardAddr)
 	addBool("VISORISPUBLIC", "public", "no-public", autoconfigVals.Public, autoconfigVals.NoPublic)
-	if cmd.Flags().Changed("stcpr") {
-		edits = append(edits, skyenvEdit{Key: "STCPRPORT", Value: formatSkyenvInt(autoconfigVals.StcprPort)})
-	}
-	if cmd.Flags().Changed("sudph") {
-		edits = append(edits, skyenvEdit{Key: "SUDPHPORT", Value: formatSkyenvInt(autoconfigVals.SudphPort)})
-	}
-	if cmd.Flags().Changed("lan-dmsg-port") {
-		edits = append(edits, skyenvEdit{Key: "LANDMSGPORT", Value: formatSkyenvInt(autoconfigVals.LanDmsgPort)})
-	}
-	if cmd.Flags().Changed("lan-dmsg-public") {
-		edits = append(edits, skyenvEdit{Key: "LANDMSGPUBLIC", Value: formatSkyenvString(autoconfigVals.LanDmsgPublic)})
-	}
-	if cmd.Flags().Changed("dmsgpty-pks") {
-		edits = append(edits, skyenvEdit{Key: "DMSGPTYPKS", Value: formatSkyenvBashArray(autoconfigVals.DmsgptyPks)})
-	}
+	addSoloBool("DISPLAYNODEIP", "publicip", autoconfigVals.PublicIP)
+	addSoloBool("DISABLEPUBLICAUTOCONN", "disable-public-autoconn", autoconfigVals.DisablePubAuto)
+
+	// Service discovery / deployment
+	addSoloBool("TESTENV", "testenv", autoconfigVals.TestEnv)
+	addSoloBool("DMSGHTTP", "dmsghttp", autoconfigVals.DmsgHTTP)
+	addString("DMSGCONF", "dmsgconf", autoconfigVals.DmsgConf)
+	addArray("SVCCONFADDR", "url", autoconfigVals.URL)
+	addString("SVCCONF", "svcconf", autoconfigVals.SvcConf)
+	addInt("MINDMSGSESS", "minsess", autoconfigVals.MinSess)
+	addArray("STUNSERVERS", "stun", autoconfigVals.StunServers)
+
+	// Transport ports
+	addInt("STCPRPORT", "stcpr", autoconfigVals.StcprPort)
+	addInt("SUDPHPORT", "sudph", autoconfigVals.SudphPort)
+	addInt("LANDMSGPORT", "lan-dmsg-port", autoconfigVals.LanDmsgPort)
+	addString("LANDMSGPUBLIC", "lan-dmsg-public", autoconfigVals.LanDmsgPublic)
+
+	// Whitelists
+	addArray("DMSGPTYPKS", "dmsgpty-pks", autoconfigVals.DmsgptyPks)
+	addArray("SURVEYPKS", "survey", autoconfigVals.SurveyPks)
+	addArray("ROUTESETUPPKS", "routesetup", autoconfigVals.RouteSetupPKs)
+	addArray("TPSETUPPKS", "tpsetup", autoconfigVals.TransportSetup)
+
+	// Route calculation
+	addSoloBool("CALCULATEROUTES", "calculate-routes", autoconfigVals.CalculateRoutes)
+
+	// VPN server
 	addBool("VPNSERVER", "vpnserver", "no-vpnserver", autoconfigVals.VpnServer, autoconfigVals.NoVpnServer)
+	addString("VPNKS", "killsw", autoconfigVals.VpnKillSw)
+	addString("ADDVPNPK", "addvpn", autoconfigVals.AddVpn)
+	addArray("VPNSERVERWL", "vpnwl", autoconfigVals.VpnWl)
+	addString("VPNSEVERSECURE", "secure", autoconfigVals.VpnSecure)
+	addString("VPNSEVERNETIFC", "netifc", autoconfigVals.VpnNetIfc)
+
+	// Proxy
 	addBool("PROXYSERVER", "proxyserver", "no-proxyserver", autoconfigVals.ProxyServer, autoconfigVals.NoProxyServer)
-	addBool("SKYCHAT", "skychat", "no-skychat", autoconfigVals.Skychat, autoconfigVals.NoSkychat)
+	addString("PROXYCLIENTPK", "proxyclientpk", autoconfigVals.ProxyClientPK)
+	addSoloBool("STARTPROXYCLIENT", "startproxyclient", autoconfigVals.StartProxyCli)
+	addArray("PROXYSERVERWL", "proxywl", autoconfigVals.ProxyWl)
+
+	// SOCKS5 web bridges
 	addBool("DMSGWEB", "dmsgweb", "no-dmsgweb", autoconfigVals.Dmsgweb, autoconfigVals.NoDmsgweb)
 	addBool("SKYNETWEB", "skynetweb", "no-skynetweb", autoconfigVals.Skynetweb, autoconfigVals.NoSkynetweb)
-	if cmd.Flags().Changed("disable-public-autoconn") {
-		edits = append(edits, skyenvEdit{Key: "DISABLEPUBLICAUTOCONN", Value: formatSkyenvBool(autoconfigVals.DisablePubAuto)})
-	}
+	addString("DMSGWEBUPSTREAM", "dmsgweb-upstream", autoconfigVals.DmsgwebUpstream)
+	addString("SKYNETWEBUPSTREAM", "skynetweb-upstream", autoconfigVals.SkynetwebUpstream)
+
+	// Skychat
+	addBool("SKYCHAT", "skychat", "no-skychat", autoconfigVals.Skychat, autoconfigVals.NoSkychat)
+	addString("SKYCHATADDR", "chataddr", autoconfigVals.ChatAddr)
+	addBool("SKYCHATPAIR", "servechatpair", "no-servechatpair", autoconfigVals.ServeChatPair, autoconfigVals.NoServeChatPair)
+
+	// Skymail bridge
+	addBool("SKYMAILBRIDGE", "skymail-bridge", "no-skymail-bridge", autoconfigVals.SkymailBridge, autoconfigVals.NoSkymailBridge)
+
+	// Skycoin daemon
+	addBool("SKYCOIND", "skycoind", "no-skycoind", autoconfigVals.Skycoind, autoconfigVals.NoSkycoind)
+	addString("SKYCOIND_FIBER_TOML", "skycoindfiber", autoconfigVals.SkycoindFiber)
+	addString("SKYCOIND_API_SETS", "skycoindapi", autoconfigVals.SkycoindAPI)
+	addString("SKYCOIND_USER", "skycoindUSER", autoconfigVals.SkycoindUser)
+	addArray("SKYCOIND_INSTANCES", "skycoindinstances", autoconfigVals.SkycoindInstances)
+	addString("SKYCOIND_FLAGS", "skycoindflags", autoconfigVals.SkycoindFlags)
+
+	// Skycoin web wallet
+	addBool("SKYCOINWEB", "skycoinweb", "no-skycoinweb", autoconfigVals.Skycoinweb, autoconfigVals.NoSkycoinweb)
+	addString("SKYCOINWEBADDR", "skycoinwebaddr", autoconfigVals.SkycoinwebAddr)
+	addArray("SKYCOINWEBNODES", "skycoinwebnodes", autoconfigVals.SkycoinwebNodes)
+	addString("SKYCOINWEBWALLET", "skycoinwebwallet", autoconfigVals.SkycoinwebWallet)
+	addString("SKYCOINWEBUSER", "skycoinwebuser", autoconfigVals.SkycoinwebUser)
+
+	// Visor runtime
+	addString("BINPATH", "binpath", autoconfigVals.BinPath)
+	addString("LOGLVL", "loglvl", autoconfigVals.LogLevel)
+	addString("SHUTDOWNTIMEOUT", "timeout", autoconfigVals.ShutdownTimeout)
+	addString("REGTIMEOUT", "regtimeout", autoconfigVals.RegTimeout)
+
 	return edits
 }
 
