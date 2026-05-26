@@ -1,4 +1,10 @@
+//go:build !js
+
 // Package disc pkg/disc/http_message.go
+//
+// HTTP-response message types used by the discovery service's HTTP
+// API. Build-tag-gated alongside client.go to keep net/http out of
+// the WASM build graph (see interface.go for rationale).
 package disc
 
 import (
