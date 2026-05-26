@@ -33,6 +33,8 @@ package autoconfigcmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // EnvFormat describes how a flag's runtime value is rendered into
@@ -65,6 +67,22 @@ type EnvMapping struct {
 	// --no-ishv has Negate=true so passing it (which sets the
 	// bool to true) writes ISHYPERVISOR=false to the .conf file.
 	Negate bool
+	// Default is the effective default the visor's `cli config gen`
+	// uses when the SKYENV variable is unset/commented. Empty when
+	// the underlying default is "" (no useful hint to show). This
+	// field exists so the WASM install-page can display the actual
+	// default as a placeholder hint — operators see "default:
+	// 127.0.0.1:8001" rather than the misleading "(unset)" the
+	// flag's own DefValue reports (which is "" because autoconfig
+	// itself defaults every flag to empty, deferring to skywire.conf
+	// / config-gen for the real default).
+	//
+	// Source of truth: the `:-` fallbacks in
+	// cmd/skywire-cli/commands/config/gen.go's scriptExec* calls,
+	// plus the skyenv constants those calls reference for the
+	// string-typed defaults. Keep in sync — if config-gen's
+	// defaults change, update this table too.
+	Default string
 }
 
 // Values holds the destination addresses for every flag binding
@@ -346,13 +364,15 @@ var envMap = map[string]EnvMapping{
 	"dmsgconf": {Key: "DMSGCONF", Format: EnvFormatString},
 	"url":      {Key: "SVCCONFADDR", Format: EnvFormatBashArray},
 	"svcconf":  {Key: "SVCCONF", Format: EnvFormatString},
-	"minsess":  {Key: "MINDMSGSESS", Format: EnvFormatInt},
+	"minsess":  {Key: "MINDMSGSESS", Format: EnvFormatInt, Default: "2"},
 	"stun":     {Key: "STUNSERVERS", Format: EnvFormatBashArray},
 
-	// Transport ports
-	"stcpr":           {Key: "STCPRPORT", Format: EnvFormatInt},
-	"sudph":           {Key: "SUDPHPORT", Format: EnvFormatInt},
-	"lan-dmsg-port":   {Key: "LANDMSGPORT", Format: EnvFormatInt},
+	// Transport ports. 0 = OS-assigned random port at runtime;
+	// stays unchanged across visor restarts only when pinned to a
+	// non-zero value.
+	"stcpr":           {Key: "STCPRPORT", Format: EnvFormatInt, Default: "0 (random)"},
+	"sudph":           {Key: "SUDPHPORT", Format: EnvFormatInt, Default: "0 (random)"},
+	"lan-dmsg-port":   {Key: "LANDMSGPORT", Format: EnvFormatInt, Default: "0 (random)"},
 	"lan-dmsg-public": {Key: "LANDMSGPUBLIC", Format: EnvFormatString},
 
 	// Whitelists
@@ -391,7 +411,7 @@ var envMap = map[string]EnvMapping{
 	// Skychat
 	"skychat":          {Key: "SKYCHAT", Format: EnvFormatBool},
 	"no-skychat":       {Key: "SKYCHAT", Format: EnvFormatBool, Negate: true},
-	"chataddr":         {Key: "SKYCHATADDR", Format: EnvFormatString},
+	"chataddr":         {Key: "SKYCHATADDR", Format: EnvFormatString, Default: skyenv.SkychatAddr},
 	"servechatpair":    {Key: "SKYCHATPAIR", Format: EnvFormatBool},
 	"no-servechatpair": {Key: "SKYCHATPAIR", Format: EnvFormatBool, Negate: true},
 
@@ -411,14 +431,14 @@ var envMap = map[string]EnvMapping{
 	// Skycoin web wallet
 	"skycoinweb":       {Key: "SKYCOINWEB", Format: EnvFormatBool},
 	"no-skycoinweb":    {Key: "SKYCOINWEB", Format: EnvFormatBool, Negate: true},
-	"skycoinwebaddr":   {Key: "SKYCOINWEBADDR", Format: EnvFormatString},
+	"skycoinwebaddr":   {Key: "SKYCOINWEBADDR", Format: EnvFormatString, Default: "127.0.0.1:8002"},
 	"skycoinwebnodes":  {Key: "SKYCOINWEBNODES", Format: EnvFormatBashArray},
 	"skycoinwebwallet": {Key: "SKYCOINWEBWALLET", Format: EnvFormatString},
 	"skycoinwebuser":   {Key: "SKYCOINWEBUSER", Format: EnvFormatString},
 
 	// Visor runtime
-	"binpath":    {Key: "BINPATH", Format: EnvFormatString},
-	"loglvl":     {Key: "LOGLVL", Format: EnvFormatString},
+	"binpath":    {Key: "BINPATH", Format: EnvFormatString, Default: skyenv.AppBinPath},
+	"loglvl":     {Key: "LOGLVL", Format: EnvFormatString, Default: skyenv.LogLevel},
 	"timeout":    {Key: "SHUTDOWNTIMEOUT", Format: EnvFormatString},
 	"regtimeout": {Key: "REGTIMEOUT", Format: EnvFormatString},
 }
