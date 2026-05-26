@@ -17,20 +17,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	jj "github.com/cloudfoundry-attic/jibber_jabber"
 	ui "github.com/gizak/termui/v3"
 	"github.com/spf13/cobra"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/colorschemes"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
-	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/layout"
-	w "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/widgets"
 	"github.com/xxxserxxx/lingo/v2"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/colorschemes"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/layout"
+	w "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/widgets"
 )
 
 const (

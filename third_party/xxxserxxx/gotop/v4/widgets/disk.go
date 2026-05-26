@@ -8,8 +8,8 @@ import (
 	"time"
 
 	psDisk "github.com/shirou/gopsutil/v3/disk"
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	ui "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"
 )
