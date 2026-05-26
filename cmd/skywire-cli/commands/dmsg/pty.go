@@ -52,6 +52,13 @@ var (
 	// pin --sk or seed DMSGPTY_SK. An explicit --sk / DMSGPTY_SK
 	// always wins.
 	ptyViaVisor bool
+	// ptyScheme pins the visor-side dialer choice for the exec
+	// (forwarded to the visor RPC as DmsgPtyExecArgs.Scheme).
+	// Empty (default) uses the visor's MultiDialer chain (skynet
+	// first, dmsg fallback). "dmsg" forces dmsg-only; "skynet"
+	// forces skynet-only. Useful for unblocking debug when one
+	// strategy in the chain hangs without honoring ctx.
+	ptyScheme string
 )
 
 // ptyTCPViaRE matches `tcp://<66-hex-pk>@<host:port>` for the --via
@@ -93,6 +100,8 @@ func init() {
 		"local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization)")
 	ptyExecCmd.Flags().BoolVar(&ptyViaVisor, "via-visor", false,
 		"borrow local visor's secret key from "+visorconfig.SkywireConfig()+" for the --via noise handshake (--sk wins if set)")
+	ptyExecCmd.Flags().StringVar(&ptyScheme, "scheme", "",
+		"pin transport: \"dmsg\" (force dmsg only), \"skynet\" (force skynet only), or empty (default MultiDialer chain: skynet first, dmsg fallback)")
 
 	// Flags for ui command
 	ptyUICmd.Flags().StringVarP(&ptyPath, "input", "i", "", "read from specified config file")
@@ -258,6 +267,7 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 				Env:       ptyExecEnv,
 				TimeoutMS: timeout.Milliseconds(),
 			},
+			Scheme: ptyScheme,
 		})
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
