@@ -572,75 +572,76 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		}
 		summaries = append(summaries, makeSummaryResp(err == nil, true, summary))
 
-		// Remote visor summaries with per-visor timeout. Successful
-		// fetches are cached so a later RPC failure can still surface
-		// the visor's last-known fields (version, IP, etc) instead of
-		// dropping the row from the response and forcing the UI into
-		// its empty-hyphens state.
-		var deadVisors []cipher.PubKey
+		// Remote visor summaries with per-visor timeout. The 5s outer
+		// cap keeps the UI snappy; cache update + eviction live in
+		// the inner Summary goroutine so completions that arrive
+		// after the outer fired still land — without this, an RPC
+		// that consistently took 6–20s would never refresh the cache
+		// and the visor would render permanently stale.
 		var mu sync.Mutex
 		wg := new(sync.WaitGroup)
 		wg.Add(len(remotes))
+
+		// Visors whose cache was refreshed within this freshness
+		// window count as "live" even if THIS round's Summary RPC
+		// timed out at the 5s outer cap — they're slow, not broken.
+		const cacheFreshWindow = 30 * time.Second
 
 		for _, entry := range remotes {
 			go func(pk cipher.PubKey, c Conn) {
 				defer wg.Done()
 
-				done := make(chan struct{})
-				var sum *Summary
-				var rpcErr error
+				type rpcResult struct {
+					sum    *Summary
+					rpcErr error
+				}
+				resultCh := make(chan rpcResult, 1)
 				go func() {
-					sum, rpcErr = c.API.Summary()
-					close(done)
+					s, e := c.API.Summary()
+					if e == nil && s != nil {
+						// Cache the success here (not in the outer
+						// select) so completions that arrive after
+						// the 5s outer timeout still refresh the
+						// cache for the next poll round.
+						now := time.Now().UTC()
+						cached := *s
+						hv.summaryCacheMx.Lock()
+						hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
+						hv.summaryCacheMx.Unlock()
+					} else {
+						hv.logger.WithError(e).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
+						// Evict on RPC failure so the next accept on
+						// a fresh conn isn't stomped by this stale
+						// entry. Done inline so it works even when
+						// the outer goroutine returned on the 5s
+						// timeout path; the next poll round picks up
+						// the new conn the peer redials in with.
+						hv.mu.Lock()
+						delete(hv.remoteVisors, pk)
+						hv.mu.Unlock()
+					}
+					resultCh <- rpcResult{s, e}
 				}()
 
-				live := false
 				select {
-				case <-done:
-					if rpcErr != nil {
-						hv.logger.WithError(rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
+				case r := <-resultCh:
+					if r.rpcErr == nil {
+						now := time.Now().UTC()
+						resp := makeSummaryResp(true, false, r.sum)
+						resp.LastSeenAt = &now
 						mu.Lock()
-						deadVisors = append(deadVisors, pk)
+						summaries = append(summaries, resp)
 						mu.Unlock()
-					} else {
-						live = true
+						return
 					}
+					// rpcErr already logged + peer evicted in the
+					// inner goroutine; fall through to cache.
 				case <-time.After(5 * time.Second):
-					// Outer timeout: render the UI snappy by falling
-					// through to the cache fallback below, but DON'T
-					// evict the visor on a single slow round. The
-					// Summary goroutine continues running with its
-					// 20s inner ctx (skyenv.RPCTimeout); if the conn
-					// is genuinely broken, that ctx fires, closes the
-					// conn from rpc_client.go:104, and the NEXT poll
-					// round sees rpcErr != nil (write-to-closed-conn)
-					// and properly evicts. Eviction on outer timeout
-					// alone was over-aggressive — it dropped visors
-					// that were merely slow (dmsg jitter, route flap,
-					// transient load) and stranded them in stale-row
-					// state because most visors don't yet have the
-					// idle-detect fix in ServeRPCClient that would
-					// otherwise let them recover by redialing.
 					hv.logger.WithField("pk", pk).
-						Warn("Remote visor summary RPC slow (>5s); using cache, will re-poll next round")
+						Warn("Remote visor summary RPC slow (>5s); using cache, background-updating")
 				}
 
-				if live {
-					now := time.Now().UTC()
-					// Cache a copy so later mutations can't bleed in.
-					cached := *sum
-					hv.summaryCacheMx.Lock()
-					hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
-					hv.summaryCacheMx.Unlock()
-					resp := makeSummaryResp(true, false, sum)
-					resp.LastSeenAt = &now
-					mu.Lock()
-					summaries = append(summaries, resp)
-					mu.Unlock()
-					return
-				}
-
-				// Live fetch failed — try the cache.
+				// Live fetch didn't return success in time — try the cache.
 				hv.summaryCacheMx.RLock()
 				cached, ok := hv.summaryCache[pk]
 				hv.summaryCacheMx.RUnlock()
@@ -648,29 +649,24 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 					return
 				}
 				stale := *cached.sum
-				offlineSince := time.Now().UTC()
-				resp := makeSummaryResp(false, false, &stale)
+				// A recent cache hit means a previous round (or this
+				// round's background completion) just updated us —
+				// the visor's RPCs are merely slow, not dead. Surface
+				// it as online so the UI doesn't flap on slow peers.
+				fresh := time.Since(cached.seenAt) < cacheFreshWindow
 				seenAt := cached.seenAt
+				resp := makeSummaryResp(fresh, false, &stale)
 				resp.LastSeenAt = &seenAt
-				resp.OfflineSince = &offlineSince
+				if !fresh {
+					offlineSince := time.Now().UTC()
+					resp.OfflineSince = &offlineSince
+				}
 				mu.Lock()
 				summaries = append(summaries, resp)
 				mu.Unlock()
 			}(entry.pk, entry.conn)
 		}
 		wg.Wait()
-
-		// Remove dead visors under write lock (safe — no goroutines accessing the map).
-		// Cache entries are NOT dropped here; they keep serving stale rows
-		// until the visor reconnects and we get a fresh summary, which
-		// overwrites the cache entry.
-		if len(deadVisors) > 0 {
-			hv.mu.Lock()
-			for _, pk := range deadVisors {
-				delete(hv.remoteVisors, pk)
-			}
-			hv.mu.Unlock()
-		}
 
 		// Surface stale cache rows for PKs that didn't make it into
 		// summaries this round. The above loop only consults the cache
