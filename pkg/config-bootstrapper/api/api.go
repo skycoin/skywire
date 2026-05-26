@@ -112,7 +112,7 @@ func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(httputil.SetLoggerMiddleware(log))

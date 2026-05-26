@@ -229,7 +229,7 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 // ServeHTTP implements http.Handler
 func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP)
+	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	if a.enableMetrics {
 		r.Use(a.reqsInFlightCountMiddleware.Handle)
