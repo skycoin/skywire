@@ -72,7 +72,7 @@ func getTemps(temps map[string]int) map[string]error {
 			log.Printf("error getting smart data for %s: %s", name, err)
 			continue
 		}
-		temps[name] = int(attr.Temperature)
+		temps[name] = int(attr.Temperature) //nolint:gosec // upstream code; safe under documented invariants
 	}
 	return nil
 }

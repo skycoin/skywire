@@ -73,8 +73,8 @@ func writeGoMetrics(w io.Writer) {
 	WriteGaugeUint64(w, "go_memstats_stack_sys_bytes", ms.StackSys)
 	WriteGaugeUint64(w, "go_memstats_sys_bytes", ms.Sys)
 
-	WriteCounterUint64(w, "go_cgo_calls_count", uint64(runtime.NumCgoCall()))
-	WriteGaugeUint64(w, "go_cpu_count", uint64(runtime.NumCPU()))
+	WriteCounterUint64(w, "go_cgo_calls_count", uint64(runtime.NumCgoCall())) //nolint:gosec // upstream code; safe under documented invariants
+	WriteGaugeUint64(w, "go_cpu_count", uint64(runtime.NumCPU()))             //nolint:gosec // upstream code; safe under documented invariants
 
 	gcPauses := histogram.NewFast()
 	for _, pauseNs := range ms.PauseNs[:] {
@@ -84,25 +84,25 @@ func writeGoMetrics(w io.Writer) {
 	quantiles := make([]float64, 0, len(phis))
 	WriteMetadataIfNeeded(w, "go_gc_duration_seconds", "summary")
 	for i, q := range gcPauses.Quantiles(quantiles[:0], phis) {
-		fmt.Fprintf(w, `go_gc_duration_seconds{quantile="%g"} %g`+"\n", phis[i], q)
+		_, _ = fmt.Fprintf(w, `go_gc_duration_seconds{quantile="%g"} %g`+"\n", phis[i], q) //nolint:errcheck
 	}
-	fmt.Fprintf(w, "go_gc_duration_seconds_sum %g\n", float64(ms.PauseTotalNs)/1e9)
-	fmt.Fprintf(w, "go_gc_duration_seconds_count %d\n", ms.NumGC)
+	_, _ = fmt.Fprintf(w, "go_gc_duration_seconds_sum %g\n", float64(ms.PauseTotalNs)/1e9) //nolint:errcheck
+	_, _ = fmt.Fprintf(w, "go_gc_duration_seconds_count %d\n", ms.NumGC)                   //nolint:errcheck
 
 	WriteCounterUint64(w, "go_gc_forced_count", uint64(ms.NumForcedGC))
 
-	WriteGaugeUint64(w, "go_gomaxprocs", uint64(runtime.GOMAXPROCS(0)))
-	WriteGaugeUint64(w, "go_goroutines", uint64(runtime.NumGoroutine()))
+	WriteGaugeUint64(w, "go_gomaxprocs", uint64(runtime.GOMAXPROCS(0)))  //nolint:gosec // upstream code; safe under documented invariants
+	WriteGaugeUint64(w, "go_goroutines", uint64(runtime.NumGoroutine())) //nolint:gosec // upstream code; safe under documented invariants
 	numThread, _ := runtime.ThreadCreateProfile(nil)
-	WriteGaugeUint64(w, "go_threads", uint64(numThread))
+	WriteGaugeUint64(w, "go_threads", uint64(numThread)) //nolint:gosec // upstream code; safe under documented invariants
 
 	// Export build details.
 	WriteMetadataIfNeeded(w, "go_info", "gauge")
-	fmt.Fprintf(w, "go_info{version=%q} 1\n", runtime.Version())
+	_, _ = fmt.Fprintf(w, "go_info{version=%q} 1\n", runtime.Version()) //nolint:errcheck
 
 	WriteMetadataIfNeeded(w, "go_info_ext", "gauge")
-	fmt.Fprintf(w, "go_info_ext{compiler=%q, GOARCH=%q, GOOS=%q, GOROOT=%q} 1\n",
-		runtime.Compiler, runtime.GOARCH, runtime.GOOS, runtime.GOROOT())
+	_, _ = fmt.Fprintf(w, "go_info_ext{compiler=%q, GOARCH=%q, GOOS=%q, GOROOT=%q} 1\n", //nolint:errcheck
+		runtime.Compiler, runtime.GOARCH, runtime.GOOS, runtime.GOROOT()) //nolint:staticcheck // upstream uses GOROOT; replacement requires runtime go binary discovery
 }
 
 func writeRuntimeMetrics(w io.Writer) {
@@ -172,12 +172,12 @@ func writeRuntimeHistogramMetric(w io.Writer, name string, h *runtimemetrics.Flo
 			iNext += iStep
 			le := buckets[i+1]
 			if !math.IsInf(le, 1) {
-				fmt.Fprintf(w, `%s_bucket{le="%g"} %d`+"\n", name, le, totalCount)
+				_, _ = fmt.Fprintf(w, `%s_bucket{le="%g"} %d`+"\n", name, le, totalCount) //nolint:errcheck
 			}
 		}
 	}
 	totalCount += tailCount
-	fmt.Fprintf(w, `%s_bucket{le="+Inf"} %d`+"\n", name, totalCount)
+	_, _ = fmt.Fprintf(w, `%s_bucket{le="+Inf"} %d`+"\n", name, totalCount) //nolint:errcheck
 	// _sum and _count are not exposed because the Go runtime histogram lacks accurate sum data.
 	// Estimating the sum (as Prometheus does) could be misleading,  while exposing only `_count` without `_sum` is impractical.
 	// We can reconsider if precise sum data becomes available.

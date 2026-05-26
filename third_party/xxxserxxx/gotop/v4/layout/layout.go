@@ -37,13 +37,12 @@ func Layout(wl layout, c gotop.Config) (*MyGrid, error) {
 	tr = c.Tr
 	rowDefs := wl.Rows
 	uiRows := make([][]interface{}, 0)
-	numRows := countNumRows(wl.Rows)
 	var uiRow []interface{}
 	maxHeight := 0
 	heights := make([]int, 0)
 	var h int
 	for len(rowDefs) > 0 {
-		h, uiRow, rowDefs = processRow(c, numRows, rowDefs)
+		h, uiRow, rowDefs = processRow(c, rowDefs)
 		maxHeight += h
 		uiRows = append(uiRows, uiRow)
 		heights = append(heights, h)
@@ -83,7 +82,7 @@ func Layout(wl layout, c gotop.Config) (*MyGrid, error) {
 // if there's a row span widget in the row; in this case, it'll consume as many
 // rows as the largest row span object in the row, and produce an uber-row
 // containing all that stuff. It returns a slice without the consumed elements.
-func processRow(c gotop.Config, numRows int, rowDefs [][]widgetRule) (int, []interface{}, [][]widgetRule) {
+func processRow(c gotop.Config, rowDefs [][]widgetRule) (int, []interface{}, [][]widgetRule) {
 	// Recursive function #3.  See the comment in deepFindProc.
 	if len(rowDefs) < 1 {
 		return 0, nil, [][]widgetRule{}
@@ -202,7 +201,7 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 		b.BarColor = ui.Color(c.Colorscheme.ProcCursor)
 		w = b
 	default:
-		log.Printf(tr.Value("layout.error.widget", widRule.Widget, strings.Join(widgetNames, ",")))
+		log.Print(tr.Value("layout.error.widget", widRule.Widget, strings.Join(widgetNames, ",")))
 		return ui.NewBlock()
 	}
 	if c.ExportPort != "" {
@@ -227,26 +226,6 @@ func assignColors(data map[string][]float64, colors []int, assign map[string]ui.
 		assign[v] = ui.Color(colors[i])
 		i++
 	}
-}
-
-func countNumRows(rs [][]widgetRule) int {
-	var ttl int
-	for len(rs) > 0 {
-		ttl++
-		line := rs[0]
-		h := 1
-		for _, c := range line {
-			if c.Height > h {
-				h = c.Height
-			}
-		}
-		if h < len(rs) {
-			rs = rs[h:]
-		} else {
-			break
-		}
-	}
-	return ttl
 }
 
 // Counts the height of the window so rows can be proportionally scaled.

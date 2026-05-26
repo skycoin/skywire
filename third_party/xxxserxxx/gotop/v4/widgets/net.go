@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	psNet "github.com/shirou/gopsutil/v3/net"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 
 	ui "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/termui"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/utils"
@@ -80,7 +80,7 @@ func (net *NetWidget) update() {
 	var totalBytesRecv uint64
 	var totalBytesSent uint64
 	interfaceMap := make(map[string]bool)
-	// Default behaviour
+	// Default behavior
 	interfaceMap[NetInterfaceAll] = true
 	interfaceMap[NetInterfaceVpn] = false
 	// Build a map with wanted status for each interfaces.
@@ -121,7 +121,7 @@ func (net *NetWidget) update() {
 		}
 		if int(recentBytesSent) < 0 {
 			v := fmt.Sprintf("%d", recentBytesSent)
-			log.Printf(tr.Value("widget.net.err.negvalsent", v))
+			log.Print(tr.Value("widget.net.err.negvalsent", v))
 			// recover from error
 			recentBytesSent = 0
 		}

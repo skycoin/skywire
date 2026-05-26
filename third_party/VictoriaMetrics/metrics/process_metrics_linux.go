@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"strconv"
@@ -49,7 +48,7 @@ type procStat struct {
 
 func writeProcessMetrics(w io.Writer) {
 	statFilepath := "/proc/self/stat"
-	data, err := ioutil.ReadFile(statFilepath)
+	data, err := os.ReadFile(statFilepath)
 	if err != nil {
 		log.Printf("ERROR: metrics: cannot open %s: %s", statFilepath, err)
 		return
@@ -89,10 +88,10 @@ func writeProcessMetrics(w io.Writer) {
 	WriteCounterFloat64(w, "process_cpu_seconds_user_total", utime)
 	WriteCounterUint64(w, "process_major_pagefaults_total", uint64(p.Majflt))
 	WriteCounterUint64(w, "process_minor_pagefaults_total", uint64(p.Minflt))
-	WriteGaugeUint64(w, "process_num_threads", uint64(p.NumThreads))
-	WriteGaugeUint64(w, "process_resident_memory_bytes", uint64(p.Rss)*pageSizeBytes)
-	WriteGaugeUint64(w, "process_start_time_seconds", uint64(startTimeSeconds))
-	WriteGaugeUint64(w, "process_virtual_memory_bytes", uint64(p.Vsize))
+	WriteGaugeUint64(w, "process_num_threads", uint64(p.NumThreads))                  //nolint:gosec // upstream code; safe under documented invariants
+	WriteGaugeUint64(w, "process_resident_memory_bytes", uint64(p.Rss)*pageSizeBytes) //nolint:gosec // upstream code; safe under documented invariants
+	WriteGaugeUint64(w, "process_start_time_seconds", uint64(startTimeSeconds))       //nolint:gosec // upstream code; safe under documented invariants
+	WriteGaugeUint64(w, "process_virtual_memory_bytes", uint64(p.Vsize))              //nolint:gosec // upstream code; safe under documented invariants
 	writeProcessMemMetrics(w)
 	writeIOMetrics(w)
 	writePSIMetrics(w)
@@ -102,7 +101,7 @@ var procSelfIOErrLogged uint32
 
 func writeIOMetrics(w io.Writer) {
 	ioFilepath := "/proc/self/io"
-	data, err := ioutil.ReadFile(ioFilepath)
+	data, err := os.ReadFile(ioFilepath)
 	if err != nil {
 		// Do not spam the logs with errors - this error cannot be fixed without process restart.
 		// See https://github.com/VictoriaMetrics/metrics/issues/42
@@ -171,11 +170,11 @@ func writeFDMetrics(w io.Writer) {
 }
 
 func getOpenFDsCount(path string) (uint64, error) {
-	f, err := os.Open(path)
+	f, err := os.Open(path) //nolint:gosec // upstream code; safe under documented invariants
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() //nolint:errcheck // close ignored: read-only fd inspection
 	var totalOpenFDs uint64
 	for {
 		names, err := f.Readdirnames(512)
@@ -191,7 +190,7 @@ func getOpenFDsCount(path string) (uint64, error) {
 }
 
 func getMaxFilesLimit(path string) (uint64, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // upstream code; safe under documented invariants
 	if err != nil {
 		return 0, err
 	}
@@ -243,7 +242,7 @@ func writeProcessMemMetrics(w io.Writer) {
 }
 
 func getMemStats(path string) (*memStats, error) {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // upstream code; safe under documented invariants
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +377,7 @@ func getPSIMetrics() (*psiMetrics, error) {
 
 func readPSITotals(cgroupPath, statsName string) (uint64, uint64, error) {
 	filePath := cgroupPath + "/" + statsName
-	data, err := ioutil.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) //nolint:gosec // upstream code; safe under documented invariants
 	if err != nil {
 		return 0, 0, err
 	}
@@ -412,7 +411,7 @@ func readPSITotals(cgroupPath, statsName string) (uint64, uint64, error) {
 }
 
 func getCgroupV2Path() string {
-	data, err := ioutil.ReadFile("/proc/self/cgroup")
+	data, err := os.ReadFile("/proc/self/cgroup")
 	if err != nil {
 		return ""
 	}
