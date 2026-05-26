@@ -30,10 +30,8 @@ func RegisterCPU(f func(map[string]int, bool) map[string]error) {
 func UpdateCPU(cpus map[string]int, interval time.Duration, logical bool) {
 	for _, f := range cpuFuncs {
 		errs := f(cpus, logical)
-		if errs != nil {
-			for k, e := range errs {
-				log.Printf("%s: %s", k, e)
-			}
+		for k, e := range errs {
+			log.Printf("%s: %s", k, e)
 		}
 	}
 }

@@ -15,10 +15,8 @@ func RegisterTemp(update func(map[string]int) map[string]error) {
 func UpdateTemps(temps map[string]int) {
 	for _, f := range tempUpdates {
 		errs := f(temps)
-		if errs != nil {
-			for k, e := range errs {
-				log.Printf(tr.Value("error.recovfetch", "temp", k, e.Error()))
-			}
+		for k, e := range errs {
+			log.Print(tr.Value("error.recovfetch", "temp", k, e.Error()))
 		}
 	}
 }

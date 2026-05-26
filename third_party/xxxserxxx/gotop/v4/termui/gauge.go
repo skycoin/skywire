@@ -1,7 +1,7 @@
 package termui
 
 import (
-	. "github.com/gizak/termui/v3"
+	ui "github.com/gizak/termui/v3"
 	gizak "github.com/gizak/termui/v3/widgets"
 )
 
@@ -16,7 +16,7 @@ func NewGauge() *Gauge {
 	}
 }
 
-func (self *Gauge) Draw(buf *Buffer) {
-	self.Gauge.Draw(buf)
-	self.Gauge.SetRect(self.Min.X, self.Min.Y, self.Inner.Dx(), self.Inner.Dy())
+func (g *Gauge) Draw(buf *ui.Buffer) {
+	g.Gauge.Draw(buf)
+	g.Gauge.SetRect(g.Min.X, g.Min.Y, g.Inner.Dx(), g.Inner.Dy())
 }

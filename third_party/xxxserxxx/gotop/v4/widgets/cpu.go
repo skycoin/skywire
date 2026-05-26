@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/VividCortex/ewma"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 
 	"github.com/gizak/termui/v3"

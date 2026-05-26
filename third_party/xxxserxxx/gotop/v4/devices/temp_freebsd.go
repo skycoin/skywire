@@ -58,10 +58,10 @@ func devs() []string {
 	// Check that thermal sensors are really available; they aren't in VMs
 	bs, err := exec.Command("sysctl", "-a").Output()
 	if err != nil {
-		log.Printf(tr.Value("error.fatalfetch", "temp", err.Error()))
+		log.Print(tr.Value("error.fatalfetch", "temp", err.Error()))
 		return []string{}
 	}
-	for k, _ := range sensorOIDS {
+	for k := range sensorOIDS {
 		idx := strings.Index(string(bs), k)
 		if idx >= 0 {
 			rv = append(rv, k)
@@ -69,10 +69,10 @@ func devs() []string {
 	}
 	if len(rv) == 0 {
 		oids := make([]string, 0, len(sensorOIDS))
-		for k, _ := range sensorOIDS {
+		for k := range sensorOIDS {
 			oids = append(oids, k)
 		}
-		log.Printf(tr.Value("error.nodevfound", strings.Join(oids, ", ")))
+		log.Print(tr.Value("error.nodevfound", strings.Join(oids, ", ")))
 	}
 	return rv
 }

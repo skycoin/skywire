@@ -25,8 +25,7 @@ func devs() []string {
 	}
 	rv := make([]string, 0, len(sensors))
 	for _, sensor := range sensors {
-		label := sensor.SensorKey
-		label = strings.TrimSuffix(sensor.SensorKey, "_input")
+		label := strings.TrimSuffix(sensor.SensorKey, "_input")
 		label = strings.TrimSuffix(label, "_thermal")
 		rv = append(rv, label)
 		sensorMap[sensor.SensorKey] = label

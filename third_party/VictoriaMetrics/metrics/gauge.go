@@ -91,9 +91,9 @@ func (g *Gauge) marshalTo(prefix string, w io.Writer) {
 	v := g.Get()
 	if float64(int64(v)) == v {
 		// Marshal integer values without scientific notation
-		fmt.Fprintf(w, "%s %d\n", prefix, int64(v))
+		_, _ = fmt.Fprintf(w, "%s %d\n", prefix, int64(v)) //nolint:errcheck
 	} else {
-		fmt.Fprintf(w, "%s %g\n", prefix, v)
+		_, _ = fmt.Fprintf(w, "%s %g\n", prefix, v) //nolint:errcheck
 	}
 }
 
