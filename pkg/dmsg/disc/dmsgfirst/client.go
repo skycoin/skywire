@@ -47,6 +47,7 @@ import (
 // failure.
 //
 // Parameters:
+//
 //   - primaryDmsgC: the dmsg.Client used for the DMSG-primary path.
 //     Should be the visor's direct-client-backed dmsg.Client (the one
 //     dmsg-disc/TPD/SD/etc. are reachable through without an HTTP-
@@ -64,14 +65,18 @@ import (
 //     delegated, so DialStream resolves locally and the dmsg session
 //     overlap with dmsg-disc's own direct.StartDmsg session set is
 //     reliable.
+//
 //   - dmsgdiscPK: the dmsg-discovery's public key. Used to construct
 //     the DMSG URL (http://<pk>:80). primaryDmsgC must carry a
 //     synthetic entry for this PK in its direct.Client (or otherwise
 //     be able to resolve it without an HTTP-discovery lookup).
+//
 //   - httpURL: the HTTP fallback URL (e.g. "http://dmsgd.skywire.skycoin.com").
 //     Same shape callers passed to disc.NewHTTP.
+//
 //   - httpClient: optional override for the fallback HTTP client. nil
 //     uses http.DefaultClient.
+//
 //   - log: logger for both legs.
 func New(
 	primaryDmsgC *dmsg.Client,
