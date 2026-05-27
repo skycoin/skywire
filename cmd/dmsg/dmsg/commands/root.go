@@ -17,6 +17,9 @@ import (
 	dc "github.com/skycoin/skywire/cmd/dmsg/dmsgcurl/commands"
 	dh "github.com/skycoin/skywire/cmd/dmsg/dmsghttp/commands"
 	di "github.com/skycoin/skywire/cmd/dmsg/dmsgip/commands"
+	dpc "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-cli/commands"
+	dph "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-host/commands"
+	dpu "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-ui/commands"
 	dw "github.com/skycoin/skywire/cmd/dmsg/dmsgweb/commands"
 	dsp "github.com/skycoin/skywire/cmd/dmsg/self-ping/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -31,15 +34,22 @@ var (
 )
 
 func init() {
-	// pty subcommands (dmsgpty-cli / -host / -ui) moved to the
-	// unified `skywire app pty <mode>` tree in cmd/apps/pty/commands.
-	// `skywire dmsg pty <cli|host|ui>` is no longer a valid path;
-	// operators should use `skywire app pty <exec|dmsg|tcp|http>`.
+	// dmsgpty subcommands stay on the dmsg tree so the standalone
+	// `dmsg pty <cli|host|ui>` binary keeps working as-is. The
+	// skywire-binary import path hides DmsgptyCmd in its root.go
+	// because the canonical operator surface there is
+	// `skywire app pty <mode>` (see cmd/apps/pty/commands).
+	DmsgptyCmd.AddCommand(
+		dpc.RootCmd,
+		dph.RootCmd,
+		dpu.RootCmd,
+	)
 
 	ds.RootCmd.AddCommand(
 		dl.RootCmd,
 	)
 	RootCmd.AddCommand(
+		DmsgptyCmd,
 		dd.RootCmd,
 		ds.RootCmd,
 		df.RootCmd,
@@ -58,6 +68,9 @@ func init() {
 	dc.RootCmd.Use = "curl"
 	dw.RootCmd.Use = "web"
 	ds5.RootCmd.Use = "socks"
+	dpc.RootCmd.Use = "cli"
+	dph.RootCmd.Use = "host"
+	dpu.RootCmd.Use = "ui"
 	di.RootCmd.Use = "ip"
 	dsp.RootCmd.Use = "self-ping"
 
@@ -113,6 +126,25 @@ var RootCmd = &cobra.Command{
 			}()
 		}
 	},
+	SilenceErrors:         true,
+	SilenceUsage:          true,
+	DisableSuggestions:    true,
+	DisableFlagsInUseLine: true,
+}
+
+// DmsgptyCmd is the `pty` group inside the dmsg subtree. Exported
+// so the skywire-binary import path (cmd/skywire/commands/root.go)
+// can mark it Hidden — the standalone `dmsg pty` paths still work
+// from the dmsg binary, but the skywire binary surfaces the unified
+// `app pty` tree instead.
+var DmsgptyCmd = &cobra.Command{
+	Use:   "pty",
+	Short: "DMSG pseudoterminal (pty)",
+	Long: `
+	┌─┐┌┬┐┬ ┬
+	├─┘ │ └┬┘
+	┴   ┴  ┴
+DMSG pseudoterminal (pty)`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
