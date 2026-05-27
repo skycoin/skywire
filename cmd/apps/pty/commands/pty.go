@@ -92,28 +92,42 @@ func init() {
 }
 
 // newDelegateCmd builds a thin wrapper cobra.Command whose RunE
-// forwards all args (flags included) to the supplied target's
-// Execute method. Flag parsing is disabled on the wrapper so the
-// target sees the raw args — including --help, which prints the
-// target's own help text. This avoids both (a) sharing cobra
-// command instances between the dmsg tree and this tree (cobra
-// can't handle one Command having two parents) and (b) duplicating
-// each underlying RunE body here.
+// parses flags onto the supplied target's flagset and invokes the
+// target's Run/RunE directly. The wrapper avoids re-entering
+// cobra's dispatcher (which would resolve os.Args back through
+// itself and recurse to a stack overflow — the original shape used
+// target.SetArgs+Execute and hit this bug as soon as both wrapper
+// and target shared an ancestor in the cobra tree).
+//
+// --help intercept fires before ParseFlags so the target's own
+// help text is what operators see, not cobra's flag-help shortcut
+// error path.
 func newDelegateCmd(use, short string, target *cobra.Command) *cobra.Command {
 	return &cobra.Command{
-		Use:                use,
-		Short:              short,
-		DisableFlagParsing: true,
-		// Suppress the wrapper's auto-generated usage on error so
-		// the target's error path stays clean; the target prints
-		// its own help.
+		Use:                   use,
+		Short:                 short,
+		DisableFlagParsing:    true,
 		SilenceErrors:         true,
 		SilenceUsage:          true,
 		DisableSuggestions:    true,
 		DisableFlagsInUseLine: true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			target.SetArgs(args)
-			return target.Execute()
+			for _, a := range args {
+				if a == "--help" || a == "-h" {
+					return target.Help()
+				}
+			}
+			if err := target.ParseFlags(args); err != nil {
+				return err
+			}
+			remaining := target.Flags().Args()
+			if target.RunE != nil {
+				return target.RunE(target, remaining)
+			}
+			if target.Run != nil {
+				target.Run(target, remaining)
+			}
+			return nil
 		},
 	}
 }
