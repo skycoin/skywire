@@ -104,6 +104,47 @@ func (c *Client) SetAppPort(appPort routing.Port) error {
 	return c.rpcC.SetAppPort(appPort)
 }
 
+// SetStatusOrLog sets the detailed status and logs the error if any.
+// Status transitions are best-effort — the app keeps running even if
+// the visor can't be notified, so callers don't have to handle the
+// error path. A nil receiver is a no-op so apps that can run in
+// standalone mode (skychat) don't have to guard each call site.
+// Replaces the setAppStatus helper that every app previously defined
+// locally.
+func (c *Client) SetStatusOrLog(status appserver.AppDetailedStatus) {
+	if c == nil {
+		return
+	}
+	if err := c.SetDetailedStatus(string(status)); err != nil {
+		c.Log().Errorf("Failed to set status %v: %v", status, err)
+	}
+}
+
+// SetErrorOrLog records an app error in the visor and logs the
+// failure to record (not the original error — that's already in
+// appErr). Best-effort and nil-safe like SetStatusOrLog. Replaces
+// the setAppError helper that every app previously defined locally.
+func (c *Client) SetErrorOrLog(appErr error) {
+	if c == nil {
+		return
+	}
+	if err := c.SetError(appErr.Error()); err != nil {
+		c.Log().Errorf("Failed to set error %v: %v", appErr, err)
+	}
+}
+
+// SetAppPortOrLog sets the routing port and logs the error if any.
+// Best-effort and nil-safe like SetStatusOrLog. Replaces the
+// setAppPort helper that every app previously defined locally.
+func (c *Client) SetAppPortOrLog(port routing.Port) {
+	if c == nil {
+		return
+	}
+	if err := c.SetAppPort(port); err != nil {
+		c.Log().Errorf("Failed to set port %v: %v", port, err)
+	}
+}
+
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 	return c.dial(remote, 0, 0, 0, 0, 0, 0)

@@ -125,25 +125,25 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	// Validate required flags
 	if srv == "" {
 		err := fmt.Errorf("--srv flag (remote server public key) is required")
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		return err
 	}
 
 	var remotePK cipher.PubKey
 	if err := remotePK.Set(srv); err != nil {
-		setAppError(appCl, fmt.Errorf("invalid server public key: %w", err))
+		appCl.SetErrorOrLog(fmt.Errorf("invalid server public key: %w", err))
 		return fmt.Errorf("invalid server public key: %w", err)
 	}
 
 	if remotePort <= 0 || remotePort > 65535 {
 		err := fmt.Errorf("--remote flag (remote port) must be 1-65535")
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		return err
 	}
 
 	if localPort <= 0 || localPort > 65535 {
 		err := fmt.Errorf("--local flag (local port) must be 1-65535")
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		return err
 	}
 
@@ -152,10 +152,10 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 
 	// Set routing port if specified
 	if appPort != 0 {
-		setAppPort(appCl, routing.Port(appPort))
+		appCl.SetAppPortOrLog(routing.Port(appPort))
 	}
 
-	setAppStatus(appCl, appserver.AppDetailedStatusStarting)
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
 
 	// Build a dial factory the client calls per-accept. The factory
 	// captures appCl + remote endpoint so each local connection gets
@@ -207,7 +207,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	client := skynet.NewClient(appCl.Log(), remotePK, remotePort, localPort, dialRemote)
 
 	appCl.Log().Info("Skynet client ready — waiting for local connections")
-	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 
 	// Handle shutdown
 	termCh := make(chan os.Signal, 1)
@@ -221,7 +221,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		}
 	}()
 
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	defer appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 
 	// Serve (accept local connections)
 	serveCh := make(chan error, 1)
@@ -244,27 +244,9 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	return nil
 }
 
-func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
-	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		appCl.Log().Errorf("Failed to set status %v: %v", status, err)
-	}
-}
-
-func setAppError(appCl *app.Client, appErr error) {
-	if err := appCl.SetError(appErr.Error()); err != nil {
-		appCl.Log().Errorf("Failed to set error %v: %v", appErr, err)
-	}
-}
-
 // Execute executes root CLI command.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		appCl.Log().Errorf("Failed to set port %v: %v", port, err)
 	}
 }
