@@ -71,7 +71,7 @@ var prodData = Services{
 		}{Address: "143.42.59.213:30081"}},
 		{Static: "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7", Server: struct {
 			Address string `json:"address"`
-		}{Address: "70.121.13.123:9082"}},
+		}{Address: "70.121.13.123:9083"}},
 		{Static: "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd", Server: struct {
 			Address string `json:"address"`
 		}{Address: "139.162.173.101:30082"}},
@@ -140,7 +140,7 @@ var testData = Services{
 		}{Address: "143.42.59.213:30081"}},
 		{Static: "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7", Server: struct {
 			Address string `json:"address"`
-		}{Address: "70.121.13.123:9082"}},
+		}{Address: "70.121.13.123:9083"}},
 		{Static: "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd", Server: struct {
 			Address string `json:"address"`
 		}{Address: "139.162.173.101:30082"}},
