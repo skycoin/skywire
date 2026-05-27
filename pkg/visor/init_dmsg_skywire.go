@@ -27,6 +27,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -81,47 +82,58 @@ func skywireConnPK(conn net.Conn) (cipher.PubKey, bool) {
 // Mirror of pty.ListenAndServe but on the skynet path; runs in its
 // own goroutine alongside the dmsg listener.
 //
-// Returns a func that cancels + waits for the goroutine. Nil
-// returned cancel means setup failed and the caller can ignore
-// shutdown bookkeeping — typical when the skynet networker isn't
-// available yet at init time.
+// The skynet networker is registered during initRouter, which may
+// run AFTER initDmsg invokes us here. We can't gate the wire-up on
+// "networker present now" — that'd silently drop the entire skynet
+// pty listener for the lifetime of the process whenever init steps
+// ran in this order. Instead, spawn a goroutine that polls until
+// the networker registers (using the same backoff as
+// goServeSkynetMirror in dual_listen.go), then binds + serves. If
+// ctx cancels before the networker shows up the goroutine exits
+// cleanly.
+//
+// Returns a func that cancels + waits for the serve goroutine.
 func startSkywirePtyListener(ctx context.Context, pty *dmsgpty.Host, localPK cipher.PubKey, port uint16, runtimeErrors chan<- error) func() error {
-	n, err := appnet.ResolveNetworker(appnet.TypeSkynet)
-	if err != nil {
-		// Skynet networker not wired yet — operator will still get
-		// the dmsg listener and the dmsg-only MultiDialer fallback;
-		// pty over skynet routes is then a no-op for this visor run.
-		// Not a fatal init error because the dmsgpty service itself
-		// still functions.
-		return nil
-	}
-	sn, ok := n.(*appnet.SkywireNetworker)
-	if !ok {
-		return nil
-	}
-
-	lis, err := sn.Listen(appnet.Addr{
-		Net:    appnet.TypeSkynet,
-		PubKey: localPK,
-		Port:   routing.Port(port),
-	})
-	if err != nil {
-		// Listen failure is non-fatal for the same reason the
-		// networker-missing branch is: dmsg path keeps working.
-		// Surface as a runtime warning rather than killing init.
-		select {
-		case runtimeErrors <- fmt.Errorf("skywire dmsgpty Listen: %w", err):
-		default:
-		}
-		return nil
-	}
-
 	serveCtx, cancel := context.WithCancel(ctx)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 
+	log := logging.MustGetLogger("dmsgpty_skynet")
+
 	go func() {
 		defer wg.Done()
+
+		if !waitForSkynetNetworker(serveCtx) {
+			return // ctx canceled before networker registered
+		}
+
+		n, err := appnet.ResolveNetworker(appnet.TypeSkynet)
+		if err != nil {
+			log.WithError(err).Warn("dmsgpty skynet: resolve networker failed after wait")
+			return
+		}
+		sn, ok := n.(*appnet.SkywireNetworker)
+		if !ok {
+			log.Warn("dmsgpty skynet: resolved networker is not SkywireNetworker")
+			return
+		}
+
+		lis, err := sn.Listen(appnet.Addr{
+			Net:    appnet.TypeSkynet,
+			PubKey: localPK,
+			Port:   routing.Port(port),
+		})
+		if err != nil {
+			// Listen failure is non-fatal — dmsg listener still works.
+			select {
+			case runtimeErrors <- fmt.Errorf("skywire dmsgpty Listen: %w", err):
+			default:
+			}
+			return
+		}
+
+		log.WithField("port", port).Info("dmsgpty skynet listener bound")
+
 		if err := pty.ListenAndServeNet(serveCtx, lis, skywireConnPK); err != nil {
 			select {
 			case runtimeErrors <- fmt.Errorf("skywire dmsgpty serve: %w", err):
