@@ -1828,4 +1828,3 @@ func handleIPCSignal(client *ipc.Client) {
 	}
 	client.Close()
 }
-
