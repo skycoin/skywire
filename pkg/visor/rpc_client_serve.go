@@ -52,7 +52,19 @@ const rpcSkynetCooldown = 5 * time.Minute
 // dies silently: the hypervisor's next poll times out, its close
 // can't deliver a close frame over the broken session, and our
 // blocking Read on the served end of the conn sits parked forever.
-const hypervisorRPCIdleTimeout = 10 * time.Minute
+//
+// 90s lines up with the dmsg.StreamIdleTimeout (2min) on the
+// hypervisor side — by the time the hypervisor's view of the
+// stream is decisively dead, the visor's redial path has already
+// fired here. Previous value (10min) left peers showing
+// "last seen N minutes ago" in the hypervisor UI for the full
+// idle window before the visor finally noticed and redialed;
+// operators correctly flagged this as a regression from before
+// the silent-stream-death fix (#2806). Trade-off: a quieter
+// hypervisor (UI closed for >90s) triggers a single redial per
+// 90s window — cheap, the dial completes in ~100ms over an
+// already-established dmsg session.
+const hypervisorRPCIdleTimeout = 90 * time.Second
 
 // rpcTransport names the transport carrying a given served RPC conn,
 // recorded by dialHypervisorRPC so ServeRPCClient can apply the
