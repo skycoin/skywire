@@ -20,11 +20,12 @@ skywire cli config update ss
 ## Global Flags
 
 ```
-  -h, --help            show help menu
-  -i, --input string    path of input config file.
-      --json            print output as JSON
-  -o, --output string   config file to output
-      --timeout int     RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+  -i, --input string      path of input config file.
+      --json              print output as JSON
+  -o, --output string     config file to output
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

@@ -116,7 +116,7 @@ skywire svc ut
                                   (default ":9096")
       --dmsg-disc string         url of dmsg discovery
                                   (default "http://dmsgd.skywire.skycoin.com")
-      --dmsgPort uint16          dmsg port value
+      --dmsg-port uint16         dmsg port value
                                   (default 80)
       --enable-load-testing      enable load testing
       --geoip string             url of geoip service

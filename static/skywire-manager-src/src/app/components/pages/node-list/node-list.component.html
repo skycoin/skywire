@@ -238,60 +238,89 @@
             <table
               class="responsive-table-translucid d-none d-md-table"
               cellspacing="0" cellpadding="0"
+              cdkDropList
+              [cdkDropListData]="dataSource"
+              (cdkDropListDropped)="rowDropped($event)"
               >
-              <!-- Column names. -->
+              <!-- Column names. Click any header to sort by that column;
+                   clicking also drops any active drag-drop custom order
+                   (changeSort wraps dataSorter.changeSortingOrder +
+                   resetCustomOrder), so a sort always wins over a
+                   previously-arranged manual order. -->
               <tr>
-                <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
+                <th class="drag-handle-column"></th>
+                <th class="sortable-column small-column" (click)="changeSort(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
                   <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
                   @if (dataSorter.currentSortingColumn === hypervisorSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
+                <th class="sortable-column small-column" (click)="changeSort(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
                   <span class="dot-outline-gray"></span>
                   @if (dataSorter.currentSortingColumn === stateSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column labels" (click)="dataSorter.changeSortingOrder(labelSortData)">
+                <th class="sortable-column labels" (click)="changeSort(labelSortData)">
                   {{ 'nodes.label' | translate }}
                   @if (dataSorter.currentSortingColumn === labelSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th>
+                <th class="sortable-column" (click)="changeSort(ipLocationSortData)">
                   {{ 'nodes.ip-location' | translate }}
+                  @if (dataSorter.currentSortingColumn === ipLocationSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
                 </th>
-                <th>
+                <th class="sortable-column" (click)="changeSort(transportsCountSortData)">
                   {{ 'nodes.transports' | translate }}
+                  @if (dataSorter.currentSortingColumn === transportsCountSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
                 </th>
-                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
+                <th class="sortable-column" (click)="changeSort(keySortData)">
                   {{ 'nodes.key' | translate }}
                   @if (dataSorter.currentSortingColumn === keySortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(versionSortData)">
+                <th class="sortable-column" (click)="changeSort(versionSortData)">
                   {{ 'nodes.version' | translate }}
                   @if (dataSorter.currentSortingColumn === versionSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th>
+                <th class="sortable-column" (click)="changeSort(servicesCountSortData)">
                   {{ 'nodes.services' | translate }}
+                  @if (dataSorter.currentSortingColumn === servicesCountSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
                 </th>
-                <th>
+                <th class="sortable-column" (click)="changeSort(rewardAddressSortData)">
                   {{ 'nodes.reward' | translate }}
+                  @if (dataSorter.currentSortingColumn === rewardAddressSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
                 </th>
                 <th class="actions"></th>
               </tr>
-              <!-- Values. -->
+              <!-- Values. cdkDrag makes the row draggable from its
+                   handle column; clicks anywhere else still navigate
+                   via routerLink. cdkDragHandle scopes the drag to
+                   the icon so the rest of the row keeps its
+                   click-to-navigate behavior. -->
               @for (node of dataSource; track node) {
                 <a
                   [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale}"
                   class="selectable link-row"
                   [routerLink]="node.online ? ['/nodes', node.localPk] : null"
+                  cdkDrag
+                  [cdkDragData]="node"
                   >
+                  <td class="drag-handle-column" cdkDragHandle [matTooltip]="'nodes.drag-to-reorder' | translate" (click)="$event.stopPropagation(); $event.preventDefault();">
+                    <mat-icon class="grey-text drag-handle-icon" [inline]="true">drag_indicator</mat-icon>
+                  </td>
                   <td>
                     @if (node.isHypervisor) {
                       <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>

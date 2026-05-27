@@ -42,6 +42,47 @@
   width: 1px;
 }
 
+// cdkDragHandle column: minimal width, neutral grip icon. Cursor
+// flips to grab/grabbing during drag so operators can tell it's
+// interactive. Hover lifts the icon's opacity from the muted
+// grey-text default to full-strength.
+.drag-handle-column {
+  width: 24px;
+  cursor: grab;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+.drag-handle-icon {
+  opacity: 0.5;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+// During an active CDK drag, the moving row gets .cdk-drag-preview
+// (the floating "ghost"); the placeholder slot left behind gets
+// .cdk-drag-placeholder. Both need styling so the table layout
+// doesn't collapse mid-drag and the operator can see where the row
+// will land.
+.cdk-drag-preview {
+  box-sizing: border-box;
+  border-radius: 4px;
+  box-shadow: 0 5px 5px -3px rgba(0, 0, 0, 0.3),
+              0 8px 10px 1px rgba(0, 0, 0, 0.2),
+              0 3px 14px 2px rgba(0, 0, 0, 0.12);
+  background: rgba(20, 30, 50, 0.95);
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.3;
+}
+
+.cdk-drag-animating {
+  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}
+
 .non-selectable {
   cursor: not-allowed;
 }
