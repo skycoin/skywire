@@ -49,4 +49,18 @@ type AppConfig struct {
 	// (today: external when Binary is set, internal otherwise).
 	// Honored by StartApp; StartAppWithMode still wins per-call.
 	LauncherMode string `json:"launcher_mode,omitempty"`
+	// RestartPolicy controls what happens when the proc exits.
+	// String form of appcommon.RestartPolicy (kept as string in spec
+	// to keep this package WASM-clean — no appcommon import).
+	//   ""            = Never (default — proc stays stopped on exit)
+	//   "on-failure"  = Restart only when the proc returns a non-nil
+	//                   error.
+	//   "always"      = Restart on any exit, including operator-
+	//                   initiated stop. Used by critical apps (pty,
+	//                   etc.) where accidentally stopping the proc
+	//                   would lock the operator out of remote
+	//                   management. The only path to actually
+	//                   disable an Always-policy app is to remove
+	//                   its config entry and restart the visor.
+	RestartPolicy string `json:"restart_policy,omitempty"`
 }

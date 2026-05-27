@@ -70,7 +70,7 @@ func TestProcManager_Pop(t *testing.T) {
 	appName := "app"
 
 	app, err := m.pop(appName)
-	require.Equal(t, err, errNoSuchApp)
+	require.Equal(t, err, ErrNoSuchApp)
 	require.Nil(t, app)
 
 	m.procs[appName] = nil
@@ -105,7 +105,7 @@ func TestProcManager_SetDetailedStatus(t *testing.T) {
 
 	nonExistingAppName := "none"
 	err = m.SetDetailedStatus(nonExistingAppName, wantStatus)
-	require.Equal(t, errNoSuchApp, err)
+	require.Equal(t, ErrNoSuchApp, err)
 }
 
 func TestProcManager_DetailedStatus(t *testing.T) {
@@ -128,7 +128,7 @@ func TestProcManager_DetailedStatus(t *testing.T) {
 
 	nonExistingAppName := "none"
 	_, err = m.DetailedStatus(nonExistingAppName)
-	require.Equal(t, errNoSuchApp, err)
+	require.Equal(t, ErrNoSuchApp, err)
 }
 
 func TestProcManager_RegisterAndDeregister(t *testing.T) {
@@ -161,5 +161,5 @@ func TestProcManager_RegisterAndDeregister(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = m.DetailedStatus(appName)
-	require.Equal(t, errNoSuchApp, err)
+	require.Equal(t, ErrNoSuchApp, err)
 }
