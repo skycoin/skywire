@@ -70,6 +70,14 @@ func init() {
 
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
 	dmsg.RootCmd.Use = "dmsg"
+	// The standalone `dmsg pty <cli|host|ui>` subtree stays in code
+	// (the standalone dmsg binary still exposes it), but it's
+	// redundant when imported into skywire — the canonical operator
+	// surface here is `skywire app pty <mode>`. Hide it so help
+	// output funnels operators to the unified path; the old path
+	// still resolves when invoked directly for back-compat with
+	// existing operator scripts.
+	dmsg.DmsgptyCmd.Hidden = true
 	services.RootCmd.Use = "svc"
 
 	scli.RootCmd.Use = "cli"

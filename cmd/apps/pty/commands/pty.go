@@ -6,26 +6,29 @@
 //   - visor   visor-hosted Internal app. Started by the launcher;
 //     not exposed here. (See RFC #2775 Phase 3.3.)
 //   - dmsg    standalone process with a dmsg listener (own keys,
-//     own dmsg client). Can also enable a TCP listener
-//     via --tcp-listen; --no-dmsg makes it TCP-only.
+//     own dmsg client). Can also enable a TCP listener via
+//     --tcp-listen; --no-dmsg makes it TCP-only.
 //   - tcp     standalone TCP-only (ssh equivalent). Convenience
-//     wrapper that forces --no-dmsg on `dmsg`; --addr is
-//     required and seeds --tcp-listen.
+//     wrapper that forces --no-dmsg on `dmsg`; --addr is required
+//     and seeds --tcp-listen.
 //   - http    HTTP/WebSocket bridge — serves a real PTY in a
-//     browser via the dmsgpty.UI machinery. Bridges to a
-//     running mode-1/2/3 pty server via --hnet + --haddr.
+//     browser via the dmsgpty.UI machinery. Bridges to a running
+//     mode-1/2/3 pty server via --hnet + --haddr.
 //
 // Plus an `exec` subcommand that dials a remote pty server and
 // runs a command (the old `dmsgpty-cli` flow), with `whitelist`
 // management subcommands underneath it.
 //
-// Code layout: each mode mounts the existing dmsgpty-host /
-// dmsgpty-ui / dmsgpty-cli cobra command from cmd/dmsg/ as a
-// subcommand under this tree, with the Use field renamed. The
-// dmsg subcommand tree (`skywire dmsg pty *`) no longer mounts
-// these — that path moved to `skywire app pty *`. The package-
-// level code identifiers (`pkg/dmsg/dmsgpty/`, `conf.Dmsgpty`,
-// etc.) are unchanged; that deeper rename is a follow-up PR.
+// Code layout: each mode here is a **thin delegating wrapper** —
+// disables flag parsing and forwards all args (including --help)
+// to the underlying `cmd/dmsg/dmsgpty-{host,ui,cli}/` RootCmd via
+// SetArgs + Execute. The dmsg subcommand tree continues to mount
+// those RootCmds as `dmsg pty <cli|host|ui>` (the standalone dmsg
+// binary needs that surface intact); the skywire-binary import
+// hides the dmsg-pty group so help output funnels operators here.
+// The package-level code identifiers (`pkg/dmsg/dmsgpty/`,
+// `conf.Dmsgpty`, etc.) are unchanged — deeper rename is a
+// follow-up PR.
 package commands
 
 import (
@@ -68,30 +71,57 @@ whitelist. See 'skywire app pty <mode> --help' for per-mode flags.`,
 }
 
 func init() {
-	// Mount each existing implementation under the unified tree
-	// with its operator-facing mode name. The dmsg subcommand tree
-	// (cmd/dmsg/dmsg/commands/root.go) no longer mounts these, so
-	// each *.RootCmd has a single parent (this tree).
-	dph.RootCmd.Use = "dmsg"
-	dph.RootCmd.Short = "Run a standalone pty server (dmsg listener; +TCP via --tcp-listen)"
-
-	dpu.RootCmd.Use = "http"
-	dpu.RootCmd.Short = "Serve a pty over HTTP/WebSocket for browser-rendered terminal"
-
-	dpc.RootCmd.Use = "exec"
-	dpc.RootCmd.Short = "Dial a remote pty server and run a command (whitelist subcommands underneath)"
-
 	RootCmd.AddCommand(
-		dph.RootCmd, // dmsg
-		newTCPCmd(), // tcp — wraps dmsg with --no-dmsg forced
-		dpu.RootCmd, // http
-		dpc.RootCmd, // exec
+		newDelegateCmd(
+			"dmsg",
+			"Run a standalone pty server (dmsg listener; +TCP via --tcp-listen)",
+			dph.RootCmd,
+		),
+		newTCPCmd(),
+		newDelegateCmd(
+			"http",
+			"Serve a pty over HTTP/WebSocket for browser-rendered terminal",
+			dpu.RootCmd,
+		),
+		newDelegateCmd(
+			"exec",
+			"Dial a remote pty server and run a command (whitelist subcommands underneath)",
+			dpc.RootCmd,
+		),
 	)
 }
 
-// newTCPCmd builds the `tcp` mode wrapper. It's a thin shim over
-// the dmsg-host RootCmd that forces --no-dmsg and seeds --tcp-listen
-// from a required --addr. Operators get a discoverable subcommand
+// newDelegateCmd builds a thin wrapper cobra.Command whose RunE
+// forwards all args (flags included) to the supplied target's
+// Execute method. Flag parsing is disabled on the wrapper so the
+// target sees the raw args — including --help, which prints the
+// target's own help text. This avoids both (a) sharing cobra
+// command instances between the dmsg tree and this tree (cobra
+// can't handle one Command having two parents) and (b) duplicating
+// each underlying RunE body here.
+func newDelegateCmd(use, short string, target *cobra.Command) *cobra.Command {
+	return &cobra.Command{
+		Use:                use,
+		Short:              short,
+		DisableFlagParsing: true,
+		// Suppress the wrapper's auto-generated usage on error so
+		// the target's error path stays clean; the target prints
+		// its own help.
+		SilenceErrors:         true,
+		SilenceUsage:          true,
+		DisableSuggestions:    true,
+		DisableFlagsInUseLine: true,
+		RunE: func(_ *cobra.Command, args []string) error {
+			target.SetArgs(args)
+			return target.Execute()
+		},
+	}
+}
+
+// newTCPCmd builds the `tcp` mode wrapper. Unlike newDelegateCmd
+// it parses its own flags so we can require --addr; the resulting
+// flag combo (--no-dmsg + --tcp-listen <addr>) is injected onto
+// the dmsg-host RootCmd. Operators get a discoverable subcommand
 // for the ssh-equivalent deployment shape without having to know
 // the underlying flag combination.
 func newTCPCmd() *cobra.Command {
@@ -119,11 +149,6 @@ the full surface.`,
 			if addr == "" {
 				return fmt.Errorf("--addr is required for tcp mode (e.g. --addr :2022)")
 			}
-			// Inject the equivalent flag combo on the underlying
-			// dmsg-host RootCmd and re-enter its parsing. This avoids
-			// duplicating the host's RunE; the trade-off is that the
-			// tcp subcommand only forwards --addr, not the rest of
-			// the host's flag surface.
 			dph.RootCmd.SetArgs([]string{"--no-dmsg", "--tcp-listen", addr})
 			return dph.RootCmd.Execute()
 		},
