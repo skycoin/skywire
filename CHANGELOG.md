@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.58
+
+Patch release. Four PRs on top of v1.3.57. All targeted at the "nodes appear slowly after restart and some flicker to last-seen-at" regression operators saw after upgrading to v1.3.57.
+
+Trace: #2842's cache-update-on-success in the inner goroutine was the right call (it fixed an earlier stale-cache pathology), but it also moved RPC-failure eviction into the inner goroutine — that half was over-aggressive. Slow-but-functional peers (dmsg jitter, route flap, transient load) got kicked out of `remoteVisors` on every poll round; peers redialed and re-registered, but during the seconds between eviction and re-accept the UI rendered them via the sweep branch as `last seen at: …` — visible flicker.
+
+#2855 walks back the aggressive eviction (the load-bearing cache-update stays). #2852 + #2853 widen the cache-fresh window to 3min (covering the dmsg.StreamIdleTimeout cycle) for both the in-remoteVisors fallback and the sweep branch. #2856 shrinks the visor-side hypervisor-RPC idle-timeout from 10min → 90s so when the stream genuinely dies silently the visor notices in seconds instead of minutes.
+
+End-to-end: hypervisor UI matches the pre-#2842 behavior operators remember — peers stay online through normal flap cycles, only flip to "last seen at" when truly gone, and recover within ~90s of any silent stream death.
+
+### Hypervisor UI stale-row regression
+
+-   `fix(hypervisor)`: widen cache-fresh window 30s → 3min to absorb stream-idle cycle  [#2852](https://github.com/skycoin/skywire/pull/2852)
+-   `fix(hypervisor)`: apply cache-fresh window to sweep branch too  [#2853](https://github.com/skycoin/skywire/pull/2853)
+-   `fix(hypervisor)`: walk back the aggressive-eviction half of #2842  [#2855](https://github.com/skycoin/skywire/pull/2855)
+-   `fix(visor)`: shorten hypervisor RPC idle-timeout 10min → 90s  [#2856](https://github.com/skycoin/skywire/pull/2856)
+
 ## 1.3.57
 
 Patch release. 47 PRs on top of v1.3.56.
