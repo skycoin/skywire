@@ -23,9 +23,10 @@ skywire cli route find <public-key> | <public-key-visor-1> <public-key-visor-2>
 ## Global Flags
 
 ```
-  -h, --help         show help menu
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -h, --help              show help menu
+      --json              print output as JSON
+      --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

@@ -39,10 +39,14 @@ skywire cli skychat send
 ## Flags
 
 ```
+  -c, --config string   skywire.json path — only sk field read, for --via tcp identity
   -m, --msg string      message to send (required)
   -n, --net string      network type: skynet or dmsg (default "skynet")
   -r, --retries int     extra retry attempts on HTTP/transport failure (default 1). 0 disables retry. Each retry waits 200ms × attempt before retrying. Ack timeouts (peer-side failures with --wait) are NOT retried. (default 1)
-  -t, --to string       recipient public key (required)
+      --sk string       identity SK for --via tcp (hex). Overrides env + config.
+  -t, --to string       recipient public key (optional when --via tcp://<pk>@host:port is set — the PK in --via is used)
+      --verbose         surface per-layer detail to stderr: POST request URL+payload, HTTP response status+headers, ack timing, /status counter deltas (outbound_msg_count / fail / retry / fallback). Use to debug send failures.
+      --via string      bypass local chat-app and dial the remote chat-app directly via noise-TCP: tcp://<pk>@host:port. Survives visor / dmsg outages. Use --sk / -c / DMSGCURL_SK for identity. When set, --to becomes optional (the PK in --via is used).
   -w, --wait duration   wait for peer-receipt ack up to this duration (e.g. 5s, 30s); 0 disables wait and returns success on WriteFrame (fire-and-forget). Default 5s gives delivery confirmation. (default 5s)
 ```
 

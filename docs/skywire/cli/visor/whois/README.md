@@ -33,9 +33,10 @@ skywire cli visor whois <pk>
 ## Global Flags
 
 ```
-  -h, --help         show help menu
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -h, --help              show help menu
+      --json              print output as JSON
+      --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

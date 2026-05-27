@@ -20,18 +20,22 @@ skywire cli visor hv
 - [disable](disable/README.md) — Disable hypervisor UI at runtime
 - [enable](enable/README.md) — Enable hypervisor UI at runtime
 - [ls](ls/README.md) — List visors connected to this hypervisor
+- [passwd](passwd/README.md) — Change the hypervisor UI admin password
 - [pk](pk/README.md) — Public key of remote hypervisor(s)
+- [rm](rm/README.md) — Disconnect from a remote hypervisor at runtime
 - [status](status/README.md) — Check if hypervisor is enabled
+- [tree](tree/README.md) — Tree view of visors per hypervisor (local + direct sub-hypervisors)
 - [tui](tui/README.md) — Hypervisor terminal UI
 - [ui](ui/README.md) — Open Hypervisor UI in default browser
 
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

@@ -13,22 +13,29 @@ skywire cli skynet start [pk]
 ## Flags
 
 ```
-      --external      force external launcher
-      --internal      force internal launcher
-  -l, --local int     local port to listen on
-  -n, --name string   custom name for this client instance (default: skynet-client-<local-port>)
-  -k, --pk string     remote server public key
-      --port uint16   routing port for communication between app and visor
-  -r, --remote int    remote port to forward
+      --external               force external launcher
+      --forward-min-hops int   per-direction forward MinHops override (>=2 forces multi-hop on forward only)
+      --forward-mux int        per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)
+      --internal               force internal launcher
+  -l, --local int              local port to listen on
+      --min-hops int           force routes through at least this many intermediates (>=2 rejects direct paths)
+  -n, --name string            custom name for this client instance (default: skynet-client-<local-port>)
+  -k, --pk string              remote server public key
+      --port uint16            routing port for communication between app and visor
+  -r, --remote int             remote port to forward
+      --reverse-min-hops int   per-direction reverse MinHops override (>=2 forces multi-hop on reverse only; combine with low/0 --min-hops for direct-upstream + multi-hop-downstream)
+      --reverse-mux int        per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)
+      --routes int             number of parallel skynet mux routes (0 or 1 = single route)
 ```
 
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---
