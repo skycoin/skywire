@@ -23,6 +23,10 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -223,12 +227,42 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 	v.embeddedDmsgWeb = runtime
 	v.initLock.Unlock()
 
-	if cfg.Enable {
-		if err := runtime.Start(); err != nil {
-			log.WithError(err).Warn("failed to auto-start dmsgweb")
-		}
-	} else {
-		log.Info("Embedded dmsgweb constructed but not started (enable=false); toggle via RPC")
-	}
+	// Register as an Internal app (RFC #2775 Phase 3.2). The
+	// launcher's AutoStart pass brings the SOCKS5 listener up when
+	// cfg.Enable=true; visor halt tears it down via procM.Close.
+	// RestartPolicy=Never so operator-driven toggles via
+	// `cli visor app start|stop dmsgweb` behave as expected (no
+	// surprise auto-restart on stop — different from pty).
+	launcher.RegisterApp(skyenvDmsgWebApp, buildDmsgWebAppFunc(runtime, log))
 	return nil
+}
+
+// skyenvDmsgWebApp is the launcher-registered name for the embedded
+// dmsgweb SOCKS5 proxy. Operators see it in `cli visor app ls` and
+// can toggle it via `cli visor app start|stop dmsgweb`.
+const skyenvDmsgWebApp = "dmsgweb"
+
+// buildDmsgWebAppFunc wraps the EmbeddedDmsgWeb runtime in the
+// AppFunc contract — the launcher invokes it on app start; the
+// returned func opens an app.Client to complete the in-process
+// IPC handshake, calls Start, blocks on ctx cancel, then calls
+// Stop. Same shape as buildPtyAppFunc in init_dmsg.go.
+func buildDmsgWebAppFunc(rt *EmbeddedDmsgWeb, log *logging.Logger) appcommon.AppFunc {
+	return func(ctx context.Context, _ []string) error {
+		appCl := app.NewClient(nil)
+		defer appCl.Close()
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
+		if err := rt.Start(); err != nil {
+			log.WithError(err).Warn("dmsgweb Start failed")
+			appCl.SetErrorOrLog(err)
+			return err
+		}
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
+		<-ctx.Done()
+		if err := rt.Stop(); err != nil {
+			log.WithError(err).Warn("dmsgweb Stop failed")
+		}
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
+		return nil
+	}
 }
