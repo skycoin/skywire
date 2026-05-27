@@ -14,7 +14,9 @@ Status: **Draft.** Scope was revised after the first round of discussion (see "S
 
 The original `#2775` issue body included the hypervisor UI in the "make it an app" list. That decision was made before the `skywire web` surface was scaffolded. With the web PTY in the picture, the unification this RFC is really after — **uniform operator visibility and control** — gets delivered at the operator-interface layer, not at the supervisor layer.
 
-**About the web PTY.** Mechanistically, `skywire web` is **dmsgpty serving its pseudoterminal over HTTP/WebSocket** so the operator's browser can render the terminal. The skywire CLI runs inside that PTY as a normal interactive shell session. It is **not** a REST/RPC gateway exposing per-command endpoints — it is the same PTY mechanism that backs `cli dmsg pty exec`, just rendered in a different transport. The security model inherits dmsgpty's PK-based authentication; no new auth surface is introduced.
+**About the web PTY.** Mechanistically, `skywire web` is **the pty subsystem serving its pseudoterminal over HTTP/WebSocket** so the operator's browser can render the terminal. The skywire CLI runs inside that PTY as a normal interactive shell session. It is **not** a REST/RPC gateway exposing per-command endpoints — it is the same PTY mechanism that backs the existing dmsg-transport pty (`cli dmsg pty exec`), just rendered over a different transport. The security model inherits the pty subsystem's PK-based authentication; no new auth surface is introduced.
+
+**Terminology rename.** The subsystem is conceptually a **pty (pseudoterminal)**. How it connects or serves and over what transport is a detail — dmsg today, HTTP via the web scaffold, potentially a local unix socket later. The current code identifier `dmsgpty` (package, config key, CLI subcommand) bakes the transport into the name; this RFC standardizes on **`pty`** for the concept and treats `dmsg` / `http` / `local` as **modes** (transports) of the same thing. The CLI surface for the standalone serves becomes `skywire app pty serve --transport=dmsg|http|local`; the existing dmsg-transport command tree (`skywire dmsg pty exec`) gains an `skywire app pty exec` alias path. The deeper code rename (`pkg/dmsgpty/` → `pkg/pty/`, `conf.Dmsgpty` → `conf.Pty` with backward-compat, etc.) is a follow-up PR — out of scope here; the rest of this RFC uses **pty** as the concept name and references existing identifiers like `pkg/dmsgpty/` only where pointing at code that hasn't been renamed yet.
 
 The implications for this RFC:
 
@@ -22,9 +24,9 @@ The implications for this RFC:
 - The thing that originally made "hypervisor as an app" attractive was uniform visibility (`cli visor app ls` showing the full picture). The web PTY delivers that same uniformity *one level up*: the operator's single remote-control surface is the shell, and `cli visor app ls` is just one of many things they run inside it.
 - Hypervisor stays as a visor subsystem with its existing init wiring. No lifecycle refactor inside critical-path code.
 
-Phase 3 therefore shrinks to **dmsgweb, skynetweb, dmsgpty** — the three runtime-toggleable subsystems where the supervisor-side unification actually buys something. Total scope is ~150 LOC instead of ~500 LOC, and the riskiest piece (hypervisor's lifecycle refactor) is removed.
+Phase 3 therefore shrinks to **dmsgweb, skynetweb, pty** — the three runtime-toggleable subsystems where the supervisor-side unification actually buys something. Total scope is ~150 LOC instead of ~500 LOC, and the riskiest piece (hypervisor's lifecycle refactor) is removed.
 
-**dmsgpty's elevated role:** since dmsgpty is the mechanism backing the meta-surface, Phase 3.3 (migrating dmsgpty to an Internal app) is touching the very thing that delivers this RFC's "hypervisor stays as subsystem" argument. Still safe — dmsgpty stays running across the migration, just managed via the launcher afterward. But it means Phase 3.3 needs the same operator-regression care that hypervisor would have needed: don't ship dmsgpty's `RestartPolicy` enforcement (Phase 4) until 3.3 has burned in.
+**pty's elevated role:** since pty is the mechanism backing the meta-surface, Phase 3.3 (migrating pty to an Internal app) is touching the very thing that delivers this RFC's "hypervisor stays as subsystem" argument. Still safe — pty stays running across the migration, just managed via the launcher afterward. But it means Phase 3.3 needs the same operator-regression care that hypervisor would have needed: don't ship pty's `RestartPolicy` enforcement (Phase 4) until 3.3 has burned in.
 
 The web PTY scaffold is a prerequisite for this revision to hold. As long as `skywire web` ships before or alongside Phase 3, operators don't lose anything by hypervisor staying as a subsystem.
 
@@ -34,23 +36,23 @@ The skywire visor today supervises two distinct kinds of long-running things, wi
 
 **Launcher apps** (`pkg/app/launcher`, `pkg/app/appserver`) — skychat, skysocks, skysocks-client, skynet, skynet-client, vpn-server, vpn-client. Either external child processes or in-process goroutines whose entrypoint matches `appcommon.AppFunc = func(ctx, args) error`. Lifecycle is owned by `appserver.ProcManager`; runtime control via `cli visor app start|stop|status|info` (RPC).
 
-**Visor subsystems** — `hypervisor` (HTTP server), `dmsgpty` host (PTY listener), `dmsgweb` and `skynetweb` (the resolver SOCKS5 proxies). Started by entries in the `pkg/visor/init.go` module DAG; shutdown via `pushCloseStack`. Each holds direct references to visor-internal state (`v.tpM`, `v.dmsgC`, `v.router`, etc.). Runtime control surfaces are bespoke per-service: hypervisor has no on/off RPC at all, dmsgpty has none, resolvers have `EmbeddedProxies`.
+**Visor subsystems** — `hypervisor` (HTTP server), the `pty` host (currently `dmsgpty` in code; PTY listener), `dmsgweb` and `skynetweb` (the resolver SOCKS5 proxies). Started by entries in the `pkg/visor/init.go` module DAG; shutdown via `pushCloseStack`. Each holds direct references to visor-internal state (`v.tpM`, `v.dmsgC`, `v.router`, etc.). Runtime control surfaces are bespoke per-service: hypervisor has no on/off RPC at all, pty has none, resolvers have `EmbeddedProxies`.
 
-Phases 1, 2a, 2b made the launcher-app contract explicit but did not bridge the two worlds. This RFC is about partially bridging — specifically for `dmsgpty`, `dmsgweb`, `skynetweb`.
+Phases 1, 2a, 2b made the launcher-app contract explicit but did not bridge the two worlds. This RFC is about partially bridging — specifically for `pty`, `dmsgweb`, `skynetweb`.
 
 ## What unification still buys (post-revision)
 
 With hypervisor out of scope, the wins are smaller but real:
 
-1. **Uniform `cli visor app ls` view** for dmsgweb / skynetweb / dmsgpty alongside launcher apps. An operator inside the web PTY runs the same `cli visor app` subcommands as in a local terminal; the migration just adds these three to the list.
+1. **Uniform `cli visor app ls` view** for dmsgweb / skynetweb / pty alongside launcher apps. An operator inside the web PTY runs the same `cli visor app` subcommands as in a local terminal; the migration just adds these three to the list.
 2. **Drop the bespoke `EmbeddedProxies` RPC** in favor of standard `cli visor app start|stop dmsgweb`. One less ad-hoc control surface.
-3. **dmsgpty gains a runtime on/off switch** it doesn't have today. Operators who don't want PTY access exposed can disable it without restarting the visor (and re-enable for a maintenance window).
-4. **Supervision (`RestartPolicy`) becomes available** for these three when phase 4 lands. dmsgpty restart-on-crash is the most useful — the listener occasionally dies silently in the field.
+3. **pty gains a runtime on/off switch** it doesn't have today. Operators who don't want PTY access exposed can disable it without restarting the visor (and re-enable for a maintenance window). The same control surface covers all pty transports — dmsg today, HTTP once the web scaffold ships.
+4. **Supervision (`RestartPolicy`) becomes available** for these three when phase 4 lands. pty restart-on-crash is the most useful — the listener occasionally dies silently in the field.
 5. **Construction site stays where it is for all three.** No init refactor; the AppFunc shim just wraps existing `Start()` / `Stop()` methods.
 
 What unification does **not** buy:
 - Hypervisor's bespoke startup stays. Operators still toggle it via `conf.Hypervisor.Enable` + visor restart (or via the web PTY once that ships, which can invoke the visor RPC to re-init it).
-- Config sprawl is partially addressed: dmsgweb/skynetweb/dmsgpty get synthetic `apps[]` entries, but their `visorconfig.*` sub-structs stay (for the args).
+- Config sprawl is partially addressed: dmsgweb/skynetweb/pty get synthetic `apps[]` entries, but their `visorconfig.*` sub-structs stay (for the args).
 
 ## Non-goals
 
@@ -61,9 +63,9 @@ What unification does **not** buy:
 
 ## The asymmetry — facts on the ground
 
-| | Launcher apps (A) | dmsgpty (B) | Resolvers (B) | Hypervisor (out of scope) |
+| | Launcher apps (A) | pty (B) | Resolvers (B) | Hypervisor (out of scope) |
 |---|---|---|---|---|
-| Entry | `AppFunc(ctx, args)` | `dmsgpty.Host.ListenAndServe()` | constructor → `Start()` | `NewHypervisor(...)` → `Enable(ctx)` |
+| Entry | `AppFunc(ctx, args)` | `dmsgpty.Host.ListenAndServe()` (code-name still `dmsgpty`) | constructor → `Start()` | `NewHypervisor(...)` → `Enable(ctx)` |
 | Construction site | `cmd/apps/*/commands/*.go` registers via `launcher.RegisterApp` | `pkg/visor/init_dmsg.go` / `init_dmsg_skywire.go` | `pkg/visor/embedded_dmsgweb.go`, `embedded_skynetweb.go` | `pkg/visor/init_apps.go:initHypervisor` |
 | Visor-internal access | None — uses `app.NewClient()` RPC pipe | Full — uses `v.dmsgC` etc. | Full — uses `v.dmsgC`, `v.tpM` | Full — gets passed `v *Visor` |
 | Supervision today | `ProcManager` (start/stop/status RPC) | None | None (toggle via `EmbeddedProxies`) | None |
@@ -105,7 +107,7 @@ A config translation layer (Phase 3.1) auto-appends `AppConfig{Name: "dmsgweb", 
 
 The earlier draft of this RFC also discussed Option C — a separate `Runnable` interface that subsystems implement directly. With hypervisor out of scope, the case for Option C collapses:
 
-- The dmsgpty/dmsgweb/skynetweb subsystems all have natural `Start()`/`Stop()` method pairs. The AppFunc shim wrapping those is trivial; promoting them to implement a new `Runnable` interface buys near-zero additional clarity.
+- The pty/dmsgweb/skynetweb subsystems all have natural `Start()`/`Stop()` method pairs. The AppFunc shim wrapping those is trivial; promoting them to implement a new `Runnable` interface buys near-zero additional clarity.
 - The "wart" of split construction-vs-start in Option B was painful mainly for hypervisor's already-tangled lifecycle. For the three simpler subsystems, the wart is invisible — construction is one line, start/stop are one line each.
 - Maintaining a second supervisor contract (`Runnable`) alongside `AppFunc` adds surface for ~50 LOC of net benefit. Not worth it.
 
@@ -131,7 +133,7 @@ if conf.DmsgWeb.Enable {
         // args carry the bits operators previously set in conf.DmsgWeb
     })
 }
-// skynetweb, dmsgpty analogous
+// skynetweb, pty analogous
 ```
 
 No subsystem code changes yet. The launcher gets new `apps[]` entries but no `RunFunc` is registered, so they fail-to-start with `ErrAppNotFound` — guarded by a feature flag (e.g. `conf.Launcher.SynthesizeSubsystems`) so the migration doesn't break boot. The flag flips to default-on once 3.2/3.3 land.
@@ -144,9 +146,9 @@ The existing `initEmbeddedDmsgWeb` skips its auto-`Start` when the synthetic app
 
 Verify operator workflow: `cli visor app start dmsgweb` brings the SOCKS5 up; `stop` brings it down. Behavior matches the current `EmbeddedProxies` toggle.
 
-### Phase 3.3 — register dmsgpty as Internal app
+### Phase 3.3 — register pty as Internal app
 
-Same shape. dmsgpty's listener becomes the `AppFunc` body; the existing `init_dmsg_skywire.go:startSkywirePtyListener` is invoked from there instead of from init directly.
+Same shape. The pty listener (code-name `dmsgpty.Host` today) becomes the `AppFunc` body; the existing `init_dmsg_skywire.go:startSkywirePtyListener` is invoked from there instead of from init directly. The Internal app registered name is `pty` (not `dmsgpty`) so the future HTTP and local transports can register the same app name and the operator surface (`cli visor app start pty`) stays stable across the deeper rename.
 
 Verify: `cli dmsg pty exec <pk> -- echo hi` still works. The remote-dial side is unaffected (different code path).
 
@@ -157,7 +159,7 @@ Add a column or grouping that distinguishes "launcher app" from "internal servic
 ## Open questions
 
 1. **Default RestartPolicy for the three subsystems.** Phase 4 (independent of this RFC) enforces `RestartPolicy`. The proposed defaults:
-   - dmsgpty: `OnFailure` — listener occasionally dies silently in the field; restart is exactly what operators want.
+   - pty: `OnFailure` — listener occasionally dies silently in the field; restart is exactly what operators want.
    - dmsgweb / skynetweb: `Never` — these are user-driven (operator clicks "enable proxy"), no value in auto-restart.
    Confirm or adjust.
 
@@ -165,7 +167,7 @@ Add a column or grouping that distinguishes "launcher app" from "internal servic
 
 3. **Synthetic config entry visibility.** Should the synthetic `apps[]` entries appear in `skywire config gen` output? If yes, operators can edit them directly; if no, the `conf.DmsgWeb.Enable` flag remains authoritative. Recommend **no** for now — keep `conf.DmsgWeb` etc. as authoritative, synthesis happens at load time. Operators who really want to override pass args through the existing config block.
 
-4. **Idempotent start/stop.** When `cli visor app stop dmsgweb` calls `Stop()`, should `cli visor app start dmsgweb` reuse the same instance or construct a fresh one? Current semantics: dmsgweb / skynetweb already cleanly stop-then-start the underlying SOCKS5 listener. dmsgpty's listener is more sensitive — the `dmsgpty.Host` keeps active sessions; stopping kills them. Recommend instance reuse for all three (simpler, matches today's runtime-toggle behavior for dmsgweb/skynetweb), and document the active-session loss for dmsgpty.
+4. **Idempotent start/stop.** When `cli visor app stop dmsgweb` calls `Stop()`, should `cli visor app start dmsgweb` reuse the same instance or construct a fresh one? Current semantics: dmsgweb / skynetweb already cleanly stop-then-start the underlying SOCKS5 listener. The pty listener is more sensitive — the host keeps active sessions; stopping kills them. Recommend instance reuse for all three (simpler, matches today's runtime-toggle behavior for dmsgweb/skynetweb), and document the active-session loss for pty.
 
 ## Out of scope for this RFC
 
