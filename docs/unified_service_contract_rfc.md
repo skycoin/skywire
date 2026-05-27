@@ -12,15 +12,21 @@ Status: **Draft.** Scope was revised after the first round of discussion (see "S
 
 ## Scope revision
 
-The original `#2775` issue body included the hypervisor UI in the "make it an app" list. That decision was made before the `skywire web` HTTP-CLI surface was scaffolded. With the web CLI in the picture, the unification this RFC is really after — **uniform operator visibility and control** — gets delivered at the operator-interface layer, not at the supervisor layer:
+The original `#2775` issue body included the hypervisor UI in the "make it an app" list. That decision was made before the `skywire web` surface was scaffolded. With the web PTY in the picture, the unification this RFC is really after — **uniform operator visibility and control** — gets delivered at the operator-interface layer, not at the supervisor layer.
 
-- The web CLI exposes the full `skywire` binary's CLI tree over an HTTP listener (localhost, forwardable). Any capability the binary supports — including hypervisor on/off, config edits, transport ops, RPC introspection — is reachable through one generic surface.
-- The thing that originally made "hypervisor as an app" attractive was uniform visibility (`cli visor app ls` showing the full picture). The web CLI delivers that same uniformity by giving operators a single remote-control surface over the entire binary, not just the apps subset.
+**About the web PTY.** Mechanistically, `skywire web` is **dmsgpty serving its pseudoterminal over HTTP/WebSocket** so the operator's browser can render the terminal. The skywire CLI runs inside that PTY as a normal interactive shell session. It is **not** a REST/RPC gateway exposing per-command endpoints — it is the same PTY mechanism that backs `cli dmsg pty exec`, just rendered in a different transport. The security model inherits dmsgpty's PK-based authentication; no new auth surface is introduced.
+
+The implications for this RFC:
+
+- Any capability the `skywire` binary supports — hypervisor on/off, config edits, transport ops, RPC introspection — is reachable through the PTY by the operator typing the corresponding `skywire ...` command. No code change to expose new things; everything the CLI can already do is already there.
+- The thing that originally made "hypervisor as an app" attractive was uniform visibility (`cli visor app ls` showing the full picture). The web PTY delivers that same uniformity *one level up*: the operator's single remote-control surface is the shell, and `cli visor app ls` is just one of many things they run inside it.
 - Hypervisor stays as a visor subsystem with its existing init wiring. No lifecycle refactor inside critical-path code.
 
 Phase 3 therefore shrinks to **dmsgweb, skynetweb, dmsgpty** — the three runtime-toggleable subsystems where the supervisor-side unification actually buys something. Total scope is ~150 LOC instead of ~500 LOC, and the riskiest piece (hypervisor's lifecycle refactor) is removed.
 
-The web CLI scaffold is a prerequisite for this revision to hold. As long as `skywire web` ships before or alongside Phase 3, operators don't lose anything by hypervisor staying as a subsystem.
+**dmsgpty's elevated role:** since dmsgpty is the mechanism backing the meta-surface, Phase 3.3 (migrating dmsgpty to an Internal app) is touching the very thing that delivers this RFC's "hypervisor stays as subsystem" argument. Still safe — dmsgpty stays running across the migration, just managed via the launcher afterward. But it means Phase 3.3 needs the same operator-regression care that hypervisor would have needed: don't ship dmsgpty's `RestartPolicy` enforcement (Phase 4) until 3.3 has burned in.
+
+The web PTY scaffold is a prerequisite for this revision to hold. As long as `skywire web` ships before or alongside Phase 3, operators don't lose anything by hypervisor staying as a subsystem.
 
 ## Background
 
@@ -36,21 +42,21 @@ Phases 1, 2a, 2b made the launcher-app contract explicit but did not bridge the 
 
 With hypervisor out of scope, the wins are smaller but real:
 
-1. **Uniform `cli visor app ls` view** for dmsgweb / skynetweb / dmsgpty alongside launcher apps. The web CLI itself goes through this surface for runtime control of those three.
+1. **Uniform `cli visor app ls` view** for dmsgweb / skynetweb / dmsgpty alongside launcher apps. An operator inside the web PTY runs the same `cli visor app` subcommands as in a local terminal; the migration just adds these three to the list.
 2. **Drop the bespoke `EmbeddedProxies` RPC** in favor of standard `cli visor app start|stop dmsgweb`. One less ad-hoc control surface.
 3. **dmsgpty gains a runtime on/off switch** it doesn't have today. Operators who don't want PTY access exposed can disable it without restarting the visor (and re-enable for a maintenance window).
 4. **Supervision (`RestartPolicy`) becomes available** for these three when phase 4 lands. dmsgpty restart-on-crash is the most useful — the listener occasionally dies silently in the field.
 5. **Construction site stays where it is for all three.** No init refactor; the AppFunc shim just wraps existing `Start()` / `Stop()` methods.
 
 What unification does **not** buy:
-- Hypervisor's bespoke startup stays. Operators still toggle it via `conf.Hypervisor.Enable` + visor restart (or via the web CLI once that ships, which can invoke the visor RPC to re-init it).
+- Hypervisor's bespoke startup stays. Operators still toggle it via `conf.Hypervisor.Enable` + visor restart (or via the web PTY once that ships, which can invoke the visor RPC to re-init it).
 - Config sprawl is partially addressed: dmsgweb/skynetweb/dmsgpty get synthetic `apps[]` entries, but their `visorconfig.*` sub-structs stay (for the args).
 
 ## Non-goals
 
 - **Not** about merging the pair binaries (`skynet-srv` / `skynet-client`, etc.) into mode-flagged singletons. The two halves of each pair share little code; the gain would be cosmetic. Treated as a separate, optional cleanup.
 - **Not** about changing the `app.NewClient()` pipe-RPC machinery for *external* apps. External apps run in their own process and need that pipe.
-- **Not** about migrating hypervisor. It stays as a visor subsystem; the web CLI is its meta-management surface.
+- **Not** about migrating hypervisor. It stays as a visor subsystem; the web PTY is its meta-management surface.
 - **Not** about deprecating the existing per-subsystem `visorconfig.*` sub-structs in v1. Migration must preserve operator config files.
 
 ## The asymmetry — facts on the ground
@@ -164,7 +170,7 @@ Add a column or grouping that distinguishes "launcher app" from "internal servic
 ## Out of scope for this RFC
 
 - Phase 4 (`RestartPolicy` enforcement). Independent change; can land before or after this RFC's phases.
-- Hypervisor lifecycle. Stays as a visor subsystem; reached via web CLI for operator ops.
+- Hypervisor lifecycle. Stays as a visor subsystem; operators reach it through the web PTY (or any other CLI invocation).
 - Pair-binary collapse (skynet srv+client, etc.). Cosmetic, low-value; not blocking.
 - Full deprecation of `EmbeddedProxies` RPC. After Phase 3.2 ships and burns in, a follow-up can remove the shim.
 - Web CLI itself. Tracked separately; is a prerequisite for this RFC's scope revision to hold.
@@ -173,7 +179,7 @@ Add a column or grouping that distinguishes "launcher app" from "internal servic
 
 For approval:
 
-- [ ] Confirm the scope revision (hypervisor out, web CLI is the meta-surface).
+- [ ] Confirm the scope revision (hypervisor out, web PTY is the meta-surface).
 - [ ] Pick default RestartPolicies per open question 1.
 - [ ] Resolve naming convention per open question 2.
 - [ ] Confirm synthetic-config-visibility direction per open question 3.
