@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	pty "github.com/skycoin/skywire/cmd/apps/pty/commands"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
 	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
@@ -39,6 +40,7 @@ func init() {
 		sc.RootCmd,
 		sn.RootCmd,
 		snc.RootCmd,
+		pty.RootCmd,
 	)
 	// Install flag-aware `help` (supports -r/-t/-d modes) on the
 	// Install flag-aware `help` + coloredcobra styling on every
