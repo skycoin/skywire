@@ -4,16 +4,16 @@
 // The pty (pseudoterminal) subsystem has four operational modes:
 //
 //   - visor   visor-hosted Internal app. Started by the launcher;
-//             not exposed here. (See RFC #2775 Phase 3.3.)
+//     not exposed here. (See RFC #2775 Phase 3.3.)
 //   - dmsg    standalone process with a dmsg listener (own keys,
-//             own dmsg client). Can also enable a TCP listener
-//             via --tcp-listen; --no-dmsg makes it TCP-only.
+//     own dmsg client). Can also enable a TCP listener
+//     via --tcp-listen; --no-dmsg makes it TCP-only.
 //   - tcp     standalone TCP-only (ssh equivalent). Convenience
-//             wrapper that forces --no-dmsg on `dmsg`; --addr is
-//             required and seeds --tcp-listen.
+//     wrapper that forces --no-dmsg on `dmsg`; --addr is
+//     required and seeds --tcp-listen.
 //   - http    HTTP/WebSocket bridge — serves a real PTY in a
-//             browser via the dmsgpty.UI machinery. Bridges to a
-//             running mode-1/2/3 pty server via --hnet + --haddr.
+//     browser via the dmsgpty.UI machinery. Bridges to a
+//     running mode-1/2/3 pty server via --hnet + --haddr.
 //
 // Plus an `exec` subcommand that dials a remote pty server and
 // runs a command (the old `dmsgpty-cli` flow), with `whitelist`
