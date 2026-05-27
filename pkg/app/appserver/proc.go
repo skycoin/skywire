@@ -95,7 +95,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	var cmd *exec.Cmd
 	var stderr io.ReadCloser
 
-	if conf.RunFunc == nil {
+	if conf.EffectiveRunMode() == appcommon.RunModeExternal {
 		envs := conf.Envs()
 		cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) //nolint:gosec
 		cmd.Env = append(os.Environ(), envs...)
@@ -230,11 +230,12 @@ func (p *Proc) Start() error {
 	p.startTime = time.Now().UTC()
 	p.startTimeMx.Unlock()
 
-	if p.conf.RunFunc != nil {
+	switch p.conf.EffectiveRunMode() {
+	case appcommon.RunModeInternal:
 		return p.startInProcess()
+	default:
+		return p.startExternal()
 	}
-
-	return p.startExternal()
 }
 
 func (p *Proc) startInProcess() error {

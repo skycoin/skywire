@@ -29,9 +29,57 @@ var (
 )
 
 // AppFunc is a function that runs an app in-process.
-// It receives a context for cancellation and command-line args.
-// The app is responsible for creating its own app.Client via app.NewClient().
+//
+// Contract:
+//   - Run until the supplied context is canceled, then return.
+//   - On clean shutdown, return nil. On unrecoverable error, return a
+//     non-nil error and log via the per-app logger obtained through
+//     app.NewClient().
+//   - args mirrors os.Args[1:] for the equivalent external binary, so
+//     internal and external invocations of the same logical app share
+//     CLI semantics.
+//   - The app is responsible for creating its own app.Client via
+//     app.NewClient(); the visor-side conn is wired in by ProcManager
+//     before the function is called.
 type AppFunc func(ctx context.Context, args []string) error
+
+// RunMode declares whether a Proc runs as a separate OS process
+// (External) or as a goroutine inside the visor (Internal). It is
+// the explicit form of what was previously implied by RunFunc != nil.
+type RunMode string
+
+const (
+	// RunModeUnspecified means the dispatch path will be derived from
+	// the presence of ProcConfig.RunFunc. Kept for backward
+	// compatibility with code paths that build ProcConfig directly.
+	RunModeUnspecified RunMode = ""
+	// RunModeExternal launches the proc as a separate OS process via
+	// ProcConfig.BinaryLoc. POSIX credentials (ProcUser/ProcGroup) and
+	// stderr capture are honored.
+	RunModeExternal RunMode = "external"
+	// RunModeInternal runs the proc in-process by invoking the AppFunc
+	// stored in ProcConfig.RunFunc. POSIX credential drops are ignored
+	// since setuid is process-wide.
+	RunModeInternal RunMode = "internal"
+)
+
+// RestartPolicy declares how the supervisor should react when a Proc
+// exits. Currently only Never is enforced — OnFailure and Always are
+// declared up-front so the contract is stable while supervision is
+// wired in a later phase.
+type RestartPolicy string
+
+const (
+	// RestartNever leaves the proc stopped when it exits. Operators
+	// must call StartApp again. This matches today's behavior across
+	// all apps.
+	RestartNever RestartPolicy = ""
+	// RestartOnFailure relaunches the proc only when it returned a
+	// non-nil error (or exited non-zero for external procs).
+	RestartOnFailure RestartPolicy = "on-failure"
+	// RestartAlways relaunches the proc on any exit, including clean.
+	RestartAlways RestartPolicy = "always"
+)
 
 // ProcKey is a unique key to authenticate a proc within the app server.
 type ProcKey [16]byte
@@ -96,6 +144,28 @@ type ProcConfig struct {
 	ProcUser  string      `json:"proc_user,omitempty"`
 	ProcGroup string      `json:"proc_group,omitempty"`
 	RunFunc   interface{} `json:"-"`
+	// RunMode is the explicit dispatch hint. When unset, EffectiveRunMode
+	// derives the mode from RunFunc presence — preserving legacy callers
+	// that construct ProcConfig directly without setting RunMode.
+	RunMode RunMode `json:"run_mode,omitempty"`
+	// Restart declares the supervisor's reaction when the proc exits.
+	// Declared now for contract stability; enforcement lands with the
+	// supervisor pass (#2775 phase 4).
+	Restart RestartPolicy `json:"restart,omitempty"`
+}
+
+// EffectiveRunMode returns the RunMode the proc manager should
+// dispatch on. When RunMode is explicitly set, it wins. Otherwise we
+// fall back to the legacy heuristic — RunFunc != nil → Internal — so
+// existing callers continue to work unchanged.
+func (c *ProcConfig) EffectiveRunMode() RunMode {
+	if c.RunMode != RunModeUnspecified {
+		return c.RunMode
+	}
+	if c.RunFunc != nil {
+		return RunModeInternal
+	}
+	return RunModeExternal
 }
 
 // ProcConfigFromEnv obtains a ProcConfig from the associated env variable, returning an error if any.
