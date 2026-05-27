@@ -19,6 +19,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
@@ -254,12 +258,35 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 	v.embeddedSkynetWeb = runtime
 	v.initLock.Unlock()
 
-	if v.conf.SkynetWeb.Enable {
-		if err := runtime.Start(); err != nil {
-			log.WithError(err).Warn("failed to auto-start skynetweb")
-		}
-	} else {
-		log.Info("Embedded skynetweb constructed but not started (enable=false); toggle via RPC")
-	}
+	// Register as an Internal app (RFC #2775 Phase 3.2). See
+	// buildDmsgWebAppFunc in embedded_dmsgweb.go for the matching
+	// pattern; both proxies use RestartPolicy=Never (operator
+	// toggles are intentional, not crash-recovery candidates).
+	launcher.RegisterApp(skyenvSkynetWebApp, buildSkynetWebAppFunc(runtime, log))
 	return nil
+}
+
+// skyenvSkynetWebApp is the launcher-registered name for the
+// embedded skynetweb SOCKS5 proxy.
+const skyenvSkynetWebApp = "skynetweb"
+
+// buildSkynetWebAppFunc — same shape as buildDmsgWebAppFunc.
+func buildSkynetWebAppFunc(rt *EmbeddedSkynetWeb, log *logging.Logger) appcommon.AppFunc {
+	return func(ctx context.Context, _ []string) error {
+		appCl := app.NewClient(nil)
+		defer appCl.Close()
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
+		if err := rt.Start(); err != nil {
+			log.WithError(err).Warn("skynetweb Start failed")
+			appCl.SetErrorOrLog(err)
+			return err
+		}
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
+		<-ctx.Done()
+		if err := rt.Stop(); err != nil {
+			log.WithError(err).Warn("skynetweb Stop failed")
+		}
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
+		return nil
+	}
 }
