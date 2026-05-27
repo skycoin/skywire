@@ -16,7 +16,26 @@ The original `#2775` issue body included the hypervisor UI in the "make it an ap
 
 **About the web PTY.** Mechanistically, `skywire web` is **the pty subsystem serving its pseudoterminal over HTTP/WebSocket** so the operator's browser can render the terminal. The skywire CLI runs inside that PTY as a normal interactive shell session. It is **not** a REST/RPC gateway exposing per-command endpoints — it is the same PTY mechanism that backs the existing dmsg-transport pty (`cli dmsg pty exec`), just rendered over a different transport. The security model inherits the pty subsystem's PK-based authentication; no new auth surface is introduced.
 
-**Terminology rename.** The subsystem is conceptually a **pty (pseudoterminal)**. How it connects or serves and over what transport is a detail — dmsg today, HTTP via the web scaffold, potentially a local unix socket later. The current code identifier `dmsgpty` (package, config key, CLI subcommand) bakes the transport into the name; this RFC standardizes on **`pty`** for the concept and treats `dmsg` / `http` / `local` as **modes** (transports) of the same thing. The CLI surface for the standalone serves becomes `skywire app pty serve --transport=dmsg|http|local`; the existing dmsg-transport command tree (`skywire dmsg pty exec`) gains an `skywire app pty exec` alias path. The deeper code rename (`pkg/dmsgpty/` → `pkg/pty/`, `conf.Dmsgpty` → `conf.Pty` with backward-compat, etc.) is a follow-up PR — out of scope here; the rest of this RFC uses **pty** as the concept name and references existing identifiers like `pkg/dmsgpty/` only where pointing at code that hasn't been renamed yet.
+**Terminology rename.** The subsystem is conceptually a **pty (pseudoterminal)**. How it connects, what transport it listens on, and what keys it uses are all operational details — a single subsystem with several modes, not several subsystems with one transport each. The current code identifier `dmsgpty` (package, config key, CLI subcommand) bakes one specific transport into the name; this RFC standardizes on **`pty`** for the concept.
+
+**The four pty modes.** These are the operational shapes the pty subsystem can run in. They are not transports stacked under one mode — each is a distinct way the pty server is set up and addressed:
+
+1. **`visor`** — visor-hosted, multi-transport. The pty runs as a visor Internal app (Phase 3.3 below). It listens on **dmsg and skynet** simultaneously (the visor already has both clients) under the visor's PK. This is what `dmsgpty.Host` does today, plus a skynet listener that doesn't exist yet but is a natural extension.
+
+2. **`dmsg`** — dmsg-standalone. The pty runs as its own process with its own dmsg client; typically uses its own keypair, but may fall back to the visor's keys when the visor isn't running. This is what `cmd/dmsg/dmsgpty-host/` does today as a separate binary.
+
+3. **`tcp`** — TCP-standalone (the "ssh equivalent"). Listens on a TCP port with PK-based auth at the noise-handshake layer. No overlay network. New for the unified pty; today there is no `pkg/dmsg/dmsgpty/` TCP listener.
+
+4. **`http`** — HTTP-on-localhost. Serves the pty over HTTP/WebSocket so a browser can render the terminal. Localhost only — the listener is not directly reachable from the network, but a skynet/dmsg port-forward can expose it remotely (which inherits the overlay's PK auth at the forwarding layer). This is what `cmd/dmsg/dmsgpty-ui/` does today (bridged HTTP→dmsg→pty) and what the stashed `skywire web` scaffold did (direct HTTP→pty).
+
+CLI surface this RFC commits to:
+
+- `skywire app pty <mode>` runs the standalone server in the given mode — `pty dmsg`, `pty tcp`, `pty http`. (`pty visor` exists but is normally invoked by the launcher under Phase 3.3, not by the operator directly.)
+- `skywire app pty exec <pk>` dials out and runs a command on a remote pty server — alias for today's `skywire dmsg pty exec` while the deeper rename is pending.
+
+The existing standalone binaries (`cmd/dmsg/dmsgpty-host/`, `cmd/dmsg/dmsgpty-ui/`, `cmd/dmsg/dmsgpty-cli/`) become deprecation-eligible once the new command tree lands — keep them as thin shims that exec into the new subcommand path, or wire them as aliases inside cobra.
+
+**Deeper code rename** (`pkg/dmsgpty/` → `pkg/pty/`, `conf.Dmsgpty` → `conf.Pty`, listener type renames, etc.) is a follow-up PR — out of scope here. The rest of this RFC uses **pty** as the concept name and references existing identifiers like `pkg/dmsgpty/` only where pointing at code that hasn't been renamed yet.
 
 The implications for this RFC:
 
@@ -146,9 +165,13 @@ The existing `initEmbeddedDmsgWeb` skips its auto-`Start` when the synthetic app
 
 Verify operator workflow: `cli visor app start dmsgweb` brings the SOCKS5 up; `stop` brings it down. Behavior matches the current `EmbeddedProxies` toggle.
 
-### Phase 3.3 — register pty as Internal app
+### Phase 3.3 — register the `visor` pty mode as Internal app
 
-Same shape. The pty listener (code-name `dmsgpty.Host` today) becomes the `AppFunc` body; the existing `init_dmsg_skywire.go:startSkywirePtyListener` is invoked from there instead of from init directly. The Internal app registered name is `pty` (not `dmsgpty`) so the future HTTP and local transports can register the same app name and the operator surface (`cli visor app start pty`) stays stable across the deeper rename.
+Of the four pty modes (`visor` / `dmsg` / `tcp` / `http`), only **`visor`** mode is migrated here. The other three are standalone serves that an operator invokes directly via `skywire app pty <mode>` — they aren't visor-managed and don't go through the launcher.
+
+The pty listener that's already running inside the visor today (code-name `dmsgpty.Host`) becomes the `AppFunc` body; the existing `init_dmsg_skywire.go:startSkywirePtyListener` is invoked from there instead of from init directly. The skynet listener that's planned but not yet built lands inside the same `AppFunc`, so toggling pty via `cli visor app stop pty` takes both listeners down at once.
+
+The Internal app registered name is **`pty`** (not `dmsgpty`) so the future HTTP and local-transport listeners can ride the same registered app without churning the operator surface. `cli visor app start pty` stays stable across the deeper rename.
 
 Verify: `cli dmsg pty exec <pk> -- echo hi` still works. The remote-dial side is unaffected (different code path).
 
