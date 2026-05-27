@@ -21,6 +21,8 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
@@ -867,63 +869,19 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// with separate permissions from the visor's RPC.
 	v.dmsgPty = pty
 
-	if ptyPort := conf.DmsgPort; ptyPort != 0 {
-		serveCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			runtimeErrors := getErrors(ctx)
-			if err := pty.ListenAndServe(serveCtx, ptyPort); err != nil {
-				runtimeErrors <- fmt.Errorf("listen and serve stopped: %w", err)
-			}
-		}()
-
-		v.pushCloseStack("router.serve", func() error {
-			cancel()
-			wg.Wait()
-			return nil
-		})
-
-		// Parallel skynet listener — accepts dmsgpty over
-		// appnet.SkywireNetworker so remote peers that have a
-		// negotiated route to us can reach the pty service without
-		// opening a fresh dmsg stream. Returns nil close-func when
-		// the skynet networker isn't wired yet (init ordering) or
-		// when Listen fails; in either case the dmsg listener
-		// above keeps the service functional.
-		runtimeErrors := getErrors(ctx)
-		if closer := startSkywirePtyListener(context.Background(), pty, v.conf.PK, ptyPort, runtimeErrors); closer != nil {
-			v.pushCloseStack("dmsgpty.skywire.serve", closer)
-		}
-
-	}
-
-	// Direct-TCP dmsgpty entry point — operator opts in via
-	// Dmsgpty.SshListen ("" disables). Same whitelist as the
-	// dmsg-overlay path; XK-noise handshake gates the accepted PK
-	// before the stream reaches the dmsgpty mux. See
-	// dmsgpty/host_tcp.go for the per-connection flow. Exposed at
-	// CLI as `skywire cli ssh` / `skywire cli sshd`.
-	if tcpAddr := conf.SshListen; tcpAddr != "" {
-		tcpCtx, tcpCancel := context.WithCancel(context.Background()) //nolint:gosec // cancel called in pushCloseStack
-		tcpWg := new(sync.WaitGroup)
-		tcpWg.Add(1)
-		go func() {
-			defer tcpWg.Done()
-			runtimeErrors := getErrors(ctx)
-			if err := pty.ListenAndServeTCP(tcpCtx, tcpAddr, v.conf.PK, v.conf.SK); err != nil {
-				runtimeErrors <- fmt.Errorf("dmsgpty tcp listen %s stopped: %w", tcpAddr, err)
-			}
-		}()
-		v.pushCloseStack("dmsgpty.tcp.serve", func() error {
-			tcpCancel()
-			tcpWg.Wait()
-			return nil
-		})
-		log.WithField("addr", tcpAddr).Info("Mounted dmsgpty direct-TCP entry point")
-	}
+	// The dmsg + skynet + TCP listeners moved from the init module
+	// into a launcher-managed Internal app (RFC #2775 Phase 3.3).
+	// Register the AppFunc here while we have closure-access to the
+	// constructed Host and the per-mode config. The launcher's
+	// AutoStart pass (see init_apps.go) brings the listeners up
+	// once the launcher is constructed; visor halt tears them down
+	// via procM.Close. RestartPolicy=Always ensures stop just
+	// triggers an auto-restart — operator-initiated `cli visor app
+	// stop pty` doesn't permanently remove the pty surface from a
+	// remote machine (lockout safety).
+	ptyPort := conf.DmsgPort
+	sshAddr := conf.SshListen
+	launcher.RegisterApp("pty", buildPtyAppFunc(v, pty, ptyPort, sshAddr))
 
 	// dmsgscp Host (scp-over-dmsg). On by default — access is gated
 	// by the same whitelist that dmsgpty uses. Operators opt OUT
@@ -1258,3 +1216,84 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 	log.Info("DMSG server latency tracking started")
 	return nil
 }
+
+// buildPtyAppFunc constructs the AppFunc registered as the "pty"
+// Internal app (RFC #2775 Phase 3.3). Captures the constructed
+// dmsgpty.Host plus the configured listener parameters from
+// initDmsgpty so the launcher can start / stop the listeners
+// after init has finished. The shape mirrors what initDmsgpty
+// itself used to do before this phase:
+//
+//   - dmsg listener on conf.DmsgPort (primary entry point)
+//   - skynet listener on the same port (routed peers)
+//   - TCP listener on conf.SshListen (operator-opt-in, ssh-style)
+//
+// All three share the dmsgpty.Host's mux and whitelist; the host
+// itself is constructed once at init time and re-used across
+// restart cycles.
+func buildPtyAppFunc(v *Visor, host *dmsgpty.Host, dmsgPort uint16, sshAddr string) appcommon.AppFunc {
+	return func(ctx context.Context, _ []string) error {
+		log := v.MasterLogger().PackageLogger("app:pty")
+		log.Info("Starting pty listeners.")
+
+		wg := new(sync.WaitGroup)
+		listenerCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		// dmsg listener — primary entry. ListenAndServe blocks
+		// until listenerCtx cancels or the listener fails.
+		if dmsgPort != 0 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := host.ListenAndServe(listenerCtx, dmsgPort); err != nil && !errors.Is(err, context.Canceled) {
+					log.WithError(err).Warn("dmsg listener stopped with error")
+				}
+			}()
+
+			// Parallel skynet listener — accepts pty over the
+			// skywire networker so routed peers can reach the
+			// service without opening a fresh dmsg stream. nil
+			// runtimeErrors channel is OK; the helper's select
+			// has a default case.
+			if closer := startSkywirePtyListener(listenerCtx, host, v.conf.PK, dmsgPort, nil); closer != nil {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-listenerCtx.Done()
+					_ = closer() //nolint:errcheck
+				}()
+			}
+		}
+
+		// Direct-TCP entry point — operator opt-in via
+		// Dmsgpty.SshListen. XK-noise handshake gates each accept;
+		// the whitelist is shared with the dmsg path. Exposed at
+		// CLI as `skywire cli ssh` / `skywire cli sshd`.
+		if sshAddr != "" {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := host.ListenAndServeTCP(listenerCtx, sshAddr, v.conf.PK, v.conf.SK); err != nil && !errors.Is(err, context.Canceled) {
+					log.WithError(err).WithField("addr", sshAddr).Warn("tcp listener stopped with error")
+				}
+			}()
+			log.WithField("addr", sshAddr).Info("Mounted pty TCP entry point.")
+		}
+
+		// Block until app ctx cancel — either operator-initiated
+		// `cli visor app stop pty` (auto-restart by Always policy)
+		// or visor halt (procM.Close cancels all proc contexts).
+		<-ctx.Done()
+		log.Info("Stopping pty listeners.")
+		cancel()
+		wg.Wait()
+		return nil
+	}
+}
+
+// Ensure the launcher package is referenced. The RegisterApp call
+// in initDmsgpty's body uses launcher.RegisterApp; this nolint hint
+// keeps tooling that scans for unused imports happy in case the
+// init path is conditionally compiled out somewhere.
+var _ = launcher.RegisterApp
