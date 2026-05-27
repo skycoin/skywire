@@ -84,11 +84,11 @@ func RunSkynet(ctx context.Context, args []string) error {
 			}
 			var port int
 			if _, err := fmt.Sscanf(p, "%d", &port); err != nil {
-				setAppError(appCl, fmt.Errorf("invalid port: %s", p))
+				appCl.SetErrorOrLog(fmt.Errorf("invalid port: %s", p))
 				return fmt.Errorf("invalid port: %s", p)
 			}
 			if port <= 0 || port > 65535 {
-				setAppError(appCl, fmt.Errorf("port out of range: %d", port))
+				appCl.SetErrorOrLog(fmt.Errorf("port out of range: %d", port))
 				return fmt.Errorf("port out of range: %d", port)
 			}
 			ports = append(ports, port)
@@ -97,7 +97,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 
 	if len(ports) == 0 {
 		err := fmt.Errorf("no ports specified, use --ports flag")
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		return err
 	}
 
@@ -108,12 +108,12 @@ func RunSkynet(ctx context.Context, args []string) error {
 
 	appCl.Log().Infof("Exposing ports: %v via built-in sky_forwarding", ports)
 
-	setAppStatus(appCl, appserver.AppDetailedStatusStarting)
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
 
 	// Create RPC client to visor
 	rpcClient, err := createRPCClient(rpcAddr)
 	if err != nil {
-		setAppError(appCl, fmt.Errorf("failed to connect to visor RPC: %w", err))
+		appCl.SetErrorOrLog(fmt.Errorf("failed to connect to visor RPC: %w", err))
 		return fmt.Errorf("failed to connect to visor RPC: %w", err)
 	}
 
@@ -126,7 +126,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 			for _, p := range registeredPorts {
 				_ = rpcClient.DeregisterTCPPort(p) //nolint:errcheck
 			}
-			setAppError(appCl, fmt.Errorf("failed to register port %d: %w", port, err))
+			appCl.SetErrorOrLog(fmt.Errorf("failed to register port %d: %w", port, err))
 			return fmt.Errorf("failed to register port %d: %w", port, err)
 		}
 		appCl.Log().Infof("Registered port %d with visor", port)
@@ -134,7 +134,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 	}
 
 	appCl.Log().Infof("All %d ports registered, server ready", len(ports))
-	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 
 	// Handle shutdown
 	termCh := make(chan os.Signal, 1)
@@ -144,7 +144,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 	select {
 	case <-ctx.Done():
 		appCl.Log().Warnf("Context already canceled before wait: %v", ctx.Err())
-		setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 		return nil
 	default:
 		appCl.Log().Info("Context is valid, waiting for shutdown signal...")
@@ -167,7 +167,7 @@ func RunSkynet(ctx context.Context, args []string) error {
 		}
 	}
 
-	setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 	return nil
 }
 
@@ -179,18 +179,6 @@ func createRPCClient(addr string) (visor.API, error) {
 	}
 	logger := logging.MustGetLogger("visor-rpc")
 	return visor.NewRPCClient(logger, conn, visor.RPCPrefix, 0), nil
-}
-
-func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
-	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		appCl.Log().Errorf("Failed to set status %v: %v", status, err)
-	}
-}
-
-func setAppError(appCl *app.Client, appErr error) {
-	if err := appCl.SetError(appErr.Error()); err != nil {
-		appCl.Log().Errorf("Failed to set error %v: %v", appErr, err)
-	}
 }
 
 // Execute executes root CLI command.
