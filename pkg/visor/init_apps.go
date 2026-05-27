@@ -65,10 +65,11 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 		})
 	}
 
-	// Phase 3.2 — embedded SOCKS5 proxies as Internal apps.
-	// RestartPolicy=Never (operator toggles are intentional, not
-	// crash-recovery candidates); AutoStart reflects the operator's
-	// Enable flag in config so the boot-time behavior is unchanged.
+	// Phase 3.2 + Phase 4 — embedded SOCKS5 proxies as Internal apps
+	// with RestartPolicy=OnFailure. Operator stop respects intent
+	// (clean exit, no restart) but a runtime crash is recovered
+	// automatically. AutoStart reflects the operator's Enable flag
+	// in config so boot-time behavior is unchanged.
 	// initEmbeddedDmsgWeb / initEmbeddedSkynetWeb register the
 	// RunFunc; the launcher's AutoStart pass starts the listener.
 	if v.embeddedDmsgWeb != nil && !appsContains(apps, "dmsgweb") {
@@ -80,7 +81,7 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 			Name:          "dmsgweb",
 			AutoStart:     autostart,
 			LauncherMode:  string(appcommon.RunModeInternal),
-			RestartPolicy: string(appcommon.RestartNever),
+			RestartPolicy: string(appcommon.RestartOnFailure),
 		})
 	}
 	if v.embeddedSkynetWeb != nil && !appsContains(apps, "skynetweb") {
@@ -92,7 +93,7 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 			Name:          "skynetweb",
 			AutoStart:     autostart,
 			LauncherMode:  string(appcommon.RunModeInternal),
-			RestartPolicy: string(appcommon.RestartNever),
+			RestartPolicy: string(appcommon.RestartOnFailure),
 		})
 	}
 
