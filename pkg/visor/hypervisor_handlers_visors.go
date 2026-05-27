@@ -585,7 +585,16 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		// Visors whose cache was refreshed within this freshness
 		// window count as "live" even if THIS round's Summary RPC
 		// timed out at the 5s outer cap — they're slow, not broken.
-		const cacheFreshWindow = 30 * time.Second
+		// 3 minutes covers the 2-minute dmsg.StreamIdleTimeout
+		// (pkg/dmsg/dmsg/types.go) plus a generous slack for the
+		// peer-side redial → hypervisor-accept → next-poll cycle.
+		// Without this, a peer whose stream just idle-closed shows
+		// "last seen 2-3min ago" in the UI for one or two polls
+		// before the new conn's first Summary lands — visible
+		// flicker that operators flag as "nodes are stale". 30s
+		// (the original value) caught only inline RPC slowness
+		// and missed the steady-state 2-min idle pattern entirely.
+		const cacheFreshWindow = 3 * time.Minute
 
 		for _, entry := range remotes {
 			go func(pk cipher.PubKey, c Conn) {
