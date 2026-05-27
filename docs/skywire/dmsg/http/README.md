@@ -20,25 +20,17 @@ skywire dmsg http
 ```
   -Z, --http               use regular http to connect to DMSG Discovery
   -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
-  -U, --disc-url string    DMSG Discovery URL
-                            (default "http://dmsgd.skywire.skycoin.com")
-  -A, --disc-addr string   DMSG Discovery dmsg address
-                            (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -U, --disc-url string    DMSG Discovery URL (default "http://dmsgd.skywire.skycoin.com")
+  -A, --disc-addr string   DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -D, --dmsgconf string    dmsghttp-config path
-  -e, --sess int           number of DMSG Servers to connect to
-                            (default 2)
+  -e, --sess int           number of DMSG Servers to connect to (default 2)
   -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port
-                           
   -p, --proxy string       connect to DMSG via proxy (i.e. '127.0.0.1:1080')
-  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ]
-                            (default "debug")
-  -r, --dir string         local dir to serve via dmsghttp
-                            (default ".")
-  -d, --port uint          DMSG port to serve from
-                            (default 80)
+  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "debug")
+  -r, --dir string         local dir to serve via dmsghttp (default ".")
+  -d, --port uint          DMSG port to serve from (default 80)
   -w, --wl strings         whitelist keys to access server, comma separated
-  -s, --sk cipher.SecKey   a random key is generated if unspecified
-                            (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)
       --pprofmode string   [ cpu | mem | mutex | block | trace | http ]
       --pprofaddr string   pprof http port (default "localhost:6060")
 ```

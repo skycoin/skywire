@@ -13,10 +13,16 @@ skywire app skynet-client
 ## Flags
 
 ```
-      --local int     local port to listen on
-      --port uint16   routing port for communication between app and visor
-      --remote int    remote port to forward
-      --srv string    remote server public key
+      --forward-min-hops int   per-direction forward MinHops override (>=2 forces multi-hop on forward direction only)
+      --forward-mux int        per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)
+      --local int              local port to listen on
+      --min-hops int           force routes through at least this many intermediates (>=2 rejects direct paths)
+      --port uint16            routing port for communication between app and visor
+      --remote int             remote port to forward
+      --reverse-min-hops int   per-direction reverse MinHops override (>=2 forces multi-hop on reverse direction only)
+      --reverse-mux int        per-direction reverse MuxRoutes override (>0 sets reverse leg count; canonical download-heavy shape: --forward-mux 1 --reverse-mux N)
+      --routes int             number of parallel skynet mux routes (0 or 1 = single route)
+      --srv string             remote server public key
 ```
 
 ## Global Flags

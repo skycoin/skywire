@@ -45,9 +45,10 @@ skywire cli vpn list
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---
