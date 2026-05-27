@@ -42,6 +42,7 @@ func init() {
 		snc.RootCmd,
 		pty.RootCmd,
 		skysocksPairCmd,
+		vpnPairCmd,
 	)
 	// Install flag-aware `help` (supports -r/-t/-d modes) on the
 	// Install flag-aware `help` + coloredcobra styling on every
@@ -83,8 +84,14 @@ func init() {
 
 	scli.RootCmd.Use = "cli"
 	visor.RootCmd.Use = "visor"
+	// vpn pair (server + client) collapsed under
+	// `skywire app vpn {serve,client}`. Legacy direct invocations
+	// stay mounted but Hidden — no Use rename needed (no collision
+	// with the new "vpn" pair name).
 	vpns.RootCmd.Use = "vpn-server"
+	vpns.RootCmd.Hidden = true
 	vpnc.RootCmd.Use = "vpn-client"
+	vpnc.RootCmd.Hidden = true
 	// skysocks pair (server + client) is collapsed under
 	// `skywire app skysocks {serve,client}`. The legacy direct
 	// invocations stay mounted but Hidden so operator scripts
