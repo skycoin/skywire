@@ -21,9 +21,12 @@ skywire cli visor ping [pk]
 ## Subcommands
 
 - [bandwidth](bandwidth/README.md) — Test bandwidth to a visor
+- [mux-bw](mux-bw/README.md) — Multiplexed-route bandwidth + queueing-delay probe (human output by default; --json for NDJSON)
+- [mux-bw-tui](mux-bw-tui/README.md) — Interactive Bubble Tea TUI for the multiplexed-route bandwidth probe
 - [stop-all](stop-all/README.md) — Stop all active ping connections
 - [test](test/README.md) — Test the visor with public visors on network
-- [tree](tree/README.md) — Ping visors via transport routes (scrollable TUI)
+- [tree](tree/README.md) — Interactive Bubble Tea TUI for the ping-tree (server-side BFS over the skywire route graph)
+- [tree-stream](tree-stream/README.md) — Stream a server-side BFS ping-tree as human-readable rows + summary (or NDJSON with --json)
 
 ## Flags
 
@@ -44,9 +47,10 @@ skywire cli visor ping [pk]
 ## Global Flags
 
 ```
-  -h, --help         show help menu
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -h, --help              show help menu
+      --json              print output as JSON
+      --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---
