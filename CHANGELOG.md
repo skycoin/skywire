@@ -8,9 +8,17 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.57
 
-Patch release. Fifteen PRs on top of v1.3.56.
+Patch release. 47 PRs on top of v1.3.56.
 
-The big-picture pieces: visor↔hypervisor RPC self-heals on degraded sessions where it used to silently strand. The skynet-preferred dial from #2802 is now actually skynet-*preferred* rather than skynet-*first* — dmsg is the always-available baseline, skynet kicks in when a real transport exists, and a cooldown drops back to dmsg after any skynet failure. The TransportRPCServer init-order bug (it never started on any visor, silently) is fixed; combined with a shared `VStreamMux` and auto-create-transport, transport-RPC actually works end-to-end. `TCP_NODELAY` is now set on every TCP transport — hvui skypty drops from "laggy at every keystroke" to local-feeling. Hypervisor tree-summary surfaces sub-hypervisor sections correctly (Hostname propagated through HVVisorEntry, managed-sub-hypervisors no longer scrubbed from the local section, ghost rows on failed Summary fetches are gone). Remote-RPC UX is unified: `skywire cli <anything> --via dmsg://<pk>` or `--via skynet://<pk>` routes any CLI command through the local visor to a remote one — no separate CLI keypair, no special-case subcommand (`tp-rpc` is removed). Release workflow auto-publishes the draft once every artifact uploads.
+The big-picture pieces, in order from initial draft (#2805–#2819) to the additional work that landed before tagging (#2820–#2850):
+
+visor↔hypervisor RPC self-heals on degraded sessions where it used to silently strand. The skynet-preferred dial from #2802 is now actually skynet-*preferred* rather than skynet-*first* — dmsg is the always-available baseline, skynet kicks in when a real transport exists, and a cooldown drops back to dmsg after any skynet failure. The TransportRPCServer init-order bug (it never started on any visor, silently) is fixed; combined with a shared `VStreamMux` and auto-create-transport, transport-RPC actually works end-to-end. `TCP_NODELAY` is now set on every TCP transport — hvui skypty drops from "laggy at every keystroke" to local-feeling. Hypervisor tree-summary surfaces sub-hypervisor sections correctly (Hostname propagated through HVVisorEntry, managed-sub-hypervisors no longer scrubbed from the local section, ghost rows on failed Summary fetches are gone). Remote-RPC UX is unified: `skywire cli <anything> --via dmsg://<pk>` or `--via skynet://<pk>` routes any CLI command through the local visor to a remote one — no separate CLI keypair, no special-case subcommand (`tp-rpc` is removed).
+
+Post-draft work added: the install-page WASM generator (skywire-bin install command generator, TinyGo-compiled) — a chain of refactors purging `net/http` and `encoding/json` from the visorconfig + autoconfigcmd + deployment graph so TinyGo can compile the install-page bundle (final size: 1.85 MB, down 75% from the Go-WASM variant). Hypervisor's stale-summary-cache that froze visor rows at "last seen N hours ago" is fixed (cache update + eviction now live inside the inner RPC goroutine, with a 30s freshness window so genuinely-slow peers don't flicker offline). `cli dmsg pty exec --scheme dmsg|skynet` pin the transport explicitly so an unreachable skynet leg can't time out the MultiDialer chain. Services (transport-discovery, address-resolver, route-finder, uptime-tracker, dmsg-discovery) now stop self-publishing in dmsg-discovery — they're direct-client-reachable via the preloaded server set and never needed a discovery entry; this drops the load on dmsgd considerably. `dmsgfirst` discovery client now uses the direct-client-backed `dmsgDC` for its primary path (was the main `dmsgC` whose own discovery is dmsgfirst — recursion-prone, fell back to HTTP on every entry refresh). dmsgpty's skynet leg actually works end-to-end now (listener init-ordering race + PK extractor accepting both `appnet.Addr` and `routing.Addr` types). One stale port in the embedded keyring (`70.121.13.123:9082` → `:9083`) fixed.
+
+Hypervisor UI: node-list sort extended to ip-location / transports / services / reward columns; drag-drop row reorder with localStorage persistence; version-distribution stacked-area chart added to `/nodes/uptime` sourced from the TPD integrated uptime tracker (no separate uptime-tracker round-trip). Standalone-mode operator guides added for `skywire app skychat --standalone --tcp-listen` and `skywire dmsg pty host --tcplisten`, including port-forwarding caveats.
+
+CI: Windows arm64 MSI build enabled; release workflow auto-publishes the draft once every artifact uploads; `make check` serialized via flock so concurrent invocations don't trip each other.
 
 ### Hypervisor RPC reliability
 
@@ -19,12 +27,17 @@ The big-picture pieces: visor↔hypervisor RPC self-heals on degraded sessions w
 -   `fix(visor)`: skynet-preferred (not skynet-first) for hypervisor RPC conn  [#2807](https://github.com/skycoin/skywire/pull/2807)
 -   `fix(visor)`: transport-RPC actually works — shared mux + init order + auto-create transport  [#2810](https://github.com/skycoin/skywire/pull/2810)
 -   `fix(transport,dmsg)`: TCP_NODELAY on all interactive paths  [#2818](https://github.com/skycoin/skywire/pull/2818)
+-   `fix(transport)`: remove recursive RLock in Manager.GetTransport  [#2821](https://github.com/skycoin/skywire/pull/2821)
+-   `fix(visor,cli/dmsg/pty)`: hard-bound DmsgPtyExec dial + honor SIGINT in cli  [#2824](https://github.com/skycoin/skywire/pull/2824)
+-   `fix(visor)`: quiet rpc_bridge accept-loop log spam during shutdown  [#2840](https://github.com/skycoin/skywire/pull/2840)
+-   `fix(hypervisor)`: refresh summary cache from RPC goroutine, not select arm  [#2842](https://github.com/skycoin/skywire/pull/2842)
 
-### Hypervisor UI tree summary
+### Hypervisor UI tree summary + node-list
 
 -   `fix(hypervisor)`: preserve Hostname + dual-list managed sub-hypervisors  [#2808](https://github.com/skycoin/skywire/pull/2808)
 -   `fix(hypervisor)`: bridge Hostname from summaryCache for cross-version sub-sections  [#2809](https://github.com/skycoin/skywire/pull/2809)
 -   `fix(hypervisor)`: no ghost rows on failed Summary + remove data race  [#2817](https://github.com/skycoin/skywire/pull/2817)
+-   `feat(hypervisor-ui)`: sortable columns + drag-drop reorder + version-history chart + standalone-mode docs  [#2850](https://github.com/skycoin/skywire/pull/2850)
 
 ### Remote RPC / `--via` flag
 
@@ -35,9 +48,47 @@ The big-picture pieces: visor↔hypervisor RPC self-heals on degraded sessions w
 -   `feat(visor,cli)`: unify dmsg + skynet bridges; --via skynet:// works end-to-end  [#2815](https://github.com/skycoin/skywire/pull/2815)
 -   `fix(cli)`: parse :port from --via URL  [#2816](https://github.com/skycoin/skywire/pull/2816)
 
-### Release ops
+### dmsgpty `--scheme` + skynet leg fixes
+
+-   `feat(dmsgpty)`: add `--scheme dmsg|skynet` flag to bypass MultiDialer chain  [#2841](https://github.com/skycoin/skywire/pull/2841)
+-   `fix(visor)`: dmsgpty skynet listener never started due to init ordering  [#2846](https://github.com/skycoin/skywire/pull/2846)
+-   `fix(visor)`: dmsgpty skynet listener silently rejects route-group conns  [#2847](https://github.com/skycoin/skywire/pull/2847)
+
+### dmsg-discovery + services-as-direct-clients
+
+-   `fix(cmdutil)`: BootstrapDmsg uses HTTP discovery for client entry lookups  [#2823](https://github.com/skycoin/skywire/pull/2823)
+-   `fix(dmsgclient)`: stop services self-publishing via fallback wrapper  [#2845](https://github.com/skycoin/skywire/pull/2845)
+-   `fix(dmsg/dmsgfirst)`: use direct-client-backed dmsg.Client for primary path  [#2848](https://github.com/skycoin/skywire/pull/2848)
+-   `fix(deployment)`: correct embedded keyring port for `70.121.13.123` dmsg server (`9082`→`9083`)  [#2849](https://github.com/skycoin/skywire/pull/2849)
+
+### Install-page WASM generator (TinyGo-clean)
+
+The install-page command generator (`skywire-bin` deb/arch repo's `index.html`) is now a TinyGo-compiled WASM bundle (1.85 MB; ~75% smaller than the Go-WASM variant it replaced). The refactor purged `net/http` and `encoding/json` from the visorconfig + autoconfigcmd + deployment build graph so TinyGo's stdlib can link it.
+
+-   `feat(skywireconfig)`: autoconfigcmd factory + keypair, WASM-clean  [#2826](https://github.com/skycoin/skywire/pull/2826)
+-   `feat(autoconfigcmd)`: operator-helpful flag descriptions  [#2827](https://github.com/skycoin/skywire/pull/2827)
+-   `feat(netutil,skyenv)`: js/wasm build-tag stubs  [#2828](https://github.com/skycoin/skywire/pull/2828)
+-   `feat(visorconfig)`: extract schema leaf packages — V1 now WASM-clean  [#2829](https://github.com/skycoin/skywire/pull/2829)
+-   `feat(skywireconfig)`: genvisor — WASM-clean visor config generator  [#2830](https://github.com/skycoin/skywire/pull/2830)
+-   `feat(autoconfig)`: config-gen parity — every SKYENV variable now exposed  [#2832](https://github.com/skycoin/skywire/pull/2832)
+-   `refactor(visorconfig,dmsg/disc)`: drop net/http from WASM build graph  [#2834](https://github.com/skycoin/skywire/pull/2834)
+-   `refactor(deployment,visorconfig,genvisor)`: split json paths for WASM  [#2835](https://github.com/skycoin/skywire/pull/2835)
+-   `refactor`: purge encoding/json from WASM build graph — TinyGo unlocked  [#2836](https://github.com/skycoin/skywire/pull/2836)
+-   `feat(genvisor)`: hand-rolled streaming JSON serializer for TinyGo  [#2837](https://github.com/skycoin/skywire/pull/2837)
+-   `feat(autoconfigcmd)`: expose config-gen defaults via EnvMapping  [#2838](https://github.com/skycoin/skywire/pull/2838)
+
+### Third-party / metrics hygiene
+
+-   `fix(metrics)`: internalize VictoriaMetrics/metrics + gotop to silence PSI log  [#2822](https://github.com/skycoin/skywire/pull/2822)
+-   `fix(third_party)`: lint-clean VictoriaMetrics/metrics + xxxserxxx/gotop trees  [#2825](https://github.com/skycoin/skywire/pull/2825)
+-   `fix(third_party)`: silence windows gosec G103 inside `Call()` args  [#2833](https://github.com/skycoin/skywire/pull/2833)
+
+### Release ops + CI
 
 -   `chore(release)`: auto-publish draft when all artifacts upload  [#2819](https://github.com/skycoin/skywire/pull/2819)
+-   `chore`: update deps + v1.3.57 changelog  [#2820](https://github.com/skycoin/skywire/pull/2820)
+-   `chore`: fix CI gofmt failures + serialize make check via flock  [#2831](https://github.com/skycoin/skywire/pull/2831)
+-   `ci`: enable Windows arm64 MSI build  [#2839](https://github.com/skycoin/skywire/pull/2839)
 
 ## 1.3.56
 
