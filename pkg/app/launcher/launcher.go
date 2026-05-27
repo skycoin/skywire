@@ -287,13 +287,17 @@ func (l *AppLauncher) startAppWithMode(cmd string, args, envs []string, launcher
 		ac.Args = args
 	}
 
-	// Override launcher mode if specified
+	// Override launcher mode if specified. The string form matches
+	// appcommon.RunMode for the typed constants — at the RPC boundary
+	// this still arrives as a string so we compare against the named
+	// constants rather than introducing a new conversion.
 	if launcherMode != "" {
 		acCopy := ac
-		if launcherMode == "internal" {
+		switch appcommon.RunMode(launcherMode) {
+		case appcommon.RunModeInternal:
 			// Force internal: clear binary
 			acCopy.Binary = ""
-		} else if launcherMode == "external" {
+		case appcommon.RunModeExternal:
 			// Force external: ensure binary is set
 			if ac.Binary == "" {
 				// Use default binary name (app name)
@@ -438,6 +442,15 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 			// Clear BinaryLoc since we're using internal function
 			procConf.BinaryLoc = ""
 		}
+	}
+
+	// Record the dispatch mode explicitly so downstream consumers
+	// (proc.go, RPC introspection, future supervision) don't have to
+	// re-derive it from RunFunc presence.
+	if procConf.RunFunc != nil {
+		procConf.RunMode = appcommon.RunModeInternal
+	} else {
+		procConf.RunMode = appcommon.RunModeExternal
 	}
 
 	err := ensureDir(&procConf.ProcWorkDir)
