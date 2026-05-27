@@ -25,6 +25,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBarModule, MAT_SNACK_BAR_DEFAULT_OPTIONS } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { DragDropModule } from '@angular/cdk/drag-drop';
 import { TransportListComponent } from './components/pages/node/routing/transport-list/transport-list.component';
 import { NodeAppsListComponent } from './components/pages/node/apps/node-apps-list/node-apps-list.component';
 import { CopyToClipboardTextComponent } from './components/layout/copy-to-clipboard-text/copy-to-clipboard-text.component';
@@ -222,7 +223,8 @@ const globalRippleConfig: RippleGlobalOptions = {
         MatSelectModule,
         MatProgressSpinnerModule,
         MatCheckboxModule,
-        MatSlideToggleModule], providers: [
+        MatSlideToggleModule,
+        DragDropModule], providers: [
         ClipboardService,
         { provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: { duration: 3000, verticalPosition: 'top' } },
         { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { width: '600px', hasBackdrop: true } },

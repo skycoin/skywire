@@ -41,15 +41,16 @@ skywire cli rewards loginchain
 ## Flags
 
 ```
-  -W, --wd string   working directory for login chain files (login_genesis.json, login_fiber.toml) (default "/home/skywire/go/src/github.com/0pcom/skywire")
+  -W, --wd string   working directory for login chain files (login_genesis.json, login_fiber.toml) (default "/home/d0mo/go/src/github.com/0pcom/skywire")
 ```
 
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

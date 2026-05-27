@@ -21,27 +21,26 @@ skywire cli config gen
   -n, --stdout                      write config to stdout
   -N, --squash                      output config without whitespace or newlines
   -o, --out string                  output config: skywire-config.json
-  -w, --hide                        dont print the config to the terminal :: show errors with -n flag
+  -w, --hide                        suppress config output to terminal
   -q, --envs                        show the conf template (reflects flags passed)
   -Q, --envout string               write conf template to file (reflects flags passed)
   -f, --force                       remove pre-existing config
-  -r, --regen                       re-generate existing config & retain keys
+  -r, --regen                       regenerate existing config and retain keys
   -x, --retainhv                    retain existing hypervisors with regen
   -a, --url string                  services conf url
                                      (default "http://conf.skywire.skycoin.com")
-  -t, --testenv                     use test deployment
-                                    (ports are offset +10000 to allow running alongside prod)
-  -d, --dmsghttp                    use only dmsg connection to skywire services (no http fallback)
-      --http                        use only http connection to skywire services (no dmsg)
-  -D, --dmsgconf string             dmsghttp-config path
+  -t, --testenv                     use test deployment (ports offset +10000 from prod)
+  -d, --dmsghttp                    use only dmsg for skywire services (no http)
+      --http                        use only http for skywire services (no dmsg)
+  -D, --dmsgconf string             dmsghttp config path
       --nofetch                     do not fetch the services from the service conf url
   -S, --svcconf string              fallback service configuration file
       --nodefaults                  do not use hardcoded defaults for services
       --minsess int                 number of dmsg servers to connect to (0 = unlimited) (default 2)
   -y, --autoconn                    disable autoconnect to public visors
   -z, --public                      publicize visor in service discovery
-      --stcpr int                   set tcp transport listening port - 0 for random
-      --sudph int                   set udp transport listening port - 0 for random
+      --stcpr int                   tcp transport listening port (0 = random)
+      --sudph int                   udp transport listening port (0 = random)
       --routesetup string           add route setup node PKs
       --tpsetup string              add transport setup node PKs
       --sn                          generate config for route setup node
@@ -63,37 +62,39 @@ skywire cli config gen
       --external-apps               configure launcher apps as external processes
   -g, --disableapps string          comma separated list of apps to disable
       --binpath string              set bin_path for visor native apps
-  -v, --servevpn                    autostart vpn server (default: true) (default true)
+  -v, --servevpn                    autostart vpn server (default true)
       --killsw string               vpn client killswitch
       --addvpn string               set vpn server public key for vpn client
-      --vpnwl string                comma-separated list of public keys allowed to connect to vpn server (empty = allow all)
+      --vpnwl string                vpn server whitelist (comma separated; empty allows all)
       --secure string               change secure mode status of vpn server
-      --netifc string               VPN Server network interface (detected: eth0)
+      --netifc string               VPN Server network interface (detected: eno1)
       --proxyclientpk string        set server public key for proxy client
       --startproxyclient            autostart proxy client
-      --serveproxy                  autostart proxy server (default: true) (default true)
-      --proxywl string              comma-separated list of public keys allowed to connect to proxy server (empty = allow all)
+      --serveproxy                  autostart proxy server (default true)
+      --proxywl string              proxy server whitelist (comma separated; empty allows all)
       --dmsgweb                     enable embedded .dmsg resolving SOCKS5 proxy on 127.0.0.1:4445
       --skynetweb                   enable embedded .skynet resolving SOCKS5 proxy on 127.0.0.1:4446
-      --dmsgweb-upstream string     upstream SOCKS5 for non-.dmsg traffic (e.g. 127.0.0.1:1080); empty + skynetweb on = auto-chain to skynetweb
-      --skynetweb-upstream string   upstream SOCKS5 for non-.skynet traffic (e.g. 127.0.0.1:1080)
-      --servechat                   autostart skychat (default: true) (default true)
+      --skymail-bridge              enable SMTP to skywire bridge on 127.0.0.1:1025
+      --dmsgweb-upstream string     upstream SOCKS5 for non .dmsg traffic (empty chains to skynetweb)
+      --skynetweb-upstream string   upstream SOCKS5 for non .skynet traffic
+      --servechat                   autostart skychat (default true)
       --chataddr string             skychat local address (default "127.0.0.1:8001")
-      --skycoind                    autostart skycoin daemon (full node) — single-instance legacy path; superseded by --skycoindinstances when set
-      --skycoindfiber string        legacy single-instance FIBER_TOML; superseded by --skycoindinstances
-      --skycoindapi string          legacy single-instance --enable-gui-api-sets; superseded by --skycoindflags
-      --skycoindUSER string         drop skycoin daemon to this user via launcher external-mode (applies to every instance)
-      --skycoindinstances string    comma-separated list of skycoin-daemon instances; entries are either 'skycoin' (built-in defaults) or a fiber.toml path. Empty = use the legacy single-instance path driven by --skycoind / --skycoindfiber.
-      --skycoindflags string        extra flags appended to every skycoin-daemon instance (e.g. '--enable-gui-api-sets READ,STATUS'); --port and --data-dir are auto-allocated and must not appear here
-      --skycoinweb                  autostart skycoin-web thin-client wallet
-      --skycoinwebaddr string       skycoin-web bind address (host:port) (default "127.0.0.1:8002")
-      --skycoinwebnodes string      comma-separated node URLs the skycoin-web wallet talks to (empty = upstream default at https://node.skycoin.com)
-      --skycoinwebwallet string     skycoin-web --wallet-dir override (empty = upstream default at ~/.skycoin/wallets)
-      --skycoinwebuser string       drop skycoin-web to this user via launcher external-mode (POSIX setuid; empty = inherit visor UID)
+      --servechatpair               skychat pair RPC channel (required for group chat) (default true)
+      --skycoind                    autostart skycoin daemon (legacy single instance)
+      --skycoindfiber string        legacy FIBER_TOML path (single instance)
+      --skycoindapi string          legacy api sets (single instance)
+      --skycoindUSER string         skycoin daemon UID (applies to every instance)
+      --skycoindinstances string    skycoin daemon instances (comma separated; skycoin or fiber.toml path)
+      --skycoindflags string        extra flags appended to every skycoin daemon (port and data dir auto allocated)
+      --skycoinweb                  autostart skycoin web wallet (thin client)
+      --skycoinwebaddr string       skycoin web bind address (host:port) (default "127.0.0.1:8002")
+      --skycoinwebnodes string      node URLs the skycoin web wallet talks to (comma separated)
+      --skycoinwebwallet string     skycoin web wallet dir override
+      --skycoinwebuser string       skycoin web UID (empty inherits visor UID)
       --rewardaddr string           skycoin reward address or xpub key
   -k, --os string                   (linux / mac / win) paths (default "linux")
   -p, --pkg                         use path for package: /opt/skywire
-  -u, --user                        use paths for user space: /home/skywire
+  -u, --user                        use paths for user space: /home/d0mo
       --loglvl string               level of logging in config (default "info")
   -s, --sk cipher.SecKey            a random key is generated if unspecified
                                      (default 0000000000000000000000000000000000000000000000000000000000000000)
@@ -113,8 +114,9 @@ skywire cli config gen
 ## Global Flags
 
 ```
-  -h, --help   show help menu
-      --json   print output as JSON
+  -h, --help              show help menu
+      --json              print output as JSON
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

@@ -18,17 +18,13 @@ skywire dmsg ip
 ## Flags
 
 ```
-  -c, --dmsg-disc string   dmsg discovery url
-                            (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -c, --dmsg-disc string   dmsg discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -F, --dmsgconf string    dmsghttp-config path
   -z, --http               use regular http to connect to dmsg discovery
-  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ]
-                            (default "fatal")
+  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
   -p, --proxy string       connect to dmsg via proxy (i.e. '127.0.0.1:1080')
-  -e, --sess int           number of dmsg servers to connect to
-                            (default 1)
-  -s, --sk cipher.SecKey   a random key is generated if unspecified
-                            (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -e, --sess int           number of dmsg servers to connect to (default 1)
+  -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)
   -d, --srv strings        dmsg server public keys
 ```
 

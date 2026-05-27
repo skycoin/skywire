@@ -97,39 +97,39 @@ skywire svc ar
 ## Flags
 
 ```
-  -a, --addr string                                                                address to bind to
-                                                                                    (default ":9093")
-  -c, --config skywire cli config gen --ar -o /etc/skywire/address-resolver.json   path to JSON config file. Generate with skywire cli config gen --ar -o /etc/skywire/address-resolver.json.
-                                                                                   
-      --dmsg-disc string                                                           url of dmsg discovery
-                                                                                    (default "http://dmsgd.skywire.skycoin.com")
-      --dmsg-server-type string                                                    type of dmsg server on dmsghttp handler
-      --dmsgPort uint16                                                            dmsg port value
-                                                                                    (default 80)
-      --entry-timeout duration                                                     address binding TTL (0 to disable)
-                                                                                    (default 5m0s)
-      --keyfile string                                                             path to file containing secret key (auto-generated if missing)
-                                                                                   
-  -l, --loglvl string                                                              [info|error|warn|debug|trace|panic]
-                                                                                    (default "info")
-  -m, --metrics string                                                             address to bind metrics API to
-      --mode string                                                                listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
-      --pprof string                                                               address to bind pprof debug server (e.g. localhost:6060)
-      --public-udp-address string                                                  externally-reachable host:port advertised in /health for SUDPH
-                                                                                   required for visors that reach this AR over dmsghttp
-      --redis string                                                               connections string for a redis store
-                                                                                    (default "redis://localhost:6379")
-      --redis-pool-size int                                                        redis connection pool size
-                                                                                    (default 10)
-      --sk cipher.SecKey                                                           dmsg secret key
-                                                                                    (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --tag string                                                                 logging tag
-                                                                                    (default "address_resolver")
-      --test-environment                                                           distinguished between prod and test environment
-  -t, --testing                                                                    enable testing to start without redis
-      --udp-addr string                                                            UDP address to bind to for SUDPH
-                                                                                    (default ":30178")
-      --whitelist-keys string                                                      list of whitelisted keys of network monitor used for deregistration
+  -a, --addr string                 address to bind to
+                                     (default ":9093")
+  -c, --config string               path to JSON config file. Generate with: skywire cli config gen --ar -o /etc/skywire/address-resolver.json
+                                    
+      --dmsg-disc string            url of dmsg discovery
+                                     (default "http://dmsgd.skywire.skycoin.com")
+      --dmsg-port uint16            dmsg port value
+                                     (default 80)
+      --dmsg-server-type string     type of dmsg server on dmsghttp handler
+      --entry-timeout duration      address binding TTL (0 to disable)
+                                     (default 5m0s)
+      --keyfile string              path to file containing secret key (auto-generated if missing)
+                                    
+  -l, --loglvl string               [info|error|warn|debug|trace|panic]
+                                     (default "info")
+  -m, --metrics string              address to bind metrics API to
+      --mode string                 listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
+      --pprof string                address to bind pprof debug server (e.g. localhost:6060)
+      --public-udp-address string   externally-reachable host:port advertised in /health for SUDPH
+                                    required for visors that reach this AR over dmsghttp
+      --redis string                connections string for a redis store
+                                     (default "redis://localhost:6379")
+      --redis-pool-size int         redis connection pool size
+                                     (default 10)
+      --sk cipher.SecKey            dmsg secret key
+                                     (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --tag string                  logging tag
+                                     (default "address_resolver")
+      --test-environment            distinguished between prod and test environment
+  -t, --testing                     enable testing to start without redis
+      --udp-addr string             UDP address to bind to for SUDPH
+                                     (default ":30178")
+      --whitelist-keys string       list of whitelisted keys of network monitor used for deregistration
 ```
 
 ## Global Flags

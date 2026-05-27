@@ -38,16 +38,17 @@ skywire cli rewards ui
   -s, --sk cipher.SecKey           a random key is generated if unspecified
                                     (default 0000000000000000000000000000000000000000000000000000000000000000)
       --skycoin-node string        Skycoin mainnet node URL for reward transaction broadcasts (default "http://127.0.0.1:6420")
-  -W, --wd string                  location of dir containing 'log_collection' & reward 'hist' dirs (default "/home/skywire/go/src/github.com/0pcom/skywire")
+  -W, --wd string                  location of dir containing 'log_collection' & reward 'hist' dirs (default "/home/d0mo/go/src/github.com/0pcom/skywire")
   -w, --wl string                  add whitelist keys, comma separated to permit POST of reward transaction to be broadcast
 ```
 
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---
