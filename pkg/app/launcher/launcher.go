@@ -346,8 +346,20 @@ func (l *AppLauncher) startAppWithMode(cmd string, args, envs []string, launcher
 // surfaces the restart events.
 //
 // Quietly returns when the proc was already de-registered from the
-// proc manager (e.g. visor shutdown removed it before Wait
-// returned) — Wait surfaces ErrNoSuchApp in that case.
+// proc manager — Wait surfaces ErrNoSuchApp in two distinct cases
+// we have to treat differently:
+//
+//  1. Operator stop via StopApp — handled at the source in StopApp
+//     itself (Always-policy apps re-Start there). We don't want to
+//     double-restart, so this watcher bails on ErrNoSuchApp.
+//  2. Visor shutdown via ProcManager.Close — same observable
+//     signal, but the launcher is going away too; bailing is
+//     correct.
+//
+// The watcher's remaining job is crash recovery: a proc exited
+// without anyone calling StopApp. In that case Wait surfaces the
+// proc's exit error, not ErrNoSuchApp, and the watcher restarts
+// per policy.
 func (l *AppLauncher) watchAndRestart(name string, args, envs []string, launcherMode string, policy appcommon.RestartPolicy) {
 	log := l.log.WithField("func", "watchAndRestart").
 		WithField("app_name", name).
@@ -355,11 +367,10 @@ func (l *AppLauncher) watchAndRestart(name string, args, envs []string, launcher
 
 	exitErr := l.procM.Wait(name)
 
-	// Shutdown / de-registration path — proc gone from the manager.
-	// Without this guard we'd loop on an app the operator already
-	// detached.
+	// Operator stop OR visor shutdown — handled elsewhere. Don't
+	// double-restart and don't fight a visor halt.
 	if errors.Is(exitErr, appserver.ErrNoSuchApp) {
-		log.Debug("proc de-registered before exit; not restarting")
+		log.Debug("proc de-registered before exit; not restarting (operator-stop or visor-shutdown path)")
 		return
 	}
 
@@ -369,7 +380,7 @@ func (l *AppLauncher) watchAndRestart(name string, args, envs []string, launcher
 		return
 	}
 
-	log.WithError(exitErr).Info("proc exited; auto-restarting per RestartPolicy")
+	log.WithError(exitErr).Info("proc exited unexpectedly; auto-restarting per RestartPolicy")
 	time.Sleep(restartBackoff)
 
 	if err := l.StartAppWithMode(name, args, envs, launcherMode); err != nil {
@@ -386,6 +397,18 @@ func (l *AppLauncher) watchAndRestart(name string, args, envs []string, launcher
 const restartBackoff = time.Second
 
 // StopApp stops running app.
+//
+// For apps with RestartPolicy=Always, the stop is followed
+// immediately by an auto-restart — operator-initiated stop is a
+// no-op semantically on critical apps (pty, etc.) so a stray click
+// can't lock an operator out of remote management. The path to
+// actually disable an Always-policy app is to remove its config
+// entry and restart the visor. RestartPolicy enforcement for
+// crash recovery (Always + OnFailure) lives in watchAndRestart;
+// that watcher can't reliably distinguish operator-initiated stop
+// from a clean exit because procM.Stop de-registers the proc
+// before Wait observes the exit, surfacing ErrNoSuchApp in both
+// paths — so we handle Always here at the source of truth instead.
 func (l *AppLauncher) StopApp(name string) (*appserver.Proc, error) {
 	log := l.log.WithField("func", "StopApp").WithField("app_name", name)
 
@@ -394,9 +417,31 @@ func (l *AppLauncher) StopApp(name string) (*appserver.Proc, error) {
 		return nil, ErrAppNotRunning
 	}
 
+	// Capture the AppConfig before the stop so we can re-Start with
+	// the same args/envs/launcher-mode. l.apps[name] still has the
+	// entry — apps[] is the operator's config-driven set; only
+	// procM.procs is mutated by Stop.
+	l.mx.Lock()
+	ac, hasAppConfig := l.apps[name]
+	l.mx.Unlock()
+
 	if err := l.procM.Stop(name); err != nil {
 		log.WithError(err).Warn("Failed to stop app.")
 		return proc, err
+	}
+
+	if hasAppConfig && appcommon.RestartPolicy(ac.RestartPolicy) == appcommon.RestartAlways {
+		log.Info("RestartPolicy=Always: auto-restarting after operator stop (lockout safety)")
+		// Spawn the restart so the RPC caller's StopApp returns
+		// promptly. The 1s backoff matches watchAndRestart's so
+		// observers see consistent restart timing regardless of
+		// which code path triggered it.
+		go func() {
+			time.Sleep(restartBackoff)
+			if err := l.StartApp(name, ac.Args, nil); err != nil {
+				log.WithError(err).Error("Always-policy auto-restart failed")
+			}
+		}()
 	}
 
 	return proc, nil
