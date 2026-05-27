@@ -21,7 +21,9 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
@@ -1234,6 +1236,19 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 func buildPtyAppFunc(v *Visor, host *dmsgpty.Host, dmsgPort uint16, sshAddr string) appcommon.AppFunc {
 	return func(ctx context.Context, _ []string) error {
 		log := v.MasterLogger().PackageLogger("app:pty")
+
+		// Complete the in-process IPC handshake the proc manager
+		// is waiting for. Without this the launcher times out on
+		// ProcStartTimeout (5s), marks the proc stopped, and the
+		// app shows up in `cli visor app ls` as stopped even
+		// though the listeners are running. Pty doesn't need the
+		// app-RPC surface for its own work (it talks straight to
+		// dmsgpty.Host), but holding the appCl alive keeps the
+		// proc lifecycle reportable as the other internal apps
+		// (skynet, skychat) do.
+		appCl := app.NewClient(nil)
+		defer appCl.Close()
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
 		log.Info("Starting pty listeners.")
 
 		wg := new(sync.WaitGroup)
@@ -1281,6 +1296,8 @@ func buildPtyAppFunc(v *Visor, host *dmsgpty.Host, dmsgPort uint16, sshAddr stri
 			log.WithField("addr", sshAddr).Info("Mounted pty TCP entry point.")
 		}
 
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
+
 		// Block until app ctx cancel — either operator-initiated
 		// `cli visor app stop pty` (auto-restart by Always policy)
 		// or visor halt (procM.Close cancels all proc contexts).
@@ -1288,6 +1305,7 @@ func buildPtyAppFunc(v *Visor, host *dmsgpty.Host, dmsgPort uint16, sshAddr stri
 		log.Info("Stopping pty listeners.")
 		cancel()
 		wg.Wait()
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 		return nil
 	}
 }
