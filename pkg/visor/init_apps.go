@@ -44,15 +44,17 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 	v.pushCloseStack("launcher.proc_manager", procM.Close)
 
-	// Synthesize the "pty" Internal app entry when initDmsgpty has
-	// constructed a Host. This is the visor-binding for RFC #2775
-	// Phase 3.3 — the pty's listener lifecycle moves into the
-	// launcher so `cli visor app start/stop pty` works uniformly
-	// with the rest of the apps surface. RestartPolicy=Always makes
-	// stop a no-op in practice (auto-restart triggers); the only
-	// real disable path is editing the config and restarting the
-	// visor, which is exactly the pre-Phase-3.3 disable path.
+	// Synthesize Internal-app entries for visor subsystems that
+	// have moved into the launcher's lifecycle per RFC #2775
+	// (operator config wins — appsContains skips synthesis when
+	// the operator has set an explicit entry).
 	apps := append([]appserver.AppConfig(nil), conf.Apps...)
+
+	// Phase 3.3 — pty as Internal app. RestartPolicy=Always so
+	// `cli visor app stop pty` is a no-op in practice (auto-restart
+	// triggers after a 1s backoff). The only real disable path is
+	// removing conf.Dmsgpty and restarting the visor — exactly the
+	// pre-Phase-3.3 disable path.
 	if v.dmsgPty != nil && !appsContains(apps, "pty") {
 		apps = append(apps, appserver.AppConfig{
 			Name:          "pty",
@@ -60,6 +62,37 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 			AutoStart:     true,
 			LauncherMode:  string(appcommon.RunModeInternal),
 			RestartPolicy: string(appcommon.RestartAlways),
+		})
+	}
+
+	// Phase 3.2 — embedded SOCKS5 proxies as Internal apps.
+	// RestartPolicy=Never (operator toggles are intentional, not
+	// crash-recovery candidates); AutoStart reflects the operator's
+	// Enable flag in config so the boot-time behavior is unchanged.
+	// initEmbeddedDmsgWeb / initEmbeddedSkynetWeb register the
+	// RunFunc; the launcher's AutoStart pass starts the listener.
+	if v.embeddedDmsgWeb != nil && !appsContains(apps, "dmsgweb") {
+		autostart := false
+		if v.conf.DmsgWeb != nil {
+			autostart = v.conf.DmsgWeb.Enable
+		}
+		apps = append(apps, appserver.AppConfig{
+			Name:          "dmsgweb",
+			AutoStart:     autostart,
+			LauncherMode:  string(appcommon.RunModeInternal),
+			RestartPolicy: string(appcommon.RestartNever),
+		})
+	}
+	if v.embeddedSkynetWeb != nil && !appsContains(apps, "skynetweb") {
+		autostart := false
+		if v.conf.SkynetWeb != nil {
+			autostart = v.conf.SkynetWeb.Enable
+		}
+		apps = append(apps, appserver.AppConfig{
+			Name:          "skynetweb",
+			AutoStart:     autostart,
+			LauncherMode:  string(appcommon.RunModeInternal),
+			RestartPolicy: string(appcommon.RestartNever),
 		})
 	}
 
