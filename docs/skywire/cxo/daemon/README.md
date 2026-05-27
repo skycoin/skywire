@@ -13,7 +13,7 @@ skywire cxo daemon
 ## Flags
 
 ```
-      --data-dir string                 data directory (default "/home/skywire/.skycoin/cxo")
+      --data-dir string                 data directory (default "/home/d0mo/.skycoin/cxo")
       --debug                           print debug logs
       --log-prefix string               log prefix (default "[node] ")
       --max-connections int             max connections, incoming and outgoing, tcp and udp (default 1000000)

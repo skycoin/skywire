@@ -32,7 +32,7 @@ skywire cli rewards
 
 ```
   -s, --loglvl string    [ debug | warn | error | fatal | panic | trace ] (default "info")
-  -d, --date string      date for which to calculate reward (default "2026-05-13")
+  -d, --date string      date for which to calculate reward (default "2026-05-26")
   -k, --pk string        check reward for pubkey
   -n, --noarch strings   disallowed architectures, comma separated (default [null,wasm])
   -w, --a1 strings       pool 1 allowed arch, comma separated (default [arm64,arm,ppc64,riscv64,loong64,mips,mips64,mips64le,mipsle,ppc64le,s390x])
@@ -55,9 +55,10 @@ skywire cli rewards
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

@@ -238,3 +238,71 @@
     max-width: 35vw;
   }
 }
+
+// Version-distribution stacked-area chart rendered above the fleet
+// bars. SVG fills the wrap; the wrap fixes the height so the chart
+// doesn't reflow when the version count changes day-over-day.
+.version-history {
+  margin: 16px 0;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 4px;
+}
+
+.version-history-title {
+  font-size: 1em;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.version-history-caption {
+  font-weight: 400;
+  font-size: 0.85em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.version-history-chart-wrap {
+  position: relative;
+  width: 100%;
+  height: 180px;
+}
+
+.version-history-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 2px;
+}
+
+.version-history-x-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding: 0 2px;
+}
+
+.version-history-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.version-history-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.version-history-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.version-history-latest {
+  margin-top: 6px;
+}

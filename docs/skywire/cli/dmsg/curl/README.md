@@ -28,7 +28,7 @@ skywire cli dmsg curl <dmsg-url>
   -r, --replace                replace existing output file
   -t, --try int                download attempts (0 unlimits) (default 1)
   -w, --wait int               time to wait between attempts (seconds)
-  -a, --agent string           HTTP user agent (default "skywire-cli/<version>")
+  -a, --agent string           HTTP user agent (default "skywire-cli/v1.3.57-0")
   -v, --verbose                stream visor's dmsg-layer logs to stderr while the request is in flight
       --verbose-level string   minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
 ```
@@ -36,9 +36,10 @@ skywire cli dmsg curl <dmsg-url>
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

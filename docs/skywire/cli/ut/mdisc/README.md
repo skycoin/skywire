@@ -49,7 +49,8 @@ skywire cli ut mdisc
 ## Global Flags
 
 ```
-  -h, --help   show help menu
+  -h, --help              show help menu
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

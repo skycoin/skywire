@@ -23,13 +23,16 @@ skywire cli dmsg
 - [scp](scp/README.md) — Copy a file between this host and a remote visor over dmsg
 - [sessions](sessions/README.md) — List dmsg servers each visor dmsg client is connected to
 - [set-sessions](set-sessions/README.md) — Persist dmsg.sessions_count and connect-all immediately
+- [smb](smb/README.md) — Standalone SMTP→dmsg bridge — relays *.skynet envelopes via own dmsg client
+- [sub](sub/README.md) — Standalone UDP→dmsg bridge — ferries length-prefixed UDP datagrams over dmsg streams
 
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

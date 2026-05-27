@@ -183,38 +183,38 @@ skywire svc tpd
 ## Flags
 
 ```
-  -a, --addr string                                                                    address to bind to
-                                                                                        (default ":9091")
-  -c, --config skywire cli config gen --tpd -o /etc/skywire/transport-discovery.json   path to JSON config file. When set, fields below come from the config file. Generate one with skywire cli config gen --tpd -o /etc/skywire/transport-discovery.json.
-                                                                                       
-      --dmsg-disc string                                                               url of dmsg-discovery
-                                                                                        (default "http://dmsgd.skywire.skycoin.com")
-      --dmsg-server-type string                                                        type of dmsg server on dmsghttp handler
-      --dmsgPort uint16                                                                dmsg port value
-                                                                                        (default 80)
-      --entry-timeout duration                                                         transport entry TTL (0 to disable)
-                                                                                        (default 5m0s)
-      --keyfile string                                                                 path to file containing secret key (auto-generated if missing)
-                                                                                       
-  -l, --loglvl string                                                                  [info|error|warn|debug|trace|panic]
-                                                                                        (default "info")
-  -m, --metrics string                                                                 address to bind metrics API to
-      --mode string                                                                    listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
-      --pprof string                                                                   address to bind pprof debug server (e.g. localhost:6060)
-      --redis string                                                                   connections string for a redis store
-                                                                                        (default "redis://localhost:6379")
-      --redis-pool-size int                                                            redis connection pool size
-                                                                                        (default 10)
-      --sk cipher.SecKey                                                               dmsg secret key
-                                                                                        (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --store-data-path string                                                         path for bandwidth backup files
-                                                                                        (default "/var/lib/skywire/tpd/bandwidth")
-      --tag string                                                                     logging tag
-                                                                                        (default "transport_discovery")
-      --test-environment                                                               distinguished between prod and test environment
-  -t, --testing                                                                        enable testing to start without redis
-      --uptime-db string                                                               path for the service-self uptime bbolt store (empty disables) (default "/var/lib/skywire/tpd/uptime.db")
-      --whitelist-keys string                                                          list of whitelisted keys of network monitor used for deregistration
+  -a, --addr string               address to bind to
+                                   (default ":9091")
+  -c, --config string             path to JSON config file. When set, fields below come from the config file. Generate one with: skywire cli config gen --tpd -o /etc/skywire/transport-discovery.json
+                                  
+      --dmsg-disc string          url of dmsg-discovery
+                                   (default "http://dmsgd.skywire.skycoin.com")
+      --dmsg-port uint16          dmsg port value
+                                   (default 80)
+      --dmsg-server-type string   type of dmsg server on dmsghttp handler
+      --entry-timeout duration    transport entry TTL (0 to disable)
+                                   (default 5m0s)
+      --keyfile string            path to file containing secret key (auto-generated if missing)
+                                  
+  -l, --loglvl string             [info|error|warn|debug|trace|panic]
+                                   (default "info")
+  -m, --metrics string            address to bind metrics API to
+      --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
+      --pprof string              address to bind pprof debug server (e.g. localhost:6060)
+      --redis string              connections string for a redis store
+                                   (default "redis://localhost:6379")
+      --redis-pool-size int       redis connection pool size
+                                   (default 10)
+      --sk cipher.SecKey          dmsg secret key
+                                   (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --store-data-path string    path for bandwidth backup files
+                                   (default "/var/lib/skywire/tpd/bandwidth")
+      --tag string                logging tag
+                                   (default "transport_discovery")
+      --test-environment          distinguished between prod and test environment
+  -t, --testing                   enable testing to start without redis
+      --uptime-db string          path for the service-self uptime bbolt store (empty disables) (default "/var/lib/skywire/tpd/uptime.db")
+      --whitelist-keys string     list of whitelisted keys of network monitor used for deregistration
 ```
 
 ## Global Flags

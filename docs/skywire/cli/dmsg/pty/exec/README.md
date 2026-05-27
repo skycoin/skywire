@@ -33,6 +33,7 @@ skywire cli dmsg pty exec <pk> <command> [args...]
   -e, --env stringArray    extra env var KEY=VALUE; repeatable
   -p, --port string        port of remote visor dmsgpty (default "22")
       --rpc string         RPC server address (default "localhost:3435")
+      --scheme string      pin transport: "dmsg" (force dmsg only), "skynet" (force skynet only), or empty (default MultiDialer chain: skynet first, dmsg fallback)
   -s, --sk cipher.SecKey   local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -t, --timeout string     max command duration (e.g. 30s, 2m); host-side cap is 5m (default "30s")
       --via string         bypass local visor + dial remote dmsgpty-host's direct-TCP listener: tcp://<pk>@<host>:<port>
