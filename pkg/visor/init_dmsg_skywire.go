@@ -66,15 +66,29 @@ func (skywireDialer) DialStream(ctx context.Context, pk cipher.PubKey, port uint
 
 // skywireConnPK is the dmsgpty.PKExtractor for conns accepted by
 // the SkywireNetworker listener. Reaches into RemoteAddr() to pull
-// the appnet.Addr that carries the remote PK. Returns (zero, false)
-// for any conn type that doesn't carry an appnet.Addr so foreign
-// listeners can't sneak past the whitelist gate.
+// the remote PK. The accepted conn type is always *appnet.SkywireConn,
+// but the EMBEDDED net.Conn's RemoteAddr() varies by path:
+//
+//   - direct-dial path (tryDirectDial): inner is *directConn which
+//     returns appnet.Addr.
+//   - route-group path (DialRoutes → NoiseRouteGroup): inner returns
+//     routing.Addr (via RouteGroup.RemoteAddr → RouteDescriptor.Src).
+//
+// Both carry a PubKey field. Accept either shape; reject anything
+// else so foreign listeners can't sneak past the whitelist gate.
+// Pre-fix this function only recognized appnet.Addr, which meant
+// every route-group-backed dmsgpty skynet conn was silently
+// rejected at the extractor — including self-dial, since loopback
+// to own PK has no direct transport and falls into DialRoutes.
 func skywireConnPK(conn net.Conn) (cipher.PubKey, bool) {
-	addr, ok := conn.RemoteAddr().(appnet.Addr)
-	if !ok {
+	switch addr := conn.RemoteAddr().(type) {
+	case appnet.Addr:
+		return addr.PubKey, true
+	case routing.Addr:
+		return addr.PubKey, true
+	default:
 		return cipher.PubKey{}, false
 	}
-	return addr.PubKey, true
 }
 
 // startSkywirePtyListener opens an appnet listener on (localPK,
