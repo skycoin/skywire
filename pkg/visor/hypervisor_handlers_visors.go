@@ -579,6 +579,11 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		// that consistently took 6–20s would never refresh the cache
 		// and the visor would render permanently stale.
 		var mu sync.Mutex
+		// deadVisors accumulates PKs that errored Summary inside the
+		// 5s outer arm — evicted from remoteVisors AFTER wg.Wait so
+		// the eviction can't race with the poll goroutines still
+		// reading their captured Conn copies.
+		var deadVisors []cipher.PubKey
 		wg := new(sync.WaitGroup)
 		wg.Add(len(remotes))
 
@@ -609,25 +614,17 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 					s, e := c.API.Summary()
 					if e == nil && s != nil {
 						// Cache the success here (not in the outer
-						// select) so completions that arrive after
-						// the 5s outer timeout still refresh the
-						// cache for the next poll round.
+						// select arm) so completions that arrive
+						// after the 5s outer timeout still refresh
+						// the cache for the next poll round. This
+						// is the load-bearing half of #2842: slow
+						// peers stay current in cache instead of
+						// rotting to "last seen at" forever.
 						now := time.Now().UTC()
 						cached := *s
 						hv.summaryCacheMx.Lock()
 						hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
 						hv.summaryCacheMx.Unlock()
-					} else {
-						hv.logger.WithError(e).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
-						// Evict on RPC failure so the next accept on
-						// a fresh conn isn't stomped by this stale
-						// entry. Done inline so it works even when
-						// the outer goroutine returned on the 5s
-						// timeout path; the next poll round picks up
-						// the new conn the peer redials in with.
-						hv.mu.Lock()
-						delete(hv.remoteVisors, pk)
-						hv.mu.Unlock()
 					}
 					resultCh <- rpcResult{s, e}
 				}()
@@ -643,8 +640,28 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 						mu.Unlock()
 						return
 					}
-					// rpcErr already logged + peer evicted in the
-					// inner goroutine; fall through to cache.
+					// Inline-arm RPC failure: peer's conn errored
+					// inside the 5s outer budget — that's a strong
+					// signal the underlying stream is broken. Queue
+					// for eviction (deadVisors → mu/deadMu pattern
+					// below). NOTE we intentionally do NOT evict
+					// from inside the inner goroutine when it
+					// returns past the 5s mark: that double-arm
+					// eviction (which earlier iterations of #2842
+					// did) kicked out peers whose Summary was
+					// merely slow (dmsg jitter, route flap, transient
+					// load) and forced redial-and-re-register on
+					// every poll round, surfacing the flicker
+					// operators reported as "things were instant a
+					// week ago, now nodes appear slowly and some
+					// flicker to last-seen-at." Outer-arm-only
+					// eviction matches the pre-#2842 behavior;
+					// the cache update above still recovers slow
+					// peers' state for the next round.
+					hv.logger.WithError(r.rpcErr).WithField("pk", pk).Warn("Failed to obtain summary via RPC")
+					mu.Lock()
+					deadVisors = append(deadVisors, pk)
+					mu.Unlock()
 				case <-time.After(5 * time.Second):
 					hv.logger.WithField("pk", pk).
 						Warn("Remote visor summary RPC slow (>5s); using cache, background-updating")
@@ -676,6 +693,20 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 			}(entry.pk, entry.conn)
 		}
 		wg.Wait()
+
+		// Now that all goroutines have stopped reading their captured
+		// Conn entries, it's safe to delete the broken ones from
+		// remoteVisors. The peer's hypervisor_client will redial and
+		// the accept loop will re-register a fresh Conn — the cache
+		// keeps the row visible (as offline/stale) in the meantime
+		// via the sweep branch below.
+		if len(deadVisors) > 0 {
+			hv.mu.Lock()
+			for _, pk := range deadVisors {
+				delete(hv.remoteVisors, pk)
+			}
+			hv.mu.Unlock()
+		}
 
 		// Surface stale cache rows for PKs that didn't make it into
 		// summaries this round. The above loop only consults the cache
