@@ -139,6 +139,23 @@ func (hv *Hypervisor) visorCtx(w http.ResponseWriter, r *http.Request) (*httpCtx
 			}, true
 		}
 
+		// Soften the "never heard of this PK" 404 to a "we knew it
+		// but it's reconnecting" 503 when the summaryCache still
+		// holds a recent snapshot. The UI's retry loop on 503 then
+		// catches the peer the moment its hypervisor_client redials
+		// and re-registers, rather than surfacing a hard-fail "not
+		// found" mid-flap. Caller still gets a clean error message
+		// for the case where the cache itself doesn't know the PK.
+		hv.summaryCacheMx.RLock()
+		cached, hasCache := hv.summaryCache[pk]
+		hv.summaryCacheMx.RUnlock()
+		if hasCache {
+			elapsed := time.Since(cached.seenAt).Round(time.Second)
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable,
+				fmt.Errorf("visor '%s' is currently disconnected (last seen %s ago) — retrying", pk, elapsed))
+			return nil, false
+		}
+
 		httputil.WriteJSON(w, r, http.StatusNotFound, fmt.Errorf("visor of pk '%s' not found", pk))
 		return nil, false
 	}
