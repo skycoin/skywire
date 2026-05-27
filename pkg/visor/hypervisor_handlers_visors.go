@@ -698,11 +698,20 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 				continue
 			}
 			stale := *cached.sum
-			offlineSince := time.Now().UTC()
-			resp := makeSummaryResp(false, false, &stale)
+			// Same freshness window as the in-remoteVisors fallback
+			// path above: a peer that was just Summary'd N seconds
+			// ago (within the dmsg stream-idle cycle) hasn't been
+			// disconnected long enough to render as offline. Once
+			// outside the window the row keeps showing "last seen
+			// at" with offline_since stamped.
+			fresh := time.Since(cached.seenAt) < cacheFreshWindow
 			seenAt := cached.seenAt
+			resp := makeSummaryResp(fresh, false, &stale)
 			resp.LastSeenAt = &seenAt
-			resp.OfflineSince = &offlineSince
+			if !fresh {
+				offlineSince := time.Now().UTC()
+				resp.OfflineSince = &offlineSince
+			}
 			summaries = append(summaries, resp)
 		}
 		hv.summaryCacheMx.RUnlock()
