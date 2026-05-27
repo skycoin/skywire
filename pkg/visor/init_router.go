@@ -285,8 +285,14 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 	// disc client, and overflows the goroutine stack.
 	v.seedDmsgServiceEntries(routeSetupDmsgC, log)
 	// Same dmsgfirst upgrade as the main dmsgC: discovery refresh
-	// prefers DMSG and only falls back to plain HTTP per-call.
-	upgradeDmsgDiscToDmsgfirst(routeSetupDmsgC, v.conf.Dmsg, log)
+	// prefers DMSG and only falls back to plain HTTP per-call. The
+	// dmsg-primary path uses v.dmsgDC (direct-client-backed) so the
+	// DialStream to dmsg-disc resolves locally — see the equivalent
+	// wiring in initDmsg's upgrade for the full rationale.
+	v.initLock.Lock()
+	primary := v.dmsgDC
+	v.initLock.Unlock()
+	upgradeDmsgDiscToDmsgfirst(routeSetupDmsgC, primary, v.conf.Dmsg, log)
 
 	v.initLock.Lock()
 	v.embeddedRouteSetup = &EmbeddedRouteSetup{
