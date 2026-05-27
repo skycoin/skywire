@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.59
+
+Patch release. One PR on top of v1.3.58 — completes the hypervisor-UI responsiveness work started in #2842 → #2858.
+
+Operators noticed that opening the hypervisor UI after a long closed-tab gap surfaced "fewer nodes / more last-seen-at" rows that filled in over the next 30-60s as the UI's per-peer Summary polls landed. Trace: the hypervisor only fired Summary RPCs when `/api/visors-summary` was hit. Closed UI = no polling = `summaryCache` rotted. Worse, peer-side `idleConn` (90s, #2856) closed every served stream from "no UI traffic" alone, peers cycled redial + re-accept on every idle window for nothing.
+
+This release ships a hypervisor-side background poll loop (30s cadence, independent of UI activity) that keeps both the cache always-fresh AND the served streams warm. Opening the UI after any duration now renders every connected peer from cache instantly. Streams stay alive on whatever transport they upgraded to (typically stcpr on LAN, dmsg as bootstrap+fallback).
+
+### Hypervisor UI responsiveness
+
+-   `fix(hypervisor)`: background summaryCache poll independent of UI activity  [#2858](https://github.com/skycoin/skywire/pull/2858)
+
 ## 1.3.58
 
 Patch release. Four PRs on top of v1.3.57. All targeted at the "nodes appear slowly after restart and some flicker to last-seen-at" regression operators saw after upgrading to v1.3.57.
