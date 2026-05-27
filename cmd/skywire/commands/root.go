@@ -41,6 +41,7 @@ func init() {
 		sn.RootCmd,
 		snc.RootCmd,
 		pty.RootCmd,
+		skysocksPairCmd,
 	)
 	// Install flag-aware `help` (supports -r/-t/-d modes) on the
 	// Install flag-aware `help` + coloredcobra styling on every
@@ -84,8 +85,15 @@ func init() {
 	visor.RootCmd.Use = "visor"
 	vpns.RootCmd.Use = "vpn-server"
 	vpnc.RootCmd.Use = "vpn-client"
+	// skysocks pair (server + client) is collapsed under
+	// `skywire app skysocks {serve,client}`. The legacy direct
+	// invocations stay mounted but Hidden so operator scripts
+	// hitting the old paths keep working; `skywire app --help`
+	// only advertises the new unified path.
 	ssc.RootCmd.Use = "skysocks-client"
-	ss.RootCmd.Use = "skysocks"
+	ssc.RootCmd.Hidden = true
+	ss.RootCmd.Use = "skysocks-srv"
+	ss.RootCmd.Hidden = true
 	sc.RootCmd.Use = "skychat"
 	sn.RootCmd.Use = "skynet-srv"
 	snc.RootCmd.Use = "skynet-client"
