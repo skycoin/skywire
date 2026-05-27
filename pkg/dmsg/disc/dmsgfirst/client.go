@@ -47,22 +47,34 @@ import (
 // failure.
 //
 // Parameters:
-//   - dmsgC: the caller's dmsg.Client. May be nil — in which case the
-//     primary path is disabled and the client behaves like
-//     disc.NewHTTP. Pass nil from short-lived tools that only have
-//     HTTP available.
+//   - primaryDmsgC: the dmsg.Client used for the DMSG-primary path.
+//     Should be the visor's direct-client-backed dmsg.Client (the one
+//     dmsg-disc/TPD/SD/etc. are reachable through without an HTTP-
+//     discovery roundtrip). May be nil — in which case the primary
+//     path is disabled and the client behaves like disc.NewHTTP.
+//
+//     Pre-2026-05: callers passed the main visor dmsgC here, which
+//     made the primary path always fall back to HTTP — dmsg-disc has
+//     no entry in its own discovery (by design — it's the root of
+//     trust), so the dmsgC's DialStream to dmsg-disc PK failed with
+//     "cannot connect to delegated server", primary returned that as
+//     a transport error, fallback ran. Using the direct-client-backed
+//     dmsg.Client fixes this: direct.Client carries a synthetic
+//     entry for the dmsg-disc PK with all known server PKs as
+//     delegated, so DialStream resolves locally and the dmsg session
+//     overlap with dmsg-disc's own direct.StartDmsg session set is
+//     reliable.
 //   - dmsgdiscPK: the dmsg-discovery's public key. Used to construct
-//     the DMSG URL (http://<pk>:80). The caller's dmsgC must be able
-//     to resolve this PK — typically via a direct.Client preloaded
-//     with the dmsg-discovery's entry, or via successful registration
-//     in the discovery itself.
+//     the DMSG URL (http://<pk>:80). primaryDmsgC must carry a
+//     synthetic entry for this PK in its direct.Client (or otherwise
+//     be able to resolve it without an HTTP-discovery lookup).
 //   - httpURL: the HTTP fallback URL (e.g. "http://dmsgd.skywire.skycoin.com").
 //     Same shape callers passed to disc.NewHTTP.
 //   - httpClient: optional override for the fallback HTTP client. nil
 //     uses http.DefaultClient.
 //   - log: logger for both legs.
 func New(
-	dmsgC *dmsg.Client,
+	primaryDmsgC *dmsg.Client,
 	dmsgdiscPK cipher.PubKey,
 	httpURL string,
 	httpClient *http.Client,
@@ -76,14 +88,14 @@ func New(
 	}
 	httpFallback := disc.NewHTTP(httpURL, httpClient, log)
 
-	if dmsgC == nil || dmsgdiscPK.Null() {
+	if primaryDmsgC == nil || dmsgdiscPK.Null() {
 		log.WithField("dmsgdisc_pk", dmsgdiscPK.String()).
-			Debug("DMSG-first disc: no dmsg client or null pk; using HTTP only")
+			Debug("DMSG-first disc: no primary dmsg client or null pk; using HTTP only")
 		return httpFallback
 	}
 
 	dmsgURL := fmt.Sprintf("http://%s:%d", dmsgdiscPK.String(), dmsg.DefaultDmsgHTTPPort)
-	dmsgTransport := dmsghttp.MakeHTTPTransport(context.Background(), dmsgC)
+	dmsgTransport := dmsghttp.MakeHTTPTransport(context.Background(), primaryDmsgC)
 	dmsgHTTP := &http.Client{Transport: dmsgTransport}
 	primary := disc.NewHTTP(dmsgURL, dmsgHTTP, log)
 
