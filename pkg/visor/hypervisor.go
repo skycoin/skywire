@@ -318,6 +318,10 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 				hv.visor.remoteVisors[peerPK] = *visorConn
 				hv.remoteVisors[peerPK] = *visorConn
 				hv.mu.Unlock()
+
+				// Warm-cache: see comment in the dmsg accept path
+				// below — same intent, same one-shot Summary.
+				go hv.warmSummaryCache(peerPK, visorConn.API)
 				if hv.lanDmsg != nil {
 					discoveryURL := hv.c.LANDmsgServer.PublicDiscoveryURL
 					if discoveryURL == "" {
@@ -370,6 +374,18 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		hv.remoteVisors[addr.PK] = *visorConn
 		hv.mu.Unlock()
 
+		// Eager-warm the summaryCache so the next UI poll renders
+		// this peer's row immediately instead of waiting for its
+		// own Summary RPC to complete inside getAllVisorsSummary
+		// (which is bounded by the outer 5s cap and would otherwise
+		// fall through to "no cache entry → row dropped"). One
+		// Summary call per accept is cheap and runs in parallel
+		// across N peers, so a freshly-restarted hypervisor goes
+		// from "list slowly fills as polls land" to "list is
+		// populated as fast as peers redial". Independent of the
+		// LAN DMSG goroutine below — they don't share state.
+		go hv.warmSummaryCache(addr.PK, visorConn.API)
+
 		// Push LAN DMSG server info to the connected visor
 		if hv.lanDmsg != nil {
 			discoveryURL := hv.c.LANDmsgServer.PublicDiscoveryURL
@@ -392,6 +408,27 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			}()
 		}
 	}
+}
+
+// warmSummaryCache fires a Summary() RPC against a freshly-accepted
+// peer and stores the result in hv.summaryCache. Runs synchronously
+// (the caller spawns it in a goroutine). Failures are silent —
+// the next getAllVisorsSummary poll will retry the Summary call
+// itself and surface whatever it finds. Idempotent; concurrent calls
+// for the same PK race on the cache lock and the last writer wins.
+func (hv *Hypervisor) warmSummaryCache(pk cipher.PubKey, api API) {
+	if api == nil {
+		return
+	}
+	sum, err := api.Summary()
+	if err != nil || sum == nil {
+		return
+	}
+	now := time.Now().UTC()
+	cached := *sum
+	hv.summaryCacheMx.Lock()
+	hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
+	hv.summaryCacheMx.Unlock()
 }
 
 type MockConfig struct {
