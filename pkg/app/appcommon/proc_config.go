@@ -141,9 +141,9 @@ type ProcConfig struct {
 	// UID/GID before exec (POSIX, external launcher only). Ignored
 	// silently when RunFunc != nil (internal launcher) since
 	// credentials are process-wide.
-	ProcUser  string      `json:"proc_user,omitempty"`
-	ProcGroup string      `json:"proc_group,omitempty"`
-	RunFunc   interface{} `json:"-"`
+	ProcUser  string  `json:"proc_user,omitempty"`
+	ProcGroup string  `json:"proc_group,omitempty"`
+	RunFunc   AppFunc `json:"-"`
 	// RunMode is the explicit dispatch hint. When unset, EffectiveRunMode
 	// derives the mode from RunFunc presence — preserving legacy callers
 	// that construct ProcConfig directly without setting RunMode.
