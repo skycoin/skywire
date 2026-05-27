@@ -24,7 +24,7 @@ The original `#2775` issue body included the hypervisor UI in the "make it an ap
 
 2. **`dmsg`** — dmsg-standalone. The pty runs as its own process with its own dmsg client; typically uses its own keypair, but may fall back to the visor's keys when the visor isn't running. This is what `cmd/dmsg/dmsgpty-host/` does today as a separate binary.
 
-3. **`tcp`** — TCP-standalone (the "ssh equivalent"). Listens on a TCP port with PK-based auth at the noise-handshake layer. No overlay network. New for the unified pty; today there is no `pkg/dmsg/dmsgpty/` TCP listener.
+3. **`tcp`** — TCP-standalone (the "ssh equivalent"). Listens on a TCP port. Each accept runs a **Noise XK handshake** for mutual PK auth + an encrypted+integrity-checked channel — same crypto primitive dmsg uses, transported over raw TCP. The primitive lives at `pkg/skywire/tcpnoise/` (factored out of `pkg/dmsg/dmsgpty/`) and is already wired by skychat's TCP-direct mode (`cmd/apps/skychat/commands/tcp_direct.go`). The pty subsystem just needs to use the same package — no new crypto, no new protocol.
 
 4. **`http`** — HTTP-on-localhost. Serves the pty over HTTP/WebSocket so a browser can render the terminal. Localhost only — the listener is not directly reachable from the network, but a skynet/dmsg port-forward can expose it remotely (which inherits the overlay's PK auth at the forwarding layer). This is what `cmd/dmsg/dmsgpty-ui/` does today (bridged HTTP→dmsg→pty) and what the stashed `skywire web` scaffold did (direct HTTP→pty).
 
