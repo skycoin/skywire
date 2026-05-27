@@ -546,7 +546,11 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Same dmsgfirst upgrade as the main dmsgC: avoids pinning the
 	// embedded TPS's discovery refresh to plain HTTP for the process
 	// lifetime when initDmsgHTTP's dmsgDC isn't ready at construction.
-	upgradeDmsgDiscToDmsgfirst(tpsDmsgC, v.conf.Dmsg, log)
+	// Primary path uses v.dmsgDC (direct-client-backed) — see initDmsg.
+	v.initLock.Lock()
+	primary := v.dmsgDC
+	v.initLock.Unlock()
+	upgradeDmsgDiscToDmsgfirst(tpsDmsgC, primary, v.conf.Dmsg, log)
 
 	v.initLock.Lock()
 	v.embeddedTPS = &embeddedTPS{
