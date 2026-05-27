@@ -15,6 +15,7 @@ import (
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -43,10 +44,29 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 	v.pushCloseStack("launcher.proc_manager", procM.Close)
 
+	// Synthesize the "pty" Internal app entry when initDmsgpty has
+	// constructed a Host. This is the visor-binding for RFC #2775
+	// Phase 3.3 — the pty's listener lifecycle moves into the
+	// launcher so `cli visor app start/stop pty` works uniformly
+	// with the rest of the apps surface. RestartPolicy=Always makes
+	// stop a no-op in practice (auto-restart triggers); the only
+	// real disable path is editing the config and restarting the
+	// visor, which is exactly the pre-Phase-3.3 disable path.
+	apps := append([]appserver.AppConfig(nil), conf.Apps...)
+	if v.dmsgPty != nil && !appsContains(apps, "pty") {
+		apps = append(apps, appserver.AppConfig{
+			Name:          "pty",
+			Binary:        "", // internal — RunFunc registered by initDmsgpty
+			AutoStart:     true,
+			LauncherMode:  string(appcommon.RunModeInternal),
+			RestartPolicy: string(appcommon.RestartAlways),
+		})
+	}
+
 	// Prepare launcher.
 	launchConf := launcher.AppLauncherConfig{
 		VisorPK:       v.conf.PK,
-		Apps:          conf.Apps,
+		Apps:          apps,
 		ServerAddr:    conf.ServerAddr,
 		BinPath:       conf.BinPath,
 		LocalPath:     v.conf.LocalPath,
@@ -78,6 +98,19 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	v.initLock.Unlock()
 
 	return nil
+}
+
+// appsContains reports whether an apps[] slice already contains an
+// entry under name. Used to skip synthesizing pty (and future
+// Internal-app) entries when the operator has set them explicitly
+// in config.json — operator config wins.
+func appsContains(apps []appserver.AppConfig, name string) bool {
+	for _, ac := range apps {
+		if ac.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // Make an env maker function for vpn application
