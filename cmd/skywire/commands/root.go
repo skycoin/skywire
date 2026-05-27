@@ -43,6 +43,7 @@ func init() {
 		pty.RootCmd,
 		skysocksPairCmd,
 		vpnPairCmd,
+		skynetPairCmd,
 	)
 	// Install flag-aware `help` (supports -r/-t/-d modes) on the
 	// Install flag-aware `help` + coloredcobra styling on every
@@ -102,8 +103,14 @@ func init() {
 	ss.RootCmd.Use = "skysocks-srv"
 	ss.RootCmd.Hidden = true
 	sc.RootCmd.Use = "skychat"
+	// skynet pair (server + client) collapsed under
+	// `skywire app skynet {srv,client}`. Legacy direct invocations
+	// stay mounted but Hidden — names already use the -srv / -client
+	// suffix so no collision with the new "skynet" pair name.
 	sn.RootCmd.Use = "skynet-srv"
+	sn.RootCmd.Hidden = true
 	snc.RootCmd.Use = "skynet-client"
+	snc.RootCmd.Hidden = true
 
 	// --all reveals hidden subcommands (e.g., autoconfig)
 	RootCmd.Flags().BoolVar(&skyShowAll, "all", false, "show all subcommands (including hidden)")
