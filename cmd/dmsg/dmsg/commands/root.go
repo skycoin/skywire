@@ -119,7 +119,6 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 }
 
-
 // Execute executes root CLI command.
 func Execute() {
 	dmsgclient.Execute(RootCmd)
