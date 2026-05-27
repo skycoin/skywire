@@ -320,7 +320,37 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// for the whole process lifetime — so an outage on the public
 	// HTTP fronting (Caddy, etc.) would break the visor's
 	// discovery refresh even when DMSG was healthy.
-	upgradeDmsgDiscToDmsgfirst(dmsgC, v.conf.Dmsg, log)
+	//
+	// Run the upgrade in a goroutine that waits for v.dmsgHTTPReady
+	// (initDmsgHTTP's dmsgDC) before wiring it in as dmsgfirst's
+	// primary path. dmsgDC is direct.Client-backed — it carries a
+	// synthetic entry for the dmsg-disc PK with all known server PKs
+	// as delegated, so DialStream resolves without ever needing an
+	// HTTP-discovery lookup. Pre-fix the primary used the main dmsgC,
+	// whose own discovery was dmsgfirst, so every Entry/PutEntry call
+	// from the visor's own updateClientEntryLoop fell back to HTTP
+	// after the DMSG primary's DialStream timed out — dmsg-disc has
+	// no entry in its own DB (root of trust, by design) so the dial
+	// never had a chance.
+	//
+	// Until dmsgHTTPReady fires (i.e., dmsgDC has bootstrapped its
+	// session set), dmsgC keeps the plain-HTTP discovery clients
+	// constructed by dmsgc.New. That's the same conservative behavior
+	// as before this fix landed.
+	go func() {
+		select {
+		case <-v.dmsgHTTPReady:
+		case <-ctx.Done():
+			return
+		}
+		v.initLock.Lock()
+		dmsgDC := v.dmsgDC
+		v.initLock.Unlock()
+		if dmsgDC == nil {
+			return
+		}
+		upgradeDmsgDiscToDmsgfirst(dmsgC, dmsgDC, v.conf.Dmsg, log)
+	}()
 
 	// Start periodic config refresh for dynamic key sets
 	go v.startConfigRefresh(ctx) //nolint:errcheck,gosec
@@ -354,9 +384,18 @@ const dmsgServersCacheRefreshInterval = 5 * time.Minute
 // to plain HTTP when the dmsg dial fails. The dmsg-discovery's PK is
 // extracted from each deployment's `discovery_dmsg` URL — when that's
 // absent, the entry stays on plain HTTP because dmsgfirst.New needs a
-// PK to dial. Safe to call after dmsgC.Ready(); a no-op if no
-// deployments yield a non-zero PK.
-func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
+// PK to dial. A no-op if no deployments yield a non-zero PK.
+//
+// primaryDmsgC is the dmsg client dmsgfirst will use for its DMSG-
+// primary path. It must be the direct.Client-backed dmsgDC, not the
+// main dmsgC — the main dmsgC's own discovery is what we're
+// upgrading here, so using it for the primary path would recurse on
+// every Entry() lookup. dmsgDC carries the dmsg-disc PK as a synthetic
+// direct.Client entry with all known server PKs as delegated, so its
+// DialStream(dmsg-disc) resolves locally and goes through a session
+// dmsg-disc actually has (it preloads the same server set via
+// direct.StartDmsg in dmsgdisc.go).
+func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
 	if conf == nil {
 		return
 	}
@@ -372,9 +411,9 @@ func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log 
 			upgraded[i] = dmsgdisc.NewHTTP(d.Discovery, &http.Client{}, log)
 			continue
 		}
-		upgraded[i] = dmsgfirst.New(dmsgC, pk, d.Discovery, &http.Client{}, log)
+		upgraded[i] = dmsgfirst.New(primaryDmsgC, pk, d.Discovery, &http.Client{}, log)
 		anyUpgraded = true
-		log.WithField("url", d.Discovery).WithField("pk", pk).Info("dmsg discovery client upgraded to dmsgfirst")
+		log.WithField("url", d.Discovery).WithField("pk", pk).Info("dmsg discovery client upgraded to dmsgfirst (primary via direct-client dmsgDC)")
 	}
 	if !anyUpgraded {
 		return
