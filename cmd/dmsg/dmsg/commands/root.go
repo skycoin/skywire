@@ -17,9 +17,6 @@ import (
 	dc "github.com/skycoin/skywire/cmd/dmsg/dmsgcurl/commands"
 	dh "github.com/skycoin/skywire/cmd/dmsg/dmsghttp/commands"
 	di "github.com/skycoin/skywire/cmd/dmsg/dmsgip/commands"
-	dpc "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-cli/commands"
-	dph "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-host/commands"
-	dpu "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-ui/commands"
 	dw "github.com/skycoin/skywire/cmd/dmsg/dmsgweb/commands"
 	dsp "github.com/skycoin/skywire/cmd/dmsg/self-ping/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -34,17 +31,15 @@ var (
 )
 
 func init() {
-	dmsgptyCmd.AddCommand(
-		dpc.RootCmd,
-		dph.RootCmd,
-		dpu.RootCmd,
-	)
+	// pty subcommands (dmsgpty-cli / -host / -ui) moved to the
+	// unified `skywire app pty <mode>` tree in cmd/apps/pty/commands.
+	// `skywire dmsg pty <cli|host|ui>` is no longer a valid path;
+	// operators should use `skywire app pty <exec|dmsg|tcp|http>`.
 
 	ds.RootCmd.AddCommand(
 		dl.RootCmd,
 	)
 	RootCmd.AddCommand(
-		dmsgptyCmd,
 		dd.RootCmd,
 		ds.RootCmd,
 		df.RootCmd,
@@ -63,9 +58,6 @@ func init() {
 	dc.RootCmd.Use = "curl"
 	dw.RootCmd.Use = "web"
 	ds5.RootCmd.Use = "socks"
-	dpc.RootCmd.Use = "cli"
-	dph.RootCmd.Use = "host"
-	dpu.RootCmd.Use = "ui"
 	di.RootCmd.Use = "ip"
 	dsp.RootCmd.Use = "self-ping"
 
@@ -127,19 +119,6 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 }
 
-var dmsgptyCmd = &cobra.Command{
-	Use:   "pty",
-	Short: "DMSG pseudoterminal (pty)",
-	Long: `
-	┌─┐┌┬┐┬ ┬
-	├─┘ │ └┬┘
-	┴   ┴  ┴
-DMSG pseudoterminal (pty)`,
-	SilenceErrors:         true,
-	SilenceUsage:          true,
-	DisableSuggestions:    true,
-	DisableFlagsInUseLine: true,
-}
 
 // Execute executes root CLI command.
 func Execute() {
