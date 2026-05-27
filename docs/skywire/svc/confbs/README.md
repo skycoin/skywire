@@ -65,9 +65,9 @@ skywire svc confbs
                                    (default "./config.json")
   -D, --dmsg-disc string          url of dmsg-discovery
                                    (default "http://dmsgd.skywire.skycoin.com")
-      --dmsg-server-type string   type of dmsg server on dmsghttp handler
-      --dmsgPort uint16           dmsg port value
+      --dmsg-port uint16          dmsg port value
                                    (default 80)
+      --dmsg-server-type string   type of dmsg server on dmsghttp handler
   -d, --domain string             the domain of the endpoints
                                    (default "skywire.skycoin.com")
       --keyfile string            path to file containing secret key (auto-generated if missing)
@@ -77,7 +77,7 @@ skywire svc confbs
       --sk cipher.SecKey          dmsg secret key
                                    (default 0000000000000000000000000000000000000000000000000000000000000000)
       --tag string                logging tag
-                                   (default "address_resolver")
+                                   (default "config_bootstrapper")
 ```
 
 ## Global Flags

@@ -72,31 +72,31 @@ skywire svc rf
 ## Flags
 
 ```
-  -a, --addr string                                                            address to bind to
-                                                                                (default ":9092")
-  -c, --config skywire cli config gen --rf -o /etc/skywire/route-finder.json   path to JSON config file. Generate with skywire cli config gen --rf -o /etc/skywire/route-finder.json.
-                                                                               
-  -D, --dmsg-disc string                                                       url of dmsg discovery
-                                                                                (default "http://dmsgd.skywire.skycoin.com")
-      --dmsg-server-type string                                                type of dmsg server on dmsghttp handler
-      --dmsgPort uint16                                                        dmsg port value
-                                                                                (default 80)
-      --keyfile string                                                         path to file containing secret key (auto-generated if missing)
-                                                                               
-  -l, --loglvl string                                                          [info|error|warn|debug|trace|panic]
-                                                                                (default "info")
-  -m, --metrics string                                                         address to bind metrics API to
-      --mode string                                                            listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
-      --pprof string                                                           address to bind pprof debug server (e.g. localhost:6060)
-      --redis string                                                           connections string for a redis store
-                                                                                (default "redis://localhost:6379")
-      --redis-pool-size int                                                    redis connection pool size
-                                                                                (default 10)
-      --sk cipher.SecKey                                                       dmsg secret key
-                                                                                (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --tag string                                                             logging tag
-                                                                                (default "route_finder")
-  -t, --testing                                                                enable testing to start without redis
+  -a, --addr string               address to bind to
+                                   (default ":9092")
+  -c, --config string             path to JSON config file. Generate with: skywire cli config gen --rf -o /etc/skywire/route-finder.json
+                                  
+  -D, --dmsg-disc string          url of dmsg discovery
+                                   (default "http://dmsgd.skywire.skycoin.com")
+      --dmsg-port uint16          dmsg port value
+                                   (default 80)
+      --dmsg-server-type string   type of dmsg server on dmsghttp handler
+      --keyfile string            path to file containing secret key (auto-generated if missing)
+                                  
+  -l, --loglvl string             [info|error|warn|debug|trace|panic]
+                                   (default "info")
+  -m, --metrics string            address to bind metrics API to
+      --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
+      --pprof string              address to bind pprof debug server (e.g. localhost:6060)
+      --redis string              connections string for a redis store
+                                   (default "redis://localhost:6379")
+      --redis-pool-size int       redis connection pool size
+                                   (default 10)
+      --sk cipher.SecKey          dmsg secret key
+                                   (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --tag string                logging tag
+                                   (default "route_finder")
+  -t, --testing                   enable testing to start without redis
 ```
 
 ## Global Flags

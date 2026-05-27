@@ -17,9 +17,10 @@ skywire cli dmsg diag porter-reset
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

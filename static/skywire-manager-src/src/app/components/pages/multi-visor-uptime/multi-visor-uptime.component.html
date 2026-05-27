@@ -62,6 +62,60 @@
         <span class="legend-item"><span class="up-block future"></span>{{ 'uptime.legend-future' | translate }}</span>
       </div>
 
+      <!-- Version-distribution stacked-area chart. Mirrors the
+           reward server's /stats/version-history page but sourced
+           from the same TPD /uptimes payload as the fleet bars
+           below — no separate uptime-tracker round-trip. Only renders
+           when there are 2+ days of data (a single day's column is
+           visually noisy and uninformative). -->
+      @if (versionHistory.length >= 2) {
+        <div class="version-history">
+          <div class="version-history-title">
+            {{ 'uptime.version-history-title' | translate }}
+            <span class="version-history-caption">
+              ({{ 'uptime.version-history-threshold' | translate }})
+            </span>
+          </div>
+          <div class="version-history-chart-wrap">
+            <svg class="version-history-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+              @for (v of versionHistoryVersions; track v) {
+                <polygon
+                  [attr.points]="versionHistoryPath(v)"
+                  [attr.fill]="versionHistoryColors[v]"
+                  fill-opacity="0.75"
+                  [attr.stroke]="versionHistoryColors[v]"
+                  stroke-width="0.3"
+                ></polygon>
+              }
+            </svg>
+            <!-- X-axis date labels: first + middle + last (avoids
+                 overlap on narrow widths). -->
+            <div class="version-history-x-axis small dim">
+              <span>{{ versionHistory[0].date }}</span>
+              @if (versionHistory.length > 2) {
+                <span>{{ versionHistoryMidDate() }}</span>
+              }
+              <span>{{ versionHistory[versionHistory.length - 1].date }}</span>
+            </div>
+          </div>
+          <div class="version-history-legend small">
+            @for (v of versionHistoryVersions; track v) {
+              <span class="version-history-legend-item">
+                <span class="version-history-swatch"
+                      [style.background-color]="versionHistoryColors[v]"></span>
+                {{ v }}
+              </span>
+            }
+          </div>
+          <div class="version-history-latest small dim">
+            {{ 'uptime.version-history-latest' | translate }}:
+            <strong>{{ versionHistoryLatestDate() }}</strong>
+            ({{ 'uptime.version-history-total' | translate }}:
+            {{ versionHistoryLatestTotal() }})
+          </div>
+        </div>
+      }
+
       <div class="fleet-graph">
         @if (ticks.length > 0) {
           <div class="up-row tick-row">

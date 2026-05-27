@@ -13,22 +13,15 @@ skywire dmsg socks client
 ## Flags
 
 ```
-  -D, --dmsg-disc string   dmsg discovery url
-                            (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -D, --dmsg-disc string   dmsg discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -F, --dmsgconf string    dmsghttp-config path
-                           
-  -q, --dport uint16       dmsg port to connect to socks5 server
-                            (default 1081)
+  -q, --dport uint16       dmsg port to connect to socks5 server (default 1081)
   -z, --http               use regular http to connect to dmsg discovery
-                           
   -k, --pk string          dmsg socks5 proxy server public key to connect to
-                           
-  -p, --port int           TCP port to serve SOCKS5 proxy locally
-                            (default 1081)
+  -p, --port int           TCP port to serve SOCKS5 proxy locally (default 1081)
       --pprofaddr string   pprof http port (default "localhost:6060")
       --pprofmode string   [ cpu | mem | mutex | block | trace | http ]
-  -s, --sk cipher.SecKey   a random key is generated if unspecified
-                            (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)
 ```
 
 ## Global Flags

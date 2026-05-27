@@ -22,6 +22,7 @@ skywire cli
 - [gotop](gotop/README.md) — Terminal based graphical activity monitor
 - [halt](halt/README.md) — Stop a running visor (alias for `cli visor halt`)
 - [log](log/README.md) — survey & transport log collection
+- [mail](mail/README.md) — Embedded SMTP→skywire bridge (skymail-bridge)
 - [mdisc](mdisc/README.md) — Query DMSG Discovery
 - [pk](pk/README.md) — Public key of the visor (alias for `cli visor pk`)
 - [proxy](proxy/README.md) — Skysocks client
@@ -51,9 +52,10 @@ skywire cli
 ## Flags
 
 ```
-      --all           show all flags and subcommands (including hidden)
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+      --all               show all flags and subcommands (including hidden)
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ## Global Flags

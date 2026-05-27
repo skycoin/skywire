@@ -13,6 +13,25 @@ backs off (1s→30s exponential), re-creates the rpc client, and
 resumes polling. Reduces the burn-the-CLI-Ctrl+C-relaunch
 friction operators hit during a development cycle.
 
+Wrap in a NEVER-TIMEOUT supervisor for agent/automation use:
+the gRPC stream itself self-recovers across visor restarts and
+dmsg blips (#2630), but the OUTER process (this listener
+binary) has no special survival mechanism — it runs until
+killed or its parent times it out. Tools that wrap it in a
+short-lived task (e.g. claude-code's Monitor with a 5-min
+default) WILL silently lose messages once the wrapper expires,
+even though the visor's subscriber is still receiving cleanly.
+
+  * claude-code Monitor: pass `persistent: true` (the wrapper runs
+    until session end or explicit TaskStop).
+  * systemd:             omit RuntimeMaxSec; rely on Restart=on-failure.
+  * tmux / shell:        plain `skywire cli skychat group listen` runs
+                       indefinitely; no other wrapping needed.
+
+If you observe "subscriber_alive=true on the visor side but
+agent didn't see the message," the outer wrapper is almost
+certainly the culprit. See https://github.com/skycoin/skywire/issues/2654.
+
 Output modes (mutually exclusive — passing both --raw and --json
 errors out):
   text (default): one line per message,
@@ -43,10 +62,11 @@ skywire cli skychat group listen
 ## Global Flags
 
 ```
-      --addr string   skychat HTTP address (default "127.0.0.1:8001")
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+      --addr string       skychat HTTP address (default "127.0.0.1:8001")
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

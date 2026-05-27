@@ -18,6 +18,7 @@ skywire app skychat
 
 ```
       --addr string                   address to bind (default: localhost-only); use "*:PORT" to bind on all interfaces (default ":8001")
+  -c, --config string                 path to skywire.json — only the sk field is read, for TCP-direct identity
       --dmsg                          listen on dmsg network (default true)
       --internal-token string         shared secret used by the hypervisor's reverse proxy to bypass the password gate; managed automatically by the visor
       --pair-enable                   enable per-partner CXO pair feeds (HTTP /pair endpoints + handshake)
@@ -34,7 +35,12 @@ skywire app skychat
       --persist-ttl int               days to keep persisted messages before sweep (0 disables) (default 30)
       --persist-whitelist string      path to file with one peer PK per line; if set, only these peers are persisted
       --port uint16                   routing port for communication between app and visor
+      --sk string                     identity SK for TCP-direct (hex). Overrides env + config.
       --skynet                        listen on skynet network (default true)
+      --standalone                    run without a parent visor: skip PROC_CONFIG handshake, disable skynet/dmsg listenLoops, keep --tcp-listen/--tcp-peer + the HTTP control surface. Pair-RPC endpoints become 503 (no visor pair-rpc to relay through). Use this to run a long-lived chat-app that survives visor restarts — reachable via TCP-direct only.
+      --tcp-listen string             accept noise-XK on TCP (e.g. ':8800'); requires --tcp-whitelist + an identity (--sk/-c/env). Bidirectional once established.
+      --tcp-peer strings              persistent outbound TCP-direct peer: tcp://<pk>@host:port (repeat for many). For NAT-side hosts that dial out to public-IP peers.
+      --tcp-whitelist string          comma-separated peer PKs allowed to connect via --tcp-listen (empty rejects all)
 ```
 
 ## Global Flags

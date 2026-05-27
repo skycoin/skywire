@@ -20,10 +20,11 @@ skywire cli skychat group promote <group-id> <pk>
 ## Global Flags
 
 ```
-      --addr string   skychat HTTP address (default "127.0.0.1:8001")
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+      --addr string       skychat HTTP address (default "127.0.0.1:8001")
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

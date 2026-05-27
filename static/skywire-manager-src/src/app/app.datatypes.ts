@@ -60,6 +60,13 @@ export class Node {
   // fallback when no explicit label is set (more operator-readable
   // than the visor's local IP or PK).
   hostname?: string;
+
+  // Pre-computed sort helpers populated by node-list's
+  // annotateForSort() so column-sort by transports/services count
+  // resolves through the standard SortingColumn property-path
+  // lookup. Not from the server.
+  transportsCount?: number;
+  servicesCount?: number;
 }
 
 export interface Application {

@@ -21,6 +21,8 @@ cobra subcommand tree.
 - [vpn.md](vpn.md) — Skywire VPN client/server with `skywire cli vpn`
 - [socks5.md](socks5.md) — Skywire SOCKS5 proxy client with `skywire cli proxy`
 - [skynet.md](skynet.md) — SkyNet P2P port forwarding with `skywire cli skynet`
+- [standalone-skychat.md](standalone-skychat.md) — `skywire app skychat --standalone --tcp-listen :PORT` for visor-independent chat-app with direct-TCP entry point; port-forwarding caveats
+- [standalone-dmsgpty-host.md](standalone-dmsgpty-host.md) — `skywire dmsg pty host --tcplisten :PORT` for visor-independent pty server with DMSG + TCP modes; port-forwarding caveats
 
 ## Advanced
 
