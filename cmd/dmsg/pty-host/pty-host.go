@@ -2,7 +2,7 @@
 package main
 
 import (
-	"github.com/skycoin/skywire/cmd/dmsg/dmsgpty-host/commands"
+	"github.com/skycoin/skywire/cmd/dmsg/pty-host/commands"
 	"github.com/skycoin/skywire/pkg/flags"
 )
 
