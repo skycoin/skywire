@@ -128,6 +128,12 @@ type DistributionConfig struct {
 	// route-finder returned, ranked by latency); smaller packets
 	// round-robin across the remaining legs.
 	SizeThreshold int
+
+	// DSCPThreshold is the IPv4 DSCP boundary for
+	// DistributionDSCPPriority. Packets with DSCP >= this value
+	// take leg 0; others round-robin across the rest. Common
+	// values: 0x2E (EF — VoIP), 0x10 (AF — interactive).
+	DSCPThreshold int
 }
 
 // DistributionMode enumerates the per-packet distribution
@@ -158,6 +164,32 @@ const (
 	// the wider pipe and small packets stay on the low-latency
 	// leg.
 	DistributionSizeThreshold
+	// DistributionSticky5Tuple pins each flow (identified by the
+	// IPv4 5-tuple — src/dst IP + src/dst port + protocol) to a
+	// single leg for the flow's lifetime. Same flow → same leg
+	// every packet, deterministic. Meaningful for VPN traffic
+	// (vpn-client, vpn-server) where the payload is an IPv4
+	// packet; for other apps the selector falls back to hashing
+	// the payload prefix (still deterministic by content but no
+	// flow semantics). Useful for TCP-over-overlay where leg
+	// reordering hurts congestion control.
+	DistributionSticky5Tuple
+	// DistributionLatencyAdaptive picks the leg with the lowest
+	// current transport-layer latency for every packet. Differs
+	// from DistributionAuto (latency-weighted schedule, built
+	// every Rebuild cycle): adaptive evaluates per-packet, so a
+	// leg whose RTT spikes mid-session loses traffic
+	// immediately. Cost: one linear scan over the leg array per
+	// packet (typically <=4 legs, sub-µs).
+	DistributionLatencyAdaptive
+	// DistributionDSCPPriority routes packets by the IPv4 DSCP
+	// field (upper 6 bits of the ToS byte at IP-header offset 1).
+	// Packets with DSCP >= the configured threshold (commonly
+	// 0x2E for EF / VoIP, or 0x10+ for AF / interactive) take
+	// leg 0 — the low-latency leg. Lower-priority packets
+	// round-robin across the rest. Like sticky:5tuple, meaningful
+	// for VPN apps; non-IPv4 payloads default to round-robin.
+	DistributionDSCPPriority
 )
 
 // LegChangeHook is an optional hook fired by the route group
@@ -215,6 +247,12 @@ func (m DistributionMode) String() string {
 		return "weighted"
 	case DistributionSizeThreshold:
 		return "size-threshold"
+	case DistributionSticky5Tuple:
+		return "sticky:5tuple"
+	case DistributionLatencyAdaptive:
+		return "latency-adaptive"
+	case DistributionDSCPPriority:
+		return "dscp-priority"
 	}
 	return "unknown"
 }
