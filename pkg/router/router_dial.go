@@ -58,10 +58,11 @@ func (r *router) DialRoutes(
 			appName = opts.AppName
 		}
 		info := DialInfo{
-			AppName: appName,
-			PeerPK:  rPK,
-			LPort:   lPort,
-			RPort:   rPort,
+			AppName:      appName,
+			PeerPK:       rPK,
+			LPort:        lPort,
+			RPort:        rPort,
+			CLIOverrides: buildCLIOverrides(opts),
 		}
 		if adj, hookErr := r.conf.DialHook.BeforeDial(ctx, info); hookErr != nil {
 			// Failure to evaluate the policy is non-fatal — the
