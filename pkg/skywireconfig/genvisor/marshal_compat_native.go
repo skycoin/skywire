@@ -248,9 +248,9 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 		marshalDmsgNative(w, v.Dmsg, o.indent+1)
 	}
 
-	if v.Dmsgpty != nil {
+	if v.Pty != nil {
 		o.field("dmsgpty")
-		marshalDmsgptyNative(w, v.Dmsgpty, o.indent+1)
+		marshalPtyNative(w, v.Pty, o.indent+1)
 	}
 	if v.Dmsgscp != nil {
 		o.field("dmsgscp")
@@ -567,7 +567,7 @@ func marshalDiscServerNative(w *strings.Builder, s *disc.Server, indent int) {
 	o.close()
 }
 
-func marshalDmsgptyNative(w *strings.Builder, d *visorconfig.Dmsgpty, indent int) {
+func marshalPtyNative(w *strings.Builder, d *visorconfig.Pty, indent int) {
 	o := newObjNative(w, indent)
 	o.field("dmsg_port")
 	writeUintNative(w, uint64(d.DmsgPort))
