@@ -573,6 +573,18 @@ func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
 	rg.mux.tpSelector.Rebuild(rg.tps)
 	legs := len(rg.tps)
 	rg.mu.Unlock()
+	// Weighted mode silently substitutes weight=1 for missing
+	// entries when len(weights) < legs and ignores trailing
+	// weights when len(weights) > legs. Surface the mismatch
+	// at warn so operators can correlate "my schedule isn't
+	// what I asked for" with a script/leg-count discrepancy.
+	if rg.logger != nil && cfg.Mode == DistributionWeighted && len(cfg.Weights) != legs {
+		rg.logger.
+			WithField("weights_len", len(cfg.Weights)).
+			WithField("legs", legs).
+			Warn("Routing policy weighted distribution: weight count != leg count. " +
+				"Missing weights default to 1; trailing weights are ignored.")
+	}
 	if rg.logger != nil {
 		entry := rg.logger.
 			WithField("distribution", cfg.Mode.String()).
