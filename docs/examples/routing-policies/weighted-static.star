@@ -1,4 +1,4 @@
-# weighted-by-kind.star — static weighted distribution for the
+# weighted-static.star — static weighted distribution for the
 # operator's bandwidth-asymmetric apps. The first mux leg gets 3x
 # the per-packet share of the second, matching the typical case
 # where the route-finder's first-pick is the lower-latency path
