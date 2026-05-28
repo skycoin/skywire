@@ -26,9 +26,26 @@ if [[ -z ${_wdate} ]] ; then
 #_wdate=$(date --date="yesterday" +%Y-%m-%d) ./reward.sh
 fi
 ####################################################
-skywire cli ut | tee "hist/${_wdate}_ut.txt"
-# Extract just the target date's data from cached JSON to a date-specific file
-jq --arg date "${_wdate}" '[.[] | {pk, on, version, daily: {($date): .daily[$date]}}]' /tmp/ut.skywire.skycoin.com/uptimes.json > "hist/${_wdate}_ut.json" 2>/dev/null || true
+# Pin the UT cache to hist/ instead of the default `/tmp/<UThost>/`.
+# Default cacheDirPath() uses os.TempDir() which is shared across all
+# UIDs; if any other user (e.g. a root-owned visor on the same host)
+# touches that path first it's created mode 0750 root:root and the
+# reward service (running as the rewards user) silently EACCES on the
+# jq read below. Bash truncates the redirect target BEFORE jq runs,
+# so the failure surfaces as an empty hist/<date>_ut.json — which
+# `ParseHistoricUptimeData` then skips, freezing the version-history
+# chart on the last good day.
+skywire cli ut --cdu hist/ | tee "hist/${_wdate}_ut.txt"
+# Extract just the target date's data from the user-owned cache into
+# a date-specific file. Write to a .tmp first and mv-on-success so a
+# failed jq leaves the previous (possibly populated) file intact
+# instead of zeroing it.
+if jq --arg date "${_wdate}" '[.[] | {pk, on, version, daily: {($date): .daily[$date]}}]' hist/uptimes.json > "hist/${_wdate}_ut.json.tmp" 2>/dev/null; then
+    mv "hist/${_wdate}_ut.json.tmp" "hist/${_wdate}_ut.json"
+else
+    echo "WARN: failed to build hist/${_wdate}_ut.json from hist/uptimes.json" >&2
+    rm -f "hist/${_wdate}_ut.json.tmp"
+fi
 # Calculate rewards
 skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -ed ${_wdate} -p log_backups  |  tee hist/${_wdate}_ineligible.csv
 skywire cli rewards --utfile "hist/${_wdate}_ut.txt" -20d ${_wdate} -p log_backups |  tee hist/${_wdate}_shares.csv
