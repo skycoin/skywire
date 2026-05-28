@@ -235,6 +235,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "noauth")
 	genConfigCmd.Flags().BoolVarP(&isEnableAuth, "auth", "e", false, "enable auth on hypervisor UI")
 	gHiddenFlags = append(gHiddenFlags, "auth")
+	genConfigCmd.Flags().BoolVar(&isEnablePKEndpoint, "pk-endpoint", scriptExecBool("${ENABLEPKENDPOINT:-false}"), "expose unauthenticated GET /api/pk on the hypervisor (skybian / Arch-ARM image builds set this)")
+	gHiddenFlags = append(gHiddenFlags, "pk-endpoint")
 
 	// Dmsgpty and survey whitelist flags
 	msg = "add dmsgpty whitelist PKs"
@@ -1323,6 +1325,7 @@ func configureHypervisor(log *logging.Logger) {
 	{
 		config := visorconfig.GenerateWorkDirConfig(isTestEnv)
 		config.Enable = isHypervisor
+		config.EnablePKEndpoint = isEnablePKEndpoint
 		if hvHTTPAddr != "" {
 			config.HTTPAddr = hvHTTPAddr
 		} else {

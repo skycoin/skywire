@@ -61,24 +61,26 @@ type HypervisorConfig struct {
 	SK         cipher.SecKey `json:"-"`
 	DBPath     string        `json:"db_path"`     // Path to store database file.
 	EnableAuth bool          `json:"enable_auth"` // Whether to enable user management.
-	// DisablePKEndpoint, when true, suppresses the otherwise-
-	// unauthenticated GET /api/pk route used by skybian's first-
-	// boot autoconfig to discover the hypervisor's pubkey. Default
-	// false (route is registered) so the autoconfig path keeps
-	// working. Inverted so a missing JSON field — the common case
-	// for upgrade-in-place configs — preserves existing behavior.
-	// Requests still must carry an SW-Public header naming the
-	// caller's PK; see hypervisor_handlers_misc.go.
-	DisablePKEndpoint bool               `json:"disable_pk_endpoint,omitempty"`
-	Cookies           CookieConfig       `json:"cookies"`                   // Configures cookies (for session management).
-	DmsgDiscovery     string             `json:"-"`                         // Dmsg discovery address.
-	DmsgPort          uint16             `json:"dmsg_port,omitempty"`       // Dmsg port to serve on.
-	HTTPAddr          string             `json:"http_addr"`                 // HTTP address to serve API/web UI on.
-	EnableTLS         bool               `json:"enable_tls"`                // Whether to enable TLS.
-	TLSCertFile       string             `json:"tls_cert_file"`             // TLS cert file location.
-	TLSKeyFile        string             `json:"tls_key_file"`              // TLS key file location.
-	TPViz             TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
-	LANDmsgServer     *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
+	// EnablePKEndpoint, when true, exposes an unauthenticated
+	// GET /api/pk route returning the hypervisor's pubkey. Off by
+	// default — only the skybian / Arch-linux-ARM image builds
+	// flip it on so first-boot visors can discover the bundled
+	// hypervisor's pubkey without an account. The route still
+	// requires an SW-Public header naming the caller's PK as a
+	// soft "looks like another visor" gate; see
+	// hypervisor_handlers_misc.go. No omitempty — the field is
+	// always serialized so operators see it in the generated
+	// config and know it exists.
+	EnablePKEndpoint bool               `json:"enable_pk_endpoint"`
+	Cookies          CookieConfig       `json:"cookies"`                   // Configures cookies (for session management).
+	DmsgDiscovery    string             `json:"-"`                         // Dmsg discovery address.
+	DmsgPort         uint16             `json:"dmsg_port,omitempty"`       // Dmsg port to serve on.
+	HTTPAddr         string             `json:"http_addr"`                 // HTTP address to serve API/web UI on.
+	EnableTLS        bool               `json:"enable_tls"`                // Whether to enable TLS.
+	TLSCertFile      string             `json:"tls_cert_file"`             // TLS cert file location.
+	TLSKeyFile       string             `json:"tls_key_file"`              // TLS key file location.
+	TPViz            TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
+	LANDmsgServer    *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
 	// CXOSubscribeInterval is the resync floor for the on-demand
 	// CXO subscription manager. Subscriptions stay open while a UI
 	// tab is acquired; the manager won't tear down a feed sooner

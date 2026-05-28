@@ -49,6 +49,7 @@ var (
 	isVpnServerEnable          bool
 	isDisableAuth              bool
 	isEnableAuth               bool
+	isEnablePKEndpoint         bool
 	selectedOS                 string
 	disableApps                string
 	serviceConfURL             = deployment.ProdConf.Conf

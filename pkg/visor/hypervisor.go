@@ -617,9 +617,10 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			// Unauthenticated pubkey-discovery route used by
 			// skybian's first-boot autoconfig. SW-Public header
 			// gates it as a soft "looks like another visor"
-			// check. Suppressed entirely when the operator sets
-			// DisablePKEndpoint=true.
-			if !hv.c.DisablePKEndpoint {
+			// check. Off by default — only registered when the
+			// operator (typically the skybian / Arch-ARM image
+			// build) sets EnablePKEndpoint=true.
+			if hv.c.EnablePKEndpoint {
 				r.Get("/pk", hv.getPK())
 			}
 

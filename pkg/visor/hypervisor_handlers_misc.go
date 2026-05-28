@@ -60,6 +60,11 @@ func (hv *Hypervisor) getAbout() http.HandlerFunc {
 // autoconfig (skymanager.sh) needs the pubkey to peer with the
 // hypervisor before any account exists.
 //
+// Off by default — the route is only registered when
+// HypervisorConfig.EnablePKEndpoint is true. The skybian /
+// Arch-ARM image builds flip it on; vanilla hypervisor configs
+// leave it off.
+//
 // Soft gate: the caller must send an SW-Public header naming its
 // own (well-formed) cipher.PubKey. This is a "looks like another
 // visor" check, not real auth — no nonce, no signature. It's
@@ -70,9 +75,6 @@ func (hv *Hypervisor) getAbout() http.HandlerFunc {
 // Response shape (snake_case to match other /api/ JSON envelopes):
 //
 //	{"public_key": "<66-hex>"}
-//
-// Suppressed entirely when HypervisorConfig.DisablePKEndpoint is
-// true (the route isn't registered at all in that case).
 func (hv *Hypervisor) getPK() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		caller := strings.TrimSpace(r.Header.Get("SW-Public"))
