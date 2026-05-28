@@ -397,6 +397,21 @@ type Routing struct {
 	// "stcpr", "sudph", "stcp", "dmsg". If empty, the built-in default order
 	// (stcpr > sudph > stcp > dmsg) is used. Types not listed here sort last.
 	TransportPreference []string `json:"transport_preference,omitempty"`
+
+	// PolicyPerDial is an optional operator-supplied routing
+	// policy script (Starlark, RFC #2882). Accepts either:
+	//   "@/path/to/policy.star"  — file-backed, hot-reloaded
+	//   "<inline script source>" — small inline policies
+	//   "" / unset                — no policy, built-in defaults
+	//
+	// The script's decide_route(ctx, candidates) function is
+	// called per dial; its returned RouteSpec adjusts MuxRoutes
+	// and MinHops, and can refuse the dial via fallback="drop".
+	//
+	// See docs/routing_policy_rfc.md for the policy DSL design,
+	// docs/examples/routing-policies/ for example scripts, and
+	// `skywire cli route policy test/bench` for iteration tools.
+	PolicyPerDial string `json:"policy_per_dial,omitempty"`
 }
 
 // UptimeTracker configures uptime tracker.
