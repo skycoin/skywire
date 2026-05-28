@@ -57,9 +57,22 @@ type DialAdjustment struct {
 	// this dial.
 	MuxRoutes int
 
+	// ForwardMuxRoutes and ReverseMuxRoutes are per-direction
+	// overrides for asymmetric mux. Zero falls back to MuxRoutes.
+	// Used by policies that want different upstream / downstream
+	// fan-out (e.g. ForwardMuxRoutes=1 + ReverseMuxRoutes=4 for
+	// a download-heavy workload).
+	ForwardMuxRoutes int
+	ReverseMuxRoutes int
+
 	// MinHops, when > 0, overrides DialOptions.MinHops for this
 	// dial.
 	MinHops int
+
+	// ForwardMinHops and ReverseMinHops are per-direction
+	// overrides for MinHops. Zero falls back to MinHops.
+	ForwardMinHops int
+	ReverseMinHops int
 
 	// Fallback, when "drop", causes DialRoutes to refuse the
 	// dial with ErrDialPolicyDropped. Any other value is
@@ -161,8 +174,20 @@ func applyAdjustment(opts *DialOptions, adj DialAdjustment) error {
 	if adj.MuxRoutes > 0 {
 		opts.MuxRoutes = adj.MuxRoutes
 	}
+	if adj.ForwardMuxRoutes > 0 {
+		opts.ForwardMuxRoutes = adj.ForwardMuxRoutes
+	}
+	if adj.ReverseMuxRoutes > 0 {
+		opts.ReverseMuxRoutes = adj.ReverseMuxRoutes
+	}
 	if adj.MinHops > 0 {
 		opts.MinHops = adj.MinHops
+	}
+	if adj.ForwardMinHops > 0 {
+		opts.ForwardMinHops = adj.ForwardMinHops
+	}
+	if adj.ReverseMinHops > 0 {
+		opts.ReverseMinHops = adj.ReverseMinHops
 	}
 	if adj.Distribution.Mode != DistributionUnset {
 		opts.Distribution = adj.Distribution
@@ -183,11 +208,13 @@ func applyAdjustment(opts *DialOptions, adj DialAdjustment) error {
 type RouteSelectingHook interface {
 	DialHook
 	// SelectRoute is invoked synchronously after the route-finder
-	// returns candidates and before route setup. The hook may
-	// return a Chosen index (into the candidates slice) or -1 to
-	// defer to the router's built-in selection. Drop=true refuses
-	// the dial with ErrDialPolicyDropped.
-	SelectRoute(ctx context.Context, info DialInfo, candidates []CandidateInfo) (RouteSelection, error)
+	// returns candidates and before route setup. forward and
+	// reverse are the per-direction candidate lists (the same
+	// path returned for both directions when the route-finder
+	// query was symmetric). The hook may return Chosen / ReverseChosen
+	// indices (into the respective lists) or -1 to defer per
+	// direction. Drop=true refuses the dial with ErrDialPolicyDropped.
+	SelectRoute(ctx context.Context, info DialInfo, forward, reverse []CandidateInfo) (RouteSelection, error)
 }
 
 // CandidateInfo is the bare-bones per-candidate description the
@@ -222,7 +249,15 @@ type CandidateInfo struct {
 // Mode == DistributionUnset means "no override at SelectRoute
 // time" — falls back to whatever BeforeDial set on DialOptions.
 type RouteSelection struct {
-	Chosen       int
-	Drop         bool
-	Distribution DistributionConfig
+	// Chosen is the forward-direction index into the forward
+	// candidates slice passed to SelectRoute, or -1 to defer.
+	Chosen int
+	// ReverseChosen is the reverse-direction index into the
+	// reverse candidates slice, or -1 to defer (router uses its
+	// built-in pickBestDirection latency rank for reverse).
+	// Independent of Chosen — a script can override forward but
+	// defer reverse, or vice versa.
+	ReverseChosen int
+	Drop          bool
+	Distribution  DistributionConfig
 }
