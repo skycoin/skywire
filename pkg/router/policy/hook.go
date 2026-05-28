@@ -79,12 +79,12 @@ func (h *Hook) loaderFor(appName string) *Loader {
 //
 // The loader's failure-mode wiring (Fallback vs. Drop) determines
 // what the policy script's failure looks like to the router:
-// - FailureFallback (default): a broken script returns an empty
-//   RouteSpec → empty DialAdjustment → router proceeds with the
-//   caller's original opts. No error surfaced.
-// - FailureDrop: errors propagate up here as a real error; the
-//   router sees an error from BeforeDial and logs it but still
-//   proceeds (failure-safe at the router layer too).
+//   - FailureFallback (default): a broken script returns an empty
+//     RouteSpec → empty DialAdjustment → router proceeds with the
+//     caller's original opts. No error surfaced.
+//   - FailureDrop: errors propagate up here as a real error; the
+//     router sees an error from BeforeDial and logs it but still
+//     proceeds (failure-safe at the router layer too).
 func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.DialAdjustment, error) {
 	loader := h.loaderFor(info.AppName)
 	if loader == nil || !loader.IsActive() {
