@@ -25,8 +25,14 @@ type v1Alias V1
 // UnmarshalJSON implements json.Unmarshaler for V1. Reads the
 // canonical schema via the alias, then patches V1.Pty from the
 // legacy "dmsgpty" key if the canonical "pty" key was absent.
+//
+// The alias is seeded with *v (not zero) so caller-populated
+// fields like the embedded *Common — set by MakeBaseConfig before
+// the JSON decode runs in ReadRaw — survive the unmarshal. A
+// `var alias v1Alias` zero-initializer would wipe *Common to nil
+// and panic the visor's first conf.MasterLogger() call.
 func (v *V1) UnmarshalJSON(data []byte) error {
-	var alias v1Alias
+	alias := v1Alias(*v)
 	if err := json.Unmarshal(data, &alias); err != nil {
 		return err
 	}
