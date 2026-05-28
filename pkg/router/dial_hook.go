@@ -16,6 +16,7 @@ package router
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -46,6 +47,15 @@ type DialInfo struct {
 	PeerPK  cipher.PubKey
 	LPort   routing.Port
 	RPort   routing.Port
+
+	// CLIOverrides surfaces any DialOptions values the caller
+	// (CLI / app) populated before BeforeDial fires, so the
+	// script can honor or override them. Keys mirror DialOptions
+	// field names in snake_case (mux_routes, min_hops,
+	// forward_mux_routes, etc.). Only non-zero values appear.
+	// The policy's adjustment runs AFTER this is captured, so
+	// the script gets a true "what did the operator pass" view.
+	CLIOverrides map[string]string
 }
 
 // DialAdjustment is the hook's return value. Each field is a
@@ -74,9 +84,14 @@ type DialAdjustment struct {
 	ForwardMinHops int
 	ReverseMinHops int
 
-	// Fallback, when "drop", causes DialRoutes to refuse the
-	// dial with ErrDialPolicyDropped. Any other value is
-	// ignored (the dial proceeds normally).
+	// Fallback drives the no-overlay paths:
+	//   "drop"   — refuse the dial with ErrDialPolicyDropped.
+	//   "direct" — skip the route-finder, force the direct-
+	//              transport short-circuit (UseExistingTpOnly=true
+	//              + MinHops=1). If no direct transport exists,
+	//              DialRoutes still fails — the script gets the
+	//              all-or-nothing semantic it asked for.
+	// Any other value is ignored (the dial proceeds normally).
 	Fallback string
 
 	// Distribution, when Mode != DistributionUnset, overrides
@@ -204,12 +219,66 @@ func (m DistributionMode) String() string {
 	return "unknown"
 }
 
+// buildCLIOverrides snapshots any non-zero CLI-set DialOptions
+// fields into a map[string]string for the policy script. Keys
+// are the field names in snake_case; values are decimal strings.
+// Called once before BeforeDial so the script sees the operator's
+// inputs before the policy gets a chance to modify them.
+func buildCLIOverrides(opts *DialOptions) map[string]string {
+	if opts == nil {
+		return nil
+	}
+	out := make(map[string]string, 6)
+	if opts.MuxRoutes > 0 {
+		out["mux_routes"] = strconv.Itoa(opts.MuxRoutes)
+	}
+	if opts.MinHops > 0 {
+		out["min_hops"] = strconv.Itoa(opts.MinHops)
+	}
+	if opts.ForwardMuxRoutes > 0 {
+		out["forward_mux_routes"] = strconv.Itoa(opts.ForwardMuxRoutes)
+	}
+	if opts.ReverseMuxRoutes > 0 {
+		out["reverse_mux_routes"] = strconv.Itoa(opts.ReverseMuxRoutes)
+	}
+	if opts.ForwardMinHops > 0 {
+		out["forward_min_hops"] = strconv.Itoa(opts.ForwardMinHops)
+	}
+	if opts.ReverseMinHops > 0 {
+		out["reverse_min_hops"] = strconv.Itoa(opts.ReverseMinHops)
+	}
+	if opts.UseExistingTpOnly {
+		out["use_existing_tp_only"] = "true"
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // applyAdjustment is a helper used inside DialRoutes — applies
 // the hook's non-zero fields to opts. Returns ErrDialPolicyDropped
 // when the hook said "drop."
 func applyAdjustment(opts *DialOptions, adj DialAdjustment) error {
 	if adj.Fallback == "drop" {
 		return ErrDialPolicyDropped
+	}
+	if adj.Fallback == "direct" {
+		// No-overlay path: skip the route-finder and route-setup
+		// hooks; the existing-tp-only flag forces the direct
+		// transport short-circuit. If no direct transport exists,
+		// DialRoutes' downstream logic still fails — the script
+		// gets the all-or-nothing semantic ("use direct or don't
+		// dial").
+		opts.UseExistingTpOnly = true
+		opts.MinHops = 1
+		// MuxRoutes is meaningless for a direct dial; clear it so
+		// downstream code paths don't try to mux a single
+		// transport.
+		opts.MuxRoutes = 0
+		opts.ForwardMuxRoutes = 0
+		opts.ReverseMuxRoutes = 0
+		return nil
 	}
 	if adj.MuxRoutes > 0 {
 		opts.MuxRoutes = adj.MuxRoutes

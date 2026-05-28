@@ -10,7 +10,9 @@
 // deterministically.
 package policy
 
-import "sync"
+import (
+	"sync"
+)
 
 // Provider is the contract the Evaluator uses to surface visor
 // state to policy scripts. Methods are called per script

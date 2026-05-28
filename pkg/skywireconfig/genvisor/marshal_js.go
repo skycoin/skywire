@@ -231,7 +231,7 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 	}
 
 	if v.Pty != nil {
-		o.field("dmsgpty")
+		o.field("pty")
 		marshalPty(w, v.Pty, o.indent+1)
 	}
 	if v.Dmsgscp != nil {
@@ -1060,6 +1060,8 @@ func marshalHypervisor(w *strings.Builder, h *visorconfig.HypervisorConfig, inde
 	writeQuoted(w, h.DBPath)
 	o.field("enable_auth")
 	writeBool(w, h.EnableAuth)
+	o.field("enable_pk_endpoint")
+	writeBool(w, h.EnablePKEndpoint)
 	o.field("cookies")
 	marshalCookieConfig(w, h.Cookies, o.indent+1)
 	if h.DmsgPort != 0 {
