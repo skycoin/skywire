@@ -16,7 +16,9 @@
 // panics caught and translated into a fallback signal.
 package policy
 
-import "time"
+import (
+	"time"
+)
 
 // RoutingContext is the input the visor passes to the policy
 // script per dial. Fields are the union of (a) the dial-time
@@ -140,18 +142,19 @@ type RouteSpec struct {
 
 	// Fallback names the backup strategy when Chosen is nil or
 	// rejected. Recognized values:
-	//   ""     — use the visor's built-in default (router's
-	//            disjoint-path pick on the unfiltered candidates,
-	//            or direct-transport short-circuit if one exists)
-	//   "drop" — fail the dial loudly with ErrDialPolicyDropped
-	//            (operator notices; app sees a connection error)
+	//   ""       — use the visor's built-in default (router's
+	//              disjoint-path pick on the unfiltered candidates,
+	//              or direct-transport short-circuit if one exists)
+	//   "drop"   — fail the dial loudly with ErrDialPolicyDropped
+	//              (operator notices; app sees a connection error)
+	//   "direct" — skip the route-finder, force the direct-transport
+	//              short-circuit. If no direct transport exists,
+	//              the dial fails. Useful when a script's filter
+	//              wipes all multihop candidates but a direct
+	//              transport would still satisfy the operator
+	//              (e.g. "Indonesia transit only, else direct").
 	//
-	// Any other value is treated as "". The earlier doc mentioned
-	// a "direct" value with "try a direct transport, no overlay"
-	// semantics; that was aspirational and never implemented — use
-	// "drop" instead when a script wants to force the no-overlay
-	// path (or set MinHops=1 to nudge the router toward direct
-	// without refusing the dial outright).
+	// Any other value is treated as "".
 	Fallback string
 
 	// Distribution is the per-packet distribution descriptor for
