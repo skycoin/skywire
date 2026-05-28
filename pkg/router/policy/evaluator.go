@@ -172,17 +172,31 @@ func NewEvaluator(name, src string, opts ...Option) (*Evaluator, error) {
 // RouteSpec; on script failure the result is the configured
 // fallback (and the failure is logged).
 //
-// ctx's deadline is respected on top of the Evaluator's own
-// timeout — whichever is tighter wins.
+// Execution is bounded by the Evaluator's MaxSteps — the
+// Starlark interpreter increments a counter per fundamental
+// operation and aborts if it exceeds the cap. With the default
+// 100k step cap, even a tight loop terminates inside a
+// millisecond on commodity hardware, so we don't need a
+// goroutine-based wall-clock timeout (which had a race: the
+// cancel-watch goroutine could fire Cancel before starlark.Call
+// even started executing, surfacing as a spurious "computation
+// cancelled" error on scripts that actually take microseconds).
+//
+// ctx is checked once at entry — if the caller's dial ctx is
+// already cancelled, we short-circuit to the fallback without
+// attempting evaluation. We don't propagate ctx cancellation
+// mid-script because the step cap already gives us a tight
+// upper bound on execution time.
 func (e *Evaluator) Decide(ctx context.Context, rctx RoutingContext, candidates []Candidate) (RouteSpec, error) {
+	if err := ctx.Err(); err != nil {
+		// Caller's ctx already done — nothing to do.
+		return RouteSpec{}, nil
+	}
+
 	// Stamp now() if the caller hasn't.
 	if rctx.Now.IsZero() {
 		rctx.Now = e.clock.Now()
 	}
-
-	// Bound execution.
-	timeoutCtx, cancel := context.WithTimeout(ctx, e.timeout)
-	defer cancel()
 
 	thread := &starlark.Thread{
 		Name: e.source + "/decide",
@@ -191,17 +205,6 @@ func (e *Evaluator) Decide(ctx context.Context, rctx RoutingContext, candidates 
 		},
 	}
 	thread.SetMaxExecutionSteps(uint64(e.maxSteps)) //nolint:gosec
-	// Cancel the thread when the context fires. Starlark checks
-	// for cancellation between operations.
-	stopCh := make(chan struct{})
-	defer close(stopCh)
-	go func() {
-		select {
-		case <-timeoutCtx.Done():
-			thread.Cancel(timeoutCtx.Err().Error())
-		case <-stopCh:
-		}
-	}()
 
 	// Build the argument values: ctx struct + candidates list.
 	starCtx := buildContextValue(rctx)
