@@ -82,3 +82,51 @@ func applyAdjustment(opts *DialOptions, adj DialAdjustment) error {
 	}
 	return nil
 }
+
+// RouteSelectingHook is an optional secondary interface that a
+// DialHook can implement to influence route selection AFTER the
+// route-finder has returned its candidates. The router type-
+// asserts for this interface; implementers that don't need
+// candidate filtering simply omit SelectRoute and continue using
+// the simpler BeforeDial path.
+//
+// Both hook points fire per dial:
+//   - BeforeDial   (sync, before route-finder)  — adjusts opts
+//   - SelectRoute  (sync, after route-finder)   — picks a route
+type RouteSelectingHook interface {
+	DialHook
+	// SelectRoute is invoked synchronously after the route-finder
+	// returns candidates and before route setup. The hook may
+	// return a Chosen index (into the candidates slice) or -1 to
+	// defer to the router's built-in selection. Drop=true refuses
+	// the dial with ErrDialPolicyDropped.
+	SelectRoute(ctx context.Context, info DialInfo, candidates []CandidateInfo) (RouteSelection, error)
+}
+
+// CandidateInfo is the bare-bones per-candidate description the
+// router hands to RouteSelectingHook.SelectRoute. The hook is
+// responsible for any further enrichment (geo lookup, transport-
+// kind classification) — the router only owns the route-finder
+// response and the latency lookup it already builds for its
+// disjoint-path selection.
+type CandidateInfo struct {
+	// Hops is the ordered intermediate PKs (hex) from source
+	// (excluded) to destination (excluded). Empty for a direct
+	// transport.
+	Hops []string
+
+	// EstLatencyMs is the sum of per-hop latencies along the
+	// route, in milliseconds, drawn from the router's existing
+	// transport-tracker lookup. Zero when no measurements are
+	// available — treat as "unknown," not "fast."
+	EstLatencyMs int
+}
+
+// RouteSelection is the SelectRoute return value. Chosen is an
+// index into the candidates slice passed in; -1 means "no
+// preference, fall back to the router's built-in disjoint-path
+// pick." Drop=true overrides everything and refuses the dial.
+type RouteSelection struct {
+	Chosen int
+	Drop   bool
+}
