@@ -213,7 +213,16 @@ type CandidateInfo struct {
 // index into the candidates slice passed in; -1 means "no
 // preference, fall back to the router's built-in disjoint-path
 // pick." Drop=true overrides everything and refuses the dial.
+//
+// Distribution lets a SelectRoute hook reconsider the per-packet
+// distribution descriptor after seeing the chosen candidate's
+// transport-kinds / latency / hops_geo. The hook can branch on
+// the candidate it picked and return a tailored distribution
+// (e.g. "if route has stcpr+sudph legs: weighted 3,1 else: auto").
+// Mode == DistributionUnset means "no override at SelectRoute
+// time" — falls back to whatever BeforeDial set on DialOptions.
 type RouteSelection struct {
-	Chosen int
-	Drop   bool
+	Chosen       int
+	Drop         bool
+	Distribution DistributionConfig
 }

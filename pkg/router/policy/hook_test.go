@@ -305,3 +305,77 @@ def decide_route(ctx, candidates):
 		t.Errorf("expected the parse failure to be logged")
 	}
 }
+
+func TestHook_SelectRoute_DistributionPropagates(t *testing.T) {
+	// Script picks a candidate and ALSO returns distribution
+	// based on its properties — the previously-impossible
+	// dynamic-distribution case.
+	src := `
+def decide_route(ctx, candidates):
+    if not candidates:
+        return RouteSpec(mux=2)
+    c = candidates[0]
+    if "stcpr" in c.transport_kinds and "sudph" in c.transport_kinds:
+        return RouteSpec(chosen=c, distribution="weighted: 3, 1")
+    return RouteSpec(chosen=c, distribution="round-robin")
+`
+	hopA := "020000000000000000000000000000000000000000000000000000000000000001"
+	prov := NewFakeProvider().
+		SetGeo(hopA, "DE").
+		SetKind(hopA, "stcpr")
+
+	loader, err := NewLoader(src, WithProvider(prov))
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader, WithHookProvider(prov))
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+
+	// Single-kind route → round-robin
+	cands := []router.CandidateInfo{{Hops: []string{hopA}}}
+	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk}, cands)
+	if err != nil {
+		t.Fatalf("SelectRoute single-kind: %v", err)
+	}
+	if sel.Distribution.Mode != router.DistributionRoundRobin {
+		t.Errorf("single-kind: Distribution.Mode=%v, want DistributionRoundRobin", sel.Distribution.Mode)
+	}
+}
+
+func TestHook_SelectRoute_BadDistributionLogsAndDefers(t *testing.T) {
+	src := `
+def decide_route(ctx, candidates):
+    if not candidates:
+        return RouteSpec()
+    return RouteSpec(chosen=candidates[0], distribution="not-a-thing")
+`
+	hopA := "020000000000000000000000000000000000000000000000000000000000000001"
+	prov := NewFakeProvider().SetGeo(hopA, "DE")
+
+	loader, err := NewLoader(src, WithProvider(prov))
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	var logged string
+	h := NewHook(loader, WithHookProvider(prov), WithHookLogger(func(f string, _ ...interface{}) {
+		logged += f
+	}))
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	cands := []router.CandidateInfo{{Hops: []string{hopA}}}
+	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk}, cands)
+	if err != nil {
+		t.Fatalf("SelectRoute: %v", err)
+	}
+	if sel.Distribution.Mode != router.DistributionUnset {
+		t.Errorf("bad descriptor in SelectRoute: Distribution.Mode=%v, want DistributionUnset", sel.Distribution.Mode)
+	}
+	if logged == "" {
+		t.Errorf("expected the bad distribution to be logged")
+	}
+}
