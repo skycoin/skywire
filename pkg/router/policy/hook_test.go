@@ -110,6 +110,87 @@ func TestHook_NoopLoader_ReturnsEmptyAdjustment(t *testing.T) {
 	}
 }
 
+func TestHook_SelectRoute_PicksByGeo(t *testing.T) {
+	// Indonesia-Friday-style filter, distilled: pick whichever
+	// candidate route includes a hop in country "ID". Three input
+	// candidates with different geo footprints; only candidate 1
+	// touches ID.
+	src := `
+def decide_route(ctx, candidates):
+    for c in candidates:
+        if "ID" in c.hops_geo:
+            return RouteSpec(chosen = c)
+    return RouteSpec()
+`
+	hopA := "020000000000000000000000000000000000000000000000000000000000000001"
+	hopB := "020000000000000000000000000000000000000000000000000000000000000002"
+	hopC := "020000000000000000000000000000000000000000000000000000000000000003"
+
+	prov := NewFakeProvider().
+		SetGeo(hopA, "DE").
+		SetGeo(hopB, "ID").
+		SetGeo(hopC, "US")
+
+	loader, err := NewLoader(src, WithProvider(prov))
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader, WithHookProvider(prov))
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+
+	cands := []router.CandidateInfo{
+		{Hops: []string{hopA, hopC}}, // DE, US
+		{Hops: []string{hopA, hopB}}, // DE, ID — should win
+		{Hops: []string{hopC}},       // US
+	}
+	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "skychat", PeerPK: pk}, cands)
+	if err != nil {
+		t.Fatalf("SelectRoute: %v", err)
+	}
+	if sel.Drop {
+		t.Fatalf("unexpected drop")
+	}
+	if sel.Chosen != 1 {
+		t.Errorf("Chosen=%d, want 1 (the ID-touching candidate)", sel.Chosen)
+	}
+}
+
+func TestHook_SelectRoute_NoMatchDefers(t *testing.T) {
+	// Script returns an empty RouteSpec when nothing matches —
+	// hook surfaces Chosen=-1 so the router falls back to its
+	// built-in disjoint-path pick.
+	src := `
+def decide_route(ctx, candidates):
+    for c in candidates:
+        if "ZZ" in c.hops_geo:
+            return RouteSpec(chosen = c)
+    return RouteSpec()
+`
+	hopA := "020000000000000000000000000000000000000000000000000000000000000001"
+	prov := NewFakeProvider().SetGeo(hopA, "DE")
+
+	loader, err := NewLoader(src, WithProvider(prov))
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader, WithHookProvider(prov))
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk},
+		[]router.CandidateInfo{{Hops: []string{hopA}}})
+	if err != nil {
+		t.Fatalf("SelectRoute: %v", err)
+	}
+	if sel.Chosen != -1 {
+		t.Errorf("Chosen=%d, want -1 (defer to router pick)", sel.Chosen)
+	}
+}
+
 func TestHook_DropMode_ErrorPropagates(t *testing.T) {
 	// Script that always errors. With FailureDrop, the loader
 	// propagates the error; the hook surfaces it as a non-nil

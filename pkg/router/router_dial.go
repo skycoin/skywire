@@ -646,6 +646,52 @@ fetchRoutesAgain:
 	// the route-finder returned a single candidate (lookup is built
 	// but never iterated).
 	latencyFor := r.buildLatencyLookup(ctx, paths[forward], paths[backward])
+
+	// Routing-policy candidate selection. When the configured
+	// DialHook also implements RouteSelectingHook, hand it the
+	// forward-direction candidates so the operator's script can
+	// filter / pick by geo / latency / transport-kind. The hook's
+	// Chosen index overrides the disjoint-path pick for the
+	// forward direction; the reverse direction still goes through
+	// the existing latency-ranked pick. Failure-safe — any error
+	// from the hook falls through to pickDisjointPath.
+	if sh, ok := r.conf.DialHook.(RouteSelectingHook); ok && sh != nil && len(paths[forward]) > 0 {
+		hookCandidates := make([]CandidateInfo, 0, len(paths[forward]))
+		for _, hops := range paths[forward] {
+			intermediates := intermediatesOfHops(hops, src, dst)
+			hopHex := make([]string, 0, len(intermediates))
+			for _, pk := range intermediates {
+				hopHex = append(hopHex, pk.Hex())
+			}
+			latSum := pathLatencyScore(hops, latencyFor)
+			hookCandidates = append(hookCandidates, CandidateInfo{
+				Hops:         hopHex,
+				EstLatencyMs: int(latSum),
+			})
+		}
+		info := DialInfo{
+			AppName: opts.AppName,
+			PeerPK:  dst,
+		}
+		if sel, herr := sh.SelectRoute(ctx, info, hookCandidates); herr != nil {
+			log.WithError(herr).Debug("Routing policy SelectRoute errored; falling back to disjoint-path pick.")
+		} else if sel.Drop {
+			log.WithField("policy_decision", "drop").Info("Routing policy dropped dial at SelectRoute.")
+			return nil, nil, ErrDialPolicyDropped
+		} else if sel.Chosen >= 0 && sel.Chosen < len(paths[forward]) {
+			chosenFwd := paths[forward][sel.Chosen]
+			excludeSet := make(map[cipher.PubKey]struct{}, len(opts.ExcludeIntermediatePKs))
+			for _, pk := range opts.ExcludeIntermediatePKs {
+				excludeSet[pk] = struct{}{}
+			}
+			if revPath, revOk := pickBestDirection(paths[backward], excludeSet, latencyFor); revOk {
+				log.WithField("policy_chosen", sel.Chosen).Debug("Routing policy selected forward route.")
+				return chosenFwd, revPath, nil
+			}
+			log.Debug("Routing policy picked a forward route but no acceptable reverse; falling back to disjoint pick.")
+		}
+	}
+
 	fwdPath, revPath, ok := pickDisjointPath(paths[forward], paths[backward], opts.ExcludeIntermediatePKs, latencyFor)
 	if !ok {
 		log.Debugf("No route-finder path avoids the %d excluded intermediates; trying local route calc fallback", len(opts.ExcludeIntermediatePKs))
