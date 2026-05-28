@@ -27,6 +27,7 @@ type Hook struct {
 	loader   *Loader
 	byApp    map[string]*Loader
 	provider Provider // used for HopsGeo enrichment during SelectRoute
+	logger   func(format string, args ...interface{})
 }
 
 // HookOption configures a Hook at construction.
@@ -42,9 +43,17 @@ func WithHookProvider(p Provider) HookOption {
 	return func(h *Hook) { h.provider = p }
 }
 
+// WithHookLogger supplies the log function the hook uses for
+// non-fatal events (e.g. malformed distribution descriptor that
+// can be safely ignored). Default is a no-op so silent operation
+// stays the default in tests.
+func WithHookLogger(f func(format string, args ...interface{})) HookOption {
+	return func(h *Hook) { h.logger = f }
+}
+
 // NewHook wraps a Loader as a DialHook.
 func NewHook(l *Loader, opts ...HookOption) *Hook {
-	h := &Hook{loader: l}
+	h := &Hook{loader: l, logger: func(string, ...interface{}) {}}
 	for _, opt := range opts {
 		opt(h)
 	}
@@ -99,11 +108,21 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 	if err != nil {
 		return router.DialAdjustment{}, err
 	}
-	return router.DialAdjustment{
+	adj := router.DialAdjustment{
 		MuxRoutes: spec.Mux,
 		MinHops:   spec.MinHops,
 		Fallback:  spec.Fallback,
-	}, nil
+	}
+	// Distribution descriptor parse — failure is non-fatal
+	// (script keeps the rest of the adjustment; distribution
+	// falls back to the visor-wide default). Empty Distribution
+	// parses to DistributionUnset, which applyAdjustment skips.
+	if dist, perr := ParseDistribution(spec.Distribution); perr != nil {
+		h.logger("policy %s: invalid distribution %q: %v", info.AppName, spec.Distribution, perr)
+	} else {
+		adj.Distribution = dist
+	}
+	return adj, nil
 }
 
 // SelectRoute implements router.RouteSelectingHook. Enriches the
