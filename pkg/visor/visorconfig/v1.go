@@ -16,7 +16,7 @@ type V1 struct {
 	mu sync.RWMutex
 
 	Dmsg          *dmsgspec.DmsgConfig `json:"dmsg"`
-	Dmsgpty       *Dmsgpty             `json:"dmsgpty,omitempty"`
+	Pty           *Pty                 `json:"pty,omitempty"`
 	Dmsgscp       *Dmsgscp             `json:"dmsgscp,omitempty"`
 	UIServer      *UIServer            `json:"ui_server,omitempty"`
 	LogServer     *LogServer           `json:"log_server,omitempty"`
@@ -91,8 +91,11 @@ type Skychat struct {
 	GroupHistoryDB string `json:"group_history_db,omitempty"`
 }
 
-// Dmsgpty configures the dmsgpty-host.
-type Dmsgpty struct {
+// Pty configures the pseudoterminal subsystem (formerly Dmsgpty).
+// The struct shape is unchanged across the rename; the V1.Pty
+// field's JSON tag accepts both "pty" (canonical) and "dmsgpty"
+// (legacy) via V1.UnmarshalJSON in config_compat.go.
+type Pty struct {
 	DmsgPort  uint16          `json:"dmsg_port"`
 	CLINet    string          `json:"cli_network"`
 	CLIAddr   string          `json:"cli_address"`
@@ -129,7 +132,7 @@ type Dmsgpty struct {
 // The host is on by default — access is gated by the same whitelist
 // that dmsgpty uses (a peer's PK must be on the list to be served).
 // Operators who want to disable it entirely set Disabled=true. When
-// Whitelist is empty the host reuses Dmsgpty.Whitelist so trusting
+// Whitelist is empty the host reuses Pty.Whitelist so trusting
 // a peer for pty implicitly trusts them for file transfer too.
 //
 // The host listens on BOTH dmsg and the skywire router (skynet) at
@@ -151,7 +154,7 @@ type Dmsgscp struct {
 	// <local_path>/scp-root is used.
 	RootDir string `json:"root_dir,omitempty"`
 	// Whitelist optionally overrides the dmsgpty whitelist. When
-	// nil or empty, init reuses Dmsgpty.Whitelist.
+	// nil or empty, init reuses Pty.Whitelist.
 	Whitelist []cipher.PubKey `json:"whitelist,omitempty"`
 }
 

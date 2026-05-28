@@ -83,7 +83,7 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 	}
 	conf.ShutdownTimeout = DefaultTimeout
 
-	conf.Dmsgpty = &Dmsgpty{
+	conf.Pty = &Pty{
 		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DmsgPtyCLINet,
 		CLIAddr:  defaultDmsgPtyCLIAddr(),

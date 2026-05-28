@@ -53,7 +53,7 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	// Phase 3.3 — pty as Internal app. RestartPolicy=Always so
 	// `cli visor app stop pty` is a no-op in practice (auto-restart
 	// triggers after a 1s backoff). The only real disable path is
-	// removing conf.Dmsgpty and restarting the visor — exactly the
+	// removing conf.Pty and restarting the visor — exactly the
 	// pre-Phase-3.3 disable path.
 	if v.dmsgPty != nil && !appsContains(apps, "pty") {
 		apps = append(apps, appserver.AppConfig{
@@ -562,8 +562,8 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		for _, pk := range v.conf.Hypervisors {
 			authorizedPKs[pk] = true
 		}
-		if v.conf.Dmsgpty != nil {
-			for _, pk := range v.conf.Dmsgpty.Whitelist {
+		if v.conf.Pty != nil {
+			for _, pk := range v.conf.Pty.Whitelist {
 				authorizedPKs[pk] = true
 			}
 		}
@@ -638,8 +638,8 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		v.pushCloseStack("transport_rpc.mux", v.transportRPCMux.Close)
 
 		whitelistPKs := append([]cipher.PubKey{}, v.conf.Hypervisors...)
-		if v.conf.Dmsgpty != nil {
-			whitelistPKs = append(whitelistPKs, v.conf.Dmsgpty.Whitelist...)
+		if v.conf.Pty != nil {
+			whitelistPKs = append(whitelistPKs, v.conf.Pty.Whitelist...)
 		}
 		if len(whitelistPKs) > 0 {
 			tpRPCS, tpRPCErr := newRPCServer(v, "TransportRPC")
@@ -667,8 +667,8 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		for _, pk := range v.conf.Hypervisors {
 			authorizedPKs[pk] = true
 		}
-		if v.conf.Dmsgpty != nil {
-			for _, pk := range v.conf.Dmsgpty.Whitelist {
+		if v.conf.Pty != nil {
+			for _, pk := range v.conf.Pty.Whitelist {
 				authorizedPKs[pk] = true
 			}
 		}

@@ -591,9 +591,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	if v.conf.Hypervisors != nil {
 		whitelistedPKs = append(whitelistedPKs, v.conf.Hypervisors...)
 	}
-	if v.conf.Dmsgpty != nil {
-		if v.conf.Dmsgpty.Whitelist != nil {
-			whitelistedPKs = append(whitelistedPKs, v.conf.Dmsgpty.Whitelist...)
+	if v.conf.Pty != nil {
+		if v.conf.Pty.Whitelist != nil {
+			whitelistedPKs = append(whitelistedPKs, v.conf.Pty.Whitelist...)
 		}
 	}
 
@@ -629,10 +629,10 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// in-process. When no CLI socket is configured we fall back to
 	// dialing our own dmsg client at DmsgPtyPort, which works the
 	// same way the hypervisor's per-PK ptyUI does for remote visors.
-	if v.conf.Dmsgpty != nil {
+	if v.conf.Pty != nil {
 		var ptyDialer pty.UIDialer
-		if v.conf.Dmsgpty.CLINet != "" {
-			ptyDialer = pty.NetUIDialer(v.conf.Dmsgpty.CLINet, v.conf.Dmsgpty.CLIAddr)
+		if v.conf.Pty.CLINet != "" {
+			ptyDialer = pty.NetUIDialer(v.conf.Pty.CLINet, v.conf.Pty.CLIAddr)
 		} else {
 			ptyDialer = pty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: v.conf.PK, Port: skyenv.DmsgPtyPort})
 		}
@@ -642,8 +642,8 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		})
 		ptyWL := []cipher.PubKey{v.conf.PK}
 		ptyWL = append(ptyWL, v.conf.Hypervisors...)
-		if v.conf.Dmsgpty.Whitelist != nil {
-			ptyWL = append(ptyWL, v.conf.Dmsgpty.Whitelist...)
+		if v.conf.Pty.Whitelist != nil {
+			ptyWL = append(ptyWL, v.conf.Pty.Whitelist...)
 		}
 		lsAPI.SetPtyHandler(ptyHandler, ptyWL)
 		logger.WithField("whitelist_size", len(ptyWL)).Info("Mounted /pty on logserver")
@@ -814,7 +814,7 @@ func initDmsgTrackers(_ context.Context, v *Visor, _ *logging.Logger) error {
 //
 //gocyclo:ignore
 func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
-	conf := v.conf.Dmsgpty
+	conf := v.conf.Pty
 
 	if conf == nil {
 		log.Debug("'dmsgpty' is not configured, skipping.")
@@ -827,8 +827,8 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 			conf.CLIAddr = pty.ParseWindowsEnv(conf.CLIAddr)
 		}
 
-		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			log.WithError(err).Errorf("Insufficient permissions to unlink socket file %q", v.conf.Dmsgpty.CLIAddr)
+		if err := osutil.UnlinkSocketFiles(v.conf.Pty.CLIAddr); err != nil {
+			log.WithError(err).Errorf("Insufficient permissions to unlink socket file %q", v.conf.Pty.CLIAddr)
 			return err
 		}
 	}
@@ -836,7 +836,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	wl := pty.NewMemoryWhitelist()
 
 	// Initialize the dmsgpty whitelist
-	if err := wl.Add(v.conf.Dmsgpty.Whitelist...); err != nil {
+	if err := wl.Add(v.conf.Pty.Whitelist...); err != nil {
 		return err
 	}
 

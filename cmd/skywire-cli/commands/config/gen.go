@@ -911,7 +911,7 @@ func readExistingConfig(log *logging.Logger) {
 					for _, j := range oldConf.Hypervisors {
 						hypervisorPKs = hypervisorPKs + "," + fmt.Sprintf("\t%s\n", j)
 					}
-					for _, j := range oldConf.Dmsgpty.Whitelist {
+					for _, j := range oldConf.Pty.Whitelist {
 						dmsgptyWlPKs = dmsgptyWlPKs + "," + fmt.Sprintf("\t%s\n", j)
 					}
 				}
@@ -1190,7 +1190,7 @@ func configureLauncher(log *logging.Logger) {
 	if isTestEnv {
 		dmsgptyAddr = filepath.Join(os.TempDir(), "dmsgpty-test.sock")
 	}
-	conf.Dmsgpty = &visorconfig.Dmsgpty{
+	conf.Pty = &visorconfig.Pty{
 		DmsgPort: skyenv.DmsgPtyPort,
 		CLINet:   skyenv.DmsgPtyCLINet,
 		CLIAddr:  dmsgptyAddr,
@@ -1362,7 +1362,7 @@ func configureHypervisor(log *logging.Logger) {
 	}
 
 	// Manipulate dmsgpty whitelist PKs
-	conf.Dmsgpty.Whitelist = make([]cipher.PubKey, 0)
+	conf.Pty.Whitelist = make([]cipher.PubKey, 0)
 	if dmsgptyWlPKs != "" {
 		keys := strings.Split(dmsgptyWlPKs, ",")
 		for _, key := range keys {
@@ -1371,7 +1371,7 @@ func configureHypervisor(log *logging.Logger) {
 				if err != nil {
 					log.WithError(err).Fatalf("Failed to parse Dmsgpty Whitelist public key: %s.", key)
 				}
-				conf.Dmsgpty.Whitelist = append(conf.Dmsgpty.Whitelist, cipher.PubKey(keyParsed))
+				conf.Pty.Whitelist = append(conf.Pty.Whitelist, cipher.PubKey(keyParsed))
 			}
 		}
 	}
