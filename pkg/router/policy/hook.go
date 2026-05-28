@@ -242,3 +242,48 @@ func hopsEqual(a, b []string) bool {
 	}
 	return true
 }
+
+// OnLegChange implements router.LegChangeHook. Called by the
+// route group whenever its leg set mutates. Translates the
+// router-side LegInfo / LegChange to the policy-side equivalents,
+// invokes the script's optional on_leg_change function, and
+// projects any returned distribution descriptor into a
+// DistributionConfig for the route group to apply.
+//
+// Returns the zero DistributionConfig (Mode == DistributionUnset)
+// when the script doesn't define on_leg_change, when the loader
+// is inactive, or when the parse fails — the route group treats
+// that as "leave distribution unchanged."
+func (h *Hook) OnLegChange(info router.DialInfo, legs []router.LegInfo, change router.LegChange) router.DistributionConfig {
+	loader := h.loaderFor(info.AppName)
+	if loader == nil || !loader.IsActive() {
+		return router.DistributionConfig{}
+	}
+	policyLegs := make([]LegInfo, 0, len(legs))
+	for _, l := range legs {
+		policyLegs = append(policyLegs, LegInfo{
+			Index:     l.Index,
+			Kind:      l.Kind,
+			LatencyMs: l.LatencyMs,
+			Alive:     l.Alive,
+		})
+	}
+	policyChange := LegChange{Event: change.Event, LegIndex: change.LegIndex}
+	rctx := RoutingContext{
+		App:    info.AppName,
+		PeerPK: info.PeerPK.Hex(),
+		Port:   uint16(info.RPort),
+	}
+	spec, err := loader.OnLegChange(context.Background(), rctx, policyLegs, policyChange)
+	if err != nil {
+		h.logger("policy %s: OnLegChange error: %v", info.AppName, err)
+		return router.DistributionConfig{}
+	}
+	dist, perr := ParseDistribution(spec.Distribution)
+	if perr != nil {
+		h.logger("policy %s: OnLegChange returned invalid distribution %q: %v",
+			info.AppName, spec.Distribution, perr)
+		return router.DistributionConfig{}
+	}
+	return dist
+}
