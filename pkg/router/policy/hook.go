@@ -180,11 +180,24 @@ func (h *Hook) SelectRoute(ctx context.Context, info router.DialInfo, candidates
 	if spec.Fallback == "drop" {
 		return router.RouteSelection{Drop: true, Chosen: -1}, nil
 	}
+	// Distribution descriptor — parsed from SelectRoute so the
+	// script can branch on the chosen candidate's properties
+	// (transport_kinds, hops_geo, est_latency_ms). When the
+	// descriptor is empty or fails to parse, the SelectRoute-side
+	// override is left unset and DialOptions.Distribution (set
+	// from BeforeDial) stays in effect.
+	var dist router.DistributionConfig
+	if d, perr := ParseDistribution(spec.Distribution); perr != nil {
+		h.logger("policy %s: invalid distribution in SelectRoute %q: %v",
+			info.AppName, spec.Distribution, perr)
+	} else {
+		dist = d
+	}
 	if spec.Chosen == nil {
-		return router.RouteSelection{Chosen: -1}, nil
+		return router.RouteSelection{Chosen: -1, Distribution: dist}, nil
 	}
 	idx := matchCandidate(policyCandidates, *spec.Chosen)
-	return router.RouteSelection{Chosen: idx}, nil
+	return router.RouteSelection{Chosen: idx, Distribution: dist}, nil
 }
 
 // matchCandidate finds the index of want in pool by Hops equality.

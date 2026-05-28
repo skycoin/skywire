@@ -654,7 +654,12 @@ fetchRoutesAgain:
 	// fall back to GetTransport's cached entry. Pass-through when
 	// the route-finder returned a single candidate (lookup is built
 	// but never iterated).
-	latencyFor := r.buildLatencyLookup(ctx, paths[forward], paths[backward])
+	// Single TPD walk: builds both the latency rank lookup and the
+	// type lookup the DMSG-multihop filter needs. Before merging,
+	// each was a separate GetTransportByID per ID — doubling the
+	// TPD query rate per dial and tripping the service's
+	// 30-req/min rate limit on heavier workloads.
+	latencyFor, typeFor := r.buildHopLookups(ctx, paths[forward], paths[backward])
 
 	// Drop any multihop candidate that contains a DMSG hop. A DMSG
 	// transport relays through a dmsg server (possibly chained via
@@ -666,7 +671,6 @@ fetchRoutesAgain:
 	// multihop, the disjoint-path pick below will fail and we'll
 	// fall through to calculateLocalRoutes (which applies the same
 	// filter at BFS construction time).
-	typeFor := r.buildTypeLookup(ctx, paths[forward], paths[backward])
 	if filtered := rejectDMSGMultihop(paths[forward], typeFor); len(filtered) != len(paths[forward]) {
 		log.Debugf("rejected %d DMSG-multihop forward candidate(s)", len(paths[forward])-len(filtered))
 		paths[forward] = filtered
@@ -707,17 +711,28 @@ fetchRoutesAgain:
 		} else if sel.Drop {
 			log.WithField("policy_decision", "drop").Info("Routing policy dropped dial at SelectRoute.")
 			return nil, nil, ErrDialPolicyDropped
-		} else if sel.Chosen >= 0 && sel.Chosen < len(paths[forward]) {
-			chosenFwd := paths[forward][sel.Chosen]
-			excludeSet := make(map[cipher.PubKey]struct{}, len(opts.ExcludeIntermediatePKs))
-			for _, pk := range opts.ExcludeIntermediatePKs {
-				excludeSet[pk] = struct{}{}
+		} else {
+			// SelectRoute may also override the per-packet
+			// distribution descriptor based on the candidate it
+			// chose. Apply it (if set) to opts so the post-mux
+			// applyDistribution call picks it up; the BeforeDial-
+			// supplied distribution stays in effect when SelectRoute
+			// leaves Mode == DistributionUnset.
+			if sel.Distribution.Mode != DistributionUnset {
+				opts.Distribution = sel.Distribution
 			}
-			if revPath, revOk := pickBestDirection(paths[backward], excludeSet, latencyFor); revOk {
-				log.WithField("policy_chosen", sel.Chosen).Debug("Routing policy selected forward route.")
-				return chosenFwd, revPath, nil
+			if sel.Chosen >= 0 && sel.Chosen < len(paths[forward]) {
+				chosenFwd := paths[forward][sel.Chosen]
+				excludeSet := make(map[cipher.PubKey]struct{}, len(opts.ExcludeIntermediatePKs))
+				for _, pk := range opts.ExcludeIntermediatePKs {
+					excludeSet[pk] = struct{}{}
+				}
+				if revPath, revOk := pickBestDirection(paths[backward], excludeSet, latencyFor); revOk {
+					log.WithField("policy_chosen", sel.Chosen).Debug("Routing policy selected forward route.")
+					return chosenFwd, revPath, nil
+				}
+				log.Debug("Routing policy picked a forward route but no acceptable reverse; falling back to disjoint pick.")
 			}
-			log.Debug("Routing policy picked a forward route but no acceptable reverse; falling back to disjoint pick.")
 		}
 	}
 
@@ -837,26 +852,25 @@ func pathLatencyScore(path []routing.Hop, latencyFor func(uuid.UUID) float64) fl
 	return total
 }
 
-// buildLatencyLookup constructs a TpID → avg-latency-ms lookup over
-// the union of TpIDs appearing in fwd and rev path candidates.
-// Sources, in preference order:
+// buildHopLookups constructs TpID → avg-latency-ms and TpID →
+// transport-type lookups over the union of TpIDs appearing in fwd
+// and rev path candidates. Sources, in preference order:
 //
-//  1. Local transport manager — `tm.GetLatencyStats().Avg` for any
-//     transport this visor holds. Constant-time map read; reflects the
-//     freshest measured RSN-ping value, including transports that
-//     haven't yet propagated to TPD.
+//  1. Local transport manager — `tm.Transport(id)` for any transport
+//     this visor holds. Constant-time map read.
 //  2. TPD `GetTransport(tpID)` — entries the local visor doesn't own
-//     (the intermediate-to-intermediate hops). Latency hydrated by
-//     pkg/transport-discovery/cxoaggregator from the per-visor CXO
-//     telemetry feed.
+//     (intermediate-to-intermediate hops). One round-trip per unique
+//     ID.
 //
-// Returns a closure rather than a map so the caller pays for lookups
-// only for hops actually visited during ranking; the candidate slice
-// is typically 2-3 paths × ≤6 hops = small.
-func (r *router) buildLatencyLookup(ctx context.Context, fwd, rev [][]routing.Hop) func(uuid.UUID) float64 {
-	// Single dial's candidate set is small — collect unique TpIDs first
-	// so we don't double-fetch when an intermediate appears in both
-	// forward and reverse paths.
+// Both lookups share a single GetTransportByID per ID so callers
+// that need both (the dial path: pickDisjointPath's latency rank
+// + rejectDMSGMultihop's type filter) don't double the TPD load.
+// Before #2899 added the type lookup as a sibling, the dial path
+// hit TPD once per hop; sharing brings it back to that level.
+//
+// typeFor returns "" for IDs the lookup failed for — rejectDMSGMultihop
+// treats unknown as "not DMSG" (can't prove it's bad).
+func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) (latencyFor func(uuid.UUID) float64, typeFor func(uuid.UUID) string) {
 	unique := make(map[uuid.UUID]struct{})
 	for _, paths := range [][][]routing.Hop{fwd, rev} {
 		for _, p := range paths {
@@ -865,76 +879,37 @@ func (r *router) buildLatencyLookup(ctx context.Context, fwd, rev [][]routing.Ho
 			}
 		}
 	}
-	cache := make(map[uuid.UUID]float64, len(unique))
+	latencyCache := make(map[uuid.UUID]float64, len(unique))
+	typeCache := make(map[uuid.UUID]string, len(unique))
 	for id := range unique {
-		// Local transport first — freshest signal, no TPD round-trip.
+		// Local transport first.
 		if r.tm != nil {
 			if tp := r.tm.Transport(id); tp != nil {
 				if stats := tp.GetLatencyStats(); stats.Avg > 0 {
-					cache[id] = stats.Avg
-					continue
+					latencyCache[id] = stats.Avg
 				}
+				typeCache[id] = string(tp.Entry.Type)
+				continue
 			}
 		}
-		// Fall through to TPD: hydrated latency from the CXO aggregator.
-		// Errors are logged at debug and treated as unknown — ranker's
-		// unknownLatencyCostMs penalty handles missing data.
+		// TPD fallback — one fetch covers both lookups.
 		if r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil {
 			entry, err := r.tm.Conf.DiscoveryClient.GetTransportByID(ctx, id)
 			if err != nil {
-				r.logger.WithError(err).Debugf("buildLatencyLookup: GetTransportByID failed for %s — treating as unknown latency", id)
+				r.logger.WithError(err).Debugf("buildHopLookups: GetTransportByID failed for %s", id)
 				continue
 			}
-			if entry != nil && entry.Latency > 0 {
-				cache[id] = entry.Latency
-			}
-		}
-	}
-	return func(id uuid.UUID) float64 {
-		return cache[id]
-	}
-}
-
-// buildTypeLookup constructs a TpID → transport-type lookup over the
-// union of TpIDs appearing in fwd and rev path candidates. Used by
-// rejectDMSGMultihop to drop route-finder responses that contain
-// DMSG hops in a multihop path — DMSG transports relay through a
-// dmsg server (and any server-to-server forwarding hops) that
-// neither endpoint of the route can observe.
-//
-// Sources mirror buildLatencyLookup: local transport manager first,
-// TPD GetTransportByID for hops the local visor doesn't own.
-// Returns "" for IDs that couldn't be resolved — the multihop
-// filter treats unknown as "not DMSG" (we can't prove it's bad,
-// so we let it through; the route still has to handshake which
-// will fail loudly if the type is actually a problem).
-func (r *router) buildTypeLookup(ctx context.Context, fwd, rev [][]routing.Hop) func(uuid.UUID) string {
-	unique := make(map[uuid.UUID]struct{})
-	for _, paths := range [][][]routing.Hop{fwd, rev} {
-		for _, p := range paths {
-			for _, h := range p {
-				unique[h.TpID] = struct{}{}
-			}
-		}
-	}
-	cache := make(map[uuid.UUID]string, len(unique))
-	for id := range unique {
-		if r.tm != nil {
-			if tp := r.tm.Transport(id); tp != nil {
-				cache[id] = string(tp.Entry.Type)
+			if entry == nil {
 				continue
 			}
-		}
-		if r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil {
-			entry, err := r.tm.Conf.DiscoveryClient.GetTransportByID(ctx, id)
-			if err == nil && entry != nil {
-				cache[id] = string(entry.Type)
+			if entry.Latency > 0 {
+				latencyCache[id] = entry.Latency
 			}
+			typeCache[id] = string(entry.Type)
 		}
 	}
-	return func(id uuid.UUID) string {
-		return cache[id]
-	}
+	return func(id uuid.UUID) float64 { return latencyCache[id] },
+		func(id uuid.UUID) string { return typeCache[id] }
 }
 
 // rejectDMSGMultihop returns paths with any multihop candidate
