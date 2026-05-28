@@ -1,15 +1,20 @@
 # trusted-only.star — every intermediate must be on the operator's
-# trust list (pkg/visor/visorconfig.Pty.Whitelist ∪ Hypervisors).
+# trust list (Pty.Whitelist ∪ Hypervisors).
 #
-# Combined with mux=0 and a non-trivial min_hops, this is the
-# "operator-curated overlay" policy: refuse to transit a route any
-# part of which is outside the trust set.
+# Two-phase invocation:
+#   - BeforeDial (candidates empty): nothing to filter on.
+#   - SelectRoute (candidates populated): keep candidates where
+#     every hop is trusted; drop if none survives.
 #
 # Beware: this is restrictive. With a small trust set, most peers
 # are unreachable. The "drop" fallback surfaces that rather than
 # pretending the dial succeeded.
 
 def decide_route(ctx, candidates):
+    # BeforeDial: defer.
+    if not candidates:
+        return RouteSpec()
+
     safe = []
     for c in candidates:
         ok = True
