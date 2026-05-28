@@ -270,8 +270,10 @@ var bwCollectCmd = &cobra.Command{
 	Short: "collect bandwidth data from TPD for reward calculation",
 	Long: `Fetches per-transport bandwidth data from TPD and records the daily
 per-edge sent totals so the reward calculator can credit each visor
-only for the bytes it actually sent, and only on transports between
-two reward-eligible visors.
+only for the bytes it actually sent — and only when the sender itself
+is reward-eligible. Counterparty eligibility is irrelevant under the
+sender-pays model: an eligible visor's transport to an ineligible peer
+still earns the eligible side credit for what it sent.
 
 This command:
 1. Fetches all transport metrics from TPD /metrics?days=1&bandwidth=true&edges=true

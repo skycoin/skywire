@@ -816,41 +816,38 @@ Architectures:
 			return
 		}
 
-		// v2 bandwidth: aggregate per-edge sent bytes over the eligible
-		// set only. A transport contributes iff BOTH edges passed the
-		// pool 1 eligibility check above (valid survey, allowed arch,
-		// valid skyaddr, non-hypervisor, met transport requirement, met
-		// uptime). The bandwidthMap was empty during the eligibility
-		// loop in this path, so initial ni.Bandwidth=0 for everyone —
-		// we re-assign from the filtered aggregation here.
-		//
-		// Why this gate matters: pre-fix, a single eligible visor could
-		// dominate pool 2 by pushing traffic through transports to
-		// throwaway counterparties (wrong arch, no skyaddr, no survey,
-		// sub-75% uptime — none of which would ever earn rewards). The
-		// other-edge filter forecloses that pattern entirely.
+		// v2 bandwidth: aggregate per-edge sent bytes for any edge that
+		// itself passed the pool 1 eligibility check (valid survey,
+		// allowed arch, valid skyaddr, non-hypervisor, met transport
+		// requirement, met uptime). Each edge is evaluated independently
+		// — counterparty eligibility is irrelevant under sender-pays,
+		// because credit only ever flows to the sender. If A is eligible
+		// and sends to B (ineligible), A still earns SentA; B was never
+		// going to receive a share regardless. The bandwidthMap was
+		// empty during the eligibility loop in this path, so initial
+		// ni.Bandwidth=0 for everyone — we re-assign from the filtered
+		// aggregation here.
 		if requireBandwidth && bwTransports != nil {
 			eligibleSet := make(map[string]struct{}, len(nodesInfos1))
 			for _, ni := range nodesInfos1 {
 				eligibleSet[ni.PK] = struct{}{}
 			}
-			creditedTransports := 0
+			var creditedEdges int
 			for _, tp := range bwTransports {
-				if _, okA := eligibleSet[tp.A]; !okA {
-					continue
+				if _, ok := eligibleSet[tp.A]; ok {
+					bandwidthMap[tp.A] += tp.SentA
+					creditedEdges++
 				}
-				if _, okB := eligibleSet[tp.B]; !okB {
-					continue
+				if _, ok := eligibleSet[tp.B]; ok {
+					bandwidthMap[tp.B] += tp.SentB
+					creditedEdges++
 				}
-				bandwidthMap[tp.A] += tp.SentA
-				bandwidthMap[tp.B] += tp.SentB
-				creditedTransports++
 			}
 			for i := range nodesInfos1 {
 				nodesInfos1[i].Bandwidth = bandwidthMap[nodesInfos1[i].PK]
 			}
-			log.Infof("v2 bandwidth filter: %d/%d transports between two pool-1-eligible visors, sender-side credit applied",
-				creditedTransports, len(bwTransports))
+			log.Infof("v2 bandwidth filter: %d eligible sender-side credits applied across %d transports",
+				creditedEdges, len(bwTransports))
 		}
 
 		// Calculate daily reward amount
