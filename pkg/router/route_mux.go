@@ -88,13 +88,34 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 // Uses latency-weighted selection when data is available, falls back to round-robin.
 // Returns the index in tps[] alongside the tp/rule so the caller can
 // record per-leg byte counts after a successful write.
+//
+// payloadSize is the upcoming packet's payload byte count, used by
+// WeightModeSizeThreshold to route large payloads to the wide-pipe
+// leg. Pass 0 for handshake / control / retx packets whose size
+// isn't a routing signal — the selector falls back to its normal
+// schedule in that case.
+//
 // NOTE: not thread-safe, caller must hold the RouteGroup mu.
-func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule) (*transport.ManagedTransport, routing.Rule, int, error) {
+func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule, payloadSize int) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
 	}
 	if len(fwd) == 0 {
 		return nil, nil, -1, ErrNoRules
+	}
+
+	// SizeThreshold path: ask the selector for the size-aware
+	// leg. Falls back to the regular schedule when payloadSize
+	// is 0 (control packets) since the threshold can't be
+	// meaningfully applied to packets whose size we don't know.
+	if m.tpSelector != nil && m.tpSelector.Mode() == WeightModeSizeThreshold && payloadSize > 0 {
+		idx := m.tpSelector.SelectForSize(payloadSize)
+		if idx < len(tps) {
+			tp := tps[idx]
+			if tp != nil && !tp.IsClosed() {
+				return tp, fwd[idx], idx, nil
+			}
+		}
 	}
 
 	// Use weighted selector if available
