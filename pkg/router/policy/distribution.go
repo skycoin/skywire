@@ -44,15 +44,21 @@ func ParseDistribution(s string) (router.DistributionConfig, error) {
 		return router.DistributionConfig{Mode: router.DistributionAuto}, nil
 	case "round-robin", "equal":
 		return router.DistributionConfig{Mode: router.DistributionRoundRobin}, nil
+	case "latency-adaptive", "latency-aware":
+		return router.DistributionConfig{Mode: router.DistributionLatencyAdaptive}, nil
 	}
 
-	// Prefix-based: "weighted: ..." and "size-threshold: ..."
+	// Prefix-based.
 	if name, body, ok := splitDescriptor(s); ok {
 		switch name {
 		case "weighted":
 			return parseWeighted(body)
 		case "size-threshold":
 			return parseSizeThreshold(body)
+		case "sticky":
+			return parseSticky(body)
+		case "dscp-priority":
+			return parseDSCPPriority(body)
 		default:
 			return router.DistributionConfig{}, fmt.Errorf("unknown distribution descriptor %q", name)
 		}
@@ -128,5 +134,49 @@ func parseSizeThreshold(body string) (router.DistributionConfig, error) {
 	return router.DistributionConfig{
 		Mode:          router.DistributionSizeThreshold,
 		SizeThreshold: n,
+	}, nil
+}
+
+// parseSticky handles the sticky family. Today only "5tuple" is
+// supported (IPv4 src/dst IP + src/dst port + protocol). Other
+// qualifiers reserved for future verbs (e.g. "sticky:flow" for
+// app-level flow ID, "sticky:hash" for raw payload-prefix hash).
+func parseSticky(body string) (router.DistributionConfig, error) {
+	t := strings.TrimSpace(body)
+	switch t {
+	case "5tuple":
+		return router.DistributionConfig{Mode: router.DistributionSticky5Tuple}, nil
+	case "":
+		return router.DistributionConfig{}, fmt.Errorf("sticky: qualifier required (e.g. sticky:5tuple)")
+	default:
+		return router.DistributionConfig{}, fmt.Errorf("sticky: unknown qualifier %q (only \"5tuple\" supported today)", t)
+	}
+}
+
+// parseDSCPPriority parses the IPv4 DSCP threshold. Accepts
+// decimal ("46") or hex ("0x2e") values; must be in [1, 63].
+// Common values: 46 (EF — VoIP), 18 (AF21 — interactive),
+// 10 (AF11 — bulk-prio).
+func parseDSCPPriority(body string) (router.DistributionConfig, error) {
+	t := strings.TrimSpace(body)
+	if t == "" {
+		return router.DistributionConfig{}, fmt.Errorf("dscp-priority: threshold required")
+	}
+	var n int64
+	var err error
+	if strings.HasPrefix(t, "0x") || strings.HasPrefix(t, "0X") {
+		n, err = strconv.ParseInt(t[2:], 16, 32)
+	} else {
+		n, err = strconv.ParseInt(t, 10, 32)
+	}
+	if err != nil {
+		return router.DistributionConfig{}, fmt.Errorf("dscp-priority: parse %q: %w", t, err)
+	}
+	if n < 1 || n > 63 {
+		return router.DistributionConfig{}, fmt.Errorf("dscp-priority: threshold %d out of range [1, 63]", n)
+	}
+	return router.DistributionConfig{
+		Mode:          router.DistributionDSCPPriority,
+		DSCPThreshold: int(n),
 	}, nil
 }
