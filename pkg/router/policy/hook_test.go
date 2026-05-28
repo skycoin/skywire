@@ -218,3 +218,90 @@ def decide_route(ctx, candidates):
 		t.Skip()
 	}
 }
+
+func TestHook_BeforeDial_DistributionDescriptorParsed(t *testing.T) {
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec(mux=2, distribution="weighted: 3, 1")
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	adj, err := h.BeforeDial(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.MuxRoutes != 2 {
+		t.Errorf("MuxRoutes=%d, want 2", adj.MuxRoutes)
+	}
+	if adj.Distribution.Mode != router.DistributionWeighted {
+		t.Errorf("Distribution.Mode=%v, want DistributionWeighted", adj.Distribution.Mode)
+	}
+	if len(adj.Distribution.Weights) != 2 || adj.Distribution.Weights[0] != 3 || adj.Distribution.Weights[1] != 1 {
+		t.Errorf("Distribution.Weights=%v, want [3 1]", adj.Distribution.Weights)
+	}
+}
+
+func TestHook_BeforeDial_DistributionSizeThreshold(t *testing.T) {
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec(mux=2, distribution="size-threshold: 1400")
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	adj, err := h.BeforeDial(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.Distribution.Mode != router.DistributionSizeThreshold {
+		t.Errorf("Distribution.Mode=%v, want DistributionSizeThreshold", adj.Distribution.Mode)
+	}
+	if adj.Distribution.SizeThreshold != 1400 {
+		t.Errorf("Distribution.SizeThreshold=%d, want 1400", adj.Distribution.SizeThreshold)
+	}
+}
+
+func TestHook_BeforeDial_BadDistributionLogsAndContinues(t *testing.T) {
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec(mux=2, distribution="not-a-real-descriptor")
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	var logged string
+	h := NewHook(loader, WithHookLogger(func(format string, _ ...interface{}) {
+		logged += format
+	}))
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	adj, err := h.BeforeDial(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.MuxRoutes != 2 {
+		t.Errorf("MuxRoutes=%d, want 2 (rest of adjustment must survive bad distribution)", adj.MuxRoutes)
+	}
+	if adj.Distribution.Mode != router.DistributionUnset {
+		t.Errorf("Distribution.Mode=%v, want DistributionUnset (parse failed)", adj.Distribution.Mode)
+	}
+	if logged == "" {
+		t.Errorf("expected the parse failure to be logged")
+	}
+}
