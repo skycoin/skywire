@@ -242,6 +242,80 @@ func (e *Evaluator) Decide(ctx context.Context, rctx RoutingContext, candidates 
 	return spec, nil
 }
 
+// OnLegChange invokes the script's optional `on_leg_change(ctx,
+// legs, change)` function. Returns the empty RouteSpec when the
+// script doesn't define the function (the common case for scripts
+// that don't care about post-setup leg events) — the route group
+// treats that as "no distribution update."
+//
+// Same step ceiling as Decide; failures are non-fatal (logged,
+// then return empty spec).
+func (e *Evaluator) OnLegChange(ctx context.Context, rctx RoutingContext, legs []LegInfo, change LegChange) (RouteSpec, error) {
+	fn, ok := e.globals["on_leg_change"]
+	if !ok {
+		return RouteSpec{}, nil
+	}
+	if _, ok := fn.(starlark.Callable); !ok {
+		return RouteSpec{}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return RouteSpec{}, nil
+	}
+	if rctx.Now.IsZero() {
+		rctx.Now = e.clock.Now()
+	}
+	thread := &starlark.Thread{
+		Name: e.source + "/on_leg_change",
+		Print: func(_ *starlark.Thread, msg string) {
+			e.logger("policy %s: print: %s", e.source, msg)
+		},
+	}
+	thread.SetMaxExecutionSteps(uint64(e.maxSteps)) //nolint:gosec
+	starCtx := buildContextValue(rctx)
+	starLegs := buildLegsValue(legs)
+	starChange := buildLegChangeValue(change)
+	var result starlark.Value
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				e.logger("policy %s: panic in on_leg_change: %v", e.source, r)
+				result = nil
+			}
+		}()
+		v, callErr := starlark.Call(thread, fn, starlark.Tuple{starCtx, starLegs, starChange}, nil)
+		if callErr != nil {
+			e.logger("policy %s: on_leg_change returned error: %v", e.source, callErr)
+			result = nil
+			return
+		}
+		result = v
+	}()
+	if result == nil {
+		return RouteSpec{}, errors.New("on_leg_change call failed")
+	}
+	spec, err := parseRouteSpec(result)
+	if err != nil {
+		return RouteSpec{}, fmt.Errorf("on_leg_change returned malformed value: %w", err)
+	}
+	return spec, nil
+}
+
+// LegInfo and LegChange mirror the router package's types so
+// scripts can reason about them without the policy package
+// pulling in the router. The bridge layer converts between the
+// two when the hook fires.
+type LegInfo struct {
+	Index     int
+	Kind      string
+	LatencyMs int
+	Alive     bool
+}
+
+type LegChange struct {
+	Event    string
+	LegIndex int
+}
+
 func (e *Evaluator) handleFailure(err error) (RouteSpec, error) {
 	if e.failureMode == FailureDrop {
 		return RouteSpec{Fallback: "drop"}, err
