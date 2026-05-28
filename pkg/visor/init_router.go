@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -172,6 +173,31 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 			return v.procM.AppByPort(p)
 		},
+	}
+
+	// Operator-programmable routing policy (RFC #2882).
+	// When conf.Routing.PolicyPerDial is set, build a Loader,
+	// start its file-watcher if the path is file-backed, and
+	// plug it into the router as a DialHook. Nil hook = no
+	// integration cost when no policy is configured.
+	if v.conf.Routing.PolicyPerDial != "" {
+		policyLogger := func(format string, args ...interface{}) {
+			log.Infof(format, args...)
+		}
+		loader, perr := policy.NewLoader(
+			v.conf.Routing.PolicyPerDial,
+			policy.WithLogger(policyLogger),
+		)
+		if perr != nil {
+			log.WithError(perr).Warn("Routing policy failed to load; visor will run without policy.")
+		} else {
+			if werr := loader.Watch(policyLogger); werr != nil {
+				log.WithError(werr).Warn("Routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
+			}
+			rConf.DialHook = policy.NewHook(loader)
+			v.pushCloseStack("router.policy", loader.Close)
+			log.WithField("source", loader.Source()).Info("Routing policy active.")
+		}
 	}
 
 	routeSetupHooks := getRouteSetupHooks(ctx, v, log)

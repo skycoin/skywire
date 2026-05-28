@@ -44,6 +44,42 @@ func (r *router) DialRoutes(
 		return nil, fmt.Errorf("failed to dial routes: %w", err)
 	}
 
+	// Operator-programmable routing policy hook (RFC #2882).
+	// When configured, the hook adjusts opts.MuxRoutes /
+	// opts.MinHops before route setup, and can refuse the dial
+	// entirely via Fallback="drop". A nil hook short-circuits
+	// the entire block so policy-free deployments pay zero cost.
+	if r.conf.DialHook != nil {
+		if opts == nil {
+			opts = &DialOptions{}
+		}
+		appName := ""
+		if opts != nil {
+			appName = opts.AppName
+		}
+		info := DialInfo{
+			AppName: appName,
+			PeerPK:  rPK,
+			LPort:   lPort,
+			RPort:   rPort,
+		}
+		if adj, hookErr := r.conf.DialHook.BeforeDial(ctx, info); hookErr != nil {
+			// Failure to evaluate the policy is non-fatal — the
+			// hook's own failure-mode wiring decides whether to
+			// return a "drop" adjustment or fall back to defaults.
+			// Here we just log it and proceed without adjustment.
+			log.WithError(hookErr).Debug("policy hook errored; proceeding without adjustment")
+		} else if err := applyAdjustment(opts, adj); err != nil {
+			log.WithField("policy_decision", "drop").Info("Dial refused by routing policy.")
+			return nil, err
+		} else if adj.MuxRoutes > 0 || adj.MinHops > 0 {
+			log.
+				WithField("policy_mux", adj.MuxRoutes).
+				WithField("policy_min_hops", adj.MinHops).
+				Debug("Routing policy adjusted dial opts.")
+		}
+	}
+
 	if r.conf.MinHops == 0 {
 		log.Error("Routing disabled. (minhop=0)")
 		return nil, fmt.Errorf("routing disabled. (minhop=0)")
