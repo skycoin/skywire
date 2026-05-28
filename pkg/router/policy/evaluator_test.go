@@ -147,13 +147,19 @@ func TestPerApp_VPNGetsMux4_SkychatGetsMux1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewEvaluator: %v", err)
 	}
-	specSkychat, _ := eval.Decide(context.Background(), RoutingContext{App: "skychat"},
+	specSkychat, decErr := eval.Decide(context.Background(), RoutingContext{App: "skychat"},
 		[]Candidate{candidateThroughUSFastest})
+	if decErr != nil {
+		t.Fatalf("Decide(skychat): %v", decErr)
+	}
 	if specSkychat.Mux != 1 {
 		t.Errorf("skychat: mux=%d, want 1", specSkychat.Mux)
 	}
-	specVPN, _ := eval.Decide(context.Background(), RoutingContext{App: "vpn-client"},
+	specVPN, decErr := eval.Decide(context.Background(), RoutingContext{App: "vpn-client"},
 		[]Candidate{candidateThroughUSFastest})
+	if decErr != nil {
+		t.Fatalf("Decide(vpn-client): %v", decErr)
+	}
 	if specVPN.Mux != 4 {
 		t.Errorf("vpn-client: mux=%d, want 4", specVPN.Mux)
 	}
