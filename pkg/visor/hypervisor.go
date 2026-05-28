@@ -282,8 +282,8 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 
 	// setup local PTY using direct connection (bypasses DMSG for local visor)
 	hv.mu.Lock()
-	if hv.visor != nil && hv.visor.conf.Dmsgpty != nil && hv.visor.conf.Dmsgpty.CLINet != "" {
-		hv.selfConn.PtyUI = setupLocalPtyUI(hv.visor.conf.Dmsgpty.CLINet, hv.visor.conf.Dmsgpty.CLIAddr)
+	if hv.visor != nil && hv.visor.conf.Pty != nil && hv.visor.conf.Pty.CLINet != "" {
+		hv.selfConn.PtyUI = setupLocalPtyUI(hv.visor.conf.Pty.CLINet, hv.visor.conf.Pty.CLIAddr)
 	} else {
 		// Fallback to DMSG if local CLI config not available
 		hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
