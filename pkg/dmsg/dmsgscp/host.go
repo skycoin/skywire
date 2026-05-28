@@ -30,15 +30,15 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// Whitelist is an alias for dmsgpty.Whitelist so operators can pass
+// Whitelist is an alias for pty.Whitelist so operators can pass
 // the same whitelist instance to both daemons without re-importing.
 // We deliberately don't define a new interface here — the contract
 // is identical and the indirection would just confuse callers.
-type Whitelist = dmsgpty.Whitelist
+type Whitelist = pty.Whitelist
 
 // Host is the listening side of dmsgscp.
 type Host struct {
@@ -83,7 +83,7 @@ func (h *Host) RootDir() string { return h.rootDir }
 // ListenAndServe binds the configured dmsg port and serves transfers
 // until ctx is canceled or the listener fails permanently. The
 // signature and accept-loop pattern intentionally mirror
-// dmsgpty.Host.ListenAndServe — see that function's comments for
+// pty.Host.ListenAndServe — see that function's comments for
 // the rationale on the temporary-error sleep and the close-pipe
 // classification.
 //
@@ -123,7 +123,7 @@ func (h *Host) ServeListener(ctx context.Context, lis net.Listener) error {
 		conn, err := lis.Accept()
 		if err != nil {
 			log := log.WithError(err)
-			// Same temporary-error treatment as dmsgpty.
+			// Same temporary-error treatment as pty.
 			if err, ok := err.(net.Error); ok && err.Temporary() { //nolint
 				log.Warn("dmsgscp: temporary accept error, continuing...")
 				time.Sleep(50 * time.Millisecond)

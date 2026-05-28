@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
 
@@ -348,7 +348,7 @@ func (r *RPC) RemoteVisors(_ *struct{}, out *[]string) (err error) {
 
 // DmsgPtyExec runs a one-shot command on a remote visor via the
 // embedded dmsgpty host (see Visor.DmsgPtyExec).
-func (r *RPC) DmsgPtyExec(args *DmsgPtyExecArgs, out *dmsgpty.CommandExecResult) (err error) {
+func (r *RPC) DmsgPtyExec(args *DmsgPtyExecArgs, out *pty.CommandExecResult) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPtyExec", args)(out, &err)
 	if args == nil {
 		return fmt.Errorf("dmsgpty: nil args")

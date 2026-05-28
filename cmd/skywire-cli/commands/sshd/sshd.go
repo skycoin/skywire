@@ -1,6 +1,6 @@
 // Package clisshd cmd/skywire-cli/commands/sshd/sshd.go — `skywire cli
 // sshd`, the OpenSSH-equivalent server over skywire identity. Thin
-// wrapper around dmsgpty.Host's direct-TCP entry point (PR #2559)
+// wrapper around pty.Host's direct-TCP entry point (PR #2559)
 // with sensible defaults for the standalone-daemon shape:
 //
 //   - TCP-only: no dmsg.Client, no dmsg listener (the visor or the
@@ -30,8 +30,8 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -92,7 +92,7 @@ Use this when:
     latency than the dmsg overlay path.
   - You're scripting ssh-like access into your skywire fleet.
 
-Use the visor's embedded dmsgpty.ssh_listen field instead when:
+Use the visor's embedded pty.ssh_listen field instead when:
   - You want the same port served by your already-running visor.
   - You want the dmsg-overlay path AND the TCP path on the same
     process (sshd is TCP-only by design).
@@ -105,7 +105,7 @@ Examples:
   skywire cli sshd --listen :2022 --sk-from-visor /etc/skywire/skywire.json --allow 02f9...
 
   # Use a standalone dmsgpty config.json for both identity AND whitelist:
-  skywire cli sshd --listen :2022 --conf /etc/skywire/dmsgpty.json`,
+  skywire cli sshd --listen :2022 --conf /etc/skywire/pty.json`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
@@ -143,7 +143,7 @@ Examples:
 		// Standalone-TCP host: nil dmsg.Client. The TCP entry point
 		// in pkg/dmsg/dmsgpty/host_tcp.go nil-guards the dmsgC
 		// access at #2569, so this is supported.
-		host := dmsgpty.NewHost(nil, wl)
+		host := pty.NewHost(nil, wl)
 
 		ctx, cancel := cmdutil.SignalContext(context.Background(), log)
 		defer cancel()
@@ -209,7 +209,7 @@ func resolveServerSK(confPath, skFromConfPath string) (cipher.SecKey, error) {
 }
 
 // buildSshdWhitelist merges --allow (inline) and --conf's WL (file).
-// Returns an in-memory whitelist (dmsgpty.NewMemoryWhitelist) so
+// Returns an in-memory whitelist (pty.NewMemoryWhitelist) so
 // the host doesn't write back to the conf file on the
 // allow/disallow RPCs the CLI exposes for the dmsg-overlay path.
 //
@@ -217,7 +217,7 @@ func resolveServerSK(confPath, skFromConfPath string) (cipher.SecKey, error) {
 // specified — refusing to start an open server is the safer default
 // (anyone with the server's address + a fresh keypair could otherwise
 // connect, since noise alone doesn't authorize, only the wl does).
-func buildSshdWhitelist(confPath string, inline []string) (dmsgpty.Whitelist, error) {
+func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error) {
 	keys := make(map[cipher.PubKey]struct{})
 
 	if confPath != "" {
@@ -261,7 +261,7 @@ func buildSshdWhitelist(confPath string, inline []string) (dmsgpty.Whitelist, er
 	for pk := range keys {
 		pks = append(pks, pk)
 	}
-	wl := dmsgpty.NewMemoryWhitelist()
+	wl := pty.NewMemoryWhitelist()
 	if err := wl.Add(pks...); err != nil {
 		return nil, fmt.Errorf("sshd: build whitelist: %w", err)
 	}
@@ -270,15 +270,15 @@ func buildSshdWhitelist(confPath string, inline []string) (dmsgpty.Whitelist, er
 
 // readDmsgptyConf reads a standalone dmsgpty config.json. Wraps
 // the public DefaultConfig to avoid duplicating the JSON shape.
-func readDmsgptyConf(path string) (dmsgpty.Config, error) {
+func readDmsgptyConf(path string) (pty.Config, error) {
 	f, err := os.Open(path) //nolint:gosec
 	if err != nil {
-		return dmsgpty.Config{}, err
+		return pty.Config{}, err
 	}
 	defer f.Close() //nolint:errcheck
-	conf := dmsgpty.DefaultConfig()
+	conf := pty.DefaultConfig()
 	if err := jsonDecode(f, &conf); err != nil {
-		return dmsgpty.Config{}, err
+		return pty.Config{}, err
 	}
 	return conf, nil
 }
