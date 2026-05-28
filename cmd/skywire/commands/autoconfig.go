@@ -128,6 +128,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	// Hypervisor / identity
 	addArray("HYPERVISORPKS", "hvpks", autoconfigVals.Hvpks)
 	addBool("ISHYPERVISOR", "ishv", "no-ishv", autoconfigVals.Ishv, autoconfigVals.NoIshv)
+	addBool("ENABLEPKENDPOINT", "pk-endpoint", "no-pk-endpoint", autoconfigVals.PkEndpoint, autoconfigVals.NoPkEndpoint)
 	addString("HVHTTPADDR", "hvaddr", autoconfigVals.HvAddr)
 	addString("SK", "sk", autoconfigVals.SecretKey)
 	addString("VERSION", "version", autoconfigVals.Version)

@@ -12,7 +12,7 @@ import (
 var allFlags = []string{
 	"verbose",
 	// Hypervisor / identity
-	"hvpks", "ishv", "no-ishv", "hvaddr", "sk", "version",
+	"hvpks", "ishv", "no-ishv", "pk-endpoint", "no-pk-endpoint", "hvaddr", "sk", "version",
 	// Visor public/private + autoconnect
 	"rewardaddr", "public", "no-public", "publicip", "disable-public-autoconn",
 	// Service discovery / deployment
@@ -49,6 +49,7 @@ var negationPairs = []struct {
 	pos, neg string
 }{
 	{"ishv", "no-ishv"},
+	{"pk-endpoint", "no-pk-endpoint"},
 	{"public", "no-public"},
 	{"vpnserver", "no-vpnserver"},
 	{"proxyserver", "no-proxyserver"},
@@ -102,6 +103,8 @@ func TestNew_BindingsTrackValues(t *testing.T) {
 	}{
 		{"hvpks", "0123,4567", func() bool { return v.Hvpks == "0123,4567" }},
 		{"ishv", "true", func() bool { return v.Ishv }},
+		{"pk-endpoint", "true", func() bool { return v.PkEndpoint }},
+		{"no-pk-endpoint", "true", func() bool { return v.NoPkEndpoint }},
 		{"stcpr", "7777", func() bool { return v.StcprPort == 7777 }},
 		// New flags from the parity expansion: cover one per group.
 		{"testenv", "true", func() bool { return v.TestEnv }},

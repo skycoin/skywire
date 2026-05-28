@@ -99,12 +99,14 @@ type Values struct {
 	Verbose bool
 
 	// --- Hypervisor / identity ---
-	Hvpks     string
-	Ishv      bool
-	NoIshv    bool
-	HvAddr    string // HVHTTPADDR
-	SecretKey string // SK — security-sensitive; see flag description
-	Version   string // VERSION — testing override
+	Hvpks        string
+	Ishv         bool
+	NoIshv       bool
+	PkEndpoint   bool // ENABLEPKENDPOINT
+	NoPkEndpoint bool
+	HvAddr       string // HVHTTPADDR
+	SecretKey    string // SK — security-sensitive; see flag description
+	Version      string // VERSION — testing override
 
 	// --- Visor public/private + autoconnect ---
 	RewardAddr     string
@@ -225,6 +227,8 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.Hvpks, "hvpks", "", "comma-separated remote hypervisor PKs to dial — writes HYPERVISORPKS in skywire.conf")
 	cmd.Flags().BoolVar(&v.Ishv, "ishv", false, "enable local hypervisor — writes ISHYPERVISOR=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoIshv, "no-ishv", false, "disable local hypervisor — writes ISHYPERVISOR=false in skywire.conf")
+	cmd.Flags().BoolVar(&v.PkEndpoint, "pk-endpoint", false, "expose unauthenticated GET /api/pk on the hypervisor — writes ENABLEPKENDPOINT=true in skywire.conf (skybian / Arch-ARM image builds set this)")
+	cmd.Flags().BoolVar(&v.NoPkEndpoint, "no-pk-endpoint", false, "do not expose GET /api/pk — writes ENABLEPKENDPOINT=false in skywire.conf")
 	cmd.Flags().StringVar(&v.HvAddr, "hvaddr", "", "hypervisor HTTP address (host:port) — writes HVHTTPADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.SecretKey, "sk", "", "pin visor secret key (64-hex) — writes SK in skywire.conf. SECURITY: appears in shell history; prefer letting the visor generate its own SK on first boot.")
 	cmd.Flags().StringVar(&v.Version, "version", "", "custom version override for testing — writes VERSION in skywire.conf")
@@ -344,12 +348,14 @@ func EnvMap() map[string]EnvMapping {
 // section comments so cross-referencing stays one-to-one.
 var envMap = map[string]EnvMapping{
 	// Hypervisor / identity
-	"hvpks":   {Key: "HYPERVISORPKS", Format: EnvFormatBashArray},
-	"ishv":    {Key: "ISHYPERVISOR", Format: EnvFormatBool},
-	"no-ishv": {Key: "ISHYPERVISOR", Format: EnvFormatBool, Negate: true},
-	"hvaddr":  {Key: "HVHTTPADDR", Format: EnvFormatString},
-	"sk":      {Key: "SK", Format: EnvFormatString},
-	"version": {Key: "VERSION", Format: EnvFormatString},
+	"hvpks":          {Key: "HYPERVISORPKS", Format: EnvFormatBashArray},
+	"ishv":           {Key: "ISHYPERVISOR", Format: EnvFormatBool},
+	"no-ishv":        {Key: "ISHYPERVISOR", Format: EnvFormatBool, Negate: true},
+	"pk-endpoint":    {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool},
+	"no-pk-endpoint": {Key: "ENABLEPKENDPOINT", Format: EnvFormatBool, Negate: true},
+	"hvaddr":         {Key: "HVHTTPADDR", Format: EnvFormatString},
+	"sk":             {Key: "SK", Format: EnvFormatString},
+	"version":        {Key: "VERSION", Format: EnvFormatString},
 
 	// Visor public/private + autoconnect
 	"rewardaddr":              {Key: "REWARDSKYADDR", Format: EnvFormatString},
