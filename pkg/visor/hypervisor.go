@@ -614,6 +614,15 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 			r.Get("/user-exists", hv.users.UserExists())
 
+			// Unauthenticated pubkey-discovery route used by
+			// skybian's first-boot autoconfig. SW-Public header
+			// gates it as a soft "looks like another visor"
+			// check. Suppressed entirely when the operator sets
+			// DisablePKEndpoint=true.
+			if !hv.c.DisablePKEndpoint {
+				r.Get("/pk", hv.getPK())
+			}
+
 			if hv.c.EnableAuth {
 				r.Group(func(r chi.Router) {
 					r.Post("/create-account", hv.users.CreateAccount())
