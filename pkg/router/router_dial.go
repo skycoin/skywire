@@ -689,49 +689,74 @@ fetchRoutesAgain:
 	// the existing latency-ranked pick. Failure-safe — any error
 	// from the hook falls through to pickDisjointPath.
 	if sh, ok := r.conf.DialHook.(RouteSelectingHook); ok && sh != nil && len(paths[forward]) > 0 {
-		hookCandidates := make([]CandidateInfo, 0, len(paths[forward]))
-		for _, hops := range paths[forward] {
-			intermediates := intermediatesOfHops(hops, src, dst)
-			hopHex := make([]string, 0, len(intermediates))
-			for _, pk := range intermediates {
-				hopHex = append(hopHex, pk.Hex())
+		toHookCandidates := func(hopsList [][]routing.Hop, isForward bool) []CandidateInfo {
+			out := make([]CandidateInfo, 0, len(hopsList))
+			endpoint := src
+			if !isForward {
+				endpoint = dst
 			}
-			latSum := pathLatencyScore(hops, latencyFor)
-			hookCandidates = append(hookCandidates, CandidateInfo{
-				Hops:         hopHex,
-				EstLatencyMs: int(latSum),
-			})
+			otherEnd := dst
+			if !isForward {
+				otherEnd = src
+			}
+			for _, hops := range hopsList {
+				intermediates := intermediatesOfHops(hops, endpoint, otherEnd)
+				hopHex := make([]string, 0, len(intermediates))
+				for _, pk := range intermediates {
+					hopHex = append(hopHex, pk.Hex())
+				}
+				latSum := pathLatencyScore(hops, latencyFor)
+				out = append(out, CandidateInfo{
+					Hops:         hopHex,
+					EstLatencyMs: int(latSum),
+				})
+			}
+			return out
 		}
+		fwdHookCandidates := toHookCandidates(paths[forward], true)
+		revHookCandidates := toHookCandidates(paths[backward], false)
 		info := DialInfo{
 			AppName: opts.AppName,
 			PeerPK:  dst,
 		}
-		if sel, herr := sh.SelectRoute(ctx, info, hookCandidates); herr != nil {
+		if sel, herr := sh.SelectRoute(ctx, info, fwdHookCandidates, revHookCandidates); herr != nil {
 			log.WithError(herr).Debug("Routing policy SelectRoute errored; falling back to disjoint-path pick.")
 		} else if sel.Drop {
 			log.WithField("policy_decision", "drop").Info("Routing policy dropped dial at SelectRoute.")
 			return nil, nil, ErrDialPolicyDropped
 		} else {
-			// SelectRoute may also override the per-packet
-			// distribution descriptor based on the candidate it
-			// chose. Apply it (if set) to opts so the post-mux
-			// applyDistribution call picks it up; the BeforeDial-
-			// supplied distribution stays in effect when SelectRoute
-			// leaves Mode == DistributionUnset.
 			if sel.Distribution.Mode != DistributionUnset {
 				opts.Distribution = sel.Distribution
 			}
-			if sel.Chosen >= 0 && sel.Chosen < len(paths[forward]) {
-				chosenFwd := paths[forward][sel.Chosen]
+			// Pick forward and reverse independently — a policy
+			// can override one direction and leave the other to
+			// the router's default pick.
+			haveFwd := sel.Chosen >= 0 && sel.Chosen < len(paths[forward])
+			haveRev := sel.ReverseChosen >= 0 && sel.ReverseChosen < len(paths[backward])
+			if haveFwd || haveRev {
 				excludeSet := make(map[cipher.PubKey]struct{}, len(opts.ExcludeIntermediatePKs))
 				for _, pk := range opts.ExcludeIntermediatePKs {
 					excludeSet[pk] = struct{}{}
 				}
-				if revPath, revOk := pickBestDirection(paths[backward], excludeSet, latencyFor); revOk {
-					log.WithField("policy_chosen", sel.Chosen).Debug("Routing policy selected forward route.")
-					return chosenFwd, revPath, nil
+				var chosenFwd, chosenRev []routing.Hop
+				if haveFwd {
+					chosenFwd = paths[forward][sel.Chosen]
+				} else if best, ok := pickBestDirection(paths[forward], excludeSet, latencyFor); ok {
+					chosenFwd = best
 				}
-				log.Debug("Routing policy picked a forward route but no acceptable reverse; falling back to disjoint pick.")
+				if haveRev {
+					chosenRev = paths[backward][sel.ReverseChosen]
+				} else if best, ok := pickBestDirection(paths[backward], excludeSet, latencyFor); ok {
+					chosenRev = best
+				}
+				if chosenFwd != nil && chosenRev != nil {
+					log.
+						WithField("policy_chosen", sel.Chosen).
+						WithField("policy_reverse_chosen", sel.ReverseChosen).
+						Debug("Routing policy selected route(s).")
+					return chosenFwd, chosenRev, nil
+				}
+				log.Debug("Routing policy made a partial pick but no acceptable counterpart; falling back to disjoint pick.")
 			}
 		}
 	}

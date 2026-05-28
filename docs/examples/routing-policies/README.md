@@ -52,6 +52,40 @@ SelectRoute. `distribution` can be set in either phase; when both
 set it, SelectRoute's value wins (it fires later in the flow and
 has more information).
 
+### Directional asymmetry
+
+`mux` / `min_hops` / `chosen` have per-direction overrides:
+`forward_mux` / `reverse_mux`, `forward_min_hops` / `reverse_min_hops`,
+and `reverse_chosen`. The reverse-direction candidates are
+exposed in SelectRoute as `ctx.reverse_candidates` (separate
+list from the positional `candidates` argument, which is always
+forward).
+
+```python
+# Different transport kinds per direction:
+# stcpr upstream, sudph downstream.
+def decide_route(ctx, candidates):
+    if not candidates:
+        return RouteSpec(forward_mux=1, reverse_mux=4)
+
+    fwd = None
+    for c in candidates:
+        if "stcpr" in c.transport_kinds:
+            fwd = c
+            break
+    rev = None
+    for c in ctx.reverse_candidates:
+        if "sudph" in c.transport_kinds:
+            rev = c
+            break
+    return RouteSpec(chosen=fwd, reverse_chosen=rev)
+```
+
+See `asymmetric-stcpr-sudph.star` for a full annotated example.
+Partial picks (only `chosen` or only `reverse_chosen`) are
+valid — the router fills the unset direction with its built-in
+latency-ranked pick.
+
 ### Knowing the leg count
 
 In SelectRoute, the script sees the route-finder's disjoint
@@ -110,6 +144,7 @@ case explicitly.
 | `business-hours.star` | 9–17 weekdays: only SG/JP/ID; off-hours: anything. |
 | `vpn-killswitch.star` | VPN: opt into mux BeforeDial, refuse non-direct-IP legs SelectRoute. |
 | `friday-id.star` | RFC headline: Friday 17:00 → Indonesia-transit only. |
+| `asymmetric-stcpr-sudph.star` | Forward stcpr (TCP), reverse sudph (UDP); different mux/min-hops per direction. |
 | `smoke-test.star` | Visible policy used for integration testing — logs every dial. |
 
 ## Layer 2 — per-packet distribution
