@@ -436,11 +436,35 @@ func decodeErrorBody(rb io.Reader) (*ErrorBody, error) {
 func TestPKEndpoint(t *testing.T) {
 	const callerPKHex = "030000000000000000000000000000000000000000000000000000000000000001"
 
-	t.Run("default_enabled_with_header_returns_pk", func(t *testing.T) {
+	// Default config has EnablePKEndpoint=false — the route isn't
+	// registered, so any GET /api/pk returns 404 regardless of
+	// header state. Pins the off-by-default semantics.
+	t.Run("default_off_returns_404", func(t *testing.T) {
 		config := visorconfig.MakeConfig(false)
 		config.EnableAuth = false
 		config.FillDefaults(false)
-		config.DBPath = filepath.Join(os.TempDir(), "users_pk_default.db")
+		config.DBPath = filepath.Join(os.TempDir(), "users_pk_off.db")
+
+		addr, client, closeFn := makeStartNode(t, config)
+		defer closeFn()
+
+		req, err := http.NewRequest(http.MethodGet, "https://"+addr+"/api/pk", nil)
+		require.NoError(t, err)
+		req.Header.Set("SW-Public", callerPKHex)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close() //nolint:errcheck
+
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	// Enabled + well-formed SW-Public → 200 with pubkey.
+	t.Run("enabled_with_header_returns_pk", func(t *testing.T) {
+		config := visorconfig.MakeConfig(false)
+		config.EnableAuth = false
+		config.EnablePKEndpoint = true
+		config.FillDefaults(false)
+		config.DBPath = filepath.Join(os.TempDir(), "users_pk_enabled.db")
 
 		addr, client, closeFn := makeStartNode(t, config)
 		defer closeFn()
@@ -462,9 +486,11 @@ func TestPKEndpoint(t *testing.T) {
 		require.Equal(t, config.PK.Hex(), body.PublicKey)
 	})
 
-	t.Run("missing_sw_public_returns_401", func(t *testing.T) {
+	// Enabled + no SW-Public → 401.
+	t.Run("enabled_missing_sw_public_returns_401", func(t *testing.T) {
 		config := visorconfig.MakeConfig(false)
 		config.EnableAuth = false
+		config.EnablePKEndpoint = true
 		config.FillDefaults(false)
 		config.DBPath = filepath.Join(os.TempDir(), "users_pk_noheader.db")
 
@@ -480,9 +506,11 @@ func TestPKEndpoint(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
-	t.Run("malformed_sw_public_returns_400", func(t *testing.T) {
+	// Enabled + malformed SW-Public → 400.
+	t.Run("enabled_malformed_sw_public_returns_400", func(t *testing.T) {
 		config := visorconfig.MakeConfig(false)
 		config.EnableAuth = false
+		config.EnablePKEndpoint = true
 		config.FillDefaults(false)
 		config.DBPath = filepath.Join(os.TempDir(), "users_pk_malformed.db")
 
@@ -497,25 +525,5 @@ func TestPKEndpoint(t *testing.T) {
 		defer resp.Body.Close() //nolint:errcheck
 
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	})
-
-	t.Run("disabled_returns_404", func(t *testing.T) {
-		config := visorconfig.MakeConfig(false)
-		config.EnableAuth = false
-		config.DisablePKEndpoint = true
-		config.FillDefaults(false)
-		config.DBPath = filepath.Join(os.TempDir(), "users_pk_disabled.db")
-
-		addr, client, closeFn := makeStartNode(t, config)
-		defer closeFn()
-
-		req, err := http.NewRequest(http.MethodGet, "https://"+addr+"/api/pk", nil)
-		require.NoError(t, err)
-		req.Header.Set("SW-Public", callerPKHex)
-		resp, err := client.Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close() //nolint:errcheck
-
-		require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
