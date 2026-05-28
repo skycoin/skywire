@@ -213,20 +213,30 @@ func (c fixedClock) Now() time.Time { return c.t }
 // specToJSON projects RouteSpec into a JSON-printable form. The
 // Chosen field uses a *Candidate; we flatten it for display.
 type specJSON struct {
-	Chosen       *policy.Candidate `json:"chosen,omitempty"`
-	Mux          int               `json:"mux"`
-	MinHops      int               `json:"min_hops"`
-	Fallback     string            `json:"fallback,omitempty"`
-	Distribution string            `json:"distribution,omitempty"`
+	Chosen         *policy.Candidate `json:"chosen,omitempty"`
+	ReverseChosen  *policy.Candidate `json:"reverse_chosen,omitempty"`
+	Mux            int               `json:"mux"`
+	ForwardMux     int               `json:"forward_mux,omitempty"`
+	ReverseMux     int               `json:"reverse_mux,omitempty"`
+	MinHops        int               `json:"min_hops"`
+	ForwardMinHops int               `json:"forward_min_hops,omitempty"`
+	ReverseMinHops int               `json:"reverse_min_hops,omitempty"`
+	Fallback       string            `json:"fallback,omitempty"`
+	Distribution   string            `json:"distribution,omitempty"`
 }
 
 func specToJSON(s policy.RouteSpec) specJSON {
 	return specJSON{
-		Chosen:       s.Chosen,
-		Mux:          s.Mux,
-		MinHops:      s.MinHops,
-		Fallback:     s.Fallback,
-		Distribution: s.Distribution,
+		Chosen:         s.Chosen,
+		ReverseChosen:  s.ReverseChosen,
+		Mux:            s.Mux,
+		ForwardMux:     s.ForwardMux,
+		ReverseMux:     s.ReverseMux,
+		MinHops:        s.MinHops,
+		ForwardMinHops: s.ForwardMinHops,
+		ReverseMinHops: s.ReverseMinHops,
+		Fallback:       s.Fallback,
+		Distribution:   s.Distribution,
 	}
 }
 

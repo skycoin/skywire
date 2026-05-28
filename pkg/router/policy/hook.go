@@ -109,9 +109,13 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 		return router.DialAdjustment{}, err
 	}
 	adj := router.DialAdjustment{
-		MuxRoutes: spec.Mux,
-		MinHops:   spec.MinHops,
-		Fallback:  spec.Fallback,
+		MuxRoutes:        spec.Mux,
+		ForwardMuxRoutes: spec.ForwardMux,
+		ReverseMuxRoutes: spec.ReverseMux,
+		MinHops:          spec.MinHops,
+		ForwardMinHops:   spec.ForwardMinHops,
+		ReverseMinHops:   spec.ReverseMinHops,
+		Fallback:         spec.Fallback,
 	}
 	// Distribution descriptor parse — failure is non-fatal
 	// (script keeps the rest of the adjustment; distribution
@@ -138,47 +142,53 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 //
 // "drop" Fallback maps to RouteSelection.Drop. An empty Chosen
 // with no drop signal maps to Chosen=-1 (defer to router's pick).
-func (h *Hook) SelectRoute(ctx context.Context, info router.DialInfo, candidates []router.CandidateInfo) (router.RouteSelection, error) {
+func (h *Hook) SelectRoute(ctx context.Context, info router.DialInfo, forward, reverse []router.CandidateInfo) (router.RouteSelection, error) {
 	loader := h.loaderFor(info.AppName)
-	if loader == nil || !loader.IsActive() || len(candidates) == 0 {
-		return router.RouteSelection{Chosen: -1}, nil
+	if loader == nil || !loader.IsActive() || len(forward) == 0 {
+		return router.RouteSelection{Chosen: -1, ReverseChosen: -1}, nil
 	}
 	prov := h.provider
 	if prov == nil {
 		prov = NopProvider()
 	}
-	policyCandidates := make([]Candidate, 0, len(candidates))
-	for _, c := range candidates {
-		geoCodes := make([]string, len(c.Hops))
-		kinds := make([]string, 0, len(c.Hops))
-		seenKinds := make(map[string]struct{}, len(c.Hops))
-		for i, pk := range c.Hops {
-			geoCodes[i] = prov.Geo(pk)
-			if k := prov.Kind(pk); k != "" {
-				if _, ok := seenKinds[k]; !ok {
-					kinds = append(kinds, k)
-					seenKinds[k] = struct{}{}
+	enrich := func(cs []router.CandidateInfo) []Candidate {
+		out := make([]Candidate, 0, len(cs))
+		for _, c := range cs {
+			geoCodes := make([]string, len(c.Hops))
+			kinds := make([]string, 0, len(c.Hops))
+			seenKinds := make(map[string]struct{}, len(c.Hops))
+			for i, pk := range c.Hops {
+				geoCodes[i] = prov.Geo(pk)
+				if k := prov.Kind(pk); k != "" {
+					if _, ok := seenKinds[k]; !ok {
+						kinds = append(kinds, k)
+						seenKinds[k] = struct{}{}
+					}
 				}
 			}
+			out = append(out, Candidate{
+				Hops:           append([]string(nil), c.Hops...),
+				HopsGeo:        geoCodes,
+				EstLatencyMs:   c.EstLatencyMs,
+				TransportKinds: kinds,
+			})
 		}
-		policyCandidates = append(policyCandidates, Candidate{
-			Hops:           append([]string(nil), c.Hops...),
-			HopsGeo:        geoCodes,
-			EstLatencyMs:   c.EstLatencyMs,
-			TransportKinds: kinds,
-		})
+		return out
 	}
+	policyCandidates := enrich(forward)
+	policyReverse := enrich(reverse)
 	rctx := RoutingContext{
-		App:    info.AppName,
-		PeerPK: info.PeerPK.Hex(),
-		Port:   uint16(info.RPort),
+		App:               info.AppName,
+		PeerPK:            info.PeerPK.Hex(),
+		Port:              uint16(info.RPort),
+		ReverseCandidates: policyReverse,
 	}
 	spec, err := loader.Decide(ctx, rctx, policyCandidates)
 	if err != nil {
-		return router.RouteSelection{Chosen: -1}, err
+		return router.RouteSelection{Chosen: -1, ReverseChosen: -1}, err
 	}
 	if spec.Fallback == "drop" {
-		return router.RouteSelection{Drop: true, Chosen: -1}, nil
+		return router.RouteSelection{Drop: true, Chosen: -1, ReverseChosen: -1}, nil
 	}
 	// Distribution descriptor — parsed from SelectRoute so the
 	// script can branch on the chosen candidate's properties
@@ -193,11 +203,19 @@ func (h *Hook) SelectRoute(ctx context.Context, info router.DialInfo, candidates
 	} else {
 		dist = d
 	}
-	if spec.Chosen == nil {
-		return router.RouteSelection{Chosen: -1, Distribution: dist}, nil
+	fwdIdx := -1
+	if spec.Chosen != nil {
+		fwdIdx = matchCandidate(policyCandidates, *spec.Chosen)
 	}
-	idx := matchCandidate(policyCandidates, *spec.Chosen)
-	return router.RouteSelection{Chosen: idx, Distribution: dist}, nil
+	revIdx := -1
+	if spec.ReverseChosen != nil {
+		revIdx = matchCandidate(policyReverse, *spec.ReverseChosen)
+	}
+	return router.RouteSelection{
+		Chosen:        fwdIdx,
+		ReverseChosen: revIdx,
+		Distribution:  dist,
+	}, nil
 }
 
 // matchCandidate finds the index of want in pool by Hops equality.
