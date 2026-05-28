@@ -65,7 +65,72 @@ type DialAdjustment struct {
 	// dial with ErrDialPolicyDropped. Any other value is
 	// ignored (the dial proceeds normally).
 	Fallback string
+
+	// Distribution, when Mode != DistributionUnset, overrides
+	// the route group's mux distribution strategy (which by
+	// default tracks the router's visor-wide muxMode). The
+	// policy layer parses the operator's descriptor string
+	// (Starlark RouteSpec.Distribution) into this struct so
+	// the router stays free of parser logic.
+	Distribution DistributionConfig
 }
+
+// DistributionConfig drives the per-packet leg-selection
+// strategy for a mux-enabled route group. Set on DialAdjustment
+// (per-dial, from a routing-policy script) or on DialOptions
+// (per-call from a CLI flag); zero-value (Mode == DistributionUnset)
+// means "no override — use the router's visor-wide muxMode."
+//
+// See pkg/router/policy/distribution.go for the descriptor
+// grammar that policy scripts emit.
+type DistributionConfig struct {
+	// Mode selects the per-packet algorithm. DistributionUnset
+	// means "no override."
+	Mode DistributionMode
+
+	// Weights are the operator-supplied fractional weights for
+	// DistributionWeighted. Must be the same length as the route
+	// group's leg count; values are normalized into an integer
+	// schedule by the selector. Empty for non-weighted modes.
+	Weights []float64
+
+	// SizeThreshold is the payload-size boundary for
+	// DistributionSizeThreshold. Packets larger than this go to
+	// leg 0 (assumed to be the wider pipe — the first leg the
+	// route-finder returned, ranked by latency); smaller packets
+	// round-robin across the remaining legs.
+	SizeThreshold int
+}
+
+// DistributionMode enumerates the per-packet distribution
+// strategies the operator can pick from. Names match the
+// vocabulary the RFC's Starlark descriptor parses to.
+type DistributionMode int
+
+const (
+	// DistributionUnset means "no policy override." The route
+	// group uses the router's visor-wide muxMode (currently
+	// WeightModeAuto: latency-weighted with round-robin fallback).
+	DistributionUnset DistributionMode = iota
+	// DistributionRoundRobin distributes packets evenly across
+	// all legs, ignoring latency. Same effect as the existing
+	// WeightModeEqual.
+	DistributionRoundRobin
+	// DistributionAuto picks WeightModeAuto explicitly — useful
+	// when a script wants to override an operator's globally-
+	// configured Equal mode back to latency-weighted for one app.
+	DistributionAuto
+	// DistributionWeighted uses the operator-supplied fractional
+	// weights in Weights[]. Length must match the leg count.
+	DistributionWeighted
+	// DistributionSizeThreshold routes packets by payload size:
+	// > SizeThreshold goes to leg 0, ≤ SizeThreshold round-robins
+	// across the rest. Useful for bulk + control mixes (VPN,
+	// terminal multiplexing) where large packets should claim
+	// the wider pipe and small packets stay on the low-latency
+	// leg.
+	DistributionSizeThreshold
+)
 
 // applyAdjustment is a helper used inside DialRoutes — applies
 // the hook's non-zero fields to opts. Returns ErrDialPolicyDropped
@@ -79,6 +144,9 @@ func applyAdjustment(opts *DialOptions, adj DialAdjustment) error {
 	}
 	if adj.MinHops > 0 {
 		opts.MinHops = adj.MinHops
+	}
+	if adj.Distribution.Mode != DistributionUnset {
+		opts.Distribution = adj.Distribution
 	}
 	return nil
 }

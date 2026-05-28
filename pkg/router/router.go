@@ -171,8 +171,15 @@ type DialOptions struct {
 	// callers outside the mux loop can pre-populate exclusions if
 	// they have constraints to express.
 	ExcludeIntermediatePKs []cipher.PubKey
-	ExcludeDMSG            bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
-	KeepAlive              time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
+	ExcludeDMSG            bool // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
+	// Distribution overrides the route group's per-packet
+	// distribution strategy when set (Mode != DistributionUnset).
+	// Populated either by a routing-policy script (see
+	// DialAdjustment.Distribution) or directly by a CLI caller
+	// constructing DialOptions. Zero-value means "use the
+	// router's visor-wide muxMode default."
+	Distribution DistributionConfig
+	KeepAlive    time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
 	// AppName is the originating app's name. Set by appnet's
 	// DialContextWithOptions when the caller threaded a context
 	// carrying it (RPCIngressGateway.Dial uses appnet.WithAppName).

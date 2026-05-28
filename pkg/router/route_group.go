@@ -307,7 +307,7 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	tp, rule, leg, err := rg.nextTransport()
+	tp, rule, leg, err := rg.nextTransport(len(p))
 	if err != nil {
 		rg.mu.Unlock()
 		return 0, err
@@ -527,15 +527,57 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	return err
 }
 
+// applyDistribution configures the route group's transport
+// selector from a DistributionConfig (typically supplied by a
+// routing-policy script via DialAdjustment.Distribution). No-op
+// when mux is unset or Mode is DistributionUnset.
+//
+// Idempotent — calling with the same config is cheap. Called
+// after establishMuxRoutes so the distribution applies to every
+// leg, including ones added by the mux loop.
+func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
+	if rg.mux == nil || rg.mux.tpSelector == nil {
+		return
+	}
+	if cfg.Mode == DistributionUnset {
+		return
+	}
+	var wm WeightMode
+	switch cfg.Mode {
+	case DistributionRoundRobin:
+		wm = WeightModeEqual
+	case DistributionAuto:
+		wm = WeightModeAuto
+	case DistributionWeighted:
+		wm = WeightModeExplicit
+		rg.mux.tpSelector.SetExplicitWeights(cfg.Weights)
+	case DistributionSizeThreshold:
+		wm = WeightModeSizeThreshold
+		rg.mux.tpSelector.SetSizeThreshold(cfg.SizeThreshold)
+	default:
+		return
+	}
+	rg.mu.Lock()
+	rg.mux.tpSelector.SetMode(wm)
+	rg.mux.tpSelector.Rebuild(rg.tps)
+	rg.mu.Unlock()
+}
+
 // nextTransport selects the next transport/rule pair. When mux is enabled and
 // multiple transports exist, uses latency-weighted selection. Falls back to
 // round-robin when latency data is unavailable, and to index 0 for single
 // transport (legacy behavior).
+//
+// payloadSize is the upcoming packet's payload byte count, used
+// only by WeightModeSizeThreshold to route large payloads to the
+// wide-pipe leg. Pass 0 from callers that don't have a meaningful
+// size (control / retx paths).
+//
 // Returns the leg index (position in rg.tps) so the caller can record
 // per-leg byte counts after a successful write; -1 for the
 // single-transport / legacy path.
 // NOTE: not thread-safe, caller must hold rg.mu.
-func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule, int, error) {
+func (rg *RouteGroup) nextTransport(payloadSize int) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(rg.tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
 	}
@@ -547,7 +589,7 @@ func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule
 	}
 
 	if rg.mux != nil && len(rg.tps) > 1 {
-		return rg.mux.selectTransport(rg.tps, rg.fwd)
+		return rg.mux.selectTransport(rg.tps, rg.fwd, payloadSize)
 	}
 
 	if rg.tps[0] == nil {
@@ -1152,7 +1194,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 		}
 
 		rg.mu.Lock()
-		tp, rule, leg, err := rg.nextTransport()
+		tp, rule, leg, err := rg.nextTransport(len(data))
 		rg.mu.Unlock()
 		if err != nil {
 			return err
