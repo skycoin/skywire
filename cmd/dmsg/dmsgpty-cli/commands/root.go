@@ -16,19 +16,19 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	dmsgcli "github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 )
 
-var cli = dmsgpty.DefaultCLI()
+var cli = pty.DefaultCLI()
 
 // path for config file ( required for whitelists )
 var (
 	defaultConfPath = "config.json"
 	confPath        string
 	// conf to update whitelists
-	conf       dmsgpty.Config
+	conf       pty.Config
 	remoteAddr dmsg.Addr
-	cmdName    = dmsgpty.DefaultCmd
+	cmdName    = pty.DefaultCmd
 	cmdArgs    []string
 
 	execTimeout string
@@ -98,7 +98,7 @@ var RootCmd = &cobra.Command{
 				cli.Log.Fatalln("Unable to write", confPath, err)
 			}
 		}
-		conf.CLIAddr = dmsgpty.ParseWindowsEnv(conf.CLIAddr)
+		conf.CLIAddr = pty.ParseWindowsEnv(conf.CLIAddr)
 		if conf.CLIAddr != "" {
 			cli.Addr = conf.CLIAddr
 		}
@@ -106,7 +106,7 @@ var RootCmd = &cobra.Command{
 			cli.Net = conf.CLINet
 		}
 		if remoteAddr.Port == 0 {
-			remoteAddr.Port = dmsgpty.DefaultPort
+			remoteAddr.Port = pty.DefaultPort
 		}
 	},
 	RunE: func(_ *cobra.Command, _ []string) error {
@@ -156,7 +156,7 @@ var execCmd = &cobra.Command{
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
 
-		var resp *dmsgpty.CommandExecResult
+		var resp *pty.CommandExecResult
 		if remoteAddr.PK.Null() {
 			resp, err = cli.ExecLocal(ctx, name, argv, execEnv, nil, timeout)
 		} else {

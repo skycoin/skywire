@@ -18,8 +18,8 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -155,17 +155,17 @@ var ptyStartCmd = &cobra.Command{
 				return err
 			}
 			myPK, mySK := resolveTCPIdentity(ptySK)
-			tcpCli := dmsgpty.DefaultCLI()
-			return (&tcpCli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, dmsgpty.DefaultCmd)
+			tcpCli := pty.DefaultCLI()
+			return (&tcpCli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, pty.DefaultCmd)
 		}
 
 		if len(args) < 1 {
 			return fmt.Errorf("pty start: <pk> required (or use --via tcp://<pk>@<host:port>)")
 		}
-		cli := dmsgpty.DefaultCLI()
+		cli := pty.DefaultCLI()
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
-		return cli.StartRemotePty(ctx, addr, uint16(port), dmsgpty.DefaultCmd)
+		return cli.StartRemotePty(ctx, addr, uint16(port), pty.DefaultCmd)
 	},
 }
 
@@ -216,7 +216,7 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 			if len(args) > 1 {
 				cmdArgs = args[1:]
 			}
-			tcpCli := dmsgpty.DefaultCLI()
+			tcpCli := pty.DefaultCLI()
 			resp, err := (&tcpCli).ExecRemoteTCP(ctx, rPK, addr, myPK, mySK, name, cmdArgs, ptyExecEnv, nil, timeout)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
@@ -261,7 +261,7 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 		resp, err := rpcCli.DmsgPtyExec(visor.DmsgPtyExecArgs{
 			RemotePK:   addr,
 			RemotePort: uint16(port),
-			Req: dmsgpty.CommandExecReq{
+			Req: pty.CommandExecReq{
 				Name:      name,
 				Arg:       cmdArgs,
 				Env:       ptyExecEnv,
@@ -285,7 +285,7 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 // only on a clean (exit 0, not truncated, not timed out) completion
 // — other shapes call os.Exit directly to surface the right exit
 // code to the caller's shell.
-func reportExecResult(cmd *cobra.Command, resp *dmsgpty.CommandExecResult) {
+func reportExecResult(cmd *cobra.Command, resp *pty.CommandExecResult) {
 	if len(resp.Stdout) > 0 {
 		_, _ = cmd.OutOrStdout().Write(resp.Stdout) //nolint:errcheck
 	}

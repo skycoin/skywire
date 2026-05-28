@@ -19,8 +19,8 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -468,7 +468,7 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 // reach :3435). Trust model downstream is unchanged: the remote
 // dmsgpty host enforces its whitelist on the dmsg stream this visor
 // opens; the remote sees this visor's PK as the peer.
-func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error) {
+func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error) {
 	if v.dmsgPty == nil {
 		return nil, fmt.Errorf("dmsgpty: not initialized on this visor")
 	}
@@ -500,7 +500,7 @@ func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, e
 		if v.dmsgC == nil {
 			return nil, fmt.Errorf("dmsgpty: dmsg scheme requested but dmsg client not initialized")
 		}
-		return v.dmsgPty.ExecRemoteVia(ctx, dmsgpty.NewDmsgDialer(v.dmsgC), args.RemotePK, args.RemotePort, &req)
+		return v.dmsgPty.ExecRemoteVia(ctx, pty.NewDmsgDialer(v.dmsgC), args.RemotePK, args.RemotePort, &req)
 	case "skynet":
 		return v.dmsgPty.ExecRemoteVia(ctx, skywireDialer{}, args.RemotePK, args.RemotePort, &req)
 	default:
