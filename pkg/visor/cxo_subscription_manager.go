@@ -93,6 +93,11 @@ const (
 	// commands (`pv -t`, `tp tree`, `tp viz`). Maps to the TPD
 	// all-transports feed.
 	TabCLITransports
+	// TabRoutingPolicy is the operator-programmable routing-policy
+	// provider's SD-services consumer. Needed so the policy script's
+	// geo.country(pk) can resolve multihop intermediates that
+	// advertise themselves as proxy/vpn/visor services.
+	TabRoutingPolicy
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -105,6 +110,7 @@ var tabFeedDeps = map[CXOTab][]CXOFeed{
 	TabAutoconnect:       {FeedSDServices},
 	TabCLIServices:       {FeedSDServices},
 	TabCLITransports:     {FeedTPDAllTransports},
+	TabRoutingPolicy:     {FeedSDServices},
 }
 
 // CXOSubscriptionManager owns the per-feed cycle goroutines + the
