@@ -93,3 +93,117 @@ func TestTransportSelector_MixedLatency(t *testing.T) {
 	assert.Equal(t, 50, counts[0])
 	assert.Equal(t, 50, counts[1])
 }
+
+func TestTransportSelector_ExplicitWeights(t *testing.T) {
+	// Operator-supplied fractional weights [0.6, 0.3, 0.1].
+	// Normalized to ints (smallest = 0.1) → [6, 3, 1] → 60/30/10 distribution.
+	ts := newTransportSelector()
+	ts.SetExplicitWeights([]float64{0.6, 0.3, 0.1})
+	ts.SetMode(WeightModeExplicit)
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	counts := make(map[int]int)
+	for i := 0; i < 1000; i++ {
+		counts[ts.Select()]++
+	}
+	// Allow ±2% slack on a 1000-sample run.
+	assert.InDelta(t, 600, counts[0], 20)
+	assert.InDelta(t, 300, counts[1], 20)
+	assert.InDelta(t, 100, counts[2], 20)
+}
+
+func TestTransportSelector_ExplicitWeightsIntegerForm(t *testing.T) {
+	// Integer-style weights [3, 1] should produce 75/25.
+	ts := newTransportSelector()
+	ts.SetExplicitWeights([]float64{3, 1})
+	ts.SetMode(WeightModeExplicit)
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	counts := make(map[int]int)
+	for i := 0; i < 1000; i++ {
+		counts[ts.Select()]++
+	}
+	assert.InDelta(t, 750, counts[0], 20)
+	assert.InDelta(t, 250, counts[1], 20)
+}
+
+func TestTransportSelector_ExplicitWeightsEmptyFallsBackToEqual(t *testing.T) {
+	// Misconfigured explicit mode (no weights set) falls back to
+	// equal — never panic, never select an out-of-range index.
+	ts := newTransportSelector()
+	ts.SetMode(WeightModeExplicit)
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	counts := make(map[int]int)
+	for i := 0; i < 100; i++ {
+		counts[ts.Select()]++
+	}
+	assert.Equal(t, 50, counts[0])
+	assert.Equal(t, 50, counts[1])
+}
+
+func TestTransportSelector_SizeThreshold_LargePacketsToLeg0(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetSizeThreshold(1400)
+	ts.SetMode(WeightModeSizeThreshold)
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	// 1401 bytes → leg 0 every time.
+	for i := 0; i < 100; i++ {
+		assert.Equal(t, 0, ts.SelectForSize(1401))
+	}
+}
+
+func TestTransportSelector_SizeThreshold_SmallPacketsRRRest(t *testing.T) {
+	ts := newTransportSelector()
+	ts.SetSizeThreshold(1400)
+	ts.SetMode(WeightModeSizeThreshold)
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	// 100 bytes → RR across legs 1 and 2 (50/50).
+	counts := make(map[int]int)
+	for i := 0; i < 1000; i++ {
+		counts[ts.SelectForSize(100)]++
+	}
+	assert.Equal(t, 0, counts[0], "leg 0 should never get small packets")
+	assert.InDelta(t, 500, counts[1], 20)
+	assert.InDelta(t, 500, counts[2], 20)
+}
+
+func TestTransportSelector_SizeThreshold_ExactlyAtThreshold(t *testing.T) {
+	// Boundary case: size == threshold goes to the small-leg RR
+	// (strict ">" check). Pins the semantics so they don't drift.
+	ts := newTransportSelector()
+	ts.SetSizeThreshold(1400)
+	ts.SetMode(WeightModeSizeThreshold)
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	counts := make(map[int]int)
+	for i := 0; i < 100; i++ {
+		counts[ts.SelectForSize(1400)]++
+	}
+	// 1400 == threshold → small-leg RR. With one small leg
+	// (leg 1), all 100 land on leg 1.
+	assert.Equal(t, 0, counts[0])
+	assert.Equal(t, 100, counts[1])
+}
+
+func TestTransportSelector_SizeThreshold_SelectWithoutSizeReturns0(t *testing.T) {
+	// Select() called from a path that doesn't know the size
+	// (handshake/control) returns leg 0 — safe default.
+	ts := newTransportSelector()
+	ts.SetSizeThreshold(1400)
+	ts.SetMode(WeightModeSizeThreshold)
+	tps := []*transport.ManagedTransport{mockTP(0), mockTP(0)}
+	ts.Rebuild(tps)
+
+	for i := 0; i < 100; i++ {
+		assert.Equal(t, 0, ts.Select())
+	}
+}
