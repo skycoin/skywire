@@ -215,8 +215,11 @@ After this phase, the Indonesia-Friday example *works*.
 | `"round-robin"` / `"equal"` | `DistributionRoundRobin` | Force `WeightModeEqual` — packets alternate across legs ignoring latency. |
 | `"weighted: f1, f2, ..."` | `DistributionWeighted` | Operator-supplied fractional weights normalized into the selector's integer schedule. Length must match leg count; mismatches fall through with a log line. |
 | `"size-threshold: N"` | `DistributionSizeThreshold` | Payloads `> N` bytes go to leg 0 (wide pipe); payloads `≤ N` round-robin across the remaining legs. Single-leg routes ignore the descriptor. Control/handshake packets (size unknown) take leg 0. |
+| `"sticky:5tuple"` | `DistributionSticky5Tuple` | Hashes the IPv4 5-tuple (src/dst IP + src/dst port + protocol) and picks `hash % live-leg-count`. Same flow → same leg deterministically. Non-IPv4 payloads fall back to a payload-prefix FNV hash. Avoids TCP-over-overlay reordering. |
+| `"latency-adaptive"` / `"latency-aware"` | `DistributionLatencyAdaptive` | Per-packet linear scan over live legs for lowest `GetLatency()`. Differs from `"auto"`: adaptive evaluates every packet, so a leg whose RTT spikes mid-session loses traffic immediately. |
+| `"dscp-priority: N"` | `DistributionDSCPPriority` | Reads IPv4 DSCP (upper 6 bits of ToS byte). DSCP ≥ N → leg 0; rest → RR. Threshold in `[1, 63]`; common values: 46 (EF/VoIP), 18 (AF21), 10 (AF11). Non-IPv4 payloads default to RR. |
 
-Real per-packet scripting (CEL or compiled bytecode) is a separate RFC, opened only when an operator demonstrates a use case that can't be expressed as a static distribution descriptor. The vocabulary above leaves room for that follow-up: descriptors not on this list (`"sticky: 5tuple"`, `"latency-aware"`, etc.) return a parse error today so they can be added meaningfully later without ambiguity.
+Real per-packet scripting (CEL or compiled bytecode) remains a separate RFC, opened only when an operator demonstrates a use case that no descriptor can express. As of this update, the vocabulary covers the realistic per-packet decision space — future additions (e.g. `"chaff: rate"` for anti-traffic-analysis chaff insertion) would land as new verbs rather than scripting.
 
 ### Phase 6 — Post-setup leg-change callback (LANDED)
 

@@ -105,10 +105,88 @@ func TestParseDistribution_SizeThresholdErrors(t *testing.T) {
 }
 
 func TestParseDistribution_UnknownDescriptor(t *testing.T) {
-	if _, err := ParseDistribution("sticky: 5tuple"); err == nil {
-		t.Errorf("expected error for unimplemented descriptor, got nil")
-	}
 	if _, err := ParseDistribution("not-a-descriptor"); err == nil {
 		t.Errorf("expected error for malformed descriptor, got nil")
+	}
+	if _, err := ParseDistribution("nonsense:foo"); err == nil {
+		t.Errorf("expected error for unknown prefixed descriptor, got nil")
+	}
+	if _, err := ParseDistribution("sticky:not-a-qualifier"); err == nil {
+		t.Errorf("expected error for unknown sticky qualifier, got nil")
+	}
+}
+
+func TestParseDistribution_Sticky5Tuple(t *testing.T) {
+	cfg, err := ParseDistribution("sticky: 5tuple")
+	if err != nil {
+		t.Fatalf("ParseDistribution: %v", err)
+	}
+	if cfg.Mode != router.DistributionSticky5Tuple {
+		t.Errorf("Mode=%v, want DistributionSticky5Tuple", cfg.Mode)
+	}
+}
+
+func TestParseDistribution_StickyErrors(t *testing.T) {
+	cases := []string{
+		"sticky:",
+		"sticky: hash",
+		"sticky: 5",
+	}
+	for _, c := range cases {
+		if _, err := ParseDistribution(c); err == nil {
+			t.Errorf("ParseDistribution(%q): expected error, got nil", c)
+		}
+	}
+}
+
+func TestParseDistribution_LatencyAdaptive(t *testing.T) {
+	for _, s := range []string{"latency-adaptive", "latency-aware"} {
+		cfg, err := ParseDistribution(s)
+		if err != nil {
+			t.Fatalf("ParseDistribution(%q): %v", s, err)
+		}
+		if cfg.Mode != router.DistributionLatencyAdaptive {
+			t.Errorf("%q Mode=%v, want DistributionLatencyAdaptive", s, cfg.Mode)
+		}
+	}
+}
+
+func TestParseDistribution_DSCPPriority(t *testing.T) {
+	cases := []struct {
+		in        string
+		threshold int
+	}{
+		{"dscp-priority: 46", 46},   // EF
+		{"dscp-priority: 18", 18},   // AF21
+		{"dscp-priority: 0x2e", 46}, // hex EF
+		{"dscp-priority: 0x10", 16}, // hex AF11ish
+	}
+	for _, c := range cases {
+		cfg, err := ParseDistribution(c.in)
+		if err != nil {
+			t.Errorf("ParseDistribution(%q): %v", c.in, err)
+			continue
+		}
+		if cfg.Mode != router.DistributionDSCPPriority {
+			t.Errorf("%q Mode=%v, want DistributionDSCPPriority", c.in, cfg.Mode)
+		}
+		if cfg.DSCPThreshold != c.threshold {
+			t.Errorf("%q DSCPThreshold=%d, want %d", c.in, cfg.DSCPThreshold, c.threshold)
+		}
+	}
+}
+
+func TestParseDistribution_DSCPPriorityErrors(t *testing.T) {
+	cases := []string{
+		"dscp-priority:",
+		"dscp-priority: 0",
+		"dscp-priority: 64",
+		"dscp-priority: -1",
+		"dscp-priority: foo",
+	}
+	for _, c := range cases {
+		if _, err := ParseDistribution(c); err == nil {
+			t.Errorf("ParseDistribution(%q): expected error, got nil", c)
+		}
 	}
 }
