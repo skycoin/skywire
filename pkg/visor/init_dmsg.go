@@ -861,7 +861,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// start` rides the visor's already-negotiated transports when
 	// a route exists, then falls through to dmsg on miss. Adding
 	// the chain here rather than at NewHost preserves backward
-	// compat for every other NewHost caller (cmd/dmsg/dmsgpty-host,
+	// compat for every other NewHost caller (cmd/dmsg/pty-host,
 	// sshd CLI, tests).
 	host := pty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
 	// Expose the Host on the visor so the RPC layer can drive Exec

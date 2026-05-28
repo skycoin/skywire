@@ -1,8 +1,8 @@
-// package main cmd/dmsgpty-cli/dmsgpty-cli.go
+// Package main cmd/dmsgpty-ui/dmsgpty-ui.go
 package main
 
 import (
-	"github.com/skycoin/skywire/cmd/dmsg/dmsgpty-cli/commands"
+	"github.com/skycoin/skywire/cmd/dmsg/pty-ui/commands"
 	"github.com/skycoin/skywire/pkg/flags"
 )
 
