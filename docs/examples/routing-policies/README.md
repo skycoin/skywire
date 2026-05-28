@@ -86,6 +86,27 @@ Partial picks (only `chosen` or only `reverse_chosen`) are
 valid — the router fills the unset direction with its built-in
 latency-ranked pick.
 
+### Post-setup leg changes (`on_leg_change`)
+
+Scripts can optionally define `on_leg_change(ctx, legs, change)`:
+the route group calls it whenever its leg set mutates — a new
+mux leg established via `appendRouteToGroup`, or a leg dropped
+because the transport closed. Only `distribution` is honored
+from the return value (mux/min_hops/chosen are dial-time
+decisions).
+
+```python
+def on_leg_change(ctx, legs, change):
+    # legs: [{index, kind, latency_ms, alive}, ...]
+    # change: {event: "added"|"dropped", leg_index: N}
+    n = sum([1 for l in legs if l.alive])
+    return RouteSpec(distribution = "weighted: " + ", ".join(["1"] * n))
+```
+
+See `rebalance-on-leg-change.star` for a worked example.
+Scripts that don't define `on_leg_change` get the static
+phase-5 behavior — the function is optional.
+
 ### Knowing the leg count
 
 In SelectRoute, the script sees the route-finder's disjoint
@@ -182,6 +203,7 @@ properties (`weighted-by-kind.star` demonstrates the pattern).
 | `vpn-bulk-split.star` | VPN packets > 1400B → wide-pipe leg; small → RR rest. |
 | `force-equal-rt.star` | Real-time apps force equal RR (lower jitter than auto). |
 | `friday-id-mux.star` | Friday-ID combined with VPN size-threshold split. |
+| `rebalance-on-leg-change.star` | Track live leg count with an even-weight schedule via `on_leg_change`. |
 
 ## Authoring notes
 

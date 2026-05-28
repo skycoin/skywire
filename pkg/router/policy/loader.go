@@ -222,6 +222,16 @@ func (l *Loader) Decide(ctx context.Context, rctx RoutingContext, candidates []C
 	return eval.Decide(ctx, rctx, candidates)
 }
 
+// OnLegChange forwards to the currently-loaded Evaluator's
+// OnLegChange. Returns empty spec when no evaluator is loaded.
+func (l *Loader) OnLegChange(ctx context.Context, rctx RoutingContext, legs []LegInfo, change LegChange) (RouteSpec, error) {
+	eval := l.current.Load()
+	if eval == nil {
+		return RouteSpec{}, nil
+	}
+	return eval.OnLegChange(ctx, rctx, legs, change)
+}
+
 // Source returns the human-readable source identifier (file path
 // or "<inline>" or "<noop>"). Used by callers for logging.
 func (l *Loader) Source() string { return l.source }

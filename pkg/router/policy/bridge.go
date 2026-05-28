@@ -196,6 +196,37 @@ func buildContextValue(rctx RoutingContext) starlark.Value {
 	)
 }
 
+// buildLegsValue converts the route group's leg list into a
+// Starlark list of struct-shaped values: [{index, kind,
+// latency_ms, alive}, ...].
+func buildLegsValue(legs []LegInfo) starlark.Value {
+	out := make([]starlark.Value, 0, len(legs))
+	for _, l := range legs {
+		out = append(out, starlarkstruct.FromStringDict(
+			starlarkstruct.Default,
+			starlark.StringDict{
+				"index":      starlark.MakeInt(l.Index),
+				"kind":       starlark.String(l.Kind),
+				"latency_ms": starlark.MakeInt(l.LatencyMs),
+				"alive":      starlark.Bool(l.Alive),
+			},
+		))
+	}
+	return starlark.NewList(out)
+}
+
+// buildLegChangeValue converts LegChange to a Starlark struct:
+// {event, leg_index}.
+func buildLegChangeValue(change LegChange) starlark.Value {
+	return starlarkstruct.FromStringDict(
+		starlarkstruct.Default,
+		starlark.StringDict{
+			"event":     starlark.String(change.Event),
+			"leg_index": starlark.MakeInt(change.LegIndex),
+		},
+	)
+}
+
 // buildCandidatesValue converts the Go candidate list into a
 // Starlark list of struct-shaped values.
 func buildCandidatesValue(cs []Candidate) starlark.Value {

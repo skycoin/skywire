@@ -266,6 +266,21 @@ func (r *router) DialRoutes(
 		// rebuild sees every leg, not just the primary.
 		nrg.rg.applyDistribution(opts.Distribution)
 
+		// Wire the post-setup leg-change hook (RFC #2882 phase 6).
+		// The dial-side DialHook may also implement LegChangeHook;
+		// when it does, the route group fires on_leg_change
+		// callbacks whenever its leg set mutates after this point
+		// (additional aux legs from appendRouteToGroup, or
+		// transport-close pruning).
+		if lch, ok := r.conf.DialHook.(LegChangeHook); ok && lch != nil {
+			nrg.rg.SetLegChangeHook(lch, DialInfo{
+				AppName: opts.AppName,
+				PeerPK:  rPK,
+				LPort:   lPort,
+				RPort:   rPort,
+			})
+		}
+
 		// reset MinHops default value if changed before
 		if defaultMinHops != 1 {
 			r.conf.MinHops = defaultMinHops
