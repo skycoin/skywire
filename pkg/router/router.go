@@ -50,6 +50,13 @@ var (
 	// ErrRemoteEmptyPK occurs when the specified remote public key is empty.
 	ErrRemoteEmptyPK = errors.New("empty remote public key")
 
+	// ErrDialPolicyDropped is returned by DialRoutes when the
+	// configured DialHook's BeforeDial returns Fallback="drop".
+	// Operators see this as the explicit signal that their
+	// routing policy refused this dial; it's distinct from any
+	// route-finder failure or transport error.
+	ErrDialPolicyDropped = errors.New("dial refused by routing policy")
+
 	// ErrNoTransportFound is returned when not even one transport is found.
 	ErrNoTransportFound = errors.New("no transport found")
 )
@@ -86,6 +93,18 @@ type Config struct {
 	// means no lookup is performed and entries are emitted untagged
 	// (the existing behavior).
 	AppLookup func(routing.Port) (string, bool)
+
+	// DialHook, when non-nil, is invoked before each DialRoutes
+	// to let an operator-supplied routing policy adjust the
+	// per-dial knobs (MuxRoutes, MinHops) or refuse the dial
+	// entirely. See pkg/router/dial_hook.go for the contract and
+	// pkg/router/policy/ for the Starlark-backed implementation
+	// the visor wires up when conf.Routing.PolicyPerDial is set.
+	//
+	// When nil (the default) DialRoutes behaves identically to
+	// its pre-integration shape — zero-cost when no policy is
+	// configured.
+	DialHook DialHook
 }
 
 // SetDefaults sets default values for certain empty values.
