@@ -190,7 +190,8 @@ func buildContextValue(rctx RoutingContext) starlark.Value {
 			"now": starlark.NewBuiltin("now", func(_ *starlark.Thread, _ *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
 				return timeValue(rctx.Now), nil
 			}),
-			"cli_overrides": cliOverrides,
+			"cli_overrides":      cliOverrides,
+			"reverse_candidates": buildCandidatesValue(rctx.ReverseCandidates),
 		},
 	)
 }
@@ -233,11 +234,16 @@ func routeSpecCtor(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple,
 		return nil, fmt.Errorf("RouteSpec: positional arguments not allowed; use kwargs")
 	}
 	dict := starlark.StringDict{
-		"chosen":       starlark.None,
-		"mux":          starlark.MakeInt(0),
-		"min_hops":     starlark.MakeInt(0),
-		"fallback":     starlark.String(""),
-		"distribution": starlark.String(""),
+		"chosen":           starlark.None,
+		"reverse_chosen":   starlark.None,
+		"mux":              starlark.MakeInt(0),
+		"forward_mux":      starlark.MakeInt(0),
+		"reverse_mux":      starlark.MakeInt(0),
+		"min_hops":         starlark.MakeInt(0),
+		"forward_min_hops": starlark.MakeInt(0),
+		"reverse_min_hops": starlark.MakeInt(0),
+		"fallback":         starlark.String(""),
+		"distribution":     starlark.String(""),
 	}
 	for _, kv := range kwargs {
 		key := string(kv[0].(starlark.String))
@@ -295,8 +301,21 @@ func parseRouteSpec(v starlark.Value) (RouteSpec, error) {
 			out.Chosen = &cand
 		}
 	}
+	if rev, err := s.Attr("reverse_chosen"); err == nil && rev != nil {
+		if _, isNone := rev.(starlark.NoneType); !isNone {
+			cand, err := parseCandidate(rev)
+			if err != nil {
+				return RouteSpec{}, fmt.Errorf("reverse_chosen: %w", err)
+			}
+			out.ReverseChosen = &cand
+		}
+	}
 	out.Mux = readIntField(s, "mux")
+	out.ForwardMux = readIntField(s, "forward_mux")
+	out.ReverseMux = readIntField(s, "reverse_mux")
 	out.MinHops = readIntField(s, "min_hops")
+	out.ForwardMinHops = readIntField(s, "forward_min_hops")
+	out.ReverseMinHops = readIntField(s, "reverse_min_hops")
 	out.Fallback = readStrField(s, "fallback")
 	out.Distribution = readStrField(s, "distribution")
 	return out, nil

@@ -48,6 +48,16 @@ type RoutingContext struct {
 	// policy can choose to honor or override them. Empty map when
 	// the dial came from a launched app rather than a CLI command.
 	CLIOverrides map[string]string
+
+	// ReverseCandidates is the reverse-direction candidate list
+	// when SelectRoute is invoked, exposed to Starlark as
+	// `ctx.reverse_candidates`. Empty during BeforeDial (no
+	// candidates yet) and during SelectRoute when the dial used
+	// a symmetric route-finder query (forward and reverse share
+	// the same path candidates — same list). Scripts that want
+	// per-direction filtering iterate this list separately and
+	// set RouteSpec.reverse_chosen.
+	ReverseCandidates []Candidate
 }
 
 // Candidate is one possible route from the visor to the peer that
@@ -84,24 +94,49 @@ type Candidate struct {
 // script. The router consumes this to drive route selection +
 // per-dial knob settings.
 type RouteSpec struct {
-	// Chosen is the candidate the policy picked. Nil means "fall
-	// back to the visor's built-in default" — either because the
-	// policy returned an explicit None or because every candidate
-	// was filtered out.
+	// Chosen is the forward-direction candidate the policy picked.
+	// Nil means "fall back to the visor's built-in default" —
+	// either because the policy returned an explicit None or
+	// because every candidate was filtered out. For directional-
+	// asymmetric policies, set ReverseChosen separately.
 	Chosen *Candidate
 
-	// Mux is the number of parallel mux legs to open. Zero or 1
-	// means a single route. The router caps it at the number of
-	// disjoint candidates the route-finder returned — scripts
-	// that want to know that count up-front should read
-	// `len(candidates)` in SelectRoute.
+	// ReverseChosen is the reverse-direction candidate, when the
+	// policy wants different forward and reverse routes (e.g.
+	// "stcpr upstream, sudph downstream"). Nil means "no override;
+	// let the router pick the lowest-latency reverse independently."
+	// The script accesses reverse candidates via ctx.reverse_candidates
+	// in SelectRoute.
+	ReverseChosen *Candidate
+
+	// Mux is the symmetric number of parallel mux legs to open.
+	// Zero or 1 means a single route. The router caps it at the
+	// number of disjoint candidates the route-finder returned —
+	// scripts that want to know that count up-front should read
+	// `len(candidates)` in SelectRoute. Overridden per-direction
+	// by ForwardMux / ReverseMux when those are non-zero.
 	Mux int
 
-	// MinHops is the minimum acceptable intermediate count.
-	// Honored as a hint by the router; if Chosen already satisfies
-	// it, no change. If Chosen doesn't, the router rejects Chosen
-	// and falls back per Fallback.
+	// ForwardMux and ReverseMux are per-direction overrides for
+	// Mux. The common use case is asymmetric workloads — a
+	// download-heavy app benefits from ReverseMux=N (multiple
+	// download paths aggregated) and ForwardMux=1 (one cheap
+	// upstream). Zero falls back to Mux.
+	ForwardMux int
+	ReverseMux int
+
+	// MinHops is the symmetric minimum acceptable intermediate
+	// count. Honored as a hint by the router. Overridden per-
+	// direction by ForwardMinHops / ReverseMinHops when those
+	// are non-zero.
 	MinHops int
+
+	// ForwardMinHops and ReverseMinHops are per-direction
+	// overrides for MinHops. Useful when one direction needs more
+	// hops than the other for compliance or trust reasons. Zero
+	// falls back to MinHops.
+	ForwardMinHops int
+	ReverseMinHops int
 
 	// Fallback names the backup strategy when Chosen is nil or
 	// rejected. Recognized values:
