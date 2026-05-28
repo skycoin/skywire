@@ -10,7 +10,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -73,9 +73,9 @@ func TestBuildDmsgptyDialer_SkywireFirstDmsgFallback(t *testing.T) {
 	// fallback. Swapping the order would silently regress to
 	// dmsg-only behavior for every call where skywire would
 	// succeed.
-	chain, ok := buildDmsgptyDialer(nil).(dmsgpty.MultiDialer)
+	chain, ok := buildDmsgptyDialer(nil).(pty.MultiDialer)
 	if !ok {
-		t.Fatalf("buildDmsgptyDialer: got %T, want dmsgpty.MultiDialer", chain)
+		t.Fatalf("buildDmsgptyDialer: got %T, want pty.MultiDialer", chain)
 	}
 	if len(chain) != 2 {
 		t.Fatalf("chain length = %d, want 2 (skywire + dmsg)", len(chain))
@@ -92,6 +92,6 @@ func TestBuildDmsgptyDialer_SkywireFirstDmsgFallback(t *testing.T) {
 	}
 }
 
-// Compile-time confirmation the extractor matches dmsgpty.PKExtractor.
+// Compile-time confirmation the extractor matches pty.PKExtractor.
 // Catches signature drift if either side changes shape.
-var _ dmsgpty.PKExtractor = skywireConnPK
+var _ pty.PKExtractor = skywireConnPK

@@ -18,9 +18,9 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -954,8 +954,8 @@ func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 }
 
 // DmsgPtyExec implements API
-func (mc *mockRPCClient) DmsgPtyExec(_ DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error) {
-	return &dmsgpty.CommandExecResult{}, nil
+func (mc *mockRPCClient) DmsgPtyExec(_ DmsgPtyExecArgs) (*pty.CommandExecResult, error) {
+	return &pty.CommandExecResult{}, nil
 }
 
 // Ports implements API

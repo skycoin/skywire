@@ -15,8 +15,8 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -54,7 +54,7 @@ type API interface {
 	ClearSkychatPassword(oldPassword string) error
 	SkychatLocalAddr() (string, error)
 	RemoteVisors() ([]string, error)
-	DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error)
+	DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error
 	IsDMSGClientReady() (bool, error)
@@ -510,9 +510,9 @@ type HealthInfo struct {
 
 // DmsgPtyExecArgs is the request shape for API.DmsgPtyExec.
 // RemotePK identifies the target visor's dmsgpty host; RemotePort
-// defaults to dmsgpty.DefaultPort (22) when zero. Req carries the
+// defaults to pty.DefaultPort (22) when zero. Req carries the
 // command, arguments, optional environment overrides, optional stdin,
-// and per-call timeout — see dmsgpty.CommandExecReq.
+// and per-call timeout — see pty.CommandExecReq.
 //
 // Scheme overrides the dialer choice. The visor's dmsgpty Host is
 // wired with a MultiDialer that tries skynet first (transport-aware,
@@ -525,7 +525,7 @@ type HealthInfo struct {
 type DmsgPtyExecArgs struct {
 	RemotePK   cipher.PubKey
 	RemotePort uint16
-	Req        dmsgpty.CommandExecReq
+	Req        pty.CommandExecReq
 	// Scheme: "" (default — MultiDialer chain), "dmsg" (force dmsg
 	// only), or "skynet" (force skynet only). Unknown values
 	// return a clear error rather than silently falling back.

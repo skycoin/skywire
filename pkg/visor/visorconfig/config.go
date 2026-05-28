@@ -133,13 +133,13 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 
 // defaultDmsgPtyCLIAddr is the conventional unix-style temp-socket
 // path the visor's dmsgpty Host listens on. Hardcoded here rather
-// than calling pkg/dmsg/dmsgpty.DefaultCLIAddr so config.go stays
+// than calling pkg/dmsg/pty.DefaultCLIAddr so config.go stays
 // WASM-clean (dmsgpty's pty.go pulls in syscall.TIOCGWINSZ + friends
 // that don't exist under GOOS=js). Operators on Windows get the
 // right path written by cmd/skywire-cli/commands/config/gen.go,
-// which still calls dmsgpty.DefaultCLIAddr() in its native build.
+// which still calls pty.DefaultCLIAddr() in its native build.
 func defaultDmsgPtyCLIAddr() string {
-	return "/tmp/dmsgpty.sock"
+	return "/tmp/pty.sock"
 }
 
 // DmsgHTTPServers struct use to unmarshal dmsghttp file
