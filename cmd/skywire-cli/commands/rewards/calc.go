@@ -658,20 +658,33 @@ Architectures:
 			}
 		}
 
-		// Load bandwidth data
+		// Load bandwidth data. Prefer v2 (per-transport sender-side
+		// totals) so we can credit each visor only for bytes it actually
+		// sent, and only on transports where the counterparty is also
+		// reward-eligible. Old v1 files (bare {pk:bytes} map) still
+		// parse — they're aggregated, full sent+recv, and credited to
+		// BOTH edges with no counterparty filter, matching the
+		// pre-v2 behavior so historical rerun stays bit-exact.
 		bandwidthMap := make(map[string]uint64)
+		var bwTransports []TransportBW // populated only for v2
 		if requireBandwidth {
 			bwFile := fmt.Sprintf("%s/%s_bandwidth.json", transportHistPath, wdate)
-			if data, err := os.ReadFile(bwFile); err == nil { //nolint:gosec
-				if err := json.Unmarshal(data, &bandwidthMap); err != nil {
-					log.Warnf("Failed to parse bandwidth file %s: %v", bwFile, err)
-					requireBandwidth = false
-				} else {
-					log.Infof("Loaded bandwidth data for %d visors from %s", len(bandwidthMap), bwFile)
-				}
-			} else {
+			data, readErr := os.ReadFile(bwFile) //nolint:gosec
+			switch {
+			case readErr != nil:
 				log.Warnf("Bandwidth file not found: %s (bandwidth pool will be skipped)", bwFile)
 				requireBandwidth = false
+			default:
+				var v2 BandwidthData
+				if err := json.Unmarshal(data, &v2); err == nil && v2.Version >= BandwidthDataVersion {
+					bwTransports = v2.Transports
+					log.Infof("Loaded v2 bandwidth data: %d transports from %s", len(bwTransports), bwFile)
+				} else if err := json.Unmarshal(data, &bandwidthMap); err == nil {
+					log.Infof("Loaded v1 bandwidth data for %d visors from %s (legacy aggregated format — no counterparty eligibility filter)", len(bandwidthMap), bwFile)
+				} else {
+					log.Warnf("Failed to parse bandwidth file %s: %v", bwFile, err)
+					requireBandwidth = false
+				}
 			}
 		}
 
@@ -801,6 +814,43 @@ Architectures:
 				fmt.Printf("%s, %s, %s, %.6f, %.6f, %s, %s, %s, %s \n", ni.SkyAddr, ni.PK, ni.Reason, ni.Share, ni.Reward, ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces)
 			}
 			return
+		}
+
+		// v2 bandwidth: aggregate per-edge sent bytes over the eligible
+		// set only. A transport contributes iff BOTH edges passed the
+		// pool 1 eligibility check above (valid survey, allowed arch,
+		// valid skyaddr, non-hypervisor, met transport requirement, met
+		// uptime). The bandwidthMap was empty during the eligibility
+		// loop in this path, so initial ni.Bandwidth=0 for everyone —
+		// we re-assign from the filtered aggregation here.
+		//
+		// Why this gate matters: pre-fix, a single eligible visor could
+		// dominate pool 2 by pushing traffic through transports to
+		// throwaway counterparties (wrong arch, no skyaddr, no survey,
+		// sub-75% uptime — none of which would ever earn rewards). The
+		// other-edge filter forecloses that pattern entirely.
+		if requireBandwidth && bwTransports != nil {
+			eligibleSet := make(map[string]struct{}, len(nodesInfos1))
+			for _, ni := range nodesInfos1 {
+				eligibleSet[ni.PK] = struct{}{}
+			}
+			creditedTransports := 0
+			for _, tp := range bwTransports {
+				if _, okA := eligibleSet[tp.A]; !okA {
+					continue
+				}
+				if _, okB := eligibleSet[tp.B]; !okB {
+					continue
+				}
+				bandwidthMap[tp.A] += tp.SentA
+				bandwidthMap[tp.B] += tp.SentB
+				creditedTransports++
+			}
+			for i := range nodesInfos1 {
+				nodesInfos1[i].Bandwidth = bandwidthMap[nodesInfos1[i].PK]
+			}
+			log.Infof("v2 bandwidth filter: %d/%d transports between two pool-1-eligible visors, sender-side credit applied",
+				creditedTransports, len(bwTransports))
 		}
 
 		// Calculate daily reward amount
