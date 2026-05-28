@@ -858,3 +858,26 @@ func (mt *ManagedTransport) Remote() cipher.PubKey { return mt.rPK }
 
 // Type returns the transport type.
 func (mt *ManagedTransport) Type() types.Type { return mt.client.Type() }
+
+// RemoteIP returns the host portion of the underlying transport's
+// remote raw address (e.g. "1.2.3.4" for an stcpr transport to
+// 1.2.3.4:5000). Returns "" when the transport isn't serving, or
+// the underlying type doesn't have an IP-shaped remote (notably
+// dmsg, which relays through a server rather than directly to the
+// peer). Used by the routing-policy provider's Geo() lookup so an
+// operator's policy can branch on `geo.country(pk) == "ID"`.
+func (mt *ManagedTransport) RemoteIP() string {
+	tp := mt.getTransport()
+	if tp == nil {
+		return ""
+	}
+	addr := tp.RemoteRawAddr()
+	if addr == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return ""
+	}
+	return host
+}
