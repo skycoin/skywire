@@ -165,6 +165,7 @@ case explicitly.
 | `business-hours.star` | 9–17 weekdays: only SG/JP/ID; off-hours: anything. |
 | `vpn-killswitch.star` | VPN: opt into mux BeforeDial, refuse non-direct-IP legs SelectRoute. |
 | `friday-id.star` | RFC headline: Friday 17:00 → Indonesia-transit only. |
+| `friday-id-direct-fallback.star` | Same as friday-id but `fallback="direct"` when filter wipes candidates — graceful when peer has a direct transport. |
 | `asymmetric-stcpr-sudph.star` | Forward stcpr (TCP), reverse sudph (UDP); different mux/min-hops per direction. |
 | `smoke-test.star` | Visible policy used for integration testing — logs every dial. |
 

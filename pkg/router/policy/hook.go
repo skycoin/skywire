@@ -100,9 +100,10 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 		return router.DialAdjustment{}, nil
 	}
 	rctx := RoutingContext{
-		App:    info.AppName,
-		PeerPK: info.PeerPK.Hex(),
-		Port:   uint16(info.RPort),
+		App:          info.AppName,
+		PeerPK:       info.PeerPK.Hex(),
+		Port:         uint16(info.RPort),
+		CLIOverrides: info.CLIOverrides,
 	}
 	spec, err := loader.Decide(ctx, rctx, nil)
 	if err != nil {
@@ -181,6 +182,7 @@ func (h *Hook) SelectRoute(ctx context.Context, info router.DialInfo, forward, r
 		App:               info.AppName,
 		PeerPK:            info.PeerPK.Hex(),
 		Port:              uint16(info.RPort),
+		CLIOverrides:      info.CLIOverrides,
 		ReverseCandidates: policyReverse,
 	}
 	spec, err := loader.Decide(ctx, rctx, policyCandidates)
