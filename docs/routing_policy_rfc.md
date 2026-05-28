@@ -255,7 +255,7 @@ The callback runs under the same step-ceiling budget as `decide_route` (`Default
 
 4. ~~**Layer 2 contract finalization.** What exactly is the distribution descriptor's vocabulary?~~ **Resolved** — see Phase 5 table above. Vocabulary is `""` / `"auto"` / `"round-robin"` / `"equal"` / `"weighted: f1, f2, ..."` / `"size-threshold: N"`. Unknown descriptors error at parse time so future additions stay unambiguous.
 
-5. **Policy granularity vs. CLI flags.** Today's `--routes N --min-hops K` per-CLI-invocation overrides interact with policies how? Suggested rule: CLI flags supplant the policy's matching fields on that invocation; the operator's policy sees `ctx.cli_overrides` so they can choose to honor or override the flag.
+5. ~~**Policy granularity vs. CLI flags.**~~ **Resolved** — policy is source of truth: `applyAdjustment` only overrides `DialOptions` when the policy explicitly sets a non-zero value. CLI's `--routes N --min-hops K` etc. populate `opts` first; the policy script reads them via `ctx.cli_overrides` (snake_case keys: `mux_routes`, `min_hops`, `forward_mux_routes`, ...). The policy chooses to honor by returning empty `RouteSpec()` (CLI values stick) or override by returning explicit values (policy wins). The earlier proposal had CLI > policy; the implementation went the other way and operators preferred it that way.
 
 ## Decision checklist
 
