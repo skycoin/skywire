@@ -146,7 +146,7 @@ def decide_route(ctx, candidates):
 		{Hops: []string{hopA, hopB}}, // DE, ID — should win
 		{Hops: []string{hopC}},       // US
 	}
-	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "skychat", PeerPK: pk}, cands)
+	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "skychat", PeerPK: pk}, cands, nil)
 	if err != nil {
 		t.Fatalf("SelectRoute: %v", err)
 	}
@@ -182,7 +182,7 @@ def decide_route(ctx, candidates):
 	pk := cipher.PubKey{}
 	pk[0] = 0x02
 	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk},
-		[]router.CandidateInfo{{Hops: []string{hopA}}})
+		[]router.CandidateInfo{{Hops: []string{hopA}}}, nil)
 	if err != nil {
 		t.Fatalf("SelectRoute: %v", err)
 	}
@@ -336,7 +336,7 @@ def decide_route(ctx, candidates):
 
 	// Single-kind route → round-robin
 	cands := []router.CandidateInfo{{Hops: []string{hopA}}}
-	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk}, cands)
+	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk}, cands, nil)
 	if err != nil {
 		t.Fatalf("SelectRoute single-kind: %v", err)
 	}
@@ -368,7 +368,7 @@ def decide_route(ctx, candidates):
 	pk := cipher.PubKey{}
 	pk[0] = 0x02
 	cands := []router.CandidateInfo{{Hops: []string{hopA}}}
-	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk}, cands)
+	sel, err := h.SelectRoute(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk}, cands, nil)
 	if err != nil {
 		t.Fatalf("SelectRoute: %v", err)
 	}
@@ -377,5 +377,97 @@ def decide_route(ctx, candidates):
 	}
 	if logged == "" {
 		t.Errorf("expected the bad distribution to be logged")
+	}
+}
+
+func TestHook_AsymmetricForwardReverseChosen(t *testing.T) {
+	// Pick forward by hop[0]=="stcpr_hop"; pick reverse by
+	// hop[0]=="sudph_hop". Script branches on transport_kinds.
+	src := `
+def decide_route(ctx, candidates):
+    if not candidates:
+        return RouteSpec()
+    fwd = None
+    for c in candidates:
+        if "stcpr" in c.transport_kinds:
+            fwd = c
+            break
+    rev = None
+    for c in ctx.reverse_candidates:
+        if "sudph" in c.transport_kinds:
+            rev = c
+            break
+    return RouteSpec(chosen=fwd, reverse_chosen=rev)
+`
+	hopStcpr := "020000000000000000000000000000000000000000000000000000000000000011"
+	hopSudph := "020000000000000000000000000000000000000000000000000000000000000022"
+
+	prov := NewFakeProvider().
+		SetKind(hopStcpr, "stcpr").
+		SetKind(hopSudph, "sudph").
+		SetGeo(hopStcpr, "DE").
+		SetGeo(hopSudph, "ID")
+
+	loader, err := NewLoader(src, WithProvider(prov))
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader, WithHookProvider(prov))
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+
+	forward := []router.CandidateInfo{
+		{Hops: []string{hopSudph}}, // first: sudph
+		{Hops: []string{hopStcpr}}, // second: stcpr — script wants this for forward
+	}
+	reverse := []router.CandidateInfo{
+		{Hops: []string{hopStcpr}}, // first: stcpr
+		{Hops: []string{hopSudph}}, // second: sudph — script wants this for reverse
+	}
+
+	sel, err := h.SelectRoute(context.Background(),
+		router.DialInfo{AppName: "vpn-client", PeerPK: pk}, forward, reverse)
+	if err != nil {
+		t.Fatalf("SelectRoute: %v", err)
+	}
+	if sel.Chosen != 1 {
+		t.Errorf("forward Chosen=%d, want 1 (stcpr)", sel.Chosen)
+	}
+	if sel.ReverseChosen != 1 {
+		t.Errorf("ReverseChosen=%d, want 1 (sudph)", sel.ReverseChosen)
+	}
+}
+
+func TestHook_BeforeDial_AsymmetricMuxAndMinHops(t *testing.T) {
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec(forward_mux=1, reverse_mux=4, forward_min_hops=1, reverse_min_hops=3)
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	adj, err := h.BeforeDial(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.ForwardMuxRoutes != 1 {
+		t.Errorf("ForwardMuxRoutes=%d, want 1", adj.ForwardMuxRoutes)
+	}
+	if adj.ReverseMuxRoutes != 4 {
+		t.Errorf("ReverseMuxRoutes=%d, want 4", adj.ReverseMuxRoutes)
+	}
+	if adj.ForwardMinHops != 1 {
+		t.Errorf("ForwardMinHops=%d, want 1", adj.ForwardMinHops)
+	}
+	if adj.ReverseMinHops != 3 {
+		t.Errorf("ReverseMinHops=%d, want 3", adj.ReverseMinHops)
 	}
 }
