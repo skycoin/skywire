@@ -536,10 +536,21 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 // after establishMuxRoutes so the distribution applies to every
 // leg, including ones added by the mux loop.
 func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
-	if rg.mux == nil || rg.mux.tpSelector == nil {
+	if cfg.Mode == DistributionUnset {
 		return
 	}
-	if cfg.Mode == DistributionUnset {
+	if rg.mux == nil || rg.mux.tpSelector == nil {
+		// Policy asked for a distribution but the route group is
+		// single-leg (peer didn't negotiate CapMux, or mux loop
+		// failed). Distribution is meaningless without multiple
+		// legs; log at debug so operators can correlate "I set
+		// a distribution and nothing happened" with the actual
+		// reason.
+		if rg.logger != nil {
+			rg.logger.
+				WithField("distribution", cfg.Mode.String()).
+				Debug("Route group distribution skipped: not mux-enabled (single leg).")
+		}
 		return
 	}
 	var wm WeightMode
@@ -560,7 +571,20 @@ func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
 	rg.mu.Lock()
 	rg.mux.tpSelector.SetMode(wm)
 	rg.mux.tpSelector.Rebuild(rg.tps)
+	legs := len(rg.tps)
 	rg.mu.Unlock()
+	if rg.logger != nil {
+		entry := rg.logger.
+			WithField("distribution", cfg.Mode.String()).
+			WithField("legs", legs)
+		if cfg.Mode == DistributionWeighted {
+			entry = entry.WithField("weights", cfg.Weights)
+		}
+		if cfg.Mode == DistributionSizeThreshold {
+			entry = entry.WithField("size_threshold", cfg.SizeThreshold)
+		}
+		entry.Debug("Route group distribution applied.")
+	}
 }
 
 // nextTransport selects the next transport/rule pair. When mux is enabled and
