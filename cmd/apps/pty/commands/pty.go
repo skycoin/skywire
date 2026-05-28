@@ -21,7 +21,7 @@
 //
 // Code layout: each mode here is a **thin delegating wrapper** —
 // disables flag parsing and forwards all args (including --help)
-// to the underlying `cmd/dmsg/dmsgpty-{host,ui,cli}/` RootCmd via
+// to the underlying `cmd/dmsg/pty-{host,ui,cli}/` RootCmd via
 // SetArgs + Execute. The dmsg subcommand tree continues to mount
 // those RootCmds as `dmsg pty <cli|host|ui>` (the standalone dmsg
 // binary needs that surface intact); the skywire-binary import
@@ -37,9 +37,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	dpc "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-cli/commands"
-	dph "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-host/commands"
-	dpu "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-ui/commands"
+	dpc "github.com/skycoin/skywire/cmd/dmsg/pty-cli/commands"
+	dph "github.com/skycoin/skywire/cmd/dmsg/pty-host/commands"
+	dpu "github.com/skycoin/skywire/cmd/dmsg/pty-ui/commands"
 )
 
 // RootCmd is the `app pty` command. Mounted onto the top-level
