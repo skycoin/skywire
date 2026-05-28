@@ -230,9 +230,9 @@ func marshalV1(w *strings.Builder, v *visorconfig.V1, indent int) {
 		marshalDmsg(w, v.Dmsg, o.indent+1)
 	}
 
-	if v.Dmsgpty != nil {
+	if v.Pty != nil {
 		o.field("dmsgpty")
-		marshalDmsgpty(w, v.Dmsgpty, o.indent+1)
+		marshalPty(w, v.Pty, o.indent+1)
 	}
 	if v.Dmsgscp != nil {
 		o.field("dmsgscp")
@@ -549,7 +549,7 @@ func marshalDiscServer(w *strings.Builder, s *disc.Server, indent int) {
 	o.close()
 }
 
-func marshalDmsgpty(w *strings.Builder, d *visorconfig.Dmsgpty, indent int) {
+func marshalPty(w *strings.Builder, d *visorconfig.Pty, indent int) {
 	o := newObj(w, indent)
 	o.field("dmsg_port")
 	writeUint(w, uint64(d.DmsgPort))
