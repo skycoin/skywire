@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 )
 
 var unsafe = false
@@ -36,7 +36,7 @@ var confgenCmd = &cobra.Command{
 			return fmt.Errorf("failed to get config: %w", err)
 		}
 		if unsafe {
-			return dmsgpty.WriteConfig(conf, confPath)
+			return pty.WriteConfig(conf, confPath)
 		}
 
 		if _, err := os.Stat(confPath); err == nil {
@@ -45,6 +45,6 @@ var confgenCmd = &cobra.Command{
 			return fmt.Errorf("failed to check if config file exists: %w", err)
 		}
 
-		return dmsgpty.WriteConfig(conf, confPath)
+		return pty.WriteConfig(conf, confPath)
 	},
 }

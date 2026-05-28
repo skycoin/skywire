@@ -14,8 +14,8 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -47,7 +47,7 @@ func init() {
 	execCmd.Flags().StringArrayVarP(&execEnv, "env", "e", nil, "extra env var KEY=VALUE; repeatable")
 }
 
-// RootCmd is the command that contains sub-commands which interacts with dmsgpty.
+// RootCmd is the command that contains sub-commands which interacts with pty.
 var RootCmd = &cobra.Command{
 	Use:   "dmsgpty",
 	Short: "Interact with remote visors",
@@ -83,12 +83,12 @@ var shellCmd = &cobra.Command{
 	Short: "Start dmsgpty session",
 	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cli := dmsgpty.DefaultCLI()
+		cli := pty.DefaultCLI()
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
-		return cli.StartRemotePty(ctx, addr, uint16(port), dmsgpty.DefaultCmd)
+		return cli.StartRemotePty(ctx, addr, uint16(port), pty.DefaultCmd)
 	},
 }
 
@@ -115,7 +115,7 @@ success, the remote's exit code on non-zero exit, 124 on timeout, 1 on
 RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 	Args: cobra.MinimumNArgs(2),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cli := dmsgpty.DefaultCLI()
+		cli := pty.DefaultCLI()
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		timeout, err := time.ParseDuration(execTimeout)

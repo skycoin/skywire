@@ -1,7 +1,7 @@
 // Package clissh cmd/skywire-cli/commands/ssh/ssh.go — `skywire cli ssh`,
 // the OpenSSH-equivalent client over skywire identity.
 //
-// Maps onto the existing dmsgpty.CLI direct-TCP path (PR #2559/#2560):
+// Maps onto the existing pty.CLI direct-TCP path (PR #2559/#2560):
 // XK noise handshake pins the server PK, the server side authorizes
 // the client PK against the dmsgpty whitelist (= authorized_keys
 // equivalent), and the resulting stream runs the dmsgpty
@@ -25,7 +25,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -73,7 +73,7 @@ var RootCmd = &cobra.Command{
 	Long: `skywire cli ssh — OpenSSH-equivalent client over skywire identity.
 
 Dials a peer's direct-TCP dmsgpty endpoint (the surface exposed by
-'skywire cli sshd' or by 'dmsgpty.ssh_listen' in the visor config),
+'skywire cli sshd' or by 'pty.ssh_listen' in the visor config),
 runs an XK noise handshake pinning the server's PK, and proxies an
 interactive shell or a one-shot exec.
 
@@ -122,14 +122,14 @@ ssh-shaped alias over that path.`,
 		ctx, cancel := cmdutil.SignalContext(context.Background(), nil)
 		defer cancel()
 
-		cli := dmsgpty.DefaultCLI()
+		cli := pty.DefaultCLI()
 
 		// Interactive when no positional command follows.
 		if len(args) == 1 {
 			if sshNoPty {
 				return fmt.Errorf("ssh: --no-pty requires a command to exec")
 			}
-			return (&cli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, dmsgpty.DefaultCmd)
+			return (&cli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, pty.DefaultCmd)
 		}
 
 		// Exec mode.
@@ -245,7 +245,7 @@ func resolveSSHIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, 
 // here so this command can stand alone if dmsg/pty.go is ever split
 // into a separate binary. Local exit code mirrors the remote
 // command's exit code (0 / N / 124 timeout / 1 RPC error).
-func reportSSHExec(cmd *cobra.Command, resp *dmsgpty.CommandExecResult) {
+func reportSSHExec(cmd *cobra.Command, resp *pty.CommandExecResult) {
 	if len(resp.Stdout) > 0 {
 		_, _ = cmd.OutOrStdout().Write(resp.Stdout) //nolint:errcheck
 	}

@@ -31,8 +31,8 @@ import (
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
@@ -102,21 +102,21 @@ type Visor struct {
 	awaitSetupListener *dmsg.Listener     // pre-opened DmsgAwaitSetupPort listener; consumed by initRouter
 
 	// dmsgWL is the live, in-memory whitelist shared with the running
-	// dmsgpty.Host and (when scp is enabled) dmsgscp.Host. VisorCat's
+	// pty.Host and (when scp is enabled) dmsgscp.Host. VisorCat's
 	// listen-mode auth reads this same reference so runtime mutations
-	// made via dmsgpty.WhitelistGateway are honored without rebuilding
+	// made via pty.WhitelistGateway are honored without rebuilding
 	// from v.conf. Mirrors scp's precedence: when Dmsgscp.Whitelist is
 	// non-empty, this holds the scp-specific list (so cat behaves like
 	// scp); otherwise it holds the dmsgpty list that scp also reuses.
 	// nil when initDmsgpty was skipped (Dmsgpty config absent).
-	dmsgWL dmsgpty.Whitelist
+	dmsgWL pty.Whitelist
 
-	// dmsgPty is the live dmsgpty.Host instance, exposed so the visor
+	// dmsgPty is the live pty.Host instance, exposed so the visor
 	// RPC layer can drive remote pty operations (Exec, list) without
 	// going back through the host's CLI control listener (the unix
 	// socket / TCP loopback the standalone dmsgpty-cli uses). nil when
 	// initDmsgpty was skipped.
-	dmsgPty *dmsgpty.Host
+	dmsgPty *pty.Host
 
 	// DMSG tracker state
 	dmsgTracker dtmState

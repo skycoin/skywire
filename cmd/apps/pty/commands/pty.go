@@ -12,7 +12,7 @@
 //     wrapper that forces --no-dmsg on `dmsg`; --addr is required
 //     and seeds --tcp-listen.
 //   - http    HTTP/WebSocket bridge — serves a real PTY in a
-//     browser via the dmsgpty.UI machinery. Bridges to a running
+//     browser via the pty.UI machinery. Bridges to a running
 //     mode-1/2/3 pty server via --hnet + --haddr.
 //
 // Plus an `exec` subcommand that dials a remote pty server and

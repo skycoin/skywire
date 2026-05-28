@@ -66,7 +66,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -88,7 +88,7 @@ var _ appcommon.LogStore
 var _ = appnet.Addr{}
 var _ appserver.AppState
 var _ cipher.PubKey
-var _ dmsgpty.CommandExecResult
+var _ pty.CommandExecResult
 var _ netutil.EphemeralDiagResult
 var _ setupmetrics.Metrics
 var _ routing.Rule

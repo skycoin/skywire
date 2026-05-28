@@ -24,8 +24,8 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 )
 
 const defaultEnvPrefix = "DMSGPTY"
@@ -39,9 +39,9 @@ var (
 	// persistent flags
 	dmsgDisc     = dmsg.DiscAddr(false)
 	dmsgSessions = dmsg.DefaultMinSessions
-	dmsgPort     = dmsgpty.DefaultPort
-	cliNet       = dmsgpty.DefaultCLINet
-	cliAddr      = dmsgpty.DefaultCLIAddr()
+	dmsgPort     = pty.DefaultPort
+	cliNet       = pty.DefaultCLINet
+	cliAddr      = pty.DefaultCLIAddr()
 	sk           cipher.SecKey
 	pk           cipher.PubKey
 	wl           cipher.PubKeys
@@ -162,7 +162,7 @@ var RootCmd = &cobra.Command{
 		}
 
 		// Prepare whitelist (needed regardless of dmsg/tcp/socket-activation mode).
-		wl, err := dmsgpty.NewConfigWhitelist(confPath)
+		wl, err := pty.NewConfigWhitelist(confPath)
 		if err != nil {
 			return fmt.Errorf("failed to init whitelist: %w", err)
 		}
@@ -192,7 +192,7 @@ var RootCmd = &cobra.Command{
 
 		// Prepare dmsgpty host. dmsgC may be nil in --no-dmsg mode;
 		// the TCP entry points are explicitly nil-safe (see host_tcp.go).
-		host := dmsgpty.NewHost(dmsgC, wl)
+		host := pty.NewHost(dmsgC, wl)
 
 		// Socket-activation single-conn mode: read inherited FD,
 		// wrap as net.Conn, run one session pipeline, exit. The unit
@@ -279,28 +279,28 @@ func Execute() {
 	dmsgclient.Execute(RootCmd)
 }
 
-func configFromJSON(conf dmsgpty.Config) (dmsgpty.Config, error) {
-	var jsonConf dmsgpty.Config
+func configFromJSON(conf pty.Config) (pty.Config, error) {
+	var jsonConf pty.Config
 
 	if confStdin {
 		if err := json.NewDecoder(os.Stdin).Decode(&jsonConf); err != nil {
-			return dmsgpty.Config{}, fmt.Errorf("flag 'confstdin' is set, but config read from stdin is invalid: %w", err)
+			return pty.Config{}, fmt.Errorf("flag 'confstdin' is set, but config read from stdin is invalid: %w", err)
 		}
 	}
 
 	if confPath != "" {
 		f, err := os.Open(confPath)
 		if err != nil {
-			return dmsgpty.Config{}, fmt.Errorf("failed to open config file: %w", err)
+			return pty.Config{}, fmt.Errorf("failed to open config file: %w", err)
 		}
 		if err := json.NewDecoder(f).Decode(&jsonConf); err != nil {
-			return dmsgpty.Config{}, fmt.Errorf("flag 'confpath' is set, but we failed to read config from specified path: %w", err)
+			return pty.Config{}, fmt.Errorf("flag 'confpath' is set, but we failed to read config from specified path: %w", err)
 		}
 	}
 
 	if jsonConf.SK != "" {
 		if err := sk.Set(jsonConf.SK); err != nil {
-			return dmsgpty.Config{}, fmt.Errorf("provided SK is invalid: %w", err)
+			return pty.Config{}, fmt.Errorf("provided SK is invalid: %w", err)
 		}
 	}
 
@@ -310,7 +310,7 @@ func configFromJSON(conf dmsgpty.Config) (dmsgpty.Config, error) {
 
 	if jsonConf.PK != "" {
 		if err := pk.Set(jsonConf.PK); err != nil {
-			return dmsgpty.Config{}, fmt.Errorf("provided PK is invalid: %w", err)
+			return pty.Config{}, fmt.Errorf("provided PK is invalid: %w", err)
 		}
 	}
 
@@ -321,7 +321,7 @@ func configFromJSON(conf dmsgpty.Config) (dmsgpty.Config, error) {
 	if len(jsonConf.WL) > 0 {
 		ustString := strings.Join(jsonConf.WL, ",")
 		if err := wl.Set(ustString); err != nil {
-			return dmsgpty.Config{}, fmt.Errorf("provided WL's are invalid: %w", err)
+			return pty.Config{}, fmt.Errorf("provided WL's are invalid: %w", err)
 		}
 	}
 
@@ -346,17 +346,17 @@ func configFromJSON(conf dmsgpty.Config) (dmsgpty.Config, error) {
 	}
 
 	if conf.CLIAddr != "" {
-		conf.CLIAddr = dmsgpty.ParseWindowsEnv(jsonConf.CLIAddr)
+		conf.CLIAddr = pty.ParseWindowsEnv(jsonConf.CLIAddr)
 	}
 
 	if conf.CLIAddr == "" {
-		conf.CLIAddr = dmsgpty.DefaultCLIAddr()
+		conf.CLIAddr = pty.DefaultCLIAddr()
 	}
 
 	return conf, nil
 }
 
-func fillConfigFromENV(conf dmsgpty.Config) (dmsgpty.Config, error) {
+func fillConfigFromENV(conf pty.Config) (pty.Config, error) {
 
 	if val, ok := os.LookupEnv(envPrefix + "_DMSGDISC"); ok {
 		conf.DmsgDisc = val
@@ -391,7 +391,7 @@ func fillConfigFromENV(conf dmsgpty.Config) (dmsgpty.Config, error) {
 	return conf, nil
 }
 
-func fillConfigFromFlags(conf dmsgpty.Config) dmsgpty.Config {
+func fillConfigFromFlags(conf pty.Config) pty.Config {
 	if dmsgDisc != dmsg.DiscAddr(false) {
 		conf.DmsgDisc = dmsgDisc
 	}
@@ -400,15 +400,15 @@ func fillConfigFromFlags(conf dmsgpty.Config) dmsgpty.Config {
 		conf.DmsgSessions = dmsgSessions
 	}
 
-	if dmsgPort != dmsgpty.DefaultPort {
+	if dmsgPort != pty.DefaultPort {
 		conf.DmsgPort = dmsgPort
 	}
 
-	if cliNet != dmsgpty.DefaultCLINet {
+	if cliNet != pty.DefaultCLINet {
 		conf.CLINet = cliNet
 	}
 
-	if cliAddr != dmsgpty.DefaultCLIAddr() {
+	if cliAddr != pty.DefaultCLIAddr() {
 		conf.CLIAddr = cliAddr
 	}
 
@@ -447,15 +447,15 @@ func loadSKFromVisorConfig(path string) error {
 }
 
 // getConfig sources variables in the following precedence order: flags, env, config, default.
-func getConfig(cmd *cobra.Command, skGen bool) (dmsgpty.Config, error) {
-	conf := dmsgpty.DefaultConfig()
+func getConfig(cmd *cobra.Command, skGen bool) (pty.Config, error) {
+	conf := pty.DefaultConfig()
 
 	var err error
 	// Prepare how config file is sourced (if root command).
 	if cmd.Name() == cmdutil.RootCmdName() {
 		conf, err = configFromJSON(conf)
 		if err != nil {
-			return dmsgpty.Config{}, fmt.Errorf("failed to read config from JSON: %w", err)
+			return pty.Config{}, fmt.Errorf("failed to read config from JSON: %w", err)
 		}
 	}
 	conf, err = fillConfigFromENV(conf)

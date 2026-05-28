@@ -22,9 +22,9 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/tpviz"
@@ -997,7 +997,7 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 }
 
 type dmsgPtyUI struct {
-	PtyUI *dmsgpty.UI
+	PtyUI *pty.UI
 }
 
 func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
@@ -1009,12 +1009,12 @@ func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
 	// us and the visor.
 	ptyDialer := SkynetFirstUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
 	return &dmsgPtyUI{
-		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+		PtyUI: pty.NewUI(ptyDialer, pty.DefaultUIConfig()),
 	}
 }
 func setupLocalPtyUI(cliNet, cliAddr string) *dmsgPtyUI {
-	ptyDialer := dmsgpty.NetUIDialer(cliNet, cliAddr)
+	ptyDialer := pty.NetUIDialer(cliNet, cliAddr)
 	return &dmsgPtyUI{
-		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+		PtyUI: pty.NewUI(ptyDialer, pty.DefaultUIConfig()),
 	}
 }
