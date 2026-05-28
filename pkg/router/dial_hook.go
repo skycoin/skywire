@@ -132,6 +132,25 @@ const (
 	DistributionSizeThreshold
 )
 
+// String returns the stable label for a DistributionMode. Used
+// by router-side log fields so operator-facing log lines say
+// "round-robin" instead of "1".
+func (m DistributionMode) String() string {
+	switch m {
+	case DistributionUnset:
+		return "unset"
+	case DistributionRoundRobin:
+		return "round-robin"
+	case DistributionAuto:
+		return "auto"
+	case DistributionWeighted:
+		return "weighted"
+	case DistributionSizeThreshold:
+		return "size-threshold"
+	}
+	return "unknown"
+}
+
 // applyAdjustment is a helper used inside DialRoutes — applies
 // the hook's non-zero fields to opts. Returns ErrDialPolicyDropped
 // when the hook said "drop."

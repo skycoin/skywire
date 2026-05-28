@@ -72,10 +72,11 @@ func (r *router) DialRoutes(
 		} else if err := applyAdjustment(opts, adj); err != nil {
 			log.WithField("policy_decision", "drop").Info("Dial refused by routing policy.")
 			return nil, err
-		} else if adj.MuxRoutes > 0 || adj.MinHops > 0 {
+		} else if adj.MuxRoutes > 0 || adj.MinHops > 0 || adj.Distribution.Mode != DistributionUnset {
 			log.
 				WithField("policy_mux", adj.MuxRoutes).
 				WithField("policy_min_hops", adj.MinHops).
+				WithField("policy_distribution", adj.Distribution.Mode).
 				Debug("Routing policy adjusted dial opts.")
 		}
 	}
