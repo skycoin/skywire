@@ -24,12 +24,32 @@ import (
 // returns a no-op spec) rather than escaping to the default — the
 // per-app policy is the operator's intent for that app.
 type Hook struct {
-	loader *Loader
-	byApp  map[string]*Loader
+	loader   *Loader
+	byApp    map[string]*Loader
+	provider Provider // used for HopsGeo enrichment during SelectRoute
+}
+
+// HookOption configures a Hook at construction.
+type HookOption func(*Hook)
+
+// WithHookProvider supplies the Provider used to enrich per-route
+// candidate metadata (HopsGeo, TransportKinds) before the script's
+// decide_route function sees the candidates slice. Without this the
+// hook's SelectRoute still works, but every HopsGeo entry is "??"
+// and TransportKinds is empty — geographic / transport-kind filters
+// in the script would match nothing.
+func WithHookProvider(p Provider) HookOption {
+	return func(h *Hook) { h.provider = p }
 }
 
 // NewHook wraps a Loader as a DialHook.
-func NewHook(l *Loader) *Hook { return &Hook{loader: l} }
+func NewHook(l *Loader, opts ...HookOption) *Hook {
+	h := &Hook{loader: l}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
+}
 
 // RegisterApp attaches a per-app Loader that overrides the default
 // for dials originating from the named app. Safe to call only
@@ -84,4 +104,91 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 		MinHops:   spec.MinHops,
 		Fallback:  spec.Fallback,
 	}, nil
+}
+
+// SelectRoute implements router.RouteSelectingHook. Enriches the
+// router's bare CandidateInfo list with HopsGeo and TransportKinds
+// (via the Hook's Provider), passes the enriched candidates to the
+// script's decide_route function, and translates the returned
+// RouteSpec.Chosen back into an index for the router.
+//
+// Index translation: the script's Chosen is a *Candidate; we match
+// it back to the input candidates by Hops equality. Hops is the
+// stable key because it's the only field the script can't fabricate
+// (provider-derived fields are read-only inside Starlark).
+//
+// "drop" Fallback maps to RouteSelection.Drop. An empty Chosen
+// with no drop signal maps to Chosen=-1 (defer to router's pick).
+func (h *Hook) SelectRoute(ctx context.Context, info router.DialInfo, candidates []router.CandidateInfo) (router.RouteSelection, error) {
+	loader := h.loaderFor(info.AppName)
+	if loader == nil || !loader.IsActive() || len(candidates) == 0 {
+		return router.RouteSelection{Chosen: -1}, nil
+	}
+	prov := h.provider
+	if prov == nil {
+		prov = NopProvider()
+	}
+	policyCandidates := make([]Candidate, 0, len(candidates))
+	for _, c := range candidates {
+		geoCodes := make([]string, len(c.Hops))
+		kinds := make([]string, 0, len(c.Hops))
+		seenKinds := make(map[string]struct{}, len(c.Hops))
+		for i, pk := range c.Hops {
+			geoCodes[i] = prov.Geo(pk)
+			if k := prov.Kind(pk); k != "" {
+				if _, ok := seenKinds[k]; !ok {
+					kinds = append(kinds, k)
+					seenKinds[k] = struct{}{}
+				}
+			}
+		}
+		policyCandidates = append(policyCandidates, Candidate{
+			Hops:           append([]string(nil), c.Hops...),
+			HopsGeo:        geoCodes,
+			EstLatencyMs:   c.EstLatencyMs,
+			TransportKinds: kinds,
+		})
+	}
+	rctx := RoutingContext{
+		App:    info.AppName,
+		PeerPK: info.PeerPK.Hex(),
+		Port:   uint16(info.RPort),
+	}
+	spec, err := loader.Decide(ctx, rctx, policyCandidates)
+	if err != nil {
+		return router.RouteSelection{Chosen: -1}, err
+	}
+	if spec.Fallback == "drop" {
+		return router.RouteSelection{Drop: true, Chosen: -1}, nil
+	}
+	if spec.Chosen == nil {
+		return router.RouteSelection{Chosen: -1}, nil
+	}
+	idx := matchCandidate(policyCandidates, *spec.Chosen)
+	return router.RouteSelection{Chosen: idx}, nil
+}
+
+// matchCandidate finds the index of want in pool by Hops equality.
+// Returns -1 if no match — the script returned a fabricated
+// candidate that doesn't correspond to any input, in which case we
+// defer to the router's built-in pick.
+func matchCandidate(pool []Candidate, want Candidate) int {
+	for i, c := range pool {
+		if hopsEqual(c.Hops, want.Hops) {
+			return i
+		}
+	}
+	return -1
+}
+
+func hopsEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
