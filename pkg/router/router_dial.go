@@ -656,6 +656,26 @@ fetchRoutesAgain:
 	// but never iterated).
 	latencyFor := r.buildLatencyLookup(ctx, paths[forward], paths[backward])
 
+	// Drop any multihop candidate that contains a DMSG hop. A DMSG
+	// transport relays through a dmsg server (possibly chained via
+	// server-to-server forwarding) that neither endpoint can
+	// observe — using one in a multihop route means traffic could
+	// transit the same dmsg server multiple times with no way to
+	// detect it. Single-hop DMSG paths survive (direct DMSG dials
+	// are fine). If every candidate in either direction was DMSG-
+	// multihop, the disjoint-path pick below will fail and we'll
+	// fall through to calculateLocalRoutes (which applies the same
+	// filter at BFS construction time).
+	typeFor := r.buildTypeLookup(ctx, paths[forward], paths[backward])
+	if filtered := rejectDMSGMultihop(paths[forward], typeFor); len(filtered) != len(paths[forward]) {
+		log.Debugf("rejected %d DMSG-multihop forward candidate(s)", len(paths[forward])-len(filtered))
+		paths[forward] = filtered
+	}
+	if filtered := rejectDMSGMultihop(paths[backward], typeFor); len(filtered) != len(paths[backward]) {
+		log.Debugf("rejected %d DMSG-multihop reverse candidate(s)", len(paths[backward])-len(filtered))
+		paths[backward] = filtered
+	}
+
 	// Routing-policy candidate selection. When the configured
 	// DialHook also implements RouteSelectingHook, hand it the
 	// forward-direction candidates so the operator's script can
@@ -873,6 +893,97 @@ func (r *router) buildLatencyLookup(ctx context.Context, fwd, rev [][]routing.Ho
 	return func(id uuid.UUID) float64 {
 		return cache[id]
 	}
+}
+
+// buildTypeLookup constructs a TpID → transport-type lookup over the
+// union of TpIDs appearing in fwd and rev path candidates. Used by
+// rejectDMSGMultihop to drop route-finder responses that contain
+// DMSG hops in a multihop path — DMSG transports relay through a
+// dmsg server (and any server-to-server forwarding hops) that
+// neither endpoint of the route can observe.
+//
+// Sources mirror buildLatencyLookup: local transport manager first,
+// TPD GetTransportByID for hops the local visor doesn't own.
+// Returns "" for IDs that couldn't be resolved — the multihop
+// filter treats unknown as "not DMSG" (we can't prove it's bad,
+// so we let it through; the route still has to handshake which
+// will fail loudly if the type is actually a problem).
+func (r *router) buildTypeLookup(ctx context.Context, fwd, rev [][]routing.Hop) func(uuid.UUID) string {
+	unique := make(map[uuid.UUID]struct{})
+	for _, paths := range [][][]routing.Hop{fwd, rev} {
+		for _, p := range paths {
+			for _, h := range p {
+				unique[h.TpID] = struct{}{}
+			}
+		}
+	}
+	cache := make(map[uuid.UUID]string, len(unique))
+	for id := range unique {
+		if r.tm != nil {
+			if tp := r.tm.Transport(id); tp != nil {
+				cache[id] = string(tp.Entry.Type)
+				continue
+			}
+		}
+		if r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil {
+			entry, err := r.tm.Conf.DiscoveryClient.GetTransportByID(ctx, id)
+			if err == nil && entry != nil {
+				cache[id] = string(entry.Type)
+			}
+		}
+	}
+	return func(id uuid.UUID) string {
+		return cache[id]
+	}
+}
+
+// rejectDMSGMultihop returns paths with any multihop candidate
+// containing a DMSG hop removed. Single-hop DMSG candidates are
+// kept (direct DMSG dials are fine — both endpoints know who
+// they're talking to). Stable order — survivors retain their
+// original index, so downstream rank/pick logic isn't perturbed.
+//
+// Returns the input slice unchanged when nothing was filtered, to
+// avoid an allocation in the common case.
+func rejectDMSGMultihop(paths [][]routing.Hop, typeFor func(uuid.UUID) string) [][]routing.Hop {
+	if len(paths) == 0 || typeFor == nil {
+		return paths
+	}
+	anyDropped := false
+	for _, p := range paths {
+		if len(p) <= 1 {
+			continue
+		}
+		for _, h := range p {
+			if typeFor(h.TpID) == "dmsg" {
+				anyDropped = true
+				break
+			}
+		}
+		if anyDropped {
+			break
+		}
+	}
+	if !anyDropped {
+		return paths
+	}
+	out := make([][]routing.Hop, 0, len(paths))
+	for _, p := range paths {
+		if len(p) > 1 {
+			drop := false
+			for _, h := range p {
+				if typeFor(h.TpID) == "dmsg" {
+					drop = true
+					break
+				}
+			}
+			if drop {
+				continue
+			}
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // pathTouchesIntermediate reports whether route hops contain any PK
@@ -1130,8 +1241,22 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// Seed the BFS with the local transports (each is a 1-hop path
 	// from src to a direct neighbor). Sort for determinism — same
 	// seeding order across calls means same expansion order.
+	//
+	// DMSG seeds are dropped here on purpose. A DMSG transport
+	// relays through a dmsg server (and, since server-to-server
+	// forwarding landed, potentially a chain of dmsg servers) that
+	// neither end of the route can observe — the intermediate
+	// server is unaccounted-for in the transport entry. Using a
+	// DMSG hop anywhere in a multihop route would let data transit
+	// the same dmsg server multiple times with no way to detect it.
+	// Direct DMSG dials (1-hop, src→dst over a DMSG transport) are
+	// fine and were already handled above; the BFS only produces
+	// multihop paths, so we strictly require non-DMSG hops here.
 	seed := make([]bfsNode, 0, len(localTps))
 	for _, tp := range localTps {
+		if tp.tpType == "dmsg" {
+			continue
+		}
 		if _, hit := excludeIntermediates[tp.remotePK]; hit {
 			continue
 		}
@@ -1223,11 +1348,18 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 			expandedAtDepth[node.pk][level] = true
 			// Expand: every transport from this node to a new neighbor
 			// becomes a candidate next node, sorted by remote-PK for
-			// deterministic order.
+			// deterministic order. DMSG entries are skipped — see the
+			// seed-loop comment above; a DMSG hop anywhere in a
+			// multihop path makes the route unaccountable since the
+			// dmsg server (and any server-to-server hops) are
+			// invisible to both endpoints.
 			entries := transportsByEdge[node.pk]
 			children := make([]bfsNode, 0, len(entries))
 			for _, entry := range entries {
 				if entry == nil {
+					continue
+				}
+				if entry.Type == tptypes.DMSG {
 					continue
 				}
 				nextPK := entry.RemoteEdge(node.pk)
