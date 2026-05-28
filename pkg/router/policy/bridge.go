@@ -19,13 +19,102 @@ import (
 // in this set surface as "undefined" errors at parse time.
 func (e *Evaluator) preDeclared() starlark.StringDict {
 	return starlark.StringDict{
-		"datetime":  datetimeModule(e.clock),
-		"RouteSpec": starlark.NewBuiltin("RouteSpec", routeSpecCtor),
-		"Candidate": starlark.NewBuiltin("Candidate", candidateCtor),
-		// Future: "geo", "transports", "peers", "logging" go here.
-		// Each one's a *starlarkstruct.Module returning bound Go
-		// closures. Adding them is mechanical; deferred to Phase 3
-		// per the RFC.
+		"datetime":   datetimeModule(e.clock),
+		"geo":        geoModule(e.provider),
+		"transports": transportsModule(e.provider),
+		"peers":      peersModule(e.provider),
+		"logging":    loggingModule(e),
+		"RouteSpec":  starlark.NewBuiltin("RouteSpec", routeSpecCtor),
+		"Candidate":  starlark.NewBuiltin("Candidate", candidateCtor),
+	}
+}
+
+// geoModule exposes geographic lookups on peer PKs. Operators
+// write `geo.country(pk) == "ID"` to filter routes by intermediate
+// country. Returns "??" for unknown PKs so policies can branch on
+// it cleanly (`if geo.country(pk) != "??"`).
+func geoModule(p Provider) *starlarkstruct.Module {
+	return &starlarkstruct.Module{
+		Name: "geo",
+		Members: starlark.StringDict{
+			"country": starlark.NewBuiltin("country", oneStringArg(func(pk string) starlark.Value {
+				return starlark.String(p.Geo(pk))
+			})),
+		},
+	}
+}
+
+// transportsModule surfaces transport-tracker state. `latency(pk)`
+// returns ms; zero means unknown. `kind(pk)` returns "stcpr" etc.;
+// empty string means unknown. Both queries are memoized in the
+// Provider so calling them on every dial doesn't re-query.
+func transportsModule(p Provider) *starlarkstruct.Module {
+	return &starlarkstruct.Module{
+		Name: "transports",
+		Members: starlark.StringDict{
+			"latency": starlark.NewBuiltin("latency", oneStringArg(func(pk string) starlark.Value {
+				return starlark.MakeInt(p.Latency(pk))
+			})),
+			"kind": starlark.NewBuiltin("kind", oneStringArg(func(pk string) starlark.Value {
+				return starlark.String(p.Kind(pk))
+			})),
+		},
+	}
+}
+
+// peersModule surfaces the operator-configured trust list and the
+// visor's hypervisor list. Common patterns:
+//
+//	if peers.is_trusted(c.hops[-1]): ...
+//	if peers.is_hypervisor(ctx.peer_pk): mux = 4
+func peersModule(p Provider) *starlarkstruct.Module {
+	return &starlarkstruct.Module{
+		Name: "peers",
+		Members: starlark.StringDict{
+			"is_trusted": starlark.NewBuiltin("is_trusted", oneStringArg(func(pk string) starlark.Value {
+				return starlark.Bool(p.IsTrusted(pk))
+			})),
+			"is_hypervisor": starlark.NewBuiltin("is_hypervisor", oneStringArg(func(pk string) starlark.Value {
+				return starlark.Bool(p.IsHypervisor(pk))
+			})),
+		},
+	}
+}
+
+// loggingModule lets policies emit info / warn messages to the
+// visor's log pipeline. Messages flow through the evaluator's
+// configured logger (WithLogger). Per-script rate-limited so a
+// runaway policy can't log-flood the visor.
+func loggingModule(e *Evaluator) *starlarkstruct.Module {
+	return &starlarkstruct.Module{
+		Name: "logging",
+		Members: starlark.StringDict{
+			"info": starlark.NewBuiltin("info", oneStringArg(func(msg string) starlark.Value {
+				e.logger("policy %s: info: %s", e.source, msg)
+				return starlark.None
+			})),
+			"warn": starlark.NewBuiltin("warn", oneStringArg(func(msg string) starlark.Value {
+				e.logger("policy %s: warn: %s", e.source, msg)
+				return starlark.None
+			})),
+		},
+	}
+}
+
+// oneStringArg is a small helper that wraps a Go function taking
+// a string PK and returning a starlark.Value into a Starlark
+// builtin signature. Cuts the repetitive boilerplate in the
+// module definitions above.
+func oneStringArg(fn func(string) starlark.Value) func(*starlark.Thread, *starlark.Builtin, starlark.Tuple, []starlark.Tuple) (starlark.Value, error) {
+	return func(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
+		if len(args) != 1 {
+			return nil, fmt.Errorf("%s: expected 1 string arg, got %d", b.Name(), len(args))
+		}
+		s, ok := args[0].(starlark.String)
+		if !ok {
+			return nil, fmt.Errorf("%s: expected string, got %s", b.Name(), args[0].Type())
+		}
+		return fn(string(s)), nil
 	}
 }
 
