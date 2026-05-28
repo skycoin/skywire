@@ -35,18 +35,47 @@ sudo install -m 0644 docs/examples/routing-policies/app-mux.star \
    `candidates` argument is **empty**. The router honors:
    - `mux` — number of parallel mux legs
    - `min_hops` — minimum acceptable intermediate count
-   - `distribution` — per-packet distribution descriptor
+   - `distribution` — per-packet distribution descriptor (baseline)
    - `fallback="drop"` — refuse the dial outright
 2. **`SelectRoute`** — fires *after* the route-finder returns
    candidates. The `candidates` argument is populated. The router
    honors:
    - `chosen` — the candidate to use
+   - `distribution` — per-packet distribution descriptor (overrides
+     BeforeDial's when set; lets the script branch on the chosen
+     candidate's `transport_kinds` / `est_latency_ms` / `hops_geo`)
    - `fallback="drop"` — refuse the dial
 
-Distribution and mux **cannot be set** in `SelectRoute` (the
-router doesn't read those fields from that hook). So a policy
-that wants a specific distribution must set it in `BeforeDial`,
-which means it can't branch on candidate properties.
+`mux` and `min_hops` are BeforeDial-only — the route-finder query
+needs them before it runs, so they can't be reconsidered in
+SelectRoute. `distribution` can be set in either phase; when both
+set it, SelectRoute's value wins (it fires later in the flow and
+has more information).
+
+### Knowing the leg count
+
+In SelectRoute, the script sees the route-finder's disjoint
+candidates — `len(candidates)` is the maximum number of mux legs
+the router could potentially establish (capped further by the
+script's `mux` value and what `establishMuxRoutes` actually
+manages to negotiate). Use it to size `weighted: ...` arrays:
+
+```python
+def decide_route(ctx, candidates):
+    if not candidates:
+        return RouteSpec(mux=4, distribution="auto")
+    n = min(len(candidates), 4)
+    # Equal weights, n entries — matches the actual leg count.
+    weights = ", ".join(["1"] * n)
+    return RouteSpec(chosen=candidates[0], distribution="weighted: " + weights)
+```
+
+When `weighted: ...` weight count doesn't match the actual
+established leg count, the router logs a warning and the selector
+substitutes weight=1 for missing entries (or ignores trailing
+ones). There's no callback when a leg drops or is added after
+setup — the selector adapts internally (skips nil/closed
+transports) but the script's distribution config is set once.
 
 The canonical pattern:
 
@@ -106,18 +135,15 @@ opaque intermediary that neither endpoint can observe, possibly
 chained via server-to-server forwarding). So no distribution
 example needs to reason about DMSG legs; they can't be there.
 
-Distribution and mux are **BeforeDial-only** — they're not
-propagated from SelectRoute. So a distribution policy is
-necessarily static (`if ctx.app == "vpn-client": distribution = ...`).
-Dynamic per-route distribution selection isn't a thing today;
-the candidate's `transport_kinds` field is visible to the
-script but doesn't help with distribution because by the time
-the script sees it (SelectRoute), it's too late to set
-distribution.
+Distribution can be set in either BeforeDial or SelectRoute. A
+SelectRoute distribution overrides the BeforeDial one — useful
+when the script wants to branch on the chosen candidate's
+properties (`weighted-by-kind.star` demonstrates the pattern).
 
 | File | Use case |
 |---|---|
 | `weighted-static.star` | Static 3:1 weighted distribution for any mux dial. |
+| `weighted-by-kind.star` | Dynamic: stcpr+sudph → weighted; otherwise auto. |
 | `vpn-bulk-split.star` | VPN packets > 1400B → wide-pipe leg; small → RR rest. |
 | `force-equal-rt.star` | Real-time apps force equal RR (lower jitter than auto). |
 | `friday-id-mux.star` | Friday-ID combined with VPN size-threshold split. |
