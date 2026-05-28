@@ -320,7 +320,7 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	tp, rule, leg, err := rg.nextTransport(len(p))
+	tp, rule, leg, err := rg.nextTransport(p)
 	if err != nil {
 		rg.mu.Unlock()
 		return 0, err
@@ -639,6 +639,13 @@ func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
 	case DistributionSizeThreshold:
 		wm = WeightModeSizeThreshold
 		rg.mux.tpSelector.SetSizeThreshold(cfg.SizeThreshold)
+	case DistributionSticky5Tuple:
+		wm = WeightModeSticky5Tuple
+	case DistributionLatencyAdaptive:
+		wm = WeightModeLatencyAdaptive
+	case DistributionDSCPPriority:
+		wm = WeightModeDSCPPriority
+		rg.mux.tpSelector.SetDSCPThreshold(cfg.DSCPThreshold)
 	default:
 		return
 	}
@@ -678,16 +685,16 @@ func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
 // round-robin when latency data is unavailable, and to index 0 for single
 // transport (legacy behavior).
 //
-// payloadSize is the upcoming packet's payload byte count, used
-// only by WeightModeSizeThreshold to route large payloads to the
-// wide-pipe leg. Pass 0 from callers that don't have a meaningful
-// size (control / retx paths).
+// payload is the upcoming packet's payload bytes (or nil for
+// control / retx paths). Used by payload-inspecting modes
+// (size-threshold, sticky:5tuple, latency-adaptive,
+// dscp-priority); other modes ignore it.
 //
 // Returns the leg index (position in rg.tps) so the caller can record
 // per-leg byte counts after a successful write; -1 for the
 // single-transport / legacy path.
 // NOTE: not thread-safe, caller must hold rg.mu.
-func (rg *RouteGroup) nextTransport(payloadSize int) (*transport.ManagedTransport, routing.Rule, int, error) {
+func (rg *RouteGroup) nextTransport(payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(rg.tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
 	}
@@ -699,7 +706,7 @@ func (rg *RouteGroup) nextTransport(payloadSize int) (*transport.ManagedTranspor
 	}
 
 	if rg.mux != nil && len(rg.tps) > 1 {
-		return rg.mux.selectTransport(rg.tps, rg.fwd, payloadSize)
+		return rg.mux.selectTransport(rg.tps, rg.fwd, payload)
 	}
 
 	if rg.tps[0] == nil {
@@ -1317,7 +1324,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 		}
 
 		rg.mu.Lock()
-		tp, rule, leg, err := rg.nextTransport(len(data))
+		tp, rule, leg, err := rg.nextTransport(data)
 		rg.mu.Unlock()
 		if err != nil {
 			return err
