@@ -85,10 +85,11 @@ values.`,
 		if err := json.Unmarshal([]byte(policyDialJSON), &dial); err != nil {
 			return fmt.Errorf("parse --dial JSON: %w", err)
 		}
-		rctx, candidates, err := dial.toContext()
+		rctx, err := dial.toContext()
 		if err != nil {
 			return err
 		}
+		var candidates []policy.Candidate
 		// Clock fixed to the dial's `now` (or system time if
 		// unset) so the test result is deterministic regardless
 		// of when the operator runs the command.
@@ -182,7 +183,7 @@ type dialJSON struct {
 	// uses empty candidates.
 }
 
-func (d dialJSON) toContext() (policy.RoutingContext, []policy.Candidate, error) {
+func (d dialJSON) toContext() (policy.RoutingContext, error) {
 	rctx := policy.RoutingContext{
 		App:    d.App,
 		PeerPK: d.PeerPK,
@@ -191,7 +192,7 @@ func (d dialJSON) toContext() (policy.RoutingContext, []policy.Candidate, error)
 	if d.Now != "" {
 		t, err := time.Parse(time.RFC3339, d.Now)
 		if err != nil {
-			return rctx, nil, fmt.Errorf("parse now: %w", err)
+			return rctx, fmt.Errorf("parse now: %w", err)
 		}
 		rctx.Now = t
 	} else if d.Friday {
@@ -202,7 +203,7 @@ func (d dialJSON) toContext() (policy.RoutingContext, []policy.Candidate, error)
 	} else {
 		rctx.Now = time.Now()
 	}
-	return rctx, nil, nil
+	return rctx, nil
 }
 
 type fixedClock struct{ t time.Time }

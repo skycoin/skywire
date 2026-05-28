@@ -6,10 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"go.starlark.net/starlark"
+	"go.starlark.net/syntax"
 )
 
 // DefaultTimeout is the per-call timeout enforced via a step
@@ -70,9 +70,9 @@ type Evaluator struct {
 
 	// globals holds the result of executing the script's
 	// top-level statements once. The decide_route function lives
-	// here. Cached so each Decide doesn't re-evaluate top-level.
-	globalsMu sync.Mutex
-	globals   starlark.StringDict
+	// here. Cached at NewEvaluator time and frozen, so concurrent
+	// Decide calls can read it without locking.
+	globals starlark.StringDict
 }
 
 // Option configures an Evaluator at construction.
@@ -136,8 +136,11 @@ func NewEvaluator(name, src string, opts ...Option) (*Evaluator, error) {
 		opt(e)
 	}
 
-	// Parse + compile once. Each Decide reuses the program.
-	_, program, err := starlark.SourceProgram(name, src, e.preDeclared().Has)
+	// Parse + compile once. Each Decide reuses the program. Use
+	// FileOptions explicitly so the linter doesn't flag the
+	// legacy SourceProgram which carries global-state side effects.
+	fileOpts := syntax.LegacyFileOptions()
+	_, program, err := starlark.SourceProgramOptions(fileOpts, name, src, e.preDeclared().Has)
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", name, err)
 	}
@@ -180,10 +183,10 @@ func NewEvaluator(name, src string, opts ...Option) (*Evaluator, error) {
 // goroutine-based wall-clock timeout (which had a race: the
 // cancel-watch goroutine could fire Cancel before starlark.Call
 // even started executing, surfacing as a spurious "computation
-// cancelled" error on scripts that actually take microseconds).
+// canceled" error on scripts that actually take microseconds).
 //
 // ctx is checked once at entry — if the caller's dial ctx is
-// already cancelled, we short-circuit to the fallback without
+// already canceled, we short-circuit to the fallback without
 // attempting evaluation. We don't propagate ctx cancellation
 // mid-script because the step cap already gives us a tight
 // upper bound on execution time.
