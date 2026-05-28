@@ -17,7 +17,9 @@
 // requested" error path and never reach the target's help text.
 package commands
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/spf13/cobra"
+)
 
 func newDelegateAppCmd(use, short string, target *cobra.Command) *cobra.Command {
 	return &cobra.Command{

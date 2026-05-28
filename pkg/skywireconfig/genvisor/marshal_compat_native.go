@@ -249,7 +249,7 @@ func marshalV1Native(w *strings.Builder, v *visorconfig.V1, indent int) {
 	}
 
 	if v.Pty != nil {
-		o.field("dmsgpty")
+		o.field("pty")
 		marshalPtyNative(w, v.Pty, o.indent+1)
 	}
 	if v.Dmsgscp != nil {
@@ -1078,6 +1078,8 @@ func marshalHypervisorNative(w *strings.Builder, h *visorconfig.HypervisorConfig
 	writeQuotedNative(w, h.DBPath)
 	o.field("enable_auth")
 	writeBoolNative(w, h.EnableAuth)
+	o.field("enable_pk_endpoint")
+	writeBoolNative(w, h.EnablePKEndpoint)
 	o.field("cookies")
 	marshalCookieConfigNative(w, h.Cookies, o.indent+1)
 	if h.DmsgPort != 0 {

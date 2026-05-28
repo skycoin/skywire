@@ -603,3 +603,75 @@ def on_leg_change(ctx, legs, change):
 		t.Errorf("dropped → Mode=%v, want DistributionUnset", dist.Mode)
 	}
 }
+
+func TestHook_BeforeDial_FallbackDirect(t *testing.T) {
+	// Script asks for fallback="direct"; the router-side
+	// applyAdjustment translates that into
+	// UseExistingTpOnly=true + MinHops=1 + zeroed mux.
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec(fallback="direct")
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	adj, err := h.BeforeDial(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.Fallback != "direct" {
+		t.Errorf("Fallback=%q, want %q", adj.Fallback, "direct")
+	}
+}
+
+func TestHook_BeforeDial_CLIOverridesVisible(t *testing.T) {
+	// Script reads ctx.cli_overrides and chooses to honor or
+	// override the operator's --routes flag.
+	src := `
+def decide_route(ctx, candidates):
+    n = ctx.cli_overrides.get("mux_routes")
+    if n == None:
+        return RouteSpec(mux=2)
+    # Operator passed --routes; honor it.
+    return RouteSpec(mux=int(n))
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	// No CLI overrides → script's default of 2.
+	adj, err := h.BeforeDial(context.Background(), router.DialInfo{AppName: "x", PeerPK: pk})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.MuxRoutes != 2 {
+		t.Errorf("no CLI: MuxRoutes=%d, want 2", adj.MuxRoutes)
+	}
+	// With CLI override → script honors it.
+	adj, err = h.BeforeDial(context.Background(), router.DialInfo{
+		AppName:      "x",
+		PeerPK:       pk,
+		CLIOverrides: map[string]string{"mux_routes": "8"},
+	})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.MuxRoutes != 8 {
+		t.Errorf("with CLI: MuxRoutes=%d, want 8 (honored)", adj.MuxRoutes)
+	}
+}
+
+func TestApplyAdjustment_FallbackDirect(t *testing.T) {
+	t.Skip("router-package internal — see router_test")
+}
