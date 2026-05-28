@@ -11,14 +11,14 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 )
 
 var (
-	hostNet  = dmsgpty.DefaultCLINet
-	hostAddr = dmsgpty.DefaultCLIAddr()
+	hostNet  = pty.DefaultCLINet
+	hostAddr = pty.DefaultCLIAddr()
 	addr     = ":8080"
-	conf     = dmsgpty.DefaultUIConfig()
+	conf     = pty.DefaultUIConfig()
 )
 
 func init() {
@@ -43,7 +43,7 @@ var RootCmd = &cobra.Command{
 			log.Printf("Failed to output build info: %v", err)
 		}
 
-		ui := dmsgpty.NewUI(dmsgpty.NetUIDialer(hostNet, hostAddr), conf)
+		ui := pty.NewUI(pty.NetUIDialer(hostNet, hostAddr), conf)
 		logrus.
 			WithField("addr", addr).
 			Info("Serving.")

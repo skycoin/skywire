@@ -36,7 +36,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -496,7 +496,7 @@ func (v *Visor) openCatListener(ctx context.Context, port uint16) (net.Listener,
 // both are non-nil, dmsg and skynet are raced), authorizes the peer
 // against wl, and returns the accepted conn. Unauthorized peers are
 // closed and the accept loop retries until ctx expires.
-func acceptCatRemote(ctx context.Context, wl dmsgpty.Whitelist, dmsgLis, skyLis net.Listener, log logrus.FieldLogger) (net.Conn, error) {
+func acceptCatRemote(ctx context.Context, wl pty.Whitelist, dmsgLis, skyLis net.Listener, log logrus.FieldLogger) (net.Conn, error) {
 	type acceptResult struct {
 		conn net.Conn
 		err  error
