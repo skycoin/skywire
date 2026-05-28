@@ -122,3 +122,9 @@ cli-comprehensive-test.md
 # Local MkDocs preview venv (created by docs-install-deps target)
 /.venv-docs/
 build-test/
+
+# Operator-local routing policies; checked-in examples live in docs/examples/routing-policies/
+/policies/
+
+# Operator-local routing policies; checked-in examples live in docs/examples/routing-policies/
+/policies/
