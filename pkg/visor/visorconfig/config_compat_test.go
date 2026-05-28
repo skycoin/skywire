@@ -45,6 +45,22 @@ func TestPtyCanonicalKeyWins(t *testing.T) {
 	}
 }
 
+// TestPtyUnmarshalPreservesPresetCommon: the loader pre-populates
+// V1.Common before calling json.Unmarshal (see ReadRaw in read.go).
+// V1.UnmarshalJSON must NOT wipe Common — visor.run panics on the
+// first conf.MasterLogger() call if it does. Regression test for
+// the "var alias v1Alias" zero-init mistake.
+func TestPtyUnmarshalPreservesPresetCommon(t *testing.T) {
+	sentinel := &Common{Version: "preset-sentinel"}
+	v := V1{Common: sentinel}
+	if err := json.Unmarshal([]byte(`{"pty": {"dmsg_port": 22}}`), &v); err != nil {
+		t.Fatalf("UnmarshalJSON: %v", err)
+	}
+	if v.Common != sentinel {
+		t.Fatalf("preset Common was overwritten by UnmarshalJSON")
+	}
+}
+
 // TestPtyMarshalsAsPty: round-trip — set V1.Pty, marshal, confirm
 // the JSON output uses the canonical "pty" key (not "dmsgpty").
 func TestPtyMarshalsAsPty(t *testing.T) {
