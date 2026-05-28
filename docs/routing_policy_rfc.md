@@ -218,6 +218,33 @@ After this phase, the Indonesia-Friday example *works*.
 
 Real per-packet scripting (CEL or compiled bytecode) is a separate RFC, opened only when an operator demonstrates a use case that can't be expressed as a static distribution descriptor. The vocabulary above leaves room for that follow-up: descriptors not on this list (`"sticky: 5tuple"`, `"latency-aware"`, etc.) return a parse error today so they can be added meaningfully later without ambiguity.
 
+### Phase 6 — Post-setup leg-change callback (LANDED)
+
+`decide_route(ctx, candidates)` is one-shot at dial-setup time. But mux route groups have dynamic legs: `appendRouteToGroup` can add legs after setup, and transport failure can drop legs mid-session. Phase 5's distribution descriptor was set once and the selector adapted internally (skipping nil / closed transports during `Rebuild`), but the script had no way to react — a `"weighted: 3, 1"` schedule against an initial 2 legs stayed at `[3, 1]` even after the route group grew to 3 legs.
+
+Phase 6 adds an optional script function:
+
+```python
+def on_leg_change(ctx, legs, change):
+    # ctx is the dial's RoutingContext (same fields as decide_route's ctx).
+    # legs is the route group's current legs: [{index, kind, latency_ms, alive}, ...].
+    # change is {"event": "added" | "dropped", "leg_index": N}.
+    #
+    # Return a RouteSpec; only the distribution field is honored
+    # — mux/min_hops/chosen are dial-time decisions that can't be
+    # changed after setup.
+    n = sum([1 for l in legs if l.alive])
+    if n == 0:
+        return RouteSpec()
+    # Re-balance weights across all live legs.
+    weights = ", ".join(["1"] * n)
+    return RouteSpec(distribution = "weighted: " + weights)
+```
+
+Scripts that don't define `on_leg_change` get phase 5's static behavior — the function is optional. The route group fires the callback synchronously from leg-mutation paths (`appendForwardLeg`, transport close detection) so the schedule rebuild stays consistent with the leg set. Failure / panic / parse-error in the callback falls through to the previous distribution; the leg change itself isn't undone.
+
+The callback runs under the same step-ceiling budget as `decide_route` (`DefaultMaxSteps` = 100k). A leg-change storm (e.g. mass transport failure on dmsg server outage) won't pin the read loop — each callback is bounded.
+
 ## Open questions
 
 1. **Trace / audit storage.** Per the operator's direction, trace is deferred. But policies will eventually need an audit trail — "why did this dial in 2026-Q3 route through Singapore?" Needs to land *before* anyone uses policies for security-sensitive routing (e.g. "never route through country X"). Suggested: trace events land in the existing visor log pipeline with a `policy=true` tag, plus a ring buffer for the last N decisions readable via RPC.

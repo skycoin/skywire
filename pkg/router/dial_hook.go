@@ -145,6 +145,46 @@ const (
 	DistributionSizeThreshold
 )
 
+// LegChangeHook is an optional hook fired by the route group
+// whenever its set of mux legs mutates — a new leg added via
+// the establishment loop or appendRouteToGroup, or a leg dropping
+// due to a transport close. The hook can return a new
+// DistributionConfig to re-balance the per-packet selector against
+// the updated leg count; returning the zero value
+// (Mode == DistributionUnset) leaves the existing distribution in
+// place.
+//
+// The route group calls OnLegChange synchronously from its leg-
+// mutation paths so the schedule rebuild stays consistent with
+// the leg set. Implementations must return quickly — the call
+// budget mirrors the dial-time policy timeout (step ceiling).
+type LegChangeHook interface {
+	OnLegChange(info DialInfo, legs []LegInfo, change LegChange) DistributionConfig
+}
+
+// LegInfo describes one mux leg's current state. Index is the
+// position in the route group's tps[] slice; Kind is the transport
+// type ("stcpr" / "sudph" / "stcp" / "dmsg" — though DMSG is
+// filtered out of mux groups at setup so it shouldn't appear here).
+// LatencyMs is the most recent measurement, 0 for "unknown."
+// Alive reflects whether the transport is currently serving (not
+// closed / nil).
+type LegInfo struct {
+	Index     int
+	Kind      string
+	LatencyMs int
+	Alive     bool
+}
+
+// LegChange describes the mutation that triggered the OnLegChange
+// callback. Event is "added" or "dropped"; LegIndex is the leg
+// that changed (the new leg's index for "added", the dropped
+// leg's last-known index for "dropped").
+type LegChange struct {
+	Event    string
+	LegIndex int
+}
+
 // String returns the stable label for a DistributionMode. Used
 // by router-side log fields so operator-facing log lines say
 // "round-robin" instead of "1".
