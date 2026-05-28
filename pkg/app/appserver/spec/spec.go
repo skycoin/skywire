@@ -63,4 +63,10 @@ type AppConfig struct {
 	//                   disable an Always-policy app is to remove
 	//                   its config entry and restart the visor.
 	RestartPolicy string `json:"restart_policy,omitempty"`
+	// RoutingPolicy overrides the visor-wide routing policy for
+	// dials originating from this app. Same `@/path` vs. inline-
+	// script convention as conf.Routing.PolicyPerDial. Empty =
+	// fall through to the visor-wide policy (which is itself
+	// empty by default). See docs/routing_policy_rfc.md.
+	RoutingPolicy string `json:"routing_policy,omitempty"`
 }

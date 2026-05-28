@@ -180,23 +180,76 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// start its file-watcher if the path is file-backed, and
 	// plug it into the router as a DialHook. Nil hook = no
 	// integration cost when no policy is configured.
-	if v.conf.Routing.PolicyPerDial != "" {
+	// Operator-programmable routing policy. Two scopes:
+	//   - visor-wide:  conf.Routing.PolicyPerDial
+	//   - per-app:     AppConfig.RoutingPolicy (overrides the
+	//                  visor-wide default for dials from that app)
+	// A Hook is installed if either scope has a configured source.
+	// Real Provider backed by the running visor's transport manager,
+	// embedded geoip db, hypervisor list, and dmsgpty whitelist —
+	// without this the script's geo.*, transports.*, and peers.*
+	// stdlib calls would return zero values from policy.NopProvider.
+	{
 		policyLogger := func(format string, args ...interface{}) {
 			log.Infof(format, args...)
 		}
-		loader, perr := policy.NewLoader(
-			v.conf.Routing.PolicyPerDial,
-			policy.WithLogger(policyLogger),
-		)
-		if perr != nil {
-			log.WithError(perr).Warn("Routing policy failed to load; visor will run without policy.")
-		} else {
-			if werr := loader.Watch(policyLogger); werr != nil {
-				log.WithError(werr).Warn("Routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
+		var provider *visorPolicyProvider
+		makeProvider := func() *visorPolicyProvider {
+			if provider == nil {
+				provider = newVisorPolicyProvider(v)
 			}
-			rConf.DialHook = policy.NewHook(loader)
-			v.pushCloseStack("router.policy", loader.Close)
-			log.WithField("source", loader.Source()).Info("Routing policy active.")
+			return provider
+		}
+
+		var hook *policy.Hook
+
+		if v.conf.Routing.PolicyPerDial != "" {
+			loader, perr := policy.NewLoader(
+				v.conf.Routing.PolicyPerDial,
+				policy.WithLogger(policyLogger),
+				policy.WithProvider(makeProvider()),
+			)
+			if perr != nil {
+				log.WithError(perr).Warn("Routing policy failed to load; visor will run without visor-wide policy.")
+			} else {
+				if werr := loader.Watch(policyLogger); werr != nil {
+					log.WithError(werr).Warn("Routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
+				}
+				hook = policy.NewHook(loader)
+				v.pushCloseStack("router.policy", loader.Close)
+				log.WithField("source", loader.Source()).Info("Routing policy active.")
+			}
+		}
+
+		if v.conf.Launcher != nil {
+			for _, app := range v.conf.Launcher.Apps {
+				if app.RoutingPolicy == "" {
+					continue
+				}
+				appLoader, perr := policy.NewLoader(
+					app.RoutingPolicy,
+					policy.WithLogger(policyLogger),
+					policy.WithProvider(makeProvider()),
+				)
+				if perr != nil {
+					log.WithError(perr).WithField("app", app.Name).Warn("Per-app routing policy failed to load; app will fall back to default policy.")
+					continue
+				}
+				if werr := appLoader.Watch(policyLogger); werr != nil {
+					log.WithError(werr).WithField("app", app.Name).Warn("Per-app routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
+				}
+				if hook == nil {
+					hook = policy.NewHook(nil)
+				}
+				hook.RegisterApp(app.Name, appLoader)
+				appName := app.Name
+				v.pushCloseStack("router.policy.app:"+appName, appLoader.Close)
+				log.WithField("app", appName).WithField("source", appLoader.Source()).Info("Per-app routing policy active.")
+			}
+		}
+
+		if hook != nil {
+			rConf.DialHook = hook
 		}
 	}
 
