@@ -56,9 +56,15 @@ multiple disjoint candidates). Single-leg dials log
 `"Route group distribution skipped: not mux-enabled"` and use the
 sole leg.
 
+DMSG transports never appear in multihop / mux routes — the
+router strips them at route construction (a dmsg server is an
+opaque intermediary that neither endpoint can observe, possibly
+chained via server-to-server forwarding). So no distribution
+example needs to reason about DMSG legs; they can't be there.
+
 | File | Use case |
 |---|---|
-| `weighted-by-kind.star` | Two legs of mixed kinds (stcpr + dmsg) → 3:1 to stcpr. |
+| `weighted-by-kind.star` | Two legs of mixed direct-IP kinds (stcpr + sudph) → 3:1 to stcpr. |
 | `vpn-bulk-split.star` | VPN packets > 1400B → wide-pipe leg; small → RR rest. |
 | `force-equal-rt.star` | Real-time apps force equal RR (lower jitter than auto). |
 | `friday-id-mux.star` | Friday-ID combined with VPN size-threshold split. |
