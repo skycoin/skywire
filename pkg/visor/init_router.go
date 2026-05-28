@@ -215,7 +215,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 				if werr := loader.Watch(policyLogger); werr != nil {
 					log.WithError(werr).Warn("Routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
 				}
-				hook = policy.NewHook(loader, policy.WithHookProvider(makeProvider()))
+				hook = policy.NewHook(loader, policy.WithHookProvider(makeProvider()), policy.WithHookLogger(policyLogger))
 				v.pushCloseStack("router.policy", loader.Close)
 				log.WithField("source", loader.Source()).Info("Routing policy active.")
 			}
@@ -239,7 +239,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 					log.WithError(werr).WithField("app", app.Name).Warn("Per-app routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
 				}
 				if hook == nil {
-					hook = policy.NewHook(nil, policy.WithHookProvider(makeProvider()))
+					hook = policy.NewHook(nil, policy.WithHookProvider(makeProvider()), policy.WithHookLogger(policyLogger))
 				}
 				hook.RegisterApp(app.Name, appLoader)
 				appName := app.Name

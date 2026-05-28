@@ -257,6 +257,14 @@ func (r *router) DialRoutes(
 		// Establish additional mux routes if requested
 		r.establishMuxRoutes(ctx, nrg, opts, forwardDesc, rules.Forward.NextTransportID())
 
+		// Apply per-dial distribution policy (from a routing-
+		// policy script via DialAdjustment.Distribution, or a
+		// CLI caller populating DialOptions.Distribution
+		// directly). No-op when Mode is DistributionUnset.
+		// Must run AFTER establishMuxRoutes so the selector's
+		// rebuild sees every leg, not just the primary.
+		nrg.rg.applyDistribution(opts.Distribution)
+
 		// reset MinHops default value if changed before
 		if defaultMinHops != 1 {
 			r.conf.MinHops = defaultMinHops

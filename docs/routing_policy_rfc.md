@@ -202,11 +202,21 @@ After this phase, the Indonesia-Friday example *works*.
 
 `cli route policy test` + `cli route policy bench` subcommands. File-watcher for hot-reload. Per-app override field on `AppConfig`.
 
-### Phase 5 — Layer 2 distribution descriptor
+### Phase 5 — Layer 2 distribution descriptor (LANDED)
 
-`RouteSpec.distribution` field is parsed and translated into the per-packet Go code's fast path. Starlark stays out of the per-packet path; operator gets to configure distribution from Layer 1.
+`RouteSpec.distribution` field is parsed by `pkg/router/policy.ParseDistribution` and applied to the route group's existing `transportSelector` via `DialAdjustment.Distribution`. Starlark stays out of the per-packet path; operator gets to configure distribution from Layer 1.
 
-Real per-packet scripting (CEL or compiled bytecode) is a separate RFC, opened only when an operator demonstrates a use case that can't be expressed as a static distribution descriptor.
+**Descriptor vocabulary (v1, finalized):**
+
+| Descriptor | Mode | Behavior |
+|---|---|---|
+| `""` | `DistributionUnset` | No override — route group uses the router's visor-wide `muxMode` default (`WeightModeAuto`, latency-weighted). |
+| `"auto"` | `DistributionAuto` | Force `WeightModeAuto` (latency-weighted with round-robin fallback). |
+| `"round-robin"` / `"equal"` | `DistributionRoundRobin` | Force `WeightModeEqual` — packets alternate across legs ignoring latency. |
+| `"weighted: f1, f2, ..."` | `DistributionWeighted` | Operator-supplied fractional weights normalized into the selector's integer schedule. Length must match leg count; mismatches fall through with a log line. |
+| `"size-threshold: N"` | `DistributionSizeThreshold` | Payloads `> N` bytes go to leg 0 (wide pipe); payloads `≤ N` round-robin across the remaining legs. Single-leg routes ignore the descriptor. Control/handshake packets (size unknown) take leg 0. |
+
+Real per-packet scripting (CEL or compiled bytecode) is a separate RFC, opened only when an operator demonstrates a use case that can't be expressed as a static distribution descriptor. The vocabulary above leaves room for that follow-up: descriptors not on this list (`"sticky: 5tuple"`, `"latency-aware"`, etc.) return a parse error today so they can be added meaningfully later without ambiguity.
 
 ## Open questions
 
@@ -216,7 +226,7 @@ Real per-packet scripting (CEL or compiled bytecode) is a separate RFC, opened o
 
 3. **Multi-script composition.** Should an operator be able to `load("./common.star")` shared helpers from their own policy file? Starlark supports this natively; cost is reading multiple files at policy-load time. Default: yes, allow within a single directory; out-of-directory loads rejected.
 
-4. **Layer 2 contract finalization.** What exactly is the distribution descriptor's vocabulary? Just `round-robin` / `weighted-list` / `size-threshold`, or richer? Worth sketching before phase 1 lands so `RouteSpec` doesn't need a breaking change later.
+4. ~~**Layer 2 contract finalization.** What exactly is the distribution descriptor's vocabulary?~~ **Resolved** — see Phase 5 table above. Vocabulary is `""` / `"auto"` / `"round-robin"` / `"equal"` / `"weighted: f1, f2, ..."` / `"size-threshold: N"`. Unknown descriptors error at parse time so future additions stay unambiguous.
 
 5. **Policy granularity vs. CLI flags.** Today's `--routes N --min-hops K` per-CLI-invocation overrides interact with policies how? Suggested rule: CLI flags supplant the policy's matching fields on that invocation; the operator's policy sees `ctx.cli_overrides` so they can choose to honor or override the flag.
 
