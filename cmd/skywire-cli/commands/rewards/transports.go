@@ -220,12 +220,15 @@ type VisorBandwidthResult map[string]uint64
 
 // BandwidthDataVersion is the current bw-collect output schema version.
 // v1 = bare {pk:bytes} map (no per-transport detail; full sent+recv
-//      credited to BOTH edges; no counterparty eligibility filter
-//      possible at calc time).
+//
+//	credited to BOTH edges; no counterparty eligibility filter
+//	possible at calc time).
+//
 // v2 = {version:2, transports:[{a,b,sent_a,sent_b}]} — preserves
-//      per-transport detail so the calculator can (a) drop transports
-//      where either edge is reward-ineligible and (b) credit each edge
-//      only for the bytes it actually sent (sender-pays model).
+//
+//	per-transport detail so the calculator can (a) drop transports
+//	where either edge is reward-ineligible and (b) credit each edge
+//	only for the bytes it actually sent (sender-pays model).
 const BandwidthDataVersion = 2
 
 // TransportBW is one bidirectional transport's per-edge sent bytes,
