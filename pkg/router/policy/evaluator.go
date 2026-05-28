@@ -65,6 +65,7 @@ type Evaluator struct {
 	maxSteps    int64
 	failureMode FailureMode
 	clock       Clock
+	provider    Provider
 	logger      func(format string, args ...interface{})
 
 	// globals holds the result of executing the script's
@@ -98,6 +99,15 @@ func WithClock(c Clock) Option {
 	return func(e *Evaluator) { e.clock = c }
 }
 
+// WithProvider injects the data source the stdlib (geo,
+// transports, peers) reads from. When unset, the Evaluator uses
+// NopProvider — every Geo lookup returns "??", every Latency 0,
+// etc. Tests use FakeProvider; production wires the visor's
+// actual geoip / transport-tracker / hypervisor-list state.
+func WithProvider(p Provider) Option {
+	return func(e *Evaluator) { e.provider = p }
+}
+
 // WithLogger injects a log function. Default is a no-op; callers
 // who want failures surfaced wire in their package logger.
 func WithLogger(f func(format string, args ...interface{})) Option {
@@ -119,6 +129,7 @@ func NewEvaluator(name, src string, opts ...Option) (*Evaluator, error) {
 		maxSteps:    DefaultMaxSteps,
 		failureMode: FailureFallback,
 		clock:       systemClock{},
+		provider:    NopProvider(),
 		logger:      func(string, ...interface{}) {},
 	}
 	for _, opt := range opts {
