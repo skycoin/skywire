@@ -26,12 +26,12 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-// skywireDialer is a dmsgpty.StreamDialer backed by the visor's
+// skywireDialer is a pty.StreamDialer backed by the visor's
 // SkywireNetworker. Each DialStream opens a fresh skynet conn to
 // the remote's dmsgpty listen-port (DefaultPort by convention).
 //
@@ -64,7 +64,7 @@ func (skywireDialer) DialStream(ctx context.Context, pk cipher.PubKey, port uint
 	}, nil)
 }
 
-// skywireConnPK is the dmsgpty.PKExtractor for conns accepted by
+// skywireConnPK is the pty.PKExtractor for conns accepted by
 // the SkywireNetworker listener. Reaches into RemoteAddr() to pull
 // the remote PK. The accepted conn type is always *appnet.SkywireConn,
 // but the EMBEDDED net.Conn's RemoteAddr() varies by path:
@@ -107,7 +107,7 @@ func skywireConnPK(conn net.Conn) (cipher.PubKey, bool) {
 // cleanly.
 //
 // Returns a func that cancels + waits for the serve goroutine.
-func startSkywirePtyListener(ctx context.Context, pty *dmsgpty.Host, localPK cipher.PubKey, port uint16, runtimeErrors chan<- error) func() error {
+func startSkywirePtyListener(ctx context.Context, pty *pty.Host, localPK cipher.PubKey, port uint16, runtimeErrors chan<- error) func() error {
 	serveCtx, cancel := context.WithCancel(ctx)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
@@ -171,9 +171,9 @@ func startSkywirePtyListener(ctx context.Context, pty *dmsgpty.Host, localPK cip
 //
 // Future strategies (stcpr, sudpr, direct-TCP) prepend or splice in
 // here without revisiting any other call site.
-func buildDmsgptyDialer(dmsgC *dmsg.Client) dmsgpty.StreamDialer {
-	return dmsgpty.MultiDialer{
+func buildDmsgptyDialer(dmsgC *dmsg.Client) pty.StreamDialer {
+	return pty.MultiDialer{
 		skywireDialer{},
-		dmsgpty.NewDmsgDialer(dmsgC),
+		pty.NewDmsgDialer(dmsgC),
 	}
 }

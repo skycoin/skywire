@@ -33,10 +33,10 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgscp"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -630,13 +630,13 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// dialing our own dmsg client at DmsgPtyPort, which works the
 	// same way the hypervisor's per-PK ptyUI does for remote visors.
 	if v.conf.Dmsgpty != nil {
-		var ptyDialer dmsgpty.UIDialer
+		var ptyDialer pty.UIDialer
 		if v.conf.Dmsgpty.CLINet != "" {
-			ptyDialer = dmsgpty.NetUIDialer(v.conf.Dmsgpty.CLINet, v.conf.Dmsgpty.CLIAddr)
+			ptyDialer = pty.NetUIDialer(v.conf.Dmsgpty.CLINet, v.conf.Dmsgpty.CLIAddr)
 		} else {
-			ptyDialer = dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: v.conf.PK, Port: skyenv.DmsgPtyPort})
+			ptyDialer = pty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: v.conf.PK, Port: skyenv.DmsgPtyPort})
 		}
-		ptyUI := dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig())
+		ptyUI := pty.NewUI(ptyDialer, pty.DefaultUIConfig())
 		ptyHandler := ptyUI.Handler(map[string][]string{
 			"update": visorconfig.UpdateCommand(),
 		})
@@ -824,7 +824,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
 		if runtime.GOOS == "windows" {
-			conf.CLIAddr = dmsgpty.ParseWindowsEnv(conf.CLIAddr)
+			conf.CLIAddr = pty.ParseWindowsEnv(conf.CLIAddr)
 		}
 
 		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
@@ -833,7 +833,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	wl := dmsgpty.NewMemoryWhitelist()
+	wl := pty.NewMemoryWhitelist()
 
 	// Initialize the dmsgpty whitelist
 	if err := wl.Add(v.conf.Dmsgpty.Whitelist...); err != nil {
@@ -863,13 +863,13 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// the chain here rather than at NewHost preserves backward
 	// compat for every other NewHost caller (cmd/dmsg/dmsgpty-host,
 	// sshd CLI, tests).
-	pty := dmsgpty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
+	host := pty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
 	// Expose the Host on the visor so the RPC layer can drive Exec
 	// directly (see pkg/visor/rpc_visor.go DmsgPtyExec). Without this
 	// the integrated `skywire cli dmsg pty exec` path is forced
 	// through the host's CLI control socket — a separate listener
 	// with separate permissions from the visor's RPC.
-	v.dmsgPty = pty
+	v.dmsgPty = host
 
 	// The dmsg + skynet + TCP listeners moved from the init module
 	// into a launcher-managed Internal app (RFC #2775 Phase 3.3).
@@ -883,7 +883,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// remote machine (lockout safety).
 	ptyPort := conf.DmsgPort
 	sshAddr := conf.SshListen
-	launcher.RegisterApp("pty", buildPtyAppFunc(v, pty, ptyPort, sshAddr))
+	launcher.RegisterApp("pty", buildPtyAppFunc(v, host, ptyPort, sshAddr))
 
 	// dmsgscp Host (scp-over-dmsg). On by default — access is gated
 	// by the same whitelist that dmsgpty uses. Operators opt OUT
@@ -903,7 +903,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if !scpConf.Disabled {
 		scpWL := wl
 		if len(scpConf.Whitelist) > 0 {
-			ownWL := dmsgpty.NewMemoryWhitelist()
+			ownWL := pty.NewMemoryWhitelist()
 			if err := ownWL.Add(scpConf.Whitelist...); err != nil {
 				return fmt.Errorf("dmsgscp: seed whitelist: %w", err)
 			}
@@ -988,7 +988,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		go func() {
 			defer wg.Done()
 			runtimeErrors := getErrors(ctx)
-			if err := pty.ServeCLI(serveCtx, cliL); err != nil {
+			if err := host.ServeCLI(serveCtx, cliL); err != nil {
 				runtimeErrors <- fmt.Errorf("serve cli stopped: %w", err)
 			}
 		}()
@@ -1221,7 +1221,7 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 
 // buildPtyAppFunc constructs the AppFunc registered as the "pty"
 // Internal app (RFC #2775 Phase 3.3). Captures the constructed
-// dmsgpty.Host plus the configured listener parameters from
+// pty.Host plus the configured listener parameters from
 // initDmsgpty so the launcher can start / stop the listeners
 // after init has finished. The shape mirrors what initDmsgpty
 // itself used to do before this phase:
@@ -1230,10 +1230,10 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 //   - skynet listener on the same port (routed peers)
 //   - TCP listener on conf.SshListen (operator-opt-in, ssh-style)
 //
-// All three share the dmsgpty.Host's mux and whitelist; the host
+// All three share the pty.Host's mux and whitelist; the host
 // itself is constructed once at init time and re-used across
 // restart cycles.
-func buildPtyAppFunc(v *Visor, host *dmsgpty.Host, dmsgPort uint16, sshAddr string) appcommon.AppFunc {
+func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) appcommon.AppFunc {
 	return func(ctx context.Context, _ []string) error {
 		log := v.MasterLogger().PackageLogger("app:pty")
 
@@ -1243,7 +1243,7 @@ func buildPtyAppFunc(v *Visor, host *dmsgpty.Host, dmsgPort uint16, sshAddr stri
 		// app shows up in `cli visor app ls` as stopped even
 		// though the listeners are running. Pty doesn't need the
 		// app-RPC surface for its own work (it talks straight to
-		// dmsgpty.Host), but holding the appCl alive keeps the
+		// pty.Host), but holding the appCl alive keeps the
 		// proc lifecycle reportable as the other internal apps
 		// (skynet, skychat) do.
 		appCl := app.NewClient(nil)

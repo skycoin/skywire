@@ -30,7 +30,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -60,7 +60,7 @@ type skynetFirstUIDialer struct {
 // SkynetFirstUIDialer returns a dmsgpty UIDialer that prefers the
 // skywire router for the pty stream and falls back to dmsg. The
 // dmsg client is required as the fallback transport.
-func SkynetFirstUIDialer(dmsgC *dmsg.Client, rAddr dmsg.Addr) dmsgpty.UIDialer {
+func SkynetFirstUIDialer(dmsgC *dmsg.Client, rAddr dmsg.Addr) pty.UIDialer {
 	return &skynetFirstUIDialer{
 		dmsgC: dmsgC,
 		rAddr: rAddr,
