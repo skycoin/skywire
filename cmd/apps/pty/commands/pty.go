@@ -27,7 +27,7 @@
 // binary needs that surface intact); the skywire-binary import
 // hides the dmsg-pty group so help output funnels operators here.
 // The package-level code identifiers (`pkg/dmsg/dmsgpty/`,
-// `conf.Dmsgpty`, etc.) are unchanged — deeper rename is a
+// `conf.Pty`, etc.) are unchanged — deeper rename is a
 // follow-up PR.
 package commands
 
