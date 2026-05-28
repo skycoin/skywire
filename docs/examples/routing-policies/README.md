@@ -179,6 +179,9 @@ consumes it. Vocabulary:
 - `"round-robin"` / `"equal"` — even round-robin across legs
 - `"weighted: f1, f2, ..."` — operator fractional weights
 - `"size-threshold: N"` — payload `> N` → leg 0; `≤ N` → RR across the rest
+- `"sticky:5tuple"` — same IPv4 flow → same leg (avoids TCP-over-overlay reordering)
+- `"latency-adaptive"` / `"latency-aware"` — per-packet lowest-RTT pick
+- `"dscp-priority: N"` — IPv4 DSCP `≥ N` → leg 0; rest → RR. Threshold `[1, 63]`; e.g. `46` for EF/VoIP, `18` for AF21
 
 Distribution only takes effect on **multi-leg** route groups (the
 peer must negotiate `CapMux` and the route-finder must surface
@@ -205,6 +208,9 @@ properties (`weighted-by-kind.star` demonstrates the pattern).
 | `force-equal-rt.star` | Real-time apps force equal RR (lower jitter than auto). |
 | `friday-id-mux.star` | Friday-ID combined with VPN size-threshold split. |
 | `rebalance-on-leg-change.star` | Track live leg count with an even-weight schedule via `on_leg_change`. |
+| `sticky-tcp-flows.star` | Pin each IPv4 5-tuple flow to one leg for VPN apps (avoids reordering). |
+| `latency-adaptive-rt.star` | Real-time apps: per-packet lowest-RTT leg pick. |
+| `vpn-dscp-priority.star` | VPN: DSCP-marked traffic (EF/AF) on leg 0, rest RR. |
 
 ## Authoring notes
 
