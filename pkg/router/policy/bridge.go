@@ -215,11 +215,10 @@ func buildCandidatesValue(cs []Candidate) starlark.Value {
 		out[i] = starlarkstruct.FromStringDict(
 			starlarkstruct.Default,
 			starlark.StringDict{
-				"hops":               starlark.NewList(hops),
-				"hops_geo":           starlark.NewList(hopsGeo),
-				"est_latency_ms":     starlark.MakeInt(c.EstLatencyMs),
-				"transport_kinds":    starlark.NewList(kinds),
-				"mux_legs_available": starlark.MakeInt(c.MuxLegsAvailable),
+				"hops":            starlark.NewList(hops),
+				"hops_geo":        starlark.NewList(hopsGeo),
+				"est_latency_ms":  starlark.MakeInt(c.EstLatencyMs),
+				"transport_kinds": starlark.NewList(kinds),
 			},
 		)
 	}
@@ -258,11 +257,10 @@ func candidateCtor(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple,
 		return nil, fmt.Errorf("Candidate: positional arguments not allowed; use kwargs")
 	}
 	dict := starlark.StringDict{
-		"hops":               starlark.NewList(nil),
-		"hops_geo":           starlark.NewList(nil),
-		"est_latency_ms":     starlark.MakeInt(0),
-		"transport_kinds":    starlark.NewList(nil),
-		"mux_legs_available": starlark.MakeInt(0),
+		"hops":            starlark.NewList(nil),
+		"hops_geo":        starlark.NewList(nil),
+		"est_latency_ms":  starlark.MakeInt(0),
+		"transport_kinds": starlark.NewList(nil),
 	}
 	for _, kv := range kwargs {
 		key := string(kv[0].(starlark.String))
@@ -310,11 +308,10 @@ func parseCandidate(v starlark.Value) (Candidate, error) {
 		return Candidate{}, fmt.Errorf("expected candidate struct, got %s", v.Type())
 	}
 	return Candidate{
-		Hops:             readStrListField(s, "hops"),
-		HopsGeo:          readStrListField(s, "hops_geo"),
-		EstLatencyMs:     readIntField(s, "est_latency_ms"),
-		TransportKinds:   readStrListField(s, "transport_kinds"),
-		MuxLegsAvailable: readIntField(s, "mux_legs_available"),
+		Hops:           readStrListField(s, "hops"),
+		HopsGeo:        readStrListField(s, "hops_geo"),
+		EstLatencyMs:   readIntField(s, "est_latency_ms"),
+		TransportKinds: readStrListField(s, "transport_kinds"),
 	}, nil
 }
 

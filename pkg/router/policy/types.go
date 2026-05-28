@@ -78,11 +78,6 @@ type Candidate struct {
 	// mixed-transport routes). Used by policies that want to
 	// prefer direct-tcp paths over relayed-dmsg paths.
 	TransportKinds []string
-
-	// MuxLegsAvailable indicates how many parallel mux legs can
-	// be opened along this route. Bounded by the route's
-	// intermediates' capabilities. Zero means "single leg only."
-	MuxLegsAvailable int
 }
 
 // RouteSpec is the structured return value from the policy
@@ -96,7 +91,10 @@ type RouteSpec struct {
 	Chosen *Candidate
 
 	// Mux is the number of parallel mux legs to open. Zero or 1
-	// means a single route. Capped by Chosen.MuxLegsAvailable.
+	// means a single route. The router caps it at the number of
+	// disjoint candidates the route-finder returned — scripts
+	// that want to know that count up-front should read
+	// `len(candidates)` in SelectRoute.
 	Mux int
 
 	// MinHops is the minimum acceptable intermediate count.
@@ -107,9 +105,18 @@ type RouteSpec struct {
 
 	// Fallback names the backup strategy when Chosen is nil or
 	// rejected. Recognized values:
-	//   ""       — use the visor's built-in default
-	//   "direct" — try a direct transport, no overlay
-	//   "drop"   — fail the dial loudly (operator notices)
+	//   ""     — use the visor's built-in default (router's
+	//            disjoint-path pick on the unfiltered candidates,
+	//            or direct-transport short-circuit if one exists)
+	//   "drop" — fail the dial loudly with ErrDialPolicyDropped
+	//            (operator notices; app sees a connection error)
+	//
+	// Any other value is treated as "". The earlier doc mentioned
+	// a "direct" value with "try a direct transport, no overlay"
+	// semantics; that was aspirational and never implemented — use
+	// "drop" instead when a script wants to force the no-overlay
+	// path (or set MinHops=1 to nudge the router toward direct
+	// without refusing the dial outright).
 	Fallback string
 
 	// Distribution is the per-packet distribution descriptor for
