@@ -471,3 +471,135 @@ def decide_route(ctx, candidates):
 		t.Errorf("ReverseMinHops=%d, want 3", adj.ReverseMinHops)
 	}
 }
+
+func TestHook_OnLegChange_RebalanceOnDrop(t *testing.T) {
+	// Script re-balances weights when a leg drops: returns
+	// "weighted: 1, 1" sized to the live leg count.
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec(mux=3, distribution="weighted: 3, 2, 1")
+
+def on_leg_change(ctx, legs, change):
+    alive = [l for l in legs if l.alive]
+    n = len(alive)
+    if n == 0:
+        return RouteSpec()
+    parts = []
+    for i in range(n):
+        parts.append("1")
+    return RouteSpec(distribution = "weighted: " + ", ".join(parts))
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	info := router.DialInfo{AppName: "vpn-client", PeerPK: pk}
+
+	// Simulate a drop event: 3 legs total, leg 1 is dead.
+	legs := []router.LegInfo{
+		{Index: 0, Kind: "stcpr", LatencyMs: 30, Alive: true},
+		{Index: 1, Kind: "sudph", LatencyMs: 50, Alive: false},
+		{Index: 2, Kind: "stcpr", LatencyMs: 80, Alive: true},
+	}
+	change := router.LegChange{Event: "dropped", LegIndex: 1}
+
+	dist := h.OnLegChange(info, legs, change)
+	if dist.Mode != router.DistributionWeighted {
+		t.Errorf("Mode=%v, want DistributionWeighted", dist.Mode)
+	}
+	if len(dist.Weights) != 2 {
+		t.Errorf("Weights len=%d, want 2 (for 2 alive legs)", len(dist.Weights))
+	}
+}
+
+func TestHook_OnLegChange_ScriptWithoutFnReturnsUnset(t *testing.T) {
+	// Most scripts don't define on_leg_change — the hook should
+	// return the zero DistributionConfig so the route group
+	// leaves its distribution unchanged.
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec()
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	dist := h.OnLegChange(
+		router.DialInfo{AppName: "x", PeerPK: pk},
+		[]router.LegInfo{{Index: 0, Kind: "stcpr", Alive: true}},
+		router.LegChange{Event: "added", LegIndex: 0},
+	)
+	if dist.Mode != router.DistributionUnset {
+		t.Errorf("Mode=%v, want DistributionUnset (script didn't define on_leg_change)", dist.Mode)
+	}
+}
+
+func TestHook_OnLegChange_InactiveLoaderReturnsUnset(t *testing.T) {
+	loader, err := NewLoader("") // noop mode
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	dist := h.OnLegChange(
+		router.DialInfo{AppName: "x", PeerPK: pk},
+		nil,
+		router.LegChange{Event: "added", LegIndex: 0},
+	)
+	if dist.Mode != router.DistributionUnset {
+		t.Errorf("Mode=%v, want DistributionUnset", dist.Mode)
+	}
+}
+
+func TestHook_OnLegChange_AddedEvent(t *testing.T) {
+	// Script handles "added" event: when a leg is added, switch
+	// to round-robin from auto.
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec()
+
+def on_leg_change(ctx, legs, change):
+    if change.event == "added":
+        return RouteSpec(distribution = "round-robin")
+    return RouteSpec()
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	dist := h.OnLegChange(
+		router.DialInfo{AppName: "x", PeerPK: pk},
+		[]router.LegInfo{{Index: 0, Alive: true}, {Index: 1, Alive: true}},
+		router.LegChange{Event: "added", LegIndex: 1},
+	)
+	if dist.Mode != router.DistributionRoundRobin {
+		t.Errorf("added → Mode=%v, want DistributionRoundRobin", dist.Mode)
+	}
+	// Dropped event leaves it unset
+	dist = h.OnLegChange(
+		router.DialInfo{AppName: "x", PeerPK: pk},
+		[]router.LegInfo{{Index: 0, Alive: true}},
+		router.LegChange{Event: "dropped", LegIndex: 1},
+	)
+	if dist.Mode != router.DistributionUnset {
+		t.Errorf("dropped → Mode=%v, want DistributionUnset", dist.Mode)
+	}
+}
