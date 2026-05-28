@@ -29,10 +29,10 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -1186,7 +1186,7 @@ func configureLauncher(log *logging.Logger) {
 		conf.RewardAddress = canonical
 	}
 
-	dmsgptyAddr := dmsgpty.DefaultCLIAddr()
+	dmsgptyAddr := pty.DefaultCLIAddr()
 	if isTestEnv {
 		dmsgptyAddr = filepath.Join(os.TempDir(), "dmsgpty-test.sock")
 	}
