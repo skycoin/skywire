@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"go.etcd.io/bbolt"
+
+	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
 
 const dateFmt = "2006-01-02"
@@ -84,6 +86,15 @@ type Store struct {
 // open and never rewritten; it identifies the on-disk database
 // independently of any single session.
 func OpenStore(path string) (*Store, error) {
+	// Repair-on-corrupt: bbolt panics inside the internal batch
+	// goroutine on a corrupt freelist page, which is unrecoverable
+	// from caller code. The local uptime DB is recreatable from
+	// runtime state (the visor just loses uptime history for this
+	// instance), so renaming a corrupt file aside and starting fresh
+	// is strictly safer than crash-looping.
+	if err := bbolthealth.RepairIfCorrupt(path); err != nil {
+		return nil, fmt.Errorf("serviceuptime: integrity-check %s: %w", path, err)
+	}
 	db, err := bbolt.Open(path, 0600, &bbolt.Options{
 		NoSync:  false,
 		Timeout: 5 * time.Second,
