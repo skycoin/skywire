@@ -475,3 +475,19 @@ func NewMockRouter(t interface {
 
 	return mock
 }
+
+// DialHook provides a mock function with given fields:
+func (_m *MockRouter) DialHook() DialHook {
+	ret := _m.Called()
+
+	var r0 DialHook
+	if rf, ok := ret.Get(0).(func() DialHook); ok {
+		r0 = rf()
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(DialHook)
+		}
+	}
+
+	return r0
+}
