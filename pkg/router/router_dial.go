@@ -398,6 +398,40 @@ func (r *router) PingRoute(
 	lPK := r.conf.PubKey
 	forwardDesc := routing.NewRouteDescriptor(lPK, rPK, lPort, rPort)
 
+	// Operator-programmable routing policy. PingRoute is the
+	// natural entry point operators use to test mux behavior
+	// (`cli visor ping mux-bw --routes N --min-hops 2`); a
+	// policy that wants to verify its distribution descriptor
+	// applies on every multi-leg setup needs to see those dials
+	// too. Same shape as DialRoutes' hook block, minus the
+	// post-mux applyDistribution call — setupPingRoute handles
+	// distribution + leg-change hook wiring downstream.
+	if r.conf.DialHook != nil {
+		appName := ""
+		if opts != nil {
+			appName = opts.AppName
+		}
+		info := DialInfo{
+			AppName:      appName,
+			PeerPK:       rPK,
+			LPort:        lPort,
+			RPort:        rPort,
+			CLIOverrides: buildCLIOverrides(opts),
+		}
+		if adj, hookErr := r.conf.DialHook.BeforeDial(ctx, info); hookErr != nil {
+			log.WithError(hookErr).Debug("policy hook errored on PingRoute; proceeding without adjustment")
+		} else if err := applyAdjustment(opts, adj); err != nil {
+			log.WithField("policy_decision", "drop").Info("PingRoute refused by routing policy.")
+			return nil, err
+		} else if adj.MuxRoutes > 0 || adj.MinHops > 0 || adj.Distribution.Mode != DistributionUnset {
+			log.
+				WithField("policy_mux", adj.MuxRoutes).
+				WithField("policy_min_hops", adj.MinHops).
+				WithField("policy_distribution", adj.Distribution.Mode).
+				Debug("Routing policy adjusted PingRoute opts.")
+		}
+	}
+
 	// Debug: log what options we received
 	log.Debugf("PingRoute opts: TransportID=%s, ForwardHops=%d, ReverseHops=%d", opts.TransportID, len(opts.ForwardHops), len(opts.ReverseHops))
 
