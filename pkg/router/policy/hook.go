@@ -24,8 +24,8 @@ import (
 // returns a no-op spec) rather than escaping to the default — the
 // per-app policy is the operator's intent for that app.
 type Hook struct {
-	loader   *Loader
-	byApp    map[string]*Loader
+	loader   Engine
+	byApp    map[string]Engine
 	provider Provider // used for HopsGeo enrichment during SelectRoute
 	logger   func(format string, args ...interface{})
 }
@@ -51,8 +51,11 @@ func WithHookLogger(f func(format string, args ...interface{})) HookOption {
 	return func(h *Hook) { h.logger = f }
 }
 
-// NewHook wraps a Loader as a DialHook.
-func NewHook(l *Loader, opts ...HookOption) *Hook {
+// NewHook wraps an Engine (e.g. the Starlark Loader or the WASM
+// Loader from pkg/router/policy/wasm) as a DialHook. Passing nil
+// is legal — the hook becomes a no-op until RegisterApp adds a
+// per-app engine.
+func NewHook(l Engine, opts ...HookOption) *Hook {
 	h := &Hook{loader: l, logger: func(string, ...interface{}) {}}
 	for _, opt := range opts {
 		opt(h)
@@ -60,19 +63,19 @@ func NewHook(l *Loader, opts ...HookOption) *Hook {
 	return h
 }
 
-// RegisterApp attaches a per-app Loader that overrides the default
+// RegisterApp attaches a per-app Engine that overrides the default
 // for dials originating from the named app. Safe to call only
 // during init (before the hook is handed to the router).
-func (h *Hook) RegisterApp(appName string, l *Loader) {
+func (h *Hook) RegisterApp(appName string, l Engine) {
 	if h.byApp == nil {
-		h.byApp = make(map[string]*Loader)
+		h.byApp = make(map[string]Engine)
 	}
 	h.byApp[appName] = l
 }
 
-// loaderFor returns the per-app loader if one is registered for
+// loaderFor returns the per-app engine if one is registered for
 // info.AppName, else the default.
-func (h *Hook) loaderFor(appName string) *Loader {
+func (h *Hook) loaderFor(appName string) Engine {
 	if h.byApp != nil {
 		if l, ok := h.byApp[appName]; ok {
 			return l

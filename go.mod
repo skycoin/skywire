@@ -76,6 +76,7 @@ require (
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
 	github.com/rivo/tview v0.42.0
 	github.com/soheilhy/cmux v0.1.5
+	github.com/tetratelabs/wazero v1.12.0
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	go.starlark.net v0.0.0-20260522144826-ec58d4b459e2
 	golang.org/x/time v0.15.0
