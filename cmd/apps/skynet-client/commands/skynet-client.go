@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -63,6 +64,17 @@ var (
 	// aggregate the bulk payload.
 	fwdMux int
 	revMux int
+	// reconnect, when set, makes per-accept dial failures retry
+	// indefinitely (with --reconnect-delay between attempts) instead
+	// of dropping the local conn on first failure. Closes the gap
+	// during remote-visor restarts: a browser refresh that lands
+	// during the remote's downtime keeps the local TCP open until
+	// the remote comes back, instead of returning ECONNREFUSED.
+	// Per-accept rather than outer-loop because skynet-client's
+	// local listener already survives indefinitely — the failure
+	// site is inside handleLocalConn's dialRemote, not at startup.
+	reconnect      bool
+	reconnectDelay int64
 )
 
 func init() {
@@ -77,6 +89,8 @@ func init() {
 	RootCmd.Flags().IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse direction only)")
 	RootCmd.Flags().IntVar(&fwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
 	RootCmd.Flags().IntVar(&revMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (>0 sets reverse leg count; canonical download-heavy shape: --forward-mux 1 --reverse-mux N)")
+	RootCmd.Flags().BoolVar(&reconnect, "reconnect", false, "retry per-accept dial indefinitely instead of dropping local conn on remote-visor failure")
+	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between per-accept dial retries when --reconnect is set")
 }
 
 // RootCmd is the root command for skynet-client
@@ -112,6 +126,8 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override")
 		fs.IntVar(&fwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override")
 		fs.IntVar(&revMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override")
+		fs.BoolVar(&reconnect, "reconnect", false, "retry per-accept dial indefinitely on failure")
+		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between per-accept dial retries")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -195,11 +211,42 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	}
 	appCl.Log().Infof("Per-accept dial shape: %s", dialShape)
 
-	dialRemote := func() (net.Conn, error) {
+	rawDial := func() (net.Conn, error) {
 		if routes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
 			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux)
 		}
 		return appCl.Dial(connApp)
+	}
+
+	// --reconnect wraps rawDial in a retry loop bounded only by ctx.
+	// First attempt is immediate (no warmup pause); subsequent
+	// attempts wait --reconnect-delay seconds. pkg/skynet.Client
+	// invokes the factory per local TCP accept, so each accept that
+	// happens during a remote-visor outage keeps trying until the
+	// remote returns or the parent ctx is canceled (e.g. the local
+	// TCP closes because the browser tab gave up).
+	dialRemote := rawDial
+	if reconnect {
+		delay := time.Duration(reconnectDelay) * time.Second
+		dialRemote = func() (net.Conn, error) {
+			attempt := 0
+			for {
+				conn, err := rawDial()
+				if err == nil {
+					if attempt > 0 {
+						appCl.Log().Infof("Dial succeeded after %d retries", attempt)
+					}
+					return conn, nil
+				}
+				attempt++
+				appCl.Log().WithError(err).Warnf("Dial attempt %d failed; retrying in %v", attempt, delay)
+				select {
+				case <-ctx.Done():
+					return nil, fmt.Errorf("dial canceled: %w", ctx.Err())
+				case <-time.After(delay):
+				}
+			}
+		}
 	}
 
 	// Create client with the dial factory; Serve binds the local
