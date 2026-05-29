@@ -412,6 +412,25 @@ type Routing struct {
 	// docs/examples/routing-policies/ for example scripts, and
 	// `skywire cli route policy test/bench` for iteration tools.
 	PolicyPerDial string `json:"policy_per_dial,omitempty"`
+
+	// PolicyPerDialWasm is the WASM-policy alternative to
+	// PolicyPerDial. Accepts "@/path/to/policy.wasm" only —
+	// inline modules aren't supported. The compiled module must
+	// export decide_route + alloc + free (and optionally
+	// on_leg_change) per the wire-format ABI in
+	// pkg/router/policy/wasm/abi.go. When both PolicyPerDial and
+	// PolicyPerDialWasm are set, PolicyPerDialWasm wins on the
+	// visor-wide default; the skylark loader still owns per-app
+	// overrides via AppConfig.RoutingPolicy.
+	//
+	// Trade-offs (see docs/examples/routing-policies/wasm/README.md):
+	//   skylark — text source, sub-second hot-reload, ~10 LoC
+	//             policies; the right default for casual policies.
+	//   wasm    — compiled artifact, near-native perf, Go/Rust/
+	//             AssemblyScript/etc.; the right choice for
+	//             power users with existing Go-WASM experience
+	//             or per-flow stateful policies.
+	PolicyPerDialWasm string `json:"policy_per_dial_wasm,omitempty"`
 }
 
 // UptimeTracker configures uptime tracker.
