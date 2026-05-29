@@ -1,5 +1,5 @@
 // Package cliroute cmd/skywire-cli/commands/route/policy.go —
-// operator tooling for the Starlark routing-policy DSL
+// operator tooling for the skylark routing-policy DSL
 // (RFC #2882). `skywire cli route policy test` previews what a
 // script would decide for a synthetic dial; `bench` runs the
 // script 1M times and reports per-call latency.
@@ -30,19 +30,19 @@ func init() {
 	policyCmd.AddCommand(policyTestCmd, policyBenchCmd)
 
 	policyTestCmd.Flags().StringVarP(&policyScriptPath, "script", "s", "",
-		"path to the Starlark policy file (.star)")
+		"path to the skylark policy file (.star)")
 	policyTestCmd.Flags().StringVarP(&policyDialJSON, "dial", "d", "{}",
 		"synthetic dial context as JSON — see the docs for the schema")
 
 	policyBenchCmd.Flags().StringVarP(&policyScriptPath, "script", "s", "",
-		"path to the Starlark policy file (.star)")
+		"path to the skylark policy file (.star)")
 	policyBenchCmd.Flags().IntVarP(&policyBenchIter, "iter", "n", 100_000,
 		"number of evaluations to run")
 }
 
 var policyCmd = &cobra.Command{
 	Use:   "policy",
-	Short: "Routing-policy DSL tooling (RFC #2882)",
+	Short: "skylark routing-policy tooling (RFC #2882)",
 	Long: `Operator tooling for the per-dial routing policy:
 
   test    Preview what a policy would decide for a synthetic dial
