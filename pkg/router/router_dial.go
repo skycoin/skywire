@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -1577,22 +1578,29 @@ func (r *router) establishMuxRoutes(
 		parentAppName = opts.AppName
 	}
 
-	// Cap on consecutive failures inside the mux loop. Without
-	// this, a fully-broken route-finder + local-calc combo would
-	// pin us for ~3s × (maxCount-1) iterations on the way to
-	// giving up. The cap surfaces "infrastructure down" quickly
-	// while still letting transient single-iteration flakes pass
-	// (each success resets the counter).
+	// Cap on consecutive planning failures. A fully-broken
+	// route-finder + local-calc combo would otherwise pin us for
+	// ~3s × (maxCount-1) iterations on the way to giving up.
 	const maxConsecutiveMuxFailures = 2
+
+	// Phase 1 (sequential): plan each aux route. Excludes
+	// propagate iteration-to-iteration so successive aux routes
+	// pick disjoint intermediates. Planning is cheap relative
+	// to the setup-node dial (cached route-finder lookups, in-
+	// process BFS for local fallback), so keeping it serial
+	// preserves the disjoint-mux guarantee without slowing things
+	// down. The expensive setup-node dial runs in phase 2 below
+	// in parallel.
+	type muxAuxPlan struct {
+		slot   int
+		req    routing.BidirectionalRoute
+		addFwd bool
+		addRev bool
+	}
+	var plans []muxAuxPlan
 	consecutiveFailures := 0
 
 	for i := 1; i < maxCount; i++ {
-		// Per-iteration direction selection: extend forward only when
-		// this leg is needed for fwdCount, reverse only when needed
-		// for revCount. When both are false we skip the entire setup
-		// (rare; only happens if asymmetric counts disagree on which
-		// side is bigger mid-loop, which can't with the current
-		// max() shape — but the guard is cheap).
 		addFwd := i < fwdCount
 		addRev := i < revCount
 		if !addFwd && !addRev {
@@ -1614,21 +1622,6 @@ func (r *router) establishMuxRoutes(
 			ExcludeDMSG:            true,
 		}
 
-		// Per-iteration best-effort: a failed aux slot no longer
-		// short-circuits the entire mux loop. Each iteration tries:
-		//   1. fetchBestRoutes (route-finder)
-		//   2. calculateLocalRoutes as fallback (local BFS over
-		//      the visor's transport graph) when the route-finder
-		//      returns nothing actionable. Gives a chance to
-		//      establish an aux even when the route-finder is
-		//      throttled / out-of-sync.
-		//   3. Dial via setup nodes.
-		//   4. Append to the route group.
-		// Any of (1-4) failing → log + continue to the next
-		// iteration so subsequent aux slots get tried. The
-		// consecutive-failure cap below guards against a fully
-		// dead route-finder + local-calc pinning us for the full
-		// maxCount-1 iterations.
 		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
 			log.Debugf("Mux route %d/%d: route-finder returned no path: %v — trying local-calc fallback",
@@ -1638,70 +1631,77 @@ func (r *router) establishMuxRoutes(
 				log.Debugf("Mux route %d/%d: local-calc fallback also failed: %v", i+1, maxCount, localErr)
 				consecutiveFailures++
 				if consecutiveFailures >= maxConsecutiveMuxFailures {
-					log.Debugf("Mux route loop: %d consecutive failures; giving up on remaining %d aux slots",
+					log.Debugf("Mux route planning: %d consecutive failures; giving up on remaining %d aux slots",
 						consecutiveFailures, maxCount-1-i)
-					return
+					break
 				}
 				continue
 			}
 			muxFwd, muxRev = localFwd, localRev
 		}
+		consecutiveFailures = 0
 
 		muxKeepAlive := DefaultRouteKeepAlive
 		if opts != nil && opts.KeepAlive > 0 {
 			muxKeepAlive = opts.KeepAlive
 		}
-		muxReq := routing.BidirectionalRoute{
-			Desc:      forwardDesc,
-			KeepAlive: muxKeepAlive,
-			Forward:   muxFwd,
-			Reverse:   muxRev,
-		}
+		plans = append(plans, muxAuxPlan{
+			slot: i + 1,
+			req: routing.BidirectionalRoute{
+				Desc:      forwardDesc,
+				KeepAlive: muxKeepAlive,
+				Forward:   muxFwd,
+				Reverse:   muxRev,
+			},
+			addFwd: addFwd,
+			addRev: addRev,
+		})
 
-		muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, muxReq)
-		if err != nil {
-			log.Debugf("Mux route %d/%d: setup failed: %v — continuing to next slot", i+1, maxCount, err)
-			consecutiveFailures++
-			if consecutiveFailures >= maxConsecutiveMuxFailures {
-				log.Debugf("Mux route loop: %d consecutive failures; giving up", consecutiveFailures)
-				return
-			}
-			continue
-		}
-
-		if err := r.appendRouteAsymmetric(nrg, muxRules, addFwd, addRev); err != nil {
-			log.Debugf("Mux route %d/%d: append failed (addFwd=%v addRev=%v): %v",
-				i+1, maxCount, addFwd, addRev, err)
-			consecutiveFailures++
-			if consecutiveFailures >= maxConsecutiveMuxFailures {
-				log.Debugf("Mux route loop: %d consecutive failures; giving up", consecutiveFailures)
-				return
-			}
-			continue
-		}
-		// Success — reset the consecutive-failure counter so a
-		// later transient flake doesn't trip the cap just because
-		// of accumulation.
-		consecutiveFailures = 0
-
-		// Track this route's forward TpID + intermediate-PK set ONLY
-		// when we actually appended the forward direction (the
-		// reverse-only case doesn't contribute to forward-side
-		// disjointness exclusion, since no forward transport was
-		// added). For reverse-only legs we still want disjoint reverse
-		// paths but the exclude set is the union of all-direction
-		// intermediates — accumulating the reverse path's
-		// intermediates handles that.
+		// Accumulate this plan's intermediates into the exclude
+		// set so the NEXT plan picks a disjoint path. Done at
+		// plan time (not after dial success) — a plan whose dial
+		// fails has still "claimed" those intermediates, and we
+		// want the surviving plans to be disjoint from the
+		// CLAIMED set, not the SUCCEEDED set, otherwise a slow
+		// failure cascade could leave all surviving aux routes
+		// sharing intermediates.
 		if addFwd {
-			excludeIDs = append(excludeIDs, muxRules.Forward.NextTransportID())
 			excludePKs = append(excludePKs, intermediatesOfHops(muxFwd, lPK, rPK)...)
 		}
 		if addRev {
 			excludePKs = append(excludePKs, intermediatesOfHops(muxRev, rPK, lPK)...)
 		}
-		log.Infof("Mux route %d/%d established (fwd=%v rev=%v) via tp %s",
-			i+1, maxCount, addFwd, addRev, muxRules.Forward.NextTransportID())
 	}
+
+	if len(plans) == 0 {
+		return
+	}
+
+	// Phase 2 (parallel): fire all aux setup-node dials at once.
+	// Each dial blocks ~setup-timeout (15s); doing them in
+	// parallel collapses N × 15s into one window. Append happens
+	// inside the goroutine — appendRouteAsymmetric takes rg.mu
+	// internally, so concurrent appends serialize naturally.
+	var wg sync.WaitGroup
+	for _, p := range plans {
+		wg.Add(1)
+		go func(p muxAuxPlan) {
+			defer wg.Done()
+			muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, p.req)
+			if err != nil {
+				log.Debugf("Mux route %d/%d: parallel setup failed: %v", p.slot, maxCount, err)
+				return
+			}
+			if err := r.appendRouteAsymmetric(nrg, muxRules, p.addFwd, p.addRev); err != nil {
+				log.Debugf("Mux route %d/%d: append failed (addFwd=%v addRev=%v): %v",
+					p.slot, maxCount, p.addFwd, p.addRev, err)
+				return
+			}
+			log.Infof("Mux route %d/%d established (fwd=%v rev=%v) via tp %s",
+				p.slot, maxCount, p.addFwd, p.addRev, muxRules.Forward.NextTransportID())
+		}(p)
+	}
+	wg.Wait()
 }
 
 // intermediatesOfHops extracts the set of intermediate-visor PKs
