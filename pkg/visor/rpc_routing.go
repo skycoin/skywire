@@ -46,6 +46,17 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	return err
 }
 
+// RoutingPolicies returns the installed routing-policy summary
+// (visor-wide default + per-app overrides) for the hypervisor UI.
+func (r *RPC) RoutingPolicies(_ *struct{}, out *RoutingPoliciesSummary) (err error) {
+	defer rpcutil.LogCall(r.log, "RoutingPolicies", nil)(out, &err)
+	res, err := r.visor.RoutingPolicies()
+	if res != nil {
+		*out = *res
+	}
+	return err
+}
+
 // RouteGroupMuxInfo retrieves per-mux-leg counters for active rg's
 // tagged with the named app.
 func (r *RPC) RouteGroupMuxInfo(in *string, out *[]MuxRouteGroupInfo) (err error) {

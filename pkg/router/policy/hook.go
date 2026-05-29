@@ -63,6 +63,50 @@ func NewHook(l Engine, opts ...HookOption) *Hook {
 	return h
 }
 
+// HookSnapshot is a point-in-time copy of the Hook's engine
+// state, for observability — hypervisor UI, `cli visor routing-
+// policies`, etc. Safe to serialize as JSON.
+type HookSnapshot struct {
+	Default *EngineSnapshot
+	PerApp  map[string]*EngineSnapshot
+}
+
+// EngineSnapshot describes one Engine instance: the source
+// identifier (file path or "<inline>" / "<noop>") and whether
+// it's actively serving (evaluator loaded).
+type EngineSnapshot struct {
+	Source string
+	Active bool
+}
+
+// Snapshot returns the Hook's current engine state. Reads are
+// safe today because RegisterApp is init-only (writes happen
+// during single-threaded startup); when SetAppRoutingPolicy
+// re-lands as a runtime swap, this method picks up the
+// required mutex alongside it.
+func (h *Hook) Snapshot() HookSnapshot {
+	out := HookSnapshot{}
+	if h.loader != nil {
+		out.Default = &EngineSnapshot{
+			Source: h.loader.Source(),
+			Active: h.loader.IsActive(),
+		}
+	}
+	if len(h.byApp) > 0 {
+		out.PerApp = make(map[string]*EngineSnapshot, len(h.byApp))
+		for name, eng := range h.byApp {
+			if eng == nil {
+				continue
+			}
+			out.PerApp[name] = &EngineSnapshot{
+				Source: eng.Source(),
+				Active: eng.IsActive(),
+			}
+		}
+	}
+	return out
+}
+
 // RegisterApp attaches a per-app Engine that overrides the default
 // for dials originating from the named app. Safe to call only
 // during init (before the hook is handed to the router).
