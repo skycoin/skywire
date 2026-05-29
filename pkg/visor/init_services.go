@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/tpviz"
@@ -300,6 +301,7 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		skynetMux := transport.NewVStreamMux(v.tpM, routing.SkynetForwardPacket, log)
 		v.tpM.SetSkynetForwardHandler(skynetMux.HandlePacket)
 		v.skynetFwdMux = skynetMux
+		wireDirectDialPolicyHook(v, skynetMux)
 		go func() {
 			for {
 				stream, err := skynetMux.Accept()
@@ -335,6 +337,7 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		appDirectMux := transport.NewVStreamMux(v.tpM, routing.AppDirectPacket, log)
 		v.tpM.SetAppDirectHandler(appDirectMux.HandlePacket)
 		v.appDirectMux = appDirectMux
+		wireDirectDialPolicyHook(v, appDirectMux)
 		if n, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
 			if sn, ok := n.(*appnet.SkywireNetworker); ok {
 				sn.SetAppDirectMux(appDirectMux)
@@ -1413,4 +1416,44 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	})
 
 	return nil
+}
+
+// wireDirectDialPolicyHook attaches the visor's routing-policy
+// hook to a VStreamMux so direct dials (sky_forward_conn /
+// VStreamMux short-circuit, which bypasses the route-finder)
+// also fire the operator's script. The script sees
+// ctx.is_direct_dial=true and ctx.transport_kind="stcpr"/etc.
+// A bare RouteSpec() allows the dial; fallback="drop" refuses
+// it (the error propagates as the VStream.Dial return).
+//
+// Other RouteSpec fields (mux/min_hops/distribution) are no-ops
+// for direct dials — there's a single transport, no routing
+// decisions to make beyond accept/refuse.
+func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
+	if v.router == nil || mux == nil {
+		return
+	}
+	hook := v.router.DialHook()
+	if hook == nil {
+		return
+	}
+	mux.SetDirectDialHook(func(remotePK cipher.PubKey, transportKind string) error {
+		info := router.DialInfo{
+			PeerPK:        remotePK,
+			IsDirectDial:  true,
+			TransportKind: transportKind,
+		}
+		adj, err := hook.BeforeDial(context.Background(), info)
+		if err != nil {
+			// Hook errored — proceed without refusing. The hook's
+			// own failure-mode (Fallback vs Drop) already decided
+			// what to return; surface as no-op here, matching
+			// how DialRoutes handles a hook error.
+			return nil
+		}
+		if adj.Fallback == "drop" {
+			return router.ErrDialPolicyDropped
+		}
+		return nil
+	})
 }
