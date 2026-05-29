@@ -17,7 +17,6 @@ import (
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/policy"
-	policywasm "github.com/skycoin/skywire/pkg/router/policy/wasm"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -202,45 +201,24 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 			return provider
 		}
 
-		var hook *policy.Hook
+		// Always install a Hook even when no policy is
+		// configured at startup. The Hook with a nil default
+		// engine and empty byApp map is zero-cost on the dial
+		// path (loaderFor returns nil → BeforeDial / SelectRoute
+		// / OnLegChange all early-return), and an installed
+		// Hook is what makes runtime swaps via
+		// SetAppRoutingPolicy possible without restart.
+		hook := policy.NewHook(nil, policy.WithHookProvider(makeProvider()), policy.WithHookLogger(policyLogger))
 
-		// PolicyPerDialWasm wins over PolicyPerDial when both
-		// are set — WASM is the explicit, compiled-artifact
-		// opt-in; a Starlark fallback at the same time would be
-		// dead config.
-		switch {
-		case v.conf.Routing.PolicyPerDialWasm != "":
-			wloader, perr := policywasm.NewLoader(
-				v.conf.Routing.PolicyPerDialWasm,
-				policywasm.WithLogger(policyLogger),
-				policywasm.WithProvider(makeProvider()),
-			)
-			if perr != nil {
-				log.WithError(perr).Warn("WASM routing policy failed to load; visor will run without visor-wide policy.")
-			} else {
-				if werr := wloader.Watch(policyLogger); werr != nil {
-					log.WithError(werr).Warn("WASM routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
-				}
-				hook = policy.NewHook(wloader, policy.WithHookProvider(makeProvider()), policy.WithHookLogger(policyLogger))
-				v.pushCloseStack("router.policy.wasm", wloader.Close)
-				log.WithField("source", wloader.Source()).Info("WASM routing policy active.")
+		if pe, perr := loadPolicyEngine(v.conf.Routing.PolicyPerDial, makeProvider(), policyLogger); perr != nil {
+			log.WithError(perr).Warn("Routing policy failed to load; visor will run without visor-wide policy.")
+		} else if pe != nil {
+			if werr := pe.watch(policyLogger); werr != nil {
+				log.WithError(werr).Warn("Routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
 			}
-		case v.conf.Routing.PolicyPerDial != "":
-			loader, perr := policy.NewLoader(
-				v.conf.Routing.PolicyPerDial,
-				policy.WithLogger(policyLogger),
-				policy.WithProvider(makeProvider()),
-			)
-			if perr != nil {
-				log.WithError(perr).Warn("Routing policy failed to load; visor will run without visor-wide policy.")
-			} else {
-				if werr := loader.Watch(policyLogger); werr != nil {
-					log.WithError(werr).Warn("Routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
-				}
-				hook = policy.NewHook(loader, policy.WithHookProvider(makeProvider()), policy.WithHookLogger(policyLogger))
-				v.pushCloseStack("router.policy", loader.Close)
-				log.WithField("source", loader.Source()).Info("Routing policy active.")
-			}
+			hook.SetDefault(pe.engine)
+			v.pushCloseStack(pe.tag, pe.engine.Close)
+			log.WithField("source", pe.engine.Source()).Info("Routing policy active.")
 		}
 
 		if v.conf.Launcher != nil {
@@ -248,31 +226,25 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 				if app.RoutingPolicy == "" {
 					continue
 				}
-				appLoader, perr := policy.NewLoader(
-					app.RoutingPolicy,
-					policy.WithLogger(policyLogger),
-					policy.WithProvider(makeProvider()),
-				)
+				pe, perr := loadPolicyEngine(app.RoutingPolicy, makeProvider(), policyLogger)
 				if perr != nil {
 					log.WithError(perr).WithField("app", app.Name).Warn("Per-app routing policy failed to load; app will fall back to default policy.")
 					continue
 				}
-				if werr := appLoader.Watch(policyLogger); werr != nil {
+				if pe == nil {
+					continue
+				}
+				if werr := pe.watch(policyLogger); werr != nil {
 					log.WithError(werr).WithField("app", app.Name).Warn("Per-app routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
 				}
-				if hook == nil {
-					hook = policy.NewHook(nil, policy.WithHookProvider(makeProvider()), policy.WithHookLogger(policyLogger))
-				}
-				hook.RegisterApp(app.Name, appLoader)
+				hook.RegisterApp(app.Name, pe.engine)
 				appName := app.Name
-				v.pushCloseStack("router.policy.app:"+appName, appLoader.Close)
-				log.WithField("app", appName).WithField("source", appLoader.Source()).Info("Per-app routing policy active.")
+				v.pushCloseStack(pe.tag+".app:"+appName, pe.engine.Close)
+				log.WithField("app", appName).WithField("source", pe.engine.Source()).Info("Per-app routing policy active.")
 			}
 		}
 
-		if hook != nil {
-			rConf.DialHook = hook
-		}
+		rConf.DialHook = hook
 	}
 
 	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
