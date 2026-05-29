@@ -190,6 +190,16 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 	if err != nil {
 		return router.DialAdjustment{}, err
 	}
+	// AvoidDirect: explicit flag OR implicit when MinHops >= 2 on
+	// any direction. The implicit case mirrors operator intent —
+	// `min_hops=2` already says "no direct" (direct = 0 hops), so
+	// surfacing that on the direct-dial bridge avoids a foot-gun
+	// where a policy seemingly enforced multi-hop but the direct
+	// short-circuit silently let traffic through anyway.
+	avoidDirect := spec.AvoidDirect ||
+		spec.MinHops >= 2 ||
+		spec.ForwardMinHops >= 2 ||
+		spec.ReverseMinHops >= 2
 	adj := router.DialAdjustment{
 		MuxRoutes:               spec.Mux,
 		ForwardMuxRoutes:        spec.ForwardMux,
@@ -199,6 +209,7 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 		ReverseMinHops:          spec.ReverseMinHops,
 		Fallback:                spec.Fallback,
 		RotationIntervalSeconds: spec.RotationIntervalSeconds,
+		AvoidDirect:             avoidDirect,
 	}
 	// Distribution descriptor parse — failure is non-fatal
 	// (script keeps the rest of the adjustment; distribution

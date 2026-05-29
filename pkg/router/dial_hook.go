@@ -16,6 +16,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"strconv"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -128,7 +129,31 @@ type DialAdjustment struct {
 	// rotation. Set by policies that want continuous bandwidth-
 	// spreading rotation across the eligible-peer set.
 	RotationIntervalSeconds int
+
+	// AvoidDirect, when true, makes the direct-dial fast path
+	// (VStreamMux / sky_forward_conn) skip the direct transport
+	// even when one exists — the dial falls through to the
+	// overlay route-setup path, which is what makes mux /
+	// min_hops / rotation policies meaningful. Without this, a
+	// direct transport short-circuits before any route group is
+	// built.
+	//
+	// Policy hooks set this either explicitly (the script
+	// returned avoid_direct=true) or implicitly (the script
+	// returned MinHops/ForwardMinHops/ReverseMinHops >= 2). The
+	// direct-dial bridge in wireDirectDialPolicyHook surfaces
+	// ErrPolicyAvoidDirect when this is true; the caller
+	// (skywire_networker.tryDirectDial) treats that as a normal
+	// direct-dial failure and falls through to route setup.
+	AvoidDirect bool
 }
+
+// ErrPolicyAvoidDirect is returned from the direct-dial policy
+// hook when the policy wants to force the overlay path. The
+// caller (tryDirectDial) treats this like any other direct-dial
+// failure and falls through to route setup — no extra plumbing
+// required.
+var ErrPolicyAvoidDirect = errors.New("routing policy: avoid direct transport, use overlay")
 
 // DistributionConfig drives the per-packet leg-selection
 // strategy for a mux-enabled route group. Set on DialAdjustment

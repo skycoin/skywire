@@ -65,6 +65,7 @@ type routeSpecWire struct {
 	MinHops                 int    `json:"min_hops,omitempty"`
 	RotationIntervalSeconds int    `json:"rotation_interval_seconds,omitempty"`
 	Distribution            string `json:"distribution,omitempty"`
+	AvoidDirect             bool   `json:"avoid_direct,omitempty"`
 }
 
 type rotationActionWire struct {
@@ -114,6 +115,12 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 			MinHops:                 2,
 			RotationIntervalSeconds: 90,
 			Distribution:            "weighted: 1, 1, 1, 1",
+			// AvoidDirect: true is implied by MinHops=2, but
+			// stating it explicitly documents intent — even if a
+			// direct stcpr exists to the remote, we want the
+			// overlay path so the rotation hook has a route group
+			// to act on.
+			AvoidDirect: true,
 		}
 	}
 	out, err := json.Marshal(spec)
