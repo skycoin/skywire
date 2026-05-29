@@ -187,22 +187,6 @@ type RouteSpec struct {
 	// via decide_route; cannot be changed mid-flight (drop + redial
 	// to reconfigure).
 	RotationIntervalSeconds int
-
-	// AvoidDirect, when true, instructs the visor's direct-dial
-	// fast path (VStreamMux / sky_forward_conn) to skip the direct
-	// transport even when one exists — the dial falls through to
-	// the route-setup-node overlay path, which is what gives the
-	// rotation hook and mux/min_hops policies something to act on.
-	// Without this, a direct transport short-circuits the entire
-	// route-group establishment.
-	//
-	// Implicitly true when MinHops, ForwardMinHops, or
-	// ReverseMinHops is >= 2 — the operator already signaled
-	// "no direct" via the hop floor, and surfacing that
-	// implication on the direct-dial bridge matches operator
-	// intent. Explicit AvoidDirect=true covers the case where the
-	// operator wants a different MinHops but still no direct.
-	AvoidDirect bool
 }
 
 // RotationAction is the structured return value from a policy's

@@ -147,7 +147,7 @@ func (v *Visor) ensureFastTransport(remotePK cipher.PubKey) error {
 // for why. The caller is responsible for closing the returned
 // client.
 func DialTransportRPC(mux *transport.VStreamMux, remotePK cipher.PubKey) (*rpc.Client, error) {
-	stream, err := mux.Dial(remotePK)
+	stream, err := mux.Dial(remotePK, "")
 	if err != nil {
 		return nil, fmt.Errorf("transport rpc: dial %s: %w", remotePK.String(), err)
 	}

@@ -80,11 +80,18 @@ func (m *VStreamMux) localPK() cipher.PubKey {
 // error surfaces as the Dial return). Pass through a non-error
 // nil return to allow. nil hook = no policy check.
 //
+// appName is the originating app's name (skysocks-client,
+// vpn-client, etc.) when the caller supplied one — empty when
+// not threaded (older code paths). The routing-policy bridge
+// uses it to look up per-app policy rules so a script can
+// branch on ctx.app for direct dials just as it does for
+// overlay dials.
+//
 // Lives as a func type rather than an interface so the transport
 // package doesn't take a dependency on the router/policy package
 // — the visor wires this with a closure that bridges into the
 // existing routing-policy stack.
-type DirectDialHookFn func(remotePK cipher.PubKey, transportKind string) error
+type DirectDialHookFn func(remotePK cipher.PubKey, transportKind, appName string) error
 
 // SetDirectDialHook attaches a hook fired before every Dial.
 // Returning an error from the hook causes Dial to fail with that
@@ -103,8 +110,11 @@ func (m *VStreamMux) loadDirectDialHook() DirectDialHookFn {
 	return m.directDialHook
 }
 
-// Dial opens a virtual stream to a remote PK over an existing transport.
-func (m *VStreamMux) Dial(remotePK cipher.PubKey) (*VStream, error) {
+// Dial opens a virtual stream to a remote PK over an existing
+// transport. appName is the originating app's name; pass "" when
+// not known. The hook receives appName so per-app policies can
+// branch correctly on the direct-dial path.
+func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, error) {
 	// Find a non-DMSG transport to this peer. DMSG transports use their
 	// own stream multiplexing and don't support route ID 0 packets.
 	var targetTp *ManagedTransport
@@ -124,7 +134,7 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey) (*VStream, error) {
 	// sudph-only on a busy uplink). Hook errors are propagated as
 	// the Dial error.
 	if hook := m.loadDirectDialHook(); hook != nil {
-		if err := hook(remotePK, string(targetTp.Type())); err != nil {
+		if err := hook(remotePK, string(targetTp.Type()), appName); err != nil {
 			m.log.WithField("remote", remotePK.String()).
 				WithField("type", targetTp.Type()).
 				WithError(err).

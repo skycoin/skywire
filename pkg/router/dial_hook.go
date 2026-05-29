@@ -134,17 +134,17 @@ type DialAdjustment struct {
 	// (VStreamMux / sky_forward_conn) skip the direct transport
 	// even when one exists — the dial falls through to the
 	// overlay route-setup path, which is what makes mux /
-	// min_hops / rotation policies meaningful. Without this, a
-	// direct transport short-circuits before any route group is
-	// built.
+	// min_hops / rotation policies meaningful.
 	//
-	// Policy hooks set this either explicitly (the script
-	// returned avoid_direct=true) or implicitly (the script
-	// returned MinHops/ForwardMinHops/ReverseMinHops >= 2). The
-	// direct-dial bridge in wireDirectDialPolicyHook surfaces
-	// ErrPolicyAvoidDirect when this is true; the caller
-	// (skywire_networker.tryDirectDial) treats that as a normal
-	// direct-dial failure and falls through to route setup.
+	// Set by the policy layer implicitly when the script returned
+	// MinHops / ForwardMinHops / ReverseMinHops >= 2 — `min_hops=2`
+	// already says "no direct" (direct is 0 intermediates), and
+	// the alternative would be a separate avoid_direct knob that
+	// duplicates the same intent. The direct-dial bridge in
+	// wireDirectDialPolicyHook surfaces ErrPolicyAvoidDirect when
+	// this is true; the caller (skywire_networker.tryDirectDial)
+	// treats that as a normal direct-dial failure and falls
+	// through to route setup.
 	AvoidDirect bool
 }
 
