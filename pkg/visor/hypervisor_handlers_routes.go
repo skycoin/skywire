@@ -192,6 +192,23 @@ func (hv *Hypervisor) getRouteGroups() http.HandlerFunc {
 	})
 }
 
+// getRoutingPolicies surfaces the installed routing-policy state
+// for the hypervisor UI's routing tab. Returns
+// {default?, per_app: {appName: PolicyInfo}}.
+func (hv *Hypervisor) getRoutingPolicies() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		summary, err := ctx.API.RoutingPolicies()
+		if err != nil {
+			httputil.WriteJSON(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		if summary == nil {
+			summary = &RoutingPoliciesSummary{PerApp: map[string]*RoutingPolicyInfo{}}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, summary)
+	})
+}
+
 func (hv *Hypervisor) postMinHops() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		var reqBody struct {

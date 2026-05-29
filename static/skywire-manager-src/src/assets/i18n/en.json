@@ -1201,7 +1201,20 @@
       "rules": "Rules",
       "groups": "Route Groups",
       "find": "Find Route",
-      "calc": "Calculate"
+      "calc": "Calculate",
+      "policies": "Policies"
+    },
+    "policies": {
+      "title": "Routing Policies",
+      "loading": "Loading policies…",
+      "empty": "No routing policy configured.",
+      "default": "Visor-wide default",
+      "active": "active",
+      "inactive": "inactive",
+      "col-app": "App",
+      "col-source": "Source",
+      "col-backend": "Backend",
+      "col-active": "State"
     },
     "groups": {
       "title": "Active Route Groups",

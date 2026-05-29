@@ -158,6 +158,12 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	// RoutingPolicies returns a snapshot of the currently-installed
+	// routing-policy state: the visor-wide default plus any per-app
+	// overrides. Empty struct when no policies are configured.
+	// Hypervisor UI consumes this to display the policy panel in
+	// the routing tab.
+	RoutingPolicies() (*RoutingPoliciesSummary, error)
 	// RouteGroupMuxInfo returns per-mux-leg byte/packet/latency
 	// counters for every active route group tagged with the named
 	// app (skysocks-client, vpn-client, etc.). Empty slice when

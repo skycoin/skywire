@@ -51,7 +51,20 @@ interface RouteFindResp {
   routes?: RouteFindEntry[];
 }
 
-type RoutingView = 'rules' | 'groups' | 'find' | 'calc';
+type RoutingView = 'rules' | 'groups' | 'find' | 'calc' | 'policies';
+
+// Routing-policy summary shape returned by
+// /visors/{pk}/routing-policies — mirrors
+// pkg/visor/api_routing_policies.go's RoutingPoliciesSummary.
+interface RoutingPolicyInfo {
+  source: string;
+  active: boolean;
+  backend?: string;
+}
+interface RoutingPoliciesSummary {
+  default?: RoutingPolicyInfo;
+  per_app: { [appName: string]: RoutingPolicyInfo };
+}
 
 /**
  * Routing tab content: routes list + traffic chart + the inline
@@ -101,10 +114,16 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   calcError: string | null = null;
   calcResults: RouteFindEntry[] = [];
 
+  // Routing-policy panel state.
+  routingPolicies: RoutingPoliciesSummary | null = null;
+  routingPoliciesLoading = false;
+  routingPoliciesError: string | null = null;
+
   private dataSubscription: Subscription;
   private trafficSubscription: Subscription;
   private saveRouterSubscription: Subscription;
   private groupsSubscription: Subscription;
+  private policiesSubscription: Subscription;
 
   constructor(
     private formBuilder: UntypedFormBuilder,
@@ -139,6 +158,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     this.trafficSubscription?.unsubscribe();
     this.saveRouterSubscription?.unsubscribe();
     this.groupsSubscription?.unsubscribe();
+    this.policiesSubscription?.unsubscribe();
   }
 
   setView(v: RoutingView) {
@@ -147,6 +167,14 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     if (v === 'groups' && !this.groupsSubscription) {
       this.startGroupsPolling();
     }
+    if (v === 'policies' && !this.policiesSubscription) {
+      this.startPoliciesPolling();
+    }
+  }
+
+  policyAppNames(): string[] {
+    if (!this.routingPolicies || !this.routingPolicies.per_app) { return []; }
+    return Object.keys(this.routingPolicies.per_app).sort();
   }
 
   submitRouteFind() {
@@ -213,6 +241,29 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
       this.routeGroups = Array.isArray(rgs) ? rgs : [];
     });
     this.routeGroupsLoading = true;
+  }
+
+  // Routing-policy snapshot rarely changes (only on config edit
+  // or runtime swap), so 15s is plenty of refresh cadence. Same
+  // shape as startGroupsPolling otherwise.
+  private startPoliciesPolling() {
+    if (!this.nodePK) { return; }
+    this.policiesSubscription = interval(15000).pipe(
+      startWith(0),
+      switchMap(() => this.routeService.routingPolicies(this.nodePK).pipe(
+        catchError((err) => {
+          this.routingPoliciesError = err?.message || 'Failed to fetch routing policies';
+          this.routingPoliciesLoading = false;
+          return of(null);
+        }),
+      )),
+    ).subscribe((summary: any) => {
+      if (summary == null) { return; }
+      this.routingPoliciesError = null;
+      this.routingPoliciesLoading = false;
+      this.routingPolicies = summary as RoutingPoliciesSummary;
+    });
+    this.routingPoliciesLoading = true;
   }
 
   toggleRouterForm() {

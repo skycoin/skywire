@@ -815,6 +815,11 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routeGroups, nil
 }
 
+// RoutingPolicies implements API.
+func (*mockRPCClient) RoutingPolicies() (*RoutingPoliciesSummary, error) {
+	return &RoutingPoliciesSummary{PerApp: map[string]*RoutingPolicyInfo{}}, nil
+}
+
 // RouteGroupMuxInfo implements API.
 func (mc *mockRPCClient) RouteGroupMuxInfo(_ string) ([]MuxRouteGroupInfo, error) {
 	return nil, nil
