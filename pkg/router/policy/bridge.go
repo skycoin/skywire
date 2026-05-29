@@ -279,6 +279,7 @@ func routeSpecCtor(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple,
 		"fallback":                  starlark.String(""),
 		"distribution":              starlark.String(""),
 		"rotation_interval_seconds": starlark.MakeInt(0),
+		"avoid_direct":              starlark.Bool(false),
 	}
 	for _, kv := range kwargs {
 		key := string(kv[0].(starlark.String))
@@ -376,6 +377,7 @@ func parseRouteSpec(v starlark.Value) (RouteSpec, error) {
 	out.Fallback = readStrField(s, "fallback")
 	out.Distribution = readStrField(s, "distribution")
 	out.RotationIntervalSeconds = readIntField(s, "rotation_interval_seconds")
+	out.AvoidDirect = readBoolField(s, "avoid_direct")
 	return out, nil
 }
 
