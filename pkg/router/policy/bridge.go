@@ -26,6 +26,7 @@ func (e *Evaluator) preDeclared() starlark.StringDict {
 		"logging":    loggingModule(e),
 		"RouteSpec":  starlark.NewBuiltin("RouteSpec", routeSpecCtor),
 		"Candidate":  starlark.NewBuiltin("Candidate", candidateCtor),
+		"Rotation":   starlark.NewBuiltin("Rotation", rotationCtor),
 	}
 }
 
@@ -267,21 +268,44 @@ func routeSpecCtor(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple,
 		return nil, fmt.Errorf("RouteSpec: positional arguments not allowed; use kwargs")
 	}
 	dict := starlark.StringDict{
-		"chosen":           starlark.None,
-		"reverse_chosen":   starlark.None,
-		"mux":              starlark.MakeInt(0),
-		"forward_mux":      starlark.MakeInt(0),
-		"reverse_mux":      starlark.MakeInt(0),
-		"min_hops":         starlark.MakeInt(0),
-		"forward_min_hops": starlark.MakeInt(0),
-		"reverse_min_hops": starlark.MakeInt(0),
-		"fallback":         starlark.String(""),
-		"distribution":     starlark.String(""),
+		"chosen":                    starlark.None,
+		"reverse_chosen":            starlark.None,
+		"mux":                       starlark.MakeInt(0),
+		"forward_mux":               starlark.MakeInt(0),
+		"reverse_mux":               starlark.MakeInt(0),
+		"min_hops":                  starlark.MakeInt(0),
+		"forward_min_hops":          starlark.MakeInt(0),
+		"reverse_min_hops":          starlark.MakeInt(0),
+		"fallback":                  starlark.String(""),
+		"distribution":              starlark.String(""),
+		"rotation_interval_seconds": starlark.MakeInt(0),
 	}
 	for _, kv := range kwargs {
 		key := string(kv[0].(starlark.String))
 		if _, ok := dict[key]; !ok {
 			return nil, fmt.Errorf("RouteSpec: unknown field %q", key)
+		}
+		dict[key] = kv[1]
+	}
+	return starlarkstruct.FromStringDict(starlarkstruct.Default, dict), nil
+}
+
+// rotationCtor is `Rotation(...)` callable from inside the
+// script. Used as the return value of on_tick. Accepts kwargs
+// only.
+func rotationCtor(_ *starlark.Thread, _ *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+	if len(args) > 0 {
+		return nil, fmt.Errorf("Rotation: positional arguments not allowed; use kwargs")
+	}
+	dict := starlark.StringDict{
+		"drop_legs":    starlark.NewList(nil),
+		"add_leg":      starlark.Bool(false),
+		"exclude_hops": starlark.NewList(nil),
+	}
+	for _, kv := range kwargs {
+		key := string(kv[0].(starlark.String))
+		if _, ok := dict[key]; !ok {
+			return nil, fmt.Errorf("Rotation: unknown field %q", key)
 		}
 		dict[key] = kv[1]
 	}
@@ -351,6 +375,41 @@ func parseRouteSpec(v starlark.Value) (RouteSpec, error) {
 	out.ReverseMinHops = readIntField(s, "reverse_min_hops")
 	out.Fallback = readStrField(s, "fallback")
 	out.Distribution = readStrField(s, "distribution")
+	out.RotationIntervalSeconds = readIntField(s, "rotation_interval_seconds")
+	return out, nil
+}
+
+// parseRotationAction translates the Starlark return value from
+// on_tick into a policy.RotationAction. None → zero-value (no-op).
+// A struct with drop_legs / add_leg / exclude_hops fields is the
+// expected shape; missing fields default to zero.
+func parseRotationAction(v starlark.Value) (RotationAction, error) {
+	if _, ok := v.(starlark.NoneType); ok {
+		return RotationAction{}, nil
+	}
+	s, ok := v.(*starlarkstruct.Struct)
+	if !ok {
+		return RotationAction{}, fmt.Errorf("expected struct, got %s", v.Type())
+	}
+	out := RotationAction{
+		AddLeg:      readBoolField(s, "add_leg"),
+		ExcludeHops: readStrListField(s, "exclude_hops"),
+	}
+	if drops, err := s.Attr("drop_legs"); err == nil && drops != nil {
+		if _, isNone := drops.(starlark.NoneType); !isNone {
+			if lst, ok := drops.(*starlark.List); ok {
+				it := lst.Iterate()
+				defer it.Done()
+				var v starlark.Value
+				for it.Next(&v) {
+					if n, ok := v.(starlark.Int); ok {
+						i, _ := n.Int64()
+						out.DropLegs = append(out.DropLegs, int(i))
+					}
+				}
+			}
+		}
+	}
 	return out, nil
 }
 
@@ -377,6 +436,17 @@ func readIntField(s *starlarkstruct.Struct, name string) int {
 		return int(n)
 	}
 	return 0
+}
+
+func readBoolField(s *starlarkstruct.Struct, name string) bool {
+	v, err := s.Attr(name)
+	if err != nil || v == nil {
+		return false
+	}
+	if b, ok := v.(starlark.Bool); ok {
+		return bool(b)
+	}
+	return false
 }
 
 func readStrField(s *starlarkstruct.Struct, name string) string {
