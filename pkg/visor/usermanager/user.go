@@ -13,6 +13,7 @@ import (
 	"go.etcd.io/bbolt"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
 
 const (
@@ -113,6 +114,18 @@ func NewBoltUserStore(path string) (*BoltUserStore, error) {
 		return nil, err
 	}
 
+	// Repair-on-corrupt: bbolt panics from inside its batch goroutine
+	// on a corrupt freelist page, which propagates up and crash-loops
+	// the hypervisor during init. Recreating users.db from scratch
+	// resets operator login — the trade-off is "visor down forever
+	// with no recovery path" vs "operator re-creates the first user
+	// at next UI visit." The corrupt file is renamed to
+	// .corrupt.<unix-ts> by RepairIfCorrupt so the prior account
+	// data isn't lost outright; an operator can recover by inspecting
+	// the renamed file if needed.
+	if err := bbolthealth.RepairIfCorrupt(path); err != nil {
+		return nil, fmt.Errorf("usermanager: integrity-check %s: %w", path, err)
+	}
 	db, err := bbolt.Open(path, os.FileMode(ownerRW), &bbolt.Options{})
 	if err != nil {
 		return nil, err

@@ -16,6 +16,7 @@ import (
 	bboltErrors "go.etcd.io/bbolt/errors"
 
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
 
 const (
@@ -91,6 +92,13 @@ type bBoltLogStore struct {
 
 // NewBBoltLogStore returns a bbolt implementation of an app log store.
 func NewBBoltLogStore(path, appName string) (_ LogStore, err error) {
+	// Repair-on-corrupt: bbolt panics from inside its batch goroutine
+	// on a corrupt freelist page, which propagates up and crash-loops
+	// the visor during InitConcurrent. Per-app log history is local
+	// telemetry — recreate fresh on corruption instead of crashing.
+	if err := bbolthealth.RepairIfCorrupt(path); err != nil {
+		return nil, fmt.Errorf("appcommon: integrity-check %s: %w", path, err)
+	}
 	db, err := bbolt.Open(path, 0606, nil)
 	if err != nil {
 		return nil, err
