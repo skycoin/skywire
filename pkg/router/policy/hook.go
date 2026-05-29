@@ -9,6 +9,7 @@ package policy
 
 import (
 	"context"
+	"sync"
 
 	"github.com/skycoin/skywire/pkg/router"
 )
@@ -25,9 +26,11 @@ import (
 // per-app policy is the operator's intent for that app.
 type Hook struct {
 	loader   Engine
-	byApp    map[string]Engine
 	provider Provider // used for HopsGeo enrichment during SelectRoute
 	logger   func(format string, args ...interface{})
+
+	mu    sync.RWMutex
+	byApp map[string]Engine
 }
 
 // HookOption configures a Hook at construction.
@@ -79,12 +82,12 @@ type EngineSnapshot struct {
 	Active bool
 }
 
-// Snapshot returns the Hook's current engine state. Reads are
-// safe today because RegisterApp is init-only (writes happen
-// during single-threaded startup); when SetAppRoutingPolicy
-// re-lands as a runtime swap, this method picks up the
-// required mutex alongside it.
+// Snapshot returns the Hook's current engine state. Takes the
+// RLock for the duration so it's safe to call concurrently with
+// the dial path and with SetDefault / RegisterApp.
 func (h *Hook) Snapshot() HookSnapshot {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	out := HookSnapshot{}
 	if h.loader != nil {
 		out.Default = &EngineSnapshot{
@@ -107,19 +110,48 @@ func (h *Hook) Snapshot() HookSnapshot {
 	return out
 }
 
-// RegisterApp attaches a per-app Engine that overrides the default
-// for dials originating from the named app. Safe to call only
-// during init (before the hook is handed to the router).
-func (h *Hook) RegisterApp(appName string, l Engine) {
+// SetDefault swaps the visor-wide (default) Engine. Returns the
+// previous engine for caller-side cleanup. Same concurrency
+// rules as RegisterApp.
+func (h *Hook) SetDefault(l Engine) Engine {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	prev := h.loader
+	h.loader = l
+	return prev
+}
+
+// RegisterApp attaches a per-app Engine that overrides the
+// default for dials originating from the named app. Safe to
+// call concurrently with the dial path: writes are serialized
+// by h.mu and the read path in loaderFor takes an RLock.
+//
+// Returns the previously-registered Engine (or nil) so the
+// caller can Close it if it owns the lifecycle. Runtime swaps
+// (e.g. `cli visor app start --routing-policy <path>`) should
+// Close the previous engine after a successful swap to release
+// the wazero runtime / fsnotify watcher.
+func (h *Hook) RegisterApp(appName string, l Engine) Engine {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	if h.byApp == nil {
 		h.byApp = make(map[string]Engine)
 	}
-	h.byApp[appName] = l
+	prev := h.byApp[appName]
+	if l == nil {
+		delete(h.byApp, appName)
+	} else {
+		h.byApp[appName] = l
+	}
+	return prev
 }
 
 // loaderFor returns the per-app engine if one is registered for
-// info.AppName, else the default.
+// info.AppName, else the default. Hot path on every dial — uses
+// an RLock so concurrent dials don't serialize on byApp lookups.
 func (h *Hook) loaderFor(appName string) Engine {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	if h.byApp != nil {
 		if l, ok := h.byApp[appName]; ok {
 			return l
