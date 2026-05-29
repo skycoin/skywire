@@ -850,6 +850,13 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, err
 }
 
+// RoutingPolicies calls RoutingPolicies.
+func (rc *rpcClient) RoutingPolicies() (*RoutingPoliciesSummary, error) {
+	var summary RoutingPoliciesSummary
+	err := rc.Call("RoutingPolicies", &struct{}{}, &summary)
+	return &summary, err
+}
+
 // RouteGroupMuxInfo calls RouteGroupMuxInfo.
 func (rc *rpcClient) RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error) {
 	var infos []MuxRouteGroupInfo
