@@ -413,7 +413,9 @@ func (mt *ManagedTransport) tickPing() {
 	}
 }
 
-// sendTransportPing writes a transport-level ping packet.
+// sendTransportPing writes a transport-level ping packet. Bytes are
+// logged via logSent so they show up symmetrically with the pong
+// the peer's readPacket logs via logRecv.
 func (mt *ManagedTransport) sendTransportPing() {
 	mt.transportMx.Lock()
 	tp := mt.transport
@@ -423,12 +425,19 @@ func (mt *ManagedTransport) sendTransportPing() {
 	}
 
 	p := routing.MakeTransportPingPacket(time.Now().UnixNano())
-	if _, err := tp.Write(p); err != nil {
+	n, err := tp.Write(p)
+	if err != nil {
 		mt.log.WithError(err).Debug("Failed to send transport ping")
+		return
+	}
+	if n > routing.PacketHeaderSize {
+		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
 }
 
 // handleTransportPing responds to a transport-level ping with a pong.
+// Pong bytes are logged via logSent for the same reason as
+// sendTransportPing.
 func (mt *ManagedTransport) handleTransportPing(p routing.Packet) {
 	payload := p.Payload()
 	if len(payload) < routing.TransportPingPayloadSize {
@@ -444,8 +453,13 @@ func (mt *ManagedTransport) handleTransportPing(p routing.Packet) {
 	}
 
 	pong := routing.MakeTransportPongPacket(timestamp)
-	if _, err := tp.Write(pong); err != nil {
+	n, err := tp.Write(pong)
+	if err != nil {
 		mt.log.WithError(err).Debug("Failed to send transport pong")
+		return
+	}
+	if n > routing.PacketHeaderSize {
+		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
 }
 
@@ -743,19 +757,36 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 }
 
 // WriteRawPacket writes a pre-constructed packet to the transport.
-// Used by the cascade handler to send ACKs and relay messages on route ID 0.
+// Used by the cascade handler and VStreamMux to send route-ID-0
+// traffic (cascade RPC, DHT, VStream / sky_forward_conn direct
+// dials).
+//
+// Logs the payload bytes via logSent so bandwidth accounting
+// matches WritePacket's behavior. Without this, every direct-
+// dial byte sent by sky_forward_conn (skysocks-client / vpn-
+// client / skynet-client over a direct stcpr/sudph transport)
+// was invisible to the bandwidth counters — only inbound bytes
+// got counted via readPacket, producing the systematic
+// "sent>>recv" or "recv>>sent" asymmetry seen on per-transport
+// metrics for visors that use direct-dial heavily. The recv
+// counter has always counted all packets because readPacket
+// is the only inbound path.
 func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
 	mt.transportMx.Lock()
 	if mt.transport == nil {
 		mt.transportMx.Unlock()
 		return fmt.Errorf("write raw packet: transport not set up")
 	}
-	_, err := mt.transport.Write(packet)
+	n, err := mt.transport.Write(packet)
 	mt.transportMx.Unlock()
 	if err != nil {
 		mt.close()
+		return err
 	}
-	return err
+	if n > routing.PacketHeaderSize {
+		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
+	}
+	return nil
 }
 
 // WARNING: Not thread safe.
