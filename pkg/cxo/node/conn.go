@@ -29,8 +29,11 @@ type Conn struct {
 	initErr error
 	initq   chan struct{}
 	// initClosed is set true the first time onConnInit or onConnInitErr
-	// publishes the init result on this Conn. Protected by Node.mx (the
-	// only callers hold it). Guards close(initq) against a double-close
+	// publishes the init result on this Conn. Atomic CAS-gated — pre-
+	// shard this was a plain bool under Node.mx, but the conn-map
+	// sharding moved the init signal off the global mutex (so accept
+	// and removeConn paths no longer serialize on init), and the
+	// guard had to follow. Guards close(initq) against a double-close
 	// race: pre-fix the isPending branch of Node.initConn called
 	// onConnInitErr a second time after its waitForInit returned the
 	// error already published by the isNew handshaker, panicking the
@@ -39,7 +42,7 @@ type Conn struct {
 	// and every per-peer ConnectPK times out). Idempotency here means
 	// any future caller of onConnInit/onConnInitErr can't reintroduce
 	// the panic even if a new code path adds a redundant signal.
-	initClosed bool
+	initClosed atomic.Bool
 
 	closeq chan struct{}  // signal for all goroutines to exit
 	doneq  chan struct{}  // closed when run() has fully completed (maps cleaned, transport closed)
