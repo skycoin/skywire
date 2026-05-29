@@ -101,3 +101,31 @@ td.mono.small,
   font-size: 0.92em;
   margin: 8px 0 0 0;
 }
+
+// Routing-policy panel styling. Active / inactive badges visually
+// match the rg-role badges (initiator-style for active, dim for
+// inactive). Backend tag is a lower-contrast pill.
+.policy-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.policy-badge.policy-active {
+  background-color: rgba(80, 200, 120, 0.18);
+  color: rgba(140, 230, 170, 0.95);
+}
+.policy-badge.policy-inactive {
+  background-color: rgba(180, 180, 180, 0.15);
+  color: rgba(200, 200, 200, 0.7);
+}
+.policy-backend {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 0.78em;
+  background-color: rgba(120, 160, 220, 0.18);
+  color: rgba(180, 210, 240, 0.95);
+}
