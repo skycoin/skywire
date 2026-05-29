@@ -8,8 +8,9 @@
 //
 //	sudo install -m 0644 app-mux.wasm /etc/skywire/policies/
 //	# in skywire.json: "routing": {
-//	#   "policy_per_dial_wasm": "@/etc/skywire/policies/app-mux.wasm"
+//	#   "policy_per_dial": "@/etc/skywire/policies/app-mux.wasm"
 //	# }
+//	# backend dispatched by file extension.
 //
 // Same semantic as the skylark version: per-app mux + min_hops,
 // latency-sensitive apps stay single-route, bandwidth apps get

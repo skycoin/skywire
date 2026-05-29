@@ -17,8 +17,22 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
+
+// ErrRouterNotAvailable is returned by RPC handlers that need a
+// router (e.g. SetAppRoutingPolicy) before the visor has finished
+// router init.
+var ErrRouterNotAvailable = errors.New("router not available")
+
+// ErrPolicyHookUnavailable is returned when no router.DialHook is
+// installed — typically because no policy was configured at startup
+// and the runtime swap is the first policy this visor has seen.
+// (Not currently reachable: init_router.go always installs a hook
+// for the runtime-swap path. Reserved for the case where DialHook
+// is explicitly disabled.)
+var ErrPolicyHookUnavailable = errors.New("routing-policy hook unavailable")
 
 // Apps implements API.
 func (v *Visor) Apps() ([]*appserver.AppState, error) {
@@ -91,6 +105,69 @@ func (v *Visor) StartAppWithMode(appName, launcherMode string) error {
 		return v.appL.StartAppWithMode(appName, nil, envs, launcherMode)
 	}
 	return ErrProcNotAvailable
+}
+
+// SetAppRoutingPolicy installs (or clears) a per-app routing
+// policy at runtime. Backend is dispatched by file extension
+// — `.wasm` uses the WASM loader, anything else (including the
+// inline-Starlark form) uses the Starlark loader. The swap is
+// live: the running app picks up the new policy on its next
+// dial, no restart required.
+//
+// path == "" or "none" clears the per-app entry, falling the
+// app back to the visor-wide policy (or no policy if none is
+// configured).
+//
+// Returns ErrRouterNotAvailable when called before router
+// initialization completes.
+func (v *Visor) SetAppRoutingPolicy(appName, path string) error {
+	if v.router == nil {
+		return ErrRouterNotAvailable
+	}
+	dh := v.router.DialHook()
+	hook, ok := dh.(*policy.Hook)
+	if !ok || hook == nil {
+		return ErrPolicyHookUnavailable
+	}
+
+	logger := func(format string, args ...interface{}) {
+		v.log.Infof(format, args...)
+	}
+	provider := newVisorPolicyProvider(v)
+
+	pe, err := loadPolicyEngine(path, provider, logger)
+	if err != nil {
+		return fmt.Errorf("load policy %q: %w", path, err)
+	}
+
+	var newEngine policy.Engine
+	if pe != nil {
+		if werr := pe.watch(logger); werr != nil {
+			v.log.WithError(werr).WithField("app", appName).
+				Warn("Per-app routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
+		}
+		newEngine = pe.engine
+	}
+	prev := hook.RegisterApp(appName, newEngine)
+	if prev != nil {
+		// Close the displaced engine to release its wazero
+		// runtime / fsnotify watcher. Idempotent for both
+		// backends; safe to call after the new engine is
+		// already serving dials.
+		if cerr := prev.Close(); cerr != nil {
+			v.log.WithError(cerr).WithField("app", appName).
+				Warn("Closing displaced routing-policy engine returned an error.")
+		}
+	}
+	if newEngine != nil {
+		v.pushCloseStack(pe.tag+".app:"+appName+".runtime", newEngine.Close)
+		v.log.WithField("app", appName).WithField("source", newEngine.Source()).
+			Info("Per-app routing policy installed at runtime.")
+	} else {
+		v.log.WithField("app", appName).
+			Info("Per-app routing policy cleared at runtime.")
+	}
+	return nil
 }
 
 // AddApp implement API.

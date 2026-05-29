@@ -298,6 +298,11 @@ func (*mockRPCClient) StartAppWithMode(string, string) error {
 	return nil
 }
 
+// SetAppRoutingPolicy implements API.
+func (*mockRPCClient) SetAppRoutingPolicy(string, string) error {
+	return nil
+}
+
 // AddApp implement API.
 func (*mockRPCClient) AddApp(string, string) error {
 	return nil
