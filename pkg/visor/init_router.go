@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/policy"
+	policywasm "github.com/skycoin/skywire/pkg/router/policy/wasm"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -203,7 +204,28 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 		var hook *policy.Hook
 
-		if v.conf.Routing.PolicyPerDial != "" {
+		// PolicyPerDialWasm wins over PolicyPerDial when both
+		// are set — WASM is the explicit, compiled-artifact
+		// opt-in; a Starlark fallback at the same time would be
+		// dead config.
+		switch {
+		case v.conf.Routing.PolicyPerDialWasm != "":
+			wloader, perr := policywasm.NewLoader(
+				v.conf.Routing.PolicyPerDialWasm,
+				policywasm.WithLogger(policyLogger),
+				policywasm.WithProvider(makeProvider()),
+			)
+			if perr != nil {
+				log.WithError(perr).Warn("WASM routing policy failed to load; visor will run without visor-wide policy.")
+			} else {
+				if werr := wloader.Watch(policyLogger); werr != nil {
+					log.WithError(werr).Warn("WASM routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
+				}
+				hook = policy.NewHook(wloader, policy.WithHookProvider(makeProvider()), policy.WithHookLogger(policyLogger))
+				v.pushCloseStack("router.policy.wasm", wloader.Close)
+				log.WithField("source", wloader.Source()).Info("WASM routing policy active.")
+			}
+		case v.conf.Routing.PolicyPerDial != "":
 			loader, perr := policy.NewLoader(
 				v.conf.Routing.PolicyPerDial,
 				policy.WithLogger(policyLogger),
