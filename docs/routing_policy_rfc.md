@@ -1,6 +1,8 @@
-# RFC: Operator-Programmable Routing Policy
+# RFC: Operator-Programmable Routing Policy (skylark)
 
-Status: **Draft.** Lays out the design space for letting operators write arbitrary per-dial routing decisions in an embedded scripting language. Implementation deferred until the design is agreed.
+Status: **Active** — phases 1–6 landed. Subsequent additions land as new descriptor verbs / hook touchpoints (PRs #2890 → #2911) rather than re-opening the RFC core.
+
+Operator-facing name: **skylark** — the embedded language is Starlark (Skylark was its original name before Google's 2017 rename); the operator-facing surface (Starlark + the skywire routing stdlib `datetime` / `geo` / `transports` / `peers` / `logging` / `RouteSpec` / `Candidate` / `on_leg_change`) keeps the historical name, matching the `sky_*` pattern used elsewhere in the project. Code references stay `starlark` because `go.starlark.net` is the upstream dep we import.
 
 Related work: this builds on the unified-app-framework groundwork (RFC #2863, PRs #2860–#2879). It's downstream of that work but not blocked on it.
 
