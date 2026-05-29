@@ -689,6 +689,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
 				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
+				r.Get("/visors/{pk}/routing-policies", hv.getRoutingPolicies())
 				r.Post("/visors/{pk}/shutdown", hv.shutdown())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Get("/visors/{pk}/runtime-stats", hv.getRuntimeStats())

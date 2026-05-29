@@ -47,6 +47,17 @@ export class RouteService {
   }
 
   /**
+   * Returns the installed routing-policy summary: visor-wide
+   * default + per-app overrides, with each engine's source,
+   * active state, and backend ("skylark" / "wasm"). Backend
+   * handler: pkg/visor/hypervisor_handlers_routes.go
+   * getRoutingPolicies.
+   */
+  routingPolicies(nodeKey: string) {
+    return this.apiService.get(`visors/${nodeKey}/routing-policies`);
+  }
+
+  /**
    * Queries the route-finder service via the visor's existing
    * rfClient. body: { src_pk?, dst_pk, min_hops?, max_hops? }.
    * src_pk defaults to the local visor on the backend when empty.
