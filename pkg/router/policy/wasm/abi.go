@@ -86,6 +86,7 @@ type RouteSpecWire struct {
 	Fallback                string         `json:"fallback,omitempty"`
 	Distribution            string         `json:"distribution,omitempty"`
 	RotationIntervalSeconds int            `json:"rotation_interval_seconds,omitempty"`
+	AvoidDirect             bool           `json:"avoid_direct,omitempty"`
 }
 
 // TickInputWire is the JSON envelope the host passes into the
