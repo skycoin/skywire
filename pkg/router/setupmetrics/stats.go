@@ -98,16 +98,35 @@ const (
 const (
 	// circuitFailureThreshold is the number of consecutive failures
 	// to a destination that trips the breaker to OPEN.
-	circuitFailureThreshold = 5
+	//
+	// Lowered from 5 → 3 after the 1.3.59-era observation that
+	// dmsg-error-202 (intermediate's stale dmsg session) consistently
+	// produces 3+ failures back-to-back; tolerating 5 wastes the next
+	// two setup attempts on doomed routes. With the open duration
+	// tuned to dmsg-session-refresh cadence (below), tripping earlier
+	// is the right balance.
+	circuitFailureThreshold = 3
 	// circuitOpenDuration is how long the breaker stays OPEN before
 	// transitioning to HALF_OPEN to allow a probe setup.
-	circuitOpenDuration = 60 * time.Second
+	//
+	// Bumped from 60s → 5min to align with dmsg's own session-refresh
+	// cadence (~5min). dmsg-error-202 means a visor is registered in
+	// dmsg-disc but its actual delegated-server session is stale; the
+	// session re-publishes itself on a ~5min cycle, so retrying inside
+	// that window is doomed to hit the same stale state. 60s let
+	// half-open probes burn through the same failure on every cycle.
+	circuitOpenDuration = 5 * time.Minute
 	// circuitMaxOpenDuration is the maximum time a breaker can stay
 	// in the open/half_open cycle before being force-reset to closed.
 	// This prevents permanent lockout when the RSN's own DMSG sessions
 	// are stale but the destination is actually alive — fresh traffic
 	// will establish new DMSG paths.
-	circuitMaxOpenDuration = 10 * time.Minute
+	//
+	// Bumped from 10min → 30min in concert with the longer open
+	// duration; with 5min between half-open probes, 10min is only two
+	// retry windows which is tight for a genuinely-down peer waiting
+	// to come back. 30min gives ~6 half-open probes before force-reset.
+	circuitMaxOpenDuration = 30 * time.Minute
 	// circuitFailureWindow bounds how long consecutive failures must
 	// occur within to count toward the threshold. Failures older than
 	// this window are considered stale and the consecutive counter is
