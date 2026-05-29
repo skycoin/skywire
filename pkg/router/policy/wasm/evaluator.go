@@ -404,7 +404,6 @@ func specFromWire(w RouteSpecWire) policy.RouteSpec {
 		Fallback:                w.Fallback,
 		Distribution:            w.Distribution,
 		RotationIntervalSeconds: w.RotationIntervalSeconds,
-		AvoidDirect:             w.AvoidDirect,
 	}
 	if w.Chosen != nil {
 		c := candidateFromWire(*w.Chosen)

@@ -65,7 +65,6 @@ type routeSpecWire struct {
 	MinHops                 int    `json:"min_hops,omitempty"`
 	RotationIntervalSeconds int    `json:"rotation_interval_seconds,omitempty"`
 	Distribution            string `json:"distribution,omitempty"`
-	AvoidDirect             bool   `json:"avoid_direct,omitempty"`
 }
 
 type rotationActionWire struct {
@@ -110,17 +109,17 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 	var spec routeSpecWire
 	switch input.Ctx.App {
 	case "vpn-client", "skysocks-client", "skynet-client":
+		// min_hops=2 already says "no direct transport" — direct
+		// is 0 intermediates, so requiring at least 1 intermediate
+		// rules it out. The visor's policy layer treats min_hops>=2
+		// as an implicit avoid_direct signal on the direct-dial
+		// bridge, so the dial flows to the overlay path where
+		// rotation can act on the resulting route group.
 		spec = routeSpecWire{
 			Mux:                     4,
 			MinHops:                 2,
 			RotationIntervalSeconds: 90,
 			Distribution:            "weighted: 1, 1, 1, 1",
-			// AvoidDirect: true is implied by MinHops=2, but
-			// stating it explicitly documents intent — even if a
-			// direct stcpr exists to the remote, we want the
-			// overlay path so the rotation hook has a route group
-			// to act on.
-			AvoidDirect: true,
 		}
 	}
 	out, err := json.Marshal(spec)

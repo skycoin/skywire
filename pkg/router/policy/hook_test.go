@@ -823,30 +823,6 @@ def decide_route(ctx, candidates):
 	}
 }
 
-func TestHook_BeforeDial_AvoidDirectExplicit(t *testing.T) {
-	src := `
-def decide_route(ctx, candidates):
-    return RouteSpec(avoid_direct=True)
-`
-	loader, err := NewLoader(src)
-	if err != nil {
-		t.Fatalf("NewLoader: %v", err)
-	}
-	defer loader.Close() //nolint:errcheck
-
-	h := NewHook(loader)
-	pk := cipher.PubKey{}
-	pk[0] = 0x02
-	info := router.DialInfo{AppName: "skysocks-client", PeerPK: pk, IsDirectDial: true}
-	adj, err := h.BeforeDial(context.Background(), info)
-	if err != nil {
-		t.Fatalf("BeforeDial: %v", err)
-	}
-	if !adj.AvoidDirect {
-		t.Errorf("AvoidDirect=false, want true (explicit)")
-	}
-}
-
 func TestHook_BeforeDial_AvoidDirectImpliedByMinHops(t *testing.T) {
 	// MinHops >= 2 should imply AvoidDirect — direct = 0 hops.
 	cases := []struct {
