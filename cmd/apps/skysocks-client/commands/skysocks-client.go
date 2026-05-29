@@ -39,13 +39,15 @@ const (
 )
 
 var (
-	r          *netutil.Retrier
-	addr       string
-	serverPK   string
-	httpAddr   string
-	retryDelay int64
-	tries      int64
-	appPort    uint16
+	r              *netutil.Retrier
+	addr           string
+	serverPK       string
+	httpAddr       string
+	retryDelay     int64
+	tries          int64
+	appPort        uint16
+	reconnect      bool
+	reconnectDelay int64
 )
 
 func init() {
@@ -56,6 +58,15 @@ func init() {
 	RootCmd.Flags().Int64Var(&tries, "tries", 3, "number of tries")
 	RootCmd.Flags().Int64Var(&retryDelay, "retry-time", 5, "delay between each try")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
+	// In-proc reconnect loop. When set, the proc does not exit
+	// on dial / stream failure — it sleeps --reconnect-delay
+	// seconds and re-dials. Closes the ~3-5s gap that the
+	// restart_policy:always cycle leaves during remote-visor
+	// restarts (e.g., upstream auto-update). The visor-side
+	// restart_policy is still useful as a backstop for unrecov-
+	// erable proc-level failures.
+	RootCmd.Flags().BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure (vs exiting)")
+	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between in-process reconnect attempts")
 }
 
 // RootCmd is the root command for skysocks
@@ -87,6 +98,8 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		fs.Int64Var(&tries, "tries", 3, "number of tries")
 		fs.Int64Var(&retryDelay, "retry-time", 5, "delay between tries")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		fs.BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure")
+		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between reconnect attempts")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -126,59 +139,115 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 
 	defer setAppStatus(appCl, log, appserver.AppDetailedStatusStopped)
 
-	conn, err := dialServer(ctx, appCl, pk, serverPort)
-	if err != nil {
-		log.WithError(err).Error("Failed to dial to a server")
-		setAppErr(appCl, log, err)
-		return err
-	}
-
-	log.Infof("Connected to %v", pk)
-	client, err := skysocks.NewClient(conn, appCl)
-	if err != nil {
-		log.WithError(err).Error("Failed to create a new client")
-		setAppErr(appCl, log, err)
-		return err
-	}
-	if runtime.GOOS == "windows" {
-		ipcClient, err := ipc.StartClient(skyenv.SkysocksClientName, nil)
-		if err != nil {
-			setAppErr(appCl, log, err)
-			log.WithError(err).Error("Error creating ipc server for skysocks")
-			return err
-		}
-		go client.ListenIPC(ipcClient)
-	} else {
-		termCh := make(chan os.Signal, 1)
-		signal.Notify(termCh, os.Interrupt)
-		go func() {
-			select {
-			case <-termCh:
-				if err := client.Close(); err != nil {
-					log.WithError(err).Warn("Error closing client on interrupt")
-				}
-			case <-ctx.Done():
-				if err := client.Close(); err != nil {
-					log.WithError(err).Warn("Error closing client on context done")
-				}
-			}
-		}()
-	}
-
-	log.Infof("Serving proxy client %v", addr)
-	setAppStatus(appCl, log, appserver.AppDetailedStatusRunning)
+	// httpProxy is bound once per proc lifetime — its connection
+	// per request to the local SOCKS5 listener means it survives
+	// reconnect cycles transparently (browser sees a brief
+	// connection-refused on the gap, retries succeed).
 	httpCtx, httpCancel := context.WithCancel(ctx)
 	defer httpCancel()
 	if httpAddr != "" {
 		go httpProxy(httpCtx, httpAddr, addr, log)
 	}
-	//nolint:staticcheck // ListenAndServe blocks until error; check is necessary
-	if err := client.ListenAndServe(addr); err != nil {
-		log.WithError(err).Error("Error serving proxy client")
-		return err
+
+	// SIGINT goroutine cancels the outer ctx so the cycle loop
+	// breaks out cleanly. Installed once for the proc lifetime;
+	// each cycle's client.ListenAndServe returns when the
+	// underlying conn closes (we close it in the cycle's deferred
+	// cleanup when ctx fires).
+	cycleCtx, cycleCancel := context.WithCancel(ctx)
+	defer cycleCancel()
+	if runtime.GOOS != "windows" {
+		termCh := make(chan os.Signal, 1)
+		signal.Notify(termCh, os.Interrupt)
+		go func() {
+			select {
+			case <-termCh:
+				cycleCancel()
+			case <-cycleCtx.Done():
+			}
+		}()
 	}
-	setAppStatus(appCl, log, appserver.AppDetailedStatusStopped)
-	return nil
+
+	// runCycle does one connect + serve attempt. Returns nil
+	// only on a clean ctx-done stop; any other return is a
+	// (re-)connect trigger when --reconnect is set.
+	runCycle := func() error {
+		conn, err := dialServer(cycleCtx, appCl, pk, serverPort)
+		if err != nil {
+			return fmt.Errorf("dial server: %w", err)
+		}
+		log.Infof("Connected to %v", pk)
+		client, err := skysocks.NewClient(conn, appCl)
+		if err != nil {
+			return fmt.Errorf("new client: %w", err)
+		}
+		// Close the client when the outer ctx fires so
+		// ListenAndServe returns. With --reconnect the loop
+		// just iterates; without it the loop body returns and
+		// the proc exits (existing behavior).
+		closeOnCtx := make(chan struct{})
+		go func() {
+			select {
+			case <-cycleCtx.Done():
+				if cerr := client.Close(); cerr != nil {
+					log.WithError(cerr).Warn("Error closing client on context done")
+				}
+			case <-closeOnCtx:
+			}
+		}()
+		defer close(closeOnCtx)
+
+		if runtime.GOOS == "windows" {
+			ipcClient, err := ipc.StartClient(skyenv.SkysocksClientName, nil)
+			if err != nil {
+				return fmt.Errorf("start IPC client: %w", err)
+			}
+			go client.ListenIPC(ipcClient)
+		}
+
+		log.Infof("Serving proxy client %v", addr)
+		setAppStatus(appCl, log, appserver.AppDetailedStatusRunning)
+		//nolint:staticcheck
+		if err := client.ListenAndServe(addr); err != nil {
+			return fmt.Errorf("serve proxy client: %w", err)
+		}
+		return nil
+	}
+
+	if !reconnect {
+		if err := runCycle(); err != nil {
+			log.WithError(err).Error("skysocks-client failed")
+			setAppErr(appCl, log, err)
+			return err
+		}
+		setAppStatus(appCl, log, appserver.AppDetailedStatusStopped)
+		return nil
+	}
+
+	// Reconnect mode: loop until cycleCtx is canceled (signal /
+	// parent visor stop). Each iteration is one connect+serve
+	// cycle; a failure logs + sleeps + retries indefinitely.
+	// The visor-side restart_policy still wins as a backstop —
+	// if this proc itself panics, the restart loop catches it.
+	delay := time.Duration(reconnectDelay) * time.Second
+	for {
+		if err := runCycle(); err != nil {
+			if cycleCtx.Err() != nil {
+				// Ctx-induced unwind, not a real failure.
+				return nil
+			}
+			log.WithError(err).Warnf("Reconnecting in %v", delay)
+			setAppStatus(appCl, log, appserver.AppDetailedStatusReconnecting)
+		}
+		if cycleCtx.Err() != nil {
+			return nil
+		}
+		select {
+		case <-cycleCtx.Done():
+			return nil
+		case <-time.After(delay):
+		}
+	}
 }
 
 func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port) (net.Conn, error) {
