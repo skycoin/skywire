@@ -25,29 +25,41 @@ import (
 	"errors"
 	"sync"
 	"testing"
-
-	"github.com/skycoin/skycoin/src/cipher"
 )
+
+// newTestNode builds a Node with the sharded conn maps initialized.
+// Test-only: callers don't need a Container/transports/RPC, just the
+// init-signal plumbing.
+func newTestNode() *Node {
+	return &Node{
+		conns:   newAddrConnMap(),
+		pkConns: newPkConnMap(),
+	}
+}
+
+// newTestConnInitClosed returns a Conn pre-signaled as init-published
+// (initClosed=true, initq already closed). Mirrors the state any
+// production Conn is in after onConnInit or onConnInitErr has run.
+func newTestConnInitClosed(initErr error) *Conn {
+	c := &Conn{
+		initq:   make(chan struct{}),
+		initErr: initErr,
+	}
+	c.initClosed.Store(true)
+	close(c.initq)
+	return c
+}
 
 func TestNode_OnConnInitErr_SecondCallNoOp(t *testing.T) {
 	// Pre-set c.initClosed to simulate "first onConnInitErr already
 	// ran"; call onConnInitErr again and assert it returned without
 	// mutating state. Pre-fix the function would have proceeded to
 	// `close(c.initq)` and panicked. Post-fix it returns at the
-	// initClosed gate before touching c.initq, c.initErr, or
-	// n.pendConns.
-	n := &Node{
-		pendConns:  map[string]*Conn{},
-		addrToConn: map[string]*Conn{},
-		pkToConn:   map[cipher.PubKey]*Conn{},
-	}
+	// initClosed gate before touching c.initq, c.initErr, or the
+	// conn maps.
+	n := newTestNode()
 	firstErr := errors.New("first publisher's error")
-	c := &Conn{
-		initq:      make(chan struct{}),
-		initErr:    firstErr,
-		initClosed: true,
-	}
-	close(c.initq) // mirror what the first call would have done
+	c := newTestConnInitClosed(firstErr)
 
 	// Second call. Pre-fix this panicked at the unconditional
 	// close(c.initq). Post-fix it must early-return.
@@ -67,29 +79,21 @@ func TestNode_OnConnInit_SecondCallNoOp(t *testing.T) {
 	// closes c.initq and must respect the c.initClosed gate so a
 	// stale callback (e.g. a reused Conn pointer after the cleanup
 	// path) can't panic the visor either.
-	n := &Node{
-		pendConns:  map[string]*Conn{},
-		addrToConn: map[string]*Conn{},
-		pkToConn:   map[cipher.PubKey]*Conn{},
-	}
-	c := &Conn{
-		initq:      make(chan struct{}),
-		initClosed: true,
-	}
-	close(c.initq)
+	n := newTestNode()
+	c := newTestConnInitClosed(nil)
 
 	// Should be a no-op; absence of panic is the assertion.
 	n.onConnInit(c)
 
-	// Maps must be untouched — pre-fix the function unconditionally
-	// wrote n.addrToConn[c.Address()] = c, which would nil-deref on
-	// the bare-Conn test fixture; the guard's early-return prevents
-	// the deref entirely.
-	if len(n.addrToConn) != 0 {
-		t.Errorf("addrToConn mutated past the initClosed guard: len = %d, want 0", len(n.addrToConn))
+	// Sharded conn maps must be untouched — pre-fix the function
+	// unconditionally wrote into addrToConn/pkToConn, which would
+	// nil-deref on the bare-Conn test fixture; the guard's early-
+	// return prevents the deref entirely.
+	if got := n.conns.activeLen(); got != 0 {
+		t.Errorf("active conn map mutated past the initClosed guard: len = %d, want 0", got)
 	}
-	if len(n.pkToConn) != 0 {
-		t.Errorf("pkToConn mutated past the initClosed guard: len = %d, want 0", len(n.pkToConn))
+	if _, ok := n.pkConns.get(c.peerID); ok {
+		t.Errorf("pkConns mutated past the initClosed guard")
 	}
 }
 
@@ -104,16 +108,10 @@ func TestNode_OnConnInitErr_ConcurrentCallersNoPanic(t *testing.T) {
 	// Bypass c.Address() (would nil-deref on the bare Conn) by
 	// pre-asserting initClosed=true before the goroutines start, so
 	// every concurrent caller hits the guard. The race detector
-	// would still flag an unsynchronized write to initClosed if the
-	// fix moved the bool outside Node.mx — which is why the test is
-	// `go test -race`-aware.
-	n := &Node{
-		pendConns:  map[string]*Conn{},
-		addrToConn: map[string]*Conn{},
-		pkToConn:   map[cipher.PubKey]*Conn{},
-	}
-	c := &Conn{initq: make(chan struct{}), initClosed: true}
-	close(c.initq)
+	// would catch an unsynchronized write to initClosed if a future
+	// change weakened it from atomic.Bool back to a plain bool.
+	n := newTestNode()
+	c := newTestConnInitClosed(nil)
 
 	const N = 32
 	var wg sync.WaitGroup
