@@ -1454,6 +1454,14 @@ func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
 		if adj.Fallback == "drop" {
 			return router.ErrDialPolicyDropped
 		}
+		if adj.AvoidDirect {
+			// Policy wants overlay even though a direct transport
+			// exists. tryDirectDial in skywire_networker treats
+			// any error as direct-failed, falling through to the
+			// route-setup overlay path — exactly the behavior we
+			// want here.
+			return router.ErrPolicyAvoidDirect
+		}
 		return nil
 	})
 }
