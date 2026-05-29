@@ -1577,6 +1577,15 @@ func (r *router) establishMuxRoutes(
 		parentAppName = opts.AppName
 	}
 
+	// Cap on consecutive failures inside the mux loop. Without
+	// this, a fully-broken route-finder + local-calc combo would
+	// pin us for ~3s × (maxCount-1) iterations on the way to
+	// giving up. The cap surfaces "infrastructure down" quickly
+	// while still letting transient single-iteration flakes pass
+	// (each success resets the counter).
+	const maxConsecutiveMuxFailures = 2
+	consecutiveFailures := 0
+
 	for i := 1; i < maxCount; i++ {
 		// Per-iteration direction selection: extend forward only when
 		// this leg is needed for fwdCount, reverse only when needed
@@ -1605,21 +1614,37 @@ func (r *router) establishMuxRoutes(
 			ExcludeDMSG:            true,
 		}
 
-		// NOTE: aux mux routes deliberately DO NOT use #2774's
-		// retry-with-exclude-on-failure loop. The mux design is
-		// graceful degradation — if aux route i can't establish (no
-		// disjoint candidate found, or its dial fails), we stop
-		// trying to add more aux routes but the PRIMARY route is
-		// already up and the app is serviceable. A reject-the-whole-
-		// dial retry loop would punish the user for transient aux
-		// flakiness when the primary is healthy. For mux-bw style
-		// callers that DO want strict N-route guarantees, the failure
-		// surfaces via MuxRouteEstablished events (#2756) and the
-		// caller can decide whether to fail or accept partial mux.
+		// Per-iteration best-effort: a failed aux slot no longer
+		// short-circuits the entire mux loop. Each iteration tries:
+		//   1. fetchBestRoutes (route-finder)
+		//   2. calculateLocalRoutes as fallback (local BFS over
+		//      the visor's transport graph) when the route-finder
+		//      returns nothing actionable. Gives a chance to
+		//      establish an aux even when the route-finder is
+		//      throttled / out-of-sync.
+		//   3. Dial via setup nodes.
+		//   4. Append to the route group.
+		// Any of (1-4) failing → log + continue to the next
+		// iteration so subsequent aux slots get tried. The
+		// consecutive-failure cap below guards against a fully
+		// dead route-finder + local-calc pinning us for the full
+		// maxCount-1 iterations.
 		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
-			log.Debugf("Mux route %d/%d: no additional route found: %v", i+1, maxCount, err)
-			break
+			log.Debugf("Mux route %d/%d: route-finder returned no path: %v — trying local-calc fallback",
+				i+1, maxCount, err)
+			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+			if localErr != nil {
+				log.Debugf("Mux route %d/%d: local-calc fallback also failed: %v", i+1, maxCount, localErr)
+				consecutiveFailures++
+				if consecutiveFailures >= maxConsecutiveMuxFailures {
+					log.Debugf("Mux route loop: %d consecutive failures; giving up on remaining %d aux slots",
+						consecutiveFailures, maxCount-1-i)
+					return
+				}
+				continue
+			}
+			muxFwd, muxRev = localFwd, localRev
 		}
 
 		muxKeepAlive := DefaultRouteKeepAlive
@@ -1635,14 +1660,29 @@ func (r *router) establishMuxRoutes(
 
 		muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, muxReq)
 		if err != nil {
-			log.Debugf("Mux route %d/%d: setup failed: %v", i+1, maxCount, err)
-			break
+			log.Debugf("Mux route %d/%d: setup failed: %v — continuing to next slot", i+1, maxCount, err)
+			consecutiveFailures++
+			if consecutiveFailures >= maxConsecutiveMuxFailures {
+				log.Debugf("Mux route loop: %d consecutive failures; giving up", consecutiveFailures)
+				return
+			}
+			continue
 		}
 
 		if err := r.appendRouteAsymmetric(nrg, muxRules, addFwd, addRev); err != nil {
-			log.Debugf("Mux route %d/%d: append failed (addFwd=%v addRev=%v): %v", i+1, maxCount, addFwd, addRev, err)
-			break
+			log.Debugf("Mux route %d/%d: append failed (addFwd=%v addRev=%v): %v",
+				i+1, maxCount, addFwd, addRev, err)
+			consecutiveFailures++
+			if consecutiveFailures >= maxConsecutiveMuxFailures {
+				log.Debugf("Mux route loop: %d consecutive failures; giving up", consecutiveFailures)
+				return
+			}
+			continue
 		}
+		// Success — reset the consecutive-failure counter so a
+		// later transient flake doesn't trip the cap just because
+		// of accumulation.
+		consecutiveFailures = 0
 
 		// Track this route's forward TpID + intermediate-PK set ONLY
 		// when we actually appended the forward direction (the
