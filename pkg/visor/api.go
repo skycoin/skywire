@@ -74,6 +74,12 @@ type API interface {
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StartAppWithMode(appName, launcherMode string) error
+	// SetAppRoutingPolicy installs (or clears, when path is "" /
+	// "none") a per-app routing policy. Backend is dispatched by
+	// file extension: "@/path.star" uses Starlark, "@/path.wasm"
+	// uses WASM. The swap is live — the running app picks up the
+	// new policy on its next dial without a restart.
+	SetAppRoutingPolicy(appName, path string) error
 	AddApp(appName, binaryName string) error
 	DeleteApp(appName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)

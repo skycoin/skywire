@@ -111,6 +111,15 @@ type StartAppIn struct {
 	AppName      string
 	LauncherMode string // "internal", "external", or "" for default
 }
+
+// SetAppRoutingPolicyIn carries (app name, policy-path) for the
+// runtime per-app routing-policy swap RPC. Path forms match the
+// config field: "@/path.star", "@/path.wasm", inline-Starlark,
+// or "" / "none" to clear.
+type SetAppRoutingPolicyIn struct {
+	AppName string
+	Path    string
+}
 type SetAppAddIn struct {
 	AppName    string
 	BinaryName string
