@@ -212,7 +212,7 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		mux = *d.skynetMuxPtr
 	}
 	if mux != nil {
-		stream, err := mux.Dial(remote)
+		stream, err := mux.Dial(remote, "")
 		if err == nil {
 			d.log.WithField("remote", remote.String()).
 				WithField("port", port).

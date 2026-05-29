@@ -1437,8 +1437,9 @@ func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
 	if hook == nil {
 		return
 	}
-	mux.SetDirectDialHook(func(remotePK cipher.PubKey, transportKind string) error {
+	mux.SetDirectDialHook(func(remotePK cipher.PubKey, transportKind, appName string) error {
 		info := router.DialInfo{
+			AppName:       appName,
 			PeerPK:        remotePK,
 			IsDirectDial:  true,
 			TransportKind: transportKind,

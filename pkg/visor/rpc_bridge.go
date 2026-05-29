@@ -198,5 +198,5 @@ func openSkynetStream(v *Visor, targetPK cipher.PubKey) (io.ReadWriteCloser, err
 	if err := v.ensureFastTransport(targetPK); err != nil {
 		return nil, err
 	}
-	return v.transportRPCMux.Dial(targetPK)
+	return v.transportRPCMux.Dial(targetPK, "")
 }
