@@ -122,3 +122,11 @@ func (r *router) isTpdExist(rPK cipher.PubKey) bool {
 	_, err = r.tm.GetTransport(rPK, types.DMSG)
 	return err == nil
 }
+
+// DialHook returns the routing-policy hook installed via
+// Config.DialHook (nil when no policy is configured). Exposed
+// on the Router interface so the visor can wire the same hook
+// into non-router dial paths like VStreamMux's direct dial.
+func (r *router) DialHook() DialHook {
+	return r.conf.DialHook
+}

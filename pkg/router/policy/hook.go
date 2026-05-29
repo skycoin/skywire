@@ -100,10 +100,12 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 		return router.DialAdjustment{}, nil
 	}
 	rctx := RoutingContext{
-		App:          info.AppName,
-		PeerPK:       info.PeerPK.Hex(),
-		Port:         uint16(info.RPort),
-		CLIOverrides: info.CLIOverrides,
+		App:           info.AppName,
+		PeerPK:        info.PeerPK.Hex(),
+		Port:          uint16(info.RPort),
+		CLIOverrides:  info.CLIOverrides,
+		IsDirectDial:  info.IsDirectDial,
+		TransportKind: info.TransportKind,
 	}
 	spec, err := loader.Decide(ctx, rctx, nil)
 	if err != nil {
