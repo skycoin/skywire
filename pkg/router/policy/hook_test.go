@@ -675,3 +675,66 @@ def decide_route(ctx, candidates):
 func TestApplyAdjustment_FallbackDirect(t *testing.T) {
 	t.Skip("router-package internal — see router_test")
 }
+
+func TestHook_BeforeDial_DirectDialCtxFields(t *testing.T) {
+	// Script reads ctx.is_direct_dial + ctx.transport_kind and
+	// branches: refuse vpn-client direct dials over dmsg, allow
+	// everything else.
+	src := `
+def decide_route(ctx, candidates):
+    if ctx.is_direct_dial and ctx.app == "vpn-client" and ctx.transport_kind == "dmsg":
+        return RouteSpec(fallback="drop")
+    return RouteSpec()
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+
+	// vpn-client direct over dmsg → drop
+	adj, err := h.BeforeDial(context.Background(), router.DialInfo{
+		AppName:       "vpn-client",
+		PeerPK:        pk,
+		IsDirectDial:  true,
+		TransportKind: "dmsg",
+	})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.Fallback != "drop" {
+		t.Errorf("vpn+dmsg+direct: Fallback=%q, want drop", adj.Fallback)
+	}
+
+	// vpn-client direct over stcpr → allow
+	adj, err = h.BeforeDial(context.Background(), router.DialInfo{
+		AppName:       "vpn-client",
+		PeerPK:        pk,
+		IsDirectDial:  true,
+		TransportKind: "stcpr",
+	})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.Fallback != "" {
+		t.Errorf("vpn+stcpr+direct: Fallback=%q, want empty", adj.Fallback)
+	}
+
+	// vpn-client overlay (not direct) → allow even if kind="dmsg"
+	adj, err = h.BeforeDial(context.Background(), router.DialInfo{
+		AppName:       "vpn-client",
+		PeerPK:        pk,
+		IsDirectDial:  false,
+		TransportKind: "dmsg",
+	})
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.Fallback != "" {
+		t.Errorf("vpn+dmsg+overlay: Fallback=%q, want empty (gate only fires for direct)", adj.Fallback)
+	}
+}

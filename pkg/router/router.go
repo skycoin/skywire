@@ -343,6 +343,13 @@ type Router interface {
 	// matching route group is found.
 	RouteGroupHops(desc routing.RouteDescriptor) []RouteHopInfo
 
+	// DialHook returns the configured routing-policy hook (nil
+	// if none configured). Visor wiring uses this to bridge the
+	// policy into non-router dial paths like VStreamMux's direct
+	// dial — the policy script's BeforeDial fires there too with
+	// ctx.is_direct_dial=true.
+	DialHook() DialHook
+
 	// RouteGroupMuxInfo returns a snapshot of per-leg mux state for
 	// the rg matching desc (or its inversion). Returns false when no
 	// matching active rg is found. Used by 'cli proxy mux-info' to

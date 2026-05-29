@@ -56,6 +56,24 @@ type DialInfo struct {
 	// The policy's adjustment runs AFTER this is captured, so
 	// the script gets a true "what did the operator pass" view.
 	CLIOverrides map[string]string
+
+	// IsDirectDial is true when the hook is being invoked from
+	// the sky_forward_conn / VStreamMux direct-dial path (the
+	// short-circuit that uses an existing direct transport
+	// instead of going through the route-finder). False for the
+	// overlay paths (DialRoutes, PingRoute). Lets scripts apply
+	// killswitch-style rules to direct dials too (e.g.
+	// "vpn-client must never dial direct over dmsg"). Surfaced
+	// as `ctx.is_direct_dial` in Starlark.
+	IsDirectDial bool
+
+	// TransportKind is the network type ("stcpr"/"sudph"/"stcp"/
+	// "dmsg") of the transport the direct dial would use.
+	// Populated only when IsDirectDial is true. Empty for
+	// overlay dials. Surfaced as `ctx.transport_kind` so a
+	// script can branch on the kind even before the overlay's
+	// candidates are available.
+	TransportKind string
 }
 
 // DialAdjustment is the hook's return value. Each field is a
