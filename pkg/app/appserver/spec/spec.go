@@ -64,9 +64,14 @@ type AppConfig struct {
 	//                   its config entry and restart the visor.
 	RestartPolicy string `json:"restart_policy,omitempty"`
 	// RoutingPolicy overrides the visor-wide routing policy for
-	// dials originating from this app. Same `@/path` vs. inline-
-	// script convention as conf.Routing.PolicyPerDial. Empty =
-	// fall through to the visor-wide policy (which is itself
-	// empty by default). See docs/routing_policy_rfc.md.
+	// dials originating from this app. Accepts the same shape
+	// as conf.Routing.PolicyPerDial:
+	//   "@/path/to/policy.star"  — Starlark, hot-reloaded
+	//   "@/path/to/policy.wasm"  — WASM, hot-reloaded
+	//   "<inline script source>" — small inline Starlark
+	//   "" / unset                — fall through to visor-wide
+	// Backend dispatch is by file extension. See
+	// docs/routing_policy_rfc.md and
+	// docs/examples/routing-policies/wasm/README.md.
 	RoutingPolicy string `json:"routing_policy,omitempty"`
 }

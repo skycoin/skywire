@@ -399,38 +399,24 @@ type Routing struct {
 	TransportPreference []string `json:"transport_preference,omitempty"`
 
 	// PolicyPerDial is an optional operator-supplied routing
-	// policy script (Starlark, RFC #2882). Accepts either:
-	//   "@/path/to/policy.star"  — file-backed, hot-reloaded
-	//   "<inline script source>" — small inline policies
+	// policy. Accepts either:
+	//   "@/path/to/policy.star"  — Starlark, file-backed, hot-reloaded
+	//   "@/path/to/policy.wasm"  — WASM, file-backed, hot-reloaded
+	//   "<inline script source>" — small inline Starlark policies
 	//   "" / unset                — no policy, built-in defaults
 	//
-	// The script's decide_route(ctx, candidates) function is
-	// called per dial; its returned RouteSpec adjusts MuxRoutes
-	// and MinHops, and can refuse the dial via fallback="drop".
+	// The visor picks the backend by file extension when the
+	// value starts with "@" (`.wasm` → WASM, anything else →
+	// Starlark). Inline values are always Starlark — compiled
+	// WASM doesn't fit in a JSON string. Both backends produce
+	// the same RouteSpec per dial and route through the same
+	// router.DialHook.
 	//
-	// See docs/routing_policy_rfc.md for the policy DSL design,
-	// docs/examples/routing-policies/ for example scripts, and
-	// `skywire cli route policy test/bench` for iteration tools.
+	// See docs/routing_policy_rfc.md for the Starlark DSL,
+	// docs/examples/routing-policies/wasm/README.md for the
+	// WASM ABI + trade-offs, and `skywire cli route policy
+	// test/bench` for iteration tools.
 	PolicyPerDial string `json:"policy_per_dial,omitempty"`
-
-	// PolicyPerDialWasm is the WASM-policy alternative to
-	// PolicyPerDial. Accepts "@/path/to/policy.wasm" only —
-	// inline modules aren't supported. The compiled module must
-	// export decide_route + alloc + free (and optionally
-	// on_leg_change) per the wire-format ABI in
-	// pkg/router/policy/wasm/abi.go. When both PolicyPerDial and
-	// PolicyPerDialWasm are set, PolicyPerDialWasm wins on the
-	// visor-wide default; the skylark loader still owns per-app
-	// overrides via AppConfig.RoutingPolicy.
-	//
-	// Trade-offs (see docs/examples/routing-policies/wasm/README.md):
-	//   skylark — text source, sub-second hot-reload, ~10 LoC
-	//             policies; the right default for casual policies.
-	//   wasm    — compiled artifact, near-native perf, Go/Rust/
-	//             AssemblyScript/etc.; the right choice for
-	//             power users with existing Go-WASM experience
-	//             or per-flow stateful policies.
-	PolicyPerDialWasm string `json:"policy_per_dial_wasm,omitempty"`
 }
 
 // UptimeTracker configures uptime tracker.

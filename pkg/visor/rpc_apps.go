@@ -58,6 +58,15 @@ func (r *RPC) StartApp(in *StartAppIn, _ *struct{}) (err error) {
 	return r.visor.StartAppWithMode(in.AppName, in.LauncherMode)
 }
 
+// SetAppRoutingPolicy installs (or clears, when Path is empty
+// / "none") a per-app routing-policy override at runtime.
+// Backend dispatched by file extension; the running app picks
+// up the change on its next dial.
+func (r *RPC) SetAppRoutingPolicy(in *SetAppRoutingPolicyIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetAppRoutingPolicy", in)(nil, &err)
+	return r.visor.SetAppRoutingPolicy(in.AppName, in.Path)
+}
+
 // AddApp add app to config
 func (r *RPC) AddApp(in *SetAppAddIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "AddApp", in)(nil, &err)
