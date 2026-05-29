@@ -41,7 +41,9 @@ Regional saturation scaling is applied to the presence pool to promote geographi
 
 ## Pool 2: Bandwidth
 
-The bandwidth pool reward for a day is distributed proportionally based on the amount of transport bandwidth each visor handled during the previous day. Only visors which handled bandwidth above a minimum threshold are eligible for the bandwidth pool.
+The bandwidth pool reward for a day is distributed proportionally based on the amount of transport bandwidth each visor **sent** during the previous day — sender-pays. A visor accrues bandwidth credit for the bytes it transmitted on each transport, with its per-edge sent counter capped by the counterparty's reported recv so a one-sided inflation cannot pump credit. Only visors whose sender-side total exceeds a minimum threshold are eligible for the bandwidth pool.
+
+Each transport edge is evaluated independently: a visor earns bandwidth credit for what it sent regardless of whether the counterparty is also reward-eligible. Credit only flows to the sender, so an ineligible peer was never going to receive a share — its eligibility is not checked.
 
 Visors which do not meet the minimum bandwidth threshold will still receive rewards from the presence pool, but will not receive any share of the bandwidth pool.
 
@@ -487,7 +489,7 @@ skywire cli tp metrics -t
 skywire cli tp metrics --tree
 ```
 
-The bandwidth data from the transport discovery is used for the bandwidth pool reward distribution. Both edges of a transport must agree on the bandwidth transferred for it to be counted (verified bandwidth). This prevents any single visor from inflating its bandwidth figures.
+The bandwidth data from the transport discovery is used for the bandwidth pool reward distribution under a sender-pays model: each visor is credited only for the bytes it sent on each transport, and each side's sent counter is capped by the counterparty's reported recv (verified bandwidth). This sender-side cap prevents any single visor from unilaterally inflating its own bandwidth figures.
 
 The visor also produces transport bandwidth log CSV files locally in response to transports handling traffic. These are collected hourly by the reward system along with the system survey, and are displayed [here](https://fiber.skywire.dev/log-collection/tplogs).
 
