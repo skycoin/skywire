@@ -28,6 +28,19 @@ import (
 //     changes; on change it re-loads and atomic-swaps the
 //     Evaluator.
 //
+// Engine is the surface the Hook needs from any policy backend.
+// Both the Starlark Loader (this package) and the WASM Loader
+// (pkg/router/policy/wasm) implement it, so the Hook can
+// dispatch to either without caring which backend the operator
+// chose.
+type Engine interface {
+	Decide(ctx context.Context, rctx RoutingContext, candidates []Candidate) (RouteSpec, error)
+	OnLegChange(ctx context.Context, rctx RoutingContext, legs []LegInfo, change LegChange) (RouteSpec, error)
+	IsActive() bool
+	Source() string
+	Close() error
+}
+
 // Callers go through Loader.Decide rather than holding an
 // Evaluator directly so the hot-reload path is transparent.
 type Loader struct {
