@@ -579,6 +579,16 @@ func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd func(excludeHops [
 	rg.rotationApplyAdd = applyAdd
 	rg.rotationInterval = interval
 	rg.mu.Unlock()
+	// Start the rotation goroutine now (startOffServiceLoops fired
+	// during initial setup before SetRotation was called, so the
+	// conditional in startOffServiceLoops saw zero values and didn't
+	// spawn this loop). Safe to call here because the loop checks
+	// the same close channels (rg.closed / rg.remoteClosed) that
+	// startOffServiceLoops' loops do — a Close() racing with
+	// SetRotation just terminates the loop immediately.
+	if interval > 0 && hook != nil {
+		go rg.servicePacketLoop("rotation", interval, rg.rotationServiceFn)
+	}
 }
 
 // snapshotLegs builds a []LegInfo from the current rg.tps. Caller
@@ -834,13 +844,10 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 func (rg *RouteGroup) startOffServiceLoops() {
 	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
-	// Rotation loop: only starts when the dialing-side policy
-	// returned a non-zero RotationIntervalSeconds in decide_route.
-	// Accept-side route groups (no policy) have rotationInterval=0
-	// and skip this entirely.
-	if rg.rotationInterval > 0 && rg.rotationHook != nil {
-		go rg.servicePacketLoop("rotation", rg.rotationInterval, rg.rotationServiceFn)
-	}
+	// Rotation loop is NOT started here — startOffServiceLoops runs
+	// during initial route-group setup, before the router-side
+	// SetRotation call wires the hook + interval. SetRotation spawns
+	// the rotation goroutine itself.
 }
 
 // rotationServiceFn fires the policy's on_tick hook against the
