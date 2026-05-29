@@ -1,11 +1,19 @@
 # Routing-policy examples
 
-Live, runnable Starlark policies for the operator-programmable
-routing DSL (RFC #2882). Every file parses + decides cleanly
-under `skywire cli route policy test`; the candidate-filtering
-ones return the bare default in the previewer (no candidates →
-no filter) and only do meaningful work in production where the
-SelectRoute hook supplies real candidates.
+Live, runnable **skylark** policies for the operator-programmable
+routing DSL (RFC #2882). Skylark = Starlark (Google's safe
+sandboxed scripting language, original Skylark name predates the
+2017 rename) + the skywire routing stdlib: `datetime`, `geo`,
+`transports`, `peers`, `logging`, `RouteSpec`, `Candidate`,
+`on_leg_change`. Picks up the `sky_*` naming convention used
+elsewhere in the project (skywire, skychat, skynet,
+sky_forward_conn).
+
+Every file parses + decides cleanly under `skywire cli route
+policy test`; the candidate-filtering ones return the bare
+default in the previewer (no candidates → no filter) and only
+do meaningful work in production where the SelectRoute hook
+supplies real candidates.
 
 ## Quickstart
 
