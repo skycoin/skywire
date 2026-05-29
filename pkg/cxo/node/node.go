@@ -39,9 +39,12 @@ type Node struct {
 
 	fs *nodeFeeds // feeds
 
-	pendConns  map[string]*Conn        // peer addr -> pending connection
-	addrToConn map[string]*Conn        // peer addr -> connection
-	pkToConn   map[cipher.PubKey]*Conn // peer pubkey (ID) -> connection
+	// conns holds both pending and active address-keyed Conns.
+	// Sharded — accept-path serialization on Node.mx is the
+	// reason this isn't a plain map (see connmap.go).
+	conns *addrConnMap
+	// pkConns is the sharded pk → Conn map. Sibling to conns.
+	pkConns *pkConnMap
 
 	ss map[cipher.PubKey]*Swarm // swarms
 
@@ -171,9 +174,8 @@ func NewNodeContainer(
 	n.c = c
 	n.fs = newNodeFeeds(n)
 
-	n.pendConns = make(map[string]*Conn)
-	n.addrToConn = make(map[string]*Conn)
-	n.pkToConn = make(map[cipher.PubKey]*Conn)
+	n.conns = newAddrConnMap()
+	n.pkConns = newPkConnMap()
 
 	n.ss = make(map[cipher.PubKey]*Swarm)
 
@@ -267,18 +269,13 @@ func (n *Node) ConnectionsOfFeed(feed cipher.PubKey) (cs []*Conn) {
 	return n.fs.connectionsOfFeed(feed)
 }
 
-// Connections returns all established connections
+// Connections returns all established connections. Snapshots the
+// sharded active map; no Node-wide lock held during the walk.
 func (n *Node) Connections() (cs []*Conn) {
-
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	cs = make([]*Conn, 0, len(n.addrToConn))
-
-	for _, c := range n.addrToConn {
+	cs = make([]*Conn, 0, n.conns.activeLen())
+	n.conns.rangeActive(func(c *Conn) {
 		cs = append(cs, c)
-	}
-
+	})
 	return
 }
 
@@ -309,16 +306,13 @@ type PublisherStats struct {
 }
 
 // Stats returns a snapshot of the Node's publisher-side health
-// counters + active gauges. Cheap: atomic loads + map-length read
-// under the node mutex.
+// counters + active gauges. Cheap: pure atomic loads — no shard
+// mutex acquired.
 func (n *Node) Stats() PublisherStats {
-	n.mx.Lock()
-	conns := len(n.addrToConn)
-	n.mx.Unlock()
 	return PublisherStats{
 		SendMsgTimeouts:   n.sendMsgTimeoutCount.Load(),
 		DeadConnsClosed:   n.deadConnsClosed.Load(),
-		ActiveConnections: conns,
+		ActiveConnections: n.conns.activeLen(),
 		ActiveFeeds:       len(n.fs.list()),
 	}
 }
@@ -439,26 +433,18 @@ func (n *Node) onDisconnect(c *Conn, reason error) {
 }
 
 func (n *Node) connCap() int {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	count := len(n.pendConns) + len(n.addrToConn)
+	count := n.conns.pendingLen() + n.conns.activeLen()
 	if count >= n.config.MaxConnections {
 		return 0
 	}
-
 	return n.config.MaxConnections - count
 }
 
 func (n *Node) pendingConnCap() int {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	count := len(n.pendConns)
+	count := n.conns.pendingLen()
 	if count >= n.config.MaxPendingConnections {
 		return 0
 	}
-
 	return n.config.MaxPendingConnections - count
 }
 
@@ -527,35 +513,38 @@ func (n *Node) initConn(
 }
 
 // onNewConn atomically checks for existing connection
-// to/form address and creates new one if necessary.
+// to/from address and creates new one if necessary.
+//
+// Replaces the prior Node.mx-guarded version with a single per-shard
+// lock acquisition. Cap checks run inside reservePending via the
+// capCheck closure so they observe the post-decrement counter from
+// any concurrent removeConn — not the pre-insert snapshot a
+// separate locked read would have given.
 func (n *Node) onNewConn(
 	fc *transport.Connection, isIncoming bool) (c *Conn, isNew, isPending bool, err error) {
 
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	// Check limits for number of open connections.
-	if len(n.pendConns)+len(n.addrToConn) >= n.config.MaxConnections {
-		return nil, false, false, ErrConnLimit
-	}
-	if len(n.pendConns) >= n.config.MaxPendingConnections {
-		return nil, false, false, ErrPendConnLimit
-	}
-
 	addr := fc.GetRemoteAddr().String()
-
-	// Check if connection to/from address already exists.
-	if c, ok := n.addrToConn[addr]; ok {
-		return c, false, false, nil
-	}
-	if c, ok := n.pendConns[addr]; ok {
-		return c, false, true, nil
-	}
-
-	// Create new pending connection.
 	c = n.newConnection(fc, isIncoming)
-	n.pendConns[addr] = c
 
+	maxConns := n.config.MaxConnections
+	maxPending := n.config.MaxPendingConnections
+	capCheck := func() error {
+		if n.conns.pendingLen()+n.conns.activeLen() >= maxConns {
+			return ErrConnLimit
+		}
+		if n.conns.pendingLen() >= maxPending {
+			return ErrPendConnLimit
+		}
+		return nil
+	}
+
+	existing, isPend, isFresh, capErr := n.conns.reservePending(addr, c, capCheck)
+	if capErr != nil {
+		return nil, false, false, capErr
+	}
+	if !isFresh {
+		return existing, false, isPend, nil
+	}
 	return c, true, false, nil
 }
 
@@ -564,67 +553,50 @@ func (n *Node) onNewConn(
 // of initq so a double-call (which pre-fix the isPending branch of
 // initConn triggered, double-closing initq and panicking the visor
 // under handshake-failure load) becomes a no-op after the first.
+//
+// Post-shard the guard is an atomic CAS rather than a Node.mx-held
+// bool — moves the init signal off the global mutex so the success/
+// failure publish doesn't queue behind unrelated address lookups.
 func (n *Node) onConnInitErr(c *Conn, initErr error) {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	if c.initClosed {
+	if !c.initClosed.CompareAndSwap(false, true) {
 		return
 	}
-	c.initClosed = true
-
-	delete(n.pendConns, c.Address())
-
+	n.conns.removePending(c.Address(), c)
 	c.initErr = initErr
 	close(c.initq)
 }
 
 // onConnInit atomically moves pending connection to cache
-// and signals about initConn success. It also chekcs if
-// peer's pubkey, receieved during hanshake is duplicate.
+// and signals about initConn success.
 //
 // Mirrors onConnInitErr's c.initClosed gate: success and failure
 // must publish exactly one close of initq, regardless of which
 // goroutine wins the race for the final write.
 func (n *Node) onConnInit(c *Conn) {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	if c.initClosed {
+	if !c.initClosed.CompareAndSwap(false, true) {
 		return
 	}
-	c.initClosed = true
-
-	delete(n.pendConns, c.Address())
-
-	n.addrToConn[c.Address()] = c
-	n.pkToConn[c.peerID] = c
-
+	addr := c.Address()
+	n.conns.promote(addr, c)
+	n.pkConns.set(c.peerID, c)
 	close(c.initq)
 }
 
-// removeConn reomoves connection from cache.
+// removeConn removes connection from cache.
 //
 // Identity-checks the slot before deleting: when evictStalePeer
 // closes a stale Conn AND its run() drains past evictStalePeer's
 // timeout AND the handshake completes AND onConnInit overwrites
-// pkToConn[id] with a NEW Conn — all before the old run() finally
+// pkConns[id] with a NEW Conn — all before the old run() finally
 // calls removeConn(old) — the old removeConn must NOT wipe the
-// slot now pointing at the live new Conn. Same shape for
-// addrToConn. Without the identity check, the late removeConn of
+// slot now pointing at the live new Conn. Same shape for the
+// address map. Without the identity check, the late removeConn of
 // the evicted Conn silently strands the live one (hasPeer returns
 // false, feed routing skips the peer) until something else
 // re-registers.
 func (n *Node) removeConn(c *Conn) {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	if existing, ok := n.addrToConn[c.Address()]; ok && existing == c {
-		delete(n.addrToConn, c.Address())
-	}
-	if existing, ok := n.pkToConn[c.peerID]; ok && existing == c {
-		delete(n.pkToConn, c.peerID)
-	}
+	n.conns.removeActive(c.Address(), c)
+	n.pkConns.remove(c.peerID, c)
 
 	// Remove from feed tracking
 	n.fs.delConn(c)
@@ -758,11 +730,7 @@ func (n *Node) SwapOnFillingBreaks(next func(*Node, *registry.Root, error)) (pre
 
 // has connection to peer with given id (pk)
 func (n *Node) hasPeer(id cipher.PubKey) (c *Conn, yep bool) { //nolint:unparam
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	c, yep = n.pkToConn[id]
-	return
+	return n.pkConns.get(id)
 }
 
 // evictStalePeer closes the existing Conn for `id` and waits up to
@@ -814,36 +782,43 @@ func (n *Node) Stat() (s *Stat) {
 
 // Close the Node. The Close returns error
 // of (skyobject.Container).Close once.
+//
+// Note: connection close cascades drain shard mutexes rather than
+// holding Node.mx — closing a Conn signals goroutines that may
+// re-enter Node methods (removeConn, etc.) and pre-fix that
+// re-entry deadlocked against the Node.mx held here.
 func (n *Node) Close() (err error) {
 	n.closeo.Do(func() {
-		n.mx.Lock()
-		defer n.mx.Unlock()
 
-		// Shutdown peer exchange.
+		// Shutdown peer exchange (under n.mx — guards n.ss).
+		n.mx.Lock()
 		for _, s := range n.ss {
 			s.shutdown()
 		}
+		n.mx.Unlock()
 
-		// Close all connections.
-		for _, c := range n.pendConns {
-			c.Close() //nolint:errcheck,gosec
-		}
-		for _, c := range n.pkToConn {
-			c.Close() //nolint:errcheck,gosec
-		}
+		// Close all connections. Drains shard mutexes only; the
+		// per-conn Close → removeConn re-entry is now decoupled
+		// from n.mx.
+		n.conns.closePending()
+		n.pkConns.closeAll()
 
-		// Shutdown all transports.
-		if n.tcp != nil {
-			n.tcp.Close() //nolint:errcheck,gosec
+		// Shutdown all transports (under n.mx — guards transport
+		// fields).
+		n.mx.Lock()
+		tcp, udp, dmsg, rpc := n.tcp, n.udp, n.dmsg, n.rpc
+		n.mx.Unlock()
+		if tcp != nil {
+			tcp.Close() //nolint:errcheck,gosec
 		}
-		if n.udp != nil {
-			n.udp.Close() //nolint:errcheck,gosec
+		if udp != nil {
+			udp.Close() //nolint:errcheck,gosec
 		}
-		if n.dmsg != nil {
-			n.dmsg.Close()
+		if dmsg != nil {
+			dmsg.Close()
 		}
-		if n.rpc != nil {
-			n.rpc.Close() //nolint:errcheck,gosec
+		if rpc != nil {
+			rpc.Close() //nolint:errcheck,gosec
 		}
 
 		// Close database.

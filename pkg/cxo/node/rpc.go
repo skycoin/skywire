@@ -99,21 +99,25 @@ func (r *RPC) IsSharing(pk cipher.PubKey, yep *bool) (_ error) {
 	return
 }
 
-// strings with all connections
+// strings with all connections.
+//
+// Drains each shard under its own lock — same shape as
+// addrConnMap.rangeActive, but inlined here so the pending pass
+// can also walk the pending map alongside active without a second
+// exported helper.
 func (n *Node) connections() (cs []string) {
-	n.mx.Lock()
-	defer n.mx.Unlock()
-
-	cs = make([]string, 0, len(n.pendConns)+len(n.addrToConn))
-
-	for _, c := range n.pendConns {
-		cs = append(cs, c.String()+"(⌛)") // pending
+	cs = make([]string, 0, n.conns.pendingLen()+n.conns.activeLen())
+	for i := range n.conns.shards {
+		s := &n.conns.shards[i]
+		s.mu.Lock()
+		for _, c := range s.pending {
+			cs = append(cs, c.String()+"(⌛)") // pending
+		}
+		for _, c := range s.active {
+			cs = append(cs, c.String()+"(✓)") // established
+		}
+		s.mu.Unlock()
 	}
-
-	for _, c := range n.addrToConn {
-		cs = append(cs, c.String()+"(✓)") // established
-	}
-
 	return
 }
 
