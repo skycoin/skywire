@@ -182,6 +182,15 @@ func (l *Loader) Decide(ctx context.Context, rctx policy.RoutingContext, candida
 	return eval.Decide(ctx, rctx, candidates)
 }
 
+// OnTick forwards to the active Evaluator's OnTick.
+func (l *Loader) OnTick(ctx context.Context, rctx policy.RoutingContext, legs []policy.LegInfo) (policy.RotationAction, error) {
+	eval := l.current.Load()
+	if eval == nil {
+		return policy.RotationAction{}, nil
+	}
+	return eval.OnTick(ctx, rctx, legs)
+}
+
 // OnLegChange forwards to the active Evaluator's OnLegChange.
 func (l *Loader) OnLegChange(ctx context.Context, rctx policy.RoutingContext, legs []policy.LegInfo, change policy.LegChange) (policy.RouteSpec, error) {
 	eval := l.current.Load()
