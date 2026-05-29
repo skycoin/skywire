@@ -192,6 +192,8 @@ func buildContextValue(rctx RoutingContext) starlark.Value {
 			}),
 			"cli_overrides":      cliOverrides,
 			"reverse_candidates": buildCandidatesValue(rctx.ReverseCandidates),
+			"is_direct_dial":     starlark.Bool(rctx.IsDirectDial),
+			"transport_kind":     starlark.String(rctx.TransportKind),
 		},
 	)
 }
