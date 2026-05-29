@@ -446,16 +446,33 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			continue
 		}
 
-		// Sender-side per-edge totals, each capped by the receiver's
-		// confirmation. Pre-fix this summed both directions and credited
-		// the union to both edges — letting a receiver-heavy visor earn
-		// rewards purely from bytes it pulled. Splitting it lets the
-		// calculator apply the sender-pays model the network intends.
+		// Sender-side per-edge totals. Mirrors the same three-branch
+		// trust model `skywire cli tp metrics` uses (see
+		// cmd/skywire-cli/commands/tp/tp-metrics.go:verifiedBandwidth):
+		// when both edges report on a day, cap each side's sent by the
+		// counterparty's recv; when only one side has reported (the
+		// common case — edges re-register on different schedules), trust
+		// that side's own counters. Without the unilateral-trust
+		// branches, virtually every transport was discarded because at
+		// any given moment only one edge has a fresh daily record.
+		//
+		// An edge whose record is present but {sent:0, recv:0} is
+		// treated as "hasn't reported real data yet" rather than
+		// "verified zero traffic" — same rationale as the cli.
 		var sentA, sentB uint64
 		for _, d := range tp.Daily {
-			if d.A != nil && d.B != nil {
+			aReported := d.A != nil && (d.A.Sent > 0 || d.A.Recv > 0)
+			bReported := d.B != nil && (d.B.Sent > 0 || d.B.Recv > 0)
+			switch {
+			case aReported && bReported:
 				sentA += minUint64(d.A.Sent, d.B.Recv)
 				sentB += minUint64(d.B.Sent, d.A.Recv)
+			case aReported:
+				sentA += d.A.Sent
+				sentB += d.A.Recv
+			case bReported:
+				sentA += d.B.Recv
+				sentB += d.B.Sent
 			}
 		}
 		if sentA == 0 && sentB == 0 {
