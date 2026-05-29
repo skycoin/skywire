@@ -43,18 +43,19 @@ type Clock interface {
 // Evaluator wraps a compiled wazero module + an instantiated
 // module instance.
 type Evaluator struct {
-	source     string
-	runtime    wazero.Runtime
-	compiled   wazero.CompiledModule
-	hostEnv    *hostEnv
-	clock      Clock
-	maxSteps   int64
-	logger     func(format string, args ...interface{})
+	source   string
+	runtime  wazero.Runtime
+	compiled wazero.CompiledModule
+	hostEnv  *hostEnv
+	clock    Clock
+	maxSteps int64
+	logger   func(format string, args ...interface{})
 
 	mu           sync.Mutex
 	instance     api.Module
 	exportDecide api.Function
 	exportLeg    api.Function
+	exportTick   api.Function
 	exportAlloc  api.Function
 }
 
@@ -163,6 +164,7 @@ func NewEvaluator(name string, wasmBytes []byte, opts ...Option) (*Evaluator, er
 		return nil, fmt.Errorf("wasm: %s missing exported decide_route", name)
 	}
 	e.exportLeg = instance.ExportedFunction("on_leg_change") // optional
+	e.exportTick = instance.ExportedFunction("on_tick")      // optional
 	e.exportAlloc = instance.ExportedFunction("alloc")
 	if e.exportAlloc == nil {
 		_ = rt.Close(ctx) //nolint:errcheck
@@ -203,6 +205,83 @@ func (e *Evaluator) Decide(ctx context.Context, rctx policy.RoutingContext, cand
 		return policy.RouteSpec{}, err
 	}
 	return specFromWire(out), nil
+}
+
+// OnTick invokes the optional on_tick export with the current
+// leg snapshot. Returns the zero-value RotationAction (no-op)
+// when the module doesn't export on_tick. Errors fall through
+// as zero-action so a misbehaving guest can't drop legs
+// unexpectedly.
+func (e *Evaluator) OnTick(ctx context.Context, rctx policy.RoutingContext, legs []policy.LegInfo) (policy.RotationAction, error) {
+	if e.exportTick == nil {
+		return policy.RotationAction{}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return policy.RotationAction{}, nil
+	}
+	if rctx.Now.IsZero() {
+		rctx.Now = e.clock.Now()
+	}
+	input := TickInputWire{
+		Ctx:  wireFromCtx(rctx),
+		Legs: wireFromLegs(legs),
+	}
+	wire, err := e.callRotation(ctx, e.exportTick, "on_tick", input)
+	if err != nil {
+		return policy.RotationAction{}, err
+	}
+	return rotationFromWire(wire), nil
+}
+
+// callRotation is the OnTick variant of call: same marshal-call-
+// unmarshal flow but decodes RotationActionWire instead of
+// RouteSpecWire.
+func (e *Evaluator) callRotation(ctx context.Context, fn api.Function, name string, input any) (RotationActionWire, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.runtime == nil {
+		return RotationActionWire{}, errors.New("wasm: evaluator closed")
+	}
+	jsonIn, err := json.Marshal(input)
+	if err != nil {
+		return RotationActionWire{}, fmt.Errorf("wasm: marshal %s input: %w", name, err)
+	}
+	allocRes, err := e.exportAlloc.Call(ctx, uint64(len(jsonIn)))
+	if err != nil || len(allocRes) == 0 {
+		return RotationActionWire{}, fmt.Errorf("wasm: alloc for %s failed: %v", name, err)
+	}
+	inPtr := uint32(allocRes[0])
+	if ok := e.instance.Memory().Write(inPtr, jsonIn); !ok {
+		return RotationActionWire{}, fmt.Errorf("wasm: write %s input to memory failed", name)
+	}
+	res, err := fn.Call(ctx, uint64(inPtr), uint64(len(jsonIn)))
+	if err != nil {
+		return RotationActionWire{}, fmt.Errorf("wasm: %s call failed: %w", name, err)
+	}
+	if len(res) == 0 {
+		return RotationActionWire{}, nil
+	}
+	outPtr, outLen := unpackPtrLen(res[0])
+	if outLen == 0 {
+		return RotationActionWire{}, nil
+	}
+	jsonOut, ok := e.instance.Memory().Read(outPtr, outLen)
+	if !ok {
+		return RotationActionWire{}, fmt.Errorf("wasm: read %s output failed", name)
+	}
+	var action RotationActionWire
+	if err := json.Unmarshal(jsonOut, &action); err != nil {
+		return RotationActionWire{}, fmt.Errorf("wasm: unmarshal %s output: %w", name, err)
+	}
+	return action, nil
+}
+
+func rotationFromWire(w RotationActionWire) policy.RotationAction {
+	return policy.RotationAction{
+		DropLegs:    append([]int(nil), w.DropLegs...),
+		AddLeg:      w.AddLeg,
+		ExcludeHops: append([]string(nil), w.ExcludeHops...),
+	}
 }
 
 // OnLegChange invokes the optional on_leg_change export. Returns
@@ -316,14 +395,15 @@ func wireFromLegs(legs []policy.LegInfo) []LegInfoWire {
 
 func specFromWire(w RouteSpecWire) policy.RouteSpec {
 	out := policy.RouteSpec{
-		Mux:            w.Mux,
-		ForwardMux:     w.ForwardMux,
-		ReverseMux:     w.ReverseMux,
-		MinHops:        w.MinHops,
-		ForwardMinHops: w.ForwardMinHops,
-		ReverseMinHops: w.ReverseMinHops,
-		Fallback:       w.Fallback,
-		Distribution:   w.Distribution,
+		Mux:                     w.Mux,
+		ForwardMux:              w.ForwardMux,
+		ReverseMux:              w.ReverseMux,
+		MinHops:                 w.MinHops,
+		ForwardMinHops:          w.ForwardMinHops,
+		ReverseMinHops:          w.ReverseMinHops,
+		Fallback:                w.Fallback,
+		Distribution:            w.Distribution,
+		RotationIntervalSeconds: w.RotationIntervalSeconds,
 	}
 	if w.Chosen != nil {
 		c := candidateFromWire(*w.Chosen)

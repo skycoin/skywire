@@ -119,6 +119,15 @@ type DialAdjustment struct {
 	// (Starlark RouteSpec.Distribution) into this struct so
 	// the router stays free of parser logic.
 	Distribution DistributionConfig
+
+	// RotationIntervalSeconds, when > 0, configures the route
+	// group's rotation servicePacketLoop to fire OnTick every N
+	// seconds. The hook gets the current leg snapshot and
+	// returns a RotationAction (drop legs / add leg / no-op),
+	// which the route group applies. Zero (default) disables
+	// rotation. Set by policies that want continuous bandwidth-
+	// spreading rotation across the eligible-peer set.
+	RotationIntervalSeconds int
 }
 
 // DistributionConfig drives the per-packet leg-selection
@@ -250,6 +259,34 @@ type LegChange struct {
 	LegIndex int
 }
 
+// RotationAction is the structured return value from the policy's
+// on_tick hook. The route group's rotation servicePacketLoop
+// fires the hook periodically (cadence configured at dial time)
+// and applies this action: drop the listed leg indices, then
+// optionally add a fresh aux leg whose path avoids ExcludeHops.
+// Zero value = no-op.
+type RotationAction struct {
+	// DropLegs is the list of current-tick leg indices to close.
+	// Indices reference the legs slice passed to the hook —
+	// they're NOT stable across ticks because the prune path
+	// compacts the slice when a leg closes.
+	DropLegs []int
+
+	// AddLeg requests one more aux forward leg with ExcludeHops
+	// as the disjoint-intermediate filter.
+	AddLeg      bool
+	ExcludeHops []string
+}
+
+// RotationHook fires periodically per active route group, giving
+// the routing policy a chance to mutate the leg set without re-
+// dialing the whole group. Policies use it to spread bandwidth
+// across the eligible-peer set (drop oldest leg, add new one
+// excluding current hops, repeat each tick).
+type RotationHook interface {
+	OnTick(info DialInfo, legs []LegInfo) RotationAction
+}
+
 // String returns the stable label for a DistributionMode. Used
 // by router-side log fields so operator-facing log lines say
 // "round-robin" instead of "1".
@@ -356,6 +393,9 @@ func applyAdjustment(opts *DialOptions, adj DialAdjustment) error {
 	}
 	if adj.Distribution.Mode != DistributionUnset {
 		opts.Distribution = adj.Distribution
+	}
+	if adj.RotationIntervalSeconds > 0 {
+		opts.RotationIntervalSeconds = adj.RotationIntervalSeconds
 	}
 	return nil
 }

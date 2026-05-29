@@ -75,14 +75,36 @@ type LegChangeInputWire struct {
 // match the policy.RouteSpec semantics (Mux=0 means "no
 // override", etc.).
 type RouteSpecWire struct {
-	Chosen         *CandidateWire `json:"chosen,omitempty"`
-	ReverseChosen  *CandidateWire `json:"reverse_chosen,omitempty"`
-	Mux            int            `json:"mux,omitempty"`
-	ForwardMux     int            `json:"forward_mux,omitempty"`
-	ReverseMux     int            `json:"reverse_mux,omitempty"`
-	MinHops        int            `json:"min_hops,omitempty"`
-	ForwardMinHops int            `json:"forward_min_hops,omitempty"`
-	ReverseMinHops int            `json:"reverse_min_hops,omitempty"`
-	Fallback       string         `json:"fallback,omitempty"`
-	Distribution   string         `json:"distribution,omitempty"`
+	Chosen                  *CandidateWire `json:"chosen,omitempty"`
+	ReverseChosen           *CandidateWire `json:"reverse_chosen,omitempty"`
+	Mux                     int            `json:"mux,omitempty"`
+	ForwardMux              int            `json:"forward_mux,omitempty"`
+	ReverseMux              int            `json:"reverse_mux,omitempty"`
+	MinHops                 int            `json:"min_hops,omitempty"`
+	ForwardMinHops          int            `json:"forward_min_hops,omitempty"`
+	ReverseMinHops          int            `json:"reverse_min_hops,omitempty"`
+	Fallback                string         `json:"fallback,omitempty"`
+	Distribution            string         `json:"distribution,omitempty"`
+	RotationIntervalSeconds int            `json:"rotation_interval_seconds,omitempty"`
+}
+
+// TickInputWire is the JSON envelope the host passes into the
+// guest's on_tick export. Same ctx shape as DecideInputWire; the
+// legs carry the current leg snapshot at tick time.
+type TickInputWire struct {
+	Ctx  RoutingContextWire `json:"ctx"`
+	Legs []LegInfoWire      `json:"legs"`
+}
+
+// RotationActionWire mirrors policy.RotationAction as a JSON wire
+// type. Returned by the guest's on_tick export. Zero-value
+// (no_drops + add_leg=false) is the "no-op this tick" signal.
+//
+// Indices in DropLegs reference the legs slice the host passed
+// in — they are not stable across ticks. Policies must re-read
+// the legs slice each tick.
+type RotationActionWire struct {
+	DropLegs    []int    `json:"drop_legs,omitempty"`
+	AddLeg      bool     `json:"add_leg,omitempty"`
+	ExcludeHops []string `json:"exclude_hops,omitempty"`
 }
