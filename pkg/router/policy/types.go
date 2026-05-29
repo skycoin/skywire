@@ -177,4 +177,37 @@ type RouteSpec struct {
 	// "weighted: a,b,c", "size-threshold:N". The per-packet path
 	// stays compiled Go; this field configures it from Starlark.
 	Distribution string
+
+	// RotationIntervalSeconds, when > 0, configures the router to
+	// fire the policy's on_tick hook on this route group every
+	// N seconds. The hook returns a RotationAction describing
+	// which legs to drop and whether to add a fresh one — the
+	// mechanism behind continuous bandwidth-spreading policies
+	// that rotate through the eligible-peer set. Set at dial time
+	// via decide_route; cannot be changed mid-flight (drop + redial
+	// to reconfigure).
+	RotationIntervalSeconds int
+}
+
+// RotationAction is the structured return value from a policy's
+// on_tick hook. The router fires the hook periodically per active
+// route group (see RouteSpec.RotationIntervalSeconds) and applies
+// this action against the group's leg set:
+//
+//   - DropLegs is a list of current-tick leg indices to close.
+//     Indices reference the slice passed to on_tick — they are
+//     NOT stable across ticks because leg-prune compacts the slice
+//     when a leg closes. Policies must re-read on each tick.
+//   - AddLeg requests the router to dial one more aux forward leg,
+//     using ExcludeHops as the disjoint-intermediate filter. The
+//     add is best-effort — if no disjoint path exists the action
+//     is logged and the group keeps its current legs.
+//
+// Drops apply before adds, so a "drop oldest + add new" pattern
+// produces one new leg replacing one old one. A no-op action
+// (zero-value) leaves the group unchanged.
+type RotationAction struct {
+	DropLegs    []int
+	AddLeg      bool
+	ExcludeHops []string
 }

@@ -221,6 +221,14 @@ type DialOptions struct {
 	// to 1 explicitly (not 0) since 0 still falls through to MuxRoutes.
 	ForwardMuxRoutes int
 	ReverseMuxRoutes int
+
+	// RotationIntervalSeconds, when > 0, instructs the route group
+	// to fire its rotation hook every N seconds after setup. The
+	// hook can drop legs and/or add new ones, enabling bandwidth-
+	// spreading policies that rotate across the eligible-peer set.
+	// Populated by the policy layer (DialAdjustment) from
+	// RouteSpec.RotationIntervalSeconds; zero = no rotation.
+	RotationIntervalSeconds int
 }
 
 // DefaultDialOptions returns default dial options.

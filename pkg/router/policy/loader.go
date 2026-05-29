@@ -36,6 +36,7 @@ import (
 type Engine interface {
 	Decide(ctx context.Context, rctx RoutingContext, candidates []Candidate) (RouteSpec, error)
 	OnLegChange(ctx context.Context, rctx RoutingContext, legs []LegInfo, change LegChange) (RouteSpec, error)
+	OnTick(ctx context.Context, rctx RoutingContext, legs []LegInfo) (RotationAction, error)
 	IsActive() bool
 	Source() string
 	Close() error
@@ -243,6 +244,17 @@ func (l *Loader) OnLegChange(ctx context.Context, rctx RoutingContext, legs []Le
 		return RouteSpec{}, nil
 	}
 	return eval.OnLegChange(ctx, rctx, legs, change)
+}
+
+// OnTick forwards to the active Evaluator's OnTick. Returns the
+// zero-value RotationAction when no evaluator is loaded — the
+// router treats that as "no rotation this tick."
+func (l *Loader) OnTick(ctx context.Context, rctx RoutingContext, legs []LegInfo) (RotationAction, error) {
+	eval := l.current.Load()
+	if eval == nil {
+		return RotationAction{}, nil
+	}
+	return eval.OnTick(ctx, rctx, legs)
 }
 
 // Source returns the human-readable source identifier (file path

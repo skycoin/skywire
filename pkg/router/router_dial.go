@@ -283,6 +283,36 @@ func (r *router) DialRoutes(
 			})
 		}
 
+		// Rotation hook (RFC #2882 — periodic-tick / bandwidth-
+		// spreading). The dial-side DialHook may also implement
+		// RotationHook; when it does AND the policy returned
+		// RotationIntervalSeconds > 0, the route group's rotation
+		// servicePacketLoop fires the hook periodically. The
+		// applyAdd callback closes over the current dial context
+		// and forwardDesc so the rotation can add aux legs that
+		// match the original dial shape.
+		if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+			optsCopy := *opts
+			fwdDescCopy := forwardDesc
+			nrgCapture := nrg
+			applyAdd := func(excludeHops []string) {
+				addCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				excludePKs := make([]cipher.PubKey, 0, len(excludeHops))
+				for _, h := range excludeHops {
+					var pk cipher.PubKey
+					if err := pk.Set(h); err == nil {
+						excludePKs = append(excludePKs, pk)
+					}
+				}
+				if err := r.addOneAuxForwardLeg(addCtx, nrgCapture, &optsCopy, fwdDescCopy, excludePKs); err != nil {
+					r.logger.WithError(err).Debug("Rotation add-leg failed; route group keeps current leg set")
+				}
+			}
+			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
+			nrg.rg.SetRotation(rh, applyAdd, interval)
+		}
+
 		// reset MinHops default value if changed before
 		if defaultMinHops != 1 {
 			r.conf.MinHops = defaultMinHops
@@ -1702,6 +1732,99 @@ func (r *router) establishMuxRoutes(
 		}(p)
 	}
 	wg.Wait()
+}
+
+// addOneAuxForwardLeg dials one additional forward aux leg and
+// appends it to nrg. Used by the rotation hook to add a leg post-
+// dial without going through establishMuxRoutes' multi-slot
+// machinery.
+//
+// extraExcludePKs are policy-supplied hop exclusions (typically
+// the PKs of legs the policy just asked to drop, or any peers it
+// wants to avoid this rotation). They're merged with the route
+// group's existing intermediates so the new leg is disjoint from
+// what's already there AND from the policy's hint.
+//
+// Failure modes: route-finder + local-calc both empty → returns
+// an error logged at debug. Setup-node dial failure → returns the
+// error. Append failure → returns the error. None of these are
+// fatal at the route group level (the group keeps its current
+// leg set); the rotation goroutine logs and waits for the next
+// tick.
+func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, opts *DialOptions, forwardDesc routing.RouteDescriptor, extraExcludePKs []cipher.PubKey) error {
+	if nrg == nil || nrg.rg == nil {
+		return fmt.Errorf("route group nil")
+	}
+	log := r.scopedLogForOpts(opts, forwardDesc.SrcPort())
+	lPK := forwardDesc.SrcPK()
+	rPK := forwardDesc.DstPK()
+
+	// Existing intermediates from the route group + policy excludes.
+	excludePKs := intermediatesOfRouteGroup(nrg, lPK, rPK)
+	excludePKs = append(excludePKs, extraExcludePKs...)
+
+	// Existing tp IDs to exclude (prevents picking the same
+	// transports the route group already uses).
+	nrg.rg.mu.Lock()
+	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.tps))
+	for _, tp := range nrg.rg.tps {
+		if tp != nil {
+			excludeIDs = append(excludeIDs, tp.Entry.ID)
+		}
+	}
+	nrg.rg.mu.Unlock()
+
+	parentMinHops := 0
+	parentFwdMinHops := 0
+	parentAppName := ""
+	if opts != nil {
+		parentMinHops = opts.MinHops
+		parentFwdMinHops = opts.ForwardMinHops
+		parentAppName = opts.AppName
+	}
+
+	muxOpts := &DialOptions{
+		MinForwardRts:          1,
+		MaxForwardRts:          1,
+		MinConsumeRts:          1,
+		MaxConsumeRts:          1,
+		Retries:                1,
+		MinHops:                parentMinHops,
+		ForwardMinHops:         parentFwdMinHops,
+		AppName:                parentAppName,
+		ExcludeTransportIDs:    excludeIDs,
+		ExcludeIntermediatePKs: excludePKs,
+		ExcludeDMSG:            true,
+	}
+
+	muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
+	if err != nil {
+		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+		if localErr != nil {
+			return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, localErr)
+		}
+		muxFwd, muxRev = localFwd, localRev
+	}
+
+	muxKeepAlive := DefaultRouteKeepAlive
+	if opts != nil && opts.KeepAlive > 0 {
+		muxKeepAlive = opts.KeepAlive
+	}
+	req := routing.BidirectionalRoute{
+		Desc:      forwardDesc,
+		KeepAlive: muxKeepAlive,
+		Forward:   muxFwd,
+		Reverse:   muxRev,
+	}
+	muxRules, _, err := r.conf.RouteGroupDialer.Dial(ctx, log, r.dmsgC, r.conf.SetupNodes, req)
+	if err != nil {
+		return fmt.Errorf("rotation add-leg: setup-node dial: %w", err)
+	}
+	if err := r.appendRouteAsymmetric(nrg, muxRules, true, false); err != nil {
+		return fmt.Errorf("rotation add-leg: append: %w", err)
+	}
+	log.Infof("Rotation aux leg established via tp %s", muxRules.Forward.NextTransportID())
+	return nil
 }
 
 // intermediatesOfHops extracts the set of intermediate-visor PKs

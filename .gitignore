@@ -128,3 +128,4 @@ build-test/
 
 # Operator-local routing policies; checked-in examples live in docs/examples/routing-policies/
 /policies/
+skysocks-client
