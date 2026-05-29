@@ -205,6 +205,10 @@ func (proxyDefaultAPI) StartAppWithMode(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SetAppRoutingPolicy(_ string, _ string) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) AddApp(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
