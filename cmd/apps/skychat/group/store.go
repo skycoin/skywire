@@ -17,6 +17,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
 
 const groupsBucket = "groups"
@@ -32,6 +33,12 @@ type Store struct {
 func OpenStore(path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("group: mkdir parent: %w", err)
+	}
+	// Repair-on-corrupt: group records are recoverable from CXO
+	// re-subscription; recreating fresh avoids visor crash-loop on
+	// a corrupt groups.db.
+	if err := bbolthealth.RepairIfCorrupt(path); err != nil {
+		return nil, fmt.Errorf("group: integrity-check %s: %w", path, err)
 	}
 	db, err := bolt.Open(path, 0o600, &bolt.Options{Timeout: 2 * time.Second})
 	if err != nil {
