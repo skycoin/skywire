@@ -738,3 +738,99 @@ def decide_route(ctx, candidates):
 		t.Errorf("vpn+dmsg+overlay: Fallback=%q, want empty (gate only fires for direct)", adj.Fallback)
 	}
 }
+
+func TestHook_OnTick_RoundTripsToRouterRotationAction(t *testing.T) {
+	// Policy returns a rotation cadence in decide_route + a
+	// rotation action in on_tick that drops two legs and adds
+	// one. Confirms the wire conversion through the Hook into
+	// router.RotationAction with all fields populated.
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec(mux=4, rotation_interval_seconds=15)
+
+def on_tick(ctx, legs):
+    return Rotation(
+        drop_legs=[0, 2],
+        add_leg=True,
+        exclude_hops=["0000000000000000000000000000000000000000000000000000000000000000ff"],
+    )
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	info := router.DialInfo{AppName: "vpn-client", PeerPK: pk}
+
+	// Confirm BeforeDial surfaces RotationIntervalSeconds on the
+	// adjustment (the router uses this to bring up the rotation
+	// loop).
+	adj, err := h.BeforeDial(context.Background(), info)
+	if err != nil {
+		t.Fatalf("BeforeDial: %v", err)
+	}
+	if adj.RotationIntervalSeconds != 15 {
+		t.Errorf("RotationIntervalSeconds=%d, want 15", adj.RotationIntervalSeconds)
+	}
+
+	// Confirm OnTick returns the policy's action through the
+	// Hook into router-side types.
+	legs := []router.LegInfo{
+		{Index: 0, Kind: "stcpr", LatencyMs: 30, Alive: true},
+		{Index: 1, Kind: "stcpr", LatencyMs: 40, Alive: true},
+		{Index: 2, Kind: "sudph", LatencyMs: 60, Alive: true},
+	}
+	action := h.OnTick(info, legs)
+	if !action.AddLeg {
+		t.Errorf("AddLeg=false, want true")
+	}
+	if len(action.DropLegs) != 2 {
+		t.Fatalf("DropLegs len=%d, want 2", len(action.DropLegs))
+	}
+	if action.DropLegs[0] != 0 || action.DropLegs[1] != 2 {
+		t.Errorf("DropLegs=%v, want [0 2]", action.DropLegs)
+	}
+	if len(action.ExcludeHops) != 1 {
+		t.Errorf("ExcludeHops len=%d, want 1", len(action.ExcludeHops))
+	}
+}
+
+func TestHook_OnTick_ScriptWithoutFnReturnsZero(t *testing.T) {
+	// Common case: policies that set rotation_interval_seconds
+	// without defining on_tick. The Hook should return the zero-
+	// value action so the route group doesn't try to mutate.
+	src := `
+def decide_route(ctx, candidates):
+    return RouteSpec(mux=2, rotation_interval_seconds=60)
+`
+	loader, err := NewLoader(src)
+	if err != nil {
+		t.Fatalf("NewLoader: %v", err)
+	}
+	defer loader.Close() //nolint:errcheck
+
+	h := NewHook(loader)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	info := router.DialInfo{AppName: "x", PeerPK: pk}
+	action := h.OnTick(info, nil)
+	if action.AddLeg || len(action.DropLegs) > 0 {
+		t.Errorf("expected zero-value action, got %+v", action)
+	}
+}
+
+func TestHook_OnTick_NoLoaderReturnsZero(t *testing.T) {
+	// Hook with no engine registered should return zero-value
+	// without panic.
+	h := NewHook(nil)
+	pk := cipher.PubKey{}
+	pk[0] = 0x02
+	action := h.OnTick(router.DialInfo{AppName: "x", PeerPK: pk}, nil)
+	if action.AddLeg || len(action.DropLegs) > 0 {
+		t.Errorf("expected zero-value action, got %+v", action)
+	}
+}

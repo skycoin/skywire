@@ -300,6 +300,60 @@ func (e *Evaluator) OnLegChange(ctx context.Context, rctx RoutingContext, legs [
 	return spec, nil
 }
 
+// OnTick invokes the script's optional `on_tick(ctx, legs)`
+// function. Returns the zero-value RotationAction when the script
+// doesn't define on_tick — the router treats that as "no
+// rotation this tick." Same step ceiling as Decide; failures are
+// non-fatal (logged, then return zero action).
+func (e *Evaluator) OnTick(ctx context.Context, rctx RoutingContext, legs []LegInfo) (RotationAction, error) {
+	fn, ok := e.globals["on_tick"]
+	if !ok {
+		return RotationAction{}, nil
+	}
+	if _, ok := fn.(starlark.Callable); !ok {
+		return RotationAction{}, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return RotationAction{}, nil
+	}
+	if rctx.Now.IsZero() {
+		rctx.Now = e.clock.Now()
+	}
+	thread := &starlark.Thread{
+		Name: e.source + "/on_tick",
+		Print: func(_ *starlark.Thread, msg string) {
+			e.logger("policy %s: print: %s", e.source, msg)
+		},
+	}
+	thread.SetMaxExecutionSteps(uint64(e.maxSteps)) //nolint:gosec
+	starCtx := buildContextValue(rctx)
+	starLegs := buildLegsValue(legs)
+	var result starlark.Value
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				e.logger("policy %s: panic in on_tick: %v", e.source, r)
+				result = nil
+			}
+		}()
+		v, callErr := starlark.Call(thread, fn, starlark.Tuple{starCtx, starLegs}, nil)
+		if callErr != nil {
+			e.logger("policy %s: on_tick returned error: %v", e.source, callErr)
+			result = nil
+			return
+		}
+		result = v
+	}()
+	if result == nil {
+		return RotationAction{}, errors.New("on_tick call failed")
+	}
+	action, err := parseRotationAction(result)
+	if err != nil {
+		return RotationAction{}, fmt.Errorf("on_tick returned malformed value: %w", err)
+	}
+	return action, nil
+}
+
 // LegInfo and LegChange mirror the router package's types so
 // scripts can reason about them without the policy package
 // pulling in the router. The bridge layer converts between the
