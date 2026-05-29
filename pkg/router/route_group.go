@@ -165,6 +165,16 @@ type RouteGroup struct {
 	// configures the hook; unset on accept-side rg's (the
 	// hook is only meaningful on the dialing side).
 	legChangeInfo DialInfo
+
+	// rotationHook, when non-nil, fires periodically at
+	// rotationInterval from the rotation servicePacketLoop —
+	// returning a RotationAction the route group applies (drop
+	// listed legs, optionally request an aux leg via
+	// rotationApplyAdd). Zero interval = no rotation goroutine.
+	// See pkg/router/dial_hook.go RotationHook.
+	rotationHook     RotationHook
+	rotationApplyAdd func(excludeHops []string)
+	rotationInterval time.Duration
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -551,6 +561,26 @@ func (rg *RouteGroup) SetLegChangeHook(hook LegChangeHook, info DialInfo) {
 	rg.mu.Unlock()
 }
 
+// SetRotation attaches the rotation hook + apply-add callback +
+// tick interval. Called once at construction time when the
+// policy's decide_route returned a non-zero
+// RotationIntervalSeconds. The actual rotation goroutine starts
+// via startOffServiceLoops; calling SetRotation after that point
+// is racy and unsupported.
+//
+// applyAdd is the router-side callback that dials one more aux
+// forward leg with the policy's ExcludeHops as the disjoint-
+// intermediate filter. It runs in the rotation goroutine's
+// own context so a slow setup-node dial doesn't block other
+// route groups' rotation.
+func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd func(excludeHops []string), interval time.Duration) {
+	rg.mu.Lock()
+	rg.rotationHook = hook
+	rg.rotationApplyAdd = applyAdd
+	rg.rotationInterval = interval
+	rg.mu.Unlock()
+}
+
 // snapshotLegs builds a []LegInfo from the current rg.tps. Caller
 // must hold rg.mu. Used by the leg-change fire path to give the
 // policy script a snapshot it can iterate.
@@ -804,6 +834,97 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 func (rg *RouteGroup) startOffServiceLoops() {
 	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
+	// Rotation loop: only starts when the dialing-side policy
+	// returned a non-zero RotationIntervalSeconds in decide_route.
+	// Accept-side route groups (no policy) have rotationInterval=0
+	// and skip this entirely.
+	if rg.rotationInterval > 0 && rg.rotationHook != nil {
+		go rg.servicePacketLoop("rotation", rg.rotationInterval, rg.rotationServiceFn)
+	}
+}
+
+// rotationServiceFn fires the policy's on_tick hook against the
+// current leg snapshot and applies the returned action: drop
+// the listed leg indices, then optionally request one fresh aux
+// leg via the router-supplied applyAdd callback.
+//
+// Drops apply before the add so a "drop oldest + add new" policy
+// produces a clean rotation (one in, one out). The add runs
+// synchronously here — a slow setup-node dial blocks the next
+// tick for THIS route group only (other groups have their own
+// rotation goroutines).
+func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
+	rg.mu.Lock()
+	hook := rg.rotationHook
+	applyAdd := rg.rotationApplyAdd
+	info := rg.legChangeInfo
+	legs := rg.snapshotLegs()
+	rg.mu.Unlock()
+	if hook == nil {
+		return
+	}
+	action := hook.OnTick(info, legs)
+	if len(action.DropLegs) == 0 && !action.AddLeg {
+		return
+	}
+
+	if len(action.DropLegs) > 0 {
+		rg.dropLegsByIndex(action.DropLegs)
+	}
+
+	if action.AddLeg && applyAdd != nil {
+		applyAdd(action.ExcludeHops)
+	}
+}
+
+// dropLegsByIndex closes the transports at the policy-supplied
+// indices (re-mapped to current live legs) then triggers a prune
+// so the slice compacts and OnLegChange fires. Bounded: never
+// drops the last alive leg — the prune itself enforces that
+// invariant, but we skip the close too so we don't briefly
+// orphan a route group with no transports.
+//
+// Indices come from the policy's view of the leg slice at tick
+// time; the snapshot the policy saw might be stale by the time
+// we mutate (concurrent prune from keep-alive loop), so we treat
+// out-of-range indices as no-ops rather than errors.
+func (rg *RouteGroup) dropLegsByIndex(indices []int) {
+	rg.mu.Lock()
+	aliveCount := 0
+	for _, tp := range rg.tps {
+		if tp != nil && !tp.IsClosed() {
+			aliveCount++
+		}
+	}
+	closed := make([]int, 0, len(indices))
+	for _, idx := range indices {
+		if idx < 0 || idx >= len(rg.tps) {
+			continue
+		}
+		tp := rg.tps[idx]
+		if tp == nil || tp.IsClosed() {
+			continue
+		}
+		if aliveCount <= 1 {
+			// Refuse to drop the last alive leg — pruneDeadTransports
+			// also refuses, but skipping the close avoids the brief
+			// window where the leg is closed but not yet pruned.
+			break
+		}
+		_ = tp.Close() //nolint:errcheck
+		aliveCount--
+		closed = append(closed, idx)
+	}
+	droppedIdx := rg.pruneDeadTransports()
+	rg.mu.Unlock()
+	for _, idx := range droppedIdx {
+		rg.fireLegChange("dropped", idx)
+	}
+	if rg.logger != nil && len(closed) > 0 {
+		rg.logger.
+			WithField("dropped_indices", closed).
+			Debug("Rotation hook dropped legs.")
+	}
 }
 
 func (rg *RouteGroup) sendPing() error {

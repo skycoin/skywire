@@ -115,13 +115,14 @@ func (h *Hook) BeforeDial(ctx context.Context, info router.DialInfo) (router.Dia
 		return router.DialAdjustment{}, err
 	}
 	adj := router.DialAdjustment{
-		MuxRoutes:        spec.Mux,
-		ForwardMuxRoutes: spec.ForwardMux,
-		ReverseMuxRoutes: spec.ReverseMux,
-		MinHops:          spec.MinHops,
-		ForwardMinHops:   spec.ForwardMinHops,
-		ReverseMinHops:   spec.ReverseMinHops,
-		Fallback:         spec.Fallback,
+		MuxRoutes:               spec.Mux,
+		ForwardMuxRoutes:        spec.ForwardMux,
+		ReverseMuxRoutes:        spec.ReverseMux,
+		MinHops:                 spec.MinHops,
+		ForwardMinHops:          spec.ForwardMinHops,
+		ReverseMinHops:          spec.ReverseMinHops,
+		Fallback:                spec.Fallback,
+		RotationIntervalSeconds: spec.RotationIntervalSeconds,
 	}
 	// Distribution descriptor parse — failure is non-fatal
 	// (script keeps the rest of the adjustment; distribution
@@ -248,6 +249,49 @@ func hopsEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// OnTick fires the policy's optional on_tick hook for periodic
+// rotation. The router calls this from the per-RouteGroup
+// rotation goroutine (cadence comes from
+// RouteSpec.RotationIntervalSeconds set at dial time). Returns
+// the zero-value action when no engine is registered, no engine
+// is active, or the engine's on_tick is undefined — the router
+// treats that as "no rotation this tick."
+//
+// Errors from the engine fall through to a zero-value action +
+// the logger, matching the failure-safe pattern used elsewhere
+// in the Hook. A misbehaving rotation script can't cause the
+// route group to drop legs unexpectedly.
+func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.RotationAction {
+	loader := h.loaderFor(info.AppName)
+	if loader == nil || !loader.IsActive() {
+		return router.RotationAction{}
+	}
+	policyLegs := make([]LegInfo, 0, len(legs))
+	for _, l := range legs {
+		policyLegs = append(policyLegs, LegInfo{
+			Index:     l.Index,
+			Kind:      l.Kind,
+			LatencyMs: l.LatencyMs,
+			Alive:     l.Alive,
+		})
+	}
+	rctx := RoutingContext{
+		App:    info.AppName,
+		PeerPK: info.PeerPK.Hex(),
+		Port:   uint16(info.RPort),
+	}
+	action, err := loader.OnTick(context.Background(), rctx, policyLegs)
+	if err != nil {
+		h.logger("policy %s: OnTick error: %v", info.AppName, err)
+		return router.RotationAction{}
+	}
+	return router.RotationAction{
+		DropLegs:    append([]int(nil), action.DropLegs...),
+		AddLeg:      action.AddLeg,
+		ExcludeHops: append([]string(nil), action.ExcludeHops...),
+	}
 }
 
 // OnLegChange implements router.LegChangeHook. Called by the
