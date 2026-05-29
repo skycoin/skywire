@@ -347,6 +347,14 @@ func (rc *rpcClient) StartAppWithMode(appName, launcherMode string) error {
 	}, &struct{}{})
 }
 
+// SetAppRoutingPolicy calls SetAppRoutingPolicy.
+func (rc *rpcClient) SetAppRoutingPolicy(appName, path string) error {
+	return rc.Call("SetAppRoutingPolicy", &SetAppRoutingPolicyIn{
+		AppName: appName,
+		Path:    path,
+	}, &struct{}{})
+}
+
 // AddApp calls AddApp.
 func (rc *rpcClient) AddApp(appName, binaryName string) error {
 	return rc.Call("AddApp", &SetAppAddIn{

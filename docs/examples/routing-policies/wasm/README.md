@@ -76,17 +76,34 @@ Install:
 sudo install -m 0644 app-mux.wasm /etc/skywire/policies/
 ```
 
-Point the visor at it via `skywire.json`:
+Point the visor at it via `skywire.json` — same field as the
+skylark policy; backend is picked by file extension:
 
 ```json
 "routing": {
-  "policy_per_dial_wasm": "@/etc/skywire/policies/app-mux.wasm"
+  "policy_per_dial": "@/etc/skywire/policies/app-mux.wasm"
 }
 ```
 
-`policy_per_dial_wasm` wins over `policy_per_dial` when both are set —
-WASM is the explicit opt-in. Per-app overrides
-(`launcher.apps[].routing_policy`) remain skylark-only for now.
+Per-app overrides accept WASM too:
+
+```json
+"launcher": {
+  "apps": [
+    {
+      "name": "vpn-client",
+      "routing_policy": "@/etc/skywire/policies/vpn.wasm"
+    }
+  ]
+}
+```
+
+Or supply at app-start time via CLI:
+
+```bash
+skywire cli visor app start vpn-client \
+    --routing-policy @/etc/skywire/policies/vpn.wasm
+```
 
 ## Hot reload
 
