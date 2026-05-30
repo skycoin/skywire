@@ -14,7 +14,7 @@ import (
 // looking for the docs/examples/routing-policies/wasm/app-mux/
 // app-mux.wasm artifact. Returns "" when not found (caller
 // t.Skip's).
-func findExampleWASM(t *testing.T) string {
+func findExampleWASM() string {
 	_, here, _, _ := runtime.Caller(0)
 	repoRoot := here
 	for i := 0; i < 8; i++ {
@@ -28,7 +28,7 @@ func findExampleWASM(t *testing.T) string {
 }
 
 func TestWasmEvaluator_DecidesByApp(t *testing.T) {
-	wasmPath := findExampleWASM(t)
+	wasmPath := findExampleWASM()
 	if wasmPath == "" {
 		t.Skip("app-mux.wasm not built; run `tinygo build -target=wasi -no-debug -opt=2 -o app-mux.wasm .` in docs/examples/routing-policies/wasm/app-mux/")
 	}
