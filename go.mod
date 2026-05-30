@@ -62,6 +62,7 @@ require (
 )
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/DiSiqueira/GoTree v1.0.0
 	github.com/ccding/go-stun v0.1.5
 	github.com/charmbracelet/bubbles v1.0.0
