@@ -48,7 +48,6 @@ require (
 	github.com/toqueteos/webbrowser v1.2.1
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/yuin/goldmark v1.8.2
-	github.com/zcalusic/sysinfo v1.1.3
 	go.etcd.io/bbolt v1.4.3
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0

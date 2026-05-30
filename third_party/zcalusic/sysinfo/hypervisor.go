@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/zcalusic/sysinfo/cpuid"
+	"github.com/skycoin/skywire/third_party/zcalusic/sysinfo/cpuid"
 )
 
 // https://en.wikipedia.org/wiki/CPUID#EAX.3D0:_Get_vendor_ID
