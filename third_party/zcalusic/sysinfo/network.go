@@ -1,3 +1,6 @@
+//go:build linux
+// +build linux
+
 // Copyright © 2016 Zlatko Čalušić
 //
 // Use of this source code is governed by an MIT-style license that can be found in the LICENSE file.
@@ -22,7 +25,7 @@ type NetworkDevice struct {
 }
 
 func getPortType(supp uint32) (port string) {
-	for i, p := range [...]string{"tp", "aui", "mii", "fibre", "bnc"} {
+	for i, p := range [...]string{"tp", "aui", "mii", "fibre", "bnc"} { //nolint:misspell // "fibre" is the kernel ethtool port-type spelling
 		if supp&(1<<uint(i+7)) > 0 {
 			port += p + "/"
 		}
@@ -61,7 +64,7 @@ func getSupported(name string) uint32 {
 	if err != nil {
 		return 0
 	}
-	defer syscall.Close(fd)
+	defer syscall.Close(fd) //nolint:errcheck // best-effort close of ioctl socket
 
 	// struct ethtool_cmd from /usr/include/linux/ethtool.h
 	var ethtool struct {
@@ -96,12 +99,12 @@ func getSupported(name string) uint32 {
 	}
 
 	copy(ifr.Name[:], name+"\000")
-	ifr.Data = uintptr(unsafe.Pointer(&ethtool))
+	ifr.Data = uintptr(unsafe.Pointer(&ethtool)) //nolint:gosec // pass ethtool_cmd struct pointer to SIOCETHTOOL ioctl
 
 	// SIOCETHTOOL from /usr/include/linux/sockios.h
 	const SIOCETHTOOL = 0x8946
 
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(SIOCETHTOOL), uintptr(unsafe.Pointer(&ifr)))
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), uintptr(SIOCETHTOOL), uintptr(unsafe.Pointer(&ifr))) //nolint:gosec // pass ifreq struct pointer to SIOCETHTOOL ioctl
 	if errno == 0 {
 		return ethtool.Supported
 	}

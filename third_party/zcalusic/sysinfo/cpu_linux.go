@@ -21,7 +21,7 @@ import (
 )
 
 // (CPU type is declared in cpu.go so the survey JSON shape is available
-// to non-Linux build targets that just need the struct for marshalling.)
+// to non-Linux build targets that just need the struct for marshaling.)
 
 var (
 	reTwoColumns = regexp.MustCompile("\t+: ")
@@ -119,14 +119,17 @@ var armPartsByImplementer = map[string]map[string]string{
 }
 
 func (si *SysInfo) getCPUInfo() {
-	si.CPU.Threads = uint(runtime.NumCPU())
+	n := runtime.NumCPU()
+	if n > 0 {
+		si.CPU.Threads = uint(n)
+	}
 
 	f, err := os.Open("/proc/cpuinfo")
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	parseProcCPUInfo(f, si) //nolint:errcheck
+	defer f.Close()             //nolint:errcheck // read-only handle on /proc pseudo-file
+	_ = parseProcCPUInfo(f, si) //nolint:errcheck // partial /proc/cpuinfo parse still yields usable fields
 }
 
 // parseProcCPUInfo is the testable core of getCPUInfo: it scans a

@@ -6,7 +6,7 @@ package sysinfo
 
 // (Board type is declared in board.go so the survey JSON shape is
 // available to non-Linux build targets that just need the struct for
-// marshalling.)
+// marshaling.)
 
 func (si *SysInfo) getBoardInfo() {
 	si.Board.Name = slurpFile("/sys/class/dmi/id/board_name")

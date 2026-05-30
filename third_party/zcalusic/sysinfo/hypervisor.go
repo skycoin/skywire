@@ -30,7 +30,7 @@ func isHypervisorActive() bool {
 func getHypervisorCpuid(ax uint32) string {
 	var info [4]uint32
 	cpuid.CPUID(&info, ax)
-	return hvmap[strings.TrimRight(string((*[12]byte)(unsafe.Pointer(&info[1]))[:]), "\000")]
+	return hvmap[strings.TrimRight(string((*[12]byte)(unsafe.Pointer(&info[1]))[:]), "\000")] //nolint:gosec // reinterpret CPUID register bytes as a string
 }
 
 func (si *SysInfo) getHypervisor() {
