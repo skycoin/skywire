@@ -65,7 +65,6 @@ type routeSpecWire struct {
 	MinHops                 int    `json:"min_hops,omitempty"`
 	RotationIntervalSeconds int    `json:"rotation_interval_seconds,omitempty"`
 	Distribution            string `json:"distribution,omitempty"`
-	AvoidDirect             bool   `json:"avoid_direct,omitempty"`
 }
 
 type rotationActionWire struct {
@@ -110,17 +109,17 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 	var spec routeSpecWire
 	switch input.Ctx.App {
 	case "vpn-client", "skysocks-client", "skynet-client":
+		// min_hops=2 already says "no direct transport" — direct
+		// is 0 intermediates, so requiring at least 1 intermediate
+		// rules it out. The visor's policy layer treats min_hops>=2
+		// as an implicit avoid_direct signal on the direct-dial
+		// bridge, so the dial flows to the overlay path where
+		// rotation can act on the resulting route group.
 		spec = routeSpecWire{
 			Mux:                     4,
 			MinHops:                 2,
 			RotationIntervalSeconds: 90,
 			Distribution:            "weighted: 1, 1, 1, 1",
-			// AvoidDirect: true is implied by MinHops=2, but
-			// stating it explicitly documents intent — even if a
-			// direct stcpr exists to the remote, we want the
-			// overlay path so the rotation hook has a route group
-			// to act on.
-			AvoidDirect: true,
 		}
 	}
 	out, err := json.Marshal(spec)
@@ -130,37 +129,67 @@ func decideRoute(inPtr, inLen uint32) uint64 {
 	return writeOutput(out)
 }
 
+// targetMux is the mux size the policy aims to maintain. Kept in
+// sync with the Mux value returned from decideRoute so on_tick
+// can reason about "are we at target?"
+const targetMux = 4
+
 //export on_tick
 func onTick(inPtr, inLen uint32) uint64 {
 	var input tickInputWire
 	if err := json.Unmarshal(readInput(inPtr, inLen), &input); err != nil {
 		return 0
 	}
-	// Rotation: drop the oldest leg (lowest index of an alive leg)
-	// and add a fresh one. ExcludeHops carries the dropped leg's
-	// transport kind as a (toy) signal — a real policy would pass
-	// the dropped leg's peer-PK chain so the new leg picks a
-	// disjoint intermediate set.
+	// Rotation policy:
 	//
-	// This example doesn't have access to per-leg hop PKs from
-	// the wire (LegInfo is index/kind/latency/alive only). A
-	// future ABI extension could expand LegInfoWire with
-	// hops/hops_geo so policies can construct precise excludes.
-	var oldestAliveIdx int = -1
+	//   alive_count >= target_mux  → drop oldest + add  (steady-
+	//                                 state rotation: one in, one
+	//                                 out, leg set drifts across
+	//                                 the eligible-peer set)
+	//   alive_count <  target_mux  → add only           (recover
+	//                                 toward target without
+	//                                 shrinking further)
+	//   alive_count == 0           → no-op              (defensive;
+	//                                 nothing to rotate yet)
+	//
+	// Why the gating: if drop+add fires every tick and adds fail
+	// in succession (transient remote outage, broken intermediate),
+	// the group would shrink one leg per tick until it hit the
+	// "never drop last alive leg" floor — the rotation would have
+	// to claw all N legs back from a single survivor. Gating drop
+	// on alive_count >= target_mux means failed adds just delay
+	// rotation; the group never shrinks below the target.
+	//
+	// ExcludeHops carries the dropped leg's transport kind as a
+	// (toy) signal — a real policy would pass the dropped leg's
+	// peer-PK chain so the new leg picks a disjoint intermediate
+	// set. This example doesn't have access to per-leg hop PKs
+	// from the wire (LegInfo is index/kind/latency/alive only);
+	// a future ABI extension could expand LegInfoWire with hops
+	// so policies can construct precise excludes.
+	aliveCount := 0
+	oldestAliveIdx := -1
 	for _, l := range input.Legs {
 		if l.Alive {
+			aliveCount++
 			if oldestAliveIdx == -1 || l.Index < oldestAliveIdx {
 				oldestAliveIdx = l.Index
 			}
 		}
 	}
-	if oldestAliveIdx == -1 {
-		// No live legs to rotate.
+	if aliveCount == 0 {
 		return 0
 	}
-	action := rotationActionWire{
-		DropLegs: []int{oldestAliveIdx},
-		AddLeg:   true,
+	var action rotationActionWire
+	if aliveCount >= targetMux {
+		action = rotationActionWire{
+			DropLegs: []int{oldestAliveIdx},
+			AddLeg:   true,
+		}
+	} else {
+		action = rotationActionWire{
+			AddLeg: true,
+		}
 	}
 	out, err := json.Marshal(action)
 	if err != nil {

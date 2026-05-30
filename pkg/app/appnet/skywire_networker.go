@@ -122,7 +122,7 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	// client were silently dropped whenever AppDirectMux had a
 	// transport — see ping-path counterpart #2751.
 	if opts.MinHops <= 1 && opts.MuxRoutes <= 1 {
-		if directConn, ok := r.tryDirectDial(addr); ok {
+		if directConn, ok := r.tryDirectDial(addr, opts.AppName); ok {
 			return &SkywireConn{
 				Conn:     directConn,
 				freePort: freePort,
@@ -148,12 +148,12 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 // debug level since the fallback is the load-bearing path; we don't
 // want to surface a noisy error every time direct happens not to be
 // available.
-func (r *SkywireNetworker) tryDirectDial(addr Addr) (net.Conn, bool) {
+func (r *SkywireNetworker) tryDirectDial(addr Addr, appName string) (net.Conn, bool) {
 	mux := r.appDirectMux
 	if mux == nil {
 		return nil, false
 	}
-	stream, err := mux.Dial(addr.PubKey)
+	stream, err := mux.Dial(addr.PubKey, appName)
 	if err != nil {
 		r.log.WithField("remote", addr.PubKey.String()).
 			WithError(err).
@@ -429,10 +429,14 @@ func (r *SkywireNetworker) tryDirectPingDial(addr Addr, opts *router.DialOptions
 	}
 	var stream *transport.VStream
 	var dialErr error
+	appName := ""
+	if opts != nil {
+		appName = opts.AppName
+	}
 	if opts != nil && opts.TransportID != (uuid.UUID{}) {
 		stream, dialErr = mux.DialByTransportID(addr.PubKey, opts.TransportID)
 	} else {
-		stream, dialErr = mux.Dial(addr.PubKey)
+		stream, dialErr = mux.Dial(addr.PubKey, appName)
 	}
 	if dialErr != nil {
 		r.log.WithField("remote", addr.PubKey.String()).
