@@ -53,6 +53,8 @@ func init() {
 	bwCollectCmd.Flags().StringVarP(&histPath, "hist", "p", "hist", "path to history directory for daily files")
 	bwCollectCmd.Flags().Uint64VarP(&minBandwidth, "min-bw", "b", defaultMinBandwidth, "minimum bandwidth in bytes to qualify")
 	bwCollectCmd.Flags().StringVarP(&bwSurveyPath, "lpath", "l", "log_collecting", "path to hardware surveys (for same-LAN detection)")
+	bwCollectCmd.Flags().IntVar(&bwDays, "days", 1, "TPD ?days= window to fetch (max 35); only the entries whose Date matches --date are counted")
+	bwCollectCmd.Flags().StringVar(&bwDate, "date", "", "UTC date the output file is named for and the only Daily entry counted (default: today)")
 
 	tpCollectCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	bwCollectCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
@@ -74,6 +76,8 @@ var (
 	histPath     string
 	minBandwidth uint64
 	bwSurveyPath string
+	bwDays       int
+	bwDate       string
 )
 
 var tpCollectCmd = &cobra.Command{
@@ -306,7 +310,10 @@ sender-side aggregation. Designed to be run hourly by the reward service.`,
 			bwLog.Fatal("Failed to create hist directory: ", err)
 		}
 
-		today := time.Now().UTC().Format("2006-01-02")
+		targetDate := bwDate
+		if targetDate == "" {
+			targetDate = time.Now().UTC().Format("2006-01-02")
+		}
 
 		// Build PK→IP map from hardware surveys for same-LAN detection.
 		// Same-LAN filtering belongs at this stage rather than calc time
@@ -317,8 +324,9 @@ sender-side aggregation. Designed to be run hourly by the reward service.`,
 		bwLog.Infof("Built PK→IP map with %d entries from %s", len(pkIPMap), bwSurveyPath)
 
 		// Fetch per-transport sender-side bandwidth from TPD (same-LAN
-		// already filtered out).
-		transports, err := fetchTransportBandwidthFromTPD(cmd.Flags(), bwLog, pkIPMap, !noCache)
+		// already filtered out; only Daily entries matching targetDate
+		// counted when targetDate is non-empty).
+		transports, err := fetchTransportBandwidthFromTPD(cmd.Flags(), bwLog, pkIPMap, !noCache, bwDays, targetDate)
 		if err != nil {
 			bwLog.Fatal("Failed to fetch bandwidth data: ", err)
 		}
@@ -328,7 +336,7 @@ sender-side aggregation. Designed to be run hourly by the reward service.`,
 			Version:    BandwidthDataVersion,
 			Transports: transports,
 		}
-		dailyFile := fmt.Sprintf("%s/%s_bandwidth.json", histPath, today)
+		dailyFile := fmt.Sprintf("%s/%s_bandwidth.json", histPath, targetDate)
 		jsonData, err := json.MarshalIndent(out, "", "  ")
 		if err != nil {
 			bwLog.Fatal("Failed to marshal bandwidth data: ", err)
@@ -402,7 +410,7 @@ func buildPKtoIPMap(bwLog *logging.Logger, surveyPath string) map[string]string 
 // pool 1 eligibility set at run time (it's recomputed during calc using
 // the day's surveys + uptime). The calculator does that filter after
 // reading this list.
-func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, pkIPMap map[string]string, useCache bool) ([]TransportBW, error) {
+func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logger, pkIPMap map[string]string, useCache bool, days int, dateFilter string) ([]TransportBW, error) {
 	// Check cache
 	if useCache {
 		if info, err := os.Stat(bwCacheFile); err == nil {
@@ -422,7 +430,10 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 
 	// Fetch all transport metrics with edge info via visor RPC → DMSG → HTTP chain.
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
-	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=false&edges=true", tpdURL)
+	if days <= 0 {
+		days = 1
+	}
+	url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=false&edges=true", tpdURL, days)
 
 	bwLog.Info("Fetching all transport metrics from TPD: ", url)
 
@@ -446,16 +457,36 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			continue
 		}
 
-		// Sender-side per-edge totals, each capped by the receiver's
-		// confirmation. Pre-fix this summed both directions and credited
-		// the union to both edges — letting a receiver-heavy visor earn
-		// rewards purely from bytes it pulled. Splitting it lets the
-		// calculator apply the sender-pays model the network intends.
+		// Sender-side per-edge totals. Mirrors the same three-branch
+		// trust model `skywire cli tp metrics` uses (see
+		// cmd/skywire-cli/commands/tp/tp-metrics.go:verifiedBandwidth):
+		// when both edges report on a day, cap each side's sent by the
+		// counterparty's recv; when only one side has reported (the
+		// common case — edges re-register on different schedules), trust
+		// that side's own counters. Without the unilateral-trust
+		// branches, virtually every transport was discarded because at
+		// any given moment only one edge has a fresh daily record.
+		//
+		// An edge whose record is present but {sent:0, recv:0} is
+		// treated as "hasn't reported real data yet" rather than
+		// "verified zero traffic" — same rationale as the cli.
 		var sentA, sentB uint64
 		for _, d := range tp.Daily {
-			if d.A != nil && d.B != nil {
+			if dateFilter != "" && d.Date != dateFilter {
+				continue
+			}
+			aReported := d.A != nil && (d.A.Sent > 0 || d.A.Recv > 0)
+			bReported := d.B != nil && (d.B.Sent > 0 || d.B.Recv > 0)
+			switch {
+			case aReported && bReported:
 				sentA += minUint64(d.A.Sent, d.B.Recv)
 				sentB += minUint64(d.B.Sent, d.A.Recv)
+			case aReported:
+				sentA += d.A.Sent
+				sentB += d.A.Recv
+			case bReported:
+				sentA += d.B.Recv
+				sentB += d.B.Sent
 			}
 		}
 		if sentA == 0 && sentB == 0 {
