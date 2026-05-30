@@ -485,23 +485,53 @@ func resolveConfig() resolvedConfig {
 }
 
 // generateConfig invokes `skywire cli config gen` with regen +
-// hide flags. -p/-u are NOT passed: cli config gen reads PKGENV /
-// USRENV from the SKYENV file via scriptExecBool, so the env-var
-// path picks up the same resolution autoconfig made — without
-// hard-coding the mode in the args (the operator's intent lives in
-// /etc/skywire.conf, not in this Cmd line).
+// hide flags. -p/-u is propagated from the autoconfig-resolved mode
+// so cli config gen writes to the SAME absolute config path that
+// autoconfig resolved.
+//
+// History: an earlier version intentionally OMITTED -p/-u under the
+// theory that cli config gen would re-derive PKGENV/USRENV from the
+// SKYENV file via scriptExecBool. That theory only holds when
+// PKGENV=true (or USRENV=true) is set explicitly in /etc/skywire.conf.
+// In the common operator case where neither key is set,
+// resolveConfig auto-elects pkgEnv via `os.Geteuid() == 0`, but cli
+// config gen — running as a separate process — sees both flags
+// default to false, falls through to the relative-path branch in
+// PreRun (`confPath = skyenv.ConfigName`), and writes
+// `skywire-config.json` to the autoconfig invoker's cwd (typically
+// /root/). The pre-existing `/opt/skywire/skywire.json` stayed
+// untouched, autoconfig's downstream `os.Stat` check passed against
+// the stale file, the visor restarted on its old config, and
+// `cli config show .hypervisors` returned `[]` even though
+// HYPERVISORPKS / ISHYPERVISOR were set in the env file. Propagating
+// -p/-u from resolvedConfig closes the gap.
 func generateConfig(r resolvedConfig, hvArg string) error {
 	// printableArgs is what we PRINT for the operator to copy-paste.
 	// Intentionally omits -w (we suppress the noisy fetch logs
-	// ourselves) and -p/-u (resolved via SKYENV vars). If the
-	// install fails, the operator can paste this exact line and see
-	// the full debug logging that we hid.
+	// ourselves). If the install fails, the operator can paste this
+	// exact line and see the full debug logging that we hid.
 	printableArgs := []string{"cli", "config", "gen", "-r"}
 
 	// args is what we ACTUALLY pass. -w suppresses the success-path
 	// JSON dump (echoing the SK + every service URL on every install
 	// is noisy and a perceived secret-leak risk on shared terminals).
 	args := []string{"cli", "config", "gen", "-r", "-w"}
+
+	// Pin the write target to the same mode autoconfig resolved.
+	// Without this, cli config gen's own scriptExecBool defaults
+	// (`${PKGENV:-false}` / `${USRENV:-false}`) silently mis-resolve
+	// to false when the env file doesn't set those keys explicitly,
+	// and gen writes to a cwd-relative path instead of the absolute
+	// /opt/skywire/skywire.json (PKGENV) or ~/skywire-config.json
+	// (USRENV) that autoconfig already stat-checks downstream.
+	switch {
+	case r.usrEnv:
+		args = append(args, "-u")
+		printableArgs = append(printableArgs, "-u")
+	case r.pkgEnv:
+		args = append(args, "-p")
+		printableArgs = append(printableArgs, "-p")
+	}
 
 	switch hvArg {
 	case "0":
