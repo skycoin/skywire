@@ -26,8 +26,14 @@ func TestAddrConnMap_ReservePending_Idempotent(t *testing.T) {
 	c1 := &Conn{}
 	c2 := &Conn{}
 
-	_, _, isNew1, _ := m.reservePending(addr, c1, nil)
-	existing, isPending, isNew2, _ := m.reservePending(addr, c2, nil)
+	_, _, isNew1, err := m.reservePending(addr, c1, nil)
+	if err != nil {
+		t.Fatalf("first reserve errored: %v", err)
+	}
+	existing, isPending, isNew2, err := m.reservePending(addr, c2, nil)
+	if err != nil {
+		t.Fatalf("second reserve errored: %v", err)
+	}
 
 	if !isNew1 {
 		t.Fatalf("first reserve should be new")
@@ -58,7 +64,9 @@ func TestAddrConnMap_Promote_IdentityCheck(t *testing.T) {
 	live := &Conn{}
 
 	// Stale path goes through reserve → promote.
-	m.reservePending(addr, stale, nil)
+	if _, _, _, err := m.reservePending(addr, stale, nil); err != nil {
+		t.Fatalf("reserve stale errored: %v", err)
+	}
 	m.promote(addr, stale)
 	if got := m.activeLen(); got != 1 {
 		t.Fatalf("active len after stale promote: got %d, want 1", got)
@@ -66,7 +74,9 @@ func TestAddrConnMap_Promote_IdentityCheck(t *testing.T) {
 
 	// Live replacement: a new Conn takes the same addr slot.
 	m.removeActive(addr, stale)
-	m.reservePending(addr, live, nil)
+	if _, _, _, err := m.reservePending(addr, live, nil); err != nil {
+		t.Fatalf("reserve live errored: %v", err)
+	}
 	m.promote(addr, live)
 
 	// A late "remove stale" must not wipe the live slot.
@@ -118,7 +128,10 @@ func TestAddrConnMap_ConcurrentInsertsDifferentShards(t *testing.T) {
 		c := &Conn{}
 		go func() {
 			defer wg.Done()
-			_, _, isNew, _ := m.reservePending(addr, c, nil)
+			_, _, isNew, err := m.reservePending(addr, c, nil)
+			if err != nil {
+				t.Errorf("reserve for unique addr %q errored: %v", addr, err)
+			}
 			if !isNew {
 				t.Errorf("reserve for unique addr %q reported not new", addr)
 			}
