@@ -6,6 +6,140 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.61
+
+Patch release. One PR on top of v1.3.60 — fixes a regression where `skywire autoconfig` silently wrote the regenerated config to the wrong path on operator boards where `/etc/skywire.conf` doesn't explicitly set `PKGENV=true` / `USRENV=true`.
+
+Symptom on a freshly-installed v1.3.60 board:
+
+```
+# cat /etc/skywire.conf | grep -vE '^#|^$'
+HYPERVISORPKS=('0323272a…')
+ISHYPERVISOR=true
+DMSGPTYPKS=('0323272a…')
+
+# skywire autoconfig
+ -> Configuring skywire
+ -> version: v1.3.60
+ --> Generating skywire config with command:
+   SKYENV=/etc/skywire.conf skywire cli config gen -r
+ --> Skywire configuration updated
+config path: /opt/skywire/skywire.json
+ --> Restarting skywire service…
+
+# skywire cli config show .hypervisors
+[]
+```
+
+Trace: autoconfig's `resolveConfig()` auto-elects pkgEnv via `os.Geteuid() == 0` when the env file doesn't set `PKGENV`/`USRENV` explicitly. The visor binary was deliberately NOT propagating `-p`/`-u` to `cli config gen`, under the theory the child process would re-derive the same mode from `SKYENV`. That theory breaks for the common operator case where neither key is set in the env file — `scriptExecBool("${PKGENV:-false}")` returns false, gen falls through to PreRun's relative-path branch (`confPath = skyenv.ConfigName`), and writes a `skywire-config.json` to the autoconfig invoker's cwd (typically `/root/`). The pre-existing `/opt/skywire/skywire.json` stays untouched, autoconfig's `os.Stat` check passes against the stale file, the visor restarts on its old config, and `hypervisors` stays empty.
+
+Fix: propagate `-p`/`-u` from the autoconfig-resolved mode. The mode is already known at `generateConfig` call time — no new resolution work needed. Same fix removes the matching silent-write-to-cwd that affected operators using HYPERVISORPKS / DMSGPTYPKS / ISHYPERVISOR set via `/etc/skywire.conf`.
+
+### Autoconfig — write to the resolved config path
+
+-   `fix(autoconfig)`: propagate -p/-u to cli config gen so writes hit the resolved path  [#2931](https://github.com/skycoin/skywire/pull/2931)
+
+## 1.3.60
+
+65 PRs on top of v1.3.59. The two headline pieces are the operator-programmable **routing policy** subsystem (Starlark + WASM, multi-phase build-out under RFC #2882) and the **unified app framework** refactor (#2775) that collapses every visor-managed binary into one Internal-app contract.
+
+### Operator-programmable routing policy (RFC #2882)
+
+This release lands the full multi-leg routing-policy stack — operator-supplied policies (Starlark by default, WASM for hot paths) that pick routes, weight forward/reverse asymmetry, and react to per-leg events. Policies are evaluated on dial *and* on packet (Layer 2 distribution + rotation hook), with stdlib helpers for `recent_latency`, `sd_recent_attempts`, multi-hop SD-CXO geo, and a sticky `5tuple` selector. Per-app overrides take precedence over the global policy; runtime swap is supported. The WASM backend (compiled via TinyGo) is wired through the same Provider so any Starlark policy can be re-implemented in WASM for sub-millisecond hot-path evaluation. The hypervisor UI gets a routing-policy panel in the routing tab. Skylark (operator-facing name) is documented; `docs/examples/routing-policies/` ships runnable examples (latency-adaptive, dscp-priority, rotating-bw, sticky:5tuple).
+
+-   `docs`: add operator-programmable routing policy RFC  [#2882](https://github.com/skycoin/skywire/pull/2882)
+-   `feat(router)`: Phase 1+2 routing-policy scaffold (Starlark)  [#2883](https://github.com/skycoin/skywire/pull/2883)
+-   `feat(router/policy)`: Phase 3 stdlib + Phase 4 loader + CLI tooling  [#2884](https://github.com/skycoin/skywire/pull/2884)
+-   `feat(router)`: integrate routing policy into dial path (RFC #2882)  [#2885](https://github.com/skycoin/skywire/pull/2885)
+-   `fix(router/policy)`: drop goroutine-based cancellation (race with starlark.Call)  [#2887](https://github.com/skycoin/skywire/pull/2887)
+-   `chore`: move policies/smoke-test.star to docs/examples + gitignore /policies/  [#2888](https://github.com/skycoin/skywire/pull/2888)
+-   `chore`: gitignore /policies/ working-tree dir  [#2889](https://github.com/skycoin/skywire/pull/2889)
+-   `feat(router/policy)`: visor-backed Provider + per-app routing policy  [#2890](https://github.com/skycoin/skywire/pull/2890)
+-   `feat(router/policy)`: RouteSelectingHook + Starlark route selection  [#2891](https://github.com/skycoin/skywire/pull/2891)
+-   `feat(router/policy)`: SD-CXO geo for multihop intermediates  [#2892](https://github.com/skycoin/skywire/pull/2892)
+-   `feat(router/policy)`: finish Layer 2 packet distribution (RFC phase 5)  [#2897](https://github.com/skycoin/skywire/pull/2897)
+-   `docs(routing-policy)`: runnable example policies + distribution observability  [#2898](https://github.com/skycoin/skywire/pull/2898)
+-   `fix(router)`: strip DMSG hops from multihop routes everywhere  [#2899](https://github.com/skycoin/skywire/pull/2899)
+-   `docs(routing-policy)`: fix empty-candidates drop bug across examples  [#2900](https://github.com/skycoin/skywire/pull/2900)
+-   `fix(router/policy)`: SelectRoute distribution + leg-count truth + TPD perf  [#2902](https://github.com/skycoin/skywire/pull/2902)
+-   `feat(router/policy)`: directional asymmetry (forward/reverse routing)  [#2903](https://github.com/skycoin/skywire/pull/2903)
+-   `feat(router/policy)`: on_leg_change callback (RFC #2882 phase 6)  [#2904](https://github.com/skycoin/skywire/pull/2904)
+-   `feat(router/policy)`: fallback="direct" + CLI overrides exposed  [#2905](https://github.com/skycoin/skywire/pull/2905)
+-   `feat(router/policy)`: sticky:5tuple + latency-adaptive + dscp-priority  [#2906](https://github.com/skycoin/skywire/pull/2906)
+-   `feat(router)`: wire DialHook into PingRoute  [#2908](https://github.com/skycoin/skywire/pull/2908)
+-   `feat(router)`: mux loop best-effort + local-calc fallback  [#2909](https://github.com/skycoin/skywire/pull/2909)
+-   `feat(router)`: parallel mux aux dials  [#2910](https://github.com/skycoin/skywire/pull/2910)
+-   `feat(router/policy)`: hook into sky_forward_conn direct dials  [#2911](https://github.com/skycoin/skywire/pull/2911)
+-   `docs(routing-policy)`: introduce "skylark" operator-facing name  [#2912](https://github.com/skycoin/skywire/pull/2912)
+-   `feat(router/policy)`: WASM backend for routing policies  [#2913](https://github.com/skycoin/skywire/pull/2913)
+-   `feat(router/policy)`: periodic rotation hook + WASM ABI extension  [#2916](https://github.com/skycoin/skywire/pull/2916)
+-   `feat(hypervisor-ui)`: routing-policy panel in the routing tab  [#2918](https://github.com/skycoin/skywire/pull/2918)
+-   `feat(router/policy)`: re-land extension dispatch + runtime per-app swap  [#2919](https://github.com/skycoin/skywire/pull/2919)
+-   `fix(router)`: start rotation loop from SetRotation, not init  [#2921](https://github.com/skycoin/skywire/pull/2921)
+-   `feat(router/policy)`: avoid_direct knob to force overlay path  [#2922](https://github.com/skycoin/skywire/pull/2922)
+-   `refactor(router/policy)`: drop avoid_direct, rely on min_hops + re-apply AppName threading  [#2924](https://github.com/skycoin/skywire/pull/2924)
+-   `fix(examples)`: rotating-bw policy gates drops on alive_count >= target  [#2925](https://github.com/skycoin/skywire/pull/2925)
+-   `fix(router)`: tune circuit breaker for dmsg-session refresh cadence  [#2928](https://github.com/skycoin/skywire/pull/2928)
+
+### Unified app framework (#2775)
+
+A multi-phase refactor that names the implicit app contract every visor-managed binary already followed, then collapses each binary's three roles (cli / host / ui) into a single Internal app run with declared run-modes. `pty` (formerly `dmsgpty`) was the first migration to Internal-app, with RestartPolicy=Always; `dmsgweb` and `skynetweb` followed under RestartPolicy=OnFailure. `skysocks`, `vpn`, and `skynet` got their pair-binaries collapsed (delegating-wrapper helper extracted to fix recursion). The pkg/dmsg/dmsgpty tree was renamed to pkg/pty; the `Dmsgpty` config field was renamed to `Pty` with backward-compat JSON unmarshal. The cmd/dmsg/dmsgpty-{host,ui,cli} binaries were renamed to pty-*.
+
+-   `docs`: RFC — unified service contract (#2775)  [#2863](https://github.com/skycoin/skywire/pull/2863)
+-   `refactor(app)`: name the implicit app contract (#2775 phase 1)  [#2860](https://github.com/skycoin/skywire/pull/2860)
+-   `refactor(app)`: extract status/error/port helpers onto *app.Client (#2775 phase 2a)  [#2861](https://github.com/skycoin/skywire/pull/2861)
+-   `refactor(app)`: type ProcConfig.RunFunc as AppFunc (#2775 phase 2b)  [#2862](https://github.com/skycoin/skywire/pull/2862)
+-   `refactor(pty)`: consolidate dmsgpty cli/host/ui under `skywire app pty`  [#2864](https://github.com/skycoin/skywire/pull/2864)
+-   `chore(pty)`: gofmt follow-up for #2864  [#2865](https://github.com/skycoin/skywire/pull/2865)
+-   `fix(pty)`: keep `dmsg pty *` subtree intact; hide-not-remove in skywire context  [#2866](https://github.com/skycoin/skywire/pull/2866)
+-   `refactor(visor)`: pty as Internal app w/ RestartPolicy=Always (#2775 phase 3.3)  [#2867](https://github.com/skycoin/skywire/pull/2867)
+-   `chore`: gofmt sweep for two pre-existing lint failures  [#2868](https://github.com/skycoin/skywire/pull/2868)
+-   `fix(visor)`: pty AppFunc must complete the in-process IPC handshake  [#2869](https://github.com/skycoin/skywire/pull/2869)
+-   `fix(launcher)`: RestartPolicy=Always must re-Start on operator stop  [#2870](https://github.com/skycoin/skywire/pull/2870)
+-   `refactor(visor)`: dmsgweb + skynetweb as Internal apps (#2775 phase 3.2)  [#2871](https://github.com/skycoin/skywire/pull/2871)
+-   `refactor(visor)`: RestartPolicy=OnFailure for dmsgweb + skynetweb (#2775 phase 4)  [#2872](https://github.com/skycoin/skywire/pull/2872)
+-   `refactor(apps)`: skysocks pair collapse + fix delegating-wrapper recursion  [#2873](https://github.com/skycoin/skywire/pull/2873)
+-   `refactor(apps)`: vpn pair collapse + extract shared delegating-wrapper helper  [#2874](https://github.com/skycoin/skywire/pull/2874)
+-   `refactor(apps)`: skynet pair collapse (final pair binary)  [#2875](https://github.com/skycoin/skywire/pull/2875)
+-   `refactor`: rename pkg/dmsg/dmsgpty → pkg/pty  [#2876](https://github.com/skycoin/skywire/pull/2876)
+-   `refactor(visorconfig)`: rename Dmsgpty → Pty w/ JSON backward-compat  [#2877](https://github.com/skycoin/skywire/pull/2877)
+-   `fix(visorconfig)`: V1.UnmarshalJSON must not wipe preset *Common  [#2878](https://github.com/skycoin/skywire/pull/2878)
+-   `refactor(cmd)`: rename cmd/dmsg/dmsgpty-{host,ui,cli} → pty-*  [#2879](https://github.com/skycoin/skywire/pull/2879)
+-   `chore`: remove run-visor.sh local dev helper + gofmt fix  [#2880](https://github.com/skycoin/skywire/pull/2880)
+
+### Rewards: bandwidth-pool sender-pays + eligible-pair filter
+
+The bandwidth-rewards pool was being skewed by two issues: the UT cache directory was unbounded growth in /tmp, and the per-pair bandwidth credit was counted on both ends so any high-traffic transport pumped its peer's reward too. This release pins UT cache under `hist/`, makes the bandwidth pool sender-pays (credit goes to the visor that originated the bytes, not both ends), and filters out pairs that aren't reward-eligible before the pool is split. Mainnet rules docs are updated: stale CSV claims retired, v1.3.59 cutoff noted, bandwidth-pool precision floor documented.
+
+-   `fix(rewards)`: pin UT cache to hist/ + bandwidth pool sender-pays + eligible-pair filter  [#2886](https://github.com/skycoin/skywire/pull/2886)
+-   `fix(transport)`: count VStream + ping bytes in sent counter  [#2927](https://github.com/skycoin/skywire/pull/2927)
+-   `docs(mainnet_rules)`: retire CSV claims, add v1.3.59 cutoff, note bw-pool precision floor  [#2920](https://github.com/skycoin/skywire/pull/2920)
+
+### bbolt corruption recovery — visor no longer crash-loops on damaged stores
+
+Five visor bbolt stores (serviceuptime, app log_store, clicache, usermanager, skychat group) were opening their files unprotected — a corrupt freelist (e.g. `invalid freelist page: N, page type is leaf` from bbolt's freelist.read during Open) would panic on first write and crash-loop the whole visor. RepairIfCorrupt now wraps every visor bbolt.Open, AND the probeIntegrity helper recovers from panics inside bbolt.Open itself (the freelist-corruption panic is treated as proof of corruption, the file is moved aside as `*.corrupt.<unix-ts>`, and the next open creates a fresh empty store). This shipped after an operator's v1.3.59 visor crash-looped on exactly this signature and recovery required hand-removal of `/opt/skywire/local`.
+
+-   `fix(bbolthealth)`: cover all visor bbolt opens + recover from probe panic  [#2926](https://github.com/skycoin/skywire/pull/2926)
+
+### Hypervisor PK endpoint
+
+A small operator-facing addition: `GET /api/pk` returns the hypervisor's own PK so an install-page generator (or any operator tool) can discover it without hand-copying from the config. The endpoint is opt-in (#2896 flipped the default after the initial #2895), gated behind `SW-Public` (so it only answers when the hypervisor is intentionally publicly-reachable), and exposed as a `--pk-endpoint` / `--no-pk-endpoint` flag from autoconfig (#2901).
+
+-   `feat(hypervisor)`: GET /api/pk + DisablePKEndpoint + SW-Public gate  [#2895](https://github.com/skycoin/skywire/pull/2895)
+-   `fix(hypervisor)`: flip pk-endpoint to opt-in + add config-gen flag  [#2896](https://github.com/skycoin/skywire/pull/2896)
+-   `feat(autoconfig)`: --pk-endpoint / --no-pk-endpoint flag  [#2901](https://github.com/skycoin/skywire/pull/2901)
+
+### Apps + CXO
+
+-   `refactor(apps)`: skysocks/vpn/skynet pair collapses (see "Unified app framework" above)
+-   `feat(apps)`: --reconnect for skysocks-client and skynet-client  [#2914](https://github.com/skycoin/skywire/pull/2914)
+-   `fix(cxo/node)`: shard connection maps to remove Node.mx accept-path serialization  [#2907](https://github.com/skycoin/skywire/pull/2907)
+
+### Lint + deps
+
+-   `chore(lint)`: gofmt + misspell + errcheck cleanup on develop  [#2893](https://github.com/skycoin/skywire/pull/2893)
+-   `chore(deps)`: bump tmp from 0.2.5 to 0.2.7 in /static/skywire-manager-src  [#2894](https://github.com/skycoin/skywire/pull/2894)
+
 ## 1.3.59
 
 Patch release. One PR on top of v1.3.58 — completes the hypervisor-UI responsiveness work started in #2842 → #2858.
