@@ -6,7 +6,7 @@
 //   - alloc(size: i32) → ptr: i32      // host-driven malloc
 //   - free(ptr: i32, size: i32)        // host-driven free
 //   - decide_route(in_ptr: i32, in_len: i32) → packed: i64
-//                                       // packed = ptr | len<<32
+//     (packed = ptr | len<<32)
 //
 // Optional:
 //   - on_leg_change(in_ptr: i32, in_len: i32) → packed: i64
@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -33,6 +34,21 @@ import (
 
 	"github.com/skycoin/skywire/pkg/router/policy"
 )
+
+// wasmPtr narrows a wazero alloc/return result (uint64) to the uint32
+// WASM32 linear-memory pointer it always is in practice. wazero runs
+// guests in a 32-bit address space, so alloc can only ever hand back a
+// value that fits in uint32 — but gosec (G115) can't know that, and a
+// bare uint32(v) conversion reads as a potential silent truncation.
+// The explicit MaxUint32 guard makes the safety provable to the linter
+// and turns the impossible-in-practice overflow into a loud failure
+// instead of a wrapped pointer.
+func wasmPtr(v uint64) (uint32, bool) {
+	if v > math.MaxUint32 {
+		return 0, false
+	}
+	return uint32(v), true
+}
 
 // Clock mirrors policy.Clock so the wasm evaluator can be
 // driven by an injected clock in tests.
@@ -250,7 +266,10 @@ func (e *Evaluator) callRotation(ctx context.Context, fn api.Function, name stri
 	if err != nil || len(allocRes) == 0 {
 		return RotationActionWire{}, fmt.Errorf("wasm: alloc for %s failed: %v", name, err)
 	}
-	inPtr := uint32(allocRes[0])
+	inPtr, ok := wasmPtr(allocRes[0])
+	if !ok {
+		return RotationActionWire{}, fmt.Errorf("wasm: alloc for %s returned out-of-range ptr %d", name, allocRes[0])
+	}
 	if ok := e.instance.Memory().Write(inPtr, jsonIn); !ok {
 		return RotationActionWire{}, fmt.Errorf("wasm: write %s input to memory failed", name)
 	}
@@ -322,7 +341,10 @@ func (e *Evaluator) call(ctx context.Context, fn api.Function, name string, inpu
 	if err != nil || len(allocRes) == 0 {
 		return RouteSpecWire{}, fmt.Errorf("wasm: alloc for %s failed: %v", name, err)
 	}
-	inPtr := uint32(allocRes[0])
+	inPtr, ok := wasmPtr(allocRes[0])
+	if !ok {
+		return RouteSpecWire{}, fmt.Errorf("wasm: alloc for %s returned out-of-range ptr %d", name, allocRes[0])
+	}
 	if ok := e.instance.Memory().Write(inPtr, jsonIn); !ok {
 		return RouteSpecWire{}, fmt.Errorf("wasm: write %s input to memory failed", name)
 	}
