@@ -6,6 +6,39 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.61
+
+Patch release. One PR on top of v1.3.60 — fixes a regression where `skywire autoconfig` silently wrote the regenerated config to the wrong path on operator boards where `/etc/skywire.conf` doesn't explicitly set `PKGENV=true` / `USRENV=true`.
+
+Symptom on a freshly-installed v1.3.60 board:
+
+```
+# cat /etc/skywire.conf | grep -vE '^#|^$'
+HYPERVISORPKS=('0323272a…')
+ISHYPERVISOR=true
+DMSGPTYPKS=('0323272a…')
+
+# skywire autoconfig
+ -> Configuring skywire
+ -> version: v1.3.60
+ --> Generating skywire config with command:
+   SKYENV=/etc/skywire.conf skywire cli config gen -r
+ --> Skywire configuration updated
+config path: /opt/skywire/skywire.json
+ --> Restarting skywire service…
+
+# skywire cli config show .hypervisors
+[]
+```
+
+Trace: autoconfig's `resolveConfig()` auto-elects pkgEnv via `os.Geteuid() == 0` when the env file doesn't set `PKGENV`/`USRENV` explicitly. The visor binary was deliberately NOT propagating `-p`/`-u` to `cli config gen`, under the theory the child process would re-derive the same mode from `SKYENV`. That theory breaks for the common operator case where neither key is set in the env file — `scriptExecBool("${PKGENV:-false}")` returns false, gen falls through to PreRun's relative-path branch (`confPath = skyenv.ConfigName`), and writes a `skywire-config.json` to the autoconfig invoker's cwd (typically `/root/`). The pre-existing `/opt/skywire/skywire.json` stays untouched, autoconfig's `os.Stat` check passes against the stale file, the visor restarts on its old config, and `hypervisors` stays empty.
+
+Fix: propagate `-p`/`-u` from the autoconfig-resolved mode. The mode is already known at `generateConfig` call time — no new resolution work needed. Same fix removes the matching silent-write-to-cwd that affected operators using HYPERVISORPKS / DMSGPTYPKS / ISHYPERVISOR set via `/etc/skywire.conf`.
+
+### Autoconfig — write to the resolved config path
+
+-   `fix(autoconfig)`: propagate -p/-u to cli config gen so writes hit the resolved path  [#2931](https://github.com/skycoin/skywire/pull/2931)
+
 ## 1.3.60
 
 65 PRs on top of v1.3.59. The two headline pieces are the operator-programmable **routing policy** subsystem (Starlark + WASM, multi-phase build-out under RFC #2882) and the **unified app framework** refactor (#2775) that collapses every visor-managed binary into one Internal-app contract.
