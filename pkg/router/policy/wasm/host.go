@@ -64,7 +64,10 @@ func writeOutput(ctx context.Context, mod api.Module, data []byte) uint64 {
 	if err != nil || len(res) == 0 {
 		return 0
 	}
-	offset := uint32(res[0])
+	offset, ok := wasmPtr(res[0])
+	if !ok {
+		return 0
+	}
 	if ok := mod.Memory().Write(offset, data); !ok {
 		return 0
 	}
