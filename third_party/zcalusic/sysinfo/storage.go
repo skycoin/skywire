@@ -28,21 +28,21 @@ func getSerial(name, fullpath string) (serial string) {
 
 	// Modern location/format of the udev database.
 	if dev := slurpFile(path.Join(fullpath, "dev")); dev != "" {
-		if f, err = os.Open(path.Join("/run/udev/data", "b"+dev)); err == nil {
+		if f, err = os.Open(path.Join("/run/udev/data", "b"+dev)); err == nil { //nolint:gosec // udev db path under well-known /run/udev/data
 			goto scan
 		}
 	}
 
 	// Legacy location/format of the udev database.
-	if f, err = os.Open(path.Join("/dev/.udev/db", "block:"+name)); err == nil {
+	if f, err = os.Open(path.Join("/dev/.udev/db", "block:"+name)); err == nil { //nolint:gosec // legacy udev db path under well-known /dev/.udev/db
 		goto scan
 	}
 
 	// No serial :(
-	return
+	return serial
 
 scan:
-	defer f.Close()
+	defer f.Close() //nolint:errcheck // read-only handle on udev db file
 
 	s := bufio.NewScanner(f)
 	for s.Scan() {
@@ -54,7 +54,7 @@ scan:
 		}
 	}
 
-	return
+	return serial
 }
 
 func (si *SysInfo) getStorageInfo() {
@@ -96,8 +96,8 @@ func (si *SysInfo) getStorageInfo() {
 			device.Vendor = vendor
 		}
 
-		size, _ := strconv.ParseUint(slurpFile(path.Join(fullpath, "size")), 10, 64)
-		device.Size = uint(size) / 1953125 // GiB
+		size, _ := strconv.ParseUint(slurpFile(path.Join(fullpath, "size")), 10, 64) //nolint:errcheck // non-numeric size → 0, acceptable
+		device.Size = uint(size) / 1953125                                           // GiB
 
 		si.Storage = append(si.Storage, device)
 	}

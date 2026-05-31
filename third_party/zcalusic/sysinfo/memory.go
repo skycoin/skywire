@@ -36,7 +36,7 @@ func (si *SysInfo) getMemoryInfo() {
 		// Xen hypervisor
 		if targetKB := slurpFile("/sys/devices/system/xen_memory/xen_memory0/target_kb"); targetKB != "" {
 			si.Memory.Type = "DRAM"
-			size, _ := strconv.ParseUint(targetKB, 10, 64)
+			size, _ := strconv.ParseUint(targetKB, 10, 64) //nolint:errcheck // non-numeric target_kb → size 0, acceptable
 			si.Memory.Size = uint(size) / 1024
 		}
 		return

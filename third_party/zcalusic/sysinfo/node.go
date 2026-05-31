@@ -78,7 +78,7 @@ func (si *SysInfo) getTimezone() {
 	}
 
 	if f, err := os.Open("/etc/sysconfig/clock"); err == nil {
-		defer f.Close()
+		defer f.Close() //nolint:errcheck // read-only handle
 		s := bufio.NewScanner(f)
 		for s.Scan() {
 			if sl := strings.Split(s.Text(), "="); len(sl) == 2 {

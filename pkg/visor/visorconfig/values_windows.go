@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -82,6 +83,8 @@ func SystemSurvey() (Survey, error) {
 type customSysinfo struct {
 	Network []networkDevice `json:"network,omitempty"`
 	Node    node            `json:"node,omitempty"`
+	CPU     cpuInfo         `json:"cpu,omitempty"`
+	OS      osInfo          `json:"os,omitempty"`
 }
 type networkDevice struct {
 	MACAddress string `json:"macaddress,omitempty"`
@@ -91,11 +94,74 @@ type node struct {
 	Hypervisor string `json:"hypervisor,omitempty"`
 }
 
+// cpuInfo mirrors the JSON shape of zcalusic/sysinfo's CPU struct so
+// reward-system survey consumers see the same field names regardless
+// of the visor's OS.
+type cpuInfo struct {
+	Vendor  string `json:"vendor,omitempty"`
+	Model   string `json:"model,omitempty"`
+	Threads uint   `json:"threads,omitempty"`
+}
+
+// osInfo mirrors the JSON shape of zcalusic/sysinfo's OS struct.
+type osInfo struct {
+	Name    string `json:"name,omitempty"`
+	Vendor  string `json:"vendor,omitempty"`
+	Version string `json:"version,omitempty"`
+}
+
 func genSysInfo() customSysinfo {
 	var sysInfo customSysinfo
 	sysInfo.Network = getMacAddr()
 	sysInfo.Node.Hypervisor = getNodeHypervisor()
+	sysInfo.CPU = getWindowsCPUInfo()
+	sysInfo.OS = getWindowsOSInfo()
 	return sysInfo
+}
+
+// getWindowsCPUInfo populates CPU vendor + model from the registry key
+// HKLM\HARDWARE\DESCRIPTION\System\CentralProcessor\0, which Windows
+// populates from the CPUID/SMBIOS BIOS info at boot. Fields used:
+//   - VendorIdentifier      e.g. "GenuineIntel" / "AuthenticAMD"
+//   - ProcessorNameString   e.g. "Intel(R) Core(TM) i7-9700 CPU @ 3.00GHz"
+//
+// Threads is populated from runtime.NumCPU() so the field is never
+// zero even if the registry read fails.
+func getWindowsCPUInfo() cpuInfo {
+	ci := cpuInfo{Threads: uint(runtime.NumCPU())}
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE,
+		`HARDWARE\DESCRIPTION\System\CentralProcessor\0`, registry.QUERY_VALUE)
+	if err != nil {
+		return ci
+	}
+	defer k.Close() //nolint:errcheck
+	if s, _, err := k.GetStringValue("VendorIdentifier"); err == nil {
+		ci.Vendor = strings.TrimSpace(s)
+	}
+	if s, _, err := k.GetStringValue("ProcessorNameString"); err == nil {
+		ci.Model = strings.TrimSpace(s)
+	}
+	return ci
+}
+
+// getWindowsOSInfo populates OS name + version from the well-known
+// CurrentVersion key. Vendor is always "Microsoft" since the field
+// lives in the Windows-specific value-builder.
+func getWindowsOSInfo() osInfo {
+	oi := osInfo{Vendor: "Microsoft"}
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE,
+		`SOFTWARE\Microsoft\Windows NT\CurrentVersion`, registry.QUERY_VALUE)
+	if err != nil {
+		return oi
+	}
+	defer k.Close() //nolint:errcheck
+	if s, _, err := k.GetStringValue("ProductName"); err == nil {
+		oi.Name = strings.TrimSpace(s)
+	}
+	if s, _, err := k.GetStringValue("CurrentBuild"); err == nil {
+		oi.Version = strings.TrimSpace(s)
+	}
+	return oi
 }
 
 func getMacAddr() []networkDevice {

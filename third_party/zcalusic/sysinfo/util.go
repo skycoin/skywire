@@ -11,7 +11,7 @@ import (
 
 // Read one-liner text files, strip newline.
 func slurpFile(path string) string {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // sysinfo reads well-known /proc + /sys pseudo-file paths
 	if err != nil {
 		return ""
 	}
@@ -22,5 +22,5 @@ func slurpFile(path string) string {
 
 // Write one-liner text files, add newline, ignore errors (best effort).
 func spewFile(path string, data string, perm os.FileMode) {
-	_ = os.WriteFile(path, []byte(data+"\n"), perm)
+	_ = os.WriteFile(path, []byte(data+"\n"), perm) //nolint:errcheck,gosec // best-effort write to machine-id paths
 }

@@ -29,5 +29,5 @@ func (si *SysInfo) getKernelInfo() {
 		return
 	}
 
-	si.Kernel.Architecture = strings.TrimRight(string((*[65]byte)(unsafe.Pointer(&uname.Machine))[:]), "\000")
+	si.Kernel.Architecture = strings.TrimRight(string((*[65]byte)(unsafe.Pointer(&uname.Machine))[:]), "\000") //nolint:gosec // read uname.Machine fixed-size C array as bytes
 }
