@@ -105,7 +105,9 @@ decisions).
 
 ```python
 def on_leg_change(ctx, legs, change):
-    # legs: [{index, kind, latency_ms, alive}, ...]
+    # legs: [{index, kind, latency_ms, alive, sent_bytes, recv_bytes, hops}, ...]
+    #   sent_bytes/recv_bytes: cumulative payload-byte counters for the leg
+    #   hops: leg's intermediate-PK chain (endpoints excluded; [] if direct)
     # change: {event: "added"|"dropped", leg_index: N}
     n = sum([1 for l in legs if l.alive])
     return RouteSpec(distribution = "weighted: " + ", ".join(["1"] * n))
