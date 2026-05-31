@@ -13,7 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jaypipes/ghw"
-	"github.com/zcalusic/sysinfo"
+	"github.com/skycoin/skywire/third_party/zcalusic/sysinfo"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
