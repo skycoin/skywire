@@ -93,13 +93,18 @@ type Visor struct {
 	startupComplete chan struct{}
 	uptimeTracker   utclient.APIClient
 
-	ebc                *appevent.Broadcaster // event broadcaster
-	dmsgC              *dmsg.Client
-	dmsgDC             *dmsg.Client       // dmsg direct client
-	dClient            dmsgdisc.APIClient // dmsg direct api client
-	dmsgHTTP           *http.Client       // dmsghttp client
-	dmsgHTTPReady      chan struct{}      // closed when dmsgHTTP is set
-	awaitSetupListener *dmsg.Listener     // pre-opened DmsgAwaitSetupPort listener; consumed by initRouter
+	ebc     *appevent.Broadcaster // event broadcaster
+	dmsgC   *dmsg.Client
+	dmsgDC  *dmsg.Client       // dmsg direct client
+	dClient dmsgdisc.APIClient // dmsg direct api client
+	// dmsgDirectServers is the dmsg-server entry set the direct client
+	// (dClient/dmsgDC) was seeded with. Stashed so peers can be made
+	// resolvable on the direct path at runtime (synthetic entries with
+	// these servers as delegated) — see ensureDirectDmsgEntry.
+	dmsgDirectServers  []*dmsgdisc.Entry
+	dmsgHTTP           *http.Client   // dmsghttp client
+	dmsgHTTPReady      chan struct{}  // closed when dmsgHTTP is set
+	awaitSetupListener *dmsg.Listener // pre-opened DmsgAwaitSetupPort listener; consumed by initRouter
 
 	// dmsgWL is the live, in-memory whitelist shared with the running
 	// pty.Host and (when scp is enabled) dmsgscp.Host. VisorCat's

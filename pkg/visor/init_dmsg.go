@@ -110,9 +110,12 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	entries := direct.GetAllEntries(keys, servers)
 	dClient := direct.NewClient(entries, v.MasterLogger().PackageLogger("dmsg_http:direct_client"))
 
-	// Set dClient immediately for direct discovery access.
+	// Set dClient immediately for direct discovery access. Stash the
+	// server set too so the dmsg tracker can register synthetic entries
+	// for connected peers on the same direct path (ensureDirectDmsgEntry).
 	v.initLock.Lock()
 	v.dClient = dClient
+	v.dmsgDirectServers = servers
 	v.initLock.Unlock()
 
 	// Start DMSG HTTP connection in background so it doesn't block visor startup.
@@ -796,18 +799,89 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	return nil
 }
 
-func initDmsgTrackers(_ context.Context, v *Visor, _ *logging.Logger) error {
-	dmsgC := v.dmsgC
+// dmsgTrackerDirectClientTimeout bounds how long the tracker waits for
+// the direct-client-backed dmsgDC to come up before falling back to the
+// discovery-based dmsgC. dmsgDC is normally ready within seconds; the
+// fallback only matters on nodes where dmsg-http is disabled / has no
+// servers (dmsgHTTPReady never fires).
+const dmsgTrackerDirectClientTimeout = 60 * time.Second
 
-	dtm := dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), dmsgC, 0, 0)
-	v.pushCloseStack("dmsg_tracker_manager", func() error {
-		return dtm.Close()
-	})
-	v.initLock.Lock()
-	v.dmsgTracker.manager = dtm
-	v.initLock.Unlock()
-	v.dmsgTracker.readyOnce.Do(func() { close(v.dmsgTracker.ready) })
+func initDmsgTrackers(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	// Build the tracker against the DIRECT client (dmsgDC) rather than
+	// the discovery-based dmsgC. The tracker dials each connected peer
+	// on DmsgCtrlPort to measure its dmsg server + round-trip; resolving
+	// those peers through dmsg-discovery fails for any peer that reached
+	// us over a skywire transport and never registered a discovery entry
+	// (the repeated "entry not found" / "cannot connect to delegated
+	// server" lookups). The direct client resolves peers locally via
+	// synthetic entries (ensureDirectDmsgEntry), dialing them through the
+	// known servers without a discovery round-trip. dmsgDC is set
+	// asynchronously by initDmsgHTTP, so wait for it (bounded).
+	go func() {
+		dmsgC := v.dmsgC // discovery-based fallback
+		select {
+		case <-v.dmsgHTTPReady:
+			v.initLock.RLock()
+			dc := v.dmsgDC
+			v.initLock.RUnlock()
+			if dc != nil {
+				dmsgC = dc
+			}
+		case <-time.After(dmsgTrackerDirectClientTimeout):
+			v.log.Debug("dmsg tracker: direct client not ready; using discovery-based client")
+		case <-ctx.Done():
+			return
+		}
+
+		dtm := dmsgtracker.NewDmsgTrackerManager(v.MasterLogger(), dmsgC, 0, 0)
+		// Only wire the direct resolver when we're actually on the direct
+		// client; with the discovery fallback the synthetic entries would
+		// be unused (dmsgC doesn't consult dClient).
+		v.initLock.RLock()
+		onDirect := dmsgC == v.dmsgDC && v.dmsgDC != nil
+		v.initLock.RUnlock()
+		if onDirect {
+			dtm.SetPeerResolver(v.ensureDirectDmsgEntry)
+		}
+
+		v.pushCloseStack("dmsg_tracker_manager", func() error {
+			return dtm.Close()
+		})
+		v.initLock.Lock()
+		v.dmsgTracker.manager = dtm
+		v.initLock.Unlock()
+		v.dmsgTracker.readyOnce.Do(func() { close(v.dmsgTracker.ready) })
+	}()
 	return nil
+}
+
+// ensureDirectDmsgEntry makes pk resolvable on the direct-client path
+// without a dmsg-discovery lookup: if the direct client doesn't already
+// know pk, it registers a synthetic entry advertising all known dmsg
+// servers as delegated, mirroring how deployment service PKs are seeded
+// (init_dmsg.go's GetAllEntries). The subsequent DialStream then tries
+// those servers directly. No-op when the direct client isn't up.
+func (v *Visor) ensureDirectDmsgEntry(pk cipher.PubKey) {
+	v.initLock.RLock()
+	dc := v.dClient
+	servers := v.dmsgDirectServers
+	v.initLock.RUnlock()
+
+	if dc == nil || len(servers) == 0 {
+		return
+	}
+	if _, err := dc.Entry(context.Background(), pk); err == nil {
+		return // already resolvable (service PK or previously registered)
+	}
+	for _, e := range direct.GetAllEntries(cipher.PubKeys{pk}, servers) {
+		if e.Static != pk {
+			continue // GetAllEntries also returns the server entries; skip them
+		}
+		if err := dc.PostEntry(context.Background(), e); err != nil {
+			v.log.WithError(err).WithField("pk", pk.String()).
+				Debug("dmsg tracker: failed to register direct entry for peer")
+		}
+	}
 }
 
 // nolint: gocyclo

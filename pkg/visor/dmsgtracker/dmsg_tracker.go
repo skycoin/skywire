@@ -27,15 +27,21 @@ func isExpectedTrackerLookupErr(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
-	if errors.Is(err, disc.ErrKeyNotFound) {
+	if errors.Is(err, disc.ErrKeyNotFound) || errors.Is(err, disc.ErrNoAvailableServers) {
 		return true
 	}
 	// Fallback: dmsg discovery returns the error wrapped with a string
-	// path through net/http, so errors.Is won't catch every case.
+	// path through net/http, so errors.Is won't catch every case. The
+	// direct-client path adds "no delegated dmsg servers" / "cannot
+	// connect to delegated server" for a peer that's connected to us
+	// over a skywire transport but has no live dmsg session on a shared
+	// server — also an expected, non-actionable condition.
 	msg := err.Error()
 	if strings.Contains(msg, "context canceled") ||
 		strings.Contains(msg, "context deadline exceeded") ||
-		strings.Contains(msg, "entry is not found") {
+		strings.Contains(msg, "entry is not found") ||
+		strings.Contains(msg, "no delegated dmsg servers") ||
+		strings.Contains(msg, "cannot connect to delegated server") {
 		return true
 	}
 	return false
@@ -111,6 +117,13 @@ type Manager struct {
 	dc  *dmsg.Client
 	dts map[cipher.PubKey]*DmsgTracker
 	mx  sync.Mutex
+
+	// ensureResolvable, when set, is invoked with a peer PK right
+	// before the tracker dials it. It lets the owner make the peer
+	// locally resolvable (e.g. register a synthetic direct-client
+	// entry) so the dial doesn't depend on the peer having a
+	// dmsg-discovery entry. nil = no-op (discovery-based resolution).
+	ensureResolvable func(cipher.PubKey)
 
 	// Track PKs with establishment attempts in progress to avoid duplicate goroutines
 	inProgress   map[cipher.PubKey]struct{}
@@ -213,6 +226,16 @@ func (dtm *Manager) updateAllTrackers(ctx context.Context) {
 	}
 }
 
+// SetPeerResolver installs a hook called with a peer PK right before
+// the tracker dials it, so the owner can make the peer locally
+// resolvable (register a synthetic direct-client entry) instead of
+// relying on a dmsg-discovery lookup. Safe to call once during setup.
+func (dtm *Manager) SetPeerResolver(f func(cipher.PubKey)) {
+	dtm.mx.Lock()
+	dtm.ensureResolvable = f
+	dtm.mx.Unlock()
+}
+
 // ShouldGet obtains a DmsgClientSummary of the client of given pk.
 // If one are not found internally, a new goroutine of tracker stream is to be established.
 func (dtm *Manager) ShouldGet(ctx context.Context, pk cipher.PubKey) (DmsgClientSummary, error) {
@@ -267,6 +290,18 @@ func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
 
 	dCtx, cancel := context.WithDeadline(ctx, time.Now().Add(dtm.updateTimeout))
 	defer cancel()
+
+	// Make the peer resolvable without a dmsg-discovery lookup when the
+	// owner has wired a resolver (direct-client path). Peers connected
+	// to us over skywire transports don't register in dmsg-discovery, so
+	// the discovery route would always fail; the resolver registers a
+	// synthetic direct entry instead.
+	dtm.mx.Lock()
+	resolve := dtm.ensureResolvable
+	dtm.mx.Unlock()
+	if resolve != nil {
+		resolve(pk)
+	}
 
 	dt, err := newDmsgTracker(dCtx, dtm.dc, pk)
 	if err != nil {
