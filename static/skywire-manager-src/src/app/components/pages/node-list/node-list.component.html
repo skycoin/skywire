@@ -267,37 +267,37 @@
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="changeSort(ipLocationSortData)">
+                <th class="sortable-column ip-location-column" (click)="changeSort(ipLocationSortData)">
                   {{ 'nodes.ip-location' | translate }}
                   @if (dataSorter.currentSortingColumn === ipLocationSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="changeSort(transportsCountSortData)">
+                <th class="sortable-column transports-column" (click)="changeSort(transportsCountSortData)">
                   {{ 'nodes.transports' | translate }}
                   @if (dataSorter.currentSortingColumn === transportsCountSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="changeSort(keySortData)">
+                <th class="sortable-column key-column" (click)="changeSort(keySortData)">
                   {{ 'nodes.key' | translate }}
                   @if (dataSorter.currentSortingColumn === keySortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="changeSort(versionSortData)">
+                <th class="sortable-column version-column" (click)="changeSort(versionSortData)">
                   {{ 'nodes.version' | translate }}
                   @if (dataSorter.currentSortingColumn === versionSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="changeSort(servicesCountSortData)">
+                <th class="sortable-column services-column" (click)="changeSort(servicesCountSortData)">
                   {{ 'nodes.services' | translate }}
                   @if (dataSorter.currentSortingColumn === servicesCountSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="changeSort(rewardAddressSortData)">
+                <th class="sortable-column reward-column" (click)="changeSort(rewardAddressSortData)">
                   {{ 'nodes.reward' | translate }}
                   @if (dataSorter.currentSortingColumn === rewardAddressSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
@@ -611,6 +611,13 @@
                        valuable here than visual parity is. -->
                   <table class="responsive-table-translucid d-none d-md-table" cellspacing="0" cellpadding="0">
                     <tr>
+                      <!-- Empty placeholder column matching the main table's
+                           drag-handle column. Sub-section tables don't
+                           support drag-drop (the dataSorter is keyed against
+                           the local section's dataSource), but the column
+                           still has to exist so the columns to its right
+                           line up vertically with the main table's. -->
+                      <th class="drag-handle-column"></th>
                       <th class="small-column" [matTooltip]="'nodes.hypervisor' | translate">
                         <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
                       </th>
@@ -618,12 +625,12 @@
                         <span class="dot-outline-gray"></span>
                       </th>
                       <th class="labels">{{ 'nodes.label' | translate }}</th>
-                      <th>{{ 'nodes.ip-location' | translate }}</th>
-                      <th>{{ 'nodes.transports' | translate }}</th>
-                      <th>{{ 'nodes.key' | translate }}</th>
-                      <th>{{ 'nodes.version' | translate }}</th>
-                      <th>{{ 'nodes.services' | translate }}</th>
-                      <th>{{ 'nodes.reward' | translate }}</th>
+                      <th class="ip-location-column">{{ 'nodes.ip-location' | translate }}</th>
+                      <th class="transports-column">{{ 'nodes.transports' | translate }}</th>
+                      <th class="key-column">{{ 'nodes.key' | translate }}</th>
+                      <th class="version-column">{{ 'nodes.version' | translate }}</th>
+                      <th class="services-column">{{ 'nodes.services' | translate }}</th>
+                      <th class="reward-column">{{ 'nodes.reward' | translate }}</th>
                       <th class="actions"></th>
                     </tr>
                     @for (node of section.nodes; track node.localPk) {
@@ -632,6 +639,10 @@
                         class="selectable link-row"
                         [routerLink]="node.online ? ['/nodes', node.localPk] : null"
                         >
+                        <!-- Empty drag-handle placeholder; main-table-only
+                             feature, but the column has to exist so the
+                             rest of the row aligns with the main table. -->
+                        <td class="drag-handle-column"></td>
                         <td>
                           @if (node.isHypervisor) {
                             <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>

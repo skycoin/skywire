@@ -7,6 +7,7 @@ package visor
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,50 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
+
+// sortHVVisorEntries orders an HVVisorEntry slice deterministically so
+// UI tables / CLI lists stay stable between fetches. Without this the
+// upstream `range hv.remoteVisors` returns entries in Go's randomized
+// map-iteration order, and every refresh shuffles the rows on the
+// operator — visible to the eye as rows jumping around for no reason.
+//
+// Sort key, in priority order:
+//  1. IsLocal first (the hypervisor's own row, when present)
+//  2. PublicIP matches the local hypervisor's PublicIP — these are
+//     "LAN-adjacent" visors (same NAT, same site as the hypervisor).
+//     Same WAN IP is a stronger proxy for "same physical site" than
+//     LocalIP comparison would be, because separate routers on the
+//     same WAN often hand out the same RFC1918 LAN range (e.g.
+//     192.168.0.x) but their WAN IPs match only if they share the
+//     upstream NAT.
+//  3. Has a non-empty PublicIP at all — visors with public-IP info
+//     before visors without (we still know "they're somewhere" vs.
+//     "we don't know where").
+//  4. PK lex order — final tiebreak, deterministic across processes.
+//
+// localPublicIP is the local hypervisor's WAN IP (empty string is
+// fine — disables the bucket-2 priority but the rest still applies).
+func sortHVVisorEntries(entries []HVVisorEntry, localPublicIP string) {
+	bucket := func(e *HVVisorEntry) int {
+		switch {
+		case e.IsLocal:
+			return 0
+		case localPublicIP != "" && e.PublicIP == localPublicIP:
+			return 1
+		case e.PublicIP != "":
+			return 2
+		default:
+			return 3
+		}
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		bi, bj := bucket(&entries[i]), bucket(&entries[j])
+		if bi != bj {
+			return bi < bj
+		}
+		return entries[i].PK.Hex() < entries[j].PK.Hex()
+	})
+}
 
 // HVVisorEntry is a summary of a remote visor connected to this hypervisor.
 type HVVisorEntry struct {
@@ -158,11 +203,19 @@ func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
 	}
 	wg.Wait()
 
+	// Build the local entry first so we can use its PublicIP as the
+	// "LAN-adjacent" sort key for the remote entries.
+	var localEntry HVVisorEntry
+	hasLocal := false
 	if hv.visor != nil {
-		localEntry := HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		localEntry = HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
+		hasLocal = true
+	}
+	sortHVVisorEntries(results, localEntry.PublicIP)
+	if hasLocal {
 		results = append([]HVVisorEntry{localEntry}, results...)
 	}
 	return results, nil
@@ -232,13 +285,17 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	}
 	wg.Wait()
 
-	// Prepend local visor
+	// Build the local entry; PublicIP anchors LAN-adjacency in the final
+	// sort. We append rather than prepend here — the single sortHVVisor-
+	// Entries call at the end of this function bubbles IsLocal=true to
+	// the top, so position-on-insert doesn't matter.
+	var localEntry HVVisorEntry
 	if hv.visor != nil {
-		localEntry := HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		localEntry = HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
-		results = append([]HVVisorEntry{localEntry}, results...)
+		results = append(results, localEntry)
 	}
 
 	// Merge sub-hypervisor visors: for each direct remote that is itself a
@@ -298,6 +355,11 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 			results = append(results, entry)
 		}
 	}
+
+	// Final stable sort across the merged direct + sub-hypervisor entries.
+	// IsLocal stays at the top via bucket 0; everything else falls into
+	// LAN-adjacent → has-PublicIP → no-PublicIP, PK-tiebroken.
+	sortHVVisorEntries(results, localEntry.PublicIP)
 
 	return results, nil
 }
@@ -455,6 +517,58 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 			HypervisorPK: r.hyperPK,
 			ViaChain:     []cipher.PubKey{localPK},
 			Visors:       r.visors,
+		})
+	}
+
+	// Stabilize sub-hypervisor section order + per-section visor order.
+	// sections[0] is the local hypervisor's own section — pin it at the
+	// top regardless of sort. Sub-hypervisors (sections[1:]) get ordered
+	// by LAN adjacency to the local hypervisor (same PublicIP as our
+	// local section's IsLocal entry, when present), then PK lex.
+	//
+	// For each section's Visors slice, sortHVVisorEntries gives stable
+	// order: IsLocal first (each section has its own IsLocal=true entry,
+	// for its own hypervisor's row), then LAN-adjacent, then by PK.
+	var localPublicIP string
+	for _, e := range sections[0].Visors {
+		if e.IsLocal {
+			localPublicIP = e.PublicIP
+			break
+		}
+	}
+	for i := range sections {
+		sortHVVisorEntries(sections[i].Visors, localPublicIP)
+	}
+	if len(sections) > 1 {
+		// Bucket each sub-hypervisor by looking up its PK in the local
+		// section's visors. If the sub-hypervisor is also one of our
+		// local hypervisor's known visors, we already have its
+		// PublicIP — use it for LAN-adjacency bucketing. Otherwise it
+		// falls into the "unknown" bucket and sorts by PK alone.
+		pubIPByPK := make(map[cipher.PubKey]string, len(sections[0].Visors))
+		for _, e := range sections[0].Visors {
+			if e.PublicIP != "" {
+				pubIPByPK[e.PK] = e.PublicIP
+			}
+		}
+		sectionBucket := func(s *HVVisorTreeNode) int {
+			pip, ok := pubIPByPK[s.HypervisorPK]
+			switch {
+			case !ok:
+				return 2
+			case localPublicIP != "" && pip == localPublicIP:
+				return 0
+			default:
+				return 1
+			}
+		}
+		subs := sections[1:]
+		sort.SliceStable(subs, func(i, j int) bool {
+			bi, bj := sectionBucket(&subs[i]), sectionBucket(&subs[j])
+			if bi != bj {
+				return bi < bj
+			}
+			return subs[i].HypervisorPK.Hex() < subs[j].HypervisorPK.Hex()
 		})
 	}
 
