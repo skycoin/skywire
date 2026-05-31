@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/zcalusic/sysinfo/cpuid"
+	"github.com/skycoin/skywire/third_party/zcalusic/sysinfo/cpuid"
 )
 
 // https://en.wikipedia.org/wiki/CPUID#EAX.3D0:_Get_vendor_ID
@@ -30,7 +30,7 @@ func isHypervisorActive() bool {
 func getHypervisorCpuid(ax uint32) string {
 	var info [4]uint32
 	cpuid.CPUID(&info, ax)
-	return hvmap[strings.TrimRight(string((*[12]byte)(unsafe.Pointer(&info[1]))[:]), "\000")]
+	return hvmap[strings.TrimRight(string((*[12]byte)(unsafe.Pointer(&info[1]))[:]), "\000")] //nolint:gosec // reinterpret CPUID register bytes as a string
 }
 
 func (si *SysInfo) getHypervisor() {
