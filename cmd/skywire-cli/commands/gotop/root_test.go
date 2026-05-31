@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/xxxserxxx/gotop/v4"
-	"github.com/xxxserxxx/gotop/v4/devices"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
