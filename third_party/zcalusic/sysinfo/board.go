@@ -12,11 +12,3 @@ type Board struct {
 	Serial   string `json:"serial,omitempty"`
 	AssetTag string `json:"assettag,omitempty"`
 }
-
-func (si *SysInfo) getBoardInfo() {
-	si.Board.Name = slurpFile("/sys/class/dmi/id/board_name")
-	si.Board.Vendor = slurpFile("/sys/class/dmi/id/board_vendor")
-	si.Board.Version = slurpFile("/sys/class/dmi/id/board_version")
-	si.Board.Serial = slurpFile("/sys/class/dmi/id/board_serial")
-	si.Board.AssetTag = slurpFile("/sys/class/dmi/id/board_asset_tag")
-}
