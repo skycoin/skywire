@@ -595,6 +595,21 @@ func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd func(excludeHops [
 // must hold rg.mu. Used by the leg-change fire path to give the
 // policy script a snapshot it can iterate.
 func (rg *RouteGroup) snapshotLegs() []LegInfo {
+	// Intermediate-PK chain shared by all legs of this route group:
+	// the forward path's hop To-PKs minus the final destination. The
+	// primary leg (index 0) reflects the originally-calculated path;
+	// aux legs added by rotation use disjoint intermediates of their
+	// own, but the route group only records the primary forwardHops,
+	// so this is a best-effort hint the policy can use to build an
+	// ExcludeHops set. Empty for a direct (0-intermediate) route.
+	var sharedHops []string
+	if len(rg.forwardHops) > 1 {
+		sharedHops = make([]string, 0, len(rg.forwardHops)-1)
+		for _, h := range rg.forwardHops[:len(rg.forwardHops)-1] {
+			sharedHops = append(sharedHops, h.To.String())
+		}
+	}
+
 	legs := make([]LegInfo, 0, len(rg.tps))
 	for i, tp := range rg.tps {
 		l := LegInfo{Index: i, Alive: false}
@@ -604,6 +619,11 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 			if stats := tp.GetLatencyStats(); stats.Avg > 0 {
 				l.LatencyMs = int(stats.Avg)
 			}
+			if bw := tp.GetBandwidth(); bw != nil {
+				l.SentBytes = bw.SentBytes
+				l.RecvBytes = bw.RecvBytes
+			}
+			l.Hops = sharedHops
 		}
 		legs = append(legs, l)
 	}

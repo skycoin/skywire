@@ -273,6 +273,17 @@ type LegInfo struct {
 	Kind      string
 	LatencyMs int
 	Alive     bool
+	// SentBytes / RecvBytes are the leg transport's cumulative
+	// payload-byte counters (ManagedTransport.GetBandwidth). Lets a
+	// policy's on_tick rotate a leg after it carries a byte threshold
+	// rather than purely on elapsed time.
+	SentBytes uint64
+	RecvBytes uint64
+	// Hops is the intermediate-PK chain this leg traverses (forward,
+	// src->dst, endpoints excluded). Lets on_tick build a precise
+	// ExcludeHops set so a rotated-in leg avoids the rotated-out leg's
+	// intermediates. Empty for a direct (0-intermediate) leg.
+	Hops []string
 }
 
 // LegChange describes the mutation that triggered the OnLegChange
