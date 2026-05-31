@@ -52,6 +52,7 @@ var (
 	requireBandwidth      bool
 	minBWThreshold        uint64
 	saturationExponent    float64
+	bwSaturationExponent  float64
 )
 
 type nodeinfo struct {
@@ -521,6 +522,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "require minimum bandwidth (proportional reward based on bandwidth)")
 	RootCmd.Flags().Uint64VarP(&minBWThreshold, "min-bw", "B", defaultMinBandwidth, "minimum bandwidth in bytes to qualify (used with --require-bw)")
 	RootCmd.Flags().Float64VarP(&saturationExponent, "sat-exp", "S", 0.5, "regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal)")
+	RootCmd.Flags().Float64Var(&bwSaturationExponent, "bw-sat-exp", 0.5, "bandwidth saturation exponent applied to pool 2 (1.0=strict bytes-proportional, 0.5=sqrt, 0=all senders equal)")
 }
 
 // RootCmd is the root command for skywire-cli rewards
@@ -879,19 +881,29 @@ Architectures:
 			computePoolShares(nodesInfos1, ipCounts, macCounts)
 			totalPresenceShares := computePoolRewards(nodesInfos1, dayReward)
 
-			// Bandwidth pool: add proportional bandwidth reward on top
+			// Bandwidth pool: add proportional bandwidth reward on top,
+			// dampened by --bw-sat-exp. At exponent 1.0 each visor's
+			// share is strictly bytes/total — the most concentrated
+			// outcome, where a single heavy sender can take a dominant
+			// fraction of the pool. At 0.5 (default) the weight is
+			// sqrt(bytes), flattening the distribution so a 100×
+			// bandwidth lead produces only a 10× share advantage.
+			// At 0 every sender that clears the threshold is weighted
+			// equally — effectively turning pool 2 into a presence
+			// pool for senders.
 			var totalBWShares float64
 			var bwPoolCount int
 			for _, ni := range nodesInfos1 {
 				if ni.Bandwidth >= minBWThreshold {
-					totalBWShares += float64(ni.Bandwidth)
+					totalBWShares += math.Pow(float64(ni.Bandwidth), bwSaturationExponent)
 					bwPoolCount++
 				}
 			}
 			if totalBWShares > 0 {
 				for i := range nodesInfos1 {
 					if nodesInfos1[i].Bandwidth >= minBWThreshold {
-						nodesInfos1[i].Reward += float64(nodesInfos1[i].Bandwidth) * dayReward / totalBWShares
+						weight := math.Pow(float64(nodesInfos1[i].Bandwidth), bwSaturationExponent)
+						nodesInfos1[i].Reward += weight * dayReward / totalBWShares
 					}
 				}
 			}
@@ -910,7 +922,7 @@ Architectures:
 				if totalPresenceShares > 0 {
 					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalPresenceShares)
 				}
-				fmt.Printf("\n--- Bandwidth Pool (proportional to bytes) ---\n")
+				fmt.Printf("\n--- Bandwidth Pool (sender-pays, weighted bytes^%.2f) ---\n", bwSaturationExponent)
 				fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
 				fmt.Printf("qualifying visors: %d\n", bwPoolCount)
 				var totalBW uint64
@@ -920,7 +932,8 @@ Architectures:
 					}
 				}
 				fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
-				if totalBWShares > 0 {
+				fmt.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
+				if totalBWShares > 0 && bwSaturationExponent == 1.0 {
 					fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
 				}
 				fmt.Printf("\nUnique mac addresses: %d\n", len(macCounts))
