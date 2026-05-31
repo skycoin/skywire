@@ -363,6 +363,9 @@ type LegInfo struct {
 	Kind      string
 	LatencyMs int
 	Alive     bool
+	SentBytes uint64
+	RecvBytes uint64
+	Hops      []string
 }
 
 type LegChange struct {

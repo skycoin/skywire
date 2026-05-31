@@ -361,6 +361,9 @@ func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.Rotati
 			Kind:      l.Kind,
 			LatencyMs: l.LatencyMs,
 			Alive:     l.Alive,
+			SentBytes: l.SentBytes,
+			RecvBytes: l.RecvBytes,
+			Hops:      l.Hops,
 		})
 	}
 	rctx := RoutingContext{
@@ -403,6 +406,9 @@ func (h *Hook) OnLegChange(info router.DialInfo, legs []router.LegInfo, change r
 			Kind:      l.Kind,
 			LatencyMs: l.LatencyMs,
 			Alive:     l.Alive,
+			SentBytes: l.SentBytes,
+			RecvBytes: l.RecvBytes,
+			Hops:      l.Hops,
 		})
 	}
 	policyChange := LegChange{Event: change.Event, LegIndex: change.LegIndex}

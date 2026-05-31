@@ -205,6 +205,10 @@ func buildContextValue(rctx RoutingContext) starlark.Value {
 func buildLegsValue(legs []LegInfo) starlark.Value {
 	out := make([]starlark.Value, 0, len(legs))
 	for _, l := range legs {
+		hops := make([]starlark.Value, len(l.Hops))
+		for j, h := range l.Hops {
+			hops[j] = starlark.String(h)
+		}
 		out = append(out, starlarkstruct.FromStringDict(
 			starlarkstruct.Default,
 			starlark.StringDict{
@@ -212,6 +216,9 @@ func buildLegsValue(legs []LegInfo) starlark.Value {
 				"kind":       starlark.String(l.Kind),
 				"latency_ms": starlark.MakeInt(l.LatencyMs),
 				"alive":      starlark.Bool(l.Alive),
+				"sent_bytes": starlark.MakeUint64(l.SentBytes),
+				"recv_bytes": starlark.MakeUint64(l.RecvBytes),
+				"hops":       starlark.NewList(hops),
 			},
 		))
 	}
