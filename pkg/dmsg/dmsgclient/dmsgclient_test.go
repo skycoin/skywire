@@ -200,7 +200,7 @@ func TestFallbackDiscClient_Entry(t *testing.T) {
 	t.Run("direct hit returns without HTTP", func(t *testing.T) {
 		direct := &fakeDisc{entry: &disc.Entry{Static: pk}}
 		httpC := &fakeDisc{}
-		f := newFallbackDiscClient(direct, httpC, testLog())
+		f := NewFallbackDiscClient(direct, httpC, testLog())
 		got, err := f.Entry(context.Background(), pk)
 		require.NoError(t, err)
 		require.Equal(t, pk, got.Static)
@@ -211,7 +211,7 @@ func TestFallbackDiscClient_Entry(t *testing.T) {
 	t.Run("direct miss falls back to HTTP", func(t *testing.T) {
 		direct := &fakeDisc{entryErr: errors.New("not found")}
 		httpC := &fakeDisc{entry: &disc.Entry{Static: pk}}
-		f := newFallbackDiscClient(direct, httpC, testLog())
+		f := NewFallbackDiscClient(direct, httpC, testLog())
 		got, err := f.Entry(context.Background(), pk)
 		require.NoError(t, err)
 		require.Equal(t, pk, got.Static)
@@ -224,7 +224,7 @@ func TestFallbackDiscClient_Delegation(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	direct := &fakeDisc{}
 	httpC := &fakeDisc{}
-	f := newFallbackDiscClient(direct, httpC, testLog())
+	f := NewFallbackDiscClient(direct, httpC, testLog())
 	ctx := context.Background()
 
 	require.NoError(t, f.PostEntry(ctx, nil))
@@ -236,21 +236,23 @@ func TestFallbackDiscClient_Delegation(t *testing.T) {
 	_, _ = f.AllClientsByServer(ctx)
 	_, _ = f.ClientsByServer(ctx, pk)
 
-	// Writes/reads that the direct client owns.
+	// Writes/reads that the direct client owns. PutEntry is intentionally
+	// routed to the direct client too: services using this wrapper run as
+	// direct dmsg clients and must not self-register in dmsg-discovery.
 	require.Equal(t, 1, direct.count("PostEntry"))
+	require.Equal(t, 1, direct.count("PutEntry"))
 	require.Equal(t, 1, direct.count("DelEntry"))
 	require.Equal(t, 1, direct.count("AvailableServers"))
 	require.Equal(t, 1, direct.count("AllServers"))
 	require.Equal(t, 1, direct.count("AllEntries"))
 
 	// Calls the HTTP client owns.
-	require.Equal(t, 1, httpC.count("PutEntry"))
 	require.Equal(t, 1, httpC.count("AllClientsByServer"))
 	require.Equal(t, 1, httpC.count("ClientsByServer"))
 
 	// And not the other way around.
 	require.Equal(t, 0, httpC.count("PostEntry"))
-	require.Equal(t, 0, direct.count("PutEntry"))
+	require.Equal(t, 0, httpC.count("PutEntry"))
 }
 
 // ---- Start* paths: only the early-return branches that never construct a
