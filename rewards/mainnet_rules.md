@@ -41,7 +41,17 @@ Regional saturation scaling is applied to the presence pool to promote geographi
 
 ## Pool 2: Bandwidth
 
-The bandwidth pool reward for a day is distributed proportionally based on the amount of transport bandwidth each visor **sent** during the previous day — sender-pays. A visor accrues bandwidth credit for the bytes it transmitted on each transport, with its per-edge sent counter capped by the counterparty's reported recv so a one-sided inflation cannot pump credit. Only visors whose sender-side total exceeds a minimum threshold are eligible for the bandwidth pool.
+The bandwidth pool reward for a day is distributed based on the amount of transport bandwidth each visor **sent** during the previous day — sender-pays. A visor accrues bandwidth credit for the bytes it transmitted on each transport, with its per-edge sent counter capped by the counterparty's reported recv so a one-sided inflation cannot pump credit. Only visors whose sender-side total exceeds a minimum threshold are eligible for the bandwidth pool.
+
+The pool is divided using a square-root scaling of sent bytes — analogous to how regional saturation scales the presence pool, but applied to bandwidth amount instead of country IP count:
+
+```
+visor_weight    = sent_bytes ^ bandwidth_exponent     (default 0.5)
+visor_share     = visor_weight / sum(all visor_weights)
+visor_reward    = visor_share * pool_2_budget
+```
+
+With the default exponent of `0.5`, a 100× bandwidth lead over another sender produces only a ~10× share advantage. This prevents any single high-throughput visor from dominating the pool while still rewarding heavier senders more than lighter ones. Setting the exponent to `1.0` reverts to strict bytes-proportional distribution; `0` weights every qualifying sender equally.
 
 Each transport edge is evaluated independently: a visor earns bandwidth credit for what it sent regardless of whether the counterparty is also reward-eligible. Credit only flows to the sender, so an ineligible peer was never going to receive a share — its eligibility is not checked.
 
