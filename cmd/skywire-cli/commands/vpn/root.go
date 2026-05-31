@@ -79,35 +79,36 @@ func getDeployment() deployment.Services {
 }
 
 var (
-	stateName         = "vpn-client"
-	serviceType       = servicedisc.ServiceTypeVPN
-	rawData           bool
-	sdURL             string
-	utURL             string
-	cacheDirSD        string
-	cacheDirUT        string
-	cacheFilesAge     int
-	noFilterOnline    bool
-	path              string
-	isPkg             bool
-	isStats           bool
-	pubkey            cipher.PubKey
-	pk                string
-	startingTimeout   int
-	jsonOutput        bool
-	country           string
-	version           string
-	minVersion        string
-	maxVersion        string
-	showOffline       bool
-	geoipURL          string
-	useInternal       bool
-	useExternal       bool
-	existingTpOnly    bool
-	forceLocalRoutes  bool
-	testEnv           bool
-	startVerbose      bool
-	startVerboseLevel string
+	stateName          = "vpn-client"
+	serviceType        = servicedisc.ServiceTypeVPN
+	rawData            bool
+	sdURL              string
+	utURL              string
+	cacheDirSD         string
+	cacheDirUT         string
+	cacheFilesAge      int
+	noFilterOnline     bool
+	path               string
+	isPkg              bool
+	isStats            bool
+	pubkey             cipher.PubKey
+	pk                 string
+	startingTimeout    int
+	jsonOutput         bool
+	country            string
+	version            string
+	minVersion         string
+	maxVersion         string
+	showOffline        bool
+	geoipURL           string
+	useInternal        bool
+	useExternal        bool
+	existingTpOnly     bool
+	forceLocalRoutes   bool
+	testEnv            bool
+	startVerbose       bool
+	startVerboseLevel  string
+	startRoutingPolicy string
 )
 
 // RootCmd contains commands that interact with the skywire-visor

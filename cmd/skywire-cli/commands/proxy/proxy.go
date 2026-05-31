@@ -84,6 +84,8 @@ func init() {
 	startCmd.Flags().Uint16Var(&minHops, "min-hops", 1, "minimum routing hops for this session (1=no minimum). Set on the visor before app start; rolled back is not automatic — restart visor or re-run with --min-hops=1 to revert.")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to this app's session (app stdout + tagged router/mux/setup events); ctrl+c stops the proxy and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
+	startCmd.Flags().BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure (proxy keeps retrying instead of exiting)")
+	startCmd.Flags().StringVar(&startRoutingPolicy, "routing-policy", "", "per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm (\"\" or \"none\" clears any previously-installed override)")
 	stopCmd.Flags().BoolVar(&allClients, "all", false, "stop all skysocks client")
 	stopCmd.Flags().StringVar(&clientName, "name", "", "specific skysocks client that want stop")
 	dep := getDeployment()
@@ -109,6 +111,19 @@ func init() {
 	testCmd.Flags().StringVarP(&pk, "pk", "s", "", "test a specific proxy server by public key")
 	testCmd.Flags().StringVar(&viaVisor, "via", "", "test 2-hop routes via specified visor (queries TPD for its transports)")
 	testCmd.Flags().IntVar(&testDelay, "delay", 0, "delay in ms between dispatching tests (0=auto: 500ms for batch>1, 0 for batch=1)")
+}
+
+// applyRoutingPolicy installs (or clears) the per-app routing policy
+// for the given client before the app starts, but only when the
+// operator actually passed --routing-policy. Mirrors the behavior of
+// `cli visor app start --routing-policy`: install happens pre-start so
+// the very first dial the proxy makes already runs through the policy.
+// Passing "" / "none" clears a previously-installed override.
+func applyRoutingPolicy(cmd *cobra.Command, rpcClient visor.API, clientName string) {
+	if !cmd.Flags().Changed("routing-policy") {
+		return
+	}
+	internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(clientName, startRoutingPolicy))
 }
 
 var startCmd = &cobra.Command{
@@ -276,6 +291,15 @@ var startCmd = &cobra.Command{
 				arguments["--http"] = httpAddr
 			}
 
+			// --reconnect is a flag-style (valueless) arg on the
+			// skysocks-client binary; passing it as a bool in the
+			// custom-setting map adds (true) or removes (false) the
+			// bare "--reconnect" token from the app's Args. With it
+			// set, the proxy proc retries in-process on stream
+			// failure instead of exiting, so a flaky route doesn't
+			// drop the SOCKS5 listener.
+			arguments["--reconnect"] = reconnect
+
 			if clientName == "" {
 				clientName = "skysocks-client"
 			}
@@ -306,6 +330,7 @@ var startCmd = &cobra.Command{
 					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Error occurs during set args to custom skysocks client. error: %s", err))
 				}
 			}
+			applyRoutingPolicy(cmd, rpcClient, clientName)
 			internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(clientName, getLauncherMode()))
 			if !startVerbose {
 				internal.PrintOutput(cmd.Flags(), nil, "Starting.")
@@ -314,6 +339,7 @@ var startCmd = &cobra.Command{
 			if clientName == "" {
 				clientName = "skysocks-client"
 			}
+			applyRoutingPolicy(cmd, rpcClient, clientName)
 			internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(clientName, getLauncherMode()))
 			if !startVerbose {
 				internal.PrintOutput(cmd.Flags(), nil, "Starting.")
