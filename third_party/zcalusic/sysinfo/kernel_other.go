@@ -16,6 +16,6 @@ type Kernel struct {
 
 // getKernelInfo is a no-op on non-Linux targets that import this
 // package only for the SysInfo / Kernel type shape used in survey
-// marshalling. The Linux build (kernel_linux.go) reads
+// marshaling. The Linux build (kernel_linux.go) reads
 // /proc/sys/kernel and syscall.Uname.
 func (si *SysInfo) getKernelInfo() {}
