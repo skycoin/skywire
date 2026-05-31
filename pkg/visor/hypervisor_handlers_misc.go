@@ -101,6 +101,16 @@ func (hv *Hypervisor) getPK() http.HandlerFunc {
 
 func (hv *Hypervisor) getPty() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		// PtyUI is nil for connections that never had a pty UI set up
+		// (the Conn zero-value, or a conn path that skips pty setup).
+		// Dereferencing it unconditionally segfaults the whole visor on
+		// a single getPty request, so guard and return an error instead.
+		if ctx.PtyUI == nil || ctx.PtyUI.PtyUI == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, struct {
+				Error string `json:"error"`
+			}{Error: "pty UI not available for this visor"})
+			return
+		}
 		customCommand := make(map[string][]string)
 		customCommand["update"] = visorconfig.UpdateCommand()
 		ctx.PtyUI.PtyUI.Handler(customCommand)(w, r)
