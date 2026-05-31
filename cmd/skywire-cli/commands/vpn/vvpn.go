@@ -130,6 +130,13 @@ var startCmd = &cobra.Command{
 			}
 		}
 
+		// Install the per-app routing policy before the app starts
+		// (only when the operator passed --routing-policy) so the
+		// first dial vpn-client makes already runs through the policy.
+		// "" / "none" clears a previously-installed override.
+		if cmd.Flags().Changed("routing-policy") {
+			internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(stateName, startRoutingPolicy))
+		}
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClientWithMode(pubkey, launcherMode))
 		if !startVerbose {
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")
