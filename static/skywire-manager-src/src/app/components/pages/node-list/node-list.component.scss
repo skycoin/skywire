@@ -15,8 +15,52 @@
   text-overflow: ellipsis;
 }
 
+// Column widths shared by the main local-section table AND the
+// sub-hypervisor section tables (rendered in the @for loop). Cross-
+// section visual parity matters: when the operator scans down the
+// page, every section should have the same column edges so the eye
+// can compare values cell-by-cell. Without explicit widths +
+// table-layout:fixed each table sized independently against its own
+// content, and a section with fewer / shorter rows ended up with a
+// narrower Transports column than the local section, shifting every
+// column to its right.
+//
+// Widths sum to ~100% across the variable columns; the small-column
+// and actions columns absorb the rest via their fixed pixel widths.
+// Drag-handle is main-table-only; sub-section tables emit an empty
+// placeholder TH/TD with the same width so the columns to its right
+// align with the main table's.
+.responsive-table-translucid.d-md-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
 .labels {
+  width: 10%;
+}
+
+.ip-location-column {
+  width: 10%;
+}
+
+.transports-column {
+  width: 10%;
+}
+
+.key-column {
+  width: 25%;
+}
+
+.version-column {
   width: 15%;
+}
+
+.services-column {
+  width: 10%;
+}
+
+.reward-column {
+  width: 8%;
 }
 
 .actions {

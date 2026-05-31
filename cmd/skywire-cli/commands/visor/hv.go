@@ -15,6 +15,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -38,6 +39,7 @@ func init() {
 	hvCmd.AddCommand(hvRmCmd)
 	hvRmCmd.Flags().BoolVar(&hvRmAll, "all", false, "remove every runtime-added hypervisor connection")
 	hvCmd.AddCommand(hvLsCmd)
+	hvLsCmd.Flags().BoolVar(&hvLsFlat, "flat", false, "single flat table instead of one section per hypervisor")
 	hvCmd.AddCommand(hvTreeCmd)
 	hvCmd.AddCommand(hvPasswdCmd)
 	hvPasswdCmd.Flags().StringVar(&hvPasswdOld, "old", "", "current password (prompts if unset)")
@@ -48,6 +50,7 @@ var (
 	hvRmAll     bool
 	hvPasswdOld string
 	hvPasswdNew string
+	hvLsFlat    bool
 )
 
 var hvCmd = &cobra.Command{
@@ -280,85 +283,88 @@ env-var or a process-substitution.`,
 	},
 }
 
-var hvLsCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List visors connected to this hypervisor",
-	Long: `List all visors connected to this hypervisor with summary info.
-
-Queries each remote visor over its DMSG connection for version, uptime,
-transport count, and other details. The local visor is shown first.`,
-	Run: func(cmd *cobra.Command, _ []string) {
-		rpcClient, err := clirpc.Client(cmd.Flags())
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), err)
+// formatHVVisorRow writes a single visor row to the tabwriter with optional
+// row-indent prefix. Centralized so the flat-mode and tree-mode renderings
+// stay in lockstep (same columns, same width, same null sentinels).
+func formatHVVisorRow(tw *tabwriter.Writer, e visor.HVVisorEntry, indent string) {
+	pk := e.PK.String()
+	status := "ok"
+	if e.IsLocal {
+		status = "local"
+	}
+	if e.Error != "" {
+		status = e.Error
+		if len(status) > 25 {
+			status = status[:25] + "..."
 		}
-
-		entries, err := rpcClient.HVListVisors()
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to list visors: %w", err))
-		}
-
-		if len(entries) == 0 {
-			internal.PrintOutput(cmd.Flags(), entries, "No visors connected.\n")
-			return
-		}
-
-		var buf strings.Builder
-		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "PK\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS") //nolint:errcheck
-		for _, e := range entries {
-			pk := e.PK.String()
-			status := "ok"
-			if e.IsLocal {
-				status = "local"
-			}
-			if e.Error != "" {
-				status = e.Error
-				if len(status) > 25 {
-					status = status[:25] + "..."
-				}
-			}
-			ver := e.Version
-			if ver == "" {
-				ver = "-"
-			}
-			uptime := "-"
-			if e.Uptime > 0 {
-				uptime = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
-			}
-			ip := e.PublicIP
-			if ip == "" {
-				ip = "-"
-			}
-			cc := e.CountryCode
-			if cc == "" {
-				cc = "-"
-			}
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", //nolint:errcheck
-				pk, ver, uptime, e.Transports, e.Apps, ip, cc, status)
-		}
-		tw.Flush() //nolint:errcheck,gosec
-		internal.PrintOutput(cmd.Flags(), entries, buf.String())
-	},
+	}
+	ver := e.Version
+	if ver == "" {
+		ver = "-"
+	}
+	uptime := "-"
+	if e.Uptime > 0 {
+		uptime = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
+	}
+	ip := e.PublicIP
+	if ip == "" {
+		ip = "-"
+	}
+	cc := e.CountryCode
+	if cc == "" {
+		cc = "-"
+	}
+	label := e.Hostname
+	if label == "" {
+		label = "-"
+	}
+	fmt.Fprintf(tw, "%s%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", //nolint:errcheck
+		indent, pk, label, ver, uptime, e.Transports, e.Apps, ip, cc, status)
 }
 
-var hvTreeCmd = &cobra.Command{
-	Use:   "tree",
-	Short: "Tree view of visors per hypervisor (local + direct sub-hypervisors)",
-	Long: `Render the hypervisor structure as one section per hypervisor.
+const hvLsTableHeader = "PK\tLABEL\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS"
 
-The local hypervisor appears first with its directly-connected visors.
-Each sub-hypervisor connected to the local one appears as its own
-section with a chain breadcrumb and that hypervisor's directly-
-connected visors. A visor connected to multiple hypervisors will
-appear in every relevant section by design.
+var hvLsCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List visors connected to this hypervisor (default: one section per hypervisor)",
+	Long: `List visors connected to this hypervisor.
 
-Walks one level (local + direct sub-hypervisors). Sections dedup by
-hypervisor PK; a sub-hypervisor reachable via two paths renders once.`,
+By default renders the same multi-section structure the hvui shows: the
+local hypervisor with its directly-connected visors first, then each
+sub-hypervisor (connected to this hypervisor) as its own section with
+a chain breadcrumb and that hypervisor's directly-connected visors. A
+visor reachable via multiple hypervisors appears in every relevant
+section by design. Sub-hypervisor sections dedup by PK.
+
+The columns match the hvui's node-list table: PK, LABEL (the visor's
+hostname), VERSION, UPTIME, TP (transport count), APPS, IP, CC
+(country code), STATUS.
+
+For the legacy single flat-table output (e.g. for scripts), pass --flat.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+
+		if hvLsFlat {
+			entries, err := rpcClient.HVListVisors()
+			if err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to list visors: %w", err))
+			}
+			if len(entries) == 0 {
+				internal.PrintOutput(cmd.Flags(), entries, "No visors connected.\n")
+				return
+			}
+			var buf strings.Builder
+			tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(tw, hvLsTableHeader) //nolint:errcheck
+			for _, e := range entries {
+				formatHVVisorRow(tw, e, "")
+			}
+			tw.Flush() //nolint:errcheck,gosec
+			internal.PrintOutput(cmd.Flags(), entries, buf.String())
+			return
 		}
 
 		tree, err := rpcClient.HVListVisorsTree()
@@ -391,40 +397,23 @@ hypervisor PK; a sub-hypervisor reachable via two paths renders once.`,
 				continue
 			}
 			tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, "  PK\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS") //nolint:errcheck
+			fmt.Fprintln(tw, "  "+hvLsTableHeader) //nolint:errcheck
 			for _, e := range section.Visors {
-				pk := e.PK.String()
-				status := "ok"
-				if e.IsLocal {
-					status = "local"
-				}
-				if e.Error != "" {
-					status = e.Error
-					if len(status) > 25 {
-						status = status[:25] + "..."
-					}
-				}
-				ver := e.Version
-				if ver == "" {
-					ver = "-"
-				}
-				uptime := "-"
-				if e.Uptime > 0 {
-					uptime = (time.Duration(e.Uptime) * time.Second).Truncate(time.Second).String()
-				}
-				ip := e.PublicIP
-				if ip == "" {
-					ip = "-"
-				}
-				cc := e.CountryCode
-				if cc == "" {
-					cc = "-"
-				}
-				fmt.Fprintf(tw, "  %s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", //nolint:errcheck
-					pk, ver, uptime, e.Transports, e.Apps, ip, cc, status)
+				formatHVVisorRow(tw, e, "  ")
 			}
 			tw.Flush() //nolint:errcheck,gosec
 		}
 		internal.PrintOutput(cmd.Flags(), tree, buf.String())
 	},
+}
+
+// hvTreeCmd is retained as a deprecated alias for backwards compatibility —
+// `hv ls` now does the same thing by default. Tagged Hidden=true so it
+// doesn't clutter `hv --help` but still works when scripts or muscle memory
+// call it.
+var hvTreeCmd = &cobra.Command{
+	Use:    "tree",
+	Short:  "Alias for `hv ls` (deprecated; use `hv ls` instead)",
+	Hidden: true,
+	Run:    hvLsCmd.Run,
 }
