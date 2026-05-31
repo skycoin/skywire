@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -99,7 +100,22 @@ type API struct {
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
 	// PKs + hypervisor PKs + the visor's own PK).
 	ptyHandler   http.Handler
-	ptyWhitelist []cipher.PubKey
+	ptyWhitelist pty.Whitelist
+}
+
+// ptyPKAllowed reports whether the request's remote host (a PK hex
+// string) is on the live pty whitelist. Fails closed on a nil
+// whitelist or an unparseable host — /pty is high-power.
+func ptyPKAllowed(wl pty.Whitelist, remoteHost string) bool {
+	if wl == nil {
+		return false
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(remoteHost); err != nil {
+		return false
+	}
+	ok, err := wl.Get(pk)
+	return err == nil && ok
 }
 
 // New creates a new API.
@@ -217,24 +233,13 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			c.AbortWithStatus(http.StatusNotFound)
 			return
 		}
-		// Empty whitelist on the API means "no PK allowed" rather than
-		// "open to all" — pty is high-power, fail closed.
-		if len(api.ptyWhitelist) == 0 {
-			c.AbortWithStatus(http.StatusForbidden)
-			return
-		}
+		// Nil whitelist means "no PK allowed" — pty is high-power,
+		// fail closed.
 		remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 		if err != nil {
 			remoteHost = c.Request.RemoteAddr
 		}
-		allowed := false
-		for _, pk := range api.ptyWhitelist {
-			if remoteHost == pk.String() {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
+		if !ptyPKAllowed(api.ptyWhitelist, remoteHost) {
 			c.AbortWithStatus(http.StatusForbidden)
 			return
 		}
@@ -290,15 +295,10 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			// distinct from the survey whitelist (it can include
 			// Dmsgpty.Whitelist entries the survey list doesn't), so
 			// we re-check rather than reuse `wl`.
-			if api.ptyHandler != nil && len(api.ptyWhitelist) > 0 {
+			if api.ptyHandler != nil && api.ptyWhitelist != nil {
 				remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
-				if err == nil {
-					for _, pk := range api.ptyWhitelist {
-						if remoteHost == pk.String() {
-							links = append(links, `<a href="/pty">/pty</a> - web terminal (dmsgpty)`)
-							break
-						}
-					}
+				if err == nil && ptyPKAllowed(api.ptyWhitelist, remoteHost) {
+					links = append(links, `<a href="/pty">/pty</a> - web terminal (dmsgpty)`)
 				}
 			}
 		}
@@ -449,7 +449,7 @@ func (api *API) SetForwardedPortLister(lister ForwardedPortLister) {
 // Pass a nil/empty whitelist or nil handler to disable; the route
 // stays registered and returns 404/403, which is the correct
 // signal to a probing client.
-func (api *API) SetPtyHandler(h http.Handler, whitelist []cipher.PubKey) {
+func (api *API) SetPtyHandler(h http.Handler, whitelist pty.Whitelist) {
 	api.ptyHandler = h
 	api.ptyWhitelist = whitelist
 }
