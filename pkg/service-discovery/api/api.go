@@ -118,6 +118,45 @@ func (a *API) SetServicesCXOPublisher(p *ServicesCXOPublisher) {
 	a.cxoPublisher = p
 }
 
+// WarmCXOFromStore pre-populates the CXO publisher's tree from the
+// current SD store. Without this, the publisher only Puts on
+// register/heartbeat events — so right after an SD restart the
+// publisher's tree is empty until the first event lands, and any
+// subscriber that connects in the gap times out at firstSyncTimeout
+// (10s) with "timeout waiting for Root".
+//
+// Best-effort: per-type listing failures are logged and skipped, but
+// the returned count is the actual number of entries pushed into the
+// publisher's queue. Caller should run this once after
+// SetServicesCXOPublisher and before declaring SD ready to serve.
+func (a *API) WarmCXOFromStore(ctx context.Context) int {
+	if a == nil || a.cxoPublisher == nil {
+		return 0
+	}
+	types := []string{
+		servicedisc.ServiceTypeVisor,
+		servicedisc.ServiceTypeVPN,
+		servicedisc.ServiceTypeProxy,
+		servicedisc.ServiceTypeSkysocks,
+	}
+	var n int
+	for _, sType := range types {
+		services, herr := a.db.Services(ctx, sType, "", "")
+		if herr != nil {
+			a.log.WithField("type", sType).WithError(herr).Warn("CXO warm: failed to list services from store")
+			continue
+		}
+		for i := range services {
+			a.cxoPublisher.PutEntry(&services[i])
+			n++
+		}
+	}
+	if n > 0 {
+		a.log.WithField("entries", n).Info("CXO warm: pre-populated publisher tree from store")
+	}
+	return n
+}
+
 // mirrorVisorServices re-publishes the current full list of services
 // for a visor PK. Called after any service registration or deletion
 // so the DHT target holds the same set as HTTP discovery. An empty
@@ -190,7 +229,7 @@ func New(log logrus.FieldLogger, db store.Store, nonceDB httpauth.NonceStore,
 // ServeHTTP implements http.Handler
 func (a *API) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r := chi.NewRouter()
-	r.Use(middleware.RealIP)
+	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
 	if a.enableMetrics {
 		r.Use(a.reqsInFlightCountMiddleware.Handle)

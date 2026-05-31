@@ -188,7 +188,7 @@ func TestMuxSelectTransportSkipsDead(t *testing.T) {
 
 	// Select should return transport 2 (the only alive one)
 	rg.mu.Lock()
-	tp, _, _, err := rg.mux.selectTransport(rg.tps, rg.fwd)
+	tp, _, _, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
 	rg.mu.Unlock()
 
 	require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestMuxSelectTransportFailsAllDead(t *testing.T) {
 	}
 
 	rg.mu.Lock()
-	_, _, _, err := rg.mux.selectTransport(rg.tps, rg.fwd)
+	_, _, _, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
 	rg.mu.Unlock()
 
 	require.ErrorIs(t, err, ErrNoSuitableTransport)

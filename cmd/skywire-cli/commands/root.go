@@ -159,6 +159,18 @@ func init() {
 	RootCmd.PersistentFlags().IntVar(&clirpc.Timeout, "timeout", 30, "RPC timeout in seconds (0 = unlimited)")
 	RootCmd.PersistentFlags().MarkHidden("timeout") //nolint:errcheck,gosec
 
+	// --via runs the command against a REMOTE visor while still
+	// using --rpc as the local endpoint. The local visor proxies
+	// the call to <pk>:
+	//   --via dmsg://<pk>   — local visor opens a dmsg stream and
+	//                         bridges bytes; CLI runs net/rpc on
+	//                         the bridged conn.
+	//   --via skynet://<pk> — local visor proxies via
+	//                         TransportRPCCall (route ID 0).
+	// Blank by default — every command behaves exactly as before
+	// when --via isn't set.
+	RootCmd.PersistentFlags().StringVar(&clirpc.Via, "via", "", "remote visor target — `dmsg://<pk>` or `skynet://<pk>`")
+
 	// --all reveals hidden flags and subcommands
 	RootCmd.Flags().BoolVar(&cliShowAll, "all", false, "show all flags and subcommands (including hidden)")
 	RootCmd.Flags().MarkHidden("all") //nolint:errcheck,gosec

@@ -41,9 +41,21 @@ Regional saturation scaling is applied to the presence pool to promote geographi
 
 ## Pool 2: Bandwidth
 
-The bandwidth pool reward for a day is distributed proportionally based on the amount of transport bandwidth each visor handled during the previous day. Only visors which handled bandwidth above a minimum threshold are eligible for the bandwidth pool.
+The bandwidth pool reward for a day is distributed based on the amount of transport bandwidth each visor **sent** during the previous day — sender-pays. A visor accrues bandwidth credit for the bytes it transmitted on each transport, with its per-edge sent counter capped by the counterparty's reported recv so a one-sided inflation cannot pump credit. Only visors whose sender-side total exceeds a minimum threshold are eligible for the bandwidth pool.
 
-Visors which do not meet the minimum bandwidth threshold will still receive rewards from the presence pool, but will not receive any share of the bandwidth pool.
+The pool is divided using a square-root scaling of sent bytes — analogous to how regional saturation scales the presence pool, but applied to bandwidth amount instead of country IP count:
+
+```
+visor_weight    = sent_bytes ^ bandwidth_exponent     (default 0.5)
+visor_share     = visor_weight / sum(all visor_weights)
+visor_reward    = visor_share * pool_2_budget
+```
+
+With the default exponent of `0.5`, a 100× bandwidth lead over another sender produces only a ~10× share advantage. This prevents any single high-throughput visor from dominating the pool while still rewarding heavier senders more than lighter ones. Setting the exponent to `1.0` reverts to strict bytes-proportional distribution; `0` weights every qualifying sender equally.
+
+Each transport edge is evaluated independently: a visor earns bandwidth credit for what it sent regardless of whether the counterparty is also reward-eligible. Credit only flows to the sender, so an ineligible peer was never going to receive a share — its eligibility is not checked.
+
+Visors which do not meet the minimum bandwidth threshold will still receive rewards from the presence pool, but will not receive any share of the bandwidth pool. In practice the effective floor is also bounded by Skycoin's 6-decimal precision: any visor whose share of the day's bandwidth pool would round to less than `0.000001` SKY receives nothing for the day, even if its sent bytes cleared the configured minimum threshold.
 
 The bandwidth considered for this pool excludes same-LAN transports (where both edges share the same external IP address).
 
@@ -74,7 +86,7 @@ To receive Skycoin rewards for running skywire, the following requirements must 
 
 * [11)](#Routability-Ping-Latency-Metric) **The visor can have routes established to it & responds to [pings](#Ping-Latency-Metric) over routes**
 
-* [12)](#Transport-Bandwidth-Logs) **The visor produces [transport bandwidth logs](#Transport-Bandwidth-Logs)** - needed for bandwidth-based rewards
+* [12)](#Transport-Bandwidth-and-Metrics) **The visor reports [transport bandwidth](#Transport-Bandwidth-and-Metrics) to the transport discovery** on transport re-registration - the basis for bandwidth-based rewards
 
 * [13)](#Survey) **The visor produces a [survey](#Survey)** when queried over dmsg by any keys in the survey_whitelist array by default
 
@@ -175,6 +187,12 @@ Rewards Cutoff date for updating 05-09-2026
 Requirement established 05-08-2026
 
 Rewards Cutoff date for updating 05-22-2026
+
+**Reward eligibility after 06-10-2026 requires Skywire v1.3.59**
+
+Requirement established 05-27-2026
+
+Rewards Cutoff date for updating 06-10-2026
 
 ### Uptime
 
@@ -408,7 +426,7 @@ sudo nano /etc/skywire.conf
 
 ### Connection To DMSG Network
 
-For any given visor, the system hardware survey, transport setup-node survey, and transport bandwidth logs are collected **hourly** by the reward system over dmsg.
+For any given visor, the system hardware survey and transport setup-node survey are collected **hourly** by the reward system over dmsg.
 
 This can be verified by examining the visor's logging:
 
@@ -417,28 +435,21 @@ This can be verified by examining the visor's logging:
 ```
 [DMSGHTTP] 2024/10/09 - 22:31:45 | 200 |        47.2µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51405 | GET      /health
 [DMSGHTTP] 2024/10/09 - 22:31:46 | 200 |     193.325µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51457 | GET      /node-info
-[DMSGHTTP] 2024/10/09 - 22:31:47 | 200 |       98.93µs |                 | 03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3:51503 | GET      /2024-10-10.csv
 ```
 
-The collected surveys and transport bandwidth log files should be visible in the survey index here:
+Bandwidth data is reported separately by each visor to the transport discovery on transport re-registration — it is no longer collected from the visor over dmsg as a per-day CSV. See [Transport Bandwidth and Metrics](#Transport-Bandwidth-and-Metrics).
+
+The collected surveys should be visible in the survey index here:
 
 [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
 
 An example of one such entry:
 ```
 ├─┬025e3e4e324a3ac2771e32b798ca3d8859e585ac36938b15a31d20982de6aa31fc
-│ ├──2024-05-02.csv
-│ ├──2024-05-03.csv
-│ ├──2024-05-04.csv
-│ ├──2024-05-05.csv
-│ ├──2024-05-06.csv
-│ ├──2024-05-07.csv
 │ ├──health.json     Age: 13m5s {"build_info":{"version":"v1.3.21","commit":"5131943","date":"2024-04-13T15:03:26Z"},"started_at":"2024-05-07T08:52:09.895919222Z"}
 │ ├──node-info.json          "v1.3.21"
 │ └──tp.json         Age: 6m56s []
 ```
-
-Note: the transport bandwidth logging CSV files will only exist if it was generated; i.e. if there were transports to that visor which handled traffic.
 
 Note: the system survey (node-info.json) will only exist if the reward address is set.
 
@@ -479,7 +490,7 @@ Transport latency is measured automatically when transports are established. If 
 
 ### Transport Bandwidth and Metrics
 
-Transport bandwidth and latency metrics are collected by the transport discovery service. Each visor reports its bandwidth counters when transports are re-registered with the transport discovery. These metrics can be viewed with:
+Transport bandwidth and latency metrics are collected by the transport discovery service. Each visor maintains per-transport bandwidth counters in a local bbolt-backed stats store and reports them when transports are re-registered with the transport discovery. (The on-disk `YYYY-MM-DD.csv` per-day log store the visor used to keep — and the reward system used to fetch over dmsg — has been retired; historical data is served from the same bbolt store via the visor's RPC.) These metrics can be viewed with:
 
 ```
 skywire cli tp metrics
@@ -487,9 +498,7 @@ skywire cli tp metrics -t
 skywire cli tp metrics --tree
 ```
 
-The bandwidth data from the transport discovery is used for the bandwidth pool reward distribution. Both edges of a transport must agree on the bandwidth transferred for it to be counted (verified bandwidth). This prevents any single visor from inflating its bandwidth figures.
-
-The visor also produces transport bandwidth log CSV files locally in response to transports handling traffic. These are collected hourly by the reward system along with the system survey, and are displayed [here](https://fiber.skywire.dev/log-collection/tplogs).
+The bandwidth data from the transport discovery is used for the bandwidth pool reward distribution under a sender-pays model: each visor is credited only for the bytes it sent on each transport, and each side's sent counter is capped by the counterparty's reported recv (verified bandwidth). This sender-side cap prevents any single visor from unilaterally inflating its own bandwidth figures.
 
 ### Survey
 
@@ -519,14 +528,12 @@ The skycoin reward address may be set for each visor.
 
 The skycoin reward address is in a text file contained in the "local" folder (local_path in the skywire config file) i.e `local/reward.txt`.
 
-The skycoin reward address is also included with the [system hardware survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire/README.md#survey) and served,
-along with transport logs, via dmsghttp.
+The skycoin reward address is also included with the [system hardware survey](https://github.com/skycoin/skywire/tree/develop/cmd/skywire/README.md#survey) and served via dmsghttp.
 
 The system survey ('local/node-info.json') is fetched hourly by the reward system via
 ```
 skywire cli log
 ```
-along with transport bandwidth logs.
 
 The index of the collected files may be viewed at [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
 

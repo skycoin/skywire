@@ -15,6 +15,7 @@ import (
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -22,6 +23,8 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
@@ -41,10 +44,63 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 
 	v.pushCloseStack("launcher.proc_manager", procM.Close)
 
+	// Synthesize Internal-app entries for visor subsystems that
+	// have moved into the launcher's lifecycle per RFC #2775
+	// (operator config wins — appsContains skips synthesis when
+	// the operator has set an explicit entry).
+	apps := append([]appserver.AppConfig(nil), conf.Apps...)
+
+	// Phase 3.3 — pty as Internal app. RestartPolicy=Always so
+	// `cli visor app stop pty` is a no-op in practice (auto-restart
+	// triggers after a 1s backoff). The only real disable path is
+	// removing conf.Pty and restarting the visor — exactly the
+	// pre-Phase-3.3 disable path.
+	if v.dmsgPty != nil && !appsContains(apps, "pty") {
+		apps = append(apps, appserver.AppConfig{
+			Name:          "pty",
+			Binary:        "", // internal — RunFunc registered by initDmsgpty
+			AutoStart:     true,
+			LauncherMode:  string(appcommon.RunModeInternal),
+			RestartPolicy: string(appcommon.RestartAlways),
+		})
+	}
+
+	// Phase 3.2 + Phase 4 — embedded SOCKS5 proxies as Internal apps
+	// with RestartPolicy=OnFailure. Operator stop respects intent
+	// (clean exit, no restart) but a runtime crash is recovered
+	// automatically. AutoStart reflects the operator's Enable flag
+	// in config so boot-time behavior is unchanged.
+	// initEmbeddedDmsgWeb / initEmbeddedSkynetWeb register the
+	// RunFunc; the launcher's AutoStart pass starts the listener.
+	if v.embeddedDmsgWeb != nil && !appsContains(apps, "dmsgweb") {
+		autostart := false
+		if v.conf.DmsgWeb != nil {
+			autostart = v.conf.DmsgWeb.Enable
+		}
+		apps = append(apps, appserver.AppConfig{
+			Name:          "dmsgweb",
+			AutoStart:     autostart,
+			LauncherMode:  string(appcommon.RunModeInternal),
+			RestartPolicy: string(appcommon.RestartOnFailure),
+		})
+	}
+	if v.embeddedSkynetWeb != nil && !appsContains(apps, "skynetweb") {
+		autostart := false
+		if v.conf.SkynetWeb != nil {
+			autostart = v.conf.SkynetWeb.Enable
+		}
+		apps = append(apps, appserver.AppConfig{
+			Name:          "skynetweb",
+			AutoStart:     autostart,
+			LauncherMode:  string(appcommon.RunModeInternal),
+			RestartPolicy: string(appcommon.RestartOnFailure),
+		})
+	}
+
 	// Prepare launcher.
 	launchConf := launcher.AppLauncherConfig{
 		VisorPK:       v.conf.PK,
-		Apps:          conf.Apps,
+		Apps:          apps,
 		ServerAddr:    conf.ServerAddr,
 		BinPath:       conf.BinPath,
 		LocalPath:     v.conf.LocalPath,
@@ -76,6 +132,19 @@ func initLauncher(_ context.Context, v *Visor, _ *logging.Logger) error {
 	v.initLock.Unlock()
 
 	return nil
+}
+
+// appsContains reports whether an apps[] slice already contains an
+// entry under name. Used to skip synthesizing pty (and future
+// Internal-app) entries when the operator has set them explicitly
+// in config.json — operator config wins.
+func appsContains(apps []appserver.AppConfig, name string) bool {
+	for _, ac := range apps {
+		if ac.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // Make an env maker function for vpn application
@@ -227,13 +296,16 @@ func (a *visorPingAdapter) DialPing(conf rpcgrpc.PingConf) error {
 		})
 	}
 	return a.v.DialPing(PingConfig{
-		PK:          conf.PK,
-		Tries:       conf.Tries,
-		PcktSize:    conf.PcktSize,
-		LocalRoute:  conf.LocalRoute,
-		TransportID: conf.TransportID,
-		ForwardHops: forwardHops,
-		ReverseHops: reverseHops,
+		PK:           conf.PK,
+		Tries:        conf.Tries,
+		PcktSize:     conf.PcktSize,
+		LocalRoute:   conf.LocalRoute,
+		TransportID:  conf.TransportID,
+		ForwardHops:  forwardHops,
+		ReverseHops:  reverseHops,
+		RouteIndex:   conf.RouteIndex,
+		MinHops:      conf.MinHops,
+		SetupTimeout: time.Duration(conf.SetupTimeoutNs),
 	})
 }
 
@@ -243,6 +315,8 @@ func (a *visorPingAdapter) PingOnce(conf rpcgrpc.PingConf) (time.Duration, error
 		Tries:      conf.Tries,
 		PcktSize:   conf.PcktSize,
 		LocalRoute: conf.LocalRoute,
+		RouteIndex: conf.RouteIndex,
+		MinHops:    conf.MinHops,
 	})
 }
 
@@ -250,26 +324,45 @@ func (a *visorPingAdapter) StopPing(pk cipher.PubKey) error {
 	return a.v.StopPing(pk)
 }
 
+// StopPingRoute crosses the rpcgrpc → visor boundary by converting
+// the rpcgrpc-local PingRouteRef into the visor-package PingRouteRef.
+// The rpcgrpc-side struct exists only to keep that package free of
+// pkg/visor imports.
+func (a *visorPingAdapter) StopPingRoute(ref rpcgrpc.PingRouteRef) error {
+	return a.v.StopPingRoute(PingRouteRef{PK: ref.PK, Index: ref.Index})
+}
+
 func (a *visorPingAdapter) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
 	return a.v.GetPingRoute(pk)
 }
 
 func (a *visorPingAdapter) GetPingRouteDetails(pk cipher.PubKey) []rpcgrpc.RouteHopInfo {
-	details := a.v.GetPingRouteDetails(pk)
+	return convertHopInfos(a.v.GetPingRouteDetails(pk))
+}
+
+// GetPingRouteDetailsAt — per-route variant used by mux-bw to fill
+// MuxRouteEstablished.hops at setup time. See StopPingRoute for the
+// boundary-cross note.
+func (a *visorPingAdapter) GetPingRouteDetailsAt(ref rpcgrpc.PingRouteRef) []rpcgrpc.RouteHopInfo {
+	return convertHopInfos(a.v.GetPingRouteDetailsAt(PingRouteRef{PK: ref.PK, Index: ref.Index}))
+}
+
+// convertHopInfos is the router.RouteHopInfo → rpcgrpc.RouteHopInfo
+// projection shared by the two GetPingRouteDetails* paths.
+func convertHopInfos(details []router.RouteHopInfo) []rpcgrpc.RouteHopInfo {
 	if details == nil {
 		return nil
 	}
-	// Convert router.RouteHopInfo to rpcgrpc.RouteHopInfo
-	result := make([]rpcgrpc.RouteHopInfo, len(details))
+	out := make([]rpcgrpc.RouteHopInfo, len(details))
 	for i, d := range details {
-		result[i] = rpcgrpc.RouteHopInfo{
+		out[i] = rpcgrpc.RouteHopInfo{
 			TpID:   d.TpID,
 			From:   d.From,
 			To:     d.To,
 			TpType: d.TpType,
 		}
 	}
-	return result
+	return out
 }
 
 func (a *visorPingAdapter) GetLastRouteCalcTime() time.Duration {
@@ -294,6 +387,8 @@ func (a *visorPingAdapter) PingOnceWithEcho(conf rpcgrpc.PingConf, echoFull bool
 		Tries:      conf.Tries,
 		PcktSize:   conf.PcktSize,
 		LocalRoute: conf.LocalRoute,
+		RouteIndex: conf.RouteIndex,
+		MinHops:    conf.MinHops,
 	}, echoFull)
 }
 
@@ -430,6 +525,12 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	v.pushCloseStack("cli.listener", cliL.Close)
 
+	// (Dmsg bridge was previously a dedicated localhost:3437
+	// listener. It's now multiplexed onto v.conf.CLIAddr via cmux
+	// — see the bridgeL match below. One local port for operators
+	// to think about, one config field. The bridge protocol /
+	// security model is unchanged; see pkg/visor/dmsg_bridge.go.)
+
 	rpcS, err := newRPCServer(v, "CLI")
 	if err != nil {
 		err := fmt.Errorf("failed to start rpc server for cli: %w", err)
@@ -461,8 +562,8 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		for _, pk := range v.conf.Hypervisors {
 			authorizedPKs[pk] = true
 		}
-		if v.conf.Dmsgpty != nil {
-			for _, pk := range v.conf.Dmsgpty.Whitelist {
+		if v.conf.Pty != nil {
+			for _, pk := range v.conf.Pty.Whitelist {
 				authorizedPKs[pk] = true
 			}
 		}
@@ -517,20 +618,36 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	// Serve visor RPC over transports (route ID 0, VisorRPCPacket).
-	// Uses the same whitelist as DMSG gRPC: hypervisor PKs + dmsgpty whitelist.
+	// The mux is always created when a transport manager exists — it
+	// supports BOTH outbound TransportRPCCall dials (used by every
+	// CLI invocation against a remote visor) AND inbound accepts
+	// from whitelisted peers (hypervisor PKs + dmsgpty whitelist).
+	// The accept loop only runs when there's something to whitelist.
 	if v.tpM != nil {
+		tpRPCLog := v.MasterLogger().PackageLogger("transport_rpc")
+		// One VStreamMux per (tm, packet_type). Registered as the
+		// transport manager's VisorRPCPacket handler so EVERY inbound
+		// frame routes here — both accept-side (new streams from
+		// peers) and dial-side (response frames for streams we opened
+		// via TransportRPCCall). Stored on the visor so
+		// TransportRPCCall can use the same mux for its outbound
+		// dials. Sharing this mux is required: the manager only
+		// routes inbound VisorRPCPacket frames to a single handler.
+		v.transportRPCMux = transport.NewVStreamMux(v.tpM, routing.VisorRPCPacket, tpRPCLog)
+		v.tpM.SetVisorRPCHandler(v.transportRPCMux.HandlePacket)
+		v.pushCloseStack("transport_rpc.mux", v.transportRPCMux.Close)
+
 		whitelistPKs := append([]cipher.PubKey{}, v.conf.Hypervisors...)
-		if v.conf.Dmsgpty != nil {
-			whitelistPKs = append(whitelistPKs, v.conf.Dmsgpty.Whitelist...)
+		if v.conf.Pty != nil {
+			whitelistPKs = append(whitelistPKs, v.conf.Pty.Whitelist...)
 		}
 		if len(whitelistPKs) > 0 {
-			tpRPCLog := v.MasterLogger().PackageLogger("transport_rpc")
 			tpRPCS, tpRPCErr := newRPCServer(v, "TransportRPC")
 			if tpRPCErr != nil {
 				log.WithError(tpRPCErr).Warn("Failed to create transport RPC server")
 			} else {
-				tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, whitelistPKs, v.tpM)
-				v.pushCloseStack("transport_rpc", tpRPCSrv.Close)
+				tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, whitelistPKs, v.transportRPCMux)
+				v.pushCloseStack("transport_rpc.server", tpRPCSrv.Close)
 				go tpRPCSrv.Serve()
 				tpRPCLog.WithField("whitelist_pks", len(whitelistPKs)).
 					Info("Transport RPC server started (VisorRPCPacket on route ID 0)")
@@ -538,10 +655,109 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	// Use cmux to multiplex gRPC and standard RPC on same port
+	// Serve visor net/rpc over dmsg (and skynet mirror) on
+	// DmsgVisorRPCPort. Same auth gate as TransportRPCServer:
+	// hypervisor PKs + dmsgpty whitelist. Reached via
+	// `skywire cli ... --rpc dmsg://<pk>` from a CLI that holds an
+	// authorized SK.
+	if v.dmsgC != nil {
+		dmsgRPCLog := v.MasterLogger().PackageLogger("dmsg_visor_rpc")
+
+		authorizedPKs := make(map[cipher.PubKey]bool)
+		for _, pk := range v.conf.Hypervisors {
+			authorizedPKs[pk] = true
+		}
+		if v.conf.Pty != nil {
+			for _, pk := range v.conf.Pty.Whitelist {
+				authorizedPKs[pk] = true
+			}
+		}
+
+		if len(authorizedPKs) == 0 {
+			dmsgRPCLog.Info("No hypervisor PKs or dmsgpty whitelist; dmsg visor-RPC server disabled")
+		} else {
+			dmsgRPCS, dmsgRPCErr := newRPCServer(v, "DmsgRPC")
+			if dmsgRPCErr != nil {
+				log.WithError(dmsgRPCErr).Warn("Failed to create dmsg visor-RPC server")
+			} else if dmsgRPCL, err := v.dmsgC.Listen(skyenv.DmsgVisorRPCPort); err != nil {
+				dmsgRPCLog.WithError(err).Warn("Failed to listen on dmsg visor-RPC port")
+			} else {
+				authL := &authorizedDmsgListener{
+					Listener:      dmsgRPCL,
+					authorizedPKs: authorizedPKs,
+					log:           dmsgRPCLog,
+				}
+				v.pushCloseStack("dmsg.visor_rpc.listener", dmsgRPCL.Close)
+
+				go func() {
+					dmsgRPCLog.Infof("Dmsg visor-RPC server listening on port %d (%d authorized PKs)", skyenv.DmsgVisorRPCPort, len(authorizedPKs))
+					for {
+						conn, err := authL.Accept()
+						if err != nil {
+							if errors.Is(err, net.ErrClosed) ||
+								strings.Contains(err.Error(), "closed") {
+								return
+							}
+							dmsgRPCLog.WithError(err).Debug("dmsg visor-RPC accept error")
+							continue
+						}
+						go func(c net.Conn) {
+							defer c.Close() //nolint:errcheck,gosec
+							dmsgRPCS.ServeConn(c)
+						}(conn)
+					}
+				}()
+
+				// Skynet mirror of the visor-RPC server at the same
+				// port. Same authorizedDmsgListener wrapper enforces
+				// the whitelist on the skynet side.
+				goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgVisorRPCPort, "dmsg_visor_rpc", dmsgRPCLog,
+					func(skyLis net.Listener) {
+						authSky := &authorizedDmsgListener{
+							Listener:      skyLis,
+							authorizedPKs: authorizedPKs,
+							log:           dmsgRPCLog,
+						}
+						for {
+							conn, err := authSky.Accept()
+							if err != nil {
+								if errors.Is(err, net.ErrClosed) ||
+									strings.Contains(err.Error(), "closed") {
+									return
+								}
+								dmsgRPCLog.WithError(err).Debug("skynet visor-RPC accept error")
+								continue
+							}
+							go func(c net.Conn) {
+								defer c.Close() //nolint:errcheck,gosec
+								dmsgRPCS.ServeConn(c)
+							}(conn)
+						}
+					})
+			}
+		}
+	}
+
+	// Use cmux to multiplex gRPC, the dmsg-bridge protocol, and
+	// standard RPC on the same port. The bridge matcher peeks for
+	// a fixed magic prefix; conns starting with it are dmsg-bridge
+	// requests, everything else falls through to gRPC or rpc.
 	mux := cmux.New(cliL)
 	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+	bridgeL := mux.Match(cmux.PrefixMatcher(bridgeMagic))
 	rpcL := mux.Match(cmux.Any()) // All other connections go to standard RPC
+
+	// Start the RPC bridge accept loop on the bridge-matched
+	// listener. Handles both `--via dmsg://<pk>` and `--via
+	// skynet://<pk>` — the header's scheme byte selects which
+	// stream type the visor opens to the target. Lets the CLI
+	// inherit the visor's dmsg/skynet identity (and its whitelist
+	// eligibility on remote peers) without needing a separate CLI
+	// keypair. Implementation in rpc_bridge.go.
+	bridgeLog := v.MasterLogger().PackageLogger("rpc_bridge")
+	go serveRPCBridge(ctx, bridgeLog, bridgeL, v)
+	bridgeLog.WithField("addr", v.conf.CLIAddr).
+		Info("RPC bridge multiplexed onto CLI RPC port (dmsg + skynet schemes)")
 
 	// Connection limiting and stats for standard RPC
 	const maxConcurrentConns = 50
@@ -682,10 +898,20 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 			//			}
 			defer delete(v.connectedHypervisors, hvPK)
 			v.connectedHypervisors[hvPK] = true
-			ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
+			ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
 			//			ServeRPCClient(ctx, log, autoPeerIP, v.dmsgC, rpcS, addr, hvErrs)
 
 		}(hvErrs)
+
+		// Background goroutine: probe the hypervisor via dmsg, then
+		// attempt stcpr / sudph transport creation so subsequent RPC
+		// and skypty dials ride a fast p2p path instead of the dmsg
+		// relay. See init_hypervisor_transport.go for the policy +
+		// reconciliation cadence.
+		go v.autoUpgradeHypervisorTransport(ctx,
+			hvPK,
+			v.MasterLogger().PackageLogger("hypervisor_transport").WithField("hypervisor_pk", hvPK),
+		)
 
 		v.pushCloseStack("hypervisor."+hvPK.String()[:shortHashLen], func() error {
 			cancel()

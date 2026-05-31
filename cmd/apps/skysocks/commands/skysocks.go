@@ -87,7 +87,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 			var pk cipher.PubKey
 			if err := pk.UnmarshalText([]byte(pkStr)); err != nil {
 				appCl.Log().Errorf("Invalid whitelist public key %s: %v", pkStr, err)
-				setAppError(appCl, err)
+				appCl.SetErrorOrLog(err)
 				return err
 			}
 			whitelistPKs = append(whitelistPKs, pk)
@@ -96,7 +96,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 
 	srv, err := skysocks.NewServer(whitelistPKs, appCl)
 	if err != nil {
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		appCl.Log().Errorf("Failed to create a new server: %v", err)
 		return err
 	}
@@ -104,12 +104,12 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	port := appCl.Config().RoutingPort
 	if appPort != 0 {
 		port = routing.Port(appPort)
-		setAppPort(appCl, port)
+		appCl.SetAppPortOrLog(port)
 	}
 
 	l, err := appCl.Listen(netType, port)
 	if err != nil {
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		appCl.Log().Errorf("Error listening network %v on port %d: %v", netType, port, err)
 		return err
 	}
@@ -119,7 +119,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	if runtime.GOOS == "windows" {
 		ipcClient, err := ipc.StartClient(skyenv.SkysocksName, nil)
 		if err != nil {
-			setAppError(appCl, err)
+			appCl.SetErrorOrLog(err)
 			appCl.Log().Errorf("Error creating ipc server for skysocks: %v", err)
 			return err
 		}
@@ -136,7 +136,7 @@ func RunSkysocks(ctx context.Context, args []string) error {
 			}
 		}()
 	}
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	defer appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 
 	serveCh := make(chan error, 1)
 	go func() {
@@ -158,27 +158,9 @@ func RunSkysocks(ctx context.Context, args []string) error {
 	return nil
 }
 
-func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
-	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		appCl.Log().Errorf("Failed to set status %v: %v", status, err)
-	}
-}
-
-func setAppError(appCl *app.Client, appErr error) {
-	if err := appCl.SetError(appErr.Error()); err != nil {
-		appCl.Log().Errorf("Failed to set error %v: %v", appErr, err)
-	}
-}
-
 // Execute executes root CLI command.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		appCl.Log().Errorf("Failed to set port %v: %v", port, err)
 	}
 }

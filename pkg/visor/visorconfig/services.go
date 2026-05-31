@@ -1,96 +1,44 @@
 // Package visorconfig pkg/visor/visorconfig/services.go
+//
+// Services + EnvServices are TYPE ALIASES to the deployment package
+// rather than independent struct definitions. Reason: the visorconfig
+// version was bit-identical to deployment.Services (same fields, same
+// json tags) but lived in two places, which forced a redundant
+// json.Unmarshal at every MakeBaseConfig call to convert the embedded
+// deployment.ServicesJSON into a visorconfig.Services. The alias
+// makes deployment.Prod / deployment.Test usable in-place — same
+// memory, same fields, zero conversion — so visorconfig no longer
+// needs to invoke encoding/json on the WASM-clean code path.
+//
+// HasDmsgEndpoints stays here as a method on the aliased type
+// (works on alias receivers under Go's type-identity rules).
 package visorconfig
 
 import (
-	"encoding/json"
-	"io"
-	"net/http"
-	"time"
-
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// Fetch fetches the service URLs & ip:ports from the config service endpoint
-func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (services *Services) {
+// EnvServices is the wrapper struct for the outer JSON (prod / test
+// keys). Aliased to deployment.EnvServices so consumers keep working
+// while only one copy of the type exists.
+//
+// The alias lives in services_native.go (//go:build !js) because
+// deployment.EnvServices itself is only defined under !js — its
+// json.RawMessage fields need encoding/json, which is build-tag-
+// gated off the WASM path.
 
-	client := http.Client{
-		Timeout: time.Second * 15, // Timeout after 15 seconds
-	}
-	//create the http request
-	req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
-	if err != nil {
-		mLog.WithError(err).Fatal("Failed to create http request\n")
-	}
-	req.Header.Add("Cache-Control", "no-cache")
-	//check for errors in the response
-	res, err := client.Do(req)
-	if err != nil {
-		//silence errors for stdout
-		if !stdout {
-			mLog.WithError(err).Error("Failed to fetch servers\n")
-			mLog.Warn("Falling back on hardcoded servers")
-		}
-	} else {
-		// nil error from client.Do(req)
-		if res.Body != nil {
-			defer res.Body.Close() //nolint:errcheck
-		}
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			mLog.WithError(err).Fatal("Failed to read response\n")
-		}
-		//fill in services struct with the response
-		err = json.Unmarshal(body, &services)
-		if err != nil {
-			mLog.WithError(err).Fatal("Failed to unmarshal json response\n")
-		}
-		if !stdout {
-			mLog.Infof("Fetched service endpoints from '%s'", serviceConf)
-		}
-	}
-	return services
-}
-
-// EnvServices is the struct for the outer JSON
-type EnvServices struct {
-	Test json.RawMessage `json:"test"`
-	Prod json.RawMessage `json:"prod"`
-}
-
-// Services is subdomains and IP addresses of the skywire services.
-// This mirrors deployment.Services for use in visor configuration and
-// the config gen CLI. Both HTTP and DMSG endpoints are included.
-type Services struct {
-	// HTTP endpoints
-	DmsgDiscovery      string          `json:"dmsg_discovery,omitempty"`
-	TransportDiscovery string          `json:"transport_discovery,omitempty"`
-	AddressResolver    string          `json:"address_resolver,omitempty"`
-	RouteFinder        string          `json:"route_finder,omitempty"`
-	RouteSetupNodes    []cipher.PubKey `json:"route_setup_nodes,omitempty"`
-	TransportSetupPKs  []cipher.PubKey `json:"transport_setup,omitempty"`
-	UptimeTracker      string          `json:"uptime_tracker,omitempty"`
-	ServiceDiscovery   string          `json:"service_discovery,omitempty"`
-	StunServers        []string        `json:"stun_servers,omitempty"`
-	DNSServer          string          `json:"dns_server,omitempty"`
-	GeoIP              string          `json:"geoip,omitempty"` // HTTP only (dmsg doesn't preserve client IP)
-	SurveyWhitelist    []cipher.PubKey `json:"survey_whitelist,omitempty"`
-	// DMSG endpoints (dmsg:// URLs for the same services)
-	ConfDmsg               string                       `json:"conf_dmsg,omitempty"`
-	DmsgServers            []deployment.DmsgServerEntry `json:"dmsg_servers,omitempty"`
-	DmsgDiscoveryDmsg      string                       `json:"dmsg_discovery_dmsg,omitempty"`
-	TransportDiscoveryDmsg string                       `json:"transport_discovery_dmsg,omitempty"`
-	AddressResolverDmsg    string                       `json:"address_resolver_dmsg,omitempty"`
-	RouteFinderDmsg        string                       `json:"route_finder_dmsg,omitempty"`
-	UptimeTrackerDmsg      string                       `json:"uptime_tracker_dmsg,omitempty"`
-	ServiceDiscoveryDmsg   string                       `json:"service_discovery_dmsg,omitempty"`
-	// Reward system
-	RewardSystem     string `json:"reward_system,omitempty"`
-	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
-}
+// Services is subdomains and IP addresses of the skywire services
+// as deployed. Aliased to deployment.Services — both packages used
+// to declare an identical struct, which created two json.Unmarshal
+// hot paths (one in deployment.init, one in visorconfig.MakeBaseConfig)
+// for the same data shape. The alias collapses the duplication.
+type Services = deployment.Services
 
 // HasDmsgEndpoints returns true if the services config has DMSG endpoints.
-func (s *Services) HasDmsgEndpoints() bool {
-	return s != nil && s.DmsgDiscoveryDmsg != ""
-}
+// Defined on the alias receiver here (rather than re-declared as a
+// method) so callers that hold a *visorconfig.Services keep working.
+// Note: deployment.Services already has a HasDmsgEndpoints method
+// with the same semantics — Go's type-identity rule makes them the
+// same method set, so this re-declaration would conflict and is
+// omitted. Callers should use deployment.Services.HasDmsgEndpoints
+// directly via the aliased type.

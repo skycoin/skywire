@@ -238,60 +238,89 @@
             <table
               class="responsive-table-translucid d-none d-md-table"
               cellspacing="0" cellpadding="0"
+              cdkDropList
+              [cdkDropListData]="dataSource"
+              (cdkDropListDropped)="rowDropped($event)"
               >
-              <!-- Column names. -->
+              <!-- Column names. Click any header to sort by that column;
+                   clicking also drops any active drag-drop custom order
+                   (changeSort wraps dataSorter.changeSortingOrder +
+                   resetCustomOrder), so a sort always wins over a
+                   previously-arranged manual order. -->
               <tr>
-                <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
+                <th class="drag-handle-column"></th>
+                <th class="sortable-column small-column" (click)="changeSort(hypervisorSortData)" [matTooltip]="'nodes.hypervisor' | translate">
                   <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
                   @if (dataSorter.currentSortingColumn === hypervisorSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column small-column" (click)="dataSorter.changeSortingOrder(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
+                <th class="sortable-column small-column" (click)="changeSort(stateSortData)" [matTooltip]="'nodes.state-tooltip' | translate">
                   <span class="dot-outline-gray"></span>
                   @if (dataSorter.currentSortingColumn === stateSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column labels" (click)="dataSorter.changeSortingOrder(labelSortData)">
+                <th class="sortable-column labels" (click)="changeSort(labelSortData)">
                   {{ 'nodes.label' | translate }}
                   @if (dataSorter.currentSortingColumn === labelSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th>
+                <th class="sortable-column ip-location-column" (click)="changeSort(ipLocationSortData)">
                   {{ 'nodes.ip-location' | translate }}
+                  @if (dataSorter.currentSortingColumn === ipLocationSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
                 </th>
-                <th>
+                <th class="sortable-column transports-column" (click)="changeSort(transportsCountSortData)">
                   {{ 'nodes.transports' | translate }}
+                  @if (dataSorter.currentSortingColumn === transportsCountSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
                 </th>
-                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(keySortData)">
+                <th class="sortable-column key-column" (click)="changeSort(keySortData)">
                   {{ 'nodes.key' | translate }}
                   @if (dataSorter.currentSortingColumn === keySortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th class="sortable-column" (click)="dataSorter.changeSortingOrder(versionSortData)">
+                <th class="sortable-column version-column" (click)="changeSort(versionSortData)">
                   {{ 'nodes.version' | translate }}
                   @if (dataSorter.currentSortingColumn === versionSortData) {
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
-                <th>
+                <th class="sortable-column services-column" (click)="changeSort(servicesCountSortData)">
                   {{ 'nodes.services' | translate }}
+                  @if (dataSorter.currentSortingColumn === servicesCountSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
                 </th>
-                <th>
+                <th class="sortable-column reward-column" (click)="changeSort(rewardAddressSortData)">
                   {{ 'nodes.reward' | translate }}
+                  @if (dataSorter.currentSortingColumn === rewardAddressSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
                 </th>
                 <th class="actions"></th>
               </tr>
-              <!-- Values. -->
+              <!-- Values. cdkDrag makes the row draggable from its
+                   handle column; clicks anywhere else still navigate
+                   via routerLink. cdkDragHandle scopes the drag to
+                   the icon so the rest of the row keeps its
+                   click-to-navigate behavior. -->
               @for (node of dataSource; track node) {
                 <a
                   [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale}"
                   class="selectable link-row"
                   [routerLink]="node.online ? ['/nodes', node.localPk] : null"
+                  cdkDrag
+                  [cdkDragData]="node"
                   >
+                  <td class="drag-handle-column" cdkDragHandle [matTooltip]="'nodes.drag-to-reorder' | translate" (click)="$event.stopPropagation(); $event.preventDefault();">
+                    <mat-icon class="grey-text drag-handle-icon" [inline]="true">drag_indicator</mat-icon>
+                  </td>
                   <td>
                     @if (node.isHypervisor) {
                       <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
@@ -537,6 +566,192 @@
               }
             </div>
           </div>
+        }
+
+        <!-- Sub-hypervisor sections. One panel per remote
+             hypervisor this visor knows about, showing the visors
+             that hypervisor reports as directly connected to it
+             (sourced via HVListDirectVisors over RPC). Local
+             section (sections[0]) is rendered by the main table
+             above; subSections covers sections[1..] so operators
+             can see other hypervisors' rosters in the same view.
+             #2780 deduped the local section's visor list so
+             hypervisors with their own sub-section here don't
+             also appear as a plain row above. -->
+        @if (subSections.length > 0) {
+          @for (section of subSections; track section.hypervisorPk) {
+            <div class="rounded-elevated-box mt-3">
+              <div class="box-internal-container full-node-list-margins">
+                <div class="generic-title-container">
+                  <div class="title">
+                    <div class="hypervisor-pk-label transparent-50" [matTooltip]="section.hypervisorPk">
+                      <mat-icon class="small-icon" [inline]="true">star_outline</mat-icon>
+                      <span class="ml-1">{{ section.hypervisorPk }}</span>
+                    </div>
+                  </div>
+                </div>
+                @if (section.subError) {
+                  <div class="font-sm mt-2">
+                    <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
+                    <span class="font-sm ml-1">{{ 'nodes.subhypervisor-error' | translate }}: {{ section.subError }}</span>
+                  </div>
+                } @else if (!section.nodes || section.nodes.length === 0) {
+                  <div class="font-sm mt-2">
+                    <mat-icon [inline]="true" class="alert-icon">info_outline</mat-icon>
+                    <span class="font-sm ml-1">{{ 'nodes.subhypervisor-empty' | translate }}</span>
+                  </div>
+                } @else {
+                  <!-- Same shape as the main local-section table.
+                       Sortable-column interactivity is intentionally
+                       dropped: the local dataSorter is keyed against
+                       allNodes/dataSource and reusing it would
+                       cross-wire the sub-section's sort state with
+                       the main table. Sub-sections are bounded
+                       (one hypervisor's roster) so sorting is less
+                       valuable here than visual parity is. -->
+                  <table class="responsive-table-translucid d-none d-md-table" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <!-- Empty placeholder column matching the main table's
+                           drag-handle column. Sub-section tables don't
+                           support drag-drop (the dataSorter is keyed against
+                           the local section's dataSource), but the column
+                           still has to exist so the columns to its right
+                           line up vertically with the main table's. -->
+                      <th class="drag-handle-column"></th>
+                      <th class="small-column" [matTooltip]="'nodes.hypervisor' | translate">
+                        <mat-icon class="hypervisor-icon grey-text">star_outline</mat-icon>
+                      </th>
+                      <th class="small-column" [matTooltip]="'nodes.state-tooltip' | translate">
+                        <span class="dot-outline-gray"></span>
+                      </th>
+                      <th class="labels">{{ 'nodes.label' | translate }}</th>
+                      <th class="ip-location-column">{{ 'nodes.ip-location' | translate }}</th>
+                      <th class="transports-column">{{ 'nodes.transports' | translate }}</th>
+                      <th class="key-column">{{ 'nodes.key' | translate }}</th>
+                      <th class="version-column">{{ 'nodes.version' | translate }}</th>
+                      <th class="services-column">{{ 'nodes.services' | translate }}</th>
+                      <th class="reward-column">{{ 'nodes.reward' | translate }}</th>
+                      <th class="actions"></th>
+                    </tr>
+                    @for (node of section.nodes; track node.localPk) {
+                      <a
+                        [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale}"
+                        class="selectable link-row"
+                        [routerLink]="node.online ? ['/nodes', node.localPk] : null"
+                        >
+                        <!-- Empty drag-handle placeholder; main-table-only
+                             feature, but the column has to exist so the
+                             rest of the row aligns with the main table. -->
+                        <td class="drag-handle-column"></td>
+                        <td>
+                          @if (node.isHypervisor) {
+                            <mat-icon class="hypervisor-icon" [inline]="true" [matTooltip]="'nodes.hypervisor-info' | translate">star</mat-icon>
+                          }
+                        </td>
+                        <td>
+                          <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
+                        </td>
+                        <td>
+                          {{ node.label }}
+                          @if (node.isStale) {
+                            <div class="stale-caption">{{ lastSeenText(node) }}</div>
+                          }
+                        </td>
+                        <td>
+                          @if (node.ip || node.publicIp || node.countryCode) {
+                            @if (node.ip && node.publicIp && node.ip !== node.publicIp) {
+                              <div style="font-size: 0.85em;">{{ node.ip }}</div>
+                              <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
+                            } @else if (node.publicIp) {
+                              <div style="font-size: 0.85em;">{{ node.publicIp }}</div>
+                            } @else if (node.ip) {
+                              <div style="font-size: 0.85em;">{{ node.ip }}</div>
+                            }
+                            @if (node.countryCode) {
+                              <div style="font-size: 0.85em;">{{ node.cityName ? node.cityName + ', ' : '' }}{{ node.regionName ? node.regionName + ', ' : '' }}{{ node.countryCode }}</div>
+                            }
+                          }
+                          @if (!node.ip && !node.publicIp && !node.countryCode) {
+                            <span>-</span>
+                          }
+                        </td>
+                        <td>
+                          @if (node.transports && node.transports.length > 0) {
+                            @for (entry of getTransportCounts(node); track entry.type) {
+                              <div style="font-size: 0.85em;">{{ entry.type }}: {{ entry.count }}</div>
+                            }
+                            <div style="font-size: 0.85em;">Total: {{ node.transports.length }}</div>
+                          }
+                          @if (node.transports && node.transports.length === 0) {
+                            <span style="font-size: 0.85em;">Total: 0</span>
+                          }
+                          @if (!node.transports) {
+                            <span>-</span>
+                          }
+                        </td>
+                        <td>
+                          {{ node.localPk }}
+                        </td>
+                        <td>
+                          @if (node.version && node.configVersion && node.version === node.configVersion) {
+                            <div style="font-size: 0.85em;">{{ node.version }}</div>
+                          } @else {
+                            <div style="font-size: 0.85em;">{{ 'nodes.visor-version' | translate }}: {{ node.version || '-' }}</div>
+                            <div style="font-size: 0.85em;">{{ 'nodes.config-label' | translate }}: {{ node.configVersion || '-' }}</div>
+                          }
+                        </td>
+                        <td>
+                          @if (getNodeServices(node).length > 0) {
+                            @for (service of getNodeServices(node); track service) {
+                              <div style="font-size: 0.85em;">{{ service }}</div>
+                            }
+                          }
+                          @if (getNodeServices(node).length === 0) {
+                            <span>-</span>
+                          }
+                        </td>
+                        <td>
+                          @if (node.rewardsAddress) {
+                            <mat-icon style="color: #4caf50; font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
+                          }
+                          @if (!node.rewardsAddress) {
+                            <mat-icon style="color: #f44336; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">cancel</mat-icon>
+                          }
+                        </td>
+                        <td class="actions">
+                          <button
+                            (click)="$event.stopPropagation(); $event.preventDefault(); copyToClipboard(node);"
+                            mat-button
+                            [matTooltip]="'nodes.copy-key' | translate"
+                            class="big-action-button transparent-button"
+                            >
+                            <mat-icon [inline]="true">filter_none</mat-icon>
+                          </button>
+                          <button
+                            (click)="$event.stopPropagation(); $event.preventDefault(); showEditLabelDialog(node);"
+                            mat-button
+                            [matTooltip]="'labeled-element.edit-label' | translate"
+                            class="big-action-button transparent-button"
+                            >
+                            <mat-icon [inline]="true">short_text</mat-icon>
+                          </button>
+                          @if (node.online) {
+                            <button
+                              mat-button
+                              [matTooltip]="'nodes.view-node' | translate"
+                              class="big-action-button transparent-button"
+                              >
+                              <mat-icon [inline]="true">chevron_right</mat-icon>
+                            </button>
+                          }
+                        </td>
+                      </a>
+                    }
+                  </table>
+                }
+              </div>
+            </div>
+          }
         }
       </div>
     </div>

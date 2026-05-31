@@ -31,7 +31,6 @@ skywire cli visor
 - [reinit](reinit/README.md) — Reinitiate modules
 - [reward](reward/README.md) — Show reward history for a visor
 - [start](start/README.md) — Start visor
-- [tp-rpc](tp-rpc/README.md) — Call a remote visor's RPC method over a transport
 - [uptime](uptime/README.md) — Visor session history (version-tagged, with restart-loop / down-window detection)
 - [user](user/README.md) — Show the user the visor process is running as
 - [ver](ver/README.md) — Version and build info
@@ -47,9 +46,10 @@ skywire cli visor
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

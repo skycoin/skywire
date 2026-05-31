@@ -9,52 +9,33 @@
 // internals (launcher, RPC, HTTP API) keep []string — only the
 // JSON file representation changes. Old configs with array-form
 // args still load.
+//
+// The encoding/json-using halves (appsList.MarshalJSON,
+// appsList.UnmarshalJSON, unmarshalAppConfig) live in
+// args_native.go under //go:build !js. This file keeps the type
+// definitions and the json-free shell-arg parser so the WASM
+// build path can still reach SplitArgs, splitArgs, and joinArgs
+// (none of which touch encoding/json).
 package visorconfig
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
-	"github.com/skycoin/skywire/pkg/app/appserver"
+	appspec "github.com/skycoin/skywire/pkg/app/appserver/spec"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-// appsList wraps []appserver.AppConfig so the JSON I/O layer can
+// appsList wraps []appspec.AppConfig so the JSON I/O layer can
 // rewrite Args between string and []string without touching the
-// shared appserver type.
-type appsList []appserver.AppConfig
+// shared appserver type. Uses the WASM-clean spec subpackage so
+// pkg/visor/visorconfig stays compilable under GOOS=js — the type
+// is identical to appspec.AppConfig (alias) so callers that read
+// the on-disk config through this package keep working unchanged.
+type appsList []appspec.AppConfig
 
-// MarshalJSON emits each AppConfig's Args as a shell-quoted string.
-func (a appsList) MarshalJSON() ([]byte, error) {
-	out := make([]appConfigOnDisk, len(a))
-	for i, c := range a {
-		out[i] = toOnDisk(c)
-	}
-	return json.Marshal(out)
-}
-
-// UnmarshalJSON accepts both the new string form and the legacy
-// array form on a per-app basis. Mixed configs work too.
-func (a *appsList) UnmarshalJSON(data []byte) error {
-	var raw []json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	out := make([]appserver.AppConfig, len(raw))
-	for i, r := range raw {
-		cfg, err := unmarshalAppConfig(r)
-		if err != nil {
-			return fmt.Errorf("apps[%d]: %w", i, err)
-		}
-		out[i] = cfg
-	}
-	*a = out
-	return nil
-}
-
-// appConfigOnDisk mirrors appserver.AppConfig with Args as a string.
-// Only used at the JSON boundary.
+// appConfigOnDisk mirrors appspec.AppConfig with Args as a string.
+// Only used at the JSON boundary (in args_native.go).
 type appConfigOnDisk struct {
 	Name         string       `json:"name"`
 	Binary       string       `json:"binary,omitempty"`
@@ -68,7 +49,7 @@ type appConfigOnDisk struct {
 	LauncherMode string       `json:"launcher_mode,omitempty"`
 }
 
-func toOnDisk(c appserver.AppConfig) appConfigOnDisk {
+func toOnDisk(c appspec.AppConfig) appConfigOnDisk {
 	return appConfigOnDisk{
 		Name:         c.Name,
 		Binary:       c.Binary,
@@ -81,38 +62,6 @@ func toOnDisk(c appserver.AppConfig) appConfigOnDisk {
 		Env:          c.Env,
 		LauncherMode: c.LauncherMode,
 	}
-}
-
-func unmarshalAppConfig(raw json.RawMessage) (appserver.AppConfig, error) {
-	// Shadow AppConfig.Args with a RawMessage at the outer scope so
-	// we can dispatch on its JSON shape (string vs array).
-	var pre struct {
-		appserver.AppConfig
-		Args json.RawMessage `json:"args,omitempty"`
-	}
-	if err := json.Unmarshal(raw, &pre); err != nil {
-		return appserver.AppConfig{}, err
-	}
-	cfg := pre.AppConfig
-	if len(pre.Args) == 0 {
-		cfg.Args = nil
-		return cfg, nil
-	}
-	// Prefer the new string form; fall back to the array form for
-	// existing on-disk configs.
-	var s string
-	if err := json.Unmarshal(pre.Args, &s); err == nil {
-		parsed, perr := splitArgs(s)
-		if perr != nil {
-			return appserver.AppConfig{}, fmt.Errorf("parsing args string: %w", perr)
-		}
-		cfg.Args = parsed
-		return cfg, nil
-	}
-	if err := json.Unmarshal(pre.Args, &cfg.Args); err != nil {
-		return appserver.AppConfig{}, fmt.Errorf("args must be string or array: %w", err)
-	}
-	return cfg, nil
 }
 
 // SplitArgs is the exported counterpart to splitArgs — same parser,

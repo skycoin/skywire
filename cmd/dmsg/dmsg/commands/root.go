@@ -17,10 +17,10 @@ import (
 	dc "github.com/skycoin/skywire/cmd/dmsg/dmsgcurl/commands"
 	dh "github.com/skycoin/skywire/cmd/dmsg/dmsghttp/commands"
 	di "github.com/skycoin/skywire/cmd/dmsg/dmsgip/commands"
-	dpc "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-cli/commands"
-	dph "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-host/commands"
-	dpu "github.com/skycoin/skywire/cmd/dmsg/dmsgpty-ui/commands"
 	dw "github.com/skycoin/skywire/cmd/dmsg/dmsgweb/commands"
+	dpc "github.com/skycoin/skywire/cmd/dmsg/pty-cli/commands"
+	dph "github.com/skycoin/skywire/cmd/dmsg/pty-host/commands"
+	dpu "github.com/skycoin/skywire/cmd/dmsg/pty-ui/commands"
 	dsp "github.com/skycoin/skywire/cmd/dmsg/self-ping/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
@@ -34,7 +34,12 @@ var (
 )
 
 func init() {
-	dmsgptyCmd.AddCommand(
+	// dmsgpty subcommands stay on the dmsg tree so the standalone
+	// `dmsg pty <cli|host|ui>` binary keeps working as-is. The
+	// skywire-binary import path hides DmsgptyCmd in its root.go
+	// because the canonical operator surface there is
+	// `skywire app pty <mode>` (see cmd/apps/pty/commands).
+	DmsgptyCmd.AddCommand(
 		dpc.RootCmd,
 		dph.RootCmd,
 		dpu.RootCmd,
@@ -44,7 +49,7 @@ func init() {
 		dl.RootCmd,
 	)
 	RootCmd.AddCommand(
-		dmsgptyCmd,
+		DmsgptyCmd,
 		dd.RootCmd,
 		ds.RootCmd,
 		df.RootCmd,
@@ -127,7 +132,12 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 }
 
-var dmsgptyCmd = &cobra.Command{
+// DmsgptyCmd is the `pty` group inside the dmsg subtree. Exported
+// so the skywire-binary import path (cmd/skywire/commands/root.go)
+// can mark it Hidden — the standalone `dmsg pty` paths still work
+// from the dmsg binary, but the skywire binary surfaces the unified
+// `app pty` tree instead.
+var DmsgptyCmd = &cobra.Command{
 	Use:   "pty",
 	Short: "DMSG pseudoterminal (pty)",
 	Long: `

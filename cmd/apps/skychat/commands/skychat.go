@@ -732,7 +732,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		port = appCl.Config().RoutingPort
 		if appPort != 0 {
 			port = routing.Port(appPort)
-			setAppPort(appCl, port)
+			appCl.SetAppPortOrLog(port)
 		}
 	} else if appPort != 0 {
 		port = routing.Port(appPort)
@@ -761,7 +761,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		ipcClient, err := ipc.StartClient(skyenv.SkychatName, nil)
 		if err != nil {
 			appLog("Error creating ipc server for skychat client: %v", err)
-			setAppError(appCl, err)
+			appCl.SetErrorOrLog(err)
 			return err
 		}
 		go handleIPCSignal(ipcClient)
@@ -817,16 +817,16 @@ func RunSkychat(ctx context.Context, args []string) error {
 		go func() {
 			select {
 			case <-termCh:
-				setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+				appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 				cancel()
 			case <-ctx.Done():
-				setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+				appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 				return
 			}
 		}()
 	}
 
-	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 	srv := &http.Server{
 		Addr:         url,
 		Handler:      mux,
@@ -843,11 +843,11 @@ func RunSkychat(ctx context.Context, args []string) error {
 	case err := <-errCh:
 		if err != nil {
 			appLog("HTTP server error: %v", err)
-			setAppError(appCl, err)
+			appCl.SetErrorOrLog(err)
 			return err
 		}
 	case <-ctx.Done():
-		setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 		if err := srv.Shutdown(context.Background()); err != nil {
 			return err
 		}
@@ -860,7 +860,7 @@ func listenLoop(netType appnet.Type, appPort routing.Port) {
 	l, err := appCl.Listen(netType, appPort)
 	if err != nil {
 		appLog("Error listening network %v on port %d: %v", netType, appPort, err)
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		return
 	}
 
@@ -1827,34 +1827,4 @@ func handleIPCSignal(client *ipc.Client) {
 
 	}
 	client.Close()
-}
-
-// setApp* helpers tolerate a nil appCl (standalone mode). Without the
-// guards the visor-RPC path would nil-panic the moment we tried to
-// surface app-state to a visor that isn't there.
-func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
-	if appCl == nil {
-		return
-	}
-	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		appCl.Log().Errorf("Failed to set status %v: %v", status, err)
-	}
-}
-
-func setAppError(appCl *app.Client, appErr error) {
-	if appCl == nil {
-		return
-	}
-	if err := appCl.SetError(appErr.Error()); err != nil {
-		appCl.Log().Errorf("Failed to set error %v: %v", appErr, err)
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if appCl == nil {
-		return
-	}
-	if err := appCl.SetAppPort(port); err != nil {
-		appCl.Log().Errorf("Failed to set port %v: %v", port, err)
-	}
 }

@@ -18,9 +18,9 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -295,6 +295,11 @@ func (*mockRPCClient) StartApp(string) error {
 
 // StartAppWithMode implements API.
 func (*mockRPCClient) StartAppWithMode(string, string) error {
+	return nil
+}
+
+// SetAppRoutingPolicy implements API.
+func (*mockRPCClient) SetAppRoutingPolicy(string, string) error {
 	return nil
 }
 
@@ -815,6 +820,11 @@ func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routeGroups, nil
 }
 
+// RoutingPolicies implements API.
+func (*mockRPCClient) RoutingPolicies() (*RoutingPoliciesSummary, error) {
+	return &RoutingPoliciesSummary{PerApp: map[string]*RoutingPolicyInfo{}}, nil
+}
+
 // RouteGroupMuxInfo implements API.
 func (mc *mockRPCClient) RouteGroupMuxInfo(_ string) ([]MuxRouteGroupInfo, error) {
 	return nil, nil
@@ -954,8 +964,8 @@ func (mc *mockRPCClient) RemoteVisors() ([]string, error) {
 }
 
 // DmsgPtyExec implements API
-func (mc *mockRPCClient) DmsgPtyExec(_ DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error) {
-	return &dmsgpty.CommandExecResult{}, nil
+func (mc *mockRPCClient) DmsgPtyExec(_ DmsgPtyExecArgs) (*pty.CommandExecResult, error) {
+	return &pty.CommandExecResult{}, nil
 }
 
 // Ports implements API
@@ -1507,6 +1517,21 @@ func (mc *mockRPCClient) DmsgPorterDiag() (*netutil.EphemeralDiagResult, error) 
 
 // AddHypervisor implements API.
 func (mc *mockRPCClient) AddHypervisor(_ cipher.PubKey) error {
+	return nil
+}
+
+// RemoveHypervisor implements API.
+func (mc *mockRPCClient) RemoveHypervisor(_ cipher.PubKey) error {
+	return nil
+}
+
+// RemoveAllHypervisors implements API.
+func (mc *mockRPCClient) RemoveAllHypervisors() (int, error) {
+	return 0, nil
+}
+
+// SetHypervisorPassword implements API.
+func (mc *mockRPCClient) SetHypervisorPassword(string, string) error {
 	return nil
 }
 

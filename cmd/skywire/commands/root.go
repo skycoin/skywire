@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	pty "github.com/skycoin/skywire/cmd/apps/pty/commands"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
 	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
@@ -39,6 +40,10 @@ func init() {
 		sc.RootCmd,
 		sn.RootCmd,
 		snc.RootCmd,
+		pty.RootCmd,
+		skysocksPairCmd,
+		vpnPairCmd,
+		skynetPairCmd,
 	)
 	// Install flag-aware `help` (supports -r/-t/-d modes) on the
 	// Install flag-aware `help` + coloredcobra styling on every
@@ -68,17 +73,44 @@ func init() {
 
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
 	dmsg.RootCmd.Use = "dmsg"
+	// The standalone `dmsg pty <cli|host|ui>` subtree stays in code
+	// (the standalone dmsg binary still exposes it), but it's
+	// redundant when imported into skywire — the canonical operator
+	// surface here is `skywire app pty <mode>`. Hide it so help
+	// output funnels operators to the unified path; the old path
+	// still resolves when invoked directly for back-compat with
+	// existing operator scripts.
+	dmsg.DmsgptyCmd.Hidden = true
 	services.RootCmd.Use = "svc"
 
 	scli.RootCmd.Use = "cli"
 	visor.RootCmd.Use = "visor"
+	// vpn pair (server + client) collapsed under
+	// `skywire app vpn {serve,client}`. Legacy direct invocations
+	// stay mounted but Hidden — no Use rename needed (no collision
+	// with the new "vpn" pair name).
 	vpns.RootCmd.Use = "vpn-server"
+	vpns.RootCmd.Hidden = true
 	vpnc.RootCmd.Use = "vpn-client"
+	vpnc.RootCmd.Hidden = true
+	// skysocks pair (server + client) is collapsed under
+	// `skywire app skysocks {serve,client}`. The legacy direct
+	// invocations stay mounted but Hidden so operator scripts
+	// hitting the old paths keep working; `skywire app --help`
+	// only advertises the new unified path.
 	ssc.RootCmd.Use = "skysocks-client"
-	ss.RootCmd.Use = "skysocks"
+	ssc.RootCmd.Hidden = true
+	ss.RootCmd.Use = "skysocks-srv"
+	ss.RootCmd.Hidden = true
 	sc.RootCmd.Use = "skychat"
+	// skynet pair (server + client) collapsed under
+	// `skywire app skynet {srv,client}`. Legacy direct invocations
+	// stay mounted but Hidden — names already use the -srv / -client
+	// suffix so no collision with the new "skynet" pair name.
 	sn.RootCmd.Use = "skynet-srv"
+	sn.RootCmd.Hidden = true
 	snc.RootCmd.Use = "skynet-client"
+	snc.RootCmd.Hidden = true
 
 	// --all reveals hidden subcommands (e.g., autoconfig)
 	RootCmd.Flags().BoolVar(&skyShowAll, "all", false, "show all subcommands (including hidden)")

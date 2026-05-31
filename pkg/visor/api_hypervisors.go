@@ -42,12 +42,14 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 		defer func() {
 			v.initLock.Lock()
 			delete(v.connectedHypervisors, hvPK)
+			delete(v.hypervisorCancels, hvPK)
 			v.initLock.Unlock()
 		}()
 		v.initLock.Lock()
 		v.connectedHypervisors[hvPK] = true
+		v.hypervisorCancels[hvPK] = cancel
 		v.initLock.Unlock()
-		ServeRPCClient(ctx, log, v.dmsgC, rpcS, addr, hvErrs)
+		ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
 	}()
 
 	v.pushCloseStack("hypervisor.runtime."+hvPK.String()[:shortHashLen], func() error {
@@ -57,4 +59,54 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 	})
 
 	return nil
+}
+
+// RemoveHypervisor tears down a runtime-added hypervisor connection by
+// PK. Only succeeds for hypervisors that were added via AddHypervisor
+// — config-loaded hypervisors take a different code path and don't
+// enter v.hypervisorCancels. Idempotent: returns nil if the PK isn't
+// currently a runtime-added hypervisor.
+//
+// The connection's goroutine, on cancel, runs its deferred delete of
+// hvPK from both connectedHypervisors and hypervisorCancels — so by
+// the time RemoveHypervisor returns, the visor's view of "connected
+// hypervisors" no longer includes hvPK.
+func (v *Visor) RemoveHypervisor(hvPK cipher.PubKey) error {
+	v.initLock.Lock()
+	cancel, ok := v.hypervisorCancels[hvPK]
+	v.initLock.Unlock()
+	if !ok {
+		// Not a runtime-added hypervisor (or already removed). Don't
+		// error — operator's intent is satisfied either way.
+		return nil
+	}
+	cancel()
+	return nil
+}
+
+// RemoveAllHypervisors tears down every runtime-added hypervisor
+// connection. Returns the count of hypervisors that were
+// disconnected.
+func (v *Visor) RemoveAllHypervisors() (int, error) {
+	v.initLock.Lock()
+	cancels := make([]context.CancelFunc, 0, len(v.hypervisorCancels))
+	for _, c := range v.hypervisorCancels {
+		cancels = append(cancels, c)
+	}
+	v.initLock.Unlock()
+	for _, c := range cancels {
+		c()
+	}
+	return len(cancels), nil
+}
+
+// SetHypervisorPassword changes the hypervisor UI's "admin" account
+// password. Mirrors the /api/change-password endpoint without the
+// HTTP session check — RPC is local-only and already privileged.
+// Returns an error when this visor isn't hosting a hypervisor.
+func (v *Visor) SetHypervisorPassword(oldPassword, newPassword string) error {
+	if v.hvInstance == nil {
+		return fmt.Errorf("hypervisor not running on this visor")
+	}
+	return v.hvInstance.users.ChangeAdminPassword(oldPassword, newPassword)
 }

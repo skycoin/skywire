@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -41,6 +42,39 @@ var (
 	// path); N > 1 = router establishes N parallel mux routes and the
 	// app sees a single conn whose payload is striped across them.
 	routes int
+	// minHops, when >= 2, forces the router to find non-direct paths
+	// (rejecting any direct transport between this visor and the
+	// remote). Needed in combination with routes > 1 to actually
+	// exercise the mux>direct hypothesis end-to-end: without
+	// min-hops, the router happily picks the direct transport for
+	// every mux route, so N mux streams ride one TCP socket and
+	// nothing is multiplexed across intermediates.
+	minHops int
+	// fwdMinHops / revMinHops are per-direction MinHops overrides for
+	// bandwidth-asymmetric workloads (HTTP GET = tiny upstream + bulk
+	// downstream). When > 0 they win over min-hops for THAT direction.
+	// Canonical asymmetric test: --forward-min-hops 0 --reverse-min-hops 2
+	// lets forward stay direct while reverse is forced multi-hop.
+	fwdMinHops int
+	revMinHops int
+	// fwdMux / revMux are per-direction MuxRoutes overrides. When > 0
+	// they win over --routes for THAT direction's route count.
+	// Canonical download-heavy shape: --forward-mux 1 --reverse-mux 4
+	// yields 1 forward leg (cheap upstream) + 4 reverse legs that
+	// aggregate the bulk payload.
+	fwdMux int
+	revMux int
+	// reconnect, when set, makes per-accept dial failures retry
+	// indefinitely (with --reconnect-delay between attempts) instead
+	// of dropping the local conn on first failure. Closes the gap
+	// during remote-visor restarts: a browser refresh that lands
+	// during the remote's downtime keeps the local TCP open until
+	// the remote comes back, instead of returning ECONNREFUSED.
+	// Per-accept rather than outer-loop because skynet-client's
+	// local listener already survives indefinitely — the failure
+	// site is inside handleLocalConn's dialRemote, not at startup.
+	reconnect      bool
+	reconnectDelay int64
 )
 
 func init() {
@@ -50,6 +84,13 @@ func init() {
 	RootCmd.Flags().IntVar(&localPort, "local", 0, "local port to listen on")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().IntVar(&routes, "routes", 0, "number of parallel skynet mux routes (0 or 1 = single route)")
+	RootCmd.Flags().IntVar(&minHops, "min-hops", 0, "force routes through at least this many intermediates (>=2 rejects direct paths)")
+	RootCmd.Flags().IntVar(&fwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override (>=2 forces multi-hop on forward direction only)")
+	RootCmd.Flags().IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse direction only)")
+	RootCmd.Flags().IntVar(&fwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
+	RootCmd.Flags().IntVar(&revMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (>0 sets reverse leg count; canonical download-heavy shape: --forward-mux 1 --reverse-mux N)")
+	RootCmd.Flags().BoolVar(&reconnect, "reconnect", false, "retry per-accept dial indefinitely instead of dropping local conn on remote-visor failure")
+	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between per-accept dial retries when --reconnect is set")
 }
 
 // RootCmd is the root command for skynet-client
@@ -80,6 +121,13 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.IntVar(&localPort, "local", 0, "local port")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.IntVar(&routes, "routes", 0, "number of parallel skynet mux routes")
+		fs.IntVar(&minHops, "min-hops", 0, "minimum hop count (>=2 rejects direct paths)")
+		fs.IntVar(&fwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override")
+		fs.IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override")
+		fs.IntVar(&fwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override")
+		fs.IntVar(&revMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override")
+		fs.BoolVar(&reconnect, "reconnect", false, "retry per-accept dial indefinitely on failure")
+		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between per-accept dial retries")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -93,80 +141,120 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	// Validate required flags
 	if srv == "" {
 		err := fmt.Errorf("--srv flag (remote server public key) is required")
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		return err
 	}
 
 	var remotePK cipher.PubKey
 	if err := remotePK.Set(srv); err != nil {
-		setAppError(appCl, fmt.Errorf("invalid server public key: %w", err))
+		appCl.SetErrorOrLog(fmt.Errorf("invalid server public key: %w", err))
 		return fmt.Errorf("invalid server public key: %w", err)
 	}
 
 	if remotePort <= 0 || remotePort > 65535 {
 		err := fmt.Errorf("--remote flag (remote port) must be 1-65535")
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		return err
 	}
 
 	if localPort <= 0 || localPort > 65535 {
 		err := fmt.Errorf("--local flag (local port) must be 1-65535")
-		setAppError(appCl, err)
+		appCl.SetErrorOrLog(err)
 		return err
 	}
 
-	appCl.Log().Infof("Connecting to %s:%d, forwarding to localhost:%d",
-		remotePK.Hex(), remotePort, localPort)
+	appCl.Log().Infof("Setting up accept loop on localhost:%d → %s:%d",
+		localPort, remotePK.Hex(), remotePort)
 
 	// Set routing port if specified
 	if appPort != 0 {
-		setAppPort(appCl, routing.Port(appPort))
+		appCl.SetAppPortOrLog(routing.Port(appPort))
 	}
 
-	setAppStatus(appCl, appserver.AppDetailedStatusStarting)
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
 
-	// Connect to remote skynet server
-	// Use SkyForwardingServerPort (47) which is the built-in visor service
-	// This avoids noise handshake race conditions that occur with app-layer connections
+	// Build a dial factory the client calls per-accept. The factory
+	// captures appCl + remote endpoint so each local connection gets
+	// its own independent remote tunnel — necessary because the
+	// skynet wire is raw bytes with no per-connection framing, so
+	// concurrent (or even tightly-sequenced) local conns sharing a
+	// single remoteConn would interleave their payloads. Using
+	// SkyForwardingServerPort (47, built-in visor service) avoids
+	// the noise-handshake race condition that hits app-layer dials.
 	connApp := appnet.Addr{
 		Net:    netType,
 		PubKey: remotePK,
 		Port:   routing.Port(skyenv.SkyForwardingServerPort),
 	}
 
+	// Build a single log line describing the dial shape (mux + min-hops
+	// + per-direction). Suppress unset fields so the common case stays
+	// short.
+	dialShape := fmt.Sprintf("%s on port %d", remotePK.Hex(), skyenv.SkyForwardingServerPort)
 	if routes > 1 {
-		appCl.Log().Infof("Dialing %s on port %d with %d parallel mux routes",
-			remotePK.Hex(), skyenv.SkyForwardingServerPort, routes)
-	} else {
-		appCl.Log().Infof("Dialing %s on port %d", remotePK.Hex(), skyenv.SkyForwardingServerPort)
+		dialShape += fmt.Sprintf(" with %d parallel mux routes", routes)
+	}
+	if minHops > 1 {
+		dialShape += fmt.Sprintf(" min-hops=%d", minHops)
+	}
+	if fwdMinHops > 1 {
+		dialShape += fmt.Sprintf(" forward-min-hops=%d", fwdMinHops)
+	}
+	if revMinHops > 1 {
+		dialShape += fmt.Sprintf(" reverse-min-hops=%d", revMinHops)
+	}
+	if fwdMux > 0 {
+		dialShape += fmt.Sprintf(" forward-mux=%d", fwdMux)
+	}
+	if revMux > 0 {
+		dialShape += fmt.Sprintf(" reverse-mux=%d", revMux)
+	}
+	appCl.Log().Infof("Per-accept dial shape: %s", dialShape)
+
+	rawDial := func() (net.Conn, error) {
+		if routes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
+			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux)
+		}
+		return appCl.Dial(connApp)
 	}
 
-	var (
-		conn net.Conn
-		err  error
-	)
-	if routes > 1 {
-		conn, err = appCl.DialWithOptions(connApp, routes)
-	} else {
-		conn, err = appCl.Dial(connApp)
-	}
-	if err != nil {
-		setAppError(appCl, fmt.Errorf("failed to connect to server: %w", err))
-		return fmt.Errorf("failed to connect to server: %w", err)
+	// --reconnect wraps rawDial in a retry loop bounded only by ctx.
+	// First attempt is immediate (no warmup pause); subsequent
+	// attempts wait --reconnect-delay seconds. pkg/skynet.Client
+	// invokes the factory per local TCP accept, so each accept that
+	// happens during a remote-visor outage keeps trying until the
+	// remote returns or the parent ctx is canceled (e.g. the local
+	// TCP closes because the browser tab gave up).
+	dialRemote := rawDial
+	if reconnect {
+		delay := time.Duration(reconnectDelay) * time.Second
+		dialRemote = func() (net.Conn, error) {
+			attempt := 0
+			for {
+				conn, err := rawDial()
+				if err == nil {
+					if attempt > 0 {
+						appCl.Log().Infof("Dial succeeded after %d retries", attempt)
+					}
+					return conn, nil
+				}
+				attempt++
+				appCl.Log().WithError(err).Warnf("Dial attempt %d failed; retrying in %v", attempt, delay)
+				select {
+				case <-ctx.Done():
+					return nil, fmt.Errorf("dial canceled: %w", ctx.Err())
+				case <-time.After(delay):
+				}
+			}
+		}
 	}
 
-	// Create client
-	client := skynet.NewClient(appCl.Log(), remotePK, remotePort, localPort)
+	// Create client with the dial factory; Serve binds the local
+	// listener and runs the accept loop.
+	client := skynet.NewClient(appCl.Log(), remotePK, remotePort, localPort, dialRemote)
 
-	// Connect (send request to server)
-	if err := client.Connect(conn); err != nil {
-		setAppError(appCl, err)
-		appCl.Log().WithError(err).Error("Failed to connect to remote server")
-		return err
-	}
-
-	appCl.Log().Info("Connected to remote skynet server")
-	setAppStatus(appCl, appserver.AppDetailedStatusRunning)
+	appCl.Log().Info("Skynet client ready — waiting for local connections")
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 
 	// Handle shutdown
 	termCh := make(chan os.Signal, 1)
@@ -180,7 +268,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		}
 	}()
 
-	defer setAppStatus(appCl, appserver.AppDetailedStatusStopped)
+	defer appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 
 	// Serve (accept local connections)
 	serveCh := make(chan error, 1)
@@ -203,27 +291,9 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	return nil
 }
 
-func setAppStatus(appCl *app.Client, status appserver.AppDetailedStatus) {
-	if err := appCl.SetDetailedStatus(string(status)); err != nil {
-		appCl.Log().Errorf("Failed to set status %v: %v", status, err)
-	}
-}
-
-func setAppError(appCl *app.Client, appErr error) {
-	if err := appCl.SetError(appErr.Error()); err != nil {
-		appCl.Log().Errorf("Failed to set error %v: %v", appErr, err)
-	}
-}
-
 // Execute executes root CLI command.
 func Execute() {
 	if err := RootCmd.Execute(); err != nil {
 		log.Fatal("Failed to execute command: ", err)
-	}
-}
-
-func setAppPort(appCl *app.Client, port routing.Port) {
-	if err := appCl.SetAppPort(port); err != nil {
-		appCl.Log().Errorf("Failed to set port %v: %v", port, err)
 	}
 }

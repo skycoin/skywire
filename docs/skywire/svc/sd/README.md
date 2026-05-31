@@ -103,30 +103,30 @@ skywire svc sd
 ## Flags
 
 ```
-  -a, --addr string                                                                 address to bind to
-                                                                                     (default ":9098")
-  -c, --config skywire cli config gen --sd -o /etc/skywire/service-discovery.json   path to JSON config file. Generate with skywire cli config gen --sd -o /etc/skywire/service-discovery.json.
-                                                                                    
-  -d, --dmsg-disc string                                                            url of dmsg-discovery
-                                                                                     (default "http://dmsgd.skywire.skycoin.com")
-      --dmsg-server-type string                                                     type of dmsg server on dmsghttp handler
-      --dmsgPort uint16                                                             dmsg port value
-                                                                                     (default 80)
-      --entry-timeout duration                                                      client service entry TTL (0 to disable)
-                                                                                     (default 5m0s)
-      --geoip string                                                                url of geoip service
-                                                                                     (default "http://ip.skycoin.com")
-      --keyfile string                                                              path to file containing secret key (auto-generated if missing)
-                                                                                    
-  -m, --metrics string                                                              address to bind metrics API to
-      --mode string                                                                 listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
-      --pprof string                                                                address to bind pprof debug server (e.g. localhost:6060)
-  -r, --redis string                                                                connections string for a redis store
-                                                                                     (default "redis://localhost:6379")
-  -s, --sk cipher.SecKey                                                            dmsg secret key
-                                                                                     (default 0000000000000000000000000000000000000000000000000000000000000000)
-  -t, --test                                                                        run in test mode and disable auth
-  -w, --whitelist-keys string                                                       list of whitelisted keys of network monitor used for deregistration
+  -a, --addr string               address to bind to
+                                   (default ":9098")
+  -c, --config string             path to JSON config file. Generate with: skywire cli config gen --sd -o /etc/skywire/service-discovery.json
+                                  
+  -d, --dmsg-disc string          url of dmsg-discovery
+                                   (default "http://dmsgd.skywire.skycoin.com")
+      --dmsg-port uint16          dmsg port value
+                                   (default 80)
+      --dmsg-server-type string   type of dmsg server on dmsghttp handler
+      --entry-timeout duration    client service entry TTL (0 to disable)
+                                   (default 5m0s)
+      --geoip string              url of geoip service
+                                   (default "http://ip.skycoin.com")
+      --keyfile string            path to file containing secret key (auto-generated if missing)
+                                  
+  -m, --metrics string            address to bind metrics API to
+      --mode string               listener mode: http|dmsg|dual (default dual if --sk, else http; env SKYWIRE_SVC_MODE overrides)
+      --pprof string              address to bind pprof debug server (e.g. localhost:6060)
+  -r, --redis string              connections string for a redis store
+                                   (default "redis://localhost:6379")
+  -s, --sk cipher.SecKey          dmsg secret key
+                                   (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -t, --test                      run in test mode and disable auth
+  -w, --whitelist-keys string     list of whitelisted keys of network monitor used for deregistration
 ```
 
 ## Global Flags

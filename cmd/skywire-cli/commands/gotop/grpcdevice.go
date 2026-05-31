@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xxxserxxx/gotop/v4/devices"
-
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
 )
 
 // grpcDevice is a gotop device extension that fetches stats from a remote visor via gRPC.

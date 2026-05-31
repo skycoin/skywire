@@ -58,7 +58,7 @@ var (
 	// STCP module
 	stcpC vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
-	pty vinit.Module
+	ptyModule vinit.Module
 	// Dmsg module
 	dmsgC vinit.Module
 	// Transportability checker ensures the visor can accept transports by creating a self-transport or exiting after 3 failed attempts to create one
@@ -165,11 +165,11 @@ func registerModules(logger *logging.MasterLogger) {
 	// dmsghttp_logserver mounts /pty on top of dmsgpty's CLI socket
 	// (or self-dialed dmsg when no CLI socket is configured), so it
 	// must run after pty has finished its setup.
-	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr, &pty)
+	dmsgHTTPLogServer = maker("dmsghttp_logserver", initDmsgHTTPLogServer, &dmsgC, &tr, &ptyModule)
 	systemSurvey = maker("system_survey", initSystemSurvey, &dmsgHTTPLogServer)
 	dmsgTrackers = maker("dmsg_trackers", initDmsgTrackers, &dmsgC)
 
-	pty = maker("dmsg_pty", initDmsgpty, &dmsgC)
+	ptyModule = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	embRouteSetup = maker("embedded_route_setup", initEmbeddedRouteSetup, &dmsgC)
 	embDmsgWeb = maker("embedded_dmsgweb", initEmbeddedDmsgWeb, &dmsgC)
 	embSkymailBridge = maker("embedded_skymail_bridge", initEmbeddedSkymailBridge, &dmsgC)
@@ -182,8 +182,17 @@ func registerModules(logger *logging.MasterLogger) {
 	// skynetweb depends on the router being up, unlike dmsgweb.
 	embSkynetWeb = maker("embedded_skynetweb", initEmbeddedSkynetWeb, &rt)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
-	cli = maker("cli", initCLI)
-	hvs = maker("hypervisors", initHypervisors, &dmsgC)
+	// cli depends on tr so v.tpM is set when initCLI wires up the
+	// shared VStreamMux for transport-RPC (registered as the manager's
+	// VisorRPCPacket handler). Without this dep, initCLI could run
+	// before initTransport, the mux would be skipped, and every
+	// TransportRPCCall would error with "transport RPC not initialized".
+	cli = maker("cli", initCLI, &tr)
+	// hvs depends on tr for the same reason: ServeRPCClient takes
+	// v.tpM to gate its skynet-preferred dial path. Without this dep
+	// the dial would always fall through to dmsg even when a fast
+	// transport exists.
+	hvs = maker("hypervisors", initHypervisors, &dmsgC, &tr)
 	ut = maker("uptime_tracker", initUptimeTracker, &dmsgHTTP)
 	pv = maker("public_autoconnect", initPublicAutoconnect, &tr, &disc)
 	trs = maker("transport_setup", initTransportSetup, &dmsgC, &tr)
@@ -219,7 +228,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// shape as pairingMod, same dmsgC dependency, separate bbolt
 	// store. See init_group.go.
 	groupingMod = maker("grouping", initGrouping, &dmsgC)
-	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &pty,
+	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
 		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &lp, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
 
 	// Hypervisor includes the full visor module tree so all services

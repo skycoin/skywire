@@ -51,11 +51,21 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	var err error
 	var conn net.Conn
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Caller-supplied setup timeout — falls back to the legacy 30s
+	// ceiling when conf.SetupTimeout is zero. mux-bw passes its
+	// per-route setup-timeout flag here so multi-hop routes (4+
+	// intermediates) can complete the saveRouteGroupRules retries
+	// that routinely exceed 30s.
+	setupTimeout := 30 * time.Second
+	if conf.SetupTimeout > 0 {
+		setupTimeout = conf.SetupTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), setupTimeout)
 	defer cancel()
 	var r = netutil.NewRetrier(v.log, 2*time.Second, netutil.DefaultMaxBackoff, 1, 2)
 	err = r.Do(ctx, func() error {
-		if len(conf.ForwardHops) > 0 && len(conf.ReverseHops) > 0 {
+		switch {
+		case len(conf.ForwardHops) > 0 && len(conf.ReverseHops) > 0:
 			// Use explicit route (skips route calculation)
 			fwdHops := make([]appnet.RouteHopInfo, len(conf.ForwardHops))
 			for i, h := range conf.ForwardHops {
@@ -66,10 +76,17 @@ func (v *Visor) DialPing(conf PingConfig) error {
 				revHops[i] = appnet.RouteHopInfo{TpID: h.TpID, From: h.From, To: h.To, TpType: h.TpType}
 			}
 			conn, err = appnet.PingContextWithRoute(ctx, conf.PK, addr, fwdHops, revHops)
-		} else if conf.TransportID != "" {
+		case conf.TransportID != "":
 			// Use specific transport (skips route calculation)
 			conn, err = appnet.PingContextWithTransport(ctx, conf.PK, addr, conf.TransportID)
-		} else {
+		case conf.MinHops > 0:
+			// Constrain the route-finder to multi-hop paths only.
+			// This is what `mux-bw --min-hops N` rides — without
+			// this branch the router would short-circuit to the
+			// direct transport whenever one existed, making the
+			// flag a no-op.
+			conn, err = appnet.PingContextWithMinHops(ctx, conf.PK, addr, conf.MinHops)
+		default:
 			conn, err = appnet.PingContext(ctx, conf.PK, addr)
 		}
 		return err
@@ -87,7 +104,7 @@ func (v *Visor) DialPing(conf PingConfig) error {
 	}
 
 	v.ping.mu.Lock()
-	v.ping.conns[conf.PK] = ping{
+	v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}] = ping{
 		conn:     conn,
 		hops:     hops,
 		hopInfos: hopInfos,
@@ -98,13 +115,24 @@ func (v *Visor) DialPing(conf PingConfig) error {
 
 // Ping implements API.
 // Measures round-trip time by sending ping data and waiting for an echo response.
+//
+// The ping.mu lock protects v.ping.conns (a map) and is released
+// before any wire I/O so concurrent Ping/PingOnceWithEcho calls on
+// DIFFERENT PingRouteRefs (the mux-bw N-routes scenario) don't
+// serialize through one global mutex. The contract for callers
+// using the same RouteRef from multiple goroutines remains
+// "serialize externally" — the conn itself is a net.Conn and the
+// ping protocol's size→ack→data→echo handshake assumes a single
+// writer/reader pair per call. StopPing concurrent with this
+// method's wire I/O will close the conn; the resulting Read/Write
+// errors are caller-visible (and surfaced via MuxRouteFailure
+// for mux-bw — see #2756) rather than indefinite-block.
 func (v *Visor) Ping(conf PingConfig) ([]time.Duration, error) {
 	v.ping.mu.Lock()
-	defer v.ping.mu.Unlock()
-
-	pingEntry, ok := v.ping.conns[conf.PK]
+	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
+	v.ping.mu.Unlock()
 	if !ok {
-		return nil, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+		return nil, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
 
 	return doPingRoundTrips(pingEntry.conn, conf)
@@ -164,13 +192,15 @@ func doPingRoundTrips(conn net.Conn, conf PingConfig) ([]time.Duration, error) {
 
 // PingOnce implements API.
 // Performs a single ping and returns the round-trip time.
+//
+// See Ping for the mutex-scoping rationale — same pattern: hold
+// ping.mu only for the map lookup, do wire I/O without the lock.
 func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 	v.ping.mu.Lock()
-	defer v.ping.mu.Unlock()
-
-	pingEntry, ok := v.ping.conns[conf.PK]
+	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
+	v.ping.mu.Unlock()
 	if !ok {
-		return 0, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+		return 0, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
 
 	data := make([]byte, conf.PcktSize*1024)
@@ -227,13 +257,32 @@ func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 // PingOnceWithEcho performs a single ping with optional full echo.
 // Returns bytes sent, bytes received, latency, and error.
 // If echoFull is true, server echoes full payload (for bandwidth testing).
+//
+// HOT PATH for mux-bw bandwidth measurements. Previously held
+// ping.mu for the entire wire roundtrip (~287ms at 2-hop with
+// 32 KB payloads), which globally serialized all N parallel pump
+// goroutines through one mutex — bytes-aggregate-across-N didn't
+// scale and per-route avg stayed pinned at ~351 kbps even though
+// peak per-call could hit ~1.7 Mbps. After PR #2761, the lock is
+// held only for the conns-map lookup; wire I/O on the chosen
+// conn runs unlocked, letting N pump goroutines on DIFFERENT
+// PingRouteRefs run truly in parallel. See Ping doc comment for
+// the conn-lifecycle contract.
+//
+// The entire call is bounded by a single 10s conn.SetDeadline at
+// entry (cleared on return). Previously each of the 4 wire steps
+// (write size, read ack, write ping, read echo) had its own 30s
+// deadline, so a single stuck step could hang up to 30s — racing
+// the mux-bw pumpCtx's default 30s duration and causing the pump
+// to suppress the resulting MuxRouteFailure event (task #131).
+// 10s gives the pump 3+ failed iterations within its window so a
+// stuck-route error reliably reaches the consumer.
 func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, bytesReceived uint64, latency time.Duration, err error) {
 	v.ping.mu.Lock()
-	defer v.ping.mu.Unlock()
-
-	pingEntry, ok := v.ping.conns[conf.PK]
+	pingEntry, ok := v.ping.conns[PingRouteRef{PK: conf.PK, Index: conf.RouteIndex}]
+	v.ping.mu.Unlock()
 	if !ok {
-		return 0, 0, 0, fmt.Errorf("no ping connection for %s, call DialPing first", conf.PK)
+		return 0, 0, 0, fmt.Errorf("no ping connection for %s#%d, call DialPing first", conf.PK, conf.RouteIndex)
 	}
 
 	data := make([]byte, conf.PcktSize*1024)
@@ -256,78 +305,104 @@ func (v *Visor) PingOnceWithEcho(conf PingConfig, echoFull bool) (bytesSent, byt
 		return 0, 0, 0, err
 	}
 
+	// Cap the entire call at 10s. With separate per-step 30s
+	// deadlines, a stuck Write could hang the full 30s — racing
+	// the mux-bw pumpCtx (default 30s duration) so that the
+	// pump's `if ctx.Err() == nil` guard suppressed the
+	// MuxRouteFailure event (task #131). Capping at 10s gives the
+	// pump 3+ iterations within its 30s budget to surface a real
+	// error before pumpCtx expires.
+	conn.SetDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck,gosec
+	defer conn.SetDeadline(time.Time{})                //nolint:errcheck,gosec
+
 	start := time.Now()
 
-	// Send size message
 	if _, err = conn.Write(size); err != nil {
 		return 0, 0, 0, fmt.Errorf("write size: %w", err)
 	}
 	bytesSent += uint64(len(size))
 
-	// Read "ok" ack with timeout
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	buf := make([]byte, 32*1024)
 	n, err := conn.Read(buf)
 	if err != nil {
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 		return bytesSent, bytesReceived, 0, fmt.Errorf("read ack: %w", err)
 	}
 	bytesReceived += uint64(n) //nolint:gosec
 
-	// Send ping data
 	if _, err = conn.Write(ping); err != nil {
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 		return bytesSent, bytesReceived, 0, fmt.Errorf("write ping: %w", err)
 	}
 	bytesSent += uint64(len(ping))
 
-	// Read echo response with timeout
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
 	if echoFull {
-		// Read full payload echo
 		var received int
 		for received < len(ping) {
 			n, err = conn.Read(buf)
 			if err != nil {
-				conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 				return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
 			}
 			received += n
 			bytesReceived += uint64(n) //nolint:gosec
 		}
 	} else {
-		// Read simple "pong" response
 		n, err = conn.Read(buf)
 		if err != nil {
-			conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 			return bytesSent, bytesReceived, 0, fmt.Errorf("read echo: %w", err)
 		}
 		bytesReceived += uint64(n) //nolint:gosec
 	}
-	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 
 	return bytesSent, bytesReceived, time.Since(start), nil
 }
 
 // StopPing implements API.
+//
+// Tears down ALL routes to the given peer (every PingRouteRef whose
+// PK matches). Callers that want to tear down a single route in a
+// mux-set must use StopPingRoute(ref) instead. The legacy semantics
+// (single PK = single connection) are preserved for the common
+// case where no aux routes exist.
 func (v *Visor) StopPing(pk cipher.PubKey) error {
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	pingEntry, ok := v.ping.conns[pk]
-	if !ok || pingEntry.conn == nil {
-		// Already stopped or never started
-		delete(v.ping.conns, pk)
+	var firstErr error
+	for ref, entry := range v.ping.conns {
+		if ref.PK != pk {
+			continue
+		}
+		if entry.conn != nil {
+			if err := entry.conn.Close(); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+		delete(v.ping.conns, ref)
+	}
+	return firstErr
+}
+
+// StopPingRoute closes a single route in a mux-set without
+// touching the other parallel routes to the same peer. Used by
+// `cli visor ping mux-bw` when one of N parallel routes fails
+// mid-pump and we want to keep the others alive, and by future
+// mux-aware proxies that want to drop one leg of a multi-route
+// session.
+//
+// Returns nil if the ref doesn't match any known conn (idempotent —
+// safe to call from cleanup paths that aren't sure whether the route
+// was ever established).
+func (v *Visor) StopPingRoute(ref PingRouteRef) error {
+	v.ping.mu.Lock()
+	defer v.ping.mu.Unlock()
+
+	entry, ok := v.ping.conns[ref]
+	if !ok || entry.conn == nil {
+		delete(v.ping.conns, ref)
 		return nil
 	}
-	err := pingEntry.conn.Close()
-	if err != nil {
-		// Still delete the entry even if close fails
-		delete(v.ping.conns, pk)
-		return err
-	}
-	delete(v.ping.conns, pk)
-	return nil
+	err := entry.conn.Close()
+	delete(v.ping.conns, ref)
+	return err
 }
 
 // StopAllPings stops all active ping connections and cleans up their routes.
@@ -339,38 +414,54 @@ func (v *Visor) StopAllPings() (int, []string, error) {
 	var errs []string
 	count := 0
 
-	for pk, pingEntry := range v.ping.conns {
+	for ref, pingEntry := range v.ping.conns {
 		if pingEntry.conn != nil {
 			if err := pingEntry.conn.Close(); err != nil {
-				errs = append(errs, fmt.Sprintf("failed to close ping to %s: %v", pk, err))
+				errs = append(errs, fmt.Sprintf("failed to close ping to %s: %v", ref, err))
 			}
 		}
-		delete(v.ping.conns, pk)
+		delete(v.ping.conns, ref)
 		count++
 	}
 
 	return count, errs, nil
 }
 
-// GetPingRoute returns the route hops for an established ping connection.
-// Returns nil if no ping connection exists for the given public key.
+// GetPingRoute returns the route hops for the primary ping
+// connection to a peer (RouteIndex 0). For aux routes in a mux-set
+// use GetPingRouteAt(ref).
 func (v *Visor) GetPingRoute(pk cipher.PubKey) []cipher.PubKey {
+	return v.GetPingRouteAt(PingRoutePrimary(pk))
+}
+
+// GetPingRouteAt returns the route hops for a specific ping route.
+func (v *Visor) GetPingRouteAt(ref PingRouteRef) []cipher.PubKey {
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	if pingEntry, ok := v.ping.conns[pk]; ok {
+	if pingEntry, ok := v.ping.conns[ref]; ok {
 		return pingEntry.hops
 	}
 	return nil
 }
 
-// GetPingRouteDetails returns detailed route information for a ping connection,
-// including transport IDs and types for each hop.
+// GetPingRouteDetails returns detailed route information for the
+// PRIMARY ping connection to a peer (RouteIndex 0), including
+// transport IDs and types for each hop. For aux routes use
+// GetPingRouteDetailsAt(ref).
 func (v *Visor) GetPingRouteDetails(pk cipher.PubKey) []router.RouteHopInfo {
+	return v.GetPingRouteDetailsAt(PingRoutePrimary(pk))
+}
+
+// GetPingRouteDetailsAt returns detailed route information for a
+// specific ping route. Used by mux-aware callers (mux-bw) to surface
+// the hops of each parallel route — the primary-keyed accessor
+// can't distinguish among them.
+func (v *Visor) GetPingRouteDetailsAt(ref PingRouteRef) []router.RouteHopInfo {
 	v.ping.mu.Lock()
 	defer v.ping.mu.Unlock()
 
-	if pingEntry, ok := v.ping.conns[pk]; ok {
+	if pingEntry, ok := v.ping.conns[ref]; ok {
 		return pingEntry.hopInfos
 	}
 	return nil
@@ -395,8 +486,11 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 		LocalRoute: conf.LocalRoute,
 	}
 
+	// BandwidthTest is a single-route caller; use the primary slot.
+	primary := PingRoutePrimary(conf.PK)
+
 	v.ping.mu.Lock()
-	_, exists := v.ping.conns[conf.PK]
+	_, exists := v.ping.conns[primary]
 	v.ping.mu.Unlock()
 
 	if !exists {
@@ -406,7 +500,7 @@ func (v *Visor) BandwidthTest(conf BandwidthTestConfig) (BandwidthResult, error)
 	}
 
 	v.ping.mu.Lock()
-	pingEntry, ok := v.ping.conns[conf.PK]
+	pingEntry, ok := v.ping.conns[primary]
 	if !ok {
 		v.ping.mu.Unlock()
 		return BandwidthResult{}, fmt.Errorf("no ping connection for %s", conf.PK)

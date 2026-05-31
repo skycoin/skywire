@@ -15,8 +15,8 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -54,7 +54,7 @@ type API interface {
 	ClearSkychatPassword(oldPassword string) error
 	SkychatLocalAddr() (string, error)
 	RemoteVisors() ([]string, error)
-	DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error)
+	DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error)
 	GetLogRotationInterval() (visorconfig.Duration, error)
 	SetLogRotationInterval(visorconfig.Duration) error
 	IsDMSGClientReady() (bool, error)
@@ -74,6 +74,12 @@ type API interface {
 	Apps() ([]*appserver.AppState, error)
 	StartApp(appName string) error
 	StartAppWithMode(appName, launcherMode string) error
+	// SetAppRoutingPolicy installs (or clears, when path is "" /
+	// "none") a per-app routing policy. Backend is dispatched by
+	// file extension: "@/path.star" uses Starlark, "@/path.wasm"
+	// uses WASM. The swap is live — the running app picks up the
+	// new policy on its next dial without a restart.
+	SetAppRoutingPolicy(appName, path string) error
 	AddApp(appName, binaryName string) error
 	DeleteApp(appName string) error
 	RegisterApp(procConf appcommon.ProcConfig) (appcommon.ProcKey, error)
@@ -158,6 +164,12 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	// RoutingPolicies returns a snapshot of the currently-installed
+	// routing-policy state: the visor-wide default plus any per-app
+	// overrides. Empty struct when no policies are configured.
+	// Hypervisor UI consumes this to display the policy panel in
+	// the routing tab.
+	RoutingPolicies() (*RoutingPoliciesSummary, error)
 	// RouteGroupMuxInfo returns per-mux-leg byte/packet/latency
 	// counters for every active route group tagged with the named
 	// app (skysocks-client, vpn-client, etc.). Empty slice when
@@ -298,6 +310,9 @@ type API interface {
 	DmsgReconnect() (int, error)
 	DmsgSetMinSessions(n int) error
 	AddHypervisor(pk cipher.PubKey) error
+	RemoveHypervisor(pk cipher.PubKey) error
+	RemoveAllHypervisors() (int, error)
+	SetHypervisorPassword(oldPassword, newPassword string) error
 	CheckAREntry(pk string) ([]string, error)
 	ARSelfInfo() (*ARSelfRegistration, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
@@ -447,16 +462,29 @@ type Overview struct {
 	Longitude           float64               `json:"longitude,omitempty"`
 	Hypervisors         []cipher.PubKey       `json:"hypervisors"`
 	ConnectedHypervisor []cipher.PubKey       `json:"connected_hypervisor"`
+	// Hostname is the operating-system hostname the visor process
+	// sees at the time of the Overview call. Best-effort:
+	// os.Hostname() failures (sandbox / containerized environments
+	// missing the syscall) yield an empty string rather than
+	// erroring out the whole Overview. Surfaced to operators in the
+	// hypervisor UI as the default label fallback when no explicit
+	// label is set, and shown in `cli visor info`.
+	Hostname string `json:"hostname,omitempty"`
 }
 
 // Summary provides detailed info including overview and health of the visor.
 type Summary struct {
-	Overview             *Overview                      `json:"overview"`
-	Health               *HealthInfo                    `json:"health"`
-	Uptime               float64                        `json:"uptime"`
-	Routes               []routingRuleResp              `json:"routes"`
-	RouteGroups          []RouteGroupInfo               `json:"route_groups,omitempty"`
-	IsHypervisor         bool                           `json:"is_hypervisor,omitempty"`
+	Overview     *Overview         `json:"overview"`
+	Health       *HealthInfo       `json:"health"`
+	Uptime       float64           `json:"uptime"`
+	Routes       []routingRuleResp `json:"routes"`
+	RouteGroups  []RouteGroupInfo  `json:"route_groups,omitempty"`
+	IsHypervisor bool              `json:"is_hypervisor,omitempty"`
+	// HypervisorAddr is the host:port the hypervisor UI is bound to
+	// when IsHypervisor=true. Empty when this visor isn't hosting a
+	// hypervisor (or when v.conf.Hypervisor is nil). Sourced from
+	// v.conf.Hypervisor.HTTPAddr.
+	HypervisorAddr       string                         `json:"hypervisor_addr,omitempty"`
 	DmsgStats            *dmsgtracker.DmsgClientSummary `json:"dmsg_stats"`
 	ConnectedDmsgServers []string                       `json:"connected_dmsg_servers"` // Deprecated: use DMSGServers instead
 	DMSGServers          []DMSGServerInfo               `json:"dmsg_servers"`           // Connected DMSG servers with latencies
@@ -494,13 +522,26 @@ type HealthInfo struct {
 
 // DmsgPtyExecArgs is the request shape for API.DmsgPtyExec.
 // RemotePK identifies the target visor's dmsgpty host; RemotePort
-// defaults to dmsgpty.DefaultPort (22) when zero. Req carries the
+// defaults to pty.DefaultPort (22) when zero. Req carries the
 // command, arguments, optional environment overrides, optional stdin,
-// and per-call timeout — see dmsgpty.CommandExecReq.
+// and per-call timeout — see pty.CommandExecReq.
+//
+// Scheme overrides the dialer choice. The visor's dmsgpty Host is
+// wired with a MultiDialer that tries skynet first (transport-aware,
+// rides existing transports for low latency) and falls back to dmsg
+// on miss. That ordering breaks down when skynet's dial blocks past
+// the caller's ctx without honoring it — dmsg never gets tried and
+// the whole exec hangs. Operators who know the peer has a working
+// dmsg session can pass Scheme="dmsg" to skip skynet entirely. Empty
+// keeps the default MultiDialer behavior.
 type DmsgPtyExecArgs struct {
 	RemotePK   cipher.PubKey
 	RemotePort uint16
-	Req        dmsgpty.CommandExecReq
+	Req        pty.CommandExecReq
+	// Scheme: "" (default — MultiDialer chain), "dmsg" (force dmsg
+	// only), or "skynet" (force skynet only). Unknown values
+	// return a clear error rather than silently falling back.
+	Scheme string
 }
 
 // UptimeHistoryArgs is the request shape for API.UptimeHistory. All
@@ -598,6 +639,31 @@ type PingConfig struct {
 	TransportID string         // Optional: use specific transport (skips route calculation)
 	ForwardHops []RouteHopInfo // Optional: explicit forward route (skips route calculation)
 	ReverseHops []RouteHopInfo // Optional: explicit reverse route (skips route calculation)
+	// RouteIndex identifies which of multiple parallel routes to the
+	// same peer this PingConfig refers to. Zero (the default) means
+	// "primary / single route" and preserves all legacy single-route
+	// behavior. Non-zero values are used by mux-aware callers
+	// (`cli visor ping mux-bw`) to dial multiple routes to the same
+	// target without their conns trampling each other in the visor's
+	// per-route conn map. See PingRouteRef in pkg/visor/ping.go.
+	RouteIndex int
+	// MinHops, when > 0, forces the route-finder to skip paths with
+	// fewer than this many hops on THIS dial — overrides the visor-
+	// global routing.min_hops config for the duration of the call.
+	// Plumbed straight into router.DialOptions.MinHops. Used by
+	// `cli visor ping mux-bw --min-hops N` to verify the operator's
+	// "mux via intermediates > direct" hypothesis: without it, the
+	// router's direct-transport fast path would short-circuit every
+	// dial to use the direct stcpr whenever one existed. 0 = inherit
+	// visor-global setting.
+	MinHops int
+	// SetupTimeout, when > 0, overrides DialPing's hardcoded 30s
+	// dial timeout. Multi-hop route setup through 4+ intermediates
+	// can take 30-120s (route-finder + setup-node round trips +
+	// saveRouteGroupRules retries), exceeding the legacy 30s
+	// ceiling. mux-bw passes its cfg.SetupTimeout here. 0 falls
+	// back to the existing 30s default.
+	SetupTimeout time.Duration
 }
 
 // TestResult type of test result

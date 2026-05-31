@@ -29,7 +29,7 @@ Response Examples:
 GET /health
 {
       "build_info": {
-        "commit": "abc1234",
+        "commit": "<commit>",
         "date": "<build-date>",
         "version": "<version>"
       },

@@ -2,29 +2,37 @@
 
 [← skywire cli visor ping](../README.md)
 
-Ping visors via transport routes with a scrollable terminal UI.
+Walk the visor's neighborhood breadth-first, pinging each
+discovered visor and rendering the results as a scrollable tree.
 
-This command uses a Bubble Tea-based TUI that lets you scroll through
-results while the ping test runs.
+The BFS runs server-side via the StreamPingTree gRPC RPC (see
+#2732 / pkg/visor/rpcgrpc/server_ping_tree.go); this command is a
+thin Bubble Tea TUI on top of that stream.
 
-Controls:
-  ↑/k, ↓/j     Scroll up/down one line
-  PgUp/PgDn    Scroll up/down one page
-  Home/End     Go to top/bottom
-  q/Ctrl+C     Quit
+The non-interactive sibling 'cli visor ping tree-stream' emits the
+same events as NDJSON on stdout — use that one for CI, coding-agent
+automation, or piping into the treeprobe harness (pkg/util/treeprobe).
 
-The display updates live while preserving your scroll position.
+Examples:
 
-Level vs hops:
-  --max-level N    cap the BFS depth — ping levels 1, 2, ..., N
-                   (0 = unlimited until no new visors discoverable)
-  --hops N         ping ONLY the visors exactly N hops away from us
-                   (use with --max-level >= N so discovery reaches them)
-  default of both means "ping every level reachable through direct
-  transports and their neighbors, until expansion exhausts."
+  # Walk all reachable levels:
+  skywire cli visor ping tree
 
-Most operators want --max-level. --hops is for targeted measurement
-when characterizing latency-by-hop-count.
+  # Only level 1 (direct neighbors), 5 ping samples each:
+  skywire cli visor ping tree --max-level 1 --tries 5
+
+  # Specific hop count for latency-by-hops measurement:
+  skywire cli visor ping tree --hops 2 --max-level 2 --tries 5
+
+  # Discovery-only, no pings (visualize the reachable graph):
+  skywire cli visor ping tree --dry-run --max-level 2
+
+Controls inside the TUI:
+  ↑/k, ↓/j     scroll one line
+  PgUp/PgDn    page up/down
+  Home/End     top/bottom
+  a            toggle auto-scroll
+  q/Ctrl+C     quit
 
 ## Usage
 
@@ -32,80 +40,33 @@ when characterizing latency-by-hop-count.
 skywire cli visor ping tree
 ```
 
-## Examples
-
-```
-# Ping every visor reachable via direct transports (level 1 only),
-  # with 5 latency samples per transport and only "online" peers.
-  skywire cli visor ping tree2 --max-level 1 --tries 5 --online
-
-  # Discovery + ping out to 3 hops; useful for the "latency as a
-  # function of hop count" measurement Synth asked about.
-  skywire cli visor ping tree2 --max-level 3 --tries 10 --online \
-    -O ping-3hop-$(date +%F).json
-
-  # Show ONLY what would be pinged (the BFS discovery tree), without
-  # firing any actual pings. Quick way to inventory your reachable
-  # network before committing to a long run.
-  skywire cli visor ping tree2 --max-level 3 --dry-run
-
-  # Resume a long run that was interrupted (re-uses the same -O file).
-  skywire cli visor ping tree2 --max-level 3 --tries 10 --resume \
-    -O ping-3hop-$(date +%F).json
-
-  # DMSG-only measurement (skip route-based ping; just probe DMSG
-  # server reachability). Useful for diagnosing route-setup-node
-  # issues separately from transport-level connectivity.
-  skywire cli visor ping tree2 --dmsg-only --online --tries 10
-
-  # Filter to visors running v1.3.51 or newer (skips old visors
-  # whose latency-publish path is broken).
-  skywire cli visor ping tree2 --max-level 2 --version v1.3.51
-```
-
 ## Flags
 
 ```
-  -m, --cfa int                  update cache files if older than n minutes (default 5)
-      --cfd string               DMSG clients cache file location (default "/tmp/dmsg-clients.json")
-      --cft string               TPD cache file location (default "/tmp/tpd.json")
-      --cfu string               UT cache file location (default "/tmp/ut.json")
-  -c, --concurrency int          max concurrent ping operations (default 2)
-      --continuous               run continuously, re-checking trees
-      --dmsg                     pre-check visor reachability over DMSG before route ping
-      --dmsg-all-servers         ping via all DMSG servers (not just first success)
-      --dmsg-only                ping via DMSG servers instead of routes
-      --dmsgurl string           DMSG discovery URL (default "http://dmsgd.skywire.skycoin.com")
-      --dry-run                  show tree structure without pinging
-      --hops uint                exact hop level to ping (0 = all levels)
-      --max-age duration         re-ping entries older than this duration
-  -l, --max-level int            maximum hop level (0 = unlimited)
-  -g, --online                   only ping visors marked online in UT
-  -O, --output string            output base filename (writes .json file)
-      --recheck-age duration     re-ping entries older than this in continuous mode (default 24h0m0s)
-      --remake-remote-tp         remake transport on remote side after failure (retry once)
-      --remake-tp                remake local transport after removing failed one (retry once)
-      --remove-remote-tp         request remote visor to remove transport if route ping fails
-      --remove-tp                remove local transport if route ping fails
-  -R, --resume                   resume from output file if it exists
-      --retries int              retry attempts if ping fails (default 1)
-      --setup-timeout duration   timeout for route setup phase (default 30s)
+  -c, --concurrency int          max in-flight pings per BFS level (0 = server default, currently 16)
+      --dmsg-only                force the ping path to ride DMSG instead of the skywire router
+      --dmsg-precheck            probe DMSG reachability before each route ping; discards unreachable visors early
+      --dry-run                  discovery only; no PingResult events fire (every entry marked latency_source=skipped)
+      --hops int                 ping ONLY entries at exactly N hops; other levels are discovered but not pinged
+  -l, --max-level int            maximum BFS depth (0 = unlimited until expansion exhausts)
+  -g, --online                   only ping visors marked online in the uptime tracker
+  -O, --output string            append per-event NDJSON to FILE as the run progresses (for offline analysis)
+      --retries int              retry attempts on failed pings
+      --setup-timeout duration   per-transport route-setup timeout (default 30s)
   -s, --size int                 packet size in KB (default 2)
-      --testenv                  use test-deployment service URLs (override SKYWIRETEST)
-  -o, --timeout duration         timeout per ping attempt (default 30s)
-      --tpdurl string            transport discovery URL (default "http://tpd.skywire.skycoin.com")
-      --tps                      verify/update transports via TPS (default: true) (default true)
-  -t, --tries int                ping attempts per transport (default 1)
-      --uturl string             uptime tracker URL (default "http://ut.skywire.skycoin.com")
-  -v, --version string           filter by minimum version
+  -o, --timeout duration         per-ping timeout (after route setup) (default 30s)
+  -t, --tries int                per-transport ping count; PingResult carries aggregated stats (default 1)
+      --use-transport-latency    at level 1: skip the live ping when the transport already has a smoothed RTT in TransportSummary.LatencyMS (default true)
+  -v, --version string           filter by minimum visor version (semver)
 ```
 
 ## Global Flags
 
 ```
-  -h, --help         show help menu
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -h, --help              show help menu
+      --json              print output as JSON
+      --rpc string        RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

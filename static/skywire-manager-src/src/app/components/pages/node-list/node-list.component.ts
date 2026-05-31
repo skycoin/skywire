@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
+import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Observable, Subscription, catchError, mergeMap, of, timer } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -52,6 +53,26 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   configVersionSortData = new SortingColumn(['configVersion'], 'nodes.config-version', SortingModes.Text);
   dmsgServerSortData = new SortingColumn(['dmsgServerPk'], 'nodes.dmsg-server', SortingModes.Text, ['dmsgServerPk_label']);
   pingSortData = new SortingColumn(['roundTripPing'], 'nodes.ping', SortingModes.Number);
+  // New sort columns — text sorts use country code / reward address
+  // (no additional data fetch); count sorts use pre-computed counts
+  // populated by annotateForSort() below before handing off to the
+  // filterer/sorter pipeline.
+  ipLocationSortData = new SortingColumn(['countryCode'], 'nodes.ip-location', SortingModes.Text);
+  transportsCountSortData = new SortingColumn(['transportsCount'], 'nodes.transports', SortingModes.Number);
+  servicesCountSortData = new SortingColumn(['servicesCount'], 'nodes.services', SortingModes.Number);
+  rewardAddressSortData = new SortingColumn(['rewardsAddress'], 'nodes.reward', SortingModes.Text);
+
+  /**
+   * Persistent user-defined ordering. When non-empty, applied after
+   * the sorter+filterer so user drag-drop wins over the column sort
+   * for the rows the user explicitly arranged. Rows not in the saved
+   * order keep the sorter's relative order, appended after the
+   * explicit rows. Cleared per-column when the user clicks a column
+   * header to sort. Persisted in localStorage under
+   * customNodeOrderKey so the order survives reloads.
+   */
+  customNodeOrder: string[] = [];
+  private readonly customNodeOrderKey = 'nl-custom-order';
 
   private dataSortedSubscription: Subscription;
   private dataFiltererSubscription: Subscription;
@@ -85,13 +106,27 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   currentPageInUrl = 1;
 
   // Per-hypervisor sections from the tree endpoint (#2633). The
-  // template currently renders the flat `allNodes` table; sections
-  // is consumed by the header (to show local hypervisor PK) and is
-  // available for the per-section table refactor (#2640).
+  // flat main table renders sections[0] (local) + every remote
+  // visor; sub-sections (sections[1..]) get their own header +
+  // compact node list below the main table so operators see each
+  // remote hypervisor's directly-connected visors at a glance.
   sections: NodeSection[] = [];
   // Local hypervisor PK — convenience accessor for the title bar
   // (derived from sections[0]). Empty until first data arrives.
   localHypervisorPk = '';
+
+  /**
+   * Sub-hypervisor sections (everything beyond the local one).
+   * Returns sections[1..] so the template can iterate without
+   * needing per-row $index checks. Empty until the tree response
+   * lands or when only the local section exists (no remote
+   * hypervisors connected). Filtering out `subError` sections is
+   * intentionally skipped here — even an unreachable sub-hypervisor
+   * is informative to display, with its error rendered inline.
+   */
+  get subSections(): NodeSection[] {
+    return this.sections.length > 1 ? this.sections.slice(1) : [];
+  }
 
   // Array with the properties of the columns that can be used for filtering the data.
   filterProperties: FilterProperties[] = [
@@ -191,9 +226,13 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.hypervisorSortData,
       this.stateSortData,
       this.labelSortData,
+      this.ipLocationSortData,
+      this.transportsCountSortData,
       this.keySortData,
       this.versionSortData,
       this.configVersionSortData,
+      this.servicesCountSortData,
+      this.rewardAddressSortData,
     ];
     const listId = this.showRewardsInfo ? 'rl' : this.nodesListId;
     this.dataSorter = new DataSorter(
@@ -274,6 +313,22 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   ngOnInit() {
+    // Restore the user's drag-drop custom order from localStorage so
+    // a reload preserves what they explicitly arranged. Empty / parse
+    // failure → keep customNodeOrder as the empty default (pure
+    // column-sort behavior).
+    const savedOrder = this.getLocalValue(this.customNodeOrderKey);
+    if (savedOrder && savedOrder.value) {
+      try {
+        const parsed = JSON.parse(savedOrder.value);
+        if (Array.isArray(parsed) && parsed.every(p => typeof p === 'string')) {
+          this.customNodeOrder = parsed;
+        }
+      } catch {
+        // Ignore parse failures — leaves customNodeOrder empty.
+      }
+    }
+
     // Load the data.
     this.startGettingData(true);
 
@@ -504,6 +559,21 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
 
     // Needed to prevent racing conditions.
     if (this.filteredNodes) {
+      // Annotate before pagination so the sort columns referencing
+      // transportsCount / servicesCount have values to sort by.
+      // Annotation is per-node and idempotent — safe to re-run on
+      // every refresh.
+      this.filteredNodes.forEach(n => this.annotateForSort(n));
+
+      // If the user has dragged rows into a custom order, apply that
+      // ordering first (over the column-sorter's output). Rows not in
+      // the saved order keep the sorter's relative order, appended
+      // after the explicit rows. Empty customNodeOrder = pure column
+      // sort (the historical behavior).
+      if (this.customNodeOrder.length > 0) {
+        this.filteredNodes = this.applyCustomOrder(this.filteredNodes);
+      }
+
       // Calculate the pagination values.
       const maxElements = AppConfig.maxFullListElements;
       this.numberOfPages = Math.ceil(this.filteredNodes.length / maxElements);
@@ -522,6 +592,106 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     if (this.nodesToShow) {
       this.dataSource = this.nodesToShow;
     }
+  }
+
+  /**
+   * Pre-computes the numeric counts the new column sorters need
+   * (transports + services). Mutates the node in place. Safe to
+   * re-run on each refresh — the values come from already-loaded
+   * node fields, no extra API calls.
+   */
+  private annotateForSort(node: Node): void {
+    node.transportsCount = node.transports ? node.transports.length : 0;
+    node.servicesCount = this.getNodeServices(node).length;
+  }
+
+  /**
+   * Reorders `nodes` so any PK present in customNodeOrder comes
+   * first (in the saved order), followed by everything else in its
+   * existing (column-sorter-imposed) order. Doesn't allocate when
+   * customNodeOrder is empty.
+   */
+  private applyCustomOrder(nodes: Node[]): Node[] {
+    if (this.customNodeOrder.length === 0) {
+      return nodes;
+    }
+    const byPk = new Map<string, Node>();
+    nodes.forEach(n => byPk.set(n.localPk, n));
+    const ordered: Node[] = [];
+    const seen = new Set<string>();
+    for (const pk of this.customNodeOrder) {
+      const n = byPk.get(pk);
+      if (n) {
+        ordered.push(n);
+        seen.add(pk);
+      }
+    }
+    nodes.forEach(n => {
+      if (!seen.has(n.localPk)) {
+        ordered.push(n);
+      }
+    });
+    return ordered;
+  }
+
+  /**
+   * cdkDropList drop handler. Reorders the visible page in place and
+   * persists the resulting PK order to localStorage. The whole-list
+   * order (across pagination) is reconstructed by capturing the
+   * current filteredNodes PK order with the drop applied; rows on
+   * other pages keep their existing slot.
+   */
+  rowDropped(event: CdkDragDrop<Node[]>): void {
+    if (!this.nodesToShow || event.previousIndex === event.currentIndex) {
+      return;
+    }
+    // Move within the visible page first so the UI updates without
+    // waiting for a full refresh cycle.
+    moveItemInArray(this.nodesToShow, event.previousIndex, event.currentIndex);
+    this.dataSource = this.nodesToShow;
+
+    // Reconstruct full filteredNodes order: keep the page's new
+    // arrangement and merge with the other pages' rows in their
+    // original order.
+    const pageSize = AppConfig.maxFullListElements;
+    const start = pageSize * (this.currentPage - 1);
+    const newFiltered = this.filteredNodes.slice();
+    for (let i = 0; i < this.nodesToShow.length; i++) {
+      newFiltered[start + i] = this.nodesToShow[i];
+    }
+    this.filteredNodes = newFiltered;
+
+    // Persist the entire filtered order as the custom order.
+    this.customNodeOrder = newFiltered.map(n => n.localPk);
+    this.saveLocalValue(this.customNodeOrderKey, JSON.stringify(this.customNodeOrder));
+  }
+
+  /**
+   * Clears the user's drag-drop custom order. Triggered by the
+   * column-sort headers (which would otherwise be ignored for any
+   * rows the user manually arranged). Without this, clicking a
+   * column header on a list where the user had dragged rows would
+   * leave the rows stuck where they were, surprising operators
+   * who expected a sort to fully take effect.
+   */
+  resetCustomOrder(): void {
+    if (this.customNodeOrder.length === 0) {
+      return;
+    }
+    this.customNodeOrder = [];
+    this.saveLocalValue(this.customNodeOrderKey, '');
+  }
+
+  /**
+   * Wrapper around dataSorter.changeSortingOrder that also clears
+   * any active custom drag-drop order, then re-paginates so the
+   * fresh sort takes effect immediately. Used by the column header
+   * (click) handlers in node-list.component.html so a column sort
+   * always wins over a previously-set custom order.
+   */
+  changeSort(column: SortingColumn): void {
+    this.resetCustomOrder();
+    this.dataSorter.changeSortingOrder(column);
   }
 
   logout() {
@@ -721,6 +891,16 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     const counts: {[key: string]: number} = {};
     node.transports.forEach(t => {
       const tp = (t.type || 'unknown').toUpperCase();
+      // Skip the "?" placeholder type emitted by sub-hypervisors that
+      // predate the TransportSummaries field (#2789) — they only send
+      // the count and the backend synthesizes typeless placeholders to
+      // keep node.transports.length right. Including "?" as a per-type
+      // row clutters the cell ("?: 35"). The template still renders
+      // the Total line from node.transports.length so the operator
+      // sees the count.
+      if (tp === '?') {
+        return;
+      }
       counts[tp] = (counts[tp] || 0) + 1;
     });
     return Object.keys(counts).sort().map(k => ({type: k, count: counts[k]}));

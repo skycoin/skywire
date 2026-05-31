@@ -22,9 +22,9 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/tpviz"
@@ -266,10 +266,24 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		}
 	}
 
+	// Background poll loop — keeps summaryCache fresh + streams warm
+	// independent of UI activity. Without this, the hypervisor only
+	// fires Summary RPCs when the operator hits /api/visors-summary;
+	// a closed-UI hypervisor goes silent, peer-side idleConn (#2856)
+	// closes every served stream at 90s, the cache rots, and the
+	// reopened UI takes one poll round per peer to repopulate.
+	//
+	// 30s cadence is faster than the 90s peer-side idle so each
+	// Summary call resets the idle clock — peers stop cycling
+	// redial+re-accept needlessly. It's slower than typical UI
+	// poll cadence so we don't double-fire when both are active
+	// (UI polls overlap-and-skip via summary's own goroutine).
+	go hv.runBackgroundSummaryPoll(ctx)
+
 	// setup local PTY using direct connection (bypasses DMSG for local visor)
 	hv.mu.Lock()
-	if hv.visor != nil && hv.visor.conf.Dmsgpty != nil && hv.visor.conf.Dmsgpty.CLINet != "" {
-		hv.selfConn.PtyUI = setupLocalPtyUI(hv.visor.conf.Dmsgpty.CLINet, hv.visor.conf.Dmsgpty.CLIAddr)
+	if hv.visor != nil && hv.visor.conf.Pty != nil && hv.visor.conf.Pty.CLINet != "" {
+		hv.selfConn.PtyUI = setupLocalPtyUI(hv.visor.conf.Pty.CLINet, hv.visor.conf.Pty.CLIAddr)
 	} else {
 		// Fallback to DMSG if local CLI config not available
 		hv.selfConn.PtyUI = setupDmsgPtyUI(hv.dmsgC, hv.c.PK)
@@ -318,6 +332,10 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 				hv.visor.remoteVisors[peerPK] = *visorConn
 				hv.remoteVisors[peerPK] = *visorConn
 				hv.mu.Unlock()
+
+				// Warm-cache: see comment in the dmsg accept path
+				// below — same intent, same one-shot Summary.
+				go hv.warmSummaryCache(peerPK, visorConn.API)
 				if hv.lanDmsg != nil {
 					discoveryURL := hv.c.LANDmsgServer.PublicDiscoveryURL
 					if discoveryURL == "" {
@@ -370,6 +388,18 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		hv.remoteVisors[addr.PK] = *visorConn
 		hv.mu.Unlock()
 
+		// Eager-warm the summaryCache so the next UI poll renders
+		// this peer's row immediately instead of waiting for its
+		// own Summary RPC to complete inside getAllVisorsSummary
+		// (which is bounded by the outer 5s cap and would otherwise
+		// fall through to "no cache entry → row dropped"). One
+		// Summary call per accept is cheap and runs in parallel
+		// across N peers, so a freshly-restarted hypervisor goes
+		// from "list slowly fills as polls land" to "list is
+		// populated as fast as peers redial". Independent of the
+		// LAN DMSG goroutine below — they don't share state.
+		go hv.warmSummaryCache(addr.PK, visorConn.API)
+
 		// Push LAN DMSG server info to the connected visor
 		if hv.lanDmsg != nil {
 			discoveryURL := hv.c.LANDmsgServer.PublicDiscoveryURL
@@ -392,6 +422,104 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 			}()
 		}
 	}
+}
+
+// hypervisorBackgroundPollInterval is the cadence of the background
+// summaryCache refresh loop spawned from ServeRPC. Tuned against the
+// visor-side hypervisorRPCIdleTimeout (90s, see rpc_client_serve.go):
+// 30s gives every served stream a Summary RPC three times per idle
+// window so peer-side idleConn never fires from "no UI traffic"
+// alone. Also tuned against the 3-minute cacheFreshWindow in
+// hypervisor_handlers_visors.go: 30s is well inside the window so
+// the cache is always-fresh from the UI's perspective.
+const hypervisorBackgroundPollInterval = 30 * time.Second
+
+// runBackgroundSummaryPoll keeps hv.summaryCache fresh independent of
+// UI activity. Spawned once from ServeRPC; runs until ctx cancels.
+// Iterates every entry in remoteVisors, fires Summary() in parallel
+// goroutines (one per peer), updates the cache on success. Failures
+// are silent — the UI-driven getAllVisorsSummary handler still does
+// its own per-peer Summary against the same conns and will surface
+// real failures via the deadVisors eviction path. The background
+// poll is purely a cache-warmer + stream-keepalive.
+//
+// Why this matters operationally: pre-this-change, the hypervisor
+// only fired Summary RPCs when the operator hit /api/visors-summary.
+// A closed-UI hypervisor went silent — peer-side idleConn (90s, per
+// #2856) closed every served stream every 90s, peer redialed,
+// hypervisor re-accepted, repeat. Plus the summaryCache rotted, so
+// when the operator reopened the UI it took one poll round per peer
+// to repopulate (visible "list slowly fills" symptom).
+//
+// With this loop running, streams are reset every 30s by the
+// Summary call's wire traffic, peer-side idle never fires
+// gratuitously, and the cache is always-warm — UI reopen renders
+// every peer instantly from cache.
+func (hv *Hypervisor) runBackgroundSummaryPoll(ctx context.Context) {
+	ticker := time.NewTicker(hypervisorBackgroundPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			hv.pollAllForCache(ctx)
+		}
+	}
+}
+
+// pollAllForCache snapshots remoteVisors under the read lock, then
+// fans out one goroutine per peer to call Summary() concurrently.
+// Successful calls write to summaryCache; failures are dropped on
+// the floor (the UI-driven path handles eviction). Bounded by the
+// inner RPC timeout (skyenv.RPCTimeout, 20s); a tick that takes
+// longer than the next tick interval is fine — Go's ticker drops
+// elapsed ticks, so we don't pile up goroutines on a slow round.
+func (hv *Hypervisor) pollAllForCache(ctx context.Context) {
+	hv.mu.RLock()
+	remotes := make(map[cipher.PubKey]API, len(hv.remoteVisors))
+	for pk, c := range hv.remoteVisors {
+		remotes[pk] = c.API
+	}
+	hv.mu.RUnlock()
+
+	if len(remotes) == 0 {
+		return
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(len(remotes))
+	for pk, api := range remotes {
+		go func(pk cipher.PubKey, api API) {
+			defer wg.Done()
+			if ctx.Err() != nil {
+				return
+			}
+			hv.warmSummaryCache(pk, api)
+		}(pk, api)
+	}
+	wg.Wait()
+}
+
+// warmSummaryCache fires a Summary() RPC against a freshly-accepted
+// peer and stores the result in hv.summaryCache. Runs synchronously
+// (the caller spawns it in a goroutine). Failures are silent —
+// the next getAllVisorsSummary poll will retry the Summary call
+// itself and surface whatever it finds. Idempotent; concurrent calls
+// for the same PK race on the cache lock and the last writer wins.
+func (hv *Hypervisor) warmSummaryCache(pk cipher.PubKey, api API) {
+	if api == nil {
+		return
+	}
+	sum, err := api.Summary()
+	if err != nil || sum == nil {
+		return
+	}
+	now := time.Now().UTC()
+	cached := *sum
+	hv.summaryCacheMx.Lock()
+	hv.summaryCache[pk] = cachedSummary{sum: &cached, seenAt: now}
+	hv.summaryCacheMx.Unlock()
 }
 
 type MockConfig struct {
@@ -465,7 +593,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(middleware.RealIP) //nolint:staticcheck
 
 	if hv.visor != nil {
 		if hv.visor.MasterLogger().GetLevel() == logrus.DebugLevel || hv.visor.MasterLogger().GetLevel() == logrus.TraceLevel {
@@ -485,6 +613,16 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/csrf", hv.getCsrf())
 
 			r.Get("/user-exists", hv.users.UserExists())
+
+			// Unauthenticated pubkey-discovery route used by
+			// skybian's first-boot autoconfig. SW-Public header
+			// gates it as a soft "looks like another visor"
+			// check. Off by default — only registered when the
+			// operator (typically the skybian / Arch-ARM image
+			// build) sets EnablePKEndpoint=true.
+			if hv.c.EnablePKEndpoint {
+				r.Get("/pk", hv.getPK())
+			}
 
 			if hv.c.EnableAuth {
 				r.Group(func(r chi.Router) {
@@ -551,6 +689,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Delete("/visors/{pk}/routes/{rid}", hv.deleteRoute())
 				r.Delete("/visors/{pk}/routes/", hv.deleteRoutes())
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
+				r.Get("/visors/{pk}/routing-policies", hv.getRoutingPolicies())
 				r.Post("/visors/{pk}/shutdown", hv.shutdown())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Get("/visors/{pk}/runtime-stats", hv.getRuntimeStats())
@@ -869,18 +1008,24 @@ func pkSliceFromQuery(r *http.Request, key string, defaultVal []cipher.PubKey) (
 }
 
 type dmsgPtyUI struct {
-	PtyUI *dmsgpty.UI
+	PtyUI *pty.UI
 }
 
 func setupDmsgPtyUI(dmsgC *dmsg.Client, visorPK cipher.PubKey) *dmsgPtyUI {
-	ptyDialer := dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
+	// SkynetFirstUIDialer tries appnet.Dial(skynet) before falling
+	// back to dmsg. The remote visor dual-listens for dmsgpty on
+	// dmsg + skynet at the same port (init_dmsg_skywire.go's
+	// startSkywirePtyListener), so the skynet path lets the pty
+	// stream ride a stcpr / sudph transport when one exists between
+	// us and the visor.
+	ptyDialer := SkynetFirstUIDialer(dmsgC, dmsg.Addr{PK: visorPK, Port: skyenv.DmsgPtyPort})
 	return &dmsgPtyUI{
-		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+		PtyUI: pty.NewUI(ptyDialer, pty.DefaultUIConfig()),
 	}
 }
 func setupLocalPtyUI(cliNet, cliAddr string) *dmsgPtyUI {
-	ptyDialer := dmsgpty.NetUIDialer(cliNet, cliAddr)
+	ptyDialer := pty.NetUIDialer(cliNet, cliAddr)
 	return &dmsgPtyUI{
-		PtyUI: dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig()),
+		PtyUI: pty.NewUI(ptyDialer, pty.DefaultUIConfig()),
 	}
 }

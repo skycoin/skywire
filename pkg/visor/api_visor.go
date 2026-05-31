@@ -103,6 +103,16 @@ func (v *Visor) Overview() (*Overview, error) {
 		overview.ConnectedHypervisor = append(overview.ConnectedHypervisor, connectedHV)
 	}
 
+	// Hostname — best-effort. os.Hostname rarely fails, but when it
+	// does (sandbox / containerized envs missing the syscall) we
+	// fall through with Hostname="" rather than failing the whole
+	// Overview. The hvui consumes this for the operator-friendly
+	// label default + per-node info row; CLI surfaces it in the
+	// `cli visor info` Hypervisor section.
+	if h, err := os.Hostname(); err == nil {
+		overview.Hostname = h
+	}
+
 	return overview, nil
 }
 
@@ -189,6 +199,10 @@ func (v *Visor) Summary() (*Summary, error) {
 		DmsgStats:            dmsgStatValue,
 		ConnectedDmsgServers: connectedDmsgServers,
 		DMSGServers:          dmsgServers,
+		IsHypervisor:         v.IsHypervisorEnabled(),
+	}
+	if v.conf.Hypervisor != nil {
+		summary.HypervisorAddr = v.conf.Hypervisor.HTTPAddr
 	}
 
 	return summary, nil

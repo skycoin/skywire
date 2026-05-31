@@ -4,9 +4,8 @@ package metrics
 import (
 	"log"
 
-	"github.com/VictoriaMetrics/metrics"
-
 	"github.com/skycoin/skywire/pkg/metricsutil"
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 )
 
 // VictoriaMetrics implements `Metrics` using `VictoriaMetrics`.

@@ -28,7 +28,12 @@ const (
 var (
 	// ErrAppAlreadyStarted is returned when trying to run the already running app.
 	ErrAppAlreadyStarted = errors.New("app already started")
-	errNoSuchApp         = errors.New("no such app")
+	// ErrNoSuchApp is returned by ProcManager getters (ProcByName,
+	// Wait, Stop, etc.) when no app is registered under the given
+	// name. Exported so callers like the launcher's auto-restart
+	// watcher can distinguish "proc exited" from "proc was
+	// de-registered" without string-matching.
+	ErrNoSuchApp = errors.New("no such app")
 
 	// ErrClosed occurs when an action is called after proc manager is closed.
 	ErrClosed = errors.New("proc manager is already closed")
@@ -497,7 +502,7 @@ func (m *procManager) pop(name string) (*Proc, error) {
 
 	p, ok := m.procs[name]
 	if !ok {
-		return nil, errNoSuchApp
+		return nil, ErrNoSuchApp
 	}
 
 	delete(m.procs, name)
@@ -512,7 +517,7 @@ func (m *procManager) get(name string) (*Proc, error) {
 
 	p, ok := m.procs[name]
 	if !ok {
-		return nil, errNoSuchApp
+		return nil, ErrNoSuchApp
 	}
 
 	return p, nil

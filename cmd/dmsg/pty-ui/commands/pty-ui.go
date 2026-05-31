@@ -1,0 +1,70 @@
+// Package commands cmd/dmsgpty-ui/commands/root.go
+package commands
+
+import (
+	"log"
+	"net/http"
+	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/pty"
+)
+
+var (
+	hostNet  = pty.DefaultCLINet
+	hostAddr = pty.DefaultCLIAddr()
+	addr     = ":8080"
+	conf     = pty.DefaultUIConfig()
+)
+
+func init() {
+	RootCmd.Flags().StringVar(&hostNet, "hnet", hostNet, "dmsgpty host network name")
+	RootCmd.Flags().StringVar(&hostAddr, "haddr", hostAddr, "dmsgpty host network address")
+	RootCmd.Flags().StringVar(&addr, "addr", addr, "network address to serve UI on")
+	RootCmd.Flags().StringVar(&conf.CmdName, "cmd", conf.CmdName, "command to run when initiating pty")
+	RootCmd.Flags().StringArrayVar(&conf.CmdArgs, "arg", conf.CmdArgs, "command arguments to include when initiating pty")
+}
+
+// RootCmd contains commands to start a dmsgpty-ui server for a dmsgpty-host
+var RootCmd = &cobra.Command{
+	Use:   dmsgclient.ExecName(),
+	Short: "DMSG pseudoterminal GUI",
+	Long: `
+	┌┬┐┌┬┐┌─┐┌─┐┌─┐┌┬┐┬ ┬   ┬ ┬┬
+	 │││││└─┐│ ┬├─┘ │ └┬┘───│ ││
+	─┴┘┴ ┴└─┘└─┘┴   ┴  ┴    └─┘┴
+  ` + "DMSG pseudoterminal GUI",
+	Run: func(_ *cobra.Command, _ []string) {
+		if _, err := buildinfo.Get().WriteTo(log.Writer()); err != nil {
+			log.Printf("Failed to output build info: %v", err)
+		}
+
+		ui := pty.NewUI(pty.NetUIDialer(hostNet, hostAddr), conf)
+		logrus.
+			WithField("addr", addr).
+			Info("Serving.")
+
+		srv := &http.Server{
+			ReadTimeout:       3 * time.Second,
+			WriteTimeout:      3 * time.Second,
+			IdleTimeout:       30 * time.Second,
+			ReadHeaderTimeout: 3 * time.Second,
+			Addr:              addr,
+			Handler:           ui.Handler(nil),
+		}
+
+		err := srv.ListenAndServe()
+		logrus.
+			WithError(err).
+			Info("Stopped serving.")
+	},
+}
+
+// Execute executes the root command.
+func Execute() {
+	dmsgclient.Execute(RootCmd)
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/router/policy"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -174,6 +175,78 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		},
 	}
 
+	// Operator-programmable routing policy (RFC #2882).
+	// When conf.Routing.PolicyPerDial is set, build a Loader,
+	// start its file-watcher if the path is file-backed, and
+	// plug it into the router as a DialHook. Nil hook = no
+	// integration cost when no policy is configured.
+	// Operator-programmable routing policy. Two scopes:
+	//   - visor-wide:  conf.Routing.PolicyPerDial
+	//   - per-app:     AppConfig.RoutingPolicy (overrides the
+	//                  visor-wide default for dials from that app)
+	// A Hook is installed if either scope has a configured source.
+	// Real Provider backed by the running visor's transport manager,
+	// embedded geoip db, hypervisor list, and dmsgpty whitelist —
+	// without this the script's geo.*, transports.*, and peers.*
+	// stdlib calls would return zero values from policy.NopProvider.
+	{
+		policyLogger := func(format string, args ...interface{}) {
+			log.Infof(format, args...)
+		}
+		var provider *visorPolicyProvider
+		makeProvider := func() *visorPolicyProvider {
+			if provider == nil {
+				provider = newVisorPolicyProvider(v)
+			}
+			return provider
+		}
+
+		// Always install a Hook even when no policy is
+		// configured at startup. The Hook with a nil default
+		// engine and empty byApp map is zero-cost on the dial
+		// path (loaderFor returns nil → BeforeDial / SelectRoute
+		// / OnLegChange all early-return), and an installed
+		// Hook is what makes runtime swaps via
+		// SetAppRoutingPolicy possible without restart.
+		hook := policy.NewHook(nil, policy.WithHookProvider(makeProvider()), policy.WithHookLogger(policyLogger))
+
+		if pe, perr := loadPolicyEngine(v.conf.Routing.PolicyPerDial, makeProvider(), policyLogger); perr != nil {
+			log.WithError(perr).Warn("Routing policy failed to load; visor will run without visor-wide policy.")
+		} else if pe != nil {
+			if werr := pe.watch(policyLogger); werr != nil {
+				log.WithError(werr).Warn("Routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
+			}
+			hook.SetDefault(pe.engine)
+			v.pushCloseStack(pe.tag, pe.engine.Close)
+			log.WithField("source", pe.engine.Source()).Info("Routing policy active.")
+		}
+
+		if v.conf.Launcher != nil {
+			for _, app := range v.conf.Launcher.Apps {
+				if app.RoutingPolicy == "" {
+					continue
+				}
+				pe, perr := loadPolicyEngine(app.RoutingPolicy, makeProvider(), policyLogger)
+				if perr != nil {
+					log.WithError(perr).WithField("app", app.Name).Warn("Per-app routing policy failed to load; app will fall back to default policy.")
+					continue
+				}
+				if pe == nil {
+					continue
+				}
+				if werr := pe.watch(policyLogger); werr != nil {
+					log.WithError(werr).WithField("app", app.Name).Warn("Per-app routing policy hot-reload watcher failed to start; policy still active but won't auto-reload.")
+				}
+				hook.RegisterApp(app.Name, pe.engine)
+				appName := app.Name
+				v.pushCloseStack(pe.tag+".app:"+appName, pe.engine.Close)
+				log.WithField("app", appName).WithField("source", pe.engine.Source()).Info("Per-app routing policy active.")
+			}
+		}
+
+		rConf.DialHook = hook
+	}
+
 	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
 
 	r, err := router.New(v.dmsgC, &rConf, routeSetupHooks)
@@ -285,8 +358,14 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 	// disc client, and overflows the goroutine stack.
 	v.seedDmsgServiceEntries(routeSetupDmsgC, log)
 	// Same dmsgfirst upgrade as the main dmsgC: discovery refresh
-	// prefers DMSG and only falls back to plain HTTP per-call.
-	upgradeDmsgDiscToDmsgfirst(routeSetupDmsgC, v.conf.Dmsg, log)
+	// prefers DMSG and only falls back to plain HTTP per-call. The
+	// dmsg-primary path uses v.dmsgDC (direct-client-backed) so the
+	// DialStream to dmsg-disc resolves locally — see the equivalent
+	// wiring in initDmsg's upgrade for the full rationale.
+	v.initLock.Lock()
+	primary := v.dmsgDC
+	v.initLock.Unlock()
+	upgradeDmsgDiscToDmsgfirst(routeSetupDmsgC, primary, v.conf.Dmsg, log)
 
 	v.initLock.Lock()
 	v.embeddedRouteSetup = &EmbeddedRouteSetup{

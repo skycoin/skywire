@@ -387,9 +387,14 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		arLimit = v.conf.Transport.ARTransportLimit
 	}
 	tpMConf := transport.ManagerConfig{
-		PubKey:                    v.conf.PK,
-		SecKey:                    v.conf.SK,
-		DiscoveryClient:           tpdC,
+		PubKey: v.conf.PK,
+		SecKey: v.conf.SK,
+		// Wrap the HTTP-backed discovery client so GetAllTransports
+		// reads the CXO tpd-all-transports snapshot first, falling
+		// back to HTTP on miss. The bulk-fetch path is what
+		// calculateLocalRoutes / autoconnect / hvui burn round-trips
+		// on; per-edge lookups keep going to HTTP.
+		DiscoveryClient:           wrapDiscoveryClientWithCXO(tpdC, v),
 		LogStore:                  logS,
 		PersistentTransportsCache: pTps,
 		Version:                   buildinfo.Version(),
@@ -541,7 +546,11 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Same dmsgfirst upgrade as the main dmsgC: avoids pinning the
 	// embedded TPS's discovery refresh to plain HTTP for the process
 	// lifetime when initDmsgHTTP's dmsgDC isn't ready at construction.
-	upgradeDmsgDiscToDmsgfirst(tpsDmsgC, v.conf.Dmsg, log)
+	// Primary path uses v.dmsgDC (direct-client-backed) — see initDmsg.
+	v.initLock.Lock()
+	primary := v.dmsgDC
+	v.initLock.Unlock()
+	upgradeDmsgDiscToDmsgfirst(tpsDmsgC, primary, v.conf.Dmsg, log)
 
 	v.initLock.Lock()
 	v.embeddedTPS = &embeddedTPS{

@@ -93,6 +93,11 @@ const (
 	// commands (`pv -t`, `tp tree`, `tp viz`). Maps to the TPD
 	// all-transports feed.
 	TabCLITransports
+	// TabRoutingPolicy is the operator-programmable routing-policy
+	// provider's SD-services consumer. Needed so the policy script's
+	// geo.country(pk) can resolve multihop intermediates that
+	// advertise themselves as proxy/vpn/visor services.
+	TabRoutingPolicy
 )
 
 // tabFeedDeps maps each tab to the set of feeds it depends on.
@@ -105,6 +110,7 @@ var tabFeedDeps = map[CXOTab][]CXOFeed{
 	TabAutoconnect:       {FeedSDServices},
 	TabCLIServices:       {FeedSDServices},
 	TabCLITransports:     {FeedTPDAllTransports},
+	TabRoutingPolicy:     {FeedSDServices},
 }
 
 // CXOSubscriptionManager owns the per-feed cycle goroutines + the
@@ -127,6 +133,12 @@ type managedFeed struct {
 	snapshot   map[string][]byte
 	lastSyncAt time.Time
 	lastErr    error // sticky last error from syncOnce; cleared on success
+	// lastSyncCachePaths / lastSyncCacheKeys: discriminator for empty
+	// snapshots (publisher sent empty Root vs manager-side filter
+	// dropped everything). Captured in syncOnce right before
+	// sub.Close. Surfaced via FeedStatus for `cxo status`.
+	lastSyncCachePaths int
+	lastSyncCacheKeys  []string
 
 	// Lifecycle (mutated only under manager.mu).
 	refcount  int
@@ -354,6 +366,18 @@ type FeedStatus struct {
 	// (e.g. SD CXO peer not configured) — meaning the feed can never
 	// sync until the visor config is fixed.
 	SpecErr string
+	// LastSyncCachePaths is len(sub.cache) snapshotted right before the
+	// most recent syncOnce closed its subscriber. Discriminator for
+	// "SnapshotPaths=0 with no error": when this is also 0 the
+	// publisher's Root was structurally empty; when this is >0 but
+	// SnapshotPaths=0 the manager's snapshot copy / prefix filter is
+	// the culprit.
+	LastSyncCachePaths int
+	// LastSyncCacheSampleKeys is up to 5 keys from sub.cache at the
+	// moment LastSyncCachePaths was captured. Lets the operator
+	// eyeball whether the publisher is writing the paths the
+	// subscriber's prefix expects.
+	LastSyncCacheSampleKeys []string
 }
 
 // Status returns a snapshot of every feed the manager knows about
@@ -385,6 +409,10 @@ func (m *CXOSubscriptionManager) Status() []FeedStatus {
 		st.LastSyncAt = f.lastSyncAt
 		if f.lastErr != nil {
 			st.LastErr = f.lastErr.Error()
+		}
+		st.LastSyncCachePaths = f.lastSyncCachePaths
+		if len(f.lastSyncCacheKeys) > 0 {
+			st.LastSyncCacheSampleKeys = append([]string(nil), f.lastSyncCacheKeys...)
 		}
 		f.snapMu.RUnlock()
 		out = append(out, st)
@@ -447,6 +475,10 @@ func (m *CXOSubscriptionManager) statusFor(fk CXOFeed, f *managedFeed) FeedStatu
 	st.LastSyncAt = f.lastSyncAt
 	if f.lastErr != nil {
 		st.LastErr = f.lastErr.Error()
+	}
+	st.LastSyncCachePaths = f.lastSyncCachePaths
+	if len(f.lastSyncCacheKeys) > 0 {
+		st.LastSyncCacheSampleKeys = append([]string(nil), f.lastSyncCacheKeys...)
 	}
 	f.snapMu.RUnlock()
 	return st
@@ -648,11 +680,19 @@ func (m *CXOSubscriptionManager) syncOnce(ctx context.Context, fk CXOFeed, f *ma
 		snapshot[path] = body
 		return true
 	})
+	// Capture the raw cache stats BEFORE Close so the FeedStatus
+	// discriminator (LastSyncCachePaths vs SnapshotPaths) is honest:
+	// cache>0 + snapshot=0 means the manager's prefix filter or
+	// snapshot copy dropped everything; both 0 means the publisher's
+	// Root was structurally empty.
+	cacheSize, cacheKeys := sub.CacheSizeAndSampleKeys(5)
 	_ = sub.Close() //nolint:errcheck
 
 	f.snapMu.Lock()
 	f.snapshot = snapshot
 	f.lastSyncAt = time.Now()
+	f.lastSyncCachePaths = cacheSize
+	f.lastSyncCacheKeys = cacheKeys
 	f.lastErr = nil
 	f.snapMu.Unlock()
 }

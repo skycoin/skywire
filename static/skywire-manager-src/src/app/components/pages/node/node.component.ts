@@ -186,14 +186,20 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   private processRouteUpdate() {
-    console.log('[HV-DIAG] processRouteUpdate called, instance id:', this.instanceId);
     NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
     if (this.nodeActionsHelper) {
       this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
     }
     this.updateTabBar();
     this.maybeBuildTerminalUrl();
-    this.navigationsSubscription.unsubscribe();
+
+    // navigationsSubscription is unsubscribed in ngOnDestroy. Don't
+    // unsubscribe here — Angular's RouteReuseStrategy reuses the
+    // NodeComponent instance across tab nav (info → routing → apps),
+    // so we need the subscription to keep firing for every
+    // intra-component navigation. Otherwise selectedTabIndex never
+    // updates (info stays highlighted), and maybeBuildTerminalUrl
+    // never fires on /terminal.
 
     // Load the data.
     this.startGettingData(true);
@@ -221,6 +227,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   private updateTabBar() {
 
     // If showing one of the sumary pages (node info, transports or apps).
+    // /dmsg and /reachability are kept in the URL-match gate because both
+    // routes still exist as redirects-to-info for back-compat with old
+    // bookmarks; including them here means NodeComponent stays mounted
+    // long enough for the redirect to fire instead of unmounting and
+    // re-rendering the page shell.
     if (
       this.lastUrl && (this.lastUrl.includes('/info') ||
       this.lastUrl.includes('/routing') ||
@@ -265,23 +276,12 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           label: 'node.tabs.bandwidth',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'bandwidth'] : null,
         },
-        {
-          // DMSG diagnostics tab: per-role client list + connected
-          // server PKs + connect-all action. Sits next to the
-          // network-diagnostic tabs (transports, bandwidth) since
-          // it surfaces the dmsg layer those tabs already touch.
-          icon: 'router',
-          label: 'node.tabs.dmsg',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'dmsg'] : null,
-        },
-        {
-          // Reachability tab: interactive ping (skynet + dmsg)
-          // and remote /health fetch over dmsg. Adjacent to DMSG
-          // since both are operator-driven connectivity probes.
-          icon: 'network_check',
-          label: 'node.tabs.reachability',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'reachability'] : null,
-        },
+        // DMSG + Reachability tabs were dropped: DMSG is folded into
+        // Info as a collapsible section (the standalone /dmsg route
+        // redirects to /info for back-compat) and Reachability moved
+        // back to a future home — the per-node tab row was overflowing
+        // and these were the lowest-priority entries. Their routes
+        // still resolve so old bookmarks don't 404.
         {
           icon: 'schedule',
           label: 'node.tabs.uptime',
@@ -349,43 +349,38 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.lastUrl.includes('/bandwidth')) {
         this.selectedTabIndex = 3;
       }
-      // DMSG + Reachability tabs sit between Bandwidth and Uptime;
-      // every subsequent index shifts by two from the original layout.
-      if (this.lastUrl.includes('/dmsg') && !this.lastUrl.includes('/dmsg-settings')) {
+      // /dmsg and /reachability resolve to redirects (→ /info), so
+      // they don't get their own selectedTabIndex anymore. The
+      // info-tab default (index 0) is correct for both.
+      if (this.lastUrl.includes('/uptime')) {
         this.selectedTabIndex = 4;
       }
-      if (this.lastUrl.includes('/reachability')) {
+      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
         this.selectedTabIndex = 5;
       }
-      if (this.lastUrl.includes('/uptime')) {
-        this.selectedTabIndex = 6;
-      }
-      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
-        this.selectedTabIndex = 7;
-      }
       if (this.lastUrl.includes('/rewards')) {
-        this.selectedTabIndex = 8;
+        this.selectedTabIndex = 6;
       }
       // /skynet matches BOTH the skynet tab and would otherwise also
       // match a hypothetical /skynet-foo path; check after web-proxy
       // since /web-proxy must take precedence on its own URL.
       if (this.lastUrl.includes('/skynet')) {
-        this.selectedTabIndex = 9;
+        this.selectedTabIndex = 7;
       }
       if (this.lastUrl.includes('/web-proxy')) {
-        this.selectedTabIndex = 10;
+        this.selectedTabIndex = 8;
       }
       if (this.lastUrl.includes('/resources')) {
-        this.selectedTabIndex = 11;
+        this.selectedTabIndex = 9;
       }
       if (this.lastUrl.includes('/terminal')) {
-        this.selectedTabIndex = 12;
+        this.selectedTabIndex = 10;
       }
       if (this.lastUrl.includes('/wallet')) {
-        this.selectedTabIndex = 13;
+        this.selectedTabIndex = 11;
       }
       if (this.lastUrl.includes('/logs')) {
-        this.selectedTabIndex = 14;
+        this.selectedTabIndex = 12;
       }
 
       // Inform that the current subpage is not for showing a full list.

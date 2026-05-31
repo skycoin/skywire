@@ -53,6 +53,18 @@ interface BarBlock {
   future: boolean;
 }
 
+/**
+ * One day's data point in the version-history stacked-area chart.
+ * `byVersion` is the count of distinct visors per normalized version
+ * string that reached >= minUptime% on this calendar date; `total`
+ * is the sum across versions (== distinct visor count for the day).
+ */
+interface VersionHistoryDayPoint {
+  date: string;
+  byVersion: { [version: string]: number };
+  total: number;
+}
+
 interface VisorRow {
   pk: string;
   online: boolean;
@@ -103,6 +115,27 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   // Same contents for every row, so we render once at the top.
   ticks: { label: string; left: number }[] = [];
   totalBlocks = 0;
+
+  /**
+   * Per-day version-distribution series used to render the stacked-
+   * area chart below the fleet graph. Computed alongside fleet rows
+   * in consume(). Sorted by date ascending so the chart's x-axis
+   * reads oldest → newest left-to-right like the existing fleet bars.
+   */
+  versionHistory: VersionHistoryDayPoint[] = [];
+  /** Sorted list of distinct versions appearing in versionHistory. */
+  versionHistoryVersions: string[] = [];
+  /** Display palette keyed by version, computed once when the set
+   * changes. Uses a fixed 12-color cycle modeled on the reward
+   * system's chart palette so visual identity stays consistent
+   * with skywire cli rewards ui /stats/version-history. */
+  versionHistoryColors: { [version: string]: string } = {};
+  /** Peak `total` across all days, used as the chart y-axis cap. */
+  versionHistoryMax = 0;
+  /** Minimum uptime% to count a visor toward a day's version
+   * count. 75% matches the threshold used by the reward server
+   * chart so the two render comparable totals. */
+  private readonly versionHistoryMinUptime = 75;
 
   private allRows: VisorRow[] = [];
   private sub: Subscription;
@@ -238,10 +271,154 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
     this.totalBlocks = out.length > 0 ? out[0].blocks.length : 0;
     this.ticks = this.buildTicks(this.totalBlocks);
     this.applyFilter();
+    // Build the version-history series from the raw TPD summaries
+    // (not the trimmed/filtered fleet rows) so the chart reflects
+    // the full population TPD knows about, not just the currently-
+    // selected fleet filter. Days that nobody met the threshold on
+    // are still emitted with total=0 so the x-axis stays continuous.
+    this.computeVersionHistory(summaries);
     this.loading = false;
     this.error = null;
     this.lastUpdated = new Date();
     this.cdr.markForCheck();
+  }
+
+  /**
+   * Aggregates `summaries` into per-day version counts and stores
+   * the result on this.versionHistory. Mirrors the reward server's
+   * ParseHistoricUptimeData logic (cmd/skywire-cli/.../stats.go):
+   *
+   *  - normalize each visor's version string (strip dirty suffix)
+   *  - for each (visor, date) where daily uptime >= minUptime%,
+   *    count that visor toward (date, version)
+   *  - de-dup by (date, pk) so a visor only counts once per day
+   *
+   * Side effects: also recomputes versionHistoryVersions,
+   * versionHistoryColors, and versionHistoryMax for the template.
+   */
+  private computeVersionHistory(summaries: VisorSummary[]): void {
+    const seen = new Set<string>();
+    const dateVersionCounts: { [date: string]: { [v: string]: number } } = {};
+
+    for (const s of summaries) {
+      const version = this.normalizeVersion(s.version || '');
+      if (!version) { continue; }
+      const daily = s.daily || {};
+      for (const date of Object.keys(daily)) {
+        const upStr = daily[date];
+        const up = parseFloat(upStr);
+        if (isNaN(up) || up < this.versionHistoryMinUptime) { continue; }
+        const dedupKey = date + '|' + s.pk;
+        if (seen.has(dedupKey)) { continue; }
+        seen.add(dedupKey);
+        if (!dateVersionCounts[date]) { dateVersionCounts[date] = {}; }
+        dateVersionCounts[date][version] = (dateVersionCounts[date][version] || 0) + 1;
+      }
+    }
+
+    const dates = Object.keys(dateVersionCounts).sort();
+    const versionSet = new Set<string>();
+    const history: VersionHistoryDayPoint[] = [];
+    let max = 0;
+    for (const date of dates) {
+      const byVersion = dateVersionCounts[date];
+      let total = 0;
+      for (const v of Object.keys(byVersion)) {
+        versionSet.add(v);
+        total += byVersion[v];
+      }
+      if (total > max) { max = total; }
+      history.push({ date, byVersion, total });
+    }
+
+    // Sort versions by reverse semver-ish so newer renders on top of
+    // the stack — visually puts the bulk of the fleet on the bottom
+    // and the recent-version uptake at the top.
+    const versions = Array.from(versionSet).sort().reverse();
+
+    // Color palette modeled on reward system chart — keeps visual
+    // continuity for operators familiar with the haltingstate page.
+    const palette = [
+      '#3399FF', '#FF6633', '#33CC66', '#FFCC00', '#CC66FF',
+      '#FF3399', '#66CCCC', '#FF9933', '#9966FF', '#66CC33',
+      '#FF6666', '#00CCCC',
+    ];
+    const colors: { [v: string]: string } = {};
+    versions.forEach((v, i) => { colors[v] = palette[i % palette.length]; });
+
+    this.versionHistory = history;
+    this.versionHistoryVersions = versions;
+    this.versionHistoryColors = colors;
+    this.versionHistoryMax = max;
+  }
+
+  private normalizeVersion(v: string): string {
+    let out = (v || '').trim();
+    if (!out) { return ''; }
+    out = out.replace(/\+dirty/g, '').replace(/ dirty/g, '').replace(/-dirty/g, '').trim();
+    return out;
+  }
+
+  /**
+   * Returns the SVG polygon points string for a stacked area
+   * representing `version`'s slice of the chart. Stacks accumulate
+   * top-down: the first version in versionHistoryVersions ends up
+   * on top of the stack (highest in the visual). Points are in the
+   * 0..100 x range and 0..100 y range; the SVG viewBox handles the
+   * actual pixel mapping.
+   */
+  versionHistoryPath(version: string): string {
+    const days = this.versionHistory;
+    const max = this.versionHistoryMax;
+    if (days.length === 0 || max === 0) { return ''; }
+    const versions = this.versionHistoryVersions;
+    // Compute the index of `version` in the stack — versions before
+    // it (in versionHistoryVersions order) sit underneath in the
+    // stack, so we offset by their cumulative count.
+    const idx = versions.indexOf(version);
+    if (idx < 0) { return ''; }
+    const xStep = days.length > 1 ? 100 / (days.length - 1) : 0;
+    const yScale = 100 / max;
+    const top: string[] = [];
+    const bottom: string[] = [];
+    for (let i = 0; i < days.length; i++) {
+      const x = i * xStep;
+      let below = 0;
+      // Sum counts for versions stacked under this one (everything
+      // after idx in the array — reverse-sorted means lower idx = on
+      // top, higher idx = bottom).
+      for (let j = idx + 1; j < versions.length; j++) {
+        below += days[i].byVersion[versions[j]] || 0;
+      }
+      const above = below + (days[i].byVersion[version] || 0);
+      // SVG y grows downward — invert so taller stacks render up.
+      const yTop = 100 - above * yScale;
+      const yBottom = 100 - below * yScale;
+      top.push(`${x.toFixed(2)},${yTop.toFixed(2)}`);
+      bottom.push(`${x.toFixed(2)},${yBottom.toFixed(2)}`);
+    }
+    // Polygon: walk top edge left→right, then bottom edge right→left.
+    return [...top, ...bottom.reverse()].join(' ');
+  }
+
+  /**
+   * Latest day's total — surfaced in the chart caption ("Latest:
+   * 2026-05-27 / Total: 147 visors ≥75% uptime").
+   */
+  versionHistoryLatestDate(): string {
+    if (this.versionHistory.length === 0) { return ''; }
+    return this.versionHistory[this.versionHistory.length - 1].date;
+  }
+  versionHistoryLatestTotal(): number {
+    if (this.versionHistory.length === 0) { return 0; }
+    return this.versionHistory[this.versionHistory.length - 1].total;
+  }
+  /** Mid-point date label for the chart's x-axis. Template uses
+   * this instead of inlining `Math.floor(...)` because Angular's
+   * template language doesn't expose globals. */
+  versionHistoryMidDate(): string {
+    if (this.versionHistory.length < 3) { return ''; }
+    return this.versionHistory[Math.floor(this.versionHistory.length / 2)].date;
   }
 
   private buildBlocks(

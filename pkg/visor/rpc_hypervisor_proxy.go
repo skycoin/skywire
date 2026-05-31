@@ -7,6 +7,7 @@ package visor
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +19,50 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
+
+// sortHVVisorEntries orders an HVVisorEntry slice deterministically so
+// UI tables / CLI lists stay stable between fetches. Without this the
+// upstream `range hv.remoteVisors` returns entries in Go's randomized
+// map-iteration order, and every refresh shuffles the rows on the
+// operator — visible to the eye as rows jumping around for no reason.
+//
+// Sort key, in priority order:
+//  1. IsLocal first (the hypervisor's own row, when present)
+//  2. PublicIP matches the local hypervisor's PublicIP — these are
+//     "LAN-adjacent" visors (same NAT, same site as the hypervisor).
+//     Same WAN IP is a stronger proxy for "same physical site" than
+//     LocalIP comparison would be, because separate routers on the
+//     same WAN often hand out the same RFC1918 LAN range (e.g.
+//     192.168.0.x) but their WAN IPs match only if they share the
+//     upstream NAT.
+//  3. Has a non-empty PublicIP at all — visors with public-IP info
+//     before visors without (we still know "they're somewhere" vs.
+//     "we don't know where").
+//  4. PK lex order — final tiebreak, deterministic across processes.
+//
+// localPublicIP is the local hypervisor's WAN IP (empty string is
+// fine — disables the bucket-2 priority but the rest still applies).
+func sortHVVisorEntries(entries []HVVisorEntry, localPublicIP string) {
+	bucket := func(e *HVVisorEntry) int {
+		switch {
+		case e.IsLocal:
+			return 0
+		case localPublicIP != "" && e.PublicIP == localPublicIP:
+			return 1
+		case e.PublicIP != "":
+			return 2
+		default:
+			return 3
+		}
+	}
+	sort.SliceStable(entries, func(i, j int) bool {
+		bi, bj := bucket(&entries[i]), bucket(&entries[j])
+		if bi != bj {
+			return bi < bj
+		}
+		return entries[i].PK.Hex() < entries[j].PK.Hex()
+	})
+}
 
 // HVVisorEntry is a summary of a remote visor connected to this hypervisor.
 type HVVisorEntry struct {
@@ -32,10 +77,33 @@ type HVVisorEntry struct {
 	CountryCode    string        `json:"country_code,omitempty"`
 	IsSymmetricNAT bool          `json:"symmetric_nat,omitempty"`
 	Transports     int           `json:"transports"`
-	Apps           int           `json:"apps"`
-	RewardAddress  string        `json:"reward_address,omitempty"`
-	ConfigVersion  string        `json:"config_version,omitempty"`
-	Error          string        `json:"error,omitempty"`
+	// TransportSummaries is the full per-transport detail (type,
+	// remote PK, sent/recv counters, etc.) the hvui's node-list
+	// table needs to render its Transports column. Populated by
+	// populateEntryFromSummary from summary.Overview.Transports.
+	// omitempty so older sub-hypervisor binaries that don't fill
+	// this field don't blow the JSON shape.
+	TransportSummaries []*TransportSummary `json:"transport_summaries,omitempty"`
+	Apps               int                 `json:"apps"`
+	RewardAddress      string              `json:"reward_address,omitempty"`
+	ConfigVersion      string              `json:"config_version,omitempty"`
+	// ServicesHealth is the remote visor's most recent
+	// HealthInfo.ServicesHealth ("healthy", "unhealthy",
+	// "connecting", ""). Carried so the hvui's tree-summary
+	// sub-section can render the same green / yellow / gray status
+	// dot that the local section's main table does — without this,
+	// every sub-section row falls through to nodeStatusClass's
+	// "online but health unknown" branch and renders as a gray
+	// outline circle even when the visor is fully healthy.
+	ServicesHealth string `json:"services_health,omitempty"`
+	// Hostname is the visor's os.Hostname(). The hvui's main node
+	// list uses this as the default Label when no explicit label is
+	// set; without it, sub-section rows render with an empty Label
+	// column even though the visor itself reports a valid hostname.
+	// Carried separately from PK because Overview.Hostname doesn't
+	// survive the HVVisorEntry round-trip otherwise.
+	Hostname string `json:"hostname,omitempty"`
+	Error    string `json:"error,omitempty"`
 	// ProxiedVia is set when this entry was discovered through a connected
 	// sub-hypervisor rather than a direct connection. The value is the PK
 	// of the sub-hypervisor that proxies operations on this visor.
@@ -51,9 +119,14 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 	entry.CountryCode = summary.Overview.CountryCode
 	entry.IsSymmetricNAT = summary.Overview.IsSymmetricNAT
 	entry.Transports = len(summary.Overview.Transports)
+	entry.TransportSummaries = summary.Overview.Transports
 	entry.Apps = len(summary.Overview.Apps)
 	entry.ConfigVersion = summary.ConfigVersion
 	entry.RewardAddress = summary.RewardAddress
+	entry.Hostname = summary.Overview.Hostname
+	if summary.Health != nil {
+		entry.ServicesHealth = summary.Health.ServicesHealth
+	}
 }
 
 // HVListDirectVisors returns summaries of visors DIRECTLY connected to
@@ -85,27 +158,44 @@ func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
 
 	log := logging.MustGetLogger("hv_list_direct_visors")
 
+	type sumResult struct {
+		summary *Summary
+		err     error
+	}
 	results := make([]HVVisorEntry, len(remotes))
 	var wg sync.WaitGroup
 	wg.Add(len(remotes))
 	for i, e := range remotes {
 		go func(idx int, pk cipher.PubKey, api API) {
 			defer wg.Done()
-			entry := HVVisorEntry{PK: pk, Online: true}
-			done := make(chan struct{})
+			// Buffered so the Summary goroutine never blocks on
+			// send — if we time out, the late result is just gc'd.
+			// Also avoids the data race the previous shared-entry
+			// pattern had (both the Summary goroutine and the
+			// timeout branch could write the same struct).
+			sumCh := make(chan sumResult, 1)
 			go func() {
-				defer close(done)
 				summary, err := api.Summary()
-				if err != nil {
-					entry.Error = err.Error()
-					return
-				}
-				populateEntryFromSummary(&entry, summary)
+				sumCh <- sumResult{summary, err}
 			}()
+
+			entry := HVVisorEntry{PK: pk}
 			select {
-			case <-done:
+			case r := <-sumCh:
+				if r.err != nil {
+					entry.Error = r.err.Error()
+				} else if r.summary != nil {
+					// Online ONLY when we actually got a Summary
+					// back. Hardcoded Online=true previously left
+					// failed-fetch entries showing as healthy in
+					// the tree-summary table with no other fields
+					// populated — the "ghost row" rendering an
+					// operator reported.
+					entry.Online = true
+					populateEntryFromSummary(&entry, r.summary)
+				}
 			case <-time.After(10 * time.Second):
-				entry.Error = "timeout"
+				entry.Error = "timeout (10s)"
 				log.WithField("pk", pk.String()).Warn("HVListDirectVisors: visor query timed out")
 			}
 			results[idx] = entry
@@ -113,11 +203,19 @@ func (v *Visor) HVListDirectVisors() ([]HVVisorEntry, error) {
 	}
 	wg.Wait()
 
+	// Build the local entry first so we can use its PublicIP as the
+	// "LAN-adjacent" sort key for the remote entries.
+	var localEntry HVVisorEntry
+	hasLocal := false
 	if hv.visor != nil {
-		localEntry := HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		localEntry = HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
+		hasLocal = true
+	}
+	sortHVVisorEntries(results, localEntry.PublicIP)
+	if hasLocal {
 		results = append([]HVVisorEntry{localEntry}, results...)
 	}
 	return results, nil
@@ -151,26 +249,35 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	var wg sync.WaitGroup
 	wg.Add(len(remotes))
 
+	type sumResult struct {
+		summary *Summary
+		err     error
+	}
 	for i, e := range remotes {
 		go func(idx int, pk cipher.PubKey, api API) {
 			defer wg.Done()
-			entry := HVVisorEntry{PK: pk, Online: true}
-
-			done := make(chan struct{})
+			// Same pattern as HVListDirectVisors above: buffered
+			// channel avoids the previous data race where both the
+			// Summary goroutine and the timeout branch could write
+			// the shared entry struct. Online is only set when we
+			// actually got a Summary — fixes ghost-row rendering.
+			sumCh := make(chan sumResult, 1)
 			go func() {
-				defer close(done)
 				summary, err := api.Summary()
-				if err != nil {
-					entry.Error = err.Error()
-					return
-				}
-				populateEntryFromSummary(&entry, summary)
+				sumCh <- sumResult{summary, err}
 			}()
 
+			entry := HVVisorEntry{PK: pk}
 			select {
-			case <-done:
+			case r := <-sumCh:
+				if r.err != nil {
+					entry.Error = r.err.Error()
+				} else if r.summary != nil {
+					entry.Online = true
+					populateEntryFromSummary(&entry, r.summary)
+				}
 			case <-time.After(10 * time.Second):
-				entry.Error = "timeout"
+				entry.Error = "timeout (10s)"
 				log.WithField("pk", pk.String()).Warn("HVListVisors: visor query timed out")
 			}
 			results[idx] = entry
@@ -178,13 +285,17 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 	}
 	wg.Wait()
 
-	// Prepend local visor
+	// Build the local entry; PublicIP anchors LAN-adjacency in the final
+	// sort. We append rather than prepend here — the single sortHVVisor-
+	// Entries call at the end of this function bubbles IsLocal=true to
+	// the top, so position-on-insert doesn't matter.
+	var localEntry HVVisorEntry
 	if hv.visor != nil {
-		localEntry := HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
+		localEntry = HVVisorEntry{PK: v.conf.PK, Online: true, IsLocal: true}
 		if localSummary, err := v.Summary(); err == nil {
 			populateEntryFromSummary(&localEntry, localSummary)
 		}
-		results = append([]HVVisorEntry{localEntry}, results...)
+		results = append(results, localEntry)
 	}
 
 	// Merge sub-hypervisor visors: for each direct remote that is itself a
@@ -244,6 +355,11 @@ func (v *Visor) HVListVisors() ([]HVVisorEntry, error) {
 			results = append(results, entry)
 		}
 	}
+
+	// Final stable sort across the merged direct + sub-hypervisor entries.
+	// IsLocal stays at the top via bucket 0; everything else falls into
+	// LAN-adjacent → has-PublicIP → no-PublicIP, PK-tiebroken.
+	sortHVVisorEntries(results, localEntry.PublicIP)
 
 	return results, nil
 }
@@ -401,6 +517,58 @@ func (v *Visor) HVListVisorsTree() (*HVVisorTree, error) {
 			HypervisorPK: r.hyperPK,
 			ViaChain:     []cipher.PubKey{localPK},
 			Visors:       r.visors,
+		})
+	}
+
+	// Stabilize sub-hypervisor section order + per-section visor order.
+	// sections[0] is the local hypervisor's own section — pin it at the
+	// top regardless of sort. Sub-hypervisors (sections[1:]) get ordered
+	// by LAN adjacency to the local hypervisor (same PublicIP as our
+	// local section's IsLocal entry, when present), then PK lex.
+	//
+	// For each section's Visors slice, sortHVVisorEntries gives stable
+	// order: IsLocal first (each section has its own IsLocal=true entry,
+	// for its own hypervisor's row), then LAN-adjacent, then by PK.
+	var localPublicIP string
+	for _, e := range sections[0].Visors {
+		if e.IsLocal {
+			localPublicIP = e.PublicIP
+			break
+		}
+	}
+	for i := range sections {
+		sortHVVisorEntries(sections[i].Visors, localPublicIP)
+	}
+	if len(sections) > 1 {
+		// Bucket each sub-hypervisor by looking up its PK in the local
+		// section's visors. If the sub-hypervisor is also one of our
+		// local hypervisor's known visors, we already have its
+		// PublicIP — use it for LAN-adjacency bucketing. Otherwise it
+		// falls into the "unknown" bucket and sorts by PK alone.
+		pubIPByPK := make(map[cipher.PubKey]string, len(sections[0].Visors))
+		for _, e := range sections[0].Visors {
+			if e.PublicIP != "" {
+				pubIPByPK[e.PK] = e.PublicIP
+			}
+		}
+		sectionBucket := func(s *HVVisorTreeNode) int {
+			pip, ok := pubIPByPK[s.HypervisorPK]
+			switch {
+			case !ok:
+				return 2
+			case localPublicIP != "" && pip == localPublicIP:
+				return 0
+			default:
+				return 1
+			}
+		}
+		subs := sections[1:]
+		sort.SliceStable(subs, func(i, j int) bool {
+			bi, bj := sectionBucket(&subs[i]), sectionBucket(&subs[j])
+			if bi != bj {
+				return bi < bj
+			}
+			return subs[i].HypervisorPK.Hex() < subs[j].HypervisorPK.Hex()
 		})
 	}
 

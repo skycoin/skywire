@@ -21,6 +21,10 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
@@ -29,10 +33,10 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgscp"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
@@ -320,7 +324,37 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// for the whole process lifetime — so an outage on the public
 	// HTTP fronting (Caddy, etc.) would break the visor's
 	// discovery refresh even when DMSG was healthy.
-	upgradeDmsgDiscToDmsgfirst(dmsgC, v.conf.Dmsg, log)
+	//
+	// Run the upgrade in a goroutine that waits for v.dmsgHTTPReady
+	// (initDmsgHTTP's dmsgDC) before wiring it in as dmsgfirst's
+	// primary path. dmsgDC is direct.Client-backed — it carries a
+	// synthetic entry for the dmsg-disc PK with all known server PKs
+	// as delegated, so DialStream resolves without ever needing an
+	// HTTP-discovery lookup. Pre-fix the primary used the main dmsgC,
+	// whose own discovery was dmsgfirst, so every Entry/PutEntry call
+	// from the visor's own updateClientEntryLoop fell back to HTTP
+	// after the DMSG primary's DialStream timed out — dmsg-disc has
+	// no entry in its own DB (root of trust, by design) so the dial
+	// never had a chance.
+	//
+	// Until dmsgHTTPReady fires (i.e., dmsgDC has bootstrapped its
+	// session set), dmsgC keeps the plain-HTTP discovery clients
+	// constructed by dmsgc.New. That's the same conservative behavior
+	// as before this fix landed.
+	go func() {
+		select {
+		case <-v.dmsgHTTPReady:
+		case <-ctx.Done():
+			return
+		}
+		v.initLock.Lock()
+		dmsgDC := v.dmsgDC
+		v.initLock.Unlock()
+		if dmsgDC == nil {
+			return
+		}
+		upgradeDmsgDiscToDmsgfirst(dmsgC, dmsgDC, v.conf.Dmsg, log)
+	}()
 
 	// Start periodic config refresh for dynamic key sets
 	go v.startConfigRefresh(ctx) //nolint:errcheck,gosec
@@ -354,9 +388,18 @@ const dmsgServersCacheRefreshInterval = 5 * time.Minute
 // to plain HTTP when the dmsg dial fails. The dmsg-discovery's PK is
 // extracted from each deployment's `discovery_dmsg` URL — when that's
 // absent, the entry stays on plain HTTP because dmsgfirst.New needs a
-// PK to dial. Safe to call after dmsgC.Ready(); a no-op if no
-// deployments yield a non-zero PK.
-func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
+// PK to dial. A no-op if no deployments yield a non-zero PK.
+//
+// primaryDmsgC is the dmsg client dmsgfirst will use for its DMSG-
+// primary path. It must be the direct.Client-backed dmsgDC, not the
+// main dmsgC — the main dmsgC's own discovery is what we're
+// upgrading here, so using it for the primary path would recurse on
+// every Entry() lookup. dmsgDC carries the dmsg-disc PK as a synthetic
+// direct.Client entry with all known server PKs as delegated, so its
+// DialStream(dmsg-disc) resolves locally and goes through a session
+// dmsg-disc actually has (it preloads the same server set via
+// direct.StartDmsg in dmsgdisc.go).
+func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
 	if conf == nil {
 		return
 	}
@@ -372,9 +415,9 @@ func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log 
 			upgraded[i] = dmsgdisc.NewHTTP(d.Discovery, &http.Client{}, log)
 			continue
 		}
-		upgraded[i] = dmsgfirst.New(dmsgC, pk, d.Discovery, &http.Client{}, log)
+		upgraded[i] = dmsgfirst.New(primaryDmsgC, pk, d.Discovery, &http.Client{}, log)
 		anyUpgraded = true
-		log.WithField("url", d.Discovery).WithField("pk", pk).Info("dmsg discovery client upgraded to dmsgfirst")
+		log.WithField("url", d.Discovery).WithField("pk", pk).Info("dmsg discovery client upgraded to dmsgfirst (primary via direct-client dmsgDC)")
 	}
 	if !anyUpgraded {
 		return
@@ -548,9 +591,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	if v.conf.Hypervisors != nil {
 		whitelistedPKs = append(whitelistedPKs, v.conf.Hypervisors...)
 	}
-	if v.conf.Dmsgpty != nil {
-		if v.conf.Dmsgpty.Whitelist != nil {
-			whitelistedPKs = append(whitelistedPKs, v.conf.Dmsgpty.Whitelist...)
+	if v.conf.Pty != nil {
+		if v.conf.Pty.Whitelist != nil {
+			whitelistedPKs = append(whitelistedPKs, v.conf.Pty.Whitelist...)
 		}
 	}
 
@@ -586,21 +629,21 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// in-process. When no CLI socket is configured we fall back to
 	// dialing our own dmsg client at DmsgPtyPort, which works the
 	// same way the hypervisor's per-PK ptyUI does for remote visors.
-	if v.conf.Dmsgpty != nil {
-		var ptyDialer dmsgpty.UIDialer
-		if v.conf.Dmsgpty.CLINet != "" {
-			ptyDialer = dmsgpty.NetUIDialer(v.conf.Dmsgpty.CLINet, v.conf.Dmsgpty.CLIAddr)
+	if v.conf.Pty != nil {
+		var ptyDialer pty.UIDialer
+		if v.conf.Pty.CLINet != "" {
+			ptyDialer = pty.NetUIDialer(v.conf.Pty.CLINet, v.conf.Pty.CLIAddr)
 		} else {
-			ptyDialer = dmsgpty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: v.conf.PK, Port: skyenv.DmsgPtyPort})
+			ptyDialer = pty.DmsgUIDialer(dmsgC, dmsg.Addr{PK: v.conf.PK, Port: skyenv.DmsgPtyPort})
 		}
-		ptyUI := dmsgpty.NewUI(ptyDialer, dmsgpty.DefaultUIConfig())
+		ptyUI := pty.NewUI(ptyDialer, pty.DefaultUIConfig())
 		ptyHandler := ptyUI.Handler(map[string][]string{
 			"update": visorconfig.UpdateCommand(),
 		})
 		ptyWL := []cipher.PubKey{v.conf.PK}
 		ptyWL = append(ptyWL, v.conf.Hypervisors...)
-		if v.conf.Dmsgpty.Whitelist != nil {
-			ptyWL = append(ptyWL, v.conf.Dmsgpty.Whitelist...)
+		if v.conf.Pty.Whitelist != nil {
+			ptyWL = append(ptyWL, v.conf.Pty.Whitelist...)
 		}
 		lsAPI.SetPtyHandler(ptyHandler, ptyWL)
 		logger.WithField("whitelist_size", len(ptyWL)).Info("Mounted /pty on logserver")
@@ -771,7 +814,7 @@ func initDmsgTrackers(_ context.Context, v *Visor, _ *logging.Logger) error {
 //
 //gocyclo:ignore
 func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
-	conf := v.conf.Dmsgpty
+	conf := v.conf.Pty
 
 	if conf == nil {
 		log.Debug("'dmsgpty' is not configured, skipping.")
@@ -781,19 +824,19 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// Unlink dmsg socket files (just in case).
 	if conf.CLINet == "unix" {
 		if runtime.GOOS == "windows" {
-			conf.CLIAddr = dmsgpty.ParseWindowsEnv(conf.CLIAddr)
+			conf.CLIAddr = pty.ParseWindowsEnv(conf.CLIAddr)
 		}
 
-		if err := osutil.UnlinkSocketFiles(v.conf.Dmsgpty.CLIAddr); err != nil {
-			log.WithError(err).Errorf("Insufficient permissions to unlink socket file %q", v.conf.Dmsgpty.CLIAddr)
+		if err := osutil.UnlinkSocketFiles(v.conf.Pty.CLIAddr); err != nil {
+			log.WithError(err).Errorf("Insufficient permissions to unlink socket file %q", v.conf.Pty.CLIAddr)
 			return err
 		}
 	}
 
-	wl := dmsgpty.NewMemoryWhitelist()
+	wl := pty.NewMemoryWhitelist()
 
 	// Initialize the dmsgpty whitelist
-	if err := wl.Add(v.conf.Dmsgpty.Whitelist...); err != nil {
+	if err := wl.Add(v.conf.Pty.Whitelist...); err != nil {
 		return err
 	}
 
@@ -818,73 +861,29 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// start` rides the visor's already-negotiated transports when
 	// a route exists, then falls through to dmsg on miss. Adding
 	// the chain here rather than at NewHost preserves backward
-	// compat for every other NewHost caller (cmd/dmsg/dmsgpty-host,
+	// compat for every other NewHost caller (cmd/dmsg/pty-host,
 	// sshd CLI, tests).
-	pty := dmsgpty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
+	host := pty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
 	// Expose the Host on the visor so the RPC layer can drive Exec
 	// directly (see pkg/visor/rpc_visor.go DmsgPtyExec). Without this
 	// the integrated `skywire cli dmsg pty exec` path is forced
 	// through the host's CLI control socket — a separate listener
 	// with separate permissions from the visor's RPC.
-	v.dmsgPty = pty
+	v.dmsgPty = host
 
-	if ptyPort := conf.DmsgPort; ptyPort != 0 {
-		serveCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is called in pushCloseStack
-		wg := new(sync.WaitGroup)
-		wg.Add(1)
-
-		go func() {
-			defer wg.Done()
-			runtimeErrors := getErrors(ctx)
-			if err := pty.ListenAndServe(serveCtx, ptyPort); err != nil {
-				runtimeErrors <- fmt.Errorf("listen and serve stopped: %w", err)
-			}
-		}()
-
-		v.pushCloseStack("router.serve", func() error {
-			cancel()
-			wg.Wait()
-			return nil
-		})
-
-		// Parallel skynet listener — accepts dmsgpty over
-		// appnet.SkywireNetworker so remote peers that have a
-		// negotiated route to us can reach the pty service without
-		// opening a fresh dmsg stream. Returns nil close-func when
-		// the skynet networker isn't wired yet (init ordering) or
-		// when Listen fails; in either case the dmsg listener
-		// above keeps the service functional.
-		runtimeErrors := getErrors(ctx)
-		if closer := startSkywirePtyListener(context.Background(), pty, v.conf.PK, ptyPort, runtimeErrors); closer != nil {
-			v.pushCloseStack("dmsgpty.skywire.serve", closer)
-		}
-
-	}
-
-	// Direct-TCP dmsgpty entry point — operator opts in via
-	// Dmsgpty.SshListen ("" disables). Same whitelist as the
-	// dmsg-overlay path; XK-noise handshake gates the accepted PK
-	// before the stream reaches the dmsgpty mux. See
-	// dmsgpty/host_tcp.go for the per-connection flow. Exposed at
-	// CLI as `skywire cli ssh` / `skywire cli sshd`.
-	if tcpAddr := conf.SshListen; tcpAddr != "" {
-		tcpCtx, tcpCancel := context.WithCancel(context.Background()) //nolint:gosec // cancel called in pushCloseStack
-		tcpWg := new(sync.WaitGroup)
-		tcpWg.Add(1)
-		go func() {
-			defer tcpWg.Done()
-			runtimeErrors := getErrors(ctx)
-			if err := pty.ListenAndServeTCP(tcpCtx, tcpAddr, v.conf.PK, v.conf.SK); err != nil {
-				runtimeErrors <- fmt.Errorf("dmsgpty tcp listen %s stopped: %w", tcpAddr, err)
-			}
-		}()
-		v.pushCloseStack("dmsgpty.tcp.serve", func() error {
-			tcpCancel()
-			tcpWg.Wait()
-			return nil
-		})
-		log.WithField("addr", tcpAddr).Info("Mounted dmsgpty direct-TCP entry point")
-	}
+	// The dmsg + skynet + TCP listeners moved from the init module
+	// into a launcher-managed Internal app (RFC #2775 Phase 3.3).
+	// Register the AppFunc here while we have closure-access to the
+	// constructed Host and the per-mode config. The launcher's
+	// AutoStart pass (see init_apps.go) brings the listeners up
+	// once the launcher is constructed; visor halt tears them down
+	// via procM.Close. RestartPolicy=Always ensures stop just
+	// triggers an auto-restart — operator-initiated `cli visor app
+	// stop pty` doesn't permanently remove the pty surface from a
+	// remote machine (lockout safety).
+	ptyPort := conf.DmsgPort
+	sshAddr := conf.SshListen
+	launcher.RegisterApp("pty", buildPtyAppFunc(v, host, ptyPort, sshAddr))
 
 	// dmsgscp Host (scp-over-dmsg). On by default — access is gated
 	// by the same whitelist that dmsgpty uses. Operators opt OUT
@@ -904,7 +903,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	if !scpConf.Disabled {
 		scpWL := wl
 		if len(scpConf.Whitelist) > 0 {
-			ownWL := dmsgpty.NewMemoryWhitelist()
+			ownWL := pty.NewMemoryWhitelist()
 			if err := ownWL.Add(scpConf.Whitelist...); err != nil {
 				return fmt.Errorf("dmsgscp: seed whitelist: %w", err)
 			}
@@ -989,7 +988,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		go func() {
 			defer wg.Done()
 			runtimeErrors := getErrors(ctx)
-			if err := pty.ServeCLI(serveCtx, cliL); err != nil {
+			if err := host.ServeCLI(serveCtx, cliL); err != nil {
 				runtimeErrors <- fmt.Errorf("serve cli stopped: %w", err)
 			}
 		}()
@@ -1219,3 +1218,100 @@ func initDmsgServerLatency(ctx context.Context, v *Visor, log *logging.Logger) e
 	log.Info("DMSG server latency tracking started")
 	return nil
 }
+
+// buildPtyAppFunc constructs the AppFunc registered as the "pty"
+// Internal app (RFC #2775 Phase 3.3). Captures the constructed
+// pty.Host plus the configured listener parameters from
+// initDmsgpty so the launcher can start / stop the listeners
+// after init has finished. The shape mirrors what initDmsgpty
+// itself used to do before this phase:
+//
+//   - dmsg listener on conf.DmsgPort (primary entry point)
+//   - skynet listener on the same port (routed peers)
+//   - TCP listener on conf.SshListen (operator-opt-in, ssh-style)
+//
+// All three share the pty.Host's mux and whitelist; the host
+// itself is constructed once at init time and re-used across
+// restart cycles.
+func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) appcommon.AppFunc {
+	return func(ctx context.Context, _ []string) error {
+		log := v.MasterLogger().PackageLogger("app:pty")
+
+		// Complete the in-process IPC handshake the proc manager
+		// is waiting for. Without this the launcher times out on
+		// ProcStartTimeout (5s), marks the proc stopped, and the
+		// app shows up in `cli visor app ls` as stopped even
+		// though the listeners are running. Pty doesn't need the
+		// app-RPC surface for its own work (it talks straight to
+		// pty.Host), but holding the appCl alive keeps the
+		// proc lifecycle reportable as the other internal apps
+		// (skynet, skychat) do.
+		appCl := app.NewClient(nil)
+		defer appCl.Close()
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
+		log.Info("Starting pty listeners.")
+
+		wg := new(sync.WaitGroup)
+		listenerCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		// dmsg listener — primary entry. ListenAndServe blocks
+		// until listenerCtx cancels or the listener fails.
+		if dmsgPort != 0 {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := host.ListenAndServe(listenerCtx, dmsgPort); err != nil && !errors.Is(err, context.Canceled) {
+					log.WithError(err).Warn("dmsg listener stopped with error")
+				}
+			}()
+
+			// Parallel skynet listener — accepts pty over the
+			// skywire networker so routed peers can reach the
+			// service without opening a fresh dmsg stream. nil
+			// runtimeErrors channel is OK; the helper's select
+			// has a default case.
+			if closer := startSkywirePtyListener(listenerCtx, host, v.conf.PK, dmsgPort, nil); closer != nil {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					<-listenerCtx.Done()
+					_ = closer() //nolint:errcheck
+				}()
+			}
+		}
+
+		// Direct-TCP entry point — operator opt-in via
+		// Dmsgpty.SshListen. XK-noise handshake gates each accept;
+		// the whitelist is shared with the dmsg path. Exposed at
+		// CLI as `skywire cli ssh` / `skywire cli sshd`.
+		if sshAddr != "" {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := host.ListenAndServeTCP(listenerCtx, sshAddr, v.conf.PK, v.conf.SK); err != nil && !errors.Is(err, context.Canceled) {
+					log.WithError(err).WithField("addr", sshAddr).Warn("tcp listener stopped with error")
+				}
+			}()
+			log.WithField("addr", sshAddr).Info("Mounted pty TCP entry point.")
+		}
+
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
+
+		// Block until app ctx cancel — either operator-initiated
+		// `cli visor app stop pty` (auto-restart by Always policy)
+		// or visor halt (procM.Close cancels all proc contexts).
+		<-ctx.Done()
+		log.Info("Stopping pty listeners.")
+		cancel()
+		wg.Wait()
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
+		return nil
+	}
+}
+
+// Ensure the launcher package is referenced. The RegisterApp call
+// in initDmsgpty's body uses launcher.RegisterApp; this nolint hint
+// keeps tooling that scans for unused imports happy in case the
+// init path is conditionally compiled out somewhere.
+var _ = launcher.RegisterApp

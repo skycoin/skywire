@@ -18,8 +18,8 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -52,6 +52,13 @@ var (
 	// pin --sk or seed DMSGPTY_SK. An explicit --sk / DMSGPTY_SK
 	// always wins.
 	ptyViaVisor bool
+	// ptyScheme pins the visor-side dialer choice for the exec
+	// (forwarded to the visor RPC as DmsgPtyExecArgs.Scheme).
+	// Empty (default) uses the visor's MultiDialer chain (skynet
+	// first, dmsg fallback). "dmsg" forces dmsg-only; "skynet"
+	// forces skynet-only. Useful for unblocking debug when one
+	// strategy in the chain hangs without honoring ctx.
+	ptyScheme string
 )
 
 // ptyTCPViaRE matches `tcp://<66-hex-pk>@<host:port>` for the --via
@@ -93,6 +100,8 @@ func init() {
 		"local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization)")
 	ptyExecCmd.Flags().BoolVar(&ptyViaVisor, "via-visor", false,
 		"borrow local visor's secret key from "+visorconfig.SkywireConfig()+" for the --via noise handshake (--sk wins if set)")
+	ptyExecCmd.Flags().StringVar(&ptyScheme, "scheme", "",
+		"pin transport: \"dmsg\" (force dmsg only), \"skynet\" (force skynet only), or empty (default MultiDialer chain: skynet first, dmsg fallback)")
 
 	// Flags for ui command
 	ptyUICmd.Flags().StringVarP(&ptyPath, "input", "i", "", "read from specified config file")
@@ -146,17 +155,17 @@ var ptyStartCmd = &cobra.Command{
 				return err
 			}
 			myPK, mySK := resolveTCPIdentity(ptySK)
-			tcpCli := dmsgpty.DefaultCLI()
-			return (&tcpCli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, dmsgpty.DefaultCmd)
+			tcpCli := pty.DefaultCLI()
+			return (&tcpCli).StartRemotePtyTCP(ctx, rPK, addr, myPK, mySK, pty.DefaultCmd)
 		}
 
 		if len(args) < 1 {
 			return fmt.Errorf("pty start: <pk> required (or use --via tcp://<pk>@<host:port>)")
 		}
-		cli := dmsgpty.DefaultCLI()
+		cli := pty.DefaultCLI()
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
-		return cli.StartRemotePty(ctx, addr, uint16(port), dmsgpty.DefaultCmd)
+		return cli.StartRemotePty(ctx, addr, uint16(port), pty.DefaultCmd)
 	},
 }
 
@@ -207,7 +216,7 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 			if len(args) > 1 {
 				cmdArgs = args[1:]
 			}
-			tcpCli := dmsgpty.DefaultCLI()
+			tcpCli := pty.DefaultCLI()
 			resp, err := (&tcpCli).ExecRemoteTCP(ctx, rPK, addr, myPK, mySK, name, cmdArgs, ptyExecEnv, nil, timeout)
 			if err != nil {
 				fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
@@ -220,7 +229,19 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 		if len(args) < 2 {
 			return fmt.Errorf("pty exec: <pk> <command> required (or use --via tcp://<pk>@<host:port>)")
 		}
-		_ = ctx // ctx is consumed by the --via branch above; RPC path is synchronous
+		// net/rpc's synchronous Call doesn't honor ctx, so wire SIGINT
+		// to a hard exit. The visor side bounds its own dial budget
+		// (api_services.go DmsgPtyExec) so a leaked goroutine there
+		// drains within ~15s + the user's --timeout; without this
+		// goroutine, an unresponsive dial would leave the CLI process
+		// hung past Ctrl-C with no way for the user to recover except
+		// SIGKILL — combined with `timeout(1)` wrappers that send only
+		// SIGTERM, the process would leak indefinitely.
+		go func() {
+			<-ctx.Done()
+			fmt.Fprintln(cmd.ErrOrStderr(), "exec: interrupted") //nolint:errcheck
+			os.Exit(130)
+		}()
 		addr := internal.ParsePK(cmd.Flags(), "pk", args[0])
 		port, _ := strconv.ParseUint(ptyPort, 10, 16) //nolint:errcheck
 		name := args[1]
@@ -240,12 +261,13 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 		resp, err := rpcCli.DmsgPtyExec(visor.DmsgPtyExecArgs{
 			RemotePK:   addr,
 			RemotePort: uint16(port),
-			Req: dmsgpty.CommandExecReq{
+			Req: pty.CommandExecReq{
 				Name:      name,
 				Arg:       cmdArgs,
 				Env:       ptyExecEnv,
 				TimeoutMS: timeout.Milliseconds(),
 			},
+			Scheme: ptyScheme,
 		})
 		if err != nil {
 			fmt.Fprintf(cmd.ErrOrStderr(), "exec: %v\n", err) //nolint:errcheck
@@ -263,7 +285,7 @@ RPC-layer failure). stdout flows to local stdout, stderr to local stderr.`,
 // only on a clean (exit 0, not truncated, not timed out) completion
 // — other shapes call os.Exit directly to surface the right exit
 // code to the caller's shell.
-func reportExecResult(cmd *cobra.Command, resp *dmsgpty.CommandExecResult) {
+func reportExecResult(cmd *cobra.Command, resp *pty.CommandExecResult) {
 	if len(resp.Stdout) > 0 {
 		_, _ = cmd.OutOrStdout().Write(resp.Stdout) //nolint:errcheck
 	}

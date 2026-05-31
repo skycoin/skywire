@@ -109,6 +109,17 @@ export class StorageService {
    */
   private savedVisibleLocalNodes = new Set<string>();
 
+  /**
+   * Returns the PK of the hypervisor this UI is hosted on. Set by
+   * initialize() during app startup from /api/about. Components
+   * comparing a visor row's connected-hypervisor list against the
+   * local hypervisor (e.g. to render a ★ next to it) use this
+   * getter so they don't have to round-trip /api/about themselves.
+   */
+  public getLocalHypervisorPk(): string {
+    return this.hypervisorPk;
+  }
+
   initialize(hypervisorPk: string) {
     this.storage = localStorage;
     this.hypervisorPk = hypervisorPk;
@@ -452,10 +463,24 @@ export class StorageService {
 
   /**
    * Returns the default label for a node.
+   *
+   * Priority: hostname > local IP > public key. The hostname is the
+   * most operator-readable identifier when no explicit label has
+   * been set — most deployments name their boxes meaningfully
+   * (`raspi-3`, `home-server`, ...), so falling back to that beats
+   * showing a `192.168.x.y` LAN IP or the raw 66-char PK. Empty
+   * hostname (visor running in a container/sandbox without
+   * os.Hostname() support, or older visor binary without the
+   * Overview.Hostname field) falls through to the IP path
+   * unchanged.
    */
   getDefaultLabel(node: Node): string {
     if (!node) {
       return '';
+    }
+
+    if (node.hostname) {
+      return node.hostname;
     }
 
     if (node.ip) {

@@ -21,19 +21,20 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/VictoriaMetrics/metrics"
 	jj "github.com/cloudfoundry-attic/jibber_jabber"
 	"github.com/droundy/goopt"
 	ui "github.com/gizak/termui/v3"
 	"github.com/shibukawa/configdir"
 	"github.com/spf13/cobra"
-	"github.com/xxxserxxx/gotop/v4"
-	"github.com/xxxserxxx/gotop/v4/colorschemes"
-	"github.com/xxxserxxx/gotop/v4/devices"
-	"github.com/xxxserxxx/gotop/v4/layout"
-	"github.com/xxxserxxx/gotop/v4/logging"
-	w "github.com/xxxserxxx/gotop/v4/widgets"
 	"github.com/xxxserxxx/lingo/v2"
+
+	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/colorschemes"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/devices"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/layout"
+	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/logging"
+	w "github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4/widgets"
 )
 
 func init() {
@@ -509,7 +510,7 @@ func run() int {
 		ui.Render(bar)
 	}
 
-	// TODO https://godoc.org/github.com/VictoriaMetrics/metrics#Set
+	// TODO https://godoc.org/github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics#Set
 	if conf.ExportPort != "" {
 		go func() {
 			http.HandleFunc("/metrics", func(w http.ResponseWriter, req *http.Request) {

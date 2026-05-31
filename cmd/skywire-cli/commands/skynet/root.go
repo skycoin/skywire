@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -22,14 +21,19 @@ const (
 )
 
 var (
-	remotePort    int
-	remotePk      string
-	localPort     int
-	clientAppPort uint16
-	useInternal   bool
-	useExternal   bool
-	clientName    string // optional custom name for the client instance
-	startRoutes   int    // number of parallel skynet mux routes (0/1 = single route)
+	remotePort      int
+	remotePk        string
+	localPort       int
+	clientAppPort   uint16
+	useInternal     bool
+	useExternal     bool
+	clientName      string // optional custom name for the client instance
+	startRoutes     int    // number of parallel skynet mux routes (0/1 = single route)
+	startMinHops    int    // minimum-hop constraint (>=2 rejects direct paths)
+	startFwdMinHops int    // per-direction forward MinHops override
+	startRevMinHops int    // per-direction reverse MinHops override
+	startFwdMux     int    // per-direction forward MuxRoutes override
+	startRevMux     int    // per-direction reverse MuxRoutes override
 )
 
 func init() {
@@ -48,6 +52,11 @@ func init() {
 	startCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startCmd.Flags().StringVarP(&clientName, "name", "n", "", "custom name for this client instance (default: skynet-client-<local-port>)")
 	startCmd.Flags().IntVar(&startRoutes, "routes", 0, "number of parallel skynet mux routes (0 or 1 = single route)")
+	startCmd.Flags().IntVar(&startMinHops, "min-hops", 0, "force routes through at least this many intermediates (>=2 rejects direct paths)")
+	startCmd.Flags().IntVar(&startFwdMinHops, "forward-min-hops", 0, "per-direction forward MinHops override (>=2 forces multi-hop on forward only)")
+	startCmd.Flags().IntVar(&startRevMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse only; combine with low/0 --min-hops for direct-upstream + multi-hop-downstream)")
+	startCmd.Flags().IntVar(&startFwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
+	startCmd.Flags().IntVar(&startRevMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)")
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the client instance to stop")
@@ -123,6 +132,26 @@ var startCmd = &cobra.Command{
 
 		if startRoutes > 1 {
 			arguments["--routes"] = fmt.Sprintf("%d", startRoutes)
+		}
+
+		if startMinHops > 1 {
+			arguments["--min-hops"] = fmt.Sprintf("%d", startMinHops)
+		}
+
+		if startFwdMinHops > 1 {
+			arguments["--forward-min-hops"] = fmt.Sprintf("%d", startFwdMinHops)
+		}
+
+		if startRevMinHops > 1 {
+			arguments["--reverse-min-hops"] = fmt.Sprintf("%d", startRevMinHops)
+		}
+
+		if startFwdMux > 0 {
+			arguments["--forward-mux"] = fmt.Sprintf("%d", startFwdMux)
+		}
+
+		if startRevMux > 0 {
+			arguments["--reverse-mux"] = fmt.Sprintf("%d", startRevMux)
 		}
 
 		err = rpcClient.DoCustomSetting(appName, arguments)
@@ -225,7 +254,9 @@ Examples:
 
 			stopped := 0
 			for _, state := range states {
-				if strings.HasPrefix(state.Name, "skynet-client-") && state.Status == appserver.AppStatusRunning {
+				// Match by Binary so custom-named clients (--name) are
+				// included — same fix as the status listing.
+				if state.Binary == skynetClientBinaryName && state.Status == appserver.AppStatusRunning {
 					if err := rpcClient.StopApp(state.Name); err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to stop %s: %v\n", state.Name, err)
 					} else {
@@ -286,18 +317,27 @@ Examples:
 		found := false
 
 		for _, state := range states {
-			// Match skynet-client-* apps or exact filter match
-			isSkynetClient := strings.HasPrefix(state.Name, "skynet-client-") || state.Name == "skynet-client"
+			// Match by Binary field — AddApp sets AppConfig.Binary
+			// to the literal binary name regardless of the operator-
+			// provided --name. The legacy name-prefix match missed
+			// any client started with `cli skynet start --name X`
+			// where X doesn't start with "skynet-client-" — so the
+			// status listing claimed "No skynet clients configured"
+			// while `cli visor app ls` clearly showed a running
+			// skynet-client app under the operator's chosen name.
+			isSkynetClient := state.Binary == skynetClientBinaryName
 			matchesFilter := filterName == "" || state.Name == filterName
 
 			if isSkynetClient && matchesFilter {
 				found = true
 				status := "stopped"
-				if state.Status == appserver.AppStatusRunning {
+				switch state.Status {
+				case appserver.AppStatusRunning:
 					status = "running"
-				}
-				if state.Status == appserver.AppStatusErrored {
+				case appserver.AppStatusErrored:
 					status = "errored"
+				case appserver.AppStatusStarting:
+					status = "starting"
 				}
 
 				jsonStatus := clientStatus{

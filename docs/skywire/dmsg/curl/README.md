@@ -20,28 +20,20 @@ skywire dmsg curl
 ```
   -Z, --http               use regular http to connect to DMSG Discovery
   -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
-  -U, --disc-url string    DMSG Discovery URL
-                            (default "http://dmsgd.skywire.skycoin.com")
-  -A, --disc-addr string   DMSG Discovery dmsg address
-                            (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -U, --disc-url string    DMSG Discovery URL (default "http://dmsgd.skywire.skycoin.com")
+  -A, --disc-addr string   DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -D, --dmsgconf string    dmsghttp-config path
-  -e, --sess int           number of DMSG Servers to connect to
-                            (default 2)
+  -e, --sess int           number of DMSG Servers to connect to (default 2)
   -S, --srv pk@ip:port     connect via specific dmsg server pk@ip:port
-                           
   -p, --proxy string       connect to DMSG via proxy (i.e. '127.0.0.1:1080')
-  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ]
-                            (default "fatal")
+  -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "fatal")
   -d, --data string        dmsghttp POST data
   -o, --out string         output filepath
   -r, --replace            replace existing file with new downloaded
-  -t, --try int            download attempts (0 unlimits)
-                            (default 1)
+  -t, --try int            download attempts (0 unlimits) (default 1)
   -w, --wait int           time to wait between requests
-  -a, --agent AGENT        identify as AGENT
-                            (default "dmsgcurl/<version>")
-  -s, --sk cipher.SecKey   a random key is generated if unspecified
-                            (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -a, --agent AGENT        identify as AGENT (default "dmsgcurl/v1.3.57-0")
+  -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)
 ```
 
 ## Global Flags

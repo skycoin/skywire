@@ -8,15 +8,16 @@ import (
 	"net"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport/network/spec"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// STCPConfig defines config for Skywire-TCP network.
-type STCPConfig struct {
-	PKTable          map[cipher.PubKey]string `json:"pk_table"`
-	ListeningAddress string                   `json:"listening_address"`
-}
+// STCPConfig is the wire-format type for Skywire-TCP configuration.
+// Aliased from pkg/transport/network/spec so existing callers
+// writing `network.STCPConfig{...}` keep compiling, while the
+// canonical (WASM-clean) definition lives in the spec leaf package.
+type STCPConfig = spec.STCPConfig
 
 type stcpClient struct {
 	*genericClient
@@ -51,6 +52,11 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		return nil, err
+	}
+	// TCP_NODELAY — see stcpr.go's matching comment. Interactive
+	// traffic (skypty, ssh, RPC) bottlenecks on Nagle without this.
+	if tcpConn, ok := conn.(*net.TCPConn); ok {
+		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
 	}
 
 	c.log.Debugf("Dialed %v:%v@%v", rPK, rPort, conn.RemoteAddr())

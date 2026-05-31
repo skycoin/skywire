@@ -113,7 +113,20 @@ dmsghttp: ## update dmsghttp-config.json
 count-dmsg-disc-entries:
 	curl -sL $(jq -r '.prod.dmsg_discovery' services-config.json)/dmsg-discovery/entries | jq '. | length'
 
-check: lint check-cg check-help test ## Run linters and tests
+check: ## Run linters and tests (lint, check-cg, check-help, test). Serialized via flock so two concurrent invocations don't trigger overlapping parallel test runs that pin every core and make the machine unresponsive.
+	@if command -v flock >/dev/null 2>&1; then \
+		exec 9>.make-check.lock; \
+		if ! flock -n 9; then \
+			echo "another 'make check' is already holding .make-check.lock; waiting for it to finish..." >&2; \
+			flock 9; \
+		fi; \
+		$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) check-inner; \
+	else \
+		echo "WARNING: 'flock' not available; running unguarded. install util-linux's flock to enable serialization." >&2; \
+		$(MAKE) --no-print-directory -f $(firstword $(MAKEFILE_LIST)) check-inner; \
+	fi
+
+check-inner: lint check-cg check-help test ## Internal: the actual check targets, run inside flock by 'make check'. Don't call directly unless you've already acquired .make-check.lock.
 
 check-cg: ## Cursory check of the main help menu, offline dmsghttp config gen and offline config gen
 	@echo "checking dmsghttp offline config gen"

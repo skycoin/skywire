@@ -45,6 +45,13 @@ import (
 // commit-time panics live. The handle is closed immediately so the
 // caller's real open isn't blocked.
 //
+// Both bolt.Open and tx.Check() can themselves panic on certain
+// freelist inconsistencies (e.g. "invalid freelist page: N, page
+// type is leaf" panics from freelist.read during Open). The probe
+// wraps both calls in recover() so a panic during the integrity
+// check is treated as proof of corruption and the file is moved
+// aside, rather than propagating up to crash-loop the caller.
+//
 // Callers that want operator visibility into the repair should
 // snapshot the directory's ".corrupt.<unix>" entries before calling
 // and re-scan after to detect a new entry — RepairIfCorrupt itself
@@ -55,17 +62,45 @@ func RepairIfCorrupt(path string) error {
 	} else if err != nil {
 		return fmt.Errorf("bbolthealth: stat %s: %w", path, err)
 	}
+	probeErr := probeIntegrity(path)
+	if probeErr != nil {
+		return moveCorruptAside(path, probeErr)
+	}
+	return nil
+}
+
+// probeIntegrity opens the file, runs tx.Check(), and closes the
+// handle. Returns nil on a clean file. Returns an error describing
+// the failure on any of: open error, integrity-check problem, or
+// panic from inside Open / Check (which bbolt can throw on certain
+// freelist inconsistencies). The recover() block is the load-
+// bearing piece — without it, the freelist-corruption panic in
+// freelist.read would propagate to the caller and crash-loop the
+// visor that bbolthealth was meant to protect.
+func probeIntegrity(path string) (probeErr error) {
+	defer func() {
+		if r := recover(); r != nil {
+			probeErr = fmt.Errorf("panic during integrity check: %v", r)
+		}
+	}()
 
 	db, openErr := bolt.Open(path, 0600, &bolt.Options{
 		Timeout: 5 * time.Second,
 	})
 	if openErr != nil {
 		// File exists but bbolt won't open it — header corruption,
-		// truncation, or unrelated I/O error. Move aside and let the
-		// caller retry; if the move itself fails, surface so the
-		// caller can fail closed.
-		return moveCorruptAside(path, fmt.Errorf("open: %w", openErr))
+		// truncation, or unrelated I/O error.
+		return fmt.Errorf("open: %w", openErr)
 	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil && probeErr == nil {
+			// Close after a clean Check failing is unusual but not
+			// itself proof of corruption — keep probeErr nil and let
+			// the caller's real open surface any persistent close-
+			// time issue.
+			_ = closeErr //nolint:errcheck
+		}
+	}()
 
 	// Collect up to a few problems for diagnostic context. Don't
 	// keep all of them — bbolt's Check can emit hundreds on a badly
@@ -81,19 +116,11 @@ func RepairIfCorrupt(path string) error {
 		}
 		return nil
 	})
-	closeErr := db.Close()
 	if viewErr != nil {
-		return moveCorruptAside(path, fmt.Errorf("check view: %w", viewErr))
+		return fmt.Errorf("check view: %w", viewErr)
 	}
 	if len(problems) > 0 {
-		return moveCorruptAside(path, fmt.Errorf("bbolt check found %d problems (first: %v)", len(problems), problems[0]))
-	}
-	if closeErr != nil {
-		// Close after a clean Check failing is unusual but not
-		// itself proof of corruption — surface as a soft warning by
-		// returning nil (we already verified contents). The caller's
-		// real open will surface any persistent close-time issue.
-		return nil
+		return fmt.Errorf("bbolt check found %d problems (first: %v)", len(problems), problems[0])
 	}
 	return nil
 }

@@ -57,6 +57,11 @@
           (click)="setView('calc')">
     {{ 'routing.view.calc' | translate }}
   </button>
+  <button mat-button
+          [class.active]="activeView === 'policies'"
+          (click)="setView('policies')">
+    {{ 'routing.view.policies' | translate }}
+  </button>
 </div>
 
 @if (activeView === 'rules') {
@@ -227,6 +232,73 @@
               <td class="mono">{{ rg.consume_rule_id ?? '-' }}</td>
               <td>{{ rg.hops?.length || 0 }}</td>
               <td class="mono small">{{ rg.fwd_next_tp_id || '-' }}</td>
+            </tr>
+          }
+        </table>
+      }
+    </div>
+  </div>
+}
+
+@if (activeView === 'policies') {
+  <div class="rounded-elevated-box mt-3">
+    <div class="box-internal-container">
+      <span class="section-title">{{ 'routing.policies.title' | translate }}</span>
+
+      @if (routingPoliciesLoading && !routingPolicies) {
+        <div class="loading-row">
+          <mat-spinner [diameter]="16"></mat-spinner>
+          <span class="ml-2">{{ 'routing.policies.loading' | translate }}</span>
+        </div>
+      }
+
+      @if (routingPoliciesError) {
+        <div class="error-row">{{ routingPoliciesError }}</div>
+      }
+
+      @if (routingPolicies && !routingPolicies.default && policyAppNames().length === 0 && !routingPoliciesError) {
+        <div class="empty-row">{{ 'routing.policies.empty' | translate }}</div>
+      }
+
+      @if (routingPolicies?.default) {
+        <div class="info-line mt-2">
+          <span class="title">{{ 'routing.policies.default' | translate }}: </span>
+          <span class="mono small">{{ routingPolicies.default.source }}</span>
+          <span class="ml-2 policy-badge"
+                [class.policy-active]="routingPolicies.default.active"
+                [class.policy-inactive]="!routingPolicies.default.active">
+            {{ routingPolicies.default.active
+                ? ('routing.policies.active' | translate)
+                : ('routing.policies.inactive' | translate) }}
+          </span>
+          @if (routingPolicies.default.backend) {
+            <span class="ml-2 policy-backend">{{ routingPolicies.default.backend }}</span>
+          }
+        </div>
+      }
+
+      @if (policyAppNames().length > 0) {
+        <table class="data-table mt-3">
+          <tr>
+            <th>{{ 'routing.policies.col-app' | translate }}</th>
+            <th>{{ 'routing.policies.col-source' | translate }}</th>
+            <th>{{ 'routing.policies.col-backend' | translate }}</th>
+            <th>{{ 'routing.policies.col-active' | translate }}</th>
+          </tr>
+          @for (appName of policyAppNames(); track appName) {
+            <tr>
+              <td>{{ appName }}</td>
+              <td class="mono small">{{ routingPolicies.per_app[appName].source }}</td>
+              <td>{{ routingPolicies.per_app[appName].backend || '-' }}</td>
+              <td>
+                <span class="policy-badge"
+                      [class.policy-active]="routingPolicies.per_app[appName].active"
+                      [class.policy-inactive]="!routingPolicies.per_app[appName].active">
+                  {{ routingPolicies.per_app[appName].active
+                      ? ('routing.policies.active' | translate)
+                      : ('routing.policies.inactive' | translate) }}
+                </span>
+              </td>
             </tr>
           }
         </table>

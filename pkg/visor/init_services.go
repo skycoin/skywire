@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/geoip"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/tpviz"
@@ -300,6 +301,7 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		skynetMux := transport.NewVStreamMux(v.tpM, routing.SkynetForwardPacket, log)
 		v.tpM.SetSkynetForwardHandler(skynetMux.HandlePacket)
 		v.skynetFwdMux = skynetMux
+		wireDirectDialPolicyHook(v, skynetMux)
 		go func() {
 			for {
 				stream, err := skynetMux.Accept()
@@ -335,6 +337,7 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		appDirectMux := transport.NewVStreamMux(v.tpM, routing.AppDirectPacket, log)
 		v.tpM.SetAppDirectHandler(appDirectMux.HandlePacket)
 		v.appDirectMux = appDirectMux
+		wireDirectDialPolicyHook(v, appDirectMux)
 		if n, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
 			if sn, ok := n.(*appnet.SkywireNetworker); ok {
 				sn.SetAppDirectMux(appDirectMux)
@@ -486,7 +489,30 @@ func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	}()
 }
 
-// forwardRawTCP does bidirectional raw TCP proxying using io.Copy
+// forwardRawTCP does bidirectional raw TCP proxying using io.Copy.
+//
+// When one direction's io.Copy returns (the local app closed its
+// socket, or the remote skynet stream returned EOF), the prior
+// implementation called Close() on BOTH conns immediately. That was
+// the root cause of #2731: io.Copy returns when bytes are accepted
+// by the smux/yamux SEND BUFFER, not when they are delivered to
+// the remote peer. Closing remoteConn at that point dropped the
+// in-flight buffered bytes — producing the "exactly 65536B then
+// Broken pipe" pattern (smux MaxStreamBuffer = 64 KB worth of
+// bytes still in flight when the close fired) and the partial-RST
+// pattern at larger byte counts.
+//
+// Fix: when the finishing-direction's destination supports
+// CloseWrite (net.TCPConn, smux.Stream, yamux.Stream all do via
+// the standard half-close interface), call CloseWrite instead of
+// Close. This signals end-of-stream to the peer (so its io.Copy
+// returns naturally) while leaving the SEND BUFFER intact long
+// enough for buffered bytes to actually reach the peer. After the
+// other direction's io.Copy completes (or the bounded drain
+// deadline fires), both conns are fully closed.
+//
+// Connections that don't implement CloseWrite fall back to the
+// prior immediate-close behavior (no worse than before).
 func forwardRawTCP(log *logging.Logger, remoteConn net.Conn, lHost string) {
 	localConn, err := net.Dial("tcp", lHost)
 	if err != nil {
@@ -496,27 +522,91 @@ func forwardRawTCP(log *logging.Logger, remoteConn net.Conn, lHost string) {
 	}
 	log.WithField("local", lHost).Debug("forwardRawTCP: connected to local server")
 
-	done := make(chan struct{}, 2)
+	type direction int
+	const (
+		dirRemoteToLocal direction = iota
+		dirLocalToRemote
+	)
+
+	type doneEvent struct {
+		d direction
+		n int64
+	}
+	done := make(chan doneEvent, 2)
 
 	// remote -> local
 	go func() {
 		n, err := io.Copy(localConn, remoteConn)
 		log.WithField("bytes", n).WithError(err).Debug("forwardRawTCP: remote->local ended")
-		done <- struct{}{}
+		done <- doneEvent{d: dirRemoteToLocal, n: n}
 	}()
 
 	// local -> remote
 	go func() {
 		n, err := io.Copy(remoteConn, localConn)
 		log.WithField("bytes", n).WithError(err).Debug("forwardRawTCP: local->remote ended")
-		done <- struct{}{}
+		done <- doneEvent{d: dirLocalToRemote, n: n}
 	}()
 
-	// Wait for one direction to finish, then close both
-	<-done
+	// Wait for one direction to finish. Half-close the OTHER side's
+	// write so the peer drains its receive buffer and the other
+	// io.Copy returns naturally. Then wait (bounded) for the second
+	// io.Copy to finish before fully closing both conns.
+	first := <-done
+	switch first.d {
+	case dirLocalToRemote:
+		// Local side stopped sending — tell the remote "I'm done
+		// writing"; remoteConn's send buffer drains to the peer.
+		halfCloseWriteOrClose(log, remoteConn, "remote")
+	case dirRemoteToLocal:
+		// Remote side stopped sending — tell the local app "I'm
+		// done writing"; localConn's send buffer drains.
+		halfCloseWriteOrClose(log, localConn, "local")
+	}
+
+	// Wait for the second direction with a bounded drain so a stuck
+	// peer doesn't pin the goroutines forever. The drain budget is
+	// generous relative to typical RTT but well short of operator
+	// patience for a hung route group.
+	select {
+	case <-done:
+	case <-time.After(forwardRawTCPDrainTimeout):
+		log.Debug("forwardRawTCP: drain timeout, forcing close")
+	}
+
 	closeConn(log, remoteConn)
 	closeConn(log, localConn)
-	<-done
+}
+
+// forwardRawTCPDrainTimeout bounds how long forwardRawTCP waits for
+// the second-direction io.Copy after half-closing the first. 30s is
+// long enough to drain a multi-MB smux/yamux send buffer over even
+// a heavily-loaded dmsg route, short enough that a black-holed peer
+// doesn't permanently pin proxy goroutines.
+const forwardRawTCPDrainTimeout = 30 * time.Second
+
+// halfCloseWriteOrClose attempts a CloseWrite half-close on c so
+// buffered bytes drain to the peer before the connection is fully
+// closed. Falls back to a full Close when c doesn't implement the
+// CloseWriter interface — preserves the pre-fix behavior for any
+// transport type that hasn't opted in to half-close semantics.
+//
+// net.TCPConn, hashicorp/yamux.Stream, and xtaci/smux.Stream all
+// satisfy the interface (they expose CloseWrite() error directly).
+func halfCloseWriteOrClose(log *logging.Logger, c net.Conn, side string) {
+	type closeWriter interface {
+		CloseWrite() error
+	}
+	if cw, ok := c.(closeWriter); ok {
+		if err := cw.CloseWrite(); err != nil {
+			log.WithError(err).WithField("side", side).Debug("forwardRawTCP: CloseWrite failed; falling back to full Close")
+			closeConn(log, c)
+		}
+		return
+	}
+	// No half-close support — fall back to full close (matches
+	// prior behavior).
+	closeConn(log, c)
 }
 
 func sendError(log *logging.Logger, remoteConn net.Conn, sendErr error) {
@@ -1326,4 +1416,53 @@ func initUIServer(ctx context.Context, v *Visor, log *logging.Logger) error {
 	})
 
 	return nil
+}
+
+// wireDirectDialPolicyHook attaches the visor's routing-policy
+// hook to a VStreamMux so direct dials (sky_forward_conn /
+// VStreamMux short-circuit, which bypasses the route-finder)
+// also fire the operator's script. The script sees
+// ctx.is_direct_dial=true and ctx.transport_kind="stcpr"/etc.
+// A bare RouteSpec() allows the dial; fallback="drop" refuses
+// it (the error propagates as the VStream.Dial return).
+//
+// Other RouteSpec fields (mux/min_hops/distribution) are no-ops
+// for direct dials — there's a single transport, no routing
+// decisions to make beyond accept/refuse.
+func wireDirectDialPolicyHook(v *Visor, mux *transport.VStreamMux) {
+	if v.router == nil || mux == nil {
+		return
+	}
+	hook := v.router.DialHook()
+	if hook == nil {
+		return
+	}
+	mux.SetDirectDialHook(func(remotePK cipher.PubKey, transportKind, appName string) error {
+		info := router.DialInfo{
+			AppName:       appName,
+			PeerPK:        remotePK,
+			IsDirectDial:  true,
+			TransportKind: transportKind,
+		}
+		adj, err := hook.BeforeDial(context.Background(), info)
+		if err != nil {
+			// Hook errored — proceed without refusing. The hook's
+			// own failure-mode (Fallback vs Drop) already decided
+			// what to return; surface as no-op here, matching
+			// how DialRoutes handles a hook error.
+			return nil
+		}
+		if adj.Fallback == "drop" {
+			return router.ErrDialPolicyDropped
+		}
+		if adj.AvoidDirect {
+			// Policy wants overlay even though a direct transport
+			// exists. tryDirectDial in skywire_networker treats
+			// any error as direct-failed, falling through to the
+			// route-setup overlay path — exactly the behavior we
+			// want here.
+			return router.ErrPolicyAvoidDirect
+		}
+		return nil
+	})
 }

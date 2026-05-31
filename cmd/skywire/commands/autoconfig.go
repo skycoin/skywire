@@ -26,6 +26,7 @@
 package commands
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
@@ -40,6 +41,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skywireconfig/autoconfigcmd"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -61,73 +63,20 @@ const (
 // would be clobbered by the next package upgrade.
 const systemdDropIn = "/etc/systemd/system/skywire.service.d/skywire-user.conf"
 
-var autoconfigVerbose bool
-
-// Editable-via-autoconfig knobs. When the operator passes any of
-// these flags, autoconfig rewrites the corresponding line in the
-// resolved SKYENV file BEFORE calling `skywire cli config gen`, so
-// the change is persisted to /etc/skywire.conf and survives
-// re-runs and package reinstalls.
-//
-// Each flag mirrors a `config gen` flag of the same name. We don't
-// pass them through to the subprocess — instead we edit skywire.conf
-// and let the existing `SKYENV=<file> config gen` invocation pick
-// them up. This keeps skywire.conf as the single source of truth.
-var (
-	autoSetHvpks          string
-	autoSetIshv           bool
-	autoSetNoIshv         bool
-	autoSetRewardAddr     string
-	autoSetPublic         bool
-	autoSetNoPublic       bool
-	autoSetStcprPort      int
-	autoSetSudphPort      int
-	autoSetLanDmsgPort    int
-	autoSetLanDmsgPublic  string
-	autoSetDmsgptyPks     string
-	autoSetVpnServer      bool
-	autoSetNoVpnServer    bool
-	autoSetProxyServer    bool
-	autoSetNoProxyServer  bool
-	autoSetSkychat        bool
-	autoSetNoSkychat      bool
-	autoSetDmsgweb        bool
-	autoSetNoDmsgweb      bool
-	autoSetSkynetweb      bool
-	autoSetNoSkynetweb    bool
-	autoSetDisablePubAuto bool
-)
+// autoconfigVals holds the runtime values of the autoconfig flags.
+// Lives at package level so the Run function can read them; the
+// pkg/skywireconfig/autoconfigcmd factory wires the bindings.
+var autoconfigVals autoconfigcmd.Values
 
 func init() {
-	autoconfigCmd.Flags().BoolVarP(&autoconfigVerbose, "verbose", "v", false, "show reward address, support links, and other details")
-
-	// Persistent skywire.conf edits. Each --flag sets the
-	// corresponding env var; --no-flag clears it back to default.
-	// Empty-string / zero-value flags are "leave unchanged" by
-	// virtue of Flags().Changed() lookup at runtime.
-	autoconfigCmd.Flags().StringVar(&autoSetHvpks, "hvpks", "", "set HYPERVISORPKS in skywire.conf (comma-separated PKs)")
-	autoconfigCmd.Flags().BoolVar(&autoSetIshv, "ishv", false, "set ISHYPERVISOR=true in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetNoIshv, "no-ishv", false, "set ISHYPERVISOR=false in skywire.conf")
-	autoconfigCmd.Flags().StringVar(&autoSetRewardAddr, "rewardaddr", "", "set REWARDSKYADDR in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetPublic, "public", false, "set VISORISPUBLIC=true in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetNoPublic, "no-public", false, "set VISORISPUBLIC=false in skywire.conf")
-	autoconfigCmd.Flags().IntVar(&autoSetStcprPort, "stcpr", 0, "set STCPRPORT in skywire.conf (0 = leave unchanged)")
-	autoconfigCmd.Flags().IntVar(&autoSetSudphPort, "sudph", 0, "set SUDPHPORT in skywire.conf (0 = leave unchanged)")
-	autoconfigCmd.Flags().IntVar(&autoSetLanDmsgPort, "lan-dmsg-port", 0, "set LANDMSGPORT in skywire.conf (0 = leave unchanged)")
-	autoconfigCmd.Flags().StringVar(&autoSetLanDmsgPublic, "lan-dmsg-public", "", "set LANDMSGPUBLIC in skywire.conf (host:port)")
-	autoconfigCmd.Flags().StringVar(&autoSetDmsgptyPks, "dmsgpty-pks", "", "set DMSGPTYPKS in skywire.conf (comma-separated PKs)")
-	autoconfigCmd.Flags().BoolVar(&autoSetVpnServer, "vpnserver", false, "set VPNSERVER=true in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetNoVpnServer, "no-vpnserver", false, "set VPNSERVER=false in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetProxyServer, "proxyserver", false, "set PROXYSERVER=true in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetNoProxyServer, "no-proxyserver", false, "set PROXYSERVER=false in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetSkychat, "skychat", false, "set SKYCHAT=true in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetNoSkychat, "no-skychat", false, "set SKYCHAT=false in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetDmsgweb, "dmsgweb", false, "set DMSGWEB=true in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetNoDmsgweb, "no-dmsgweb", false, "set DMSGWEB=false in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetSkynetweb, "skynetweb", false, "set SKYNETWEB=true in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetNoSkynetweb, "no-skynetweb", false, "set SKYNETWEB=false in skywire.conf")
-	autoconfigCmd.Flags().BoolVar(&autoSetDisablePubAuto, "disable-public-autoconn", false, "set DISABLEPUBLICAUTOCONN=true in skywire.conf")
-
+	autoconfigCmd = autoconfigcmd.New(&autoconfigVals)
+	// Preserved from the pre-factory inlined version. The factory
+	// produces a generic, non-hidden command; the binary makes it
+	// hidden so it doesn't pollute the top-level help listing
+	// (operators reach it via the autoconfig package install
+	// step, not via interactive discovery).
+	autoconfigCmd.Hidden = true
+	autoconfigCmd.Run = autoconfigRun
 	RootCmd.AddCommand(autoconfigCmd)
 }
 
@@ -135,11 +84,19 @@ func init() {
 // of edits to apply to /etc/skywire.conf. Only flags the operator
 // actually passed are included — un-passed flags leave the
 // corresponding lines untouched.
+//
+// The flag → SKYENV mapping is authoritatively defined in
+// pkg/skywireconfig/autoconfigcmd.EnvMap(); for the actual
+// VALUES we read from autoconfigVals via tiny switch helpers.
+// Keeping the mapping there means the WASM consumer (apt-repo
+// install page) and this Run-path agree on which env var each
+// flag writes.
 func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	var edits []skyenvEdit
+
 	// Bool-pair helper: --flag wins over --no-flag if both somehow set,
 	// but cobra normally only sees one per invocation.
-	addBool := func(key string, onName, offName string, on, off bool) {
+	addBool := func(key, onName, offName string, on, off bool) {
 		switch {
 		case cmd.Flags().Changed(onName) && on:
 			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(true)})
@@ -147,38 +104,114 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(false)})
 		}
 	}
+	addSoloBool := func(key, name string, val bool) {
+		if cmd.Flags().Changed(name) {
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBool(val)})
+		}
+	}
+	addString := func(key, name, val string) {
+		if cmd.Flags().Changed(name) {
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvString(val)})
+		}
+	}
+	addArray := func(key, name, val string) {
+		if cmd.Flags().Changed(name) {
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvBashArray(val)})
+		}
+	}
+	addInt := func(key, name string, val int) {
+		if cmd.Flags().Changed(name) {
+			edits = append(edits, skyenvEdit{Key: key, Value: formatSkyenvInt(val)})
+		}
+	}
 
-	if cmd.Flags().Changed("hvpks") {
-		edits = append(edits, skyenvEdit{Key: "HYPERVISORPKS", Value: formatSkyenvBashArray(autoSetHvpks)})
-	}
-	addBool("ISHYPERVISOR", "ishv", "no-ishv", autoSetIshv, autoSetNoIshv)
-	if cmd.Flags().Changed("rewardaddr") {
-		edits = append(edits, skyenvEdit{Key: "REWARDSKYADDR", Value: formatSkyenvString(autoSetRewardAddr)})
-	}
-	addBool("VISORISPUBLIC", "public", "no-public", autoSetPublic, autoSetNoPublic)
-	if cmd.Flags().Changed("stcpr") {
-		edits = append(edits, skyenvEdit{Key: "STCPRPORT", Value: formatSkyenvInt(autoSetStcprPort)})
-	}
-	if cmd.Flags().Changed("sudph") {
-		edits = append(edits, skyenvEdit{Key: "SUDPHPORT", Value: formatSkyenvInt(autoSetSudphPort)})
-	}
-	if cmd.Flags().Changed("lan-dmsg-port") {
-		edits = append(edits, skyenvEdit{Key: "LANDMSGPORT", Value: formatSkyenvInt(autoSetLanDmsgPort)})
-	}
-	if cmd.Flags().Changed("lan-dmsg-public") {
-		edits = append(edits, skyenvEdit{Key: "LANDMSGPUBLIC", Value: formatSkyenvString(autoSetLanDmsgPublic)})
-	}
-	if cmd.Flags().Changed("dmsgpty-pks") {
-		edits = append(edits, skyenvEdit{Key: "DMSGPTYPKS", Value: formatSkyenvBashArray(autoSetDmsgptyPks)})
-	}
-	addBool("VPNSERVER", "vpnserver", "no-vpnserver", autoSetVpnServer, autoSetNoVpnServer)
-	addBool("PROXYSERVER", "proxyserver", "no-proxyserver", autoSetProxyServer, autoSetNoProxyServer)
-	addBool("SKYCHAT", "skychat", "no-skychat", autoSetSkychat, autoSetNoSkychat)
-	addBool("DMSGWEB", "dmsgweb", "no-dmsgweb", autoSetDmsgweb, autoSetNoDmsgweb)
-	addBool("SKYNETWEB", "skynetweb", "no-skynetweb", autoSetSkynetweb, autoSetNoSkynetweb)
-	if cmd.Flags().Changed("disable-public-autoconn") {
-		edits = append(edits, skyenvEdit{Key: "DISABLEPUBLICAUTOCONN", Value: formatSkyenvBool(autoSetDisablePubAuto)})
-	}
+	// Hypervisor / identity
+	addArray("HYPERVISORPKS", "hvpks", autoconfigVals.Hvpks)
+	addBool("ISHYPERVISOR", "ishv", "no-ishv", autoconfigVals.Ishv, autoconfigVals.NoIshv)
+	addBool("ENABLEPKENDPOINT", "pk-endpoint", "no-pk-endpoint", autoconfigVals.PkEndpoint, autoconfigVals.NoPkEndpoint)
+	addString("HVHTTPADDR", "hvaddr", autoconfigVals.HvAddr)
+	addString("SK", "sk", autoconfigVals.SecretKey)
+	addString("VERSION", "version", autoconfigVals.Version)
+
+	// Visor public/private + autoconnect
+	addString("REWARDSKYADDR", "rewardaddr", autoconfigVals.RewardAddr)
+	addBool("VISORISPUBLIC", "public", "no-public", autoconfigVals.Public, autoconfigVals.NoPublic)
+	addSoloBool("DISPLAYNODEIP", "publicip", autoconfigVals.PublicIP)
+	addSoloBool("DISABLEPUBLICAUTOCONN", "disable-public-autoconn", autoconfigVals.DisablePubAuto)
+
+	// Service discovery / deployment
+	addSoloBool("TESTENV", "testenv", autoconfigVals.TestEnv)
+	addSoloBool("DMSGHTTP", "dmsghttp", autoconfigVals.DmsgHTTP)
+	addString("DMSGCONF", "dmsgconf", autoconfigVals.DmsgConf)
+	addArray("SVCCONFADDR", "url", autoconfigVals.URL)
+	addString("SVCCONF", "svcconf", autoconfigVals.SvcConf)
+	addInt("MINDMSGSESS", "minsess", autoconfigVals.MinSess)
+	addArray("STUNSERVERS", "stun", autoconfigVals.StunServers)
+
+	// Transport ports
+	addInt("STCPRPORT", "stcpr", autoconfigVals.StcprPort)
+	addInt("SUDPHPORT", "sudph", autoconfigVals.SudphPort)
+	addInt("LANDMSGPORT", "lan-dmsg-port", autoconfigVals.LanDmsgPort)
+	addString("LANDMSGPUBLIC", "lan-dmsg-public", autoconfigVals.LanDmsgPublic)
+
+	// Whitelists
+	addArray("DMSGPTYPKS", "dmsgpty-pks", autoconfigVals.DmsgptyPks)
+	addArray("SURVEYPKS", "survey", autoconfigVals.SurveyPks)
+	addArray("ROUTESETUPPKS", "routesetup", autoconfigVals.RouteSetupPKs)
+	addArray("TPSETUPPKS", "tpsetup", autoconfigVals.TransportSetup)
+
+	// Route calculation
+	addSoloBool("CALCULATEROUTES", "calculate-routes", autoconfigVals.CalculateRoutes)
+
+	// VPN server
+	addBool("VPNSERVER", "vpnserver", "no-vpnserver", autoconfigVals.VpnServer, autoconfigVals.NoVpnServer)
+	addString("VPNKS", "killsw", autoconfigVals.VpnKillSw)
+	addString("ADDVPNPK", "addvpn", autoconfigVals.AddVpn)
+	addArray("VPNSERVERWL", "vpnwl", autoconfigVals.VpnWl)
+	addString("VPNSEVERSECURE", "secure", autoconfigVals.VpnSecure)
+	addString("VPNSEVERNETIFC", "netifc", autoconfigVals.VpnNetIfc)
+
+	// Proxy
+	addBool("PROXYSERVER", "proxyserver", "no-proxyserver", autoconfigVals.ProxyServer, autoconfigVals.NoProxyServer)
+	addString("PROXYCLIENTPK", "proxyclientpk", autoconfigVals.ProxyClientPK)
+	addSoloBool("STARTPROXYCLIENT", "startproxyclient", autoconfigVals.StartProxyCli)
+	addArray("PROXYSERVERWL", "proxywl", autoconfigVals.ProxyWl)
+
+	// SOCKS5 web bridges
+	addBool("DMSGWEB", "dmsgweb", "no-dmsgweb", autoconfigVals.Dmsgweb, autoconfigVals.NoDmsgweb)
+	addBool("SKYNETWEB", "skynetweb", "no-skynetweb", autoconfigVals.Skynetweb, autoconfigVals.NoSkynetweb)
+	addString("DMSGWEBUPSTREAM", "dmsgweb-upstream", autoconfigVals.DmsgwebUpstream)
+	addString("SKYNETWEBUPSTREAM", "skynetweb-upstream", autoconfigVals.SkynetwebUpstream)
+
+	// Skychat
+	addBool("SKYCHAT", "skychat", "no-skychat", autoconfigVals.Skychat, autoconfigVals.NoSkychat)
+	addString("SKYCHATADDR", "chataddr", autoconfigVals.ChatAddr)
+	addBool("SKYCHATPAIR", "servechatpair", "no-servechatpair", autoconfigVals.ServeChatPair, autoconfigVals.NoServeChatPair)
+
+	// Skymail bridge
+	addBool("SKYMAILBRIDGE", "skymail-bridge", "no-skymail-bridge", autoconfigVals.SkymailBridge, autoconfigVals.NoSkymailBridge)
+
+	// Skycoin daemon
+	addBool("SKYCOIND", "skycoind", "no-skycoind", autoconfigVals.Skycoind, autoconfigVals.NoSkycoind)
+	addString("SKYCOIND_FIBER_TOML", "skycoindfiber", autoconfigVals.SkycoindFiber)
+	addString("SKYCOIND_API_SETS", "skycoindapi", autoconfigVals.SkycoindAPI)
+	addString("SKYCOIND_USER", "skycoindUSER", autoconfigVals.SkycoindUser)
+	addArray("SKYCOIND_INSTANCES", "skycoindinstances", autoconfigVals.SkycoindInstances)
+	addString("SKYCOIND_FLAGS", "skycoindflags", autoconfigVals.SkycoindFlags)
+
+	// Skycoin web wallet
+	addBool("SKYCOINWEB", "skycoinweb", "no-skycoinweb", autoconfigVals.Skycoinweb, autoconfigVals.NoSkycoinweb)
+	addString("SKYCOINWEBADDR", "skycoinwebaddr", autoconfigVals.SkycoinwebAddr)
+	addArray("SKYCOINWEBNODES", "skycoinwebnodes", autoconfigVals.SkycoinwebNodes)
+	addString("SKYCOINWEBWALLET", "skycoinwebwallet", autoconfigVals.SkycoinwebWallet)
+	addString("SKYCOINWEBUSER", "skycoinwebuser", autoconfigVals.SkycoinwebUser)
+
+	// Visor runtime
+	addString("BINPATH", "binpath", autoconfigVals.BinPath)
+	addString("LOGLVL", "loglvl", autoconfigVals.LogLevel)
+	addString("SHUTDOWNTIMEOUT", "timeout", autoconfigVals.ShutdownTimeout)
+	addString("REGTIMEOUT", "regtimeout", autoconfigVals.RegTimeout)
+
 	return edits
 }
 
@@ -194,217 +227,205 @@ type resolvedConfig struct {
 	useUserUnit bool   // true = `systemctl --user`, false = system unit
 }
 
-var autoconfigCmd = &cobra.Command{
-	Use:   "autoconfig",
-	Short: "Automatic visor configuration for packages",
-	Long: `Automatic visor configuration. Reads /etc/skywire.conf (or whatever
-SKYENV points at), generates the visor config, manages the systemd
-drop-in, and restarts (or prompts to start) the service.
+// autoconfigCmd is constructed in init() via the autoconfigcmd factory
+// so the flag set is shared with WASM consumers (apt-repo install
+// page). Use, Short, Long, and flag bindings all come from the
+// factory; this file only contributes Hidden=true and the Run body.
+var autoconfigCmd *cobra.Command
 
-Mode is selected by PKGENV/USRENV in the env file:
+// autoconfigRun is the Run function attached to autoconfigCmd in
+// init(). Extracted from the pre-factory inline closure so the
+// init body stays small.
+func autoconfigRun(cmd *cobra.Command, args []string) {
+	if os.Getenv("NOAUTOCONFIG") == "true" {
+		fmt.Println("autoconfiguration disabled. to configure and start skywire run: skywire autoconfig")
+		os.Exit(0)
+	}
 
-  PKGENV=true            → system install at /opt/skywire,
-                           system-level systemd unit
-  PKGENV=true
-  SKYWIRE_USER=_skywire  → same, but visor runs as _skywire (drop-in
-                           writes User=_skywire, /opt/skywire chowned)
+	msg2("Configuring skywire")
 
-  USRENV=true            → user install at $HOME, systemctl --user
-
-  neither set            → falls back to PKGENV when run as root,
-                           USRENV otherwise.`,
-	Hidden: true,
-	Run: func(cmd *cobra.Command, args []string) {
-		if os.Getenv("NOAUTOCONFIG") == "true" {
-			fmt.Println("autoconfiguration disabled. to configure and start skywire run: skywire autoconfig")
-			os.Exit(0)
+	// Apply any operator-requested skywire.conf edits before
+	// the rest of autoconfig sources the file. Each `--flag`
+	// rewrites the corresponding env line in place (uncomment +
+	// new value), preserving every other line. The subsequent
+	// `cli config gen` invocation reads the updated file via
+	// SKYENV so the new values take effect on the same run.
+	//
+	// Resolves the skyenv path FIRST so we know which file to
+	// edit — same lookup the downstream stages use, just lifted
+	// up to do the edits first.
+	if edits := collectSkyenvEdits(cmd); len(edits) > 0 {
+		pre := resolveConfig()
+		target := pre.skyenvPath
+		if target == "" {
+			target = defaultSkyenvPath()
 		}
-
-		msg2("Configuring skywire")
-
-		// Apply any operator-requested skywire.conf edits before
-		// the rest of autoconfig sources the file. Each `--flag`
-		// rewrites the corresponding env line in place (uncomment +
-		// new value), preserving every other line. The subsequent
-		// `cli config gen` invocation reads the updated file via
-		// SKYENV so the new values take effect on the same run.
-		//
-		// Resolves the skyenv path FIRST so we know which file to
-		// edit — same lookup the downstream stages use, just lifted
-		// up to do the edits first.
-		if edits := collectSkyenvEdits(cmd); len(edits) > 0 {
-			pre := resolveConfig()
-			target := pre.skyenvPath
-			if target == "" {
-				target = defaultSkyenvPath()
-			}
-			if err := updateSkyenvFile(target, edits); err != nil {
-				fmt.Printf("%s>>> FATAL:%s could not update %s: %v\n", colorRed, colorReset, target, err)
-				os.Exit(1)
-			}
-			editedKeys := make([]string, 0, len(edits))
-			for _, e := range edits {
-				editedKeys = append(editedKeys, e.Key)
-			}
-			msg3(fmt.Sprintf("Updated %s%s%s: %s", colorPurple, target, colorReset, strings.Join(editedKeys, " ")))
-		}
-
-		versionOut, err := exec.Command("skywire", "-v").Output()
-		if err == nil {
-			version := strings.TrimSpace(string(versionOut))
-			if !strings.Contains(version, "unknown") {
-				msg2(fmt.Sprintf("version: %s", strings.Fields(version)[len(strings.Fields(version))-1]))
-			}
-		}
-
-		hvArg := ""
-		if len(args) > 0 {
-			hvArg = args[0]
-		}
-
-		resolved := resolveConfig()
-
-		if err := generateConfig(resolved, hvArg); err != nil {
-			fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
+		if err := updateSkyenvFile(target, edits); err != nil {
+			fmt.Printf("%s>>> FATAL:%s could not update %s: %v\n", colorRed, colorReset, target, err)
 			os.Exit(1)
 		}
+		editedKeys := make([]string, 0, len(edits))
+		for _, e := range edits {
+			editedKeys = append(editedKeys, e.Key)
+		}
+		msg3(fmt.Sprintf("Updated %s%s%s: %s", colorPurple, target, colorReset, strings.Join(editedKeys, " ")))
+	}
 
-		if _, err := os.Stat(resolved.configPath); os.IsNotExist(err) {
-			mode := "PKGENV"
-			if resolved.usrEnv {
-				mode = "USRENV"
+	versionOut, err := exec.Command("skywire", "-v").Output()
+	if err == nil {
+		version := strings.TrimSpace(string(versionOut))
+		if !strings.Contains(version, "unknown") {
+			msg2(fmt.Sprintf("version: %s", strings.Fields(version)[len(strings.Fields(version))-1]))
+		}
+	}
+
+	hvArg := ""
+	if len(args) > 0 {
+		hvArg = args[0]
+	}
+
+	resolved := resolveConfig()
+
+	if err := generateConfig(resolved, hvArg); err != nil {
+		fmt.Printf("%s>>> FATAL:%s %v\n", colorRed, colorReset, err)
+		os.Exit(1)
+	}
+
+	if _, err := os.Stat(resolved.configPath); os.IsNotExist(err) {
+		mode := "PKGENV"
+		if resolved.usrEnv {
+			mode = "USRENV"
+		}
+		fmt.Printf("%s>>> FATAL:%s expected config file not found at %s\n", colorRed, colorReset, resolved.configPath)
+		fmt.Printf("            autoconfig resolved mode=%s from %s\n", mode, func() string {
+			if resolved.skyenvPath != "" {
+				return resolved.skyenvPath
 			}
-			fmt.Printf("%s>>> FATAL:%s expected config file not found at %s\n", colorRed, colorReset, resolved.configPath)
-			fmt.Printf("            autoconfig resolved mode=%s from %s\n", mode, func() string {
+			return "implicit fallback (no " + defaultSkyenvPath() + ")"
+		}())
+		fmt.Printf("            if %s is commented out in %s, uncomment it and re-run `skywire autoconfig`\n",
+			mode, func() string {
 				if resolved.skyenvPath != "" {
 					return resolved.skyenvPath
 				}
-				return "implicit fallback (no " + defaultSkyenvPath() + ")"
+				return defaultSkyenvPath()
 			}())
-			fmt.Printf("            if %s is commented out in %s, uncomment it and re-run `skywire autoconfig`\n",
-				mode, func() string {
-					if resolved.skyenvPath != "" {
-						return resolved.skyenvPath
-					}
-					return defaultSkyenvPath()
-				}())
-			os.Exit(100)
-		}
-		msg3(fmt.Sprintf("%sSkywire%s configuration updated\nconfig path: %s%s%s", colorBlue, colorReset, colorPurple, resolved.configPath, colorReset))
+		os.Exit(100)
+	}
+	msg3(fmt.Sprintf("%sSkywire%s configuration updated\nconfig path: %s%s%s", colorBlue, colorReset, colorPurple, resolved.configPath, colorReset))
 
-		// PKGENV mode: keep the systemd drop-in in sync with
-		// SKYWIRE_USER. When SKYWIRE_USER is set, write a drop-in
-		// pinning User= and chown the install to that user. When it's
-		// unset (or the operator switched away from it), tear down a
-		// previously-written drop-in so the unit reverts to running
-		// as root — otherwise the stale `User=<old_user>` would
-		// either fail CHDIR (if that user no longer has access to
-		// the install) or fail the visor's `--pkg requires root`
-		// pre-run check (because the drop-in still pins a non-root
-		// User= even though the operator's policy changed).
-		//
-		// Only meaningful when invoked as root: chowning root-owned
-		// files and writing under /etc/systemd/system/ both need it.
-		// When run as the target user already, we skip both branches
-		// and let the operator manage them out of band.
-		if runtime.GOOS == "linux" && !resolved.usrEnv && os.Geteuid() == 0 {
-			daemonReload := false
-			switch {
-			case resolved.skywireUser != "":
-				if err := writeSystemdDropIn(resolved.skywireUser); err != nil {
-					fmt.Printf("%sWarning:%s could not write systemd drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
+	// PKGENV mode: keep the systemd drop-in in sync with
+	// SKYWIRE_USER. When SKYWIRE_USER is set, write a drop-in
+	// pinning User= and chown the install to that user. When it's
+	// unset (or the operator switched away from it), tear down a
+	// previously-written drop-in so the unit reverts to running
+	// as root — otherwise the stale `User=<old_user>` would
+	// either fail CHDIR (if that user no longer has access to
+	// the install) or fail the visor's `--pkg requires root`
+	// pre-run check (because the drop-in still pins a non-root
+	// User= even though the operator's policy changed).
+	//
+	// Only meaningful when invoked as root: chowning root-owned
+	// files and writing under /etc/systemd/system/ both need it.
+	// When run as the target user already, we skip both branches
+	// and let the operator manage them out of band.
+	if runtime.GOOS == "linux" && !resolved.usrEnv && os.Geteuid() == 0 {
+		daemonReload := false
+		switch {
+		case resolved.skywireUser != "":
+			if err := writeSystemdDropIn(resolved.skywireUser); err != nil {
+				fmt.Printf("%sWarning:%s could not write systemd drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
+			} else {
+				msg3(fmt.Sprintf("Wrote %s (User=%s)", systemdDropIn, resolved.skywireUser))
+				daemonReload = true
+			}
+			if err := chownInstall(resolved.skywireUser); err != nil {
+				fmt.Printf("%sWarning:%s chown %s failed: %v\n", colorYellow, colorReset, skyenv.SkywirePath, err)
+			}
+		default:
+			// SKYWIRE_USER unset → ensure no stale drop-in is
+			// present that would still pin the unit to a
+			// non-root user. Idempotent: silent when there's
+			// nothing to remove.
+			if _, statErr := os.Stat(systemdDropIn); statErr == nil {
+				if err := os.Remove(systemdDropIn); err != nil {
+					fmt.Printf("%sWarning:%s could not remove stale drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
 				} else {
-					msg3(fmt.Sprintf("Wrote %s (User=%s)", systemdDropIn, resolved.skywireUser))
+					msg3(fmt.Sprintf("Removed stale %s (SKYWIRE_USER unset)", systemdDropIn))
+					// Also drop the parent dir if it's now empty.
+					_ = os.Remove(filepath.Dir(systemdDropIn)) //nolint:errcheck
 					daemonReload = true
 				}
-				if err := chownInstall(resolved.skywireUser); err != nil {
-					fmt.Printf("%sWarning:%s chown %s failed: %v\n", colorYellow, colorReset, skyenv.SkywirePath, err)
-				}
-			default:
-				// SKYWIRE_USER unset → ensure no stale drop-in is
-				// present that would still pin the unit to a
-				// non-root user. Idempotent: silent when there's
-				// nothing to remove.
-				if _, statErr := os.Stat(systemdDropIn); statErr == nil {
-					if err := os.Remove(systemdDropIn); err != nil {
-						fmt.Printf("%sWarning:%s could not remove stale drop-in %s: %v\n", colorYellow, colorReset, systemdDropIn, err)
-					} else {
-						msg3(fmt.Sprintf("Removed stale %s (SKYWIRE_USER unset)", systemdDropIn))
-						// Also drop the parent dir if it's now empty.
-						_ = os.Remove(filepath.Dir(systemdDropIn)) //nolint:errcheck
-						daemonReload = true
-					}
-				}
-			}
-			if daemonReload {
-				_ = exec.Command("systemctl", "daemon-reload").Run() //nolint:errcheck,gosec
 			}
 		}
-
-		// SKYBIAN auto-start: legacy appliance bootstrap. Limited to
-		// PKGENV mode; user-mode appliances aren't a thing.
-		// Linux-only — Windows service registration is the Phase 2
-		// piece of the autoconfig parity project (see project memory
-		// project_windows_autoconfig_parity.md). For now Windows
-		// operators run `skywire visor` directly after autoconfig.
-		if runtime.GOOS == "linux" && !resolved.useUserUnit && os.Getenv("SKYBIAN") == "true" {
-			msg3("Enabling skywire service and starting...")
-			_ = exec.Command("systemctl", "enable", "--now", "skywire.service").Run() //nolint:errcheck,gosec
+		if daemonReload {
+			_ = exec.Command("systemctl", "daemon-reload").Run() //nolint:errcheck,gosec
 		}
+	}
 
-		restartOrPrompt(resolved)
+	// SKYBIAN auto-start: legacy appliance bootstrap. Limited to
+	// PKGENV mode; user-mode appliances aren't a thing.
+	// Linux-only — Windows service registration is the Phase 2
+	// piece of the autoconfig parity project (see project memory
+	// project_windows_autoconfig_parity.md). For now Windows
+	// operators run `skywire visor` directly after autoconfig.
+	if runtime.GOOS == "linux" && !resolved.useUserUnit && os.Getenv("SKYBIAN") == "true" {
+		msg3("Enabling skywire service and starting...")
+		_ = exec.Command("systemctl", "enable", "--now", "skywire.service").Run() //nolint:errcheck,gosec
+	}
 
-		// Public key — read from the freshly-generated config rather
-		// than spawning another `skywire cli visor pk` (which would
-		// race against a still-restarting visor RPC port).
-		conf, err := visorconfig.ReadFile(resolved.configPath)
-		pubkey := ""
-		if err == nil && conf != nil {
-			pubkey = conf.PK.Hex()
-		}
+	restartOrPrompt(resolved)
 
+	// Public key — read from the freshly-generated config rather
+	// than spawning another `skywire cli visor pk` (which would
+	// race against a still-restarting visor RPC port).
+	conf, err := visorconfig.ReadFile(resolved.configPath)
+	pubkey := ""
+	if err == nil && conf != nil {
+		pubkey = conf.PK.Hex()
+	}
+
+	if pubkey != "" {
+		msg2(fmt.Sprintf("Visor Public Key:\n%s%s%s", colorGreen, pubkey, colorReset))
+	}
+
+	isHypervisor := conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable
+
+	if isHypervisor {
+		msg2(fmt.Sprintf("Hypervisor UI Starting now on:\n%shttp://127.0.0.1:8000%s", colorRed, colorReset))
 		if pubkey != "" {
-			msg2(fmt.Sprintf("Visor Public Key:\n%s%s%s", colorGreen, pubkey, colorReset))
+			vpnURL := fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s", pubkey)
+			msg2(fmt.Sprintf("Use the vpn:\n%s%s%s", colorRed, vpnURL, colorReset))
 		}
 
-		isHypervisor := conf != nil && conf.Hypervisor != nil && conf.Hypervisor.Enable
-
-		if isHypervisor {
-			msg2(fmt.Sprintf("Hypervisor UI Starting now on:\n%shttp://127.0.0.1:8000%s", colorRed, colorReset))
-			if pubkey != "" {
-				vpnURL := fmt.Sprintf("http://127.0.0.1:8000/#/vpn/%s", pubkey)
-				msg2(fmt.Sprintf("Use the vpn:\n%s%s%s", colorRed, vpnURL, colorReset))
+		lanIPs := getLANIPs()
+		if len(lanIPs) > 0 {
+			hvURLs := "Hypervisor UI LAN access:"
+			for _, ip := range lanIPs {
+				hvURLs += fmt.Sprintf("\n%shttp://%s:8000%s", colorYellow, ip, colorReset)
 			}
-
-			lanIPs := getLANIPs()
-			if len(lanIPs) > 0 {
-				hvURLs := "Hypervisor UI LAN access:"
-				for _, ip := range lanIPs {
-					hvURLs += fmt.Sprintf("\n%shttp://%s:8000%s", colorYellow, ip, colorReset)
-				}
-				msg2(hvURLs)
-			}
-		} else {
-			msg2(fmt.Sprintf("%sSkywire%s starting without Hypervisor UI", colorBlue, colorReset))
+			msg2(hvURLs)
 		}
+	} else {
+		msg2(fmt.Sprintf("%sSkywire%s starting without Hypervisor UI", colorBlue, colorReset))
+	}
 
-		if conf != nil && len(conf.Hypervisors) > 0 {
-			hvPKs := ""
-			for _, hvPK := range conf.Hypervisors {
-				hvPKs += hvPK.String() + "\n"
-			}
-			msg2(fmt.Sprintf("Remote Hypervisor Public Key:\n%s%s%s", colorPurple, strings.TrimSpace(hvPKs), colorReset))
+	if conf != nil && len(conf.Hypervisors) > 0 {
+		hvPKs := ""
+		for _, hvPK := range conf.Hypervisors {
+			hvPKs += hvPK.String() + "\n"
 		}
+		msg2(fmt.Sprintf("Remote Hypervisor Public Key:\n%s%s%s", colorPurple, strings.TrimSpace(hvPKs), colorReset))
+	}
 
-		rewardOut, err := exec.Command("skywire", "cli", "reward", "-r").Output() //nolint:gosec
-		if err == nil && len(rewardOut) > 0 {
-			msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
-		}
+	rewardOut, err := exec.Command("skywire", "cli", "reward", "-r").Output() //nolint:gosec
+	if err == nil && len(rewardOut) > 0 {
+		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
+	}
 
-		if autoconfigVerbose {
-			printWelcome(pubkey, isHypervisor)
-		}
-	},
+	if autoconfigVals.Verbose {
+		printWelcome(pubkey, isHypervisor)
+	}
 }
 
 // defaultSkyenvPath returns the canonical SKYENV file location for
@@ -463,71 +484,101 @@ func resolveConfig() resolvedConfig {
 	return r
 }
 
-// generateConfig invokes `skywire cli config gen` with the mode
-// flag (-p or -u) matching what resolveConfig already decided. We
-// intentionally do NOT let the subprocess redo the resolution —
-// autoconfig has an implicit "euid==0 → PKGENV" fallback when the
-// env file leaves both PKGENV and USRENV commented out, but
-// `cli config gen` does not, so without explicit -p/-u the
-// subprocess writes the config to gen's own default path (working-
-// directory ./skywire-config.json) instead of the system path
-// autoconfig is expecting at r.configPath. The mismatch surfaces
-// later as the FATAL `expected config file not found` from
-// autoconfig's post-Stat check and aborts the postinst with
-// exit 100. Propagating the resolved mode explicitly closes the gap.
+// generateConfig invokes `skywire cli config gen` with regen +
+// hide flags. -p/-u is propagated from the autoconfig-resolved mode
+// so cli config gen writes to the SAME absolute config path that
+// autoconfig resolved.
+//
+// History: an earlier version intentionally OMITTED -p/-u under the
+// theory that cli config gen would re-derive PKGENV/USRENV from the
+// SKYENV file via scriptExecBool. That theory only holds when
+// PKGENV=true (or USRENV=true) is set explicitly in /etc/skywire.conf.
+// In the common operator case where neither key is set,
+// resolveConfig auto-elects pkgEnv via `os.Geteuid() == 0`, but cli
+// config gen — running as a separate process — sees both flags
+// default to false, falls through to the relative-path branch in
+// PreRun (`confPath = skyenv.ConfigName`), and writes
+// `skywire-config.json` to the autoconfig invoker's cwd (typically
+// /root/). The pre-existing `/opt/skywire/skywire.json` stayed
+// untouched, autoconfig's downstream `os.Stat` check passed against
+// the stale file, the visor restarted on its old config, and
+// `cli config show .hypervisors` returned `[]` even though
+// HYPERVISORPKS / ISHYPERVISOR were set in the env file. Propagating
+// -p/-u from resolvedConfig closes the gap.
 func generateConfig(r resolvedConfig, hvArg string) error {
-	// `-w` / `--hide` suppresses the generated config from being
-	// echoed to stdout. autoconfig is meant for unattended
-	// systemd/postinst invocation — dumping the visor's SK + every
-	// service URL through the terminal at every install is both
-	// noisy (the file is the authoritative copy) and a perceived
-	// secret-leak risk on shared terminals / CI logs. The Stdout
-	// pipe we hook up below is still useful for errors; `-w` only
-	// hides the success-path JSON dump.
+	// printableArgs is what we PRINT for the operator to copy-paste.
+	// Intentionally omits -w (we suppress the noisy fetch logs
+	// ourselves). If the install fails, the operator can paste this
+	// exact line and see the full debug logging that we hid.
+	printableArgs := []string{"cli", "config", "gen", "-r"}
+
+	// args is what we ACTUALLY pass. -w suppresses the success-path
+	// JSON dump (echoing the SK + every service URL on every install
+	// is noisy and a perceived secret-leak risk on shared terminals).
 	args := []string{"cli", "config", "gen", "-r", "-w"}
 
+	// Pin the write target to the same mode autoconfig resolved.
+	// Without this, cli config gen's own scriptExecBool defaults
+	// (`${PKGENV:-false}` / `${USRENV:-false}`) silently mis-resolve
+	// to false when the env file doesn't set those keys explicitly,
+	// and gen writes to a cwd-relative path instead of the absolute
+	// /opt/skywire/skywire.json (PKGENV) or ~/skywire-config.json
+	// (USRENV) that autoconfig already stat-checks downstream.
 	switch {
-	case r.pkgEnv:
-		args = append(args, "-p")
 	case r.usrEnv:
 		args = append(args, "-u")
+		printableArgs = append(printableArgs, "-u")
+	case r.pkgEnv:
+		args = append(args, "-p")
+		printableArgs = append(printableArgs, "-p")
 	}
 
 	switch hvArg {
 	case "0":
 		args = append(args, "-i")
+		printableArgs = append(printableArgs, "-i")
 	case "1":
 		// no hypervisor
 	case "":
 		// New install? Default to enabling the local hypervisor.
 		if _, err := os.Stat(r.configPath); os.IsNotExist(err) {
 			args = append(args, "-i")
+			printableArgs = append(printableArgs, "-i")
 		}
 	default:
 		args = append(args, "-j", hvArg)
+		printableArgs = append(printableArgs, "-j", hvArg)
 	}
 
 	envPrefix := ""
 	if r.skyenvPath != "" {
 		envPrefix = fmt.Sprintf("SKYENV=%s ", r.skyenvPath)
 	}
-	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(args, " "), colorReset))
+	msg3(fmt.Sprintf("Generating skywire config with command:\n  %s%sskywire %s%s", colorCyan, envPrefix, strings.Join(printableArgs, " "), colorReset))
 
-	// Forward stdout and stderr to the parent so any error from
-	// `cli config gen` (missing service-config.json, bad SK, write
-	// permission denied, etc.) reaches the operator's apt output /
-	// journalctl. Previously these were both /dev/null'd, so a
-	// failing gen exited 0-or-noise and autoconfig only noticed
-	// downstream — by the time the FATAL Stat fired, the actual
-	// cause was lost.
+	// Suppress the subprocess's stdout/stderr by default. The DMSG
+	// fetch chatter ([INFO]/[DEBUG] lines) and -w's hidden JSON dump
+	// both go through here and are noise on the happy path. Buffer
+	// stderr; on failure flush it so the operator can see what
+	// broke (missing service-config.json, bad SK, write permission
+	// denied, etc.). If the operator wants the verbose path, the
+	// printableArgs above show the same command without -w to paste
+	// into a terminal.
+	var stderrBuf bytes.Buffer
 	cmd := exec.Command("skywire", args...) //nolint:gosec
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = &stderrBuf
 	cmd.Env = os.Environ()
 	if r.skyenvPath != "" {
 		cmd.Env = append(cmd.Env, "SKYENV="+r.skyenvPath)
 	}
-	return cmd.Run()
+	if err := cmd.Run(); err != nil {
+		if stderrBuf.Len() > 0 {
+			fmt.Fprint(os.Stderr, stderrBuf.String())
+		}
+		return err
+	}
+	return nil
 }
 
 // writeSystemdDropIn writes a one-section drop-in that pins User=

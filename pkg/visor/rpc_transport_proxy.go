@@ -17,14 +17,16 @@
 package visor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/rpc"
+	"strings"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // TransportRPCProxyRequest is the request for the TransportRPCProxy RPC method.
@@ -42,12 +44,34 @@ type TransportRPCProxyReply struct {
 
 // TransportRPCCall proxies an RPC call to a remote visor over a transport VStream.
 // args is optional JSON-encoded RPC arguments; nil means no-arg call.
+//
+// Uses v.transportRPCMux — the SAME VStreamMux that's registered as
+// the transport manager's VisorRPCPacket handler. Sharing this mux
+// between accept and dial paths is required: the manager only routes
+// inbound VisorRPCPacket frames to one handler, and dial-side
+// response frames have to land in the same streams map that opened
+// the stream. Creating a separate mux for the dial path (as the
+// previous DialTransportRPC implementation did) left outbound
+// streams unable to receive responses and every tp-rpc call timed
+// out indefinitely.
 func (v *Visor) TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error) {
 	if v.tpM == nil {
 		return nil, fmt.Errorf("transport manager not available")
 	}
-	log := logging.MustGetLogger("transport_rpc_proxy")
-	rpcC, err := DialTransportRPC(remotePK, v.tpM, log)
+	if v.transportRPCMux == nil {
+		return nil, fmt.Errorf("transport RPC not initialized")
+	}
+
+	// On a fresh visor (or one that just restarted) the transport
+	// to remotePK may not exist yet. Try to create one before the
+	// dial — same stcpr→sudph fallback the autoUpgradeHypervisorTransport
+	// goroutine uses on a steady cadence. If a non-dmsg transport
+	// already exists, ensureFastTransport is a no-op.
+	if err := v.ensureFastTransport(remotePK); err != nil {
+		return nil, fmt.Errorf("transport rpc: ensure transport to %s: %w", remotePK.String(), err)
+	}
+
+	rpcC, err := DialTransportRPC(v.transportRPCMux, remotePK)
 	if err != nil {
 		return nil, err
 	}
@@ -65,17 +89,67 @@ func (v *Visor) TransportRPCCall(remotePK cipher.PubKey, method string, args jso
 	return result, nil
 }
 
-// DialTransportRPC opens a VStream to a remote visor over a transport
-// and returns an RPC client connected to it. The caller is responsible
-// for closing the returned client.
-func DialTransportRPC(remotePK cipher.PubKey, tm *transport.Manager, log *logging.Logger) (*rpc.Client, error) {
-	mux := transport.NewVStreamMux(tm, routing.VisorRPCPacket, log)
-
-	stream, err := mux.Dial(remotePK)
-	if err != nil {
-		mux.Close() //nolint:errcheck,gosec
-		return nil, fmt.Errorf("transport rpc: dial %s: %w", remotePK.String(), err)
+// ensureFastTransport guarantees a non-dmsg ManagedTransport to
+// remotePK is in place before a transport-RPC dial. No-op when one
+// already exists; otherwise tries stcpr first (direct TCP, no dmsg
+// signaling), then sudph (UDP with NAT hole-punch). dmsg is not a
+// candidate here — VStreamMux excludes dmsg transports because
+// VisorRPCPacket on route ID 0 doesn't ride dmsg's own stream mux.
+//
+// Bounded dial timeout (8s per attempt) keeps a totally unreachable
+// peer from stalling the caller for the full address-resolver
+// retrier budget.
+func (v *Visor) ensureFastTransport(remotePK cipher.PubKey) error {
+	if hasFastTransportTo(v.tpM, remotePK) {
+		return nil
 	}
 
+	localSTCPR := v.tpM.IsKnownNetwork(tptypes.STCPR)
+	localSUDPH := v.tpM.IsKnownNetwork(tptypes.SUDPH)
+	if !localSTCPR && !localSUDPH {
+		return fmt.Errorf("local visor has neither stcpr nor sudph available")
+	}
+
+	var firstErr error
+	for _, attempt := range []tptypes.Type{tptypes.STCPR, tptypes.SUDPH} {
+		if attempt == tptypes.STCPR && !localSTCPR {
+			continue
+		}
+		if attempt == tptypes.SUDPH && !localSUDPH {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		_, err := v.tpM.SaveTransport(ctx, remotePK, attempt, transport.LabelAutomatic)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	// hasFastTransportTo is the source of truth — SaveTransport can
+	// return an error if the peer entry already exists with the same
+	// type, even though the transport itself is fine. Re-check.
+	if hasFastTransportTo(v.tpM, remotePK) {
+		return nil
+	}
+	if firstErr != nil && strings.Contains(firstErr.Error(), "context") {
+		return fmt.Errorf("transport create timed out: %w", firstErr)
+	}
+	return fmt.Errorf("transport create failed: %w", firstErr)
+}
+
+// DialTransportRPC opens a VStream to a remote visor on the visor's
+// shared transport-RPC mux and returns an RPC client connected to
+// it. The mux MUST be the one registered as the transport manager's
+// VisorRPCPacket handler — see the comment on Visor.transportRPCMux
+// for why. The caller is responsible for closing the returned
+// client.
+func DialTransportRPC(mux *transport.VStreamMux, remotePK cipher.PubKey) (*rpc.Client, error) {
+	stream, err := mux.Dial(remotePK, "")
+	if err != nil {
+		return nil, fmt.Errorf("transport rpc: dial %s: %w", remotePK.String(), err)
+	}
 	return rpc.NewClient(stream), nil
 }

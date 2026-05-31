@@ -36,6 +36,8 @@ import (
 	"time"
 
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/skycoin/skywire/pkg/util/bbolthealth"
 )
 
 // DefaultFilename is the bbolt file's basename under the cache dir.
@@ -103,6 +105,11 @@ func Open(path string) (*Cache, error) {
 		_ = err //nolint:errcheck // intentionally swallowed
 	}
 
+	// Repair-on-corrupt: clicache is a pure performance cache —
+	// recreating it fresh costs only the next fetch's HTTP round trip.
+	if err := bbolthealth.RepairIfCorrupt(path); err != nil {
+		return nil, fmt.Errorf("clicache: integrity-check %q: %w", path, err)
+	}
 	db, err := bolt.Open(path, 0o666, &bolt.Options{Timeout: 2 * time.Second})
 	if err != nil {
 		return nil, fmt.Errorf("clicache: open %q: %w", path, err)

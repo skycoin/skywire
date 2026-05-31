@@ -31,8 +31,8 @@ import (
 	dmsgcmdutil "github.com/skycoin/skywire/pkg/dmsg/cmdutil"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
@@ -102,21 +102,21 @@ type Visor struct {
 	awaitSetupListener *dmsg.Listener     // pre-opened DmsgAwaitSetupPort listener; consumed by initRouter
 
 	// dmsgWL is the live, in-memory whitelist shared with the running
-	// dmsgpty.Host and (when scp is enabled) dmsgscp.Host. VisorCat's
+	// pty.Host and (when scp is enabled) dmsgscp.Host. VisorCat's
 	// listen-mode auth reads this same reference so runtime mutations
-	// made via dmsgpty.WhitelistGateway are honored without rebuilding
+	// made via pty.WhitelistGateway are honored without rebuilding
 	// from v.conf. Mirrors scp's precedence: when Dmsgscp.Whitelist is
 	// non-empty, this holds the scp-specific list (so cat behaves like
 	// scp); otherwise it holds the dmsgpty list that scp also reuses.
 	// nil when initDmsgpty was skipped (Dmsgpty config absent).
-	dmsgWL dmsgpty.Whitelist
+	dmsgWL pty.Whitelist
 
-	// dmsgPty is the live dmsgpty.Host instance, exposed so the visor
+	// dmsgPty is the live pty.Host instance, exposed so the visor
 	// RPC layer can drive remote pty operations (Exec, list) without
 	// going back through the host's CLI control listener (the unix
 	// socket / TCP loopback the standalone dmsgpty-cli uses). nil when
 	// initDmsgpty was skipped.
-	dmsgPty *dmsgpty.Host
+	dmsgPty *pty.Host
 
 	// DMSG tracker state
 	dmsgTracker dtmState
@@ -150,6 +150,14 @@ type Visor struct {
 	isTransportabilityHealthy *internalHealthInfo
 	remoteVisors              map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors      map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
+	// hypervisorCancels holds the per-hypervisor context.CancelFunc
+	// installed by AddHypervisor, keyed by the remote hypervisor PK.
+	// RemoveHypervisor looks up the cancel func and invokes it; the
+	// goroutine's deferred delete from connectedHypervisors completes
+	// the teardown. Populated only for runtime-added hypervisors
+	// (those that came through AddHypervisor / RPC); config-loaded
+	// hypervisors take a different path that doesn't enter this map.
+	hypervisorCancels map[cipher.PubKey]context.CancelFunc
 
 	// Allowed ports for app connections (legacy — being replaced by forwardedPorts)
 	allowed allowedPortsState
@@ -261,6 +269,16 @@ type Visor struct {
 	// through the setup-node-mediated route group machinery. Falls
 	// back to router.DialRoutes when no direct transport exists.
 	appDirectMux *transport.VStreamMux
+	// Shared VStreamMux for visor RPC over transport (VisorRPCPacket,
+	// route ID 0). Used by BOTH the TransportRPCServer's Accept loop
+	// AND by TransportRPCCall's outbound dial. Sharing one mux per
+	// (tm, packet_type) is required because the transport.Manager
+	// only routes incoming VisorRPCPacket frames to a single
+	// registered handler (the mux's HandlePacket) — separate dial-side
+	// muxes wouldn't receive response packets and would hang
+	// indefinitely, which was the cause of every tp-rpc call timing
+	// out before this was fixed.
+	transportRPCMux *transport.VStreamMux
 
 	// Hypervisor instance (nil if never initialized; may be enabled/disabled at runtime)
 	hvInstance *Hypervisor
@@ -283,20 +301,6 @@ type Visor struct {
 	// STCP PK table for runtime address injection (tp add -t stcp --addr)
 	stcpTable stcp.PKTable
 
-	// Lazy-initialized CXO subscriber for TPD's network-wide
-	// transport-metrics feed. Created on the first hvui-driven
-	// FetchTransportMetricsCXO call and kept alive thereafter; the
-	// hvui handler reads cached values via Subscriber.Get and falls
-	// back to HTTP /metrics when a path hasn't been published yet.
-	tpdMetricsSub   *tpdMetricsSubscriber
-	tpdMetricsSubMu sync.RWMutex
-
-	// Same lazy-on-demand pattern for TPD's network-wide visor-uptime
-	// feed (the /uptimes?v=v3 mirror). Drives the hvui Network Uptime
-	// tab. Falls back to DMSG-HTTP / HTTP when the cache misses.
-	tpdUptimeSub   *tpdUptimeSubscriber
-	tpdUptimeSubMu sync.RWMutex
-
 	// cxoSubMgr is the on-demand CXO subscription manager that owns
 	// the network-visualizer / metrics-tab data feeds (SD services,
 	// DMSG-D clients-by-server, TPD aggregates). Constructed in
@@ -304,16 +308,14 @@ type Visor struct {
 	// nil otherwise. Tabs that source CXO data call AcquireFor on
 	// open and ReleaseFor on close.
 	cxoSubMgr *CXOSubscriptionManager
-	// Records the last unix-nano time a Connect attempt failed so we
-	// can throttle re-dials while TPD's publisher is down. Read
-	// lock-free on the hot path (atomic), written from inside the
-	// connect-fail branch under the outer mutex.
-	tpdUptimeLastFail atomic.Int64
 }
 
-// pingState manages Skywire transport ping connections.
+// pingState manages Skywire transport ping connections. Keyed by
+// PingRouteRef (PK + RouteIndex) so multiple parallel routes to the
+// same peer can coexist without overwriting each other — single-route
+// callers use PingRoutePrimary(pk) (RouteIndex=0) and see no change.
 type pingState struct {
-	conns    map[cipher.PubKey]ping
+	conns    map[PingRouteRef]ping
 	mu       *sync.Mutex
 	pcktSize int
 }
@@ -567,6 +569,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		isAutoconnectHealthy:      newInternalHealthInfo(),
 		isTransportabilityHealthy: newInternalHealthInfo(),
 		connectedHypervisors:      make(map[cipher.PubKey]bool),
+		hypervisorCancels:         make(map[cipher.PubKey]context.CancelFunc),
 		allowed: allowedPortsState{
 			ports: make(map[int]bool),
 			mu:    new(sync.RWMutex),
@@ -582,7 +585,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		},
 		arSelf: newARSelfState(),
 		ping: pingState{
-			conns: make(map[cipher.PubKey]ping),
+			conns: make(map[PingRouteRef]ping),
 			mu:    new(sync.Mutex),
 		},
 		dmsgPing: dmsgPingState{
@@ -773,11 +776,6 @@ func (v *Visor) Close() error {
 	log := v.MasterLogger().PackageLogger("visor:shutdown")
 	log.Info("Begin shutdown.")
 
-	// Tear down lazy CXO subscribers (TPD metrics + uptime) before
-	// the closeStack runs, since they hold dmsg conns that closeStack
-	// also touches via the dmsg client shutdown.
-	v.closeTPDMetricsSubscriber()
-	v.closeTPDUptimeSubscriber()
 	if v.cxoSubMgr != nil {
 		v.cxoSubMgr.Close()
 	}

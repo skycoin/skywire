@@ -88,13 +88,40 @@ func newRouteMux(logger *logging.Logger, sackEnabled bool) *routeMux {
 // Uses latency-weighted selection when data is available, falls back to round-robin.
 // Returns the index in tps[] alongside the tp/rule so the caller can
 // record per-leg byte counts after a successful write.
+//
+// payload is the upcoming packet's payload bytes (or nil for
+// handshake / control / retx paths that don't have a meaningful
+// payload). Used by WeightModeSizeThreshold, WeightModeSticky5Tuple,
+// WeightModeLatencyAdaptive, and WeightModeDSCPPriority — they
+// inspect the payload directly. Other modes ignore it and fall
+// back to the schedule-based pick.
+//
 // NOTE: not thread-safe, caller must hold the RouteGroup mu.
-func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule) (*transport.ManagedTransport, routing.Rule, int, error) {
+func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []routing.Rule, payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
 	}
 	if len(fwd) == 0 {
 		return nil, nil, -1, ErrNoRules
+	}
+
+	// Payload-inspecting modes: ask the selector for a leg
+	// derived from the bytes. Empty payload (handshake / retx)
+	// falls through to the schedule-based pick.
+	if m.tpSelector != nil && len(payload) > 0 {
+		switch m.tpSelector.Mode() {
+		case WeightModeSizeThreshold,
+			WeightModeSticky5Tuple,
+			WeightModeLatencyAdaptive,
+			WeightModeDSCPPriority:
+			idx := m.tpSelector.SelectForPayload(payload)
+			if idx < len(tps) {
+				tp := tps[idx]
+				if tp != nil && !tp.IsClosed() {
+					return tp, fwd[idx], idx, nil
+				}
+			}
+		}
 	}
 
 	// Use weighted selector if available

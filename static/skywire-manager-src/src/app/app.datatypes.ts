@@ -38,6 +38,12 @@ export class Node {
   dmsgServers?: DMSGServerInfo[];  // DMSG servers with per-server latencies
   roundTripPing?: string;
   isHypervisor?: boolean;
+  // hypervisors = configured (from skywire-config.json's hypervisors[]);
+  // connectedHypervisors = currently connected sessions reported by
+  // the visor. Both are 66-char hex PKs. Surfaced on the Info tab so
+  // operators can see which hypervisors a visor reports to.
+  hypervisors?: string[];
+  connectedHypervisors?: string[];
   buildTag: string;
   skybianBuildVersion?: string;
   autoconnectTransports: boolean;
@@ -48,6 +54,19 @@ export class Node {
   cityName?: string;
   latitude?: number;
   longitude?: number;
+  // OS hostname of the host the visor runs on, populated from
+  // os.Hostname() server-side. Surfaced on the Node Info tab and
+  // used by storageService.getDefaultLabel() as the preferred
+  // fallback when no explicit label is set (more operator-readable
+  // than the visor's local IP or PK).
+  hostname?: string;
+
+  // Pre-computed sort helpers populated by node-list's
+  // annotateForSort() so column-sort by transports/services count
+  // resolves through the standard SortingColumn property-path
+  // lookup. Not from the server.
+  transportsCount?: number;
+  servicesCount?: number;
 }
 
 export interface Application {

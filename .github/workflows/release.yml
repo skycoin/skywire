@@ -297,7 +297,6 @@ jobs:
           echo "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Fetch Windows installer files
-        if: matrix.arch != 'arm64'
         shell: pwsh
         run: |
           $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/win_installer"
@@ -390,7 +389,6 @@ jobs:
           Get-ChildItem "dist\" -Exclude "*.zip","*.sha256" | Remove-Item
 
       - name: Create MSI installer
-        if: matrix.arch != 'arm64'
         shell: pwsh
         run: |
           $MSI_NAME = "skywire-installer-${{ github.ref_name }}-windows-${{ matrix.arch }}"
@@ -482,3 +480,21 @@ jobs:
           gh release upload "${{ github.ref_name }}" checksums.txt \
             --repo ${{ github.repository }} \
             --clobber
+
+  publish-release:
+    # Flips the draft release to published once every build artifact is
+    # uploaded and the combined checksums file is in place. The
+    # two-phase create-as-draft / publish-when-complete pattern means
+    # users never see a partial release (downloading the tarball before
+    # the checksum file lands, etc.). create-release sets --draft;
+    # this job clears it after every dependent job has succeeded.
+    needs: [linux, darwin-amd64, darwin-arm64, windows, docker, create-checksums]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "${{ github.ref_name }}" \
+            --repo ${{ github.repository }} \
+            --draft=false

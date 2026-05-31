@@ -50,6 +50,13 @@ var (
 	// ErrRemoteEmptyPK occurs when the specified remote public key is empty.
 	ErrRemoteEmptyPK = errors.New("empty remote public key")
 
+	// ErrDialPolicyDropped is returned by DialRoutes when the
+	// configured DialHook's BeforeDial returns Fallback="drop".
+	// Operators see this as the explicit signal that their
+	// routing policy refused this dial; it's distinct from any
+	// route-finder failure or transport error.
+	ErrDialPolicyDropped = errors.New("dial refused by routing policy")
+
 	// ErrNoTransportFound is returned when not even one transport is found.
 	ErrNoTransportFound = errors.New("no transport found")
 )
@@ -86,6 +93,18 @@ type Config struct {
 	// means no lookup is performed and entries are emitted untagged
 	// (the existing behavior).
 	AppLookup func(routing.Port) (string, bool)
+
+	// DialHook, when non-nil, is invoked before each DialRoutes
+	// to let an operator-supplied routing policy adjust the
+	// per-dial knobs (MuxRoutes, MinHops) or refuse the dial
+	// entirely. See pkg/router/dial_hook.go for the contract and
+	// pkg/router/policy/ for the Starlark-backed implementation
+	// the visor wires up when conf.Routing.PolicyPerDial is set.
+	//
+	// When nil (the default) DialRoutes behaves identically to
+	// its pre-integration shape — zero-cost when no policy is
+	// configured.
+	DialHook DialHook
 }
 
 // SetDefaults sets default values for certain empty values.
@@ -120,8 +139,47 @@ type DialOptions struct {
 	ReverseHops         []routing.Hop // If set, use these hops for reverse path (skips route calculation)
 	MuxRoutes           int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
 	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
-	ExcludeDMSG         bool          // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
-	KeepAlive           time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
+	// MinHops, when > 0, is the per-call minimum hop count constraint.
+	// Overrides Config.MinHops for this dial only — needed by callers
+	// that want a non-direct path even when the visor's global
+	// min_hops is 1 (e.g. `cli visor ping mux-bw --min-hops 2`, which
+	// must force every dial through an intermediate to test the
+	// "mux via intermediates > direct" bandwidth hypothesis without
+	// requiring the operator to bump visor-global config).
+	//
+	// Setting MinHops >= 2 also suppresses the direct-transport
+	// fast path inside DialRoutes (the existing
+	// "if r.isTpdExist(rPK) { MinHops = 1 }" downgrade is skipped),
+	// since the caller has explicitly asked NOT to use direct.
+	//
+	// 0 = inherit Config.MinHops (legacy / single-route callers).
+	MinHops int
+	// ExcludeIntermediatePKs lists intermediate-visor PKs that route-
+	// finder paths must NOT contain. Source + destination are never
+	// excluded (they're endpoints, not intermediates). The mux loop
+	// populates this with the intermediates of routes already
+	// established so that subsequent routes are constructed through
+	// different intermediate paths — disjoint in the intermediate-PK
+	// set sense. Applied in both the HTTP route-finder path (post-
+	// filter response) and the local route-calc fallback (filter
+	// candidates).
+	//
+	// Disjoint-intermediate routing is AUTOMATIC for the mux loop
+	// (MuxRoutes > 1). Callers that want overlapping intermediates
+	// must dial with explicit ForwardHops/ReverseHops (which bypass
+	// the route-finder entirely). This field is also exposed so
+	// callers outside the mux loop can pre-populate exclusions if
+	// they have constraints to express.
+	ExcludeIntermediatePKs []cipher.PubKey
+	ExcludeDMSG            bool // Exclude DMSG transports (for mux — DMSG is a relay, not suitable for multiplexing)
+	// Distribution overrides the route group's per-packet
+	// distribution strategy when set (Mode != DistributionUnset).
+	// Populated either by a routing-policy script (see
+	// DialAdjustment.Distribution) or directly by a CLI caller
+	// constructing DialOptions. Zero-value means "use the
+	// router's visor-wide muxMode default."
+	Distribution DistributionConfig
+	KeepAlive    time.Duration // Route keepalive (0 = DefaultRouteKeepAlive). Routes idle longer expire.
 	// AppName is the originating app's name. Set by appnet's
 	// DialContextWithOptions when the caller threaded a context
 	// carrying it (RPCIngressGateway.Dial uses appnet.WithAppName).
@@ -129,6 +187,48 @@ type DialOptions struct {
 	// since DialRoutes is invoked with an ephemeral source port that
 	// isn't the app's registered SetAppPort value.
 	AppName string
+
+	// ForwardMinHops / ReverseMinHops are per-direction overrides for
+	// MinHops. When > 0 they take precedence over the symmetric
+	// MinHops field for THAT direction only. Use case: bandwidth-
+	// asymmetric workloads (HTTP GET = tiny upstream, bulk downstream)
+	// where the user wants e.g. direct stcpr for the forward leg but
+	// multi-hop for the reverse-direction bulk payload.
+	//
+	// 0 (the default) means "inherit MinHops" — back-compat for
+	// callers that only care about symmetric routes.
+	//
+	// Resolution at use site (see resolveDirMinHops): if the per-
+	// direction override is > 0 it wins; else MinHops; else
+	// Config.MinHops; else the global default.
+	ForwardMinHops int
+	ReverseMinHops int
+
+	// ForwardMuxRoutes / ReverseMuxRoutes are per-direction overrides
+	// for MuxRoutes. When > 1 they take precedence over the symmetric
+	// MuxRoutes field for THAT direction's route count.
+	//
+	// Use case: the operator's "direct upstream + multi-hop downstream"
+	// test — set ForwardMuxRoutes=1 and ReverseMuxRoutes=4 to open a
+	// single forward leg (the GET request rides one TCP socket) while
+	// the reverse direction aggregates the bulk payload across 4
+	// multi-hop legs. The data plane already supports rg.fwd[] and
+	// rg.rvs[] being different lengths (the read path is by route-id
+	// lookup, not slice index), so this is purely a setup-side change.
+	//
+	// 0 (the default) means "inherit MuxRoutes" for that direction.
+	// When the caller wants strictly N=1 on a side they should set it
+	// to 1 explicitly (not 0) since 0 still falls through to MuxRoutes.
+	ForwardMuxRoutes int
+	ReverseMuxRoutes int
+
+	// RotationIntervalSeconds, when > 0, instructs the route group
+	// to fire its rotation hook every N seconds after setup. The
+	// hook can drop legs and/or add new ones, enabling bandwidth-
+	// spreading policies that rotate across the eligible-peer set.
+	// Populated by the policy layer (DialAdjustment) from
+	// RouteSpec.RotationIntervalSeconds; zero = no rotation.
+	RotationIntervalSeconds int
 }
 
 // DefaultDialOptions returns default dial options.
@@ -141,6 +241,69 @@ func DefaultDialOptions() *DialOptions {
 		MaxConsumeRts: 1,
 		Retries:       3,
 	}
+}
+
+// EffectiveMinHops returns the per-direction min-hops constraint:
+// forward=true → ForwardMinHops if > 0 else MinHops; forward=false →
+// ReverseMinHops if > 0 else MinHops. Callers (the route-finder query
+// site + the local-BFS fallback) read this once per direction to
+// support bandwidth-asymmetric workloads where forward (small uplink)
+// can use direct/short paths while reverse (bulk downlink) is forced
+// onto multi-hop.
+//
+// Returns 0 when opts is nil or both per-direction + symmetric fields
+// are 0 — preserves the caller's "inherit Config.MinHops" semantic.
+func (o *DialOptions) EffectiveMinHops(forward bool) int {
+	if o == nil {
+		return 0
+	}
+	if forward {
+		if o.ForwardMinHops > 0 {
+			return o.ForwardMinHops
+		}
+	} else {
+		if o.ReverseMinHops > 0 {
+			return o.ReverseMinHops
+		}
+	}
+	return o.MinHops
+}
+
+// EffectiveMuxRoutes returns the per-direction mux-route count:
+// forward=true → ForwardMuxRoutes if > 0 else MuxRoutes; forward=false →
+// ReverseMuxRoutes if > 0 else MuxRoutes. Callers (establishMuxRoutes,
+// the dial-shape logger) read this once per direction to support
+// asymmetric mux topologies — most commonly 1 forward + N reverse
+// for download-heavy workloads.
+//
+// Returns 0 when opts is nil or all relevant fields are 0; preserves
+// the "single route" default behavior.
+func (o *DialOptions) EffectiveMuxRoutes(forward bool) int {
+	if o == nil {
+		return 0
+	}
+	if forward {
+		if o.ForwardMuxRoutes > 0 {
+			return o.ForwardMuxRoutes
+		}
+	} else {
+		if o.ReverseMuxRoutes > 0 {
+			return o.ReverseMuxRoutes
+		}
+	}
+	return o.MuxRoutes
+}
+
+// AnyMinHopsConstraint reports whether the caller has set any min-hops
+// constraint (symmetric or per-direction). Used at the direct-tp
+// downgrade site in DialRoutes: if either direction wants multi-hop,
+// the "transport-exists → drop MinHops to 1" optimization should be
+// suppressed (mirroring the existing opts.MinHops > 1 check).
+func (o *DialOptions) AnyMinHopsConstraint() bool {
+	if o == nil {
+		return false
+	}
+	return o.MinHops > 1 || o.ForwardMinHops > 1 || o.ReverseMinHops > 1
 }
 
 // Router is responsible for creating and keeping track of routes.
@@ -187,6 +350,13 @@ type Router interface {
 	// matching the given descriptor (or its inversion). Returns nil if no
 	// matching route group is found.
 	RouteGroupHops(desc routing.RouteDescriptor) []RouteHopInfo
+
+	// DialHook returns the configured routing-policy hook (nil
+	// if none configured). Visor wiring uses this to bridge the
+	// policy into non-router dial paths like VStreamMux's direct
+	// dial — the policy script's BeforeDial fires there too with
+	// ctx.is_direct_dial=true.
+	DialHook() DialHook
 
 	// RouteGroupMuxInfo returns a snapshot of per-leg mux state for
 	// the rg matching desc (or its inversion). Returns false when no

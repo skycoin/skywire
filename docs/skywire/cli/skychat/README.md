@@ -17,6 +17,7 @@ skywire cli skychat
 - [group](group/README.md) — D1 owner-centric group chat over CXO feeds
 - [history](history/README.md) — Print persisted message history
 - [listen](listen/README.md) — Listen for incoming messages
+- [pair](pair/README.md) — CXO-backed 1:1 chat (paired contacts)
 - [send](send/README.md) — Send a message
 - [status](status/README.md) — Probe the skychat app's health
 
@@ -29,9 +30,10 @@ skywire cli skychat
 ## Global Flags
 
 ```
-  -h, --help          show help menu
-      --json          print output as JSON
-      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
+  -h, --help              show help menu
+      --json              print output as JSON
+      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 
 ---

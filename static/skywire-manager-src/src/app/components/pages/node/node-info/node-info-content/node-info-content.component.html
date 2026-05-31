@@ -21,6 +21,60 @@
           <span class="title">{{ 'node.details.node-info.public-key' | translate }} </span>
           <app-copy-to-clipboard-text text="{{ node.localPk }}"></app-copy-to-clipboard-text>
         </span>
+        @if (node.hostname) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.hostname' | translate }} </span>
+            <app-copy-to-clipboard-text text="{{ node.hostname }}"></app-copy-to-clipboard-text>
+          </span>
+        }
+        <!-- Connected hypervisors live right under the visor PK so
+             the relationship is visually obvious. Each row carries a
+             ★ when the hypervisor PK matches the one serving this
+             UI; configured / runtime-attached / offline state is
+             tagged inline. Section only renders when ≥1 PK is known. -->
+        @if ((node.hypervisors && node.hypervisors.length > 0) || (node.connectedHypervisors && node.connectedHypervisors.length > 0)) {
+          <span class="info-line">
+            <span class="title">{{ 'node.details.node-info.hypervisors-section' | translate }} </span>
+          </span>
+          <div class="hypervisor-list hypervisor-list-inline">
+            @if (node.hypervisors) {
+              @for (hv of node.hypervisors; track hv) {
+                <div class="hypervisor-item">
+                  @if (isLocalHypervisor(hv)) {
+                    <mat-icon class="hypervisor-star" [inline]="true"
+                              [matTooltip]="'node.details.node-info.hypervisor-local' | translate">star</mat-icon>
+                  }
+                  <app-copy-to-clipboard-text text="{{ hv }}"></app-copy-to-clipboard-text>
+                  @if (node.connectedHypervisors && node.connectedHypervisors.indexOf(hv) >= 0) {
+                    <span class="hypervisor-state hypervisor-state-online">
+                      {{ 'node.details.node-info.hypervisor-connected' | translate }}
+                    </span>
+                  } @else {
+                    <span class="hypervisor-state hypervisor-state-offline">
+                      {{ 'node.details.node-info.hypervisor-disconnected' | translate }}
+                    </span>
+                  }
+                </div>
+              }
+            }
+            @if (node.connectedHypervisors) {
+              @for (hv of node.connectedHypervisors; track hv) {
+                @if (!node.hypervisors || node.hypervisors.indexOf(hv) < 0) {
+                  <div class="hypervisor-item">
+                    @if (isLocalHypervisor(hv)) {
+                      <mat-icon class="hypervisor-star" [inline]="true"
+                                [matTooltip]="'node.details.node-info.hypervisor-local' | translate">star</mat-icon>
+                    }
+                    <app-copy-to-clipboard-text text="{{ hv }}"></app-copy-to-clipboard-text>
+                    <span class="hypervisor-state hypervisor-state-runtime">
+                      {{ 'node.details.node-info.hypervisor-runtime' | translate }}
+                    </span>
+                  </div>
+                }
+              }
+            }
+          </div>
+        }
         <span class="info-line">
           <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
           {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
@@ -64,6 +118,9 @@
         <span class="info-line">
           <span class="title">{{ 'node.details.node-info.symmetic-nat' | translate }} </span>
           {{ (node.isSymmeticNat ? 'common.yes' : 'common.no') | translate }}
+          <mat-icon class="info-hint" [inline]="true"
+                    [matTooltip]="'node.details.node-info.symmetic-nat-info' | translate"
+                    matTooltipPosition="above">info_outline</mat-icon>
         </span>
         @if (!node.isSymmeticNat) {
           <span class="info-line">
@@ -80,8 +137,15 @@
         <span class="info-line">
           <span class="title">{{ 'node.details.node-info.ping' | translate }} </span>
           {{ 'common.time-in-ms' | translate:{ time: node.roundTripPing } }}
+          <mat-icon class="info-hint" [inline]="true"
+                    [matTooltip]="'node.details.node-info.ping-info' | translate"
+                    matTooltipPosition="above">info_outline</mat-icon>
         </span>
       </div>
+
+      <!-- Hypervisors list moved into the Identity card (above) so
+           it sits right under the visor PK. The previous standalone
+           Hypervisor info-card was removed. -->
 
       <!-- DMSG — server count + per-server list. The list is the
            bulky element on a healthy visor (8+ servers); giving it

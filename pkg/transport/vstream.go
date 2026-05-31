@@ -46,6 +46,13 @@ type VStreamMux struct {
 	incoming chan *VStream
 	done     chan struct{}
 	once     sync.Once
+
+	// Routing-policy hook for direct dials. Set via
+	// SetDirectDialHook; nil = no policy check. Read on every
+	// Dial; the RWMutex covers the swap (hook itself must be
+	// thread-safe).
+	directDialHookMu sync.RWMutex
+	directDialHook   DirectDialHookFn
 }
 
 // NewVStreamMux creates a virtual stream multiplexer for the given packet type.
@@ -68,8 +75,46 @@ func (m *VStreamMux) localPK() cipher.PubKey {
 	return m.tm.Local()
 }
 
-// Dial opens a virtual stream to a remote PK over an existing transport.
-func (m *VStreamMux) Dial(remotePK cipher.PubKey) (*VStream, error) {
+// DirectDialHookFn is the policy hook fired before a VStreamMux
+// direct dial. Returns a non-nil error to refuse the dial (the
+// error surfaces as the Dial return). Pass through a non-error
+// nil return to allow. nil hook = no policy check.
+//
+// appName is the originating app's name (skysocks-client,
+// vpn-client, etc.) when the caller supplied one — empty when
+// not threaded (older code paths). The routing-policy bridge
+// uses it to look up per-app policy rules so a script can
+// branch on ctx.app for direct dials just as it does for
+// overlay dials.
+//
+// Lives as a func type rather than an interface so the transport
+// package doesn't take a dependency on the router/policy package
+// — the visor wires this with a closure that bridges into the
+// existing routing-policy stack.
+type DirectDialHookFn func(remotePK cipher.PubKey, transportKind, appName string) error
+
+// SetDirectDialHook attaches a hook fired before every Dial.
+// Returning an error from the hook causes Dial to fail with that
+// error — useful for vpn-killswitch-style policies that want to
+// refuse direct dials over the wrong transport kind. Goroutine-
+// safe; the hook itself must be thread-safe.
+func (m *VStreamMux) SetDirectDialHook(hook DirectDialHookFn) {
+	m.directDialHookMu.Lock()
+	m.directDialHook = hook
+	m.directDialHookMu.Unlock()
+}
+
+func (m *VStreamMux) loadDirectDialHook() DirectDialHookFn {
+	m.directDialHookMu.RLock()
+	defer m.directDialHookMu.RUnlock()
+	return m.directDialHook
+}
+
+// Dial opens a virtual stream to a remote PK over an existing
+// transport. appName is the originating app's name; pass "" when
+// not known. The hook receives appName so per-app policies can
+// branch correctly on the direct-dial path.
+func (m *VStreamMux) Dial(remotePK cipher.PubKey, appName string) (*VStream, error) {
 	// Find a non-DMSG transport to this peer. DMSG transports use their
 	// own stream multiplexing and don't support route ID 0 packets.
 	var targetTp *ManagedTransport
@@ -82,6 +127,20 @@ func (m *VStreamMux) Dial(remotePK cipher.PubKey) (*VStream, error) {
 	})
 	if targetTp == nil {
 		return nil, fmt.Errorf("vstream: no non-DMSG transport to %s", remotePK.String())
+	}
+
+	// Routing-policy hook: give the operator's script a chance to
+	// refuse the direct dial (e.g. vpn-killswitch refusing
+	// sudph-only on a busy uplink). Hook errors are propagated as
+	// the Dial error.
+	if hook := m.loadDirectDialHook(); hook != nil {
+		if err := hook(remotePK, string(targetTp.Type()), appName); err != nil {
+			m.log.WithField("remote", remotePK.String()).
+				WithField("type", targetTp.Type()).
+				WithError(err).
+				Debug("VStreamMux: dial refused by routing policy")
+			return nil, err
+		}
 	}
 
 	m.log.WithField("tp", targetTp.Entry.ID.String()).

@@ -77,6 +77,33 @@ service PingService {
   // visor with hundreds of transports, an unauthenticated caller
   // could trigger a many-target ping storm; the gate prevents that.
   rpc StreamPingTree(PingTreeRequest) returns (stream PingTreeEvent);
+
+  // StreamMuxBandwidth measures bandwidth + queueing-delay between
+  // this visor and a target peer, optionally across N parallel
+  // routes. The operator-visible hypothesis: routes that EXCLUDE the
+  // direct transport (via min_hops >= 2) should sum to MORE bandwidth
+  // than the direct edge alone, because intermediates aggregate
+  // independent paths. This RPC produces the data to test that.
+  //
+  // Three flavors via the request fields:
+  //   - routes=1, min_hops=0: baseline — whatever route the finder
+  //     picks. With a healthy direct transport this measures the
+  //     direct edge.
+  //   - routes=1, min_hops=2: single non-direct path — forces the
+  //     route through at least one intermediate.
+  //   - routes=N, min_hops=>=0: N parallel routes pumping bytes
+  //     concurrently. Aggregate throughput is the operator's headline
+  //     comparison metric.
+  //
+  // Optionally a separate small-packet probe runs alongside the bulk
+  // load to capture queueing-delay: loaded RTT vs unloaded RTT
+  // baseline. The probe rides the SAME first route as the bulk pump,
+  // so the queueing-delay number reflects that route's saturation.
+  //
+  // Wire shape mirrors StreamPingTree: server-side BFS becomes
+  // server-side bandwidth-pump, events stream as they happen,
+  // ctx.Done() at every iteration, bounded internal channel.
+  rpc StreamMuxBandwidth(MuxBandwidthRequest) returns (stream MuxBandwidthEvent);
 }
 
 message PingRequest {
@@ -534,5 +561,240 @@ message PingTreeServerError {
   string code = 1;
   // Message carries operator-readable detail. Not stable across
   // versions.
+  string message = 2;
+}
+
+// MuxBandwidthRequest configures a multiplexed-route bandwidth + RTT
+// probe run against a single target peer. See StreamMuxBandwidth's
+// docstring for the operator-visible hypothesis this serves.
+//
+// All durations are nanoseconds (proto convention used throughout
+// this service). All "0 = default" fields fall back to handler-side
+// constants documented inline.
+message MuxBandwidthRequest {
+  // TargetPk is the remote visor's public key. Required.
+  string target_pk = 1;
+
+  // Routes is the number of parallel route connections to open.
+  // 1 = single route (the StreamBandwidthTest equivalent).
+  // N > 1 = N concurrent routes pumping bytes, aggregate throughput
+  // is the headline measurement. 0 falls back to 1.
+  int32 routes = 2;
+
+  // DurationNs caps the total wall-clock time spent pumping bytes.
+  // 0 falls back to 30s.
+  int64 duration_ns = 3;
+
+  // PacketSizeKb sizes each write block. Larger amortizes write
+  // overhead; smaller surfaces stalls faster. 0 falls back to 32 KB.
+  int32 packet_size_kb = 4;
+
+  // MinHops is the route-finder's minimum hop constraint. When > 1,
+  // the route excludes any direct transport between the local visor
+  // and TargetPk — forcing the bandwidth pump through intermediates.
+  // This is the "mux excluding direct" cell of the operator's
+  // hypothesis. 0 uses the visor's routing.min_hops config default
+  // (usually 1).
+  int32 min_hops = 5;
+
+  // SetupTimeoutNs bounds each route's setup phase. 0 falls back to
+  // 30s. Long setup times are common for multi-hop routes (see the
+  // p95=9.5s level-1 setup numbers from the ping-tree measurement).
+  int64 setup_timeout_ns = 6;
+
+  // ProbeRtt toggles a separate small-packet RTT probe that runs
+  // concurrently with the bulk pump. Pairs are emitted as
+  // MuxRttProbe events. The probe rides the SAME first route as the
+  // bulk pump, so the resulting RTT samples reflect that route's
+  // saturation — the queueing-delay signal.
+  bool probe_rtt = 7;
+
+  // ProbeIntervalNs is how often the RTT probe fires. 0 falls back
+  // to 100 ms. Faster = denser jitter signal; slower = less
+  // contention with the bulk pump.
+  int64 probe_interval_ns = 8;
+
+  // SampleIntervalNs is how often a MuxBandwidthSample is emitted.
+  // 0 falls back to 1s. Smaller surfaces transient throughput dips
+  // (bufferbloat, queue spikes); larger reduces stream chatter.
+  int64 sample_interval_ns = 9;
+
+  // LocalRoute uses local route calculation (cached TPD data)
+  // instead of querying the route-finder service. Mirrors
+  // BandwidthRequest.LocalRoute.
+  bool local_route = 10;
+
+  // IdleBaselineDurationNs, when > 0, inserts a quiescent probe
+  // phase between route setup and the bulk pump. During the phase
+  // the same probe loop fires (rate = probe_interval_ns) but no
+  // pump goroutines run — so the RTT samples reflect the route
+  // with zero contention. The aggregated distribution comes back
+  // in MuxBandwidthDone.idle_probe_* fields, and the queueing
+  // delay computed by callers is (loaded_pXX - idle_pXX). 0 = no
+  // idle phase (skip the baseline measurement). Implies ProbeRtt =
+  // true at the handler — without probes there's nothing to
+  // measure.
+  int64 idle_baseline_duration_ns = 11;
+}
+
+// MuxBandwidthEvent is one entry on the stream. Exactly one oneof
+// payload is set per message.
+message MuxBandwidthEvent {
+  int64 timestamp_ns = 1;
+  oneof payload {
+    // RouteEstablished fires once per route (in any order) as the
+    // setup phase completes. Carries the actual route hops chosen,
+    // letting consumers verify min_hops was honored.
+    MuxRouteEstablished route_established = 10;
+    // Sample fires every sample_interval_ns with cumulative + instant
+    // throughput numbers. Sent until pump duration elapses.
+    MuxBandwidthSample sample = 11;
+    // RttProbe fires every probe_interval_ns when ProbeRtt is set.
+    // Standalone from the Sample event because probes are async.
+    MuxRttProbe rtt_probe = 12;
+    // Done is the terminal event before stream close. Carries the
+    // aggregated totals + RTT distribution stats.
+    MuxBandwidthDone done = 13;
+    // Error signals an unrecoverable condition. Last event before
+    // stream close; same shape semantics as PingTreeServerError.
+    MuxBandwidthError error = 14;
+    // RouteFailure fires when a route's pump goroutine exits with an
+    // error AFTER the route was established. Distinct from
+    // MuxRouteEstablished{failed:true,setup_err:...} which covers
+    // setup-phase failures. Carries the partial bytes shipped before
+    // the pump goroutine died so the consumer can attribute throughput
+    // contributions accurately.
+    MuxRouteFailure route_failure = 15;
+  }
+}
+
+// MuxRouteEstablished records one route's setup outcome.
+message MuxRouteEstablished {
+  // RouteIndex is 0..Routes-1, assigned in setup-order.
+  int32 route_index = 1;
+  // SetupLatencyNs is the time spent on the route-setup phase
+  // (route-finder query + setup-node negotiation + handshake).
+  int64 setup_latency_ns = 2;
+  // Hops is the chosen path. Consumers verify min_hops by
+  // counting (len(hops) - 1) intermediate edges.
+  repeated RouteHop hops = 3;
+  // Failed is set when the route could not be established;
+  // SetupErr carries the cause. The route is excluded from the
+  // pump phase but kept in the event log for diagnostics.
+  bool failed = 4;
+  string setup_err = 5;
+}
+
+// MuxRouteFailure records a route's pump-phase exit-with-error.
+// Distinct from MuxRouteEstablished{failed:true} which covers
+// setup-phase failures. Pre-this event, pump goroutines that hit
+// PingOnceWithEcho errors silently exited and the route's bytes
+// contribution stopped accruing — operator-visible only as a
+// drop in MuxBandwidthSample.active_routes with no explanation.
+//
+// This event surfaces the cause: the first PingOnceWithEcho call
+// that fails terminates the route's pump goroutine, and we emit
+// one of these with the bytes shipped before the failure so the
+// consumer can compute per-route effective throughput.
+message MuxRouteFailure {
+  // RouteIndex is the same 0..Routes-1 index from the matching
+  // MuxRouteEstablished event.
+  int32 route_index = 1;
+  // ErrorMessage is the formatted error returned by the pump call.
+  string error_message = 2;
+  // BytesSentBeforeFailure / BytesReceivedBeforeFailure are the
+  // cumulative bytes the route had pumped up to the failure point.
+  // Zero is meaningful — indicates the first call after route
+  // establishment failed before any bytes shipped.
+  uint64 bytes_sent_before_failure = 3;
+  uint64 bytes_received_before_failure = 4;
+  // ElapsedNs is time since pump-start when the failure happened.
+  // Same epoch as MuxBandwidthSample.ElapsedNs.
+  int64 elapsed_ns = 5;
+}
+
+// MuxBandwidthSample is a periodic throughput snapshot. Cumulative
+// fields are run-totals across all routes; instant fields are
+// per-sample-interval rates.
+message MuxBandwidthSample {
+  // ElapsedNs is the time since the first byte was sent (NOT since
+  // the run was requested — excludes setup time).
+  int64 elapsed_ns = 1;
+  uint64 bytes_sent = 2;
+  uint64 bytes_received = 3;
+  // InstantSendBps / RecvBps are per-interval rates. avg_*_bps are
+  // run-cumulative rates. All in bits-per-second (matches the
+  // network-engineer convention; consumers needing Mbps divide by
+  // 1e6).
+  double instant_send_bps = 4;
+  double instant_recv_bps = 5;
+  double avg_send_bps = 6;
+  double avg_recv_bps = 7;
+  // ActiveRoutes is how many of the Routes-requested routes are
+  // still pumping. Drops when a route fails mid-run.
+  int32 active_routes = 8;
+}
+
+// MuxRttProbe is one RTT measurement during the pump. Allows
+// consumers to plot loaded-RTT-over-time and compute queueing delay
+// as (loaded_rtt - baseline_rtt).
+message MuxRttProbe {
+  // Sequence is the 1-indexed probe number, in emit order.
+  int64 sequence = 1;
+  // LatencyNs is the measured RTT. 0 when the probe failed; Error
+  // carries the cause.
+  int64 latency_ns = 2;
+  string error = 3;
+  // ElapsedNs is the time since the first byte was sent (same epoch
+  // as MuxBandwidthSample.ElapsedNs). Lets consumers align probes
+  // with concurrent bandwidth samples without timestamp diffing.
+  int64 elapsed_ns = 4;
+}
+
+// MuxBandwidthDone is the terminal event. Aggregates the run.
+message MuxBandwidthDone {
+  uint64 total_bytes_sent = 1;
+  uint64 total_bytes_received = 2;
+  // WallTimeNs is total elapsed including setup; PumpTimeNs excludes
+  // setup. Operators comparing throughput across runs typically want
+  // PumpTimeNs (apples-to-apples regardless of how long setup took).
+  int64 wall_time_ns = 3;
+  int64 pump_time_ns = 4;
+  double avg_send_bps = 5;
+  double avg_recv_bps = 6;
+  double peak_send_bps = 7;
+  double peak_recv_bps = 8;
+  int32 routes_requested = 9;
+  int32 routes_established = 10;
+  int64 setup_total_ns = 11;
+  // RTT distribution under load — across all probes that fired
+  // during the bulk pump phase. Zero when no probes ran or
+  // ProbeRtt was false. Jitter is population stddev — same
+  // formula as PingTreeResult.jitter_ns.
+  int32 probe_count = 12;
+  int64 probe_avg_ns = 13;
+  int64 probe_p50_ns = 14;
+  int64 probe_p99_ns = 15;
+  int64 probe_jitter_ns = 16;
+  // TerminationReason: "duration" | "context_cancel" | "all_routes_failed" | "error".
+  string termination_reason = 17;
+
+  // RTT distribution under no contention — across all probes that
+  // fired during the IdleBaselineDuration phase BEFORE the bulk
+  // pump. Zero when idle_baseline_duration_ns was 0 or no probes
+  // landed in the window. Operators compute the queueing delay
+  // as (probe_pXX - idle_probe_pXX); the CLI's summary prints
+  // this delta directly when both distributions are present.
+  int32 idle_probe_count = 18;
+  int64 idle_probe_avg_ns = 19;
+  int64 idle_probe_p50_ns = 20;
+  int64 idle_probe_p99_ns = 21;
+  int64 idle_probe_jitter_ns = 22;
+}
+
+// MuxBandwidthError signals an unrecoverable condition. Last event
+// before stream close.
+message MuxBandwidthError {
+  string code = 1;
   string message = 2;
 }

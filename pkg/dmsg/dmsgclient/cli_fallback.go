@@ -129,7 +129,7 @@ func StartDmsgWithDirectClient(ctx context.Context, dlog *logging.Logger, pk cip
 	httpDiscClient := disc.NewHTTP(DmsgDiscURL, &http.Client{}, dlog)
 
 	// Wrap with fallback client that tries direct first, then HTTP discovery
-	fallbackClient := newFallbackDiscClient(directClient, httpDiscClient, dlog)
+	fallbackClient := NewFallbackDiscClient(directClient, httpDiscClient, dlog)
 
 	dmsgC = dmsg.NewClient(pk, sk, fallbackClient, &dmsg.Config{MinSessions: dmsgSessions})
 	dlog.Debug("Created dmsg client with fallback discovery client (direct + HTTP).")
@@ -227,8 +227,11 @@ type fallbackDiscClient struct {
 	log    *logging.Logger
 }
 
-// newFallbackDiscClient creates a discovery client that tries direct first, then HTTP
-func newFallbackDiscClient(direct, http disc.APIClient, log *logging.Logger) disc.APIClient {
+// NewFallbackDiscClient creates a discovery client that tries direct first, then HTTP.
+// Used by callers that need to dial arbitrary client PKs registered in the real
+// dmsg-discovery while keeping a pre-loaded direct.Client for the bootstrap server
+// list (and any synthetic/seeded entries the caller wants to short-circuit).
+func NewFallbackDiscClient(direct, http disc.APIClient, log *logging.Logger) disc.APIClient {
 	return &fallbackDiscClient{
 		direct: direct,
 		http:   http,
@@ -254,9 +257,19 @@ func (f *fallbackDiscClient) PostEntry(ctx context.Context, entry *disc.Entry) e
 	return f.direct.PostEntry(ctx, entry)
 }
 
-// PutEntry delegates to HTTP client (direct client doesn't support updates)
+// PutEntry delegates to the direct client (which no-ops). Services
+// using this fallback wrapper run as direct dmsg clients and are not
+// supposed to register themselves in dmsg-discovery — they are
+// reachable equally through any dmsg server via the consumer's
+// preloaded direct.Client. Routing PutEntry to HTTP caused TD/SD/
+// dmsg-disc to publish themselves on every dmsg.Client UpdateInterval
+// (5 min default for clients), producing entries with seq numbers
+// growing into the hundreds and pointless write traffic against
+// dmsg-discovery; consumers gain nothing from those entries because
+// the visor's direct.Client already knows the service PK → all-servers
+// mapping at startup.
 func (f *fallbackDiscClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *disc.Entry) error {
-	return f.http.PutEntry(ctx, sk, entry)
+	return f.direct.PutEntry(ctx, sk, entry)
 }
 
 // DelEntry delegates to direct client

@@ -1,426 +1,608 @@
-// Package clivisor cmd/skywire-cli/commands/visor/ping-tree-tui.go
+// Package ping cmd/skywire-cli/commands/visor/ping/tree.go: the
+// interactive Bubble Tea TUI for `cli visor ping tree`.
+//
+// History: this command used to host a ~2300-line client-side BFS
+// + concurrency-limited ping orchestrator + state machine. That code
+// had several structural problems on visors with hundreds of
+// transports: default concurrency=2 capped throughput at ~4 pings/
+// minute (so level 1 of a 500-transport visor took >2 hours and
+// level 2 never started), the renderer hid pending entries (making
+// progress invisible), and the Bubble Tea TUI's /dev/tty
+// requirement made the tool undriveable from CI or coding agents.
+//
+// #2732 moved the BFS server-side as the StreamPingTree gRPC RPC.
+// This file now consumes that stream and renders it with the same
+// Bubble Tea TUI shape — header, stats line, scrollable tree
+// viewport, footer — that operators were already familiar with.
+//
+// The NDJSON-driven sibling lives in tree_stream.go (`cli visor ping
+// tree-stream`); it feeds the same events to stdout for treeprobe +
+// CI consumers. Both subcommands ride the same server-side BFS
+// implementation, so a fix at the server lands in both.
 package ping
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
-	"os/signal"
+	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"syscall"
 	"time"
 
-	"github.com/blang/semver/v4"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/google/uuid"
-	"github.com/pterm/pterm"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
-	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
-// pingTreeConfig holds every flag-driven knob for `ping tree2`.
-// Single package-level instance (cfg) is used for cobra flag
-// binding by address; the rest of the file reads fields off it
-// rather than through 30+ separate globals. Field names mirror
-// the long-flag names (camel-cased) so the mapping at the init()
-// call site is obvious.
-type pingTreeConfig struct {
-	Version        string
-	MaxLevel       int
-	Timeout        time.Duration
-	SetupTimeout   time.Duration
-	Tries          int
-	PcktSize       int
-	CacheTPD       string
-	CacheUT        string
-	CacheDMSG      string
-	CacheAge       int
-	TPDURL         string
-	UTURL          string
-	DMSGURL        string
-	OnlineOnly     bool
-	Output         string
-	Hops           uint
-	Retries        int
-	Resume         bool
-	MaxAge         time.Duration
-	DryRun         bool
-	DmsgOnly       bool
-	DmsgPreCheck   bool
-	DmsgAllServers bool
-	UseTPS         bool
-	Continuous     bool
-	RecheckAge     time.Duration
-	RemoveTp       bool
-	RemoveRemoteTp bool
-	RemakeTp       bool
-	RemakeRemoteTp bool
-	Concurrency    int
-	TestEnv        bool
+// ---------------------------------------------------------------------------
+// Flags
+// ---------------------------------------------------------------------------
+
+// pingTreeFlags is the subset of PingTreeRequest fields that operators
+// commonly override. Server-side defaults (in normalizePingTreeRequest)
+// kick in when a flag is zero. Flags that controlled client-side BFS
+// state machinery in the old implementation (--concurrency, --continuous,
+// --max-age, --remove-tp, --remake-tp, etc.) are dropped: concurrency is
+// a server-side knob now, continuous-rerun is dead weight for a one-
+// shot measurement tool, and transport mutations belong in cli tp.
+type pingTreeFlags struct {
+	MaxLevel     int
+	Hops         int
+	Tries        int
+	Size         int
+	Concurrency  int
+	Timeout      time.Duration
+	SetupTimeout time.Duration
+	OnlineOnly   bool
+	Version      string
+	UseTpLat     bool
+	DmsgOnly     bool
+	DmsgPreCheck bool
+	Retries      int
+	DryRun       bool
+	OutputFile   string
 }
 
-var cfg pingTreeConfig
+var treeFlags pingTreeFlags
 
 func init() {
-	// Defaults swap to the test deployment when SKYWIRETEST=1 is set
-	// in the environment. The --testenv flag below lets an operator
-	// flip it per-invocation without exporting the env var; the Run
-	// callback handles the per-flag re-default for the URLs.
-	dep := getDeployment()
+	pingTreeCmd.Flags().IntVarP(&treeFlags.MaxLevel, "max-level", "l", 0,
+		"maximum BFS depth (0 = unlimited until expansion exhausts)")
+	pingTreeCmd.Flags().IntVar(&treeFlags.Hops, "hops", 0,
+		"ping ONLY entries at exactly N hops; other levels are discovered but not pinged")
+	pingTreeCmd.Flags().IntVarP(&treeFlags.Tries, "tries", "t", 1,
+		"per-transport ping count; PingResult carries aggregated stats")
+	pingTreeCmd.Flags().IntVarP(&treeFlags.Size, "size", "s", 2,
+		"packet size in KB")
+	pingTreeCmd.Flags().IntVarP(&treeFlags.Concurrency, "concurrency", "c", 0,
+		"max in-flight pings per BFS level (0 = server default, currently 16)")
+	pingTreeCmd.Flags().DurationVarP(&treeFlags.Timeout, "timeout", "o", 30*time.Second,
+		"per-ping timeout (after route setup)")
+	pingTreeCmd.Flags().DurationVar(&treeFlags.SetupTimeout, "setup-timeout", 30*time.Second,
+		"per-transport route-setup timeout")
+	pingTreeCmd.Flags().BoolVarP(&treeFlags.OnlineOnly, "online", "g", false,
+		"only ping visors marked online in the uptime tracker")
+	pingTreeCmd.Flags().StringVarP(&treeFlags.Version, "version", "v", "",
+		"filter by minimum visor version (semver)")
+	pingTreeCmd.Flags().BoolVar(&treeFlags.UseTpLat, "use-transport-latency", true,
+		"at level 1: skip the live ping when the transport already has a smoothed RTT in TransportSummary.LatencyMS")
+	pingTreeCmd.Flags().BoolVar(&treeFlags.DmsgOnly, "dmsg-only", false,
+		"force the ping path to ride DMSG instead of the skywire router")
+	pingTreeCmd.Flags().BoolVar(&treeFlags.DmsgPreCheck, "dmsg-precheck", false,
+		"probe DMSG reachability before each route ping; discards unreachable visors early")
+	pingTreeCmd.Flags().IntVar(&treeFlags.Retries, "retries", 0,
+		"retry attempts on failed pings")
+	pingTreeCmd.Flags().BoolVar(&treeFlags.DryRun, "dry-run", false,
+		"discovery only; no PingResult events fire (every entry marked latency_source=skipped)")
+	pingTreeCmd.Flags().StringVarP(&treeFlags.OutputFile, "output", "O", "",
+		"append per-event NDJSON to FILE as the run progresses (for offline analysis)")
 
-	pingTreeTUICmd.Flags().BoolVar(&cfg.TestEnv, "testenv", isTestEnv(), "use test-deployment service URLs (override SKYWIRETEST)")
-	pingTreeTUICmd.Flags().StringVarP(&cfg.Version, "version", "v", "", "filter by minimum version")
-	pingTreeTUICmd.Flags().IntVarP(&cfg.MaxLevel, "max-level", "l", 0, "maximum hop level (0 = unlimited)")
-	pingTreeTUICmd.Flags().DurationVarP(&cfg.Timeout, "timeout", "o", 30*time.Second, "timeout per ping attempt")
-	pingTreeTUICmd.Flags().DurationVar(&cfg.SetupTimeout, "setup-timeout", 30*time.Second, "timeout for route setup phase")
-	pingTreeTUICmd.Flags().IntVarP(&cfg.Tries, "tries", "t", 1, "ping attempts per transport")
-	pingTreeTUICmd.Flags().IntVarP(&cfg.PcktSize, "size", "s", 2, "packet size in KB")
-	pingTreeTUICmd.Flags().StringVar(&cfg.CacheTPD, "cft", os.TempDir()+"/tpd.json", "TPD cache file location")
-	pingTreeTUICmd.Flags().StringVar(&cfg.CacheUT, "cfu", os.TempDir()+"/ut.json", "UT cache file location")
-	pingTreeTUICmd.Flags().StringVar(&cfg.CacheDMSG, "cfd", os.TempDir()+"/dmsg-clients.json", "DMSG clients cache file location")
-	pingTreeTUICmd.Flags().IntVarP(&cfg.CacheAge, "cfa", "m", 5, "update cache files if older than n minutes")
-	pingTreeTUICmd.Flags().StringVar(&cfg.TPDURL, "tpdurl", dep.TransportDiscovery, "transport discovery URL")
-	pingTreeTUICmd.Flags().StringVar(&cfg.UTURL, "uturl", dep.UptimeTracker, "uptime tracker URL")
-	pingTreeTUICmd.Flags().StringVar(&cfg.DMSGURL, "dmsgurl", dep.DmsgDiscovery, "DMSG discovery URL")
-	pingTreeTUICmd.Flags().BoolVarP(&cfg.OnlineOnly, "online", "g", false, "only ping visors marked online in UT")
-	pingTreeTUICmd.Flags().StringVarP(&cfg.Output, "output", "O", "", "output base filename (writes .json file)")
-	pingTreeTUICmd.Flags().UintVar(&cfg.Hops, "hops", 0, "exact hop level to ping (0 = all levels)")
-	pingTreeTUICmd.Flags().IntVar(&cfg.Retries, "retries", 1, "retry attempts if ping fails")
-	pingTreeTUICmd.Flags().BoolVarP(&cfg.Resume, "resume", "R", false, "resume from output file if it exists")
-	pingTreeTUICmd.Flags().DurationVar(&cfg.MaxAge, "max-age", 0, "re-ping entries older than this duration")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.DryRun, "dry-run", false, "show tree structure without pinging")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.DmsgOnly, "dmsg-only", false, "ping via DMSG servers instead of routes")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.DmsgPreCheck, "dmsg", false, "pre-check visor reachability over DMSG before route ping")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.DmsgAllServers, "dmsg-all-servers", false, "ping via all DMSG servers (not just first success)")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.UseTPS, "tps", true, "verify/update transports via TPS (default: true)")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.Continuous, "continuous", false, "run continuously, re-checking trees")
-	pingTreeTUICmd.Flags().DurationVar(&cfg.RecheckAge, "recheck-age", 24*time.Hour, "re-ping entries older than this in continuous mode")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.RemoveTp, "remove-tp", false, "remove local transport if route ping fails")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.RemoveRemoteTp, "remove-remote-tp", false, "request remote visor to remove transport if route ping fails")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.RemakeTp, "remake-tp", false, "remake local transport after removing failed one (retry once)")
-	pingTreeTUICmd.Flags().BoolVar(&cfg.RemakeRemoteTp, "remake-remote-tp", false, "remake transport on remote side after failure (retry once)")
-	pingTreeTUICmd.Flags().IntVarP(&cfg.Concurrency, "concurrency", "c", 2, "max concurrent ping operations")
-
-	RootCmd.AddCommand(pingTreeTUICmd)
+	RootCmd.AddCommand(pingTreeCmd)
 }
 
-var pingTreeTUICmd = &cobra.Command{
+// ---------------------------------------------------------------------------
+// Cobra command
+// ---------------------------------------------------------------------------
+
+var pingTreeCmd = &cobra.Command{
 	Use:   "tree",
-	Short: "Ping visors via transport routes (scrollable TUI)",
-	Long: `Ping visors via transport routes with a scrollable terminal UI.
+	Short: "Interactive Bubble Tea TUI for the ping-tree (server-side BFS over the skywire route graph)",
+	Long: `Walk the visor's neighborhood breadth-first, pinging each
+discovered visor and rendering the results as a scrollable tree.
 
-This command uses a Bubble Tea-based TUI that lets you scroll through
-results while the ping test runs.
+The BFS runs server-side via the StreamPingTree gRPC RPC (see
+#2732 / pkg/visor/rpcgrpc/server_ping_tree.go); this command is a
+thin Bubble Tea TUI on top of that stream.
 
-Controls:
-  ↑/k, ↓/j     Scroll up/down one line
-  PgUp/PgDn    Scroll up/down one page
-  Home/End     Go to top/bottom
-  q/Ctrl+C     Quit
+The non-interactive sibling 'cli visor ping tree-stream' emits the
+same events as NDJSON on stdout — use that one for CI, coding-agent
+automation, or piping into the treeprobe harness (pkg/util/treeprobe).
 
-The display updates live while preserving your scroll position.
+Examples:
 
-Level vs hops:
-  --max-level N    cap the BFS depth — ping levels 1, 2, ..., N
-                   (0 = unlimited until no new visors discoverable)
-  --hops N         ping ONLY the visors exactly N hops away from us
-                   (use with --max-level >= N so discovery reaches them)
-  default of both means "ping every level reachable through direct
-  transports and their neighbors, until expansion exhausts."
+  # Walk all reachable levels:
+  skywire cli visor ping tree
 
-Most operators want --max-level. --hops is for targeted measurement
-when characterizing latency-by-hop-count.`,
-	Example: `  # Ping every visor reachable via direct transports (level 1 only),
-  # with 5 latency samples per transport and only "online" peers.
-  skywire cli visor ping tree2 --max-level 1 --tries 5 --online
+  # Only level 1 (direct neighbors), 5 ping samples each:
+  skywire cli visor ping tree --max-level 1 --tries 5
 
-  # Discovery + ping out to 3 hops; useful for the "latency as a
-  # function of hop count" measurement Synth asked about.
-  skywire cli visor ping tree2 --max-level 3 --tries 10 --online \
-    -O ping-3hop-$(date +%F).json
+  # Specific hop count for latency-by-hops measurement:
+  skywire cli visor ping tree --hops 2 --max-level 2 --tries 5
 
-  # Show ONLY what would be pinged (the BFS discovery tree), without
-  # firing any actual pings. Quick way to inventory your reachable
-  # network before committing to a long run.
-  skywire cli visor ping tree2 --max-level 3 --dry-run
+  # Discovery-only, no pings (visualize the reachable graph):
+  skywire cli visor ping tree --dry-run --max-level 2
 
-  # Resume a long run that was interrupted (re-uses the same -O file).
-  skywire cli visor ping tree2 --max-level 3 --tries 10 --resume \
-    -O ping-3hop-$(date +%F).json
-
-  # DMSG-only measurement (skip route-based ping; just probe DMSG
-  # server reachability). Useful for diagnosing route-setup-node
-  # issues separately from transport-level connectivity.
-  skywire cli visor ping tree2 --dmsg-only --online --tries 10
-
-  # Filter to visors running v1.3.51 or newer (skips old visors
-  # whose latency-publish path is broken).
-  skywire cli visor ping tree2 --max-level 2 --version v1.3.51`,
-	Run: runPingTreeTUI,
+Controls inside the TUI:
+  ↑/k, ↓/j     scroll one line
+  PgUp/PgDn    page up/down
+  Home/End     top/bottom
+  a            toggle auto-scroll
+  q/Ctrl+C     quit`,
+	Run: runPingTree,
 }
 
-// tuiTreeEntry represents a single entry in the tree
-type tuiTreeEntry struct {
-	tpID       string
-	tpType     string
-	remotePK   string
-	level      int
-	parentPK   string
-	failed     bool
-	removed    bool
-	removeErr  string
-	remade     bool
-	remadeOnce bool
+// runPingTree opens the StreamPingTree RPC, starts a Bubble Tea
+// program that consumes events, and blocks until the TUI exits.
+// Ctrl+C or 'q' inside the TUI cancels the upstream context, which
+// tears down the BFS within one in-flight ping.
+func runPingTree(cmd *cobra.Command, _ []string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client, err := rpcgrpc.NewPingClient(clirpc.Addr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ping tree: gRPC client connect: %v\n", err)
+		os.Exit(1)
+	}
+	defer client.Close() //nolint:errcheck
+
+	req := buildPingTreeRequest()
+	stream, err := client.StreamPingTree(ctx, req)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ping tree: StreamPingTree call: %v\n", err)
+		os.Exit(1)
+	}
+
+	model := newPingTreeModel(ctx, cancel)
+
+	// Optional NDJSON tee-to-file. When set, we open the file once
+	// up-front and the stream consumer goroutine writes one line per
+	// event. The TUI runs in parallel — operator gets visual + file
+	// in one shot.
+	if treeFlags.OutputFile != "" {
+		f, openErr := os.OpenFile(treeFlags.OutputFile, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644) //nolint:gosec
+		if openErr != nil {
+			fmt.Fprintf(os.Stderr, "ping tree: open --output file: %v\n", openErr)
+			os.Exit(1)
+		}
+		defer f.Close() //nolint:errcheck
+		model.outputFile = f
+	}
+
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithContext(ctx))
+	go consumeStream(stream, p, model)
+
+	if _, err := p.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "ping tree: TUI: %v\n", err)
+		os.Exit(1)
+	}
+
+	// tea.WithAltScreen restores the pre-TUI screen contents on
+	// exit, which wipes the tree the operator just spent time on.
+	// Print the final state to stdout so it lands in terminal
+	// scrollback regardless of whether the run completed or the
+	// operator hit Ctrl+C / q mid-stream.
+	fmt.Print(model.renderTree())
+	fmt.Println(model.statsLine())
 }
 
-// tuiDmsgServerData tracks DMSG ping results via a specific server
-type tuiDmsgServerData struct {
-	serverPK    string
-	pingSamples []float64
-	pingErr     string
-	phase       string // "pending", "ping", "done"
-	timestamp   time.Time
+func buildPingTreeRequest() *rpcgrpc.PingTreeRequest {
+	return &rpcgrpc.PingTreeRequest{
+		MaxLevel:            int32(treeFlags.MaxLevel), //nolint:gosec
+		Hops:                int32(treeFlags.Hops),     //nolint:gosec
+		Tries:               int32(treeFlags.Tries),    //nolint:gosec
+		PacketSizeKb:        int32(treeFlags.Size),     //nolint:gosec
+		PingTimeoutNs:       treeFlags.Timeout.Nanoseconds(),
+		SetupTimeoutNs:      treeFlags.SetupTimeout.Nanoseconds(),
+		Concurrency:         int32(treeFlags.Concurrency), //nolint:gosec
+		OnlineOnly:          treeFlags.OnlineOnly,
+		MinVersion:          treeFlags.Version,
+		UseTransportLatency: treeFlags.UseTpLat,
+		DmsgOnly:            treeFlags.DmsgOnly,
+		DmsgPreCheck:        treeFlags.DmsgPreCheck,
+		Retries:             int32(treeFlags.Retries), //nolint:gosec
+		DryRun:              treeFlags.DryRun,
+	}
 }
 
-// tuiLatencyData tracks timing for each transport ping
-type tuiLatencyData struct {
-	tpID           string
-	tpType         string
-	from           string
-	to             string
-	gatewayPK      string // First-hop visor for level 2+ entries
+// ---------------------------------------------------------------------------
+// Stream consumer
+// ---------------------------------------------------------------------------
+
+// consumeStream reads events off the gRPC stream and forwards each
+// one to the Bubble Tea program via p.Send(eventMsg{...}). When the
+// stream closes (RunDone or EOF), it sends a streamDoneMsg so the
+// TUI can switch to "press q to exit" mode without quitting outright
+// — operators may want to scroll through results.
+func consumeStream(stream rpcgrpc.PingService_StreamPingTreeClient, p *tea.Program, m *pingTreeModel) {
+	for {
+		ev, err := stream.Recv()
+		if err != nil {
+			if err == io.EOF {
+				p.Send(streamDoneMsg{})
+				return
+			}
+			p.Send(streamErrMsg{err: err})
+			return
+		}
+		if m.outputFile != nil {
+			writeNDJSONLine(m.outputFile, ev)
+		}
+		p.Send(eventMsg{ev: ev})
+	}
+}
+
+// writeNDJSONLine emits one NDJSON line per event when --output is
+// set. Mirrors the envelope shape tree-stream uses so consumers can
+// share parsers (treeprobe accepts either source).
+func writeNDJSONLine(f *os.File, ev *rpcgrpc.PingTreeEvent) {
+	typ, _ := classifyEvent(ev)
+	envelope := map[string]any{
+		"ts":   time.Unix(0, ev.TimestampNs).UTC().Format(time.RFC3339Nano),
+		"type": typ,
+	}
+	// Reuse the proto JSON wire shape via encoding/json's
+	// general-purpose encoder — fine for the file tee path because
+	// the consumer is treeprobe, which already handles both
+	// protojson-style and stdlib-style int64 encodings.
+	switch p := ev.Payload.(type) {
+	case *rpcgrpc.PingTreeEvent_Discovered:
+		envelope["data"] = p.Discovered
+	case *rpcgrpc.PingTreeEvent_PingResult:
+		envelope["data"] = p.PingResult
+	case *rpcgrpc.PingTreeEvent_LevelDone:
+		envelope["data"] = p.LevelDone
+	case *rpcgrpc.PingTreeEvent_RunDone:
+		envelope["data"] = p.RunDone
+	case *rpcgrpc.PingTreeEvent_StatusUpdate:
+		envelope["data"] = p.StatusUpdate
+	case *rpcgrpc.PingTreeEvent_ServerError:
+		envelope["data"] = p.ServerError
+	}
+	b, _ := json.Marshal(envelope) //nolint:errcheck
+	_, _ = f.Write(b)              //nolint:errcheck
+	_, _ = f.Write([]byte("\n"))   //nolint:errcheck
+}
+
+func classifyEvent(ev *rpcgrpc.PingTreeEvent) (string, any) {
+	switch p := ev.Payload.(type) {
+	case *rpcgrpc.PingTreeEvent_Discovered:
+		return "discovered", p.Discovered
+	case *rpcgrpc.PingTreeEvent_PingResult:
+		return "ping_result", p.PingResult
+	case *rpcgrpc.PingTreeEvent_LevelDone:
+		return "level_done", p.LevelDone
+	case *rpcgrpc.PingTreeEvent_RunDone:
+		return "run_done", p.RunDone
+	case *rpcgrpc.PingTreeEvent_StatusUpdate:
+		return "status_update", p.StatusUpdate
+	case *rpcgrpc.PingTreeEvent_ServerError:
+		return "server_error", p.ServerError
+	}
+	return "unknown", nil
+}
+
+// ---------------------------------------------------------------------------
+// Bubble Tea model
+// ---------------------------------------------------------------------------
+
+// treeEntry is one (transport, peer) pair as the TUI sees it. The
+// model maintains one per tp_id keyed by Discovered events; ping
+// results update the same struct in place so the renderer can show
+// "pending" → "success/fail" transitions without losing the
+// discovery order.
+type treeEntry struct {
+	tpID, tpType   string
+	remotePK       string
+	parentPK       string
 	level          int
-	calcTimeMs     float64
-	setupTimeMs    float64
-	pingSamples    []float64
-	calcErr        string
+	pinged         bool
+	failed         bool
+	canceled       bool
+	latencySource  string // "live_ping" | "transport_summary" | "skipped"
+	setupLatencyMs float64
+	pingAvgMs      float64
+	pingP50Ms      float64
+	pingP99Ms      float64
+	jitterMs       float64
+	sampleCount    int32
 	setupErr       string
 	pingErr        string
-	phase          string // "pending", "calc", "setup", "ping", "done"
-	timestamp      time.Time
-	lastSuccess    time.Time
-	stale          bool
-	dmsgReachable  bool
-	dmsgSkipReason string
-	dmsgServers    []*tuiDmsgServerData
+	calcErr        string
+	ts             time.Time
 }
 
-// tuiSavedState represents the saved state for resume functionality
-type tuiSavedState struct {
-	LocalPK    string                 `json:"local_pk"`
-	StartTime  string                 `json:"start_time"`
-	UpdateTime string                 `json:"update_time"`
-	Entries    []tuiSavedEntry        `json:"entries"`
-	Settings   map[string]interface{} `json:"settings"`
+// levelInfo carries the LevelDone summary for header rendering.
+type levelInfo struct {
+	attempted     int32
+	succeeded     int32
+	failed        int32
+	skippedCached int32
+	done          bool
 }
 
-// tuiDmsgServerSavedEntry represents DMSG ping results via a specific server
-type tuiDmsgServerSavedEntry struct {
-	ServerPK    string    `json:"server_pk"`
-	PingSamples []float64 `json:"ping_samples,omitempty"`
-	AvgLatency  float64   `json:"avg_latency_ms,omitempty"`
-	PingErr     string    `json:"ping_err,omitempty"`
-	Timestamp   string    `json:"timestamp,omitempty"`
+// runSummary mirrors PingTreeRunDone for final-section rendering.
+type runSummary struct {
+	totalDiscovered    int32
+	totalPinged        int32
+	totalSucceeded     int32
+	totalFailed        int32
+	totalSkippedCached int32
+	wallMs             int64
+	peakInFlight       int32
+	terminationReason  string
 }
 
-// tuiSavedEntry represents a single transport ping entry in saved state
-type tuiSavedEntry struct {
-	TpID           string                    `json:"tp_id"`
-	TpType         string                    `json:"tp_type"`
-	RemotePK       string                    `json:"remote_pk"`
-	ParentPK       string                    `json:"parent_pk"`
-	GatewayPK      string                    `json:"gateway_pk,omitempty"`
-	Level          int                       `json:"level"`
-	CalcTimeMs     float64                   `json:"calc_time_ms,omitempty"`
-	SetupTimeMs    float64                   `json:"setup_time_ms,omitempty"`
-	PingSamples    []float64                 `json:"ping_samples,omitempty"`
-	AvgLatency     float64                   `json:"avg_latency_ms,omitempty"`
-	CalcErr        string                    `json:"calc_err,omitempty"`
-	SetupErr       string                    `json:"setup_err,omitempty"`
-	PingErr        string                    `json:"ping_err,omitempty"`
-	Timestamp      string                    `json:"timestamp,omitempty"`
-	LastSuccess    string                    `json:"last_success,omitempty"`
-	Phase          string                    `json:"phase"`
-	Stale          bool                      `json:"stale,omitempty"`
-	DmsgServers    []tuiDmsgServerSavedEntry `json:"dmsg_servers,omitempty"`
-	DmsgReachable  bool                      `json:"dmsg_reachable,omitempty"`
-	DmsgSkipReason string                    `json:"dmsg_skip_reason,omitempty"`
-}
-
-// pingTreeModel is the Bubble Tea model for the scrollable ping tree
 type pingTreeModel struct {
-	viewport   viewport.Model
-	content    string
+	viewport viewport.Model
+	spinner  spinner.Model
+
 	ready      bool
+	quitting   bool
 	width      int
 	height     int
-	quitting   bool
 	autoScroll bool
 
-	// Command flags (for FetchCachedServiceURL fallback chain)
-	cmdFlags *pflag.FlagSet
+	mu          sync.RWMutex
+	entries     map[string]*treeEntry // tp_id → entry
+	entryOrder  []string              // tp_id insert order; ties to discovery order at each level
+	levels      map[int32]*levelInfo  // level → info
+	statusPhase string
+	statusInFly int32
+	statusPend  int32
+	statusText  string
+	runDone     *runSummary
+	serverError string
+	streamErr   error
+	streamEnded bool
 
-	// Ping state
-	ctx        context.Context
-	cancel     context.CancelFunc
-	grpcClient *rpcgrpc.PingClient
-	rpcClient  visor.API
-	localPK    string
-	adjacency  map[string][]treeNeighbor
-	localTps   []*visor.TransportSummary
+	ctx      context.Context
+	cancel   context.CancelFunc
+	runStart time.Time
 
-	// Filter state
-	passesFilter func(string) bool
-	onlineSet    map[string]bool
-
-	// DMSG state
-	visorDmsgServers  map[string][]string // visorPK -> []serverPK
-	dmsgClientsLoaded bool
-
-	// Data
-	entries     []tuiTreeEntry
-	entriesMu   *sync.RWMutex
-	latencies   map[string]*tuiLatencyData
-	latenciesMu *sync.RWMutex
-	pingedTpIDs map[string]bool // Already pinged transport IDs
-
-	// Local transport tracking
-	localTpIDs      map[string]bool
-	localTpByRemote map[string]treeNeighbor
-
-	// Stats
-	totalVisors  int
-	pingedVisors int
-	failedVisors int
-	startTime    time.Time
-
-	// Status messages
-	statusMu  *sync.RWMutex
-	statusMsg string
-
-	// Spinner for visual "work in progress" feedback in the status
-	// bar. Driven by bubbles/spinner; ticked while the status string
-	// indicates ongoing work, paused on "Done" so the operator sees
-	// a stable indicator of completion.
-	spinner spinner.Model
-
-	// Goroutine tracking
-	pingWg *sync.WaitGroup
+	// outputFile is the optional --output NDJSON tee. Owned by the
+	// command; nil when not set.
+	outputFile *os.File
 }
 
-// Messages for Bubble Tea
-type tickMsg time.Time
+func newPingTreeModel(ctx context.Context, cancel context.CancelFunc) *pingTreeModel {
+	sp := spinner.New()
+	sp.Spinner = spinner.Line
+	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
 
-func (m pingTreeModel) Init() tea.Cmd {
-	return tea.Batch(
-		tea.EnterAltScreen,
-		tickCmd(),
-		m.spinner.Tick,
-	)
+	return &pingTreeModel{
+		spinner:    sp,
+		entries:    make(map[string]*treeEntry),
+		levels:     make(map[int32]*levelInfo),
+		autoScroll: true,
+		ctx:        ctx,
+		cancel:     cancel,
+		runStart:   time.Now(),
+	}
 }
+
+// ---------------------------------------------------------------------------
+// Bubble Tea Update / Init / View
+// ---------------------------------------------------------------------------
+
+// eventMsg wraps one PingTreeEvent from the gRPC stream. The
+// stream-consumer goroutine sends one per event via p.Send.
+type eventMsg struct{ ev *rpcgrpc.PingTreeEvent }
+
+// streamDoneMsg fires when the gRPC stream closes cleanly (EOF
+// after a RunDone). The TUI stops the spinner and shows
+// "press q to exit" in the footer.
+type streamDoneMsg struct{}
+
+// streamErrMsg fires when stream.Recv() returns an error other
+// than EOF. The TUI surfaces the error inline.
+type streamErrMsg struct{ err error }
+
+// tickMsg drives the elapsed-time counter and re-renders the tree
+// even when no new events have arrived (so the operator sees the
+// spinner moving and the elapsed timer ticking).
+type tickMsg struct{}
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg {
-		return tickMsg(t)
-	})
+	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
-func (m pingTreeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var (
-		cmd  tea.Cmd
-		cmds []tea.Cmd
-	)
+func (m *pingTreeModel) Init() tea.Cmd {
+	return tea.Batch(m.spinner.Tick, tickCmd())
+}
 
-	switch msg := msg.(type) {
+func (m *pingTreeModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+
+	switch v := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "q", "ctrl+c":
+		switch v.String() {
+		case "q", "ctrl+c", "esc":
 			m.quitting = true
 			m.cancel()
-			// Save state before quitting
-			m.saveResults()
 			return m, tea.Quit
-		case "home", "g":
-			m.autoScroll = false
-			m.viewport.GotoTop()
-		case "end", "G":
-			m.autoScroll = true
-			m.viewport.GotoBottom()
+		case "a":
+			m.autoScroll = !m.autoScroll
 		case "up", "k":
+			m.viewport.ScrollUp(1)
 			m.autoScroll = false
 		case "down", "j":
-			if m.viewport.AtBottom() {
-				m.autoScroll = true
-			}
-		case "pgup", "ctrl+u":
+			m.viewport.ScrollDown(1)
 			m.autoScroll = false
-		case "pgdown", "ctrl+d":
-			if m.viewport.AtBottom() {
-				m.autoScroll = true
-			}
+		case "pgup":
+			m.viewport.HalfPageUp()
+			m.autoScroll = false
+		case "pgdown":
+			m.viewport.HalfPageDown()
+			m.autoScroll = false
+		case "home", "g":
+			m.viewport.GotoTop()
+			m.autoScroll = false
+		case "end", "G":
+			m.viewport.GotoBottom()
+			m.autoScroll = true
 		}
 
 	case tea.WindowSizeMsg:
-		headerHeight := 4
-		footerHeight := 2
-		verticalMarginHeight := headerHeight + footerHeight
-
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
-			m.viewport.YPosition = headerHeight
-			m.viewport.SetContent(m.content)
+			m.viewport = viewport.New(v.Width, v.Height-3)
+			m.viewport.SetContent(m.renderTree())
 			m.ready = true
 		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - verticalMarginHeight
+			m.viewport.Width = v.Width
+			m.viewport.Height = v.Height - 3
 		}
-		m.width = msg.Width
-		m.height = msg.Height
-
-	case tickMsg:
-		m.content = m.renderTreeContent()
-		wasAtBottom := m.viewport.AtBottom()
-		m.viewport.SetContent(m.content)
-		if m.autoScroll || wasAtBottom {
-			m.viewport.GotoBottom()
-		}
-		cmds = append(cmds, tickCmd())
+		m.width, m.height = v.Width, v.Height
 
 	case spinner.TickMsg:
-		// Spinner only animates while work is in flight. Once the
-		// status string starts with "Done" we stop pumping spinner
-		// ticks — the stationary glyph is the operator's visual cue
-		// that the run has completed.
-		m.statusMu.RLock()
-		ongoing := !strings.HasPrefix(m.statusMsg, "Done")
-		m.statusMu.RUnlock()
-		if ongoing {
-			var spinnerCmd tea.Cmd
-			m.spinner, spinnerCmd = m.spinner.Update(msg)
-			cmds = append(cmds, spinnerCmd)
+		var spinnerCmd tea.Cmd
+		m.spinner, spinnerCmd = m.spinner.Update(msg)
+		cmds = append(cmds, spinnerCmd)
+
+	case tickMsg:
+		// Re-render to refresh elapsed-time counter + status line.
+		m.viewport.SetContent(m.renderTree())
+		if m.autoScroll {
+			m.viewport.GotoBottom()
 		}
+		if !m.streamEnded {
+			cmds = append(cmds, tickCmd())
+		}
+
+	case eventMsg:
+		m.applyEvent(v.ev)
+		m.viewport.SetContent(m.renderTree())
+		if m.autoScroll {
+			m.viewport.GotoBottom()
+		}
+
+	case streamDoneMsg:
+		m.streamEnded = true
+		m.viewport.SetContent(m.renderTree())
+
+	case streamErrMsg:
+		m.streamErr = v.err
+		m.streamEnded = true
+		m.viewport.SetContent(m.renderTree())
 	}
 
-	m.viewport, cmd = m.viewport.Update(msg)
-	cmds = append(cmds, cmd)
-
+	var vpCmd tea.Cmd
+	m.viewport, vpCmd = m.viewport.Update(msg)
+	cmds = append(cmds, vpCmd)
 	return m, tea.Batch(cmds...)
 }
 
-func (m pingTreeModel) View() string {
+// applyEvent folds one PingTreeEvent into the model state. Called
+// from the Update message handler; takes the model's write lock so
+// the renderer (which holds the read lock) doesn't see partial
+// updates.
+func (m *pingTreeModel) applyEvent(ev *rpcgrpc.PingTreeEvent) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	switch p := ev.Payload.(type) {
+	case *rpcgrpc.PingTreeEvent_Discovered:
+		d := p.Discovered
+		if _, exists := m.entries[d.TpId]; !exists {
+			m.entries[d.TpId] = &treeEntry{
+				tpID:     d.TpId,
+				tpType:   d.TpType,
+				remotePK: d.RemotePk,
+				parentPK: d.ParentPk,
+				level:    int(d.Level),
+				ts:       time.Unix(0, ev.TimestampNs),
+			}
+			m.entryOrder = append(m.entryOrder, d.TpId)
+		}
+
+	case *rpcgrpc.PingTreeEvent_PingResult:
+		r := p.PingResult
+		e, ok := m.entries[r.TpId]
+		if !ok {
+			// PingResult arrived without a prior Discovered.
+			// Shouldn't happen for the server-side BFS, but be
+			// defensive: synthesize an entry so the renderer
+			// still surfaces the result.
+			e = &treeEntry{
+				tpID:     r.TpId,
+				tpType:   r.TpType,
+				remotePK: r.RemotePk,
+				parentPK: r.ParentPk,
+				level:    int(r.Level),
+				ts:       time.Unix(0, ev.TimestampNs),
+			}
+			m.entries[r.TpId] = e
+			m.entryOrder = append(m.entryOrder, r.TpId)
+		}
+		e.pinged = true
+		e.failed = r.Failed
+		e.canceled = r.Canceled
+		e.latencySource = r.LatencySource
+		e.setupLatencyMs = float64(r.SetupLatencyNs) / 1e6
+		e.pingAvgMs = float64(r.PingAvgNs) / 1e6
+		e.pingP50Ms = float64(r.PingP50Ns) / 1e6
+		e.pingP99Ms = float64(r.PingP99Ns) / 1e6
+		e.jitterMs = float64(r.JitterNs) / 1e6
+		e.sampleCount = r.SampleCount
+		e.setupErr = r.SetupErr
+		e.pingErr = r.PingErr
+		e.calcErr = r.CalcErr
+
+	case *rpcgrpc.PingTreeEvent_LevelDone:
+		l := p.LevelDone
+		m.levels[l.Level] = &levelInfo{
+			attempted:     l.Attempted,
+			succeeded:     l.Succeeded,
+			failed:        l.Failed,
+			skippedCached: l.SkippedCached,
+			done:          true,
+		}
+
+	case *rpcgrpc.PingTreeEvent_RunDone:
+		r := p.RunDone
+		m.runDone = &runSummary{
+			totalDiscovered:    r.TotalDiscovered,
+			totalPinged:        r.TotalPinged,
+			totalSucceeded:     r.TotalSucceeded,
+			totalFailed:        r.TotalFailed,
+			totalSkippedCached: r.TotalSkippedCached,
+			wallMs:             r.WallTimeNs / 1e6,
+			peakInFlight:       r.PeakInFlight,
+			terminationReason:  r.TerminationReason,
+		}
+
+	case *rpcgrpc.PingTreeEvent_StatusUpdate:
+		s := p.StatusUpdate
+		m.statusPhase = s.Phase
+		m.statusInFly = s.InFlight
+		m.statusPend = s.Pending
+		m.statusText = s.Message
+
+	case *rpcgrpc.PingTreeEvent_ServerError:
+		e := p.ServerError
+		m.serverError = fmt.Sprintf("%s: %s", e.Code, e.Message)
+	}
+}
+
+func (m *pingTreeModel) View() string {
 	if m.quitting {
 		return "Shutting down...\n"
 	}
@@ -429,1880 +611,267 @@ func (m pingTreeModel) View() string {
 	}
 
 	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	header := headerStyle.Render("Ping Over Routes - Scrollable Tree View")
+	header := headerStyle.Render("Ping Tree (gRPC streaming, server-side BFS)")
 
-	elapsed := time.Since(m.startTime).Truncate(time.Second)
-	statsLine := fmt.Sprintf("Visors: %d/%d pinged, %d failed | Elapsed: %s",
-		m.pingedVisors, m.totalVisors, m.failedVisors, elapsed)
+	stats := m.statsLine()
 
-	m.statusMu.RLock()
-	status := m.statusMsg
-	m.statusMu.RUnlock()
-	if status != "" {
-		// Spinner glyph in front of the status string is the
-		// visual "still working" indicator. The spinner stops
-		// animating on Done so the glyph holds steady.
-		statsLine += fmt.Sprintf(" | %s %s", m.spinner.View(), status)
-	}
-
-	scrollPercent := m.viewport.ScrollPercent() * 100
-	scrollIndicator := fmt.Sprintf("%.0f%%", scrollPercent)
+	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	scrollPct := m.viewport.ScrollPercent() * 100
+	scrollIndicator := fmt.Sprintf("%.0f%%", scrollPct)
 	if m.autoScroll {
 		scrollIndicator += " [auto]"
 	}
+	hint := "↑/↓ scroll | PgUp/PgDn page | a toggle auto-scroll | q quit"
+	if m.streamEnded {
+		hint = "Run complete — q to exit"
+	}
+	footer := footerStyle.Render(fmt.Sprintf("%s | %s", hint, scrollIndicator))
 
-	footerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	footer := footerStyle.Render(fmt.Sprintf(
-		"↑/↓ scroll | PgUp/PgDn page | Home/End top/bottom | q quit | %s",
-		scrollIndicator,
-	))
-
-	return fmt.Sprintf("%s\n%s\n%s\n%s",
-		header,
-		statsLine,
-		m.viewport.View(),
-		footer,
-	)
+	return fmt.Sprintf("%s\n%s\n%s\n%s", header, stats, m.viewport.View(), footer)
 }
 
-// setStatus updates the status message
-func (m *pingTreeModel) setStatus(msg string) {
-	m.statusMu.Lock()
-	m.statusMsg = msg
-	m.statusMu.Unlock()
+// statsLine renders the per-frame summary above the viewport. Pulls
+// from m's locked state. Format mirrors the pre-rewire output:
+// "Visors: A/B pinged, F failed | Elapsed: T | [status]".
+func (m *pingTreeModel) statsLine() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	var pinged, failed, discovered int
+	for _, e := range m.entries {
+		if e.pinged {
+			pinged++
+		}
+		if e.failed {
+			failed++
+		}
+		discovered++
+	}
+	elapsed := time.Since(m.runStart).Truncate(time.Second)
+	stats := fmt.Sprintf("Visors: %d/%d pinged, %d failed | Elapsed: %s",
+		pinged, discovered, failed, elapsed)
+	if m.statusPhase != "" && !m.streamEnded {
+		stats += fmt.Sprintf(" | %s %s (inflight=%d pending=%d)",
+			m.spinner.View(), m.statusPhase, m.statusInFly, m.statusPend)
+	}
+	if m.serverError != "" {
+		stats += " | server error: " + m.serverError
+	}
+	if m.streamErr != nil {
+		stats += " | stream error: " + m.streamErr.Error()
+	}
+	return stats
 }
 
-// renderTreeContent generates the tree display string using pterm tree
-func (m *pingTreeModel) renderTreeContent() string {
-	m.entriesMu.RLock()
-	entries := make([]tuiTreeEntry, len(m.entries))
-	copy(entries, m.entries)
-	m.entriesMu.RUnlock()
+// renderTree builds the scrollable viewport content. Per level we
+// group entries by parentPK so each subtree is rendered as
+//
+//	<parent-PK>
+//	├─ <child entry>
+//	├─ <child entry>
+//	└─ <child entry>
+//
+// Within each subtree entries are sorted: succeeded by ascending
+// avg ms, then pending (discovery order), then failed. Final
+// RunDone summary at the bottom.
+func (m *pingTreeModel) renderTree() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
-	if len(entries) == 0 {
+	if len(m.entryOrder) == 0 {
 		return "Discovering network topology...\n"
 	}
 
+	// level → parentPK → ordered entries
+	byLevel := make(map[int]map[string][]*treeEntry)
+	for _, tpID := range m.entryOrder {
+		e := m.entries[tpID]
+		if _, ok := byLevel[e.level]; !ok {
+			byLevel[e.level] = make(map[string][]*treeEntry)
+		}
+		byLevel[e.level][e.parentPK] = append(byLevel[e.level][e.parentPK], e)
+	}
+
+	levelKeys := make([]int, 0, len(byLevel))
+	for k := range byLevel {
+		levelKeys = append(levelKeys, k)
+	}
+	sort.Ints(levelKeys)
+
+	headStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
+	rootStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("87")).Bold(true)
+	branchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	cacheStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("117"))
+	liveStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("82"))
+	failStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	pendStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
 	var sb strings.Builder
 
-	// Column header using pterm tree format - matches graph.go/tree format
-	// Column widths: remotePK(64) tpID(36) calc(1) setup(9) pings(8 each) avg(9)
-	labelParts := []string{
-		fmt.Sprintf("%-64s", pterm.Gray("edge")),
-		fmt.Sprintf("%-36s", pterm.Green("tpid")),
-		pterm.Gray("-"), // calc column
-		fmt.Sprintf("%9s", pterm.Gray("setup")),
-	}
-	// Ping columns: "ping" in first slot, ".....ms" in rest - each 8 chars right-aligned
-	labelParts = append(labelParts, fmt.Sprintf("%8s", pterm.Gray("ping")))
-	for i := 1; i < cfg.Tries; i++ {
-		labelParts = append(labelParts, fmt.Sprintf("%8s", pterm.Gray(".....ms")))
-	}
-	labelParts = append(labelParts, fmt.Sprintf("%9s", pterm.Gray("avg")))
-	if cfg.DmsgPreCheck || cfg.DmsgOnly {
-		labelParts = append(labelParts, pterm.Gray("dmsg"))
-	}
-	labelRow := strings.Join(labelParts, " ")
-
-	labelTree := pterm.TreeNode{
-		Text: pterm.Gray("edge"),
-		Children: []pterm.TreeNode{
-			{Text: labelRow},
-		},
-	}
-	treeStr, _ := pterm.DefaultTree.WithRoot(labelTree).Srender() //nolint:errcheck
-	sb.WriteString(treeStr)
-	sb.WriteString("\n")
-
-	// Group entries by level
-	entriesByLevel := make(map[int][]tuiTreeEntry)
-	for _, entry := range entries {
-		entriesByLevel[entry.level] = append(entriesByLevel[entry.level], entry)
-	}
-
-	maxLevel := 0
-	for lvl := range entriesByLevel {
-		if lvl > maxLevel {
-			maxLevel = lvl
+	for _, lv := range levelKeys {
+		parents := byLevel[lv]
+		totalEntries := 0
+		for _, es := range parents {
+			totalEntries += len(es)
 		}
-	}
 
-	// Update stats
-	pinged := 0
-	failed := 0
-	for _, entry := range entries {
-		m.latenciesMu.RLock()
-		data := m.latencies[entry.tpID]
-		m.latenciesMu.RUnlock()
-		if data != nil && data.phase == "done" {
-			pinged++
-			if entry.failed || data.pingErr != "" || data.setupErr != "" {
-				failed++
-			}
+		levelHeader := fmt.Sprintf("=== Level %d (%d entries", lv, totalEntries)
+		if info, ok := m.levels[int32(lv)]; ok && info.done { //nolint:gosec
+			levelHeader += fmt.Sprintf(" — cached:%d live:%d failed:%d",
+				info.skippedCached, info.succeeded-info.skippedCached, info.failed)
 		}
-	}
-	m.pingedVisors = pinged
-	m.failedVisors = failed
-	m.totalVisors = len(entries)
+		levelHeader += ") ==="
+		sb.WriteString(headStyle.Render(levelHeader))
+		sb.WriteString("\n")
 
-	// Render Level 1 (direct transports)
-	level1Entries, hasLevel1 := entriesByLevel[1]
-	if hasLevel1 && len(level1Entries) > 0 {
-		sb.WriteString("=== Level 1 (direct transports) ===\n")
+		// Stable subtree order: sort parent PKs alphabetically so the
+		// frame-to-frame layout doesn't reshuffle when new entries arrive.
+		parentKeys := make([]string, 0, len(parents))
+		for pk := range parents {
+			parentKeys = append(parentKeys, pk)
+		}
+		sort.Strings(parentKeys)
 
-		// Sort entries: successful by latency first, then failed
-		m.sortEntriesByLatency(level1Entries)
+		for _, parentPK := range parentKeys {
+			entries := parents[parentPK]
 
-		// Separate success and failure entries
-		var successEntries, failedEntries []tuiTreeEntry
-		for _, entry := range level1Entries {
-			if entry.failed {
-				failedEntries = append(failedEntries, entry)
-			} else {
-				m.latenciesMu.RLock()
-				data := m.latencies[entry.tpID]
-				m.latenciesMu.RUnlock()
-				if data != nil && (data.pingErr != "" || data.setupErr != "") {
-					failedEntries = append(failedEntries, entry)
-				} else {
-					successEntries = append(successEntries, entry)
+			sort.SliceStable(entries, func(i, j int) bool {
+				ai, aj := entries[i], entries[j]
+				cati := entryCategory(ai)
+				catj := entryCategory(aj)
+				if cati != catj {
+					return cati < catj
 				}
-			}
-		}
-
-		// Render success tree
-		if len(successEntries) > 0 {
-			var children []pterm.TreeNode
-			for _, entry := range successEntries {
-				children = append(children, m.buildTreeNodeWithDmsg(entry))
-			}
-			rootTree := pterm.TreeNode{
-				Text:     pterm.Cyan(m.localPK) + pterm.Gray(" (local)"),
-				Children: children,
-			}
-			treeStr, _ := pterm.DefaultTree.WithRoot(rootTree).Srender() //nolint:errcheck
-			sb.WriteString(treeStr)
-		}
-
-		// Render failure tree
-		if len(failedEntries) > 0 {
-			var children []pterm.TreeNode
-			for _, entry := range failedEntries {
-				children = append(children, m.buildTreeNodeWithDmsg(entry))
-			}
-			failedTree := pterm.TreeNode{
-				Text:     pterm.Cyan(m.localPK) + pterm.Red(" (failures)"),
-				Children: children,
-			}
-			treeStr, _ := pterm.DefaultTree.WithRoot(failedTree).Srender() //nolint:errcheck
-			sb.WriteString(treeStr)
-		}
-	}
-
-	// Render Level 2+ trees: separate tree per parent
-	for lvl := 2; lvl <= maxLevel; lvl++ {
-		levelEntries, ok := entriesByLevel[lvl]
-		if !ok || len(levelEntries) == 0 {
-			continue
-		}
-
-		sb.WriteString(fmt.Sprintf("\n=== Level %d ===\n", lvl))
-
-		// Group entries by parent
-		entriesByParent := make(map[string][]tuiTreeEntry)
-		for _, entry := range levelEntries {
-			entriesByParent[entry.parentPK] = append(entriesByParent[entry.parentPK], entry)
-		}
-
-		// Sort parents by their best child latency
-		type parentInfo struct {
-			pk          string
-			bestLatency float64
-		}
-		var sortedParents []parentInfo
-		for parentPK, children := range entriesByParent {
-			best := float64(-1)
-			for _, child := range children {
-				lat := m.getAvgLatency(child.tpID)
-				if lat >= 0 && (best < 0 || lat < best) {
-					best = lat
+				if cati == 0 {
+					return ai.pingAvgMs < aj.pingAvgMs
 				}
-			}
-			sortedParents = append(sortedParents, parentInfo{pk: parentPK, bestLatency: best})
-		}
-		// Sort: lowest latency first, -1 (no data) last
-		for i := 0; i < len(sortedParents)-1; i++ {
-			for j := i + 1; j < len(sortedParents); j++ {
-				swap := false
-				if sortedParents[i].bestLatency < 0 && sortedParents[j].bestLatency >= 0 {
-					swap = true
-				} else if sortedParents[i].bestLatency >= 0 && sortedParents[j].bestLatency >= 0 {
-					if sortedParents[j].bestLatency < sortedParents[i].bestLatency {
-						swap = true
-					}
-				}
-				if swap {
-					sortedParents[i], sortedParents[j] = sortedParents[j], sortedParents[i]
-				}
-			}
-		}
+				return ai.ts.Before(aj.ts)
+			})
 
-		// Render tree for each parent
-		for _, parent := range sortedParents {
-			children := entriesByParent[parent.pk]
-			m.sortEntriesByLatency(children)
+			rootLabel := rootStyle.Render(parentPK)
+			if lv == 1 {
+				rootLabel += " " + branchStyle.Render("(local)")
+			}
+			sb.WriteString(rootLabel)
+			sb.WriteString("\n")
 
-			// Separate success and failure
-			var successEntries, failedLevelEntries []tuiTreeEntry
-			for _, entry := range children {
-				if entry.failed {
-					failedLevelEntries = append(failedLevelEntries, entry)
-				} else {
-					m.latenciesMu.RLock()
-					data := m.latencies[entry.tpID]
-					m.latenciesMu.RUnlock()
-					if data != nil && (data.pingErr != "" || data.setupErr != "") {
-						failedLevelEntries = append(failedLevelEntries, entry)
+			for i, e := range entries {
+				connector := "├─ "
+				if i == len(entries)-1 {
+					connector = "└─ "
+				}
+				line := formatEntryLine(e)
+				switch entryCategory(e) {
+				case 0:
+					if e.latencySource == "transport_summary" {
+						line = cacheStyle.Render(line)
 					} else {
-						successEntries = append(successEntries, entry)
+						line = liveStyle.Render(line)
 					}
+				case 1:
+					line = pendStyle.Render(line)
+				case 2:
+					line = failStyle.Render(line)
 				}
+				sb.WriteString(branchStyle.Render(connector))
+				sb.WriteString(line)
+				sb.WriteString("\n")
 			}
-
-			// Build parent text with latency info
-			parentLatStr := ""
-			if parent.bestLatency >= 0 {
-				parentLatStr = pterm.Gray(fmt.Sprintf(" (%.1fms)", parent.bestLatency))
-			}
-
-			// Render success tree for this parent
-			if len(successEntries) > 0 {
-				var treeChildren []pterm.TreeNode
-				for _, entry := range successEntries {
-					treeChildren = append(treeChildren, m.buildTreeNodeWithDmsg(entry))
-				}
-				parentTree := pterm.TreeNode{
-					Text:     pterm.Cyan(parent.pk) + parentLatStr,
-					Children: treeChildren,
-				}
-				treeStr, _ := pterm.DefaultTree.WithRoot(parentTree).Srender() //nolint:errcheck
-				sb.WriteString(treeStr)
-			}
-
-			// Render failure tree for this parent
-			if len(failedLevelEntries) > 0 {
-				var treeChildren []pterm.TreeNode
-				for _, entry := range failedLevelEntries {
-					treeChildren = append(treeChildren, m.buildTreeNodeWithDmsg(entry))
-				}
-				failedTree := pterm.TreeNode{
-					Text:     pterm.Cyan(parent.pk) + pterm.Red(" (failures)") + parentLatStr,
-					Children: treeChildren,
-				}
-				treeStr, _ := pterm.DefaultTree.WithRoot(failedTree).Srender() //nolint:errcheck
-				sb.WriteString(treeStr)
-			}
+			sb.WriteString("\n")
 		}
 	}
 
+	if m.runDone != nil {
+		sb.WriteString(headStyle.Render("=== Run Summary ==="))
+		sb.WriteString("\n")
+		sb.WriteString(fmt.Sprintf(
+			"discovered=%d pinged=%d succeeded=%d failed=%d skipped_cached=%d\n"+
+				"wall_time=%dms peak_in_flight=%d termination=%s\n",
+			m.runDone.totalDiscovered, m.runDone.totalPinged,
+			m.runDone.totalSucceeded, m.runDone.totalFailed,
+			m.runDone.totalSkippedCached, m.runDone.wallMs,
+			m.runDone.peakInFlight, m.runDone.terminationReason,
+		))
+	}
 	return sb.String()
 }
 
-// buildTreeNodeWithDmsg creates a tree node for a transport entry with DMSG server children
-func (m *pingTreeModel) buildTreeNodeWithDmsg(entry tuiTreeEntry) pterm.TreeNode {
-	node := pterm.TreeNode{Text: m.formatEntryForTree(entry)}
-
-	// Add DMSG server children if available
-	if cfg.DmsgPreCheck || cfg.DmsgOnly {
-		m.latenciesMu.RLock()
-		data := m.latencies[entry.tpID]
-		m.latenciesMu.RUnlock()
-
-		if data != nil && len(data.dmsgServers) > 0 {
-			for _, serverData := range data.dmsgServers {
-				node.Children = append(node.Children, pterm.TreeNode{
-					Text: m.formatDmsgServerEntry(serverData),
-				})
-			}
-		}
+// entryCategory returns 0 for successful pings, 1 for pending
+// (discovered but not yet pinged), 2 for failed. The renderer sorts
+// by this category so successes float to the top of each level.
+func entryCategory(e *treeEntry) int {
+	if !e.pinged {
+		return 1
 	}
-
-	return node
+	if e.failed {
+		return 2
+	}
+	return 0
 }
 
-// formatDmsgServerEntry formats a DMSG server entry for tree display
-// Matches the format used in graph.go/tree command
-func (m *pingTreeModel) formatDmsgServerEntry(serverData *tuiDmsgServerData) string {
-	if serverData == nil {
-		return pterm.Gray("...")
-	}
-
-	// Helper to truncate error messages
-	truncateErr := func(err string, maxLen int) string {
-		if len(err) <= maxLen {
-			return err
-		}
-		return err[:maxLen-3] + "..."
-	}
-
-	// Format aligned with transport entries:
-	// serverPK(64) | (dmsg)(34) | calc(-) | setup(-) | pings(8 each) | avg(9)
-	var pingsStr, avgStr string
-
-	if serverData.pingErr != "" {
-		pingsStr = truncateErr(serverData.pingErr, 12)
-		avgStr = fmt.Sprintf("%9s", "-")
-	} else if len(serverData.pingSamples) > 0 {
-		// Format ping samples
-		var pingParts []string
-		var pingSum float64
-		for _, p := range serverData.pingSamples {
-			pingParts = append(pingParts, fmt.Sprintf("%8s", fmt.Sprintf("%.1fms", p)))
-			pingSum += p
-		}
-		pingsStr = strings.Join(pingParts, " ")
-		avgPing := pingSum / float64(len(serverData.pingSamples))
-		avgStr = fmt.Sprintf("%9s", fmt.Sprintf("%.1fms", avgPing))
-	} else if serverData.phase != "done" {
-		pingsStr = fmt.Sprintf("%8s", "...")
-		avgStr = fmt.Sprintf("%9s", "...")
-	} else {
-		pingsStr = fmt.Sprintf("%8s", "-")
-		avgStr = fmt.Sprintf("%9s", "-")
-	}
-
-	// Build line aligned with transport entries:
-	// serverPK (64 chars) | "(dmsg)" padded to 34 chars (2 less to compensate for tree indent) | "-" for calc | "-" padded to 9 for setup | pings | avg | timestamp
-	dmsgLabel := fmt.Sprintf("%-34s", "(dmsg)")
-	calcStr := "-"
-	setupStr := fmt.Sprintf("%9s", "-")
-
-	// Timestamp (grayed, at the end) - same format as transport entries
-	var tsStr string
-	if serverData.phase == "done" && !serverData.timestamp.IsZero() {
-		tsStr = pterm.Gray(fmt.Sprintf(" %s", serverData.timestamp.Format("2006-01-02 15:04:05")))
-	}
-
-	// Use magenta color for DMSG servers to distinguish from transports
-	var text string
-	if serverData.pingErr != "" {
-		// Red text for failed DMSG pings
-		text = pterm.Red(fmt.Sprintf("%s %s %s %s %s %s",
-			serverData.serverPK, dmsgLabel, calcStr, setupStr, pingsStr, avgStr)) + tsStr
-	} else {
-		// Magenta server PK, gray labels
-		text = fmt.Sprintf("%s %s %s %s %s %s",
-			pterm.Magenta(serverData.serverPK), pterm.Gray(dmsgLabel), pterm.Gray(calcStr), pterm.Gray(setupStr), pingsStr, avgStr) + tsStr
-	}
-
-	return text
-}
-
-// sortEntriesByLatency sorts entries by latency (lowest first, failures last)
-func (m *pingTreeModel) sortEntriesByLatency(entries []tuiTreeEntry) {
-	for i := 0; i < len(entries)-1; i++ {
-		for j := i + 1; j < len(entries); j++ {
-			avgI := m.getAvgLatency(entries[i].tpID)
-			avgJ := m.getAvgLatency(entries[j].tpID)
-			if entries[i].failed && !entries[j].failed {
-				entries[i], entries[j] = entries[j], entries[i]
-			} else if !entries[i].failed && !entries[j].failed {
-				if avgI < 0 && avgJ >= 0 {
-					entries[i], entries[j] = entries[j], entries[i]
-				} else if avgI >= 0 && avgJ >= 0 && avgJ < avgI {
-					entries[i], entries[j] = entries[j], entries[i]
-				}
-			}
-		}
-	}
-}
-
-// formatEntryForTree formats an entry for pterm tree display
-// Matches the format used in graph.go/tree command
-func (m *pingTreeModel) formatEntryForTree(entry tuiTreeEntry) string {
-	m.latenciesMu.RLock()
-	data := m.latencies[entry.tpID]
-	m.latenciesMu.RUnlock()
-
-	pk := entry.remotePK
-	tpID := entry.tpID
-
-	// Helper to truncate error messages
-	truncateErr := func(err string, maxLen int) string {
-		if len(err) <= maxLen {
-			return err
-		}
-		return err[:maxLen-3] + "..."
-	}
-
-	// Color transport ID by type
-	formatTpID := func(id, tpType string) string {
-		switch tpType {
-		case "stcpr":
-			return pterm.Green(id)
-		case "sudph":
-			return pterm.Blue(id)
-		case "dmsg":
-			return pterm.Yellow(id)
-		default:
-			return id
-		}
-	}
-
-	if data == nil {
-		return fmt.Sprintf("%s %s ... %9s %8s %9s", pk, tpID, "...", "...", "...")
-	}
-
-	// Determine failure types
-	earlyFailure := data.calcErr != "" || data.setupErr != ""
-	pingFailure := data.pingErr != "" && !earlyFailure
-
-	// Calc time/error (minimal width, expands for errors/values)
-	var calcStr string
-	if data.calcErr != "" {
-		calcStr = truncateErr(data.calcErr, 9)
-	} else if data.calcTimeMs > 0 {
-		calcStr = fmt.Sprintf("%.1fms", data.calcTimeMs)
-	} else if data.phase == "pending" || data.phase == "calc" {
-		calcStr = "..."
-	} else {
-		calcStr = "-"
-	}
-
-	// Setup time/error (9 chars, right-aligned)
-	var setupStr string
-	if data.setupErr != "" {
-		setupStr = fmt.Sprintf("%9s", truncateErr(data.setupErr, 9))
-	} else if data.setupTimeMs > 0 {
-		setupStr = fmt.Sprintf("%9s", fmt.Sprintf("%.1fms", data.setupTimeMs))
-	} else if data.phase == "pending" || data.phase == "calc" || data.phase == "setup" {
-		setupStr = fmt.Sprintf("%9s", "...")
-	} else {
-		setupStr = fmt.Sprintf("%9s", "-")
-	}
-
-	// Ping times/error - show all samples (space-separated, each 8 chars for alignment)
-	var pingsStr string
-	if data.pingErr != "" {
-		pingsStr = truncateErr(data.pingErr, 12)
-	} else if len(data.pingSamples) > 0 {
-		var pingParts []string
-		for _, p := range data.pingSamples {
-			pingParts = append(pingParts, fmt.Sprintf("%8s", fmt.Sprintf("%.1fms", p)))
-		}
-		pingsStr = strings.Join(pingParts, " ")
-	} else if data.phase != "done" {
-		pingsStr = fmt.Sprintf("%8s", "...")
-	} else {
-		pingsStr = fmt.Sprintf("%8s", "-")
-	}
-
-	// Average ping time (9 chars, right-aligned)
-	var totalStr string
-	if !earlyFailure && !pingFailure && len(data.pingSamples) > 0 {
-		var pingSum float64
-		for _, p := range data.pingSamples {
-			pingSum += p
-		}
-		avgPing := pingSum / float64(len(data.pingSamples))
-		totalStr = fmt.Sprintf("%9s", fmt.Sprintf("%.1fms", avgPing))
-	} else {
-		totalStr = fmt.Sprintf("%9s", "-")
-	}
-
-	// Timestamp (grayed, at the end)
-	var tsStr string
-	if data.phase == "done" && !data.timestamp.IsZero() {
-		tsStr = pterm.Gray(fmt.Sprintf(" %s", data.timestamp.Format("2006-01-02 15:04:05")))
-	}
-
-	// Removal status (for failed entries)
-	var removeStr string
-	if entry.removed {
-		removeStr = pterm.Green(" [REMOVED]")
-	} else if entry.removeErr != "" {
-		removeStr = pterm.Yellow(" [rm err: " + truncateErr(entry.removeErr, 20) + "]")
-	}
-	if entry.remade {
-		removeStr += pterm.Cyan(" [REMADE]")
-	}
-
-	// Build the line: remotePK tpID calc setup pings... avg timestamp [removal_status]
-	tpIDFormatted := formatTpID(tpID, entry.tpType)
-
-	// Format the entire line based on failure status
-	var text string
-	if earlyFailure {
-		// Red background with white text for early failures
-		line := fmt.Sprintf("%s %s %s %s %s %s",
-			pk, tpID, calcStr, setupStr, pingsStr, totalStr)
-		text = pterm.BgRed.Sprint(pterm.White(line)) + tsStr + removeStr
-	} else if pingFailure {
-		// Red text for ping failures
-		text = pterm.Red(fmt.Sprintf("%s %s %s %s %s %s",
-			pk, tpID, calcStr, setupStr, pingsStr, totalStr)) + tsStr + removeStr
-	} else {
-		// Normal formatting with colored tpID
-		text = fmt.Sprintf("%s %s %s %s %s %s",
-			pk, tpIDFormatted, calcStr, setupStr, pingsStr, totalStr) + tsStr + removeStr
-	}
-
-	return text
-}
-
-// getAvgLatency returns average ping latency for a transport
-func (m *pingTreeModel) getAvgLatency(tpID string) float64 {
-	m.latenciesMu.RLock()
-	defer m.latenciesMu.RUnlock()
-
-	data := m.latencies[tpID]
-	if data == nil || len(data.pingSamples) == 0 {
-		return -1
-	}
-
-	var sum float64
-	for _, s := range data.pingSamples {
-		sum += s
-	}
-	return sum / float64(len(data.pingSamples))
-}
-
-// saveResults saves the current state to JSON file
-func (m *pingTreeModel) saveResults() {
-	if cfg.Output == "" {
-		return
-	}
-
-	m.entriesMu.RLock()
-	entries := make([]tuiTreeEntry, len(m.entries))
-	copy(entries, m.entries)
-	m.entriesMu.RUnlock()
-
-	m.latenciesMu.RLock()
-	latencies := make(map[string]*tuiLatencyData)
-	for k, v := range m.latencies {
-		latencies[k] = v
-	}
-	m.latenciesMu.RUnlock()
-
-	state := tuiSavedState{
-		LocalPK:    m.localPK,
-		StartTime:  m.startTime.Format(time.RFC3339),
-		UpdateTime: time.Now().Format(time.RFC3339),
-		Settings: map[string]interface{}{
-			"tries":   cfg.Tries,
-			"timeout": cfg.Timeout.String(),
-			"version": cfg.Version,
-		},
-	}
-
-	for _, entry := range entries {
-		data := latencies[entry.tpID]
-		if data == nil {
-			continue
-		}
-
-		var avgLatency float64
-		if len(data.pingSamples) > 0 {
-			for _, s := range data.pingSamples {
-				avgLatency += s
-			}
-			avgLatency /= float64(len(data.pingSamples))
-		}
-
-		savedEntry := tuiSavedEntry{
-			TpID:           entry.tpID,
-			TpType:         data.tpType,
-			RemotePK:       entry.remotePK,
-			ParentPK:       entry.parentPK,
-			GatewayPK:      data.gatewayPK,
-			Level:          entry.level,
-			CalcTimeMs:     data.calcTimeMs,
-			SetupTimeMs:    data.setupTimeMs,
-			PingSamples:    data.pingSamples,
-			AvgLatency:     avgLatency,
-			CalcErr:        data.calcErr,
-			SetupErr:       data.setupErr,
-			PingErr:        data.pingErr,
-			Phase:          data.phase,
-			Stale:          data.stale,
-			DmsgReachable:  data.dmsgReachable,
-			DmsgSkipReason: data.dmsgSkipReason,
-		}
-
-		if !data.timestamp.IsZero() {
-			savedEntry.Timestamp = data.timestamp.Format(time.RFC3339)
-		}
-		if !data.lastSuccess.IsZero() {
-			savedEntry.LastSuccess = data.lastSuccess.Format(time.RFC3339)
-		}
-
-		// Save DMSG server results
-		for _, srv := range data.dmsgServers {
-			var avgDmsg float64
-			if len(srv.pingSamples) > 0 {
-				for _, s := range srv.pingSamples {
-					avgDmsg += s
-				}
-				avgDmsg /= float64(len(srv.pingSamples))
-			}
-			savedEntry.DmsgServers = append(savedEntry.DmsgServers, tuiDmsgServerSavedEntry{
-				ServerPK:    srv.serverPK,
-				PingSamples: srv.pingSamples,
-				AvgLatency:  avgDmsg,
-				PingErr:     srv.pingErr,
-				Timestamp:   srv.timestamp.Format(time.RFC3339),
-			})
-		}
-
-		state.Entries = append(state.Entries, savedEntry)
-	}
-
-	jsonData, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return
-	}
-
-	jsonFile := cfg.Output + ".json"
-	_ = os.WriteFile(jsonFile, jsonData, 0600) //nolint:errcheck,gosec
-
-	// Also save text output (with ANSI codes for colors) for consistency with tree command
-	textFile := cfg.Output + ".txt"
-	textOut := m.generateTextOutput(entries, latencies)
-	_ = os.WriteFile(textFile, []byte(textOut), 0600) //nolint:errcheck,gosec
-}
-
-// generateTextOutput generates text output similar to tree command
-func (m *pingTreeModel) generateTextOutput(entries []tuiTreeEntry, latencies map[string]*tuiLatencyData) string {
-	var textOut strings.Builder
-	textOut.WriteString("=== Route Ping Graph (Tree View) ===\n")
-	textOut.WriteString(fmt.Sprintf("Local: %s\n", pterm.Cyan(m.localPK)))
-	textOut.WriteString(fmt.Sprintf("Started: %s\n", m.startTime.Format(time.RFC3339)))
-	textOut.WriteString(fmt.Sprintf("Updated: %s\n\n", time.Now().Format(time.RFC3339)))
-
-	// Group entries by level
-	entriesByLevel := make(map[int][]tuiTreeEntry)
-	for _, entry := range entries {
-		entriesByLevel[entry.level] = append(entriesByLevel[entry.level], entry)
-	}
-
-	// Find max level
-	maxLevel := 0
-	for lvl := range entriesByLevel {
-		if lvl > maxLevel {
-			maxLevel = lvl
-		}
-	}
-
-	// Helper to calculate average latency
-	calcAvg := func(samples []float64) float64 {
-		if len(samples) == 0 {
-			return 0
-		}
-		var sum float64
-		for _, s := range samples {
-			sum += s
-		}
-		return sum / float64(len(samples))
-	}
-
-	// Write level 1
-	if level1Entries, ok := entriesByLevel[1]; ok && len(level1Entries) > 0 {
-		textOut.WriteString(pterm.Yellow("=== Level 1 (direct transports) ===\n"))
-		for _, entry := range level1Entries {
-			data := latencies[entry.tpID]
-			if data == nil {
-				continue
-			}
-			var latStr string
-			if len(data.pingSamples) > 0 {
-				avg := calcAvg(data.pingSamples)
-				latStr = fmt.Sprintf("%.1fms", avg)
-			} else if data.pingErr != "" {
-				latStr = data.pingErr
-			} else if data.setupErr != "" {
-				latStr = data.setupErr
-			} else if data.calcErr != "" {
-				latStr = data.calcErr
-			} else {
-				latStr = "..."
-			}
-			textOut.WriteString(fmt.Sprintf("  %s %s %s\n", entry.remotePK, entry.tpID, latStr))
-		}
-	}
-
-	// Write level 2+
-	for lvl := 2; lvl <= maxLevel; lvl++ {
-		levelEntries, ok := entriesByLevel[lvl]
-		if !ok || len(levelEntries) == 0 {
-			continue
-		}
-		textOut.WriteString(fmt.Sprintf("\n%s\n", pterm.Yellow(fmt.Sprintf("=== Level %d ===", lvl))))
-		for _, entry := range levelEntries {
-			data := latencies[entry.tpID]
-			if data == nil {
-				continue
-			}
-			var latStr string
-			if len(data.pingSamples) > 0 {
-				avg := calcAvg(data.pingSamples)
-				latStr = fmt.Sprintf("%.1fms", avg)
-			} else if data.pingErr != "" {
-				latStr = data.pingErr
-			} else if data.setupErr != "" {
-				latStr = data.setupErr
-			} else if data.calcErr != "" {
-				latStr = data.calcErr
-			} else {
-				latStr = "..."
-			}
-			textOut.WriteString(fmt.Sprintf("  %s %s %s\n", entry.remotePK, entry.tpID, latStr))
-		}
-	}
-
-	return textOut.String()
-}
-
-// loadSavedState loads previous state from JSON file for resume
-func (m *pingTreeModel) loadSavedState() bool {
-	if !cfg.Resume || cfg.Output == "" {
-		return false
-	}
-
-	resumeFile := cfg.Output + ".json"
-	savedData, err := os.ReadFile(resumeFile) //nolint:gosec
-	if err != nil {
-		return false
-	}
-
-	var savedState tuiSavedState
-	if err := json.Unmarshal(savedData, &savedState); err != nil {
-		return false
-	}
-
-	m.setStatus(fmt.Sprintf("Resuming from %s (%d entries)", resumeFile, len(savedState.Entries)))
-
-	if ts, err := time.Parse(time.RFC3339, savedState.StartTime); err == nil {
-		m.startTime = ts
-	}
-
-	var staleCount int
-	for _, entry := range savedState.Entries {
-		var entryTime time.Time
-		if entry.Timestamp != "" {
-			if ts, err := time.Parse(time.RFC3339, entry.Timestamp); err == nil {
-				entryTime = ts
-			}
-		}
-
-		isStale := false
-		if cfg.MaxAge > 0 && entry.Phase == "done" && !entryTime.IsZero() {
-			if time.Since(entryTime) > cfg.MaxAge {
-				isStale = true
-				staleCount++
-			}
-		}
-
-		if entry.Phase == "done" && !isStale {
-			m.pingedTpIDs[entry.TpID] = true
-		}
-
-		// Check for duplicates before adding
-		duplicate := false
-		for _, e := range m.entries {
-			if e.tpID == entry.TpID {
-				duplicate = true
-				break
-			}
-		}
-		if !duplicate {
-			m.entries = append(m.entries, tuiTreeEntry{
-				tpID:     entry.TpID,
-				tpType:   entry.TpType,
-				remotePK: entry.RemotePK,
-				level:    entry.Level,
-				parentPK: entry.ParentPK,
-			})
-		}
-
-		var lastSuccessTime time.Time
-		if entry.LastSuccess != "" {
-			if ts, err := time.Parse(time.RFC3339, entry.LastSuccess); err == nil {
-				lastSuccessTime = ts
-			}
-		}
-
-		data := &tuiLatencyData{
-			tpID:           entry.TpID,
-			tpType:         entry.TpType,
-			from:           entry.ParentPK,
-			to:             entry.RemotePK,
-			gatewayPK:      entry.GatewayPK,
-			level:          entry.Level,
-			calcTimeMs:     entry.CalcTimeMs,
-			setupTimeMs:    entry.SetupTimeMs,
-			pingSamples:    entry.PingSamples,
-			calcErr:        entry.CalcErr,
-			setupErr:       entry.SetupErr,
-			pingErr:        entry.PingErr,
-			phase:          entry.Phase,
-			timestamp:      entryTime,
-			lastSuccess:    lastSuccessTime,
-			stale:          isStale,
-			dmsgReachable:  entry.DmsgReachable,
-			dmsgSkipReason: entry.DmsgSkipReason,
-		}
-
-		if isStale {
-			data.phase = "pending"
-		}
-
-		m.latencies[entry.TpID] = data
-	}
-
-	return true
-}
-
-// removeLocalTransport removes a local transport
-func (m *pingTreeModel) removeLocalTransport(tpID string) error {
-	tpUUID, err := uuid.Parse(tpID)
-	if err != nil {
-		return fmt.Errorf("invalid transport ID: %w", err)
-	}
-	if err := m.rpcClient.RemoveTransport(tpUUID); err != nil {
-		return fmt.Errorf("failed to remove local transport: %w", err)
-	}
-	delete(m.localTpIDs, tpID)
-	return nil
-}
-
-// removeRemoteTransport requests remote visor to remove a transport via TPS
-func (m *pingTreeModel) removeRemoteTransport(remotePK string, tpID string) error {
-	var pk cipher.PubKey
-	if err := pk.Set(remotePK); err != nil {
-		return fmt.Errorf("invalid remote PK: %w", err)
-	}
-	tpUUID, err := uuid.Parse(tpID)
-	if err != nil {
-		return fmt.Errorf("invalid transport ID: %w", err)
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- m.rpcClient.TPSRemoveTransport(pk, tpUUID)
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			return fmt.Errorf("failed to remove remote transport: %w", err)
-		}
-	case <-time.After(15 * time.Second):
-		return fmt.Errorf("timeout removing remote transport")
-	}
-
-	return nil
-}
-
-// loadDmsgClients loads DMSG clients data for pre-checking
-func (m *pingTreeModel) loadDmsgClients() {
-	if !cfg.DmsgPreCheck && !cfg.DmsgOnly {
-		return
-	}
-
-	dmsgURL := cfg.DMSGURL + "/dmsg-discovery/servers/clients"
-	m.setStatus("Loading DMSG clients...")
-	dmsgClientsRaw := clirpc.FetchCachedServiceURL(m.cmdFlags, cfg.CacheDMSG, dmsgURL, cfg.CacheAge)
-
-	var clientsByServer map[string][]string
-	if err := json.Unmarshal([]byte(dmsgClientsRaw), &clientsByServer); err != nil {
-		m.setStatus("Failed to load DMSG clients")
-		return
-	}
-
-	newVisorServers := make(map[string][]string)
-	for serverPK, clients := range clientsByServer {
-		for _, clientPK := range clients {
-			newVisorServers[clientPK] = append(newVisorServers[clientPK], serverPK)
-		}
-	}
-	m.visorDmsgServers = newVisorServers
-	m.dmsgClientsLoaded = true
-	m.setStatus(fmt.Sprintf("Loaded DMSG data for %d clients", len(newVisorServers)))
-}
-
-// getVisorDmsgServers returns DMSG servers for a visor
-func (m *pingTreeModel) getVisorDmsgServers(visorPK string) []string {
-	if !m.dmsgClientsLoaded {
-		return nil
-	}
-	return m.visorDmsgServers[visorPK]
-}
-
-// runPingTreeTUI is the main entry point
-func runPingTreeTUI(cmd *cobra.Command, _ []string) {
-	pterm.EnableStyling()
-
-	// --testenv at run time: when the operator passed --testenv but
-	// SKYWIRETEST=1 isn't in the environment, swap any URL flags
-	// they didn't explicitly set to the test-deployment defaults.
-	// Mirrors the per-flag .Changed() check the old `ping tree`
-	// did, so an operator who passes --testenv on the command line
-	// gets the same effective configuration as one who exports
-	// SKYWIRETEST=1.
-	if cfg.TestEnv && !isTestEnv() {
-		if !cmd.Flags().Changed("tpdurl") {
-			cfg.TPDURL = deployment.Test.TransportDiscovery
-		}
-		if !cmd.Flags().Changed("uturl") {
-			cfg.UTURL = deployment.Test.UptimeTracker
-		}
-		if !cmd.Flags().Changed("dmsgurl") {
-			cfg.DMSGURL = deployment.Test.DmsgDiscovery
-		}
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		cancel()
-	}()
-
-	rpcClient, err := clirpc.Client(cmd.Flags())
-	if err != nil {
-		internal.PrintFatalError(cmd.Flags(), err)
-	}
-
-	grpcClient, err := rpcgrpc.NewPingClient(clirpc.Addr)
-	if err != nil {
-		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to connect to gRPC server: %w", err))
-	}
-	defer grpcClient.Close() //nolint:errcheck
-
-	overview, err := rpcClient.Overview()
-	if err != nil {
-		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get visor overview: %w", err))
-	}
-	localPK := overview.PubKey.String()
-
-	// Fetch TPD data
-	tpdRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), cfg.CacheTPD, cfg.TPDURL+"/all-transports", cfg.CacheAge)
-	var transports []transportEntry
-	if err := json.Unmarshal([]byte(tpdRaw), &transports); err != nil {
-		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
-	}
-
-	adjacency := make(map[string][]treeNeighbor)
-	for _, tp := range transports {
-		edge0, edge1 := tp.Edges[0], tp.Edges[1]
-		adjacency[edge0] = append(adjacency[edge0], treeNeighbor{pk: edge1, tpID: tp.ID, tpType: tp.Type})
-		if edge0 != edge1 {
-			adjacency[edge1] = append(adjacency[edge1], treeNeighbor{pk: edge0, tpID: tp.ID, tpType: tp.Type})
-		}
-	}
-
-	localTransports, err := rpcClient.Transports(nil, nil, false)
-	if err != nil {
-		fmt.Printf("Warning: failed to get local transports: %v\n", err)
-	}
-
-	localTpIDs := make(map[string]bool)
-	localTpByRemote := make(map[string]treeNeighbor)
-	for _, tp := range localTransports {
-		tpID := tp.ID.String()
-		remotePK := tp.Remote.String()
-		tpType := string(tp.Type)
-
-		localTpIDs[tpID] = true
-		localTpByRemote[remotePK] = treeNeighbor{pk: remotePK, tpID: tpID, tpType: tpType}
-
-		found := false
-		for _, n := range adjacency[localPK] {
-			if n.tpID == tpID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			adjacency[localPK] = append(adjacency[localPK], treeNeighbor{pk: remotePK, tpID: tpID, tpType: tpType})
-			adjacency[remotePK] = append(adjacency[remotePK], treeNeighbor{pk: localPK, tpID: tpID, tpType: tpType})
-		}
-	}
-
-	// Fetch UT data
-	utRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), cfg.CacheUT, cfg.UTURL+"/uptimes?v=v2", cfg.CacheAge)
-	var utEntries []uptimeEntry
-	_ = json.Unmarshal([]byte(utRaw), &utEntries) //nolint:errcheck
-
-	onlineSet := make(map[string]bool)
-	versionFilteredSet := make(map[string]bool)
-	filterByVersion := cfg.Version != ""
-
-	var minVersion semver.Version
-	if filterByVersion {
-		cleanVersion := strings.TrimPrefix(cfg.Version, "v")
-		minVersion, err = semver.Parse(cleanVersion)
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid version format: %w", err))
-		}
-	}
-
-	for _, entry := range utEntries {
-		if entry.Online {
-			onlineSet[entry.PK] = true
-		}
-		if filterByVersion && entry.Version != "" {
-			cleanVer := strings.TrimPrefix(entry.Version, "v")
-			cleanVer = strings.Fields(cleanVer)[0]
-			cleanVer = strings.Split(cleanVer, "+")[0]
-			cleanVer = strings.SplitN(cleanVer, "-", 2)[0]
-			if v, err := semver.Parse(cleanVer); err == nil && v.GTE(minVersion) {
-				versionFilteredSet[entry.PK] = true
-			}
-		}
-	}
-
-	passesFilter := func(pk string) bool {
-		if cfg.OnlineOnly && !onlineSet[pk] {
-			return false
-		}
-		if filterByVersion && !versionFilteredSet[pk] {
-			return false
-		}
-		return true
-	}
-
-	model := &pingTreeModel{
-		cmdFlags:         cmd.Flags(),
-		ctx:              ctx,
-		cancel:           cancel,
-		grpcClient:       grpcClient,
-		rpcClient:        rpcClient,
-		localPK:          localPK,
-		adjacency:        adjacency,
-		localTps:         localTransports,
-		passesFilter:     passesFilter,
-		onlineSet:        onlineSet,
-		entries:          []tuiTreeEntry{},
-		entriesMu:        &sync.RWMutex{},
-		latencies:        make(map[string]*tuiLatencyData),
-		latenciesMu:      &sync.RWMutex{},
-		pingedTpIDs:      make(map[string]bool),
-		localTpIDs:       localTpIDs,
-		localTpByRemote:  localTpByRemote,
-		visorDmsgServers: make(map[string][]string),
-		autoScroll:       true,
-		startTime:        time.Now(),
-		statusMu:         &sync.RWMutex{},
-		pingWg:           &sync.WaitGroup{},
-	}
-	// Spinner: Line is a tight |/-\ rotation. Styled cyan so it
-	// stands out from the status text without being loud.
-	sp := spinner.New()
-	sp.Spinner = spinner.Line
-	sp.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("86"))
-	model.spinner = sp
-
-	// Load DMSG clients if needed
-	if cfg.DmsgPreCheck || cfg.DmsgOnly {
-		model.loadDmsgClients()
-	}
-
-	// Load saved state if resuming
-	model.loadSavedState()
-
-	// Start the ping worker
-	model.pingWg.Add(1)
-	go func() {
-		defer model.pingWg.Done()
-		model.runPingWorker()
-	}()
-
-	// Auto-save periodically
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				model.saveResults()
-			}
-		}
-	}()
-
-	p := tea.NewProgram(model, tea.WithAltScreen())
-	finalModel, err := p.Run()
-	if err != nil {
-		fmt.Printf("Error running TUI: %v\n", err)
-		os.Exit(1)
-	}
-
-	// Cancel context and wait for all goroutines to finish before closing grpcClient
-	cancel()
-	model.pingWg.Wait()
-
-	// Print final results to stdout so they remain visible after exit
-	if m, ok := finalModel.(pingTreeModel); ok {
-		fmt.Println("\n=== Final Results ===")
-		fmt.Print(m.renderTreeContent())
-		fmt.Printf("\nTotal: %d visors, %d pinged, %d failed\n", m.totalVisors, m.pingedVisors, m.failedVisors)
-	}
-}
-
-// runPingWorker runs the ping tests in the background
-func (m *pingTreeModel) runPingWorker() {
-	for {
-		select {
-		case <-m.ctx.Done():
-			return
-		default:
-		}
-
-		if cfg.DmsgOnly {
-			m.runDmsgMode()
+// formatEntryLine renders a single entry as one row. Full 66-char
+// remotePK and full UUID tpID are emitted unredacted — PK truncation
+// in operator-facing output is a hard no, and the tpID is the only
+// stable handle for the (local, remote, transport-type) edge so we
+// surface it alongside the PK.
+//
+// Layout (the renderer prepends ├─/└─ branch characters):
+//
+//	<glyph> <remotePK 66> <tpID 36> <tpType 6> [tag] <latency block | error>
+func formatEntryLine(e *treeEntry) string {
+	// glyph + status block
+	var glyph, block string
+	switch entryCategory(e) {
+	case 1: // pending
+		glyph = "·"
+		block = "(pending)"
+	case 2: // failed
+		if e.canceled {
+			glyph = "⊘"
 		} else {
-			m.runRouteMode()
+			glyph = "✗"
 		}
-
-		if !cfg.Continuous {
-			// Note: an earlier setStatus from expandLevels' break
-			// path already describes WHY the run is done (max-level
-			// reached, no parents left, no new neighbors). Only
-			// overwrite to a plain "Done" when nothing more
-			// specific is on the status line — preserves the
-			// "why expansion stopped" hint for the operator.
-			m.statusMu.RLock()
-			cur := m.statusMsg
-			m.statusMu.RUnlock()
-			if !strings.HasPrefix(cur, "Done") {
-				m.setStatus("Done — press q to exit")
-			} else {
-				m.setStatus(cur + " — press q to exit")
-			}
-			return
+		errMsg := e.setupErr
+		if errMsg == "" {
+			errMsg = e.pingErr
 		}
-
-		m.setStatus("Waiting for recheck...")
-		select {
-		case <-m.ctx.Done():
-			return
-		case <-time.After(cfg.RecheckAge):
+		if errMsg == "" {
+			errMsg = e.calcErr
 		}
-
-		// Mark old entries as stale for re-ping
-		m.markStaleEntries()
-	}
-}
-
-// markStaleEntries marks entries older than recheckAge as stale
-func (m *pingTreeModel) markStaleEntries() {
-	m.latenciesMu.Lock()
-	defer m.latenciesMu.Unlock()
-
-	for _, data := range m.latencies {
-		if data.phase == "done" && time.Since(data.timestamp) > cfg.RecheckAge {
-			data.stale = true
-			data.phase = "pending"
-			delete(m.pingedTpIDs, data.tpID)
+		// Cap the error message so a verbose setup-error doesn't
+		// blow the row past its single-line budget. Visor-side
+		// errors can be arbitrarily long (wrapped error chains,
+		// raw remote responses); the row's fixed-width prefix is
+		// ~113 chars, leaving ~85 chars for the payload before we
+		// start needing horizontal scroll. The regression test in
+		// tree_test.go pins total line width < 200 chars.
+		const maxErrBlock = 80
+		if len(errMsg) > maxErrBlock {
+			errMsg = errMsg[:maxErrBlock-3] + "..."
 		}
-	}
-}
-
-// runRouteMode runs route-based ping tests
-func (m *pingTreeModel) runRouteMode() {
-	visited := make(map[string]bool)
-	visited[m.localPK] = true
-
-	// Process level 1 (direct transports). Always discover entries
-	// at every reachable level — even when --hops N targets a
-	// deeper level than 1, we still need level-1 visors as the
-	// parents the BFS expands FROM. The pingLevel call below
-	// (and the deeper passes via expandLevels) consult cfg.Hops to
-	// decide whether to actually fire a latency measurement; the
-	// discovery walk itself runs unconditionally.
-	//
-	// Before this fix, --hops 2 left m.entries empty (this loop's
-	// "if cfg.Hops > 0 && cfg.Hops != 1: continue" skipped every
-	// level-1 entry), so expandLevels(2) found zero parents and
-	// the View sat at its empty-state "Discovering network
-	// topology..." placeholder forever.
-	m.setStatus("Discovering level 1...")
-	for _, tp := range m.localTps {
-		remotePK := tp.Remote.String()
-		if visited[remotePK] {
-			continue
+		block = errMsg
+	default: // succeeded
+		glyph = "✓"
+		srcTag := "[live] "
+		if e.latencySource == "transport_summary" {
+			srcTag = "[cache]"
 		}
-		if !m.passesFilter(remotePK) {
-			continue
-		}
-
-		entry := tuiTreeEntry{
-			tpID:     tp.ID.String(),
-			tpType:   string(tp.Type),
-			remotePK: remotePK,
-			level:    1,
-			parentPK: m.localPK,
-		}
-
-		m.addEntry(entry)
-		visited[remotePK] = true
-	}
-
-	// Ping level 1 entries
-	m.pingLevel(1)
-
-	// Expand to deeper levels
-	if cfg.MaxLevel == 0 || cfg.MaxLevel > 1 {
-		m.expandLevels(visited, 2)
-	}
-}
-
-// runDmsgMode runs DMSG-based ping tests
-func (m *pingTreeModel) runDmsgMode() {
-	m.setStatus("Running DMSG-only mode...")
-
-	// Get all online visors
-	var targets []string
-	for pk := range m.onlineSet {
-		if pk == m.localPK {
-			continue
-		}
-		if !m.passesFilter(pk) {
-			continue
-		}
-		targets = append(targets, pk)
-	}
-
-	for i, remotePK := range targets {
-		select {
-		case <-m.ctx.Done():
-			return
-		default:
-		}
-
-		m.setStatus(fmt.Sprintf("DMSG ping %d/%d", i+1, len(targets)))
-
-		entry := tuiTreeEntry{
-			tpID:     fmt.Sprintf("dmsg-%s", remotePK),
-			tpType:   "dmsg",
-			remotePK: remotePK,
-			level:    1,
-			parentPK: m.localPK,
-		}
-
-		m.addEntry(entry)
-		m.pingViaDmsg(entry)
-	}
-}
-
-// addEntry adds an entry if not already present
-func (m *pingTreeModel) addEntry(entry tuiTreeEntry) {
-	m.entriesMu.Lock()
-	defer m.entriesMu.Unlock()
-
-	// Check if already exists
-	for _, e := range m.entries {
-		if e.tpID == entry.tpID {
-			return
-		}
-	}
-
-	m.entries = append(m.entries, entry)
-
-	m.latenciesMu.Lock()
-	if m.latencies[entry.tpID] == nil {
-		m.latencies[entry.tpID] = &tuiLatencyData{
-			tpID:   entry.tpID,
-			tpType: entry.tpType,
-			from:   entry.parentPK,
-			to:     entry.remotePK,
-			level:  entry.level,
-			phase:  "pending",
-		}
-	}
-	m.latenciesMu.Unlock()
-}
-
-// pingLevel pings all entries at a given level with concurrency limiting
-// This function blocks until all pings at this level are complete.
-func (m *pingTreeModel) pingLevel(level int) {
-	m.entriesMu.RLock()
-	var levelEntries []tuiTreeEntry
-	for _, e := range m.entries {
-		if e.level == level {
-			levelEntries = append(levelEntries, e)
-		}
-	}
-	m.entriesMu.RUnlock()
-
-	// Use semaphore for concurrency limiting
-	concurrency := cfg.Concurrency
-	if concurrency < 1 {
-		concurrency = 1
-	}
-	sem := make(chan struct{}, concurrency)
-	var completed int32
-
-	// Local WaitGroup to ensure all pings at this level complete before returning
-	// This is separate from m.pingWg which is used for cleanup on shutdown
-	var levelWg sync.WaitGroup
-
-	for _, entry := range levelEntries {
-		select {
-		case <-m.ctx.Done():
-			// Wait for any already-started goroutines before returning
-			levelWg.Wait()
-			return
-		default:
-		}
-
-		if m.pingedTpIDs[entry.tpID] {
-			continue
-		}
-
-		// --hops N targets a single level; non-target levels are
-		// discovered (so BFS can reach the target) but not pinged.
-		// Mark them as "skipped" so the tree still surfaces them
-		// without inflating the latency results.
-		if cfg.Hops > 0 && uint(level) != cfg.Hops { //nolint:gosec
-			m.latenciesMu.Lock()
-			if data := m.latencies[entry.tpID]; data != nil {
-				data.phase = "skipped"
-				data.timestamp = time.Now()
-			}
-			m.latenciesMu.Unlock()
-			continue
-		}
-
-		if cfg.DryRun {
-			m.latenciesMu.Lock()
-			if data := m.latencies[entry.tpID]; data != nil {
-				data.phase = "done"
-				data.timestamp = time.Now()
-			}
-			m.latenciesMu.Unlock()
-			continue
-		}
-
-		// Acquire semaphore slot
-		sem <- struct{}{}
-		m.pingWg.Add(1)
-		levelWg.Add(1)
-
-		go func(entry tuiTreeEntry) {
-			defer m.pingWg.Done()
-			defer levelWg.Done()
-			defer func() { <-sem }()
-			defer func() {
-				if r := recover(); r != nil {
-					// Gracefully handle panic (e.g., gRPC client closed during shutdown)
-					m.latenciesMu.Lock()
-					if data := m.latencies[entry.tpID]; data != nil {
-						data.pingErr = "interrupted"
-						data.phase = "done"
-					}
-					m.latenciesMu.Unlock()
-				}
-			}()
-
-			// Check context before starting work
-			select {
-			case <-m.ctx.Done():
-				return
-			default:
-			}
-
-			// Update status
-			current := atomic.AddInt32(&completed, 1)
-			m.setStatus(fmt.Sprintf("Level %d: %d/%d", level, current, len(levelEntries)))
-
-			// DMSG pre-check if enabled
-			if cfg.DmsgPreCheck {
-				if !m.checkDmsgReachable(entry) {
-					return
-				}
-			}
-
-			m.pingTransport(entry)
-		}(entry)
-	}
-
-	// Wait for all pings at this level to complete before returning
-	// This ensures levels are processed sequentially
-	levelWg.Wait()
-}
-
-// expandLevels expands to deeper levels. Surfaces a clear status
-// message whenever the loop terminates so the bottom bar doesn't
-// silently sit at "Level N: K/K" after work has actually finished —
-// every break path now sets a status describing why expansion
-// stopped (max-level reached, no parents to expand from, no new
-// neighbors). Pre-fix symptom: a run that completes level 1 with
-// no expandable parents left the status frozen at "Level 1: 51/51"
-// forever and the operator couldn't tell whether the run was hung
-// or done.
-func (m *pingTreeModel) expandLevels(visited map[string]bool, startLevel int) {
-	currentLevel := startLevel
-	for {
-		if cfg.MaxLevel > 0 && currentLevel > cfg.MaxLevel {
-			m.setStatus(fmt.Sprintf("Done — reached --max-level %d", cfg.MaxLevel))
-			break
-		}
-		// Note: --hops gating happens at PING time in pingLevel, not
-		// here. Expansion needs to run at every level so non-target
-		// levels still discover their entries — those entries are the
-		// parents we need to find target-level neighbors from. Pre-fix
-		// this branch did `currentLevel++; continue` for non-target
-		// levels, which skipped the entry-adding step and left BFS
-		// without parents to expand from at the target level.
-		//
-		// Once we've passed the --hops target level, the deeper
-		// expansion serves no purpose (nothing past the target will
-		// be pinged), so stop early to avoid scanning the rest of
-		// the graph.
-		if cfg.Hops > 0 && uint(currentLevel) > cfg.Hops { //nolint:gosec
-			m.setStatus(fmt.Sprintf("Done — reached --hops target %d", cfg.Hops))
-			break
-		}
-
-		var expandFrom []string
-		m.entriesMu.RLock()
-		for _, entry := range m.entries {
-			if entry.level == currentLevel-1 && !entry.failed {
-				expandFrom = append(expandFrom, entry.remotePK)
-			}
-		}
-		m.entriesMu.RUnlock()
-
-		if len(expandFrom) == 0 {
-			m.setStatus(fmt.Sprintf("Done — no successful pings at level %d to expand from", currentLevel-1))
-			break
-		}
-
-		m.setStatus(fmt.Sprintf("Discovering level %d...", currentLevel))
-		newEntries := 0
-		for _, parentPK := range expandFrom {
-			select {
-			case <-m.ctx.Done():
-				return
-			default:
-			}
-
-			neighbors := m.adjacency[parentPK]
-			for _, neighbor := range neighbors {
-				if visited[neighbor.pk] {
-					continue
-				}
-				if !m.passesFilter(neighbor.pk) {
-					continue
-				}
-
-				entry := tuiTreeEntry{
-					tpID:     neighbor.tpID,
-					tpType:   neighbor.tpType,
-					remotePK: neighbor.pk,
-					level:    currentLevel,
-					parentPK: parentPK,
-				}
-
-				m.addEntry(entry)
-				visited[neighbor.pk] = true
-				newEntries++
-			}
-		}
-
-		if newEntries == 0 {
-			m.setStatus(fmt.Sprintf("Done — no new visors discoverable at level %d (every neighbor of level-%d visors is already visited)", currentLevel, currentLevel-1))
-			break
-		}
-
-		m.pingLevel(currentLevel)
-		currentLevel++
-	}
-}
-
-// checkDmsgReachable checks if a visor is reachable via DMSG
-func (m *pingTreeModel) checkDmsgReachable(entry tuiTreeEntry) bool {
-	servers := m.getVisorDmsgServers(entry.remotePK)
-	if len(servers) == 0 {
-		m.latenciesMu.Lock()
-		if data := m.latencies[entry.tpID]; data != nil {
-			data.dmsgSkipReason = "no DMSG servers"
-		}
-		m.latenciesMu.Unlock()
-		return false
-	}
-
-	// Ping via each DMSG server and store results
-	reachable := false
-	for _, serverPK := range servers {
-		select {
-		case <-m.ctx.Done():
-			return false
-		default:
-		}
-
-		// Create server data entry
-		serverData := &tuiDmsgServerData{
-			serverPK: serverPK,
-			phase:    "ping",
-		}
-
-		// Add to latency data immediately so it shows in tree
-		m.latenciesMu.Lock()
-		if data := m.latencies[entry.tpID]; data != nil {
-			data.dmsgServers = append(data.dmsgServers, serverData)
-		}
-		m.latenciesMu.Unlock()
-
-		// Perform DMSG ping via this server
-		var samples []float64
-		ctx, cancel := context.WithTimeout(m.ctx, cfg.Timeout*time.Duration(cfg.Tries+1))
-		err := m.grpcClient.StreamDmsgPing(ctx, entry.remotePK, int32(cfg.Tries), int32(cfg.PcktSize), cfg.Timeout, serverPK, //nolint:gosec
-			func(_ int32, latency time.Duration, isSetup bool, _ []rpcgrpc.RouteHopDetail, _ string, _ time.Duration, pingErr error) {
-				if isSetup {
-					return
-				}
-				if pingErr != nil {
-					serverData.pingErr = pingErr.Error()
-				} else {
-					samples = append(samples, float64(latency.Milliseconds()))
-				}
-			})
-		cancel()
-
-		// Update server data with results
-		serverData.pingSamples = samples
-		serverData.phase = "done"
-		serverData.timestamp = time.Now()
-
-		if err != nil && serverData.pingErr == "" {
-			serverData.pingErr = err.Error()
-		}
-
-		// Mark reachable if we got any successful pings
-		if len(samples) > 0 {
-			reachable = true
-			m.latenciesMu.Lock()
-			if data := m.latencies[entry.tpID]; data != nil {
-				data.dmsgReachable = true
-			}
-			m.latenciesMu.Unlock()
-		}
-
-		// Stop after first success unless --dmsg-all-servers
-		if !cfg.DmsgAllServers && reachable {
-			break
-		}
-	}
-
-	// Set skip reason if not reachable
-	if !reachable {
-		m.latenciesMu.Lock()
-		if data := m.latencies[entry.tpID]; data != nil {
-			data.dmsgSkipReason = "DMSG ping failed"
-		}
-		m.latenciesMu.Unlock()
-	}
-
-	return reachable
-}
-
-// pingViaDmsg pings a visor via DMSG servers
-func (m *pingTreeModel) pingViaDmsg(entry tuiTreeEntry) {
-	servers := m.getVisorDmsgServers(entry.remotePK)
-	if len(servers) == 0 {
-		m.latenciesMu.Lock()
-		if data := m.latencies[entry.tpID]; data != nil {
-			data.pingErr = "no DMSG servers"
-			data.phase = "done"
-			data.timestamp = time.Now()
-		}
-		m.latenciesMu.Unlock()
-		m.markFailed(entry.tpID)
-		return
-	}
-
-	m.latenciesMu.Lock()
-	if data := m.latencies[entry.tpID]; data != nil {
-		data.phase = "ping"
-	}
-	m.latenciesMu.Unlock()
-
-	for _, serverPK := range servers {
-		select {
-		case <-m.ctx.Done():
-			return
-		default:
-		}
-
-		serverData := &tuiDmsgServerData{
-			serverPK: serverPK,
-			phase:    "ping",
-		}
-
-		var samples []float64
-		ctx, cancel := context.WithTimeout(m.ctx, cfg.Timeout*time.Duration(cfg.Tries+1))
-		err := m.grpcClient.StreamDmsgPing(ctx, entry.remotePK, int32(cfg.Tries), int32(cfg.PcktSize), cfg.Timeout, serverPK, //nolint:gosec
-			func(_ int32, latency time.Duration, isSetup bool, _ []rpcgrpc.RouteHopDetail, _ string, _ time.Duration, pingErr error) {
-				if isSetup {
-					return
-				}
-				if pingErr != nil {
-					serverData.pingErr = pingErr.Error()
-				} else {
-					samples = append(samples, float64(latency.Milliseconds()))
-				}
-			})
-		cancel()
-
-		serverData.pingSamples = samples
-		serverData.phase = "done"
-		serverData.timestamp = time.Now()
-
-		if err != nil && serverData.pingErr == "" {
-			serverData.pingErr = err.Error()
-		}
-
-		m.latenciesMu.Lock()
-		if data := m.latencies[entry.tpID]; data != nil {
-			data.dmsgServers = append(data.dmsgServers, serverData)
-			if len(samples) > 0 {
-				data.dmsgReachable = true
-				// Use best DMSG result for main samples
-				if len(data.pingSamples) == 0 || samples[0] < data.pingSamples[0] {
-					data.pingSamples = samples
-				}
-			}
-		}
-		m.latenciesMu.Unlock()
-
-		if !cfg.DmsgAllServers && len(samples) > 0 {
-			break
-		}
-	}
-
-	m.latenciesMu.Lock()
-	if data := m.latencies[entry.tpID]; data != nil {
-		data.phase = "done"
-		data.timestamp = time.Now()
-		if len(data.pingSamples) == 0 {
-			m.latenciesMu.Unlock()
-			m.markFailed(entry.tpID)
-			return
-		}
-	}
-	m.latenciesMu.Unlock()
-	m.pingedTpIDs[entry.tpID] = true
-}
-
-// pingTransport pings a single transport via route
-func (m *pingTreeModel) pingTransport(entry tuiTreeEntry) {
-	m.latenciesMu.Lock()
-	data := m.latencies[entry.tpID]
-	if data == nil {
-		data = &tuiLatencyData{
-			tpID:   entry.tpID,
-			tpType: entry.tpType,
-			from:   entry.parentPK,
-			to:     entry.remotePK,
-			level:  entry.level,
-			phase:  "pending",
-		}
-		m.latencies[entry.tpID] = data
-	}
-	data.phase = "setup"
-	m.latenciesMu.Unlock()
-
-	var samples []float64
-	var setupTimeMs float64
-	var calcTimeMs float64
-	var setupErr, pingErr, calcErr string
-
-	callback := func(_ int32, latency time.Duration, isSetup bool, _ []rpcgrpc.RouteHopDetail, _ string, routeCalcTime time.Duration, err error) {
-		if isSetup {
-			setupTimeMs = float64(latency.Milliseconds())
-			calcTimeMs = float64(routeCalcTime.Milliseconds())
-			if err != nil {
-				setupErr = err.Error()
-			}
-			m.latenciesMu.Lock()
-			data.setupTimeMs = setupTimeMs
-			data.calcTimeMs = calcTimeMs
-			if setupErr != "" {
-				data.setupErr = setupErr
-			}
-			data.phase = "ping"
-			m.latenciesMu.Unlock()
+		if e.sampleCount > 1 {
+			block = fmt.Sprintf(
+				"%s avg=%6.1fms p50=%6.1fms p99=%6.1fms jit=%5.1fms n=%d setup=%5.1fms",
+				srcTag, e.pingAvgMs, e.pingP50Ms, e.pingP99Ms, e.jitterMs, e.sampleCount, e.setupLatencyMs,
+			)
 		} else {
-			if err != nil {
-				pingErr = err.Error()
-			} else {
-				samples = append(samples, float64(latency.Milliseconds()))
-				m.latenciesMu.Lock()
-				data.pingSamples = samples
-				m.latenciesMu.Unlock()
-			}
+			block = fmt.Sprintf(
+				"%s avg=%6.1fms setup=%5.1fms n=%d",
+				srcTag, e.pingAvgMs, e.setupLatencyMs, e.sampleCount,
+			)
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(m.ctx, cfg.SetupTimeout+cfg.Timeout*time.Duration(cfg.Tries+1))
-	err := m.grpcClient.StreamPingWithTransport(
-		ctx,
-		entry.remotePK,
-		int32(cfg.Tries),    //nolint:gosec
-		int32(cfg.PcktSize), //nolint:gosec
-		true,
-		cfg.Timeout,
-		cfg.SetupTimeout,
-		entry.tpID,
-		callback,
-	)
-	cancel()
-
-	// Handle retries
-	retryCount := 0
-	for (setupErr != "" || pingErr != "" || len(samples) == 0) && retryCount < cfg.Retries {
-		select {
-		case <-m.ctx.Done():
-			return
-		default:
-		}
-
-		retryCount++
-		samples = nil
-		setupErr = ""
-		pingErr = ""
-
-		m.latenciesMu.Lock()
-		data.phase = "setup"
-		data.setupErr = ""
-		data.pingErr = ""
-		data.pingSamples = nil
-		m.latenciesMu.Unlock()
-
-		ctx, cancel := context.WithTimeout(m.ctx, cfg.SetupTimeout+cfg.Timeout*time.Duration(cfg.Tries+1))
-		err = m.grpcClient.StreamPingWithTransport(ctx, entry.remotePK, int32(cfg.Tries), int32(cfg.PcktSize), true, cfg.Timeout, cfg.SetupTimeout, entry.tpID, callback) //nolint:gosec
-		cancel()
-	}
-
-	// Finalize
-	m.latenciesMu.Lock()
-	if err != nil && data.setupErr == "" && data.pingErr == "" {
-		data.pingErr = err.Error()
-	}
-	if calcErr != "" && data.calcErr == "" {
-		data.calcErr = calcErr
-	}
-	if pingErr != "" && data.pingErr == "" {
-		data.pingErr = pingErr
-	}
-	data.phase = "done"
-	data.timestamp = time.Now()
-
-	failed := data.setupErr != "" || data.pingErr != "" || data.calcErr != "" || len(data.pingSamples) == 0
-	if !failed {
-		data.lastSuccess = time.Now()
-	}
-	m.latenciesMu.Unlock()
-
-	if failed {
-		m.handleFailedTransport(entry)
-	} else {
-		m.pingedTpIDs[entry.tpID] = true
-	}
-}
-
-// handleFailedTransport handles a failed transport (removal/remake)
-func (m *pingTreeModel) handleFailedTransport(entry tuiTreeEntry) {
-	m.markFailed(entry.tpID)
-
-	isLevel1 := entry.level == 1
-
-	// Remove local transport if requested
-	if cfg.RemoveTp && isLevel1 && m.localTpIDs[entry.tpID] {
-		if err := m.removeLocalTransport(entry.tpID); err != nil {
-			m.entriesMu.Lock()
-			for i := range m.entries {
-				if m.entries[i].tpID == entry.tpID {
-					m.entries[i].removeErr = err.Error()
-					break
-				}
-			}
-			m.entriesMu.Unlock()
-		} else {
-			m.entriesMu.Lock()
-			for i := range m.entries {
-				if m.entries[i].tpID == entry.tpID {
-					m.entries[i].removed = true
-					break
-				}
-			}
-			m.entriesMu.Unlock()
-		}
-	}
-
-	// Remove remote transport if requested
-	if cfg.RemoveRemoteTp && isLevel1 {
-		_ = m.removeRemoteTransport(entry.remotePK, entry.tpID) //nolint:errcheck
-	}
-
-	// Remake transport if requested and not already remade
-	m.entriesMu.RLock()
-	var alreadyRemade bool
-	for _, e := range m.entries {
-		if e.tpID == entry.tpID {
-			alreadyRemade = e.remadeOnce
-			break
-		}
-	}
-	m.entriesMu.RUnlock()
-
-	if (cfg.RemakeTp || cfg.RemakeRemoteTp) && isLevel1 && !alreadyRemade {
-		m.entriesMu.Lock()
-		for i := range m.entries {
-			if m.entries[i].tpID == entry.tpID {
-				m.entries[i].remadeOnce = true
-				break
-			}
-		}
-		m.entriesMu.Unlock()
-
-		// Try to recreate via TPS
-		var remotePKObj, localPKObj cipher.PubKey
-		if err := remotePKObj.Set(entry.remotePK); err == nil {
-			if err := localPKObj.Set(m.localPK); err == nil {
-				newTps, err := m.rpcClient.TPSAddTransport(localPKObj, remotePKObj, entry.tpType)
-				if err == nil && newTps != nil {
-					m.entriesMu.Lock()
-					for i := range m.entries {
-						if m.entries[i].tpID == entry.tpID {
-							m.entries[i].remade = true
-							break
-						}
-					}
-					m.entriesMu.Unlock()
-				}
-			}
-		}
-	}
-
-	m.pingedTpIDs[entry.tpID] = true
-}
-
-// markFailed marks an entry as failed
-func (m *pingTreeModel) markFailed(tpID string) {
-	m.entriesMu.Lock()
-	defer m.entriesMu.Unlock()
-	for i := range m.entries {
-		if m.entries[i].tpID == tpID {
-			m.entries[i].failed = true
-			break
-		}
-	}
+	// %-66s remotePK, %-36s tpID, %-6s tpType — fixed widths so the
+	// columns line up across rows. lipgloss color escapes are added
+	// downstream around the whole row, so width math stays correct.
+	return fmt.Sprintf("%s %-66s %-36s %-6s %s",
+		glyph, e.remotePK, e.tpID, e.tpType, block)
 }

@@ -147,8 +147,16 @@
         "network-section": "Network",
         "system-section": "System",
         "dmsg-section": "DMSG",
+        "hypervisors-section": "Hypervisors:",
+        "hypervisor-connected": "online",
+        "hypervisor-disconnected": "offline",
+        "hypervisor-runtime": "runtime-attached",
+        "hypervisor-local": "This hypervisor (the one serving this UI)",
+        "ping-info": "DMSG control-stream round-trip from this hypervisor to the visor. Measured by the dmsg client periodically; not a visor self-ping or transport-layer latency.",
+        "symmetic-nat-info": "Whether this visor is behind a symmetric NAT. Symmetric NAT prevents direct UDP hole-punching (sudph) — only DMSG and stcpr can be used. Detected via STUN.",
         "label": "Label:",
         "public-key": "Public key:",
+        "hostname": "Hostname:",
         "symmetic-nat": "Symmetic NAT:",
         "public-ip": "Public IP:",
         "ip": "IP:",
@@ -188,7 +196,7 @@
         "title": "Transport",
         "total": "Total:",
         "autoconnect": "Autoconnect:",
-        "autoconnect-info": "When enabled, the visor will automatically create the transports needed when a connection to a public visor is requested. If disabled, the transports will have to be created before being able to make the connection.",
+        "autoconnect-info": "When enabled, the visor automatically creates a transport to any public visor a route requests, instead of requiring the transport to exist beforehand.",
         "enabled": "Enabled",
         "disabled": "Disabled",
         "enable-button": "Enable",
@@ -259,6 +267,8 @@
       "routing": "Routing",
       "transports": "Transports",
       "bandwidth": "Bandwidth",
+      "dmsg": "DMSG",
+      "reachability": "Reachability",
       "uptime": "Uptime",
       "rewards": "Rewards",
       "skynet": "Skynet",
@@ -313,6 +323,8 @@
     "state-tooltip": "Current state",
     "label": "Label",
     "key": "Key",
+    "subhypervisor-error": "Could not query this hypervisor",
+    "subhypervisor-empty": "No visors directly connected to this hypervisor.",
     "ip": "IP",
     "lan-ip": "LAN IP",
     "public-ip": "Public IP",
@@ -322,6 +334,7 @@
     "version": "Version",
     "config-version": "Config",
     "hypervisor-info": "This visor is the current Hypervisor.",
+    "drag-to-reorder": "Drag to reorder. Click any column header to clear the custom order.",
     "copy-key": "Copy key",
     "copy-dmsg": "Copy DMSG server key",
     "copy-data": "Copy data",
@@ -410,6 +423,8 @@
     "latency": "Latency",
     "version": "Version",
     "endpoint": "Endpoint",
+    "drill": "Show /health payload",
+    "collapse": "Collapse",
     "rsn-section": "Route Setup Nodes",
     "rsn-empty": "No route setup nodes configured.",
     "rsn-pk": "Public Key",
@@ -572,6 +587,10 @@
     "loading": "Loading runtime logs…",
     "empty": "No log entries match the current filter.",
     "filter": "Filter",
+    "module": "Module",
+    "module-placeholder": "regex, e.g. ^dmsg",
+    "search": "Search",
+    "search-placeholder": "free-text match on msg / module / extras",
     "pause": "Pause",
     "resume": "Resume",
     "open-raw": "Open raw logs",
@@ -622,6 +641,10 @@
     "legend-down": "down",
     "legend-up": "up",
     "legend-future": "future",
+    "version-history-title": "Version distribution history",
+    "version-history-threshold": "visors per version with ≥75% daily uptime",
+    "version-history-latest": "Latest",
+    "version-history-total": "Total visors",
     "loading-fleet": "Reading TPD uptime feed…",
     "fleet-empty": "No connected visors reporting uptime.",
     "fleet-filter": "Filter",
@@ -631,7 +654,12 @@
     "fleet-process": "Process %",
     "fleet-dmsg": "DMSG %",
     "fleet-skynet": "Skynet %",
-    "today-pct": "Today %"
+    "today-pct": "Today %",
+    "services-title": "External Services Uptime",
+    "services-help": "Daily uptime % for this visor as recorded by each integrated UT service (TPD, SD, DMSG-D). Useful for spotting 'I think I'm online but the network lost me' divergence.",
+    "services-col-service": "Service",
+    "services-col-recent": "Last 7 days",
+    "services-no-data": "No data for this visor."
   },
 
   "skychat": {
@@ -1138,6 +1166,85 @@
         "persistent": "Persistent",
         "non-persistent": "Non-persistent"
       }
+    }
+  },
+
+  "reach": {
+    "title": "Reachability Probes",
+    "help": "Test live reachability to a target visor: skywire-route ping, dmsg ping, or remote /health fetch over dmsg. Each result is appended below; results stay until cleared.",
+    "target-placeholder": "target visor public key",
+    "tries": "tries",
+    "size": "kB",
+    "skynet-ping": "Skynet Ping",
+    "dmsg-ping": "DMSG Ping",
+    "health": "/health over DMSG",
+    "running": "running…",
+    "clear": "Clear",
+    "empty": "No probes run yet."
+  },
+
+  "dmsg": {
+    "title": "DMSG Clients",
+    "loading": "Loading dmsg sessions…",
+    "empty": "No dmsg clients reported.",
+    "refresh": "Refresh",
+    "connect-all": "Connect to all servers",
+    "connecting": "Connecting…",
+    "connect-all-done": "Connect-all dispatched.",
+    "servers": "servers",
+    "no-servers": "No connected servers.",
+    "fetched-at": "Fetched"
+  },
+
+  "routing": {
+    "view": {
+      "rules": "Rules",
+      "groups": "Route Groups",
+      "find": "Find Route",
+      "calc": "Calculate",
+      "policies": "Policies"
+    },
+    "policies": {
+      "title": "Routing Policies",
+      "loading": "Loading policies…",
+      "empty": "No routing policy configured.",
+      "default": "Visor-wide default",
+      "active": "active",
+      "inactive": "inactive",
+      "col-app": "App",
+      "col-source": "Source",
+      "col-backend": "Backend",
+      "col-active": "State"
+    },
+    "groups": {
+      "title": "Active Route Groups",
+      "loading": "Loading route groups…",
+      "empty": "No active route groups.",
+      "role": "Role",
+      "remote": "Remote",
+      "ports": "Ports",
+      "fwd-rule": "Fwd RID",
+      "consume-rule": "Consume RID",
+      "hops": "Hops",
+      "next-tp": "Next TP"
+    },
+    "find": {
+      "title": "Find Route",
+      "help": "Query the route-finder service for a path between this visor and a target PK. Use this to answer 'why can't I reach X' — if no path is returned, the route-finder doesn't see one.",
+      "dst-placeholder": "destination public key",
+      "submit": "Find",
+      "searching": "Searching…",
+      "empty": "No routes found yet.",
+      "path": "Path"
+    },
+    "calc": {
+      "title": "Calculate Routes",
+      "help": "BFS-enumerate paths through the visor's local view of the transport graph (TPD snapshot). Doesn't depend on the route-finder service being reachable.",
+      "dst-placeholder": "destination public key",
+      "submit": "Calculate",
+      "searching": "Calculating…",
+      "empty": "No routes computed yet.",
+      "found": "Found {{count}} routes."
     }
   },
 

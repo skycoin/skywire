@@ -52,6 +52,7 @@ var (
 	requireBandwidth      bool
 	minBWThreshold        uint64
 	saturationExponent    float64
+	bwSaturationExponent  float64
 )
 
 type nodeinfo struct {
@@ -521,6 +522,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "require minimum bandwidth (proportional reward based on bandwidth)")
 	RootCmd.Flags().Uint64VarP(&minBWThreshold, "min-bw", "B", defaultMinBandwidth, "minimum bandwidth in bytes to qualify (used with --require-bw)")
 	RootCmd.Flags().Float64VarP(&saturationExponent, "sat-exp", "S", 0.5, "regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal)")
+	RootCmd.Flags().Float64Var(&bwSaturationExponent, "bw-sat-exp", 0.5, "bandwidth saturation exponent applied to pool 2 (1.0=strict bytes-proportional, 0.5=sqrt, 0=all senders equal)")
 }
 
 // RootCmd is the root command for skywire-cli rewards
@@ -658,20 +660,33 @@ Architectures:
 			}
 		}
 
-		// Load bandwidth data
+		// Load bandwidth data. Prefer v2 (per-transport sender-side
+		// totals) so we can credit each visor only for bytes it actually
+		// sent, and only on transports where the counterparty is also
+		// reward-eligible. Old v1 files (bare {pk:bytes} map) still
+		// parse — they're aggregated, full sent+recv, and credited to
+		// BOTH edges with no counterparty filter, matching the
+		// pre-v2 behavior so historical rerun stays bit-exact.
 		bandwidthMap := make(map[string]uint64)
+		var bwTransports []TransportBW // populated only for v2
 		if requireBandwidth {
 			bwFile := fmt.Sprintf("%s/%s_bandwidth.json", transportHistPath, wdate)
-			if data, err := os.ReadFile(bwFile); err == nil { //nolint:gosec
-				if err := json.Unmarshal(data, &bandwidthMap); err != nil {
-					log.Warnf("Failed to parse bandwidth file %s: %v", bwFile, err)
-					requireBandwidth = false
-				} else {
-					log.Infof("Loaded bandwidth data for %d visors from %s", len(bandwidthMap), bwFile)
-				}
-			} else {
+			data, readErr := os.ReadFile(bwFile) //nolint:gosec
+			switch {
+			case readErr != nil:
 				log.Warnf("Bandwidth file not found: %s (bandwidth pool will be skipped)", bwFile)
 				requireBandwidth = false
+			default:
+				var v2 BandwidthData
+				if err := json.Unmarshal(data, &v2); err == nil && v2.Version >= BandwidthDataVersion {
+					bwTransports = v2.Transports
+					log.Infof("Loaded v2 bandwidth data: %d transports from %s", len(bwTransports), bwFile)
+				} else if err := json.Unmarshal(data, &bandwidthMap); err == nil {
+					log.Infof("Loaded v1 bandwidth data for %d visors from %s (legacy aggregated format — no counterparty eligibility filter)", len(bandwidthMap), bwFile)
+				} else {
+					log.Warnf("Failed to parse bandwidth file %s: %v", bwFile, err)
+					requireBandwidth = false
+				}
 			}
 		}
 
@@ -803,6 +818,40 @@ Architectures:
 			return
 		}
 
+		// v2 bandwidth: aggregate per-edge sent bytes for any edge that
+		// itself passed the pool 1 eligibility check (valid survey,
+		// allowed arch, valid skyaddr, non-hypervisor, met transport
+		// requirement, met uptime). Each edge is evaluated independently
+		// — counterparty eligibility is irrelevant under sender-pays,
+		// because credit only ever flows to the sender. If A is eligible
+		// and sends to B (ineligible), A still earns SentA; B was never
+		// going to receive a share regardless. The bandwidthMap was
+		// empty during the eligibility loop in this path, so initial
+		// ni.Bandwidth=0 for everyone — we re-assign from the filtered
+		// aggregation here.
+		if requireBandwidth && bwTransports != nil {
+			eligibleSet := make(map[string]struct{}, len(nodesInfos1))
+			for _, ni := range nodesInfos1 {
+				eligibleSet[ni.PK] = struct{}{}
+			}
+			var creditedEdges int
+			for _, tp := range bwTransports {
+				if _, ok := eligibleSet[tp.A]; ok {
+					bandwidthMap[tp.A] += tp.SentA
+					creditedEdges++
+				}
+				if _, ok := eligibleSet[tp.B]; ok {
+					bandwidthMap[tp.B] += tp.SentB
+					creditedEdges++
+				}
+			}
+			for i := range nodesInfos1 {
+				nodesInfos1[i].Bandwidth = bandwidthMap[nodesInfos1[i].PK]
+			}
+			log.Infof("v2 bandwidth filter: %d eligible sender-side credits applied across %d transports",
+				creditedEdges, len(bwTransports))
+		}
+
 		// Calculate daily reward amount
 		daysThisMonth := time.Date(wDate.Year(), wDate.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day()
 		daysThisYear := int(time.Date(wDate.Year(), 12, 31, 23, 59, 59, 999999999, time.UTC).Sub(time.Date(wDate.Year(), 1, 1, 0, 0, 0, 0, time.UTC)).Hours()) / 24
@@ -832,19 +881,29 @@ Architectures:
 			computePoolShares(nodesInfos1, ipCounts, macCounts)
 			totalPresenceShares := computePoolRewards(nodesInfos1, dayReward)
 
-			// Bandwidth pool: add proportional bandwidth reward on top
+			// Bandwidth pool: add proportional bandwidth reward on top,
+			// dampened by --bw-sat-exp. At exponent 1.0 each visor's
+			// share is strictly bytes/total — the most concentrated
+			// outcome, where a single heavy sender can take a dominant
+			// fraction of the pool. At 0.5 (default) the weight is
+			// sqrt(bytes), flattening the distribution so a 100×
+			// bandwidth lead produces only a 10× share advantage.
+			// At 0 every sender that clears the threshold is weighted
+			// equally — effectively turning pool 2 into a presence
+			// pool for senders.
 			var totalBWShares float64
 			var bwPoolCount int
 			for _, ni := range nodesInfos1 {
 				if ni.Bandwidth >= minBWThreshold {
-					totalBWShares += float64(ni.Bandwidth)
+					totalBWShares += math.Pow(float64(ni.Bandwidth), bwSaturationExponent)
 					bwPoolCount++
 				}
 			}
 			if totalBWShares > 0 {
 				for i := range nodesInfos1 {
 					if nodesInfos1[i].Bandwidth >= minBWThreshold {
-						nodesInfos1[i].Reward += float64(nodesInfos1[i].Bandwidth) * dayReward / totalBWShares
+						weight := math.Pow(float64(nodesInfos1[i].Bandwidth), bwSaturationExponent)
+						nodesInfos1[i].Reward += weight * dayReward / totalBWShares
 					}
 				}
 			}
@@ -863,7 +922,7 @@ Architectures:
 				if totalPresenceShares > 0 {
 					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalPresenceShares)
 				}
-				fmt.Printf("\n--- Bandwidth Pool (proportional to bytes) ---\n")
+				fmt.Printf("\n--- Bandwidth Pool (sender-pays, weighted bytes^%.2f) ---\n", bwSaturationExponent)
 				fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
 				fmt.Printf("qualifying visors: %d\n", bwPoolCount)
 				var totalBW uint64
@@ -873,7 +932,8 @@ Architectures:
 					}
 				}
 				fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
-				if totalBWShares > 0 {
+				fmt.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
+				if totalBWShares > 0 && bwSaturationExponent == 1.0 {
 					fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
 				}
 				fmt.Printf("\nUnique mac addresses: %d\n", len(macCounts))

@@ -164,6 +164,83 @@
   }
 }
 
+.hypervisor-list {
+  margin-left: 0;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(255, 192, 64, 0.05);
+  border-radius: 6px;
+  border-left: 2px solid rgba(255, 192, 64, 0.3);
+
+  // Inline variant sits inside the Identity card right under the
+  // visor PK. Trim padding so it visually attaches to the line
+  // above instead of feeling like a separate panel.
+  &.hypervisor-list-inline {
+    margin-top: 4px;
+    padding: 6px 10px;
+  }
+}
+
+// Info-indicator icon used for the Ping / Symmetric NAT hover
+// tooltips. matTooltip handles mobile long-press automatically.
+.info-hint {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.45);
+  cursor: help;
+  margin-left: 4px;
+
+  &:hover {
+    color: rgba(0, 212, 255, 0.85);
+  }
+}
+
+// ★ next to the local hypervisor's PK in the per-visor list.
+.hypervisor-star {
+  color: #fbbf24;
+  font-size: 14px;
+  margin-right: 2px;
+  text-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+}
+
+.hypervisor-item {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.82em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  color: rgba(255, 255, 255, 0.95);
+
+  .hypervisor-state {
+    font-family: inherit;
+    font-size: 0.95em;
+    font-weight: 500;
+    padding: 1px 6px;
+    border-radius: 4px;
+
+    &.hypervisor-state-online {
+      color: #4ade80;
+      background: rgba(74, 222, 128, 0.12);
+      text-shadow: 0 0 6px rgba(74, 222, 128, 0.3);
+    }
+
+    &.hypervisor-state-offline {
+      color: #f87171;
+      background: rgba(248, 113, 113, 0.12);
+      text-shadow: 0 0 6px rgba(248, 113, 113, 0.3);
+    }
+
+    &.hypervisor-state-runtime {
+      color: #fbbf24;
+      background: rgba(251, 191, 36, 0.12);
+      text-shadow: 0 0 6px rgba(251, 191, 36, 0.3);
+    }
+  }
+}
+
 // Glow effect for key values
 .glow-value {
   color: #e0f2fe;

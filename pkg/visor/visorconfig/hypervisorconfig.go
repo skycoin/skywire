@@ -1,12 +1,16 @@
 // Package visorconfig pkg/visor/visorconfig/hypergo
+//
+// The CookieConfig.SameSite() method (which returns http.SameSite)
+// is the only net/http user in this file; it's moved to
+// hypervisorconfig_native.go under //go:build !js so this file
+// compiles cleanly for js/wasm. See services.go's package doc for
+// the broader rationale.
 package visorconfig
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"io/fs"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -51,21 +55,32 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // HypervisorConfig configures the hypervisor.
 type HypervisorConfig struct {
-	Enable        bool               `json:"enable"` // Whether the hypervisor is enabled (starts HTTP + DMSG on visor startup).
-	UIAssets      fs.FS              `json:"-"`
-	PK            cipher.PubKey      `json:"-"`
-	SK            cipher.SecKey      `json:"-"`
-	DBPath        string             `json:"db_path"`                   // Path to store database file.
-	EnableAuth    bool               `json:"enable_auth"`               // Whether to enable user management.
-	Cookies       CookieConfig       `json:"cookies"`                   // Configures cookies (for session management).
-	DmsgDiscovery string             `json:"-"`                         // Dmsg discovery address.
-	DmsgPort      uint16             `json:"dmsg_port,omitempty"`       // Dmsg port to serve on.
-	HTTPAddr      string             `json:"http_addr"`                 // HTTP address to serve API/web UI on.
-	EnableTLS     bool               `json:"enable_tls"`                // Whether to enable TLS.
-	TLSCertFile   string             `json:"tls_cert_file"`             // TLS cert file location.
-	TLSKeyFile    string             `json:"tls_key_file"`              // TLS key file location.
-	TPViz         TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
-	LANDmsgServer *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
+	Enable     bool          `json:"enable"` // Whether the hypervisor is enabled (starts HTTP + DMSG on visor startup).
+	UIAssets   fs.FS         `json:"-"`
+	PK         cipher.PubKey `json:"-"`
+	SK         cipher.SecKey `json:"-"`
+	DBPath     string        `json:"db_path"`     // Path to store database file.
+	EnableAuth bool          `json:"enable_auth"` // Whether to enable user management.
+	// EnablePKEndpoint, when true, exposes an unauthenticated
+	// GET /api/pk route returning the hypervisor's pubkey. Off by
+	// default — only the skybian / Arch-linux-ARM image builds
+	// flip it on so first-boot visors can discover the bundled
+	// hypervisor's pubkey without an account. The route still
+	// requires an SW-Public header naming the caller's PK as a
+	// soft "looks like another visor" gate; see
+	// hypervisor_handlers_misc.go. No omitempty — the field is
+	// always serialized so operators see it in the generated
+	// config and know it exists.
+	EnablePKEndpoint bool               `json:"enable_pk_endpoint"`
+	Cookies          CookieConfig       `json:"cookies"`                   // Configures cookies (for session management).
+	DmsgDiscovery    string             `json:"-"`                         // Dmsg discovery address.
+	DmsgPort         uint16             `json:"dmsg_port,omitempty"`       // Dmsg port to serve on.
+	HTTPAddr         string             `json:"http_addr"`                 // HTTP address to serve API/web UI on.
+	EnableTLS        bool               `json:"enable_tls"`                // Whether to enable TLS.
+	TLSCertFile      string             `json:"tls_cert_file"`             // TLS cert file location.
+	TLSKeyFile       string             `json:"tls_key_file"`              // TLS key file location.
+	TPViz            TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
+	LANDmsgServer    *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
 	// CXOSubscribeInterval is the resync floor for the on-demand
 	// CXO subscription manager. Subscriptions stay open while a UI
 	// tab is acquired; the manager won't tear down a feed sooner
@@ -142,20 +157,16 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 	}
 
 	if c.DmsgDiscovery == "" {
-		var envServices EnvServices
-		var services Services
-		if err := json.Unmarshal(deployment.ServicesJSON, &envServices); err == nil {
-			if testEnv {
-				if err := json.Unmarshal(envServices.Test, &services); err != nil {
-					return
-				}
-			} else {
-				if err := json.Unmarshal(envServices.Prod, &services); err != nil {
-					return
-				}
-			}
-
-			c.DmsgDiscovery = services.DmsgDiscovery
+		// deployment.Prod / deployment.Test are populated at
+		// deployment.init() time from the embedded
+		// services-config.json. Use those directly rather than
+		// re-unmarshalling — keeps json.Unmarshal off the WASM
+		// build graph and avoids duplicating the parse cost on
+		// every hypervisor-config FillDefaults call.
+		if testEnv {
+			c.DmsgDiscovery = deployment.Test.DmsgDiscovery
+		} else {
+			c.DmsgDiscovery = deployment.Prod.DmsgDiscovery
 		}
 		if c.DmsgPort == 0 {
 			c.DmsgPort = skyenv.DmsgHypervisorPort
@@ -173,26 +184,14 @@ func (c *HypervisorConfig) FillDefaults(testEnv bool) {
 	}
 }
 
-// Parse parses the file in path, and decodes to the config.
-func (c *HypervisorConfig) Parse(path string) error {
-	var err error
-	if path, err = filepath.Abs(path); err != nil {
-		return err
-	}
-
-	f, err := os.Open(filepath.Clean(path))
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		if err := f.Close(); err != nil {
-			log.Fatalf("Failed to close file %s: %v", f.Name(), err)
-		}
-	}()
-
-	return json.NewDecoder(f).Decode(c)
-}
+// Parse parses the file at path and decodes its JSON into c.
+//
+// Implementation lives in hypervisorconfig_native.go under
+// //go:build !js — see services.go's package doc for the rationale
+// on keeping encoding/json out of the WASM build graph. Browsers
+// have no filesystem so this method is genuinely unavailable in
+// that context; callers under js/wasm should construct
+// HypervisorConfig in memory.
 
 // CookieConfig configures cookies used for hypervisor.
 type CookieConfig struct {
@@ -226,7 +225,7 @@ func (c *CookieConfig) HTTPOnly() bool {
 }
 
 // SameSite gets cookie's `SameSite` value.
-func (c *CookieConfig) SameSite() http.SameSite {
-	// using default value for now
-	return http.SameSiteDefaultMode
-}
+//
+// Implementation lives in hypervisorconfig_native.go under
+// //go:build !js — see services.go's package doc for the
+// rationale on keeping net/http out of the WASM build graph.

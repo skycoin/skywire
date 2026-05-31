@@ -87,6 +87,7 @@ export class NodeService {
           node.lastSeenAt = response.last_seen_at;
           node.isStale = !!response.offline_since;
           node.localPk = response.overview.local_pk;
+          node.hostname = response.overview.hostname;
           node.version = response.overview.build_info.version;
           node.configVersion = response.config_version;
           node.os = response.overview.build_info.os;
@@ -322,6 +323,7 @@ return {
       node.lastSeenAt = response.last_seen_at;
       node.isStale = !!response.offline_since;
       node.localPk = response.overview ? response.overview.local_pk : '';
+      node.hostname = response.overview ? response.overview.hostname : undefined;
       node.version = response.overview && response.overview.build_info ? response.overview.build_info.version : '';
       node.configVersion = response.config_version;
       node.os = response.overview && response.overview.build_info ? response.overview.build_info.os : '';
@@ -365,6 +367,33 @@ return {
           transportabilityHealth: response.health.transportability_health,
         };
       }
+
+      // is_hypervisor flags the local visor (the one this UI is
+      // hosted on). Drives the per-row ★ icon in node-list. The
+      // flat getNodes() path sets this too; mirroring it here so the
+      // tree-based path doesn't drop it.
+      node.isHypervisor = response.is_hypervisor;
+
+      // Transports. Mirrors the parsing in getNodes() — the
+      // node-list Transports column iterates node.transports by type
+      // to render the "tcp: N / dmsg: M / Total: N+M" cell. Without
+      // this assignment the field is undefined and the template's
+      // !node.transports branch renders a "-" dash.
+      node.transports = [];
+      if (response.overview && response.overview.transports) {
+        (response.overview.transports as any[]).forEach(transport => {
+          node.transports.push({
+            id: transport.id,
+            localPk: transport.local_pk,
+            remotePk: transport.remote_pk,
+            type: transport.type,
+            recv: transport.log ? transport.log.recv : 0,
+            sent: transport.log ? transport.log.sent : 0,
+            latencyMs: transport.latency_ms || 0,
+          });
+        });
+      }
+
       out.push(node);
     });
     return out;
@@ -397,6 +426,7 @@ return {
 
         // Basic data.
         node.localPk = response.overview.local_pk;
+        node.hostname = response.overview.hostname;
         node.version = response.overview.build_info.version;
         node.configVersion = response.config_version;
         node.os = response.overview.build_info.os;
@@ -411,6 +441,19 @@ return {
         node.autoconnectTransports = response.public_autoconnect;
         node.isPublic = response.is_public;
         node.rewardsAddress = response.reward_address;
+
+        // Hypervisor relationships. `hypervisors` are the PKs the
+        // visor was configured to report to (from skywire-config);
+        // `connected_hypervisor` are the sessions the visor reports
+        // as actively connected right now. Both are surfaced on the
+        // Info tab so the operator can see which hypervisor(s) own
+        // this visor and which ones are currently online.
+        node.hypervisors = Array.isArray(response.overview.hypervisors)
+          ? (response.overview.hypervisors as string[])
+          : [];
+        node.connectedHypervisors = Array.isArray(response.overview.connected_hypervisor)
+          ? (response.overview.connected_hypervisor as string[])
+          : [];
 
         // Geolocation data.
         if (response.overview.country_code) {

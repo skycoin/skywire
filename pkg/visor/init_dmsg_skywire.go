@@ -26,11 +26,12 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
-// skywireDialer is a dmsgpty.StreamDialer backed by the visor's
+// skywireDialer is a pty.StreamDialer backed by the visor's
 // SkywireNetworker. Each DialStream opens a fresh skynet conn to
 // the remote's dmsgpty listen-port (DefaultPort by convention).
 //
@@ -63,17 +64,31 @@ func (skywireDialer) DialStream(ctx context.Context, pk cipher.PubKey, port uint
 	}, nil)
 }
 
-// skywireConnPK is the dmsgpty.PKExtractor for conns accepted by
+// skywireConnPK is the pty.PKExtractor for conns accepted by
 // the SkywireNetworker listener. Reaches into RemoteAddr() to pull
-// the appnet.Addr that carries the remote PK. Returns (zero, false)
-// for any conn type that doesn't carry an appnet.Addr so foreign
-// listeners can't sneak past the whitelist gate.
+// the remote PK. The accepted conn type is always *appnet.SkywireConn,
+// but the EMBEDDED net.Conn's RemoteAddr() varies by path:
+//
+//   - direct-dial path (tryDirectDial): inner is *directConn which
+//     returns appnet.Addr.
+//   - route-group path (DialRoutes → NoiseRouteGroup): inner returns
+//     routing.Addr (via RouteGroup.RemoteAddr → RouteDescriptor.Src).
+//
+// Both carry a PubKey field. Accept either shape; reject anything
+// else so foreign listeners can't sneak past the whitelist gate.
+// Pre-fix this function only recognized appnet.Addr, which meant
+// every route-group-backed dmsgpty skynet conn was silently
+// rejected at the extractor — including self-dial, since loopback
+// to own PK has no direct transport and falls into DialRoutes.
 func skywireConnPK(conn net.Conn) (cipher.PubKey, bool) {
-	addr, ok := conn.RemoteAddr().(appnet.Addr)
-	if !ok {
+	switch addr := conn.RemoteAddr().(type) {
+	case appnet.Addr:
+		return addr.PubKey, true
+	case routing.Addr:
+		return addr.PubKey, true
+	default:
 		return cipher.PubKey{}, false
 	}
-	return addr.PubKey, true
 }
 
 // startSkywirePtyListener opens an appnet listener on (localPK,
@@ -81,47 +96,58 @@ func skywireConnPK(conn net.Conn) (cipher.PubKey, bool) {
 // Mirror of pty.ListenAndServe but on the skynet path; runs in its
 // own goroutine alongside the dmsg listener.
 //
-// Returns a func that cancels + waits for the goroutine. Nil
-// returned cancel means setup failed and the caller can ignore
-// shutdown bookkeeping — typical when the skynet networker isn't
-// available yet at init time.
-func startSkywirePtyListener(ctx context.Context, pty *dmsgpty.Host, localPK cipher.PubKey, port uint16, runtimeErrors chan<- error) func() error {
-	n, err := appnet.ResolveNetworker(appnet.TypeSkynet)
-	if err != nil {
-		// Skynet networker not wired yet — operator will still get
-		// the dmsg listener and the dmsg-only MultiDialer fallback;
-		// pty over skynet routes is then a no-op for this visor run.
-		// Not a fatal init error because the dmsgpty service itself
-		// still functions.
-		return nil
-	}
-	sn, ok := n.(*appnet.SkywireNetworker)
-	if !ok {
-		return nil
-	}
-
-	lis, err := sn.Listen(appnet.Addr{
-		Net:    appnet.TypeSkynet,
-		PubKey: localPK,
-		Port:   routing.Port(port),
-	})
-	if err != nil {
-		// Listen failure is non-fatal for the same reason the
-		// networker-missing branch is: dmsg path keeps working.
-		// Surface as a runtime warning rather than killing init.
-		select {
-		case runtimeErrors <- fmt.Errorf("skywire dmsgpty Listen: %w", err):
-		default:
-		}
-		return nil
-	}
-
+// The skynet networker is registered during initRouter, which may
+// run AFTER initDmsg invokes us here. We can't gate the wire-up on
+// "networker present now" — that'd silently drop the entire skynet
+// pty listener for the lifetime of the process whenever init steps
+// ran in this order. Instead, spawn a goroutine that polls until
+// the networker registers (using the same backoff as
+// goServeSkynetMirror in dual_listen.go), then binds + serves. If
+// ctx cancels before the networker shows up the goroutine exits
+// cleanly.
+//
+// Returns a func that cancels + waits for the serve goroutine.
+func startSkywirePtyListener(ctx context.Context, pty *pty.Host, localPK cipher.PubKey, port uint16, runtimeErrors chan<- error) func() error {
 	serveCtx, cancel := context.WithCancel(ctx)
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 
+	log := logging.MustGetLogger("dmsgpty_skynet")
+
 	go func() {
 		defer wg.Done()
+
+		if !waitForSkynetNetworker(serveCtx) {
+			return // ctx canceled before networker registered
+		}
+
+		n, err := appnet.ResolveNetworker(appnet.TypeSkynet)
+		if err != nil {
+			log.WithError(err).Warn("dmsgpty skynet: resolve networker failed after wait")
+			return
+		}
+		sn, ok := n.(*appnet.SkywireNetworker)
+		if !ok {
+			log.Warn("dmsgpty skynet: resolved networker is not SkywireNetworker")
+			return
+		}
+
+		lis, err := sn.Listen(appnet.Addr{
+			Net:    appnet.TypeSkynet,
+			PubKey: localPK,
+			Port:   routing.Port(port),
+		})
+		if err != nil {
+			// Listen failure is non-fatal — dmsg listener still works.
+			select {
+			case runtimeErrors <- fmt.Errorf("skywire dmsgpty Listen: %w", err):
+			default:
+			}
+			return
+		}
+
+		log.WithField("port", port).Info("dmsgpty skynet listener bound")
+
 		if err := pty.ListenAndServeNet(serveCtx, lis, skywireConnPK); err != nil {
 			select {
 			case runtimeErrors <- fmt.Errorf("skywire dmsgpty serve: %w", err):
@@ -145,9 +171,9 @@ func startSkywirePtyListener(ctx context.Context, pty *dmsgpty.Host, localPK cip
 //
 // Future strategies (stcpr, sudpr, direct-TCP) prepend or splice in
 // here without revisiting any other call site.
-func buildDmsgptyDialer(dmsgC *dmsg.Client) dmsgpty.StreamDialer {
-	return dmsgpty.MultiDialer{
+func buildDmsgptyDialer(dmsgC *dmsg.Client) pty.StreamDialer {
+	return pty.MultiDialer{
 		skywireDialer{},
-		dmsgpty.NewDmsgDialer(dmsgC),
+		pty.NewDmsgDialer(dmsgC),
 	}
 }

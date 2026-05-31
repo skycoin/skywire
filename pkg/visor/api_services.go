@@ -19,8 +19,8 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsgpty"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -468,7 +468,7 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 // reach :3435). Trust model downstream is unchanged: the remote
 // dmsgpty host enforces its whitelist on the dmsg stream this visor
 // opens; the remote sees this visor's PK as the peer.
-func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, error) {
+func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error) {
 	if v.dmsgPty == nil {
 		return nil, fmt.Errorf("dmsgpty: not initialized on this visor")
 	}
@@ -476,7 +476,36 @@ func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*dmsgpty.CommandExecResult, e
 		return nil, fmt.Errorf("dmsgpty: remote_pk required")
 	}
 	req := args.Req
-	return v.dmsgPty.ExecRemote(context.Background(), args.RemotePK, args.RemotePort, &req)
+	// Bound the whole call: Req.TimeoutMS covers the remote command's
+	// execution; we add a 15s dial/handshake budget on top so an
+	// unreachable target (stale dmsg discovery, downed peer, etc.)
+	// doesn't hang this RPC goroutine indefinitely. Without the bound,
+	// the dmsg client's dial blocks in a syscall that doesn't unwind
+	// on RPC-side cancellation, leaking a goroutine per attempt and
+	// preventing the caller's `timeout` wrapper from ever returning.
+	const dialBudget = 15 * time.Second
+	callTimeout := time.Duration(req.TimeoutMS)*time.Millisecond + dialBudget
+	ctx, cancel := context.WithTimeout(context.Background(), callTimeout)
+	defer cancel()
+
+	// Scheme selects a specific dialer over the Host's default
+	// MultiDialer chain. Useful when skynet's dial hangs without
+	// honoring ctx and the operator knows dmsg is reachable —
+	// passing Scheme="dmsg" skips skynet entirely. Empty keeps the
+	// default chain (skynet first, dmsg fallback).
+	switch args.Scheme {
+	case "":
+		return v.dmsgPty.ExecRemote(ctx, args.RemotePK, args.RemotePort, &req)
+	case "dmsg":
+		if v.dmsgC == nil {
+			return nil, fmt.Errorf("dmsgpty: dmsg scheme requested but dmsg client not initialized")
+		}
+		return v.dmsgPty.ExecRemoteVia(ctx, pty.NewDmsgDialer(v.dmsgC), args.RemotePK, args.RemotePort, &req)
+	case "skynet":
+		return v.dmsgPty.ExecRemoteVia(ctx, skywireDialer{}, args.RemotePK, args.RemotePort, &req)
+	default:
+		return nil, fmt.Errorf("dmsgpty: unknown scheme %q (want \"\", \"dmsg\", or \"skynet\")", args.Scheme)
+	}
 }
 
 // Ports return list of all ports used by visor services and apps
@@ -488,7 +517,7 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP"}
 	}
 
-	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Dmsgpty.DmsgPort), Type: "DMSG"}
+	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Pty.DmsgPort), Type: "DMSG"}
 	ports["cli_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.CLIAddr, ":")[1]), Type: "TCP"}
 	ports["proc_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Launcher.ServerAddr, ":")[1]), Type: "TCP"}
 	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.STCP.ListeningAddress, ":")[1]), Type: "TCP"}

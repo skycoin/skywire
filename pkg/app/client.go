@@ -104,36 +104,90 @@ func (c *Client) SetAppPort(appPort routing.Port) error {
 	return c.rpcC.SetAppPort(appPort)
 }
 
+// SetStatusOrLog sets the detailed status and logs the error if any.
+// Status transitions are best-effort — the app keeps running even if
+// the visor can't be notified, so callers don't have to handle the
+// error path. A nil receiver is a no-op so apps that can run in
+// standalone mode (skychat) don't have to guard each call site.
+// Replaces the setAppStatus helper that every app previously defined
+// locally.
+func (c *Client) SetStatusOrLog(status appserver.AppDetailedStatus) {
+	if c == nil {
+		return
+	}
+	if err := c.SetDetailedStatus(string(status)); err != nil {
+		c.Log().Errorf("Failed to set status %v: %v", status, err)
+	}
+}
+
+// SetErrorOrLog records an app error in the visor and logs the
+// failure to record (not the original error — that's already in
+// appErr). Best-effort and nil-safe like SetStatusOrLog. Replaces
+// the setAppError helper that every app previously defined locally.
+func (c *Client) SetErrorOrLog(appErr error) {
+	if c == nil {
+		return
+	}
+	if err := c.SetError(appErr.Error()); err != nil {
+		c.Log().Errorf("Failed to set error %v: %v", appErr, err)
+	}
+}
+
+// SetAppPortOrLog sets the routing port and logs the error if any.
+// Best-effort and nil-safe like SetStatusOrLog. Replaces the
+// setAppPort helper that every app previously defined locally.
+func (c *Client) SetAppPortOrLog(port routing.Port) {
+	if c == nil {
+		return
+	}
+	if err := c.SetAppPort(port); err != nil {
+		c.Log().Errorf("Failed to set port %v: %v", port, err)
+	}
+}
+
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
-	return c.dial(remote, 0)
+	return c.dial(remote, 0, 0, 0, 0, 0, 0)
 }
 
-// DialWithOptions dials remote with per-call dial options. The only
-// currently-honored option is muxRoutes: when > 1 and the remote's
-// transport family routes through the visor's SkywireNetworker, the
-// underlying router establishes N parallel mux routes. muxRoutes <= 1
-// is semantically equivalent to Dial. Apps requesting multi-route
-// dials (e.g. skynet-client with the --routes flag for #1525-adjacent
-// mux-route testing) call this instead of Dial; non-mux callers keep
-// using Dial unchanged.
-func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes int) (net.Conn, error) {
-	return c.dial(remote, muxRoutes)
+// DialWithOptions dials remote with per-call dial options.
+// Honored options:
+//   - muxRoutes: when > 1 and the remote's transport family routes
+//     through SkywireNetworker, the router establishes N parallel
+//     mux routes.
+//   - minHops: when >= 2, the router rejects the direct path and
+//     finds routes through that many intermediates.
+//   - fwdMinHops / revMinHops: per-direction MinHops overrides for
+//     bandwidth-asymmetric path quality (e.g. direct upstream +
+//     multi-hop downstream).
+//   - fwdMux / revMux: per-direction MuxRoutes overrides for
+//     asymmetric route counts. Setting fwdMux=1 + revMux=N yields
+//     1 forward leg + N reverse legs — the canonical download-heavy
+//     workload shape where only the bulk-receive direction is
+//     aggregated.
+//
+// All <= 1 is semantically equivalent to Dial. Apps requesting these
+// dial shapes (e.g. skynet-client with --routes / --min-hops /
+// --forward-min-hops / --reverse-min-hops / --forward-mux /
+// --reverse-mux flags) call this instead of Dial; non-mux callers
+// keep using Dial unchanged.
+func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int) (net.Conn, error) {
+	return c.dial(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux)
 }
 
-// dial is the common body for Dial + DialWithOptions. muxRoutes <= 1
-// invokes the original rpcC.Dial path (preserving the existing wire
-// shape for non-mux callers); muxRoutes > 1 sends the DialWithOptions
-// request so the server-side knows to take the SkywireNetworker
-// mux-routes path.
-func (c *Client) dial(remote appnet.Addr, muxRoutes int) (net.Conn, error) {
+// dial is the common body for Dial + DialWithOptions. When all opts
+// are <= 1 it invokes the original rpcC.Dial path (preserving the
+// existing wire shape for non-mux callers); otherwise sends the
+// DialWithOptions request so the server-side knows to take the
+// SkywireNetworker per-call-opts path.
+func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int) (net.Conn, error) {
 	var (
 		connID    uint16
 		localPort routing.Port
 		err       error
 	)
-	if muxRoutes > 1 {
-		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes)
+	if muxRoutes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
+		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux)
 	} else {
 		connID, localPort, err = c.rpcC.Dial(remote)
 	}

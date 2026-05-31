@@ -1,0 +1,77 @@
+// Package spec is the WASM-clean schema half of pkg/app/appserver.
+// Holds the AppConfig wire-format type that pkg/visor/visorconfig.V1's
+// Launcher.Apps field embeds. Splitting it out of pkg/app/appserver
+// keeps V1 importable from GOOS=js consumers without dragging in
+// appserver's operational graph (which transitively pulls
+// github.com/james-barrow/golang-ipc — the per-app IPC channel —
+// and go.etcd.io/bbolt — the app-state store).
+//
+// pkg/app/appserver re-exports `AppConfig = spec.AppConfig` so
+// existing callers compile unchanged.
+package spec
+
+import (
+	"github.com/skycoin/skywire/pkg/routing"
+)
+
+// AppConfig defines app startup parameters.
+//
+// User/Group/WorkDir/Env are POSIX-only knobs that only take effect
+// when the app runs as an external process (Binary set, no internal
+// RunFunc registered). In-process apps share the visor's UID/GID by
+// definition — credentials can't be dropped per-goroutine without
+// breaking the runtime's thread-pinning assumptions, and the visor
+// logs a warning if any of these fields are set on an internal app.
+type AppConfig struct {
+	Name      string       `json:"name"`
+	Binary    string       `json:"binary,omitempty"`
+	Args      []string     `json:"args,omitempty"`
+	AutoStart bool         `json:"auto_start"`
+	Port      routing.Port `json:"port"`
+	// User overrides the UID the spawned process runs as (POSIX
+	// setuid before exec). Requires the visor to have the
+	// privileges to switch users (i.e. running as root, or with
+	// CAP_SETUID). Empty = inherit visor UID.
+	User string `json:"user,omitempty"`
+	// Group overrides the GID. Empty = inherit visor GID, or the
+	// primary group of User when User is set.
+	Group string `json:"group,omitempty"`
+	// WorkDir overrides the proc's working directory. Empty =
+	// launcher's per-app default (lc.LocalPath/<app-name>).
+	WorkDir string `json:"work_dir,omitempty"`
+	// Env adds key=value pairs to the spawned process's
+	// environment. Useful for HOME=/home/<user> when User is set.
+	Env []string `json:"env,omitempty"`
+	// LauncherMode persists the operator's launcher-mode preference
+	// for this app: "internal" runs the app inside the visor process,
+	// "external" spawns it as a child with optional User/Group/etc.
+	// Empty = use whatever the visor's StartApp default chooses
+	// (today: external when Binary is set, internal otherwise).
+	// Honored by StartApp; StartAppWithMode still wins per-call.
+	LauncherMode string `json:"launcher_mode,omitempty"`
+	// RestartPolicy controls what happens when the proc exits.
+	// String form of appcommon.RestartPolicy (kept as string in spec
+	// to keep this package WASM-clean — no appcommon import).
+	//   ""            = Never (default — proc stays stopped on exit)
+	//   "on-failure"  = Restart only when the proc returns a non-nil
+	//                   error.
+	//   "always"      = Restart on any exit, including operator-
+	//                   initiated stop. Used by critical apps (pty,
+	//                   etc.) where accidentally stopping the proc
+	//                   would lock the operator out of remote
+	//                   management. The only path to actually
+	//                   disable an Always-policy app is to remove
+	//                   its config entry and restart the visor.
+	RestartPolicy string `json:"restart_policy,omitempty"`
+	// RoutingPolicy overrides the visor-wide routing policy for
+	// dials originating from this app. Accepts the same shape
+	// as conf.Routing.PolicyPerDial:
+	//   "@/path/to/policy.star"  — Starlark, hot-reloaded
+	//   "@/path/to/policy.wasm"  — WASM, hot-reloaded
+	//   "<inline script source>" — small inline Starlark
+	//   "" / unset                — fall through to visor-wide
+	// Backend dispatch is by file extension. See
+	// docs/routing_policy_rfc.md and
+	// docs/examples/routing-policies/wasm/README.md.
+	RoutingPolicy string `json:"routing_policy,omitempty"`
+}

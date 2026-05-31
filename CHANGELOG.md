@@ -6,6 +6,617 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.61
+
+Patch release. One PR on top of v1.3.60 — fixes a regression where `skywire autoconfig` silently wrote the regenerated config to the wrong path on operator boards where `/etc/skywire.conf` doesn't explicitly set `PKGENV=true` / `USRENV=true`.
+
+Symptom on a freshly-installed v1.3.60 board:
+
+```
+# cat /etc/skywire.conf | grep -vE '^#|^$'
+HYPERVISORPKS=('0323272a…')
+ISHYPERVISOR=true
+DMSGPTYPKS=('0323272a…')
+
+# skywire autoconfig
+ -> Configuring skywire
+ -> version: v1.3.60
+ --> Generating skywire config with command:
+   SKYENV=/etc/skywire.conf skywire cli config gen -r
+ --> Skywire configuration updated
+config path: /opt/skywire/skywire.json
+ --> Restarting skywire service…
+
+# skywire cli config show .hypervisors
+[]
+```
+
+Trace: autoconfig's `resolveConfig()` auto-elects pkgEnv via `os.Geteuid() == 0` when the env file doesn't set `PKGENV`/`USRENV` explicitly. The visor binary was deliberately NOT propagating `-p`/`-u` to `cli config gen`, under the theory the child process would re-derive the same mode from `SKYENV`. That theory breaks for the common operator case where neither key is set in the env file — `scriptExecBool("${PKGENV:-false}")` returns false, gen falls through to PreRun's relative-path branch (`confPath = skyenv.ConfigName`), and writes a `skywire-config.json` to the autoconfig invoker's cwd (typically `/root/`). The pre-existing `/opt/skywire/skywire.json` stays untouched, autoconfig's `os.Stat` check passes against the stale file, the visor restarts on its old config, and `hypervisors` stays empty.
+
+Fix: propagate `-p`/`-u` from the autoconfig-resolved mode. The mode is already known at `generateConfig` call time — no new resolution work needed. Same fix removes the matching silent-write-to-cwd that affected operators using HYPERVISORPKS / DMSGPTYPKS / ISHYPERVISOR set via `/etc/skywire.conf`.
+
+### Autoconfig — write to the resolved config path
+
+-   `fix(autoconfig)`: propagate -p/-u to cli config gen so writes hit the resolved path  [#2931](https://github.com/skycoin/skywire/pull/2931)
+
+## 1.3.60
+
+65 PRs on top of v1.3.59. The two headline pieces are the operator-programmable **routing policy** subsystem (Starlark + WASM, multi-phase build-out under RFC #2882) and the **unified app framework** refactor (#2775) that collapses every visor-managed binary into one Internal-app contract.
+
+### Operator-programmable routing policy (RFC #2882)
+
+This release lands the full multi-leg routing-policy stack — operator-supplied policies (Starlark by default, WASM for hot paths) that pick routes, weight forward/reverse asymmetry, and react to per-leg events. Policies are evaluated on dial *and* on packet (Layer 2 distribution + rotation hook), with stdlib helpers for `recent_latency`, `sd_recent_attempts`, multi-hop SD-CXO geo, and a sticky `5tuple` selector. Per-app overrides take precedence over the global policy; runtime swap is supported. The WASM backend (compiled via TinyGo) is wired through the same Provider so any Starlark policy can be re-implemented in WASM for sub-millisecond hot-path evaluation. The hypervisor UI gets a routing-policy panel in the routing tab. Skylark (operator-facing name) is documented; `docs/examples/routing-policies/` ships runnable examples (latency-adaptive, dscp-priority, rotating-bw, sticky:5tuple).
+
+-   `docs`: add operator-programmable routing policy RFC  [#2882](https://github.com/skycoin/skywire/pull/2882)
+-   `feat(router)`: Phase 1+2 routing-policy scaffold (Starlark)  [#2883](https://github.com/skycoin/skywire/pull/2883)
+-   `feat(router/policy)`: Phase 3 stdlib + Phase 4 loader + CLI tooling  [#2884](https://github.com/skycoin/skywire/pull/2884)
+-   `feat(router)`: integrate routing policy into dial path (RFC #2882)  [#2885](https://github.com/skycoin/skywire/pull/2885)
+-   `fix(router/policy)`: drop goroutine-based cancellation (race with starlark.Call)  [#2887](https://github.com/skycoin/skywire/pull/2887)
+-   `chore`: move policies/smoke-test.star to docs/examples + gitignore /policies/  [#2888](https://github.com/skycoin/skywire/pull/2888)
+-   `chore`: gitignore /policies/ working-tree dir  [#2889](https://github.com/skycoin/skywire/pull/2889)
+-   `feat(router/policy)`: visor-backed Provider + per-app routing policy  [#2890](https://github.com/skycoin/skywire/pull/2890)
+-   `feat(router/policy)`: RouteSelectingHook + Starlark route selection  [#2891](https://github.com/skycoin/skywire/pull/2891)
+-   `feat(router/policy)`: SD-CXO geo for multihop intermediates  [#2892](https://github.com/skycoin/skywire/pull/2892)
+-   `feat(router/policy)`: finish Layer 2 packet distribution (RFC phase 5)  [#2897](https://github.com/skycoin/skywire/pull/2897)
+-   `docs(routing-policy)`: runnable example policies + distribution observability  [#2898](https://github.com/skycoin/skywire/pull/2898)
+-   `fix(router)`: strip DMSG hops from multihop routes everywhere  [#2899](https://github.com/skycoin/skywire/pull/2899)
+-   `docs(routing-policy)`: fix empty-candidates drop bug across examples  [#2900](https://github.com/skycoin/skywire/pull/2900)
+-   `fix(router/policy)`: SelectRoute distribution + leg-count truth + TPD perf  [#2902](https://github.com/skycoin/skywire/pull/2902)
+-   `feat(router/policy)`: directional asymmetry (forward/reverse routing)  [#2903](https://github.com/skycoin/skywire/pull/2903)
+-   `feat(router/policy)`: on_leg_change callback (RFC #2882 phase 6)  [#2904](https://github.com/skycoin/skywire/pull/2904)
+-   `feat(router/policy)`: fallback="direct" + CLI overrides exposed  [#2905](https://github.com/skycoin/skywire/pull/2905)
+-   `feat(router/policy)`: sticky:5tuple + latency-adaptive + dscp-priority  [#2906](https://github.com/skycoin/skywire/pull/2906)
+-   `feat(router)`: wire DialHook into PingRoute  [#2908](https://github.com/skycoin/skywire/pull/2908)
+-   `feat(router)`: mux loop best-effort + local-calc fallback  [#2909](https://github.com/skycoin/skywire/pull/2909)
+-   `feat(router)`: parallel mux aux dials  [#2910](https://github.com/skycoin/skywire/pull/2910)
+-   `feat(router/policy)`: hook into sky_forward_conn direct dials  [#2911](https://github.com/skycoin/skywire/pull/2911)
+-   `docs(routing-policy)`: introduce "skylark" operator-facing name  [#2912](https://github.com/skycoin/skywire/pull/2912)
+-   `feat(router/policy)`: WASM backend for routing policies  [#2913](https://github.com/skycoin/skywire/pull/2913)
+-   `feat(router/policy)`: periodic rotation hook + WASM ABI extension  [#2916](https://github.com/skycoin/skywire/pull/2916)
+-   `feat(hypervisor-ui)`: routing-policy panel in the routing tab  [#2918](https://github.com/skycoin/skywire/pull/2918)
+-   `feat(router/policy)`: re-land extension dispatch + runtime per-app swap  [#2919](https://github.com/skycoin/skywire/pull/2919)
+-   `fix(router)`: start rotation loop from SetRotation, not init  [#2921](https://github.com/skycoin/skywire/pull/2921)
+-   `feat(router/policy)`: avoid_direct knob to force overlay path  [#2922](https://github.com/skycoin/skywire/pull/2922)
+-   `refactor(router/policy)`: drop avoid_direct, rely on min_hops + re-apply AppName threading  [#2924](https://github.com/skycoin/skywire/pull/2924)
+-   `fix(examples)`: rotating-bw policy gates drops on alive_count >= target  [#2925](https://github.com/skycoin/skywire/pull/2925)
+-   `fix(router)`: tune circuit breaker for dmsg-session refresh cadence  [#2928](https://github.com/skycoin/skywire/pull/2928)
+
+### Unified app framework (#2775)
+
+A multi-phase refactor that names the implicit app contract every visor-managed binary already followed, then collapses each binary's three roles (cli / host / ui) into a single Internal app run with declared run-modes. `pty` (formerly `dmsgpty`) was the first migration to Internal-app, with RestartPolicy=Always; `dmsgweb` and `skynetweb` followed under RestartPolicy=OnFailure. `skysocks`, `vpn`, and `skynet` got their pair-binaries collapsed (delegating-wrapper helper extracted to fix recursion). The pkg/dmsg/dmsgpty tree was renamed to pkg/pty; the `Dmsgpty` config field was renamed to `Pty` with backward-compat JSON unmarshal. The cmd/dmsg/dmsgpty-{host,ui,cli} binaries were renamed to pty-*.
+
+-   `docs`: RFC — unified service contract (#2775)  [#2863](https://github.com/skycoin/skywire/pull/2863)
+-   `refactor(app)`: name the implicit app contract (#2775 phase 1)  [#2860](https://github.com/skycoin/skywire/pull/2860)
+-   `refactor(app)`: extract status/error/port helpers onto *app.Client (#2775 phase 2a)  [#2861](https://github.com/skycoin/skywire/pull/2861)
+-   `refactor(app)`: type ProcConfig.RunFunc as AppFunc (#2775 phase 2b)  [#2862](https://github.com/skycoin/skywire/pull/2862)
+-   `refactor(pty)`: consolidate dmsgpty cli/host/ui under `skywire app pty`  [#2864](https://github.com/skycoin/skywire/pull/2864)
+-   `chore(pty)`: gofmt follow-up for #2864  [#2865](https://github.com/skycoin/skywire/pull/2865)
+-   `fix(pty)`: keep `dmsg pty *` subtree intact; hide-not-remove in skywire context  [#2866](https://github.com/skycoin/skywire/pull/2866)
+-   `refactor(visor)`: pty as Internal app w/ RestartPolicy=Always (#2775 phase 3.3)  [#2867](https://github.com/skycoin/skywire/pull/2867)
+-   `chore`: gofmt sweep for two pre-existing lint failures  [#2868](https://github.com/skycoin/skywire/pull/2868)
+-   `fix(visor)`: pty AppFunc must complete the in-process IPC handshake  [#2869](https://github.com/skycoin/skywire/pull/2869)
+-   `fix(launcher)`: RestartPolicy=Always must re-Start on operator stop  [#2870](https://github.com/skycoin/skywire/pull/2870)
+-   `refactor(visor)`: dmsgweb + skynetweb as Internal apps (#2775 phase 3.2)  [#2871](https://github.com/skycoin/skywire/pull/2871)
+-   `refactor(visor)`: RestartPolicy=OnFailure for dmsgweb + skynetweb (#2775 phase 4)  [#2872](https://github.com/skycoin/skywire/pull/2872)
+-   `refactor(apps)`: skysocks pair collapse + fix delegating-wrapper recursion  [#2873](https://github.com/skycoin/skywire/pull/2873)
+-   `refactor(apps)`: vpn pair collapse + extract shared delegating-wrapper helper  [#2874](https://github.com/skycoin/skywire/pull/2874)
+-   `refactor(apps)`: skynet pair collapse (final pair binary)  [#2875](https://github.com/skycoin/skywire/pull/2875)
+-   `refactor`: rename pkg/dmsg/dmsgpty → pkg/pty  [#2876](https://github.com/skycoin/skywire/pull/2876)
+-   `refactor(visorconfig)`: rename Dmsgpty → Pty w/ JSON backward-compat  [#2877](https://github.com/skycoin/skywire/pull/2877)
+-   `fix(visorconfig)`: V1.UnmarshalJSON must not wipe preset *Common  [#2878](https://github.com/skycoin/skywire/pull/2878)
+-   `refactor(cmd)`: rename cmd/dmsg/dmsgpty-{host,ui,cli} → pty-*  [#2879](https://github.com/skycoin/skywire/pull/2879)
+-   `chore`: remove run-visor.sh local dev helper + gofmt fix  [#2880](https://github.com/skycoin/skywire/pull/2880)
+
+### Rewards: bandwidth-pool sender-pays + eligible-pair filter
+
+The bandwidth-rewards pool was being skewed by two issues: the UT cache directory was unbounded growth in /tmp, and the per-pair bandwidth credit was counted on both ends so any high-traffic transport pumped its peer's reward too. This release pins UT cache under `hist/`, makes the bandwidth pool sender-pays (credit goes to the visor that originated the bytes, not both ends), and filters out pairs that aren't reward-eligible before the pool is split. Mainnet rules docs are updated: stale CSV claims retired, v1.3.59 cutoff noted, bandwidth-pool precision floor documented.
+
+-   `fix(rewards)`: pin UT cache to hist/ + bandwidth pool sender-pays + eligible-pair filter  [#2886](https://github.com/skycoin/skywire/pull/2886)
+-   `fix(transport)`: count VStream + ping bytes in sent counter  [#2927](https://github.com/skycoin/skywire/pull/2927)
+-   `docs(mainnet_rules)`: retire CSV claims, add v1.3.59 cutoff, note bw-pool precision floor  [#2920](https://github.com/skycoin/skywire/pull/2920)
+
+### bbolt corruption recovery — visor no longer crash-loops on damaged stores
+
+Five visor bbolt stores (serviceuptime, app log_store, clicache, usermanager, skychat group) were opening their files unprotected — a corrupt freelist (e.g. `invalid freelist page: N, page type is leaf` from bbolt's freelist.read during Open) would panic on first write and crash-loop the whole visor. RepairIfCorrupt now wraps every visor bbolt.Open, AND the probeIntegrity helper recovers from panics inside bbolt.Open itself (the freelist-corruption panic is treated as proof of corruption, the file is moved aside as `*.corrupt.<unix-ts>`, and the next open creates a fresh empty store). This shipped after an operator's v1.3.59 visor crash-looped on exactly this signature and recovery required hand-removal of `/opt/skywire/local`.
+
+-   `fix(bbolthealth)`: cover all visor bbolt opens + recover from probe panic  [#2926](https://github.com/skycoin/skywire/pull/2926)
+
+### Hypervisor PK endpoint
+
+A small operator-facing addition: `GET /api/pk` returns the hypervisor's own PK so an install-page generator (or any operator tool) can discover it without hand-copying from the config. The endpoint is opt-in (#2896 flipped the default after the initial #2895), gated behind `SW-Public` (so it only answers when the hypervisor is intentionally publicly-reachable), and exposed as a `--pk-endpoint` / `--no-pk-endpoint` flag from autoconfig (#2901).
+
+-   `feat(hypervisor)`: GET /api/pk + DisablePKEndpoint + SW-Public gate  [#2895](https://github.com/skycoin/skywire/pull/2895)
+-   `fix(hypervisor)`: flip pk-endpoint to opt-in + add config-gen flag  [#2896](https://github.com/skycoin/skywire/pull/2896)
+-   `feat(autoconfig)`: --pk-endpoint / --no-pk-endpoint flag  [#2901](https://github.com/skycoin/skywire/pull/2901)
+
+### Apps + CXO
+
+-   `refactor(apps)`: skysocks/vpn/skynet pair collapses (see "Unified app framework" above)
+-   `feat(apps)`: --reconnect for skysocks-client and skynet-client  [#2914](https://github.com/skycoin/skywire/pull/2914)
+-   `fix(cxo/node)`: shard connection maps to remove Node.mx accept-path serialization  [#2907](https://github.com/skycoin/skywire/pull/2907)
+
+### Lint + deps
+
+-   `chore(lint)`: gofmt + misspell + errcheck cleanup on develop  [#2893](https://github.com/skycoin/skywire/pull/2893)
+-   `chore(deps)`: bump tmp from 0.2.5 to 0.2.7 in /static/skywire-manager-src  [#2894](https://github.com/skycoin/skywire/pull/2894)
+
+## 1.3.59
+
+Patch release. One PR on top of v1.3.58 — completes the hypervisor-UI responsiveness work started in #2842 → #2858.
+
+Operators noticed that opening the hypervisor UI after a long closed-tab gap surfaced "fewer nodes / more last-seen-at" rows that filled in over the next 30-60s as the UI's per-peer Summary polls landed. Trace: the hypervisor only fired Summary RPCs when `/api/visors-summary` was hit. Closed UI = no polling = `summaryCache` rotted. Worse, peer-side `idleConn` (90s, #2856) closed every served stream from "no UI traffic" alone, peers cycled redial + re-accept on every idle window for nothing.
+
+This release ships a hypervisor-side background poll loop (30s cadence, independent of UI activity) that keeps both the cache always-fresh AND the served streams warm. Opening the UI after any duration now renders every connected peer from cache instantly. Streams stay alive on whatever transport they upgraded to (typically stcpr on LAN, dmsg as bootstrap+fallback).
+
+### Hypervisor UI responsiveness
+
+-   `fix(hypervisor)`: background summaryCache poll independent of UI activity  [#2858](https://github.com/skycoin/skywire/pull/2858)
+
+## 1.3.58
+
+Patch release. Four PRs on top of v1.3.57. All targeted at the "nodes appear slowly after restart and some flicker to last-seen-at" regression operators saw after upgrading to v1.3.57.
+
+Trace: #2842's cache-update-on-success in the inner goroutine was the right call (it fixed an earlier stale-cache pathology), but it also moved RPC-failure eviction into the inner goroutine — that half was over-aggressive. Slow-but-functional peers (dmsg jitter, route flap, transient load) got kicked out of `remoteVisors` on every poll round; peers redialed and re-registered, but during the seconds between eviction and re-accept the UI rendered them via the sweep branch as `last seen at: …` — visible flicker.
+
+#2855 walks back the aggressive eviction (the load-bearing cache-update stays). #2852 + #2853 widen the cache-fresh window to 3min (covering the dmsg.StreamIdleTimeout cycle) for both the in-remoteVisors fallback and the sweep branch. #2856 shrinks the visor-side hypervisor-RPC idle-timeout from 10min → 90s so when the stream genuinely dies silently the visor notices in seconds instead of minutes.
+
+End-to-end: hypervisor UI matches the pre-#2842 behavior operators remember — peers stay online through normal flap cycles, only flip to "last seen at" when truly gone, and recover within ~90s of any silent stream death.
+
+### Hypervisor UI stale-row regression
+
+-   `fix(hypervisor)`: widen cache-fresh window 30s → 3min to absorb stream-idle cycle  [#2852](https://github.com/skycoin/skywire/pull/2852)
+-   `fix(hypervisor)`: apply cache-fresh window to sweep branch too  [#2853](https://github.com/skycoin/skywire/pull/2853)
+-   `fix(hypervisor)`: walk back the aggressive-eviction half of #2842  [#2855](https://github.com/skycoin/skywire/pull/2855)
+-   `fix(visor)`: shorten hypervisor RPC idle-timeout 10min → 90s  [#2856](https://github.com/skycoin/skywire/pull/2856)
+
+## 1.3.57
+
+Patch release. 47 PRs on top of v1.3.56.
+
+The big-picture pieces, in order from initial draft (#2805–#2819) to the additional work that landed before tagging (#2820–#2850):
+
+visor↔hypervisor RPC self-heals on degraded sessions where it used to silently strand. The skynet-preferred dial from #2802 is now actually skynet-*preferred* rather than skynet-*first* — dmsg is the always-available baseline, skynet kicks in when a real transport exists, and a cooldown drops back to dmsg after any skynet failure. The TransportRPCServer init-order bug (it never started on any visor, silently) is fixed; combined with a shared `VStreamMux` and auto-create-transport, transport-RPC actually works end-to-end. `TCP_NODELAY` is now set on every TCP transport — hvui skypty drops from "laggy at every keystroke" to local-feeling. Hypervisor tree-summary surfaces sub-hypervisor sections correctly (Hostname propagated through HVVisorEntry, managed-sub-hypervisors no longer scrubbed from the local section, ghost rows on failed Summary fetches are gone). Remote-RPC UX is unified: `skywire cli <anything> --via dmsg://<pk>` or `--via skynet://<pk>` routes any CLI command through the local visor to a remote one — no separate CLI keypair, no special-case subcommand (`tp-rpc` is removed).
+
+Post-draft work added: the install-page WASM generator (skywire-bin install command generator, TinyGo-compiled) — a chain of refactors purging `net/http` and `encoding/json` from the visorconfig + autoconfigcmd + deployment graph so TinyGo can compile the install-page bundle (final size: 1.85 MB, down 75% from the Go-WASM variant). Hypervisor's stale-summary-cache that froze visor rows at "last seen N hours ago" is fixed (cache update + eviction now live inside the inner RPC goroutine, with a 30s freshness window so genuinely-slow peers don't flicker offline). `cli dmsg pty exec --scheme dmsg|skynet` pin the transport explicitly so an unreachable skynet leg can't time out the MultiDialer chain. Services (transport-discovery, address-resolver, route-finder, uptime-tracker, dmsg-discovery) now stop self-publishing in dmsg-discovery — they're direct-client-reachable via the preloaded server set and never needed a discovery entry; this drops the load on dmsgd considerably. `dmsgfirst` discovery client now uses the direct-client-backed `dmsgDC` for its primary path (was the main `dmsgC` whose own discovery is dmsgfirst — recursion-prone, fell back to HTTP on every entry refresh). dmsgpty's skynet leg actually works end-to-end now (listener init-ordering race + PK extractor accepting both `appnet.Addr` and `routing.Addr` types). One stale port in the embedded keyring (`70.121.13.123:9082` → `:9083`) fixed.
+
+Hypervisor UI: node-list sort extended to ip-location / transports / services / reward columns; drag-drop row reorder with localStorage persistence; version-distribution stacked-area chart added to `/nodes/uptime` sourced from the TPD integrated uptime tracker (no separate uptime-tracker round-trip). Standalone-mode operator guides added for `skywire app skychat --standalone --tcp-listen` and `skywire dmsg pty host --tcplisten`, including port-forwarding caveats.
+
+CI: Windows arm64 MSI build enabled; release workflow auto-publishes the draft once every artifact uploads; `make check` serialized via flock so concurrent invocations don't trip each other.
+
+### Hypervisor RPC reliability
+
+-   `fix(visor)`: skypty + RPC dialer hard-timeout the skynet attempt  [#2805](https://github.com/skycoin/skywire/pull/2805)
+-   `fix(visor+hypervisor)`: self-heal orphan RPC conns on degraded dmsg  [#2806](https://github.com/skycoin/skywire/pull/2806)
+-   `fix(visor)`: skynet-preferred (not skynet-first) for hypervisor RPC conn  [#2807](https://github.com/skycoin/skywire/pull/2807)
+-   `fix(visor)`: transport-RPC actually works — shared mux + init order + auto-create transport  [#2810](https://github.com/skycoin/skywire/pull/2810)
+-   `fix(transport,dmsg)`: TCP_NODELAY on all interactive paths  [#2818](https://github.com/skycoin/skywire/pull/2818)
+-   `fix(transport)`: remove recursive RLock in Manager.GetTransport  [#2821](https://github.com/skycoin/skywire/pull/2821)
+-   `fix(visor,cli/dmsg/pty)`: hard-bound DmsgPtyExec dial + honor SIGINT in cli  [#2824](https://github.com/skycoin/skywire/pull/2824)
+-   `fix(visor)`: quiet rpc_bridge accept-loop log spam during shutdown  [#2840](https://github.com/skycoin/skywire/pull/2840)
+-   `fix(hypervisor)`: refresh summary cache from RPC goroutine, not select arm  [#2842](https://github.com/skycoin/skywire/pull/2842)
+
+### Hypervisor UI tree summary + node-list
+
+-   `fix(hypervisor)`: preserve Hostname + dual-list managed sub-hypervisors  [#2808](https://github.com/skycoin/skywire/pull/2808)
+-   `fix(hypervisor)`: bridge Hostname from summaryCache for cross-version sub-sections  [#2809](https://github.com/skycoin/skywire/pull/2809)
+-   `fix(hypervisor)`: no ghost rows on failed Summary + remove data race  [#2817](https://github.com/skycoin/skywire/pull/2817)
+-   `feat(hypervisor-ui)`: sortable columns + drag-drop reorder + version-history chart + standalone-mode docs  [#2850](https://github.com/skycoin/skywire/pull/2850)
+
+### Remote RPC / `--via` flag
+
+-   `feat(cli)`: unify --rpc with skynet://<pk> + delete tp-rpc subcommand  [#2811](https://github.com/skycoin/skywire/pull/2811)
+-   `feat(visor,cli)`: dmsg-direct visor-RPC listener + --rpc dmsg://<pk>  [#2812](https://github.com/skycoin/skywire/pull/2812)
+-   `feat(visor,cli)`: dmsg-bridge for --rpc dmsg://<pk> (no separate CLI keypair needed)  [#2813](https://github.com/skycoin/skywire/pull/2813)
+-   `feat(visor,cli)`: fold dmsg bridge into RPC port + --via <scheme>://<pk>  [#2814](https://github.com/skycoin/skywire/pull/2814)
+-   `feat(visor,cli)`: unify dmsg + skynet bridges; --via skynet:// works end-to-end  [#2815](https://github.com/skycoin/skywire/pull/2815)
+-   `fix(cli)`: parse :port from --via URL  [#2816](https://github.com/skycoin/skywire/pull/2816)
+
+### dmsgpty `--scheme` + skynet leg fixes
+
+-   `feat(dmsgpty)`: add `--scheme dmsg|skynet` flag to bypass MultiDialer chain  [#2841](https://github.com/skycoin/skywire/pull/2841)
+-   `fix(visor)`: dmsgpty skynet listener never started due to init ordering  [#2846](https://github.com/skycoin/skywire/pull/2846)
+-   `fix(visor)`: dmsgpty skynet listener silently rejects route-group conns  [#2847](https://github.com/skycoin/skywire/pull/2847)
+
+### dmsg-discovery + services-as-direct-clients
+
+-   `fix(cmdutil)`: BootstrapDmsg uses HTTP discovery for client entry lookups  [#2823](https://github.com/skycoin/skywire/pull/2823)
+-   `fix(dmsgclient)`: stop services self-publishing via fallback wrapper  [#2845](https://github.com/skycoin/skywire/pull/2845)
+-   `fix(dmsg/dmsgfirst)`: use direct-client-backed dmsg.Client for primary path  [#2848](https://github.com/skycoin/skywire/pull/2848)
+-   `fix(deployment)`: correct embedded keyring port for `70.121.13.123` dmsg server (`9082`→`9083`)  [#2849](https://github.com/skycoin/skywire/pull/2849)
+
+### Install-page WASM generator (TinyGo-clean)
+
+The install-page command generator (`skywire-bin` deb/arch repo's `index.html`) is now a TinyGo-compiled WASM bundle (1.85 MB; ~75% smaller than the Go-WASM variant it replaced). The refactor purged `net/http` and `encoding/json` from the visorconfig + autoconfigcmd + deployment build graph so TinyGo's stdlib can link it.
+
+-   `feat(skywireconfig)`: autoconfigcmd factory + keypair, WASM-clean  [#2826](https://github.com/skycoin/skywire/pull/2826)
+-   `feat(autoconfigcmd)`: operator-helpful flag descriptions  [#2827](https://github.com/skycoin/skywire/pull/2827)
+-   `feat(netutil,skyenv)`: js/wasm build-tag stubs  [#2828](https://github.com/skycoin/skywire/pull/2828)
+-   `feat(visorconfig)`: extract schema leaf packages — V1 now WASM-clean  [#2829](https://github.com/skycoin/skywire/pull/2829)
+-   `feat(skywireconfig)`: genvisor — WASM-clean visor config generator  [#2830](https://github.com/skycoin/skywire/pull/2830)
+-   `feat(autoconfig)`: config-gen parity — every SKYENV variable now exposed  [#2832](https://github.com/skycoin/skywire/pull/2832)
+-   `refactor(visorconfig,dmsg/disc)`: drop net/http from WASM build graph  [#2834](https://github.com/skycoin/skywire/pull/2834)
+-   `refactor(deployment,visorconfig,genvisor)`: split json paths for WASM  [#2835](https://github.com/skycoin/skywire/pull/2835)
+-   `refactor`: purge encoding/json from WASM build graph — TinyGo unlocked  [#2836](https://github.com/skycoin/skywire/pull/2836)
+-   `feat(genvisor)`: hand-rolled streaming JSON serializer for TinyGo  [#2837](https://github.com/skycoin/skywire/pull/2837)
+-   `feat(autoconfigcmd)`: expose config-gen defaults via EnvMapping  [#2838](https://github.com/skycoin/skywire/pull/2838)
+
+### Third-party / metrics hygiene
+
+-   `fix(metrics)`: internalize VictoriaMetrics/metrics + gotop to silence PSI log  [#2822](https://github.com/skycoin/skywire/pull/2822)
+-   `fix(third_party)`: lint-clean VictoriaMetrics/metrics + xxxserxxx/gotop trees  [#2825](https://github.com/skycoin/skywire/pull/2825)
+-   `fix(third_party)`: silence windows gosec G103 inside `Call()` args  [#2833](https://github.com/skycoin/skywire/pull/2833)
+
+### Release ops + CI
+
+-   `chore(release)`: auto-publish draft when all artifacts upload  [#2819](https://github.com/skycoin/skywire/pull/2819)
+-   `chore`: update deps + v1.3.57 changelog  [#2820](https://github.com/skycoin/skywire/pull/2820)
+-   `chore`: fix CI gofmt failures + serialize make check via flock  [#2831](https://github.com/skycoin/skywire/pull/2831)
+-   `ci`: enable Windows arm64 MSI build  [#2839](https://github.com/skycoin/skywire/pull/2839)
+
+## 1.3.56
+
+Patch release. Three PRs on top of v1.3.55.
+
+The big-picture pieces: hypervisor↔visor data-plane now upgrades to a fast p2p transport (stcpr / sudph) automatically once the dmsg session is up; RPC + skypty dial through skynet when a route exists, with dmsg as the bootstrap + fallback. The skypty UI banner is rebranded (skypty-ui, dropped the box that overflowed on the 66-char PK lines), DMSGPTYTERM=1 export is gone — operators wanting "install without auto-restart from inside a pty session" use `NOAUTOCONFIG=true` instead, which the Go autoconfig already honors. The Windows MSI and macOS .pkg installers finally match the deb / arch package post_install pattern from #2796: SK preserved across upgrades (the `-b` flag was rejected by current binaries since #2536's BESTPROTO cleanup, which silently broke the `-r` retain-keys path), and a persistent operator-knobs env file (`%ProgramData%\Skywire\skywire.conf` on Windows, `~/Library/Application Support/Skywire/skywire.conf` on macOS) generated on first install only and untouched on every upgrade.
+
+### Multihop + multiplexed routing
+
+-   `feat(visor)`: auto-upgrade visor↔hypervisor to skynet for RPC + skypty  [#2802](https://github.com/skycoin/skywire/pull/2802)
+
+### dmsg utility belt
+
+-   `feat(dmsgpty/ui)`: skypty-ui rebrand + drop box overflow + drop DMSGPTYTERM  [#2801](https://github.com/skycoin/skywire/pull/2801)
+
+### Packaging + config UX
+
+-   `fix(installers)`: preserve SK + add skywire.conf env file on win + mac  [#2803](https://github.com/skycoin/skywire/pull/2803)
+
+## 1.3.55
+
+Patch release. Two PRs on top of v1.3.54.
+
+### Multihop + multiplexed routing
+
+-   `feat(router)`: per-direction MuxRoutes for asymmetric route counts  [#2797](https://github.com/skycoin/skywire/pull/2797)
+
+### Packaging + config UX
+
+-   `fix(autoconfig,cli/config/gen)`: quiet gen subprocess + clean flag descs  [#2798](https://github.com/skycoin/skywire/pull/2798)
+
+Companion AUR change (skycoin/aur, not in this repo): try-restart loop in deb postinst + arch post_upgrade so every package-shipped service that's currently active picks up the new binary on `apt upgrade` / `pacman -Syu` without operator intervention.
+
+## 1.3.54
+
+Multihop + multiplexed routing is operator-facing now. A new
+`mux-bw` gRPC streaming RPC + bubbletea TUI measure aggregate
+throughput across N parallel routes through ≥K hops, with an
+idle-baseline + probe-rtt phase that reads latency, jitter, and
+queueing-delay from one invocation. The accumulated multihop /
+multiplex fixes — `--min-hops` plumbed through every dial path,
+N-hop BFS in local route calc, per-route teardown decoupling,
+DisjointMux + ExcludeIntermediatePKs on DialOptions,
+MuxRouteFailure events surfacing pump-phase errors,
+retry-on-bad-intermediate, the `ping.mu` critical-section
+narrow, and the PingOnceWithEcho deadline-race close — turn
+what was an undocumented research surface into a deterministic
+operator tool. Skynet client + server gain `--routes N`
+`--min-hops K` end-to-end, the per-conn accept loop no longer
+exits after one conn, and the visor's CXO subscription manager
+now backs `GetAllTransports` for all internal consumers so route
+calc reads from the local snapshot instead of HTTP on every
+dial.
+
+CXO is reliable end-to-end after a multi-PR foundation pass.
+The big one: `HasPrefix` was dropping every match when the
+prefix ended in `/` — affected all 5 of the visor's CXO
+subscription manager feeds network-wide (#2769). Publishers
+pre-warm from their store at startup so subscribers connecting
+in the post-restart gap get a real Root instead of a 10s timeout
+(#2771). Duplicate per-feed subscribers that raced for the same
+DMSG port are gone (#2768). Subscriber reconnect watchdog +
+Conn idle watchdog close the silent-stale-conn cases. Bbolt
+corruption auto-recovers on stats / idxdb / cxds opens. The
+publisher hydrates from the on-disk container so restart no
+longer truncates the published Root. The CXO-aware
+`transport.DiscoveryClient` wrapper (#2773) routes CLI / hvui /
+autoconnect / route calc through the in-memory snapshot — the
+familiar "CXO miss" log finally goes quiet.
+
+Skychat group chat federation. Members publish to their own
+feeds (D1 distributed publisher) instead of relaying through the
+owner. Signed roster + admin mutations gossip across the mesh,
+with admin-side verbatim republish for non-admin subscribers; the
+previous admin-mirror-feed shape is gone. Per-(group, peer)
+reconnect backoff with eviction-clean state replaces the old
+single-flag liveness signal, and per-peer `last_inbound` is
+surfaced in `GroupInfo` + `cli skychat group info`. Persistent
+group history at the visor layer survives restarts; history
+replay extends past the in-memory inbox ring.
+Manager.Resume reconnects subscribers on chat-app restart, and
+pairs gain a CLI surface. The new noise-TCP direct transport +
+`--standalone` mode let operators run chat-apps outside the
+visor for inter-agent / inter-host coordination.
+
+UDP-over-skynet ships as a faithful overlay datagram. New
+`DatagramPacket` wire type with per-datagram AEAD,
+`DatagramRouteGroup` + Group interface, `forwarded_ports.udp` in
+the visor, and `DialPacket` / `DatagramPacketConn` API on appnet.
+The standalone `skyudp-bridge` is a Plan-B UDP→dmsg shim for
+stacks that need datagram semantics without the routing layer.
+
+IPv6 lands as dual-stack. RemoteAddrV6 + AddressV6 schema,
+dmsg-server v6 advertisement in the discovery entry, visor binds
+AR over v6 HTTP, declared PublicIPv6 in bind payload, Happy
+Eyeballs dialer in transport/network, ARSelfEntry surfaces v6
+with CLI render, CI dual-stack dmsg e2e lane.
+
+dmsg utility belt. New `ssh` + `sshd` commands provide
+OpenSSH-equivalent surface over skywire identity; dmsgpty grows
+direct-TCP entry with XK-noise handshake, MultiDialer (skynet
+listener + dialer in chain), and a TCP-only / shared-SK
+socket-activation mode for sshd-style daemons. `cli dmsg cat`
++ `cli util nc` stream piping; `cli dmsg iperf` bulk throughput
++ `--rtt`; `cli dmsg probe --ports` multi-port sweep; `cli util
+foreach` templated-command parallelism; `cli route trace`
+per-hop latency; `cli visor doctor` health rollup;
+`cli visor whois` PK rollup over TPD + UT + SD; `dmsgscp` p2p
+file transfer (default-on, no size cap, dmsg + skynet).
+
+Hypervisor UI gets nested-visor tree management. Backend nested-
+tree API + `cli hv tree`; node service + node-list consume tree
+sections; hypervisor list under PK with live online-time + ping
+/ NAT tooltips. Tab highlight + terminal iframe + DMSG /
+Reachability tab cleanup, local-hypervisor ★ restored,
+transient-offline visors stay visible.
+
+Skymail bridge — SMTP-aware sender-side bridge for skywire email,
+accepting both host-prefixed and bare-PK address shapes; operator
+recipe + Postfix overrides documented.
+
+Packaging + config UX. Persistent `skywire.conf` edits across
+autoconfig runs; native-Go env-file parser + Windows phase 1;
+LANDMSG defaults to ISHYPERVISOR + LANDMSGPORT knob; lan-dmsg
+keypair generated at config-gen time; `--pair-enable` defaults
+on for skychat with SKYCHATPAIR override; kebab-case
+`--dmsg-port` + confbs tag fixes; `applyFlagsToConf` now handles
+bash-array flags (HYPERVISORPKS et al, #2777) — the operator
+regression where `config gen -qpij <pk>` emitted
+`#HYPERVISORPKS=('')` is closed.
+
+Docs site: MkDocs Material at
+[skycoin.github.io/skywire](https://skycoin.github.io/skywire);
+cobra-driven `docs/skywire/` tree with hidden `skywire doc`
+generator. Specs trimmed of non-normative content. Skychat
+group gossip RFC committed. README restructured for
+"Skywire is encrypted UDP & TCP" lead.
+
+Performance. dmsg noise static-static DH cache; hex-encode
+allocation halving; per-transport tickers centralized in
+Manager; bbolt batch coalescing on publisher tree-walk + stats
+sample writes; AcceptBufferSize 20→256 for deployment burst
+absorption.
+
+### Multihop + multiplexed routing
+
+-   `feat(skynet)`: --routes flag for parallel mux-route dialing  [#2727](https://github.com/skycoin/skywire/pull/2727)
+-   `feat(visor)`: server-side gRPC streaming ping-tree RPC  [#2732](https://github.com/skycoin/skywire/pull/2732)
+-   `feat(visor/ping-tree)`: use_transport_latency fast path at level-1  [#2733](https://github.com/skycoin/skywire/pull/2733)
+-   `feat(cli/ping-tree)`: rewire TUI onto server-side gRPC streaming  [#2736](https://github.com/skycoin/skywire/pull/2736)
+-   `feat(visor)`: StreamMuxBandwidth gRPC RPC + cli mux-bw  [#2737](https://github.com/skycoin/skywire/pull/2737)
+-   `feat(cli/ping-mux-bw)`: bubbletea TUI dashboard for StreamMuxBandwidth  [#2739](https://github.com/skycoin/skywire/pull/2739)
+-   `feat(visor)`: per-route teardown — decouple StopPing from PK-only  [#2745](https://github.com/skycoin/skywire/pull/2745)
+-   `feat(router)`: DisjointMux + ExcludeIntermediatePKs in DialOptions  [#2746](https://github.com/skycoin/skywire/pull/2746)
+-   `feat(cli/ping)`: human-readable defaults + built-in aggregation for tree-stream + mux-bw  [#2747](https://github.com/skycoin/skywire/pull/2747)
+-   `feat(visor/cli)`: mux-bw idle-baseline phase + built-in queueing-delay output  [#2748](https://github.com/skycoin/skywire/pull/2748)
+-   `fix(visor/router)`: plumb mux-bw --min-hops through DialPing → router  [#2749](https://github.com/skycoin/skywire/pull/2749)
+-   `fix(router)`: blame intermediate not dst when id_reservation fails on a hop  [#2750](https://github.com/skycoin/skywire/pull/2750)
+-   `fix(appnet)`: tryDirectPingDial shortcut bypassed MinHops constraint  [#2751](https://github.com/skycoin/skywire/pull/2751)
+-   `feat(visor)`: honor caller SetupTimeout in DialPing  [#2752](https://github.com/skycoin/skywire/pull/2752)
+-   `fix(router)`: calculateLocalRoutes must honor MinHops > 2  [#2753](https://github.com/skycoin/skywire/pull/2753)
+-   `fix(rpcgrpc)`: mux-bw probe-after-pump race + per-level LevelDone counters  [#2754](https://github.com/skycoin/skywire/pull/2754)
+-   `feat(router)`: N-hop BFS in calculateLocalRoutes — deterministic local routing  [#2755](https://github.com/skycoin/skywire/pull/2755)
+-   `feat(rpcgrpc/mux-bw)`: surface pump-phase route failures as MuxRouteFailure events  [#2756](https://github.com/skycoin/skywire/pull/2756)
+-   `fix(visor)`: PingOnceWithEcho adapter must forward RouteIndex + MinHops  [#2757](https://github.com/skycoin/skywire/pull/2757)
+-   `fix(router)`: local-route BFS visited-set was shadowing longer paths  [#2758](https://github.com/skycoin/skywire/pull/2758)
+-   `fix(skynet/client)`: accept loop with per-conn remote dial + half-close drain  [#2759](https://github.com/skycoin/skywire/pull/2759)
+-   `fix(cli/skynet,visor)`: list custom-named skynet apps + render AppStatusStarting  [#2760](https://github.com/skycoin/skywire/pull/2760)
+-   `fix(visor/ping)`: narrow ping.mu critical section to map lookup  [#2761](https://github.com/skycoin/skywire/pull/2761)
+-   `fix(visor)`: write deadlines on PingOnceWithEcho + probe RouteIndex passthrough  [#2762](https://github.com/skycoin/skywire/pull/2762)
+-   `fix(visor/ping)`: cap PingOnceWithEcho at 10s + emit failure on bytes=0 exit  [#2764](https://github.com/skycoin/skywire/pull/2764)
+-   `fix(appnet)`: gate direct-dial shortcut on MinHops/MuxRoutes opts  [#2765](https://github.com/skycoin/skywire/pull/2765)
+-   `feat(skynet-client)`: plumb --min-hops flag through app dial chain  [#2766](https://github.com/skycoin/skywire/pull/2766)
+-   `fix(cli/skynet)`: forward --min-hops flag through start command  [#2770](https://github.com/skycoin/skywire/pull/2770)
+-   `feat(visor)`: CXO-aware transport.DiscoveryClient — local route calc reads CXO before HTTP  [#2773](https://github.com/skycoin/skywire/pull/2773)
+-   `fix(router)`: retry with different intermediate on id_reservation dial failure  [#2774](https://github.com/skycoin/skywire/pull/2774)
+-   `fix(router)`: plumb opts.MinHops + AppName into establishMuxRoutes aux muxOpts  [#2776](https://github.com/skycoin/skywire/pull/2776)
+-   `fix(skynet-srv)`: half-close forwardRawTCP before close — drains buffered bytes  [#2735](https://github.com/skycoin/skywire/pull/2735)
+-   `fix(router)`: handleDataPacket panic on send-to-closed-readCh during remote close  [#2730](https://github.com/skycoin/skywire/pull/2730)
+-   `feat(router)`: rank route candidates by measured per-hop latency  [#2782](https://github.com/skycoin/skywire/pull/2782)
+-   `feat(router)`: unpair forward/reverse candidate selection  [#2785](https://github.com/skycoin/skywire/pull/2785)
+-   `feat(router)`: per-direction MinHops for asymmetric routing  [#2792](https://github.com/skycoin/skywire/pull/2792)
+
+### CXO reliability
+
+-   `feat(cli,visor,tpd)`: close CXO subscriber gap (SD services, TPD all-transports) + bbolt cache fallback  [#2491](https://github.com/skycoin/skywire/pull/2491)
+-   `feat(sd,tpd,dmsgd)`: make CXO publishers always-on (drop --cxo flag)  [#2494](https://github.com/skycoin/skywire/pull/2494)
+-   `fix(sd,dmsgd)`: decouple HTTP register path from CXO publisher mutex  [#2495](https://github.com/skycoin/skywire/pull/2495)
+-   `fix(cxo/node)`: plug Connection read/write-loop goroutine leak  [#2497](https://github.com/skycoin/skywire/pull/2497)
+-   `fix(cxo/data/idxdb)`: implement real in-memory IdxDB  [#2499](https://github.com/skycoin/skywire/pull/2499)
+-   `fix(cxo/node)`: bounded sendMsg + fan-out broadcastRoot  [#2538](https://github.com/skycoin/skywire/pull/2538)
+-   `fix(cxo/node)`: evict stale Conn on peer rejoin instead of rejecting  [#2625](https://github.com/skycoin/skywire/pull/2625)
+-   `fix(cxo/node)`: handleSub always pushes current Root on duplicate Subscribe  [#2647](https://github.com/skycoin/skywire/pull/2647)
+-   `fix(cxo/treestore)`: subscriber.handleRootFilled filters by feedPK  [#2648](https://github.com/skycoin/skywire/pull/2648)
+-   `feat(cxo/treestore)`: subscriber consumes OnFillingBreaks (visibility)  [#2649](https://github.com/skycoin/skywire/pull/2649)
+-   `fix(cxo/treestore)`: hydrate Publisher in-memory tree from container on restart  [#2651](https://github.com/skycoin/skywire/pull/2651)
+-   `fix(cxo)`: thread context.Context through Subscriber.Connect → dmsg ConnectPK  [#2652](https://github.com/skycoin/skywire/pull/2652)
+-   `fix(cxo/node)`: Conn idle watchdog — close half-dead conns within ~2min  [#2657](https://github.com/skycoin/skywire/pull/2657)
+-   `fix(cxo/cxds)`: memoryCXDS.Del actually removes the map entry  [#2676](https://github.com/skycoin/skywire/pull/2676)
+-   `fix(cxo)`: recover from missing seqs in RemoveRootObjects + periodic forced sweep  [#2677](https://github.com/skycoin/skywire/pull/2677)
+-   `fix(cxo/node)`: guard Conn init signaling against double-close panic  [#2681](https://github.com/skycoin/skywire/pull/2681)
+-   `fix(cxo/skyobject)`: LastRoot + rootByHash nil-deref on missing CXDS bytes  [#2683](https://github.com/skycoin/skywire/pull/2683)
+-   `feat(cxo/treestore)`: ConnectAndWaitForRoot — atomic-subscribe (phase C foundation)  [#2690](https://github.com/skycoin/skywire/pull/2690)
+-   `fix(cxo/node)`: synchronize OnRootFilled/OnFillingBreaks callback access  [#2703](https://github.com/skycoin/skywire/pull/2703)
+-   `fix(cxo/skyobject)`: DelRoot walk best-effort on ErrNotFound (TPD leak fix)  [#2704](https://github.com/skycoin/skywire/pull/2704)
+-   `fix(dmsg-discovery)`: drop tombstone writes from clients-by-server CXO publisher  [#2705](https://github.com/skycoin/skywire/pull/2705)
+-   `fix(cxo/treestore)`: subscriber reconnect watchdog  [#2714](https://github.com/skycoin/skywire/pull/2714)
+-   `fix(dmsg-discovery)`: skip CXO republish on heartbeat-only entry updates  [#2724](https://github.com/skycoin/skywire/pull/2724)
+-   `fix(stats)`: auto-recover from bbolt corruption at startup  [#2728](https://github.com/skycoin/skywire/pull/2728)
+-   `fix(cxo)`: auto-recover from bbolt corruption in idxdb + cxds opens  [#2729](https://github.com/skycoin/skywire/pull/2729)
+-   `fix(visor)`: remove duplicate standalone CXO subscribers for tpd-metrics/uptime  [#2768](https://github.com/skycoin/skywire/pull/2768)
+-   `fix(cxo)`: HasPrefix dropped every match for trailing-slash prefixes  [#2769](https://github.com/skycoin/skywire/pull/2769)
+-   `fix(sd,dmsgd)`: pre-warm CXO publisher tree from redis at startup  [#2771](https://github.com/skycoin/skywire/pull/2771)
+-   `fix(cxo/treestore)`: release publisher mutex around encode + bbolt write  [#2599](https://github.com/skycoin/skywire/pull/2599)
+
+### Skychat group chat federation
+
+-   `fix(skychat)`: /status groups visibility + stale-active demotion + inbox MarkMessage  [#2530](https://github.com/skycoin/skywire/pull/2530)
+-   `feat(skychat/group)`: owner heartbeat watchdog for fast stale-sub detection  [#2531](https://github.com/skycoin/skywire/pull/2531)
+-   `refactor(skychat/group)`: collapse 4 liveness flags into single lastInboundNs  [#2537](https://github.com/skycoin/skywire/pull/2537)
+-   `feat(skychat/group)`: D1 distributed publisher — every member publishes own feed  [#2539](https://github.com/skycoin/skywire/pull/2539)
+-   `feat(skychat/group)`: relay-ack for member→owner sends  [#2575](https://github.com/skycoin/skywire/pull/2575)
+-   `feat(skychat/group)`: persistent group history at the visor layer  [#2578](https://github.com/skycoin/skywire/pull/2578)
+-   `feat(skychat/group)`: federated send — members publish to own feed  [#2580](https://github.com/skycoin/skywire/pull/2580)
+-   `feat(skychat)`: admin role + admin-set management (1/3, 2/3, 3/3)  [#2583](https://github.com/skycoin/skywire/pull/2583) [#2584](https://github.com/skycoin/skywire/pull/2584) [#2585](https://github.com/skycoin/skywire/pull/2585)
+-   `fix(skychat/group)`: owner-role peerSubs also need reconnect coverage  [#2595](https://github.com/skycoin/skywire/pull/2595)
+-   `fix(skychat/group)`: per-peerSub liveness signal so silent peers get reconnected  [#2606](https://github.com/skycoin/skywire/pull/2606)
+-   `fix(skychat/group)`: per-(group, peer) reconnect backoff  [#2627](https://github.com/skycoin/skywire/pull/2627)
+-   `feat(skychat/group)`: surface per-peer last-inbound in GroupInfo  [#2628](https://github.com/skycoin/skywire/pull/2628)
+-   `feat(cli/group)`: human-readable info + peer_last_inbound table  [#2629](https://github.com/skycoin/skywire/pull/2629)
+-   `fix(skychat/group)`: replay backlog on streaming reconnect  [#2630](https://github.com/skycoin/skywire/pull/2630)
+-   `fix(skychat/group)`: clear per-peer reconnect state on roster eviction  [#2632](https://github.com/skycoin/skywire/pull/2632)
+-   `feat(skychat/group)`: mutation types + signing for roster/admin gossip  [#2658](https://github.com/skycoin/skywire/pull/2658)
+-   `feat(skychat/group)`: history-replay beyond inbox ring (Path A of #2637)  [#2659](https://github.com/skycoin/skywire/pull/2659)
+-   `feat(skychat/group)`: publish signed roster/admin mutations on roster change  [#2674](https://github.com/skycoin/skywire/pull/2674)
+-   `refactor(skychat/group)`: drop admin-mirror feeds — full mesh only  [#2682](https://github.com/skycoin/skywire/pull/2682)
+-   `feat(skychat/group)`: sign + verify leaf-level Messages  [#2685](https://github.com/skycoin/skywire/pull/2685)
+-   `feat(skychat/group)`: admin-side verbatim republish on onUpdate  [#2688](https://github.com/skycoin/skywire/pull/2688)
+-   `feat(skychat/group)`: non-admin sub topology — admin-aggregator slice  [#2689](https://github.com/skycoin/skywire/pull/2689)
+-   `feat(skychat/group)`: switch all 6 Connect call sites to ConnectAndWaitForRoot  [#2692](https://github.com/skycoin/skywire/pull/2692)
+-   `feat(cli/skychat)`: pair subcommands for CXO p2p baseline  [#2699](https://github.com/skycoin/skywire/pull/2699)
+-   `fix(skychat/pairing)`: add /pair/inbox HTTP handler (closes #2699 CLI gap)  [#2702](https://github.com/skycoin/skywire/pull/2702)
+-   `feat(skychat)`: noise-TCP direct transport — listener, peer dialer, CLI --via  [#2707](https://github.com/skycoin/skywire/pull/2707)
+-   `feat(skychat)`: --standalone mode (skip PROC_CONFIG, keep TCP-direct + HTTP control)  [#2708](https://github.com/skycoin/skywire/pull/2708)
+-   `fix(skychat/pairing)`: Manager.Resume reconnects subscribers (3-agent pair-RX root cause)  [#2711](https://github.com/skycoin/skywire/pull/2711)
+-   `feat(skychat/group)`: server-streaming gRPC for group listen  [#2571](https://github.com/skycoin/skywire/pull/2571)
+-   `feat(cli/skychat)`: default --wait=5s for delivery-confirmed send  [#2573](https://github.com/skycoin/skywire/pull/2573)
+-   `feat(skychat)`: network fallback — try alternate transport on send failure  [#2574](https://github.com/skycoin/skywire/pull/2574)
+-   `feat(skychat/group)`: surface gRPC subscriber drop count + per-layer drop counters  [#2662](https://github.com/skycoin/skywire/pull/2662) [#2664](https://github.com/skycoin/skywire/pull/2664) [#2665](https://github.com/skycoin/skywire/pull/2665)
+-   `feat(cli/skychat/group)`: render sub_drop_count / stream_send_count / deliver_count  [#2663](https://github.com/skycoin/skywire/pull/2663) [#2666](https://github.com/skycoin/skywire/pull/2666) [#2669](https://github.com/skycoin/skywire/pull/2669)
+
+### UDP-over-skynet
+
+-   `feat(routing)`: add DatagramPacket wire type (faithful UDP, stage 1)  [#2609](https://github.com/skycoin/skywire/pull/2609)
+-   `feat(router)`: DatagramRouteGroup + Group interface (faithful UDP, stage 2)  [#2610](https://github.com/skycoin/skywire/pull/2610)
+-   `feat(skyudp-bridge)`: standalone UDP→dmsg bridge — Plan B for UDP-over-skynet  [#2611](https://github.com/skycoin/skywire/pull/2611)
+-   `feat(router)`: per-datagram AEAD for DatagramRouteGroup (faithful UDP, stage 3)  [#2612](https://github.com/skycoin/skywire/pull/2612)
+-   `feat(visor)`: UDP-over-skynet via forwarded_ports.udp (faithful UDP, stage 4)  [#2613](https://github.com/skycoin/skywire/pull/2613)
+-   `feat(appnet)`: DialPacket / DatagramPacketConn API (faithful UDP, stage 5)  [#2614](https://github.com/skycoin/skywire/pull/2614)
+
+### IPv6 dual-stack
+
+-   `feat(ipv6)`: phase 1 schema — RemoteAddrV6 + AddressV6, per-family bind merge  [#2715](https://github.com/skycoin/skywire/pull/2715)
+-   `feat(ipv6)`: phase 2a — dmsg-server v6 advertisement in discovery entry  [#2716](https://github.com/skycoin/skywire/pull/2716)
+-   `feat(ipv6)`: phase 3 — Happy Eyeballs dialer in transport/network  [#2717](https://github.com/skycoin/skywire/pull/2717)
+-   `feat(ci)`: ipv6 phase 5 — dual-stack dmsg e2e lane  [#2718](https://github.com/skycoin/skywire/pull/2718)
+-   `feat(ipv6)`: phase 2b — visor binds AR over v6 HTTP to register RemoteAddrV6  [#2719](https://github.com/skycoin/skywire/pull/2719)
+-   `feat(ipv6)`: phase 4a — ARSelfEntry exposes RemoteAddrV6 + CLI dual-stack render  [#2721](https://github.com/skycoin/skywire/pull/2721)
+-   `feat(ipv6)`: phase 2c — declared PublicIPv6 in bind payload (dmsg-routed AR path)  [#2722](https://github.com/skycoin/skywire/pull/2722)
+
+### dmsg utility belt
+
+-   `feat(cli)`: add dmsgcat + util nc — stream piping over dmsg/skynet/TCP  [#2544](https://github.com/skycoin/skywire/pull/2544)
+-   `feat(cli/visor)`: doctor — one-shot health rollup with verdict + exit code  [#2545](https://github.com/skycoin/skywire/pull/2545)
+-   `feat(cli/dmsg)`: iperf — bulk throughput measurement over dmsg streams  [#2546](https://github.com/skycoin/skywire/pull/2546)
+-   `feat(cli/dmsg)`: iperf --rtt + listener --echo for latency + jitter  [#2550](https://github.com/skycoin/skywire/pull/2550)
+-   `feat(cli/route)`: trace — per-hop latency printout for a route to a peer  [#2553](https://github.com/skycoin/skywire/pull/2553)
+-   `feat(cli/dmsg)`: probe --ports <list> for multi-port sweep  [#2554](https://github.com/skycoin/skywire/pull/2554)
+-   `feat(cli/util)`: foreach — run templated command against each target in parallel  [#2555](https://github.com/skycoin/skywire/pull/2555)
+-   `feat(cli/visor)`: whois — single-PK rollup over TPD + UT + SD  [#2556](https://github.com/skycoin/skywire/pull/2556)
+-   `feat(dmsgpty)`: direct-TCP entry point with XK-noise handshake (server-side)  [#2559](https://github.com/skycoin/skywire/pull/2559)
+-   `feat(cli/dmsg/pty)`: --via tcp://<pk>@<host:port> direct-TCP path  [#2560](https://github.com/skycoin/skywire/pull/2560)
+-   `feat(dmsgpty)`: TCPListen on standalone dmsgpty-host + --via-visor on cli  [#2561](https://github.com/skycoin/skywire/pull/2561)
+-   `feat(dmsgpty-host)`: TCP-only / shared-SK / socket-activation for sshd-style daemon  [#2569](https://github.com/skycoin/skywire/pull/2569)
+-   `feat(cli)`: ssh + sshd commands — OpenSSH-equivalent surface over skywire identity  [#2572](https://github.com/skycoin/skywire/pull/2572)
+-   `refactor(dmsgpty)`: StreamDialer interface for outbound proxy dial (phase 1, 2, 3)  [#2671](https://github.com/skycoin/skywire/pull/2671) [#2672](https://github.com/skycoin/skywire/pull/2672) [#2675](https://github.com/skycoin/skywire/pull/2675)
+-   `feat(dmsgscp)`: scp-over-dmsg utility, port 23, whitelist-gated, dmsg + skynet  [#2524](https://github.com/skycoin/skywire/pull/2524) [#2527](https://github.com/skycoin/skywire/pull/2527) [#2542](https://github.com/skycoin/skywire/pull/2542)
+
+### Hypervisor UI
+
+-   `feat(hv)`: nested-visor tree API + cli hv tree command (backend half)  [#2633](https://github.com/skycoin/skywire/pull/2633)
+-   `feat(hvui)`: node service getNodesTree() + NodeSection type (frontend service half)  [#2641](https://github.com/skycoin/skywire/pull/2641)
+-   `feat(hvui)`: node-list consumes tree sections + header shows local hypervisor PK  [#2642](https://github.com/skycoin/skywire/pull/2642)
+-   `fix(hv-ui)`: tab highlight, terminal iframe, hypervisor list on Info  [#2740](https://github.com/skycoin/skywire/pull/2740)
+-   `chore(ui)`: npmrc + refreshed lockfile so make build-ui works on npm 11  [#2741](https://github.com/skycoin/skywire/pull/2741)
+-   `fix(hv)`: restore local-hypervisor ★ + keep transient-offline visors visible  [#2742](https://github.com/skycoin/skywire/pull/2742)
+-   `fix(hv-ui)`: drop DMSG + Reachability tabs; terminal tab now works  [#2743](https://github.com/skycoin/skywire/pull/2743)
+-   `feat(hv-ui)`: hypervisor list under PK, live online-time, ping/NAT tooltips  [#2744](https://github.com/skycoin/skywire/pull/2744)
+-   `feat(visor/hv)`: runtime management — rm/--all/passwd CLI, hypervisor section on visor info  [#2779](https://github.com/skycoin/skywire/pull/2779)
+-   `fix(hv)`: dedup hypervisor visor rows in tree-summary local section + surface Hostname  [#2780](https://github.com/skycoin/skywire/pull/2780)
+-   `feat(hvui)`: default node label to hostname; surface hostname on node info tab  [#2781](https://github.com/skycoin/skywire/pull/2781)
+-   `feat(hvui/node-list)`: render per-sub-hypervisor sections below the main table  [#2783](https://github.com/skycoin/skywire/pull/2783)
+-   `fix(hv)`: propagate ServicesHealth through HVVisorEntry → sub-section status dots  [#2784](https://github.com/skycoin/skywire/pull/2784)
+-   `fix(hvui/node-list)`: sub-section tables now use the full-fat main-table styling  [#2786](https://github.com/skycoin/skywire/pull/2786)
+-   `feat(hv)`: proxy visor RPC through a sub-hypervisor for drill-down access  [#2787](https://github.com/skycoin/skywire/pull/2787)
+-   `fix(hv)`: default sub-section Online visors to healthy when ServicesHealth empty  [#2788](https://github.com/skycoin/skywire/pull/2788)
+-   `fix(hv)`: surface sub-section visor transports column  [#2789](https://github.com/skycoin/skywire/pull/2789)
+-   `fix(hvui)`: parse transports in sub-section tree response  [#2790](https://github.com/skycoin/skywire/pull/2790)
+-   `fix(hv)`: sub-section ★ icon + clean placeholder transport rows  [#2791](https://github.com/skycoin/skywire/pull/2791)
+-   `fix(hv)`: only star sub-section row matching the section's hypervisor PK  [#2793](https://github.com/skycoin/skywire/pull/2793)
+-   `fix(hvui)`: main flat list = section 0 only; visors per their own hypervisor  [#2794](https://github.com/skycoin/skywire/pull/2794)
+-   `fix(hv)`: sub-section transports fallback via HVVisorSummary  [#2795](https://github.com/skycoin/skywire/pull/2795)
+
+### Skymail bridge
+
+-   `feat(skymail-bridge)`: SMTP-aware sender-side bridge for skywire email  [#2598](https://github.com/skycoin/skywire/pull/2598)
+-   `feat(skymail-bridge)`: mode b accepts both host-prefixed and bare-PK address shapes  [#2605](https://github.com/skycoin/skywire/pull/2605)
+-   `docs(guides)`: skymail-bridge operator recipe + Postfix overrides  [#2604](https://github.com/skycoin/skywire/pull/2604)
+
+### Packaging + config UX
+
+-   `fix(autoconfig)`: propagate resolved PKGENV/USRENV mode to the gen subprocess  [#2490](https://github.com/skycoin/skywire/pull/2490)
+-   `fix(cli)`: operator-UX bundle — config template + WARN, router/proxy clarity  [#2501](https://github.com/skycoin/skywire/pull/2501)
+-   `feat(autoconfig,skyenv)`: native-Go env-file parser; Windows-aware autoconfig (phase 1)  [#2503](https://github.com/skycoin/skywire/pull/2503)
+-   `feat(cli/config)`: LANDMSG defaults to ISHYPERVISOR + add LANDMSGPORT env knob  [#2535](https://github.com/skycoin/skywire/pull/2535)
+-   `feat(skywire-autoconfig)`: persistent skywire.conf edits + cleanup vestigial knobs  [#2536](https://github.com/skycoin/skywire/pull/2536)
+-   `fix(cli/config)`: generate lan-dmsg-server keypair at gen time (unblocks CI)  [#2541](https://github.com/skycoin/skywire/pull/2541)
+-   `fix(cli/config/gen)`: default --pair-enable on skychat so groups work out of the box  [#2594](https://github.com/skycoin/skywire/pull/2594)
+-   `fix(cli/config/gen)`: SKYCHATPAIR env knob for --pair-enable + conf template entry  [#2596](https://github.com/skycoin/skywire/pull/2596)
+-   `fix(svc)`: kebab-case --dmsg-port + fix garbled --config + confbs tag  [#2602](https://github.com/skycoin/skywire/pull/2602)
+-   `chore(deps)`: bump vis-data and vis-network in /pkg/tpviz/ui  [#2767](https://github.com/skycoin/skywire/pull/2767)
+-   `chore(transport)`: remove unused tpdCache field + Set/GetTPDCache methods  [#2772](https://github.com/skycoin/skywire/pull/2772)
+-   `fix(cli/config)`: applyFlagsToConf handles bash-array flags (HYPERVISORPKS et al)  [#2777](https://github.com/skycoin/skywire/pull/2777)
+
+### Docs
+
+-   `docs(specs)`: strip non-normative content from specifications  [#2579](https://github.com/skycoin/skywire/pull/2579)
+-   `docs(specs)`: trim impl detail from TPD + Transport Management  [#2581](https://github.com/skycoin/skywire/pull/2581)
+-   `docs`: cobra-driven docs/skywire/ tree + hidden `skywire doc` generator  [#2582](https://github.com/skycoin/skywire/pull/2582)
+-   `docs(skywire/doc)`: code-fence ASCII-art Longs + scrub raw DBIVersion  [#2586](https://github.com/skycoin/skywire/pull/2586)
+-   `docs(skywire/doc)`: strip ANSI escape sequences from generated Longs  [#2588](https://github.com/skycoin/skywire/pull/2588)
+-   `docs(skywire/doc)`: expand --capture allowlist + commit captured samples  [#2589](https://github.com/skycoin/skywire/pull/2589)
+-   `feat(docs)`: MkDocs Material site at skycoin.github.io/skywire  [#2590](https://github.com/skycoin/skywire/pull/2590)
+-   `fix(docs)`: drop --strict from CI so deploy doesn't abort on dangling specs links  [#2591](https://github.com/skycoin/skywire/pull/2591)
+-   `docs(skywire/doc)`: include flags marked Hidden in the rendered output  [#2593](https://github.com/skycoin/skywire/pull/2593)
+-   `docs(readme)`: lead with "Skywire is encrypted UDP & TCP"  [#2624](https://github.com/skycoin/skywire/pull/2624)
+-   `docs`: RFC for cross-visor admin/roster gossip  [#2656](https://github.com/skycoin/skywire/pull/2656)
+-   `docs(readme)`: counter-points + restructure Major features  [#2701](https://github.com/skycoin/skywire/pull/2701)
+
+### Performance
+
+-   `perf(cipher,dmsgd)`: halve hex-encode allocs on MarshalText + dedupe in hot map  [#2500](https://github.com/skycoin/skywire/pull/2500)
+-   `perf(dmsg/noise)`: cache static-static DH results for repeat peers  [#2507](https://github.com/skycoin/skywire/pull/2507)
+-   `perf(dmsg)`: bump AcceptBufferSize 20 → 256 to absorb deployment burst  [#2552](https://github.com/skycoin/skywire/pull/2552)
+-   `perf(stats/cxo)`: batch sample writes into single Publisher mutex acquire  [#2564](https://github.com/skycoin/skywire/pull/2564)
+-   `perf(cxo)`: coalesce publisher tree-walk writes into one bbolt tx  [#2566](https://github.com/skycoin/skywire/pull/2566)
+-   `perf(transport)`: centralize per-transport tickers in Manager  [#2567](https://github.com/skycoin/skywire/pull/2567)
+
+### CI
+
+-   `ci(deploy)`: serialize Deploy runs per-branch via concurrency group  [#2502](https://github.com/skycoin/skywire/pull/2502)
+-   `feat(ci)`: mux-route-probe.sh — 3-visor multiplexed-route test runner  [#2723](https://github.com/skycoin/skywire/pull/2723)
+-   `feat(ci/mux-runner)`: endpoint-a/-b, intermediate-pool, avoid-direct flags  [#2725](https://github.com/skycoin/skywire/pull/2725)
+-   `feat(ci)`: mux-probe-assert — Go harness for mux-route-probe.sh tally  [#2726](https://github.com/skycoin/skywire/pull/2726)
+
 ## 1.3.53
 
 Skychat group chat — feature complete. A three-agent live

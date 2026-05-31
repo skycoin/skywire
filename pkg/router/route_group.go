@@ -152,6 +152,29 @@ type RouteGroup struct {
 	// Route multiplexing layer (nil when mux not negotiated).
 	// Encapsulates sequencing, reordering, SACK, and transport selection.
 	mux *routeMux
+
+	// legChangeHook, when non-nil, fires from the leg-mutation
+	// paths (appendForwardLeg / appendRules / leg-prune on
+	// transport close). Returning a non-Unset DistributionConfig
+	// causes the route group to re-apply distribution against the
+	// new leg set. See pkg/router/dial_hook.go LegChangeHook for
+	// the contract.
+	legChangeHook LegChangeHook
+	// legChangeInfo is the DialInfo the hook receives. Set once
+	// at route group construction time when the dialing visor
+	// configures the hook; unset on accept-side rg's (the
+	// hook is only meaningful on the dialing side).
+	legChangeInfo DialInfo
+
+	// rotationHook, when non-nil, fires periodically at
+	// rotationInterval from the rotation servicePacketLoop —
+	// returning a RotationAction the route group applies (drop
+	// listed legs, optionally request an aux leg via
+	// rotationApplyAdd). Zero interval = no rotation goroutine.
+	// See pkg/router/dial_hook.go RotationHook.
+	rotationHook     RotationHook
+	rotationApplyAdd func(excludeHops []string)
+	rotationInterval time.Duration
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -307,7 +330,7 @@ func (rg *RouteGroup) Write(p []byte) (n int, err error) {
 	}
 
 	rg.mu.Lock()
-	tp, rule, leg, err := rg.nextTransport()
+	tp, rule, leg, err := rg.nextTransport(p)
 	if err != nil {
 		rg.mu.Unlock()
 		return 0, err
@@ -527,15 +550,191 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 	return err
 }
 
+// SetLegChangeHook attaches a leg-change callback to the route
+// group. Called once at construction time (from saveRouteGroupRules)
+// by the dialing side; accept-side route groups are unaffected
+// because they don't run policies.
+func (rg *RouteGroup) SetLegChangeHook(hook LegChangeHook, info DialInfo) {
+	rg.mu.Lock()
+	rg.legChangeHook = hook
+	rg.legChangeInfo = info
+	rg.mu.Unlock()
+}
+
+// SetRotation attaches the rotation hook + apply-add callback +
+// tick interval. Called once at construction time when the
+// policy's decide_route returned a non-zero
+// RotationIntervalSeconds. The actual rotation goroutine starts
+// via startOffServiceLoops; calling SetRotation after that point
+// is racy and unsupported.
+//
+// applyAdd is the router-side callback that dials one more aux
+// forward leg with the policy's ExcludeHops as the disjoint-
+// intermediate filter. It runs in the rotation goroutine's
+// own context so a slow setup-node dial doesn't block other
+// route groups' rotation.
+func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd func(excludeHops []string), interval time.Duration) {
+	rg.mu.Lock()
+	rg.rotationHook = hook
+	rg.rotationApplyAdd = applyAdd
+	rg.rotationInterval = interval
+	rg.mu.Unlock()
+	// Start the rotation goroutine now (startOffServiceLoops fired
+	// during initial setup before SetRotation was called, so the
+	// conditional in startOffServiceLoops saw zero values and didn't
+	// spawn this loop). Safe to call here because the loop checks
+	// the same close channels (rg.closed / rg.remoteClosed) that
+	// startOffServiceLoops' loops do — a Close() racing with
+	// SetRotation just terminates the loop immediately.
+	if interval > 0 && hook != nil {
+		go rg.servicePacketLoop("rotation", interval, rg.rotationServiceFn)
+	}
+}
+
+// snapshotLegs builds a []LegInfo from the current rg.tps. Caller
+// must hold rg.mu. Used by the leg-change fire path to give the
+// policy script a snapshot it can iterate.
+func (rg *RouteGroup) snapshotLegs() []LegInfo {
+	legs := make([]LegInfo, 0, len(rg.tps))
+	for i, tp := range rg.tps {
+		l := LegInfo{Index: i, Alive: false}
+		if tp != nil {
+			l.Kind = string(tp.Entry.Type)
+			l.Alive = !tp.IsClosed()
+			if stats := tp.GetLatencyStats(); stats.Avg > 0 {
+				l.LatencyMs = int(stats.Avg)
+			}
+		}
+		legs = append(legs, l)
+	}
+	return legs
+}
+
+// fireLegChange calls the policy's OnLegChange hook (if any) and
+// applies the returned DistributionConfig. Must NOT be called
+// while holding rg.mu — applyDistribution acquires it.
+//
+// Called from leg-mutation paths: appendForwardLeg, appendRules
+// (added events), and the leg-prune path inside the read loop
+// (dropped events).
+func (rg *RouteGroup) fireLegChange(event string, legIdx int) {
+	hook := rg.legChangeHook
+	info := rg.legChangeInfo
+	if hook == nil {
+		return
+	}
+	rg.mu.Lock()
+	legs := rg.snapshotLegs()
+	rg.mu.Unlock()
+	change := LegChange{Event: event, LegIndex: legIdx}
+	cfg := hook.OnLegChange(info, legs, change)
+	if cfg.Mode == DistributionUnset {
+		return
+	}
+	if rg.logger != nil {
+		rg.logger.
+			WithField("event", event).
+			WithField("leg_index", legIdx).
+			WithField("new_distribution", cfg.Mode.String()).
+			Debug("Routing policy on_leg_change reconfigured distribution.")
+	}
+	rg.applyDistribution(cfg)
+}
+
+// applyDistribution configures the route group's transport
+// selector from a DistributionConfig (typically supplied by a
+// routing-policy script via DialAdjustment.Distribution). No-op
+// when mux is unset or Mode is DistributionUnset.
+//
+// Idempotent — calling with the same config is cheap. Called
+// after establishMuxRoutes so the distribution applies to every
+// leg, including ones added by the mux loop.
+func (rg *RouteGroup) applyDistribution(cfg DistributionConfig) {
+	if cfg.Mode == DistributionUnset {
+		return
+	}
+	if rg.mux == nil || rg.mux.tpSelector == nil {
+		// Policy asked for a distribution but the route group is
+		// single-leg (peer didn't negotiate CapMux, or mux loop
+		// failed). Distribution is meaningless without multiple
+		// legs; log at debug so operators can correlate "I set
+		// a distribution and nothing happened" with the actual
+		// reason.
+		if rg.logger != nil {
+			rg.logger.
+				WithField("distribution", cfg.Mode.String()).
+				Debug("Route group distribution skipped: not mux-enabled (single leg).")
+		}
+		return
+	}
+	var wm WeightMode
+	switch cfg.Mode {
+	case DistributionRoundRobin:
+		wm = WeightModeEqual
+	case DistributionAuto:
+		wm = WeightModeAuto
+	case DistributionWeighted:
+		wm = WeightModeExplicit
+		rg.mux.tpSelector.SetExplicitWeights(cfg.Weights)
+	case DistributionSizeThreshold:
+		wm = WeightModeSizeThreshold
+		rg.mux.tpSelector.SetSizeThreshold(cfg.SizeThreshold)
+	case DistributionSticky5Tuple:
+		wm = WeightModeSticky5Tuple
+	case DistributionLatencyAdaptive:
+		wm = WeightModeLatencyAdaptive
+	case DistributionDSCPPriority:
+		wm = WeightModeDSCPPriority
+		rg.mux.tpSelector.SetDSCPThreshold(cfg.DSCPThreshold)
+	default:
+		return
+	}
+	rg.mu.Lock()
+	rg.mux.tpSelector.SetMode(wm)
+	rg.mux.tpSelector.Rebuild(rg.tps)
+	legs := len(rg.tps)
+	rg.mu.Unlock()
+	// Weighted mode silently substitutes weight=1 for missing
+	// entries when len(weights) < legs and ignores trailing
+	// weights when len(weights) > legs. Surface the mismatch
+	// at warn so operators can correlate "my schedule isn't
+	// what I asked for" with a script/leg-count discrepancy.
+	if rg.logger != nil && cfg.Mode == DistributionWeighted && len(cfg.Weights) != legs {
+		rg.logger.
+			WithField("weights_len", len(cfg.Weights)).
+			WithField("legs", legs).
+			Warn("Routing policy weighted distribution: weight count != leg count. " +
+				"Missing weights default to 1; trailing weights are ignored.")
+	}
+	if rg.logger != nil {
+		entry := rg.logger.
+			WithField("distribution", cfg.Mode.String()).
+			WithField("legs", legs)
+		if cfg.Mode == DistributionWeighted {
+			entry = entry.WithField("weights", cfg.Weights)
+		}
+		if cfg.Mode == DistributionSizeThreshold {
+			entry = entry.WithField("size_threshold", cfg.SizeThreshold)
+		}
+		entry.Debug("Route group distribution applied.")
+	}
+}
+
 // nextTransport selects the next transport/rule pair. When mux is enabled and
 // multiple transports exist, uses latency-weighted selection. Falls back to
 // round-robin when latency data is unavailable, and to index 0 for single
 // transport (legacy behavior).
+//
+// payload is the upcoming packet's payload bytes (or nil for
+// control / retx paths). Used by payload-inspecting modes
+// (size-threshold, sticky:5tuple, latency-adaptive,
+// dscp-priority); other modes ignore it.
+//
 // Returns the leg index (position in rg.tps) so the caller can record
 // per-leg byte counts after a successful write; -1 for the
 // single-transport / legacy path.
 // NOTE: not thread-safe, caller must hold rg.mu.
-func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule, int, error) {
+func (rg *RouteGroup) nextTransport(payload []byte) (*transport.ManagedTransport, routing.Rule, int, error) {
 	if len(rg.tps) == 0 {
 		return nil, nil, -1, ErrNoTransports
 	}
@@ -547,7 +746,7 @@ func (rg *RouteGroup) nextTransport() (*transport.ManagedTransport, routing.Rule
 	}
 
 	if rg.mux != nil && len(rg.tps) > 1 {
-		return rg.mux.selectTransport(rg.tps, rg.fwd)
+		return rg.mux.selectTransport(rg.tps, rg.fwd, payload)
 	}
 
 	if rg.tps[0] == nil {
@@ -645,6 +844,94 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 func (rg *RouteGroup) startOffServiceLoops() {
 	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
+	// Rotation loop is NOT started here — startOffServiceLoops runs
+	// during initial route-group setup, before the router-side
+	// SetRotation call wires the hook + interval. SetRotation spawns
+	// the rotation goroutine itself.
+}
+
+// rotationServiceFn fires the policy's on_tick hook against the
+// current leg snapshot and applies the returned action: drop
+// the listed leg indices, then optionally request one fresh aux
+// leg via the router-supplied applyAdd callback.
+//
+// Drops apply before the add so a "drop oldest + add new" policy
+// produces a clean rotation (one in, one out). The add runs
+// synchronously here — a slow setup-node dial blocks the next
+// tick for THIS route group only (other groups have their own
+// rotation goroutines).
+func (rg *RouteGroup) rotationServiceFn(_ time.Duration) {
+	rg.mu.Lock()
+	hook := rg.rotationHook
+	applyAdd := rg.rotationApplyAdd
+	info := rg.legChangeInfo
+	legs := rg.snapshotLegs()
+	rg.mu.Unlock()
+	if hook == nil {
+		return
+	}
+	action := hook.OnTick(info, legs)
+	if len(action.DropLegs) == 0 && !action.AddLeg {
+		return
+	}
+
+	if len(action.DropLegs) > 0 {
+		rg.dropLegsByIndex(action.DropLegs)
+	}
+
+	if action.AddLeg && applyAdd != nil {
+		applyAdd(action.ExcludeHops)
+	}
+}
+
+// dropLegsByIndex closes the transports at the policy-supplied
+// indices (re-mapped to current live legs) then triggers a prune
+// so the slice compacts and OnLegChange fires. Bounded: never
+// drops the last alive leg — the prune itself enforces that
+// invariant, but we skip the close too so we don't briefly
+// orphan a route group with no transports.
+//
+// Indices come from the policy's view of the leg slice at tick
+// time; the snapshot the policy saw might be stale by the time
+// we mutate (concurrent prune from keep-alive loop), so we treat
+// out-of-range indices as no-ops rather than errors.
+func (rg *RouteGroup) dropLegsByIndex(indices []int) {
+	rg.mu.Lock()
+	aliveCount := 0
+	for _, tp := range rg.tps {
+		if tp != nil && !tp.IsClosed() {
+			aliveCount++
+		}
+	}
+	closed := make([]int, 0, len(indices))
+	for _, idx := range indices {
+		if idx < 0 || idx >= len(rg.tps) {
+			continue
+		}
+		tp := rg.tps[idx]
+		if tp == nil || tp.IsClosed() {
+			continue
+		}
+		if aliveCount <= 1 {
+			// Refuse to drop the last alive leg — pruneDeadTransports
+			// also refuses, but skipping the close avoids the brief
+			// window where the leg is closed but not yet pruned.
+			break
+		}
+		_ = tp.Close() //nolint:errcheck
+		aliveCount--
+		closed = append(closed, idx)
+	}
+	droppedIdx := rg.pruneDeadTransports()
+	rg.mu.Unlock()
+	for _, idx := range droppedIdx {
+		rg.fireLegChange("dropped", idx)
+	}
+	if rg.logger != nil && len(closed) > 0 {
+		rg.logger.
+			WithField("dropped_indices", closed).
+			Debug("Rotation hook dropped legs.")
+	}
 }
 
 func (rg *RouteGroup) sendPing() error {
@@ -741,28 +1028,39 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	}
 
 	// Prune dead transports and rebuild weights
+	var droppedLegs []int
 	if rg.mux != nil {
 		rg.mu.Lock()
-		rg.pruneDeadTransports()
+		droppedLegs = rg.pruneDeadTransports()
 		if len(rg.tps) > 1 {
 			rg.mux.rebuildWeights(rg.tps)
 		}
 		rg.mu.Unlock()
 	}
+	// Fire the policy hook outside the lock so the script can
+	// safely call back into rg methods (the on_leg_change script
+	// returning a new distribution causes applyDistribution which
+	// re-takes rg.mu).
+	for _, idx := range droppedLegs {
+		rg.fireLegChange("dropped", idx)
+	}
 }
 
 // pruneDeadTransports removes closed transports from the mux.
 // Cleans up the corresponding forward/reverse rules from the routing table.
-// Must be called with rg.mu held.
-func (rg *RouteGroup) pruneDeadTransports() {
+// Must be called with rg.mu held. Returns the original indexes
+// of legs that were pruned, so the caller can fire OnLegChange
+// events for them after releasing the lock.
+func (rg *RouteGroup) pruneDeadTransports() []int {
 	if len(rg.tps) <= 1 {
-		return // Don't prune the last transport
+		return nil // Don't prune the last transport
 	}
 
 	aliveTps := make([]*transport.ManagedTransport, 0, len(rg.tps))
 	aliveFwd := make([]routing.Rule, 0, len(rg.fwd))
 	aliveRvs := make([]routing.Rule, 0, len(rg.rvs))
 	var deadRuleIDs []routing.RouteID
+	var droppedIdx []int
 
 	for i, tp := range rg.tps {
 		if tp != nil && !tp.IsClosed() {
@@ -783,11 +1081,12 @@ func (rg *RouteGroup) pruneDeadTransports() {
 			if tp != nil {
 				rg.logger.Infof("Pruning dead mux transport %v", tp.Entry.ID)
 			}
+			droppedIdx = append(droppedIdx, i)
 		}
 	}
 
 	if len(aliveTps) == len(rg.tps) {
-		return // Nothing was pruned
+		return nil // Nothing was pruned
 	}
 
 	// Clean up dead rules from routing table
@@ -800,6 +1099,7 @@ func (rg *RouteGroup) pruneDeadTransports() {
 	rg.rvs = aliveRvs
 
 	rg.logger.Infof("Pruned dead transports: %d alive, %d removed", len(aliveTps), len(deadRuleIDs)/2)
+	return droppedIdx
 }
 
 func (rg *RouteGroup) sendKeepAlive() error {
@@ -1152,7 +1452,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 		}
 
 		rg.mu.Lock()
-		tp, rule, leg, err := rg.nextTransport()
+		tp, rule, leg, err := rg.nextTransport(data)
 		rg.mu.Unlock()
 		if err != nil {
 			return err
@@ -1410,11 +1710,11 @@ func (rg *RouteGroup) isClosed() bool {
 
 func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.ManagedTransport) {
 	rg.mu.Lock()
-	defer rg.mu.Unlock()
 
 	rg.fwd = append(rg.fwd, forward)
 	rg.rvs = append(rg.rvs, reverse)
 	rg.tps = append(rg.tps, tp)
+	newIdx := len(rg.tps) - 1
 
 	// Rebuild transport weights when transports change
 	if rg.mux != nil && len(rg.tps) > 1 {
@@ -1424,6 +1724,67 @@ func (rg *RouteGroup) appendRules(forward, reverse routing.Rule, tp *transport.M
 	if rg.mux != nil {
 		rg.mux.growLegs(len(rg.tps))
 	}
+	// Initial single-leg rg's get their first leg via appendRules
+	// too, but the policy doesn't need on_leg_change to fire for
+	// that — the BeforeDial/SelectRoute knobs already handled it.
+	// Only fire on subsequent appends (mux growth).
+	hookSet := rg.legChangeHook != nil && newIdx > 0
+	rg.mu.Unlock()
+
+	if hookSet {
+		rg.fireLegChange("added", newIdx)
+	}
+}
+
+// appendForwardLeg adds a forward leg (rule + transport) WITHOUT a
+// matching reverse rule. Used by asymmetric mux setups where the
+// ForwardMuxRoutes count exceeds ReverseMuxRoutes — e.g. a workload
+// with bulk upstream but tiny downstream. The reverse-direction
+// rule from the same setup-node call is discarded by the caller
+// (router.appendRouteAsymmetric) so it doesn't leak in the routing
+// table.
+//
+// Mirrors appendRules' tps[]+fwd[] parallel maintenance but leaves
+// rvs[] untouched. Mux weight + per-leg counter bookkeeping treats
+// this as a new forward leg.
+func (rg *RouteGroup) appendForwardLeg(forward routing.Rule, tp *transport.ManagedTransport) {
+	rg.mu.Lock()
+
+	rg.fwd = append(rg.fwd, forward)
+	rg.tps = append(rg.tps, tp)
+	newIdx := len(rg.tps) - 1
+
+	if rg.mux != nil && len(rg.tps) > 1 {
+		rg.mux.rebuildWeights(rg.tps)
+	}
+	if rg.mux != nil {
+		rg.mux.growLegs(len(rg.tps))
+	}
+	hookSet := rg.legChangeHook != nil
+	rg.mu.Unlock()
+
+	if hookSet {
+		rg.fireLegChange("added", newIdx)
+	}
+}
+
+// appendReverseLeg adds a reverse rule WITHOUT a paired forward
+// rule + transport. Used by asymmetric mux setups where
+// ReverseMuxRoutes exceeds ForwardMuxRoutes — the operator's
+// canonical bandwidth-asymmetric case (1 forward + N reverse for
+// download-heavy workloads).
+//
+// rvs[] grows independently of tps[]/fwd[]; the read path is by
+// route-id lookup (not slice-indexed) so this works without further
+// data-plane changes. Per-leg counter slots (mux.legs) are NOT
+// extended here — they are parallel to tps[] and the reverse-only
+// leg doesn't add a forward transport. Per-direction recv-byte
+// attribution for reverse-only legs is a separate refinement.
+func (rg *RouteGroup) appendReverseLeg(reverse routing.Rule) {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	rg.rvs = append(rg.rvs, reverse)
 }
 
 func chanClosed(ch chan struct{}) bool {

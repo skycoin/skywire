@@ -30,6 +30,7 @@ var procKey string
 var useInternal bool
 var useExternal bool
 var lsAppsLive bool
+var startAppRoutingPolicy string
 
 func init() {
 	// cobra.EnableCommandSorting used to be set to false here, which
@@ -67,6 +68,10 @@ func init() {
 	startAppCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startAppCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startAppCmd.MarkFlagsMutuallyExclusive("internal", "external")
+	startAppCmd.Flags().StringVar(&startAppRoutingPolicy, "routing-policy", "",
+		"per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm. "+
+			"Installed before the app starts; backend dispatched by file extension. "+
+			"Pass an empty string or \"none\" to clear a previously-installed override.")
 	lsAppsCmd.Flags().BoolVarP(&lsAppsLive, "live", "L", false,
 		"live-refresh mode (bubbletea TUI, 1s tick); shows app status transitions in place")
 }
@@ -136,6 +141,8 @@ func formatAppList(states []*appserver.AppState) ([]appLsState, string) {
 			status = "running"
 		case appserver.AppStatusErrored:
 			status = "errored"
+		case appserver.AppStatusStarting:
+			status = "starting"
 		}
 		fmt.Fprintf(w, "%s\t%s\t%t\t%s\t%s\n", //nolint:errcheck
 			state.Name, strconv.Itoa(int(state.Port)),
@@ -178,6 +185,17 @@ var startAppCmd = &cobra.Command{
 			launcherMode = "internal"
 		} else if useExternal {
 			launcherMode = "external"
+		}
+
+		// Install the per-app routing policy *before* the app
+		// starts. SetAppRoutingPolicy returns immediately once
+		// the engine is registered, so by the time StartApp
+		// returns, the very first dial the app makes already
+		// runs through the new policy. Passing "" / "none" still
+		// fires — that's how the operator clears a previously-
+		// installed runtime override.
+		if cmd.Flags().Changed("routing-policy") {
+			internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(args[0], startAppRoutingPolicy))
 		}
 
 		internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(args[0], launcherMode))

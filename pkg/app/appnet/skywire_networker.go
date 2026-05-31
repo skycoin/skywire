@@ -114,11 +114,20 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 		opts.AppName = AppNameFromContext(ctx)
 	}
 
-	if directConn, ok := r.tryDirectDial(addr); ok {
-		return &SkywireConn{
-			Conn:     directConn,
-			freePort: freePort,
-		}, nil
+	// Only take the direct shortcut when the caller is fine with a
+	// single 0-hop conn. opts.MinHops > 1 means the caller wants
+	// intermediates (direct is 0 hops); opts.MuxRoutes > 1 means the
+	// caller wants N parallel routes (direct returns one conn).
+	// Without this gate, --routes N / --min-hops K on a skynet
+	// client were silently dropped whenever AppDirectMux had a
+	// transport — see ping-path counterpart #2751.
+	if opts.MinHops <= 1 && opts.MuxRoutes <= 1 {
+		if directConn, ok := r.tryDirectDial(addr, opts.AppName); ok {
+			return &SkywireConn{
+				Conn:     directConn,
+				freePort: freePort,
+			}, nil
+		}
 	}
 
 	conn, err = r.r.DialRoutes(ctx, addr.PubKey, routing.Port(localPort), addr.Port, opts)
@@ -139,12 +148,12 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 // debug level since the fallback is the load-bearing path; we don't
 // want to surface a noisy error every time direct happens not to be
 // available.
-func (r *SkywireNetworker) tryDirectDial(addr Addr) (net.Conn, bool) {
+func (r *SkywireNetworker) tryDirectDial(addr Addr, appName string) (net.Conn, bool) {
 	mux := r.appDirectMux
 	if mux == nil {
 		return nil, false
 	}
-	stream, err := mux.Dial(addr.PubKey)
+	stream, err := mux.Dial(addr.PubKey, appName)
 	if err != nil {
 		r.log.WithField("remote", addr.PubKey.String()).
 			WithError(err).
@@ -373,11 +382,22 @@ func (r *SkywireNetworker) PingContextWithOpts(ctx context.Context, pk cipher.Pu
 		opts = router.DefaultDialOptions()
 	}
 
-	if directConn, ok := r.tryDirectPingDial(addr, opts); ok {
-		return &SkywireConn{
-			Conn:     directConn,
-			freePort: freePort,
-		}, nil
+	// Skip the direct-vstream shortcut when the caller has demanded a
+	// multi-hop path (mux-bw --min-hops 2, etc.). Without this guard
+	// the direct dial sneaks past router.DialRoutes' MinHops
+	// enforcement, defeating the constraint silently. Also note:
+	// the direct path returns a SkywireConn with nrg=nil, which
+	// makes RouteHopDetails() come back empty — so anything that
+	// later inspects the chosen path (mux-bw's MuxRouteEstablished
+	// .Hops field, ping tree's per-row hop list) would see no
+	// hops. Forcing the route-setup path keeps both pieces honest.
+	if opts.MinHops <= 1 {
+		if directConn, ok := r.tryDirectPingDial(addr, opts); ok {
+			return &SkywireConn{
+				Conn:     directConn,
+				freePort: freePort,
+			}, nil
+		}
 	}
 
 	conn, err := r.r.PingRoute(ctx, pk, routing.Port(localPort), addr.Port, opts)
@@ -409,10 +429,14 @@ func (r *SkywireNetworker) tryDirectPingDial(addr Addr, opts *router.DialOptions
 	}
 	var stream *transport.VStream
 	var dialErr error
+	appName := ""
+	if opts != nil {
+		appName = opts.AppName
+	}
 	if opts != nil && opts.TransportID != (uuid.UUID{}) {
 		stream, dialErr = mux.DialByTransportID(addr.PubKey, opts.TransportID)
 	} else {
-		stream, dialErr = mux.Dial(addr.PubKey)
+		stream, dialErr = mux.Dial(addr.PubKey, appName)
 	}
 	if dialErr != nil {
 		r.log.WithField("remote", addr.PubKey.String()).

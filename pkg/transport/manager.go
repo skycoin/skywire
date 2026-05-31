@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -27,11 +28,11 @@ const reconnectPhaseDelay = 10 * time.Second
 const reconnectRemoteTimeout = 3 * time.Second
 const transportReRegisterInterval = 90 * time.Second
 
-// PersistentTransports is a persistent transports description
-type PersistentTransports struct {
-	PK      cipher.PubKey `json:"pk"`
-	NetType types.Type    `json:"type"`
-}
+// PersistentTransports is the wire-format pinning entry. Aliased
+// from pkg/transport/spec so existing callers writing
+// `transport.PersistentTransports{...}` keep compiling, while the
+// canonical (WASM-clean) definition lives in the spec leaf package.
+type PersistentTransports = tspec.PersistentTransports
 
 // ManagerConfig configures a Manager.
 type ManagerConfig struct {
@@ -88,10 +89,6 @@ type Manager struct {
 	// If it returns true, the transport has active routes and must not be torn down.
 	routeChecker   RouteChecker
 	routeCheckerMu sync.RWMutex
-
-	// tpdCache stores the cached transport discovery data for local route calculation
-	tpdCache   []*Entry
-	tpdCacheMu sync.RWMutex
 
 	// tpdLeafPub mirrors register / deregister to the visor's CXO
 	// stats publisher tree (the same tree that already carries
@@ -748,21 +745,6 @@ func (tm *Manager) hasActiveRoutes(tpID uuid.UUID) bool {
 	return rc(tpID)
 }
 
-// SetTPDCache updates the cached TPD data for local route calculation.
-func (tm *Manager) SetTPDCache(entries []*Entry) {
-	tm.tpdCacheMu.Lock()
-	defer tm.tpdCacheMu.Unlock()
-	tm.tpdCache = entries
-	tm.Logger.Debugf("TPD cache updated with %d entries", len(entries))
-}
-
-// GetTPDCache returns the cached TPD data.
-func (tm *Manager) GetTPDCache() []*Entry {
-	tm.tpdCacheMu.RLock()
-	defer tm.tpdCacheMu.RUnlock()
-	return tm.tpdCache
-}
-
 // InitClient initilizes a network client
 func (tm *Manager) InitClient(ctx context.Context, netType types.Type, port int) {
 	client, err := tm.factory.MakeClient(netType, port)
@@ -1016,10 +998,28 @@ var ErrNotFound = errors.New("transport not found")
 var ErrUnknownNetwork = errors.New("unknown network type")
 
 // IsKnownNetwork returns true when netName is a known
-// network type that we are able to operate in
+// network type that we are able to operate in.
+//
+// Wrapper around the lockless helper for external callers. Methods
+// that already hold tm.mx (read or write) MUST call
+// isKnownNetworkLocked directly — calling this exported wrapper
+// from inside a held read lock deadlocks against any pending
+// writer (Go's RWMutex prioritizes pending writers to prevent
+// writer starvation, so a recursive RLock attempt blocks when a
+// writer is waiting). Production case that bit us: GetTransport
+// previously called IsKnownNetwork from inside its own RLock; with
+// cleanupTransports or acceptTransport pending the write lock, the
+// recursive read attempt deadlocked, freezing every subsequent
+// transport operation including ServeRPCClient's redial attempts.
 func (tm *Manager) IsKnownNetwork(netName types.Type) bool {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
+	return tm.isKnownNetworkLocked(netName)
+}
+
+// isKnownNetworkLocked is the lockless variant of IsKnownNetwork.
+// Caller must hold tm.mx (read or write).
+func (tm *Manager) isKnownNetworkLocked(netName types.Type) bool {
 	_, ok := tm.netClients[netName]
 	return ok
 }
@@ -1028,7 +1028,7 @@ func (tm *Manager) IsKnownNetwork(netName types.Type) bool {
 func (tm *Manager) GetTransport(remote cipher.PubKey, netType types.Type) (*ManagedTransport, error) {
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
-	if !tm.IsKnownNetwork(netType) {
+	if !tm.isKnownNetworkLocked(netType) {
 		return nil, ErrUnknownNetwork
 	}
 
