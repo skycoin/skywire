@@ -920,11 +920,16 @@ func buildRouter() *gin.Engine {
 				c.Writer.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			//find all transacion csvs
-			f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
+			// Find all combined transaction CSVs. Anchored to
+			// YYYY-MM-DD_rewardtxn0.csv so the per-pool variants
+			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv) from
+			// PR #2946 are NOT listed here — those are informational
+			// only, not broadcast inputs, and would derail the
+			// distribution flow.
+			f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Slice()
 			if err != nil {
 				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte(`script.FindFiles(wd + /hist/).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice():\n\n` + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
+				c.Writer.Write([]byte("script.FindFiles(wd + /hist/).MatchRegexp(combined rewardtxn0).Slice():\n\n" + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			//and range through the results
@@ -982,7 +987,11 @@ func buildRouter() *gin.Engine {
 				return
 			}
 			c.Writer.Header().Set("Server", "")
-			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint:errcheck,gosec
+			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
+			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
+			// #2946) are excluded — they are informational, not
+			// broadcast inputs.
+			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Basename().Slice() //nolint:errcheck,gosec
 			for _, f1 := range f {
 				g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 				if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
@@ -1010,7 +1019,11 @@ func buildRouter() *gin.Engine {
 			}
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Content-Type", "text/plain")
-			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint:errcheck,gosec
+			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
+			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
+			// #2946) are excluded — they are informational, not
+			// broadcast inputs.
+			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Basename().Slice() //nolint:errcheck,gosec
 			for _, f1 := range f {
 				g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint:errcheck,gosec
 				if g != "" && g != "\n" {
