@@ -471,7 +471,8 @@ func isUnderBase(rawURL, base, suffix string) bool {
 	if len(rawURL) == len(target) {
 		return true
 	}
-	return rawURL[len(target)] == '?'
+	next := rawURL[len(target)]
+	return next == '?' || next == '#'
 }
 
 // queryParam extracts a single query-string value by name. Returns
