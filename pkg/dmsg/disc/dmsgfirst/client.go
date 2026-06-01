@@ -131,6 +131,18 @@ func shouldFallback(err error) bool {
 	if err == nil {
 		return false
 	}
+	// A canceled context is the CALLER giving up — the outer dial was
+	// aborted, a competing transport won, or the peer went away mid-
+	// lookup. It is NOT a dmsg-transport failure of the primary path:
+	// the HTTP fallback would inherit the same dead context and fail
+	// too, so retrying is pointless and the WARN is misleading (it
+	// reads as "dmsg-disc unreachable" when dmsg was fine). Treat it as
+	// authoritative so only genuine transport failures surface. Note:
+	// context.DeadlineExceeded is deliberately NOT included — a real
+	// primary-side timeout should still try HTTP (handled below).
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
 	// Authoritative discovery sentinels — primary's response is the
 	// truth; do not retry on fallback.
 	switch {
