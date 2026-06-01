@@ -244,6 +244,18 @@ type Config struct {
 	// deployments that want to opt out of the ~1KB/min/group wire
 	// cost). Recommended production value: 30s.
 	HeartbeatInterval time.Duration
+
+	// TCPListenAddr selects native-TCP transport instead of dmsg: when
+	// DmsgC is nil and this is set, the session's CXO publisher listens
+	// here over the node's built-in TCP transport (no dmsg/discovery).
+	// Used by the standalone skychat --cxo group mode.
+	TCPListenAddr string
+
+	// PeerAddrs maps a peer PK to its "host:port" for the TCP path
+	// (dmsg resolves PK->addr via discovery; native TCP has none, so the
+	// caller supplies addresses). Consulted by the per-peer dial loop in
+	// TCP mode; ignored under dmsg.
+	PeerAddrs map[cipher.PubKey]string
 }
 
 // Session is one live group as this visor knows it — either as the
@@ -532,9 +544,19 @@ const relayAckReadTimeout = 5 * time.Second
 // publisher's SubscriberAllowlist is set to every member PK in the
 // record. For member role, the subscriber is created attached to a
 // fresh CXO node and waits for Connect to dial the owner.
+// newPublisher builds the session's CXO publisher over the configured
+// transport: DMSG when cfg.DmsgC is set, otherwise the CXO node's
+// native TCP transport on cfg.TCPListenAddr (no dmsg/discovery).
+func (cfg Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, error) {
+	if cfg.DmsgC != nil {
+		return treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, pc)
+	}
+	return treestore.NewWithTCP(cfg.TCPListenAddr, cfg.MySK, pc)
+}
+
 func Open(cfg Config) (*Session, error) {
-	if cfg.DmsgC == nil {
-		return nil, errors.New("group: Open: DmsgC required")
+	if cfg.DmsgC == nil && cfg.TCPListenAddr == "" {
+		return nil, errors.New("group: Open: DmsgC or TCPListenAddr (native-TCP mode) required")
 	}
 	if cfg.Record.ID == "" {
 		return nil, errors.New("group: Open: Record.ID required")
@@ -573,7 +595,7 @@ func Open(cfg Config) (*Session, error) {
 // openOwner brings up a publisher with the member allowlist plus
 // the relay listener that members dial when submitting messages.
 func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
-	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
+	pub, err := cfg.newPublisher(treestore.PubConfig{
 		BatchWindow:         cfg.BatchWindow,
 		Logger:              log,
 		DataDir:             filepath.Join(cfg.DataDir, "group", cfg.Record.ID),
@@ -642,16 +664,22 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
 		s.peerSubs[peerPK] = ps
 	}
-	if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
-		log.WithError(err).WithField("port", relayPort).
-			Warn("group: owner relay dmsg listen failed")
-	} else {
-		s.relayDmsg = dmsgLis
+	// Relay listeners are the owner-centric/visor fallback path; the
+	// federated peerSubs mesh (above) makes them vestigial. They depend
+	// on dmsg + the visor's skynet app context, so skip them entirely in
+	// native-TCP standalone mode (DmsgC == nil).
+	if cfg.DmsgC != nil {
+		if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
+			log.WithError(err).WithField("port", relayPort).
+				Warn("group: owner relay dmsg listen failed")
+		} else {
+			s.relayDmsg = dmsgLis
+			s.relayWG.Add(1)
+			go s.acceptRelayOn(dmsgLis, "dmsg")
+		}
 		s.relayWG.Add(1)
-		go s.acceptRelayOn(dmsgLis, "dmsg")
+		go s.bindRelaySkynet(relayPort)
 	}
-	s.relayWG.Add(1)
-	go s.bindRelaySkynet(relayPort)
 
 	// Heartbeat emission. Publishes a tiny no-op message to the feed
 	// every HeartbeatInterval so members can detect a silently-stalled
@@ -718,7 +746,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	// Record.Port (~1/65535 birthday collision per-pair across
 	// groups). When it does happen, bind fails with a clear "address
 	// in use" error; not silent corruption.
-	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
+	pub, err := cfg.newPublisher(treestore.PubConfig{
 		BatchWindow: cfg.BatchWindow,
 		Logger:      log,
 		DataDir:     filepath.Join(cfg.DataDir, "group", cfg.Record.ID, "member"),
