@@ -533,6 +533,29 @@ func (s *Subscriber) ConnectAndWaitForRoot(ctx context.Context, publisherPK ciph
 	}
 }
 
+// ConnectAndWaitForRootTCP is the native-TCP analog of
+// ConnectAndWaitForRoot: it dials the publisher by address (ConnectTCP,
+// no discovery) and waits until the first Root for this subscriber's
+// feedPK fills, so the caller gets a verified-live subscription rather
+// than just "subscribe frame queued". Used by the group session's
+// per-peer dial loop in TCP mode.
+func (s *Subscriber) ConnectAndWaitForRootTCP(ctx context.Context, address string) error {
+	s.rootObservedMu.Lock()
+	s.rootObservedSignal = make(chan struct{})
+	signal := s.rootObservedSignal
+	s.rootObservedMu.Unlock()
+
+	if err := s.ConnectTCP(ctx, address); err != nil {
+		return err
+	}
+	select {
+	case <-signal:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
 // SetPrefixes restricts which paths surface via Get / Walk / the
 // OnUpdate callback. An empty slice (or nil) means "no filter".
 //
