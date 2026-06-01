@@ -860,7 +860,7 @@ func (ce *Client) reconnectMissing(ctx context.Context) {
 // for deadness detection). With ~6 sessions per visor the traffic is
 // 6 round-trips/min — negligible.
 func (ce *Client) pingSessionsLoop(ctx context.Context) {
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(pingSessionsInterval)
 	defer ticker.Stop()
 
 	// Per-session consecutive-failure counter. Keyed on the session's
@@ -887,6 +887,19 @@ func (ce *Client) pingSessionsLoop(ctx context.Context) {
 // give up on a session and close it. Set to 2 so a single transient
 // hiccup (packet loss, brief server blip) does not kill the session.
 const pingDeadThreshold = 2
+
+// pingSessionsInterval is how often each client pings its server
+// sessions for liveness. A dead / half-open session is only evicted
+// (and then re-dialed by the reconnect loop) after pingDeadThreshold
+// consecutive failures, so worst-case recovery is roughly
+// pingSessionsInterval * pingDeadThreshold. This matters most for
+// services (MinSessions=0, sessions to ALL servers): until a degraded
+// session is evicted, reconnectMissing skips that server (it still has
+// a session entry) and the service keeps advertising it via
+// ConnectedServersPK / /health while forwards through it fail. Kept
+// short (20s → ~40s worst-case recovery) so services don't appear
+// connected to servers they can't actually forward through for minutes.
+const pingSessionsInterval = 20 * time.Second
 
 func (ce *Client) pingSessions(_ context.Context, fails map[*SessionCommon]int) {
 	sessions := ce.allClientSessions(ce.porter)
