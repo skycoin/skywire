@@ -85,6 +85,13 @@ type htmlTemplateData struct {
 	OGImage     string
 	Page        string
 	Content     htmpl.HTML
+	// JSONLD is an optional schema.org structured-data block (already
+	// wrapped in a <script type='application/ld+json'> tag) that gets
+	// emitted in <head> when set. Used on per-date reward pages to
+	// give Google et al a machine-readable Dataset summary
+	// (qualifying visor count, total SKY distributed, country count,
+	// date) so search-result rich snippets can render properly.
+	JSONLD htmpl.HTML
 }
 
 // withCanonical returns a copy of the template data with canonical URL and OG image set
@@ -105,16 +112,24 @@ func chunkedPageHead(title, description, path string) string {
 	h := `<!doctype html><html lang='en'><head>` +
 		`<meta charset='UTF-8'>` +
 		`<meta name='viewport' content='width=device-width, initial-scale=1.0'>` +
+		`<meta name='theme-color' content='#1a1d24'>` +
+		`<meta name='keywords' content='Skycoin, Skywire, rewards, mesh network, transport bandwidth, dmsg, visor'>` +
 		`<title>` + title + ` - Skywire Network</title>` +
 		`<meta name='description' content='` + description + `'>` +
 		`<meta property='og:title' content='` + title + ` - Skywire Network'>` +
 		`<meta property='og:description' content='` + description + `'>` +
-		`<meta property='og:type' content='website'>`
+		`<meta property='og:type' content='website'>` +
+		`<meta property='og:site_name' content='Skywire Network'>` +
+		`<meta name='twitter:card' content='summary_large_image'>` +
+		`<meta name='twitter:title' content='` + title + ` - Skywire Network'>` +
+		`<meta name='twitter:description' content='` + description + `'>`
 	if canonicalDomain != "" {
 		canonical := strings.TrimRight(canonicalDomain, "/") + path
+		ogImage := strings.TrimRight(canonicalDomain, "/") + "/favicon.ico"
 		h += `<link rel='canonical' href='` + canonical + `'>` +
 			`<meta property='og:url' content='` + canonical + `'>` +
-			`<meta property='og:image' content='` + strings.TrimRight(canonicalDomain, "/") + `/favicon.ico'>`
+			`<meta property='og:image' content='` + ogImage + `'>` +
+			`<meta name='twitter:image' content='` + ogImage + `'>`
 	}
 	h += `<style type='text/css'>` +
 		`a { color: #3399FF; } a:visited { color: #FF00FF; } ` +
@@ -209,14 +224,22 @@ var htmlMainPageTemplate = `
 var htmlHeadTemplate = `<head>
 <meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=4.9,'>
+<meta name='theme-color' content='#1a1d24'>
+<meta name='keywords' content='Skycoin, Skywire, rewards, mesh network, transport bandwidth, dmsg, visor'>
 <title>{{.Page.Title}} - Skywire Network</title>
 {{if .Page.Description}}<meta name='description' content='{{.Page.Description}}'>
-<meta property='og:description' content='{{.Page.Description}}'>{{end}}
+<meta property='og:description' content='{{.Page.Description}}'>
+<meta name='twitter:description' content='{{.Page.Description}}'>{{end}}
 <meta property='og:title' content='{{.Page.Title}} - Skywire Network'>
 <meta property='og:type' content='website'>
+<meta property='og:site_name' content='Skywire Network'>
+<meta name='twitter:card' content='summary_large_image'>
+<meta name='twitter:title' content='{{.Page.Title}} - Skywire Network'>
 {{if .Page.Canonical}}<link rel='canonical' href='{{.Page.Canonical}}'>
 <meta property='og:url' content='{{.Page.Canonical}}'>
-<meta property='og:image' content='{{.Page.OGImage}}'>{{end}}
+<meta property='og:image' content='{{.Page.OGImage}}'>
+<meta name='twitter:image' content='{{.Page.OGImage}}'>{{end}}
+{{if .Page.JSONLD}}{{.Page.JSONLD}}{{end}}
 <style type='text/css'>
 a {
 		color: #3399FF;
