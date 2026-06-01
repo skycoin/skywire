@@ -847,6 +847,21 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 // inbound yet". On error, lastInboundNs stays at whatever it was
 // (seeded from Record.LastMessageAt at Open) and the Manager's
 // background reconnect loop keeps retrying.
+// connectSub dials a subscriber over the session's transport and waits
+// for its first Root: native TCP (by the peer's PeerAddrs "host:port")
+// in TCP mode, else dmsg (by PK via discovery). Used by Connect and the
+// reconnect paths for the legacy owner sub and every peerSub.
+func (s *Session) connectSub(ctx context.Context, sub *treestore.Subscriber, pk cipher.PubKey) error {
+	if s.cfg.DmsgC == nil { // native-TCP mode
+		addr := s.cfg.PeerAddrs[pk]
+		if addr == "" {
+			return fmt.Errorf("group: no TCP address configured for peer %s", pk)
+		}
+		return sub.ConnectAndWaitForRootTCP(ctx, addr)
+	}
+	return sub.ConnectAndWaitForRoot(ctx, pk)
+}
+
 func (s *Session) Connect(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -872,7 +887,7 @@ func (s *Session) Connect(ctx context.Context) error {
 	// goroutine that runs to completion before discarding its result.
 	if s.sub != nil {
 		done := make(chan error, 1)
-		go func() { done <- s.sub.ConnectAndWaitForRoot(ctx, s.cfg.Record.OwnerPK) }()
+		go func() { done <- s.connectSub(ctx, s.sub, s.cfg.Record.OwnerPK) }()
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -920,7 +935,7 @@ func (s *Session) Connect(ctx context.Context) error {
 		}
 		done := make(chan error, 1)
 		pkLocal, psLocal := pk, ps
-		go func() { done <- psLocal.ConnectAndWaitForRoot(ctx, pkLocal) }()
+		go func() { done <- s.connectSub(ctx, psLocal, pkLocal) }()
 		select {
 		case <-ctx.Done():
 			// Outer deadline fired mid-Connect. The goroutine will
@@ -1104,7 +1119,7 @@ func (s *Session) ReconnectPeer(ctx context.Context, pk cipher.PubKey) error {
 		return nil
 	}
 	done := make(chan error, 1)
-	go func() { done <- ps.ConnectAndWaitForRoot(ctx, pk) }()
+	go func() { done <- s.connectSub(ctx, ps, pk) }()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -1153,7 +1168,7 @@ func (s *Session) ReconnectLegacySub(ctx context.Context) error {
 		return nil
 	}
 	done := make(chan error, 1)
-	go func() { done <- s.sub.ConnectAndWaitForRoot(ctx, s.cfg.Record.OwnerPK) }()
+	go func() { done <- s.connectSub(ctx, s.sub, s.cfg.Record.OwnerPK) }()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -1392,7 +1407,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 		// in the allowlist doesn't block roster expansion. The retry
 		// loop will pick it up on a later tick with its own deadline.
 		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-		err = ps.ConnectAndWaitForRoot(dctx, pk)
+		err = s.connectSub(dctx, ps, pk)
 		dcancel()
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
@@ -1527,7 +1542,7 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 		// SetAllowlist. A peer that's offline now will be picked up
 		// on the next reconnect tick once the publisher comes back.
 		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-		err = ps.ConnectAndWaitForRoot(dctx, pk)
+		err = s.connectSub(dctx, ps, pk)
 		dcancel()
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
