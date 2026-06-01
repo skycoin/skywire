@@ -64,6 +64,11 @@ nav .dropdown a{display:block;padding:4px 12px;}
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
   </div></details>
   <a href='/login'>login</a>
+  <details><summary>resources</summary><div class='dropdown'>
+    <a title='Browser-based form that builds the apt-get install command' href='https://deb.theskywirenetwork.net/generator/'>install command generator</a>
+    <a title='Skywire APT repository — install via apt-get' href='https://deb.theskywirenetwork.net'>apt repo (deb)</a>
+    <a title='Skywire Network blog' href='https://blog.theskywirenetwork.net'>blog</a>
+  </div></details>
   <details><summary>community</summary><div class='dropdown'>
     <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
     <a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
@@ -161,8 +166,22 @@ func mainPage(c *gin.Context) {
 	mainnetRulesHTML, _ := script.Exec(`skywire cli reward rules -l`).String()              //nolint:errcheck,gosec
 	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String() //nolint:errcheck,gosec
 	htmlPageTemplateData1 := htmlPageTemplateData.withCanonical("/")
+	// Short orientation block above the mainnet-rules dump so first-
+	// time visitors get a value-prop, an install entry point, and a
+	// pointer to the eligibility rules — instead of being dropped
+	// straight into a 200-line rules article. Keep this terse;
+	// detailed rules live below.
+	introHTML := `<div style='border:1px solid #333;padding:10px 14px;margin:8px 0;background:#1a1d24;border-radius:4px;'>` +
+		`<b>Skywire</b> is a decentralized mesh network. Run a visor on any computer (Linux, ARM SBC, Windows, macOS) and earn <b>Skycoin</b> rewards for providing uptime and bandwidth to the network. 816,000 SKY are distributed annually across two reward pools (presence + bandwidth) to all eligible visors.<br><br>` +
+		`<b>Get started:</b> <a href='https://deb.theskywirenetwork.net/generator/'>install command generator</a> &middot; ` +
+		`<a href='https://deb.theskywirenetwork.net'>apt repo</a> &middot; ` +
+		`<a href='/skycoin-rewards'>view reward history</a> &middot; ` +
+		`<a href='https://blog.theskywirenetwork.net'>blog</a> &middot; ` +
+		`<a href='https://t.me/skywire'>community</a><br>` +
+		`<span style='color:#94a3b8;font-size:9pt;'>Full eligibility rules below. Network statistics at <a href='/stats'>/stats</a>.</span>` +
+		`</div>`
 	//nolint:gosec
-	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHTML)
+	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + introHTML + mainnetRulesHTML)
 	tmplData := map[string]interface{}{
 		"Page": htmlPageTemplateData1,
 	}
@@ -206,6 +225,11 @@ var htmlMainPageTemplate = `
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
   </div></details>
   <a href='/login'>login</a>
+  <details><summary>resources</summary><div class='dropdown'>
+    <a title='Browser-based form that builds the apt-get install command' href='https://deb.theskywirenetwork.net/generator/'>install command generator</a>
+    <a title='Skywire APT repository — install via apt-get' href='https://deb.theskywirenetwork.net'>apt repo (deb)</a>
+    <a title='Skywire Network blog' href='https://blog.theskywirenetwork.net'>blog</a>
+  </div></details>
   <details><summary>community</summary><div class='dropdown'>
     <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
     <a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
