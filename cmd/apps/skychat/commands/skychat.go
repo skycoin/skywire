@@ -602,6 +602,8 @@ func init() {
 	RootCmd.Flags().BoolVar(&cxoEnable, "cxo", false, "enable CXO-backed messaging over native TCP (no dmsg): publish outbound to your CXO feed, subscribe to --cxo-peer feeds. Works in --standalone.")
 	RootCmd.Flags().StringVar(&cxoListen, "cxo-listen", ":8802", "CXO-TCP listen address for your feed (peers dial this)")
 	RootCmd.Flags().StringSliceVar(&cxoPeers, "cxo-peer", nil, "subscribe to a peer's CXO feed: tcp://<feedpk>@host:port (repeat for many)")
+	RootCmd.Flags().StringVar(&cxoGroup, "cxo-group", "", "enable federated CXO GROUP chat with this group id (over native TCP, roster/signing/gossip); members from --cxo-peer, owner from --cxo-group-owner")
+	RootCmd.Flags().StringVar(&cxoGroupOwner, "cxo-group-owner", "", "group owner PK (your role is owner if it equals your identity, else member)")
 	RootCmd.Flags().BoolVar(&standalone, "standalone", false, "run without a parent visor: skip PROC_CONFIG handshake, disable skynet/dmsg listenLoops, keep --tcp-listen/--tcp-peer + the HTTP control surface. Pair-RPC endpoints become 503 (no visor pair-rpc to relay through). Use this to run a long-lived chat-app that survives visor restarts — reachable via TCP-direct only.")
 }
 
@@ -761,7 +763,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if err := startCXOTCP(ctx); err != nil {
 		appLog("skychat: cxo startup failed: %v — continuing without CXO mode", err)
 	}
-	if !useSkynet && !useDmsg && tcpListen == "" && len(tcpPeers) == 0 && !cxoEnable {
+	if !useSkynet && !useDmsg && tcpListen == "" && len(tcpPeers) == 0 && !cxoEnable && cxoGroup == "" {
 		appLog("Warning: no network types enabled, skychat will not accept connections")
 	}
 
@@ -1047,7 +1049,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		// peer subscribed to our feed receives it. No per-message ack
 		// (CXO is eventual) — success means the leaf was published. This
 		// short-circuits the tcp-direct/skynet/dmsg send path below.
-		if cxoEnable {
+		if cxoEnable || cxoGroup != "" {
 			path, perr := publishCXO(data.Message)
 			if perr != nil {
 				http.Error(w, fmt.Sprintf("cxo publish: %v", perr), http.StatusServiceUnavailable)

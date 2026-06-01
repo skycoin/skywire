@@ -13,25 +13,39 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/skywire/cmd/apps/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
+	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// cxoGroupNominalPort is a non-zero placeholder for group.Record.Port,
+// which is vestigial in native-TCP mode (it drives only the dmsg port +
+// relay offset, both unused on TCP). The session's real listener is
+// --cxo-listen.
+const cxoGroupNominalPort uint16 = 8870
 
 var (
 	cxoEnable bool
 	cxoListen string
 	cxoPeers  []string
 
-	cxoMu   sync.Mutex
-	cxoPub  *treestore.Publisher
-	cxoMyPK cipher.PubKey
-	cxoSubs []*treestore.Subscriber
-	cxoSeq  uint64
+	cxoGroup      string // --cxo-group <id>: enable federated group mode
+	cxoGroupOwner string // --cxo-group-owner <pk>
+
+	cxoMu        sync.Mutex
+	cxoPub       *treestore.Publisher
+	cxoMyPK      cipher.PubKey
+	cxoSubs      []*treestore.Subscriber
+	cxoSeq       uint64
+	cxoGroupSess *group.Session
 )
 
 // startCXOTCP brings up CXO-over-native-TCP messaging when --cxo is set.
@@ -41,6 +55,12 @@ var (
 // identity (feed PK) is resolved exactly like tcp-direct (--sk / env /
 // -c config), so the CXO feed PK equals the chat identity.
 func startCXOTCP(ctx context.Context) error {
+	// Federated group mode (--cxo-group) takes over when set: it uses the
+	// group subsystem (roster / signing / gossip) over the same CXO-TCP
+	// transport instead of the flat per-feed mesh below.
+	if cxoGroup != "" {
+		return startCXOGroup(ctx)
+	}
 	if !cxoEnable {
 		return nil
 	}
@@ -134,8 +154,14 @@ func cxoDialUntilConnected(ctx context.Context, sub *treestore.Subscriber, addr,
 // peer subscribed to our feed receives it. Returns the leaf path used.
 func publishCXO(body string) (string, error) {
 	cxoMu.Lock()
+	sess := cxoGroupSess
 	pub := cxoPub
 	cxoMu.Unlock()
+	// Federated group mode: outbound goes through the group session
+	// (publishes to our own member feed; the group receives via subs).
+	if sess != nil {
+		return "group", sess.Send(body)
+	}
 	if pub == nil {
 		return "", fmt.Errorf("cxo publisher not ready")
 	}
@@ -147,6 +173,83 @@ func publishCXO(body string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// startCXOGroup brings up a federated CXO group over native TCP using
+// the group subsystem (roster, signing, gossip — all transport-agnostic)
+// on the dmsg-free TCP transport. Enabled by --cxo-group <id> with
+// --cxo-group-owner <pk>; members and their addresses come from
+// --cxo-peer (tcp://<pk>@host:port). Outbound /message routes through
+// Session.Send; inbound messages surface on the SSE hub. Everyone is an
+// admin (full-mesh peerSubs) so every member follows every other.
+func startCXOGroup(ctx context.Context) error {
+	pk, sk, source, err := resolveTCPIdentity()
+	if err != nil {
+		return fmt.Errorf("cxo-group: %w", err)
+	}
+	var ownerPK cipher.PubKey
+	if err := ownerPK.Set(cxoGroupOwner); err != nil {
+		return fmt.Errorf("cxo-group: invalid --cxo-group-owner %q: %w", cxoGroupOwner, err)
+	}
+
+	peerAddrs := make(map[cipher.PubKey]string)
+	members := []cipher.PubKey{pk}
+	for _, spec := range cxoPeers {
+		ppk, addr, perr := parseCXOPeer(spec)
+		if perr != nil {
+			appLog("skychat: cxo-group skipping invalid --cxo-peer %q: %v", spec, perr)
+			continue
+		}
+		peerAddrs[ppk] = addr
+		members = append(members, ppk)
+	}
+
+	role := group.RoleMember
+	if pk == ownerPK {
+		role = group.RoleOwner
+	}
+
+	sess, err := group.Open(group.Config{
+		MyPK: pk,
+		MySK: sk,
+		Record: group.Record{
+			ID:      cxoGroup,
+			OwnerPK: ownerPK,
+			Port:    cxoGroupNominalPort,
+			Mode:    group.ModePublic,
+			Members: members,
+			Admins:  members, // full-mesh: every member follows every other
+			Role:    role,
+		},
+		TCPListenAddr: cxoListen,
+		PeerAddrs:     peerAddrs,
+		DataDir:       filepath.Join(os.TempDir(), "skychat-cxo"),
+		Logger:        logging.MustGetLogger("skychat-cxo-group"),
+		BatchWindow:   300 * time.Millisecond,
+	})
+	if err != nil {
+		return fmt.Errorf("cxo-group: open %q: %w", cxoGroup, err)
+	}
+	cxoMu.Lock()
+	cxoGroupSess = sess
+	cxoMyPK = pk
+	cxoMu.Unlock()
+	appLog("skychat: cxo-group %q OPEN as pk=%s role=%s on %s, %d members (identity source: %s)",
+		cxoGroup, pk, role, cxoListen, len(members), source)
+
+	sess.SetMessageHandler(func(_ string, sender cipher.PubKey, msg group.Message) {
+		surfaceCXOInbound(sender.Hex(), msg.Text)
+	})
+	go func() {
+		if cerr := sess.Connect(ctx); cerr != nil {
+			appLog("skychat: cxo-group Connect: %v", cerr)
+		}
+	}()
+	go func() {
+		<-ctx.Done()
+		_ = sess.Close() //nolint:errcheck
+	}()
+	return nil
 }
 
 // surfaceCXOInbound pushes a message received from a subscribed CXO feed
