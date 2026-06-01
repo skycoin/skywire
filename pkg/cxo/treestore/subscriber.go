@@ -121,6 +121,13 @@ type Subscriber struct {
 	// Connect succeeds.
 	publisherPK atomic.Pointer[cipher.PubKey]
 
+	// publisherAddr stores the most recent ConnectTCP target address
+	// (native-TCP mode) so the watchdog re-dials by address rather than
+	// by discovery-resolved PK. When set it takes precedence over
+	// publisherPK in the watchdog. nil until the first ConnectTCP
+	// succeeds.
+	publisherAddr atomic.Pointer[string]
+
 	// reconnectStop, when closed, terminates the watchdog. Created
 	// when Connect is first called; closed by Close. Idempotent
 	// close via reconnectOnce.
@@ -218,6 +225,57 @@ func NewSubscriber(dmsgC *dmsg.Client, feedPK cipher.PubKey, conf SubConfig) (*S
 	return s, nil
 }
 
+// NewSubscriberTCP is the native-TCP analog of NewSubscriber: it
+// creates a Subscriber whose CXO node uses the built-in TCP transport
+// (no dmsg, no discovery). Call ConnectTCP with the publisher's tcp
+// address to attach. The returned Subscriber owns its node; Close
+// releases it.
+//
+// listenAddr is the node's TCP listen address. Subscribe-only flows can
+// pass "" (dial-only): the conn opened by ConnectTCP carries the
+// publisher's Root pushes back, so a listener isn't required. Pass a
+// real "host:port" when this node must also accept inbound (e.g. a pair
+// node that publishes its own feed too).
+func NewSubscriberTCP(listenAddr string, feedPK cipher.PubKey, conf SubConfig) (*Subscriber, error) {
+	if conf.Logger == nil {
+		conf.Logger = logging.MustGetLogger("cxo-treestore-sub")
+	}
+
+	cfg := node.NewConfig()
+	cfg.Config = skyobject.NewConfig()
+	cfg.Config.InMemoryDB = conf.InMemoryDB
+	if conf.DataDir != "" {
+		cfg.Config.DataDir = conf.DataDir
+	}
+	// Native-TCP: keep the TCP listener (NewNode starts it when non-empty;
+	// "" = dial-only), disable UDP / RPC, and do NOT enable dmsg.
+	cfg.TCP.Listen = listenAddr
+	cfg.UDP.Listen = ""
+	cfg.RPC = ""
+
+	cxoNode, err := node.NewNode(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	s := &Subscriber{
+		log:                conf.Logger,
+		cxoNode:            cxoNode,
+		ownsNode:           true,
+		feedPK:             feedPK,
+		cache:              make(map[string][]byte),
+		rootObservedSignal: make(chan struct{}),
+	}
+
+	cxoNode.SwapOnRootFilled(func(_ *node.Node, r *registry.Root) {
+		s.handleRootFilled(r)
+	})
+	cxoNode.SwapOnFillingBreaks(func(_ *node.Node, r *registry.Root, err error) {
+		s.handleFillingBreaks(r, err)
+	})
+	return s, nil
+}
+
 // NewSubscriberOnNode attaches a Subscriber to an existing CXO node.
 // Caller retains ownership of the node — the Subscriber's Close does
 // NOT release it.
@@ -306,6 +364,44 @@ func (s *Subscriber) Connect(ctx context.Context, publisherPK cipher.PubKey) err
 	return nil
 }
 
+// ConnectTCP is the native-TCP analog of Connect: it dials the
+// publisher at the given tcp address over the node's TCP transport and
+// subscribes to feedPK. Unlike Connect — which resolves a publisher PK
+// through dmsg discovery — native TCP has no discovery, so the caller
+// supplies the "host:port". The reconnect watchdog re-dials this same
+// address (stored in publisherAddr) when the feed goes quiet.
+//
+// ctx is accepted for API symmetry with Connect and future cancellable
+// dials; the current node TCP transport dials with its own timeout.
+func (s *Subscriber) ConnectTCP(ctx context.Context, address string) error {
+	_ = ctx
+	tcpT := s.cxoNode.TCP()
+	if tcpT == nil {
+		return node.ErrAlreadyListen
+	}
+	conn, err := tcpT.Connect(address)
+	if err != nil {
+		return err
+	}
+	if err := conn.Subscribe(skycipher.PubKey(s.feedPK)); err != nil {
+		return err
+	}
+
+	// Remember the address for the watchdog (stored as a copy so the
+	// watchdog goroutine doesn't alias a caller-owned variable).
+	addr := address
+	s.publisherAddr.Store(&addr)
+	// Reset the activity clock — a fresh subscribe should not count as
+	// stale; handleRootFilled bumps it on real updates.
+	s.lastUpdateNs.Store(time.Now().UnixNano())
+	// Start the watchdog on the FIRST successful connect only.
+	s.reconnectStartOnce.Do(func() {
+		s.reconnectStop = make(chan struct{})
+		go s.runReconnectWatchdog()
+	})
+	return nil
+}
+
 // runReconnectWatchdog polls for stalled subscriptions and re-Connects
 // when the local subscriber has gone quiet for longer than the
 // threshold. Fix for issue #2713: when a peer restarts, the dmsg
@@ -346,29 +442,43 @@ func (s *Subscriber) runReconnectWatchdogWith(tickEvery, quietThreshold time.Dur
 		if quiet < quietThreshold {
 			continue
 		}
+		// Native-TCP subscriptions re-dial by stored address; dmsg
+		// subscriptions re-Connect by publisher PK. ConnectTCP takes
+		// precedence when an address is set.
+		addrPtr := s.publisherAddr.Load()
 		pkPtr := s.publisherPK.Load()
-		if pkPtr == nil {
+		if addrPtr == nil && pkPtr == nil {
 			continue
 		}
-		// Bounded Connect so a hung dial doesn't wedge the watchdog
+		// Bounded re-Connect so a hung dial doesn't wedge the watchdog
 		// past the next tick. ConnectAndWaitForRoot would be more
-		// thorough (it confirms the new subscription actually
-		// delivers a Root) but here we want a non-blocking refresh —
-		// the next tick will catch a still-quiet feed.
+		// thorough (it confirms the new subscription actually delivers
+		// a Root) but here we want a non-blocking refresh — the next
+		// tick will catch a still-quiet feed.
 		s.reconnectAttempts.Add(1)
 		ctx, cancel := context.WithTimeout(context.Background(), reconnectConnectTimeout)
-		err := s.Connect(ctx, *pkPtr)
+		var (
+			err    error
+			target string
+		)
+		if addrPtr != nil {
+			target = *addrPtr
+			err = s.ConnectTCP(ctx, *addrPtr)
+		} else {
+			target = pkPtr.Hex()[:8]
+			err = s.Connect(ctx, *pkPtr)
+		}
 		cancel()
 		if err != nil {
 			if s.log != nil {
-				s.log.WithError(err).WithField("publisher_pk", pkPtr.Hex()[:8]).
+				s.log.WithError(err).WithField("publisher", target).
 					WithField("quiet_seconds", quiet.Seconds()).
-					Debug("treestore: reconnect-watchdog Connect failed; will retry next tick")
+					Debug("treestore: reconnect-watchdog re-Connect failed; will retry next tick")
 			}
 			continue
 		}
 		if s.log != nil {
-			s.log.WithField("publisher_pk", pkPtr.Hex()[:8]).
+			s.log.WithField("publisher", target).
 				WithField("quiet_seconds", quiet.Seconds()).
 				Info("treestore: reconnect-watchdog re-Connected after quiet period")
 		}
