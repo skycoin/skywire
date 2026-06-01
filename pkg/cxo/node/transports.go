@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	swcipher "github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/node/transport"
 )
 
@@ -29,7 +30,24 @@ func newTCP(n *Node) (t *TCP) {
 
 	t = new(TCP)
 
-	t.TCPFactory = transport.NewTCPFactory()
+	// Encrypt CXO-TCP with the canonical Noise (XX pattern). Use the
+	// node's identity (skycoin SecKey -> skywire cipher via hex; both
+	// are 32-byte keys). A subscribe-only node may have no SecKey set —
+	// fall back to an ephemeral keypair so the XX handshake still
+	// authenticates + encrypts (open feeds accept any subscriber PK).
+	var (
+		lpk swcipher.PubKey
+		lsk swcipher.SecKey
+	)
+	if lsk.Set(n.config.SecKey.Hex()) == nil {
+		if pk, err := lsk.PubKey(); err == nil {
+			lpk = pk
+		}
+	}
+	if lpk.Null() {
+		lpk, lsk = swcipher.GenerateKeyPair()
+	}
+	t.TCPFactory = transport.NewTCPFactory(lpk, lsk)
 
 	t.n = n
 	t.AcceptedCallback = t.acceptConn
