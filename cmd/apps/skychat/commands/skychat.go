@@ -594,11 +594,16 @@ func init() {
 	RootCmd.Flags().DurationVar(&pairPollInterval, "pair-poll-interval", time.Second, "how often skychat drains the visor's pair-message inbox onto the SSE stream")
 
 	// TCP-direct entry points — see tcp_direct.go. Defaults disabled.
-	RootCmd.Flags().StringVar(&tcpListen, "tcp-listen", "", "accept noise-XK on TCP (e.g. ':8800'); requires --tcp-whitelist + an identity (--sk/-c/env). Bidirectional once established.")
+	RootCmd.Flags().StringVar(&tcpListen, "tcp-listen", "", "accept noise-XK on TCP (e.g. ':8800'); needs an identity (--sk/-c/env). --tcp-whitelist optional (empty = open to any authenticated key). Bidirectional once established.")
 	RootCmd.Flags().StringSliceVar(&tcpPeers, "tcp-peer", nil, "persistent outbound TCP-direct peer: tcp://<pk>@host:port (repeat for many). For NAT-side hosts that dial out to public-IP peers.")
-	RootCmd.Flags().StringVar(&tcpWhitelist, "tcp-whitelist", "", "comma-separated peer PKs allowed to connect via --tcp-listen (empty rejects all)")
+	RootCmd.Flags().StringVar(&tcpWhitelist, "tcp-whitelist", "", "comma-separated peer PKs allowed to connect via --tcp-listen (empty = open to any authenticated key, matching skynet/CXO convention)")
 	RootCmd.Flags().StringVar(&tcpSKFlag, "sk", "", "identity SK for TCP-direct (hex). Overrides env + config.")
-	RootCmd.Flags().StringVarP(&tcpConfigPath, "config", "c", "", "path to skywire.json — only the sk field is read, for TCP-direct identity")
+	RootCmd.Flags().StringVarP(&tcpConfigPath, "config", "c", "", "path to skywire.json — only the sk field is read, for TCP-direct / CXO identity")
+	RootCmd.Flags().BoolVar(&cxoEnable, "cxo", false, "enable CXO-backed messaging over native TCP (no dmsg): publish outbound to your CXO feed, subscribe to --cxo-peer feeds. Works in --standalone.")
+	RootCmd.Flags().StringVar(&cxoListen, "cxo-listen", ":8802", "CXO-TCP listen address for your feed (peers dial this)")
+	RootCmd.Flags().StringSliceVar(&cxoPeers, "cxo-peer", nil, "subscribe to a peer's CXO feed: tcp://<feedpk>@host:port (repeat for many)")
+	RootCmd.Flags().StringVar(&cxoGroup, "cxo-group", "", "enable federated CXO GROUP chat with this group id (over native TCP, roster/signing/gossip); members from --cxo-peer, owner from --cxo-group-owner")
+	RootCmd.Flags().StringVar(&cxoGroupOwner, "cxo-group-owner", "", "group owner PK (your role is owner if it equals your identity, else member)")
 	RootCmd.Flags().BoolVar(&standalone, "standalone", false, "run without a parent visor: skip PROC_CONFIG handshake, disable skynet/dmsg listenLoops, keep --tcp-listen/--tcp-peer + the HTTP control surface. Pair-RPC endpoints become 503 (no visor pair-rpc to relay through). Use this to run a long-lived chat-app that survives visor restarts — reachable via TCP-direct only.")
 }
 
@@ -753,7 +758,12 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if err := startTCPDirect(ctx); err != nil {
 		appLog("skychat: tcp-direct startup failed: %v — continuing with dmsg/skynet only", err)
 	}
-	if !useSkynet && !useDmsg && tcpListen == "" && len(tcpPeers) == 0 {
+	// CXO-backed messaging entry point (native TCP, no dmsg). Opt-in via
+	// --cxo; nil-effect when unset. See cxo_tcp.go.
+	if err := startCXOTCP(ctx); err != nil {
+		appLog("skychat: cxo startup failed: %v — continuing without CXO mode", err)
+	}
+	if !useSkynet && !useDmsg && tcpListen == "" && len(tcpPeers) == 0 && !cxoEnable && cxoGroup == "" {
 		appLog("Warning: no network types enabled, skychat will not accept connections")
 	}
 
@@ -1033,6 +1043,35 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			Net:    netType,
 			PubKey: pk,
 			Port:   1,
+		}
+
+		// CXO-backed mode: publish outbound to our own CXO feed; every
+		// peer subscribed to our feed receives it. No per-message ack
+		// (CXO is eventual) — success means the leaf was published. This
+		// short-circuits the tcp-direct/skynet/dmsg send path below.
+		if cxoEnable || cxoGroup != "" {
+			path, perr := publishCXO(data.Message)
+			if perr != nil {
+				http.Error(w, fmt.Sprintf("cxo publish: %v", perr), http.StatusServiceUnavailable)
+				return
+			}
+			cxoMu.Lock()
+			myPK := cxoMyPK
+			cxoMu.Unlock()
+			outMsg, _ := json.Marshal(map[string]interface{}{ //nolint:errcheck
+				"sender":    myPK.Hex(),
+				"recipient": data.Recipient,
+				"message":   data.Message,
+				"network":   "cxo",
+				"dir":       "out",
+				"id":        newEventID(),
+				"len":       len(data.Message),
+				"path":      path,
+			})
+			hub.broadcast(string(outMsg))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true,"network":"cxo"}`)) //nolint:errcheck,gosec
+			return
 		}
 
 		// Self-send detection — log it clearly so the user can tell self
