@@ -1070,7 +1070,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			})
 			hub.broadcast(string(outMsg))
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"ok":true,"network":"cxo"}`))
+			_, _ = w.Write([]byte(`{"ok":true,"network":"cxo"}`)) //nolint:errcheck,gosec
 			return
 		}
 

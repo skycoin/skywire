@@ -57,7 +57,7 @@ func newTCP(n *Node) (t *TCP) {
 	t.MaxPendingAccepts = n.config.MaxPendingConnections
 	t.cs = make(map[string]*Conn)
 
-	return
+	return t
 }
 func (t *TCP) addConn(c *Conn) {
 	t.mx.Lock()
