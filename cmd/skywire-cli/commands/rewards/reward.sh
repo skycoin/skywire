@@ -47,9 +47,9 @@ else
     rm -f "hist/${_wdate}_ut.json.tmp"
 fi
 # Calculate rewards
-skywire cli rewards -b --utfile "hist/${_wdate}_ut.txt" -ed ${_wdate} -p log_backups  |  tee hist/${_wdate}_ineligible.csv
-skywire cli rewards -b --utfile "hist/${_wdate}_ut.txt" -20d ${_wdate} -p log_backups |  tee hist/${_wdate}_shares.csv
-skywire cli rewards -b --utfile "hist/${_wdate}_ut.txt" -10d ${_wdate} -p log_backups | tee hist/${_wdate}_rewardtxn0.csv
-skywire cli rewards -b --utfile "hist/${_wdate}_ut.txt" -12d ${_wdate} -p log_backups |  tee hist/${_wdate}_stats.txt
+skywire cli rewards -b -B 0 --utfile "hist/${_wdate}_ut.txt" -ed ${_wdate} -p log_backups  |  tee hist/${_wdate}_ineligible.csv
+skywire cli rewards -b -B 0 --utfile "hist/${_wdate}_ut.txt" -20d ${_wdate} -p log_backups |  tee hist/${_wdate}_shares.csv
+skywire cli rewards -b -B 0 --utfile "hist/${_wdate}_ut.txt" -10d ${_wdate} -p log_backups | tee hist/${_wdate}_rewardtxn0.csv
+skywire cli rewards -b -B 0 --utfile "hist/${_wdate}_ut.txt" -12d ${_wdate} -p log_backups |  tee hist/${_wdate}_stats.txt
 #return
 exit 0
