@@ -84,7 +84,7 @@ func newNodeFeeds(node *Node) (n *nodeFeeds) {
 	n.addcfq = make(chan connFeed) // add connection to a feed
 	n.delcfq = make(chan connFeed) // del connection from a feed
 
-	n.delcq = make(chan *Conn)
+	n.delcq = make(chan *Conn, 512) // buffered so (*Conn).run exit doesn't block the actor on the rrq path
 
 	n.brorq = make(chan connRoot)
 
