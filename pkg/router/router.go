@@ -412,6 +412,7 @@ type router struct {
 	muxMode            WeightMode       // default weight mode for new mux connections
 	lastRouteCalcTime  time.Duration    // last route calculation time (for local routes)
 	lastRouteCalcMu    sync.Mutex       // protects lastRouteCalcTime
+	tpdCache           *tpdEntryCache   // visor-wide TTL cache for TPD GetTransportByID, see tpd_cache.go
 }
 
 // scopedLog returns a logger augmented with app_name=<n> when the
@@ -481,6 +482,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		done:            make(chan struct{}),
 		trustedVisors:   trustedVisors,
 		routeSetupHooks: routeSetupHooks,
+		tpdCache:        newTPDEntryCache(),
 	}
 
 	go r.rulesGCLoop()

@@ -998,9 +998,25 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 				continue
 			}
 		}
-		// TPD fallback — one fetch covers both lookups.
+		// TPD fallback — one fetch covers both lookups, served from
+		// the router's TTL cache when the entry is fresh. The cache
+		// is what keeps --routes N --min-hops K from blowing through
+		// TPD's 30-req/min rate limit on multi-hop dials: each dial
+		// retry pulls 12+ unique TpIDs across candidate paths, and
+		// without caching the bursts trivially exceed budget → 429s
+		// → buildHopLookups returns empty for every hop → downstream
+		// rejectDMSGMultihop / latency-rank can't filter or rank →
+		// the assembled route group never works.
 		if r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil {
-			entry, err := r.tm.Conf.DiscoveryClient.GetTransportByID(ctx, id)
+			fetch := r.tm.Conf.DiscoveryClient.GetTransportByID
+			cache := r.tpdCache
+			var entry *transport.Entry
+			var err error
+			if cache != nil {
+				entry, err = cache.GetOrFetch(ctx, id, fetch)
+			} else {
+				entry, err = fetch(ctx, id)
+			}
 			if err != nil {
 				r.logger.WithError(err).Debugf("buildHopLookups: GetTransportByID failed for %s", id)
 				continue
