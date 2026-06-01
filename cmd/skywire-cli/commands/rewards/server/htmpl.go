@@ -65,6 +65,7 @@ nav .dropdown a{display:block;padding:4px 12px;}
   </div></details>
   <a href='/login'>login</a>
   <details><summary>resources</summary><div class='dropdown'>
+    <a title='Browser-based form that builds the apt-get install command' href='https://deb.theskywirenetwork.net/generator/'>install command generator</a>
     <a title='Skywire APT repository — install via apt-get' href='https://deb.theskywirenetwork.net'>apt repo (deb)</a>
     <a title='Skywire Network blog' href='https://blog.theskywirenetwork.net'>blog</a>
   </div></details>
@@ -157,7 +158,8 @@ func mainPage(c *gin.Context) {
 	// detailed rules live below.
 	introHTML := `<div style='border:1px solid #333;padding:10px 14px;margin:8px 0;background:#1a1d24;border-radius:4px;'>` +
 		`<b>Skywire</b> is a decentralized mesh network. Run a visor on any computer (Linux, ARM SBC, Windows, macOS) and earn <b>Skycoin</b> rewards for providing uptime and bandwidth to the network. 816,000 SKY are distributed annually across two reward pools (presence + bandwidth) to all eligible visors.<br><br>` +
-		`<b>Get started:</b> <a href='https://deb.theskywirenetwork.net'>install via APT</a> &middot; ` +
+		`<b>Get started:</b> <a href='https://deb.theskywirenetwork.net/generator/'>install command generator</a> &middot; ` +
+		`<a href='https://deb.theskywirenetwork.net'>apt repo</a> &middot; ` +
 		`<a href='/skycoin-rewards'>view reward history</a> &middot; ` +
 		`<a href='https://blog.theskywirenetwork.net'>blog</a> &middot; ` +
 		`<a href='https://t.me/skywire'>community</a><br>` +
@@ -209,6 +211,7 @@ var htmlMainPageTemplate = `
   </div></details>
   <a href='/login'>login</a>
   <details><summary>resources</summary><div class='dropdown'>
+    <a title='Browser-based form that builds the apt-get install command' href='https://deb.theskywirenetwork.net/generator/'>install command generator</a>
     <a title='Skywire APT repository — install via apt-get' href='https://deb.theskywirenetwork.net'>apt repo (deb)</a>
     <a title='Skywire Network blog' href='https://blog.theskywirenetwork.net'>blog</a>
   </div></details>

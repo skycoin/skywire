@@ -4,7 +4,7 @@
 
 ```
 skycoin reward system user interface server and skywire network metrics:
- https://fiber.skywire.dev
+ https://theskywirenetwork.net
 ┌─┐┬┌┐ ┌─┐┬─┐
 ├┤ │├┴┐├┤ ├┬┘
 └  ┴└─┘└─┘┴└─run the web application
@@ -26,8 +26,6 @@ skywire cli rewards ui
   -D, --dmsg-disc string           dmsg discovery url (default "http://dmsgd.skywire.skycoin.com")
   -d, --dport uint16               dmsg port to serve (default 80)
   -e, --dsess int                  dmsg sessions (default 1)
-  -O, --ensure-online string       Exit when the specified URL cannot be fetched;
-                                   i.e. https://fiber.skywire.dev
       --health-only                serve only /health endpoint for testing
       --login-chain-flags string   override flags for login chain skycoin daemon subprocess
                                    (default: --block-publisher --localhost-only --download-peerlist=false
