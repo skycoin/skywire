@@ -647,20 +647,35 @@ fetchRoutesAgain:
 		revMinHops = uint16(revEff) //nolint:gosec // bounded by caller; CLI flag values are small
 	}
 
+	// Route count to request per edge: the route-finder defaults to 3
+	// routes, so a mux degree above that would be silently capped and
+	// starve the mux splitter of legs. Ask for the mux degree (+ small
+	// headroom for disjoint-pick overlap) so --forward-mux/--reverse-mux
+	// above 3 actually get enough disjoint routes. Zero mux → 0 →
+	// finder uses its default.
+	fwdNum := findRouteNum(opts.EffectiveMuxRoutes(true))
+	revNum := findRouteNum(opts.EffectiveMuxRoutes(false))
+
 	var paths map[routing.PathEdges][][]routing.Hop
 	if fwdMinHops == revMinHops {
-		// Common path: single query covers both directions.
+		// Common path: single query covers both directions. One count
+		// applies to all PathEdges in the call, so request the larger
+		// of the two directions' mux degrees.
+		num := fwdNum
+		if revNum > num {
+			num = revNum
+		}
 		paths, err = r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward, backward},
-			&rfclient.RouteOptions{MinHops: fwdMinHops, MaxHops: r.conf.MaxHops})
+			&rfclient.RouteOptions{MinHops: fwdMinHops, MaxHops: r.conf.MaxHops, NumRoutes: num})
 	} else {
 		// Asymmetric: two queries with different MinHops per direction.
 		// Merge their results into a single map keyed by PathEdges.
 		var fwdPaths, revPaths map[routing.PathEdges][][]routing.Hop
 		fwdPaths, err = r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{forward},
-			&rfclient.RouteOptions{MinHops: fwdMinHops, MaxHops: r.conf.MaxHops})
+			&rfclient.RouteOptions{MinHops: fwdMinHops, MaxHops: r.conf.MaxHops, NumRoutes: fwdNum})
 		if err == nil {
 			revPaths, err = r.conf.RouteFinder.FindRoutes(ctx, []routing.PathEdges{backward},
-				&rfclient.RouteOptions{MinHops: revMinHops, MaxHops: r.conf.MaxHops})
+				&rfclient.RouteOptions{MinHops: revMinHops, MaxHops: r.conf.MaxHops, NumRoutes: revNum})
 		}
 		if err == nil {
 			paths = make(map[routing.PathEdges][][]routing.Hop, 2)
@@ -958,6 +973,33 @@ func pathLatencyScore(path []routing.Hop, latencyFor func(uuid.UUID) float64) fl
 	return total
 }
 
+// baseRouteCandidates mirrors the route-finder's historical default
+// route count — request at least this many so non-mux dials keep their
+// latency-rank choice. muxRouteHeadroom is the extra routes requested
+// on top of the mux degree so the disjoint-path pick can still reach
+// the target count when some returned candidates share intermediates.
+const (
+	baseRouteCandidates = 3
+	muxRouteHeadroom    = 2
+)
+
+// findRouteNum returns the per-edge route count to request from the
+// route-finder for a dial with the given effective mux degree. Zero
+// (mux off) returns 0, letting the finder apply its own default. A
+// positive mux degree returns mux+headroom, floored at the historical
+// default so we never request fewer candidates than before. The
+// finder clamps the value to its own ceiling.
+func findRouteNum(mux int) uint16 {
+	if mux <= 0 {
+		return 0
+	}
+	n := mux + muxRouteHeadroom
+	if n < baseRouteCandidates {
+		n = baseRouteCandidates
+	}
+	return uint16(n) //nolint:gosec // mux degree is a small CLI-bounded value
+}
+
 // buildHopLookups constructs TpID → avg-latency-ms and TpID →
 // transport-type lookups over the union of TpIDs appearing in fwd
 // and rev path candidates. Sources, in preference order:
@@ -987,8 +1029,11 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 	}
 	latencyCache := make(map[uuid.UUID]float64, len(unique))
 	typeCache := make(map[uuid.UUID]string, len(unique))
+
+	var misses []uuid.UUID
 	for id := range unique {
-		// Local transport first.
+		// Local transport first — constant-time map read, with the
+		// freshest latency stats this visor holds.
 		if r.tm != nil {
 			if tp := r.tm.Transport(id); tp != nil {
 				if stats := tp.GetLatencyStats(); stats.Avg > 0 {
@@ -998,22 +1043,41 @@ func (r *router) buildHopLookups(ctx context.Context, fwd, rev [][]routing.Hop) 
 				continue
 			}
 		}
-		// TPD fallback — one fetch covers both lookups.
-		if r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil {
-			entry, err := r.tm.Conf.DiscoveryClient.GetTransportByID(ctx, id)
-			if err != nil {
-				r.logger.WithError(err).Debugf("buildHopLookups: GetTransportByID failed for %s", id)
-				continue
+		misses = append(misses, id)
+	}
+
+	// Resolve non-local hops (intermediate-to-intermediate) from ONE
+	// cached GetAllTransports snapshot rather than a GetTransportByID
+	// per ID. A multiplexed multi-hop dial touches 12+ unique IDs ×
+	// retries; per-ID fetches blow through TPD's 30-req/min limit, so
+	// every lookup 429s, buildHopLookups degrades to empty latency/
+	// type, and the route group can't rank/filter → never assembles.
+	// The bulk snapshot is a single fetch (cached, see tpd_cache.go),
+	// so the same data costs one round-trip per TTL instead of one
+	// per hop per dial.
+	if len(misses) > 0 && r.tm != nil && r.tm.Conf != nil && r.tm.Conf.DiscoveryClient != nil && r.tpdCache != nil {
+		snap, err := r.tpdCache.snapshot(ctx, r.tm.Conf.DiscoveryClient.GetAllTransports)
+		if err != nil {
+			// snap is non-nil when a prior snapshot was served stale;
+			// only a cold-cache failure yields nil. Either way, log
+			// and proceed — unknown hops degrade gracefully (latency 0,
+			// type "" which rejectDMSGMultihop treats as "not DMSG").
+			r.logger.WithError(err).Debug("buildHopLookups: transport snapshot refresh failed; using local + any stale data")
+		}
+		if snap != nil {
+			for _, id := range misses {
+				entry := snap.byID[id]
+				if entry == nil {
+					continue
+				}
+				if entry.Latency > 0 {
+					latencyCache[id] = entry.Latency
+				}
+				typeCache[id] = string(entry.Type)
 			}
-			if entry == nil {
-				continue
-			}
-			if entry.Latency > 0 {
-				latencyCache[id] = entry.Latency
-			}
-			typeCache[id] = string(entry.Type)
 		}
 	}
+
 	return func(id uuid.UUID) float64 { return latencyCache[id] },
 		func(id uuid.UUID) string { return typeCache[id] }
 }
@@ -1200,12 +1264,27 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		}
 	}
 
-	// Build transport cache from single GetAllTransports() call
-	// This replaces N individual GetTransportsByEdge API calls with one bulk fetch
-	allEntries, err := dc.GetAllTransports(ctx)
-	if err != nil {
-		log.WithError(err).Warn("Failed to fetch all transports for route calculation")
-		return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", err)
+	// Build transport cache from a single GetAllTransports() snapshot,
+	// shared with buildHopLookups via r.tpdCache (5m TTL). This both
+	// replaces N individual GetTransportsByEdge calls with one bulk
+	// fetch AND amortizes that fetch across dials so repeated local
+	// route calculations don't re-pull the whole dataset each time.
+	var allEntries []*transport.Entry
+	if r.tpdCache != nil {
+		snap, serr := r.tpdCache.snapshot(ctx, dc.GetAllTransports)
+		if snap == nil {
+			// Cold-cache failure only — a stale snapshot would be
+			// returned non-nil. Nothing to compute routes from.
+			log.WithError(serr).Warn("Failed to fetch all transports for route calculation")
+			return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", serr)
+		}
+		allEntries = snap.entries
+	} else {
+		allEntries, err = dc.GetAllTransports(ctx)
+		if err != nil {
+			log.WithError(err).Warn("Failed to fetch all transports for route calculation")
+			return nil, nil, fmt.Errorf("failed to fetch transport discovery data: %w", err)
+		}
 	}
 
 	// Build lookup map: pubkey -> transports involving that pubkey.
