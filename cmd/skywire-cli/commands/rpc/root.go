@@ -456,15 +456,22 @@ func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
 	return "", "", false
 }
 
-// isUnderBase reports whether rawURL begins with `base + suffix`.
-// Empty bases never match — keeps deployment configs without a DMSG
-// equivalent from accidentally aliasing onto every URL.
+// isUnderBase reports whether rawURL matches `base + suffix` exactly
+// or with a query string. A trailing sub-path (e.g. /per-key-stats on
+// top of /all-transports) is a different endpoint and must not match.
+// Empty bases never match.
 func isUnderBase(rawURL, base, suffix string) bool {
 	if base == "" {
 		return false
 	}
 	target := base + suffix
-	return len(rawURL) >= len(target) && rawURL[:len(target)] == target
+	if len(rawURL) < len(target) || rawURL[:len(target)] != target {
+		return false
+	}
+	if len(rawURL) == len(target) {
+		return true
+	}
+	return rawURL[len(target)] == '?'
 }
 
 // queryParam extracts a single query-string value by name. Returns
