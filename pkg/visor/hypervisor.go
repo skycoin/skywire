@@ -336,6 +336,10 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 				// Warm-cache: see comment in the dmsg accept path
 				// below — same intent, same one-shot Summary.
 				go hv.warmSummaryCache(peerPK, visorConn.API)
+
+				// Push this hypervisor's own hypervisors so the visor
+				// trusts them transitively (pty + RPC) up the chain.
+				go hv.pushHypervisorWhitelist(visorConn.API)
 				if hv.lanDmsg != nil {
 					discoveryURL := hv.c.LANDmsgServer.PublicDiscoveryURL
 					if discoveryURL == "" {
@@ -399,6 +403,10 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 		// populated as fast as peers redial". Independent of the
 		// LAN DMSG goroutine below — they don't share state.
 		go hv.warmSummaryCache(addr.PK, visorConn.API)
+
+		// Push this hypervisor's own hypervisors so the visor trusts
+		// them transitively (pty + RPC) up the chain.
+		go hv.pushHypervisorWhitelist(visorConn.API)
 
 		// Push LAN DMSG server info to the connected visor
 		if hv.lanDmsg != nil {
@@ -499,6 +507,26 @@ func (hv *Hypervisor) pollAllForCache(ctx context.Context) {
 		}(pk, api)
 	}
 	wg.Wait()
+}
+
+// pushHypervisorWhitelist tells a freshly-connected visor to also
+// trust this hypervisor's OWN configured hypervisors, so a
+// super-hypervisor that manages this hypervisor can reach the visor
+// transitively (pty + RPC) without being listed on the visor itself.
+// No-op when this hypervisor has no hypervisors configured. The
+// caller spawns it in a goroutine; failures are logged at debug and
+// the next reconnect retries.
+func (hv *Hypervisor) pushHypervisorWhitelist(api API) {
+	if api == nil {
+		return
+	}
+	hvPKs := hv.visor.conf.Hypervisors
+	if len(hvPKs) == 0 {
+		return
+	}
+	if err := api.AddPtyWhitelist(hvPKs); err != nil {
+		hv.logger.WithError(err).Debug("Failed to push transitive hypervisor whitelist to visor")
+	}
 }
 
 // warmSummaryCache fires a Summary() RPC against a freshly-accepted

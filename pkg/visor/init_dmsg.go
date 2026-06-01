@@ -640,13 +640,12 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		ptyHandler := ptyUI.Handler(map[string][]string{
 			"update": visorconfig.UpdateCommand(),
 		})
-		ptyWL := []cipher.PubKey{v.conf.PK}
-		ptyWL = append(ptyWL, v.conf.Hypervisors...)
-		if v.conf.Pty.Whitelist != nil {
-			ptyWL = append(ptyWL, v.conf.Pty.Whitelist...)
-		}
-		lsAPI.SetPtyHandler(ptyHandler, ptyWL)
-		logger.WithField("whitelist_size", len(ptyWL)).Info("Mounted /pty on logserver")
+		// Gate /pty on the shared peer whitelist (own PK + hypervisors
+		// + configured pty whitelist, plus any runtime transitive
+		// additions) so the web terminal honors the same live set as
+		// the dmsgpty host.
+		lsAPI.SetPtyHandler(ptyHandler, v.peerWhitelist)
+		logger.Info("Mounted /pty on logserver (gated by shared peer whitelist)")
 	}
 
 	// Mount the website handler for port 80 — rewards UI if configured,
@@ -833,21 +832,13 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	wl := pty.NewMemoryWhitelist()
-
-	// Initialize the dmsgpty whitelist
-	if err := wl.Add(v.conf.Pty.Whitelist...); err != nil {
-		return err
-	}
-
-	// Ensure hypervisors are added to the whitelist.
-	if err := wl.Add(v.conf.Hypervisors...); err != nil {
-		return err
-	}
-	// add the visor's own public key to the whitelist to allow local pty
-	if err := wl.Add(v.conf.PK); err != nil {
-		v.log.Errorf("Cannot add itself to the pty whitelist: %s", err)
-	}
+	// Use the visor's shared peer whitelist as the dmsgpty host's
+	// whitelist. It's seeded with the configured pty whitelist +
+	// hypervisors + the visor's own PK, and is the same reference
+	// dmsgscp and the /pty web terminal consult — so a runtime
+	// transitive addition (a connected hypervisor pushing its own
+	// hypervisors via AddPtyWhitelist) reaches all of them at once.
+	wl := v.peerWhitelist
 
 	dmsgC := v.dmsgC
 	if dmsgC == nil {
