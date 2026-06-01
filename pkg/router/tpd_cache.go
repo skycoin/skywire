@@ -46,19 +46,19 @@ import (
 // results. Concurrent-safe via sync.RWMutex (lookups are read-heavy
 // + bursty; cache fill is the only writer per ID).
 type tpdEntryCache struct {
-	mu          sync.RWMutex
-	entries     map[uuid.UUID]tpdCacheEntry
-	posTTL      time.Duration
-	negTTL      time.Duration
-	clock       func() time.Time // injectable for tests
+	mu      sync.RWMutex
+	entries map[uuid.UUID]tpdCacheEntry
+	posTTL  time.Duration
+	negTTL  time.Duration
+	clock   func() time.Time // injectable for tests
 }
 
 // tpdCacheEntry is one cached lookup result. When entry is nil
 // the lookup failed (rate-limited or 404); the negative TTL
 // suppresses retries until expiry.
 type tpdCacheEntry struct {
-	entry    *transport.Entry // nil ⇒ negative cache
-	expires  time.Time
+	entry   *transport.Entry // nil ⇒ negative cache
+	expires time.Time
 }
 
 // defaultTPDCachePosTTL is the lifetime of a cached successful
