@@ -81,15 +81,15 @@ func startCXOTCP(ctx context.Context) error {
 				surfaceCXOInbound(fpk, string(ev.Value))
 			}
 		})
-		if cerr := sub.ConnectTCP(ctx, addr); cerr != nil {
-			// Non-fatal: the reconnect watchdog retries by address.
-			appLog("skychat: cxo ConnectTCP %s (%s) failed (watchdog will retry): %v", addr, fpk, cerr)
-		} else {
-			appLog("skychat: cxo subscribed to feed %s via %s", fpk, addr)
-		}
 		cxoMu.Lock()
 		cxoSubs = append(cxoSubs, sub)
 		cxoMu.Unlock()
+		// Retry the initial dial until it connects — the peer may not be
+		// listening yet at startup. ConnectTCP arms the reconnect
+		// watchdog only after a first success, so a failed initial dial
+		// would otherwise never retry; the watchdog handles re-connects
+		// once we are connected.
+		go cxoDialUntilConnected(ctx, sub, addr, fpk)
 	}
 
 	go func() {
@@ -104,6 +104,30 @@ func startCXOTCP(ctx context.Context) error {
 		}
 	}()
 	return nil
+}
+
+// cxoDialUntilConnected retries Subscriber.ConnectTCP with capped
+// exponential backoff until the first successful connect (the peer may
+// not be listening yet at startup). After success the subscriber's
+// reconnect watchdog takes over, so this returns.
+func cxoDialUntilConnected(ctx context.Context, sub *treestore.Subscriber, addr, fpk string) {
+	backoff := time.Second
+	for {
+		err := sub.ConnectTCP(ctx, addr)
+		if err == nil {
+			appLog("skychat: cxo subscribed to feed %s via %s", fpk, addr)
+			return
+		}
+		appLog("skychat: cxo dial %s (%s) failed, retry in %s: %v", addr, fpk, backoff, err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(backoff):
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
+	}
 }
 
 // publishCXO publishes a chat message body to our own CXO feed. Every
