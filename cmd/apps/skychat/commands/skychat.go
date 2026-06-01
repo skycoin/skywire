@@ -594,9 +594,9 @@ func init() {
 	RootCmd.Flags().DurationVar(&pairPollInterval, "pair-poll-interval", time.Second, "how often skychat drains the visor's pair-message inbox onto the SSE stream")
 
 	// TCP-direct entry points — see tcp_direct.go. Defaults disabled.
-	RootCmd.Flags().StringVar(&tcpListen, "tcp-listen", "", "accept noise-XK on TCP (e.g. ':8800'); requires --tcp-whitelist + an identity (--sk/-c/env). Bidirectional once established.")
+	RootCmd.Flags().StringVar(&tcpListen, "tcp-listen", "", "accept noise-XK on TCP (e.g. ':8800'); needs an identity (--sk/-c/env). --tcp-whitelist optional (empty = open to any authenticated key). Bidirectional once established.")
 	RootCmd.Flags().StringSliceVar(&tcpPeers, "tcp-peer", nil, "persistent outbound TCP-direct peer: tcp://<pk>@host:port (repeat for many). For NAT-side hosts that dial out to public-IP peers.")
-	RootCmd.Flags().StringVar(&tcpWhitelist, "tcp-whitelist", "", "comma-separated peer PKs allowed to connect via --tcp-listen (empty rejects all)")
+	RootCmd.Flags().StringVar(&tcpWhitelist, "tcp-whitelist", "", "comma-separated peer PKs allowed to connect via --tcp-listen (empty = open to any authenticated key, matching skynet/CXO convention)")
 	RootCmd.Flags().StringVar(&tcpSKFlag, "sk", "", "identity SK for TCP-direct (hex). Overrides env + config.")
 	RootCmd.Flags().StringVarP(&tcpConfigPath, "config", "c", "", "path to skywire.json — only the sk field is read, for TCP-direct / CXO identity")
 	RootCmd.Flags().BoolVar(&cxoEnable, "cxo", false, "enable CXO-backed messaging over native TCP (no dmsg): publish outbound to your CXO feed, subscribe to --cxo-peer feeds. Works in --standalone.")
