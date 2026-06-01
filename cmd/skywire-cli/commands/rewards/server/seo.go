@@ -50,14 +50,17 @@ func parseRewardStats(wd, date string) rewardStats {
 	// Single-line scalar extractors. Use FIRST match for fields that
 	// appear multiple times (qualifying visors appears once per pool
 	// in bandwidth mode but is the same count by construction).
+	// strconv errors are unreachable: the regex capture groups
+	// guarantee the matched substring parses as the target type
+	// (\d+ → Atoi; \d+\.\d+ → ParseFloat). errcheck-ignored.
 	if m := regexp.MustCompile(`(?m)^qualifying visors:\s*(\d+)`).FindStringSubmatch(body); len(m) == 2 {
-		stats.QualifyingVisors, _ = strconv.Atoi(m[1])
+		stats.QualifyingVisors, _ = strconv.Atoi(m[1]) //nolint:errcheck
 	}
 	if m := regexp.MustCompile(`(?m)^Total Reward Amount.*:\s*([0-9]+\.[0-9]+)`).FindStringSubmatch(body); len(m) == 2 {
-		stats.TotalRewardSKY, _ = strconv.ParseFloat(m[1], 64)
+		stats.TotalRewardSKY, _ = strconv.ParseFloat(m[1], 64) //nolint:errcheck
 	}
 	if m := regexp.MustCompile(`(?m)^Unique IP Addresses:\s*(\d+)`).FindStringSubmatch(body); len(m) == 2 {
-		stats.UniqueIPs, _ = strconv.Atoi(m[1])
+		stats.UniqueIPs, _ = strconv.Atoi(m[1]) //nolint:errcheck
 	}
 	if m := regexp.MustCompile(`(?m)^total network bandwidth:\s*(.+)$`).FindStringSubmatch(body); len(m) == 2 {
 		stats.TotalBandwidth = strings.TrimSpace(m[1])
