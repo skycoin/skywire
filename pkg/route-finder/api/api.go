@@ -21,7 +21,15 @@ import (
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
+// maxNumberOfRoutes is the default per-edge route count when the
+// request doesn't specify RouteOptions.NumRoutes (back-compat with
+// pre-NumRoutes clients).
 const maxNumberOfRoutes = 3
+
+// routesCeiling bounds RouteOptions.NumRoutes so a client can't make
+// the finder collect an unbounded number of routes (BFS work scales
+// with the count). Sized comfortably above any realistic mux degree.
+const routesCeiling = 20
 
 // API represents the api of the route-finder service.
 type API struct {
@@ -111,9 +119,18 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	var minHops, maxHops int
+	numRoutes := maxNumberOfRoutes
 	if grr.Opts != nil {
 		minHops = int(grr.Opts.MinHops)
 		maxHops = int(grr.Opts.MaxHops)
+		// Honor the caller's requested route count (mux degree +
+		// headroom), bounded by routesCeiling. Zero keeps the default.
+		if grr.Opts.NumRoutes > 0 {
+			numRoutes = int(grr.Opts.NumRoutes)
+			if numRoutes > routesCeiling {
+				numRoutes = routesCeiling
+			}
+		}
 	}
 
 	// Limit graph exploration depth to prevent OOM on large networks.
@@ -146,7 +163,7 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		dstPK := edge[1]
 		graph := graphs[srcPK]
 
-		forwardRoutes, err := graph.GetRoute(r.Context(), srcPK, dstPK, minHops, maxHops, maxNumberOfRoutes)
+		forwardRoutes, err := graph.GetRoute(r.Context(), srcPK, dstPK, minHops, maxHops, numRoutes)
 		if err != nil {
 			a.handleError(w, r, http.StatusNotFound, err)
 			return
