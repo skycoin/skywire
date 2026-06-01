@@ -23,7 +23,7 @@ Please join [@SkywirePSA](https://t.me/SkywirePSA) for public service announceme
 
 Reward distribution notifications are on telegram [@skywire_reward](https://t.me/skywire_reward).
 
-Information about reward distribution as well as other metrics for the skywire network can be found at [fiber.skywire.dev](https://fiber.skywire.dev)
+Information about reward distribution as well as other metrics for the skywire network can be found at [theskywirenetwork.net](https://theskywirenetwork.net)
 
 # Reward Pools
 
@@ -441,7 +441,7 @@ Bandwidth data is reported separately by each visor to the transport discovery o
 
 The collected surveys should be visible in the survey index here:
 
-[fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
+[theskywirenetwork.net/log-collection/tree](https://theskywirenetwork.net/log-collection/tree)
 
 An example of one such entry:
 ```
@@ -535,7 +535,7 @@ The system survey ('local/node-info.json') is fetched hourly by the reward syste
 skywire cli log
 ```
 
-The index of the collected files may be viewed at [fiber.skywire.dev/log-collection/tree](https://fiber.skywire.dev/log-collection/tree)
+The index of the collected files may be viewed at [theskywirenetwork.net/log-collection/tree](https://theskywirenetwork.net/log-collection/tree)
 
 Once collected from the nodes, the surveys for those visors which met uptime are checked to verify hardware and other requirements, etc.
 

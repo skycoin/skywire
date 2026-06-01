@@ -898,7 +898,7 @@ func buildRouter() *gin.Engine {
 			c.Writer.Flush()
 		})
 
-		// dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L http://fiber.skywire.dev/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
+		// dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L https://theskywirenetwork.net/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
 		authRoute.POST("/reward", func(c *gin.Context) {
 			//override the behavior of `public fallback` for this endpoint
 			if len(wlkeys) == 0 {
@@ -1777,26 +1777,6 @@ func serveStandalone(r1 *gin.Engine) {
 			log.WithError(err).Error("HTTP server shutdown error")
 		}
 	}()
-
-	if ensureOnlineURL != "" {
-		go func() {
-			var errCount int
-			ticker := time.NewTicker(15 * time.Minute)
-			defer ticker.Stop()
-			for range ticker.C {
-				_, err := script.NewPipe().WithHTTPClient(&http.Client{Timeout: 60 * time.Second}).Get(ensureOnlineURL).AppendFile("/dev/null")
-				if err != nil {
-					errCount++
-					log.WithError(err).Error(fmt.Sprintf("Error fetching %v\nError count: %v", ensureOnlineURL, errCount))
-				} else {
-					errCount = 0
-				}
-				if errCount >= 3 {
-					log.Fatalf("http server %v unreachable after %v tries ; exiting", ensureOnlineURL, errCount)
-				}
-			}
-		}()
-	}
 
 	go func() {
 		err := generateAndCacheJSON()
