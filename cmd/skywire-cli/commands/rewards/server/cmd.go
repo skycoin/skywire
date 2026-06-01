@@ -30,7 +30,6 @@ var (
 	wd                  string
 	wlkeys              []cipher.PubKey
 	webPort             uint
-	ensureOnlineURL     string
 	loginNode           string
 	loginNodeAddr       string // resolved URL of login chain node (set at runtime)
 	loginGenesisAddress string // genesis wallet address for login verification (set at runtime)
@@ -65,7 +64,6 @@ func init() {
 	ServerCmd.Flags().StringVarP(&wd, "wd", "W", wd, "location of dir containing 'log_collection' & reward 'hist' dirs")
 	LoginChainCmd.Flags().StringVarP(&wd, "wd", "W", wd, "working directory for login chain files (login_genesis.json, login_fiber.toml)")
 	ServerCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", deployment.Prod.DmsgDiscovery, "dmsg discovery url")
-	ServerCmd.Flags().StringVarP(&ensureOnlineURL, "ensure-online", "O", scriptExecString("${ENSUREONLINE}"), "Exit when the specified URL cannot be fetched;\ni.e. https://fiber.skywire.dev")
 	if os.Getenv("DMSGHTTP_SK") != "" {
 		sk.Set(os.Getenv("DMSGHTTP_SK")) //nolint:errcheck,gosec
 	}
@@ -84,7 +82,7 @@ func init() {
 var ServerCmd = &cobra.Command{
 	Use:   "ui",
 	Short: "reward system UI server",
-	Long: "skycoin reward system user interface server and skywire network metrics:\n https://fiber.skywire.dev\n" + calvin.AsciiFont("fiber") + func() string {
+	Long: "skycoin reward system user interface server and skywire network metrics:\n https://theskywirenetwork.net\n" + calvin.AsciiFont("fiber") + func() string {
 		if _, err := os.Stat(skyenvfile); err == nil {
 			return `run the web application
 
