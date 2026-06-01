@@ -91,6 +91,10 @@ type API interface {
 	RestartApp(appName string) error
 	SetAutoStart(appName string, autostart bool) error
 	SetAppWhitelist(appName, whitelist string) error
+	// AddPtyWhitelist merges PKs into the visor's shared peer
+	// whitelist (a connected hypervisor pushing its own hypervisors
+	// for transitive pty + RPC trust).
+	AddPtyWhitelist(pks []cipher.PubKey) error
 	SetAppPK(appName string, pk cipher.PubKey) error
 	SetAppSecure(appName string, isSecure bool) error
 	SetAppAddress(appName string, address string) error

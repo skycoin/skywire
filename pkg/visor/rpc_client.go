@@ -457,6 +457,11 @@ func (rc *rpcClient) SetAppWhitelist(appName, whitelist string) error {
 	}, &struct{}{})
 }
 
+// AddPtyWhitelist calls AddPtyWhitelist.
+func (rc *rpcClient) AddPtyWhitelist(pks []cipher.PubKey) error {
+	return rc.Call("AddPtyWhitelist", &AddPtyWhitelistIn{PKs: pks}, &struct{}{})
+}
+
 // SetAppPK calls SetAppPK.
 func (rc *rpcClient) SetAppPK(appName string, pk cipher.PubKey) error {
 	return rc.Call("SetAppPK", &SetAppPKIn{
