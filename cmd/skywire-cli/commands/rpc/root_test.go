@@ -16,14 +16,14 @@ func TestIsUnderBase(t *testing.T) {
 		url  string
 		want bool
 	}{
-		{base + suffix, true},                            // exact
-		{base + suffix + "?selfTransports=true", true},   // query
-		{base + suffix + "#frag", true},                  // fragment
-		{base + suffix + "/per-key-stats", false},        // sub-path — the bug
-		{base + suffix + "/stats", false},                // sub-path — sibling
-		{base + suffix + "extra", false},                 // no boundary char
-		{base + "/other", false},                         // unrelated path
-		{"", false},                                      // empty
+		{base + suffix, true},                          // exact
+		{base + suffix + "?selfTransports=true", true}, // query
+		{base + suffix + "#frag", true},                // fragment
+		{base + suffix + "/per-key-stats", false},      // sub-path — the bug
+		{base + suffix + "/stats", false},              // sub-path — sibling
+		{base + suffix + "extra", false},               // no boundary char
+		{base + "/other", false},                       // unrelated path
+		{"", false},                                    // empty
 	}
 	for _, c := range cases {
 		if got := isUnderBase(c.url, base, suffix); got != c.want {
