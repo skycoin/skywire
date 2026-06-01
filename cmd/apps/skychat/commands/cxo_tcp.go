@@ -223,7 +223,7 @@ func startCXOGroup(ctx context.Context) error {
 		},
 		TCPListenAddr: cxoListen,
 		PeerAddrs:     peerAddrs,
-		DataDir:       filepath.Join(os.TempDir(), "skychat-cxo"),
+		DataDir:       filepath.Join(os.TempDir(), "skychat-cxo-data"),
 		Logger:        logging.MustGetLogger("skychat-cxo-group"),
 		BatchWindow:   300 * time.Millisecond,
 	})
