@@ -27,6 +27,14 @@ var ErrTransportNotFound = errors.New("transport not found")
 type RouteOptions struct {
 	MinHops uint16
 	MaxHops uint16
+	// NumRoutes is the desired number of distinct routes per edge the
+	// finder should return. Zero means "use the service default"
+	// (maxNumberOfRoutes). Callers requesting a multiplexed dial set
+	// this to the mux degree (+ headroom) so the finder returns enough
+	// disjoint legs instead of the hard-coded default — without it the
+	// finder caps at 3 routes and any --forward-mux/--reverse-mux above
+	// that silently degrades. See router.findRouteOptions.
+	NumRoutes uint16
 }
 
 // FindRoutesRequest parses json body for /routes endpoint request
