@@ -419,6 +419,11 @@ func (mc *mockRPCClient) SetAppWhitelist(string, string) error {
 	})
 }
 
+// AddPtyWhitelist implements API.
+func (mc *mockRPCClient) AddPtyWhitelist([]cipher.PubKey) error {
+	return nil
+}
+
 // SetAppNetworkInterface implements API.
 func (mc *mockRPCClient) SetAppNetworkInterface(string, string) error {
 	return mc.do(true, func() error {

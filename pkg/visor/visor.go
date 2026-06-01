@@ -150,6 +150,12 @@ type Visor struct {
 	isTransportabilityHealthy *internalHealthInfo
 	remoteVisors              map[cipher.PubKey]Conn // remote hypervisors the visor is attempting to connect to
 	connectedHypervisors      map[cipher.PubKey]bool // remote hypervisors the visor is currently connected to
+	// peerWhitelist is the shared "who may manage this visor" set
+	// consulted live by every management surface (dmsgpty, dmsgscp,
+	// /pty web terminal, transport-RPC / dmsg-gRPC / dmsg visor-RPC).
+	// Seeded from config; extended at runtime when a connected
+	// hypervisor pushes its own hypervisors. See peer_whitelist.go.
+	peerWhitelist pty.Whitelist
 	// hypervisorCancels holds the per-hypervisor context.CancelFunc
 	// installed by AddHypervisor, keyed by the remote hypervisor PK.
 	// RemoveHypervisor looks up the cancel func and invokes it; the
@@ -569,6 +575,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 		isAutoconnectHealthy:      newInternalHealthInfo(),
 		isTransportabilityHealthy: newInternalHealthInfo(),
 		connectedHypervisors:      make(map[cipher.PubKey]bool),
+		peerWhitelist:             newPeerWhitelist(conf),
 		hypervisorCancels:         make(map[cipher.PubKey]context.CancelFunc),
 		allowed: allowedPortsState{
 			ports: make(map[int]bool),

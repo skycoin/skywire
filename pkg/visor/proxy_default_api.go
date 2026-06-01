@@ -253,6 +253,10 @@ func (proxyDefaultAPI) SetAppWhitelist(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) AddPtyWhitelist(_ []cipher.PubKey) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) SetAppPK(_ string, _ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
