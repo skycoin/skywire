@@ -1068,6 +1068,16 @@ func buildRouter() *gin.Engine {
 					filetoserve, err := script.File(wd + `/hist/` + c.Param("date")).Bytes()
 					if err == nil {
 						c.Writer.Header().Set("Content-Type", "text/plain")
+						// Raw CSV / stats / txt downloads are bulk data
+						// artifacts the indexable per-date HTML page
+						// already summarizes. Tell crawlers not to
+						// index the raw-file URLs themselves so they
+						// don't dilute the indexable surface (we want
+						// /skycoin-rewards/hist/<date> to be THE result
+						// for "skycoin rewards <date>", not a dozen
+						// .csv siblings). `follow` keeps any links
+						// inside the file (typically none) crawlable.
+						c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
 						c.Writer.WriteHeader(http.StatusOK)
 						c.Writer.Flush()
 						_, _ = c.Writer.Write(filetoserve) //nolint:errcheck,gosec
@@ -1094,6 +1104,7 @@ func buildRouter() *gin.Engine {
 						toserve += fmt.Sprintf("%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(reason, "\n"), "\r"), ","))
 					}
 					c.Writer.Header().Set("Content-Type", "text/plain")
+					c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
 					c.Writer.WriteHeader(http.StatusOK)
 					c.Writer.Flush()
 					c.Writer.Write([]byte(toserve)) //nolint:errcheck,gosec
@@ -1137,6 +1148,7 @@ func buildRouter() *gin.Engine {
 						toserve += fmt.Sprintf("%s%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(share, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(sky, "\n"), "\r"), ","))
 					}
 					c.Writer.Header().Set("Content-Type", "text/plain")
+					c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
 					c.Writer.WriteHeader(http.StatusOK)
 					c.Writer.Flush()
 					c.Writer.Write([]byte(toserve)) //nolint:errcheck,gosec
@@ -1352,10 +1364,23 @@ func buildRouter() *gin.Engine {
 				fmt.Println("Error parsing Front Page template:", err1)
 			}
 			tmpl := tmpl0
+			// Build SEO-rich Title + Description + JSON-LD from the
+			// freshly-rendered stats file. Crawlers index per-date
+			// pages much better when the description carries the
+			// actual reward totals + visor count + country count
+			// instead of a templated stub, and the JSON-LD Dataset
+			// block gives Google a clean rich-snippet target.
+			stats := parseRewardStats(wd, c.Param("date"))
+			pageDescription := stats.description(c.Param("date"))
+			pageTitle := stats.title(c.Param("date"))
+			pageCanonical := strings.TrimRight(canonicalDomain, "/") + "/skycoin-rewards/hist/" + c.Param("date")
+			jsonLD := stats.jsonLD(pageCanonical, c.Param("date"))
+
 			htmlPageTemplateData1 := (htmlTemplateData{
-				Title:       "Skycoin Rewards " + c.Param("date"),
-				Description: "Skycoin reward calculation details for " + c.Param("date") + " on the Skywire Network.",
-				Content:     htmpl.HTML(l), //nolint:gosec
+				Title:       pageTitle,
+				Description: pageDescription,
+				Content:     htmpl.HTML(l),      //nolint:gosec
+				JSONLD:      htmpl.HTML(jsonLD), //nolint:gosec
 			}).withCanonical("/skycoin-rewards/hist/" + c.Param("date"))
 			tmplData := map[string]interface{}{
 				"Page": htmlPageTemplateData1,
