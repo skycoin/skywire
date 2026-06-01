@@ -193,7 +193,7 @@ func (c *fallbackClient) Entry(ctx context.Context, pk cipher.PubKey) (*disc.Ent
 	if e, err := c.primary.Entry(ctx, pk); !shouldFallback(err) {
 		return e, err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc Entry: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc Entry: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.Entry(ctx, pk)
 }
@@ -205,7 +205,7 @@ func (c *fallbackClient) PostEntry(ctx context.Context, entry *disc.Entry) error
 	if err := c.primary.PostEntry(ctx, entry); !shouldFallback(err) {
 		return err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc PostEntry: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc PostEntry: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.PostEntry(ctx, entry)
 }
@@ -217,7 +217,7 @@ func (c *fallbackClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *
 	if err := c.primary.PutEntry(ctx, sk, entry); !shouldFallback(err) {
 		return err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc PutEntry: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc PutEntry: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.PutEntry(ctx, sk, entry)
 }
@@ -229,7 +229,7 @@ func (c *fallbackClient) DelEntry(ctx context.Context, entry *disc.Entry) error 
 	if err := c.primary.DelEntry(ctx, entry); !shouldFallback(err) {
 		return err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc DelEntry: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc DelEntry: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.DelEntry(ctx, entry)
 }
@@ -241,7 +241,7 @@ func (c *fallbackClient) AvailableServers(ctx context.Context) ([]*disc.Entry, e
 	if v, err := c.primary.AvailableServers(ctx); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc AvailableServers: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc AvailableServers: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.AvailableServers(ctx)
 }
@@ -253,7 +253,7 @@ func (c *fallbackClient) AllServers(ctx context.Context) ([]*disc.Entry, error) 
 	if v, err := c.primary.AllServers(ctx); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc AllServers: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc AllServers: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.AllServers(ctx)
 }
@@ -265,7 +265,7 @@ func (c *fallbackClient) AllEntries(ctx context.Context) ([]string, error) {
 	if v, err := c.primary.AllEntries(ctx); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc AllEntries: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc AllEntries: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.AllEntries(ctx)
 }
@@ -277,7 +277,7 @@ func (c *fallbackClient) AllClientsByServer(ctx context.Context) (map[string][]*
 	if v, err := c.primary.AllClientsByServer(ctx); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc AllClientsByServer: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc AllClientsByServer: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.AllClientsByServer(ctx)
 }
@@ -289,7 +289,7 @@ func (c *fallbackClient) ClientsByServer(ctx context.Context, serverPK cipher.Pu
 	if v, err := c.primary.ClientsByServer(ctx, serverPK); !shouldFallback(err) {
 		return v, err
 	} else { //nolint:revive
-		c.log.WithError(err).Debug("disc ClientsByServer: DMSG primary failed; trying HTTP fallback")
+		c.log.WithError(err).Warn("disc ClientsByServer: DMSG primary failed; trying HTTP fallback")
 	}
 	return c.fallback.ClientsByServer(ctx, serverPK)
 }
