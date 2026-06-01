@@ -50,6 +50,7 @@ var (
 	requireTransports     bool
 	transportHistPath     string
 	requireBandwidth      bool
+	noBWPool              bool
 	minBWThreshold        uint64
 	saturationExponent    float64
 	bwSaturationExponent  float64
@@ -520,6 +521,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", true, "require minimum transports (from hist/YYYY-MM-DD_transports.txt)")
 	RootCmd.Flags().StringVarP(&transportHistPath, "tp-hist", "T", "hist", "path to transport history directory")
 	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "require minimum bandwidth (proportional reward based on bandwidth)")
+	RootCmd.Flags().BoolVar(&noBWPool, "no-bw-pool", false, "recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool (requires -b)")
 	RootCmd.Flags().Uint64VarP(&minBWThreshold, "min-bw", "B", defaultMinBandwidth, "minimum bandwidth in bytes to qualify (used with --require-bw)")
 	RootCmd.Flags().Float64VarP(&saturationExponent, "sat-exp", "S", 0.5, "regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal)")
 	RootCmd.Flags().Float64Var(&bwSaturationExponent, "bw-sat-exp", 0.5, "bandwidth saturation exponent applied to pool 2 (1.0=strict bytes-proportional, 0.5=sqrt, 0=all senders equal)")
@@ -669,7 +671,7 @@ Architectures:
 		// pre-v2 behavior so historical rerun stays bit-exact.
 		bandwidthMap := make(map[string]uint64)
 		var bwTransports []TransportBW // populated only for v2
-		if requireBandwidth {
+		if requireBandwidth && !noBWPool {
 			bwFile := fmt.Sprintf("%s/%s_bandwidth.json", transportHistPath, wdate)
 			data, readErr := os.ReadFile(bwFile) //nolint:gosec
 			switch {
@@ -877,9 +879,20 @@ Architectures:
 			// ==================== TWO-POOL MODEL ====================
 			// Pool 1: Presence — equal shares with IP/MAC dedup + regional saturation
 			// Pool 2: Bandwidth — proportional to bandwidth bytes
+			//
+			// With --no-bw-pool, pool 2 is skipped and its budget folds
+			// into pool 1: presence is computed once against 2×dayReward.
+			// This is the recovery lever for days where bw-collect data
+			// is missing or corrupt — IP/MAC dedup and regional
+			// saturation still apply to the full 2-pool budget.
+
+			presenceBudget := dayReward
+			if noBWPool {
+				presenceBudget = 2 * dayReward
+			}
 
 			computePoolShares(nodesInfos1, ipCounts, macCounts)
-			totalPresenceShares := computePoolRewards(nodesInfos1, dayReward)
+			totalPresenceShares := computePoolRewards(nodesInfos1, presenceBudget)
 
 			// Bandwidth pool: add proportional bandwidth reward on top,
 			// dampened by --bw-sat-exp. At exponent 1.0 each visor's
@@ -893,17 +906,19 @@ Architectures:
 			// pool for senders.
 			var totalBWShares float64
 			var bwPoolCount int
-			for _, ni := range nodesInfos1 {
-				if ni.Bandwidth >= minBWThreshold {
-					totalBWShares += math.Pow(float64(ni.Bandwidth), bwSaturationExponent)
-					bwPoolCount++
+			if !noBWPool {
+				for _, ni := range nodesInfos1 {
+					if ni.Bandwidth >= minBWThreshold {
+						totalBWShares += math.Pow(float64(ni.Bandwidth), bwSaturationExponent)
+						bwPoolCount++
+					}
 				}
-			}
-			if totalBWShares > 0 {
-				for i := range nodesInfos1 {
-					if nodesInfos1[i].Bandwidth >= minBWThreshold {
-						weight := math.Pow(float64(nodesInfos1[i].Bandwidth), bwSaturationExponent)
-						nodesInfos1[i].Reward += weight * dayReward / totalBWShares
+				if totalBWShares > 0 {
+					for i := range nodesInfos1 {
+						if nodesInfos1[i].Bandwidth >= minBWThreshold {
+							weight := math.Pow(float64(nodesInfos1[i].Bandwidth), bwSaturationExponent)
+							nodesInfos1[i].Reward += weight * dayReward / totalBWShares
+						}
 					}
 				}
 			}
@@ -915,31 +930,40 @@ Architectures:
 				fmt.Printf("days in the year: %d\n", daysThisYear)
 				fmt.Printf("this month's rewards: %.6f\n", monthReward)
 				fmt.Printf("reward per pool: %.6f\n", dayReward)
-				fmt.Printf("reward mode: presence + bandwidth\n")
+				if noBWPool {
+					fmt.Printf("reward mode: presence only (bandwidth pool disabled, 2× presence)\n")
+				} else {
+					fmt.Printf("reward mode: presence + bandwidth\n")
+				}
 				fmt.Printf("\n--- Presence Pool (equal shares, IP/MAC dedup) ---\n")
+				fmt.Printf("presence pool budget: %.6f\n", presenceBudget)
 				fmt.Printf("qualifying visors: %d\n", len(nodesInfos1))
 				fmt.Printf("total presence shares: %.6f\n", totalPresenceShares)
 				if totalPresenceShares > 0 {
-					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", dayReward/totalPresenceShares)
+					fmt.Printf("Skycoin Per Share (Pool 1): %.6f\n", presenceBudget/totalPresenceShares)
 				}
-				fmt.Printf("\n--- Bandwidth Pool (sender-pays, weighted bytes^%.2f) ---\n", bwSaturationExponent)
-				fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
-				fmt.Printf("qualifying visors: %d\n", bwPoolCount)
-				var totalBW uint64
-				for _, ni := range nodesInfos1 {
-					if ni.Bandwidth >= minBWThreshold {
-						totalBW += ni.Bandwidth
+				if noBWPool {
+					fmt.Printf("\n--- Bandwidth Pool: DISABLED (budget folded into presence) ---\n")
+				} else {
+					fmt.Printf("\n--- Bandwidth Pool (sender-pays, weighted bytes^%.2f) ---\n", bwSaturationExponent)
+					fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
+					fmt.Printf("qualifying visors: %d\n", bwPoolCount)
+					var totalBW uint64
+					for _, ni := range nodesInfos1 {
+						if ni.Bandwidth >= minBWThreshold {
+							totalBW += ni.Bandwidth
+						}
 					}
-				}
-				fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
-				fmt.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
-				if totalBWShares > 0 && bwSaturationExponent == 1.0 {
-					fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
+					fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
+					fmt.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
+					if totalBWShares > 0 && bwSaturationExponent == 1.0 {
+						fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
+					}
 				}
 				fmt.Printf("\nUnique mac addresses: %d\n", len(macCounts))
 				fmt.Printf("Unique IP Addresses: %d\n", len(ipCounts))
 				fmt.Printf("Unique UUIDs: %d\n", len(uuidCounts))
-				printSaturationStats(nodesInfos1, dayReward, totalPresenceShares)
+				printSaturationStats(nodesInfos1, presenceBudget, totalPresenceShares)
 			}
 
 			if !h1 {
