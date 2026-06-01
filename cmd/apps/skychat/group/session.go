@@ -551,6 +551,14 @@ func (cfg Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, er
 	if cfg.DmsgC != nil {
 		return treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, pc)
 	}
+	// Native-TCP / standalone: use the in-memory CXDS. A live standalone
+	// chat session needs no on-disk persistence (the publisher
+	// republishes from its in-memory tree on restart), and the
+	// disk-backed store on this path failed to establish the feed head —
+	// subscribers got "no such head" and could never fill the Root. The
+	// flat --cxo path uses InMemoryDB and works; match it here. (Bonus:
+	// no DataDir on disk, so no work-dir/binary path collision.)
+	pc.InMemoryDB = true
 	return treestore.NewWithTCP(cfg.TCPListenAddr, cfg.MySK, pc)
 }
 
