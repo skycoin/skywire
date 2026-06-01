@@ -245,6 +245,34 @@ func startCXOGroup(ctx context.Context) error {
 			appLog("skychat: cxo-group Connect: %v", cerr)
 		}
 	}()
+	// group.Session (used here without the group Manager) does not retry a
+	// peer-sub whose INITIAL connect failed — the treestore watchdog only
+	// arms after a first success. Drive reconnects ourselves: periodically
+	// re-attempt every member peer that has never delivered (PeerLastInbound
+	// zero, i.e. never connected). Once a peer connects and its first Root
+	// lands, lastInbound is set and the treestore watchdog takes over
+	// quiet-reconnects, so we stop poking it.
+	go func() {
+		t := time.NewTicker(15 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				for _, ppk := range members {
+					if ppk == pk || !sess.PeerLastInbound(ppk).IsZero() {
+						continue
+					}
+					rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+					if rerr := sess.ReconnectPeer(rctx, ppk); rerr != nil {
+						appLog("skychat: cxo-group reconnect %s: %v", ppk, rerr)
+					}
+					cancel()
+				}
+			}
+		}
+	}()
 	go func() {
 		<-ctx.Done()
 		_ = sess.Close() //nolint:errcheck
