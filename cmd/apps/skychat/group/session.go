@@ -244,6 +244,18 @@ type Config struct {
 	// deployments that want to opt out of the ~1KB/min/group wire
 	// cost). Recommended production value: 30s.
 	HeartbeatInterval time.Duration
+
+	// TCPListenAddr selects native-TCP transport instead of dmsg: when
+	// DmsgC is nil and this is set, the session's CXO publisher listens
+	// here over the node's built-in TCP transport (no dmsg/discovery).
+	// Used by the standalone skychat --cxo group mode.
+	TCPListenAddr string
+
+	// PeerAddrs maps a peer PK to its "host:port" for the TCP path
+	// (dmsg resolves PK->addr via discovery; native TCP has none, so the
+	// caller supplies addresses). Consulted by the per-peer dial loop in
+	// TCP mode; ignored under dmsg.
+	PeerAddrs map[cipher.PubKey]string
 }
 
 // Session is one live group as this visor knows it — either as the
@@ -532,9 +544,27 @@ const relayAckReadTimeout = 5 * time.Second
 // publisher's SubscriberAllowlist is set to every member PK in the
 // record. For member role, the subscriber is created attached to a
 // fresh CXO node and waits for Connect to dial the owner.
+// newPublisher builds the session's CXO publisher over the configured
+// transport: DMSG when cfg.DmsgC is set, otherwise the CXO node's
+// native TCP transport on cfg.TCPListenAddr (no dmsg/discovery).
+func (cfg Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, error) {
+	if cfg.DmsgC != nil {
+		return treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, pc)
+	}
+	// Native-TCP / standalone: use the in-memory CXDS. A live standalone
+	// chat session needs no on-disk persistence (the publisher
+	// republishes from its in-memory tree on restart), and the
+	// disk-backed store on this path failed to establish the feed head —
+	// subscribers got "no such head" and could never fill the Root. The
+	// flat --cxo path uses InMemoryDB and works; match it here. (Bonus:
+	// no DataDir on disk, so no work-dir/binary path collision.)
+	pc.InMemoryDB = true
+	return treestore.NewWithTCP(cfg.TCPListenAddr, cfg.MySK, pc)
+}
+
 func Open(cfg Config) (*Session, error) {
-	if cfg.DmsgC == nil {
-		return nil, errors.New("group: Open: DmsgC required")
+	if cfg.DmsgC == nil && cfg.TCPListenAddr == "" {
+		return nil, errors.New("group: Open: DmsgC or TCPListenAddr (native-TCP mode) required")
 	}
 	if cfg.Record.ID == "" {
 		return nil, errors.New("group: Open: Record.ID required")
@@ -573,7 +603,7 @@ func Open(cfg Config) (*Session, error) {
 // openOwner brings up a publisher with the member allowlist plus
 // the relay listener that members dial when submitting messages.
 func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
-	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
+	pub, err := cfg.newPublisher(treestore.PubConfig{
 		BatchWindow:         cfg.BatchWindow,
 		Logger:              log,
 		DataDir:             filepath.Join(cfg.DataDir, "group", cfg.Record.ID),
@@ -642,16 +672,22 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
 		s.peerSubs[peerPK] = ps
 	}
-	if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
-		log.WithError(err).WithField("port", relayPort).
-			Warn("group: owner relay dmsg listen failed")
-	} else {
-		s.relayDmsg = dmsgLis
+	// Relay listeners are the owner-centric/visor fallback path; the
+	// federated peerSubs mesh (above) makes them vestigial. They depend
+	// on dmsg + the visor's skynet app context, so skip them entirely in
+	// native-TCP standalone mode (DmsgC == nil).
+	if cfg.DmsgC != nil {
+		if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
+			log.WithError(err).WithField("port", relayPort).
+				Warn("group: owner relay dmsg listen failed")
+		} else {
+			s.relayDmsg = dmsgLis
+			s.relayWG.Add(1)
+			go s.acceptRelayOn(dmsgLis, "dmsg")
+		}
 		s.relayWG.Add(1)
-		go s.acceptRelayOn(dmsgLis, "dmsg")
+		go s.bindRelaySkynet(relayPort)
 	}
-	s.relayWG.Add(1)
-	go s.bindRelaySkynet(relayPort)
 
 	// Heartbeat emission. Publishes a tiny no-op message to the feed
 	// every HeartbeatInterval so members can detect a silently-stalled
@@ -718,7 +754,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	// Record.Port (~1/65535 birthday collision per-pair across
 	// groups). When it does happen, bind fails with a clear "address
 	// in use" error; not silent corruption.
-	pub, err := treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, treestore.PubConfig{
+	pub, err := cfg.newPublisher(treestore.PubConfig{
 		BatchWindow: cfg.BatchWindow,
 		Logger:      log,
 		DataDir:     filepath.Join(cfg.DataDir, "group", cfg.Record.ID, "member"),
@@ -819,6 +855,21 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 // inbound yet". On error, lastInboundNs stays at whatever it was
 // (seeded from Record.LastMessageAt at Open) and the Manager's
 // background reconnect loop keeps retrying.
+// connectSub dials a subscriber over the session's transport and waits
+// for its first Root: native TCP (by the peer's PeerAddrs "host:port")
+// in TCP mode, else dmsg (by PK via discovery). Used by Connect and the
+// reconnect paths for the legacy owner sub and every peerSub.
+func (s *Session) connectSub(ctx context.Context, sub *treestore.Subscriber, pk cipher.PubKey) error {
+	if s.cfg.DmsgC == nil { // native-TCP mode
+		addr := s.cfg.PeerAddrs[pk]
+		if addr == "" {
+			return fmt.Errorf("group: no TCP address configured for peer %s", pk)
+		}
+		return sub.ConnectAndWaitForRootTCP(ctx, addr)
+	}
+	return sub.ConnectAndWaitForRoot(ctx, pk)
+}
+
 func (s *Session) Connect(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -844,7 +895,7 @@ func (s *Session) Connect(ctx context.Context) error {
 	// goroutine that runs to completion before discarding its result.
 	if s.sub != nil {
 		done := make(chan error, 1)
-		go func() { done <- s.sub.ConnectAndWaitForRoot(ctx, s.cfg.Record.OwnerPK) }()
+		go func() { done <- s.connectSub(ctx, s.sub, s.cfg.Record.OwnerPK) }()
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -892,7 +943,7 @@ func (s *Session) Connect(ctx context.Context) error {
 		}
 		done := make(chan error, 1)
 		pkLocal, psLocal := pk, ps
-		go func() { done <- psLocal.ConnectAndWaitForRoot(ctx, pkLocal) }()
+		go func() { done <- s.connectSub(ctx, psLocal, pkLocal) }()
 		select {
 		case <-ctx.Done():
 			// Outer deadline fired mid-Connect. The goroutine will
@@ -1076,7 +1127,7 @@ func (s *Session) ReconnectPeer(ctx context.Context, pk cipher.PubKey) error {
 		return nil
 	}
 	done := make(chan error, 1)
-	go func() { done <- ps.ConnectAndWaitForRoot(ctx, pk) }()
+	go func() { done <- s.connectSub(ctx, ps, pk) }()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -1125,7 +1176,7 @@ func (s *Session) ReconnectLegacySub(ctx context.Context) error {
 		return nil
 	}
 	done := make(chan error, 1)
-	go func() { done <- s.sub.ConnectAndWaitForRoot(ctx, s.cfg.Record.OwnerPK) }()
+	go func() { done <- s.connectSub(ctx, s.sub, s.cfg.Record.OwnerPK) }()
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -1364,7 +1415,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 		// in the allowlist doesn't block roster expansion. The retry
 		// loop will pick it up on a later tick with its own deadline.
 		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-		err = ps.ConnectAndWaitForRoot(dctx, pk)
+		err = s.connectSub(dctx, ps, pk)
 		dcancel()
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
@@ -1499,7 +1550,7 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 		// SetAllowlist. A peer that's offline now will be picked up
 		// on the next reconnect tick once the publisher comes back.
 		dctx, dcancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-		err = ps.ConnectAndWaitForRoot(dctx, pk)
+		err = s.connectSub(dctx, ps, pk)
 		dcancel()
 		if err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
