@@ -20,9 +20,12 @@
 //
 // Identity comes from the chat-app's --sk / -c / DMSGCURL_SK
 // resolution chain (skychat.go owns those flags). Whitelist (the
-// chat-app's existing --tcp-whitelist set) gates incoming peers
-// the same way dmsgpty's whitelist does — empty list rejects all,
-// which is fail-safe.
+// chat-app's --tcp-whitelist set) gates incoming peers: a non-empty
+// list restricts to those PKs; an EMPTY list is open (accepts any
+// authenticated peer), matching the skywire convention (skynet
+// Server.useWL, CXO treestore nil-allowlist). Peers are always
+// authenticated by the noise XK handshake — open means unrestricted,
+// not anonymous.
 package commands
 
 import (
@@ -198,18 +201,18 @@ func acceptTCPConn(
 		appLog("skychat: tcp-direct handshake failed from %s: %v", raw.RemoteAddr(), err)
 		return
 	}
-	// Whitelist gate. Empty whitelist = reject all (the chat-app
-	// must be explicitly configured to accept). This matches
-	// dmsgpty's host_tcp.go behavior.
-	if len(whitelist) == 0 {
-		appLog("skychat: tcp-direct rejecting %s: no whitelist configured", rPK)
-		_ = wrapped.Close() //nolint:errcheck
-		return
-	}
-	if _, ok := whitelist[rPK]; !ok {
-		appLog("skychat: tcp-direct rejecting %s: not on whitelist", rPK)
-		_ = wrapped.Close() //nolint:errcheck
-		return
+	// Whitelist gate. Empty whitelist = OPEN: accept any authenticated
+	// peer. Matches the skywire convention (skynet Server.useWL, CXO
+	// treestore nil-allowlist, TPD publishers) where an empty/nil
+	// whitelist means "no restriction". The noise XK handshake still
+	// authenticates each peer's PK, so open means unrestricted, not
+	// anonymous. A non-empty whitelist restricts to the listed PKs.
+	if len(whitelist) > 0 {
+		if _, ok := whitelist[rPK]; !ok {
+			appLog("skychat: tcp-direct rejecting %s: not on whitelist", rPK)
+			_ = wrapped.Close() //nolint:errcheck
+			return
+		}
 	}
 
 	tdc := &tcpDirectConn{Conn: wrapped, rPK: rPK}
@@ -369,7 +372,7 @@ func startTCPDirect(ctx context.Context) error {
 	whitelist := tcpWhitelistSet(tcpWhitelist)
 	if tcpListen != "" {
 		if len(whitelist) == 0 {
-			appLog("skychat: tcp-direct WARNING --tcp-listen set without --tcp-whitelist; will reject all incoming peers")
+			appLog("skychat: tcp-direct OPEN MODE — --tcp-listen set without --tcp-whitelist; accepting ANY authenticated peer key (set --tcp-whitelist to restrict)")
 		}
 		go func() {
 			if err := runTCPListen(ctx, tcpListen, pk, sk, whitelist); err != nil {

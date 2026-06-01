@@ -3,11 +3,20 @@ package transport
 import (
 	"net"
 	"sync"
+
+	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// TCPFactory creates and manages TCP connections.
+// TCPFactory creates and manages TCP connections. Every connection
+// (dial + accept) is Noise_XX-encrypted via wrapNoiseXX using the
+// factory's identity, so CXO-TCP is no longer a plaintext transport.
 type TCPFactory struct {
 	AcceptedCallback func(conn *Connection)
+
+	// localPK / localSK is the node identity used for the Noise XX
+	// handshake on every TCP conn.
+	localPK cipher.PubKey
+	localSK cipher.SecKey
 
 	// MaxPendingAccepts caps in-flight AcceptedCallback invocations.
 	// Zero (default) leaves accepts unbounded for backwards compatibility;
@@ -21,9 +30,10 @@ type TCPFactory struct {
 	sem      chan struct{} // nil when MaxPendingAccepts == 0
 }
 
-// NewTCPFactory creates a new TCPFactory.
-func NewTCPFactory() *TCPFactory {
-	return &TCPFactory{}
+// NewTCPFactory creates a new TCPFactory bound to the given identity,
+// used for the Noise XX handshake on every TCP connection.
+func NewTCPFactory(localPK cipher.PubKey, localSK cipher.SecKey) *TCPFactory {
+	return &TCPFactory{localPK: localPK, localSK: localSK}
 }
 
 // Listen starts listening on the given address for incoming TCP connections.
@@ -56,11 +66,16 @@ func (f *TCPFactory) ListenerAddress() string {
 
 // Connect dials a TCP address and returns a Connection.
 func (f *TCPFactory) Connect(address string) (*Connection, error) {
-	conn, err := net.Dial("tcp", address)
+	raw, err := net.Dial("tcp", address)
 	if err != nil {
 		return nil, err
 	}
-	return newConnection(conn, true), nil
+	nc, err := wrapNoiseXX(raw, f.localPK, f.localSK, true)
+	if err != nil {
+		_ = raw.Close() //nolint:errcheck,gosec
+		return nil, err
+	}
+	return newConnection(nc, true), nil
 }
 
 // Close stops the factory and closes the listener.
@@ -95,9 +110,9 @@ func (f *TCPFactory) acceptLoop(ln net.Listener) {
 			}
 			return
 		}
-		c := newConnection(conn, true)
 		cb := f.AcceptedCallback
 		if cb == nil {
+			conn.Close() //nolint:errcheck,gosec
 			if sem != nil {
 				<-sem
 			}
@@ -109,7 +124,15 @@ func (f *TCPFactory) acceptLoop(ln net.Listener) {
 					<-sem
 				}
 			}()
-			cb(c)
+			// Noise XX handshake runs here (in the accept goroutine, not
+			// the accept loop) so a slow handshake never stalls accepts;
+			// the sem bounds concurrent handshakes.
+			nc, herr := wrapNoiseXX(conn, f.localPK, f.localSK, false)
+			if herr != nil {
+				conn.Close() //nolint:errcheck,gosec
+				return
+			}
+			cb(newConnection(nc, true))
 		}()
 	}
 }
