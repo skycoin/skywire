@@ -141,11 +141,10 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 
 	// Service discovery / deployment
 	addSoloBool("TESTENV", "testenv", autoconfigVals.TestEnv)
-	addSoloBool("DMSGHTTP", "dmsghttp", autoconfigVals.DmsgHTTP)
-	addString("DMSGCONF", "dmsgconf", autoconfigVals.DmsgConf)
 	addArray("SVCCONFADDR", "url", autoconfigVals.URL)
 	addString("SVCCONF", "svcconf", autoconfigVals.SvcConf)
 	addInt("MINDMSGSESS", "minsess", autoconfigVals.MinSess)
+	addInt("MAXTRANSPORTS", "maxtransports", autoconfigVals.MaxTransports)
 	addArray("STUNSERVERS", "stun", autoconfigVals.StunServers)
 
 	// Transport ports
