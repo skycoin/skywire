@@ -649,6 +649,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 			r.Get("/csrf", hv.getCsrf())
 
+			// Browser-side error sink: the hvui forwards window
+			// errors / unhandled rejections / console.error+warn here
+			// so client-side failures land in the visor log. Public
+			// (a broken or pre-login page must still report) but
+			// rate-limited + size-capped — see postClientLog.
+			r.Post("/client-log", hv.postClientLog())
+
 			r.Get("/user-exists", hv.users.UserExists())
 
 			// Unauthenticated pubkey-discovery route used by
