@@ -50,8 +50,8 @@ func networkDown(r *http.Request) (*http.Response, error) {
 	return nil, fmt.Errorf("network disabled: %s", r.URL)
 }
 
-func jsonResp(code int, v any) *http.Response {
-	b, _ := json.Marshal(v)
+func jsonResp(code int, v any) *http.Response { //nolint
+	b, _ := json.Marshal(v) //nolint
 	return &http.Response{
 		StatusCode: code,
 		Body:       io.NopCloser(bytes.NewReader(b)),

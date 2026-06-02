@@ -27,7 +27,7 @@ func charDeviceStdin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open %s: %v", os.DevNull, err)
 	}
-	t.Cleanup(func() { _ = f.Close() })
+	t.Cleanup(func() { _ = f.Close() }) //nolint
 	withStdin(t, f)
 }
 
@@ -39,11 +39,11 @@ func pipedStdin(t *testing.T, content string) {
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
 		t.Fatalf("write temp stdin: %v", err)
 	}
-	f, err := os.Open(p)
+	f, err := os.Open(p) //nolint
 	if err != nil {
 		t.Fatalf("open temp stdin: %v", err)
 	}
-	t.Cleanup(func() { _ = f.Close() })
+	t.Cleanup(func() { _ = f.Close() }) //nolint
 	withStdin(t, f)
 }
 
@@ -61,7 +61,7 @@ func captureStdout(t *testing.T, fn func()) string {
 
 	fn()
 
-	_ = w.Close()
+	_ = w.Close() //nolint
 	out, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("read captured stdout: %v", err)

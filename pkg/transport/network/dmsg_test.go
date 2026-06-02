@@ -78,9 +78,9 @@ func TestDmsgAdapters_EndToEnd(t *testing.T) {
 	require.NotNil(t, addr)
 
 	// Data flows across the adapter.
-	go func() { _, _ = dialed.Write([]byte("ping")) }()
+	go func() { _, _ = dialed.Write([]byte("ping")) }() //nolint
 	buf := make([]byte, 4)
-	_ = accepted.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_ = accepted.SetReadDeadline(time.Now().Add(10 * time.Second)) //nolint
 	n, err := accepted.Read(buf)
 	require.NoError(t, err)
 	require.Equal(t, "ping", string(buf[:n]))

@@ -37,11 +37,11 @@ func TestMain(m *testing.M) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/security/nonces/"):
 			// httpauth handshake: hand back a nonce for this key.
-			fmt.Fprintf(w, `{"edge":"%s","next_nonce":1}`, testPK)
+			fmt.Fprintf(w, `{"edge":"%s","next_nonce":1}`, testPK) //nolint
 		case r.Method == http.MethodPost && r.URL.Path == "/api/services":
 			sdPostN.Add(1)
 			// Must be valid JSON: postEntry decodes the body into a Service.
-			_, _ = w.Write([]byte("{}"))
+			_, _ = w.Write([]byte("{}")) //nolint
 		case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/api/services/"):
 			sdDeleteN.Add(1)
 			w.WriteHeader(http.StatusOK)

@@ -26,7 +26,7 @@ func fakeRedis(t *testing.T) (addr string) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = ln.Close() })
+	t.Cleanup(func() { _ = ln.Close() }) //nolint
 
 	go func() {
 		for {
@@ -53,11 +53,11 @@ func serveFakeRedis(conn net.Conn) {
 		}
 		switch strings.ToUpper(cmd[0]) {
 		case "PING":
-			_, _ = conn.Write([]byte("+PONG\r\n"))
+			_, _ = conn.Write([]byte("+PONG\r\n")) //nolint
 		case "HELLO":
-			_, _ = conn.Write([]byte("-ERR unknown command 'HELLO'\r\n"))
+			_, _ = conn.Write([]byte("-ERR unknown command 'HELLO'\r\n")) //nolint
 		default:
-			_, _ = conn.Write([]byte("+OK\r\n"))
+			_, _ = conn.Write([]byte("+OK\r\n")) //nolint
 		}
 	}
 }

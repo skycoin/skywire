@@ -149,12 +149,12 @@ func TestDebugConn(t *testing.T) {
 	require.Equal(t, "(no data captured)", dc.capturedData())
 
 	go func() {
-		sv.Write([]byte("hello-world")) //nolint:errcheck
-		sv.Close()                      //nolint:errcheck
+		sv.Write([]byte("hello-world")) //nolint
+		sv.Close()                      //nolint
 	}()
 
 	buf := make([]byte, 64)
-	n, _ := dc.Read(buf)
+	n, _ := dc.Read(buf) //nolint
 	require.Equal(t, "hello-world", string(buf[:n]))
 
 	captured := dc.capturedData()
@@ -422,9 +422,9 @@ func TestStcp_DialAcceptEndToEnd(t *testing.T) {
 	require.Equal(t, pkB, accepted.RemotePK())
 
 	// Data flows across the encrypted transport.
-	go func() { _, _ = dialed.Write([]byte("hi")) }()
+	go func() { _, _ = dialed.Write([]byte("hi")) }() //nolint
 	buf := make([]byte, 2)
-	_ = accepted.SetReadDeadline(time.Now().Add(10 * time.Second))
+	_ = accepted.SetReadDeadline(time.Now().Add(10 * time.Second)) //nolint
 	n, err := accepted.Read(buf)
 	require.NoError(t, err)
 	require.Equal(t, "hi", string(buf[:n]))
@@ -469,7 +469,7 @@ func TestStcpClient_Dial(t *testing.T) {
 
 // ---- resolvedClient.dialVisor ---------------------------------------------
 
-func newTestResolvedClient(netType types.Type, lPK cipher.PubKey, ar addrresolver.APIClient) *resolvedClient {
+func newTestResolvedClient(netType types.Type, lPK cipher.PubKey, ar addrresolver.APIClient) *resolvedClient { //nolint
 	gc := &genericClient{lPK: lPK, netType: netType, log: testLog()}
 	return &resolvedClient{genericClient: gc, ar: ar}
 }

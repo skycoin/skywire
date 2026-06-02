@@ -192,7 +192,7 @@ func TestListenAndServe_Serves(t *testing.T) {
 	a := api.New(testLog(), store.NewMock(), metrics.NewEmpty(), true, false, false, "", "", 0)
 	// listenAndServe blocks on Serve; it has no shutdown hook, so the
 	// goroutine is intentionally left running until the test binary exits.
-	go func() { _ = listenAndServe(fmt.Sprintf("127.0.0.1:%d", port), a) }()
+	go func() { _ = listenAndServe(fmt.Sprintf("127.0.0.1:%d", port), a) }() //nolint
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/health", port)
 	require.Eventually(t, func() bool {
@@ -200,7 +200,7 @@ func TestListenAndServe_Serves(t *testing.T) {
 		if e != nil {
 			return false
 		}
-		_ = resp.Body.Close()
+		_ = resp.Body.Close() //nolint
 		return resp.StatusCode == http.StatusOK
 	}, 5*time.Second, 25*time.Millisecond)
 }

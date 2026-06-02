@@ -48,7 +48,7 @@ func TestMainExecutesRoot(t *testing.T) {
 
 	main()
 
-	_ = w.Close()
+	_ = w.Close() //nolint
 	out, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatalf("read stdout: %v", err)

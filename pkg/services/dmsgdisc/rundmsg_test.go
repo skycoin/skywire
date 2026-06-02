@@ -31,8 +31,8 @@ func startTestDmsgServer(t *testing.T) *disc.Entry {
 	dc := disc.NewMock(0)
 	conf := &dmsg.ServerConfig{MaxSessions: 10, UpdateInterval: dmsg.DefaultUpdateInterval}
 	srv := dmsg.NewServer(srvPK, srvSK, dc, conf, nil)
-	go func() { _ = srv.Serve(lis, "") }()
-	t.Cleanup(func() { _ = srv.Close() })
+	go func() { _ = srv.Serve(lis, "") }() //nolint
+	t.Cleanup(func() { _ = srv.Close() })  //nolint
 
 	select {
 	case <-srv.Ready():
@@ -90,7 +90,7 @@ func TestRunDMSG_DefaultDeploymentSource(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_ = svc.runDMSG(ctx, cancel, cfg, a, pk, sk, testLog())
+	_ = svc.runDMSG(ctx, cancel, cfg, a, pk, sk, testLog()) //nolint
 
 	time.Sleep(200 * time.Millisecond)
 }

@@ -169,7 +169,7 @@ func TestReadFile(t *testing.T) {
 func TestFetchURL(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Write([]byte(`{"ok":true}`)) //nolint:errcheck
+			w.Write([]byte(`{"ok":true}`)) //nolint
 		}))
 		defer srv.Close()
 
@@ -242,7 +242,7 @@ func TestGetCacheAgeSeconds(t *testing.T) {
 func TestGetData(t *testing.T) {
 	t.Run("no cache fetches directly", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Write([]byte("live")) //nolint:errcheck
+			w.Write([]byte("live")) //nolint
 		}))
 		defer srv.Close()
 
@@ -254,7 +254,7 @@ func TestGetData(t *testing.T) {
 
 	t.Run("writes and reads cache file", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Write([]byte("cached-content")) //nolint:errcheck
+			w.Write([]byte("cached-content")) //nolint
 		}))
 		defer srv.Close()
 
@@ -268,7 +268,7 @@ func TestGetData(t *testing.T) {
 		require.Equal(t, "cached-content", got)
 
 		// File now exists with the fetched content.
-		data, err := os.ReadFile(cacheFile)
+		data, err := os.ReadFile(cacheFile) //nolint
 		require.NoError(t, err)
 		require.Equal(t, "cached-content", string(data))
 
@@ -389,9 +389,9 @@ func TestHandleServices_LiveFallback(t *testing.T) {
 	sd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Query().Get("type") {
 		case "proxy":
-			w.Write([]byte(`[{"address":"pkA:1080","geo":{"country":"US"}}]`)) //nolint:errcheck
+			w.Write([]byte(`[{"address":"pkA:1080","geo":{"country":"US"}}]`)) //nolint
 		default:
-			w.Write([]byte(`[]`)) //nolint:errcheck
+			w.Write([]byte(`[]`)) //nolint
 		}
 	}))
 	defer sd.Close()
@@ -415,7 +415,7 @@ func TestHandleServices_LiveFallback(t *testing.T) {
 
 func TestHandleTransports(t *testing.T) {
 	tpd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`[{"t_id":"x"}]`)) //nolint:errcheck
+		w.Write([]byte(`[{"t_id":"x"}]`)) //nolint
 	}))
 	defer tpd.Close()
 
@@ -718,7 +718,7 @@ func TestHandleDMSGHealth(t *testing.T) {
 
 func TestHandleUptimes(t *testing.T) {
 	ut := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"uptimes":[]}`)) //nolint:errcheck
+		w.Write([]byte(`{"uptimes":[]}`)) //nolint
 	}))
 	defer ut.Close()
 
@@ -756,17 +756,17 @@ func newDMSGStack(t *testing.T) (dmsgURL, geoURL string, closeFn func()) {
 	dmsg := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/all_servers"):
-			w.Write([]byte(`[{"static":"srvPK","server":{"address":"1.2.3.4:8080","availableSessions":5,"serverType":"public"}}]`)) //nolint:errcheck
+			w.Write([]byte(`[{"static":"srvPK","server":{"address":"1.2.3.4:8080","availableSessions":5,"serverType":"public"}}]`)) //nolint
 		case strings.HasSuffix(r.URL.Path, "/entries"):
-			w.Write([]byte(`["e1","e2","e3"]`)) //nolint:errcheck
+			w.Write([]byte(`["e1","e2","e3"]`)) //nolint
 		case strings.HasSuffix(r.URL.Path, "/servers/clients"):
-			w.Write([]byte(`{"srvPK":["c1","c2"]}`)) //nolint:errcheck
+			w.Write([]byte(`{"srvPK":["c1","c2"]}`)) //nolint
 		default:
-			w.Write([]byte(`[]`)) //nolint:errcheck
+			w.Write([]byte(`[]`)) //nolint
 		}
 	}))
 	geo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"country_code":"US"}`)) //nolint:errcheck
+		w.Write([]byte(`{"country_code":"US"}`)) //nolint
 	}))
 	return dmsg.URL, geo.URL, func() { dmsg.Close(); geo.Close() }
 }
@@ -826,7 +826,7 @@ func TestFetchGeoForIP(t *testing.T) {
 
 	// Configured.
 	geo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{"country_code":"DE"}`)) //nolint:errcheck
+		w.Write([]byte(`{"country_code":"DE"}`)) //nolint
 	}))
 	defer geo.Close()
 	s.config.GeoIPURL = geo.URL
@@ -837,11 +837,11 @@ func TestFetchGeoForIP(t *testing.T) {
 
 func TestRefreshCache(t *testing.T) {
 	tpd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`[]`)) //nolint:errcheck
+		w.Write([]byte(`[]`)) //nolint
 	}))
 	defer tpd.Close()
 	ut := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`{}`)) //nolint:errcheck
+		w.Write([]byte(`{}`)) //nolint
 	}))
 	defer ut.Close()
 
@@ -866,7 +866,7 @@ func TestRefreshCache(t *testing.T) {
 
 func TestRefreshSDCache(t *testing.T) {
 	sd := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte(`[{"address":"pkA:1080","geo":{"country":"US"}}]`)) //nolint:errcheck
+		w.Write([]byte(`[{"address":"pkA:1080","geo":{"country":"US"}}]`)) //nolint
 	}))
 	defer sd.Close()
 

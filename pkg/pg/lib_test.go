@@ -38,7 +38,7 @@ func newMockGormDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	t.Cleanup(func() { _ = sqlDB.Close() })
+	t.Cleanup(func() { _ = sqlDB.Close() }) //nolint
 
 	gdb, err := gorm.Open(postgres.New(postgres.Config{Conn: sqlDB}), &gorm.Config{})
 	if err != nil {

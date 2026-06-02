@@ -52,7 +52,7 @@ func newTestLauncher(t *testing.T, procM appserver.ProcManager, apps ...appserve
 
 func TestRegistry(t *testing.T) {
 	called := false
-	fn := func(_ context.Context, _ []string) error {
+	fn := func(_ context.Context, _ []string) error { //nolint
 		called = true
 		return nil
 	}
@@ -416,7 +416,7 @@ func TestStopApp(t *testing.T) {
 		pm.On("ProcByName", "app").Return((*appserver.Proc)(nil), false)
 
 		l := newTestLauncher(t, pm)
-		_, err := l.StopApp("app")
+		_, err := l.StopApp("app") //nolint
 		require.ErrorIs(t, err, ErrAppNotRunning)
 	})
 
@@ -512,7 +512,7 @@ func TestKillHangingProcesses(t *testing.T) {
 	require.NoError(t, l.killHangingProcesses())
 
 	// File is emptied afterwards.
-	data, err := os.ReadFile(pidPath)
+	data, err := os.ReadFile(pidPath) //nolint
 	require.NoError(t, err)
 	require.Empty(t, data)
 }

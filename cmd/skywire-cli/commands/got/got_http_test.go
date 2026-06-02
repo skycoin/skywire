@@ -58,11 +58,11 @@ func captureStdout(t *testing.T, fn func()) string {
 	done := make(chan string, 1)
 	go func() {
 		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
+		_, _ = io.Copy(&buf, r) //nolint
 		done <- buf.String()
 	}()
 	fn()
-	_ = w.Close()
+	_ = w.Close() //nolint: errcheck
 	os.Stdout = orig
 	return <-done
 }
@@ -117,7 +117,7 @@ func TestReqCmd_HTTP_ToFile(t *testing.T) {
 	cmd := &cobra.Command{}
 	reqCmd.Run(cmd, []string{"GET", srv.URL + "/file.bin"})
 
-	got, err := os.ReadFile(output)
+	got, err := os.ReadFile(output) //nolint
 	require.NoError(t, err)
 	require.Equal(t, body, got)
 }

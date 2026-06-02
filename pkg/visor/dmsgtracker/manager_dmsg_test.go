@@ -48,7 +48,7 @@ func TestManager_EstablishUpdateServe(t *testing.T) {
 
 	// A short interval makes serve()'s ticker fire updateAllTrackers.
 	dtm := NewDmsgTrackerManager(logging.NewMasterLogger(), cT, 150*time.Millisecond, 5*time.Second)
-	t.Cleanup(func() { _ = dtm.Close() })
+	t.Cleanup(func() { _ = dtm.Close() }) //nolint
 
 	// Establish a tracker to the listening client.
 	dtm.establishTracker(context.Background(), listenerPK)
@@ -82,7 +82,7 @@ func TestManager_ShouldGetSpawnsEstablishment(t *testing.T) {
 	cT, listenerPK := newTrackerEnv(t)
 
 	dtm := NewDmsgTrackerManager(logging.NewMasterLogger(), cT, time.Minute, 5*time.Second)
-	t.Cleanup(func() { _ = dtm.Close() })
+	t.Cleanup(func() { _ = dtm.Close() }) //nolint
 
 	// A cache-miss ShouldGet returns an empty summary and kicks off a single
 	// background establishment goroutine (covers the non-cached branch). We
@@ -104,7 +104,7 @@ func TestManager_EstablishTracker_UnreachablePeer(t *testing.T) {
 	cT, _ := newTrackerEnv(t)
 
 	dtm := NewDmsgTrackerManager(logging.NewMasterLogger(), cT, time.Minute, time.Second)
-	t.Cleanup(func() { _ = dtm.Close() })
+	t.Cleanup(func() { _ = dtm.Close() }) //nolint
 
 	// A PK that isn't in discovery: establishTracker hits the expected
 	// "entry not found" path and stores nothing.

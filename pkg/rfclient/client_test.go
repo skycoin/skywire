@@ -96,7 +96,7 @@ func TestFindRoutes_Success(t *testing.T) {
 			t.Errorf("server failed to decode request body: %v", err)
 		}
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(want)
+		_ = json.NewEncoder(w).Encode(want) //nolint
 	}))
 	defer srv.Close()
 
@@ -126,7 +126,7 @@ func TestFindRoutes_NotFound(t *testing.T) {
 func TestFindRoutes_ErrorStatusWithJSONBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(HTTPResponse{Error: &HTTPError{Message: "bad edges", Code: http.StatusBadRequest}})
+		_ = json.NewEncoder(w).Encode(HTTPResponse{Error: &HTTPError{Message: "bad edges", Code: http.StatusBadRequest}}) //nolint
 	}))
 	defer srv.Close()
 
@@ -143,7 +143,7 @@ func TestFindRoutes_ErrorStatusWithJSONBody(t *testing.T) {
 func TestFindRoutes_ErrorStatusWithUndecodableBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte("this is not json"))
+		_, _ = w.Write([]byte("this is not json")) //nolint
 	}))
 	defer srv.Close()
 
@@ -161,7 +161,7 @@ func TestFindRoutes_ErrorStatusWithUndecodableBody(t *testing.T) {
 func TestFindRoutes_UndecodableSuccessBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("{not valid json"))
+		_, _ = w.Write([]byte("{not valid json")) //nolint
 	}))
 	defer srv.Close()
 

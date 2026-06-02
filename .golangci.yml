@@ -55,7 +55,8 @@ linters:
   exclusions:
     generated: lax
     paths:
-      - third_party$
+      - vendor/
+      - third_party/
       - cmd/skywire-cli/commands/gotop
       - builtin$
       - examples$

@@ -52,7 +52,7 @@ func authReq(t *testing.T, method, target string, body []byte, pk *cipher.PubKey
 
 	ctx := r.Context()
 	if pk != nil {
-		ctx = context.WithValue(ctx, httpauth.ContextAuthKey, *pk)
+		ctx = context.WithValue(ctx, httpauth.ContextAuthKey, *pk) //nolint
 	}
 	if params != nil {
 		rctx := chi.NewRouteContext()
@@ -166,7 +166,7 @@ func TestBind(t *testing.T) {
 
 	t.Run("remote addr not in local addresses -> 400", func(t *testing.T) {
 		a := newTestAPI(t)
-		body, _ := json.Marshal(addrresolver.LocalAddresses{Addresses: []string{"8.8.8.8"}})
+		body, _ := json.Marshal(addrresolver.LocalAddresses{Addresses: []string{"8.8.8.8"}}) //nolint: errcheck
 		rec := httptest.NewRecorder()
 		a.bind(rec, authReq(t, http.MethodPost, "/bind/stcpr", body, &pk, nil))
 		require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -174,7 +174,7 @@ func TestBind(t *testing.T) {
 
 	t.Run("success binds and stores", func(t *testing.T) {
 		a := newTestAPI(t)
-		body, _ := json.Marshal(addrresolver.LocalAddresses{
+		body, _ := json.Marshal(addrresolver.LocalAddresses{ //nolint: errcheck
 			Port:      "30000",
 			Addresses: []string{"203.0.113.5"},
 		})
@@ -189,7 +189,7 @@ func TestBind(t *testing.T) {
 
 	t.Run("declared public IPv6 populates RemoteAddrV6", func(t *testing.T) {
 		a := newTestAPI(t)
-		body, _ := json.Marshal(addrresolver.LocalAddresses{
+		body, _ := json.Marshal(addrresolver.LocalAddresses{ //nolint
 			Port:       "30000",
 			Addresses:  []string{"203.0.113.5"},
 			PublicIPv6: "2606:4700:4700::1111",
@@ -319,7 +319,7 @@ func TestDeregister(t *testing.T) {
 		sig, err := cipher.SignPayload([]byte(nmPK.Hex()), nmSK)
 		require.NoError(t, err)
 
-		body, _ := json.Marshal([]string{target.Hex()})
+		body, _ := json.Marshal([]string{target.Hex()}) //nolint
 		req := httptest.NewRequest(http.MethodDelete, "/deregister/stcpr", bytes.NewReader(body))
 		req.Header.Set("NM-PK", nmPK.Hex())
 		req.Header.Set("NM-Sign", sig.Hex())
@@ -399,7 +399,7 @@ func TestAskToDialUDP(t *testing.T) {
 	readDone := make(chan []byte, 1)
 	go func() {
 		buf := make([]byte, 256)
-		n, _ := c2.Read(buf)
+		n, _ := c2.Read(buf) //nolint: errcheck
 		readDone <- buf[:n]
 	}()
 
@@ -445,7 +445,7 @@ func TestResolve_SUDPH(t *testing.T) {
 	a.setUDPConn(receiver, c1)
 	go func() {
 		buf := make([]byte, 256)
-		_, _ = c2.Read(buf) // drain the ask-to-dial write so the handler doesn't block
+		_, _ = c2.Read(buf) //nolint
 	}()
 
 	rec := httptest.NewRecorder()

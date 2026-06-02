@@ -204,7 +204,7 @@ func (a *API) config(w http.ResponseWriter, r *http.Request) {
 	a.writeJSON(w, r, http.StatusOK, &resp)
 }
 
-func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) {
+func (a *API) writeJSON(w http.ResponseWriter, r *http.Request, code int, object interface{}) { //nolint
 	jsonObject, err := json.Marshal(object)
 	if err != nil {
 		a.logger(r).WithError(err).Errorf("failed to encode json response")

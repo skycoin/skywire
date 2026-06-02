@@ -12,12 +12,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/require"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
+
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 )
 
 func testLog() *logging.Logger { return logging.MustGetLogger("dmsgclient_test") }
@@ -181,10 +181,10 @@ func TestCachingDiscClient(t *testing.T) {
 		require.NoError(t, c.PostEntry(ctx, nil))
 		require.NoError(t, c.PutEntry(ctx, cipher.SecKey{}, nil))
 		require.NoError(t, c.DelEntry(ctx, nil))
-		_, _ = c.AvailableServers(ctx) //nolint:errcheck
-		_, _ = c.AllServers(ctx) //nolint:errcheck
-		_, _ = c.AllEntries(ctx) //nolint:errcheck
-		_, _ = c.AllClientsByServer(ctx) //nolint:errcheck
+		_, _ = c.AvailableServers(ctx)    //nolint:errcheck
+		_, _ = c.AllServers(ctx)          //nolint:errcheck
+		_, _ = c.AllEntries(ctx)          //nolint:errcheck
+		_, _ = c.AllClientsByServer(ctx)  //nolint:errcheck
 		_, _ = c.ClientsByServer(ctx, pk) //nolint:errcheck
 		for _, m := range []string{"PostEntry", "PutEntry", "DelEntry", "AvailableServers", "AllServers", "AllEntries", "AllClientsByServer", "ClientsByServer"} {
 			require.Equal(t, 1, base.count(m), "base.%s", m)
@@ -230,10 +230,10 @@ func TestFallbackDiscClient_Delegation(t *testing.T) {
 	require.NoError(t, f.PostEntry(ctx, nil))
 	require.NoError(t, f.PutEntry(ctx, cipher.SecKey{}, nil))
 	require.NoError(t, f.DelEntry(ctx, nil))
-	_, _ = f.AvailableServers(ctx) //nolint:errcheck
-	_, _ = f.AllServers(ctx) //nolint:errcheck
-	_, _ = f.AllEntries(ctx) //nolint:errcheck
-	_, _ = f.AllClientsByServer(ctx) //nolint:errcheck
+	_, _ = f.AvailableServers(ctx)    //nolint:errcheck
+	_, _ = f.AllServers(ctx)          //nolint:errcheck
+	_, _ = f.AllEntries(ctx)          //nolint:errcheck
+	_, _ = f.AllClientsByServer(ctx)  //nolint:errcheck
 	_, _ = f.ClientsByServer(ctx, pk) //nolint:errcheck
 
 	// Writes/reads that the direct client owns. PutEntry is intentionally

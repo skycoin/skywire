@@ -190,7 +190,7 @@ func TestFetchLocalGeoIP(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		geo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Write([]byte(`{"ip_address":"1.2.3.4","country_code":"US"}`)) //nolint:errcheck
+			w.Write([]byte(`{"ip_address":"1.2.3.4","country_code":"US"}`)) //nolint
 		}))
 		defer geo.Close()
 
@@ -204,7 +204,7 @@ func TestFetchLocalGeoIP(t *testing.T) {
 
 	t.Run("bad json", func(t *testing.T) {
 		geo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Write([]byte(`not json`)) //nolint:errcheck
+			w.Write([]byte(`not json`)) //nolint
 		}))
 		defer geo.Close()
 
@@ -470,7 +470,7 @@ func TestHandleLocalVisorWS(t *testing.T) {
 
 	// Closing the client makes the server read loop error out and
 	// unregister the client.
-	conn.Close(websocket.StatusNormalClosure, "done")
+	conn.Close(websocket.StatusNormalClosure, "done") //nolint
 	require.Eventually(t, func() bool {
 		s.wsClientsMu.RLock()
 		defer s.wsClientsMu.RUnlock()
@@ -501,7 +501,7 @@ func TestListenAndServe(t *testing.T) {
 	// ListenAndServe blocks; run it in the background. It has no graceful
 	// shutdown hook, so the goroutine is intentionally left running until
 	// the test binary exits.
-	go func() { _ = s.ListenAndServe() }()
+	go func() { _ = s.ListenAndServe() }() //nolint
 
 	url := fmt.Sprintf("http://127.0.0.1:%d/health", port)
 	var resp *http.Response
@@ -700,7 +700,7 @@ func TestGetDMSGSubData_DiskCache(t *testing.T) {
 
 func TestRefreshCacheFile(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Write([]byte("fresh-data")) //nolint:errcheck
+		w.Write([]byte("fresh-data")) //nolint
 	}))
 	defer srv.Close()
 
@@ -710,14 +710,14 @@ func TestRefreshCacheFile(t *testing.T) {
 
 	// Missing file -> fetch + write.
 	s.refreshCacheFile(cacheFile, srv.URL)
-	data, err := os.ReadFile(cacheFile)
+	data, err := os.ReadFile(cacheFile) //nolint
 	require.NoError(t, err)
 	require.Equal(t, "fresh-data", string(data))
 
 	// Fresh file -> early return (no error, content unchanged even if the
 	// upstream would now serve something else).
 	s.refreshCacheFile(cacheFile, srv.URL)
-	data, err = os.ReadFile(cacheFile)
+	data, err = os.ReadFile(cacheFile) //nolint
 	require.NoError(t, err)
 	require.Equal(t, "fresh-data", string(data))
 
