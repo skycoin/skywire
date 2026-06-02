@@ -100,16 +100,6 @@ type ManagedTransport struct {
 	// goroutine. atomic so the manager's central maintenance loop can
 	// touch it lock-free.
 	pingReadyAtNanos atomic.Int64
-	// pingFallbackFired is set to true after the RSN-latency fallback
-	// has been invoked once, so the maintenance loop never invokes it
-	// twice for the same transport. CompareAndSwap ensures
-	// invokeLatencyFallback is called exactly once even under
-	// concurrent ticks.
-	pingFallbackFired atomic.Bool
-
-	// manager back-reference for latency fallback (RSN-based measurement
-	// when remote visor doesn't support transport-level ping).
-	manager *Manager
 
 	// cascadeHandler handles cascade protocol packets (route ID 0).
 	// Set by the transport manager from the router's CascadeHandler.
@@ -363,12 +353,6 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	}
 }
 
-// transportPingGracePeriod is how long we wait for a transport-level pong
-// before falling back to RSN-based latency measurement. This covers the
-// case where the remote visor is running old code that doesn't support
-// transport ping frames.
-const transportPingGracePeriod = 90 * time.Second
-
 // tickPing is invoked once per transportPingInterval by the manager's
 // central maintenance goroutine. It encapsulates the state machine the
 // per-transport pingLoop used to run on its own goroutine:
@@ -397,20 +381,6 @@ func (mt *ManagedTransport) tickPing() {
 	}
 
 	mt.sendTransportPing()
-
-	// Fallback: if grace period has elapsed and no pong-derived
-	// latency arrived, fall back to RSN-based measurement (for peers
-	// running old code without transport-ping support). CompareAndSwap
-	// ensures we hand off to invokeLatencyFallback exactly once.
-	readyAt := time.Unix(0, mt.pingReadyAtNanos.Load())
-	if !mt.pingFallbackFired.Load() &&
-		time.Since(readyAt) > transportPingGracePeriod &&
-		mt.GetLatency() == 0 &&
-		mt.manager != nil &&
-		mt.pingFallbackFired.CompareAndSwap(false, true) {
-		mt.log.Debug("No transport pong received, falling back to RSN latency measurement")
-		mt.manager.invokeLatencyFallback(mt.rPK, mt)
-	}
 }
 
 // sendTransportPing writes a transport-level ping packet. Bytes are

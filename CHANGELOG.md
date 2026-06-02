@@ -6,6 +6,46 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.62
+
+29 PRs on top of v1.3.61. Headline items:
+
+-   **Multiplexed routing unblocked.** Aux mux legs are no longer selected for sending until the peer has registered their rule, fixing the mux≥2 "0 bytes / close code 0" stall that made multi-route spreading transfer nothing (#2962), on top of mux-degree-aware route counts and a bulk-snapshot TPD hop cache (#2955).
+-   **VPN client UI pass** (#2963): fixes the dead servers tab (a full-viewport map overlay was swallowing clicks), reloads the History/Favorites/Blocked tabs correctly, decouples server-selection from connecting, adds inline multihop / multiplex route options on the status page, and removes the dead passcode plumbing.
+-   **dmsg / hypervisor stability.** Eliminates the dmsg-discovery HTTP-fallback churn by raising the entry-cache TTL above the tracker interval (#2958) and scoping the round-trip tracker to currently-connected visors (#2959), with a negative-cache 202 backoff folded into #2963; plus hvui browser-error forwarding to the visor log (#2961) and transitive hypervisor whitelisting (#2940).
+
+Continued rewards / reward-UI work and CLI improvements round out the release.
+
+-   `chore(release)`: v1.3.62 changelog + free routing port 46 for hv-RPC skynet parity (drop redundant route-based latency probe)  [#2964](https://github.com/skycoin/skywire/pull/2964)
+-   `fix(router)`: gate aux mux legs on readiness — fixes mux>=2 stall (0 bytes / close code 0)  [#2962](https://github.com/skycoin/skywire/pull/2962)
+-   `fix(vpn-ui,dmsg)`: dead servers tab, select/connect decouple, route options, dmsg-tracker 202 backoff  [#2963](https://github.com/skycoin/skywire/pull/2963)
+-   `fix(cli/route)`: dispatch `route policy test`/`bench` to the WASM backend for .wasm scripts  [#2960](https://github.com/skycoin/skywire/pull/2960)
+-   `feat(hypervisor)`: forward hvui browser errors to the visor log  [#2961](https://github.com/skycoin/skywire/pull/2961)
+-   `fix(hypervisor)`: scope dmsg round-trip tracker to currently-connected visors  [#2959](https://github.com/skycoin/skywire/pull/2959)
+-   `fix(dmsg)`: raise entry-cache TTL above the tracker interval to stop disc-dial thrash  [#2958](https://github.com/skycoin/skywire/pull/2958)
+-   `feat(autoconfig)`: add --maxtransports (public-visor limit); drop deprecated --dmsghttp/--dmsgconf  [#2957](https://github.com/skycoin/skywire/pull/2957)
+-   `fix(router)`: bulk-snapshot TPD for hop lookups + honor mux degree in route count  [#2955](https://github.com/skycoin/skywire/pull/2955)
+-   `log(dmsg/dmsgfirst)`: surface DMSG-discovery HTTP fallback at Warn (was Debug)  [#2953](https://github.com/skycoin/skywire/pull/2953)
+-   `feat(skychat)`: CXO-backed messaging over native TCP in standalone (P2P, no dmsg)  [#2950](https://github.com/skycoin/skywire/pull/2950)
+-   `feat(rewards/ui)`: add resources nav dropdown + home page intro section  [#2952](https://github.com/skycoin/skywire/pull/2952)
+-   `feat(rewards/ui)`: SEO enrichment for per-date reward pages  [#2951](https://github.com/skycoin/skywire/pull/2951)
+-   `fix(rewards/ui)`: exclude per-pool CSVs from /skycoin-rewards/csv endpoint  [#2949](https://github.com/skycoin/skywire/pull/2949)
+-   `fix(skywire-cli)`: isUnderBase boundary match — stop /all-transports/per-key-stats aliasing onto the CXO feed  [#2948](https://github.com/skycoin/skywire/pull/2948)
+-   `feat(rewards/ui)`: per-pool tables + bandwidth-mode shares SKY column fix  [#2947](https://github.com/skycoin/skywire/pull/2947)
+-   `feat(rewards)`: per-pool detail CSVs + defensive empty-file fallback  [#2946](https://github.com/skycoin/skywire/pull/2946)
+-   `feat(visor)`: transitive hypervisor whitelist — trust flows up the hypervisor chain  [#2940](https://github.com/skycoin/skywire/pull/2940)
+-   `feat(cli/svc)`: `svc health --service <pk> --dmsg-server <pk>` — per-server service /health  [#2944](https://github.com/skycoin/skywire/pull/2944)
+-   `fix(cxo/node)`: buffer delcq so connection cleanup doesn't block the actor  [#2945](https://github.com/skycoin/skywire/pull/2945)
+-   `feat(rewards)`: default embedded reward.sh to bandwidth-pool mode  [#2943](https://github.com/skycoin/skywire/pull/2943)
+-   `fix(hypervisor)`: guard getPty against nil PtyUI instead of crashing the visor  [#2939](https://github.com/skycoin/skywire/pull/2939)
+-   `feat(router/policy)`: expose leg byte counters and hop chain to rotation callbacks  [#2938](https://github.com/skycoin/skywire/pull/2938)
+-   `feat(cli)`: --reconnect + --routing-policy on proxy start; --routing-policy on vpn start  [#2937](https://github.com/skycoin/skywire/pull/2937)
+-   `feat(survey)`: internalize zcalusic/sysinfo + populate CPU on ARM SBCs and Windows  [#2934](https://github.com/skycoin/skywire/pull/2934)
+-   `feat(cli,hvui)`: hv ls multi-section + cross-section column alignment  [#2933](https://github.com/skycoin/skywire/pull/2933)
+-   `feat(rewards)`: square-root scaling for the bandwidth pool  [#2929](https://github.com/skycoin/skywire/pull/2929)
+-   `fix(lint)`: clear pre-existing lint debt in wasm policy + cxo connmap tests  [#2936](https://github.com/skycoin/skywire/pull/2936)
+-   `fix(rewards/bw-collect)`: trust single-edge daily reports + --date/--days flags  [#2923](https://github.com/skycoin/skywire/pull/2923)
+
 ## 1.3.61
 
 Patch release. One PR on top of v1.3.60 — fixes a regression where `skywire autoconfig` silently wrote the regenerated config to the wrong path on operator boards where `/etc/skywire.conf` doesn't explicitly set `PKGENV=true` / `USRENV=true`.

@@ -2,14 +2,10 @@
 package router
 
 import (
-	"context"
 	"fmt"
 	"io"
-	"time"
 
-	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Saves `rules` to the routing table.
@@ -167,39 +163,6 @@ func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 		return nil
 	}
 	r.mx.Unlock()
-
-	// Handle ping/latency probe routes (port 46) directly without going through
-	// the accept channel. These are ephemeral routes from other visors measuring
-	// transport latency — they don't need to be delivered to any application.
-	// Processing them in-line prevents them from blocking application routes
-	// (proxy, VPN) in the accept queue, where each route blocks for up to the
-	// handshake timeout (30s).
-	if rules.Desc.DstPort() == routing.Port(skyenv.LatencyProbePort) || rules.Desc.SrcPort() == routing.Port(skyenv.LatencyProbePort) {
-		go func() {
-			// Short timeout for ping routes — they're ephemeral and if the
-			// handshake doesn't complete quickly, the ping will fail anyway.
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-
-			nsConf := noise.Config{
-				LocalPK:   r.conf.PubKey,
-				LocalSK:   r.conf.SecKey,
-				RemotePK:  rules.Desc.SrcPK(),
-				Initiator: false,
-			}
-			// AcceptRoutes path: no opts available, so app_name comes
-			// from the port→app lookup if it resolves (the SrcPort on
-			// inbound rules is the dialing peer's port, not ours, so
-			// this is best-effort only).
-			nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "")
-			if err != nil {
-				r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
-				return
-			}
-			nrg.rg.startOffServiceLoops()
-		}()
-		return nil
-	}
 
 	select {
 	case <-r.done:
