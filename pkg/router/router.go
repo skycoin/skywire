@@ -377,10 +377,6 @@ type Router interface {
 	Rule(routing.RouteID) (routing.Rule, error)
 	SaveRule(routing.Rule) error
 	DelRules([]routing.RouteID)
-
-	// MeasureTransportLatency measures latency via RSN route setup.
-	// Used as fallback when the remote visor doesn't support transport-level ping.
-	MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error)
 }
 
 // Router implements visor.PacketRouter. It manages routing table by
