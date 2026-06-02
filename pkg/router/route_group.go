@@ -1280,6 +1280,23 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		})
 		return rg.handleDataPacket(packet)
 	case routing.HandshakePacket:
+		// A handshake on an aux leg proves the peer registered that leg's
+		// rule, so it is safe to start sending on it. The primary leg's
+		// handshake (which creates the mux below) needs no marking — leg 0
+		// is ready from growLegs. This matters most for download-heavy
+		// flows: the bulk-sending side would otherwise never receive data
+		// on its aux legs and so never learn it may spread onto them.
+		if rg.mux != nil {
+			rg.mu.Lock()
+			rid := packet.RouteID()
+			for i, rule := range rg.rvs {
+				if rule != nil && rule.KeyRouteID() == rid {
+					rg.mux.markLegReady(i)
+					break
+				}
+			}
+			rg.mu.Unlock()
+		}
 		rg.handshakeProcessedOnce.Do(func() {
 			// first packet is handshake packet, so we're communicating with the new visor
 			rg.encrypt = true
@@ -1362,6 +1379,9 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 		for i, rule := range rg.rvs {
 			if rule != nil && rule.KeyRouteID() == rid {
 				rg.mux.recordRecv(i, uint64(packet.Size()))
+				// Inbound traffic on leg i proves the peer registered its
+				// rule for this leg, so it is now safe to send on it.
+				rg.mux.markLegReady(i)
 				break
 			}
 		}

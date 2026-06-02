@@ -102,6 +102,13 @@ func createMuxRouteGroup(t *testing.T, nTransports int) (*RouteGroup, []*transpo
 	rg.fwd = fwds
 	rg.rvs = rvss
 	rg.mux.rebuildWeights(mts)
+	// These helpers model already-established legs, so mark every leg
+	// ready for selection. In live operation an aux leg becomes ready
+	// only after inbound traffic proves the peer registered its rule.
+	rg.mux.growLegs(len(mts))
+	for i := range mts {
+		rg.mux.markLegReady(i)
+	}
 	rg.mu.Unlock()
 
 	return rg, mts, conns
@@ -175,6 +182,43 @@ func TestPrunePreservesLastTransport(t *testing.T) {
 	rg.mu.Unlock()
 
 	require.Equal(t, 1, remaining, "should not prune the last transport")
+}
+
+// TestMuxSelectTransportSkipsNotReadyLeg verifies that an aux leg that has
+// not yet been confirmed ready is never selected for sending, so the first
+// writes can't be steered onto a route the peer hasn't registered (the
+// mux>=2 "0 bytes / close code 0" bug). The primary leg (0) is always ready.
+func TestMuxSelectTransportSkipsNotReadyLeg(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 2)
+
+	// Reset readiness: primary ready, aux (leg 1) not ready.
+	rg.mux.legMu.Lock()
+	rg.mux.ready = []bool{true, false}
+	rg.mux.legMu.Unlock()
+
+	// Every selection must return the primary while leg 1 is not ready.
+	for i := 0; i < 20; i++ {
+		rg.mu.Lock()
+		tp, _, idx, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
+		rg.mu.Unlock()
+		require.NoError(t, err)
+		require.Equal(t, 0, idx, "must not select the not-ready aux leg")
+		require.Equal(t, mts[0], tp)
+	}
+
+	// Once leg 1 is marked ready, it becomes eligible.
+	rg.mux.markLegReady(1)
+	sawLeg1 := false
+	for i := 0; i < 50 && !sawLeg1; i++ {
+		rg.mu.Lock()
+		_, _, idx, err := rg.mux.selectTransport(rg.tps, rg.fwd, nil)
+		rg.mu.Unlock()
+		require.NoError(t, err)
+		if idx == 1 {
+			sawLeg1 = true
+		}
+	}
+	require.True(t, sawLeg1, "leg 1 should be selectable once marked ready")
 }
 
 // TestMuxSelectTransportSkipsDead verifies that the mux transport selector
