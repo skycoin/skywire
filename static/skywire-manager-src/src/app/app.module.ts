@@ -1,5 +1,5 @@
 import { BrowserModule} from '@angular/platform-browser';
-import { NgModule } from '@angular/core';
+import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { AppComponent } from './app.component';
@@ -33,6 +33,7 @@ import { LogComponent } from './components/pages/node/apps/node-apps-list/log/lo
 import { SettingsComponent } from './components/pages/settings/settings.component';
 import { PasswordComponent } from './components/pages/settings/password/password.component';
 import { ClipboardService } from './services/clipboard.service';
+import { ClientErrorHandler } from './services/client-error-reporter';
 import { ClipboardDirective } from './directives/clipboard.directive';
 import { AppTranslationModule } from './app-translation.module';
 import { ButtonComponent } from './components/layout/button/button.component';
@@ -226,6 +227,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         MatSlideToggleModule,
         DragDropModule], providers: [
         ClipboardService,
+        { provide: ErrorHandler, useClass: ClientErrorHandler },
         { provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: { duration: 3000, verticalPosition: 'top' } },
         { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { width: '600px', hasBackdrop: true } },
         { provide: ErrorStateMatcher, useClass: ShowOnDirtyErrorStateMatcher },
