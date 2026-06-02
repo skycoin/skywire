@@ -8,7 +8,7 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.62
 
-28 PRs on top of v1.3.61. Headline items:
+29 PRs on top of v1.3.61. Headline items:
 
 -   **Multiplexed routing unblocked.** Aux mux legs are no longer selected for sending until the peer has registered their rule, fixing the mux≥2 "0 bytes / close code 0" stall that made multi-route spreading transfer nothing (#2962), on top of mux-degree-aware route counts and a bulk-snapshot TPD hop cache (#2955).
 -   **VPN client UI pass** (#2963): fixes the dead servers tab (a full-viewport map overlay was swallowing clicks), reloads the History/Favorites/Blocked tabs correctly, decouples server-selection from connecting, adds inline multihop / multiplex route options on the status page, and removes the dead passcode plumbing.
@@ -16,6 +16,7 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 Continued rewards / reward-UI work and CLI improvements round out the release.
 
+-   `chore(release)`: v1.3.62 changelog + free routing port 46 for hv-RPC skynet parity (drop redundant route-based latency probe)  [#2964](https://github.com/skycoin/skywire/pull/2964)
 -   `fix(router)`: gate aux mux legs on readiness — fixes mux>=2 stall (0 bytes / close code 0)  [#2962](https://github.com/skycoin/skywire/pull/2962)
 -   `fix(vpn-ui,dmsg)`: dead servers tab, select/connect decouple, route options, dmsg-tracker 202 backoff  [#2963](https://github.com/skycoin/skywire/pull/2963)
 -   `fix(cli/route)`: dispatch `route policy test`/`bench` to the WASM backend for .wasm scripts  [#2960](https://github.com/skycoin/skywire/pull/2960)
