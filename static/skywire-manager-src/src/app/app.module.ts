@@ -105,7 +105,6 @@ import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status
 import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
 import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
 import { VpnServerNameComponent } from './components/vpn/layout/vpn-server-name/vpn-server-name.component';
-import { EnterVpnServerPasswordComponent } from './components/vpn/pages/vpn-server-list/enter-vpn-server-password/enter-vpn-server-password.component';
 import { UpdateAllComponent } from './components/layout/update-all/update-all.component';
 import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
 import { RewardsAddressComponent } from './components/pages/node/node-info/node-info-content/rewards-address-config/rewards-address-config.component';
@@ -197,7 +196,6 @@ const globalRippleConfig: RippleGlobalOptions = {
         VpnSettingsComponent,
         EditVpnServerValueComponent,
         VpnServerNameComponent,
-        EnterVpnServerPasswordComponent,
         UpdateAllComponent,
         VpnDnsConfigComponent,
         RewardsAddressComponent,

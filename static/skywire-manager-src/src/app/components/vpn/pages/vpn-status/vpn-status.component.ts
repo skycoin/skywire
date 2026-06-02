@@ -89,6 +89,13 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   currentRemoteServer: LocalServerData;
   // Extended data about the current state of the VPN client app.
   backendState: BackendState;
+  // Route options applied when pressing Start. minHops >= 2 forces the route
+  // through that many intermediate visors (multihop); muxRoutes > 1 dials over
+  // that many parallel multiplexed routes (experimental). 1 = plain dial.
+  minHops = 1;
+  muxRoutes = 1;
+  // Bounds for the inline route-option inputs.
+  readonly maxRouteOption = 8;
 
   serverFlags = ServerFlags;
 
@@ -314,7 +321,34 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
 
     this.showBusy = true;
 
-    this.vpnClientService.start();
+    // Selecting a server only marks it as current; Start is what actually
+    // connects — applying the server PK + the chosen route options.
+    this.vpnClientService.connectToServer(this.currentRemoteServer, this.muxRoutes, this.minHops);
+  }
+
+  /**
+   * Updates minHops from the inline input, clamped to a sane range.
+   */
+  setMinHops(event: Event) {
+    this.minHops = this.sanitizeRouteOption(event);
+  }
+
+  /**
+   * Updates muxRoutes from the inline input, clamped to a sane range.
+   */
+  setMuxRoutes(event: Event) {
+    this.muxRoutes = this.sanitizeRouteOption(event);
+  }
+
+  private sanitizeRouteOption(event: Event): number {
+    let value = parseInt((event.target as HTMLInputElement).value, 10);
+    if (isNaN(value) || value < 1) {
+      value = 1;
+    }
+    if (value > this.maxRouteOption) {
+      value = this.maxRouteOption;
+    }
+    return value;
   }
 
   /**

@@ -712,13 +712,21 @@ func (c *Client) dialServer(appCl *app.Client, pk cipher.PubKey) (net.Conn, erro
 		serverPort = routing.Port(skyenv.VPNServerPort) // VPN server port (44)
 	)
 
-	var conn net.Conn
-	var err error
-	conn, err = appCl.Dial(appnet.Addr{
+	addr := appnet.Addr{
 		Net:    netType,
 		PubKey: pk,
 		Port:   serverPort,
-	})
+	}
+
+	var conn net.Conn
+	var err error
+	// Use the per-call dial options only when the user asked for multiplexed
+	// or multihop routing; otherwise keep the plain single-route dial.
+	if c.cfg.MuxRoutes > 1 || c.cfg.MinHops >= 2 {
+		conn, err = appCl.DialWithOptions(addr, c.cfg.MuxRoutes, c.cfg.MinHops, 0, 0, 0, 0)
+	} else {
+		conn, err = appCl.Dial(addr)
+	}
 
 	if err != nil {
 		return nil, err

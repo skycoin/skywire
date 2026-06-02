@@ -189,8 +189,10 @@ export class VpnClientService {
   private working = true;
   // If has a value, the current server must be replaced by this one.
   private requestedServer: LocalServerData = null;
-  // Password provided with requestedServer.
-  private requestedPassword: string = null;
+  // Route options to apply when (re)connecting: number of parallel
+  // multiplexed routes and minimum hops. 0 / <2 means the plain dial.
+  private requestedMuxRoutes = 0;
+  private requestedMinHops = 0;
   // If the continuous automatic updates were stopped due to a problem.
   private updatesStopped = false;
 
@@ -333,13 +335,29 @@ export class VpnClientService {
   }
 
   /**
+   * Connects to an already-selected server using the provided route options.
+   * This is the action behind the Start button on the status page: selecting
+   * a server in the list only marks it as current (no connection); this
+   * method applies the server PK + route options and starts the VPN.
+   * @param server The server to connect to (the current selected server).
+   * @param muxRoutes Parallel multiplexed routes (>1 to enable). 0/1 = plain.
+   * @param minHops Minimum hops (>=2 to force multihop). 0/1 = direct allowed.
+   * @returns If it was possible to start the process (true) or not (false).
+   */
+  connectToServer(server: LocalServerData, muxRoutes: number, minHops: number): boolean {
+    this.requestedServer = server;
+    this.requestedMuxRoutes = muxRoutes && muxRoutes > 0 ? muxRoutes : 0;
+    this.requestedMinHops = minHops && minHops > 0 ? minHops : 0;
+
+    return this.changeServer();
+  }
+
+  /**
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerUsingHistory(newServer: LocalServerData, password: string): boolean {
+  changeServerUsingHistory(newServer: LocalServerData): boolean {
     this.requestedServer = newServer;
-    this.requestedPassword = password;
-    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
   }
@@ -348,10 +366,8 @@ export class VpnClientService {
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerUsingDiscovery(newServer: VpnServer, password: string): boolean {
+  changeServerUsingDiscovery(newServer: VpnServer): boolean {
     this.requestedServer = this.vpnSavedDataService.processFromDiscovery(newServer);
-    this.requestedPassword = password;
-    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
   }
@@ -360,26 +376,10 @@ export class VpnClientService {
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerManually(newServer: ManualVpnServerData, password: string): boolean {
+  changeServerManually(newServer: ManualVpnServerData): boolean {
     this.requestedServer = this.vpnSavedDataService.processFromManual(newServer);
-    this.requestedPassword = password;
-    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
-  }
-
-  /**
-   * Updates the "usedWithPassword" property of the server in the requestedServer var, locally
-   * and in in persistent storage.
-   */
-  private updateRequestedServerPasswordSetting() {
-    this.requestedServer.usedWithPassword = !!this.requestedPassword && this.requestedPassword !== '';
-
-    const alreadySavedVersion = this.vpnSavedDataService.getSavedVersion(this.requestedServer.pk, true);
-    if (alreadySavedVersion) {
-      alreadySavedVersion.usedWithPassword = this.requestedServer.usedWithPassword;
-      this.vpnSavedDataService.updateServer(alreadySavedVersion);
-    }
   }
 
   /**
@@ -430,12 +430,22 @@ export class VpnClientService {
       this.dataSubscription.unsubscribe();
     }
 
-    const data = { pk: this.requestedServer.pk };
-    if (this.requestedPassword) {
-      data['passcode'] = this.requestedPassword;
-    } else {
-      data['passcode'] = '';
-    }
+    // Only the server PK is sent (plus route options below). The
+    // vpn-server/skysocks apps no longer accept a passcode (auth is now
+    // PK-whitelist based), and the visor's putApp handler rejects unknown
+    // JSON fields with DisallowUnknownFields — sending a "passcode" key made
+    // the whole request fail with "request format is malformed".
+    const data: { pk: string; env?: { [key: string]: string } } = { pk: this.requestedServer.pk };
+
+    // Route options are passed to the vpn-client through its environment (the
+    // server PK is managed via the app args, which must not be clobbered).
+    // The vpn-client reads VPNMUXROUTES / VPNMINHOPS at startup and dials with
+    // those options. Both keys are always sent (0 when not enabled) so that
+    // lowering a value clears a previously-set one instead of leaving it stale.
+    data.env = {
+      VPNMUXROUTES: String(this.requestedMuxRoutes > 1 ? this.requestedMuxRoutes : 0),
+      VPNMINHOPS: String(this.requestedMinHops >= 2 ? this.requestedMinHops : 0),
+    };
 
     // Mark the service as busy, stop updating the VPN state and inform about the changes.
     this.stopContinuallyUpdatingData();
@@ -454,7 +464,8 @@ export class VpnClientService {
 
         // Make the service work normally again.
         this.requestedServer = null;
-        this.requestedPassword = null;
+        this.requestedMuxRoutes = 0;
+        this.requestedMinHops = 0;
         this.working = false;
 
         // Start the VPN.
@@ -467,7 +478,8 @@ export class VpnClientService {
         // Make the service work normally again.
         this.working = false;
         this.requestedServer = null;
-        this.requestedPassword = null;
+        this.requestedMuxRoutes = 0;
+        this.requestedMinHops = 0;
         this.sendUpdate();
         this.updateData();
       }
@@ -621,8 +633,16 @@ export class VpnClientService {
           this.working = false;
         }
 
-        // Check if the server PK was changed externally.
-        this.vpnSavedDataService.compareCurrentServer(appData.serverPk);
+        // Sync the selected server from the backend's app config only when the
+        // VPN is running (then the app's server PK is the real connected
+        // server) or when nothing is selected locally yet (first load /
+        // external config). Selecting a server in the list now only stages it
+        // locally — it does not touch the backend until Start — so while the
+        // VPN is stopped the local selection is authoritative and must not be
+        // cleared/overridden by the (empty or stale) app --srv.
+        if (appData.running || !this.vpnSavedDataService.currentServer) {
+          this.vpnSavedDataService.compareCurrentServer(appData.serverPk);
+        }
 
         // Update the data and send the event.
         if (appData.running) {

@@ -40,6 +40,12 @@
   top: 0;
   left: 0;
   position: fixed;
+  // Decorative only. It is position:fixed and full-viewport, so as a
+  // positioned element it paints on top of the non-positioned VPN content
+  // (router-outlet) regardless of DOM order — without this it silently
+  // swallows every click in the VPN client (dead nav/search/list/copy).
+  pointer-events: none;
+  z-index: 0;
 }
 
 .connection-problem-container {

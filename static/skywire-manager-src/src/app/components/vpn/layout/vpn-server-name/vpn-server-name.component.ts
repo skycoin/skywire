@@ -16,7 +16,6 @@ export class VpnServerNameComponent {
   @Input() isFavorite = false;
   @Input() isBlocked = false;
   @Input() isInHistory = false;
-  @Input() hasPassword = false;
   // Names.
   @Input() name = '';
   @Input() customName = '';

@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // clientLogEntry is the JSON shape the hvui error reporter POSTs.
@@ -53,7 +54,14 @@ const (
 // rate-limit state is captured in the closure so it's per-handler
 // (i.e. per hypervisor), not global.
 func (hv *Hypervisor) postClientLog() http.HandlerFunc {
-	log := hv.visor.MasterLogger().PackageLogger("hvui_client")
+	// Derive the logger nil-safely: this runs at route-registration time, and
+	// hv.visor is nil in some hypervisor-only tests (TestNewNode). Mirror
+	// NewHypervisor's own pattern instead of dereferencing hv.visor eagerly.
+	mLogger := logging.NewMasterLogger()
+	if hv.visor != nil {
+		mLogger = hv.visor.MasterLogger()
+	}
+	log := mLogger.PackageLogger("hvui_client")
 	var (
 		mu          sync.Mutex
 		windowStart time.Time
