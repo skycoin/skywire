@@ -66,10 +66,6 @@ export interface LocalServerData {
    */
   personalNote: string;
   /**
-   * If the last time the server was used it was used with a password.
-   */
-  usedWithPassword: boolean;
-  /**
    * If the server was entered manually, at least one time.
    */
   enteredManually: boolean;
@@ -348,7 +344,6 @@ export class VpnSavedDataService {
       personalNote: null,
       note: newServer.note,
       enteredManually: false,
-      usedWithPassword: false,
     };
   }
 
@@ -383,7 +378,6 @@ export class VpnSavedDataService {
       personalNote: newServer.note,
       note: '',
       enteredManually: true,
-      usedWithPassword: false,
     };
   }
 

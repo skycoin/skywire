@@ -35,7 +35,12 @@ func isExpectedTrackerLookupErr(err error) bool {
 	msg := err.Error()
 	if strings.Contains(msg, "context canceled") ||
 		strings.Contains(msg, "context deadline exceeded") ||
-		strings.Contains(msg, "entry is not found") {
+		strings.Contains(msg, "entry is not found") ||
+		// dmsg error 202: the peer is in discovery but we currently can't
+		// reach its delegated dmsg server. For a best-effort latency
+		// tracker this is the same benign "peer unreachable right now"
+		// class as the peer being offline — not a real failure to warn on.
+		strings.Contains(msg, "cannot connect to delegated server") {
 		return true
 	}
 	return false
@@ -45,6 +50,13 @@ func isExpectedTrackerLookupErr(err error) bool {
 const (
 	DefaultDTMUpdateInterval = skyenv.DmsgTrackerUpdateInterval
 	DefaultDTMUpdateTimeout  = skyenv.DmsgTrackerUpdateTimeout
+
+	// failedEstablishBackoff is how long a PK whose tracker could not be
+	// established (peer offline, not in discovery, or its delegated dmsg
+	// server unreachable — error 202) is skipped before we try again.
+	// Without it, every GetBulk/ShouldGet for an unreachable peer re-dials
+	// it on the spot, flooding the log and churning dmsg dials.
+	failedEstablishBackoff = 5 * time.Minute
 )
 
 // DmsgClientSummary summaries a dmsg client.
@@ -112,8 +124,12 @@ type Manager struct {
 	dts map[cipher.PubKey]*DmsgTracker
 	mx  sync.Mutex
 
-	// Track PKs with establishment attempts in progress to avoid duplicate goroutines
+	// Track PKs with establishment attempts in progress to avoid duplicate
+	// goroutines, and the time of the last failed attempt per PK so an
+	// unreachable peer isn't re-dialed on every cycle (negative-cache
+	// backoff). Both are guarded by inProgressMx.
 	inProgress   map[cipher.PubKey]struct{}
+	recentFail   map[cipher.PubKey]time.Time
 	inProgressMx sync.Mutex
 
 	done     chan struct{}
@@ -137,6 +153,7 @@ func NewDmsgTrackerManager(mLog *logging.MasterLogger, dc *dmsg.Client, updateIn
 		dc:             dc,
 		dts:            make(map[cipher.PubKey]*DmsgTracker),
 		inProgress:     make(map[cipher.PubKey]struct{}),
+		recentFail:     make(map[cipher.PubKey]time.Time),
 		done:           make(chan struct{}),
 	}
 
@@ -247,11 +264,16 @@ func (dtm *Manager) Get(pk cipher.PubKey) (DmsgClientSummary, bool) {
 // mustEstablishTracker creates / re-creates tracker when dmsgTrackerMap entry got deleted, and reconnected.
 // It is ment to be used as a goroutine and saves the new DmsgTracker to dtm.dts.
 func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
-	// Check if establishment is already in progress for this PK
+	// Skip if establishment is already in progress for this PK, or if a
+	// recent attempt failed and we're still within the backoff window.
 	dtm.inProgressMx.Lock()
 	if _, exists := dtm.inProgress[pk]; exists {
 		dtm.inProgressMx.Unlock()
 		return // Another goroutine is already working on this PK
+	}
+	if t, ok := dtm.recentFail[pk]; ok && time.Since(t) < failedEstablishBackoff {
+		dtm.inProgressMx.Unlock()
+		return // Recently failed — don't re-dial an unreachable peer every cycle
 	}
 	dtm.inProgress[pk] = struct{}{}
 	dtm.inProgressMx.Unlock()
@@ -270,12 +292,19 @@ func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
 
 	dt, err := newDmsgTracker(dCtx, dtm.dc, pk)
 	if err != nil {
-		// "entry not found" + cancel/deadline are expected when a peer
-		// is offline or the tracker shuts down mid-lookup; downgrade to
-		// debug so the warn channel stays useful for real failures.
+		// Remember the failure so the backoff above skips this PK on the
+		// next cycle(s) instead of re-dialing an unreachable peer.
+		dtm.inProgressMx.Lock()
+		dtm.recentFail[pk] = time.Now()
+		dtm.inProgressMx.Unlock()
+
+		// "entry not found", cancel/deadline, and "cannot connect to
+		// delegated server" (202) are expected when a peer is offline or
+		// unreachable via dmsg; downgrade to debug so the warn channel
+		// stays useful for real failures.
 		entry := log.WithError(err).WithField("client_pk", pk)
 		if isExpectedTrackerLookupErr(err) {
-			entry.Debug("Skipped dmsgtracker client (peer not in discovery or lookup canceled).")
+			entry.Debug("Skipped dmsgtracker client (peer not in discovery, unreachable, or lookup canceled).")
 		} else {
 			entry.Warn("Failed to re-create dmsgtracker client.")
 		}
@@ -285,6 +314,9 @@ func (dtm *Manager) establishTracker(ctx context.Context, pk cipher.PubKey) {
 		dtm.mx.Lock()
 		dtm.dts[pk] = dt
 		dtm.mx.Unlock()
+		dtm.inProgressMx.Lock()
+		delete(dtm.recentFail, pk)
+		dtm.inProgressMx.Unlock()
 		log.WithField("client_pk", pk).Debug("Dmsgtracker client Established.")
 	}
 }

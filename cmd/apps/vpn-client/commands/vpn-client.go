@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"strconv"
 	"syscall"
 
 	ipc "github.com/james-barrow/golang-ipc"
@@ -36,6 +37,8 @@ var (
 	killswitch  bool
 	dnsAddr     string
 	appPort     uint16
+	muxRoutes   int
+	minHops     int
 )
 
 func init() {
@@ -46,6 +49,8 @@ func init() {
 	RootCmd.Flags().BoolVar(&killswitch, "killswitch", false, "If set, the Internet won't be restored during reconnection attempts")
 	RootCmd.Flags().StringVar(&dnsAddr, "dns", "", "address of DNS want set to tun")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
+	RootCmd.Flags().IntVar(&muxRoutes, "mux", 0, "dial the server over this many parallel (multiplexed) routes")
+	RootCmd.Flags().IntVar(&minHops, "min-hops", 0, "force the route through at least this many intermediate visors")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -66,6 +71,20 @@ var RootCmd = &cobra.Command{
 	},
 }
 
+// envInt reads a non-negative integer from the named environment variable,
+// returning 0 when it is unset or not a valid number.
+func envInt(name string) int {
+	v := os.Getenv(name)
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
 // RunVPNClient runs the VPN client app logic.
 func RunVPNClient(ctx context.Context, args []string) error {
 	// Parse flags when called via internal launcher
@@ -77,9 +96,21 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		fs.BoolVar(&killswitch, "killswitch", false, "killswitch")
 		fs.StringVar(&dnsAddr, "dns", "", "DNS address")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
+		fs.IntVar(&muxRoutes, "mux", 0, "multiplexed route count")
+		fs.IntVar(&minHops, "min-hops", 0, "minimum hops")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
+	}
+
+	// The hypervisor UI sets the route options through the app environment
+	// (it manages --srv via the app args and must not clobber them). Env
+	// values fill in when the corresponding flag was not provided.
+	if muxRoutes == 0 {
+		muxRoutes = envInt("VPNMUXROUTES")
+	}
+	if minHops == 0 {
+		minHops = envInt("VPNMINHOPS")
 	}
 
 	var directIPsCh, nonDirectIPsCh = make(chan net.IP, 100), make(chan net.IP, 100)
@@ -182,10 +213,16 @@ func RunVPNClient(ctx context.Context, args []string) error {
 
 	logger.Infof("Connecting to VPN server %s", serverPK.String())
 
+	if muxRoutes > 1 || minHops >= 2 {
+		logger.Infof("Route options: mux=%d min-hops=%d", muxRoutes, minHops)
+	}
+
 	vpnClientCfg := vpn.ClientConfig{
 		Killswitch: killswitch,
 		ServerPK:   serverPK,
 		DNSAddr:    dnsAddress,
+		MuxRoutes:  muxRoutes,
+		MinHops:    minHops,
 	}
 
 	vpnClient, err := vpn.NewClient(vpnClientCfg, appCl)

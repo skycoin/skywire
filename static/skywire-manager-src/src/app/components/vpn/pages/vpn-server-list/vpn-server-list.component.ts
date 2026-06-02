@@ -14,8 +14,6 @@ import { VpnClientService } from 'src/app/services/vpn-client.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
 import { AddVpnServerComponent } from './add-vpn-server/add-vpn-server.component';
 import { VpnSavedDataService, LocalServerData, ServerFlags } from 'src/app/services/vpn-saved-data.service';
-import GeneralUtils from 'src/app/utils/generalUtils';
-import { EnterVpnServerPasswordComponent } from './enter-vpn-server-password/enter-vpn-server-password.component';
 import { StorageService } from 'src/app/services/storage.service';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 
@@ -116,10 +114,6 @@ interface VpnServerForList {
    * Special condition the server may have.
    */
   flag?: ServerFlags;
-  /**
-   * If the last time the server was used it was used with a password.
-   */
-  usedWithPassword?: boolean;
   /**
    * If the server was entered manually, at least one time.
    */
@@ -237,6 +231,10 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
     super();
 
     this.navigationsSubscription = route.paramMap.subscribe(params => {
+      // Remember the list shown before this navigation, so a tab change can
+      // trigger a reload (a mere page change must not).
+      const previousList = this.currentList;
+
       // Get which list must be shown.
       if (params.has('type')) {
         if (params.get('type') === Lists.Favorites) {
@@ -282,6 +280,10 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
       // Load the data, if needed.
       if (!this.initialLoadStarted) {
         this.initialLoadStarted = true;
+        this.loadData(true);
+      } else if (this.currentList !== previousList) {
+        // The tab (Public / History / Favorites / Blocked) changed — reload
+        // so the correct list is shown instead of the one loaded first.
         this.loadData(true);
       }
     });
@@ -341,7 +343,10 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
   }
 
   /**
-   * Selects a server and starts the process for connecting to it.
+   * Selects a server as the current one and opens the status page. This does
+   * NOT connect and does NOT touch the backend: applying the server PK, the
+   * route options and starting the VPN all happen only when the user presses
+   * Start on the status page.
    */
   selectServer(server: VpnServerForList) {
     const savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
@@ -349,62 +354,24 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
     // Close any previous temporary loading error msg.
     this.snackbarService.closeCurrentIfTemporaryError();
 
-    if (!savedVersion || savedVersion.flag !== ServerFlags.Blocked) {
-      // To prevent overriding any password, if the currently selected server is selected again,
-      // the case is managed here.
-      if (this.currentServer && this.currentServer.pk === server.pk) {
-        if (this.vpnRunning) {
-          // Inform that the VPN is already connected to the server.
-          this.snackbarService.showWarning('vpn.server-change.already-selected-warning');
-        } else {
-          // Ask for confirmation for starting the VPN.
-          const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'vpn.server-change.start-same-server-confirmation');
-          confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
-            confirmationDialog.componentInstance.closeModal();
-
-            this.vpnClientService.start();
-            VpnHelpers.redirectAfterServerChange(this.router, null, this.currentLocalPk);
-          });
-        }
-
-        return;
-      }
-
-      // If the server was previously used with a password, ask for it.
-      if (savedVersion && savedVersion.usedWithPassword) {
-        EnterVpnServerPasswordComponent.openDialog(this.dialog, true).afterClosed().subscribe((password: string) => {
-          // Continue only if the user did not cancel the operation.
-          if (password) {
-            this.makeServerChange(server, password === '-' ? null : password.substr(1));
-          }
-        });
-
-        return;
-      }
-
-      this.makeServerChange(server, null);
-    } else {
+    // A blocked server cannot be selected for use.
+    if (savedVersion && savedVersion.flag === ServerFlags.Blocked) {
       this.snackbarService.showError('vpn.starting-blocked-server-error', {}, true);
-    }
-  }
 
-  /**
-   * Changes the currently selected server and connects to the new one after that.
-   */
-  private makeServerChange(server: VpnServerForList, password: string) {
-    VpnHelpers.processServerChange(
-      this.router,
-      this.vpnClientService,
-      this.vpnSavedDataService,
-      this.snackbarService,
-      this.dialog,
-      null,
-      this.currentLocalPk,
-      server.originalLocalData,
-      server.originalDiscoveryData,
-      null,
-      password,
-    );
+      return;
+    }
+
+    // Resolve the local (saved) representation of the server. For the public
+    // list it is built from the discovery data; for the saved lists (history,
+    // favorites, blocked) the row already carries a LocalServerData.
+    const localServer = server.originalLocalData
+      ? server.originalLocalData
+      : this.vpnSavedDataService.processFromDiscovery(server.originalDiscoveryData);
+
+    // Mark it as the current server (local/UI state only — no connection) and
+    // navigate to the status page, where Start performs the actual connection.
+    this.vpnSavedDataService.modifyCurrentServer(localServer);
+    VpnHelpers.redirectAfterServerChange(this.router, null, this.currentLocalPk);
   }
 
   /**
@@ -441,6 +408,12 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
    * Loads the server list.
    */
   private loadData(checkSavedData: boolean) {
+    // Drop any in-flight/previous data subscription so a tab change does not
+    // leave two subscriptions feeding the list.
+    if (this.dataSubscription) {
+      this.dataSubscription.unsubscribe();
+    }
+
     if (this.currentList === Lists.Public) {
       // Use saved data or get from the server. If there is no saved data, savedData is null.
       const savedData = checkSavedData ? this.getLocalValue(this.persistentServerDataResponseKey) : null;
@@ -537,6 +510,22 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
    * Makes preparations for the page to work well with the obtained server list.
    */
   private processAllServers() {
+    // This may run again on a tab change; dispose the sorter/filterer (and
+    // their subscriptions) created by a previous run before recreating them,
+    // to avoid leaking instances and double-processing the data.
+    if (this.dataSortedSubscription) {
+      this.dataSortedSubscription.unsubscribe();
+    }
+    if (this.dataFiltererSubscription) {
+      this.dataFiltererSubscription.unsubscribe();
+    }
+    if (this.dataFilterer) {
+      this.dataFilterer.dispose();
+    }
+    if (this.dataSorter) {
+      this.dataSorter.dispose();
+    }
+
     this.fillFilterPropertiesArray();
 
     // Create a list with the countries on the server list. Also, add all saved data to each
@@ -552,7 +541,6 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
       server.inHistory = saveddata ? saveddata.inHistory : false;
       server.flag = saveddata ? saveddata.flag : ServerFlags.None;
       server.enteredManually = saveddata ? saveddata.enteredManually : false;
-      server.usedWithPassword = saveddata ? saveddata.usedWithPassword : false;
     });
 
     // Create a filter option for each country.
@@ -761,6 +749,27 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
    */
   getCountryName(countryCode: string): string {
     return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
+  }
+
+  /**
+   * Returns the location (region) string to display, or "-" when it is
+   * missing or not a usable place name. The discovery service fills this
+   * from raw GeoIP `geo.region` data, which is often a cryptic subdivision
+   * code (a bare number like "22", or a single character) that means
+   * nothing to the user — the country flag already conveys the country.
+   * We keep values that have at least two alphabetic characters and hyphen
+   * the rest.
+   */
+  getLocationText(location: string): string {
+    if (!location) {
+      return '-';
+    }
+    const trimmed = location.trim();
+    const letters = (trimmed.match(/[a-zA-Z]/g) || []).length;
+    if (letters < 2) {
+      return '-';
+    }
+    return trimmed;
   }
 
 
