@@ -154,15 +154,36 @@ func (hv *Hypervisor) putVisorDmsgSessionsCount() http.HandlerFunc {
 }
 
 func (hv *Hypervisor) getDmsgSummary() []dmsgtracker.DmsgClientSummary {
-	hv.mu.RLock()
 	pks := make([]cipher.PubKey, 0, len(hv.remoteVisors)+1)
 	if hv.visor != nil {
-		pks = append(pks, hv.visor.conf.PK)
+		pks = append(pks, hv.visor.conf.PK) // always track self
 	}
+
+	// Track dmsg round-trip ONLY for visors that are currently
+	// connected — i.e. answered a Summary RPC within cacheFreshWindow.
+	// remoteVisors accumulates every visor that ever connected (it's
+	// pruned on a broken-conn Summary in the UI handler, but only while
+	// the UI is polling), so tracking it directly made the dmsg-tracker
+	// re-resolve + ping long-disconnected peers every cycle — hammering
+	// the dmsg-discovery (the source of the 202 → HTTP-fallback churn)
+	// and emitting "Failed to re-create dmsgtracker" warns for dead
+	// peers. A disconnected visor stops refreshing its summaryCache
+	// entry and ages out here, so the tracker follows live connections.
+	hv.mu.RLock()
+	remotes := make([]cipher.PubKey, 0, len(hv.remoteVisors))
 	for pk := range hv.remoteVisors {
-		pks = append(pks, pk)
+		remotes = append(remotes, pk)
 	}
 	hv.mu.RUnlock()
+
+	now := time.Now()
+	hv.summaryCacheMx.RLock()
+	for _, pk := range remotes {
+		if c, ok := hv.summaryCache[pk]; ok && now.Sub(c.seenAt) < cacheFreshWindow {
+			pks = append(pks, pk)
+		}
+	}
+	hv.summaryCacheMx.RUnlock()
 
 	if hv.visor.isDTMReady() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
