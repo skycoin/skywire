@@ -771,12 +771,22 @@ func buildRouter() *gin.Engine {
 				calendar = cal()
 			}
 			l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
-			l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
+			// Caption above the daily history table to explain the two
+			// pool columns. Detailed eligibility rules live further
+			// down the page (#Pool-1-Presence, #Pool-2-Bandwidth); this
+			// keeps the meaning of Pool 1 / Pool 2 inline without
+			// requiring readers to scroll.
+			l += "\n\n<p style='margin:8px 0 4px 0;font-size:12px;color:#aaa;'>" +
+				"<b>Pool 1</b> = presence (Skycoin per visor-share). " +
+				"<b>Pool 2</b> = bandwidth (Skycoin per share or per GB, depending on mode). " +
+				"<b>Distributed</b>: <span style='color:#0f0;'>✔</span> broadcast on-chain · <span style='color:#f00;'>✘</span> pending." +
+				"</p>\n"
+			l += "<table style='border-collapse: collapse; width: auto;'>\n"
 			l += "<thead>\n"
 			l += "<tr>\n"
 			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: left;'>Date</th>"
-			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 1</th>"
-			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 2</th>"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right; font-family: monospace;'>Pool 1</th>"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right; font-family: monospace;'>Pool 2</th>"
 			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: center;'>Distributed</th>\n"
 			l += "</tr>\n"
 			l += "</thead>\n"
@@ -1181,7 +1191,7 @@ func buildRouter() *gin.Engine {
 
 			l1, err := script.File(wd + `/hist/` + c.Param("date") + ".txt").String()
 			if err != nil {
-				l += "Rewards not distributed yet\n\n"
+				l += "Rewards not distributed yet — awaiting broadcast\n\n"
 			} else {
 				if l1 == "" {
 					l += "Reward txid not recorded\n\n"
@@ -1238,18 +1248,29 @@ func buildRouter() *gin.Engine {
 			if err == nil {
 				l += "\n\nIneligible:\n"
 				for _, line := range l2 {
-					thispk, _ := script.Echo(line).Column(2).String()         //nolint:errcheck,gosec
-					reason, _ := script.Echo(line).Column(3).String()         //nolint:errcheck,gosec
+					// Split on ", " (comma+space) — ineligible.csv reason
+					// values can contain spaces ("No transports", "Invalid
+					// survey", etc), and the prior whitespace-tokenizing
+					// Column() call truncated multi-word reasons to their
+					// first word ("No" instead of "No transports").
+					parts := strings.SplitN(line, ", ", 4)
+					thispk := ""
+					reason := ""
+					if len(parts) >= 3 {
+						thispk = parts[1]
+						reason = parts[2]
+					}
+					pkClean := strings.TrimRight(thispk, ",\n")
 					invalid, _ := script.Echo(line).Match(", , , ,").String() //nolint:errcheck,gosec
 					if invalid != "" {
-						_, err = script.IfExists(wd + `/` + "log_backups/" + thispk + "/node-info.json").Echo("").String()
+						_, err = script.IfExists(wd + `/` + "log_backups/" + pkClean + "/node-info.json").Echo("").String()
 						if err != nil {
-							l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Survey not found\n"
+							l += "<a id='" + pkClean + "'>" + pkClean + "</a>, " + ineligibleReasonLink("Survey not found") + "\n"
 						} else {
-							l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Invalid survey\n"
+							l += "<a id='" + pkClean + "'>" + pkClean + "</a>, " + ineligibleReasonLink("Invalid survey") + "\n"
 						}
 					} else {
-						l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Ineligible " + strings.Replace(reason, ",\n", "\n", -1)
+						l += "<a id='" + pkClean + "'>" + pkClean + "</a>, Ineligible " + ineligibleReasonLink(strings.TrimRight(reason, ",\n")) + "\n"
 					}
 				}
 			}
