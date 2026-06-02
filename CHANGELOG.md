@@ -8,14 +8,17 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
 ## 1.3.62
 
-29 PRs on top of v1.3.61. Headline items:
+31 PRs on top of v1.3.61. Headline items:
 
 -   **Multiplexed routing unblocked.** Aux mux legs are no longer selected for sending until the peer has registered their rule, fixing the mux≥2 "0 bytes / close code 0" stall that made multi-route spreading transfer nothing (#2962), on top of mux-degree-aware route counts and a bulk-snapshot TPD hop cache (#2955).
 -   **VPN client UI pass** (#2963): fixes the dead servers tab (a full-viewport map overlay was swallowing clicks), reloads the History/Favorites/Blocked tabs correctly, decouples server-selection from connecting, adds inline multihop / multiplex route options on the status page, and removes the dead passcode plumbing.
 -   **dmsg / hypervisor stability.** Eliminates the dmsg-discovery HTTP-fallback churn by raising the entry-cache TTL above the tracker interval (#2958) and scoping the round-trip tracker to currently-connected visors (#2959), with a negative-cache 202 backoff folded into #2963; plus hvui browser-error forwarding to the visor log (#2961) and transitive hypervisor whitelisting (#2940).
+-   **Rewards accounting + Windows install.** TPD `/metrics` now retains the bandwidth history of deregistered/offline transports (#2966) — fixing the shrinking bandwidth-history chart and a bandwidth-reward undercount (transports that carried traffic but went offline before the daily reward collect ran); and the Windows MSI runs config setup at install time for postinstall parity with Linux (#2965).
 
 Continued rewards / reward-UI work and CLI improvements round out the release.
 
+-   `fix(tpd)`: include offline transports with bandwidth history in /metrics — fixes shrinking bandwidth chart + reward undercount  [#2966](https://github.com/skycoin/skywire/pull/2966)
+-   `fix(win_installer)`: run config setup at MSI install (postinstall parity with Linux)  [#2965](https://github.com/skycoin/skywire/pull/2965)
 -   `chore(release)`: v1.3.62 changelog + free routing port 46 for hv-RPC skynet parity (drop redundant route-based latency probe)  [#2964](https://github.com/skycoin/skywire/pull/2964)
 -   `fix(router)`: gate aux mux legs on readiness — fixes mux>=2 stall (0 bytes / close code 0)  [#2962](https://github.com/skycoin/skywire/pull/2962)
 -   `fix(vpn-ui,dmsg)`: dead servers tab, select/connect decouple, route options, dmsg-tracker 202 backoff  [#2963](https://github.com/skycoin/skywire/pull/2963)
