@@ -144,6 +144,29 @@ func chunkedPageHead(title, description, path string) string {
 	return h
 }
 
+// ineligibleReasonLink renders an ineligibility reason as a link
+// into the matching mainnet-rules anchor on the rewards index page,
+// so visitors can click through to the rule that classified them
+// out. Returns the bare reason unwrapped for entries we don't have
+// a mapping for. Anchor strings match the explicit (#…) links in
+// rewards/mainnet_rules.md.
+func ineligibleReasonLink(reason string) string {
+	r := strings.TrimSpace(reason)
+	anchor := ""
+	switch r {
+	case "No transports":
+		anchor = "Transports"
+	case "kvm", "hyperv", "xenhvm", "vmware", "vbox":
+		anchor = "Per-Machine-Limit"
+	case "Invalid survey", "Survey not found":
+		anchor = "Survey"
+	}
+	if anchor == "" {
+		return reason
+	}
+	return `<a href="/skycoin-rewards/#` + anchor + `">` + reason + `</a>`
+}
+
 const htmlFrontPageTemplate = `
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐  ┬─┐┌─┐┬ ┬┌─┐┬─┐┌┬┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤   ├┬┘├┤ │││├─┤├┬┘ ││└─┐
