@@ -235,3 +235,49 @@ func checkIDReserver(t *testing.T, rtIDR *idReserver) {
 		assert.Len(t, idMap, len(ids))
 	}
 }
+
+// errReserveGateway is a mock router RPCGateway whose ReserveIDs always fails.
+type errReserveGateway struct{}
+
+func (errReserveGateway) ReserveIDs(_ uint8, _ *[]routing.RouteID) error {
+	return errors.New("mock: reserve failed")
+}
+
+// TestIdReserver_ReserveIDs_NoSiblingCancelOnFailure is a regression test for the
+// route-setup "RST race": one hop's reservation failure must NOT cancel the
+// shared context, because that tore down the (pooled) DMSG streams of the other
+// in-flight hops mid-call, RST-ing healthy intermediates and failing the whole
+// route. Here hop A fails immediately while hop C is slow but healthy; C must
+// still reserve its ID rather than being canceled by A's failure.
+func TestIdReserver_ReserveIDs_NoSiblingCancelOnFailure(t *testing.T) {
+	pkA, _ := cipher.GenerateKeyPair() // fails fast
+	pkC, _ := cipher.GenerateKeyPair() // slow but healthy
+
+	routers := map[cipher.PubKey]interface{}{
+		pkA: errReserveGateway{},
+		pkC: &mockGatewayForDialer{hangDuration: 150 * time.Millisecond},
+	}
+	dialer := newMockDialer(t, routers)
+
+	rtIDR, err := NewIDReserver(context.TODO(), dialer, nil, [][]routing.Hop{makeHops(pkA, pkC)})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, rtIDR.Close()) })
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 2*time.Second)
+	defer cancel()
+
+	err = rtIDR.ReserveIDs(ctx)
+
+	// A failed, so the overall reservation returns an error — but it must be
+	// A's reservation error, not a context cancellation that leaked into C.
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), context.Canceled.Error())
+
+	// The key assertion: C's reservation completed and was recorded, proving
+	// A's failure did not cancel/RST the healthy sibling.
+	idr := rtIDR.(*idReserver)
+	idr.mx.Lock()
+	cIDs := idr.ids[pkC]
+	idr.mx.Unlock()
+	assert.Len(t, cIDs, 1, "healthy sibling C should reserve its ID despite A failing")
+}

@@ -635,10 +635,14 @@ func BroadcastIntermediaryRules(ctx context.Context, log logrus.FieldLogger, rtI
 			return err
 		}
 		go func(pk cipher.PubKey, rules []routing.Rule) {
+			// Same RST-race fix as idReserver.ReserveIDs: do NOT cancel the
+			// shared ctx when one intermediary's AddIntermediaryRules fails —
+			// that propagated to every sibling goroutine, whose Client.call()
+			// closed the underlying pooled DMSG stream on ctx.Done(), RST-ing
+			// healthy intermediaries mid-broadcast and leaving a half-installed
+			// route. firstError below waits for all N and returns the first
+			// error; each call is bounded by its own per-call rpcDeadline.
 			_, err := rtIDR.Client(pk).AddIntermediaryRules(ctx, rules)
-			if err != nil {
-				cancel()
-			}
 			errCh <- err
 		}(pk, rules)
 	}

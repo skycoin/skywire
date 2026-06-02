@@ -110,13 +110,23 @@ func (idr *idReserver) ReserveIDs(ctx context.Context) error {
 		go func(pk cipher.PubKey, n uint8) {
 			client := idr.rcM.Client(pk)
 			if client == nil {
-				cancel()
+				// NOTE: deliberately do NOT cancel the shared ctx on a single
+				// hop's failure. cancel() here propagated to every sibling
+				// goroutine still blocked in client.ReserveIDs(ctx); their
+				// Client.call() reacts to ctx.Done() by closing the underlying
+				// (pooled) DMSG stream — RST-ing perfectly healthy
+				// intermediates mid-reservation and turning one hop's blip into
+				// a whole-route setup failure (the "RST race" that made
+				// multi-hop / mux route setup fail at a high rate). Each hop is
+				// independently bounded by its own per-call rpcDeadline, and
+				// firstError below already waits for all N goroutines and
+				// returns the first error — so a genuinely dead hop still fails
+				// the route, without resetting the healthy hops.
 				errCh <- fmt.Errorf("reserve routeID from %s failed: no client available", pk)
 				return
 			}
 			rtIDs, err := client.ReserveIDs(ctx, n)
 			if err != nil {
-				cancel()
 				errCh <- fmt.Errorf("reserve routeID from %s failed: %w", pk, err)
 				return
 			}
