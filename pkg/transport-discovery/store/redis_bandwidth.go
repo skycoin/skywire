@@ -46,6 +46,16 @@ func (s *redisStore) visorAllKey() string {
 func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 	reporterPK cipher.PubKey, currentSent, currentRecv uint64) error {
 
+	// Never attribute bandwidth to the zero PubKey. A zero reporter would
+	// write "0000…:sent"/"0000…:recv" fields into the per-transport daily hash
+	// (later read back by recoverBandwidthEdges as a null transport edge) and a
+	// zero-PK per-visor daily key — the source of the null-PK orphan transports
+	// and the ghost-attributed bandwidth seen in /metrics. Defense-in-depth
+	// alongside the aggregator's zero-publisher gate.
+	if reporterPK == (cipher.PubKey{}) {
+		return nil
+	}
+
 	now := time.Now().UTC()
 	reporterHex := reporterPK.Hex()
 

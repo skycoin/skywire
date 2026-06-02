@@ -352,6 +352,15 @@ func (a *Aggregator) handleRootFilled(r *registry.Root) {
 		return
 	}
 	reporter := cipher.PubKey(r.Pub)
+	// A root with no publisher identity can't be attributed to a visor.
+	// Dispatching it would write bandwidth under the zero PubKey — the
+	// "0000…:sent" per-edge fields and the zero-PK per-visor key that became
+	// the null-PK orphan transports and the ghost-attributed bandwidth in
+	// /metrics. Drop it rather than mis-attribute.
+	if reporter == (cipher.PubKey{}) {
+		a.log.Debug("CXO aggregator: dropping root with zero publisher PK")
+		return
+	}
 	a.walkAndDispatch(pack, &rootNode, "", reporter)
 }
 
