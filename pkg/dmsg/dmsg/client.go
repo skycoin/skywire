@@ -23,7 +23,23 @@ type entryCacheEntry struct {
 	fetchedAt time.Time
 }
 
-const entryCacheTTL = 30 * time.Second
+// entryCacheTTL bounds how long a resolved discovery entry is reused
+// before a fresh lookup. It MUST stay comfortably larger than the
+// callers that re-resolve the same peers on a fixed cadence — most
+// notably the dmsg-tracker (skyenv.DmsgTrackerUpdateInterval, 30s),
+// which re-establishes trackers for the same handful of peers every
+// cycle. When this TTL equalled that interval, every tracker cycle
+// landed just after expiry → cache miss → a burst of concurrent
+// dmsg-discovery dials for the same ~10 peers → contention →
+// canceled/timed-out dials → "cannot connect to delegated server"
+// (202) → HTTP fallback. Sizing the TTL to span many tracker cycles
+// collapses those repeat lookups into one disc hit per peer per TTL,
+// which is what lets the DMSG-primary path stay on dmsg instead of
+// falling back to HTTP. Peer entries are stable (they change only on
+// a dmsg-server reconnect), and a stale entry self-heals: DialStream's
+// mesh phase reaches the peer via any shared server regardless of the
+// cached delegated-server list.
+const entryCacheTTL = 5 * time.Minute
 
 // SessionDialCallback is triggered BEFORE a session is dialed to.
 // If a non-nil error is returned, the session dial is instantly terminated.
