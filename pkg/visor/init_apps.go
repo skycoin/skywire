@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
@@ -575,9 +576,9 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		} else {
 			// Wrap listener with access control
 			authL := &authorizedDmsgListener{
-				Listener:      dmsgGRPCL,
-				authorizedPKs: authorizedPKs,
-				log:           dmsgGRPCLog,
+				Listener:  dmsgGRPCL,
+				whitelist: v.peerWhitelist,
+				log:       dmsgGRPCLog,
 			}
 
 			v.pushCloseStack("dmsg.grpc.listener", dmsgGRPCL.Close)
@@ -604,9 +605,9 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 			goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgGRPCPort, "dmsg_grpc", dmsgGRPCLog,
 				func(skyLis net.Listener) {
 					authSky := &authorizedDmsgListener{
-						Listener:      skyLis,
-						authorizedPKs: authorizedPKs,
-						log:           dmsgGRPCLog,
+						Listener:  skyLis,
+						whitelist: v.peerWhitelist,
+						log:       dmsgGRPCLog,
 					}
 					if err := dmsgGRPCServer.Serve(authSky); err != nil &&
 						!errors.Is(err, net.ErrClosed) &&
@@ -646,7 +647,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 			if tpRPCErr != nil {
 				log.WithError(tpRPCErr).Warn("Failed to create transport RPC server")
 			} else {
-				tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, whitelistPKs, v.transportRPCMux)
+				tpRPCSrv := NewTransportRPCServer(tpRPCLog, tpRPCS, v.peerWhitelist, v.transportRPCMux)
 				v.pushCloseStack("transport_rpc.server", tpRPCSrv.Close)
 				go tpRPCSrv.Serve()
 				tpRPCLog.WithField("whitelist_pks", len(whitelistPKs)).
@@ -683,9 +684,9 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 				dmsgRPCLog.WithError(err).Warn("Failed to listen on dmsg visor-RPC port")
 			} else {
 				authL := &authorizedDmsgListener{
-					Listener:      dmsgRPCL,
-					authorizedPKs: authorizedPKs,
-					log:           dmsgRPCLog,
+					Listener:  dmsgRPCL,
+					whitelist: v.peerWhitelist,
+					log:       dmsgRPCLog,
 				}
 				v.pushCloseStack("dmsg.visor_rpc.listener", dmsgRPCL.Close)
 
@@ -714,9 +715,9 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 				goServeSkynetMirror(ctx, v.conf.PK, skyenv.DmsgVisorRPCPort, "dmsg_visor_rpc", dmsgRPCLog,
 					func(skyLis net.Listener) {
 						authSky := &authorizedDmsgListener{
-							Listener:      skyLis,
-							authorizedPKs: authorizedPKs,
-							log:           dmsgRPCLog,
+							Listener:  skyLis,
+							whitelist: v.peerWhitelist,
+							log:       dmsgRPCLog,
 						}
 						for {
 							conn, err := authSky.Accept()
@@ -1005,8 +1006,8 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 // "Dmsg" name, the same wrapper is used for the skynet mirror.
 type authorizedDmsgListener struct {
 	net.Listener
-	authorizedPKs map[cipher.PubKey]bool
-	log           *logging.Logger
+	whitelist pty.Whitelist
+	log       *logging.Logger
 }
 
 func (l *authorizedDmsgListener) Accept() (net.Conn, error) {
@@ -1033,7 +1034,7 @@ func (l *authorizedDmsgListener) Accept() (net.Conn, error) {
 			conn.Close() //nolint:errcheck,gosec
 			continue
 		}
-		if !l.authorizedPKs[pk] {
+		if ok, err := l.whitelist.Get(pk); err != nil || !ok {
 			l.log.WithField("remote_pk", pk).Warn("Rejected unauthorized gRPC connection")
 			conn.Close() //nolint:errcheck,gosec
 			continue

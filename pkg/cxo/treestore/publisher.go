@@ -229,6 +229,58 @@ func NewWithDMSG(dmsgC *dmsg.Client, sk cipher.SecKey, conf PubConfig) (*Publish
 	return p, nil
 }
 
+// NewWithTCP is the native-TCP analog of NewWithDMSG: it constructs a
+// CXO node that listens on listenAddr over the node's built-in TCP
+// transport (no dmsg, no discovery) and hands back a Publisher with the
+// node already wired. Use this for standalone / dmsg-free deployments
+// where peers connect by an explicit tcp address rather than a
+// discovery-resolved PK (see Subscriber.ConnectTCP). The Publisher owns
+// the node — Close releases both.
+//
+// listenAddr is a "host:port" (e.g. ":8870"). Each node binds its own
+// listener, so distinct feeds hosted in the same process need distinct
+// addresses. The node identity is bound to sk (so the handshake-
+// advertised PK matches the feed PK), mirroring NewWithDMSG.
+func NewWithTCP(listenAddr string, sk cipher.SecKey, conf PubConfig) (*Publisher, error) {
+	cfg := node.NewConfig()
+	// Bind the CXO node's identity to the publisher's keypair so remote
+	// peers see the feed PK on the handshake — same rationale as
+	// NewWithDMSG (subscriber-allowlist gating keys off the feed PK).
+	cfg.SecKey = skycipher.SecKey(sk)
+	cfg.Config = skyobject.NewConfig()
+	cfg.Config.InMemoryDB = conf.InMemoryDB
+	cfg.Config.NoSyncCXDS = conf.NoSyncCXDS
+	if conf.DataDir != "" {
+		cfg.Config.DataDir = conf.DataDir
+	}
+	// Native-TCP transport: keep the TCP listener (NewNode starts it when
+	// TCP.Listen != ""), and disable UDP / RPC / dmsg. We do NOT call
+	// EnableDMSG.
+	cfg.TCP.Listen = listenAddr
+	cfg.UDP.Listen = ""
+	cfg.RPC = ""
+
+	allow := newAllowState(conf.SubscriberAllowlist)
+	cfg.OnSubscribeRemote = subscribeHook(allow)
+
+	cxoNode, err := node.NewNode(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	p, err := New(cxoNode, sk, Config{
+		BatchWindow: conf.BatchWindow,
+		Logger:      conf.Logger,
+		sharedAllow: allow,
+	})
+	if err != nil {
+		_ = cxoNode.Close() //nolint:errcheck
+		return nil, err
+	}
+	p.ownsNode = true
+	return p, nil
+}
+
 // New constructs a Publisher backed by the given CXO node. The feed
 // PK is derived from sk — the node's own keypair, by convention.
 // The publish loop starts immediately; call Close to stop it.

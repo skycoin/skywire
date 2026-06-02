@@ -332,7 +332,7 @@ Operator usage: [docs/guides/skynet.md](docs/guides/skynet.md).
 
 ## Skywire Rewards
 
-The [Skywire reward system](https://fiber.skywire.dev) is the
+The [Skywire reward system](https://theskywirenetwork.net) is the
 distribution mechanism for [Skycoin](https://skycoin.com). Skycoin is
 not 'mined' as with other cryptocurrencies; rewards in Skycoin ($SKY)
 are distributed daily to eligible Skywire visors who meet the

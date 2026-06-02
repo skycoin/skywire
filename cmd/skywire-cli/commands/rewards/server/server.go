@@ -898,7 +898,7 @@ func buildRouter() *gin.Engine {
 			c.Writer.Flush()
 		})
 
-		// dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L http://fiber.skywire.dev/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
+		// dmsgpost dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80/reward -d $(skycoin-cli createRawTransaction /home/user/.skycoin/wallets/2023_06_29.wlt --csv <(curl --silent -L https://theskywirenetwork.net/skycoin-rewards/csv) -a 24MGsKPDo3EJX4uF1h4CHcgmNNHmtGaLR5f) -s <secret-key-of-reward-whitelisted-pk>
 		authRoute.POST("/reward", func(c *gin.Context) {
 			//override the behavior of `public fallback` for this endpoint
 			if len(wlkeys) == 0 {
@@ -920,11 +920,16 @@ func buildRouter() *gin.Engine {
 				c.Writer.Write([]byte("skywire skycoin cli status:\n\n" + status + "\n\nskywire skycoin cli status error:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
-			//find all transacion csvs
-			f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice()
+			// Find all combined transaction CSVs. Anchored to
+			// YYYY-MM-DD_rewardtxn0.csv so the per-pool variants
+			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv) from
+			// PR #2946 are NOT listed here — those are informational
+			// only, not broadcast inputs, and would derail the
+			// distribution flow.
+			f, err := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Slice()
 			if err != nil {
 				c.Writer.WriteHeader(http.StatusInternalServerError)
-				c.Writer.Write([]byte(`script.FindFiles(wd + /hist/).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Slice():\n\n` + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
+				c.Writer.Write([]byte("script.FindFiles(wd + /hist/).MatchRegexp(combined rewardtxn0).Slice():\n\n" + strings.Join(f, "\n") + "\n\nError:\n\n" + err.Error())) //nolint:errcheck,gosec
 				return
 			}
 			//and range through the results
@@ -982,7 +987,11 @@ func buildRouter() *gin.Engine {
 				return
 			}
 			c.Writer.Header().Set("Server", "")
-			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint:errcheck,gosec
+			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
+			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
+			// #2946) are excluded — they are informational, not
+			// broadcast inputs.
+			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Basename().Slice() //nolint:errcheck,gosec
 			for _, f1 := range f {
 				g, err := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String()
 				if err != nil || g == "" || g == "\n" || g == "test" || g == "test\n" {
@@ -1010,7 +1019,11 @@ func buildRouter() *gin.Engine {
 			}
 			c.Writer.Header().Set("Server", "")
 			c.Writer.Header().Set("Content-Type", "text/plain")
-			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(".*_rewardtxn0.csv")).Basename().Slice() //nolint:errcheck,gosec
+			// Anchored to YYYY-MM-DD_rewardtxn0.csv so per-pool variants
+			// (_pool1_rewardtxn0.csv / _pool2_rewardtxn0.csv from PR
+			// #2946) are excluded — they are informational, not
+			// broadcast inputs.
+			f, _ := script.FindFiles(wd + `/hist/`).MatchRegexp(regexp.MustCompile(`[0-9]{4}-[0-9]{2}-[0-9]{2}_rewardtxn0\.csv$`)).Basename().Slice() //nolint:errcheck,gosec
 			for _, f1 := range f {
 				g, _ := script.File(wd + `/hist/` + strings.Replace(f1, "_rewardtxn0.csv", ".txt", -1)).String() //nolint:errcheck,gosec
 				if g != "" && g != "\n" {
@@ -1032,16 +1045,39 @@ func buildRouter() *gin.Engine {
 				_, err3 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_ineligible.csv", "", -1))
 				_, err4 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_shares.csv", "", -1))
 				_, err5 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), ".txt", "", -1))
-				if err1 != nil && err2 != nil && err3 != nil && err4 != nil && err5 != nil {
+				// Per-pool detail CSVs from the bandwidth-mode reward calc
+				// (PR #2946). Served as raw text — they have non-standard
+				// column layouts (pool1_shares: presence-share+P1 SKY;
+				// pool2_shares: bytes+weight+P2 SKY; pool*_rewardtxn0:
+				// per-pool aggregation by address) so falling through to
+				// the same raw-bytes serving branch as _rewardtxn0.csv is
+				// the right move — no per-column rewrite needed for now.
+				_, err6 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_pool1_shares.csv", "", -1))
+				_, err7 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_pool2_shares.csv", "", -1))
+				_, err8 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_pool1_rewardtxn0.csv", "", -1))
+				_, err9 := time.Parse("2006-01-02", strings.Replace(c.Param("date"), "_pool2_rewardtxn0.csv", "", -1))
+				if err1 != nil && err2 != nil && err3 != nil && err4 != nil && err5 != nil &&
+					err6 != nil && err7 != nil && err8 != nil && err9 != nil {
 					fmt.Println("cant parse date or match filename")
 					c.Writer.WriteHeader(http.StatusNotFound)
 					c.Writer.Flush()
 					return
 				}
-				if err1 == nil || err2 == nil || err5 == nil {
+				if err1 == nil || err2 == nil || err5 == nil ||
+					err6 == nil || err7 == nil || err8 == nil || err9 == nil {
 					filetoserve, err := script.File(wd + `/hist/` + c.Param("date")).Bytes()
 					if err == nil {
 						c.Writer.Header().Set("Content-Type", "text/plain")
+						// Raw CSV / stats / txt downloads are bulk data
+						// artifacts the indexable per-date HTML page
+						// already summarizes. Tell crawlers not to
+						// index the raw-file URLs themselves so they
+						// don't dilute the indexable surface (we want
+						// /skycoin-rewards/hist/<date> to be THE result
+						// for "skycoin rewards <date>", not a dozen
+						// .csv siblings). `follow` keeps any links
+						// inside the file (typically none) crawlable.
+						c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
 						c.Writer.WriteHeader(http.StatusOK)
 						c.Writer.Flush()
 						_, _ = c.Writer.Write(filetoserve) //nolint:errcheck,gosec
@@ -1068,6 +1104,7 @@ func buildRouter() *gin.Engine {
 						toserve += fmt.Sprintf("%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(reason, "\n"), "\r"), ","))
 					}
 					c.Writer.Header().Set("Content-Type", "text/plain")
+					c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
 					c.Writer.WriteHeader(http.StatusOK)
 					c.Writer.Flush()
 					c.Writer.Write([]byte(toserve)) //nolint:errcheck,gosec
@@ -1111,6 +1148,7 @@ func buildRouter() *gin.Engine {
 						toserve += fmt.Sprintf("%s%s%s\n", strings.TrimRight(strings.TrimRight(thispk, "\n"), "\r"), strings.TrimRight(strings.TrimRight(share, "\n"), "\r"), strings.TrimRight(strings.TrimRight(strings.TrimRight(sky, "\n"), "\r"), ","))
 					}
 					c.Writer.Header().Set("Content-Type", "text/plain")
+					c.Writer.Header().Set("X-Robots-Tag", "noindex, follow")
 					c.Writer.WriteHeader(http.StatusOK)
 					c.Writer.Flush()
 					c.Writer.Write([]byte(toserve)) //nolint:errcheck,gosec
@@ -1157,6 +1195,16 @@ func buildRouter() *gin.Engine {
 			if err != nil {
 				l += "<div style='float: right;'>PK,Share,SKY Amount\nReward shares file not found\nerror: " + err.Error() + "\n\n"
 			} else {
+				// Bandwidth-mode shares.csv has 11 columns where col4 is
+				// "Bandwidth (bytes)" and col5 is "Total Reward SKY";
+				// legacy-mode has 10 columns where col4 is the SKY amount
+				// and col5 is the IP. Detect the layout from the header
+				// row so the wrong column doesn't get displayed as SKY.
+				bwMode := len(l2) > 0 && strings.Contains(l2[0], "Bandwidth (bytes)")
+				skyCol := 4
+				if bwMode {
+					skyCol = 5
+				}
 				l += "<div style='float: right;'>PK,Share,SKY Amount\n"
 				for i, line := range l2 {
 					if i == 0 {
@@ -1176,9 +1224,9 @@ func buildRouter() *gin.Engine {
 						c.Writer.Flush()
 						return
 					}
-					sky, err := script.Echo(line).Column(4).String()
+					sky, err := script.Echo(line).Column(skyCol).String()
 					if err != nil {
-						fmt.Println("non nil script.Echo(line).Column(4).String() error")
+						fmt.Printf("non nil script.Echo(line).Column(%d).String() error\n", skyCol)
 						c.Writer.WriteHeader(http.StatusNotFound)
 						c.Writer.Flush()
 						return
@@ -1205,6 +1253,46 @@ func buildRouter() *gin.Engine {
 					}
 				}
 			}
+
+			// Per-pool detail tables (from PR #2946 calc.go side outputs).
+			// Each section reads the corresponding hist/<date>_pool[12]_*.csv
+			// and renders PK + qualifier + per-pool SKY. Missing files are
+			// silently skipped — they may not exist on dates that
+			// pre-date the per-pool feature, or when running without
+			// bandwidth mode.
+			//   pool1_shares.csv columns: SkyAddr, PK, PresenceShare, Pool1SKY, IP, Arch, UUID, Interfaces, Country, XPub
+			//   pool2_shares.csv columns: SkyAddr, PK, Bandwidth(bytes), Pool2Weight, Pool2SKY, IP, ...
+			l2, err = script.File(wd + `/hist/` + c.Param("date") + "_pool1_shares.csv").Slice()
+			if err == nil {
+				l += "\n\nPool 1 (Presence):\nPK,Presence Share,Pool 1 SKY\n"
+				for i, line := range l2 {
+					if i == 0 {
+						continue
+					}
+					thispk, _ := script.Echo(line).Column(2).String() //nolint:errcheck,gosec
+					share, _ := script.Echo(line).Column(3).String()  //nolint:errcheck,gosec
+					p1sky, _ := script.Echo(line).Column(4).String()  //nolint:errcheck,gosec
+					l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(share, "\n") + strings.Replace(p1sky, ",\n", "\n", -1)
+				}
+			}
+			l2, err = script.File(wd + `/hist/` + c.Param("date") + "_pool2_shares.csv").Slice()
+			if err == nil {
+				l += "\n\nPool 2 (Bandwidth):\nPK,Bandwidth (bytes),Pool 2 SKY\n"
+				for i, line := range l2 {
+					if i == 0 {
+						continue
+					}
+					thispk, _ := script.Echo(line).Column(2).String() //nolint:errcheck,gosec
+					bytes, _ := script.Echo(line).Column(3).String()  //nolint:errcheck,gosec
+					p2sky, _ := script.Echo(line).Column(5).String()  //nolint:errcheck,gosec
+					// Column(3) already brings the trailing comma so
+					// it serves as the separator before p2sky — no
+					// explicit "," needed (matches Pool 1 + main shares
+					// render pattern).
+					l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + strings.TrimRight(bytes, "\n") + strings.Replace(p2sky, ",\n", "\n", -1)
+				}
+			}
+
 			l += "</div>"
 
 			l1, err = script.File(wd + `/hist/` + c.Param("date") + "_stats.txt").String()
@@ -1276,10 +1364,23 @@ func buildRouter() *gin.Engine {
 				fmt.Println("Error parsing Front Page template:", err1)
 			}
 			tmpl := tmpl0
+			// Build SEO-rich Title + Description + JSON-LD from the
+			// freshly-rendered stats file. Crawlers index per-date
+			// pages much better when the description carries the
+			// actual reward totals + visor count + country count
+			// instead of a templated stub, and the JSON-LD Dataset
+			// block gives Google a clean rich-snippet target.
+			stats := parseRewardStats(wd, c.Param("date"))
+			pageDescription := stats.description(c.Param("date"))
+			pageTitle := stats.title(c.Param("date"))
+			pageCanonical := strings.TrimRight(canonicalDomain, "/") + "/skycoin-rewards/hist/" + c.Param("date")
+			jsonLD := stats.jsonLD(pageCanonical, c.Param("date"))
+
 			htmlPageTemplateData1 := (htmlTemplateData{
-				Title:       "Skycoin Rewards " + c.Param("date"),
-				Description: "Skycoin reward calculation details for " + c.Param("date") + " on the Skywire Network.",
-				Content:     htmpl.HTML(l), //nolint:gosec
+				Title:       pageTitle,
+				Description: pageDescription,
+				Content:     htmpl.HTML(l),      //nolint:gosec
+				JSONLD:      htmpl.HTML(jsonLD), //nolint:gosec
 			}).withCanonical("/skycoin-rewards/hist/" + c.Param("date"))
 			tmplData := map[string]interface{}{
 				"Page": htmlPageTemplateData1,
@@ -1676,26 +1777,6 @@ func serveStandalone(r1 *gin.Engine) {
 			log.WithError(err).Error("HTTP server shutdown error")
 		}
 	}()
-
-	if ensureOnlineURL != "" {
-		go func() {
-			var errCount int
-			ticker := time.NewTicker(15 * time.Minute)
-			defer ticker.Stop()
-			for range ticker.C {
-				_, err := script.NewPipe().WithHTTPClient(&http.Client{Timeout: 60 * time.Second}).Get(ensureOnlineURL).AppendFile("/dev/null")
-				if err != nil {
-					errCount++
-					log.WithError(err).Error(fmt.Sprintf("Error fetching %v\nError count: %v", ensureOnlineURL, errCount))
-				} else {
-					errCount = 0
-				}
-				if errCount >= 3 {
-					log.Fatalf("http server %v unreachable after %v tries ; exiting", ensureOnlineURL, errCount)
-				}
-			}
-		}()
-	}
 
 	go func() {
 		err := generateAndCacheJSON()

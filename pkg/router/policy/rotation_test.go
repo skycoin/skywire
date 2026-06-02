@@ -52,6 +52,52 @@ def on_tick(ctx, legs):
 	}
 }
 
+// TestEvaluator_OnTick_ByteThresholdAndHops verifies the leg fields
+// added for byte- and hop-aware rotation (sent_bytes / recv_bytes /
+// hops) round-trip into on_tick: a script can drop a leg once it has
+// carried a byte threshold and build an exclude_hops set from that
+// leg's intermediate chain.
+func TestEvaluator_OnTick_ByteThresholdAndHops(t *testing.T) {
+	const hopPK = "030000000000000000000000000000000000000000000000000000000000000000"
+	script := `
+def decide_route(ctx, candidates):
+    return RouteSpec(rotation_interval_seconds=30)
+
+def on_tick(ctx, legs):
+    drop = []
+    excl = []
+    for l in legs:
+        if l.sent_bytes + l.recv_bytes > 1000000:
+            drop.append(l.index)
+            excl = excl + l.hops
+    if len(drop) == 0:
+        return None
+    return Rotation(drop_legs=drop, add_leg=True, exclude_hops=excl)
+`
+	eval, err := NewEvaluator("test", script)
+	if err != nil {
+		t.Fatalf("NewEvaluator: %v", err)
+	}
+
+	legs := []LegInfo{
+		{Index: 0, Kind: "stcpr", Alive: true, SentBytes: 2_000_000, RecvBytes: 0, Hops: []string{hopPK}},
+		{Index: 1, Kind: "stcpr", Alive: true, SentBytes: 10, RecvBytes: 10},
+	}
+	action, err := eval.OnTick(context.Background(), RoutingContext{App: "vpn-client"}, legs)
+	if err != nil {
+		t.Fatalf("OnTick: %v", err)
+	}
+	if len(action.DropLegs) != 1 || action.DropLegs[0] != 0 {
+		t.Errorf("DropLegs=%v, want [0] (leg 0 over byte threshold)", action.DropLegs)
+	}
+	if !action.AddLeg {
+		t.Errorf("AddLeg=false, want true")
+	}
+	if len(action.ExcludeHops) != 1 || action.ExcludeHops[0] != hopPK {
+		t.Errorf("ExcludeHops=%v, want [%s] (dropped leg's hops)", action.ExcludeHops, hopPK)
+	}
+}
+
 // TestEvaluator_OnTick_NoFunction returns the zero-value action
 // when the script doesn't define on_tick (the common case for
 // non-rotating policies).

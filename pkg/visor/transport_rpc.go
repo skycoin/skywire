@@ -13,8 +13,8 @@ import (
 	"net/rpc"
 	"sync"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -22,7 +22,7 @@ import (
 type TransportRPCServer struct {
 	log       *logging.Logger
 	rpcServer *rpc.Server
-	whitelist map[cipher.PubKey]struct{}
+	whitelist pty.Whitelist
 	mux       *transport.VStreamMux
 	done      chan struct{}
 	once      sync.Once
@@ -30,7 +30,8 @@ type TransportRPCServer struct {
 
 // NewTransportRPCServer creates a transport-level RPC server.
 // rpcServer is the visor's existing RPC server (same one that serves localhost).
-// whitelistPKs controls who can connect — typically the hypervisor PKs.
+// whitelist is the visor's shared peer whitelist — consulted live per
+// accept, so runtime transitive additions take effect without a restart.
 //
 // mux MUST be the same VStreamMux that's registered as the transport
 // manager's VisorRPCPacket handler (via tm.SetVisorRPCHandler) AND is
@@ -43,18 +44,13 @@ type TransportRPCServer struct {
 func NewTransportRPCServer(
 	log *logging.Logger,
 	rpcServer *rpc.Server,
-	whitelistPKs []cipher.PubKey,
+	whitelist pty.Whitelist,
 	mux *transport.VStreamMux,
 ) *TransportRPCServer {
-	wl := make(map[cipher.PubKey]struct{}, len(whitelistPKs))
-	for _, pk := range whitelistPKs {
-		wl[pk] = struct{}{}
-	}
-
 	srv := &TransportRPCServer{
 		log:       log,
 		rpcServer: rpcServer,
-		whitelist: wl,
+		whitelist: whitelist,
 		mux:       mux,
 		done:      make(chan struct{}),
 	}
@@ -80,7 +76,7 @@ func (s *TransportRPCServer) Serve() {
 		remotePK := stream.RemotePK()
 
 		// Check whitelist.
-		if _, ok := s.whitelist[remotePK]; !ok {
+		if ok, err := s.whitelist.Get(remotePK); err != nil || !ok {
 			s.log.WithField("remote_pk", remotePK.String()).
 				Warn("Transport RPC rejected: PK not in whitelist")
 			stream.Close() //nolint:errcheck,gosec
@@ -104,13 +100,4 @@ func (s *TransportRPCServer) Close() error {
 		s.mux.Close() //nolint:errcheck,gosec
 	})
 	return nil
-}
-
-// UpdateWhitelist replaces the whitelist at runtime.
-func (s *TransportRPCServer) UpdateWhitelist(pks []cipher.PubKey) {
-	wl := make(map[cipher.PubKey]struct{}, len(pks))
-	for _, pk := range pks {
-		wl[pk] = struct{}{}
-	}
-	s.whitelist = wl
 }

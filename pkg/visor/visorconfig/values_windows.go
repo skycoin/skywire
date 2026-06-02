@@ -128,7 +128,7 @@ func genSysInfo() customSysinfo {
 // Threads is populated from runtime.NumCPU() so the field is never
 // zero even if the registry read fails.
 func getWindowsCPUInfo() cpuInfo {
-	ci := cpuInfo{Threads: uint(runtime.NumCPU())}
+	ci := cpuInfo{Threads: uint(runtime.NumCPU())} //nolint:gosec // runtime.NumCPU() is always positive
 	k, err := registry.OpenKey(registry.LOCAL_MACHINE,
 		`HARDWARE\DESCRIPTION\System\CentralProcessor\0`, registry.QUERY_VALUE)
 	if err != nil {

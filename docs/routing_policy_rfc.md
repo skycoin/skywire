@@ -232,7 +232,11 @@ Phase 6 adds an optional script function:
 ```python
 def on_leg_change(ctx, legs, change):
     # ctx is the dial's RoutingContext (same fields as decide_route's ctx).
-    # legs is the route group's current legs: [{index, kind, latency_ms, alive}, ...].
+    # legs is the route group's current legs:
+    #   [{index, kind, latency_ms, alive, sent_bytes, recv_bytes, hops}, ...].
+    # sent_bytes/recv_bytes are the leg transport's cumulative payload-byte
+    # counters; hops is the leg's intermediate-PK chain (endpoints excluded,
+    # empty for a direct leg) — usable to build an exclude_hops set.
     # change is {"event": "added" | "dropped", "leg_index": N}.
     #
     # Return a RouteSpec; only the distribution field is honored

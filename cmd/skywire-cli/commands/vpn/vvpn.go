@@ -47,6 +47,7 @@ func init() {
 	startCmd.Flags().BoolVar(&forceLocalRoutes, "local-route", false, "calculate routes locally instead of using route finder")
 	startCmd.Flags().BoolVarP(&startVerbose, "verbose", "v", false, "stream the visor's logs scoped to vpn-client (app stdout + tagged router/mux/setup events); ctrl+c stops the vpn and exits")
 	startCmd.Flags().StringVar(&startVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
+	startCmd.Flags().StringVar(&startRoutingPolicy, "routing-policy", "", "per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm (\"\" or \"none\" clears any previously-installed override)")
 }
 
 var startCmd = &cobra.Command{
@@ -129,6 +130,13 @@ var startCmd = &cobra.Command{
 			}
 		}
 
+		// Install the per-app routing policy before the app starts
+		// (only when the operator passed --routing-policy) so the
+		// first dial vpn-client makes already runs through the policy.
+		// "" / "none" clears a previously-installed override.
+		if cmd.Flags().Changed("routing-policy") {
+			internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(stateName, startRoutingPolicy))
+		}
 		internal.Catch(cmd.Flags(), rpcClient.StartVPNClientWithMode(pubkey, launcherMode))
 		if !startVerbose {
 			internal.PrintOutput(cmd.Flags(), nil, "Starting.")

@@ -64,6 +64,11 @@ nav .dropdown a{display:block;padding:4px 12px;}
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
   </div></details>
   <a href='/login'>login</a>
+  <details><summary>resources</summary><div class='dropdown'>
+    <a title='Browser-based form that builds the apt-get install command' href='https://deb.theskywirenetwork.net/generator/'>install command generator</a>
+    <a title='Skywire APT repository — install via apt-get' href='https://deb.theskywirenetwork.net'>apt repo (deb)</a>
+    <a title='Skywire Network blog' href='https://blog.theskywirenetwork.net'>blog</a>
+  </div></details>
   <details><summary>community</summary><div class='dropdown'>
     <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
     <a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
@@ -85,6 +90,13 @@ type htmlTemplateData struct {
 	OGImage     string
 	Page        string
 	Content     htmpl.HTML
+	// JSONLD is an optional schema.org structured-data block (already
+	// wrapped in a <script type='application/ld+json'> tag) that gets
+	// emitted in <head> when set. Used on per-date reward pages to
+	// give Google et al a machine-readable Dataset summary
+	// (qualifying visor count, total SKY distributed, country count,
+	// date) so search-result rich snippets can render properly.
+	JSONLD htmpl.HTML
 }
 
 // withCanonical returns a copy of the template data with canonical URL and OG image set
@@ -105,16 +117,24 @@ func chunkedPageHead(title, description, path string) string {
 	h := `<!doctype html><html lang='en'><head>` +
 		`<meta charset='UTF-8'>` +
 		`<meta name='viewport' content='width=device-width, initial-scale=1.0'>` +
+		`<meta name='theme-color' content='#1a1d24'>` +
+		`<meta name='keywords' content='Skycoin, Skywire, rewards, mesh network, transport bandwidth, dmsg, visor'>` +
 		`<title>` + title + ` - Skywire Network</title>` +
 		`<meta name='description' content='` + description + `'>` +
 		`<meta property='og:title' content='` + title + ` - Skywire Network'>` +
 		`<meta property='og:description' content='` + description + `'>` +
-		`<meta property='og:type' content='website'>`
+		`<meta property='og:type' content='website'>` +
+		`<meta property='og:site_name' content='Skywire Network'>` +
+		`<meta name='twitter:card' content='summary_large_image'>` +
+		`<meta name='twitter:title' content='` + title + ` - Skywire Network'>` +
+		`<meta name='twitter:description' content='` + description + `'>`
 	if canonicalDomain != "" {
 		canonical := strings.TrimRight(canonicalDomain, "/") + path
+		ogImage := strings.TrimRight(canonicalDomain, "/") + "/favicon.ico"
 		h += `<link rel='canonical' href='` + canonical + `'>` +
 			`<meta property='og:url' content='` + canonical + `'>` +
-			`<meta property='og:image' content='` + strings.TrimRight(canonicalDomain, "/") + `/favicon.ico'>`
+			`<meta property='og:image' content='` + ogImage + `'>` +
+			`<meta name='twitter:image' content='` + ogImage + `'>`
 	}
 	h += `<style type='text/css'>` +
 		`a { color: #3399FF; } a:visited { color: #FF00FF; } ` +
@@ -146,8 +166,22 @@ func mainPage(c *gin.Context) {
 	mainnetRulesHTML, _ := script.Exec(`skywire cli reward rules -l`).String()              //nolint:errcheck,gosec
 	skywireVersion, _ := script.Exec(`skywire -v`).Replace("skywire version ", "").String() //nolint:errcheck,gosec
 	htmlPageTemplateData1 := htmlPageTemplateData.withCanonical("/")
+	// Short orientation block above the mainnet-rules dump so first-
+	// time visitors get a value-prop, an install entry point, and a
+	// pointer to the eligibility rules — instead of being dropped
+	// straight into a 200-line rules article. Keep this terse;
+	// detailed rules live below.
+	introHTML := `<div style='border:1px solid #333;padding:10px 14px;margin:8px 0;background:#1a1d24;border-radius:4px;'>` +
+		`<b>Skywire</b> is a decentralized mesh network. Run a visor on any computer (Linux, ARM SBC, Windows, macOS) and earn <b>Skycoin</b> rewards for providing uptime and bandwidth to the network. 816,000 SKY are distributed annually across two reward pools (presence + bandwidth) to all eligible visors.<br><br>` +
+		`<b>Get started:</b> <a href='https://deb.theskywirenetwork.net/generator/'>install command generator</a> &middot; ` +
+		`<a href='https://deb.theskywirenetwork.net'>apt repo</a> &middot; ` +
+		`<a href='/skycoin-rewards'>view reward history</a> &middot; ` +
+		`<a href='https://blog.theskywirenetwork.net'>blog</a> &middot; ` +
+		`<a href='https://t.me/skywire'>community</a><br>` +
+		`<span style='color:#94a3b8;font-size:9pt;'>Full eligibility rules below. Network statistics at <a href='/stats'>/stats</a>.</span>` +
+		`</div>`
 	//nolint:gosec
-	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + mainnetRulesHTML)
+	htmlPageTemplateData1.Content = htmpl.HTML(skywireVersion + "<br>" + skycoinlogohtml + "<br>" + introHTML + mainnetRulesHTML)
 	tmplData := map[string]interface{}{
 		"Page": htmlPageTemplateData1,
 	}
@@ -191,6 +225,11 @@ var htmlMainPageTemplate = `
     <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
   </div></details>
   <a href='/login'>login</a>
+  <details><summary>resources</summary><div class='dropdown'>
+    <a title='Browser-based form that builds the apt-get install command' href='https://deb.theskywirenetwork.net/generator/'>install command generator</a>
+    <a title='Skywire APT repository — install via apt-get' href='https://deb.theskywirenetwork.net'>apt repo (deb)</a>
+    <a title='Skywire Network blog' href='https://blog.theskywirenetwork.net'>blog</a>
+  </div></details>
   <details><summary>community</summary><div class='dropdown'>
     <a title='@skywire telegram' href='https://t.me/skywire'>skywire telegram</a>
     <a title='@skywire_reward telegram' href='https://t.me/skywire_reward'>reward notifications</a>
@@ -209,14 +248,22 @@ var htmlMainPageTemplate = `
 var htmlHeadTemplate = `<head>
 <meta charset='UTF-8'>
 <meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=4.9,'>
+<meta name='theme-color' content='#1a1d24'>
+<meta name='keywords' content='Skycoin, Skywire, rewards, mesh network, transport bandwidth, dmsg, visor'>
 <title>{{.Page.Title}} - Skywire Network</title>
 {{if .Page.Description}}<meta name='description' content='{{.Page.Description}}'>
-<meta property='og:description' content='{{.Page.Description}}'>{{end}}
+<meta property='og:description' content='{{.Page.Description}}'>
+<meta name='twitter:description' content='{{.Page.Description}}'>{{end}}
 <meta property='og:title' content='{{.Page.Title}} - Skywire Network'>
 <meta property='og:type' content='website'>
+<meta property='og:site_name' content='Skywire Network'>
+<meta name='twitter:card' content='summary_large_image'>
+<meta name='twitter:title' content='{{.Page.Title}} - Skywire Network'>
 {{if .Page.Canonical}}<link rel='canonical' href='{{.Page.Canonical}}'>
 <meta property='og:url' content='{{.Page.Canonical}}'>
-<meta property='og:image' content='{{.Page.OGImage}}'>{{end}}
+<meta property='og:image' content='{{.Page.OGImage}}'>
+<meta name='twitter:image' content='{{.Page.OGImage}}'>{{end}}
+{{if .Page.JSONLD}}{{.Page.JSONLD}}{{end}}
 <style type='text/css'>
 a {
 		color: #3399FF;

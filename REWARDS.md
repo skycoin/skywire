@@ -38,7 +38,7 @@ It should be noted that the system survey generation requires root for many of i
 The log collection and [reward processing](#reward-processing) happens hourly via [skywire-reward.service](/scripts/rewards/services/skywire-reward.service) - triggered to run hourly by [skywire-reward.timer](/scripts/rewards/services/skywire-reward.timer).
 
 The log collection run can be viewed here:
-https://fiber.skywire.dev/log-collection
+https://theskywirenetwork.net/log-collection
 
 The surveys and transport logs are collected with
 
@@ -86,9 +86,9 @@ This service is called by a timer which triggers it to run hourly
 /etc/systemd/system/[`skywire-reward.timer`](/scripts/rewards/services/skywire-reward.timer).
 
 
-## fiber.skywire.dev
+## theskywirenetwork.net
 
-The 'frontend' of the reward system, is currently running at [fiber.skywire.dev](https://fiber.skywire.dev) and is reliant upon on the output of certain cli commands ~~and some scripts~~
+The 'frontend' of the reward system, is currently running at [theskywirenetwork.net](https://theskywirenetwork.net) and is reliant upon on the output of certain cli commands ~~and some scripts~~
 
 [`skywire cli rewards ui`](cmd/skywire-cli/commands/rewards/ui.go) serves the reward system frontend or user interface - via http and dmsghttp.
 
@@ -97,13 +97,13 @@ The service which runs the reward system UI:
 
 A wrapper script [`getlogs.sh`](scripts/rewards/getlogs.sh) is used to redirect the output of `skywire cli log` to a file, which is displayed at:
 
-https://fiber.skywire.dev/log-collection
+https://theskywirenetwork.net/log-collection
 
 The above endpoint will live-update via streamed html / chunked transfer encoding when the hourly survey and log collection run is ongoing
 
 Here shows links to the reward calculations and distribution data by day:
 
-https://fiber.skywire.dev/skycoin-rewards
+https://theskywirenetwork.net/skycoin-rewards
 
 on each linked page, the distribution data is displayed with a link to the explorer for that transaction if it was broadcast. Also displayed are the public keys and their reward shares, or the reason why they were not rewarded
 
@@ -143,7 +143,7 @@ REWARD_WL_SK=<secret-key-of-whitelisted-public-key>
 REWARD_SYS_URL="dmsg://<reward-system-public-key>:80"
 ```
 
-before the script is run and the transaction is attempted to be broadcast, it's crucial to check that the hourly [log collection and reward calculation](https://fiber.skywire.dev/log-collection) is not ongoing.
+before the script is run and the transaction is attempted to be broadcast, it's crucial to check that the hourly [log collection and reward calculation](https://theskywirenetwork.net/log-collection) is not ongoing.
 
 ### Reward Notifications
 
