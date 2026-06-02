@@ -102,6 +102,29 @@
                 </div>
               }
             </div>
+            <!-- Route options (applied when pressing Start). -->
+            @if (currentRemoteServer) {
+              <div class="route-options">
+                <div class="route-options-title">{{ 'vpn.status-page.route-options.title' | translate }}</div>
+                <div class="route-option">
+                  <span class="route-option-label"
+                    [matTooltip]="'vpn.status-page.route-options.hops-info' | translate">
+                    {{ 'vpn.status-page.route-options.hops' | translate }}
+                  </span>
+                  <input type="number" min="1" [max]="maxRouteOption" step="1"
+                    [value]="minHops" (input)="setMinHops($event)" [disabled]="showBusy">
+                </div>
+                <div class="route-option">
+                  <span class="route-option-label"
+                    [matTooltip]="'vpn.status-page.route-options.mux-info' | translate">
+                    {{ 'vpn.status-page.route-options.mux' | translate }}
+                    <span class="experimental">{{ 'vpn.status-page.route-options.experimental' | translate }}</span>
+                  </span>
+                  <input type="number" min="1" [max]="maxRouteOption" step="1"
+                    [value]="muxRoutes" (input)="setMuxRoutes($event)" [disabled]="showBusy">
+                </div>
+              </div>
+            }
             <!-- Last error. -->
             <div>
               @if (backendState && backendState.vpnClientAppData && backendState.vpnClientAppData.lastErrorMsg) {

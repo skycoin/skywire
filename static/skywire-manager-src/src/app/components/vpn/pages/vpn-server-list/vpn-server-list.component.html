@@ -271,12 +271,7 @@
                     </app-vpn-server-name>
                   </td>
                   <td class="location-column">
-                    @if (server.location) {
-                      {{ server.location }}
-                    }
-                    @if (!server.location) {
-                      {{ 'vpn.server-list.unknown' | translate }}
-                    }
+                    {{ getLocationText(server.location) }}
                   </td>
                   <!--
                   // TODO: this should be used, instead of the currently active version, if the extra columns are reactivated.
