@@ -167,12 +167,22 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 		dw := widgets.NewDiskWidget()
 		w = dw
 	case "cpu":
-		cpu := widgets.NewCPUWidget(c.UpdateInterval, c.GraphHorizontalScale, c.AverageLoad, c.PercpuLoad)
+		cpu := widgets.NewCPUWidget(c.UpdateInterval, c.GraphHorizontalScale, c.AverageLoad, c.PercpuLoad, c.Multiload)
 		assignColors(cpu.Data, c.Colorscheme.CPULines, cpu.LineColors)
 		w = cpu
 	case "mem":
-		m := widgets.NewMemWidget(c.UpdateInterval, c.GraphHorizontalScale)
-		assignColors(m.Data, c.Colorscheme.MemLines, m.LineColors)
+		m := widgets.NewMemWidget(c.UpdateInterval, c.GraphHorizontalScale, c.Multiload)
+		if c.Multiload {
+			// Color the used/buff/cache/total components as shades of the
+			// colorscheme's first memory hue (multiload-ng style).
+			base := ui.Color(0)
+			if len(c.Colorscheme.MemLines) > 0 {
+				base = ui.Color(c.Colorscheme.MemLines[0])
+			}
+			m.AssignShades(base)
+		} else {
+			assignColors(m.Data, c.Colorscheme.MemLines, m.LineColors)
+		}
 		w = m
 	case "batt":
 		b := widgets.NewBatteryWidget(c.GraphHorizontalScale)

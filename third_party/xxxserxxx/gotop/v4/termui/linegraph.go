@@ -1,6 +1,7 @@
 package termui
 
 import (
+	"fmt"
 	"image"
 	"sort"
 	"strconv"
@@ -46,6 +47,36 @@ func NewLineGraph() *LineGraph {
 		LineColors:  make(map[string]ui.Color),
 		LabelStyles: make(map[string]ui.Modifier),
 	}
+}
+
+// Tint returns a lighter variant of a 256-color "color cube" color (palette
+// indices 16-231) by blending each channel toward white by fraction t (0..1).
+// t<=0 returns the base color; colors outside the cube are returned unchanged.
+// Used to derive shades of a single base hue (e.g. light vs. dark green for
+// memory used/buffers/cache) the way multiload-ng tints one color per subtype.
+func Tint(base ui.Color, t float64) ui.Color {
+	c := int(base)
+	if c < 16 || c > 231 || t <= 0 {
+		return base
+	}
+	if t > 1 {
+		t = 1
+	}
+	c -= 16
+	blend := func(v int) int {
+		nv := int(float64(v) + (5.0-float64(v))*t + 0.5)
+		if nv < 0 {
+			nv = 0
+		}
+		if nv > 5 {
+			nv = 5
+		}
+		return nv
+	}
+	r := blend(c / 36)
+	g := blend((c % 36) / 6)
+	b := blend(c % 6)
+	return ui.Color(16 + 36*r + 6*g + b)
 }
 
 func (lg *LineGraph) Draw(buf *ui.Buffer) {
@@ -131,7 +162,20 @@ func (lg *LineGraph) Draw(buf *ui.Buffer) {
 		}
 	}
 
-	// renders key/label ontop
+	lg.drawLabels(buf)
+}
+
+// drawLabels renders the per-series key + value text overlaid on the graph.
+// Series names are left-justified to the widest name so the value column lines
+// up instead of floating right after each variable-width name. Shared by the
+// line and stacked render paths.
+func (lg *LineGraph) drawLabels(buf *ui.Buffer) {
+	nameWid := 0
+	for _, seriesName := range lg.seriesList {
+		if len(seriesName) > nameWid {
+			nameWid = len(seriesName)
+		}
+	}
 	maxWid := 0
 	xoff := 0 // X offset for additional columns of text
 	yoff := 0 // Y offset for resetting column to top of widget
@@ -151,7 +195,7 @@ func (lg *LineGraph) Draw(buf *ui.Buffer) {
 		}
 
 		// render key ontop, but let braille be drawn over space characters
-		str := seriesName + " " + lg.Labels[seriesName]
+		str := fmt.Sprintf("%-*s %s", nameWid, seriesName, lg.Labels[seriesName])
 		if len(str) > maxWid {
 			maxWid = len(str)
 		}
