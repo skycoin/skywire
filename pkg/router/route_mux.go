@@ -69,6 +69,15 @@ type routeMux struct {
 	// the individual counters.
 	legMu sync.RWMutex
 	legs  []*legCounters
+	// ready[i] reports whether leg i may be SELECTED for sending. The
+	// primary leg (0) is ready from the start; an aux leg only becomes
+	// ready once we have received a packet (data or handshake) on it,
+	// which proves the peer finished registering its rule. Without this,
+	// the selector could steer the first writes onto an aux leg the peer
+	// has not set up yet — those packets are dropped, the reorder buffer
+	// stalls on the missing sequence, and the stream hangs until it is
+	// closed (the mux>=2 "0 bytes / close code 0" bug). Guarded by legMu.
+	ready []bool
 }
 
 // newRouteMux creates a new routeMux instance with all sub-components initialized.
@@ -117,7 +126,7 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 			idx := m.tpSelector.SelectForPayload(payload)
 			if idx < len(tps) {
 				tp := tps[idx]
-				if tp != nil && !tp.IsClosed() {
+				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 					return tp, fwd[idx], idx, nil
 				}
 			}
@@ -129,19 +138,22 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		idx := m.tpSelector.Select()
 		if idx < len(tps) {
 			tp := tps[idx]
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 				return tp, fwd[idx], idx, nil
 			}
 		}
 	}
 
-	// Fallback: round-robin with skip-dead
+	// Fallback: round-robin with skip-dead and skip-not-ready. An aux leg
+	// the peer has not confirmed yet is skipped so we never send the first
+	// packets onto a route whose rule the peer has not registered; the
+	// primary leg (0) is always ready, so this loop always finds it.
 	n := uint32(len(tps)) //nolint:gosec
 	start := atomic.AddUint32(&m.tpIndex, 1) - 1
 	for i := uint32(0); i < n; i++ {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]
-		if tp != nil && !tp.IsClosed() {
+		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 			return tp, fwd[idx], idx, nil
 		}
 	}
@@ -157,7 +169,41 @@ func (m *routeMux) growLegs(n int) {
 	for len(m.legs) < n {
 		m.legs = append(m.legs, &legCounters{})
 	}
+	for len(m.ready) < n {
+		// The primary leg (index 0) is ready immediately; aux legs start
+		// not-ready and are marked ready on the first inbound packet.
+		m.ready = append(m.ready, len(m.ready) == 0)
+	}
 	m.legMu.Unlock()
+}
+
+// markLegReady records that leg idx has carried inbound traffic, so it
+// is now safe to select for sending. Idempotent and bounds-checked.
+func (m *routeMux) markLegReady(idx int) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.Lock()
+	if idx < len(m.ready) {
+		m.ready[idx] = true
+	}
+	m.legMu.Unlock()
+}
+
+// legReadyAt reports whether leg idx may be selected for sending.
+// Out-of-range indices and the never-grown case report not-ready, except
+// the primary leg (0) which is always ready so a group with no readiness
+// info still sends on its primary route.
+func (m *routeMux) legReadyAt(idx int) bool {
+	if idx < 0 {
+		return false
+	}
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if idx >= len(m.ready) {
+		return idx == 0
+	}
+	return m.ready[idx]
 }
 
 // recordSent atomically increments the sent-bytes/packets counters
