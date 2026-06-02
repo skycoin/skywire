@@ -51,6 +51,7 @@ var (
 	fahrenheit   bool
 	percpu       bool
 	averagecpu   bool
+	multiload    bool
 	statusbar    bool
 	exportPort   string
 	mbps         bool
@@ -73,6 +74,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&fahrenheit, "fahrenheit", false, "use fahrenheit for temperature")
 	RootCmd.Flags().BoolVarP(&percpu, "percpu", "p", false, "show per-cpu usage")
 	RootCmd.Flags().BoolVarP(&averagecpu, "averagecpu", "a", false, "show average CPU usage")
+	RootCmd.Flags().BoolVarP(&multiload, "multiload", "M", false, "multiload-ng-style display (CPU usage broken down by state: user/sys/iowait/irq/steal + total)")
 	RootCmd.Flags().BoolVarP(&statusbar, "statusbar", "s", false, "show status bar")
 	RootCmd.Flags().StringVarP(&exportPort, "export", "x", "", "export metrics on port (e.g., :8080)")
 	RootCmd.Flags().BoolVar(&mbps, "mbps", false, "show network in Mbps")
@@ -168,6 +170,7 @@ func runDirectGotop() error {
 	conf.Layout = layoutFlag
 	conf.PercpuLoad = percpu
 	conf.AverageLoad = averagecpu
+	conf.Multiload = multiload
 	conf.Statusbar = statusbar
 	conf.ExportPort = exportPort
 	conf.Mbps = mbps
@@ -377,6 +380,7 @@ func runGotopWithConfig(updateInterval time.Duration, remoteMode bool) error {
 	}
 	conf.PercpuLoad = percpu
 	conf.AverageLoad = averagecpu
+	conf.Multiload = multiload
 	conf.Statusbar = statusbar
 	conf.ExportPort = exportPort
 	conf.Mbps = mbps

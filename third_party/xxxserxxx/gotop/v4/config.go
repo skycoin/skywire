@@ -37,6 +37,7 @@ type Config struct {
 	UpdateInterval       time.Duration
 	AverageLoad          bool
 	PercpuLoad           bool
+	Multiload            bool
 	Statusbar            bool
 	TempScale            widgets.TempScale
 	NetInterface         string
@@ -64,6 +65,7 @@ func NewConfig() Config {
 		UpdateInterval:       time.Second,
 		AverageLoad:          false,
 		PercpuLoad:           true,
+		Multiload:            false,
 		TempScale:            widgets.Celsius,
 		Statusbar:            false,
 		NetInterface:         widgets.NetInterfaceAll,
@@ -154,6 +156,12 @@ func load(in io.Reader, conf *Config) error {
 				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
 			}
 			conf.PercpuLoad = bv
+		case multiload:
+			bv, err := strconv.ParseBool(kv[1])
+			if err != nil {
+				return errors.New(conf.Tr.Value("config.err.line", ln, err.Error()))
+			}
+			conf.Multiload = bv
 		case tempscale:
 			switch kv[1] {
 			case "C":
@@ -249,6 +257,8 @@ func marshal(c *Config) []byte {
 	fmt.Fprintf(buff, "%s=%t\n", averagecpu, c.AverageLoad)
 	fmt.Fprintln(buff, "# If true, show load per CPU")
 	fmt.Fprintf(buff, "%s=%t\n", percpuload, c.PercpuLoad)
+	fmt.Fprintln(buff, "# If true, use a multiload-ng-style display (per-state CPU breakdown, etc.)")
+	fmt.Fprintf(buff, "%s=%t\n", multiload, c.Multiload)
 	fmt.Fprintln(buff, "# Temperature units. C for Celsius, F for Fahrenheit")
 	fmt.Fprintf(buff, "%s=%c\n", tempscale, c.TempScale)
 	fmt.Fprintln(buff, "# If true, display a status bar")
@@ -285,6 +295,7 @@ const (
 	updateinterval       = "updateinterval"
 	averagecpu           = "averagecpu"
 	percpuload           = "percpuload"
+	multiload            = "multiload"
 	tempscale            = "tempscale"
 	statusbar            = "statusbar"
 	netinterface         = "netinterface"
