@@ -189,8 +189,6 @@ export class VpnClientService {
   private working = true;
   // If has a value, the current server must be replaced by this one.
   private requestedServer: LocalServerData = null;
-  // Password provided with requestedServer.
-  private requestedPassword: string = null;
   // Route options to apply when (re)connecting: number of parallel
   // multiplexed routes and minimum hops. 0 / <2 means the plain dial.
   private requestedMuxRoutes = 0;
@@ -348,7 +346,6 @@ export class VpnClientService {
    */
   connectToServer(server: LocalServerData, muxRoutes: number, minHops: number): boolean {
     this.requestedServer = server;
-    this.requestedPassword = null;
     this.requestedMuxRoutes = muxRoutes && muxRoutes > 0 ? muxRoutes : 0;
     this.requestedMinHops = minHops && minHops > 0 ? minHops : 0;
 
@@ -359,10 +356,8 @@ export class VpnClientService {
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerUsingHistory(newServer: LocalServerData, password: string): boolean {
+  changeServerUsingHistory(newServer: LocalServerData): boolean {
     this.requestedServer = newServer;
-    this.requestedPassword = password;
-    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
   }
@@ -371,10 +366,8 @@ export class VpnClientService {
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerUsingDiscovery(newServer: VpnServer, password: string): boolean {
+  changeServerUsingDiscovery(newServer: VpnServer): boolean {
     this.requestedServer = this.vpnSavedDataService.processFromDiscovery(newServer);
-    this.requestedPassword = password;
-    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
   }
@@ -383,26 +376,10 @@ export class VpnClientService {
    * Changes the currently selected server and connects to it.
    * @returns If it was possible to start the process (true) or not (false).
    */
-  changeServerManually(newServer: ManualVpnServerData, password: string): boolean {
+  changeServerManually(newServer: ManualVpnServerData): boolean {
     this.requestedServer = this.vpnSavedDataService.processFromManual(newServer);
-    this.requestedPassword = password;
-    this.updateRequestedServerPasswordSetting();
 
     return this.changeServer();
-  }
-
-  /**
-   * Updates the "usedWithPassword" property of the server in the requestedServer var, locally
-   * and in in persistent storage.
-   */
-  private updateRequestedServerPasswordSetting() {
-    this.requestedServer.usedWithPassword = !!this.requestedPassword && this.requestedPassword !== '';
-
-    const alreadySavedVersion = this.vpnSavedDataService.getSavedVersion(this.requestedServer.pk, true);
-    if (alreadySavedVersion) {
-      alreadySavedVersion.usedWithPassword = this.requestedServer.usedWithPassword;
-      this.vpnSavedDataService.updateServer(alreadySavedVersion);
-    }
   }
 
   /**
@@ -487,7 +464,6 @@ export class VpnClientService {
 
         // Make the service work normally again.
         this.requestedServer = null;
-        this.requestedPassword = null;
         this.requestedMuxRoutes = 0;
         this.requestedMinHops = 0;
         this.working = false;
@@ -502,7 +478,6 @@ export class VpnClientService {
         // Make the service work normally again.
         this.working = false;
         this.requestedServer = null;
-        this.requestedPassword = null;
         this.requestedMuxRoutes = 0;
         this.requestedMinHops = 0;
         this.sendUpdate();

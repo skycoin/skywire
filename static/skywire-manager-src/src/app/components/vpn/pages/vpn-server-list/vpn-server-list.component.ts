@@ -115,10 +115,6 @@ interface VpnServerForList {
    */
   flag?: ServerFlags;
   /**
-   * If the last time the server was used it was used with a password.
-   */
-  usedWithPassword?: boolean;
-  /**
    * If the server was entered manually, at least one time.
    */
   enteredManually?: boolean;
@@ -545,7 +541,6 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
       server.inHistory = saveddata ? saveddata.inHistory : false;
       server.flag = saveddata ? saveddata.flag : ServerFlags.None;
       server.enteredManually = saveddata ? saveddata.enteredManually : false;
-      server.usedWithPassword = saveddata ? saveddata.usedWithPassword : false;
     });
 
     // Create a filter option for each country.
