@@ -110,6 +110,13 @@ func TestShouldFallback(t *testing.T) {
 		{"no such host", errors.New("dial tcp: lookup x: no such host"), true},
 		{"context deadline exceeded", context.DeadlineExceeded, true},
 
+		// dmsg "cannot connect to delegated server" (error 202) — a
+		// transient dmsg reachability problem, not a dead discovery
+		// endpoint. Must NOT fall back even though the production form is
+		// wrapped in a *url.Error (so it would otherwise hit that branch).
+		{"dmsg 202 raw", errors.New("dmsg error 202 - cannot connect to delegated server"), false},
+		{"dmsg 202 wrapped in url.Error", &url.Error{Op: "Get", URL: "http://pk:80/dmsg-discovery/entry/x", Err: errors.New("dmsg error 202 - cannot connect to delegated server")}, false},
+
 		// Random unrelated error — DON'T fallback (we can't tell if
 		// it's authoritative or transport, so prefer to surface it).
 		{"random", errors.New("totally unrelated bug"), false},
