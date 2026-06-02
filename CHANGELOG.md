@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.63
+
+7 PRs on top of v1.3.62. Headline items:
+
+-   **Reward-accounting integrity.** TPD no longer attributes bandwidth to the zero PubKey — the source of thousands of null-PK "orphan" transport records and ghost-attributed bandwidth in `/metrics` (#2971) — fixed at the root in CXO by binding a received Root's decoded `Pub` to its cryptographically-authenticated feed, so a mis-attributed or zero publisher key can no longer be credited to the wrong (or no) visor (#2972); and the reward-server stats summary now credits single-edge-reported transports instead of zeroing them via an AND-gated `min()` (#2973).
+-   **Routing / dmsg robustness.** The router no longer downgrades a dial's MinHops to 1 over a *closed* direct transport — which made the route-finder return dead 1-hop routes and made `cli route trace` disagree with the live dial path (#2970); and the dmsg-first discovery client no longer degrades to plain HTTP on a transient `dmsg error 202` ("cannot connect to delegated server"), which self-heals over dmsg on the next refresh (#2974).
+-   **gotop multiload display** (#2968): a single `--multiload` flag switches `cli gotop` to a multiload-ng-style breakdown — per-state CPU (incl. iowait), RAM used/buffers/cache, disk read/write throughput, and a temperature graph (also fixes the temperature panel rendering empty).
+-   **Reward-UI polish** (#2969): titled visor counts, No-transports cutoff fix, linkified reasons, pool caption.
+
+-   `feat(cli/gotop)`: multiload-ng-style display behind --multiload (CPU + RAM breakdown)  [#2968](https://github.com/skycoin/skywire/pull/2968)
+-   `feat(rewards/ui)`: title visor counts, fix No-transports cutoff, linkify reasons, pool caption  [#2969](https://github.com/skycoin/skywire/pull/2969)
+-   `fix(router)`: don't downgrade MinHops to 1 over a closed direct transport  [#2970](https://github.com/skycoin/skywire/pull/2970)
+-   `fix(tpd)`: never attribute bandwidth to the zero PubKey (null-PK orphans + ghost /metrics)  [#2971](https://github.com/skycoin/skywire/pull/2971)
+-   `fix(cxo)`: bind a received Root's Pub to its authenticated feed  [#2972](https://github.com/skycoin/skywire/pull/2972)
+-   `fix(rewards/server)`: credit single-edge-reported transports in the stats summary  [#2973](https://github.com/skycoin/skywire/pull/2973)
+-   `fix(dmsg/disc)`: don't HTTP-fallback on dmsg 202 "cannot connect to delegated server"  [#2974](https://github.com/skycoin/skywire/pull/2974)
+
 ## 1.3.62
 
 31 PRs on top of v1.3.61. Headline items:
