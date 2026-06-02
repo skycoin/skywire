@@ -145,6 +145,18 @@ func shouldFallback(err error) bool {
 	if errors.As(err, &ve) {
 		return false
 	}
+	// A dmsg "cannot connect to delegated server" (dmsg error 202) is a
+	// transient per-server session-overlap failure reaching the discovery
+	// over dmsg — not a sign the discovery endpoint is down. An HTTP fallback
+	// can't fix the underlying dmsg reachability; it just adds a doomed
+	// roundtrip and a WARN per refresh. Don't fall back — let the caller retry
+	// over dmsg on its next refresh (discovery refresh / re-registration is
+	// periodic, so a transient 202 self-heals once sessions realign). Matched
+	// on the message because the typed sentinel is wrapped by the dmsghttp
+	// RoundTrip's *url.Error before it reaches here.
+	if strings.Contains(err.Error(), "cannot connect to delegated server") {
+		return false
+	}
 	// net.Error timeout / temporary — fall back.
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
