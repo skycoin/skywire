@@ -11,13 +11,45 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/router/policy"
+	policywasm "github.com/skycoin/skywire/pkg/router/policy/wasm"
 )
+
+// policyTestEngine is the minimal surface `route policy test` / `bench`
+// need from either policy backend.
+type policyTestEngine interface {
+	Decide(ctx context.Context, rctx policy.RoutingContext, candidates []policy.Candidate) (policy.RouteSpec, error)
+}
+
+// loadPolicyEngine dispatches by file extension — ".wasm" loads the
+// WASM backend (pkg/router/policy/wasm), anything else loads Starlark —
+// mirroring the visor's SetAppRoutingPolicy dispatch so `route policy
+// test` previews the SAME backend the visor would actually run. Before
+// this, both subcommands fed the file to the Starlark evaluator
+// unconditionally, so testing a .wasm policy failed with "missing
+// decide_route function" (the wasm bytes don't parse as Starlark).
+func loadPolicyEngine(path string, src []byte, clock fixedClock) (policyTestEngine, error) {
+	logger := func(format string, args ...interface{}) {
+		fmt.Fprintf(os.Stderr, "[policy log] "+format+"\n", args...)
+	}
+	if strings.EqualFold(filepath.Ext(path), ".wasm") {
+		return policywasm.NewEvaluator(path, src,
+			policywasm.WithClock(clock),
+			policywasm.WithLogger(logger),
+		)
+	}
+	return policy.NewEvaluator(path, string(src),
+		policy.WithClock(clock),
+		policy.WithFailureMode(policy.FailureDrop),
+		policy.WithLogger(logger),
+	)
+}
 
 var (
 	policyScriptPath string
@@ -94,13 +126,7 @@ values.`,
 		// unset) so the test result is deterministic regardless
 		// of when the operator runs the command.
 		clock := fixedClock{t: rctx.Now}
-		eval, err := policy.NewEvaluator(policyScriptPath, string(src),
-			policy.WithClock(clock),
-			policy.WithFailureMode(policy.FailureDrop),
-			policy.WithLogger(func(format string, args ...interface{}) {
-				fmt.Fprintf(os.Stderr, "[policy log] "+format+"\n", args...)
-			}),
-		)
+		eval, err := loadPolicyEngine(policyScriptPath, src, clock)
 		if err != nil {
 			return fmt.Errorf("load policy: %w", err)
 		}
@@ -132,7 +158,7 @@ deploying a complex policy to confirm it stays inside the
 		if err != nil {
 			return fmt.Errorf("read script: %w", err)
 		}
-		eval, err := policy.NewEvaluator(policyScriptPath, string(src))
+		eval, err := loadPolicyEngine(policyScriptPath, src, fixedClock{t: time.Now()})
 		if err != nil {
 			return fmt.Errorf("load policy: %w", err)
 		}
@@ -262,6 +288,3 @@ func percentile(samples []time.Duration, p int) time.Duration {
 	}
 	return samples[idx]
 }
-
-// Silence "unused import" if strings isn't reached above (template).
-var _ = strings.TrimSpace
