@@ -108,10 +108,6 @@ const (
 	// TransportPort Listening port of a visor for incoming transports.
 	TransportPort uint16 = 45
 
-	// LatencyProbePort is the Skywire routing port for transport latency probes.
-	// Note: same number as DmsgHypervisorPort but different namespace (routing vs DMSG).
-	LatencyProbePort uint16 = 46
-
 	// PublicAutoconnect determines if the visor automatically creates stcpr transports to public visors
 	PublicAutoconnect = true
 
