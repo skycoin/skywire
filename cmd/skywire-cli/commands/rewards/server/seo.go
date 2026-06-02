@@ -28,6 +28,7 @@ import (
 type rewardStats struct {
 	Date             string  // YYYY-MM-DD (from "date:" line)
 	QualifyingVisors int     // from "qualifying visors:" (first occurrence — Presence Pool)
+	IneligibleVisors int     // number of rows in hist/<date>_ineligible.csv
 	TotalRewardSKY   float64 // from "Total Reward Amount (both pools):" (or single-pool variant)
 	UniqueIPs        int     // from "Unique IP Addresses:"
 	Countries        int     // distinct country codes in the Regional Saturation table
@@ -93,6 +94,18 @@ func parseRewardStats(wd, date string) rewardStats {
 		}
 	}
 
+	// Ineligible-visor count is just the row count of the matching
+	// ineligible.csv. File may be absent on dates that predate the
+	// feature; absent is a 0 count, not an error.
+	if ineligibleData, err := os.ReadFile(filepath.Join(wd, "hist", date+"_ineligible.csv")); err == nil { //nolint:gosec
+		// Count non-empty lines.
+		for _, line := range strings.Split(string(ineligibleData), "\n") {
+			if strings.TrimSpace(line) != "" {
+				stats.IneligibleVisors++
+			}
+		}
+	}
+
 	return stats
 }
 
@@ -102,6 +115,15 @@ func parseRewardStats(wd, date string) rewardStats {
 func (s rewardStats) title(date string) string {
 	if s.QualifyingVisors == 0 || s.TotalRewardSKY == 0 {
 		return "Skycoin Rewards " + date
+	}
+	// When ineligibles are recorded, surface the full "X of Y (Z
+	// ineligible)" breakdown so the headline numbers don't hide the
+	// excluded visors. Falls back to the simpler "to N visors" form
+	// when no ineligible data is available (dates before the feature).
+	if s.IneligibleVisors > 0 {
+		return fmt.Sprintf("Skycoin Rewards %s — %.2f SKY to %d of %d visors (%d ineligible)",
+			date, s.TotalRewardSKY, s.QualifyingVisors,
+			s.QualifyingVisors+s.IneligibleVisors, s.IneligibleVisors)
 	}
 	return fmt.Sprintf("Skycoin Rewards %s — %.2f SKY to %d visors", date, s.TotalRewardSKY, s.QualifyingVisors)
 }
