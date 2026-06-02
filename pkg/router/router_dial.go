@@ -17,7 +17,6 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -538,50 +537,6 @@ func (r *router) PingRoute(
 	}
 
 	return nil, fmt.Errorf("failed to establish ping route after %d attempts: %w", maxRetries, lastErr)
-}
-
-// MeasureTransportLatency measures the latency of a specific transport by creating
-// a temporary direct route over that transport, performing ping/pong measurements,
-// and returning average latency. Used as a fallback when the remote visor doesn't
-// support transport-level ping frames.
-func (r *router) MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error) {
-	r.logger.Debugf("Measuring latency (RSN fallback) for transport %s to %s", tpID, remote)
-
-	opts := &DialOptions{TransportID: tpID}
-	lPort := routing.Port(skyenv.LatencyProbePort)
-	rPort := routing.Port(skyenv.LatencyProbePort)
-
-	conn, err := r.PingRoute(ctx, remote, lPort, rPort, opts)
-	if err != nil {
-		return 0, fmt.Errorf("failed to establish ping route: %w", err)
-	}
-	defer conn.Close() //nolint:errcheck,gosec
-
-	// Extract the RouteGroup for ping measurement.
-	rg, ok := conn.(*RouteGroup)
-	if !ok {
-		if nrg, ok := conn.(*NoiseRouteGroup); ok {
-			rg = nrg.rg
-		} else {
-			return 0, errors.New("unexpected connection type")
-		}
-	}
-
-	const pingCount = 5
-	min, max, avg, err := rg.MeasureLatency(ctx, pingCount)
-	if err != nil {
-		return 0, fmt.Errorf("failed to measure latency: %w", err)
-	}
-
-	r.logger.Debugf("Transport %s latency (RSN): min=%.2f max=%.2f avg=%.2f ms", tpID, min, max, avg)
-
-	r.mx.Lock()
-	if tp := r.tm.Transport(tpID); tp != nil {
-		tp.SetLatencyStats(transport.LatencyStats{Min: min, Max: max, Avg: avg})
-	}
-	r.mx.Unlock()
-
-	return avg, nil
 }
 
 func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {

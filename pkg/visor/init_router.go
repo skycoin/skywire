@@ -271,19 +271,6 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.router = r
 	v.initLock.Unlock()
 
-	// Latency is primarily measured at the transport level via transport-level
-	// ping/pong frames (no RSN needed). For backward compatibility with old
-	// visors that don't support transport ping, fall back to RSN-based measurement.
-	v.tpM.SetLatencyFallback(func(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) float64 {
-		latencyMs, err := r.MeasureTransportLatency(ctx, remote, tpID)
-		if err != nil {
-			logger.WithError(err).Debugf("RSN latency fallback failed for transport %s", tpID)
-			return 0
-		}
-		logger.Debugf("Transport %s latency (RSN fallback): %.2f ms", tpID, latencyMs)
-		return latencyMs
-	})
-
 	// Set up route checker so that transport re-creation is blocked when the
 	// existing transport is actively referenced by routing rules. This prevents
 	// a remote visor (or TPS) from breaking an in-flight route by forcing a
