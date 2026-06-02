@@ -203,7 +203,7 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 		if c.Multiload {
 			// multiload-ng style: plot each sensor as a line over time instead
 			// of the text readout.
-			tg := widgets.NewTempGraphWidget(c.TempScale, c.Temps, c.GraphHorizontalScale)
+			tg := widgets.NewTempGraphWidget(c.UpdateInterval, c.TempScale, c.Temps, c.GraphHorizontalScale)
 			assignColors(tg.Data, c.Colorscheme.CPULines, tg.LineColors)
 			w = tg
 		} else {

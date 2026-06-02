@@ -23,10 +23,10 @@ type TempGraphWidget struct {
 	TempScale      TempScale
 }
 
-func NewTempGraphWidget(tempScale TempScale, filter []string, horizontalScale int) *TempGraphWidget {
+func NewTempGraphWidget(updateInterval time.Duration, tempScale TempScale, filter []string, horizontalScale int) *TempGraphWidget {
 	self := &TempGraphWidget{
 		LineGraph:      ui.NewLineGraph(),
-		updateInterval: time.Second * 5,
+		updateInterval: updateInterval,
 		TempScale:      tempScale,
 	}
 	self.Title = tr.Value("widget.label.temp")
