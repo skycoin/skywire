@@ -442,6 +442,15 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 // the cache is always-fresh from the UI's perspective.
 const hypervisorBackgroundPollInterval = 30 * time.Second
 
+// cacheFreshWindow is how recently a remote visor must have answered a
+// Summary RPC (tracked via summaryCache.seenAt) to count as currently
+// connected. Sized to span the 2-minute dmsg.StreamIdleTimeout plus
+// the peer's redial → hypervisor-accept → next-poll cycle, so a peer
+// whose stream just idle-closed isn't flagged disconnected mid-cycle.
+// Used both by the UI summary handler and by getDmsgSummary to scope
+// the dmsg round-trip tracker to live connections only.
+const cacheFreshWindow = 3 * time.Minute
+
 // runBackgroundSummaryPoll keeps hv.summaryCache fresh independent of
 // UI activity. Spawned once from ServeRPC; runs until ctx cancels.
 // Iterates every entry in remoteVisors, fires Summary() in parallel
