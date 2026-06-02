@@ -50,11 +50,6 @@ type ManagerConfig struct {
 	ARTransportLimit int
 }
 
-// LatencyFallbackCallback is called when transport-level ping fails to produce
-// latency data (remote visor doesn't support transport ping frames).
-// It falls back to measuring latency via RSN route setup.
-type LatencyFallbackCallback func(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (latencyMs float64)
-
 // RouteChecker is called before tearing down an existing transport for re-creation.
 // It returns true if any active routing rule references the given transport ID,
 // meaning the transport is actively carrying route traffic and must not be torn down.
@@ -78,12 +73,6 @@ type Manager struct {
 
 	factory    network.ClientFactory
 	netClients map[types.Type]network.Client
-
-	// latencyFallback is called when transport-level ping doesn't produce
-	// latency data after a grace period (old visor that doesn't support
-	// transport ping frames). Falls back to RSN-based route measurement.
-	latencyFallback   LatencyFallbackCallback
-	latencyFallbackMu sync.RWMutex
 
 	// routeChecker is called before tearing down an existing transport for re-creation.
 	// If it returns true, the transport has active routes and must not be torn down.
@@ -692,39 +681,6 @@ func (tm *Manager) SetSetupRPCHandler(h func(p routing.Packet, mt *ManagedTransp
 }
 
 // SetRouteChecker sets the callback used to determine if a transport has active routes.
-// SetLatencyFallback sets the callback used when transport-level ping fails
-// to produce latency data (remote visor doesn't support transport ping frames).
-func (tm *Manager) SetLatencyFallback(cb LatencyFallbackCallback) {
-	tm.latencyFallbackMu.Lock()
-	defer tm.latencyFallbackMu.Unlock()
-	tm.latencyFallback = cb
-}
-
-// invokeLatencyFallback is called by the managed transport's pingLoop when
-// transport-level pings produce no response after a grace period. It falls
-// back to the RSN-based route measurement for backward compatibility with
-// old visors that don't support transport ping frames.
-func (tm *Manager) invokeLatencyFallback(remote cipher.PubKey, tp *ManagedTransport) {
-	tm.latencyFallbackMu.RLock()
-	cb := tm.latencyFallback
-	tm.latencyFallbackMu.RUnlock()
-
-	if cb == nil {
-		return
-	}
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
-
-		latencyMs := cb(ctx, remote, tp.Entry.ID)
-		if latencyMs > 0 {
-			tp.SetLatency(latencyMs)
-			tm.Logger.Debugf("Transport %s latency (RSN fallback): %.2f ms", tp.Entry.ID, latencyMs)
-		}
-	}()
-}
-
 // When set, transport re-creation is blocked for transports that are currently
 // referenced by routing rules, protecting in-flight route traffic.
 func (tm *Manager) SetRouteChecker(rc RouteChecker) {
@@ -918,7 +874,6 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			mlog:           tm.factory.MLogger,
 			QueueDeletion:  tm.queueDeletion,
 		})
-		mTp.manager = tm
 		tm.cascadeHandlerMu.RLock()
 		mTp.cascadeHandler = tm.cascadeHandler
 		tm.cascadeHandlerMu.RUnlock()
@@ -1162,7 +1117,6 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		mlog:           tm.factory.MLogger,
 		QueueDeletion:  tm.queueDeletion,
 	})
-	mTp.manager = tm
 	tm.cascadeHandlerMu.RLock()
 	mTp.cascadeHandler = tm.cascadeHandler
 	tm.cascadeHandlerMu.RUnlock()
