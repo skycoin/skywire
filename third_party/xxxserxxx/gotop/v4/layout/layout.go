@@ -200,10 +200,18 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 		assignColors(b.Data, c.Colorscheme.BattLines, b.LineColors)
 		w = b
 	case "temp":
-		t := widgets.NewTempWidget(c.TempScale, c.Temps)
-		t.TempLowColor = ui.Color(c.Colorscheme.TempLow)
-		t.TempHighColor = ui.Color(c.Colorscheme.TempHigh)
-		w = t
+		if c.Multiload {
+			// multiload-ng style: plot each sensor as a line over time instead
+			// of the text readout.
+			tg := widgets.NewTempGraphWidget(c.TempScale, c.Temps, c.GraphHorizontalScale)
+			assignColors(tg.Data, c.Colorscheme.CPULines, tg.LineColors)
+			w = tg
+		} else {
+			t := widgets.NewTempWidget(c.TempScale, c.Temps)
+			t.TempLowColor = ui.Color(c.Colorscheme.TempLow)
+			t.TempHighColor = ui.Color(c.Colorscheme.TempHigh)
+			w = t
+		}
 	case "net":
 		n := widgets.NewNetWidget(c.NetInterface)
 		n.Lines[0].LineColor = ui.Color(c.Colorscheme.Sparklines[0])
