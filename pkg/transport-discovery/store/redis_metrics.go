@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -344,14 +346,130 @@ func (s *redisStore) GetVisorAggregateMetrics(ctx context.Context, pks []cipher.
 // GetAllTransportMetrics returns metrics for all transports.
 func (s *redisStore) GetAllTransportMetrics(ctx context.Context, query MetricsQuery) ([]TransportMetric, error) {
 	entries, err := s.getAllTransportsWithQoS(ctx, true)
-	if err != nil {
-		if errors.Is(err, ErrTransportNotFound) {
-			return []TransportMetric{}, nil
-		}
+	if err != nil && !errors.Is(err, ErrTransportNotFound) {
 		return nil, err
 	}
 
-	return s.buildTransportMetrics(ctx, entries, nil, query)
+	// Include transports that still have bandwidth history within the query
+	// window but are no longer registered (deregistered via `cli tp rm`, or
+	// expired because a visor stopped re-registering). Their bw:daily:* keys
+	// have a 35-day TTL and outlive the ~5-minute registration TTL, so the
+	// bandwidth they carried must keep counting toward the metrics + rewards
+	// even after the transport drops offline. Without this, a removed/offline
+	// transport's entire daily history vanished from /metrics — which made the
+	// bandwidth-history chart shrink over time and would undercount rewards.
+	// These transports are reported with Live=false.
+	registered := make(map[uuid.UUID]bool, len(entries))
+	for _, e := range entries {
+		registered[e.ID] = true
+	}
+	expiredEntries, expiredIDs := s.expiredTransportEntries(ctx, registered, query.Days)
+	entries = append(entries, expiredEntries...)
+
+	return s.buildTransportMetrics(ctx, entries, expiredIDs, query)
+}
+
+// expiredTransportEntries returns synthetic transport.Entry values for
+// transports that have daily-bandwidth records within the last `days` days but
+// are no longer in the registered set. The returned set marks those IDs so
+// buildTransportMetrics reports them Live=false. Edges are recovered from the
+// daily-hash field names (see recoverBandwidthEdges).
+//
+// Cost note: this SCANs the bw:daily:*:<date> keyspace once per day in the
+// window. It runs on the metrics path, which is low-frequency (rewards
+// dashboard / daily reward calc) — acceptable, and mirrors the existing
+// BackupAndCleanOldBandwidth SCAN pattern.
+func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map[uuid.UUID]bool, days int) ([]*transport.Entry, map[uuid.UUID]bool) {
+	if days <= 0 || days > 35 {
+		days = 35
+	}
+	now := time.Now().UTC()
+	prefix := serviceName + ":bw:daily:"
+
+	seen := make(map[uuid.UUID]bool)
+	for d := 0; d < days; d++ {
+		dateStr := now.AddDate(0, 0, -d).Format("2006-01-02")
+		pattern := prefix + "*:" + dateStr
+		iter := s.client.Scan(ctx, 0, pattern, 10000).Iterator()
+		for iter.Next(ctx) {
+			// key = transport-discovery:bw:daily:<id>:<date>
+			rest := strings.TrimSuffix(strings.TrimPrefix(iter.Val(), prefix), ":"+dateStr)
+			id, err := uuid.Parse(rest)
+			if err != nil || registered[id] || seen[id] {
+				continue
+			}
+			seen[id] = true
+		}
+	}
+	if len(seen) == 0 {
+		return nil, nil
+	}
+
+	expiredIDs := make(map[uuid.UUID]bool, len(seen))
+	var entries []*transport.Entry
+	for id := range seen {
+		edges, ok := s.recoverBandwidthEdges(ctx, id, now, days)
+		if !ok {
+			continue // only legacy/combined data, no per-edge fields — skip
+		}
+		entries = append(entries, &transport.Entry{ID: id, Edges: edges})
+		expiredIDs[id] = true
+	}
+	return entries, expiredIDs
+}
+
+// recoverBandwidthEdges reconstructs an (offline) transport's edge public keys
+// from its most recent daily-bandwidth hash, whose fields are
+// "<edgePK>:sent" / "<edgePK>:recv". Returns false if no day in the window has
+// per-edge fields. Edges are sorted ascending per the transport.Entry contract;
+// a single-reporter transport leaves the second edge zero-valued (its bandwidth
+// fields simply won't match, contributing 0 — the total stays correct).
+func (s *redisStore) recoverBandwidthEdges(ctx context.Context, id uuid.UUID, now time.Time, days int) ([2]cipher.PubKey, bool) {
+	var edges [2]cipher.PubKey
+	for d := 0; d < days; d++ {
+		h, err := s.client.HGetAll(ctx, s.bandwidthDailyKey(id.String(), now.AddDate(0, 0, -d))).Result()
+		if err != nil || len(h) == 0 {
+			continue
+		}
+		seenHex := make(map[string]bool)
+		var hexes []string
+		for field := range h {
+			var hex string
+			switch {
+			case strings.HasSuffix(field, ":sent"):
+				hex = strings.TrimSuffix(field, ":sent")
+			case strings.HasSuffix(field, ":recv"):
+				hex = strings.TrimSuffix(field, ":recv")
+			default:
+				continue
+			}
+			if hex == "" || seenHex[hex] {
+				continue
+			}
+			seenHex[hex] = true
+			hexes = append(hexes, hex)
+		}
+		if len(hexes) == 0 {
+			continue
+		}
+		sort.Strings(hexes)
+		n := 0
+		for _, hex := range hexes {
+			if n >= 2 {
+				break
+			}
+			var pk cipher.PubKey
+			if err := pk.UnmarshalText([]byte(hex)); err != nil {
+				continue
+			}
+			edges[n] = pk
+			n++
+		}
+		if n > 0 {
+			return edges, true
+		}
+	}
+	return edges, false
 }
 
 // GetTransportMetricsByIDs returns metrics for specific transports.
