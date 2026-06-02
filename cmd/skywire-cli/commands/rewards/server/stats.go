@@ -1398,7 +1398,19 @@ func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
 			summary.LatencyCount++
 		}
 		for _, daily := range m.Daily {
-			if daily.A != nil && daily.B != nil {
+			// Mirror the canonical three-branch trust model used by the reward
+			// bw-collect (cmd/.../rewards/transports.go) and `cli tp metrics`
+			// (verifiedBandwidth): an edge whose record is present but
+			// {sent:0,recv:0} has "not reported yet", NOT "verified zero". Key
+			// on reported-data, not record presence — otherwise a present
+			// {0,0} edge takes the min() branch and zeroes the counterparty's
+			// real bandwidth (e.g. min(0, 986MB)=0), which is exactly why
+			// single-edge-reporting transports showed 0 verified bandwidth here
+			// while the actual reward calc credited them.
+			aReported := daily.A != nil && (daily.A.Sent > 0 || daily.A.Recv > 0)
+			bReported := daily.B != nil && (daily.B.Sent > 0 || daily.B.Recv > 0)
+			switch {
+			case aReported && bReported:
 				aToB := daily.A.Sent
 				if daily.B.Recv < aToB {
 					aToB = daily.B.Recv
@@ -1408,9 +1420,9 @@ func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
 					bToA = daily.B.Sent
 				}
 				summary.TotalBandwidth += aToB + bToA
-			} else if daily.A != nil {
+			case aReported:
 				summary.TotalBandwidth += daily.A.Sent + daily.A.Recv
-			} else if daily.B != nil {
+			case bReported:
 				summary.TotalBandwidth += daily.B.Sent + daily.B.Recv
 			}
 		}
