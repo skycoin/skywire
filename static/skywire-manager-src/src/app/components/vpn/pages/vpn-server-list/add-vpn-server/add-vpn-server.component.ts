@@ -64,7 +64,6 @@ export class AddVpnServerComponent implements OnInit {
         Validators.maxLength(66),
         Validators.pattern('^[0-9a-fA-F]+$')])
       ],
-      password: [''],
       name: [''],
       note: [''],
     });
@@ -97,7 +96,6 @@ export class AddVpnServerComponent implements OnInit {
       null,
       null,
       serverData,
-      this.form.get('password').value
     );
   }
 }
