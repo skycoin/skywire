@@ -26,6 +26,7 @@
                <Component Id="ApplicationFiles" Guid="d6963d6c-acea-49a0-bd9b-610f8a8bce82">
                     <File Id="SKYWIRE" Source=".\build\skywire.exe"/>
                     <File Id="SKYWIREBAT" Source=".\build\skywire.bat"/>
+                    <File Id="SKYWIREAUTOCONFIGBAT" Source=".\build\skywire-autoconfig.bat"/>
                     <File Id="ICON" Source=".\images\ico.ico"/>
                     <File Id="WINTUN" Source=".\build\wintun.dll"/>
                     <File Id="NEWUPDATE" Source=".\build\new.update"/>
@@ -92,8 +93,27 @@
 
 
 
+      <!-- Windows analogue of the Linux package postinstall: generate the
+           env file (%ProgramData%\Skywire\skywire.conf) and the visor config
+           at INSTALL time, so a fresh install is configured without the
+           operator having to launch first. Deferred + non-impersonated so it
+           runs elevated (it writes under %ProgramData% and Program Files),
+           after the files are on disk. Return="ignore" so a config-gen hiccup
+           never rolls back the install — skywire.bat re-runs the same
+           idempotent script at launch as a fallback. Directory="INSTALLDIR"
+           sets the working dir so the bare script name + %~dp0 resolve to the
+           install dir. -->
+      <CustomAction Id="RunSkywireAutoconfig"
+                    Directory="INSTALLDIR"
+                    ExeCommand="cmd.exe /c &quot;skywire-autoconfig.bat&quot;"
+                    Execute="deferred"
+                    Impersonate="no"
+                    Return="ignore"/>
+
       <InstallExecuteSequence>
          <RemoveExistingProducts After="InstallValidate"/>
+         <!-- Run on install/upgrade only, not on uninstall. -->
+         <Custom Action="RunSkywireAutoconfig" After="InstallFiles">NOT REMOVE</Custom>
       </InstallExecuteSequence>
 
       <Feature Id="DefaultFeature" Level="1">
