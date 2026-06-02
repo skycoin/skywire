@@ -263,7 +263,6 @@
                       [isFavorite]="server.flag === serverFlags.Favorite && currentList !== lists.Favorites"
                       [isBlocked]="server.flag === serverFlags.Blocked && currentList !== lists.Blocked"
                       [isInHistory]="server.inHistory && currentList !== lists.History"
-                      [hasPassword]="server.usedWithPassword"
                       [name]="server.name"
                       [pk]="server.pk"
                       [customName]="server.customName"
@@ -271,12 +270,7 @@
                     </app-vpn-server-name>
                   </td>
                   <td class="location-column">
-                    @if (server.location) {
-                      {{ server.location }}
-                    }
-                    @if (!server.location) {
-                      {{ 'vpn.server-list.unknown' | translate }}
-                    }
+                    {{ getLocationText(server.location) }}
                   </td>
                   <!--
                   // TODO: this should be used, instead of the currently active version, if the extra columns are reactivated.
