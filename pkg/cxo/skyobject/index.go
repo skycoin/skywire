@@ -254,17 +254,29 @@ func (i *Index) receivedRoot(
 
 	var hash = cipher.SumSHA256(val)
 	if err = cipher.VerifyPubKeySignedHash(pk, sig, hash); err != nil {
-		return
+		return r, err
 	}
 
 	if r, err = registry.DecodeRoot(val); err != nil {
-		return
+		return r, err
+	}
+
+	// The signature above authenticates `val` against `pk` — the feed the Root
+	// actually arrived on. But every downstream consumer (feed routing, index
+	// keying, OnRootFilled, and TPD's reward/bandwidth attribution) keys on the
+	// *decoded* r.Pub, which the publisher serialized into the value and which
+	// the signature does NOT bind. A Root signed by a real feed but carrying a
+	// mismatched (or zero) Pub would therefore be attributed to the wrong — or
+	// to no — visor. Reject any such Root so the attribution key is provably the
+	// authenticated feed.
+	if r.Pub != pk {
+		return nil, fmt.Errorf("root pub %s does not match authenticated feed %s", r.Pub.Hex(), pk.Hex())
 	}
 
 	r.Hash = hash // set the hash
 	r.Sig = sig   // set the signature
 
-	return
+	return r, nil
 }
 
 // PreviewRoot method used by node package to check
