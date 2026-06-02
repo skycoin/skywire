@@ -71,9 +71,15 @@ func NewMemWidget(updateInterval time.Duration, horizontalScale int, showBreakdo
 	return widg
 }
 
+// MultiloadMemBase is the base hue for the multiload-ng-style memory breakdown:
+// a saturated green (256-color cube (r,g,b)=(0,5,0)), matching multiload's RAM
+// convention regardless of the active colorscheme. used is the vivid base green
+// and the lighter components fade toward white.
+const MultiloadMemBase = termui.Color(46)
+
 // AssignShades colors the breakdown components as tints of a single base hue
-// (multiload-ng style): used (base) -> total (lightest), with the total label
-// bolded. Called by the layout once the colorscheme's base memory color is known.
+// (multiload-ng style): used (vivid base) -> total (lightest, near white), with
+// the total label bolded.
 func (mem *MemWidget) AssignShades(base termui.Color) {
 	order := devices.MemBreakdownLabels
 	for i, name := range order {
@@ -81,7 +87,9 @@ func (mem *MemWidget) AssignShades(base termui.Color) {
 		if len(order) > 1 {
 			t = float64(i) / float64(len(order)-1)
 		}
-		mem.LineColors[name] = ui.Tint(base, 0.10+t*0.75)
+		// spread from 0 (pure base hue for `used`) to 0.85 (near white for the
+		// lightest component) so the subtypes stay clearly distinct.
+		mem.LineColors[name] = ui.Tint(base, t*0.85)
 	}
 	mem.LabelStyles[devices.MemTotal] = termui.ModifierBold
 }

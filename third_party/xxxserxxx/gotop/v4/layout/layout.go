@@ -164,8 +164,23 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 	var w Metric
 	switch widRule.Widget {
 	case "disk":
-		dw := widgets.NewDiskWidget()
-		w = dw
+		if c.Multiload {
+			// multiload-ng style: aggregate disk read/write throughput graph
+			// instead of the per-partition usage table.
+			d := widgets.NewDiskIOWidget()
+			if len(c.Colorscheme.Sparklines) > 0 {
+				d.Lines[0].LineColor = ui.Color(c.Colorscheme.Sparklines[0])
+			}
+			d.Lines[0].TitleColor = ui.Color(c.Colorscheme.BorderLabel)
+			if len(c.Colorscheme.Sparklines) > 1 {
+				d.Lines[1].LineColor = ui.Color(c.Colorscheme.Sparklines[1])
+			}
+			d.Lines[1].TitleColor = ui.Color(c.Colorscheme.BorderLabel)
+			w = d
+		} else {
+			dw := widgets.NewDiskWidget()
+			w = dw
+		}
 	case "cpu":
 		cpu := widgets.NewCPUWidget(c.UpdateInterval, c.GraphHorizontalScale, c.AverageLoad, c.PercpuLoad, c.Multiload)
 		assignColors(cpu.Data, c.Colorscheme.CPULines, cpu.LineColors)
@@ -173,13 +188,9 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 	case "mem":
 		m := widgets.NewMemWidget(c.UpdateInterval, c.GraphHorizontalScale, c.Multiload)
 		if c.Multiload {
-			// Color the used/buff/cache/total components as shades of the
-			// colorscheme's first memory hue (multiload-ng style).
-			base := ui.Color(0)
-			if len(c.Colorscheme.MemLines) > 0 {
-				base = ui.Color(c.Colorscheme.MemLines[0])
-			}
-			m.AssignShades(base)
+			// Color the used/buff/cache/total components as shades of green
+			// (multiload-ng's RAM convention), regardless of colorscheme.
+			m.AssignShades(widgets.MultiloadMemBase)
 		} else {
 			assignColors(m.Data, c.Colorscheme.MemLines, m.LineColors)
 		}
