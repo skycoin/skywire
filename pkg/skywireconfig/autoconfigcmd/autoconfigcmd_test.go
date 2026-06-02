@@ -16,7 +16,7 @@ var allFlags = []string{
 	// Visor public/private + autoconnect
 	"rewardaddr", "public", "no-public", "publicip", "disable-public-autoconn",
 	// Service discovery / deployment
-	"testenv", "dmsghttp", "dmsgconf", "url", "svcconf", "minsess", "stun",
+	"testenv", "url", "svcconf", "minsess", "maxtransports", "stun",
 	// Transport ports
 	"stcpr", "sudph", "lan-dmsg-port", "lan-dmsg-public",
 	// Whitelists

@@ -392,7 +392,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "timeout")
 	genConfigCmd.Flags().StringVar(&publicVisorRegTimeout, "regtimeout", scriptExecString("${REGTIMEOUT}"), "public visor registration timeout (e.g. 10m)")
 	gHiddenFlags = append(gHiddenFlags, "regtimeout")
-	genConfigCmd.Flags().IntVar(&publicVisorMaxTransports, "maxtransports", 0, "public visor max transports")
+	genConfigCmd.Flags().IntVar(&publicVisorMaxTransports, "maxtransports", scriptExecInt("${MAXTRANSPORTS:-0}"), "public visor max transports")
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
 	genConfigCmd.Flags().IntVar(&muxRoutes, "muxroutes", 0, "number of parallel mux routes per connection")
 	gHiddenFlags = append(gHiddenFlags, "muxroutes")

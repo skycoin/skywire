@@ -117,12 +117,13 @@ type Values struct {
 
 	// --- Service discovery / deployment ---
 	TestEnv     bool   // TESTENV
-	DmsgHTTP    bool   // DMSGHTTP
-	DmsgConf    string // DMSGCONF
 	URL         string // SVCCONFADDR (services conf URL — accepts comma-list)
 	SvcConf     string // SVCCONF (fallback service-configuration file)
 	MinSess     int    // MINDMSGSESS
 	StunServers string // STUNSERVERS (comma-separated)
+
+	// --- Public-visor transport limit ---
+	MaxTransports int // MAXTRANSPORTS (deregister from AR once this many transports exist)
 
 	// --- Transport ports ---
 	StcprPort     int
@@ -242,11 +243,10 @@ func New(v *Values) *cobra.Command {
 
 	// --- Service discovery / deployment ---
 	cmd.Flags().BoolVar(&v.TestEnv, "testenv", false, "use test deployment (ports offset +10000 from prod) — writes TESTENV=true in skywire.conf")
-	cmd.Flags().BoolVar(&v.DmsgHTTP, "dmsghttp", false, "use only dmsg for skywire services (no http) — writes DMSGHTTP=true in skywire.conf")
-	cmd.Flags().StringVar(&v.DmsgConf, "dmsgconf", "", "dmsghttp config path — writes DMSGCONF in skywire.conf")
 	cmd.Flags().StringVar(&v.URL, "url", "", "services-config URL(s), comma-separated — writes SVCCONFADDR in skywire.conf")
 	cmd.Flags().StringVar(&v.SvcConf, "svcconf", "", "fallback service-configuration file path — writes SVCCONF in skywire.conf")
 	cmd.Flags().IntVar(&v.MinSess, "minsess", 0, "number of dmsg servers to connect to (0 = unlimited; leave unset to keep default 2) — writes MINDMSGSESS in skywire.conf")
+	cmd.Flags().IntVar(&v.MaxTransports, "maxtransports", 0, "public visor transport limit — deregister from the address resolver once this many transports exist (0 = leave unset; default 1000) — writes MAXTRANSPORTS in skywire.conf")
 	cmd.Flags().StringVar(&v.StunServers, "stun", "", "STUN servers, comma-separated — writes STUNSERVERS in skywire.conf")
 
 	// --- Transport ports ---
@@ -365,13 +365,12 @@ var envMap = map[string]EnvMapping{
 	"disable-public-autoconn": {Key: "DISABLEPUBLICAUTOCONN", Format: EnvFormatBool},
 
 	// Service discovery / deployment
-	"testenv":  {Key: "TESTENV", Format: EnvFormatBool},
-	"dmsghttp": {Key: "DMSGHTTP", Format: EnvFormatBool},
-	"dmsgconf": {Key: "DMSGCONF", Format: EnvFormatString},
-	"url":      {Key: "SVCCONFADDR", Format: EnvFormatBashArray},
-	"svcconf":  {Key: "SVCCONF", Format: EnvFormatString},
-	"minsess":  {Key: "MINDMSGSESS", Format: EnvFormatInt, Default: "2"},
-	"stun":     {Key: "STUNSERVERS", Format: EnvFormatBashArray},
+	"testenv":       {Key: "TESTENV", Format: EnvFormatBool},
+	"url":           {Key: "SVCCONFADDR", Format: EnvFormatBashArray},
+	"svcconf":       {Key: "SVCCONF", Format: EnvFormatString},
+	"minsess":       {Key: "MINDMSGSESS", Format: EnvFormatInt, Default: "2"},
+	"maxtransports": {Key: "MAXTRANSPORTS", Format: EnvFormatInt, Default: "1000"},
+	"stun":          {Key: "STUNSERVERS", Format: EnvFormatBashArray},
 
 	// Transport ports. 0 = OS-assigned random port at runtime;
 	// stays unchanged across visor restarts only when pinned to a
