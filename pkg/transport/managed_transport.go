@@ -101,6 +101,22 @@ type ManagedTransport struct {
 	// touch it lock-free.
 	pingReadyAtNanos atomic.Int64
 
+	// pongSeen is set true on the first transport pong ever received on
+	// this transport, ARMING the half-open-link detector. Until a peer
+	// has answered at least one ping we never close on missed pongs —
+	// older visors that don't implement transport ping/pong would
+	// otherwise be falsely reaped, severing working links to them.
+	pongSeen atomic.Bool
+	// missedPongs counts pings sent with no intervening pong. Reset to 0
+	// on every pong received and whenever the underlying transport is
+	// (re)set. Once pongSeen is true and this reaches pongMissThreshold,
+	// the far end has gone silent (a half-open link the OS hasn't torn
+	// down) — the transport is closed + deregistered so it stops being
+	// re-registered and routed through. This is what makes a dead edge's
+	// transports actually expire from TPD instead of being kept alive by
+	// the still-live edge's re-registration.
+	missedPongs atomic.Int64
+
 	// cascadeHandler handles cascade protocol packets (route ID 0).
 	// Set by the transport manager from the router's CascadeHandler.
 	cascadeHandler func(p routing.Packet, mt *ManagedTransport)
@@ -244,6 +260,13 @@ func (mt *ManagedTransport) GetBandwidth() *BandwidthData {
 // goroutine.
 const transportPingInterval = 60 * time.Second
 
+// pongMissThreshold is the number of consecutive transport pings with no
+// intervening pong after which an ARMED (pongSeen) transport is treated as a
+// dead half-open link and closed. At transportPingInterval (60s) this is ~3
+// minutes of silence — long enough to ride out a brief blip or a momentarily
+// slow peer, short enough that dead edges drain from TPD promptly.
+const pongMissThreshold = 3
+
 // Serve serves and manages the transport.
 //
 // Goroutine layout: one readLoop goroutine plus the Serve goroutine
@@ -371,6 +394,20 @@ func (mt *ManagedTransport) tickPing() {
 		return
 	}
 
+	// Half-open-link detection: if the peer has answered a ping before
+	// (pongSeen) but has since gone silent for pongMissThreshold
+	// consecutive pings, the far end is gone while our local socket
+	// still looks "open" (no RST). Close + deregister so the dead edge
+	// stops being re-registered and routed through. Guarded by pongSeen
+	// so peers that never implement transport ping/pong are untouched.
+	if mt.pongSeen.Load() && mt.missedPongs.Load() >= pongMissThreshold {
+		mt.log.WithField("missed_pongs", mt.missedPongs.Load()).
+			WithField("remote", mt.Remote()).
+			Warn("Transport peer stopped answering pings; closing half-open transport")
+		mt.close()
+		return
+	}
+
 	// First time observed ready — stamp + send first ping. CAS makes
 	// the stamp idempotent in case the maintenance loop ever overlaps
 	// with itself (a precaution; in the current design only one
@@ -400,6 +437,8 @@ func (mt *ManagedTransport) sendTransportPing() {
 		mt.log.WithError(err).Debug("Failed to send transport ping")
 		return
 	}
+	// Count this ping as awaiting a pong; handleTransportPong resets it.
+	mt.missedPongs.Add(1)
 	if n > routing.PacketHeaderSize {
 		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
@@ -439,6 +478,11 @@ func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
 	if len(payload) < routing.TransportPingPayloadSize {
 		return
 	}
+	// A valid pong proves the far end is alive: arm the detector and
+	// reset the miss counter, regardless of the RTT-outlier filtering
+	// below (an outlier-RTT pong still proves liveness).
+	mt.pongSeen.Store(true)
+	mt.missedPongs.Store(0)
 	sentAt := int64(binary.BigEndian.Uint64(payload[:8])) //nolint:gosec
 	rttMs := float64(time.Now().UnixNano()-sentAt) / 1e6
 	if rttMs <= 0 {
@@ -645,6 +689,10 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) {
 		}
 		mt.transport = nil
 	}
+
+	// Fresh underlying connection — reset the half-open miss counter so a
+	// stale count from a prior connection can't immediately reap the new one.
+	mt.missedPongs.Store(0)
 
 	// Set new underlying transport.
 	mt.transport = newTransport
