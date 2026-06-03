@@ -140,7 +140,8 @@ type RouteGroup struct {
 	// "WaitGroup reused before previous Wait returned" panics.
 	closeDonePending int32         // atomic counter of outstanding close acks
 	closeDoneCh      chan struct{} // closed when closeDonePending reaches 0
-	once             sync.Once
+	once             sync.Once     // guards the readCh/remoteClosed cleanup
+	closedOnce       sync.Once     // guards close(rg.closed) — closable from two paths
 
 	errorMu    sync.RWMutex
 	closeError error
@@ -348,8 +349,12 @@ func (rg *RouteGroup) Close() error {
 
 	if rg.isRemoteClosed() {
 		// remote already closed, everything is cleaned up,
-		// we just need to close signal channel at this point
-		close(rg.closed)
+		// we just need to close signal channel at this point.
+		// Guard with closedOnce: two concurrent Close() callers (e.g. an
+		// app-level Close and the GC's removeRouteGroupOfRule->Close) can both
+		// pass the isClosed() gate in the window before the channel is closed,
+		// and a bare close() here would panic with "close of closed channel".
+		rg.closedOnce.Do(func() { close(rg.closed) })
 		return nil
 	}
 
@@ -1250,17 +1255,25 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		}
 	}
 
-	rules := make([]routing.RouteID, 0, len(rg.fwd))
+	rules := make([]routing.RouteID, 0, len(rg.fwd)+len(rg.rvs))
 	for _, r := range rg.fwd {
+		rules = append(rules, r.KeyRouteID())
+	}
+	// Also delete the reverse/consume rules. Without this they linger in the
+	// routing table until the keep-alive GC reaps them, leaking N stale rules
+	// per close (N legs for a mux group) and opening the window where a packet
+	// resolves the orphaned consume rule but finds no route group
+	// (errRouteDescNotExist log-spam).
+	for _, r := range rg.rvs {
 		rules = append(rules, r.KeyRouteID())
 	}
 
 	rg.rt.DelRules(rules)
 
+	if closeInitiator {
+		rg.closedOnce.Do(func() { close(rg.closed) })
+	}
 	rg.once.Do(func() {
-		if closeInitiator {
-			close(rg.closed)
-		}
 		rg.setRemoteClosed()
 		close(rg.readCh)
 	})
@@ -1271,7 +1284,11 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 	switch packet.Type() {
 	case routing.ClosePacket:
-		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
+		closeCode, err := closeCodeFromPacket(packet)
+		if err != nil {
+			return err
+		}
+		return rg.handleClosePacket(closeCode)
 	case routing.DataPacket:
 		rg.handshakeProcessedOnce.Do(func() {
 			// first packet is data packet, so we're communicating with the old visor
