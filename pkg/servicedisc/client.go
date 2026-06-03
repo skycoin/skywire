@@ -129,8 +129,20 @@ func (c *HTTPClient) Auth(ctx context.Context) (*httpauthclient.Client, error) {
 	return auth, nil
 }
 
+// Configured reports whether this client can perform HTTP service discovery —
+// it has both a non-nil http.Client and a discovery address. Callers (e.g. the
+// autoconnector) should skip the HTTP path when this is false instead of
+// invoking it, which would otherwise nil-deref c.client. This happens when the
+// operator drops/blanks the service_discovery URL to force dmsg-only.
+func (c *HTTPClient) Configured() bool {
+	return c != nil && c.client != nil && c.conf.DiscAddr != ""
+}
+
 // Services calls 'GET /api/services'.
 func (c *HTTPClient) Services(ctx context.Context, quantity int, version, country string) (out []Service, err error) {
+	if c.client == nil {
+		return nil, errors.New("servicedisc: no HTTP client configured (service_discovery URL not set)")
+	}
 	url, err := c.addr("/api/services", c.entry.Type, version, country, quantity)
 	if err != nil {
 		return nil, err
