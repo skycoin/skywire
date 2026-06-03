@@ -42,7 +42,7 @@ func (s *TransportSuite) TestRegister() {
 	}
 
 	t.Run(".RegisterTransport", func(t *testing.T) {
-		require.NoError(t, s.RegisterTransport(ctx, sEntry))
+		require.NoError(t, s.RegisterTransport(ctx, cipher.PubKey{}, sEntry))
 		assert.True(t, sEntry.Registered > 0)
 	})
 

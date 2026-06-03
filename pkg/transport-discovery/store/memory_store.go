@@ -31,16 +31,18 @@ func (s *memoryStore) SetError(err error) {
 	s.err = err
 }
 
-func (s *memoryStore) RegisterTransportsBatch(ctx context.Context, entries []*transport.SignedEntry) error {
+func (s *memoryStore) RegisterTransportsBatch(ctx context.Context, reporter cipher.PubKey, entries []*transport.SignedEntry) error {
 	for _, entry := range entries {
-		if err := s.RegisterTransport(ctx, entry); err != nil {
+		if err := s.RegisterTransport(ctx, reporter, entry); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *memoryStore) RegisterTransport(_ context.Context, entry *transport.SignedEntry) error {
+// RegisterTransport ignores reporter: the in-memory store has no per-edge TTL
+// index (no expiry), so the per-edge-refresh distinction is moot here.
+func (s *memoryStore) RegisterTransport(_ context.Context, _ cipher.PubKey, entry *transport.SignedEntry) error {
 	if s.err != nil {
 		return s.err
 	}
