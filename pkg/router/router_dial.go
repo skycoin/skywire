@@ -96,13 +96,20 @@ func (r *router) DialRoutes(
 	// direct transport when one happens to exist would defeat the constraint
 	// (this was the symptom of `mux-bw --min-hops 2` riding direct stcpr
 	// instead of going via intermediates).
-	defaultMinHops := r.conf.MinHops
+	// baseMinHops is a LOCAL effective min-hops for this dial. We must NOT
+	// mutate the shared r.conf.MinHops here: DialRoutes runs concurrently per
+	// app dial, so writing the field both races other in-flight dials and —
+	// because the old restore only ran on the success path while 7 early
+	// `return nil, err` sit between mutation and restore — would permanently
+	// pin the visor-global MinHops to 1 after the first failed dial, silently
+	// disabling the operator's min-hops policy for every subsequent dial.
+	baseMinHops := r.conf.MinHops
 	// Suppress the direct-tp downgrade when ANY min-hops constraint is
 	// set (symmetric or per-direction). Even if only ReverseMinHops > 1,
 	// downgrading globally to 1 would defeat that constraint for the
 	// reverse direction's route-finder query below.
 	if r.isTpdExist(rPK) && !opts.AnyMinHopsConstraint() {
-		r.conf.MinHops = 1
+		baseMinHops = 1
 	}
 
 	// Check if existing transport only mode is set on the router
@@ -113,7 +120,7 @@ func (r *router) DialRoutes(
 	// Only run route setup hooks (which may create new transports) if UseExistingTpOnly is false
 	// on both the router level and the dial options level
 	useExistingOnly := routerExistingTpOnly || (opts != nil && opts.UseExistingTpOnly)
-	if r.conf.MinHops == 1 && !useExistingOnly {
+	if baseMinHops == 1 && !useExistingOnly {
 		r.routeSetupHookMu.Lock()
 		if len(r.routeSetupHooks) != 0 {
 			for _, rsf := range r.routeSetupHooks {
@@ -148,7 +155,7 @@ func (r *router) DialRoutes(
 		maxFetchAttempts = 1
 	}
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts, baseMinHops)
 		if err != nil {
 			if attempt < maxFetchAttempts {
 				log.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
@@ -312,10 +319,8 @@ func (r *router) DialRoutes(
 			nrg.rg.SetRotation(rh, applyAdd, interval)
 		}
 
-		// reset MinHops default value if changed before
-		if defaultMinHops != 1 {
-			r.conf.MinHops = defaultMinHops
-		}
+		// NOTE: no MinHops restore needed — baseMinHops is a local var now,
+		// r.conf.MinHops is never mutated by the dial path.
 
 		return nrg, nil
 	}
@@ -499,7 +504,8 @@ func (r *router) PingRoute(
 	}
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
+		// PingRoute has no direct-tp downgrade; use the visor-global base.
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts, r.conf.MinHops)
 		if err != nil {
 			if pingForceLocal {
 				lastErr = fmt.Errorf("local route calc: %w", err)
@@ -539,7 +545,12 @@ func (r *router) PingRoute(
 	return nil, fmt.Errorf("failed to establish ping route after %d attempts: %w", maxRetries, lastErr)
 }
 
-func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+// baseMinHops is the per-dial base min-hops to use when opts carries no
+// per-call / per-direction override. The caller (DialRoutes) computes it as a
+// LOCAL value — applying the direct-transport downgrade there rather than
+// mutating the shared r.conf.MinHops, which used to race across concurrent
+// dials and permanently lose the constraint on any early-return error path.
+func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions, baseMinHops uint16) (fwd, rev []routing.Hop, err error) {
 	if log == nil {
 		log = r.logger
 	}
@@ -593,8 +604,8 @@ fetchRoutesAgain:
 	// asymmetric constraints can't be expressed in one round-trip.
 	fwdEff := opts.EffectiveMinHops(true)
 	revEff := opts.EffectiveMinHops(false)
-	fwdMinHops := r.conf.MinHops
-	revMinHops := r.conf.MinHops
+	fwdMinHops := baseMinHops
+	revMinHops := baseMinHops
 	if fwdEff > 0 {
 		fwdMinHops = uint16(fwdEff) //nolint:gosec // bounded by caller; CLI flag values are small
 	}
@@ -1686,7 +1697,7 @@ func (r *router) establishMuxRoutes(
 			ExcludeDMSG:            true,
 		}
 
-		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
+		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
 		if err != nil {
 			log.Debugf("Mux route %d/%d: route-finder returned no path: %v — trying local-calc fallback",
 				i+1, maxCount, err)
@@ -1831,7 +1842,7 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 		ExcludeDMSG:            true,
 	}
 
-	muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
+	muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
 	if err != nil {
 		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
 		if localErr != nil {
