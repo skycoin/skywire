@@ -235,6 +235,17 @@ func NewConfig() (conf *Config) {
 
 	conf.MaxObjectSize = MaxObjectSize
 
+	// MaxFillingParallel was previously left at its int zero value here
+	// — that zeroed through to (*Node).maxFillingParallel and triggered
+	// the magic-1024 fallback in pkg/cxo/node/head.go's maxParallel(),
+	// which sized Filler.limit + Filler.rq to 1024 per Filler. Under
+	// concurrent fillers that pinned thousands of goroutines parked in
+	// (*Filler).get's select, producing scheduler pressure visible in
+	// production pprof (5700+ goroutines stuck on fill.go:82). The
+	// MaxFillingParallel constant was always documented as 10 ("ten
+	// parallel subtrees") in this file — just never assigned.
+	conf.MaxFillingParallel = MaxFillingParallel
+
 	// data dir
 	conf.DataDir = DataDir()
 
