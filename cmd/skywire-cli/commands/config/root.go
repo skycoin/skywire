@@ -45,6 +45,7 @@ var (
 	transportSetupPKs          string
 	isDmsgHTTP                 bool
 	isHTTPOnly                 bool
+	isDual                     bool
 	minDmsgSess                int
 	isVpnServerEnable          bool
 	isDisableAuth              bool
