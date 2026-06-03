@@ -266,10 +266,10 @@ func (s *hvCalcStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) (
 // Stubs to satisfy tpdstore.Store. None of these are reached during
 // route enumeration; they exist only to make the type assignable to
 // the route-finder's parameter type.
-func (s *hvCalcStore) RegisterTransport(context.Context, *transport.SignedEntry) error {
+func (s *hvCalcStore) RegisterTransport(context.Context, cipher.PubKey, *transport.SignedEntry) error {
 	return nil
 }
-func (s *hvCalcStore) RegisterTransportsBatch(context.Context, []*transport.SignedEntry) error {
+func (s *hvCalcStore) RegisterTransportsBatch(context.Context, cipher.PubKey, []*transport.SignedEntry) error {
 	return nil
 }
 func (s *hvCalcStore) DeregisterTransport(context.Context, uuid.UUID) error { return nil }
