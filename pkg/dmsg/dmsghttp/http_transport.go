@@ -3,11 +3,13 @@ package dmsghttp
 
 import (
 	"bufio"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -112,13 +114,32 @@ func (t *HTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		hostAddr.Port = defaultHTTPPort
 	}
 
+	// Mirror net/http.Transport's transparent gzip. This custom
+	// RoundTripper bypasses the stdlib Transport (see type doc), so
+	// without this it never advertises Accept-Encoding and TPD/AR/SD
+	// reply with uncompressed bodies — the "gzip gap" that drove the
+	// residual dmsg-server write CPU + egress after the TPD #2980 cache
+	// landed (TPD already pre-marshals gzip; the dmsg client just never
+	// asked). Only auto-gzip when the caller set no encoding of its own
+	// and it's not a HEAD/Range request, then transparently decompress
+	// in do() so callers are unaffected. Computed once here (not in
+	// do()) so the pooled-then-fresh retry path doesn't see the header
+	// we set on the first attempt and skip decompression on the second.
+	requestedGzip := false
+	if req.Header.Get("Accept-Encoding") == "" &&
+		req.Header.Get("Range") == "" &&
+		req.Method != http.MethodHead {
+		requestedGzip = true
+		req.Header.Set("Accept-Encoding", "gzip")
+	}
+
 	// Try one pooled stream first; if the write or response read fails
 	// (idle conn was closed by peer between requests), fall through to
 	// a fresh dial. We never retry idempotent requests beyond a single
 	// pooled-then-fresh attempt because the test/production cost of
 	// multi-retry is higher than just paying a fresh handshake.
 	if ps := t.takeIdle(hostAddr); ps != nil {
-		resp, err := t.do(ps, req)
+		resp, err := t.do(ps, req, requestedGzip)
 		if err == nil {
 			return resp, nil
 		}
@@ -143,7 +164,7 @@ func (t *HTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	ps := &pooledStream{s: stream, br: bufio.NewReader(stream), host: hostAddr}
 	t.track(ps)
-	resp, err := t.do(ps, req)
+	resp, err := t.do(ps, req, requestedGzip)
 	if err != nil {
 		ps.discard()
 		t.untrack(ps)
@@ -173,13 +194,27 @@ func rewindBody(req *http.Request) error {
 // do writes req to ps and reads back the response. The response body
 // is wrapped so that closing it returns the stream to the idle pool
 // (or discards it on error).
-func (t *HTTPTransport) do(ps *pooledStream, req *http.Request) (*http.Response, error) {
+func (t *HTTPTransport) do(ps *pooledStream, req *http.Request, requestedGzip bool) (*http.Response, error) {
 	if err := req.Write(ps.s); err != nil {
 		return nil, err
 	}
 	resp, err := http.ReadResponse(ps.br, req)
 	if err != nil {
 		return nil, err
+	}
+	// When we asked for gzip on the caller's behalf, decompress
+	// transparently so callers see a plain body — same contract as
+	// net/http.Transport. Drop the now-misleading Content-Encoding and
+	// Content-Length and mark the response Uncompressed. The gzipReader
+	// wraps the raw body and is itself wrapped by pooledBody below, so
+	// Close still drains the underlying compressed stream before the
+	// dmsg stream returns to the idle pool.
+	if requestedGzip && strings.EqualFold(resp.Header.Get("Content-Encoding"), "gzip") {
+		resp.Header.Del("Content-Encoding")
+		resp.Header.Del("Content-Length")
+		resp.ContentLength = -1
+		resp.Uncompressed = true
+		resp.Body = &gzipReader{body: resp.Body}
 	}
 	resp.Body = &pooledBody{
 		ReadCloser: resp.Body,
@@ -335,4 +370,33 @@ func (b *pooledBody) Close() error {
 		b.t.putIdle(b.ps)
 	}
 	return closeErr
+}
+
+// gzipReader transparently decompresses a gzip-encoded response body,
+// mirroring net/http.Transport's internal gzipReader (which this custom
+// RoundTripper bypasses). The gzip.Reader is created lazily on first
+// Read so a never-read body still closes cleanly, and Close closes the
+// underlying body rather than the gzip reader — draining the underlying
+// (compressed) stream is what pooledBody.Close relies on to recycle the
+// dmsg stream.
+type gzipReader struct {
+	body io.ReadCloser
+	zr   *gzip.Reader
+	zerr error
+}
+
+func (gz *gzipReader) Read(p []byte) (int, error) {
+	if gz.zr == nil {
+		if gz.zerr == nil {
+			gz.zr, gz.zerr = gzip.NewReader(gz.body)
+		}
+		if gz.zerr != nil {
+			return 0, gz.zerr
+		}
+	}
+	return gz.zr.Read(p)
+}
+
+func (gz *gzipReader) Close() error {
+	return gz.body.Close()
 }
