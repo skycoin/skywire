@@ -257,7 +257,16 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, err := api.store.GetTransportsByEdge(r.Context(), pk)
+	// /transports/edge:<PK> is polled by every visor on a short cadence to
+	// learn its own and peers' transports. Serve a memoized, gzipped response
+	// body so identical repeat polls don't hit Redis or re-marshal per call.
+	raw, gz, err := api.edgeRespCache.body(pk, func() ([]byte, error) {
+		entries, e := api.store.GetTransportsByEdge(r.Context(), pk)
+		if e != nil {
+			return nil, e
+		}
+		return json.Marshal(entries)
+	})
 	if err != nil {
 		if err != store.ErrTransportNotFound {
 			api.log(r).WithError(err).Error("Error getting transport")
@@ -265,7 +274,17 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, r, err)
 		return
 	}
-	httputil.WriteJSON(w, r, http.StatusOK, entries)
+
+	w.Header().Set("Content-Type", "application/json")
+	if gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(gz) //nolint:errcheck
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw) //nolint:errcheck
 }
 
 func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
