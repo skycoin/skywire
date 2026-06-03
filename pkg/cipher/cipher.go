@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/skycoin/skycoin/src/cipher"
 	"github.com/skycoin/skycoin/src/cipher/secp256k1-go"
@@ -22,6 +23,10 @@ var (
 	verifyCacheMu   sync.RWMutex
 	verifyCacheMap  = make(map[[130]byte]struct{}, 1024) // key: PK(33) + Sig(65) + Hash(32) = 130 bytes
 	verifyCacheSize int
+
+	verifyCacheHits      atomic.Uint64
+	verifyCacheMisses    atomic.Uint64
+	verifyCacheEvictions atomic.Uint64
 )
 
 const maxVerifyCacheSize = 4096
@@ -39,6 +44,11 @@ func verifyCacheCheck(pk cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) bool
 	verifyCacheMu.RLock()
 	_, ok := verifyCacheMap[key]
 	verifyCacheMu.RUnlock()
+	if ok {
+		verifyCacheHits.Add(1)
+	} else {
+		verifyCacheMisses.Add(1)
+	}
 	return ok
 }
 
@@ -49,10 +59,38 @@ func verifyCacheStore(pk cipher.PubKey, sig cipher.Sig, hash cipher.SHA256) {
 		// Simple eviction: clear entire cache.
 		verifyCacheMap = make(map[[130]byte]struct{}, 1024)
 		verifyCacheSize = 0
+		verifyCacheEvictions.Add(1)
 	}
 	verifyCacheMap[key] = struct{}{}
 	verifyCacheSize++
 	verifyCacheMu.Unlock()
+}
+
+// VerifyCacheStats is a snapshot of the signature-verify cache counters.
+// Hits/Misses are counted on every verifyCacheCheck; Evictions is
+// incremented each time the cache hits maxVerifyCacheSize and is wiped.
+// Size is the current entry count.
+type VerifyCacheStats struct {
+	Hits      uint64
+	Misses    uint64
+	Evictions uint64
+	Size      int
+	Capacity  int
+}
+
+// GetVerifyCacheStats returns a snapshot of the signature-verify
+// cache counters. Safe to call concurrently with verification.
+func GetVerifyCacheStats() VerifyCacheStats {
+	verifyCacheMu.RLock()
+	size := verifyCacheSize
+	verifyCacheMu.RUnlock()
+	return VerifyCacheStats{
+		Hits:      verifyCacheHits.Load(),
+		Misses:    verifyCacheMisses.Load(),
+		Evictions: verifyCacheEvictions.Load(),
+		Size:      size,
+		Capacity:  maxVerifyCacheSize,
+	}
 }
 
 func init() {

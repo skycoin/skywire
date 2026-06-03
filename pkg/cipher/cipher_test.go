@@ -132,3 +132,51 @@ func BenchmarkVerifyPubKeySignedPayload(b *testing.B) {
 		_ = VerifyPubKeySignedPayload(pk, sig, payload) //nolint
 	}
 }
+
+// TestVerifyCacheStats validates the hits / misses / evictions
+// counters exposed via GetVerifyCacheStats. First verify is a miss
+// + populates the cache; repeated verifies are hits. Filling past
+// maxVerifyCacheSize triggers a wipe (Evictions++, Size resets to 1).
+func TestVerifyCacheStats(t *testing.T) {
+	resetVerifyCache()
+
+	pk, sk := GenerateKeyPair()
+	payload := []byte("stats test payload")
+	sig, err := SignPayload(payload, sk)
+	require.NoError(t, err)
+
+	// First verify — miss + populate.
+	require.NoError(t, VerifyPubKeySignedPayload(pk, sig, payload))
+	// 5 more — all hits.
+	for i := 0; i < 5; i++ {
+		require.NoError(t, VerifyPubKeySignedPayload(pk, sig, payload))
+	}
+
+	s := GetVerifyCacheStats()
+	assert.Equal(t, uint64(5), s.Hits, "expected 5 hits after first verify populated the cache")
+	assert.Equal(t, uint64(1), s.Misses, "expected 1 miss on first verify")
+	assert.Equal(t, 1, s.Size)
+	assert.Equal(t, maxVerifyCacheSize, s.Capacity)
+	assert.Equal(t, uint64(0), s.Evictions, "expected no evictions yet")
+
+	// Stuff the cache past capacity to trigger a wipe.
+	for i := 0; i <= maxVerifyCacheSize; i++ {
+		spk, ssk := GenerateKeyPair()
+		ssig, _ := SignPayload(payload, ssk)              //nolint
+		_ = VerifyPubKeySignedPayload(spk, ssig, payload) //nolint
+	}
+	s = GetVerifyCacheStats()
+	assert.GreaterOrEqual(t, s.Evictions, uint64(1), "expected at least one eviction (wipe) after overflow")
+}
+
+// resetVerifyCache wipes the package-level cache + counters for
+// test isolation.
+func resetVerifyCache() {
+	verifyCacheMu.Lock()
+	verifyCacheMap = make(map[[130]byte]struct{}, 1024)
+	verifyCacheSize = 0
+	verifyCacheMu.Unlock()
+	verifyCacheHits.Store(0)
+	verifyCacheMisses.Store(0)
+	verifyCacheEvictions.Store(0)
+}

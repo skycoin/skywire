@@ -75,6 +75,59 @@ func resetDHCache() {
 	dhCacheMu.Lock()
 	dhCache = make(map[dhCacheKey][33]byte, dhCacheMax)
 	dhCacheMu.Unlock()
+	dhCacheHits.Store(0)
+	dhCacheMisses.Store(0)
+	dhCacheEvictions.Store(0)
+}
+
+// TestDHCacheStats validates the hits / misses / evictions counters
+// exposed via GetCacheStats. Each unique (sk, pk) input is a miss
+// on first call and a hit on subsequent calls; overflowing the
+// cap triggers an eviction per overflow insertion.
+func TestDHCacheStats(t *testing.T) {
+	resetDHCache()
+
+	dh := Secp256k1{}
+	pk1, sk1 := secp256k1.GenerateKeyPair()
+	pk2, sk2 := secp256k1.GenerateKeyPair()
+
+	// First call on each pair = miss.
+	_ = dh.DH(sk1, pk2)
+	_ = dh.DH(sk2, pk1)
+	// Repeat — both hits.
+	_ = dh.DH(sk1, pk2)
+	_ = dh.DH(sk2, pk1)
+	_ = dh.DH(sk1, pk2)
+
+	s := GetCacheStats()
+	if s.Hits != 3 {
+		t.Fatalf("expected Hits=3, got %d", s.Hits)
+	}
+	if s.Misses != 2 {
+		t.Fatalf("expected Misses=2, got %d", s.Misses)
+	}
+	if s.Size != 2 {
+		t.Fatalf("expected Size=2, got %d", s.Size)
+	}
+	if s.Capacity != dhCacheMax {
+		t.Fatalf("expected Capacity=%d, got %d", dhCacheMax, s.Capacity)
+	}
+	if s.Evictions != 0 {
+		t.Fatalf("expected Evictions=0 (no overflow yet), got %d", s.Evictions)
+	}
+
+	// Push past the cap to trigger evictions.
+	for i := 0; i < dhCacheMax*2; i++ {
+		pk, sk := secp256k1.GenerateKeyPair()
+		_ = dh.DH(sk, pk)
+	}
+	s = GetCacheStats()
+	if s.Evictions == 0 {
+		t.Fatalf("expected Evictions>0 after pushing 2x cap, got 0")
+	}
+	if s.Size > dhCacheMax {
+		t.Fatalf("Size exceeded Capacity: %d > %d", s.Size, dhCacheMax)
+	}
 }
 
 // dhCacheSize returns the current entry count under the lock.

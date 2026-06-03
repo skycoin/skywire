@@ -2,6 +2,7 @@
 package cmdutil
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/pprof"
 	"os"
@@ -9,8 +10,61 @@ import (
 	rpprof "runtime/pprof"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// cacheStatsHandler exposes the in-process cipher signature-verify
+// cache and noise DH cache counters as JSON. Mounted at
+// /debug/cache by startPProfHTTP. Sits beside the standard
+// /debug/pprof/* endpoints so operators can pull hit/miss/eviction
+// rates from the same pprof server without a separate listener.
+//
+// Output shape (hit_rate is misses>0 ? hits/(hits+misses) : 0):
+//
+//	{
+//	  "verify_cache": {
+//	    "hits": uint64, "misses": uint64, "evictions": uint64,
+//	    "size": int, "capacity": int, "hit_rate": float64
+//	  },
+//	  "dh_cache": {
+//	    "hits": uint64, "misses": uint64, "evictions": uint64,
+//	    "size": int, "capacity": int, "hit_rate": float64
+//	  }
+//	}
+func cacheStatsHandler(w http.ResponseWriter, _ *http.Request) {
+	vs := cipher.GetVerifyCacheStats()
+	ds := noise.GetCacheStats()
+	out := map[string]any{
+		"verify_cache": map[string]any{
+			"hits":      vs.Hits,
+			"misses":    vs.Misses,
+			"evictions": vs.Evictions,
+			"size":      vs.Size,
+			"capacity":  vs.Capacity,
+			"hit_rate":  hitRate(vs.Hits, vs.Misses),
+		},
+		"dh_cache": map[string]any{
+			"hits":      ds.Hits,
+			"misses":    ds.Misses,
+			"evictions": ds.Evictions,
+			"size":      ds.Size,
+			"capacity":  ds.Capacity,
+			"hit_rate":  hitRate(ds.Hits, ds.Misses),
+		},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out) //nolint:errcheck
+}
+
+func hitRate(hits, misses uint64) float64 {
+	total := hits + misses
+	if total == 0 {
+		return 0
+	}
+	return float64(hits) / float64(total)
+}
 
 // InitPProf starts profiling based on the given mode and address.
 // Supported modes: http, cpu, mem, mutex, block, trace.
@@ -142,7 +196,8 @@ func startPProfHTTP(log *logging.Logger, addr string, traceOnly bool) {
 			for _, profile := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
 				mux.Handle("/debug/pprof/"+profile, pprof.Handler(profile))
 			}
-			log.Infof("Serving pprof on http://%s (dedicated thread)", addr)
+			mux.HandleFunc("/debug/cache", cacheStatsHandler)
+			log.Infof("Serving pprof on http://%s (dedicated thread); cipher+DH cache stats at /debug/cache", addr)
 		}
 
 		srv := &http.Server{
