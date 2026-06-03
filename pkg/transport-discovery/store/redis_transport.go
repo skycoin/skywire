@@ -14,7 +14,22 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.SignedEntry) error {
+// edgeRefreshTargets decides whose per-edge index TTL to refresh for a
+// registration. When reporter is one of the two edges, only that edge's index
+// is refreshed (so the OTHER edge's index expires unless that edge registers
+// itself — i.e. is still online). When reporter is neither edge (zero PK,
+// unauthenticated, or legacy callers), both are refreshed to preserve the old
+// behavior.
+func edgeRefreshTargets(reporter cipher.PubKey, edges [2]cipher.PubKey) (refreshA, refreshB bool) {
+	refreshA = reporter == edges[0]
+	refreshB = reporter == edges[1]
+	if !refreshA && !refreshB {
+		return true, true
+	}
+	return refreshA, refreshB
+}
+
+func (s *redisStore) RegisterTransport(ctx context.Context, reporter cipher.PubKey, sEntry *transport.SignedEntry) error {
 	entry := sEntry.Entry
 	if entry == nil {
 		return ErrBadEntry
@@ -49,15 +64,24 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 	edgeAKey := s.edgeKey(entry.Edges[0])
 	edgeBKey := s.edgeKey(entry.Edges[1])
 
+	// Refresh ONLY the reporter's per-edge index, so an offline edge's index
+	// expires even while its live peer keeps re-registering the shared
+	// transport. The route-finder explores via per-edge indexes, so an expired
+	// index drops that visor as a routable intermediate. Fall back to both
+	// edges when the reporter is not one of them (zero / legacy / unauthed).
+	refreshA, refreshB := edgeRefreshTargets(reporter, entry.Edges)
+
 	// Always apply TTL so stale transports expire when visors stop re-registering.
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, tpKey, string(raw), s.ttl)
-	pipe.SAdd(ctx, edgeAKey, entry.ID.String())
 	pipe.SAdd(ctx, s.allTpsIndexKey(), entry.ID.String())
-	if s.ttl > 0 {
-		pipe.Expire(ctx, edgeAKey, s.ttl)
+	if refreshA {
+		pipe.SAdd(ctx, edgeAKey, entry.ID.String())
+		if s.ttl > 0 {
+			pipe.Expire(ctx, edgeAKey, s.ttl)
+		}
 	}
-	if entry.Edges[0] != entry.Edges[1] {
+	if entry.Edges[0] != entry.Edges[1] && refreshB {
 		pipe.SAdd(ctx, edgeBKey, entry.ID.String())
 		if s.ttl > 0 {
 			pipe.Expire(ctx, edgeBKey, s.ttl)
@@ -86,7 +110,7 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 // pipeline. This reduces TCP round-trips from N pipelines (one per transport)
 // to 1 pipeline for the entire batch. At ~50 registrations/sec × 8 commands
 // each, this cuts Redis syscall overhead significantly.
-func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*transport.SignedEntry) error {
+func (s *redisStore) RegisterTransportsBatch(ctx context.Context, reporter cipher.PubKey, entries []*transport.SignedEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -120,13 +144,18 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*tra
 		tpKey := s.transportKey(entry.ID)
 		edgeAKey := s.edgeKey(entry.Edges[0])
 
+		// Refresh only the reporter's per-edge index (see RegisterTransport).
+		refreshA, refreshB := edgeRefreshTargets(reporter, entry.Edges)
+
 		pipe.Set(ctx, tpKey, string(raw), s.ttl)
-		pipe.SAdd(ctx, edgeAKey, entry.ID.String())
 		pipe.SAdd(ctx, s.allTpsIndexKey(), entry.ID.String())
-		if s.ttl > 0 {
-			pipe.Expire(ctx, edgeAKey, s.ttl)
+		if refreshA {
+			pipe.SAdd(ctx, edgeAKey, entry.ID.String())
+			if s.ttl > 0 {
+				pipe.Expire(ctx, edgeAKey, s.ttl)
+			}
 		}
-		if entry.Edges[0] != entry.Edges[1] {
+		if entry.Edges[0] != entry.Edges[1] && refreshB {
 			edgeBKey := s.edgeKey(entry.Edges[1])
 			pipe.SAdd(ctx, edgeBKey, entry.ID.String())
 			if s.ttl > 0 {

@@ -42,7 +42,7 @@ func (api *API) RegisterTransportFromCXO(ctx context.Context, entry *transport.E
 	}
 
 	sEntry := &transport.SignedEntry{Entry: entry, Version: version}
-	if err := api.store.RegisterTransportsBatch(ctx, []*transport.SignedEntry{sEntry}); err != nil {
+	if err := api.store.RegisterTransportsBatch(ctx, reporter, []*transport.SignedEntry{sEntry}); err != nil {
 		return fmt.Errorf("register batch: %w", err)
 	}
 

@@ -67,6 +67,10 @@ type API struct {
 	transportsCacheFiltered []*transport.Entry // excludes self-transports
 	transportsMu            sync.RWMutex
 
+	// allTpsRespCache memoizes the marshaled (+gzip) /all-transports body so the
+	// dominant-egress endpoint doesn't re-marshal/re-send ~3MB per call.
+	allTpsRespCache *allTransportsRespCache
+
 	uptimesCache   []store.VisorSummary
 	uptimesV2Cache []store.VisorSummary
 	uptimesMu      sync.RWMutex
@@ -116,6 +120,7 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
 		backupPath:                  backupPath,
+		allTpsRespCache:             newAllTransportsRespCache(allTransportsRespCacheTTL),
 	}
 
 	r := chi.NewRouter()
