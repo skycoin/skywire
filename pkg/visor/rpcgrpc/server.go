@@ -937,10 +937,10 @@ func (s *calcMemStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) 
 }
 
 // Unused store.Store stubs.
-func (s *calcMemStore) RegisterTransport(context.Context, *transport.SignedEntry) error {
+func (s *calcMemStore) RegisterTransport(context.Context, cipher.PubKey, *transport.SignedEntry) error {
 	return nil
 }
-func (s *calcMemStore) RegisterTransportsBatch(context.Context, []*transport.SignedEntry) error {
+func (s *calcMemStore) RegisterTransportsBatch(context.Context, cipher.PubKey, []*transport.SignedEntry) error {
 	return nil
 }
 func (s *calcMemStore) DeregisterTransport(context.Context, uuid.UUID) error { return nil }
