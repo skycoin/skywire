@@ -14,7 +14,6 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -601,9 +600,19 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 		return nil // already running
 	}
 
+	// Prefer the HTTP service-discovery URL; fall back to the dmsg URL when the
+	// operator dropped the HTTP one (dmsg-only). Never silently substitute the
+	// hardcoded prod HTTP discovery: a dropped field is intentional, and pairing
+	// sd.skycoin.com with the dmsg-http client (v.serviceDisc.Client, built from
+	// the dmsg URL in initDiscovery) makes the connector dial sd.skycoin.com over
+	// dmsg → "invalid host address: Invalid public key". Mirror initDiscovery.
 	serviceDisc := v.conf.Launcher.ServiceDisc
-	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
-		serviceDisc = deployment.Prod.ServiceDiscovery
+	if serviceDisc == "" {
+		serviceDisc = v.conf.Launcher.ServiceDiscDmsg
+	}
+	if serviceDisc == "" {
+		log.Debug("service discovery not configured (neither http nor dmsg URL); skipping public autoconnect")
+		return nil
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and
