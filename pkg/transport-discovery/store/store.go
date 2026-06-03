@@ -172,8 +172,13 @@ type Store interface {
 
 // TransportStore stores Transport metadata.
 type TransportStore interface {
-	RegisterTransport(context.Context, *transport.SignedEntry) error
-	RegisterTransportsBatch(context.Context, []*transport.SignedEntry) error
+	// RegisterTransport registers/refreshes a transport. reporter is the
+	// authenticated registering edge: only that edge's per-edge index TTL is
+	// refreshed, so an offline edge's index expires even while its live peer
+	// keeps re-registering the shared transport. A zero reporter (or one that
+	// is not an edge) falls back to refreshing both edges (legacy behavior).
+	RegisterTransport(context.Context, cipher.PubKey, *transport.SignedEntry) error
+	RegisterTransportsBatch(context.Context, cipher.PubKey, []*transport.SignedEntry) error
 	DeregisterTransport(context.Context, uuid.UUID) error
 	GetTransportByID(context.Context, uuid.UUID) (*transport.Entry, error)
 	GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error)
