@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
 	"github.com/skycoin/noise"
 	"github.com/skycoin/skycoin/src/cipher"
@@ -80,6 +81,10 @@ type dhCacheKey [65]byte
 var (
 	dhCacheMu sync.RWMutex
 	dhCache   = make(map[dhCacheKey][33]byte, dhCacheMax)
+
+	dhCacheHits      atomic.Uint64
+	dhCacheMisses    atomic.Uint64
+	dhCacheEvictions atomic.Uint64
 )
 
 func makeDHKey(sk, pk []byte) dhCacheKey {
@@ -99,10 +104,12 @@ func (Secp256k1) DH(sk, pk []byte) []byte {
 	cached, hit := dhCache[k]
 	dhCacheMu.RUnlock()
 	if hit {
+		dhCacheHits.Add(1)
 		out := make([]byte, 33)
 		copy(out, cached[:])
 		return out
 	}
+	dhCacheMisses.Add(1)
 
 	var pubKey cipher.PubKey
 	var secKey cipher.SecKey
@@ -129,10 +136,38 @@ func (Secp256k1) DH(sk, pk []byte) []byte {
 			delete(dhCache, k0)
 			break
 		}
+		dhCacheEvictions.Add(1)
 	}
 	dhCache[k] = entry
 	dhCacheMu.Unlock()
 	return out
+}
+
+// CacheStats is a snapshot of the noise DH cache counters. Hits/Misses
+// are counted on every call to (Secp256k1).DH; Evictions is incremented
+// each time a single entry is dropped to make room (one per eviction,
+// not per overflowed insertion).
+type CacheStats struct {
+	Hits      uint64
+	Misses    uint64
+	Evictions uint64
+	Size      int
+	Capacity  int
+}
+
+// GetCacheStats returns a snapshot of the noise DH cache counters.
+// Safe to call concurrently with DH.
+func GetCacheStats() CacheStats {
+	dhCacheMu.RLock()
+	size := len(dhCache)
+	dhCacheMu.RUnlock()
+	return CacheStats{
+		Hits:      dhCacheHits.Load(),
+		Misses:    dhCacheMisses.Load(),
+		Evictions: dhCacheEvictions.Load(),
+		Size:      size,
+		Capacity:  dhCacheMax,
+	}
 }
 
 // DHLen helps to implement `noise.DHFunc`.
