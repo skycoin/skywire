@@ -3,10 +3,12 @@ package dmsghttp
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -225,4 +227,107 @@ func newDmsgClient(t *testing.T, dc disc.APIClient, minSessions int, name string
 		t.Fatal("timed out waiting for dmsg client to be ready")
 	}
 	return dmsgC
+}
+
+// TestHTTPTransport_TransparentGzip pins the "gzip gap" fix: because this
+// transport is a custom http.RoundTripper that bypasses net/http.Transport,
+// it must itself advertise Accept-Encoding: gzip on the caller's behalf and
+// transparently decompress the response — otherwise dmsg service callers
+// (TPD/AR/SD) receive uncompressed bodies even though the server can gzip,
+// driving dmsg-server write CPU + egress (Beta's post-#2980 residual).
+func TestHTTPTransport_TransparentGzip(t *testing.T) {
+	logging.SetLevel(logrus.WarnLevel)
+
+	const (
+		nSrvs       = 1
+		minSessions = 1
+		maxSessions = 10
+		port        = uint16(80)
+	)
+	// A payload large/repetitive enough that gzip is unmistakably applied.
+	payload := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
+
+	dc := startDmsgEnv(t, nSrvs, maxSessions)
+
+	lis, err := newDmsgClient(t, dc, minSessions, "gzipsrv").Listen(port)
+	require.NoError(t, err)
+
+	gotAcceptEncoding := make(chan string, 4)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/gzip", func(w http.ResponseWriter, r *http.Request) {
+		gotAcceptEncoding <- r.Header.Get("Accept-Encoding")
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		_, _ = gz.Write([]byte(payload))
+		_ = gz.Close()
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write(buf.Bytes())
+	})
+	mux.HandleFunc("/plain", func(w http.ResponseWriter, r *http.Request) {
+		gotAcceptEncoding <- r.Header.Get("Accept-Encoding")
+		_, _ = w.Write([]byte(payload))
+	})
+	srv := &http.Server{ReadHeaderTimeout: 3 * time.Second, Handler: mux}
+	errCh := make(chan error, 1)
+	go func() { errCh <- srv.Serve(lis); close(errCh) }()
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx) //nolint:errcheck
+		_ = lis.Close()       //nolint:errcheck
+		<-errCh
+	})
+
+	addr := lis.Addr().String()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	httpC := http.Client{
+		Transport: MakeHTTPTransport(ctx, newDmsgClient(t, dc, minSessions, "gzipcli")),
+		Timeout:   30 * time.Second,
+	}
+	time.Sleep(2 * time.Second)
+
+	waitAE := func(t *testing.T) string {
+		t.Helper()
+		select {
+		case ae := <-gotAcceptEncoding:
+			return ae
+		case <-time.After(10 * time.Second):
+			t.Fatal("server never received the request")
+			return ""
+		}
+	}
+
+	t.Run("gzip_response_transparently_decompressed", func(t *testing.T) {
+		req, err := http.NewRequest(http.MethodGet, "http://"+addr+"/gzip", nil)
+		require.NoError(t, err)
+		resp, err := httpC.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		assert.Contains(t, waitAE(t), "gzip", "transport must advertise Accept-Encoding: gzip")
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, payload, string(body), "body must be transparently decompressed")
+		assert.True(t, resp.Uncompressed, "resp.Uncompressed must be set after transparent decode")
+		assert.Empty(t, resp.Header.Get("Content-Encoding"), "Content-Encoding must be stripped")
+	})
+
+	t.Run("caller_accept_encoding_preserved_no_autodecode", func(t *testing.T) {
+		// A caller that sets its own Accept-Encoding must be left alone:
+		// we neither override the header nor auto-decompress (net/http parity).
+		req, err := http.NewRequest(http.MethodGet, "http://"+addr+"/plain", nil)
+		require.NoError(t, err)
+		req.Header.Set("Accept-Encoding", "identity")
+		resp, err := httpC.Do(req)
+		require.NoError(t, err)
+		defer func() { _ = resp.Body.Close() }()
+
+		assert.Equal(t, "identity", waitAE(t), "caller's Accept-Encoding must be preserved")
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		assert.Equal(t, payload, string(body))
+	})
 }
