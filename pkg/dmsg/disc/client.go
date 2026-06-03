@@ -71,7 +71,7 @@ func (noDiscoveryClient) PostEntry(context.Context, *Entry) error            { r
 func (noDiscoveryClient) PutEntry(context.Context, cipher.SecKey, *Entry) error {
 	return nil
 }
-func (noDiscoveryClient) DelEntry(context.Context, *Entry) error      { return nil }
+func (noDiscoveryClient) DelEntry(context.Context, *Entry) error       { return nil }
 func (noDiscoveryClient) AllEntries(context.Context) ([]string, error) { return nil, nil }
 func (noDiscoveryClient) AllClientsByServer(context.Context) (map[string][]*Entry, error) {
 	return nil, nil
