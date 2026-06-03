@@ -12,10 +12,24 @@ import (
 )
 
 var (
-	errRouteDescNotExist = errors.New("route descriptor does not exist")
-	errNilNoiseRG        = errors.New("noiseRouteGroup is nil")
-	errNilInitRG         = errors.New("initializing RouteGroup is nil")
+	errRouteDescNotExist    = errors.New("route descriptor does not exist")
+	errNilNoiseRG           = errors.New("noiseRouteGroup is nil")
+	errNilInitRG            = errors.New("initializing RouteGroup is nil")
+	errMalformedClosePacket = errors.New("close packet has empty payload")
 )
+
+// closeCodeFromPacket safely extracts the close code from a ClosePacket. A
+// remote peer fully controls the on-wire payload length (managedTransport reads
+// exactly the declared size), so a malformed/zero-length close payload must not
+// be indexed blindly — doing so panics the router read loop, which has no
+// recover and would take down all routing on the visor.
+func closeCodeFromPacket(packet routing.Packet) (routing.CloseCode, error) {
+	payload := packet.Payload()
+	if len(payload) == 0 {
+		return 0, errMalformedClosePacket
+	}
+	return routing.CloseCode(payload[0]), nil
+}
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
 	switch packet.Type() {
@@ -116,7 +130,10 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return errNilNoiseRG
 	}
 
-	closeCode := routing.CloseCode(packet.Payload()[0])
+	closeCode, err := closeCodeFromPacket(packet)
+	if err != nil {
+		return err
+	}
 
 	if nrg.isClosed() {
 		return io.ErrClosedPipe
@@ -210,7 +227,11 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
 	case routing.ClosePacket:
-		p = routing.MakeClosePacket(rule.NextRouteID(), routing.CloseCode(packet.Payload()[0]))
+		closeCode, err := closeCodeFromPacket(packet)
+		if err != nil {
+			return err
+		}
+		p = routing.MakeClosePacket(rule.NextRouteID(), closeCode)
 	case routing.PingPacket:
 		timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))    //nolint:gosec
 		throughput := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset+8:])) //nolint:gosec
