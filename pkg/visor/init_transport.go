@@ -185,15 +185,24 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 
 	conf := v.conf.Launcher
 
-	httpC, err := getHTTPClient(ctx, v, conf.ServiceDisc)
+	// Prefer the HTTP service-discovery URL; fall back to the dmsg URL when the
+	// operator dropped the HTTP one (dmsg-only). getHTTPClient returns the
+	// dmsg-http client for a dmsg:// URL, so the autoconnector still fetches
+	// public visors over dmsg. Same http-or-dmsg selection as route-finder/AR.
+	sdURL := conf.ServiceDisc
+	if sdURL == "" && conf.ServiceDiscDmsg != "" {
+		sdURL = conf.ServiceDiscDmsg
+	}
+
+	httpC, err := getHTTPClient(ctx, v, sdURL)
 	if err != nil {
 		return err
 	}
 
-	if conf.ServiceDisc != "" {
+	if sdURL != "" {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
-		factory.ServiceDisc = conf.ServiceDisc
+		factory.ServiceDisc = sdURL
 		factory.DisplayNodeIP = conf.DisplayNodeIP
 		factory.HeartbeatInterval = time.Duration(conf.HeartbeatInterval)
 		factory.Client = httpC
