@@ -32,7 +32,20 @@ type httpClient struct {
 }
 
 // NewHTTP constructs a new APIClient that communicates with discovery via http.
+//
+// Defense-in-depth: an empty address (the operator dropped/blanked the
+// discovery URL to force dmsg-only) must NOT build a host-less httpClient —
+// that turns every request into "GET /dmsg-discovery/...: invalid host address"
+// and spins the dmsg serve-loop retrier indefinitely. Return a no-op client
+// that reports "no servers" cleanly so callers fall back to seeded / dmsg
+// entries instead of hammering an invalid URL.
 func NewHTTP(address string, client *http.Client, log *logging.Logger) APIClient {
+	if address == "" {
+		if log != nil {
+			log.Warn("disc.NewHTTP: empty discovery address; using no-op discovery client (relying on seeded servers / dmsg)")
+		}
+		return noDiscoveryClient{}
+	}
 	log.WithField("func", "disc.NewHTTP").
 		WithField("addr", address).
 		Debug("Created HTTP client.")
@@ -41,6 +54,30 @@ func NewHTTP(address string, client *http.Client, log *logging.Logger) APIClient
 		address: address,
 		log:     log,
 	}
+}
+
+// noDiscoveryClient is the APIClient returned by NewHTTP when no discovery
+// address is configured. Server-list lookups return empty (no error) so the
+// dmsg client falls through to its seeded / config servers without retrying;
+// entry lookups return ErrNoAvailableServers; writes are no-ops.
+type noDiscoveryClient struct{}
+
+func (noDiscoveryClient) Entry(context.Context, cipher.PubKey) (*Entry, error) {
+	return nil, ErrNoAvailableServers
+}
+func (noDiscoveryClient) AvailableServers(context.Context) ([]*Entry, error) { return nil, nil }
+func (noDiscoveryClient) AllServers(context.Context) ([]*Entry, error)       { return nil, nil }
+func (noDiscoveryClient) PostEntry(context.Context, *Entry) error            { return nil }
+func (noDiscoveryClient) PutEntry(context.Context, cipher.SecKey, *Entry) error {
+	return nil
+}
+func (noDiscoveryClient) DelEntry(context.Context, *Entry) error      { return nil }
+func (noDiscoveryClient) AllEntries(context.Context) ([]string, error) { return nil, nil }
+func (noDiscoveryClient) AllClientsByServer(context.Context) (map[string][]*Entry, error) {
+	return nil, nil
+}
+func (noDiscoveryClient) ClientsByServer(context.Context, cipher.PubKey) ([]*Entry, error) {
+	return nil, nil
 }
 
 // Entry retrieves an entry associated with the given public key.
