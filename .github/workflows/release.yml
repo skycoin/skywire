@@ -304,6 +304,7 @@ jobs:
           Invoke-WebRequest "$base/Product.wxs" -OutFile "scripts\win_installer\Product.wxs"
           Invoke-WebRequest "$base/UI.wxs" -OutFile "scripts\win_installer\UI.wxs"
           Invoke-WebRequest "$base/skywire.bat" -OutFile "scripts\win_installer\skywire.bat"
+          Invoke-WebRequest "$base/skywire-autoconfig.bat" -OutFile "scripts\win_installer\skywire-autoconfig.bat"
           Invoke-WebRequest "$base/images/Banner.png" -OutFile "scripts\win_installer\images\Banner.png"
           Invoke-WebRequest "$base/images/Dialog.png" -OutFile "scripts\win_installer\images\Dialog.png"
           Invoke-WebRequest "$base/images/ico.ico" -OutFile "scripts\win_installer\images\ico.ico"
@@ -407,6 +408,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "build\apps"
           Copy-Item ..\..\bin\skywire.exe build\skywire.exe
           Copy-Item skywire.bat build\skywire.bat
+          Copy-Item skywire-autoconfig.bat build\skywire-autoconfig.bat
           New-Item -ItemType File -Path "build\new.update"
           Copy-Item ..\..\wintun_extracted\wintun\bin\${{ matrix.wintun_arch }}\wintun.dll build\wintun.dll
 
