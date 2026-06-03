@@ -85,7 +85,7 @@ func (api *API) registerTransportV3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.store.RegisterTransportsBatch(r.Context(), signed); err != nil {
+	if err := api.store.RegisterTransportsBatch(r.Context(), authPK, signed); err != nil {
 		api.writeError(w, r, err)
 		return
 	}
@@ -146,9 +146,13 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The authenticated caller is the registering edge; the store refreshes
+	// only its per-edge index TTL (zero PK falls back to both edges).
+	reporter, _ := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey)
+
 	// Register all transports in a single Redis pipeline (batch).
 	// This reduces N separate pipelines to 1, cutting Redis round-trips.
-	if err := api.store.RegisterTransportsBatch(r.Context(), entries); err != nil {
+	if err := api.store.RegisterTransportsBatch(r.Context(), reporter, entries); err != nil {
 		api.writeError(w, r, err)
 		return
 	}
