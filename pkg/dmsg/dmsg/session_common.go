@@ -184,12 +184,52 @@ func (sc *SessionCommon) Ping() (time.Duration, error) {
 	sc.sm.mutx.RLock()
 	defer sc.sm.mutx.RUnlock()
 	if sc.sm.yamux != nil {
-		return sc.sm.yamux.Ping()
+		return sc.yamuxPing()
 	}
 	if sc.sm.smux != nil {
 		return sc.smuxPing()
 	}
 	return 0, fmt.Errorf("no mux session available for ping")
+}
+
+// yamuxPing implements ping over yamux the same way smuxPing does for smux:
+// open a temporary stream, write the ping marker, and wait for the echo.
+//
+// Why NOT yamux.Session.Ping(): that is a yamux *control-frame* keepalive —
+// it round-trips at the mux-control layer over the existing TCP connection
+// and proves only that the client<->server link is alive. It does NOT
+// exercise the server's stream-forwarding path, so it cannot detect a
+// "zombie" session where the control link is healthy but the dmsg server can
+// no longer relay streams to/from us (observed in production: a dial-target
+// service — e.g. a route setup-node behind a Docker bridge — kept advertising
+// 8 "delegated servers" on which 0/8 stream-dials succeeded, while
+// yamux.Ping() reported all 8 alive, so pingSessionsLoop never marked them
+// dead and the node stayed unreachable until a manual restart). Opening a real
+// stream and round-tripping the ping marker through the server's serveStream
+// echo (which handles yamux and smux streams identically) exposes exactly that
+// mismatch, so the existing pingDeadThreshold logic can close + redial the
+// dead session. The smux path already worked this way; this brings yamux to
+// parity.
+func (sc *SessionCommon) yamuxPing() (time.Duration, error) {
+	str, err := sc.sm.yamux.OpenStream()
+	if err != nil {
+		return 0, fmt.Errorf("yamux ping: open stream: %w", err)
+	}
+	defer str.Close() //nolint:errcheck
+
+	if err := str.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return 0, fmt.Errorf("yamux ping: set deadline: %w", err)
+	}
+
+	start := time.Now()
+	if _, err := str.Write(pingMarker); err != nil {
+		return 0, fmt.Errorf("yamux ping: write: %w", err)
+	}
+	resp := make([]byte, 2)
+	if _, err := io.ReadFull(str, resp); err != nil {
+		return 0, fmt.Errorf("yamux ping: read: %w", err)
+	}
+	return time.Since(start), nil
 }
 
 // smuxPing implements ping over smux by opening a temporary stream,

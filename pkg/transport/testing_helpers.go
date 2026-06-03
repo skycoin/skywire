@@ -28,5 +28,6 @@ func NewManagedTransportForTest(conn network.Transport) *ManagedTransport {
 		transportCh:   make(chan struct{}, 1),
 		done:          make(chan struct{}),
 		queueDeletion: func(_ uuid.UUID) {}, // no-op for tests
+		LogEntry:      NewLogEntry(),        // so logSent/logRecv don't nil-deref
 	}
 }
