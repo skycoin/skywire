@@ -429,7 +429,14 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context, v *Visor) ([]ciph
 		}
 	}
 
-	// Fall back to HTTP service discovery.
+	// Fall back to HTTP service discovery — only when it's configured.
+	// With service_discovery dropped (dmsg-only), there is no HTTP client; the
+	// CXO snapshot above is the only public-visor source, so return cleanly
+	// instead of nil-dereferencing the absent client.
+	if !a.client.Configured() {
+		a.log.Debug("Autoconnect: HTTP service discovery not configured; relying on CXO snapshot only")
+		return nil, nil
+	}
 	var services []servicedisc.Service
 	retrier := netutil.NewDefaultRetrier(a.log)
 	fetch := func() (err error) {
