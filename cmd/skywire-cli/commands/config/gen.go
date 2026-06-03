@@ -159,8 +159,9 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment (ports offset +10000 from prod)")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg for skywire services (no http)")
+	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg for skywire services, no http (this is the default)")
 	genConfigCmd.Flags().BoolVar(&isHTTPOnly, "http", false, "use only http for skywire services (no dmsg)")
+	genConfigCmd.Flags().BoolVar(&isDual, "dual", false, "use http for skywire services with dmsg as fallback (dual)")
 	genConfigCmd.MarkFlagsMutuallyExclusive("dmsghttp", "http")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
 	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp config path")
@@ -1219,14 +1220,18 @@ func configureLauncher(log *logging.Logger) {
 	// Configure service URLs based on connection mode:
 	// --dmsghttp: DMSG-only (overwrite HTTP URLs with DMSG URLs)
 	// --http: HTTP-only (no DMSG fields, default HTTP URLs kept)
-	// neither: dual mode (HTTP URLs + DMSG URLs in _dmsg fields)
+	// Service-URL mode: dmsg-only by DEFAULT (dmsg:// URLs in the primary
+	// fields, no http). --dual keeps the http URLs with dmsg in the _dmsg
+	// fallback fields. --http (isHTTPOnly) skips the dmsg fields entirely.
+	// --dmsghttp forces dmsg-only (== the default) for backward compatibility.
+	dmsgOnly := isDmsgHTTP || !isDual
 	if !isHTTPOnly {
 		// Prefer unified services config; fall back to legacy dmsgHTTPServersList
 		if services.HasDmsgEndpoints() {
 			// Unified config: DMSG fields from services-config.json
 			conf.Dmsg.Servers = deployment.DmsgServerEntriesToDisc(services.DmsgServers)
 
-			if isDmsgHTTP {
+			if dmsgOnly {
 				conf.Dmsg.Discovery = services.DmsgDiscoveryDmsg
 				conf.Transport.AddressResolver = services.AddressResolverDmsg
 				conf.Transport.Discovery = services.TransportDiscoveryDmsg
@@ -1253,7 +1258,7 @@ func configureLauncher(log *logging.Logger) {
 			}
 			if dmsgConf != nil {
 				conf.Dmsg.Servers = dmsgConf.DMSGServers
-				if isDmsgHTTP {
+				if dmsgOnly {
 					conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
 					conf.Transport.AddressResolver = dmsgConf.AddressResolver
 					conf.Transport.Discovery = dmsgConf.TransportDiscovery
