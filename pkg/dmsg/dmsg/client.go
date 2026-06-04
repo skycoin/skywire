@@ -809,6 +809,28 @@ func (ce *Client) Probe(ctx context.Context, pk cipher.PubKey, port uint16) bool
 	return true
 }
 
+// ProbeViaServer is like Probe but forces the stream through a specific
+// dmsg server (serverPK), so it tests reachability of pk:port VIA that
+// server rather than via whichever delegated/shared server DialStream
+// would otherwise pick. Useful for per-server reachability diagnosis
+// ("is pk reachable through server X but not server Y?"). It ensures a
+// session to serverPK first, then dials the target through that session.
+func (ce *Client) ProbeViaServer(ctx context.Context, pk cipher.PubKey, port uint16, serverPK cipher.PubKey) bool {
+	if _, err := ce.EnsureAndObtainSession(ctx, serverPK); err != nil {
+		return false
+	}
+	session, ok := ce.Session(serverPK)
+	if !ok {
+		return false
+	}
+	stream, err := session.DialStream(ctx, Addr{PK: pk, Port: port})
+	if err != nil {
+		return false
+	}
+	_ = stream.Close() //nolint:errcheck
+	return true
+}
+
 // reconnectLoop periodically discovers all available servers and attempts to
 // connect to any that don't have an active session. This ensures services using
 // MinSessions=0 (connect to all) maintain sessions to all servers, even if some

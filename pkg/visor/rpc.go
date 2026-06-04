@@ -319,6 +319,13 @@ type DmsgProbeRequest struct {
 	PK   cipher.PubKey
 	Port uint16
 }
+
+// DmsgProbeViaServerRequest is the argument for the DmsgProbeViaServer RPC.
+type DmsgProbeViaServerRequest struct {
+	PK       cipher.PubKey
+	Port     uint16
+	ServerPK cipher.PubKey
+}
 type TPSAddTransportIn struct {
 	TargetPK cipher.PubKey
 	RemotePK cipher.PubKey

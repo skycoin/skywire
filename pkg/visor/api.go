@@ -232,6 +232,8 @@ type API interface {
 
 	//dmsg utilities
 	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
+	DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error)
+	SkynetProbe(pk cipher.PubKey, port uint16) (bool, error)
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 	SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error)
 	VisorSCP(req VisorSCPRequest) error

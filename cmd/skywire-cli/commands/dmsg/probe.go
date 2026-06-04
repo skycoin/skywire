@@ -19,6 +19,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skywire/tcpnoise"
 )
 
 var (
@@ -27,10 +28,18 @@ var (
 	probeVerboseLevel string
 	probePorts        string
 	probeParallel     int
+	probeSK           string
+	probeServer       string
+	probeSkynet       bool
+	probeVia          string
 )
 
 func init() {
-	probeCmd.Flags().BoolVarP(&standalone, "standalone", "s", false, "use a standalone dmsg client (no running visor needed)")
+	probeCmd.Flags().BoolVarP(&standalone, "standalone", "s", false, "use a standalone dmsg client with an ephemeral key (no running visor needed)")
+	probeCmd.Flags().StringVar(&probeSK, "sk", "", "standalone dmsg client using THIS secret key (hex); implies --standalone, no visor RPC")
+	probeCmd.Flags().StringVar(&probeServer, "server", "", "dmsg: force the probe through this specific dmsg server (pk hex) — per-server reachability")
+	probeCmd.Flags().BoolVar(&probeSkynet, "skynet", false, "probe over skynet (skywire's routed p2p transports) instead of dmsg — uses the visor's router")
+	probeCmd.Flags().StringVar(&probeVia, "via", "", "probe a direct noise-TCP connection instead of dmsg: tcp://<pk>@host:port (uses --sk or an ephemeral key)")
 	probeCmd.Flags().BoolVarP(&probeVerbose, "verbose", "v", false, "stream visor's dmsg-layer logs to stderr while probing (single-port mode only)")
 	probeCmd.Flags().StringVar(&probeVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
 	probeCmd.Flags().StringVar(&probePorts, "ports", "", "multi-port sweep — comma list with optional ranges, e.g. '22,80,1000-1010,5000'. When set, the positional <port> arg is ignored and one row per port is printed.")
@@ -40,32 +49,49 @@ func init() {
 
 var probeCmd = &cobra.Command{
 	Use:   "probe <public-key> <port>",
-	Short: "Probe a remote visor's dmsg port reachability",
-	Long: `Probe a remote visor on a specific dmsg port via dmsg.
+	Short: "Probe a remote port's reachability over dmsg, skynet, or a direct TCP connection",
+	Long: `Probe a remote port's reachability. The probe performs a full noise
+handshake to the destination; if a listener is active, the handshake completes
+and the probe reports success.
 
-The probe performs a full DialStream (noise handshake) through the dmsg server
-bridge to the destination. If a listener is active on the specified port, the
-handshake completes and the probe reports success. If nothing is listening,
-the probe reports failure.
+TRANSPORTS:
+  (default)   dmsg — DialStream through a dmsg server bridge to <pk>:<port>.
+  --skynet    skynet — dial a route over skywire's p2p transports to <pk>:<port>
+              (uses the local visor's router; RPC only).
+  --via tcp://<pk>@host:port
+              a direct noise-TCP connection (no dmsg, no router). Reports
+              whether the noise handshake to that endpoint completes for <pk>.
 
-By default, the probe uses the local visor's dmsg client via RPC. Use -s to
-bootstrap a standalone dmsg client (no running visor required).
+IDENTITY (dmsg / tcp):
+  By default dmsg probes use the local visor's dmsg client via RPC. Use -s for a
+  standalone client with an ephemeral key, or --sk <hex> to run standalone with
+  a SPECIFIC identity (no visor needed). --via tcp uses --sk or an ephemeral key.
 
-Common ports:
+  --server <server-pk> forces a dmsg probe through a specific dmsg server, to ask
+  "is <pk> reachable VIA this server?" — works in both RPC and standalone modes.
+
+Common dmsg ports:
   80   - dmsghttp log server (/health, /ping)
   136  - route setup await port (used by RSN for route establishment)
-  22   - dmsgpty (remote terminal)
+  22   - pty (remote terminal)
   7    - dmsg ctrl
   8    - dmsg ping
 
 Examples:
-  skywire cli dmsg probe <pk> 136        # via visor RPC
-  skywire cli dmsg probe -s <pk> 136     # standalone (no visor needed)
-  skywire cli dmsg probe -s <pk> 80      # check if log server is up`,
+  skywire cli dmsg probe <pk> 136                    # dmsg via visor RPC
+  skywire cli dmsg probe -s <pk> 136                 # dmsg standalone (ephemeral key)
+  skywire cli dmsg probe --sk <hex> <pk> 80          # dmsg standalone with a specific key
+  skywire cli dmsg probe --server <srv> <pk> 136     # dmsg via a specific server
+  skywire cli dmsg probe --skynet <pk> 136           # over skynet (routed transports)
+  skywire cli dmsg probe --via tcp://<pk>@host:8801  # direct noise-TCP connection`,
 	Args: func(cmd *cobra.Command, args []string) error {
+		// --via tcp carries the pk in its URL, so no positional args are
+		// required in that mode.
+		if probeVia != "" {
+			return nil
+		}
 		// --ports drives a multi-port sweep, so the positional <port>
-		// is optional in that mode. Without --ports we require both
-		// <pk> and <port>.
+		// is optional in that mode (but <pk> is still required).
 		if probePorts != "" {
 			if len(args) < 1 {
 				return fmt.Errorf("requires at least <pk> when --ports is set")
@@ -75,14 +101,26 @@ Examples:
 		return cobra.ExactArgs(2)(cmd, args)
 	},
 	Run: func(cmd *cobra.Command, args []string) {
+		// Direct noise-TCP connection probe — fully self-contained.
+		if probeVia != "" {
+			runTCPProbe(cmd)
+			return
+		}
+
+		// Mode validation: skynet needs the visor's router; it can't run
+		// standalone.
+		if probeSkynet && (standalone || probeSK != "") {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--skynet uses the visor's router and cannot run standalone (-s/--sk)"))
+		}
+		if probeSkynet && probeServer != "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--server only applies to dmsg probes, not --skynet"))
+		}
+
 		var pk cipher.PubKey
 		if err := pk.Set(args[0]); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid public key: %w", err))
 		}
 
-		// Multi-port mode short-circuits before the positional-port
-		// parse. Standalone vs RPC dispatch still applies; sweep
-		// fans out parallel probes capped at --parallel.
 		if probePorts != "" {
 			ports, perr := parsePortSpec(probePorts)
 			if perr != nil {
@@ -97,7 +135,8 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid port: %w", err))
 		}
 
-		if standalone {
+		// Standalone dmsg (ephemeral or provided key).
+		if standalone || probeSK != "" {
 			runStandaloneProbe(cmd, pk, uint16(port))
 			return
 		}
@@ -107,9 +146,7 @@ Examples:
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
-		// --verbose: subscribe to dmsg-layer logs for the duration of
-		// the probe so DialStream activity is visible in real time.
-		if probeVerbose {
+		if probeVerbose && !probeSkynet {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			vs, vErr := clirpc.OpenVerbose(ctx, clirpc.Addr, clirpc.VerboseFilter{
@@ -124,25 +161,122 @@ Examples:
 		}
 
 		start := time.Now()
-		reachable, err := rpcClient.DmsgProbe(pk, uint16(port))
+		reachable, err := rpcProbeOne(rpcClient, pk, uint16(port))
 		latency := time.Since(start)
-
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("probe failed: %w", err))
 		}
 
+		scheme, suffix := probeSchemeSuffix()
+		state := "unreachable"
 		if reachable {
-			fmt.Printf("dmsg://%s:%d — reachable (%s)\n", pk, port, latency.Round(time.Millisecond))
-		} else {
-			fmt.Printf("dmsg://%s:%d — unreachable (%s)\n", pk, port, latency.Round(time.Millisecond))
+			state = "reachable"
 		}
+		fmt.Printf("%s://%s:%d%s — %s (%s)\n", scheme, pk, port, suffix, state, latency.Round(time.Millisecond))
 	},
+}
+
+// rpcProbeOne dispatches a single RPC-mode probe by the selected transport.
+func rpcProbeOne(rpcClient interface {
+	DmsgProbe(cipher.PubKey, uint16) (bool, error)
+	DmsgProbeViaServer(cipher.PubKey, uint16, cipher.PubKey) (bool, error)
+	SkynetProbe(cipher.PubKey, uint16) (bool, error)
+}, pk cipher.PubKey, port uint16) (bool, error) {
+	if probeSkynet {
+		return rpcClient.SkynetProbe(pk, port)
+	}
+	if probeServer != "" {
+		srv, err := parsePK(probeServer)
+		if err != nil {
+			return false, fmt.Errorf("invalid --server pk: %w", err)
+		}
+		return rpcClient.DmsgProbeViaServer(pk, port, srv)
+	}
+	return rpcClient.DmsgProbe(pk, port)
+}
+
+// probeSchemeSuffix returns the URL scheme + an optional suffix for the
+// reachability print line, reflecting the chosen transport.
+func probeSchemeSuffix() (string, string) {
+	if probeSkynet {
+		return "skynet", ""
+	}
+	if probeServer != "" {
+		return "dmsg", " (via " + probeServer[:min(8, len(probeServer))] + "…)"
+	}
+	return "dmsg", ""
+}
+
+// parsePK parses a hex public key.
+func parsePK(s string) (cipher.PubKey, error) {
+	var pk cipher.PubKey
+	err := pk.Set(s)
+	return pk, err
+}
+
+// probeIdentity returns the (pk, sk) to use for standalone dmsg / tcp
+// probes: the --sk key if provided, else a fresh ephemeral pair.
+func probeIdentity() (cipher.PubKey, cipher.SecKey, error) {
+	if probeSK != "" {
+		var sk cipher.SecKey
+		if err := sk.Set(probeSK); err != nil {
+			return cipher.PubKey{}, cipher.SecKey{}, fmt.Errorf("invalid --sk: %w", err)
+		}
+		pk, err := sk.PubKey()
+		if err != nil {
+			return cipher.PubKey{}, cipher.SecKey{}, fmt.Errorf("derive pk from --sk: %w", err)
+		}
+		return pk, sk, nil
+	}
+	pk, sk := cipher.GenerateKeyPair()
+	return pk, sk, nil
+}
+
+// runTCPProbe dials a direct noise-TCP connection to tcp://<pk>@host:port
+// and reports whether the noise handshake completed (a listener answered).
+func runTCPProbe(cmd *cobra.Command) {
+	rPK, hostPort, err := parseViaTCP(probeVia)
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	myPK, mySK, err := probeIdentity()
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	conn, err := tcpnoise.Dial(ctx, hostPort, myPK, mySK, rPK)
+	latency := time.Since(start)
+	if err != nil {
+		fmt.Printf("tcp://%s@%s — unreachable (%s)\n", rPK, hostPort, latency.Round(time.Millisecond))
+		return
+	}
+	_ = conn.Close() //nolint:errcheck
+	fmt.Printf("tcp://%s@%s — reachable (%s)\n", rPK, hostPort, latency.Round(time.Millisecond))
+}
+
+// parseViaTCP turns "tcp://<66-hex-pk>@host:port" into (pk, "host:port").
+func parseViaTCP(spec string) (cipher.PubKey, string, error) {
+	const prefix = "tcp://"
+	if !strings.HasPrefix(spec, prefix) {
+		return cipher.PubKey{}, "", fmt.Errorf("--via must start with %q", prefix)
+	}
+	rest := spec[len(prefix):]
+	at := strings.IndexByte(rest, '@')
+	if at <= 0 || at >= len(rest)-1 {
+		return cipher.PubKey{}, "", fmt.Errorf("--via tcp: expected tcp://<pk>@host:port, got %q", spec)
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(rest[:at]); err != nil {
+		return cipher.PubKey{}, "", fmt.Errorf("--via tcp: invalid pk: %w", err)
+	}
+	return pk, rest[at+1:], nil
 }
 
 // parsePortSpec turns a "22,80,1000-1010,5000" spec into a
 // deduplicated sorted []uint16. Range endpoints are inclusive.
-// Invalid tokens / out-of-range values return an error rather
-// than silently dropping — operators get an explicit complaint.
 func parsePortSpec(spec string) ([]uint16, error) {
 	seen := map[uint16]struct{}{}
 	out := make([]uint16, 0, 16)
@@ -164,7 +298,7 @@ func parsePortSpec(spec string) ([]uint16, error) {
 				return nil, fmt.Errorf("range %q has end < start", tok)
 			}
 			for p := lo; p <= hi; p++ {
-				port := uint16(p) //nolint:gosec // ParseUint(..., 16) already bounds p to uint16 range
+				port := uint16(p) //nolint:gosec // ParseUint(..., 16) already bounds p
 				if _, dup := seen[port]; !dup {
 					seen[port] = struct{}{}
 					out = append(out, port)
@@ -189,9 +323,7 @@ func parsePortSpec(spec string) ([]uint16, error) {
 	return out, nil
 }
 
-// portProbeResult is the per-port record emitted by the multi-port
-// sweep. Kept compact for the table renderer; the JSON output uses
-// the same struct.
+// portProbeResult is the per-port record emitted by the multi-port sweep.
 type portProbeResult struct {
 	Port      uint16        `json:"port"`
 	Reachable bool          `json:"reachable"`
@@ -200,14 +332,12 @@ type portProbeResult struct {
 	Err       string        `json:"error,omitempty"`
 }
 
-// runMultiPortProbe fans out parallel probes against a single pk
-// across a port set. Standalone-dmsg uses one client for all
-// probes (cheaper than spinning N clients). RPC path reuses the
-// local visor's dmsg client via DmsgProbe.
+// runMultiPortProbe fans out parallel probes against a single pk across a
+// port set, by the selected transport / identity.
 func runMultiPortProbe(cmd *cobra.Command, pk cipher.PubKey, ports []uint16) {
 	results := make([]portProbeResult, len(ports))
 
-	if standalone {
+	if standalone || probeSK != "" {
 		runMultiPortProbeStandalone(cmd, pk, ports, results)
 	} else {
 		runMultiPortProbeRPC(cmd, pk, ports, results)
@@ -215,9 +345,6 @@ func runMultiPortProbe(cmd *cobra.Command, pk cipher.PubKey, ports []uint16) {
 
 	jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
 	if jsonMode {
-		// Populate the int latency-ms field before marshaling so
-		// the JSON consumer doesn't see a "0ns" stringified
-		// time.Duration.
 		for i := range results {
 			results[i].LatencyMS = results[i].Latency.Milliseconds()
 		}
@@ -242,10 +369,8 @@ func runMultiPortProbe(cmd *cobra.Command, pk cipher.PubKey, ports []uint16) {
 	_ = w.Flush() //nolint:errcheck
 }
 
-// runMultiPortProbeRPC pumps probes through the local visor's
-// DmsgProbe RPC. Capped concurrency via probeParallel; the visor's
-// own dmsg client multiplexes requests but we don't want to fire
-// a few hundred goroutines if --ports has a wide range.
+// runMultiPortProbeRPC pumps probes through the local visor (dmsg /
+// dmsg-via-server / skynet), capped at --parallel.
 func runMultiPortProbeRPC(cmd *cobra.Command, pk cipher.PubKey, ports []uint16, results []portProbeResult) {
 	rpcClient, err := clirpc.Client(cmd.Flags())
 	if err != nil {
@@ -261,12 +386,8 @@ func runMultiPortProbeRPC(cmd *cobra.Command, pk cipher.PubKey, ports []uint16, 
 			defer wg.Done()
 			defer func() { <-sem }()
 			start := time.Now()
-			reachable, perr := rpcClient.DmsgProbe(pk, p)
-			results[i] = portProbeResult{
-				Port:      p,
-				Reachable: reachable && perr == nil,
-				Latency:   time.Since(start),
-			}
+			reachable, perr := rpcProbeOne(rpcClient, pk, p)
+			results[i] = portProbeResult{Port: p, Reachable: reachable && perr == nil, Latency: time.Since(start)}
 			if perr != nil {
 				results[i].Err = perr.Error()
 			}
@@ -275,12 +396,21 @@ func runMultiPortProbeRPC(cmd *cobra.Command, pk cipher.PubKey, ports []uint16, 
 	wg.Wait()
 }
 
-// runMultiPortProbeStandalone bootstraps a single standalone dmsg
-// client and uses dmsgC.Probe for each port. Cheaper than the
-// RPC path when no visor is up; identical semantics otherwise.
+// runMultiPortProbeStandalone bootstraps a single standalone dmsg client
+// (ephemeral or --sk key) and probes each port, optionally via --server.
 func runMultiPortProbeStandalone(cmd *cobra.Command, pk cipher.PubKey, ports []uint16, results []portProbeResult) {
 	log := logging.MustGetLogger("dmsg-probe")
-	myPK, mySK := cipher.GenerateKeyPair()
+	myPK, mySK, err := probeIdentity()
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	var serverPK cipher.PubKey
+	serverSet := probeServer != ""
+	if serverSet {
+		if serverPK, err = parsePK(probeServer); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --server pk: %w", err))
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	dmsgC, stop, err := startDmsgClient(ctx, log, myPK, mySK)
@@ -299,27 +429,37 @@ func runMultiPortProbeStandalone(cmd *cobra.Command, pk cipher.PubKey, ports []u
 			defer wg.Done()
 			defer func() { <-sem }()
 			start := time.Now()
-			reachable := dmsgC.Probe(ctx, pk, p)
-			results[i] = portProbeResult{
-				Port:      p,
-				Reachable: reachable,
-				Latency:   time.Since(start),
+			var reachable bool
+			if serverSet {
+				reachable = dmsgC.ProbeViaServer(ctx, pk, p, serverPK)
+			} else {
+				reachable = dmsgC.Probe(ctx, pk, p)
 			}
+			results[i] = portProbeResult{Port: p, Reachable: reachable, Latency: time.Since(start)}
 		}()
 	}
 	wg.Wait()
 }
 
+// runStandaloneProbe bootstraps a standalone dmsg client (ephemeral or
+// --sk key) and probes a single port, optionally via --server.
 func runStandaloneProbe(cmd *cobra.Command, pk cipher.PubKey, port uint16) {
 	log := logging.MustGetLogger("dmsg-probe")
-
-	// Generate ephemeral identity for this probe.
-	myPK, mySK := cipher.GenerateKeyPair()
+	myPK, mySK, err := probeIdentity()
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	var serverPK cipher.PubKey
+	serverSet := probeServer != ""
+	if serverSet {
+		if serverPK, err = parsePK(probeServer); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --server pk: %w", err))
+		}
+	}
 	log.WithField("pk", myPK).Debug("Starting standalone dmsg client")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
 	dmsgC, stop, err := startDmsgClient(ctx, log, myPK, mySK)
 	if err != nil {
 		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to start dmsg client: %w", err))
@@ -327,12 +467,18 @@ func runStandaloneProbe(cmd *cobra.Command, pk cipher.PubKey, port uint16) {
 	defer stop()
 
 	start := time.Now()
-	reachable := dmsgC.Probe(ctx, pk, port)
+	var reachable bool
+	if serverSet {
+		reachable = dmsgC.ProbeViaServer(ctx, pk, port, serverPK)
+	} else {
+		reachable = dmsgC.Probe(ctx, pk, port)
+	}
 	latency := time.Since(start)
 
+	_, suffix := probeSchemeSuffix()
+	state := "unreachable"
 	if reachable {
-		fmt.Printf("dmsg://%s:%d — reachable (%s)\n", pk, port, latency.Round(time.Millisecond))
-	} else {
-		fmt.Printf("dmsg://%s:%d — unreachable (%s)\n", pk, port, latency.Round(time.Millisecond))
+		state = "reachable"
 	}
+	fmt.Printf("dmsg://%s:%d%s — %s (%s)\n", pk, port, suffix, state, latency.Round(time.Millisecond))
 }
