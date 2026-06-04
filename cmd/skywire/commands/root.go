@@ -17,6 +17,7 @@ import (
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	cxo "github.com/skycoin/skywire/cmd/cxo/commands"
 	dmsg "github.com/skycoin/skywire/cmd/dmsg/dmsg/commands"
+	dmsgprobe "github.com/skycoin/skywire/cmd/dmsg/dmsgprobe/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/cmd/skywire/commands/doc"
 	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
@@ -81,6 +82,11 @@ func init() {
 	// still resolves when invoked directly for back-compat with
 	// existing operator scripts.
 	dmsg.DmsgptyCmd.Hidden = true
+	// The standalone `dmsg probe` stays mounted and callable, but is hidden
+	// from the bundled skywire binary's help — the canonical, richer surface
+	// here is `skywire cli dmsg probe` (which adds visor-RPC + skynet modes).
+	// The standalone dmsg binary still advertises it.
+	dmsgprobe.RootCmd.Hidden = true
 	services.RootCmd.Use = "svc"
 
 	scli.RootCmd.Use = "cli"
