@@ -38,10 +38,10 @@ import (
 
 // mountCmd flag storage.
 var (
-	mountReadOnly bool
-	mountDebug    bool
-	mountAttrTTL  time.Duration
-	mountEntryTTL time.Duration
+	mountReadOnly   bool
+	mountDebug      bool
+	mountAttrTTL    time.Duration
+	mountEntryTTL   time.Duration
 	mountRemoteRoot string
 )
 
@@ -110,7 +110,7 @@ var umountCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	RunE: func(_ *cobra.Command, args []string) error {
-		out, err := exec.Command("fusermount", "-u", args[0]).CombinedOutput()
+		out, err := exec.Command("fusermount", "-u", args[0]).CombinedOutput() //nolint:gosec // fusermount is a fixed system binary; only the user-supplied mountpoint flows in as an arg, same trust model as cli ssh / cli sshfs mount
 		if err != nil {
 			return fmt.Errorf("sshfs umount %s: %w (%s)", args[0], err, string(out))
 		}
@@ -186,7 +186,7 @@ func runMount(
 	}
 	if err := server.Unmount(); err != nil {
 		fmt.Fprintf(os.Stderr, "sshfs: unmount returned: %v (falling back to fusermount -u)\n", err) //nolint:errcheck
-		_, _ = exec.Command("fusermount", "-u", mountpoint).CombinedOutput()                         //nolint:errcheck
+		_, _ = exec.Command("fusermount", "-u", mountpoint).CombinedOutput()                         //nolint:errcheck,gosec // fixed system binary, mountpoint is the operator-supplied path we just unmounted
 	}
 	return nil
 }
@@ -247,10 +247,10 @@ func fillAttrFromFileInfo(fi os.FileInfo, a *fuse.Attr) {
 	default:
 		a.Mode |= syscall.S_IFREG
 	}
-	a.Size = uint64(fi.Size())
+	a.Size = uint64(fi.Size()) //nolint:gosec // os.FileInfo.Size is int64, FUSE attr expects uint64; negative sizes don't occur for valid files
 	mtime := fi.ModTime()
-	a.Mtime = uint64(mtime.Unix())
-	a.Mtimensec = uint32(mtime.Nanosecond())
+	a.Mtime = uint64(mtime.Unix())           //nolint:gosec // unix epoch fits uint64 well past year 9999
+	a.Mtimensec = uint32(mtime.Nanosecond()) //nolint:gosec // Nanosecond is [0, 1e9), fits uint32
 	a.Atime = a.Mtime
 	a.Atimensec = a.Mtimensec
 	a.Ctime = a.Mtime
@@ -414,7 +414,7 @@ func (n *sftpNode) Setattr(_ context.Context, _ fs.FileHandle, in *fuse.SetAttrI
 		}
 	}
 	if size, ok := in.GetSize(); ok {
-		if err := n.root.cli.Truncate(abs, int64(size)); err != nil {
+		if err := n.root.cli.Truncate(abs, int64(size)); err != nil { //nolint:gosec // FUSE size is uint64; sftp.Truncate takes int64. File sizes above 2^63 don't occur in practice
 			return sftpToErrno(err)
 		}
 	}
@@ -465,9 +465,9 @@ func (h *sftpHandle) Read(_ context.Context, dest []byte, off int64) (fuse.ReadR
 func (h *sftpHandle) Write(_ context.Context, data []byte, off int64) (uint32, syscall.Errno) {
 	n, err := h.f.WriteAt(data, off)
 	if err != nil {
-		return uint32(n), sftpToErrno(err)
+		return uint32(n), sftpToErrno(err) //nolint:gosec // WriteAt returns int <= len(data), FUSE limits per-write to max_write (typically <= 128 KiB)
 	}
-	return uint32(n), 0
+	return uint32(n), 0 //nolint:gosec // same: int n bounded by FUSE max_write
 }
 
 func (h *sftpHandle) Release(_ context.Context) syscall.Errno {

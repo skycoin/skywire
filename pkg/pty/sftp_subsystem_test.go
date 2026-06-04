@@ -15,7 +15,7 @@ import (
 // TestMux_BackwardsCompat_RejectsUnknownURI confirms the URI-as-
 // subsystem dispatch keeps backwards-compat: an older server with no
 // SftpURI registration replies "invalid request" to a new client's
-// SftpURI request, exactly like any other unrecognised URI. No
+// SftpURI request, exactly like any other unrecognized URI. No
 // hidden version bumping; no silent acceptance.
 //
 // An empty mux is the simplest faithful model of an "old server"
