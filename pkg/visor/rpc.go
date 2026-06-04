@@ -452,6 +452,15 @@ func (r *RPC) SetHypervisorPassword(in *HypervisorPasswordChangeIn, _ *struct{})
 	return r.visor.SetHypervisorPassword(in.OldPassword, in.NewPassword)
 }
 
+// SetHypervisorPasswordForce sets the hypervisor UI admin password
+// without the old one (reset / first-time set). Local-only RPC; same
+// privileged-local rationale as SetHypervisorPassword. OldPassword in the
+// request is ignored.
+func (r *RPC) SetHypervisorPasswordForce(in *HypervisorPasswordChangeIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetHypervisorPasswordForce", nil)(nil, &err)
+	return r.visor.SetHypervisorPasswordForce(in.NewPassword)
+}
+
 type DHTSyncRequest struct {
 	RemotePK string `json:"remote_pk"`
 	Salt     string `json:"salt"`

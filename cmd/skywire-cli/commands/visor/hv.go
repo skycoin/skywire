@@ -42,15 +42,17 @@ func init() {
 	hvLsCmd.Flags().BoolVar(&hvLsFlat, "flat", false, "single flat table instead of one section per hypervisor")
 	hvCmd.AddCommand(hvTreeCmd)
 	hvCmd.AddCommand(hvPasswdCmd)
-	hvPasswdCmd.Flags().StringVar(&hvPasswdOld, "old", "", "current password (prompts if unset)")
-	hvPasswdCmd.Flags().StringVar(&hvPasswdNew, "new", "", "new password (prompts if unset)")
+	hvPasswdCmd.Flags().StringVar(&hvPasswdOld, "old", "", "current password (required unless --force)")
+	hvPasswdCmd.Flags().StringVar(&hvPasswdNew, "new", "", "new password")
+	hvPasswdCmd.Flags().BoolVar(&hvPasswdForce, "force", false, "set --new without the old password (reset a forgotten password, or first-time set)")
 }
 
 var (
-	hvRmAll     bool
-	hvPasswdOld string
-	hvPasswdNew string
-	hvLsFlat    bool
+	hvRmAll       bool
+	hvPasswdOld   string
+	hvPasswdNew   string
+	hvPasswdForce bool
+	hvLsFlat      bool
 )
 
 var hvCmd = &cobra.Command{
@@ -260,21 +262,37 @@ required.`,
 
 var hvPasswdCmd = &cobra.Command{
 	Use:   "passwd",
-	Short: "Change the hypervisor UI admin password",
-	Long: `Change the password for the hypervisor UI's "admin" account.
+	Short: "Set the hypervisor UI admin password",
+	Long: `Set the password for the hypervisor UI's "admin" account.
 Mirrors the /api/change-password endpoint the UI uses, but without
 the HTTP session check (RPC is local-only and already privileged).
 
-Both --old and --new are required. Use the value-only form (avoid
-shell history capturing the password) by sourcing them from an
-env-var or a process-substitution.`,
+Normal change: --old and --new are both required.
+
+--force sets --new without the old password — to reset a forgotten
+password, or to set the password for the first time from the CLI
+(creating the "admin" account if none exists, so you don't need the
+UI's create-account page). All existing sessions are invalidated.
+
+Avoid shell history capturing the password by sourcing the values
+from an env-var or a process-substitution.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		if hvPasswdOld == "" || hvPasswdNew == "" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("both --old and --new are required"))
+		if hvPasswdNew == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--new is required"))
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if hvPasswdForce {
+			if err := rpcClient.SetHypervisorPasswordForce(hvPasswdNew); err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			fmt.Println("Hypervisor UI password set; all existing sessions invalidated.")
+			return
+		}
+		if hvPasswdOld == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--old is required (or use --force to set without it)"))
 		}
 		if err := rpcClient.SetHypervisorPassword(hvPasswdOld, hvPasswdNew); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
