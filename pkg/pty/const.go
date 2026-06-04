@@ -25,3 +25,16 @@ const (
 	WhitelistRPCName = "whitelist"
 	WhitelistURI     = "dmsgpty/whitelist"
 )
+
+// Subsystem URIs share the dmsgpty mux + noise-protected stream + whitelist
+// auth. The mux dispatches on URI alone — new subsystems are added by
+// registering a new URI rather than bumping a wire-protocol version, so
+// older peers either serve the URIs they know (pty) and reject the rest
+// (preserving backwards-compat) or, on the client side, simply never ask
+// for what they don't implement.
+const (
+	// SftpURI is the dispatch key for the sftp subsystem. Server-side
+	// hands the conn to github.com/pkg/sftp.NewServer instead of the
+	// net/rpc-driven pty gateway. Whitelist gating is identical to PtyURI.
+	SftpURI = "dmsgpty/sftp"
+)
