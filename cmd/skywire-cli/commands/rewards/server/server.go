@@ -151,6 +151,7 @@ func buildRouter() *gin.Engine {
 				{"/stats", "0.7"},
 				{"/log-collection", "0.6"},
 				{"/log-collection/tree", "0.6"},
+				{"/log-collection/tree-detail", "0.5"},
 				{"/transport-graph", "0.5"},
 				{"/stats/version-history", "0.5"},
 				{"/stats/bandwidth-history", "0.5"},
@@ -336,6 +337,8 @@ func buildRouter() *gin.Engine {
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
+			c.Writer.Write([]byte("<p style='margin:6px 0;'>View: <b>flat list</b> &middot; <a href='/log-collection/tree-detail'>detail tree (per-PK health.json + version inline)</a></p>\n")) //nolint:errcheck,gosec
+			c.Writer.Flush()
 			surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint:errcheck,gosec
 			c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n\n", surveycount)))                          //nolint:errcheck,gosec,staticcheck
 			c.Writer.Flush()
@@ -374,6 +377,37 @@ func buildRouter() *gin.Engine {
 					fmt.Fprint(c.Writer, "\n") //nolint:errcheck,gosec
 				}
 			}
+			c.Writer.Flush()
+			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
+			c.Writer.Flush()
+			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
+			c.Writer.Flush()
+		})
+
+		// Detail tree view — restores the pre-2026-03-28 format that
+		// showed per-PK health.json contents and node-info.json version
+		// inline, so operators can spot version distribution at a glance
+		// without clicking into individual visor pages. Output is the
+		// ANSI tree rendered by `skywire cli log st -d log_backups -r`
+		// (Index header, ├/└ branches, color-coded file types, age +
+		// JSON body for health.json, version field for node-info.json),
+		// converted to HTML. The flat list lives at /log-collection/tree.
+		r1.GET("/log-collection/tree-detail", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Transfer-Encoding", "chunked")
+			c.Writer.WriteHeader(http.StatusOK)
+			c.Writer.Write([]byte(chunkedPageHead("Survey Detail Tree", "Detailed Skywire visor survey tree with inline health.json and version info", "/log-collection/tree-detail"))) //nolint:errcheck,gosec
+			c.Writer.Flush()
+			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
+			c.Writer.Flush()
+			c.Writer.Write([]byte("<p style='margin:6px 0;'>View: <a href='/log-collection/tree'>flat list</a> &middot; <b>detail tree (per-PK health.json + version inline)</b></p>\n")) //nolint:errcheck,gosec
+			c.Writer.Flush()
+			st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes()
+			if err != nil {
+				log.WithError(err).Error()
+				c.Writer.Write([]byte(err.Error())) //nolint:errcheck,gosec
+			}
+			c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
 			c.Writer.Flush()
