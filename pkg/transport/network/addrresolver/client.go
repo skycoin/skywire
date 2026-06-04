@@ -46,6 +46,14 @@ const (
 	// sudphReconnectMaxBackoff caps the reconnect sleep so a long AR
 	// outage doesn't push the retry interval out indefinitely.
 	sudphReconnectMaxBackoff = 60 * time.Second
+	// sudphARReadTimeout bounds how long the SUDPH read loop waits for any
+	// inbound packet from the AR before treating the connection as dead.
+	// Over KCP-on-UDP a visor's writes keep "succeeding" even after the AR
+	// process is gone (e.g. a redeploy), so an inbound-silence deadline is
+	// the only reliable liveness signal. The AR echoes our 10s heartbeats,
+	// so a live AR resets this every interval; ~4 missed echoes trips it and
+	// drives a reconnect+re-register via serveSUDPHReconnect.
+	sudphARReadTimeout = 40 * time.Second
 )
 
 var (
@@ -914,6 +922,25 @@ func (c *httpClient) readSUDPHIntoChan(arConn net.Conn, out chan<- RemoteVisor) 
 
 	buf := make([]byte, 4096)
 	for {
+		select {
+		case <-c.closed:
+			return
+		default:
+		}
+
+		// Bound the read so a silently-dead AR connection (e.g. the AR
+		// process restarted/redeployed) is detected: KCP-on-UDP reads
+		// never EOF and our heartbeat writes keep "succeeding", so without
+		// this deadline the visor would block here forever, never
+		// reconnect, and leave a stale SUDPH entry in the AR. The AR
+		// echoes our heartbeats, so a live AR resets this every interval.
+		if err := arConn.SetReadDeadline(time.Now().Add(sudphARReadTimeout)); err != nil {
+			if !c.isClosed() {
+				c.log.Debugf("SUDPH set read deadline failed (will reconnect): %v", err)
+			}
+			return
+		}
+
 		n, err := arConn.Read(buf)
 		if err != nil {
 			if c.isClosed() {
@@ -922,6 +949,13 @@ func (c *httpClient) readSUDPHIntoChan(arConn net.Conn, out chan<- RemoteVisor) 
 				c.log.Debugf("SUDPH read error (will reconnect): %v", err)
 			}
 			return
+		}
+
+		// Echoed heartbeat from the AR: a liveness signal only (the
+		// successful read above already reset the deadline). Not a
+		// RemoteVisor payload, so skip before unmarshalling.
+		if string(buf[:n]) == UDPKeepHeartbeatMessage {
+			continue
 		}
 
 		c.log.Debugf("New SUDPH message: %v", string(buf[:n]))

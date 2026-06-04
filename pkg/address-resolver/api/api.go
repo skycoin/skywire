@@ -925,6 +925,20 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 
 			data := buf[:n]
 			a.log.Debugf("(SUDPH) New packet from %v@%v: %v", pk, fromAddr, string(data))
+			if string(data) == addrresolver.UDPKeepHeartbeatMessage {
+				// Echo heartbeats so the visor can detect a dead AR
+				// connection. Over KCP-on-UDP a visor's writes keep
+				// "succeeding" even after this AR process is gone (e.g. a
+				// redeploy), so without an inbound signal the visor never
+				// notices, never reconnects, and its SUDPH entry goes
+				// stale. The echo gives the visor read loop a liveness
+				// deadline to trip. Best-effort.
+				if _, err := conn.Write(data); err != nil {
+					a.log.Debugf("Failed to echo SUDPH heartbeat to %v: %v", pk, err)
+					return
+				}
+				continue
+			}
 			if string(data) == addrresolver.UDPDelBindMessage {
 				err = a.store.DelBind(context.Background(), types.SUDPH, pk)
 				if err != nil {
