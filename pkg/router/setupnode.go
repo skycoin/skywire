@@ -111,13 +111,26 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 		pool:  NewClientPool(dialer, DefaultPoolTTL),
 	}
 
-	// Initialize cascade builder if cascade config is present.
-	// The transport manager for the RSN is initialized separately
-	// by the caller (cmd/setup-node) since it requires network
-	// factory configuration that depends on the deployment environment.
+	// Always create a sign-capable cascade builder so any setup node can act
+	// as a signing oracle for source-driven cascade setup out-of-the-box, with
+	// no per-RSN config. Signing (signReserveCascades/signInstallCascades, via
+	// BuildReserveMessage/BuildInstallMessage) only needs the RSN's identity
+	// (PK/SK) — never a transport manager — so tm stays nil here. A source
+	// visor running the source-driven cascade code can therefore ask ANY setup
+	// node to sign at the source's request; setup nodes that predate this code
+	// lack the CascadeSign* RPCs and the source transparently falls back to the
+	// legacy DMSG @136 dialing model.
+	//
+	// The transport manager — needed only by the experimental embedded-send
+	// path, where the RSN itself injects cascade messages down its own
+	// transports — is wired separately by InitCascade, which replaces this
+	// builder with a tm-backed one when both cascade config and a transport
+	// manager are present.
+	node.cascade = NewCascadeBuilder(log, conf.PK, conf.SK, nil)
 	if conf.Cascade != nil {
 		conf.Cascade.SetCascadeDefaults()
-		log.Info("Cascade route setup enabled")
+		node.cascade.SetTimeouts(conf.Cascade.ReserveTimeout, conf.Cascade.InstallTimeout)
+		log.Info("Cascade route setup config present (embedded-send path eligible)")
 	}
 
 	return node, nil
@@ -465,8 +478,12 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 		return routing.EdgeRules{}, err
 	}
 
-	// Try cascade path if a CascadeBuilder is available.
-	if cascade != nil {
+	// Try the embedded-send cascade path only when the builder has a transport
+	// manager — i.e. this RSN is configured to inject cascade messages down its
+	// own transports (the experimental embedded model). A sign-only builder
+	// (tm == nil) skips straight to DMSG here; its signing role is exercised
+	// separately via the CascadeSign* RPCs that a source visor drives.
+	if cascade != nil && cascade.tm != nil {
 		cascadeResp, cascadeErr := createRouteGroupCascade(ctx, log, cascade, biRt)
 		if cascadeErr == nil {
 			return cascadeResp, nil
