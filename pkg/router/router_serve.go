@@ -80,6 +80,21 @@ func (r *router) Serve(ctx context.Context) error {
 		trustedPKs = append(trustedPKs, pk)
 	}
 	ch := NewCascadeHandler(r.logger, r.conf.PubKey, trustedPKs, r.rt, r.tm)
+
+	// Source-driven cascade: the visor's route-group dialer owns a send-only
+	// CascadeBuilder that injects RSN-signed cascades down this visor's own
+	// transports. ACKs for those sends arrive on this single registered
+	// cascade handler, so share the dialer's ack registry into it and into
+	// the builder so the handler can deliver ACKs to in-flight sends.
+	if r.conf != nil {
+		if sp, ok := r.conf.RouteGroupDialer.(cascadeSourceProvider); ok {
+			if reg := sp.CascadeAckRegistry(); reg != nil {
+				ch.acks = reg
+				r.logger.Debug("Cascade handler sharing source-driven ack registry")
+			}
+		}
+	}
+
 	r.tm.SetCascadeHandler(ch.HandlePacket)
 	r.logger.WithField("trusted_rsns", len(trustedPKs)).Debug("Cascade handler registered")
 
