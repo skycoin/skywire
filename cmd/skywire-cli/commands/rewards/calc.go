@@ -222,11 +222,26 @@ func countFrequency(values []string) map[string]int {
 	return counts
 }
 
+// perIPShareLimit returns the per-IP visor reward-share cap in effect
+// on the given calc date. Default is 8 (matching rewards/mainnet_rules.md
+// "Per IP Limit" section). June 2026 is a one-month exception at 12 —
+// see operator announcement 2026-06-03 for the rationale (per-operator
+// request to accommodate visor-relocation work blocked by the
+// bandwidth-pool issues). The limit auto-reverts to 8 on 2026-07-01
+// without any code change required.
+func perIPShareLimit(t time.Time) int {
+	if t.Year() == 2026 && t.Month() == time.June {
+		return 12
+	}
+	return 8
+}
+
 // calcPresenceShare computes a visor's share after IP cap and MAC dedup.
 func calcPresenceShare(ni nodeinfo, ipCounts, macCounts map[string]int) float64 {
 	share := 1.0
-	if count := ipCounts[ni.IPAddr]; count >= 8 {
-		share = 8.0 / float64(count)
+	limit := perIPShareLimit(wDate)
+	if count := ipCounts[ni.IPAddr]; count >= limit {
+		share = float64(limit) / float64(count)
 	}
 	if count := macCounts[ni.MacAddr]; count > 1 {
 		share /= float64(count)
