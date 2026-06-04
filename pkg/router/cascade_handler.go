@@ -107,73 +107,119 @@ func (ch *CascadeHandler) handleSetup(p routing.Packet, sourceTp *transport.Mana
 }
 
 func (ch *CascadeHandler) handleReserve(msg *routing.CascadeSetup, sourceTp *transport.ManagedTransport) {
+	ack, err := ch.processReserve(msg)
+	if err != nil {
+		ch.log.WithError(err).Warn("Cascade reserve failed")
+		ch.sendErrorAck(sourceTp, msg.SessionID, msg.Phase, err.Error())
+		return
+	}
+	ch.sendAck(sourceTp, ack)
+}
+
+// processReserve reserves this hop's route IDs and, for non-terminal hops,
+// relays the inner payload to the next hop and prepends our IDs to the
+// downstream ACK. It returns the ACK to send upstream. Shared by the wire path
+// (handleReserve) and the source-origin path (ProcessLocalOrigin).
+func (ch *CascadeHandler) processReserve(msg *routing.CascadeSetup) (*routing.CascadeAck, error) {
 	// Reserve local route IDs.
 	ids, err := ch.rt.ReserveKeys(int(msg.ReserveN))
 	if err != nil {
-		ch.log.WithError(err).Warn("Cascade reserve: failed to reserve route IDs")
-		ch.sendErrorAck(sourceTp, msg.SessionID, msg.Phase, fmt.Sprintf("reserve IDs: %v", err))
-		return
+		return nil, fmt.Errorf("reserve IDs: %w", err)
 	}
 
 	if msg.IsTerminal() {
-		// Terminal hop — send ACK with our reserved IDs back.
-		ack := &routing.CascadeAck{
+		// Terminal hop — ACK with our reserved IDs.
+		return &routing.CascadeAck{
 			SessionID: msg.SessionID,
 			Phase:     msg.Phase,
 			RouteIDs:  ids,
-		}
-		ch.sendAck(sourceTp, ack)
-		return
+		}, nil
 	}
 
 	// Relay to next hop and wait for ACK.
 	downstreamAck, err := ch.relayAndWait(msg.RelayTpID, msg.SessionID, msg.Payload)
 	if err != nil {
-		ch.log.WithError(err).Warn("Cascade reserve: relay failed")
-		ch.sendErrorAck(sourceTp, msg.SessionID, msg.Phase, fmt.Sprintf("relay: %v", err))
-		return
+		return nil, fmt.Errorf("relay: %w", err)
 	}
 
 	// Prepend our IDs to the downstream ACK.
 	downstreamAck.PrependRouteIDs(ids)
-	ch.sendAck(sourceTp, downstreamAck)
+	return downstreamAck, nil
 }
 
 func (ch *CascadeHandler) handleInstall(msg *routing.CascadeSetup, sourceTp *transport.ManagedTransport) {
+	ack, err := ch.processInstall(msg)
+	if err != nil {
+		ch.log.WithError(err).Warn("Cascade install failed")
+		ch.sendErrorAck(sourceTp, msg.SessionID, msg.Phase, err.Error())
+		return
+	}
+	ch.sendAck(sourceTp, ack)
+}
+
+// processInstall saves this hop's rules and, for non-terminal hops, relays the
+// inner payload to the next hop and returns the downstream ACK. Shared by the
+// wire path (handleInstall) and the source-origin path (ProcessLocalOrigin).
+func (ch *CascadeHandler) processInstall(msg *routing.CascadeSetup) (*routing.CascadeAck, error) {
 	// Deserialize and install rules.
 	rules, err := routing.DeserializeRules(msg.RuleData)
 	if err != nil {
-		ch.log.WithError(err).Warn("Cascade install: failed to deserialize rules")
-		ch.sendErrorAck(sourceTp, msg.SessionID, msg.Phase, fmt.Sprintf("deserialize rules: %v", err))
-		return
+		return nil, fmt.Errorf("deserialize rules: %w", err)
 	}
 
 	for _, rule := range rules {
 		if err := ch.rt.SaveRule(rule); err != nil {
-			ch.log.WithError(err).Warn("Cascade install: failed to save rule")
-			ch.sendErrorAck(sourceTp, msg.SessionID, msg.Phase, fmt.Sprintf("save rule: %v", err))
-			return
+			return nil, fmt.Errorf("save rule: %w", err)
 		}
 	}
 
 	if msg.IsTerminal() {
-		ack := &routing.CascadeAck{
+		return &routing.CascadeAck{
 			SessionID: msg.SessionID,
 			Phase:     msg.Phase,
-		}
-		ch.sendAck(sourceTp, ack)
-		return
+		}, nil
 	}
 
 	// Relay to next hop.
 	downstreamAck, err := ch.relayAndWait(msg.RelayTpID, msg.SessionID, msg.Payload)
 	if err != nil {
-		ch.log.WithError(err).Warn("Cascade install: relay failed")
-		ch.sendErrorAck(sourceTp, msg.SessionID, msg.Phase, fmt.Sprintf("relay: %v", err))
-		return
+		return nil, fmt.Errorf("relay: %w", err)
 	}
 
-	ch.sendAck(sourceTp, downstreamAck)
+	return downstreamAck, nil
+}
+
+// ProcessLocalOrigin processes a cascade layer addressed to THIS visor as the
+// route's origin (source). Unlike handleSetup, the origin has no upstream
+// transport to ACK back on: it verifies the RSN signature against our own PK,
+// performs the reserve/install locally, relays the inner payload to the first
+// hop over our own transport, and RETURNS the collected ACK to the caller
+// (runSourceCascade) instead of writing it to a sourceTp.
+//
+// This is the crux of source-driven cascade: the RSN builds the nested cascade
+// with the source as the OUTERMOST layer (signed for the source's PK). The
+// source must consume that layer itself — shipping it verbatim to the first hop
+// made the hop reject it ("RSN signature verification failed"), since it was
+// signed for the source's PK, not the hop's.
+func (ch *CascadeHandler) ProcessLocalOrigin(payload []byte) (*routing.CascadeAck, error) {
+	msg, err := routing.UnmarshalCascadeSetup(payload)
+	if err != nil {
+		return nil, fmt.Errorf("cascade origin: unmarshal: %w", err)
+	}
+	if _, ok := ch.trustedRSNs[msg.RSNPK]; !ok {
+		return nil, routing.ErrCascadeUntrustedRSN
+	}
+	if err := msg.Verify(ch.localPK); err != nil {
+		return nil, err
+	}
+	switch msg.Phase {
+	case routing.CascadePhaseReserve:
+		return ch.processReserve(msg)
+	case routing.CascadePhaseInstall:
+		return ch.processInstall(msg)
+	default:
+		return nil, fmt.Errorf("cascade origin: unknown phase %d", msg.Phase)
+	}
 }
 
 func (ch *CascadeHandler) handleAck(p routing.Packet) {
