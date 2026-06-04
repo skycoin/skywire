@@ -1715,6 +1715,14 @@ func (rc *rpcClient) SetHypervisorPassword(oldPassword, newPassword string) erro
 	}, &struct{}{})
 }
 
+// SetHypervisorPasswordForce sets the hypervisor UI admin password
+// without the old one (reset / first-time set).
+func (rc *rpcClient) SetHypervisorPasswordForce(newPassword string) error {
+	return rc.Call("SetHypervisorPasswordForce", &HypervisorPasswordChangeIn{
+		NewPassword: newPassword,
+	}, &struct{}{})
+}
+
 // DmsgSetMinSessions updates the minimum DMSG session count.
 func (rc *rpcClient) DmsgSetMinSessions(n int) error {
 	return rc.Call("DmsgSetMinSessions", &n, &struct{}{})

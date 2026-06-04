@@ -905,6 +905,10 @@ func (proxyDefaultAPI) SetHypervisorPassword(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SetHypervisorPasswordForce(_ string) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) CheckAREntry(_ string) ([]string, error) {
 	return nil, ErrProxyNotSupported
 }

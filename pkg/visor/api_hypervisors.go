@@ -110,3 +110,15 @@ func (v *Visor) SetHypervisorPassword(oldPassword, newPassword string) error {
 	}
 	return v.hvInstance.users.ChangeAdminPassword(oldPassword, newPassword)
 }
+
+// SetHypervisorPasswordForce sets the hypervisor UI's "admin" account
+// password WITHOUT the old one, creating the account if none exists. For
+// the local privileged RPC path (skywire cli visor hv passwd --force):
+// forgotten-password reset, or a first-time set from the CLI.
+// Returns an error when this visor isn't hosting a hypervisor.
+func (v *Visor) SetHypervisorPasswordForce(newPassword string) error {
+	if v.hvInstance == nil {
+		return fmt.Errorf("hypervisor not running on this visor")
+	}
+	return v.hvInstance.users.SetAdminPassword(newPassword)
+}
