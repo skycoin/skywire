@@ -32,15 +32,33 @@ import (
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
-// metricsPublishDays is the set of day windows the publisher refreshes
-// on every tick. The hvui currently picks one of these via the day
-// selector; everything else falls through to the HTTP path.
-var metricsPublishDays = []int{1, 7, 30}
+// metricsPublishWindow defines a CXO-published day-window and the
+// cadence at which its body is recomputed. Heavy windows (7d, 30d)
+// aggregate over long periods and barely change minute-to-minute, so
+// they recompute less often than the 1d window — the previous
+// uniform 60s tick across all three windows drove TPD into a GC
+// storm (~70% of CPU in gcBgMarkWorker under prod load, since
+// buildTransportMetrics walks all transports × days × per-edge
+// fields each call). Staggering the heavy windows keeps subscribers
+// fed without paying the full cost every minute.
+type metricsPublishWindow struct {
+	days     int
+	interval time.Duration
+}
 
-// metricsPublishInterval is the recompute cadence. 60s is short
-// enough that a typical hvui open will catch a fresh sample within
-// one cycle, long enough that the redis read cost stays bounded.
-const metricsPublishInterval = 60 * time.Second
+// metricsPublishWindows is the set of day windows the publisher
+// refreshes, each on its own ticker. The hvui picks one of these via
+// the day selector; everything else falls through to the HTTP path.
+// Cadence picks: 60s for the 1d window matches a typical hvui-open
+// freshness expectation; 5m for the 7d window and 30m for the 30d
+// window are short enough that an opening hvui sees recent data
+// (well inside human-noticeable freshness on a long aggregate) and
+// long enough that the buildTransportMetrics cost amortizes.
+var metricsPublishWindows = []metricsPublishWindow{
+	{days: 1, interval: 60 * time.Second},
+	{days: 7, interval: 5 * time.Minute},
+	{days: 30, interval: 30 * time.Minute},
+}
 
 // MetricsCXOPublisher periodically computes the /metrics aggregate
 // for a fixed set of day windows and publishes each result as a
@@ -115,50 +133,56 @@ func (m *MetricsCXOPublisher) Close() error {
 func (m *MetricsCXOPublisher) loop(ctx context.Context) {
 	defer close(m.done)
 
-	// Publish once immediately so a subscriber that connects shortly
-	// after TPD starts gets a snapshot without waiting a full tick.
-	m.publishOnce(ctx)
+	var wg sync.WaitGroup
+	for _, w := range metricsPublishWindows {
+		wg.Add(1)
+		go func(w metricsPublishWindow) {
+			defer wg.Done()
+			// Publish once immediately so a subscriber that connects
+			// shortly after TPD starts gets a snapshot without waiting
+			// a full tick.
+			m.publishWindow(ctx, w.days)
 
-	t := time.NewTicker(metricsPublishInterval)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			m.publishOnce(ctx)
-		}
+			t := time.NewTicker(w.interval)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-t.C:
+					m.publishWindow(ctx, w.days)
+				}
+			}
+		}(w)
 	}
+	wg.Wait()
 }
 
-func (m *MetricsCXOPublisher) publishOnce(ctx context.Context) {
-	for _, days := range metricsPublishDays {
-		query := store.MetricsQuery{
-			Days:      days,
-			Live:      "all",
-			Edges:     true,
-			Bandwidth: true,
-			Latency:   true,
-		}
-		metrics, err := m.api.store.GetAllTransportMetrics(ctx, query)
-		if err != nil {
-			m.log.WithError(err).WithField("days", days).Debug("metrics fetch failed; will retry next tick")
-			m.recordError(err)
-			continue
-		}
-		body, err := json.Marshal(metrics)
-		if err != nil {
-			m.log.WithError(err).WithField("days", days).Warn("metrics marshal failed")
-			m.recordError(err)
-			continue
-		}
-		path := metricsPath(days)
-		if err := m.pub.Put(path, body); err != nil {
-			m.log.WithError(err).WithField("path", path).Warn("publisher Put failed")
-			m.recordError(err)
-			continue
-		}
+func (m *MetricsCXOPublisher) publishWindow(ctx context.Context, days int) {
+	query := store.MetricsQuery{
+		Days:      days,
+		Live:      "all",
+		Edges:     true,
+		Bandwidth: true,
+		Latency:   true,
+	}
+	metrics, err := m.api.store.GetAllTransportMetrics(ctx, query)
+	if err != nil {
+		m.log.WithError(err).WithField("days", days).Debug("metrics fetch failed; will retry next tick")
+		m.recordError(err)
+		return
+	}
+	body, err := json.Marshal(metrics)
+	if err != nil {
+		m.log.WithError(err).WithField("days", days).Warn("metrics marshal failed")
+		m.recordError(err)
+		return
+	}
+	path := metricsPath(days)
+	if err := m.pub.Put(path, body); err != nil {
+		m.log.WithError(err).WithField("path", path).Warn("publisher Put failed")
+		m.recordError(err)
+		return
 	}
 }
 
