@@ -17,6 +17,7 @@ import (
 	dc "github.com/skycoin/skywire/cmd/dmsg/dmsgcurl/commands"
 	dh "github.com/skycoin/skywire/cmd/dmsg/dmsghttp/commands"
 	di "github.com/skycoin/skywire/cmd/dmsg/dmsgip/commands"
+	dp "github.com/skycoin/skywire/cmd/dmsg/dmsgprobe/commands"
 	dw "github.com/skycoin/skywire/cmd/dmsg/dmsgweb/commands"
 	dpc "github.com/skycoin/skywire/cmd/dmsg/pty-cli/commands"
 	dph "github.com/skycoin/skywire/cmd/dmsg/pty-host/commands"
@@ -58,6 +59,7 @@ func init() {
 		dw.RootCmd,
 		ds5.RootCmd,
 		di.RootCmd,
+		dp.RootCmd,
 		dsp.RootCmd,
 	)
 	dd.RootCmd.Use = "disc"
