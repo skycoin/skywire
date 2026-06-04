@@ -1183,6 +1183,16 @@ func (mc *mockRPCClient) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
 	return true, nil
 }
 
+// DmsgProbeViaServer implements API.
+func (mc *mockRPCClient) DmsgProbeViaServer(_ cipher.PubKey, _ uint16, _ cipher.PubKey) (bool, error) {
+	return true, nil
+}
+
+// SkynetProbe implements API.
+func (mc *mockRPCClient) SkynetProbe(_ cipher.PubKey, _ uint16) (bool, error) {
+	return true, nil
+}
+
 // DmsgConnectAll implements API.
 func (mc *mockRPCClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 	return &DmsgConnectAllResult{}, nil

@@ -34,6 +34,30 @@ func (r *RPC) DmsgProbe(req *DmsgProbeRequest, out *bool) (err error) {
 	return nil
 }
 
+// DmsgProbeViaServer probes dmsg reachability forced through a specific server.
+func (r *RPC) DmsgProbeViaServer(req *DmsgProbeViaServerRequest, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgProbeViaServer", req)(out, &err)
+
+	reachable, err := r.visor.DmsgProbeViaServer(req.PK, req.Port, req.ServerPK)
+	if err != nil {
+		return err
+	}
+	*out = reachable
+	return nil
+}
+
+// SkynetProbe probes reachability of a remote PK:port over skynet.
+func (r *RPC) SkynetProbe(req *DmsgProbeRequest, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "SkynetProbe", req)(out, &err)
+
+	reachable, err := r.visor.SkynetProbe(req.PK, req.Port)
+	if err != nil {
+		return err
+	}
+	*out = reachable
+	return nil
+}
+
 func (r *RPC) DmsgHTTP(req *DmsgHTTPRequest, out *DmsgHTTPResponse) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgHTTP", req)(out, &err)
 
