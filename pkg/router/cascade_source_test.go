@@ -205,3 +205,80 @@ func TestSourceBuilderSharesHandlerRegistry(t *testing.T) {
 		t.Fatal("handler dispatch did not reach builder's waiter")
 	}
 }
+
+// TestReserveCascade_OutermostLayerAddressesSource is the regression test for
+// the source-driven cascade signature bug: the RSN builds the nested reserve
+// cascade with the SOURCE (hops[0].From) as the OUTERMOST layer. Shipping that
+// layer verbatim to the first hop made the hop reject it with "RSN signature
+// verification failed" — because it is signed for the source's PK, not the
+// hop's. The source must consume its own layer (ProcessLocalOrigin).
+func TestReserveCascade_OutermostLayerAddressesSource(t *testing.T) {
+	cb, _ := rsnBuilder(t)
+	biRt, pkA, pkB, _ := buildTestBiRoute(t)
+
+	_, fwdBytes, _, _, err := signReserveCascades(cb, biRt)
+	require.NoError(t, err)
+
+	outer, err := routing.UnmarshalCascadeSetup(fwdBytes)
+	require.NoError(t, err)
+	require.NoError(t, outer.Verify(pkA), "outermost layer must verify for the source (pkA)")
+	require.Error(t, outer.Verify(pkB),
+		"outermost layer must NOT verify for the first hop (pkB) — the bug that 0/N'd source-driven setup")
+}
+
+// TestProcessLocalOrigin_TerminalReserve verifies the source consumes a layer
+// addressed to itself: it passes the trusted-RSN + own-PK signature checks and
+// reserves its own route IDs. (Terminal layer => no relay, so no tm needed.)
+func TestProcessLocalOrigin_TerminalReserve(t *testing.T) {
+	rsnPK, rsnSK := cipher.GenerateKeyPair()
+	srcPK, _ := cipher.GenerateKeyPair()
+
+	msg := &routing.CascadeSetup{
+		Phase:     routing.CascadePhaseReserve,
+		SessionID: 42,
+		RSNPK:     rsnPK,
+		Nonce:     1,
+		ReserveN:  2,
+		// RelayTpID zero => terminal, no downstream relay
+	}
+	require.NoError(t, msg.Sign(srcPK, rsnSK))
+	payload, err := msg.Marshal()
+	require.NoError(t, err)
+
+	ch := NewCascadeHandler(logging.MustGetLogger("test_src"), srcPK,
+		[]cipher.PubKey{rsnPK}, routing.NewTable(logging.MustGetLogger("test_rt")), nil)
+
+	ack, err := ch.ProcessLocalOrigin(payload)
+	require.NoError(t, err)
+	assert.Equal(t, uint64(42), ack.SessionID)
+	assert.Len(t, ack.RouteIDs, 2, "source must reserve its own route IDs")
+}
+
+// TestProcessLocalOrigin_Rejections covers the two guard paths that fail before
+// any relay: an untrusted RSN and a signature not addressed to this visor.
+func TestProcessLocalOrigin_Rejections(t *testing.T) {
+	rsnPK, rsnSK := cipher.GenerateKeyPair()
+	srcPK, _ := cipher.GenerateKeyPair()
+	otherPK, _ := cipher.GenerateKeyPair()
+	rt := routing.NewTable(logging.MustGetLogger("test_rt"))
+	ch := NewCascadeHandler(logging.MustGetLogger("test_src"), srcPK,
+		[]cipher.PubKey{rsnPK}, rt, nil)
+
+	mk := func(target cipher.PubKey, rsn cipher.PubKey) []byte {
+		msg := &routing.CascadeSetup{
+			Phase: routing.CascadePhaseReserve, SessionID: 1, RSNPK: rsn, Nonce: 1, ReserveN: 1,
+		}
+		require.NoError(t, msg.Sign(target, rsnSK))
+		b, err := msg.Marshal()
+		require.NoError(t, err)
+		return b
+	}
+
+	// RSNPK not in the trusted set.
+	_, err := ch.ProcessLocalOrigin(mk(srcPK, otherPK))
+	require.ErrorIs(t, err, routing.ErrCascadeUntrustedRSN)
+
+	// Trusted RSN, but the layer is signed for otherPK, not us (srcPK).
+	_, err = ch.ProcessLocalOrigin(mk(otherPK, rsnPK))
+	require.ErrorIs(t, err, routing.ErrCascadeSigInvalid)
+}
