@@ -54,6 +54,13 @@ func (c *SetupClient) ConnectedNode() cipher.PubKey {
 	return c.connectedNode
 }
 
+// RPCClient returns the underlying net/rpc client so the source-driven
+// cascade orchestrator can issue the CascadeSign* RPCs over the same DMSG
+// connection used for the legacy DialRouteGroup path.
+func (c *SetupClient) RPCClient() *rpc.Client {
+	return c.rpc
+}
+
 // perNodeDialTimeout is the maximum time to wait for each individual setup node
 const perNodeDialTimeout = 10 * time.Second
 
