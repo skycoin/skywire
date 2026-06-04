@@ -44,12 +44,12 @@ func TestEdgeRespCache(t *testing.T) {
 	})
 
 	t.Run("stale-on-error returns last good body", func(t *testing.T) {
-		short := newEdgeRespCache(20 * time.Millisecond)
+		short := newEdgeRespCache(100 * time.Millisecond)
 		good := []byte(`["good"]`)
 		_, _, err := short.body(pkA, func() ([]byte, error) { return good, nil })
 		require.NoError(t, err)
 
-		time.Sleep(30 * time.Millisecond) // expire the slot
+		time.Sleep(150 * time.Millisecond) // expire the slot
 		raw, _, err := short.body(pkA, func() ([]byte, error) { return nil, errors.New("store down") })
 		require.NoError(t, err, "should serve stale, not error, when a prior body exists")
 		assert.Equal(t, good, raw)
@@ -62,7 +62,11 @@ func TestEdgeRespCache(t *testing.T) {
 	})
 
 	t.Run("expired slots are swept on miss", func(t *testing.T) {
-		short := newEdgeRespCache(20 * time.Millisecond)
+		// TTL deliberately well above the cost of two body() calls on a
+		// slow CI runner. Earlier 20ms version flaked on linux runners
+		// when the second body() call took >20ms to reach the sweep,
+		// causing pkA to expire mid-test and the assert.Len(2) to fail.
+		short := newEdgeRespCache(100 * time.Millisecond)
 		// Populate two edges.
 		_, _, err := short.body(pkA, func() ([]byte, error) { return []byte(`["a"]`), nil })
 		require.NoError(t, err)
@@ -70,7 +74,7 @@ func TestEdgeRespCache(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, short.slots, 2)
 
-		time.Sleep(30 * time.Millisecond) // expire both slots
+		time.Sleep(150 * time.Millisecond) // expire both slots
 
 		// One miss on pkA should sweep pkB's expired slot too, leaving only pkA.
 		_, _, err = short.body(pkA, func() ([]byte, error) { return []byte(`["a2"]`), nil })

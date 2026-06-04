@@ -258,15 +258,15 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 		gotAcceptEncoding <- r.Header.Get("Accept-Encoding")
 		var buf bytes.Buffer
 		gz := gzip.NewWriter(&buf)
-		_, _ = gz.Write([]byte(payload))
-		_ = gz.Close()
+		_, _ = gz.Write([]byte(payload)) //nolint:errcheck
+		_ = gz.Close()                   //nolint:errcheck
 		w.Header().Set("Content-Encoding", "gzip")
 		w.Header().Set("Content-Type", "text/plain")
-		_, _ = w.Write(buf.Bytes())
+		_, _ = w.Write(buf.Bytes()) //nolint:errcheck
 	})
 	mux.HandleFunc("/plain", func(w http.ResponseWriter, r *http.Request) {
 		gotAcceptEncoding <- r.Header.Get("Accept-Encoding")
-		_, _ = w.Write([]byte(payload))
+		_, _ = w.Write([]byte(payload)) //nolint:errcheck
 	})
 	srv := &http.Server{ReadHeaderTimeout: 3 * time.Second, Handler: mux}
 	errCh := make(chan error, 1)
@@ -304,7 +304,7 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 		require.NoError(t, err)
 		resp, err := httpC.Do(req)
 		require.NoError(t, err)
-		defer func() { _ = resp.Body.Close() }()
+		defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 
 		assert.Contains(t, waitAE(t), "gzip", "transport must advertise Accept-Encoding: gzip")
 
@@ -323,7 +323,7 @@ func TestHTTPTransport_TransparentGzip(t *testing.T) {
 		req.Header.Set("Accept-Encoding", "identity")
 		resp, err := httpC.Do(req)
 		require.NoError(t, err)
-		defer func() { _ = resp.Body.Close() }()
+		defer func() { _ = resp.Body.Close() }() //nolint:errcheck
 
 		assert.Equal(t, "identity", waitAE(t), "caller's Accept-Encoding must be preserved")
 		body, err := io.ReadAll(resp.Body)

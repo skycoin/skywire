@@ -6,7 +6,9 @@ import (
 	"fmt"
 	htmpl "html/template"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
@@ -51,6 +53,7 @@ nav .dropdown a{display:block;padding:4px 12px;}
   <details><summary>logs</summary><div class='dropdown'>
     <a href='/log-collection'>overview</a>
     <a href='/log-collection/tree'>survey index</a>
+    <a href='/log-collection/tree-detail'>survey detail tree</a>
     <a href='/log-collection/tplogs'>transport logs</a>
   </div></details>
   <details><summary>services</summary><div class='dropdown'>
@@ -144,6 +147,30 @@ func chunkedPageHead(title, description, path string) string {
 	return h
 }
 
+// currentMinVersion reads the cached "currently-enforced minimum
+// skywire version" written by getlogs.sh's auto-derivation. The cache
+// path matches rewards/getlogs.sh which writes /tmp/skywire_minversion.cache.
+// Returns empty string when the cache is missing or older than 24h —
+// callers degrade gracefully to a static "see Version section" link
+// instead of displaying a stale value.
+func currentMinVersion() string {
+	const cachePath = "/tmp/skywire_minversion.cache"
+	const maxAge = 24 * time.Hour
+	info, err := os.Stat(cachePath)
+	if err != nil || time.Since(info.ModTime()) > maxAge {
+		return ""
+	}
+	data, err := os.ReadFile(cachePath) //nolint:gosec
+	if err != nil {
+		return ""
+	}
+	v := strings.TrimSpace(string(data))
+	if !strings.HasPrefix(v, "v") {
+		return ""
+	}
+	return v
+}
+
 // ineligibleReasonLink renders an ineligibility reason as a link
 // into the matching mainnet-rules anchor on the rewards index page,
 // so visitors can click through to the rule that classified them
@@ -194,7 +221,19 @@ func mainPage(c *gin.Context) {
 	// pointer to the eligibility rules — instead of being dropped
 	// straight into a 200-line rules article. Keep this terse;
 	// detailed rules live below.
-	introHTML := `<div style='border:1px solid #333;padding:10px 14px;margin:8px 0;background:#1a1d24;border-radius:4px;'>` +
+	// Currently-enforced minimum version banner. Reads from the cache
+	// that rewards/getlogs.sh writes after consulting the skywire
+	// release feed. Displays empty span if the cache is missing/stale
+	// so we never publish a misleading value.
+	minVerBanner := ""
+	if v := currentMinVersion(); v != "" {
+		minVerBanner = `<div style='border:1px solid #2d4a6b;padding:6px 10px;margin:8px 0;background:#1a2536;border-radius:4px;font-size:11pt;'>` +
+			`<b>Currently enforced minimum skywire version: <span style='color:#3399FF;'>` + v + `</span></b> ` +
+			`<span style='color:#94a3b8;font-size:9pt;'>(auto-derived: each release becomes required 14 days after its tag date — see <a href='/skycoin-rewards/#Version'>Version</a> for full rule)</span>` +
+			`</div>`
+	}
+	introHTML := minVerBanner +
+		`<div style='border:1px solid #333;padding:10px 14px;margin:8px 0;background:#1a1d24;border-radius:4px;'>` +
 		`<b>Skywire</b> is a decentralized mesh network. Run a visor on any computer (Linux, ARM SBC, Windows, macOS) and earn <b>Skycoin</b> rewards for providing uptime and bandwidth to the network. 816,000 SKY are distributed annually across two reward pools (presence + bandwidth) to all eligible visors.<br><br>` +
 		`<b>Get started:</b> <a href='https://deb.theskywirenetwork.net/generator/'>install command generator</a> &middot; ` +
 		`<a href='https://deb.theskywirenetwork.net'>apt repo</a> &middot; ` +
@@ -235,6 +274,7 @@ var htmlMainPageTemplate = `
   <details><summary>logs</summary><div class='dropdown'>
     <a href='/log-collection'>overview</a>
     <a href='/log-collection/tree'>survey index</a>
+    <a href='/log-collection/tree-detail'>survey detail tree</a>
     <a href='/log-collection/tplogs'>transport logs</a>
   </div></details>
   <details><summary>services</summary><div class='dropdown'>
