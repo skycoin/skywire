@@ -317,6 +317,7 @@ type API interface {
 	RemoveHypervisor(pk cipher.PubKey) error
 	RemoveAllHypervisors() (int, error)
 	SetHypervisorPassword(oldPassword, newPassword string) error
+	SetHypervisorPasswordForce(newPassword string) error
 	CheckAREntry(pk string) ([]string, error)
 	ARSelfInfo() (*ARSelfRegistration, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
