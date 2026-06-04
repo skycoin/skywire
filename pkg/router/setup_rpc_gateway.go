@@ -3,6 +3,7 @@ package router
 
 import (
 	"context"
+	"errors"
 	"net"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
+
+// errCascadeUnavailable is returned by the cascade-sign RPCs when the RSN
+// has no CascadeBuilder configured (cascade disabled / DMSG-only mode).
+var errCascadeUnavailable = errors.New("cascade signing unavailable on this setup node")
 
 // SetupRPCGateway is a RPC interface for setup node.
 type SetupRPCGateway struct {
@@ -49,6 +54,100 @@ func (g *SetupRPCGateway) DialRouteGroup(route routing.BidirectionalRoute, rules
 
 	// Confirm routes with initiating visor.
 	*rules = initRules
+	return nil
+}
+
+// CascadeSignReserveArgs is the request for CascadeSignReserve.
+type CascadeSignReserveArgs struct {
+	Route routing.BidirectionalRoute
+}
+
+// CascadeSignReserveReply carries the RSN-signed reserve cascades. The RSN
+// signs but does NOT send — the SOURCE injects these bytes into its own
+// transports (Forward[0].TpID / Reverse[0].TpID) and collects the reserved
+// route-ID ACKs.
+type CascadeSignReserveReply struct {
+	FwdSessionID    uint64
+	FwdReserveBytes []byte
+	RevSessionID    uint64
+	RevReserveBytes []byte
+}
+
+// CascadeSignReserve is the RSN-side half of the cascade reserve phase. The
+// RSN is a pure signing oracle: it builds and signs the nested per-hop
+// reserve cascades for the bidirectional route and returns the bytes plus
+// the session IDs. It never dials hops or sends anything itself.
+func (g *SetupRPCGateway) CascadeSignReserve(args *CascadeSignReserveArgs, reply *CascadeSignReserveReply) error {
+	log := logging.MustGetLogger("cascade-sign-reserve:" + g.ReqPK.String())
+	if g.Cascade == nil {
+		return errCascadeUnavailable
+	}
+	if err := args.Route.Check(); err != nil {
+		log.WithError(err).Warn("CascadeSignReserve: invalid route")
+		return err
+	}
+
+	fwdSessionID, fwdBytes, revSessionID, revBytes, err := signReserveCascades(g.Cascade, args.Route)
+	if err != nil {
+		log.WithError(err).Warn("CascadeSignReserve failed")
+		return err
+	}
+
+	reply.FwdSessionID = fwdSessionID
+	reply.FwdReserveBytes = fwdBytes
+	reply.RevSessionID = revSessionID
+	reply.RevReserveBytes = revBytes
+	return nil
+}
+
+// CascadeSignInstallArgs is the request for CascadeSignInstall. The source
+// supplies the route, the session IDs from the reserve phase, and the route
+// IDs it collected per hop. The RSN recomputes rules deterministically from
+// the route + IDs; it does NOT trust source-supplied rules.
+type CascadeSignInstallArgs struct {
+	Route        routing.BidirectionalRoute
+	FwdSessionID uint64
+	RevSessionID uint64
+	FwdRouteIDs  []routing.RouteID
+	RevRouteIDs  []routing.RouteID
+}
+
+// CascadeSignInstallReply carries the RSN-signed install cascades plus the
+// initiating-edge rules the source installs locally and returns to the dialer.
+type CascadeSignInstallReply struct {
+	FwdInstallBytes []byte
+	RevInstallBytes []byte
+	InitEdge        routing.EdgeRules
+}
+
+// CascadeSignInstall is the RSN-side half of the cascade install phase. It
+// reconstructs the IDReserver from the source-collected route IDs, recomputes
+// the routing rules deterministically (GenerateRules), and builds+signs the
+// nested per-hop install cascades. It returns the install bytes for the
+// source to inject, plus the initiating EdgeRules.
+func (g *SetupRPCGateway) CascadeSignInstall(args *CascadeSignInstallArgs, reply *CascadeSignInstallReply) error {
+	log := logging.MustGetLogger("cascade-sign-install:" + g.ReqPK.String())
+	if g.Cascade == nil {
+		return errCascadeUnavailable
+	}
+	if err := args.Route.Check(); err != nil {
+		log.WithError(err).Warn("CascadeSignInstall: invalid route")
+		return err
+	}
+
+	fwdBytes, revBytes, initEdge, err := signInstallCascades(
+		g.Cascade, args.Route,
+		args.FwdSessionID, args.RevSessionID,
+		args.FwdRouteIDs, args.RevRouteIDs,
+	)
+	if err != nil {
+		log.WithError(err).Warn("CascadeSignInstall failed")
+		return err
+	}
+
+	reply.FwdInstallBytes = fwdBytes
+	reply.RevInstallBytes = revBytes
+	reply.InitEdge = initEdge
 	return nil
 }
 

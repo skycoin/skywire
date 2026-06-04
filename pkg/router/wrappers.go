@@ -44,6 +44,25 @@ type setupNodeDialer struct {
 	relayCache    *RSNRelayCache        // cached RSN relay peers (may be nil)
 	tm            *transport.Manager    // for finding relay transports (may be nil)
 	setupRPCMux   *transport.VStreamMux // virtual stream mux for RSN RPC (may be nil)
+
+	// srcCascade is the SOURCE-side cascade builder used to inject RSN-signed
+	// reserve/install cascades down this visor's own transports. nil when no
+	// transport manager is available (e.g. NewSetupNodeDialer).
+	srcCascade *CascadeBuilder
+}
+
+// CascadeAckRegistry exposes the source-side cascade builder's ack registry
+// so the router's CascadeHandler can share it. ACKs for source-driven
+// cascades arrive on the visor's single registered cascade handler and must
+// be delivered to the source builder's in-flight sends. Returns nil when no
+// source-side builder is configured.
+//
+// This is consumed by the router via the cascadeSourceProvider interface.
+func (d *setupNodeDialer) CascadeAckRegistry() *ackRegistry {
+	if d.srcCascade == nil {
+		return nil
+	}
+	return d.srcCascade.AckRegistry()
 }
 
 // NewSetupNodeDialer returns a wrapper for (*Client).DialRouteGroup.
@@ -58,19 +77,24 @@ func NewSetupNodeDialerWithEmbedded(embedded EmbeddedSetupNode) RouteGroupDialer
 }
 
 // NewSetupNodeDialerFull returns a dialer with all capabilities:
-// embedded RSN, transport relay, and DMSG fallback.
+// embedded RSN, transport relay, DMSG fallback, and source-driven cascade.
 func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCache, tm *transport.Manager) RouteGroupDialer {
 	var mux *transport.VStreamMux
+	var srcCascade *CascadeBuilder
 	if tm != nil {
 		log := logging.MustGetLogger("setup_rpc_mux")
 		mux = transport.NewVStreamMux(tm, routing.SetupRPCPacket, log)
 		tm.SetSetupRPCHandler(mux.HandlePacket)
+		// Source-side cascade builder: send-only (zero rsnSK). Its ack
+		// registry is shared into the router's CascadeHandler at Serve time.
+		srcCascade = NewSourceCascadeBuilder(logging.MustGetLogger("cascade_source"), tm, nil)
 	}
 	return &setupNodeDialer{
 		embeddedSetup: embedded,
 		relayCache:    relayCache,
 		tm:            tm,
 		setupRPCMux:   mux,
+		srcCascade:    srcCascade,
 	}
 }
 
@@ -149,6 +173,23 @@ func (d *setupNodeDialer) Dial(
 		}
 	}
 
+	// Prefer the source-driven cascade over the DMSG connection: the RSN
+	// signs over DMSG, but the reserve/install cascades flow down OUR
+	// transports (not the RSN's). This avoids the RSN having to dial each
+	// hop over dmsg (the dmsg-202 failure mode for zombie sessions). Fall
+	// back to the legacy DMSG DialRouteGroup if the RSN is un-upgraded.
+	if d.srcCascade != nil {
+		rules, cascErr := runSourceCascade(ctx, log, client.RPCClient(), d.srcCascade, req)
+		if cascErr == nil {
+			return rules, connectedNode, nil
+		}
+		if !errors.Is(cascErr, errCascadeSignUnimplemented) {
+			log.WithError(cascErr).Warn("Source-driven cascade failed, falling back to DMSG DialRouteGroup")
+		} else {
+			log.Debug("RSN lacks source-driven cascade RPCs (dmsg), falling back to DialRouteGroup")
+		}
+	}
+
 	resp, err := client.DialRouteGroup(ctx, req)
 	if err != nil {
 		return routing.EdgeRules{}, cipher.PubKey{}, fmt.Errorf("route setup: %w", err)
@@ -179,6 +220,20 @@ func (d *setupNodeDialer) dialViaTransport(
 
 	rpcC := rpc.NewClient(stream)
 	defer rpcC.Close() //nolint:errcheck
+
+	// Prefer the source-driven cascade: the RSN only signs, and we inject the
+	// cascades down our own transports. Fall back to the legacy DialRouteGroup
+	// RPC if the RSN doesn't implement the CascadeSign* methods.
+	if d.srcCascade != nil {
+		rules, cascErr := runSourceCascade(ctx, log, rpcC, d.srcCascade, req)
+		if cascErr == nil {
+			return rules, nil
+		}
+		if !errors.Is(cascErr, errCascadeSignUnimplemented) {
+			return routing.EdgeRules{}, cascErr
+		}
+		log.Debug("RSN lacks source-driven cascade RPCs (vstream), falling back to DialRouteGroup")
+	}
 
 	var rules routing.EdgeRules
 	call := rpcC.Go("SetupRPCGateway.DialRouteGroup", req, &rules, nil)

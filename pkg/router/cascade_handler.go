@@ -7,7 +7,6 @@ package router
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,9 +25,10 @@ type CascadeHandler struct {
 	rt          routing.Table // for ReserveKeys and SaveRule
 	tm          *transport.Manager
 
-	// pendingAcks tracks in-flight relay operations awaiting ACK from next hop.
-	pendingAcks   map[uint64]chan routing.Packet
-	pendingAcksMu sync.Mutex
+	// acks tracks in-flight relay operations (and, on the source visor,
+	// source-driven sends) awaiting an ACK. Shared with the source-side
+	// CascadeBuilder so its injected cascades' ACKs are delivered here.
+	acks *ackRegistry
 
 	// defaultTimeout is the per-hop timeout for waiting for a cascade ACK.
 	defaultTimeout time.Duration
@@ -52,9 +52,16 @@ func NewCascadeHandler(
 		trustedRSNs:    trusted,
 		rt:             rt,
 		tm:             tm,
-		pendingAcks:    make(map[uint64]chan routing.Packet),
+		acks:           newAckRegistry(),
 		defaultTimeout: 10 * time.Second,
 	}
+}
+
+// AckRegistry returns the handler's shared ack registry. The source-side
+// CascadeBuilder is constructed against this registry so ACKs arriving on
+// the visor's single registered cascade handler reach the builder's sends.
+func (ch *CascadeHandler) AckRegistry() *ackRegistry {
+	return ch.acks
 }
 
 // HandlePacket is the callback registered with the transport manager.
@@ -176,16 +183,7 @@ func (ch *CascadeHandler) handleAck(p routing.Packet) {
 		return
 	}
 
-	ch.pendingAcksMu.Lock()
-	waitCh, ok := ch.pendingAcks[ack.SessionID]
-	if ok {
-		delete(ch.pendingAcks, ack.SessionID)
-	}
-	ch.pendingAcksMu.Unlock()
-
-	if ok {
-		waitCh <- p
-	}
+	ch.acks.dispatch(ack.SessionID, p)
 }
 
 // relayAndWait sends the cascade payload to the next hop transport and waits for an ACK.
@@ -203,16 +201,11 @@ func (ch *CascadeHandler) relayAndWait(relayTpID uuid.UUID, sessionID uint64, pa
 	}
 
 	// Register for ACK.
-	waitCh := make(chan routing.Packet, 1)
-	ch.pendingAcksMu.Lock()
-	ch.pendingAcks[sessionID] = waitCh
-	ch.pendingAcksMu.Unlock()
+	waitCh := ch.acks.register(sessionID)
 
 	// Send the relay.
 	if err := tp.WriteRawPacket(pkt); err != nil {
-		ch.pendingAcksMu.Lock()
-		delete(ch.pendingAcks, sessionID)
-		ch.pendingAcksMu.Unlock()
+		ch.acks.unregister(sessionID)
 		return nil, fmt.Errorf("write relay packet: %w", err)
 	}
 
@@ -221,9 +214,7 @@ func (ch *CascadeHandler) relayAndWait(relayTpID uuid.UUID, sessionID uint64, pa
 	case ackPkt := <-waitCh:
 		return routing.UnmarshalCascadeAck(ackPkt.Payload())
 	case <-time.After(ch.defaultTimeout):
-		ch.pendingAcksMu.Lock()
-		delete(ch.pendingAcks, sessionID)
-		ch.pendingAcksMu.Unlock()
+		ch.acks.unregister(sessionID)
 		return nil, fmt.Errorf("cascade ACK timeout (session %d)", sessionID)
 	}
 }
