@@ -1371,6 +1371,21 @@ func (rc *rpcClient) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 	return reachable, err
 }
 
+// DmsgProbeViaServer checks dmsg reachability of a remote PK:port forced
+// through a specific dmsg server.
+func (rc *rpcClient) DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error) {
+	var reachable bool
+	err := rc.Call("DmsgProbeViaServer", &DmsgProbeViaServerRequest{PK: pk, Port: port, ServerPK: serverPK}, &reachable)
+	return reachable, err
+}
+
+// SkynetProbe checks reachability of a remote PK:port over skynet.
+func (rc *rpcClient) SkynetProbe(pk cipher.PubKey, port uint16) (bool, error) {
+	var reachable bool
+	err := rc.Call("SkynetProbe", &DmsgProbeRequest{PK: pk, Port: port}, &reachable)
+	return reachable, err
+}
+
 // DmsgConnectAll triggers a one-shot connect-to-all-dmsg-servers action.
 func (rc *rpcClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 	var resp DmsgConnectAllResult
