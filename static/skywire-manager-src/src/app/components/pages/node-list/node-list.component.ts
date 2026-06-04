@@ -249,6 +249,23 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredNodes = data;
 
+      // The local hypervisor's own visor (the machine serving this UI)
+      // must never vanish from its own list. On a cold start it can
+      // briefly report offline while it finishes initializing, so an
+      // active `online` filter (or a stale filtered/bookmarked URL)
+      // would drop it — leaving an empty "no visor matches the filter"
+      // list even though the host visor plainly exists. Re-insert it at
+      // the top whenever the current filter excluded it.
+      if (this.localHypervisorPk && this.allNodes) {
+        const localShown = this.filteredNodes.some(n => n.localPk === this.localHypervisorPk);
+        if (!localShown) {
+          const localNode = this.allNodes.find(n => n.localPk === this.localHypervisorPk);
+          if (localNode) {
+            this.filteredNodes = [localNode, ...this.filteredNodes];
+          }
+        }
+      }
+
       // Check if there are offline nodes.
       this.hasOfflineNodes = false;
       this.filteredNodes.forEach(node => {
@@ -489,14 +506,12 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       if (result && !result.updating) {
         // If the data was obtained.
         if (result.data && !result.error) {
-          this.allNodes = result.data as Node[];
-          this.dataFilterer.setData(this.allNodes);
-
-          // Tree shape from #2633's /api/visors-tree-summary. Populates
-          // `sections` for the next-step multi-table render. Header
-          // shows the local hypervisor PK; if the response is empty
-          // (older backend, or pre-init), fall back to whatever the
-          // first node's PK is so the header isn't blank.
+          // Tree shape from #2633's /api/visors-tree-summary. Populate
+          // `sections` + the local hypervisor PK BEFORE filtering, so the
+          // filter pass (in the dataFiltered subscription) can guarantee
+          // the local visor is always shown. Header shows the local
+          // hypervisor PK; if the response is empty (older backend, or
+          // pre-init) the header falls back to blank.
           if (result.sections && result.sections.length > 0) {
             this.sections = result.sections;
             this.localHypervisorPk = result.sections[0].hypervisorPk;
@@ -504,6 +519,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
             this.sections = [];
             this.localHypervisorPk = '';
           }
+
+          this.allNodes = result.data as Node[];
+          this.dataFilterer.setData(this.allNodes);
 
           // Fetch reward data if on the rewards tab and not yet loaded
           if (this.showRewardsInfo && !this.rewardDataLoaded && !this.rewardDataLoading) {
