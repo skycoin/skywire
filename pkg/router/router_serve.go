@@ -93,6 +93,14 @@ func (r *router) Serve(ctx context.Context) error {
 				r.logger.Debug("Cascade handler sharing source-driven ack registry")
 			}
 		}
+		// Wire the handler in as the dialer's source-origin processor so the
+		// source consumes the outermost (source-addressed) cascade layer
+		// itself — reserving its own route IDs and relaying inward — instead
+		// of shipping it to the first hop (which would reject the signature).
+		if os, ok := r.conf.RouteGroupDialer.(cascadeOriginSetter); ok {
+			os.SetCascadeOrigin(ch)
+			r.logger.Debug("Cascade handler wired as source-origin processor")
+		}
 	}
 
 	r.tm.SetCascadeHandler(ch.HandlePacket)

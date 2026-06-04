@@ -49,6 +49,25 @@ type setupNodeDialer struct {
 	// reserve/install cascades down this visor's own transports. nil when no
 	// transport manager is available (e.g. NewSetupNodeDialer).
 	srcCascade *CascadeBuilder
+
+	// cascadeOrigin processes the outermost (source-addressed) cascade layer
+	// locally: it reserves this visor's own route IDs / saves its own rules and
+	// relays the inner payload to the first hop. Set by the router at Serve time
+	// (the visor's CascadeHandler implements it). nil until then.
+	cascadeOrigin cascadeOriginProcessor
+}
+
+// cascadeOriginProcessor consumes the source-addressed outermost layer of a
+// cascade and returns the collected ACK. Implemented by *CascadeHandler.
+type cascadeOriginProcessor interface {
+	ProcessLocalOrigin(payload []byte) (*routing.CascadeAck, error)
+}
+
+// SetCascadeOrigin wires the visor's CascadeHandler in as the source-origin
+// processor. Called by the router at Serve time via the cascadeOriginSetter
+// interface.
+func (d *setupNodeDialer) SetCascadeOrigin(p cascadeOriginProcessor) {
+	d.cascadeOrigin = p
 }
 
 // CascadeAckRegistry exposes the source-side cascade builder's ack registry
@@ -178,8 +197,8 @@ func (d *setupNodeDialer) Dial(
 	// transports (not the RSN's). This avoids the RSN having to dial each
 	// hop over dmsg (the dmsg-202 failure mode for zombie sessions). Fall
 	// back to the legacy DMSG DialRouteGroup if the RSN is un-upgraded.
-	if d.srcCascade != nil {
-		rules, cascErr := runSourceCascade(ctx, log, client.RPCClient(), d.srcCascade, req)
+	if d.srcCascade != nil && d.cascadeOrigin != nil {
+		rules, cascErr := runSourceCascade(ctx, log, client.RPCClient(), d.cascadeOrigin, req)
 		if cascErr == nil {
 			return rules, connectedNode, nil
 		}
@@ -224,8 +243,8 @@ func (d *setupNodeDialer) dialViaTransport(
 	// Prefer the source-driven cascade: the RSN only signs, and we inject the
 	// cascades down our own transports. Fall back to the legacy DialRouteGroup
 	// RPC if the RSN doesn't implement the CascadeSign* methods.
-	if d.srcCascade != nil {
-		rules, cascErr := runSourceCascade(ctx, log, rpcC, d.srcCascade, req)
+	if d.srcCascade != nil && d.cascadeOrigin != nil {
+		rules, cascErr := runSourceCascade(ctx, log, rpcC, d.cascadeOrigin, req)
 		if cascErr == nil {
 			return rules, nil
 		}
