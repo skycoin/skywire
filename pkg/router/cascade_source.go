@@ -37,6 +37,14 @@ type cascadeSourceProvider interface {
 	CascadeAckRegistry() *ackRegistry
 }
 
+// cascadeOriginSetter is implemented by route-group dialers that drive
+// source-driven cascade. The router calls SetCascadeOrigin at Serve time to
+// hand the dialer the visor's CascadeHandler, which the dialer uses to consume
+// the source-addressed outermost cascade layer locally.
+type cascadeOriginSetter interface {
+	SetCascadeOrigin(p cascadeOriginProcessor)
+}
+
 // errCascadeSignUnimplemented signals that the RSN does not implement the
 // CascadeSign* RPCs (an un-upgraded setup node). Callers fall back to the
 // legacy DMSG @136 path.
@@ -63,11 +71,11 @@ func runSourceCascade(
 	ctx context.Context,
 	log logrus.FieldLogger,
 	rpcC *rpc.Client,
-	srcCB *CascadeBuilder,
+	originProc cascadeOriginProcessor,
 	biRt routing.BidirectionalRoute,
 ) (routing.EdgeRules, error) {
-	if srcCB == nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: no source-side builder")
+	if originProc == nil {
+		return routing.EdgeRules{}, fmt.Errorf("cascade: no source-origin processor")
 	}
 	if len(biRt.Forward) == 0 || len(biRt.Reverse) == 0 {
 		return routing.EdgeRules{}, fmt.Errorf("cascade: route has no hops")
@@ -85,20 +93,20 @@ func runSourceCascade(
 		return routing.EdgeRules{}, fmt.Errorf("cascade: sign reserve RPC: %w", err)
 	}
 
-	// --- Phase 1 (cont): inject reserve cascades over our own transports ---
-	firstFwdTpID := biRt.Forward[0].TpID
-	fwdAck, err := srcCB.SendCascade(ctx, firstFwdTpID, reserveReply.FwdSessionID, reserveReply.FwdReserveBytes, srcCB.reserveTimeout)
+	// --- Phase 1 (cont): consume our own (outermost) layer locally, which
+	// reserves our route IDs and relays the inner payload down our own
+	// transport to the first hop, collecting the cascade ACK. ---
+	fwdAck, err := originProc.ProcessLocalOrigin(reserveReply.FwdReserveBytes)
 	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd reserve send: %w", err)
+		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd reserve: %w", err)
 	}
 	if fwdAck.Error != "" {
 		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd reserve rejected: %s", fwdAck.Error)
 	}
 
-	firstRevTpID := biRt.Reverse[0].TpID
-	revAck, err := srcCB.SendCascade(ctx, firstRevTpID, reserveReply.RevSessionID, reserveReply.RevReserveBytes, srcCB.reserveTimeout)
+	revAck, err := originProc.ProcessLocalOrigin(reserveReply.RevReserveBytes)
 	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: rev reserve send: %w", err)
+		return routing.EdgeRules{}, fmt.Errorf("cascade: rev reserve: %w", err)
 	}
 	if revAck.Error != "" {
 		return routing.EdgeRules{}, fmt.Errorf("cascade: rev reserve rejected: %s", revAck.Error)
@@ -123,18 +131,18 @@ func runSourceCascade(
 		return routing.EdgeRules{}, fmt.Errorf("cascade: sign install RPC: %w", err)
 	}
 
-	// --- Phase 2 (cont): inject install cascades over our own transports ---
-	fwdInstAck, err := srcCB.SendCascade(ctx, firstFwdTpID, reserveReply.FwdSessionID, installReply.FwdInstallBytes, srcCB.installTimeout)
+	// --- Phase 2 (cont): consume our own install layer locally and relay. ---
+	fwdInstAck, err := originProc.ProcessLocalOrigin(installReply.FwdInstallBytes)
 	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd install send: %w", err)
+		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd install: %w", err)
 	}
 	if fwdInstAck.Error != "" {
 		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd install rejected: %s", fwdInstAck.Error)
 	}
 
-	revInstAck, err := srcCB.SendCascade(ctx, firstRevTpID, reserveReply.RevSessionID, installReply.RevInstallBytes, srcCB.installTimeout)
+	revInstAck, err := originProc.ProcessLocalOrigin(installReply.RevInstallBytes)
 	if err != nil {
-		return routing.EdgeRules{}, fmt.Errorf("cascade: rev install send: %w", err)
+		return routing.EdgeRules{}, fmt.Errorf("cascade: rev install: %w", err)
 	}
 	if revInstAck.Error != "" {
 		return routing.EdgeRules{}, fmt.Errorf("cascade: rev install rejected: %s", revInstAck.Error)
