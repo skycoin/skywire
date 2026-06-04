@@ -6,6 +6,32 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.64
+
+14 PRs on top of v1.3.63. Headline items:
+
+-   **dmsg-only configs by default.** `skywire cli config gen` now generates a dmsg-only (dmsghttp) config by default, with `--dual` for the http+dmsg-fallback config and `--http` for http-only (#2983). Supporting hardening makes dmsg-only robust: an empty discovery URL resolves to a no-op client instead of an invalid-host retry spin (#2981); service-discovery falls back to its dmsg URL with nil-client guards, so a dropped HTTP SD URL no longer panics the visor at startup (#2982); and public-autoconnect no longer silently re-defaults a dropped `service_discovery` to the prod HTTP endpoint (#2985).
+-   **Routing reliability.** A single hop's failure no longer RSTs the whole route during setup (#2976); the router guards a `ClosePacket` panic, a double-close, a reverse-rule leak, and a MinHops race (#2977); and "ghost" transports — offline edges that stayed routable because the live edge kept re-registering them — are drained at the source: visors detect half-open links via missed transport pongs (#2979) and TPD expires each edge's transport set on its own TTL (#2980).
+-   **TPD egress + visor CPU.** The dominant `/all-transports` egress storm is cut with a cached, pre-gzipped response body (#2980); the dmsghttp client now advertises `Accept-Encoding: gzip` and transparently decompresses, so dmsg service reads compress like clearnet ones (#2986); `/transports/edge` gets the same cached+gzipped treatment (#2987); and the CXO Filler no longer spawns thousands of parked goroutines — `MaxFillingParallel` was never populated and fell back to a magic 1024 (#2988).
+-   **Windows installer restored** (#2989): the MSI build had been failing since v1.3.62 (a `Product.wxs` file reference added in #2965 was never staged in the release workflow), so v1.3.62/v1.3.63 shipped with no Windows `.msi`/`.zip` assets — fixed by staging `skywire-autoconfig.bat`.
+-   **Rewards** (#2990): drop the receiver-side `min()` cap (deferred from v1.3.63) and set the per-IP share cap to 12 for June 2026.
+-   **Diagnostics** (#2984): instrument the cipher verify / DH caches and expose a `/debug/cache` endpoint.
+
+-   feat(rewards): drop receiver-side min() cap (pending v1.3.63); per-IP 12 for June 2026  [#2990](https://github.com/skycoin/skywire/pull/2990)
+-   fix(release): stage skywire-autoconfig.bat for the Windows MSI build  [#2989](https://github.com/skycoin/skywire/pull/2989)
+-   fix(cxo): bound Filler goroutines — populate MaxFillingParallel + sane fallback  [#2988](https://github.com/skycoin/skywire/pull/2988)
+-   fix(tpd): cache /transports/edge:<PK> response body + gzip  [#2987](https://github.com/skycoin/skywire/pull/2987)
+-   fix(dmsghttp): advertise Accept-Encoding: gzip + transparent decompress  [#2986](https://github.com/skycoin/skywire/pull/2986)
+-   fix(visor/autoconnect): don't re-default dropped service_discovery to prod HTTP  [#2985](https://github.com/skycoin/skywire/pull/2985)
+-   feat(cipher,dmsg/noise,cmdutil): instrument the verify / DH caches + /debug/cache endpoint  [#2984](https://github.com/skycoin/skywire/pull/2984)
+-   feat(cli/config): generate dmsg-only config by default; add --dual flag  [#2983](https://github.com/skycoin/skywire/pull/2983)
+-   fix(visor/servicedisc): service-discovery dmsg fallback + nil-client guards (no startup panic when HTTP SD dropped)  [#2982](https://github.com/skycoin/skywire/pull/2982)
+-   fix(dmsg/disc): empty discovery URL → no-op client (no invalid-host retry spin)  [#2981](https://github.com/skycoin/skywire/pull/2981)
+-   fix(tpd): drain ghost transports (per-edge-TTL) + cache/gzip /all-transports egress storm  [#2980](https://github.com/skycoin/skywire/pull/2980)
+-   fix(transport): detect half-open links via missed transport pongs (drain ghost transports from TPD)  [#2979](https://github.com/skycoin/skywire/pull/2979)
+-   fix(router): guard ClosePacket panic, double-close, reverse-rule leak, MinHops race  [#2977](https://github.com/skycoin/skywire/pull/2977)
+-   fix(router): stop one hop's failure from RST-ing the whole route (setup cascade)  [#2976](https://github.com/skycoin/skywire/pull/2976)
+
 ## 1.3.63
 
 7 PRs on top of v1.3.62. Headline items:
