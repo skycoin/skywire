@@ -249,7 +249,7 @@ func NewConfig() (conf *Config) {
 	// data dir
 	conf.DataDir = DataDir()
 
-	return
+	return conf
 }
 
 // FromFlags associates config fields
