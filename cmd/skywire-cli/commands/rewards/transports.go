@@ -470,6 +470,19 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 		// An edge whose record is present but {sent:0, recv:0} is
 		// treated as "hasn't reported real data yet" rather than
 		// "verified zero traffic" — same rationale as the cli.
+		//
+		// TODO(B2): the both-reported branch used to cap each side's
+		// sent by the counterparty's recv (min(A.Sent, B.Recv) +
+		// min(B.Sent, A.Recv)). That anti-inflation cap collapsed
+		// dual-edge pool 2 contribution to ~0 whenever the receiver-
+		// side counter was zero — the dominant symptom of B2 (TPD
+		// upsert clobbers the prior side's perspective when the
+		// counterparty heartbeats). The cap has been temporarily
+		// removed; both branches now trust the sender unconditionally,
+		// matching the unilateral-trust branches below. Restore the
+		// min() cap once v1.3.63 (with the TPD per-edge merge upsert)
+		// is the required minimum version and the dual-edge ratio is
+		// reliably >50%. See operator announcement 2026-06-03.
 		var sentA, sentB uint64
 		for _, d := range tp.Daily {
 			if dateFilter != "" && d.Date != dateFilter {
@@ -479,8 +492,8 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 			bReported := d.B != nil && (d.B.Sent > 0 || d.B.Recv > 0)
 			switch {
 			case aReported && bReported:
-				sentA += minUint64(d.A.Sent, d.B.Recv)
-				sentB += minUint64(d.B.Sent, d.A.Recv)
+				sentA += d.A.Sent
+				sentB += d.B.Sent
 			case aReported:
 				sentA += d.A.Sent
 				sentB += d.A.Recv
@@ -529,6 +542,12 @@ func fetchTransportBandwidthFromTPD(cmdFlags *pflag.FlagSet, bwLog *logging.Logg
 	return out, nil
 }
 
+// minUint64 is the receiver-side anti-inflation cap previously used in
+// fetchTransportBandwidthFromTPD's both-reported branch. Retained so
+// the restore on v1.3.63 minimum is a single-line diff at the call
+// site. Marked unused-ok until then.
+//
+//nolint:unused
 func minUint64(a, b uint64) uint64 {
 	if a < b {
 		return a

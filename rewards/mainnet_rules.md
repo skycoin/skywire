@@ -72,7 +72,7 @@ To receive Skycoin rewards for running skywire, the following requirements must 
 
 * [4)](#Per-Machine-Limit) **Only 1 (one) visor per machine** - virtual machines are ineligible
 
-* [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime.
+* [5)](#Per-IP-Limit) **Up to 8 (eight) visors may each receive 1 (one) reward share per location (ip address)** - with 8 shares divided between all visors at that ip address which achieved the minimum uptime. *(Temporary exception: for the month of June 2026 only, the per-IP cap is raised to 12 shares — see [Per IP Limit](#Per-IP-Limit) for the rationale; the cap auto-reverts to 8 on 2026-07-01.)*
 
 * [6)](#Skycoin-Address) **A valid [skycoin address](#Skycoin-Address)** must be set for the visor
 
@@ -312,6 +312,8 @@ Multiple instances of skywire which are otherwise determined to be running on th
 A maximum of 8 reward shares per ip address is divided between all visors which made uptime at a given ip address.
 
 For example, if 9 visors at a given ip address meet the minimum uptime requirement, the reward share for each visor will be 8/9ths of a share (~0.8888) which sum to a total of ~7.99999 shares.
+
+**Temporary exception — June 2026 only**: the per-IP cap is raised from 8 to **12** shares for calc dates within June 2026 (UTC). Rationale: a specific operator was unable to relocate excess visors off a single IP address because OS-level update infrastructure was blocked by ongoing bandwidth-pool issues this month, and several boards in their official miner died reducing the visor count to 11+1 at one location. The cap reverts automatically to 8 on 2026-07-01 with no further action required.
 
 ### Regional Saturation Scaling
 
