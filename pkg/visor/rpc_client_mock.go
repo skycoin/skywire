@@ -1540,6 +1540,11 @@ func (mc *mockRPCClient) SetHypervisorPassword(string, string) error {
 	return nil
 }
 
+// SetHypervisorPasswordForce implements API.
+func (mc *mockRPCClient) SetHypervisorPasswordForce(string) error {
+	return nil
+}
+
 // DmsgSetMinSessions implements API.
 func (mc *mockRPCClient) DmsgSetMinSessions(_ int) error {
 	return nil
