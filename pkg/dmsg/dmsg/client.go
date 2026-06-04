@@ -138,6 +138,18 @@ type Client struct {
 	once  sync.Once
 	wg    sync.WaitGroup // tracks background goroutines for clean shutdown
 	sesMx sync.Mutex
+
+	// closed gates new session-serving goroutines once Close has begun.
+	// Protected by EntityCommon.sessionsMx — set true at the start of
+	// Close's critical section and checked in dialSession before
+	// wg.Add(1). Without this gate, a dialSession running concurrently
+	// with Close can race wg.Add against wg.Wait (the race detector
+	// flags this in TestEnv): Close.wg.Wait returns with the counter
+	// at zero just as dialSession is about to wg.Add(1), leaving a
+	// serve-goroutine un-waited-on. Holding sessionsMx around both
+	// the closed-set in Close and the closed-check + Add in
+	// dialSession provides the happens-before edge.
+	closed bool
 }
 
 // AddDiscovery registers an additional dmsg-discovery this client
@@ -498,6 +510,10 @@ func (ce *Client) Close() error {
 		ce.sesMx.Unlock()
 
 		ce.sessionsMx.Lock()
+		// Mark closed before iterating so any concurrent dialSession
+		// blocking on sessionsMx sees the closed flag and bails out
+		// without doing wg.Add(1) (see Client.closed for the race).
+		ce.closed = true
 		for _, dSes := range ce.sessions {
 			ce.log.
 				WithError(dSes.Close()).
