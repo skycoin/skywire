@@ -822,6 +822,29 @@ const sudphReadTimeout = 3 * time.Minute
 // LocalAddresses payload after a successful handshake.
 const sudphInitialReadTimeout = 30 * time.Second
 
+// effectiveSUDPHAddr returns the address to register for a SUDPH visor.
+// Normally that's the observed UDP source, but when the observed source is
+// non-public AND the visor declared a public PublicIP+Port, the declared
+// address is used instead. This is the hairpin-SNAT case: a visor on the
+// same Docker host as the AR reaches the AR's UDP socket via the docker
+// bridge, so the observed source IP is the bridge gateway (172.16-31.x.y) —
+// unreachable from external peers. The visor's declared listen port
+// (LocalAddresses.Port) is the externally-reachable port. Must be applied on
+// BOTH the initial bind and every re-registration, otherwise the 90s
+// re-register overwrites a correct initial bind with the bridge address.
+func (a *API) effectiveSUDPHAddr(observed string, la addrresolver.LocalAddresses, pk cipher.PubKey) string {
+	host, _, err := net.SplitHostPort(observed)
+	if err != nil || netutil.IsPublicIP(net.ParseIP(host)) {
+		return observed
+	}
+	if la.PublicIP != "" && la.Port != "" && netutil.IsPublicIP(net.ParseIP(la.PublicIP)) {
+		declared := net.JoinHostPort(la.PublicIP, la.Port)
+		a.log.Infof("SUDPH: observed %v non-public; using declared %v for %v", observed, declared, pk)
+		return declared
+	}
+	return observed
+}
+
 func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 	a.log.Infof("Binding %v to %v (SUDPH)", strPK, remoteAddr)
 
@@ -867,27 +890,7 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 		return
 	}
 
-	// Override the observed UDP source when it's non-public AND the visor
-	// declared a known-public PublicIP. The hairpin-SNAT case (visor and
-	// AR on the same Docker host) rewrites BOTH the source IP (to the
-	// docker bridge gateway) and the source port (to a kernel-chosen
-	// ephemeral) — neither is reachable from external peers. Use the
-	// visor's listen port (LocalAddresses.Port), which IS the externally-
-	// reachable UDP port. Visors with public observed sources (the
-	// common case, including legitimate NAT'd visors that need
-	// hole-punching to retain the NAT-mapped source port) keep the
-	// observed value unchanged.
-	effectiveRemoteAddr := remoteAddr
-	if host, _, err := net.SplitHostPort(remoteAddr); err == nil && !netutil.IsPublicIP(net.ParseIP(host)) {
-		if localAddresses.PublicIP != "" && localAddresses.Port != "" &&
-			netutil.IsPublicIP(net.ParseIP(localAddresses.PublicIP)) {
-			effectiveRemoteAddr = net.JoinHostPort(localAddresses.PublicIP, localAddresses.Port)
-			a.log.Infof("SUDPH: observed %v non-public; using declared %v for %v",
-				remoteAddr, effectiveRemoteAddr, pk)
-		}
-	}
-
-	v4SUDPH, v6SUDPH := splitFamilyAddr(effectiveRemoteAddr)
+	v4SUDPH, v6SUDPH := splitFamilyAddr(a.effectiveSUDPHAddr(remoteAddr, localAddresses, pk))
 	visorData := addrresolver.VisorData{
 		RemoteAddr:     v4SUDPH,
 		RemoteAddrV6:   v6SUDPH,
@@ -954,7 +957,10 @@ func (a *API) bindSUDPH(conn net.Conn, remoteAddr, strPK string) {
 			// Handle re-registration: try to unmarshal as LocalAddresses
 			var localAddresses addrresolver.LocalAddresses
 			if err := json.Unmarshal(data, &localAddresses); err == nil && localAddresses.Port != "" {
-				v4Re, v6Re := splitFamilyAddr(fromAddr)
+				// Apply the same hairpin-SNAT override as the initial bind,
+				// otherwise this re-register overwrites a correct initial
+				// bind with the docker-bridge source address.
+				v4Re, v6Re := splitFamilyAddr(a.effectiveSUDPHAddr(fromAddr, localAddresses, pk))
 				newVisorData := addrresolver.VisorData{
 					RemoteAddr:     v4Re,
 					RemoteAddrV6:   v6Re,
