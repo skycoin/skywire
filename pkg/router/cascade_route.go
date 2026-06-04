@@ -136,6 +136,98 @@ func createRouteGroupCascade(
 	return initEdge, nil
 }
 
+// signReserveCascades builds and signs the forward and reverse reserve
+// cascades for a bidirectional route WITHOUT sending them. This is the
+// RSN-side half of phase 1: the RSN is a pure signing oracle and never
+// dials hops. The returned bytes are injected by the SOURCE over its own
+// transports.
+//
+// cb must be an RSN-side CascadeBuilder (constructed with the RSN's
+// rsnPK/rsnSK) so each per-hop layer is signed with the RSN's key.
+func signReserveCascades(cb *CascadeBuilder, biRt routing.BidirectionalRoute) (
+	fwdSessionID uint64, fwdReserveBytes []byte,
+	revSessionID uint64, revReserveBytes []byte,
+	err error,
+) {
+	if len(biRt.Forward) == 0 {
+		return 0, nil, 0, nil, fmt.Errorf("cascade: no forward hops")
+	}
+	if len(biRt.Reverse) == 0 {
+		return 0, nil, 0, nil, fmt.Errorf("cascade: no reverse hops")
+	}
+
+	reserveCount := computeReserveCount(biRt.Forward, biRt.Reverse)
+
+	fwdSessionID, fwdReserveBytes, err = buildReserveWithCounts(cb, biRt.Forward, reserveCount)
+	if err != nil {
+		return 0, nil, 0, nil, fmt.Errorf("cascade: build fwd reserve: %w", err)
+	}
+
+	revSessionID, revReserveBytes, err = buildReserveWithCounts(cb, biRt.Reverse, reserveCount)
+	if err != nil {
+		return 0, nil, 0, nil, fmt.Errorf("cascade: build rev reserve: %w", err)
+	}
+
+	return fwdSessionID, fwdReserveBytes, revSessionID, revReserveBytes, nil
+}
+
+// signInstallCascades reconstructs the IDReserver from the route-IDs that
+// the SOURCE collected during the reserve phase, recomputes the routing
+// rules DETERMINISTICALLY from the route (rules are never trusted from the
+// source), then builds and signs the forward and reverse install cascades
+// WITHOUT sending them. This is the RSN-side half of phase 2.
+//
+// It returns the install bytes (for the source to inject over its own
+// transports) plus the initiating-edge EdgeRules that the source installs
+// locally and returns to the dialer.
+func signInstallCascades(
+	cb *CascadeBuilder,
+	biRt routing.BidirectionalRoute,
+	fwdSessionID, revSessionID uint64,
+	fwdRouteIDs, revRouteIDs []routing.RouteID,
+) (fwdInstallBytes, revInstallBytes []byte, initEdge routing.EdgeRules, err error) {
+	fwdRt, revRt := biRt.ForwardAndReverse()
+
+	// Reconstruct the IDReserver from the cascade ACK route IDs. The rules
+	// are recomputed below from this deterministic reserver — we do NOT
+	// trust source-supplied rules.
+	idR, err := newCascadeIDReserver(biRt.Forward, biRt.Reverse, fwdRouteIDs, revRouteIDs)
+	if err != nil {
+		return nil, nil, routing.EdgeRules{}, fmt.Errorf("cascade: reconstruct IDs: %w", err)
+	}
+
+	fwdRules, revRules, interRules, err := GenerateRules(idR, []routing.Route{fwdRt, revRt})
+	if err != nil {
+		return nil, nil, routing.EdgeRules{}, fmt.Errorf("cascade: generate rules: %w", err)
+	}
+
+	srcPK := biRt.Desc.Src()
+	dstPK := biRt.Desc.Dst()
+	initEdge = routing.EdgeRules{
+		Desc:    revRt.Desc,
+		Forward: fwdRules[srcPK.String()][0],
+		Reverse: revRules[srcPK.String()][0],
+	}
+	respEdge := routing.EdgeRules{
+		Desc:    fwdRt.Desc,
+		Forward: fwdRules[dstPK.String()][0],
+		Reverse: revRules[dstPK.String()][0],
+	}
+
+	rulesPerPK := collectRulesPerPK(fwdRules, revRules, interRules, initEdge, respEdge)
+
+	fwdInstallBytes, err = cb.BuildInstallMessage(biRt.Forward, fwdSessionID, rulesPerPK)
+	if err != nil {
+		return nil, nil, routing.EdgeRules{}, fmt.Errorf("cascade: build fwd install: %w", err)
+	}
+	revInstallBytes, err = cb.BuildInstallMessage(biRt.Reverse, revSessionID, rulesPerPK)
+	if err != nil {
+		return nil, nil, routing.EdgeRules{}, fmt.Errorf("cascade: build rev install: %w", err)
+	}
+
+	return fwdInstallBytes, revInstallBytes, initEdge, nil
+}
+
 // computeReserveCount determines how many route IDs each PK needs across both paths.
 func computeReserveCount(forward, reverse []routing.Hop) map[cipher.PubKey]uint8 {
 	counts := make(map[cipher.PubKey]uint8)
