@@ -35,7 +35,18 @@ type nodeFeeds struct {
 	addcfq chan connFeed // add connection to a feed
 	delcfq chan connFeed // del connection from a feed
 
-	delcq chan *Conn // delete connection (closed connection and similar)
+	// delete-connection cleanup. A closed connection's cleanup must never
+	// block the caller (Conn.run exit / Node.removeConn). The previous
+	// design sent on a bounded buffered channel which BLOCKED once the
+	// single feeds actor fell behind under connection churn — stranding
+	// tens of thousands of goroutines (and GBs of stacks) parked on the
+	// send. delConn now appends to this unbounded queue under delcMu and
+	// nudges the actor via delcwake; the actor drains it in bounded
+	// batches, so the enqueue is always non-blocking and cleanup still
+	// happens (no drop).
+	delcMu    sync.Mutex
+	delcQueue []*Conn
+	delcwake  chan struct{} // wake the actor to drain delcQueue (cap 1)
 
 	brorq chan connRoot // broadcast root to feed (triggered by head)
 
@@ -84,7 +95,7 @@ func newNodeFeeds(node *Node) (n *nodeFeeds) {
 	n.addcfq = make(chan connFeed) // add connection to a feed
 	n.delcfq = make(chan connFeed) // del connection from a feed
 
-	n.delcq = make(chan *Conn, 512) // buffered so (*Conn).run exit doesn't block the actor on the rrq path
+	n.delcwake = make(chan struct{}, 1) // wake the actor to drain the unbounded delcQueue
 
 	n.brorq = make(chan connRoot)
 
@@ -141,10 +152,10 @@ func (n *nodeFeeds) handle() {
 		addq = n.addq
 		delq = n.delq
 
-		addcfq = n.addcfq
-		delcfq = n.delcfq
-		delcq  = n.delcq
-		broq   = n.brorq
+		addcfq   = n.addcfq
+		delcfq   = n.delcfq
+		delcwake = n.delcwake
+		broq     = n.brorq
 
 		listrq  = n.listrq
 		fcrq    = n.fcrq
@@ -184,8 +195,8 @@ func (n *nodeFeeds) handle() {
 		case pk = <-delq:
 			n.handleDelFeed(pk)
 
-		case c = <-delcq:
-			n.handleDelConn(c)
+		case <-delcwake:
+			n.drainDelConn()
 
 		//
 		// info api
@@ -390,12 +401,57 @@ func (n *nodeFeeds) handleBroadcastRoot(cr connRoot) {
 
 // (api)
 func (n *nodeFeeds) delConn(c *Conn) {
+	// Non-blocking: a dead connection's cleanup must not block the caller
+	// (Conn.run exit / Node.removeConn). Append to the unbounded queue and
+	// nudge the actor; if a wake is already pending the actor will drain
+	// the whole queue on the next pass. See the delcQueue field comment.
+	n.delcMu.Lock()
+	n.delcQueue = append(n.delcQueue, c)
+	n.delcMu.Unlock()
 
 	select {
-	case n.delcq <- c:
-	case <-n.closeq:
+	case n.delcwake <- struct{}{}:
+	default: // a wake is already queued
+	}
+}
+
+// (handler) drainDelConn removes a bounded batch of closed connections
+// from all feeds. It runs in the actor goroutine, so n.fs stays
+// single-threaded. The batch cap bounds how long this monopolizes the
+// actor (so root traffic isn't starved); if connections remain queued it
+// re-arms delcwake and the select loop picks it up again, fairly
+// interleaved with the other cases.
+func (n *nodeFeeds) drainDelConn() {
+	const batchMax = 256
+
+	n.delcMu.Lock()
+	nb := len(n.delcQueue)
+	if nb == 0 {
+		n.delcMu.Unlock()
+		return
+	}
+	if nb > batchMax {
+		nb = batchMax
+	}
+	batch := make([]*Conn, nb)
+	copy(batch, n.delcQueue[:nb])
+	n.delcQueue = n.delcQueue[nb:]
+	more := len(n.delcQueue) > 0
+	if !more {
+		n.delcQueue = nil // release the backing array once fully drained
+	}
+	n.delcMu.Unlock()
+
+	for _, c := range batch {
+		n.handleDelConn(c)
 	}
 
+	if more {
+		select {
+		case n.delcwake <- struct{}{}:
+		default:
+		}
+	}
 }
 
 // (handler)
