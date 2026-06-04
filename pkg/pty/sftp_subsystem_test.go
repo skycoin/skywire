@@ -25,8 +25,8 @@ func TestMux_BackwardsCompat_RejectsUnknownURI(t *testing.T) {
 	mux := hostMux{}
 
 	srvConn, cliConn := net.Pipe()
-	defer srvConn.Close()
-	defer cliConn.Close()
+	defer srvConn.Close() //nolint:errcheck,gosec
+	defer cliConn.Close() //nolint:errcheck,gosec
 
 	go func() {
 		_ = mux.ServeConn(context.Background(), srvConn) //nolint:errcheck
@@ -65,8 +65,8 @@ func TestMux_SftpURI_DispatchedToConnHandler(t *testing.T) {
 	}
 
 	srvConn, cliConn := net.Pipe()
-	defer srvConn.Close()
-	defer cliConn.Close()
+	defer srvConn.Close() //nolint:errcheck,gosec
+	defer cliConn.Close() //nolint:errcheck,gosec
 
 	go func() {
 		_ = mux.ServeConn(context.Background(), srvConn) //nolint:errcheck
