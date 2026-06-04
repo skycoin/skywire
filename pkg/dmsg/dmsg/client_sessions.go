@@ -151,12 +151,37 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		ce.log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
 	}
 
-	if !ce.setSession(ctx, dSes.SessionCommon) {
+	// Atomically: refuse-if-closed, dedupe, store, and wg.Add(1) under
+	// sessionsMx — pairs with Close which sets ce.closed under the same
+	// lock before wg.Wait. The Add must happen-before any subsequent
+	// Wait or sync.WaitGroup races (TestEnv race: Add at 159 vs Wait at
+	// client.go:510). The setSessionCallback is invoked outside the lock
+	// to match the previous setSession semantics.
+	ce.sessionsMx.Lock()
+	if ce.closed {
+		ce.sessionsMx.Unlock()
+		_ = dSes.Close() //nolint:errcheck
+		return ClientSession{}, errors.New("client closed")
+	}
+	if _, exists := ce.sessions[dSes.RemotePK()]; exists {
+		ce.sessionsMx.Unlock()
 		_ = dSes.Close() //nolint:errcheck
 		return ClientSession{}, errors.New("session already exists")
 	}
-
+	ce.sessions[dSes.RemotePK()] = dSes.SessionCommon
 	ce.wg.Add(1)
+	setSessCb := ce.setSessionCallback
+	ce.sessionsMx.Unlock()
+
+	if setSessCb != nil {
+		if err := setSessCb(ctx); err != nil {
+			ce.log.
+				WithField("func", "Client.dialSession").
+				WithError(err).
+				Warn("setSessionCallback returned non-nil error.")
+		}
+	}
+
 	go func() {
 		defer ce.wg.Done()
 		defer func() {
