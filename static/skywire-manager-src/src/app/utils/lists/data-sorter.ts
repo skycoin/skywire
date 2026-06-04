@@ -357,12 +357,14 @@ export class DataSorter {
     const propertiesList = this.sortByLabel && sortByLabelIfRequested && sortingColumn.labelProperties ?
       sortingColumn.labelProperties : sortingColumn.properties;
 
-    // Get the data from the property.
+    // Get the data from the property. Use optional chaining so a missing
+    // intermediate property leaves the value undefined instead of throwing
+    // "Cannot read properties of undefined".
     let aVal = a;
     let bVal = b;
     propertiesList.forEach(property => {
-      aVal = aVal[property];
-      bVal = bVal[property];
+      aVal = aVal == null ? undefined : aVal[property];
+      bVal = bVal == null ? undefined : bVal[property];
     });
 
     const sortingMode = this.sortByLabel && sortByLabelIfRequested ? SortingModes.Text : sortingColumn.sortingMode;
@@ -370,7 +372,11 @@ export class DataSorter {
     // Use the selected sorting method.
     let response = 0;
     if (sortingMode === SortingModes.Text) {
-      response = !this.sortReverse ? (aVal as string).localeCompare(bVal) : (bVal as string).localeCompare(aVal);
+      // Coerce missing values (undefined/null) to '' so a node lacking the
+      // sort property doesn't crash localeCompare; it just sorts as empty.
+      const aText = aVal == null ? '' : (aVal as string);
+      const bText = bVal == null ? '' : (bVal as string);
+      response = !this.sortReverse ? aText.localeCompare(bText) : bText.localeCompare(aText);
     } else if (sortingMode === SortingModes.NumberReversed) {
       response = !this.sortReverse ? bVal - aVal : aVal - bVal;
     } else if (sortingMode === SortingModes.Number) {
