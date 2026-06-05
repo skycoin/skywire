@@ -85,7 +85,24 @@ func aggregateDiskIO() (read, write uint64) {
 	return read, write
 }
 
+// rootDiskTitle builds the widget border label with the root filesystem's
+// percent-used + total size, so the -M (multiload) disk widget keeps the
+// size/%-used numbers the default per-partition DiskWidget shows. multiload-ng
+// likewise annotates the disk graph with usage. Falls back to the plain label
+// if the root usage can't be read.
+func rootDiskTitle() string {
+	label := tr.Value("widget.label.disk")
+	usage, err := psDisk.Usage("/")
+	if err != nil || usage.Total == 0 {
+		return label
+	}
+	totConv, totUnit := utils.ConvertBytes(usage.Total)
+	return fmt.Sprintf("%s  /  %.0f%% of %.0f%s", label, usage.UsedPercent, totConv, totUnit)
+}
+
 func (d *DiskIOWidget) update() {
+	d.Title = rootDiskTitle()
+
 	read, write := aggregateDiskIO()
 	if d.totalRead != 0 || d.totalWrite != 0 { // not the first sample
 		// compare before subtracting so a counter reset (read < previous) can't
