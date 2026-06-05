@@ -32,9 +32,7 @@ import (
 	cliskychat "github.com/skycoin/skywire/cmd/skywire-cli/commands/skychat"
 	cliskycoin "github.com/skycoin/skywire/cmd/skywire-cli/commands/skycoin"
 	cliskynet "github.com/skycoin/skywire/cmd/skywire-cli/commands/skynet"
-	clissh "github.com/skycoin/skywire/cmd/skywire-cli/commands/ssh"
-	clisshd "github.com/skycoin/skywire/cmd/skywire-cli/commands/sshd"
-	clisshfs "github.com/skycoin/skywire/cmd/skywire-cli/commands/sshfs"
+	clipty "github.com/skycoin/skywire/cmd/skywire-cli/commands/pty"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
 	clisvc "github.com/skycoin/skywire/cmd/skywire-cli/commands/svc"
 	clitp "github.com/skycoin/skywire/cmd/skywire-cli/commands/tp"
@@ -88,9 +86,7 @@ func init() {
 	cliskysocksc.RootCmd.GroupID = groupApps
 	cliskychat.RootCmd.GroupID = groupApps
 	cliskynet.RootCmd.GroupID = groupApps
-	clissh.RootCmd.GroupID = groupApps
-	clisshd.RootCmd.GroupID = groupApps
-	clisshfs.RootCmd.GroupID = groupApps
+	clipty.RootCmd.GroupID = groupApps
 
 	clitp.RootCmd.GroupID = groupNet
 	clitps.RootCmd.GroupID = groupNet
@@ -137,9 +133,7 @@ func init() {
 		climdisc.RootCmd,
 		clisd.RootCmd,
 		cliskychat.RootCmd,
-		clissh.RootCmd,
-		clisshd.RootCmd,
-		clisshfs.RootCmd,
+		clipty.RootCmd,
 		cliskycoin.RootCmd,
 		clicompletion.RootCmd,
 		clilog.RootCmd,

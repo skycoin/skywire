@@ -1,7 +1,7 @@
 //go:build linux
 
-// Package clisshfs cmd/skywire-cli/commands/sshfs/mount_linux.go —
-// FUSE mount + unmount for the sshfs subsystem. Maps each FUSE op
+// Package cliptyfs cmd/skywire-cli/commands/ptyfs/mount_linux.go —
+// FUSE mount + unmount for the ptyfs subsystem. Maps each FUSE op
 // onto the matching github.com/pkg/sftp call.
 //
 // Layering: dmsgpty-tcp noise stream  →  sftp.Client  →  sftpNode
@@ -11,9 +11,9 @@
 // seen by the host's user (no chroot, no per-mount allowlist) — same
 // gating model as the interactive pty subsystem. Symlinks are
 // followed via Readlink; xattrs / fifos / sockets / devices are not
-// exposed (the standard sshfs feature set; we can extend in a
+// exposed (the standard ptyfs feature set; we can extend in a
 // follow-up if a use case shows up).
-package clisshfs
+package cliptyfs
 
 import (
 	"context"
@@ -77,21 +77,21 @@ their own supervision).`,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dest := injectDefaultPort(args[0], sshfsDefPort)
+		dest := injectDefaultPort(args[0], ptyfsDefPort)
 		mountpoint := args[1]
 
-		rPK, addr, err := parseSSHFSDestination(dest)
+		rPK, addr, err := parsePTYFSDestination(dest)
 		if err != nil {
 			return err
 		}
-		myPK, mySK := resolveSSHFSIdentity(sshfsSK, !sshfsNoVisor)
+		myPK, mySK := resolvePTYFSIdentity(ptyfsSK, !ptyfsNoVisor)
 
 		// Pre-flight the mountpoint so the FUSE error doesn't bury the
 		// real cause ("does not exist" / "not a directory").
 		if st, err := os.Stat(mountpoint); err != nil {
-			return fmt.Errorf("sshfs: mountpoint %q: %w", mountpoint, err)
+			return fmt.Errorf("ptyfs: mountpoint %q: %w", mountpoint, err)
 		} else if !st.IsDir() {
-			return fmt.Errorf("sshfs: mountpoint %q is not a directory", mountpoint)
+			return fmt.Errorf("ptyfs: mountpoint %q is not a directory", mountpoint)
 		}
 
 		ctx, cancel := cmdutil.SignalContext(cmd.Context(), nil)
@@ -103,16 +103,16 @@ their own supervision).`,
 
 var umountCmd = &cobra.Command{
 	Use:                   "umount <mountpoint>",
-	Short:                 "Unmount a previously-mounted sshfs (calls fusermount -u)",
+	Short:                 "Unmount a previously-mounted pty fs (calls fusermount -u)",
 	Args:                  cobra.ExactArgs(1),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	RunE: func(_ *cobra.Command, args []string) error {
-		out, err := exec.Command("fusermount", "-u", args[0]).CombinedOutput() //nolint:gosec // fusermount is a fixed system binary; only the user-supplied mountpoint flows in as an arg, same trust model as cli ssh / cli sshfs mount
+		out, err := exec.Command("fusermount", "-u", args[0]).CombinedOutput() //nolint:gosec // fusermount is a fixed system binary; only the user-supplied mountpoint flows in as an arg, same trust model as cli pty shell / cli pty fs mount
 		if err != nil {
-			return fmt.Errorf("sshfs umount %s: %w (%s)", args[0], err, string(out))
+			return fmt.Errorf("ptyfs umount %s: %w (%s)", args[0], err, string(out))
 		}
 		return nil
 	},
@@ -138,7 +138,7 @@ func runMount(
 	sftpC, err := sftp.NewClientPipe(rwc, rwc)
 	if err != nil {
 		_ = rwc.Close() //nolint:errcheck,gosec
-		return fmt.Errorf("sshfs: sftp handshake: %w", err)
+		return fmt.Errorf("ptyfs: sftp handshake: %w", err)
 	}
 	defer sftpC.Close() //nolint:errcheck
 
@@ -151,7 +151,7 @@ func runMount(
 		EntryTimeout: &mountEntryTTL,
 	}
 	opts.MountOptions.Debug = mountDebug
-	opts.MountOptions.Name = "skywire-sshfs"
+	opts.MountOptions.Name = "skywire-ptyfs"
 	opts.MountOptions.FsName = rPK.String()
 	if mountReadOnly {
 		opts.MountOptions.Options = append(opts.MountOptions.Options, "ro")
@@ -159,9 +159,9 @@ func runMount(
 
 	server, err := fs.Mount(mountpoint, root, opts)
 	if err != nil {
-		return fmt.Errorf("sshfs: FUSE mount %s: %w", mountpoint, err)
+		return fmt.Errorf("ptyfs: FUSE mount %s: %w", mountpoint, err)
 	}
-	fmt.Fprintf(os.Stderr, "sshfs: mounted %s -> %s@%s (remote-root=%s)\n", mountpoint, rPK, addr, root.root.remoteRoot) //nolint:errcheck
+	fmt.Fprintf(os.Stderr, "ptyfs: mounted %s -> %s@%s (remote-root=%s)\n", mountpoint, rPK, addr, root.root.remoteRoot) //nolint:errcheck
 
 	// Either the caller's ctx fires (Ctrl-C) or the kernel unmounts
 	// out from under us (e.g. external `fusermount -u`). Wait for
@@ -185,7 +185,7 @@ func runMount(
 		return nil
 	}
 	if err := server.Unmount(); err != nil {
-		fmt.Fprintf(os.Stderr, "sshfs: unmount returned: %v (falling back to fusermount -u)\n", err) //nolint:errcheck
+		fmt.Fprintf(os.Stderr, "ptyfs: unmount returned: %v (falling back to fusermount -u)\n", err) //nolint:errcheck
 		_, _ = exec.Command("fusermount", "-u", mountpoint).CombinedOutput()                         //nolint:errcheck,gosec // fixed system binary, mountpoint is the operator-supplied path we just unmounted
 	}
 	return nil
