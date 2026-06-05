@@ -167,7 +167,7 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 		if c.Multiload {
 			// multiload-ng style: aggregate disk read/write throughput graph
 			// instead of the per-partition usage table.
-			d := widgets.NewDiskIOWidget()
+			d := widgets.NewDiskIOWidget(c.UpdateInterval)
 			if len(c.Colorscheme.Sparklines) > 0 {
 				d.Lines[0].LineColor = ui.Color(c.Colorscheme.Sparklines[0])
 			}
@@ -213,7 +213,7 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 			w = t
 		}
 	case "net":
-		n := widgets.NewNetWidget(c.NetInterface)
+		n := widgets.NewNetWidget(c.UpdateInterval, c.NetInterface)
 		n.Lines[0].LineColor = ui.Color(c.Colorscheme.Sparklines[0])
 		n.Lines[0].TitleColor = ui.Color(c.Colorscheme.BorderLabel)
 		n.Lines[1].LineColor = ui.Color(c.Colorscheme.Sparklines[1])
