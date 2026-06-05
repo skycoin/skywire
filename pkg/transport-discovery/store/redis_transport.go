@@ -83,6 +83,16 @@ func (s *redisStore) RegisterTransport(ctx context.Context, _ cipher.PubKey, sEn
 	}
 	pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
 
+	// Persist the real edge pair (35-day TTL, matching the daily bandwidth) so
+	// recoverBandwidthEdges can identify the counterparty after this transport
+	// expires — even when that edge never publishes its own bandwidth, which is
+	// the common case and the reason ~half of expired transports otherwise lose
+	// their second edge to the zero PK.
+	if entry.Edges[0] != (cipher.PubKey{}) && entry.Edges[1] != (cipher.PubKey{}) {
+		pipe.Set(ctx, s.bandwidthEdgesKey(entry.ID.String()),
+			entry.Edges[0].Hex()+","+entry.Edges[1].Hex(), bandwidthHistoryTTL)
+	}
+
 	if _, err := pipe.Exec(ctx); err != nil {
 		return err
 	}
@@ -149,6 +159,13 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, _ cipher.PubKe
 		pipe.SAdd(ctx, s.visorAllKey(), entry.Edges[0].Hex())
 		if entry.Edges[0] != entry.Edges[1] {
 			pipe.SAdd(ctx, s.visorAllKey(), entry.Edges[1].Hex())
+		}
+
+		// Persist the real edge pair (35-day TTL) so recoverBandwidthEdges keeps
+		// the counterparty identifiable after expiry — see RegisterTransport.
+		if entry.Edges[0] != (cipher.PubKey{}) && entry.Edges[1] != (cipher.PubKey{}) {
+			pipe.Set(ctx, s.bandwidthEdgesKey(entry.ID.String()),
+				entry.Edges[0].Hex()+","+entry.Edges[1].Hex(), bandwidthHistoryTTL)
 		}
 	}
 
