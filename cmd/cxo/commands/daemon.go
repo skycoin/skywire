@@ -13,6 +13,14 @@ import (
 
 var cfg = node.NewConfig()
 
+// skHex is the optional node identity secret key (hex). Empty = the node
+// generates a random ephemeral identity each start (the historical default),
+// which means its public key — and therefore the `<pk>@host:port` address other
+// nodes/utilities use to reach it — changes on every restart. Provide --sk to
+// pin a stable identity, matching the pk-as-identity convention the treestore-
+// backed CXO utilities (e.g. skychat) already use.
+var skHex string
+
 var daemonCmd = &cobra.Command{
 	Use:   "daemon",
 	Short: "Run CXO daemon",
@@ -24,6 +32,10 @@ func init() {
 	cfg.OnSubscribeRemote = acceptAllSubscriptions
 
 	f := daemonCmd.Flags()
+
+	// identity
+	f.StringVar(&skHex, "sk", "",
+		"node identity secret key (hex); empty = random ephemeral identity (PK changes each restart)")
 
 	// node
 	f.IntVar(&cfg.MaxConnections, "max-connections", cfg.MaxConnections,
@@ -69,11 +81,34 @@ func init() {
 }
 
 func runDaemon(_ *cobra.Command, _ []string) {
+	if skHex != "" {
+		sk, err := cipher.SecKeyFromHex(skHex)
+		if err != nil {
+			log.Fatalf("invalid --sk: %v", err)
+		}
+		cfg.SecKey = sk
+	}
+
 	n, err := node.NewNode(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer n.Close() //nolint:errcheck,gosec
+
+	// Surface the node's identity + how to reach it, so operators can use the
+	// pk-as-identity (<pk>@host:port) convention. Without --sk the PK below is
+	// random and changes on the next restart.
+	pk := n.ID()
+	log.Printf("CXO node identity (pk): %s", pk.Hex())
+	if skHex == "" {
+		log.Printf("CXO: ephemeral identity (random) — pass --sk <hex> to pin a stable pk across restarts")
+	}
+	if cfg.TCP.Listen != "" {
+		log.Printf("CXO reachable (tcp): %s@<host>%s", pk.Hex(), cfg.TCP.Listen)
+	}
+	if cfg.UDP.Listen != "" {
+		log.Printf("CXO reachable (udp): %s@<host>%s", pk.Hex(), cfg.UDP.Listen)
+	}
 
 	waitInterrupt()
 }
