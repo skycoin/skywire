@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/skycoin/skywire/pkg/router/policy/presets"
 )
 
 // Loader manages an Evaluator constructed from a config field.
@@ -80,6 +82,23 @@ func NewLoader(raw string, opts ...Option) (*Loader, error) {
 		// WithLogger explicitly if they want reload events
 		// logged.
 		_ = o
+	}
+
+	// preset:<name> — a curated policy embedded in the binary (no file, no
+	// compile). Resolves to inline Starlark source from the presets registry.
+	if name, ok := strings.CutPrefix(raw, "preset:"); ok {
+		src, found := presets.Source(name)
+		if !found {
+			return nil, fmt.Errorf("policy: unknown preset %q (available: %s)",
+				name, strings.Join(presets.Names(), ", "))
+		}
+		l.source = "<preset:" + name + ">"
+		eval, err := NewEvaluator(l.source, src, opts...)
+		if err != nil {
+			return nil, fmt.Errorf("policy: preset %q failed to load: %w", name, err)
+		}
+		l.current.Store(eval)
+		return l, nil
 	}
 
 	if strings.HasPrefix(raw, "@") {
