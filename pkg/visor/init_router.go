@@ -144,7 +144,10 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	relayCache := router.NewRSNRelayCache(logger)
-	rgDialer := router.NewSetupNodeDialerFull(embeddedRSN, relayCache, v.tpM)
+	if v.conf.Routing.ForceLegacyRouteSetup {
+		log.Warn("Routing.force_legacy_route_setup is enabled: route setup will dial each hop directly over dmsg (cascade disabled)")
+	}
+	rgDialer := router.NewSetupNodeDialerFull(embeddedRSN, relayCache, v.tpM, v.conf.Routing.ForceLegacyRouteSetup)
 
 	if order := types.ParsePreferenceOrder(v.conf.Routing.TransportPreference); len(order) > 0 {
 		types.SetPreferenceOrder(order)
