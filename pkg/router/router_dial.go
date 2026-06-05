@@ -149,7 +149,15 @@ func (r *router) DialRoutes(
 	r.forceLocalRoutesMu.Lock()
 	forceLocal := r.forceLocalRoutes
 	r.forceLocalRoutesMu.Unlock()
-	const maxRetries = 3
+	// maxRetries bounds how many candidate routes the fallback loop below
+	// walks before giving up. On each setup failure we exclude the failing
+	// intermediate and re-fetch a fresh route (a different intermediate), so
+	// a higher bound = more of the candidate set tried before the dial fails.
+	// Multihop setups over flaky intermediates need several tries to land a
+	// healthy path; combined with the tightened handshake/cascade timeouts
+	// (fast per-attempt failure) this stays well within a reasonable dial
+	// budget while greatly improving multihop establishment odds.
+	const maxRetries = 6
 	maxFetchAttempts := maxRetries
 	if forceLocal {
 		maxFetchAttempts = 1
