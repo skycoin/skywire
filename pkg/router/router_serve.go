@@ -79,7 +79,7 @@ func (r *router) Serve(ctx context.Context) error {
 	for pk := range r.trustedVisors {
 		trustedPKs = append(trustedPKs, pk)
 	}
-	ch := NewCascadeHandler(r.logger, r.conf.PubKey, trustedPKs, r.rt, r.tm)
+	ch := NewCascadeHandler(r.logger, r.conf.PubKey, trustedPKs, r.rt, r.tm, r.IntroduceRules)
 
 	// Source-driven cascade: the visor's route-group dialer owns a send-only
 	// CascadeBuilder that injects RSN-signed cascades down this visor's own
