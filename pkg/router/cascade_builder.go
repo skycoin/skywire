@@ -156,10 +156,15 @@ func (cb *CascadeBuilder) BuildReserveMessage(hops []routing.Hop, reserveN uint8
 
 // BuildInstallMessage constructs a nested install cascade from last hop to first.
 // rulesPerHop maps each visor PK to the rules that should be installed on it.
+// edgeDesc, when non-zero, is stamped onto the TERMINAL hop's layer (the
+// responding destination) so that hop calls router.IntroduceRules — creating a
+// route group — instead of only installing forwarding rules. Pass the zero
+// RouteDescriptor for a path whose terminal must not introduce a route group.
 func (cb *CascadeBuilder) BuildInstallMessage(
 	hops []routing.Hop,
 	sessionID uint64,
 	rulesPerHop map[cipher.PubKey][]routing.Rule,
+	edgeDesc routing.RouteDescriptor,
 ) ([]byte, error) {
 	if len(hops) == 0 {
 		return nil, fmt.Errorf("cascade: no hops")
@@ -197,6 +202,11 @@ func (cb *CascadeBuilder) BuildInstallMessage(
 			RuleData:  ruleData,
 			RelayTpID: targets[i].relayTpID,
 			Payload:   innerPayload,
+		}
+		// Mark the terminal hop (the responding destination) as a route-group
+		// edge so it calls IntroduceRules. Signed below along with the rest.
+		if i == len(targets)-1 {
+			msg.EdgeDesc = edgeDesc
 		}
 		if err := msg.Sign(targets[i].pk, cb.rsnSK); err != nil {
 			return nil, fmt.Errorf("cascade sign hop %d: %w", i, err)
