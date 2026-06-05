@@ -25,6 +25,12 @@ type CascadeHandler struct {
 	rt          routing.Table // for ReserveKeys and SaveRule
 	tm          *transport.Manager
 
+	// introduceRules creates/joins a route group from edge rules and notifies
+	// the launcher (router.IntroduceRules). Called when an Install-phase hop is
+	// marked as the responding destination edge (msg.IsEdge()). nil in contexts
+	// without a router (e.g. the RSN, tests) — those fall back to SaveRule.
+	introduceRules func(routing.EdgeRules) error
+
 	// acks tracks in-flight relay operations (and, on the source visor,
 	// source-driven sends) awaiting an ACK. Shared with the source-side
 	// CascadeBuilder so its injected cascades' ACKs are delivered here.
@@ -34,13 +40,17 @@ type CascadeHandler struct {
 	defaultTimeout time.Duration
 }
 
-// NewCascadeHandler creates a new cascade handler.
+// NewCascadeHandler creates a new cascade handler. introduceRules is the
+// router's IntroduceRules (creates a route group + notifies the launcher) and
+// may be nil where no router is available (RSN, tests) — edge installs then
+// fall back to plain rule saving.
 func NewCascadeHandler(
 	log *logging.Logger,
 	localPK cipher.PubKey,
 	trustedRSNPKs []cipher.PubKey,
 	rt routing.Table,
 	tm *transport.Manager,
+	introduceRules func(routing.EdgeRules) error,
 ) *CascadeHandler {
 	trusted := make(map[cipher.PubKey]struct{}, len(trustedRSNPKs))
 	for _, pk := range trustedRSNPKs {
@@ -52,6 +62,7 @@ func NewCascadeHandler(
 		trustedRSNs:    trusted,
 		rt:             rt,
 		tm:             tm,
+		introduceRules: introduceRules,
 		acks:           newAckRegistry(),
 		defaultTimeout: 10 * time.Second,
 	}
@@ -167,9 +178,23 @@ func (ch *CascadeHandler) processInstall(msg *routing.CascadeSetup) (*routing.Ca
 		return nil, fmt.Errorf("deserialize rules: %w", err)
 	}
 
-	for _, rule := range rules {
-		if err := ch.rt.SaveRule(rule); err != nil {
-			return nil, fmt.Errorf("save rule: %w", err)
+	if msg.IsEdge() && ch.introduceRules != nil {
+		// Responding destination edge: create a route group (and notify the
+		// launcher) rather than only installing forwarding rules — the
+		// cascade equivalent of the legacy AddEdgeRules RPC. RuleData carries
+		// [Forward, Reverse] (respEdge order); SerializeRules round-trips them.
+		if len(rules) != 2 {
+			return nil, fmt.Errorf("cascade edge install: expected 2 rules, got %d", len(rules))
+		}
+		edge := routing.EdgeRules{Desc: msg.EdgeDesc, Forward: rules[0], Reverse: rules[1]}
+		if err := ch.introduceRules(edge); err != nil {
+			return nil, fmt.Errorf("introduce edge rules: %w", err)
+		}
+	} else {
+		for _, rule := range rules {
+			if err := ch.rt.SaveRule(rule); err != nil {
+				return nil, fmt.Errorf("save rule: %w", err)
+			}
 		}
 	}
 

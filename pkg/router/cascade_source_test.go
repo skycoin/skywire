@@ -186,7 +186,7 @@ func TestAckRegistry_Dispatch(t *testing.T) {
 // registered handler that must deliver ACKs to the builder's sends).
 func TestSourceBuilderSharesHandlerRegistry(t *testing.T) {
 	localPK, _ := cipher.GenerateKeyPair()
-	ch := NewCascadeHandler(logging.MustGetLogger("test_handler"), localPK, nil, nil, nil)
+	ch := NewCascadeHandler(logging.MustGetLogger("test_handler"), localPK, nil, nil, nil, nil)
 	srcCB := NewSourceCascadeBuilder(logging.MustGetLogger("test_src"), nil, ch.AckRegistry())
 
 	// Builder and handler must observe the same registry instance.
@@ -247,7 +247,7 @@ func TestProcessLocalOrigin_TerminalReserve(t *testing.T) {
 	require.NoError(t, err)
 
 	ch := NewCascadeHandler(logging.MustGetLogger("test_src"), srcPK,
-		[]cipher.PubKey{rsnPK}, routing.NewTable(logging.MustGetLogger("test_rt")), nil)
+		[]cipher.PubKey{rsnPK}, routing.NewTable(logging.MustGetLogger("test_rt")), nil, nil)
 
 	ack, err := ch.ProcessLocalOrigin(payload)
 	require.NoError(t, err)
@@ -263,7 +263,7 @@ func TestProcessLocalOrigin_Rejections(t *testing.T) {
 	otherPK, _ := cipher.GenerateKeyPair()
 	rt := routing.NewTable(logging.MustGetLogger("test_rt"))
 	ch := NewCascadeHandler(logging.MustGetLogger("test_src"), srcPK,
-		[]cipher.PubKey{rsnPK}, rt, nil)
+		[]cipher.PubKey{rsnPK}, rt, nil, nil)
 
 	mk := func(target cipher.PubKey, rsn cipher.PubKey) []byte {
 		msg := &routing.CascadeSetup{
@@ -369,4 +369,55 @@ func TestSourceCascade_BothDirectionsSourceFirst_EndToEnd(t *testing.T) {
 	// Install cascades are also source-first.
 	assertInstallSourceFirst(t, fwdInst, srcFirst)
 	assertInstallSourceFirst(t, revInst, srcFirst)
+}
+
+// TestInstallCascade_EdgeMarkedOnDestinationOnly verifies the route-group fix:
+// the forward install cascade stamps EdgeDesc (= the forward route descriptor)
+// onto the TERMINAL hop only — the responding destination — so that hop calls
+// IntroduceRules (creates a route group); intermediaries and the reverse
+// cascade carry no edge marking. Without this, the destination only installs
+// forwarding rules, never creates a route group, and the source's noise
+// handshake over the route times out.
+func TestInstallCascade_EdgeMarkedOnDestinationOnly(t *testing.T) {
+	cb, _ := rsnBuilder(t)
+	biRt, pkA, pkB, pkC := buildTestBiRoute(t) // A -> B -> C
+	fwdRt, _ := biRt.ForwardAndReverse()
+
+	fwdSession, _, revSession, _, err := signReserveCascades(cb, biRt)
+	require.NoError(t, err)
+	fwdInst, revInst, _, err := signInstallCascades(cb, biRt, fwdSession, revSession,
+		[]routing.RouteID{10, 11, 12}, []routing.RouteID{20, 21, 22})
+	require.NoError(t, err)
+
+	srcFirst := []cipher.PubKey{pkA, pkB, pkC}
+
+	// Forward install: only the terminal (pkC = destination) is an edge.
+	payload := fwdInst
+	for i, target := range srcFirst {
+		cs, err := routing.UnmarshalCascadeSetup(payload)
+		require.NoErrorf(t, err, "fwd install layer %d", i)
+		require.NoError(t, cs.Verify(target))
+		if i == len(srcFirst)-1 {
+			require.True(t, cs.IsEdge(), "destination layer must be an edge")
+			require.Equal(t, fwdRt.Desc, cs.EdgeDesc, "edge desc must be the forward route descriptor")
+			rules, err := routing.DeserializeRules(cs.RuleData)
+			require.NoError(t, err)
+			require.Len(t, rules, 2, "edge carries exactly [Forward, Reverse]")
+		} else {
+			require.Falsef(t, cs.IsEdge(), "intermediary layer %d must not be an edge", i)
+			payload = cs.Payload
+		}
+	}
+
+	// Reverse install: no layer is an edge (route group already introduced).
+	payload = revInst
+	for i, target := range srcFirst {
+		cs, err := routing.UnmarshalCascadeSetup(payload)
+		require.NoErrorf(t, err, "rev install layer %d", i)
+		require.NoError(t, cs.Verify(target))
+		require.Falsef(t, cs.IsEdge(), "reverse install layer %d must not be an edge", i)
+		if i < len(srcFirst)-1 {
+			payload = cs.Payload
+		}
+	}
 }
