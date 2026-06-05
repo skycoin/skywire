@@ -25,6 +25,21 @@ func (s *redisStore) bandwidthDailyKey(tpID string, t time.Time) string {
 	return fmt.Sprintf("%s:bw:daily:%s:%s", serviceName, tpID, t.Format("2006-01-02"))
 }
 
+// bandwidthHistoryTTL matches the daily-bandwidth hash TTL (see
+// UpdateBandwidth). The persisted edge pair must outlive the ~5-min
+// registration TTL for as long as the bandwidth data it identifies, so an
+// expired transport's counterparty stays recoverable.
+const bandwidthHistoryTTL = 35 * 24 * time.Hour
+
+// bandwidthEdgesKey stores a transport's real edge pair ("<edge0hex>,<edge1hex>")
+// so recoverBandwidthEdges can identify BOTH edges of an expired transport even
+// when only one edge ever published bandwidth (the common case). Without it the
+// field-name reconstruction recovers only the reporting edge and the
+// counterparty collapses to the zero PK — uncreditable in the reward calc.
+func (s *redisStore) bandwidthEdgesKey(tpID string) string {
+	return fmt.Sprintf("%s:bw:edges:%s", serviceName, tpID)
+}
+
 // Visor-level bandwidth key generators
 func (s *redisStore) visorBandwidthDailyKey(pkHex string, t time.Time) string {
 	return fmt.Sprintf("%s:bw:visor:daily:%s:%s", serviceName, pkHex, t.Format("2006-01-02"))
