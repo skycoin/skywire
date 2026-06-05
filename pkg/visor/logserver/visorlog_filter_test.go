@@ -17,13 +17,13 @@ import (
 // asserts the expected verdict on a representative line shape.
 func TestPassesFilters(t *testing.T) {
 	cases := []struct {
-		name           string
-		line           string
-		minLevel       string // "" = no level filter
-		moduleRe       string // "" = no module filter
-		grepRe         string // "" = no grep filter
-		strictLevel    bool
-		wantPass       bool
+		name        string
+		line        string
+		minLevel    string // "" = no level filter
+		moduleRe    string // "" = no module filter
+		grepRe      string // "" = no grep filter
+		strictLevel bool
+		wantPass    bool
 	}{
 		{
 			name:     "no filters keeps everything",
