@@ -400,6 +400,10 @@ type Routing struct {
 
 	// PolicyPerDial is an optional operator-supplied routing
 	// policy. Accepts either:
+	//   "preset:<name>"          — a curated policy embedded in the
+	//                              binary, no file or compile needed
+	//                              (e.g. "preset:spread-bw"); presets
+	//                              live in pkg/router/policy/presets
 	//   "@/path/to/policy.star"  — Starlark, file-backed, hot-reloaded
 	//   "@/path/to/policy.wasm"  — WASM, file-backed, hot-reloaded
 	//   "<inline script source>" — small inline Starlark policies
