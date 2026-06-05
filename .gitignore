@@ -129,3 +129,7 @@ build-test/
 # Operator-local routing policies; checked-in examples live in docs/examples/routing-policies/
 /policies/
 skysocks-client
+
+# stray local artifacts (accidentally committed once; see chore/rm-stray-committed-files)
+/visor.log
+/hist/
