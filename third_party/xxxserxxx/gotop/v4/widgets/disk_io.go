@@ -26,7 +26,7 @@ type DiskIOWidget struct {
 	writeMetric    *metrics.Counter
 }
 
-func NewDiskIOWidget() *DiskIOWidget {
+func NewDiskIOWidget(updateInterval time.Duration) *DiskIOWidget {
 	read := ui.NewSparkline()
 	read.Data = []int{}
 	write := ui.NewSparkline()
@@ -34,7 +34,7 @@ func NewDiskIOWidget() *DiskIOWidget {
 
 	self := &DiskIOWidget{
 		SparklineGroup: ui.NewSparklineGroup(read, write),
-		updateInterval: time.Second,
+		updateInterval: updateInterval,
 	}
 	self.Title = tr.Value("widget.label.disk")
 
@@ -86,18 +86,20 @@ func aggregateDiskIO() (read, write uint64) {
 }
 
 // rootDiskTitle builds the widget border label with the root filesystem's
-// percent-used + total size, so the -M (multiload) disk widget keeps the
-// size/%-used numbers the default per-partition DiskWidget shows. multiload-ng
-// likewise annotates the disk graph with usage. Falls back to the plain label
-// if the root usage can't be read.
+// percent-used, free space, and total size, so the -M (multiload) disk widget
+// keeps the size/%-used numbers the default per-partition DiskWidget shows.
+// multiload-ng likewise annotates the disk graph with usage. Falls back to the
+// plain label if the root usage can't be read.
 func rootDiskTitle() string {
 	label := tr.Value("widget.label.disk")
 	usage, err := psDisk.Usage("/")
 	if err != nil || usage.Total == 0 {
 		return label
 	}
+	freeConv, freeUnit := utils.ConvertBytes(usage.Free)
 	totConv, totUnit := utils.ConvertBytes(usage.Total)
-	return fmt.Sprintf("%s  /  %.0f%% of %.0f%s", label, usage.UsedPercent, totConv, totUnit)
+	return fmt.Sprintf("%s  /  %.0f%% used · %.0f%s free of %.0f%s",
+		label, usage.UsedPercent, freeConv, freeUnit, totConv, totUnit)
 }
 
 func (d *DiskIOWidget) update() {

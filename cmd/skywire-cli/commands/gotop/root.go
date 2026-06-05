@@ -254,7 +254,7 @@ func runDirectGotop() error {
 	help.Resize(termWidth, termHeight)
 
 	// Build-version overlay in the top-right corner (what `skywire -b` prints).
-	versionLabel = w.NewVersionLabel(buildinfo.Version())
+	versionLabel = w.NewVersionLabel(skywireBuildVersion())
 	versionLabel.Reposition(termWidth)
 
 	ui.Render(grid)
@@ -457,7 +457,7 @@ func runGotopWithConfig(updateInterval time.Duration, remoteMode bool) error {
 	help.Resize(termWidth, termHeight)
 
 	// Build-version overlay in the top-right corner (what `skywire -b` prints).
-	versionLabel = w.NewVersionLabel(buildinfo.Version())
+	versionLabel = w.NewVersionLabel(skywireBuildVersion())
 	versionLabel.Reposition(termWidth)
 
 	ui.Render(grid)
@@ -506,6 +506,17 @@ func getLayout(conf gotop.Config) io.Reader {
 	default:
 		return strings.NewReader(defaultUI)
 	}
+}
+
+// skywireBuildVersion returns the full build version string that `skywire -b`
+// prints — runtime/debug BuildInfo.Main.Version, i.e. version-date-commit for
+// untagged builds (buildinfo.Version() strips that down to the bare tag).
+// Falls back to the short tag if the raw value is unavailable.
+func skywireBuildVersion() string {
+	if v := buildinfo.DBIVersion(); v != "" {
+		return v
+	}
+	return buildinfo.Version()
 }
 
 // renderVersionLabel draws the build-version overlay on top of the grid's
