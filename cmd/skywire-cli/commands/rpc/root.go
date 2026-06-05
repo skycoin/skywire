@@ -199,15 +199,19 @@ func viaClient(cmdFlags *pflag.FlagSet, via string, quiet bool) (visor.API, erro
 // rpc.Client running over the bridged conn. The visor opens the
 // underlying stream using its own identity — no separate CLI
 // keypair needed.
-func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint16, quiet bool) (visor.API, error) {
-	var remotePK cipher.PubKey
-	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
-		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf("invalid PK after scheme: %w", err))
-		}
-		return nil, err
-	}
-
+// BridgeConn dials the local visor's CLI RPC port, sends the bridge
+// magic + header, and returns the RAW bridged conn (no rpc.Client
+// wrapper). The visor opens the underlying stream to (remotePK, port)
+// using ITS OWN identity — for scheme=0 (dmsg) that is the visor's
+// authorized dmsg client, so a peer's dmsgpty whitelist sees the
+// visor's PK (e.g. the implicitly-allowed hypervisor) rather than a
+// throwaway CLI key, and there is no dmsg-discovery PK collision.
+//
+// Callers drive whatever protocol they like over the conn and own its
+// lifecycle. `cli pty fs mount <pk>` uses this for its via-visor path
+// (port = skyenv.DmsgPtyPort, then the sftp-subsystem handshake);
+// bridgeClient uses it for the `--via` RPC path (port = visor RPC).
+func BridgeConn(scheme byte, remotePK cipher.PubKey, port uint16) (net.Conn, error) {
 	localAddr := Addr
 	if localAddr == "" || strings.Contains(localAddr, "://") {
 		localAddr = DefaultRPCAddr
@@ -215,12 +219,7 @@ func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint1
 	const dialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", localAddr, dialTimeout)
 	if err != nil {
-		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf(
-				"--via needs the local visor RPC at %s; dial failed: %w",
-				localAddr, err))
-		}
-		return nil, err
+		return nil, fmt.Errorf("bridge needs the local visor RPC at %s; dial failed: %w", localAddr, err)
 	}
 
 	// Header: 6 magic + 1 scheme + 33 PK + 2 LE port = 42 bytes.
@@ -234,8 +233,24 @@ func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint1
 	binary.LittleEndian.PutUint16(header[40:42], port)
 	if _, err := conn.Write(header); err != nil {
 		conn.Close() //nolint:errcheck,gosec
+		return nil, fmt.Errorf("bridge: write header: %w", err)
+	}
+	return conn, nil
+}
+
+func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint16, quiet bool) (visor.API, error) {
+	var remotePK cipher.PubKey
+	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
 		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf("bridge: write header: %w", err))
+			internal.PrintError(cmdFlags, fmt.Errorf("invalid PK after scheme: %w", err))
+		}
+		return nil, err
+	}
+
+	conn, err := BridgeConn(scheme, remotePK, port)
+	if err != nil {
+		if !quiet {
+			internal.PrintError(cmdFlags, err)
 		}
 		return nil, err
 	}

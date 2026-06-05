@@ -107,8 +107,8 @@ type Pty struct {
 	// `:2022`, `0.0.0.0:2022`, `127.0.0.1:2022`, etc. Empty (default)
 	// disables it: only the dmsg-overlay entry point is served.
 	//
-	// This is the surface that `skywire cli ssh` (client) and
-	// `skywire cli sshd` (server) expose as the OpenSSH-equivalent
+	// This is the surface that `skywire cli pty shell` (client) and
+	// `skywire cli pty host` (server) expose as the OpenSSH-equivalent
 	// shell over skywire identity.
 	//
 	// Auth flow per accepted TCP connection:
@@ -123,7 +123,7 @@ type Pty struct {
 	//      over either transport.
 	//
 	// Motivation: operators who have direct IP reachability to a peer
-	// can `cli ssh <pk>@<host>:<port>` — no dmsg-discovery dependency,
+	// can `cli pty shell <pk>@<host>:<port>` — no dmsg-discovery dependency,
 	// lower latency for known endpoints, same PK-based auth model.
 	SshListen string `json:"ssh_listen,omitempty"`
 }
