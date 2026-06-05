@@ -49,11 +49,18 @@ type CascadeSetup struct {
 	SessionID uint64        // correlates reserve/install phases
 	RSNPK     cipher.PubKey // RSN that authorized this setup (33 bytes)
 	Nonce     uint64        // anti-replay, unique per session+hop
-	RSNSig    cipher.Sig    // signature over (Phase||SessionID||RSNPK||Nonce||TargetPK||RuleData)
+	RSNSig    cipher.Sig    // signature over (Phase||SessionID||RSNPK||Nonce||TargetPK||EdgeDesc||RuleData)
 	RuleData  []byte        // serialized routing rules for this hop (empty in Reserve phase)
 	ReserveN  uint8         // number of route IDs to reserve (Reserve phase only)
 	RelayTpID uuid.UUID     // transport to forward Payload on (zero = terminal hop)
-	Payload   []byte        // next hop's CascadeSetup (opaque to this hop)
+	// EdgeDesc, when non-zero, marks this hop as a route-group EDGE (the
+	// responding destination): the hop must call router.IntroduceRules with
+	// EdgeRules{Desc: EdgeDesc, Forward: RuleData[0], Reverse: RuleData[1]} so it
+	// creates/joins a route group (and notifies its launcher) rather than only
+	// installing forwarding rules. Zero on intermediaries (Install phase) and
+	// throughout the Reserve phase.
+	EdgeDesc RouteDescriptor
+	Payload  []byte // next hop's CascadeSetup (opaque to this hop)
 }
 
 // IsTerminal returns true if this is the last hop (no further relay).
@@ -61,7 +68,22 @@ func (cs *CascadeSetup) IsTerminal() bool {
 	return cs.RelayTpID == uuid.Nil
 }
 
+// IsEdge reports whether this Install-phase hop is a route-group edge (the
+// responding destination): EdgeDesc is set, so the hop must IntroduceRules.
+func (cs *CascadeSetup) IsEdge() bool {
+	return cs.EdgeDesc != RouteDescriptor{}
+}
+
 // SignablePayload returns the bytes that are signed/verified.
+//
+// EdgeDesc is deliberately NOT signed: it is appended as optional trailing wire
+// data so that un-upgraded intermediaries (which predate EdgeDesc) still parse
+// and verify the message and relay the inner payload opaquely — cascade then
+// works as soon as the SOURCE and DESTINATION are upgraded, regardless of
+// intermediary versions. EdgeDesc only selects the destination's local action
+// (IntroduceRules vs SaveRule); the rules it acts on ARE signed via RuleData, so
+// a tampered EdgeDesc can at worst break that one route (a relay can already do
+// that by dropping packets), never forge or escalate.
 func (cs *CascadeSetup) SignablePayload(targetPK cipher.PubKey) []byte {
 	// Phase(1) + SessionID(8) + RSNPK(33) + Nonce(8) + TargetPK(33) + RuleData
 	buf := make([]byte, 1+8+33+8+33+len(cs.RuleData))
@@ -99,11 +121,16 @@ func (cs *CascadeSetup) Verify(targetPK cipher.PubKey) error {
 // Wire format:
 //
 //	[Phase:1][SessionID:8][RSNPK:33][Nonce:8][RSNSig:65][ReserveN:1][RelayTpID:16]
-//	[RuleDataLen:2][RuleData:...][PayloadLen:2][Payload:...]
+//	[RuleDataLen:2][RuleData:...][PayloadLen:2][Payload:...][EdgeDesc:70]
+//
+// EdgeDesc is appended LAST as optional trailing data: nodes that predate it
+// parse up to Payload and ignore the trailing bytes (and relay the inner payload
+// — which carries the destination's own trailing EdgeDesc — opaquely), so only
+// the source and destination need to understand it.
 func (cs *CascadeSetup) Marshal() ([]byte, error) {
 	ruleLen := len(cs.RuleData)
 	payloadLen := len(cs.Payload)
-	totalLen := cascadeFixedSize + 2 + ruleLen + 2 + payloadLen
+	totalLen := cascadeFixedSize + 2 + ruleLen + 2 + payloadLen + routeDescriptorSize
 
 	buf := make([]byte, totalLen)
 	off := 0
@@ -131,6 +158,9 @@ func (cs *CascadeSetup) Marshal() ([]byte, error) {
 	binary.BigEndian.PutUint16(buf[off:], uint16(payloadLen)) //nolint:gosec
 	off += 2
 	copy(buf[off:], cs.Payload)
+	off += payloadLen
+
+	copy(buf[off:], cs.EdgeDesc[:])
 
 	return buf, nil
 }
@@ -182,6 +212,13 @@ func UnmarshalCascadeSetup(data []byte) (*CascadeSetup, error) {
 	}
 	cs.Payload = make([]byte, payloadLen)
 	copy(cs.Payload, data[off:off+payloadLen])
+	off += payloadLen
+
+	// EdgeDesc is optional trailing data (see Marshal). Absent on messages from
+	// nodes that predate it — leave it zero (IsEdge()==false) in that case.
+	if off+routeDescriptorSize <= len(data) {
+		copy(cs.EdgeDesc[:], data[off:off+routeDescriptorSize])
+	}
 
 	return cs, nil
 }
