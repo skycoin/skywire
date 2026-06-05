@@ -1275,7 +1275,7 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 		// Direct-TCP entry point — operator opt-in via
 		// Dmsgpty.SshListen. XK-noise handshake gates each accept;
 		// the whitelist is shared with the dmsg path. Exposed at
-		// CLI as `skywire cli ssh` / `skywire cli sshd`.
+		// CLI as `skywire cli pty shell` / `skywire cli pty host`.
 		if sshAddr != "" {
 			wg.Add(1)
 			go func() {

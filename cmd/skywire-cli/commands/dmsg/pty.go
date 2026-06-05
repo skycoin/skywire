@@ -68,7 +68,7 @@ var ptyTCPViaRE = regexp.MustCompile(`^tcp://([a-f0-9]{66})@(.+)$`)
 
 func init() {
 	// pty command
-	ptyCmd.AddCommand(
+	PtyCmd.AddCommand(
 		ptyListCmd,
 		ptyStartCmd,
 		ptyExecCmd,
@@ -114,8 +114,8 @@ func init() {
 	ptyURLCmd.Flags().StringVarP(&ptyPK, "visor", "v", "", "public key of visor to connect to")
 }
 
-// ptyCmd is the command for dmsgpty functionality
-var ptyCmd = &cobra.Command{
+// PtyCmd is the command for dmsgpty functionality
+var PtyCmd = &cobra.Command{
 	Use:   "pty",
 	Short: "Interact with remote visors",
 	Long:  "Commands for interacting with remote visors via dmsgpty",
@@ -174,7 +174,7 @@ var ptyExecCmd = &cobra.Command{
 	Short: "Run a one-shot command on a remote visor (no TTY)",
 	Long: `Runs a single command on the remote visor identified by <pk>, captures
 stdout/stderr/exit-code, and prints them locally. Same dmsgpty whitelist
-gates this as the interactive shell command (` + "`cli dmsg pty start`" + `).
+gates this as the interactive shell command (` + "`cli pty start`" + `).
 
 Use when scripting against a remote visor — the interactive shell needs
 a real TTY which pipes/CI runners don't have. Output is captured in full
@@ -183,9 +183,9 @@ that produce bounded output (status / config / log slices) over streaming
 ones — use ` + "`start`" + ` for those.
 
 Examples:
-  skywire cli dmsg pty exec <pk> -- systemctl status skywire-update.timer
-  skywire cli dmsg pty exec <pk> --timeout 10s -- journalctl -u skywire --since '5 min ago'
-  skywire cli dmsg pty exec <pk> -- /bin/sh -c 'cat /etc/systemd/system/skywire-update.service'
+  skywire cli pty exec <pk> -- systemctl status skywire-update.timer
+  skywire cli pty exec <pk> --timeout 10s -- journalctl -u skywire --since '5 min ago'
+  skywire cli pty exec <pk> -- /bin/sh -c 'cat /etc/systemd/system/skywire-update.service'
 
 The local CLI exit code mirrors the remote command's exit code (0 on
 success, the remote's exit code on non-zero exit, 124 on timeout, 1 on

@@ -76,6 +76,24 @@ func DialSftpDmsg(
 	return stream, nil
 }
 
+// OpenSftpConn performs the dmsgpty sftp-subsystem handshake on a
+// stream that is ALREADY connected to a remote dmsgpty host — e.g. a
+// conn bridged through the local visor's authorized dmsg client (the
+// `cli pty fs mount` via-visor path). The dial + whitelist auth has
+// happened on the visor side using its own identity; here we only run
+// the mux handshake (writeRequest(SftpURI) + readResponse). On success
+// the returned conn is positioned at the start of the sftp byte
+// protocol — pass to sftp.NewClientPipe. The caller owns conn.
+func OpenSftpConn(conn net.Conn) (io.ReadWriteCloser, error) {
+	if conn == nil {
+		return nil, fmt.Errorf("dmsgpty-sftp: nil conn")
+	}
+	if err := openSftpSubsystem(conn); err != nil {
+		return nil, err
+	}
+	return conn, nil
+}
+
 // openSftpSubsystem performs the dmsgpty mux handshake selecting the
 // sftp subsystem. The conn is positioned for sftp protocol bytes on
 // successful return.
