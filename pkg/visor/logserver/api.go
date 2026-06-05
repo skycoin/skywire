@@ -197,13 +197,37 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 	})
 
 	// Serve visor log file (auth'd) — written when visor runs with -s/--save-log
+	//
+	// With no query params: behaves like a static file dump (c.File).
+	//
+	// Query params (any set → switches to streaming filtered mode):
+	//   ?min-level=<lvl>    keep only lines >= <lvl> (trace<debug<info<warn<error<fatal<panic)
+	//   ?module=<regex>     keep only lines whose `[module]` tag matches the regex
+	//   ?grep=<regex>       keep only lines whose full text matches the regex
+	//   ?since-line=<N>     skip the first N lines (1-based, useful for resume after disconnect)
+	//   ?limit=<N>          stop after writing N matching lines
+	//   ?follow=1           keep reading after EOF (tail -f), polling for appends until ctx fires
+	//
+	// Filtering happens server-side so callers over dmsg/skynet don't burn bandwidth
+	// pulling everything just to grep locally. The standard line format is
+	//   `[<iso8601>] LEVEL [module:...]: msg key=val…`
+	// — anything that doesn't match this shape is passed through unchanged when
+	// no level/module filters apply, and conservatively dropped when they do (so
+	// stray lines from libraries that don't follow the format don't sneak past
+	// a strict --min-level filter).
 	authRoute.GET("/visor.log", func(c *gin.Context) {
 		logFile := filepath.Join(localPath, "visor.log")
 		if _, err := os.Stat(logFile); err != nil {
 			c.String(http.StatusNotFound, "visor.log not found (start visor with -s flag)")
 			return
 		}
-		c.File(logFile)
+		q := c.Request.URL.Query()
+		if q.Get("min-level") == "" && q.Get("module") == "" && q.Get("grep") == "" &&
+			q.Get("since-line") == "" && q.Get("limit") == "" && q.Get("follow") == "" {
+			c.File(logFile)
+			return
+		}
+		streamFilteredVisorLog(c, logFile, q)
 	})
 
 	// pprof endpoints (auth'd) — runtime profiling
