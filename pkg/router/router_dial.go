@@ -525,7 +525,10 @@ func (r *router) PingRoute(
 	r.forceLocalRoutesMu.Lock()
 	pingForceLocal := r.forceLocalRoutes
 	r.forceLocalRoutesMu.Unlock()
-	const maxRetries = 3
+	// Match DialRoutes: walk up to 6 candidate intermediates (excluding the
+	// dead route's hops each time) before giving up, so a flaky intermediate
+	// that ACKs install but won't forward doesn't fail the whole probe.
+	const maxRetries = 6
 	pingMaxFetch := maxRetries
 	if pingForceLocal {
 		pingMaxFetch = 1
@@ -559,6 +562,14 @@ func (r *router) PingRoute(
 				opts = appendExcludeIntermediate(opts, failedPK)
 				log.WithError(err).Warnf("Ping route setup failed on intermediate %s (attempt %d/%d); excluding from next route-finder pick",
 					failedPK, attempt, maxRetries)
+			} else {
+				// Handshake/data-plane failure: the error names the dst, not
+				// the intermediate that ACKed install but won't forward. Exclude
+				// the whole dead route's intermediates so the retry diverges —
+				// same rationale as DialRoutes' saveRouteGroupRules retry.
+				for _, ipk := range intermediatePKsOfPath(forwardPath, lPK, rPK) {
+					opts = appendExcludeIntermediate(opts, ipk)
+				}
 			}
 			if attempt < maxRetries {
 				log.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
