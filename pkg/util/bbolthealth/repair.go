@@ -21,9 +21,9 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-// RepairIfCorrupt opens the bbolt file at path (if it exists), runs
-// bbolt's built-in tx.Check() consistency walk, and — if any problem
-// is found — moves the file aside with a timestamped
+// RepairIfCorrupt opens the bbolt file at path (if it exists), runs a
+// synchronous integrity walk of every reachable page, and — if any
+// problem is found — moves the file aside with a timestamped
 // ".corrupt.<unix>" suffix so the subsequent bolt.Open creates a
 // fresh, empty file.
 //
@@ -45,12 +45,14 @@ import (
 // commit-time panics live. The handle is closed immediately so the
 // caller's real open isn't blocked.
 //
-// Both bolt.Open and tx.Check() can themselves panic on certain
-// freelist inconsistencies (e.g. "invalid freelist page: N, page
-// type is leaf" panics from freelist.read during Open). The probe
-// wraps both calls in recover() so a panic during the integrity
-// check is treated as proof of corruption and the file is moved
-// aside, rather than propagating up to crash-loop the caller.
+// Both bolt.Open and the synchronous integrity walk can panic on
+// corruption (freelist inconsistencies like "invalid freelist page:
+// N, page type is leaf" during Open; FastCheck page assertions during
+// the walk). The probe wraps both in recover() so a panic during the
+// integrity check is treated as proof of corruption and the file is
+// moved aside, rather than propagating up to crash-loop the caller.
+// (bbolt's own tx.Check() is unusable here: it scans in an internal
+// goroutine whose panic recover() cannot reach — see probeIntegrity.)
 //
 // Callers that want operator visibility into the repair should
 // snapshot the directory's ".corrupt.<unix>" entries before calling
@@ -69,14 +71,15 @@ func RepairIfCorrupt(path string) error {
 	return nil
 }
 
-// probeIntegrity opens the file, runs tx.Check(), and closes the
-// handle. Returns nil on a clean file. Returns an error describing
-// the failure on any of: open error, integrity-check problem, or
-// panic from inside Open / Check (which bbolt can throw on certain
-// freelist inconsistencies). The recover() block is the load-
-// bearing piece — without it, the freelist-corruption panic in
-// freelist.read would propagate to the caller and crash-loop the
-// visor that bbolthealth was meant to protect.
+// probeIntegrity opens the file, walks every reachable page
+// synchronously, and closes the handle. Returns nil on a clean file.
+// Returns an error describing the failure on any of: open error, walk
+// error, or panic from inside Open / the walk (which bbolt throws on
+// freelist inconsistencies and on FastCheck page-header assertions).
+// The recover() block is the load-bearing piece — and the walk MUST be
+// synchronous (not tx.Check(), which panics in its own goroutine) so
+// that recover() actually catches the corruption panic instead of the
+// visor crash-looping.
 func probeIntegrity(path string) (probeErr error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -102,27 +105,52 @@ func probeIntegrity(path string) (probeErr error) {
 		}
 	}()
 
-	// Collect up to a few problems for diagnostic context. Don't
-	// keep all of them — bbolt's Check can emit hundreds on a badly
-	// damaged file, and the reason field only carries the first one
-	// to the rename-aside message anyway.
-	var problems []error
-	const maxProblemsKept = 5
-	viewErr := db.View(func(tx *bolt.Tx) error {
-		for e := range tx.Check() {
-			if len(problems) < maxProblemsKept {
-				problems = append(problems, e)
-			}
+	// Integrity probe: a SYNCHRONOUS full walk of every reachable b-tree page.
+	//
+	// We deliberately do NOT use bbolt's tx.Check(): it runs its consistency
+	// scan in an internal goroutine (`go tx.check(ch)`), so a page-assertion
+	// panic — e.g. bbolt v1.4.x FastCheck "Page expected to be: N, but self
+	// identifies as 0" on an SD-card-corrupted file — fires in THAT goroutine,
+	// which no caller-side recover() can reach. That defeated probeIntegrity's
+	// recover() entirely and crash-looped the visor (the very thing
+	// bbolthealth exists to prevent).
+	//
+	// Instead we cursor-walk all buckets and keys ourselves. Every page access
+	// goes through tx.page(), which runs the same FastCheck — but now
+	// synchronously, in THIS goroutine, where the deferred recover() above
+	// converts the panic into a corruption verdict and moves the file aside.
+	// Combined with the writable Open above (which surfaces freelist
+	// corruption synchronously), this covers the corruption modes that
+	// actually crash a visor at access time.
+	if viewErr := db.View(walkAllPages); viewErr != nil {
+		return fmt.Errorf("integrity walk: %w", viewErr)
+	}
+	return nil
+}
+
+// walkAllPages forces synchronous access to every reachable b-tree page by
+// cursoring over all buckets (recursing into nested buckets) and all keys. A
+// corrupt page panics inside tx.page()'s FastCheck during this walk — in the
+// caller's goroutine, so probeIntegrity's recover() catches it.
+func walkAllPages(tx *bolt.Tx) error {
+	return tx.ForEach(func(_ []byte, b *bolt.Bucket) error {
+		return walkBucket(b)
+	})
+}
+
+// walkBucket cursors over every key in b, recursing into nested buckets so the
+// whole sub-tree's pages are touched.
+func walkBucket(b *bolt.Bucket) error {
+	return b.ForEach(func(k, v []byte) error {
+		if v != nil {
+			return nil // plain key — its leaf page was already read
+		}
+		// A nil value marks a nested bucket; descend to touch its pages.
+		if sub := b.Bucket(k); sub != nil {
+			return walkBucket(sub)
 		}
 		return nil
 	})
-	if viewErr != nil {
-		return fmt.Errorf("check view: %w", viewErr)
-	}
-	if len(problems) > 0 {
-		return fmt.Errorf("bbolt check found %d problems (first: %v)", len(problems), problems[0])
-	}
-	return nil
 }
 
 // moveCorruptAside renames the bbolt file at path to
