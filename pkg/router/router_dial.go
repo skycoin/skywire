@@ -317,15 +317,22 @@ func (r *router) DialRoutes(
 			})
 		}
 
-		// Rotation hook (RFC #2882 — periodic-tick / bandwidth-
-		// spreading). The dial-side DialHook may also implement
-		// RotationHook; when it does AND the policy returned
-		// RotationIntervalSeconds > 0, the route group's rotation
-		// servicePacketLoop fires the hook periodically. The
-		// applyAdd callback closes over the current dial context
-		// and forwardDesc so the rotation can add aux legs that
-		// match the original dial shape.
-		if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+		// Add-leg callback for any multiplexed dial. It closes over the
+		// dial context + forwardDesc so a replacement leg matches the
+		// original dial shape (same peer, ports, min-hops, app). Used by
+		// BOTH the route group's self-healing (restore the degree in the
+		// background when a leg dies) AND the periodic rotation hook
+		// (policy on_tick / bandwidth-spreading, RFC #2882).
+		muxTarget := 1
+		if opts != nil {
+			if eff := opts.EffectiveMuxRoutes(true); eff > muxTarget {
+				muxTarget = eff
+			}
+			if eff := opts.EffectiveMuxRoutes(false); eff > muxTarget {
+				muxTarget = eff
+			}
+		}
+		if muxTarget > 1 {
 			optsCopy := *opts
 			fwdDescCopy := forwardDesc
 			nrgCapture := nrg
@@ -340,11 +347,27 @@ func (r *router) DialRoutes(
 					}
 				}
 				if err := r.addOneAuxForwardLeg(addCtx, nrgCapture, &optsCopy, fwdDescCopy, excludePKs); err != nil {
-					r.logger.WithError(err).Debug("Rotation add-leg failed; route group keeps current leg set")
+					r.logger.WithError(err).Debug("Mux add-leg failed; route group keeps current leg set")
 				}
 			}
-			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
-			nrg.rg.SetRotation(rh, applyAdd, interval)
+			// Self-healing: any leg death triggers a background replacement
+			// dial to restore the requested degree, while surviving legs
+			// carry the traffic. General to every mux dial, not just ones
+			// with a rotation policy.
+			nrg.rg.SetSelfHeal(applyAdd, muxTarget)
+
+			// Top up an initial shortfall: establishMuxRoutes sets up aux
+			// legs best-effort, so a flaky intermediate can leave the group
+			// below the requested degree at dial time. Heal it now in the
+			// background (same mechanism as runtime leg death) — the dial
+			// still returns immediately on the legs that did establish.
+			nrg.rg.maybeSelfHeal()
+
+			// Periodic rotation (policy on_tick) reuses the same callback.
+			if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+				interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
+				nrg.rg.SetRotation(rh, applyAdd, interval)
+			}
 		}
 
 		// NOTE: no MinHops restore needed — baseMinHops is a local var now,
