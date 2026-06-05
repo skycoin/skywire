@@ -138,6 +138,16 @@ func notifyInviteSSE(peerPK cipher.PubKey, kind string) {
 		return
 	}
 	hub.broadcast(string(body))
+	// Also surface on the structured /events stream's "pair" channel,
+	// keeping the legacy /sse control-envelope above untouched.
+	hub.recordEvent(chatEvent{
+		ID:        newEventID(),
+		Channel:   channelPair,
+		Transport: "pair",
+		Dir:       "in",
+		From:      peerPK.Hex(),
+		Text:      kind, // received | accepted | declined
+	})
 }
 
 // connectPairRPC dials the local visor's RPC and stores the client
@@ -210,6 +220,14 @@ func startPairPoller(parent context.Context) {
 					continue
 				}
 				hub.broadcast(string(body))
+				hub.recordEvent(chatEvent{
+					ID:        newEventID(),
+					Channel:   channelPair,
+					Transport: "pair",
+					Dir:       "in",
+					From:      m.PeerPK.Hex(),
+					Text:      m.Text,
+				})
 			}
 		}
 	}()

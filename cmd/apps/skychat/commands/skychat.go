@@ -458,12 +458,75 @@ type sseHub struct {
 	replay     []string
 	replayHead int
 	replayLen  int
+
+	// Structured event stream backing GET /events (cli skychat events).
+	// Each published event gets a monotonic seq; the ring keeps the last
+	// eventRingSize events (also bounded by eventTTL on replay) so a
+	// reconnecting consumer resumes from its last seq via ?since=. Separate
+	// from the legacy string replay above so /sse stays byte-for-byte
+	// unchanged.
+	seq        uint64
+	events     []chatEvent
+	eventsHead int
+	eventsLen  int
+	eventSubs  map[*eventSub]struct{}
+}
+
+// chatEvent is the structured form of a chat event, streamed as NDJSON by
+// GET /events. Agreed schema (Beta+Gamma consensus): seq cursor + id-keyed
+// dedupe, channel taxonomy, in/out direction.
+type chatEvent struct {
+	Seq       uint64    `json:"seq"`
+	ID        string    `json:"id"`
+	TS        time.Time `json:"ts"`
+	Channel   string    `json:"channel"`   // dm|group|pair|system
+	Transport string    `json:"transport"` // skynet|dmsg|cxo|tcp-direct
+	Dir       string    `json:"dir"`       // in|out
+	From      string    `json:"from,omitempty"`
+	To        string    `json:"to,omitempty"`
+	GroupID   string    `json:"group_id,omitempty"`
+	Text      string    `json:"text"`
+	ReplyToID string    `json:"reply_to_id,omitempty"`
+	Len       int       `json:"len"`
+}
+
+// eventSub is a /events subscriber: a buffered channel plus the set of
+// channels it wants (nil = the default dm+group+pair set).
+type eventSub struct {
+	ch       chan chatEvent
+	channels map[string]bool
+}
+
+const (
+	// eventRingSize bounds the structured-event replay ring.
+	eventRingSize = 10000
+	// eventTTL bounds replay age — events older than this are not replayed
+	// even if still in the ring (the 24h window from the agreed design).
+	eventTTL = 24 * time.Hour
+	// eventSubBufSize is the per-/events-client buffer depth.
+	eventSubBufSize = 256
+)
+
+// Channel taxonomy.
+const (
+	channelDM     = "dm"
+	channelGroup  = "group"
+	channelPair   = "pair"
+	channelSystem = "system"
+)
+
+// defaultEventChannels is what `--channel all` (or no filter) resolves to:
+// dm+group+pair. "system" is opt-in only.
+func defaultEventChannels() map[string]bool {
+	return map[string]bool{channelDM: true, channelGroup: true, channelPair: true}
 }
 
 func newSSEHub() *sseHub {
 	return &sseHub{
-		clients: make(map[chan string]struct{}),
-		replay:  make([]string, sseReplayBufSize),
+		clients:   make(map[chan string]struct{}),
+		replay:    make([]string, sseReplayBufSize),
+		events:    make([]chatEvent, eventRingSize),
+		eventSubs: make(map[*eventSub]struct{}),
 	}
 }
 
@@ -561,6 +624,162 @@ func (h *sseHub) broadcast(msg string) {
 		sseDropCount += drops
 		counterMu.Unlock()
 	}
+}
+
+// recordEvent assigns the monotonic seq + timestamp, stores the event in the
+// structured ring, and fans it out to /events subscribers (channel-filtered).
+// It does NOT touch the legacy /sse stream — callers that also want /sse
+// either use publishEvent (chat messages) or keep their own hub.broadcast call
+// (pairing, which has its own /sse control-event shape).
+func (h *sseHub) recordEvent(ev chatEvent) {
+	if ev.Len == 0 {
+		ev.Len = len(ev.Text)
+	}
+	if ev.Channel == "" {
+		ev.Channel = channelDM
+	}
+
+	h.mu.Lock()
+	h.seq++
+	ev.Seq = h.seq
+	if ev.TS.IsZero() {
+		ev.TS = time.Now().UTC()
+	}
+	h.events[h.eventsHead] = ev
+	h.eventsHead = (h.eventsHead + 1) % len(h.events)
+	if h.eventsLen < len(h.events) {
+		h.eventsLen++
+	}
+	for sub := range h.eventSubs {
+		if !sub.channels[ev.Channel] {
+			continue
+		}
+		select {
+		case sub.ch <- ev:
+		default: // slow consumer — recoverable via ?since= on reconnect
+		}
+	}
+	h.mu.Unlock()
+}
+
+// publishEvent records a chat-message event for /events AND renders the legacy
+// SSE JSON into the unchanged /sse path — one call reaches both surfaces in
+// order. Use for chat messages (dm/group); pairing uses recordEvent + its own
+// broadcast.
+func (h *sseHub) publishEvent(ev chatEvent) {
+	if ev.Len == 0 {
+		ev.Len = len(ev.Text)
+	}
+	if ev.Channel == "" {
+		ev.Channel = channelDM
+	}
+	h.recordEvent(ev)
+	h.broadcast(renderLegacySSE(ev))
+}
+
+// renderLegacySSE renders a chatEvent into the historical /sse JSON shape
+// {sender, message, network, dir, id, len, [to]} so existing /sse consumers
+// (incl. `cli skychat listen`) are unaffected by the richer /events schema.
+func renderLegacySSE(ev chatEvent) string {
+	m := map[string]interface{}{
+		"sender":  ev.From,
+		"message": ev.Text,
+		"network": ev.Transport,
+		"dir":     ev.Dir,
+		"id":      ev.ID,
+		"len":     ev.Len,
+	}
+	if ev.To != "" {
+		m["to"] = ev.To
+	}
+	b, err := json.Marshal(m)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
+}
+
+// subscribeEvents registers a /events subscriber that wants the given channels
+// (nil = the default dm+group+pair set) and replays buffered events with
+// seq > since (within eventTTL) before live-following. Returns the channel and
+// an unsubscribe func the caller MUST invoke.
+func (h *sseHub) subscribeEvents(channels map[string]bool, since uint64) (<-chan chatEvent, func()) {
+	// Resolve nil ("default") to the dm+group+pair set so system stays opt-in
+	// and the fan-out/replay filters can assume a concrete set.
+	if channels == nil {
+		channels = defaultEventChannels()
+	}
+	sub := &eventSub{ch: make(chan chatEvent, eventSubBufSize), channels: channels}
+	h.mu.Lock()
+	if h.eventsLen > 0 {
+		start := (h.eventsHead - h.eventsLen + len(h.events)) % len(h.events)
+	replay:
+		for i := 0; i < h.eventsLen; i++ {
+			ev := h.events[(start+i)%len(h.events)]
+			if ev.Seq <= since {
+				continue
+			}
+			if !channels[ev.Channel] {
+				continue
+			}
+			if time.Since(ev.TS) > eventTTL {
+				continue
+			}
+			select {
+			case sub.ch <- ev:
+			default:
+				break replay // buffer full; remainder recoverable via ?since=
+			}
+		}
+	}
+	h.eventSubs[sub] = struct{}{}
+	h.mu.Unlock()
+	return sub.ch, func() {
+		h.mu.Lock()
+		if _, ok := h.eventSubs[sub]; ok {
+			delete(h.eventSubs, sub)
+			close(sub.ch)
+		}
+		h.mu.Unlock()
+	}
+}
+
+// parseEventChannels turns a comma-separated channel list into a set. Empty or
+// "all" → the default dm+group+pair set. "all" combined with extras (e.g.
+// "all,system") expands "all" then unions the extras. Unknown tokens are
+// ignored. Returns nil only for the pure-default case so callers can treat nil
+// as "default set" cheaply.
+func parseEventChannels(csv string) map[string]bool {
+	csv = strings.TrimSpace(csv)
+	if csv == "" {
+		return nil
+	}
+	set := make(map[string]bool)
+	onlyAll := true
+	for _, tok := range strings.Split(csv, ",") {
+		switch strings.ToLower(strings.TrimSpace(tok)) {
+		case "", "all":
+			for c := range defaultEventChannels() {
+				set[c] = true
+			}
+		case channelDM:
+			set[channelDM] = true
+			onlyAll = false
+		case channelGroup:
+			set[channelGroup] = true
+			onlyAll = false
+		case channelPair:
+			set[channelPair] = true
+			onlyAll = false
+		case channelSystem:
+			set[channelSystem] = true
+			onlyAll = false
+		}
+	}
+	if len(set) == 0 || onlyAll {
+		return nil // pure default
+	}
+	return set
 }
 
 func init() {
@@ -801,6 +1020,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.Handle("/", requireAuth(http.FileServer(getFileSystem())))
 	mux.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
 	mux.HandleFunc("/sse", requireAuthFunc(sseHandler))
+	mux.HandleFunc("/events", requireAuthFunc(eventsHandler))
 	mux.HandleFunc("/history", requireAuthFunc(historyHandler))
 	mux.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
@@ -982,18 +1202,14 @@ func handleConn(conn *framedConn) {
 		// so consumers can already use it for log correlation / dedup.
 		// "len" is the body byte length, surfaced for size-debug
 		// without forcing consumers to count after a json round-trip.
-		clientMsg, err := json.Marshal(map[string]interface{}{
-			"sender":  peerPK,
-			"message": text,
-			"network": string(raddr.Net),
-			"dir":     "in",
-			"id":      newEventID(),
-			"len":     len(text),
+		hub.publishEvent(chatEvent{
+			ID:        newEventID(),
+			Channel:   channelDM,
+			Transport: string(raddr.Net),
+			Dir:       "in",
+			From:      peerPK,
+			Text:      text,
 		})
-		if err != nil {
-			appLog("Failed to marshal json: %v", err)
-		}
-		hub.broadcast(string(clientMsg))
 	}
 }
 
@@ -1058,17 +1274,17 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			cxoMu.Lock()
 			myPK := cxoMyPK
 			cxoMu.Unlock()
-			outMsg, _ := json.Marshal(map[string]interface{}{ //nolint:errcheck
-				"sender":    myPK.Hex(),
-				"recipient": data.Recipient,
-				"message":   data.Message,
-				"network":   "cxo",
-				"dir":       "out",
-				"id":        newEventID(),
-				"len":       len(data.Message),
-				"path":      path,
+			_ = path
+			hub.publishEvent(chatEvent{
+				ID:        newEventID(),
+				Channel:   channelGroup,
+				Transport: "cxo",
+				Dir:       "out",
+				From:      myPK.Hex(),
+				To:        data.Recipient,
+				GroupID:   cxoGroup,
+				Text:      data.Message,
 			})
-			hub.broadcast(string(outMsg))
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"ok":true,"network":"cxo"}`)) //nolint:errcheck,gosec
 			return
@@ -1347,18 +1563,15 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		if mirrorID == "" {
 			mirrorID = newEventID()
 		}
-		mirrorMsg, mErr := json.Marshal(map[string]interface{}{
-			"sender":  myPK,
-			"to":      pk.Hex(),
-			"message": data.Message,
-			"network": string(netType),
-			"dir":     "out",
-			"id":      mirrorID,
-			"len":     len(data.Message),
+		hub.publishEvent(chatEvent{
+			ID:        mirrorID,
+			Channel:   channelDM,
+			Transport: string(netType),
+			Dir:       "out",
+			From:      myPK,
+			To:        pk.Hex(),
+			Text:      data.Message,
 		})
-		if mErr == nil {
-			hub.broadcast(string(mirrorMsg))
-		}
 
 		counterMu.Lock()
 		outboundMsgCount++
@@ -1468,6 +1681,83 @@ func sseHandler(w http.ResponseWriter, req *http.Request) {
 
 		case <-req.Context().Done():
 			chatLog.Debug("SSE connection was closed.")
+			return
+		}
+	}
+}
+
+// eventsHandler is the structured event stream backing `cli skychat events`.
+// It is SSE (text/event-stream) with one NDJSON chatEvent per `data:` line.
+//
+//	GET /events?channel=<csv>&since=<seq>
+//
+// channel: comma-separated dm|group|pair|system|all (default/empty/all =
+//
+//	dm+group+pair; "system" is opt-in). since: resume after this seq (replay
+//	buffered events with seq>since within the 24h window, then live-follow).
+func eventsHandler(w http.ResponseWriter, req *http.Request) {
+	f, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported!", http.StatusBadRequest)
+		return
+	}
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		chatLog.Debugf("events SetWriteDeadline: %v", err)
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	channels := parseEventChannels(req.URL.Query().Get("channel"))
+	var since uint64
+	if v := req.URL.Query().Get("since"); v != "" {
+		if _, err := fmt.Sscanf(v, "%d", &since); err != nil {
+			http.Error(w, "invalid since", http.StatusBadRequest)
+			return
+		}
+	}
+
+	ch, unsubscribe := hub.subscribeEvents(channels, since)
+	defer unsubscribe()
+
+	if _, err := fmt.Fprint(w, ": connected\n\n"); err != nil {
+		chatLog.Debugf("events initial keepalive write failed: %v", err)
+		return
+	}
+	f.Flush()
+
+	keepalive := time.NewTicker(sseKeepaliveInterval)
+	defer keepalive.Stop()
+
+	for {
+		select {
+		case ev, ok := <-ch:
+			if !ok {
+				return
+			}
+			b, err := json.Marshal(ev)
+			if err != nil {
+				continue
+			}
+			if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {
+				chatLog.Debugf("events write failed, dropping subscriber: %v", err)
+				return
+			}
+			f.Flush()
+
+		case <-keepalive.C:
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				chatLog.Debugf("events keepalive write failed: %v", err)
+				return
+			}
+			f.Flush()
+
+		case <-req.Context().Done():
+			chatLog.Debug("events connection was closed.")
 			return
 		}
 	}
