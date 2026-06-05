@@ -76,8 +76,9 @@ func TestSignReserveCascades_SignedBytes(t *testing.T) {
 
 	// Forward targets: A (source) -> B -> C
 	verifyReserveChain(t, fwdBytes, rsnPK, []cipher.PubKey{pkA, pkB, pkC})
-	// Reverse targets: C (source of reverse) -> B -> A
-	verifyReserveChain(t, revBytes, rsnPK, []cipher.PubKey{pkC, pkB, pkA})
+	// Reverse targets: re-oriented source-first so the SOURCE (A) injects it
+	// over its own transports — A -> B -> C, NOT the logical reverse C -> B -> A.
+	verifyReserveChain(t, revBytes, rsnPK, []cipher.PubKey{pkA, pkB, pkC})
 }
 
 func TestSignReserveCascades_WrongTargetFailsVerify(t *testing.T) {
@@ -281,4 +282,91 @@ func TestProcessLocalOrigin_Rejections(t *testing.T) {
 	// Trusted RSN, but the layer is signed for otherPK, not us (srcPK).
 	_, err = ch.ProcessLocalOrigin(mk(otherPK, rsnPK))
 	require.ErrorIs(t, err, routing.ErrCascadeSigInvalid)
+}
+
+// simulateReserveCascade walks a nested reserve cascade the way the real hops
+// would: each layer is verified against its target PK in source-first order,
+// the target "reserves" ReserveN fresh route IDs, and the ACK accumulates those
+// IDs source-first (each hop prepends its own, which equals appending in target
+// order). Returns the collected IDs.
+func simulateReserveCascade(t *testing.T, payload []byte, targets []cipher.PubKey, nextID *routing.RouteID) []routing.RouteID {
+	t.Helper()
+	var acc []routing.RouteID
+	for i, target := range targets {
+		cs, err := routing.UnmarshalCascadeSetup(payload)
+		require.NoErrorf(t, err, "reserve layer %d unmarshal", i)
+		require.Equalf(t, routing.CascadePhaseReserve, cs.Phase, "reserve layer %d phase", i)
+		require.NoErrorf(t, cs.Verify(target), "reserve layer %d must be signed for target %s", i, target)
+		for j := uint8(0); j < cs.ReserveN; j++ {
+			acc = append(acc, *nextID)
+			*nextID++
+		}
+		if i == len(targets)-1 {
+			require.Truef(t, cs.IsTerminal(), "reserve last layer must be terminal")
+		} else {
+			require.NotEmptyf(t, cs.Payload, "reserve layer %d must wrap inner payload", i)
+			payload = cs.Payload
+		}
+	}
+	return acc
+}
+
+// assertInstallSourceFirst walks an install cascade and asserts each layer is
+// signed for its source-first target PK.
+func assertInstallSourceFirst(t *testing.T, payload []byte, targets []cipher.PubKey) {
+	t.Helper()
+	for i, target := range targets {
+		cs, err := routing.UnmarshalCascadeSetup(payload)
+		require.NoErrorf(t, err, "install layer %d unmarshal", i)
+		require.Equalf(t, routing.CascadePhaseInstall, cs.Phase, "install layer %d phase", i)
+		require.NoErrorf(t, cs.Verify(target), "install layer %d must be signed for target %s", i, target)
+		if i < len(targets)-1 {
+			payload = cs.Payload
+		}
+	}
+}
+
+// TestSourceCascade_BothDirectionsSourceFirst_EndToEnd is the deterministic
+// regression test for the source-driven cascade bugs found 2026-06-04:
+//   - the reverse cascade was built dst-first (signed for the destination), so
+//     the source could not consume its outermost layer ("rev reserve: RSN
+//     signature verification failed");
+//   - each cascade reserved the COMBINED per-PK count while newCascadeIDReserver
+//     consumed one ID per PK, misaligning route IDs when count>1.
+//
+// It drives the real RSN-side build/sign/ID-reserve/rule-generation path and
+// asserts BOTH cascades are source-first and the install signing — which runs
+// newCascadeIDReserver + GenerateRules — succeeds (i.e. the IDs line up).
+func TestSourceCascade_BothDirectionsSourceFirst_EndToEnd(t *testing.T) {
+	cb, _ := rsnBuilder(t)
+	biRt, pkA, pkB, pkC := buildTestBiRoute(t) // forward A -> B -> C
+
+	fwdSession, fwdBytes, revSession, revBytes, err := signReserveCascades(cb, biRt)
+	require.NoError(t, err)
+
+	// Both the forward AND the re-oriented reverse cascade must address the
+	// SOURCE (pkA) outermost, then pkB, then pkC.
+	srcFirst := []cipher.PubKey{pkA, pkB, pkC}
+
+	var nextID routing.RouteID = 1
+	fwdIDs := simulateReserveCascade(t, fwdBytes, srcFirst, &nextID)
+	revIDs := simulateReserveCascade(t, revBytes, srcFirst, &nextID)
+
+	// Each node reserves once per cascade (singlePathReserveCount); two cascades
+	// => two route IDs per node, matching what GenerateRules pops per PK.
+	require.Len(t, fwdIDs, 3, "one fwd ID per node")
+	require.Len(t, revIDs, 3, "one rev ID per node")
+
+	// Signing the install runs newCascadeIDReserver + GenerateRules. If the IDs
+	// misaligned (the count bug) this returns ErrNoKey.
+	fwdInst, revInst, initEdge, err := signInstallCascades(cb, biRt, fwdSession, revSession, fwdIDs, revIDs)
+	require.NoError(t, err, "install signing must succeed (route IDs aligned)")
+	require.NotEmpty(t, fwdInst)
+	require.NotEmpty(t, revInst)
+	require.NotEmpty(t, initEdge.Forward, "initiating edge must carry a forward rule")
+	require.NotEmpty(t, initEdge.Reverse, "initiating edge must carry a reverse rule")
+
+	// Install cascades are also source-first.
+	assertInstallSourceFirst(t, fwdInst, srcFirst)
+	assertInstallSourceFirst(t, revInst, srcFirst)
 }
