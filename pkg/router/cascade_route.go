@@ -108,8 +108,8 @@ func createRouteGroupCascade(
 	// Collect all rules per PK for the cascade install.
 	rulesPerPK := collectRulesPerPK(fwdRules, revRules, interRules, initEdge, respEdge)
 
-	// Forward path install.
-	fwdInstallPayload, err := cb.BuildInstallMessage(biRt.Forward, fwdSessionID, rulesPerPK)
+	// Forward path install — terminal is the responding destination edge.
+	fwdInstallPayload, err := cb.BuildInstallMessage(biRt.Forward, fwdSessionID, rulesPerPK, respEdge.Desc)
 	if err != nil {
 		return routing.EdgeRules{}, fmt.Errorf("cascade: build fwd install: %w", err)
 	}
@@ -121,8 +121,8 @@ func createRouteGroupCascade(
 		return routing.EdgeRules{}, fmt.Errorf("cascade: fwd install rejected: %s", fwdInstAck.Error)
 	}
 
-	// Reverse path install (source-oriented).
-	revInstallPayload, err := cb.BuildInstallMessage(revInject, revSessionID, rulesPerPK)
+	// Reverse path install (source-oriented); route group already introduced.
+	revInstallPayload, err := cb.BuildInstallMessage(revInject, revSessionID, rulesPerPK, routing.RouteDescriptor{})
 	if err != nil {
 		return routing.EdgeRules{}, fmt.Errorf("cascade: build rev install: %w", err)
 	}
@@ -229,11 +229,15 @@ func signInstallCascades(
 
 	rulesPerPK := collectRulesPerPK(fwdRules, revRules, interRules, initEdge, respEdge)
 
-	fwdInstallBytes, err = cb.BuildInstallMessage(biRt.Forward, fwdSessionID, rulesPerPK)
+	// The forward cascade terminates at the responding destination — stamp its
+	// EdgeRules descriptor so it creates a route group (IntroduceRules). The
+	// reverse cascade terminates at the destination too but the route group is
+	// already introduced by the forward terminal, so no edge marking there.
+	fwdInstallBytes, err = cb.BuildInstallMessage(biRt.Forward, fwdSessionID, rulesPerPK, respEdge.Desc)
 	if err != nil {
 		return nil, nil, routing.EdgeRules{}, fmt.Errorf("cascade: build fwd install: %w", err)
 	}
-	revInstallBytes, err = cb.BuildInstallMessage(revInject, revSessionID, rulesPerPK)
+	revInstallBytes, err = cb.BuildInstallMessage(revInject, revSessionID, rulesPerPK, routing.RouteDescriptor{})
 	if err != nil {
 		return nil, nil, routing.EdgeRules{}, fmt.Errorf("cascade: build rev install: %w", err)
 	}
