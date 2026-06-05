@@ -418,6 +418,23 @@ func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map
 	return entries, expiredIDs
 }
 
+// parseBandwidthEdgePair parses the "<edge0hex>,<edge1hex>" value written by
+// bandwidthEdgesKey at registration back into an edge pair (kept in entry
+// order, which the transport.Entry contract already sorts ascending).
+func parseBandwidthEdgePair(v string) ([2]cipher.PubKey, bool) {
+	parts := strings.Split(v, ",")
+	if len(parts) != 2 {
+		return [2]cipher.PubKey{}, false
+	}
+	var edges [2]cipher.PubKey
+	for i, p := range parts {
+		if err := edges[i].UnmarshalText([]byte(p)); err != nil {
+			return [2]cipher.PubKey{}, false
+		}
+	}
+	return edges, true
+}
+
 // recoverBandwidthEdges reconstructs an (offline) transport's edge public keys
 // from its most recent daily-bandwidth hash, whose fields are
 // "<edgePK>:sent" / "<edgePK>:recv". Returns false if no day in the window has
@@ -426,6 +443,18 @@ func (s *redisStore) expiredTransportEntries(ctx context.Context, registered map
 // fields simply won't match, contributing 0 — the total stays correct).
 func (s *redisStore) recoverBandwidthEdges(ctx context.Context, id uuid.UUID, now time.Time, days int) ([2]cipher.PubKey, bool) {
 	var edges [2]cipher.PubKey
+
+	// Prefer the real edge pair persisted at registration (bandwidthEdgesKey,
+	// 35-day TTL). It keeps the counterparty identifiable even when only one
+	// edge ever published bandwidth — the field-name reconstruction below can
+	// only recover the reporting edge, collapsing the other to the zero PK
+	// (which the reward calc cannot credit).
+	if pair, err := s.client.Get(ctx, s.bandwidthEdgesKey(id.String())).Result(); err == nil {
+		if e, ok := parseBandwidthEdgePair(pair); ok {
+			return e, true
+		}
+	}
+
 	for d := 0; d < days; d++ {
 		h, err := s.client.HGetAll(ctx, s.bandwidthDailyKey(id.String(), now.AddDate(0, 0, -d))).Result()
 		if err != nil || len(h) == 0 {
