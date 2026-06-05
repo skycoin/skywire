@@ -1,5 +1,5 @@
 // battery
-// Copyright (C) 2016-2017 Karol 'Kenji Takahashi' Woźniak
+// Copyright (C) 2016-2017,2023 Karol 'Kenji Takahashi' Woźniak
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the "Software"),
@@ -23,14 +23,14 @@ package battery
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
 	"unsafe"
 
-	plist "howett.net/plist"
-
 	"golang.org/x/sys/unix"
+	plist "howett.net/plist"
 )
 
 type plistref struct {
@@ -94,7 +94,7 @@ func handleValue(val values, div float64, res *float64, amps *[]string) error {
 	return nil
 }
 
-func deriveState(cr1, cr2 error, current float64, max int) (State, error) {
+func deriveState(cr1, cr2 error, current float64, max int) (AgnosticState, error) {
 	if cr1 == nil && cr2 != nil {
 		return Charging, nil
 	}
@@ -183,7 +183,8 @@ func convertBattery(prop prop) (*Battery, error) {
 		}
 	}
 
-	b.State, e.State = deriveState(cr1, cr2, b.Current, maxCharge)
+	b.State.Raw, e.State = deriveState(cr1, cr2, b.Current, maxCharge)
+	b.State.specific = fmt.Sprintf("cr1: %v, cr2: %v")
 
 	handleVoltage(amps, b, &e)
 
