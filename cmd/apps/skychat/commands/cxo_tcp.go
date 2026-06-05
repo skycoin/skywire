@@ -11,7 +11,6 @@ package commands
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -288,19 +287,15 @@ func surfaceCXOInbound(senderPK, text string) {
 	lastRxAt = time.Now().UTC()
 	counterMu.Unlock()
 
-	clientMsg, err := json.Marshal(map[string]interface{}{
-		"sender":  senderPK,
-		"message": text,
-		"network": "cxo",
-		"dir":     "in",
-		"id":      newEventID(),
-		"len":     len(text),
+	hub.publishEvent(chatEvent{
+		ID:        newEventID(),
+		Channel:   channelGroup,
+		Transport: "cxo",
+		Dir:       "in",
+		From:      senderPK,
+		GroupID:   cxoGroup,
+		Text:      text,
 	})
-	if err != nil {
-		appLog("skychat: cxo inbound marshal failed: %v", err)
-		return
-	}
-	hub.broadcast(string(clientMsg))
 }
 
 // parseCXOPeer parses "tcp://<feedpk>@<host:port>".
