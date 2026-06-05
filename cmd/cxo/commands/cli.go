@@ -191,37 +191,37 @@ func init() {
 			},
 		},
 		&cobra.Command{
-			Use:   "subscribe <address> <public-key>",
+			Use:   "subscribe <public-key>@<address> | <address> <public-key>",
 			Short: "Subscribe to a feed via TCP connection",
-			Args:  cobra.ExactArgs(2),
+			Args:  cobra.RangeArgs(1, 2),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				address, pk, err := addrAndPK(args)
+				if err != nil {
+					return err
+				}
 				r, err := getCLIRPCClient()
 				if err != nil {
 					return err
 				}
 				defer r.Close() //nolint:errcheck,gosec
-				pk, err := pubKeyFromHex(args[1])
-				if err != nil {
-					return err
-				}
-				return r.TCP().Subscribe(args[0], pk)
+				return r.TCP().Subscribe(address, pk)
 			},
 		},
 		&cobra.Command{
-			Use:   "unsubscribe <address> <public-key>",
+			Use:   "unsubscribe <public-key>@<address> | <address> <public-key>",
 			Short: "Unsubscribe from a feed via TCP connection",
-			Args:  cobra.ExactArgs(2),
+			Args:  cobra.RangeArgs(1, 2),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				address, pk, err := addrAndPK(args)
+				if err != nil {
+					return err
+				}
 				r, err := getCLIRPCClient()
 				if err != nil {
 					return err
 				}
 				defer r.Close() //nolint:errcheck,gosec
-				pk, err := pubKeyFromHex(args[1])
-				if err != nil {
-					return err
-				}
-				return r.TCP().Unsubscribe(args[0], pk)
+				return r.TCP().Unsubscribe(address, pk)
 			},
 		},
 		&cobra.Command{
@@ -285,37 +285,37 @@ func init() {
 			},
 		},
 		&cobra.Command{
-			Use:   "subscribe <address> <public-key>",
+			Use:   "subscribe <public-key>@<address> | <address> <public-key>",
 			Short: "Subscribe to a feed via UDP connection",
-			Args:  cobra.ExactArgs(2),
+			Args:  cobra.RangeArgs(1, 2),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				address, pk, err := addrAndPK(args)
+				if err != nil {
+					return err
+				}
 				r, err := getCLIRPCClient()
 				if err != nil {
 					return err
 				}
 				defer r.Close() //nolint:errcheck,gosec
-				pk, err := pubKeyFromHex(args[1])
-				if err != nil {
-					return err
-				}
-				return r.UDP().Subscribe(args[0], pk)
+				return r.UDP().Subscribe(address, pk)
 			},
 		},
 		&cobra.Command{
-			Use:   "unsubscribe <address> <public-key>",
+			Use:   "unsubscribe <public-key>@<address> | <address> <public-key>",
 			Short: "Unsubscribe from a feed via UDP connection",
-			Args:  cobra.ExactArgs(2),
+			Args:  cobra.RangeArgs(1, 2),
 			RunE: func(cmd *cobra.Command, args []string) error {
+				address, pk, err := addrAndPK(args)
+				if err != nil {
+					return err
+				}
 				r, err := getCLIRPCClient()
 				if err != nil {
 					return err
 				}
 				defer r.Close() //nolint:errcheck,gosec
-				pk, err := pubKeyFromHex(args[1])
-				if err != nil {
-					return err
-				}
-				return r.UDP().Unsubscribe(args[0], pk)
+				return r.UDP().Unsubscribe(address, pk)
 			},
 		},
 		&cobra.Command{
@@ -934,6 +934,37 @@ func execStat(r *node.RPCClient) error {
 }
 
 // --- Helpers ---
+
+// addrAndPK parses a (un)subscribe target in either form:
+//
+//	<address> <public-key>   (two args, the historical form)
+//	<public-key>@<address>   (one arg, the pk-as-identity convention used by
+//	                          the treestore-backed CXO utilities, e.g. skychat)
+//
+// e.g. "tcp subscribe 039d...@1.2.3.4:8870" == "tcp subscribe 1.2.3.4:8870 039d...".
+func addrAndPK(args []string) (address string, pk cipher.PubKey, err error) {
+	switch len(args) {
+	case 1:
+		at := strings.LastIndex(args[0], "@")
+		if at < 0 {
+			return "", pk, errors.New("single argument must be <public-key>@<address>")
+		}
+		pk, err = pubKeyFromHex(args[0][:at])
+		if err != nil {
+			return "", pk, err
+		}
+		address = args[0][at+1:]
+		if address == "" {
+			return "", pk, errors.New("missing address after '@'")
+		}
+		return address, pk, nil
+	case 2:
+		pk, err = pubKeyFromHex(args[1])
+		return args[0], pk, err
+	default:
+		return "", pk, errors.New("expected <address> <public-key> or <public-key>@<address>")
+	}
+}
 
 func pubKeyFromHex(pks string) (pk cipher.PubKey, err error) {
 	var b []byte
