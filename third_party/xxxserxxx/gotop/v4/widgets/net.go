@@ -34,7 +34,7 @@ type NetWidget struct {
 }
 
 // TODO: state:merge #169 % option for network use (jrswab/networkPercentage)
-func NewNetWidget(netInterface string) *NetWidget {
+func NewNetWidget(updateInterval time.Duration, netInterface string) *NetWidget {
 	recvSparkline := ui.NewSparkline()
 	recvSparkline.Data = []int{}
 
@@ -44,7 +44,7 @@ func NewNetWidget(netInterface string) *NetWidget {
 	spark := ui.NewSparklineGroup(recvSparkline, sentSparkline)
 	self := &NetWidget{
 		SparklineGroup: spark,
-		updateInterval: time.Second,
+		updateInterval: updateInterval,
 		NetInterface:   strings.Split(netInterface, ","),
 	}
 	self.Title = tr.Value("widget.label.net")

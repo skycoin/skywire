@@ -66,7 +66,9 @@ func (b *BatteryGauge) update() {
 		if rate < bat.ChargeRate {
 			rate = bat.ChargeRate
 		}
-		if bat.State == battery.Charging {
+		// distatus/battery v0.11.0 changed State from an enum to a struct;
+		// the platform-agnostic state moved to State.Raw.
+		if bat.State.Raw == battery.Charging {
 			charging = "%d%% 🔌%s"
 		}
 	}

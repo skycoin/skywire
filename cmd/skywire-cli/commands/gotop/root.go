@@ -24,6 +24,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 	"github.com/skycoin/skywire/third_party/VictoriaMetrics/metrics"
 	"github.com/skycoin/skywire/third_party/xxxserxxx/gotop/v4"
@@ -63,6 +64,7 @@ var (
 	conf         gotop.Config
 	help         *w.HelpMenu
 	bar          *w.StatusBar
+	versionLabel *w.VersionLabel
 	stderrLogger = log.New(os.Stderr, "", 0)
 	tr           lingo.Translations
 )
@@ -251,7 +253,12 @@ func runDirectGotop() error {
 	}
 	help.Resize(termWidth, termHeight)
 
+	// Build-version overlay in the top-right corner (what `skywire -b` prints).
+	versionLabel = w.NewVersionLabel(skywireBuildVersion())
+	versionLabel.Reposition(termWidth)
+
 	ui.Render(grid)
+	renderVersionLabel()
 	if conf.Statusbar {
 		bar.SetRect(0, termHeight-1, termWidth, termHeight)
 		ui.Render(bar)
@@ -449,7 +456,12 @@ func runGotopWithConfig(updateInterval time.Duration, remoteMode bool) error {
 	}
 	help.Resize(termWidth, termHeight)
 
+	// Build-version overlay in the top-right corner (what `skywire -b` prints).
+	versionLabel = w.NewVersionLabel(skywireBuildVersion())
+	versionLabel.Reposition(termWidth)
+
 	ui.Render(grid)
+	renderVersionLabel()
 	if conf.Statusbar {
 		bar.SetRect(0, termHeight-1, termWidth, termHeight)
 		ui.Render(bar)
@@ -496,6 +508,25 @@ func getLayout(conf gotop.Config) io.Reader {
 	}
 }
 
+// skywireBuildVersion returns the full build version string that `skywire -b`
+// prints — runtime/debug BuildInfo.Main.Version, i.e. version-date-commit for
+// untagged builds (buildinfo.Version() strips that down to the bare tag).
+// Falls back to the short tag if the raw value is unavailable.
+func skywireBuildVersion() string {
+	if v := buildinfo.DBIVersion(); v != "" {
+		return v
+	}
+	return buildinfo.Version()
+}
+
+// renderVersionLabel draws the build-version overlay on top of the grid's
+// top-right border. Call after every ui.Render(grid).
+func renderVersionLabel() {
+	if versionLabel != nil {
+		ui.Render(versionLabel)
+	}
+}
+
 func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 	drawTicker := time.NewTicker(c.UpdateInterval).C
 
@@ -512,6 +543,7 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 		case <-drawTicker:
 			if !c.HelpVisible {
 				ui.Render(grid)
+				renderVersionLabel()
 				if c.Statusbar {
 					ui.Render(bar)
 				}
@@ -536,6 +568,9 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 					grid.SetRect(0, 0, payload.Width, payload.Height)
 				}
 				help.Resize(payload.Width, payload.Height)
+				if versionLabel != nil {
+					versionLabel.Reposition(termWidth)
+				}
 				ui.Clear()
 			}
 
@@ -574,6 +609,7 @@ func eventLoop(c gotop.Config, grid *layout.MyGrid) {
 					}
 				case "<Resize>":
 					ui.Render(grid)
+					renderVersionLabel()
 					if c.Statusbar {
 						ui.Render(bar)
 					}
