@@ -1,6 +1,7 @@
 package bbolthealth
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,5 +150,94 @@ func TestRepairIfCorrupt_IsIdempotentOnRepair(t *testing.T) {
 	}
 	if err := RepairIfCorrupt(path); err != nil {
 		t.Fatalf("second repair (path absent now): %v", err)
+	}
+}
+
+// TestRepairIfCorrupt_SyncWalkCatchesPageCorruption reproduces the production
+// crash: a bbolt file with a corrupted b-tree page header (page id zeroed,
+// yielding bbolt's "Page expected to be: N, but self identifies as 0" FastCheck
+// panic). The old probe used tx.Check(), which panics in an internal goroutine
+// that recover() can't reach — so the visor crash-looped. The synchronous walk
+// hits the same FastCheck in the caller's goroutine, where recover() converts
+// it into a corruption verdict and the file is moved aside. If this test panics
+// instead of passing, the regression is back.
+func TestRepairIfCorrupt_SyncWalkCatchesPageCorruption(t *testing.T) {
+	const pageSize = 4096
+	dir := t.TempDir()
+	path := filepath.Join(dir, "corrupt.db")
+
+	db, err := bolt.Open(path, 0600, &bolt.Options{Timeout: time.Second, PageSize: pageSize})
+	if err != nil {
+		t.Fatalf("create bbolt: %v", err)
+	}
+	// Write enough keys (plus a nested bucket) to span many leaf/branch pages.
+	if err := db.Update(func(tx *bolt.Tx) error {
+		b, e := tx.CreateBucketIfNotExists([]byte("data"))
+		if e != nil {
+			return e
+		}
+		val := make([]byte, 256)
+		for i := 0; i < 800; i++ {
+			if e := b.Put([]byte(fmt.Sprintf("key-%06d", i)), val); e != nil {
+				return e
+			}
+		}
+		nb, e := b.CreateBucketIfNotExists([]byte("nested"))
+		if e != nil {
+			return e
+		}
+		return nb.Put([]byte("nk"), []byte("nv"))
+	}); err != nil {
+		t.Fatalf("populate: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	// Zero the page-id header (first 8 bytes) of every page from index 4 to the
+	// end, preserving the meta (0,1) and freelist pages so bolt.Open succeeds
+	// and the corruption is hit during the b-tree WALK (the fixed path).
+	f, err := os.OpenFile(path, os.O_RDWR, 0600) //nolint:gosec // test-controlled temp path
+	if err != nil {
+		t.Fatalf("open for corruption: %v", err)
+	}
+	fi, statErr := f.Stat()
+	if statErr != nil {
+		t.Fatalf("stat: %v", statErr)
+	}
+	zeros := make([]byte, 8)
+	corrupted := 0
+	for off := int64(4 * pageSize); off+8 <= fi.Size(); off += pageSize {
+		if _, e := f.WriteAt(zeros, off); e != nil {
+			t.Fatalf("corrupt at %d: %v", off, e)
+		}
+		corrupted++
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("close corrupt file: %v", err)
+	}
+	if corrupted == 0 {
+		t.Skip("db too small to corrupt interior pages")
+	}
+
+	// Must NOT crash; must move the file aside and return nil.
+	if err := RepairIfCorrupt(path); err != nil {
+		t.Fatalf("RepairIfCorrupt returned error: %v", err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Errorf("corrupt file should have been moved aside; still present (err=%v)", err)
+	}
+	entries, readErr := os.ReadDir(dir)
+	if readErr != nil {
+		t.Fatalf("readdir: %v", readErr)
+	}
+	movedAside := false
+	for _, e := range entries {
+		if strings.Contains(e.Name(), ".corrupt.") {
+			movedAside = true
+		}
+	}
+	if !movedAside {
+		t.Errorf("expected a .corrupt.<ts> sibling after repair; dir=%v", entries)
 	}
 }
