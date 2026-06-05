@@ -69,6 +69,7 @@ package treestore
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -79,6 +80,60 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
 )
+
+// transientConnectDmsgErrSubstrings names the dmsg dial-error fragments
+// that are known to be transient in the in-process test env: the single
+// dmsg-server can race on the noise handshake (dmsg error 203 — "extra
+// bytes received during session handshake" / write: broken pipe), tear
+// down the session under the dial, and surface as dmsg error 202 with
+// no session-mate to fall through to. Production retries through real
+// reconnect loops; the in-process subscribers don't, so wrap Connect
+// with a short bounded retry to keep the test deterministic. Observed
+// ~16% local flake rate without this; 0 across 50+ runs with.
+var transientConnectDmsgErrSubstrings = []string{
+	"dmsg error 202",
+	"dmsg error 203",
+	"session shutdown",
+	"broken pipe",
+	"use of closed network connection",
+}
+
+func isTransientConnectErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, frag := range transientConnectDmsgErrSubstrings {
+		if strings.Contains(msg, frag) {
+			return true
+		}
+	}
+	return false
+}
+
+// connectWithRetry calls sub.Connect and retries on transient dmsg dial
+// errors with exponential backoff (50ms, 100ms, 200ms, 400ms, 800ms).
+// Returns the last error if all attempts fail or if ctx is canceled.
+func connectWithRetry(ctx context.Context, sub *Subscriber, peerPK cipher.PubKey) error {
+	const maxAttempts = 6
+	backoff := 50 * time.Millisecond
+	var err error
+	for i := 0; i < maxAttempts; i++ {
+		if err = sub.Connect(ctx, peerPK); err == nil {
+			return nil
+		}
+		if !isTransientConnectErr(err) {
+			return err
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+	}
+	return err
+}
 
 // reattachVisor is a minimal participant in the reattach repro rig.
 // Parallels visorMock in federated_receive_test.go but exposes the
@@ -183,7 +238,7 @@ func (rig *reattachRig) attachSubsTo(t *testing.T, vm *reattachVisor) {
 		})
 
 		require.NoErrorf(t,
-			sub.Connect(ctx, peer.pk),
+			connectWithRetry(ctx, sub, peer.pk),
 			"%s → %s: subscriber.Connect", vm.pk.Hex()[:8], peer.pk.Hex()[:8])
 		vm.subs[peer.pk] = sub
 	}
