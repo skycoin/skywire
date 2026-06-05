@@ -1,13 +1,13 @@
 module github.com/skycoin/skywire
 
-go 1.26.4
+go 1.26.1
 
 require (
 	fyne.io/systray v1.12.1
 	github.com/AudriusButkevicius/pfilter v0.0.11
 	github.com/MichaelMure/go-term-markdown v0.1.4
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
-	github.com/bitfield/script v0.24.2
+	github.com/bitfield/script v0.24.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/chen3feng/safecast v0.0.0-20220908170618-81b2ecd47937
 	github.com/docker/docker v28.5.2+incompatible
