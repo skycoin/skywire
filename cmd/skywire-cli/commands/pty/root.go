@@ -3,18 +3,20 @@
 // remote-filesystem mount, plus the host (server) side, all keyed by public
 // key over a noise-XK connection (no SSH involved).
 //
-//	pty host    — serve the pty subsystem on a TCP port (was `cli sshd`)
-//	pty shell   — open a remote shell to a peer    (was `cli ssh`)
-//	pty fs      — mount a peer's filesystem         (was `cli sshfs`)
+//	pty host          — serve the pty subsystem on a TCP port (was `cli sshd`)
+//	pty shell         — open a remote shell to a peer          (was `cli ssh`)
+//	pty fs            — mount a peer's filesystem               (was `cli sshfs`)
+//	pty exec/start    — one-shot / interactive shell over the dmsg overlay
+//	pty list/ui/url   — list peers, open the dmsgpty UI         (was `cli dmsg pty …`)
 //
-// The dmsg-overlay forms of the shell — `cli dmsg pty exec` / `start` — remain
-// under `cli dmsg pty` for now; folding them in here (so `cli pty exec`) is a
-// follow-up.
+// The exec/start/list/ui/url commands were re-parented here from `cli dmsg pty`
+// (their RunE closures still live in the dmsg package; only the parent moved).
 package clipty
 
 import (
 	"github.com/spf13/cobra"
 
+	clidmsg "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsg"
 	cliptyfs "github.com/skycoin/skywire/cmd/skywire-cli/commands/ptyfs"
 	clissh "github.com/skycoin/skywire/cmd/skywire-cli/commands/ssh"
 	clisshd "github.com/skycoin/skywire/cmd/skywire-cli/commands/sshd"
@@ -50,4 +52,11 @@ func init() {
 		clissh.RootCmd,
 		cliptyfs.RootCmd,
 	)
+
+	// Fold the dmsg-overlay pty commands (exec/start/list/ui/url) in too:
+	// re-parent PtyCmd's children from `cli dmsg pty` onto `cli pty`. Copy
+	// the slice first since AddCommand mutates the source's child list.
+	for _, sub := range append([]*cobra.Command{}, clidmsg.PtyCmd.Commands()...) {
+		RootCmd.AddCommand(sub)
+	}
 }
