@@ -1,12 +1,12 @@
 //go:build linux
 
-// Package clisshfs cmd/skywire-cli/commands/sshfs/identity_linux.go —
+// Package cliptyfs cmd/skywire-cli/commands/ptyfs/identity_linux.go —
 // destination parsing + identity loading helpers used by the linux
 // mount path. Gated to linux because the only consumer is
 // mount_linux.go; non-linux builds get stub subcommands that don't
 // need this surface, so leaving these here unguarded would flag as
 // unused on darwin/windows.
-package clisshfs
+package cliptyfs
 
 import (
 	"fmt"
@@ -17,22 +17,22 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
-// sshfsDestRE matches both `<pk>@<host>:<port>` and the more explicit
+// ptyfsDestRE matches both `<pk>@<host>:<port>` and the more explicit
 // `tcp://<pk>@<host>:<port>` form, identical to clissh's destination
-// shape. Kept as a separate copy here so cli sshfs can stand alone if
-// cli ssh is ever split out.
-var sshfsDestRE = regexp.MustCompile(`^(?:tcp://)?([a-f0-9]{66})@(.+:[^:]+)$`)
+// shape. Kept as a separate copy here so cli ptyfs can stand alone if
+// cli pty shell is ever split out.
+var ptyfsDestRE = regexp.MustCompile(`^(?:tcp://)?([a-f0-9]{66})@(.+:[^:]+)$`)
 
-// parseSSHFSDestination splits `<pk>@<host>:<port>` (with optional
+// parsePTYFSDestination splits `<pk>@<host>:<port>` (with optional
 // `tcp://` prefix) into the remote PK and the dial-target address.
-func parseSSHFSDestination(dest string) (cipher.PubKey, string, error) {
-	m := sshfsDestRE.FindStringSubmatch(dest)
+func parsePTYFSDestination(dest string) (cipher.PubKey, string, error) {
+	m := ptyfsDestRE.FindStringSubmatch(dest)
 	if m == nil {
-		return cipher.PubKey{}, "", fmt.Errorf("sshfs: destination %q must be <66-hex-pk>@<host:port> (optionally prefixed tcp://)", dest)
+		return cipher.PubKey{}, "", fmt.Errorf("ptyfs: destination %q must be <66-hex-pk>@<host:port> (optionally prefixed tcp://)", dest)
 	}
 	var pk cipher.PubKey
 	if err := pk.Set(m[1]); err != nil {
-		return cipher.PubKey{}, "", fmt.Errorf("sshfs: destination PK invalid: %w", err)
+		return cipher.PubKey{}, "", fmt.Errorf("ptyfs: destination PK invalid: %w", err)
 	}
 	return pk, m[2], nil
 }
@@ -60,10 +60,10 @@ func injectDefaultPort(dest, defPort string) string {
 	return dest + ":" + defPort
 }
 
-// resolveSSHFSIdentity loads the client SK with the same precedence
+// resolvePTYFSIdentity loads the client SK with the same precedence
 // as resolveSSHIdentity in cmd/skywire-cli/commands/ssh: explicit
 // --sk > DMSGPTY_SK env > visor SK (when useVisorKey) > random.
-func resolveSSHFSIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, cipher.SecKey) {
+func resolvePTYFSIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey, cipher.SecKey) {
 	var zero cipher.SecKey
 	sk := skFlag
 	if sk == zero {
@@ -75,11 +75,11 @@ func resolveSSHFSIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey
 		confPath := visorconfig.SkywireConfig()
 		conf, err := visorconfig.ReadFile(confPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "sshfs: --visor-key read %s: %v\n", confPath, err) //nolint:errcheck
+			fmt.Fprintf(os.Stderr, "ptyfs: --visor-key read %s: %v\n", confPath, err) //nolint:errcheck
 			os.Exit(1)
 		}
 		if conf.SK == zero {
-			fmt.Fprintf(os.Stderr, "sshfs: --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
+			fmt.Fprintf(os.Stderr, "ptyfs: --visor-key: visor config %s has empty SK\n", confPath) //nolint:errcheck
 			os.Exit(1)
 		}
 		sk = conf.SK
@@ -90,7 +90,7 @@ func resolveSSHFSIdentity(skFlag cipher.SecKey, useVisorKey bool) (cipher.PubKey
 	}
 	pk, err := sk.PubKey()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "sshfs: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
+		fmt.Fprintf(os.Stderr, "ptyfs: failed to derive PK from --sk: %v\n", err) //nolint:errcheck
 		os.Exit(1)
 	}
 	return pk, sk

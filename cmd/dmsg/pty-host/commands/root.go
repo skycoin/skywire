@@ -101,7 +101,7 @@ func init() {
 	RootCmd.Flags().StringVar(&cliNet, "clinet", cliNet, "network used for listening for cli connections")
 	RootCmd.Flags().StringVar(&cliAddr, "cliaddr", cliAddr, "address used for listening for cli connections")
 	RootCmd.Flags().StringVar(&tcpListen, "tcplisten", "",
-		"optional direct-TCP entry point address (e.g. ':2022'); empty disables. XK-noise + whitelist gated, mirrors the visor-embedded Dmsgpty.SshListen. Exposed as 'skywire cli sshd'.")
+		"optional direct-TCP entry point address (e.g. ':2022'); empty disables. XK-noise + whitelist gated, mirrors the visor-embedded Dmsgpty.SshListen. Exposed as 'skywire cli pty host'.")
 	RootCmd.Flags().BoolVar(&noDmsg, "no-dmsg", false,
 		"skip dmsg.Client + dmsg listener; run as TCP-only daemon (use with --tcplisten or --listen-fd)")
 	RootCmd.Flags().StringVar(&skFromVisor, "sk-from-visor", "",

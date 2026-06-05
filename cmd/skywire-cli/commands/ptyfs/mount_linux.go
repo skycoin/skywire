@@ -1,7 +1,7 @@
 //go:build linux
 
-// Package clisshfs cmd/skywire-cli/commands/sshfs/mount_linux.go —
-// FUSE mount + unmount for the sshfs subsystem. Maps each FUSE op
+// Package cliptyfs cmd/skywire-cli/commands/ptyfs/mount_linux.go —
+// FUSE mount + unmount for the ptyfs subsystem. Maps each FUSE op
 // onto the matching github.com/pkg/sftp call.
 //
 // Layering: dmsgpty-tcp noise stream  →  sftp.Client  →  sftpNode
@@ -11,18 +11,20 @@
 // seen by the host's user (no chroot, no per-mount allowlist) — same
 // gating model as the interactive pty subsystem. Symlinks are
 // followed via Readlink; xattrs / fifos / sockets / devices are not
-// exposed (the standard sshfs feature set; we can extend in a
+// exposed (the standard ptyfs feature set; we can extend in a
 // follow-up if a use case shows up).
-package clisshfs
+package cliptyfs
 
 import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path"
+	"strings"
 	"syscall"
 	"time"
 
@@ -31,9 +33,15 @@ import (
 	"github.com/pkg/sftp"
 	"github.com/spf13/cobra"
 
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
+	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // mountCmd flag storage.
@@ -43,10 +51,13 @@ var (
 	mountAttrTTL    time.Duration
 	mountEntryTTL   time.Duration
 	mountRemoteRoot string
+	mountStandalone bool
 )
 
 func init() {
 	mountCmd.Flags().SortFlags = false
+	mountCmd.Flags().BoolVar(&mountStandalone, "standalone", false,
+		"dmsg-standalone: dial over an ephemeral dmsg client instead of bridging through the local visor (peer must whitelist --sk; default uses the visor)")
 	mountCmd.Flags().BoolVar(&mountReadOnly, "ro", false,
 		"mount read-only (writes return EROFS)")
 	mountCmd.Flags().BoolVar(&mountDebug, "debug", false,
@@ -61,11 +72,29 @@ func init() {
 }
 
 var mountCmd = &cobra.Command{
-	Use:   "mount <pk>@<host>:<port> <mountpoint>",
+	Use:   "mount <pk>[@<host>:<port>] <mountpoint>",
 	Short: "Mount a peer visor's filesystem over the sftp subsystem",
-	Long: `mount opens a noise-XK protected TCP connection to the peer's
-dmsgpty endpoint, requests the sftp subsystem, and exposes the
-remote filesystem at <mountpoint> via FUSE.
+	Long: `mount requests the peer's dmsgpty sftp subsystem and exposes the
+remote filesystem at <mountpoint> via FUSE. Three transport modes,
+selected by the target shape and the --standalone flag:
+
+  via-visor (default)   target is a bare <pk>. The LOCAL visor opens a
+                        dmsg stream to the peer's dmsgpty (port 22) using
+                        its OWN authorized client and bridges it here, so
+                        a hypervisor can mount a managed visor with no
+                        extra whitelist entry and no standalone daemon:
+                          skywire cli pty fs mount <pk> ~/mnt/peer
+
+  dmsg-standalone       bare <pk> with --standalone. Dials over a fresh
+                        ephemeral dmsg client (no visor needed); the peer
+                        must whitelist the client key, so pin one with
+                        --sk:
+                          skywire cli pty fs mount --standalone --sk <sk> <pk> ~/mnt/peer
+
+  standalone-tcp        target is <pk>@<host>:<port> (optionally tcp://).
+                        Direct noise-XK TCP to the peer's pty-host TCP
+                        listener (cli pty host):
+                          skywire cli pty fs mount <pk>@1.2.3.4:2022 ~/mnt/peer
 
 Runs in the foreground. Send SIGINT (Ctrl-C) or SIGTERM to unmount
 and exit. For a background mount use 'nohup ... &' or a systemd
@@ -77,68 +106,127 @@ their own supervision).`,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		dest := injectDefaultPort(args[0], sshfsDefPort)
+		target := args[0]
 		mountpoint := args[1]
-
-		rPK, addr, err := parseSSHFSDestination(dest)
-		if err != nil {
-			return err
-		}
-		myPK, mySK := resolveSSHFSIdentity(sshfsSK, !sshfsNoVisor)
 
 		// Pre-flight the mountpoint so the FUSE error doesn't bury the
 		// real cause ("does not exist" / "not a directory").
 		if st, err := os.Stat(mountpoint); err != nil {
-			return fmt.Errorf("sshfs: mountpoint %q: %w", mountpoint, err)
+			return fmt.Errorf("ptyfs: mountpoint %q: %w", mountpoint, err)
 		} else if !st.IsDir() {
-			return fmt.Errorf("sshfs: mountpoint %q is not a directory", mountpoint)
+			return fmt.Errorf("ptyfs: mountpoint %q is not a directory", mountpoint)
 		}
 
 		ctx, cancel := cmdutil.SignalContext(cmd.Context(), nil)
 		defer cancel()
 
-		return runMount(ctx, addr, rPK, myPK, mySK, mountpoint)
+		switch {
+		case strings.Contains(target, "@"):
+			// standalone-tcp: direct noise-XK TCP to the peer's pty-host.
+			if mountStandalone {
+				return fmt.Errorf("ptyfs: --standalone is for the bare-<pk> dmsg path; a <pk>@host:port target is already standalone TCP")
+			}
+			dest := injectDefaultPort(target, ptyfsDefPort)
+			rPK, addr, err := parsePTYFSDestination(dest)
+			if err != nil {
+				return err
+			}
+			myPK, mySK := resolvePTYFSIdentity(ptyfsSK, !ptyfsNoVisor)
+			rwc, err := pty.DialSftpTCP(ctx, addr, myPK, mySK, rPK)
+			if err != nil {
+				return err
+			}
+			return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s@%s (tcp)", rPK, addr))
+
+		case mountStandalone:
+			// dmsg-standalone: ephemeral dmsg client. NEVER the visor SK
+			// here — a second client registering the visor's PK collides
+			// with the running visor in dmsg discovery — so don't borrow it.
+			rPK, err := parseBarePK(target)
+			if err != nil {
+				return err
+			}
+			myPK, mySK := resolvePTYFSIdentity(ptyfsSK, false)
+			dmsgC, stop, err := startPTYFSDmsgClient(ctx, myPK, mySK)
+			if err != nil {
+				return err
+			}
+			defer stop()
+			rwc, err := pty.DialSftpDmsg(ctx, dmsgC, rPK, skyenv.DmsgPtyPort)
+			if err != nil {
+				return err
+			}
+			return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s (dmsg-standalone)", rPK))
+
+		default:
+			// via-visor: bridge through the LOCAL visor's authorized dmsg
+			// client to the peer's dmsgpty (port 22). No CLI key needs
+			// whitelisting and there's no discovery collision — the visor
+			// (e.g. the hypervisor) is already authorized to the peer.
+			rPK, err := parseBarePK(target)
+			if err != nil {
+				return err
+			}
+			conn, err := clirpc.BridgeConn(0 /* dmsg */, rPK, skyenv.DmsgPtyPort)
+			if err != nil {
+				return fmt.Errorf("ptyfs: via-visor bridge (is the local visor running? add --standalone for a visorless dmsg dial): %w", err)
+			}
+			rwc, err := pty.OpenSftpConn(conn)
+			if err != nil {
+				_ = conn.Close() //nolint:errcheck,gosec
+				return err
+			}
+			return runMount(ctx, rwc, rPK, mountpoint, fmt.Sprintf("%s (via-visor)", rPK))
+		}
 	},
+}
+
+// parseBarePK parses a bare 66-hex public key target (the via-visor and
+// dmsg-standalone forms), with an error that points at the TCP form.
+func parseBarePK(target string) (cipher.PubKey, error) {
+	var pk cipher.PubKey
+	if err := pk.Set(strings.TrimSpace(target)); err != nil {
+		return cipher.PubKey{}, fmt.Errorf("ptyfs: target %q must be a bare 66-hex pk (via-visor / --standalone) or <pk>@host:port (tcp): %w", target, err)
+	}
+	return pk, nil
 }
 
 var umountCmd = &cobra.Command{
 	Use:                   "umount <mountpoint>",
-	Short:                 "Unmount a previously-mounted sshfs (calls fusermount -u)",
+	Short:                 "Unmount a previously-mounted pty fs (calls fusermount -u)",
 	Args:                  cobra.ExactArgs(1),
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	RunE: func(_ *cobra.Command, args []string) error {
-		out, err := exec.Command("fusermount", "-u", args[0]).CombinedOutput() //nolint:gosec // fusermount is a fixed system binary; only the user-supplied mountpoint flows in as an arg, same trust model as cli ssh / cli sshfs mount
+		out, err := exec.Command("fusermount", "-u", args[0]).CombinedOutput() //nolint:gosec // fusermount is a fixed system binary; only the user-supplied mountpoint flows in as an arg, same trust model as cli pty shell / cli pty fs mount
 		if err != nil {
-			return fmt.Errorf("sshfs umount %s: %w (%s)", args[0], err, string(out))
+			return fmt.Errorf("ptyfs umount %s: %w (%s)", args[0], err, string(out))
 		}
 		return nil
 	},
 }
 
-// runMount wires the dmsgpty-tcp stream → sftp.Client → FUSE mount
-// and blocks until ctx fires (Ctrl-C). On exit it unmounts cleanly
-// via Server.Unmount() before returning.
+// runMount wires an already-open sftp-subsystem stream → sftp.Client →
+// FUSE mount and blocks until ctx fires (Ctrl-C). The caller dialed +
+// ran the sftp-subsystem handshake (one of the three transport modes);
+// rwc is positioned at the start of the sftp byte protocol. display is
+// a human label for the mounted-confirmation line. On exit it unmounts
+// cleanly via Server.Unmount() before returning.
 func runMount(
 	ctx context.Context,
-	addr string,
+	rwc io.ReadWriteCloser,
 	rPK cipher.PubKey,
-	myPK cipher.PubKey, mySK cipher.SecKey,
 	mountpoint string,
+	display string,
 ) error {
-	rwc, err := pty.DialSftpTCP(ctx, addr, myPK, mySK, rPK)
-	if err != nil {
-		return err
-	}
-
 	// sftp.NewClientPipe takes the read + write halves separately. Our
 	// stream is a single io.ReadWriteCloser; reuse it for both halves.
 	sftpC, err := sftp.NewClientPipe(rwc, rwc)
 	if err != nil {
 		_ = rwc.Close() //nolint:errcheck,gosec
-		return fmt.Errorf("sshfs: sftp handshake: %w", err)
+		return fmt.Errorf("ptyfs: sftp handshake: %w", err)
 	}
 	defer sftpC.Close() //nolint:errcheck
 
@@ -151,7 +239,7 @@ func runMount(
 		EntryTimeout: &mountEntryTTL,
 	}
 	opts.MountOptions.Debug = mountDebug
-	opts.MountOptions.Name = "skywire-sshfs"
+	opts.MountOptions.Name = "skywire-ptyfs"
 	opts.MountOptions.FsName = rPK.String()
 	if mountReadOnly {
 		opts.MountOptions.Options = append(opts.MountOptions.Options, "ro")
@@ -159,9 +247,9 @@ func runMount(
 
 	server, err := fs.Mount(mountpoint, root, opts)
 	if err != nil {
-		return fmt.Errorf("sshfs: FUSE mount %s: %w", mountpoint, err)
+		return fmt.Errorf("ptyfs: FUSE mount %s: %w", mountpoint, err)
 	}
-	fmt.Fprintf(os.Stderr, "sshfs: mounted %s -> %s@%s (remote-root=%s)\n", mountpoint, rPK, addr, root.root.remoteRoot) //nolint:errcheck
+	fmt.Fprintf(os.Stderr, "ptyfs: mounted %s -> %s (remote-root=%s)\n", mountpoint, display, root.root.remoteRoot) //nolint:errcheck
 
 	// Either the caller's ctx fires (Ctrl-C) or the kernel unmounts
 	// out from under us (e.g. external `fusermount -u`). Wait for
@@ -185,7 +273,7 @@ func runMount(
 		return nil
 	}
 	if err := server.Unmount(); err != nil {
-		fmt.Fprintf(os.Stderr, "sshfs: unmount returned: %v (falling back to fusermount -u)\n", err) //nolint:errcheck
+		fmt.Fprintf(os.Stderr, "ptyfs: unmount returned: %v (falling back to fusermount -u)\n", err) //nolint:errcheck
 		_, _ = exec.Command("fusermount", "-u", mountpoint).CombinedOutput()                         //nolint:errcheck,gosec // fixed system binary, mountpoint is the operator-supplied path we just unmounted
 	}
 	return nil
@@ -199,6 +287,37 @@ func mountpoint_remote_default(p string) string {
 		return "/"
 	}
 	return p
+}
+
+// startPTYFSDmsgClient brings up an ephemeral dmsg client for the
+// dmsg-standalone mount mode, mirroring the dmsg curl helper. Returns
+// the client + a stop func; the caller defers stop. The pk/sk are a
+// throwaway or --sk-pinned identity — NOT the visor's, which would
+// collide with the running visor in dmsg discovery.
+func startPTYFSDmsgClient(ctx context.Context, pk cipher.PubKey, sk cipher.SecKey) (*dmsg.Client, func(), error) {
+	log := logging.MustGetLogger("ptyfs-dmsg")
+	discURL := deployment.Prod.DmsgDiscovery
+	if discURL == "" {
+		discURL = "http://dmsgd.skywire.skycoin.com"
+	}
+	discClient := disc.NewHTTP(discURL, &http.Client{Timeout: 30 * time.Second}, log)
+
+	dmsgConfig := dmsg.DefaultConfig()
+	dmsgConfig.MinSessions = 1
+	dmsgC := dmsg.NewClient(pk, sk, discClient, dmsgConfig)
+	go dmsgC.Serve(ctx)
+
+	select {
+	case <-ctx.Done():
+		_ = dmsgC.Close() //nolint:errcheck
+		return nil, nil, ctx.Err()
+	case <-dmsgC.Ready():
+		log.Debug("dmsg client ready")
+	case <-time.After(30 * time.Second):
+		_ = dmsgC.Close() //nolint:errcheck
+		return nil, nil, fmt.Errorf("ptyfs: timeout waiting for dmsg client")
+	}
+	return dmsgC, func() { _ = dmsgC.Close() }, nil //nolint:errcheck
 }
 
 // sftpRoot is the per-mount state shared by every sftpNode in the

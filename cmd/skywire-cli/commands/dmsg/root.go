@@ -21,9 +21,10 @@ var RootCmd = &cobra.Command{
 }
 
 func init() {
+	// PtyCmd's subcommands are re-parented onto `cli pty` (see the pty
+	// package); they are no longer registered under `cli dmsg`.
 	RootCmd.AddCommand(
 		curlCmd,
-		ptyCmd,
 		chatCmd,
 		scpCmd,
 		catCmd,

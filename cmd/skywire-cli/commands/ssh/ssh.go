@@ -1,4 +1,4 @@
-// Package clissh cmd/skywire-cli/commands/ssh/ssh.go — `skywire cli ssh`,
+// Package clissh cmd/skywire-cli/commands/ssh/ssh.go — `skywire cli pty shell`,
 // the OpenSSH-equivalent client over skywire identity.
 //
 // Maps onto the existing pty.CLI direct-TCP path (PR #2559/#2560):
@@ -64,16 +64,16 @@ func init() {
 		"default port when the destination omits one (e.g. 'ssh <pk>@host' resolves to <pk>@host:<port>)")
 }
 
-// RootCmd is the `skywire cli ssh` command — OpenSSH-equivalent client
+// RootCmd is the `skywire cli pty shell` command — OpenSSH-equivalent client
 // over skywire identity. Registered separately under skywire-cli's
 // root alongside the `sshd` server command.
 var RootCmd = &cobra.Command{
 	Use:   "ssh <pk>@<host>[:<port>] [-- <command> [args...]]",
-	Short: "Open a remote shell or exec a command on a peer visor (ssh-equivalent)",
-	Long: `skywire cli ssh — OpenSSH-equivalent client over skywire identity.
+	Short: "Open a remote shell or exec a command on a peer visor",
+	Long: `skywire cli pty shell — OpenSSH-equivalent client over skywire identity.
 
 Dials a peer's direct-TCP dmsgpty endpoint (the surface exposed by
-'skywire cli sshd' or by 'pty.ssh_listen' in the visor config),
+'skywire cli pty host' or by 'pty.ssh_listen' in the visor config),
 runs an XK noise handshake pinning the server's PK, and proxies an
 interactive shell or a one-shot exec.
 
@@ -90,13 +90,13 @@ Compared to OpenSSH:
 
 Examples:
   # Interactive shell on a peer visor at 1.2.3.4:2022
-  skywire cli ssh 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c@1.2.3.4:2022
+  skywire cli pty shell 0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c@1.2.3.4:2022
 
   # One-shot exec
-  skywire cli ssh 0323...@1.2.3.4:2022 -- systemctl status skywire
+  skywire cli pty shell 0323...@1.2.3.4:2022 -- systemctl status skywire
 
   # Use a pinned client SK instead of the visor's
-  skywire cli ssh 0323...@1.2.3.4:2022 --sk <hex> -- whoami
+  skywire cli pty shell 0323...@1.2.3.4:2022 --sk <hex> -- whoami
 
 The underlying transport is identical to 'cli dmsg pty exec/start
 --via tcp://<pk>@<host>:<port>'; this command is the discoverable

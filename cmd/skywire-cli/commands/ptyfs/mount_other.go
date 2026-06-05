@@ -1,11 +1,11 @@
 //go:build !linux
 
-// Package clisshfs cmd/skywire-cli/commands/sshfs/mount_other.go —
-// non-Linux stub. The sshfs subsystem itself is cross-platform
+// Package cliptyfs cmd/skywire-cli/commands/ptyfs/mount_other.go —
+// non-Linux stub. The ptyfs subsystem itself is cross-platform
 // (server-side compiles everywhere), but the FUSE client only ships
 // on Linux today. macOS/Windows would need separate platform code
 // (macFUSE / WinFsp); not in v1 scope.
-package clisshfs
+package cliptyfs
 
 import (
 	"errors"
@@ -17,7 +17,7 @@ func init() {
 	RootCmd.AddCommand(mountStubCmd, umountStubCmd)
 }
 
-var errSshfsNotSupported = errors.New("sshfs: FUSE mount is Linux-only in this build (macOS/Windows support would require macFUSE/WinFsp wiring not present here)")
+var errPtyfsNotSupported = errors.New("ptyfs: FUSE mount is Linux-only in this build (macOS/Windows support would require macFUSE/WinFsp wiring not present here)")
 
 var mountStubCmd = &cobra.Command{
 	Use:           "mount <pk>@<host>:<port> <mountpoint>",
@@ -25,16 +25,16 @@ var mountStubCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(_ *cobra.Command, _ []string) error {
-		return errSshfsNotSupported
+		return errPtyfsNotSupported
 	},
 }
 
 var umountStubCmd = &cobra.Command{
 	Use:           "umount <mountpoint>",
-	Short:         "Unmount a previously-mounted sshfs (Linux only)",
+	Short:         "Unmount a previously-mounted pty fs (Linux only)",
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(_ *cobra.Command, _ []string) error {
-		return errSshfsNotSupported
+		return errPtyfsNotSupported
 	},
 }

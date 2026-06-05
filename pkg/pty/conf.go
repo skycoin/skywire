@@ -30,8 +30,8 @@ type Config struct {
 	// (default) disables the TCP entry point: only the dmsg-overlay
 	// path is served, matching legacy behavior.
 	//
-	// This is the surface that `skywire cli ssh` (client) and
-	// `skywire cli sshd` (server) expose as the OpenSSH-equivalent
+	// This is the surface that `skywire cli pty shell` (client) and
+	// `skywire cli pty host` (server) expose as the OpenSSH-equivalent
 	// shell over skywire.
 	//
 	// Auth flow per accepted TCP connection:
