@@ -290,8 +290,6 @@ dep: tidy ## Sorts dependencies
 
 update-deps: ## Update all dependencies to latest versions (use 'make update-deps push-deps' to also commit and push)
 	${OPTS} go get -v -u ./...
-	@echo "Pinning distatus/battery@v0.10.0 (v0.11.0 breaks gotop)"
-	${OPTS} go get github.com/distatus/battery@v0.10.0
 	${OPTS} go mod tidy -v
 	${OPTS} go mod vendor -v
 	@echo "Dependencies updated. Run 'make push-deps' to commit and push changes."

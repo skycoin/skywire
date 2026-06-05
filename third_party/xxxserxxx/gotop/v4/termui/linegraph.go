@@ -194,11 +194,22 @@ func (lg *LineGraph) drawLabels(buf *ui.Buffer) {
 			seriesLabelStyle = ui.ModifierClear
 		}
 
-		// render key ontop, but let braille be drawn over space characters
 		str := fmt.Sprintf("%-*s %s", nameWid, seriesName, lg.Labels[seriesName])
-		if len(str) > maxWid {
-			maxWid = len(str)
+		// Mask the label's footprint (field width + a one-column right margin)
+		// with blank cells first, so the braille graph doesn't bleed through the
+		// gaps between/around the text. The graph still shows everywhere outside
+		// this strip.
+		fieldWid := len(str) + 1
+		if fieldWid > maxWid {
+			maxWid = fieldWid
 		}
+		for k := 0; k < fieldWid; k++ {
+			buf.SetCell(
+				ui.NewCell(' ', ui.NewStyle(ui.ColorClear)),
+				image.Pt(xoff+lg.Inner.Min.X+2+k, yoff+lg.Inner.Min.Y+i+1),
+			)
+		}
+		// then render the key + value text on the clean strip
 		for k, char := range str {
 			if char != ' ' {
 				buf.SetCell(
