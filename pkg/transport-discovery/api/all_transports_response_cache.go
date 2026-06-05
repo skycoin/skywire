@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"compress/gzip"
+	"io"
 	"sync"
 	"time"
 )
@@ -69,10 +70,24 @@ func (c *allTransportsRespCache) body(selfTransports bool, compute func() ([]byt
 	return body, gzBody, nil
 }
 
+// gzipWriterPool reuses *gzip.Writer instances across calls to gzipBytes.
+// Each gzip.NewWriter allocates a flate.compressor with Huffman tables and
+// compression buffers (~70-100KB) — significant per-call alloc that adds up
+// fast on the response-cache miss paths (allTransportsRespCache and
+// edgeRespCache) and contributes to TPD GC pressure under prod load.
+// Reset(io.Writer) lets the writer be reused after Close.
+var gzipWriterPool = sync.Pool{
+	New: func() any {
+		return gzip.NewWriter(io.Discard)
+	},
+}
+
 func gzipBytes(b []byte) []byte {
 	var buf bytes.Buffer
-	zw := gzip.NewWriter(&buf)
+	zw := gzipWriterPool.Get().(*gzip.Writer)
+	zw.Reset(&buf)
 	_, _ = zw.Write(b) //nolint:errcheck
 	_ = zw.Close()     //nolint:errcheck
+	gzipWriterPool.Put(zw)
 	return buf.Bytes()
 }
