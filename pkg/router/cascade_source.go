@@ -112,8 +112,8 @@ func runSourceCascade(
 		return routing.EdgeRules{}, fmt.Errorf("cascade: rev reserve rejected: %s", revAck.Error)
 	}
 
-	log.WithField("fwd_ids", len(fwdAck.RouteIDs)).
-		WithField("rev_ids", len(revAck.RouteIDs)).
+	log.WithField("fwd_ids", fmt.Sprintf("%v", fwdAck.RouteIDs)).
+		WithField("rev_ids", fmt.Sprintf("%v", revAck.RouteIDs)).
 		Debug("Source-driven cascade: reserved route IDs, requesting install signatures")
 
 	// --- Phase 2: ask RSN to sign install cascades (recomputes rules) ---

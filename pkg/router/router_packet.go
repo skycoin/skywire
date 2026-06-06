@@ -65,7 +65,11 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 func (r *router) dispatchToRouteGroup(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
-		return err
+		// Surface the offending route ID + packet type. A bare "rule not
+		// found" is useless for diagnosing multihop setup failures where a
+		// handshake/data frame arrives stamped with a route ID this visor
+		// never installed a rule for (e.g. a mis-stitched reverse chain).
+		return fmt.Errorf("%w (routeID=%d, pktType=%s)", err, packet.RouteID(), packet.Type())
 	}
 
 	// Forward/intermediary rules get forwarded
