@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 // Connection wraps a net.Conn with channel-based message I/O.
@@ -61,7 +62,19 @@ func (c *Connection) Close() {
 	c.closed = true
 	c.mu.Unlock()
 
-	c.conn.Close() //nolint:errcheck,gosec
+	// Force-unblock any read parked in readLoop's io.ReadFull BEFORE closing.
+	// When the remote peer vanishes without a FIN/RST (the common dmsg
+	// half-dead-stream case), the underlying Read never returns an error and
+	// net.Conn.Close() does NOT reliably interrupt an in-flight Read — only a
+	// read deadline does (dmsg honors SetReadDeadline even when Close cannot
+	// wake the reader). Without this, readLoop never returns, its deferred
+	// close(c.in) never runs, the owning CXO Conn.receiveMsg stays blocked
+	// waiting on c.in, and Conn.run leaks forever on await.Wait(). That leak
+	// accumulated tens of thousands of goroutines and multi-GB RSS on the
+	// transport-discovery CXO node despite the idle watchdog correctly calling
+	// Close() — the Close just never reached the stuck reader.
+	c.conn.SetReadDeadline(time.Now()) //nolint:errcheck,gosec
+	c.conn.Close()                     //nolint:errcheck,gosec
 	close(c.done)
 }
 
