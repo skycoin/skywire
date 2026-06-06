@@ -666,7 +666,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
 	RootCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
 	RootCmd.Flags().BoolVarP(&processRewards, "process", "r", false, "run complete reward processing workflow")
-	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", true, "require minimum transports (from hist/YYYY-MM-DD_transports.txt)")
+	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", false, "require minimum transports from hist/YYYY-MM-DD_transports.txt (deprecated — TPD-integrated UT data now gates >= 2 transports inherently; this flag is kept only for historical re-runs of dates before the migration)")
 	RootCmd.Flags().StringVarP(&transportHistPath, "tp-hist", "T", "hist", "path to transport history directory")
 	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "require minimum bandwidth (proportional reward based on bandwidth)")
 	RootCmd.Flags().BoolVar(&noBWPool, "no-bw-pool", false, "recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool (requires -b)")
