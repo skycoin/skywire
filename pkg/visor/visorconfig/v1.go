@@ -398,6 +398,16 @@ type Routing struct {
 	// (stcpr > sudph > stcp > dmsg) is used. Types not listed here sort last.
 	TransportPreference []string `json:"transport_preference,omitempty"`
 
+	// EnableCascadeRouteSetup opts INTO the source-driven cascade route-setup
+	// path (RSN signs, source injects the cascade down its own transports,
+	// avoiding the RSN's dmsg dependency). It is OFF by default: the cascade
+	// currently has a multihop data-plane bug (control plane succeeds on every
+	// hop, but the set-up route does not carry traffic), so the legacy path —
+	// where the setup node dials each hop directly over dmsg to install rules —
+	// is the default until that is fixed. Flip this to true (or change the
+	// default) once the cascade data plane is corrected.
+	EnableCascadeRouteSetup bool `json:"enable_cascade_route_setup,omitempty"`
+
 	// PolicyPerDial is an optional operator-supplied routing
 	// policy. Accepts either:
 	//   "preset:<name>"          — a curated policy embedded in the

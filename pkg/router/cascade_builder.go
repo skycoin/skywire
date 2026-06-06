@@ -60,7 +60,7 @@ func NewCascadeBuilder(
 		rsnSK:          rsnSK,
 		tm:             tm,
 		acks:           newAckRegistry(),
-		reserveTimeout: 10 * time.Second,
+		reserveTimeout: 6 * time.Second,
 		installTimeout: 10 * time.Second,
 	}
 }
@@ -84,7 +84,7 @@ func NewSourceCascadeBuilder(
 		log:            log,
 		tm:             tm,
 		acks:           acks,
-		reserveTimeout: 10 * time.Second,
+		reserveTimeout: 6 * time.Second,
 		installTimeout: 10 * time.Second,
 	}
 }
