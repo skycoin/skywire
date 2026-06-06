@@ -97,7 +97,13 @@ func NewSetupNodeDialerWithEmbedded(embedded EmbeddedSetupNode) RouteGroupDialer
 
 // NewSetupNodeDialerFull returns a dialer with all capabilities:
 // embedded RSN, transport relay, DMSG fallback, and source-driven cascade.
-func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCache, tm *transport.Manager) RouteGroupDialer {
+//
+// When forceLegacy is true the source-driven cascade is left nil, so every
+// dial uses the legacy path: the setup node dials each hop directly over dmsg
+// to reserve IDs and install rules. This is the default for now (the cascade
+// has a multihop data-plane bug); operators opt back into the cascade via
+// Routing.enable_cascade_route_setup once it is fixed.
+func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCache, tm *transport.Manager, forceLegacy bool) RouteGroupDialer {
 	var mux *transport.VStreamMux
 	var srcCascade *CascadeBuilder
 	if tm != nil {
@@ -106,7 +112,12 @@ func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCach
 		tm.SetSetupRPCHandler(mux.HandlePacket)
 		// Source-side cascade builder: send-only (zero rsnSK). Its ack
 		// registry is shared into the router's CascadeHandler at Serve time.
-		srcCascade = NewSourceCascadeBuilder(logging.MustGetLogger("cascade_source"), tm, nil)
+		// Skipped entirely when the operator forces the legacy setup path.
+		if !forceLegacy {
+			srcCascade = NewSourceCascadeBuilder(logging.MustGetLogger("cascade_source"), tm, nil)
+		} else {
+			log.Info("Source-driven cascade disabled (default): using legacy setup-node dialing for every route")
+		}
 	}
 	return &setupNodeDialer{
 		embeddedSetup: embedded,
