@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -63,8 +65,22 @@ func NewWithContext(ctx context.Context) *Got {
 }
 
 // NewWithProxy returns a Got configured to route through a SOCKS5 proxy.
+//
+// The proxyAddr is accepted in any of:
+//
+//	socks5h://host:port  destination resolved by the proxy (curl --socks5-hostname).
+//	                     Required for proxies that resolve non-DNS hostnames
+//	                     themselves — e.g. dmsgweb's <pk>.dmsg URLs.
+//	socks5://host:port   destination resolved by this client first, then the
+//	                     IP is sent to the proxy (curl --socks5).
+//	host:port            bare form, treated as socks5h:// for backward compat.
 func NewWithProxy(ctx context.Context, proxyAddr string) (*Got, error) {
-	dialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+	addr, resolveLocally, err := parseProxyAddr(proxyAddr)
+	if err != nil {
+		return nil, err
+	}
+
+	dialer, err := proxy.SOCKS5("tcp", addr, nil, proxy.Direct)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
 	}
@@ -74,9 +90,14 @@ func NewWithProxy(ctx context.Context, proxyAddr string) (*Got, error) {
 		return nil, errors.New("SOCKS5 dialer does not support DialContext")
 	}
 
+	dialContext := contextDialer.DialContext
+	if resolveLocally {
+		dialContext = resolveBeforeDial(dialContext)
+	}
+
 	client := &http.Client{
 		Transport: &http.Transport{
-			DialContext:         contextDialer.DialContext,
+			DialContext:         dialContext,
 			MaxIdleConns:        10,
 			IdleConnTimeout:     30 * time.Second,
 			TLSHandshakeTimeout: 5 * time.Second,
@@ -87,6 +108,56 @@ func NewWithProxy(ctx context.Context, proxyAddr string) (*Got, error) {
 		ctx:    ctx,
 		Client: client,
 	}, nil
+}
+
+// parseProxyAddr returns the bare host:port to hand to proxy.SOCKS5 and
+// whether the destination hostname should be resolved client-side before
+// the dial. See NewWithProxy's docstring for the accepted forms.
+func parseProxyAddr(raw string) (addr string, resolveLocally bool, err error) {
+	if !strings.Contains(raw, "://") {
+		return raw, false, nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return "", false, fmt.Errorf("parse proxy address %q: %w", raw, err)
+	}
+	if u.Host == "" {
+		return "", false, fmt.Errorf("proxy address %q has no host", raw)
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "socks5h":
+		return u.Host, false, nil
+	case "socks5":
+		return u.Host, true, nil
+	default:
+		return "", false, fmt.Errorf("unsupported proxy scheme %q (expected socks5:// or socks5h://)", u.Scheme)
+	}
+}
+
+// resolveBeforeDial wraps a SOCKS5 dialer with client-side DNS resolution
+// of the destination address. IP literals pass through unchanged so this
+// is a no-op when the URL host is already an IP. This is the
+// `socks5://` (no h) semantic; for `socks5h://` we leave the dialer alone
+// and the SOCKS5 protocol encodes the hostname as ATYP=FQDN, leaving
+// resolution to the proxy.
+func resolveBeforeDial(inner func(context.Context, string, string) (net.Conn, error)) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		host, port, splitErr := net.SplitHostPort(address)
+		if splitErr != nil {
+			return inner(ctx, network, address)
+		}
+		if net.ParseIP(host) != nil {
+			return inner(ctx, network, address)
+		}
+		ips, lookupErr := net.DefaultResolver.LookupIPAddr(ctx, host)
+		if lookupErr != nil {
+			return nil, &net.OpError{Op: "dial", Net: network, Err: lookupErr}
+		}
+		if len(ips) == 0 {
+			return nil, &net.OpError{Op: "dial", Net: network, Err: fmt.Errorf("no addresses for %s", host)}
+		}
+		return inner(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+	}
 }
 
 // Download creates a Download for the given URL and destination, then runs it.
