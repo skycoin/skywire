@@ -171,7 +171,21 @@ func (g *Got) Download(URL, dest string) error {
 }
 
 // Do initializes and runs a Download, calling ProgressFunc if set.
+//
+// Callers who construct a *Download by hand (e.g. `skywire-cli got dl`)
+// typically don't set Client or ctx — without this propagation step,
+// Download.Init falls back to DefaultClient(), silently discarding the
+// proxy / context configured on the Got receiver. That manifests as the
+// SOCKS5 proxy being bypassed (DNS lookups resolved locally instead of
+// through the dialer wired up in NewWithProxy) — exactly the failure
+// mode that turned out to outlive #3029.
 func (g *Got) Do(dl *Download) error {
+	if dl.Client == nil {
+		dl.Client = g.Client
+	}
+	if dl.ctx == nil {
+		dl.ctx = g.ctx
+	}
 	if err := dl.Init(); err != nil {
 		return err
 	}
