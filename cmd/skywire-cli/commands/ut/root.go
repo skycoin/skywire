@@ -75,6 +75,20 @@ func cacheFile(cacheDir, fullURL string) string {
 	return filepath.Join(cacheDir, name+".json")
 }
 
+// writeCacheJSON mirrors a fetched response body to the on-disk JSON path
+// resolved by cacheFile. The bbolt singleton cache used by
+// FetchCachedServiceURL is opaque to outside tools, so without this mirror
+// the --cdu / --cdt flags only flip caching on; the literal "<dir>/<name>.json"
+// the flag's documentation describes never gets written. Best-effort: write
+// errors are silently ignored so a non-writable cache dir never breaks the
+// query itself.
+func writeCacheJSON(path, body string) {
+	if path == "" || body == "" {
+		return
+	}
+	_ = os.WriteFile(path, []byte(body), 0o600) //nolint:errcheck,gosec
+}
+
 // getDeployment returns the appropriate deployment config based on test env
 func getDeployment() deployment.Services {
 	if isTestEnv() {
@@ -155,12 +169,25 @@ var utCmd = &cobra.Command{
 		utFullURL := utURL + "/uptimes?v=v2"
 		tpdFullURL := tpdURL + "/all-transports"
 
-		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+		// Resolve cache file paths up-front so we can mirror response bodies
+		// to them after fetch. FetchCachedServiceURL only treats the path as
+		// a "caching enabled" flag; the actual cache lives in a separate
+		// bbolt DB at clicache.DefaultPath. Without this mirror, --cdu /dir
+		// never produces /dir/uptimes.json, silently breaking legacy
+		// consumers (e.g. the embedded reward.sh that jq-slices a per-day
+		// view from hist/uptimes.json — without the file, ${date}_ut.json
+		// comes out empty and ParseHistoricUptimeData freezes the
+		// version-history chart on the last good day).
+		utCacheFile := cacheFile(cacheDirUT, utFullURL)
+		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), utCacheFile, utFullURL, cacheFilesAge)
+		writeCacheJSON(utCacheFile, uts)
 
 		// Build transport count map if --max-tp is specified
 		var tpCount map[string]int
 		if maxTP >= 0 {
-			tpd := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirTPD, tpdFullURL), tpdFullURL, cacheFilesAge)
+			tpdCacheFile := cacheFile(cacheDirTPD, tpdFullURL)
+			tpd := clirpc.FetchCachedServiceURL(cmd.Flags(), tpdCacheFile, tpdFullURL, cacheFilesAge)
+			writeCacheJSON(tpdCacheFile, tpd)
 			var entries []*transport.Entry
 			if err := json.Unmarshal([]byte(tpd), &entries); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse TPD data: %w", err))
