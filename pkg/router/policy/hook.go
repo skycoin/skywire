@@ -357,13 +357,14 @@ func (h *Hook) OnTick(info router.DialInfo, legs []router.LegInfo) router.Rotati
 	policyLegs := make([]LegInfo, 0, len(legs))
 	for _, l := range legs {
 		policyLegs = append(policyLegs, LegInfo{
-			Index:     l.Index,
-			Kind:      l.Kind,
-			LatencyMs: l.LatencyMs,
-			Alive:     l.Alive,
-			SentBytes: l.SentBytes,
-			RecvBytes: l.RecvBytes,
-			Hops:      l.Hops,
+			Index:       l.Index,
+			Kind:        l.Kind,
+			LatencyMs:   l.LatencyMs,
+			Alive:       l.Alive,
+			SentBytes:   l.SentBytes,
+			RecvBytes:   l.RecvBytes,
+			Retransmits: l.Retransmits,
+			Hops:        l.Hops,
 		})
 	}
 	rctx := RoutingContext{
@@ -402,13 +403,14 @@ func (h *Hook) OnLegChange(info router.DialInfo, legs []router.LegInfo, change r
 	policyLegs := make([]LegInfo, 0, len(legs))
 	for _, l := range legs {
 		policyLegs = append(policyLegs, LegInfo{
-			Index:     l.Index,
-			Kind:      l.Kind,
-			LatencyMs: l.LatencyMs,
-			Alive:     l.Alive,
-			SentBytes: l.SentBytes,
-			RecvBytes: l.RecvBytes,
-			Hops:      l.Hops,
+			Index:       l.Index,
+			Kind:        l.Kind,
+			LatencyMs:   l.LatencyMs,
+			Alive:       l.Alive,
+			SentBytes:   l.SentBytes,
+			RecvBytes:   l.RecvBytes,
+			Retransmits: l.Retransmits,
+			Hops:        l.Hops,
 		})
 	}
 	policyChange := LegChange{Event: change.Event, LegIndex: change.LegIndex}
