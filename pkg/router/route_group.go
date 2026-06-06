@@ -628,6 +628,9 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 				l.SentBytes = bw.SentBytes
 				l.RecvBytes = bw.RecvBytes
 			}
+			if rg.mux != nil {
+				l.Retransmits = rg.mux.retransmitsAt(i)
+			}
 			l.Hops = sharedHops
 		}
 		legs = append(legs, l)
@@ -1527,6 +1530,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 			// (which may differ from the original send leg — the
 			// retx selector picks fresh, mirroring the data path).
 			rg.mux.recordSent(leg, uint64(retxPacket.Size()))
+			rg.mux.recordRetransmit(leg) // separate loss signal for leg health
 		}
 	}
 	return nil
