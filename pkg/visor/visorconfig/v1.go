@@ -398,15 +398,15 @@ type Routing struct {
 	// (stcpr > sudph > stcp > dmsg) is used. Types not listed here sort last.
 	TransportPreference []string `json:"transport_preference,omitempty"`
 
-	// ForceLegacyRouteSetup disables the source-driven cascade and forces the
-	// legacy route-setup path, where the setup node (RSN) dials each hop
-	// directly over dmsg to reserve route IDs and install rules. The cascade
-	// avoids that dmsg dependency (it injects signed cascades down the
-	// source's own transports), but when it sets up a route whose data plane
-	// does not carry traffic, falling back to the directly-dialed legacy
-	// install is a useful escape hatch / A-B test. Default false (cascade
-	// preferred, legacy used only when the RSN lacks the CascadeSign RPCs).
-	ForceLegacyRouteSetup bool `json:"force_legacy_route_setup,omitempty"`
+	// EnableCascadeRouteSetup opts INTO the source-driven cascade route-setup
+	// path (RSN signs, source injects the cascade down its own transports,
+	// avoiding the RSN's dmsg dependency). It is OFF by default: the cascade
+	// currently has a multihop data-plane bug (control plane succeeds on every
+	// hop, but the set-up route does not carry traffic), so the legacy path —
+	// where the setup node dials each hop directly over dmsg to install rules —
+	// is the default until that is fixed. Flip this to true (or change the
+	// default) once the cascade data plane is corrected.
+	EnableCascadeRouteSetup bool `json:"enable_cascade_route_setup,omitempty"`
 
 	// PolicyPerDial is an optional operator-supplied routing
 	// policy. Accepts either:

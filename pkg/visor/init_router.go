@@ -144,10 +144,14 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	relayCache := router.NewRSNRelayCache(logger)
-	if v.conf.Routing.ForceLegacyRouteSetup {
-		log.Warn("Routing.force_legacy_route_setup is enabled: route setup will dial each hop directly over dmsg (cascade disabled)")
+	// Legacy route setup (RSN dials each hop directly over dmsg) is the default
+	// for now; the source-driven cascade is opt-in until its multihop data-plane
+	// bug is fixed. forceLegacy is therefore the inverse of the opt-in flag.
+	forceLegacy := !v.conf.Routing.EnableCascadeRouteSetup
+	if forceLegacy {
+		log.Info("Route setup using legacy direct-dial path (source-driven cascade disabled; set routing.enable_cascade_route_setup=true to opt in)")
 	}
-	rgDialer := router.NewSetupNodeDialerFull(embeddedRSN, relayCache, v.tpM, v.conf.Routing.ForceLegacyRouteSetup)
+	rgDialer := router.NewSetupNodeDialerFull(embeddedRSN, relayCache, v.tpM, forceLegacy)
 
 	if order := types.ParsePreferenceOrder(v.conf.Routing.TransportPreference); len(order) > 0 {
 		types.SetPreferenceOrder(order)

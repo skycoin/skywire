@@ -100,9 +100,9 @@ func NewSetupNodeDialerWithEmbedded(embedded EmbeddedSetupNode) RouteGroupDialer
 //
 // When forceLegacy is true the source-driven cascade is left nil, so every
 // dial uses the legacy path: the setup node dials each hop directly over dmsg
-// to reserve IDs and install rules. Operators set this via
-// Routing.ForceLegacyRouteSetup as an escape hatch when the cascade sets up
-// routes whose data plane does not carry traffic.
+// to reserve IDs and install rules. This is the default for now (the cascade
+// has a multihop data-plane bug); operators opt back into the cascade via
+// Routing.enable_cascade_route_setup once it is fixed.
 func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCache, tm *transport.Manager, forceLegacy bool) RouteGroupDialer {
 	var mux *transport.VStreamMux
 	var srcCascade *CascadeBuilder
@@ -116,7 +116,7 @@ func NewSetupNodeDialerFull(embedded EmbeddedSetupNode, relayCache *RSNRelayCach
 		if !forceLegacy {
 			srcCascade = NewSourceCascadeBuilder(logging.MustGetLogger("cascade_source"), tm, nil)
 		} else {
-			log.Warn("Routing.ForceLegacyRouteSetup is set: source-driven cascade disabled, using legacy setup-node dialing for every route")
+			log.Info("Source-driven cascade disabled (default): using legacy setup-node dialing for every route")
 		}
 	}
 	return &setupNodeDialer{
