@@ -149,7 +149,15 @@ func (r *router) DialRoutes(
 	r.forceLocalRoutesMu.Lock()
 	forceLocal := r.forceLocalRoutes
 	r.forceLocalRoutesMu.Unlock()
-	const maxRetries = 3
+	// maxRetries bounds how many candidate routes the fallback loop below
+	// walks before giving up. On each setup failure we exclude the failing
+	// intermediate and re-fetch a fresh route (a different intermediate), so
+	// a higher bound = more of the candidate set tried before the dial fails.
+	// Multihop setups over flaky intermediates need several tries to land a
+	// healthy path; combined with the tightened handshake/cascade timeouts
+	// (fast per-attempt failure) this stays well within a reasonable dial
+	// budget while greatly improving multihop establishment odds.
+	const maxRetries = 6
 	maxFetchAttempts := maxRetries
 	if forceLocal {
 		maxFetchAttempts = 1
@@ -246,12 +254,32 @@ func (r *router) DialRoutes(
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			// Check if this is a "no suitable transport" error (stale TPD data)
-			if errors.Is(err, ErrNoSuitableTransport) {
-				if attempt < maxRetries {
-					log.WithError(err).Warnf("Route handshake failed due to transport issue (attempt %d/%d), querying route-finder for fresh route...", attempt, maxRetries)
-					continue
+			// The dialer (cascade or DMSG) returned SUCCESS — routing rules
+			// were installed on every hop — yet saveRouteGroupRules failed:
+			// the route's reverse handshake never completed, so the data
+			// plane is dead. This is the dominant multihop failure mode: an
+			// intermediate that ACKs rule-install (so the source-driven
+			// cascade reports success and the dialer never falls back to the
+			// legacy setup-node path) but does not actually forward packets.
+			//
+			// Because the cascade already "succeeded", neither the dialer's
+			// own cascade->DMSG fallback nor the old ErrNoSuitableTransport
+			// branch fired here, so a single bad intermediate failed the
+			// whole dial. Treat a dead route like any other retryable route
+			// failure: exclude THIS route's intermediates and re-fetch a
+			// fresh route through different ones. Walking candidate
+			// intermediates is what turns probabilistic multihop setup into
+			// reliable setup. Direct routes (no intermediates) that aren't a
+			// stale-TPD error still fail fast — retrying the same direct path
+			// to a down peer would only burn the budget.
+			deadInter := intermediatePKsOfPath(forwardPath, lPK, rPK)
+			if (len(deadInter) > 0 || errors.Is(err, ErrNoSuitableTransport)) && attempt < maxRetries {
+				for _, ipk := range deadInter {
+					opts = appendExcludeIntermediate(opts, ipk)
 				}
+				log.WithError(err).Warnf("Route setup failed at handshake/data plane (attempt %d/%d); excluding %d intermediate(s) and retrying with a fresh route",
+					attempt, maxRetries, len(deadInter))
+				continue
 			}
 			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 		}
@@ -289,15 +317,22 @@ func (r *router) DialRoutes(
 			})
 		}
 
-		// Rotation hook (RFC #2882 — periodic-tick / bandwidth-
-		// spreading). The dial-side DialHook may also implement
-		// RotationHook; when it does AND the policy returned
-		// RotationIntervalSeconds > 0, the route group's rotation
-		// servicePacketLoop fires the hook periodically. The
-		// applyAdd callback closes over the current dial context
-		// and forwardDesc so the rotation can add aux legs that
-		// match the original dial shape.
-		if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+		// Add-leg callback for any multiplexed dial. It closes over the
+		// dial context + forwardDesc so a replacement leg matches the
+		// original dial shape (same peer, ports, min-hops, app). Used by
+		// BOTH the route group's self-healing (restore the degree in the
+		// background when a leg dies) AND the periodic rotation hook
+		// (policy on_tick / bandwidth-spreading, RFC #2882).
+		muxTarget := 1
+		if opts != nil {
+			if eff := opts.EffectiveMuxRoutes(true); eff > muxTarget {
+				muxTarget = eff
+			}
+			if eff := opts.EffectiveMuxRoutes(false); eff > muxTarget {
+				muxTarget = eff
+			}
+		}
+		if muxTarget > 1 {
 			optsCopy := *opts
 			fwdDescCopy := forwardDesc
 			nrgCapture := nrg
@@ -312,11 +347,27 @@ func (r *router) DialRoutes(
 					}
 				}
 				if err := r.addOneAuxForwardLeg(addCtx, nrgCapture, &optsCopy, fwdDescCopy, excludePKs); err != nil {
-					r.logger.WithError(err).Debug("Rotation add-leg failed; route group keeps current leg set")
+					r.logger.WithError(err).Debug("Mux add-leg failed; route group keeps current leg set")
 				}
 			}
-			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
-			nrg.rg.SetRotation(rh, applyAdd, interval)
+			// Self-healing: any leg death triggers a background replacement
+			// dial to restore the requested degree, while surviving legs
+			// carry the traffic. General to every mux dial, not just ones
+			// with a rotation policy.
+			nrg.rg.SetSelfHeal(applyAdd, muxTarget)
+
+			// Top up an initial shortfall: establishMuxRoutes sets up aux
+			// legs best-effort, so a flaky intermediate can leave the group
+			// below the requested degree at dial time. Heal it now in the
+			// background (same mechanism as runtime leg death) — the dial
+			// still returns immediately on the legs that did establish.
+			nrg.rg.maybeSelfHeal()
+
+			// Periodic rotation (policy on_tick) reuses the same callback.
+			if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+				interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
+				nrg.rg.SetRotation(rh, applyAdd, interval)
+			}
 		}
 
 		// NOTE: no MinHops restore needed — baseMinHops is a local var now,
@@ -497,7 +548,10 @@ func (r *router) PingRoute(
 	r.forceLocalRoutesMu.Lock()
 	pingForceLocal := r.forceLocalRoutes
 	r.forceLocalRoutesMu.Unlock()
-	const maxRetries = 3
+	// Match DialRoutes: walk up to 6 candidate intermediates (excluding the
+	// dead route's hops each time) before giving up, so a flaky intermediate
+	// that ACKs install but won't forward doesn't fail the whole probe.
+	const maxRetries = 6
 	pingMaxFetch := maxRetries
 	if pingForceLocal {
 		pingMaxFetch = 1
@@ -531,6 +585,14 @@ func (r *router) PingRoute(
 				opts = appendExcludeIntermediate(opts, failedPK)
 				log.WithError(err).Warnf("Ping route setup failed on intermediate %s (attempt %d/%d); excluding from next route-finder pick",
 					failedPK, attempt, maxRetries)
+			} else {
+				// Handshake/data-plane failure: the error names the dst, not
+				// the intermediate that ACKed install but won't forward. Exclude
+				// the whole dead route's intermediates so the retry diverges —
+				// same rationale as DialRoutes' saveRouteGroupRules retry.
+				for _, ipk := range intermediatePKsOfPath(forwardPath, lPK, rPK) {
+					opts = appendExcludeIntermediate(opts, ipk)
+				}
 			}
 			if attempt < maxRetries {
 				log.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
@@ -1979,4 +2041,27 @@ func appendExcludeIntermediate(opts *DialOptions, pk cipher.PubKey) *DialOptions
 	}
 	opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, pk)
 	return opts
+}
+
+// intermediatePKsOfPath returns the distinct intermediate-visor PKs of a
+// forward path: every hop.To that is neither the source nor the destination.
+// For a direct route (src->dst) it returns nil. Used to exclude a dead
+// route's intermediates from the next route-finder pick when a route sets up
+// (rules installed on every hop) but its data plane never carries the
+// handshake — i.e. one of the intermediates ACKs install but won't forward.
+func intermediatePKsOfPath(hops []routing.Hop, src, dst cipher.PubKey) []cipher.PubKey {
+	seen := make(map[cipher.PubKey]struct{}, len(hops))
+	var out []cipher.PubKey
+	for _, h := range hops {
+		pk := h.To
+		if pk == src || pk == dst {
+			continue
+		}
+		if _, ok := seen[pk]; ok {
+			continue
+		}
+		seen[pk] = struct{}{}
+		out = append(out, pk)
+	}
+	return out
 }
