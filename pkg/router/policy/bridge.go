@@ -212,13 +212,14 @@ func buildLegsValue(legs []LegInfo) starlark.Value {
 		out = append(out, starlarkstruct.FromStringDict(
 			starlarkstruct.Default,
 			starlark.StringDict{
-				"index":      starlark.MakeInt(l.Index),
-				"kind":       starlark.String(l.Kind),
-				"latency_ms": starlark.MakeInt(l.LatencyMs),
-				"alive":      starlark.Bool(l.Alive),
-				"sent_bytes": starlark.MakeUint64(l.SentBytes),
-				"recv_bytes": starlark.MakeUint64(l.RecvBytes),
-				"hops":       starlark.NewList(hops),
+				"index":       starlark.MakeInt(l.Index),
+				"kind":        starlark.String(l.Kind),
+				"latency_ms":  starlark.MakeInt(l.LatencyMs),
+				"alive":       starlark.Bool(l.Alive),
+				"sent_bytes":  starlark.MakeUint64(l.SentBytes),
+				"recv_bytes":  starlark.MakeUint64(l.RecvBytes),
+				"retransmits": starlark.MakeUint64(l.Retransmits),
+				"hops":        starlark.NewList(hops),
 			},
 		))
 	}

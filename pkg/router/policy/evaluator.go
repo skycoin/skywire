@@ -359,13 +359,14 @@ func (e *Evaluator) OnTick(ctx context.Context, rctx RoutingContext, legs []LegI
 // pulling in the router. The bridge layer converts between the
 // two when the hook fires.
 type LegInfo struct {
-	Index     int
-	Kind      string
-	LatencyMs int
-	Alive     bool
-	SentBytes uint64
-	RecvBytes uint64
-	Hops      []string
+	Index       int
+	Kind        string
+	LatencyMs   int
+	Alive       bool
+	SentBytes   uint64
+	RecvBytes   uint64
+	Retransmits uint64
+	Hops        []string
 }
 
 type LegChange struct {
