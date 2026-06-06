@@ -174,9 +174,15 @@ func runLogCollection(minVer string) error {
 // .daily map to only the requested date, and writes the pruned views to
 // hist/{date}_ut.json and hist/{date}_ut.txt. This replaces the previous
 // `skywire cli ut | tee ...` (which kept all 7 days) plus the jq prune step.
+//
+// The source is the TPD-integrated uptime endpoint (`tpd/.../uptimes?v=v2`),
+// not the standalone uptime tracker. TPD only credits heartbeats from
+// visors that hold >= 2 transports, so the formerly-separate
+// hist/{date}_transports.txt eligibility gate is now implicit in the UT
+// data itself — no manual transport-count tracking required.
 func fetchAndSaveUT(date, histDir string) error {
 	dep := getDeploymentForUT()
-	url := strings.TrimRight(dep.UptimeTracker, "/") + "/uptimes?v=v2"
+	url := strings.TrimRight(dep.TransportDiscovery, "/") + "/uptimes?v=v2"
 
 	client := &http.Client{Timeout: 60 * time.Second}
 	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
@@ -329,20 +335,13 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		}
 	}
 
-	// Transport requirement.
-	transportMap := make(map[string]struct{})
-	tpFile := filepath.Join(opts.HistDir, opts.Date+"_transports.txt")
-	if data, err := os.ReadFile(tpFile); err == nil { //nolint:gosec
-		for _, line := range strings.Split(string(data), "\n") {
-			if line = strings.TrimSpace(line); line != "" {
-				transportMap[line] = struct{}{}
-			}
-		}
-		log.Infof("Loaded %d visors with sufficient transports from %s", len(transportMap), tpFile)
-	} else {
-		log.Warnf("Transport file not found: %s (transport requirement will be skipped)", tpFile)
-	}
-	requireTPs := len(transportMap) > 0
+	// Transport requirement is now implicit in the UT source. Since
+	// fetchAndSaveUT pulls from TPD's integrated /uptimes endpoint
+	// (which only credits heartbeats while the visor holds >= 2
+	// transports), any PK in hist/{date}_ut.txt has already passed the
+	// "had transports yesterday" gate. We no longer read or honor a
+	// separate hist/{date}_transports.txt file here. tp-collect remains
+	// available for diagnostics but is not load-bearing for rewards.
 
 	// Get PKs that met uptime on this date.
 	res, _ := script.File(utfilePath).Match(strings.TrimRight(opts.Date, "\n")).Column(1).Slice() //nolint:errcheck
@@ -375,8 +374,9 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		_, allowed2 := allowArchMap2[arch]
 		_, _, addrErr := rewardconfig.ValidateRewardAddress(sky)
 
-		_, hasTransports := transportMap[pk]
-		meetsTransportReq := !requireTPs || hasTransports
+		// TPD-integrated UT already gated >= 2 transports at heartbeat
+		// time, so every pk we're iterating qualified by definition.
+		meetsTransportReq := true
 
 		archAllowed := allowed1 || allowed2
 
