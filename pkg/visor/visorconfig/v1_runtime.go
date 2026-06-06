@@ -459,67 +459,46 @@ func updateStringArg(conf *Launcher, appName, argName, value string) bool {
 // All flag names and values are formatted as "-name=value" to allow arbitrary values with respect to different
 // possible default values.
 // The updated config gets flushed to file if there are any changes.
+// updateBoolArg sets or clears a boolean flag in the app's Args. A bool flag in
+// pflag is a bare "--flag" token (presence = true); a false value means the flag
+// must be ABSENT. The previous implementation stored "-flag=value" (single dash,
+// value-suffixed), which pflag parses as an unknown shorthand cluster and errors
+// on — making the launched app exit immediately on startup. This normalizes to a
+// proper double-dash bare flag and strips any prior (incl. malformed) form.
 func updateBoolArg(conf *Launcher, appName, argName string, value bool) bool {
-	const argFmt = "%s=%v"
+	name := strings.TrimLeft(argName, "-") // e.g. "reconnect"
+	flag := "--" + name
 
 	configChanged := false
-
 	for i := range conf.Apps {
 		if conf.Apps[i].Name != appName {
 			continue
 		}
-
-		// we format it to have a single dash, just to unify representation
-		fmtedArgName := argName
-		if argName[1] == '-' {
-			fmtedArgName = fmtedArgName[1:]
-		}
-
-		arg := fmt.Sprintf(argFmt, fmtedArgName, value)
-
 		configChanged = true
 
-		argChanged := false
+		// Strip every prior occurrence in any form: bare ("--reconnect" /
+		// "-reconnect" / "reconnect"), value-suffixed ("--reconnect=true"), or a
+		// "<flag> true/false" pair from older configs.
+		out := conf.Apps[i].Args[:0]
 		for j := 0; j < len(conf.Apps[i].Args); j++ {
-			// there shouldn't be such values if config is modified automatically,
-			// but might happen if done manually, so we avoid further panic with this check
-			if len(conf.Apps[i].Args[j]) < 2 {
-				continue
-			}
-
-			equalArgName := conf.Apps[i].Args[j][1] != '-' && strings.HasPrefix(conf.Apps[i].Args[j], fmtedArgName)
-			if conf.Apps[i].Args[j][1] == '-' {
-				equalArgName = strings.HasPrefix(conf.Apps[i].Args[j], "-"+fmtedArgName)
-			}
-
-			if !equalArgName {
-				continue
-			}
-
-			// check next value. currently we store value along with the flag name in a single string,
-			// but there're may be some broken configs because of the previous functionality, so we
-			// make our best effort to fix this on the go
-			if (j + 1) < len(conf.Apps[i].Args) {
-				// bool value shouldn't be present there, so we remove it, if it is
-				if conf.Apps[i].Args[j+1] == "true" || conf.Apps[i].Args[j+1] == "false" {
-					if (j + 2) < len(conf.Apps[i].Args) {
-						conf.Apps[i].Args = append(conf.Apps[i].Args[:j+1], conf.Apps[i].Args[j+2:]...)
-					} else {
-						conf.Apps[i].Args = conf.Apps[i].Args[:j+1]
+			a := conf.Apps[i].Args[j]
+			bare := strings.TrimLeft(a, "-")
+			if bare == name || strings.HasPrefix(bare, name+"=") {
+				if j+1 < len(conf.Apps[i].Args) {
+					if n := conf.Apps[i].Args[j+1]; n == "true" || n == "false" {
+						j++ // also drop the stray bool literal
 					}
 				}
+				continue
 			}
-
-			conf.Apps[i].Args[j] = arg
-			argChanged = true
-
-			break
+			out = append(out, a)
 		}
+		conf.Apps[i].Args = out
 
-		if !argChanged {
-			conf.Apps[i].Args = append(conf.Apps[i].Args, arg)
+		// Re-add as a bare double-dash flag only when true.
+		if value {
+			conf.Apps[i].Args = append(conf.Apps[i].Args, flag)
 		}
-
 		break
 	}
 
