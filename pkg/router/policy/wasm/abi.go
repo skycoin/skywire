@@ -14,13 +14,14 @@ package wasm
 
 // LegInfoWire mirrors policy.LegInfo as a JSON wire type.
 type LegInfoWire struct {
-	Index     int      `json:"index"`
-	Kind      string   `json:"kind"`
-	LatencyMs int      `json:"latency_ms"`
-	Alive     bool     `json:"alive"`
-	SentBytes uint64   `json:"sent_bytes,omitempty"`
-	RecvBytes uint64   `json:"recv_bytes,omitempty"`
-	Hops      []string `json:"hops,omitempty"`
+	Index       int      `json:"index"`
+	Kind        string   `json:"kind"`
+	LatencyMs   int      `json:"latency_ms"`
+	Alive       bool     `json:"alive"`
+	SentBytes   uint64   `json:"sent_bytes,omitempty"`
+	RecvBytes   uint64   `json:"recv_bytes,omitempty"`
+	Retransmits uint64   `json:"retransmits,omitempty"`
+	Hops        []string `json:"hops,omitempty"`
 }
 
 // LegChangeWire mirrors policy.LegChange as a JSON wire type.

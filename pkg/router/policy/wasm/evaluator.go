@@ -411,13 +411,14 @@ func wireFromLegs(legs []policy.LegInfo) []LegInfoWire {
 	out := make([]LegInfoWire, len(legs))
 	for i, l := range legs {
 		out[i] = LegInfoWire{
-			Index:     l.Index,
-			Kind:      l.Kind,
-			LatencyMs: l.LatencyMs,
-			Alive:     l.Alive,
-			SentBytes: l.SentBytes,
-			RecvBytes: l.RecvBytes,
-			Hops:      l.Hops,
+			Index:       l.Index,
+			Kind:        l.Kind,
+			LatencyMs:   l.LatencyMs,
+			Alive:       l.Alive,
+			SentBytes:   l.SentBytes,
+			RecvBytes:   l.RecvBytes,
+			Retransmits: l.Retransmits,
+			Hops:        l.Hops,
 		}
 	}
 	return out

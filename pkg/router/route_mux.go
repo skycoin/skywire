@@ -32,6 +32,11 @@ type LegStats struct {
 	// not what the peer said it sent.
 	RecvBytes   uint64
 	RecvPackets uint64
+	// Retransmits is how many SACK retransmit packets THIS leg has
+	// carried. A high retransmits:sentPackets ratio marks a lossy leg —
+	// the signal a routing policy needs to shed lossy intermediates and
+	// the scheduler needs to deweight them.
+	Retransmits uint64
 }
 
 type legCounters struct {
@@ -39,6 +44,7 @@ type legCounters struct {
 	sentPackets uint64 // atomic
 	recvBytes   uint64 // atomic
 	recvPackets uint64 // atomic
+	retransmits uint64 // atomic
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -236,6 +242,34 @@ func (m *routeMux) recordRecv(idx int, n uint64) {
 	m.legMu.RUnlock()
 }
 
+// recordRetransmit atomically increments the retransmit counter for leg
+// idx (the leg that carried a SACK retransmit). The retransmitted bytes
+// are still recorded via recordSent; this is the separate loss signal.
+func (m *routeMux) recordRetransmit(idx int) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].retransmits, 1)
+	}
+	m.legMu.RUnlock()
+}
+
+// retransmitsAt returns leg idx's cumulative retransmit count (0 if out of
+// range), for snapshotLegs / LegInfo without a full Snapshot allocation.
+func (m *routeMux) retransmitsAt(idx int) uint64 {
+	if idx < 0 {
+		return 0
+	}
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if idx < len(m.legs) {
+		return atomic.LoadUint64(&m.legs[idx].retransmits)
+	}
+	return 0
+}
+
 // snapshotLegs returns a stable copy of the current per-leg counters.
 // Atomic loads, no locking against in-flight increments — the
 // snapshot is point-in-time and the underlying counters keep moving.
@@ -249,6 +283,7 @@ func (m *routeMux) snapshotLegs() []LegStats {
 			SentPackets: atomic.LoadUint64(&c.sentPackets),
 			RecvBytes:   atomic.LoadUint64(&c.recvBytes),
 			RecvPackets: atomic.LoadUint64(&c.recvPackets),
+			Retransmits: atomic.LoadUint64(&c.retransmits),
 		}
 	}
 	m.legMu.RUnlock()
