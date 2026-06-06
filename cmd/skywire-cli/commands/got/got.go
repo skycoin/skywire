@@ -33,21 +33,21 @@ func init() {
 	dlCmd.Flags().UintVarP(&concurrency, "concurrency", "c", 0, "number of concurrent chunks (0 = auto)")
 	dlCmd.Flags().Uint64Var(&chunkSize, "chunk-size", 0, "chunk size in bytes (0 = auto)")
 	dlCmd.Flags().StringSliceVarP(&headers, "header", "H", nil, `HTTP header "Key: Value"`)
-	dlCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy address (host:port)")
+	dlCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg)")
 	dlCmd.Flags().StringVarP(&userAgent, "agent", "A", "", "user agent string")
 	dlCmd.Flags().BoolVarP(&resume, "resume", "r", false, "resume interrupted download")
 
 	// Request flags
 	reqCmd.Flags().StringVarP(&output, "output", "o", "", "write response body to file")
 	reqCmd.Flags().StringSliceVarP(&headers, "header", "H", nil, `HTTP header "Key: Value"`)
-	reqCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy address (host:port)")
+	reqCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg)")
 	reqCmd.Flags().StringVarP(&userAgent, "agent", "A", "", "user agent string")
 	reqCmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "print response headers")
 	reqCmd.Flags().StringVarP(&data, "data", "D", "", `request body (or @filename to read from file)`)
 
 	// Head flags
 	headCmd.Flags().StringSliceVarP(&headers, "header", "H", nil, `HTTP header "Key: Value"`)
-	headCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy address (host:port)")
+	headCmd.Flags().StringVarP(&proxyAddr, "proxy", "x", "", "SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg)")
 	headCmd.Flags().StringVarP(&userAgent, "agent", "A", "", "user agent string")
 
 	RootCmd.AddCommand(dlCmd, reqCmd, headCmd)
