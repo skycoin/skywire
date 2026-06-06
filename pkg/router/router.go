@@ -36,7 +36,15 @@ const (
 	DefaultRulesGCInterval = 10 * time.Second
 	acceptSize             = 1024
 
-	handshakeAwaitTimeout = 30 * time.Second
+	// handshakeAwaitTimeout bounds the dial-side wait for the remote's
+	// reciprocal route-group handshake. A handshake is a single small packet
+	// each way, so even a 6-hop high-latency route completes in a few seconds;
+	// 30s was ~20x the worst realistic RTT and meant a single flaky / dead
+	// intermediate stalled the whole dial for half a minute before the
+	// retry-with-exclude loop in DialRoutes could try another candidate. A
+	// tighter bound turns "remote not responding" into a fast failure that the
+	// fallback loop converts into the next candidate route. See DialRoutes.
+	handshakeAwaitTimeout = 12 * time.Second
 
 	maxHops       = 1000
 	retryDuration = 2 * time.Second

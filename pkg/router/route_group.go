@@ -176,6 +176,17 @@ type RouteGroup struct {
 	rotationHook     RotationHook
 	rotationApplyAdd func(excludeHops []string)
 	rotationInterval time.Duration
+
+	// selfHealAdd restores the multiplexed degree in the background when a
+	// leg dies. pruneDeadTransports drops the dead leg (surviving legs
+	// immediately carry its share via the selector), then maybeSelfHeal
+	// dials replacement aux legs up to selfHealTarget — without blocking
+	// traffic. Wired for EVERY mux dial, not just policy-rotation ones, so
+	// a plain `--routes N` group self-heals too. healInFlight guards against
+	// piling up concurrent heals while a replacement is still dialing.
+	selfHealAdd    func(excludeHops []string)
+	selfHealTarget int
+	healInFlight   atomic.Bool
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -596,6 +607,77 @@ func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd func(excludeHops [
 	}
 }
 
+// SetSelfHeal wires the background degree-restoration callback for a
+// multiplexed route group. When a leg is pruned and the live degree drops
+// below target, the route group dials replacement aux legs (via applyAdd)
+// without blocking traffic — surviving legs carry the load meanwhile. target
+// is the requested mux degree (legs the group should maintain). A target of
+// 0 or 1 disables self-heal (a single-leg group has nothing to spread to).
+func (rg *RouteGroup) SetSelfHeal(applyAdd func(excludeHops []string), target int) {
+	rg.mu.Lock()
+	rg.selfHealAdd = applyAdd
+	rg.selfHealTarget = target
+	rg.mu.Unlock()
+}
+
+// aliveLegCount returns the number of live legs (non-nil, unclosed
+// transports). Caller must NOT hold rg.mu.
+func (rg *RouteGroup) aliveLegCount() int {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	n := 0
+	for _, tp := range rg.tps {
+		if tp != nil && !tp.IsClosed() {
+			n++
+		}
+	}
+	return n
+}
+
+// maybeSelfHeal restores the multiplexed degree after a leg drop. If the live
+// leg count fell below target and no replacement is already in flight, it
+// dials replacement aux legs in the background until the degree is restored
+// (or a bounded number of attempts is exhausted, so a destination with no
+// remaining disjoint paths can't loop forever). Non-blocking: surviving legs
+// keep carrying traffic while replacements set up. healInFlight bounds this to
+// one concurrent heal so a flapping leg can't spawn a storm of setup dials.
+//
+// Must NOT be called while holding rg.mu.
+func (rg *RouteGroup) maybeSelfHeal() {
+	rg.mu.Lock()
+	add := rg.selfHealAdd
+	target := rg.selfHealTarget
+	rg.mu.Unlock()
+	if add == nil || target <= 1 || rg.isClosed() {
+		return
+	}
+	if rg.aliveLegCount() >= target {
+		return
+	}
+	if !rg.healInFlight.CompareAndSwap(false, true) {
+		return // a replacement is already dialing
+	}
+	go func() {
+		defer rg.healInFlight.Store(false)
+		// Each add(nil) blocks ~one setup-node dial and, on success,
+		// appends one leg. Re-check the live count between attempts and
+		// stop as soon as the degree is restored, the group closes, or we
+		// hit the attempt cap (target+1 gives a little headroom for dials
+		// that fail on a bad intermediate before one lands).
+		for attempt := 0; attempt < target+1; attempt++ {
+			if rg.isClosed() || rg.aliveLegCount() >= target {
+				return
+			}
+			if rg.logger != nil {
+				rg.logger.WithField("alive", rg.aliveLegCount()).
+					WithField("target", target).
+					Debug("Mux self-heal: dialing replacement leg to restore degree")
+			}
+			add(nil)
+		}
+	}()
+}
+
 // snapshotLegs builds a []LegInfo from the current rg.tps. Caller
 // must hold rg.mu. Used by the leg-change fire path to give the
 // policy script a snapshot it can iterate.
@@ -955,6 +1037,9 @@ func (rg *RouteGroup) dropLegsByIndex(indices []int) {
 	for _, idx := range droppedIdx {
 		rg.fireLegChange("dropped", idx)
 	}
+	if len(droppedIdx) > 0 {
+		rg.maybeSelfHeal()
+	}
 	if rg.logger != nil && len(closed) > 0 {
 		rg.logger.
 			WithField("dropped_indices", closed).
@@ -1071,6 +1156,9 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	// re-takes rg.mu).
 	for _, idx := range droppedLegs {
 		rg.fireLegChange("dropped", idx)
+	}
+	if len(droppedLegs) > 0 {
+		rg.maybeSelfHeal()
 	}
 }
 
