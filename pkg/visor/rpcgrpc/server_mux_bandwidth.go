@@ -47,6 +47,10 @@ const (
 	defaultMuxBwProbeInterval  = 100 * time.Millisecond
 	defaultMuxBwSampleInterval = 1 * time.Second
 	muxBwEventChannelCapacity  = 256
+	// muxBwProbeTimeout caps a single RTT probe's round-trip so it cannot
+	// block the pump WaitGroup past the measurement window. Shrunk to the
+	// remaining ctx per-iteration in muxBwProbeLoop.
+	muxBwProbeTimeout = 5 * time.Second
 )
 
 // muxBwCfg is the normalized request. Pass this around inside the
@@ -620,6 +624,20 @@ func (s *PingServer) muxBwProbeLoop(
 			// connection for ... call DialPing first" events at
 			// every run-end. Cosmetic but noisy.
 			if ctx.Err() != nil {
+				return
+			}
+			// Bound this probe so its reads cannot outlive the measurement
+			// window (pumpCtx / idleCtx). Without this, PingOnce's default
+			// read deadline blocks pumpWg.Wait() past the run end — the
+			// mux-bw "never returns" hang. Cap at muxBwProbeTimeout, shrunk
+			// to whatever ctx time remains.
+			probeConf.Timeout = muxBwProbeTimeout
+			if dl, ok := ctx.Deadline(); ok {
+				if rem := time.Until(dl); rem < probeConf.Timeout {
+					probeConf.Timeout = rem
+				}
+			}
+			if probeConf.Timeout <= 0 {
 				return
 			}
 			sequence++
