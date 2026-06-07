@@ -87,16 +87,24 @@ button:focus {
 }
 .mat-mdc-form-field input.mat-mdc-input-element::placeholder,
 .mat-mdc-form-field textarea.mat-mdc-input-element::placeholder {
-  // Was 0.45 — placeholder hints (e.g. "127.0.0.1:1080") were barely
-  // legible against the dark field. 0.6 keeps them clearly subordinate
-  // to entered text while remaining readable.
-  color: rgba(255, 255, 255, 0.6) !important;
+  // Was 0.45 then 0.6 — placeholder hints (e.g. "127.0.0.1:1080") still read
+  // as too dark. 0.72 keeps them subordinate to entered text yet legible.
+  color: rgba(255, 255, 255, 0.72) !important;
 }
-// Outline / floating label tone — slightly dimmer so it doesn't
-// compete with the entered text.
+// Checkbox / radio / slide-toggle label text — Material's default tone is too
+// dark on this app's dark surfaces (e.g. the Web Proxy "Enable resolving
+// proxy" label). Make it clearly legible everywhere.
+.mdc-form-field > label,
+.mat-mdc-checkbox label,
+.mat-mdc-checkbox .mdc-label,
+.mat-mdc-radio-button label,
+.mat-mdc-slide-toggle label {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+// Outline / floating label tone — legible but subordinate to entered text.
 .mat-mdc-form-field .mdc-floating-label,
 .mat-mdc-form-field .mat-mdc-floating-label {
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.85);
 }
 .mat-mdc-form-field .mdc-notched-outline__leading,
 .mat-mdc-form-field .mdc-notched-outline__notch,

@@ -3,7 +3,7 @@
 .loading-row {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgba(255, 255, 255, 0.85);
   padding: 24px 0;
 }
 
@@ -36,7 +36,7 @@
   }
 
   .last-updated {
-    color: rgba(255, 255, 255, 0.55);
+    color: rgba(255, 255, 255, 0.8);
     font-size: 0.85em;
     margin-left: 8px;
   }
@@ -47,16 +47,16 @@
 }
 
 .dim {
-  // Secondary text. Was 0.55 alpha, which fell below a readable contrast
-  // ratio on the translucid table background — bumped to 0.72.
-  color: rgba(255, 255, 255, 0.72);
+  // Secondary text. 0.55 then 0.72 both still read as "too dark" against the
+  // bright white table headers — set to 0.85 for clear legibility.
+  color: rgba(255, 255, 255, 0.85);
 }
 
 // Endpoint + IP are reference data operators copy/paste — they must be
-// clearly legible, not muted. The endpoint was previously rendered with
-// the .dim class on a <code>, which double-dimmed it into the background.
+// clearly legible, not muted. The endpoint was previously a .dim <code> that
+// faded into the background; render it near-white.
 .endpoint {
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.92);
   word-break: break-all;
 }
 
@@ -150,7 +150,7 @@ code {
     .rsn-pk {
       font-family: monospace;
       font-size: 11px;
-      color: rgba(255, 255, 255, 0.7);
+      color: rgba(255, 255, 255, 0.85);
       word-break: break-all;
       flex: 1 1 auto;
       min-width: 0;
@@ -208,7 +208,7 @@ tr.drill-row td {
 .drill-loading {
   display: flex;
   align-items: center;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.85);
 }
 .drill-error {
   color: #ff6b6b;
