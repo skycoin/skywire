@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -268,12 +269,12 @@ func (c *EntityCommon) SessionCount() int {
 //
 // The evicted predecessor's serve goroutine unwinds and calls delSession,
 // which is identity-checked so it cannot remove the live replacement.
-func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool {
+func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) {
 	c.sessionsMx.Lock()
 	old, hadOld := c.sessions[dSes.RemotePK()]
 	if hadOld && old == dSes {
 		c.sessionsMx.Unlock()
-		return true
+		return
 	}
 	c.sessions[dSes.RemotePK()] = dSes
 	cb := c.setSessionCallback
@@ -294,7 +295,6 @@ func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool
 				Warn("Callback returned non-nil error.\n")
 		}
 	}
-	return true
 }
 
 // delSession removes the session for pk, but only when the currently-stored
@@ -491,6 +491,21 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr, addrV6 s
 	}
 }
 
+// isEntryNotFound reports whether err is the discovery's "entry not found"
+// result — i.e. the client genuinely has no entry yet, so a fresh sequence-0
+// registration is correct. It checks BOTH the typed sentinel and the message
+// string: the raw httpClient returns the disc.ErrKeyNotFound sentinel, but the
+// dmsgfirst/fallback clients and the test mock stringify it across the
+// dmsg-HTTP boundary (the same reason dmsgfirst string-matches the 202 error),
+// so errors.Is alone is not reliable here. Any OTHER error is transient (the
+// entry probably exists at a sequence we just couldn't read) and must NOT
+// trigger a sequence-0 re-registration, which the discovery rejects 422.
+func isEntryNotFound(err error) bool {
+	return err != nil &&
+		(errors.Is(err, disc.ErrKeyNotFound) ||
+			strings.Contains(err.Error(), disc.ErrKeyNotFound.Error()))
+}
+
 func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType string, protocol string) (err error) {
 	endpoints := c.snapshotDiscoveries()
 	if len(endpoints) == 0 {
@@ -507,8 +522,24 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 	var firstErr error
 	anyOK := false
 	for _, ep := range endpoints {
-		if _, lookupErr := ep.Client.Entry(ctx, c.pk); lookupErr == nil {
+		_, lookupErr := ep.Client.Entry(ctx, c.pk)
+		if lookupErr == nil {
 			anyOK = true
+			continue
+		}
+		// Only a genuine "entry not found" means we should register a fresh
+		// entry at sequence 0. Any other lookup error is transient (EOF /
+		// timeout / dmsg session not ready during the startup burst — the
+		// same race that produces the "Failed to dial server for IP" EOF):
+		// the entry almost certainly EXISTS at some sequence N we just
+		// couldn't read, so POSTing a sequence-0 entry would be rejected
+		// "sequence field of new entry is not sequence of old entry + 1"
+		// (422). Surface the transient error so the caller retries the
+		// initial post once the fetch works, instead of clobbering.
+		if !isEntryNotFound(lookupErr) {
+			if firstErr == nil {
+				firstErr = lookupErr
+			}
 			continue
 		}
 		entry := disc.NewClientEntry(c.pk, 0, srvPKs)
@@ -600,6 +631,14 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, clientType string, srvPKs []cipher.PubKey) error {
 	entry, err := ep.Client.Entry(ctx, c.pk)
 	if err != nil {
+		// Only register a fresh sequence-0 entry when the entry is
+		// genuinely absent. A transient lookup failure (EOF/timeout) does
+		// NOT mean the entry is gone — POSTing sequence 0 over an existing
+		// entry is rejected 422 "not old + 1". Return the error and let the
+		// update loop retry on the next tick.
+		if !isEntryNotFound(err) {
+			return err
+		}
 		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
 		entry.ClientType = clientType
 		if err := entry.Sign(c.sk); err != nil {

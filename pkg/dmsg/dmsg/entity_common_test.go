@@ -36,20 +36,20 @@ func TestSetSession_NewestWins(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 
 	s1 := testSession(pk)
-	require.True(t, c.setSession(context.Background(), s1))
+	c.setSession(context.Background(), s1)
 	got, ok := c.session(pk)
 	require.True(t, ok)
 	require.Same(t, s1, got)
 
 	// Reconnect: a second session for the SAME pk must take over.
 	s2 := testSession(pk)
-	require.True(t, c.setSession(context.Background(), s2))
+	c.setSession(context.Background(), s2)
 	got, ok = c.session(pk)
 	require.True(t, ok)
 	require.Same(t, s2, got, "newest session must replace the stale one")
 
 	// Installing the identical session again is a no-op, still present.
-	require.True(t, c.setSession(context.Background(), s2))
+	c.setSession(context.Background(), s2)
 	got, _ = c.session(pk)
 	require.Same(t, s2, got)
 }
@@ -64,8 +64,8 @@ func TestDelSession_IdentityChecked(t *testing.T) {
 
 	s1 := testSession(pk)
 	s2 := testSession(pk)
-	require.True(t, c.setSession(context.Background(), s1))
-	require.True(t, c.setSession(context.Background(), s2)) // s2 replaces s1
+	c.setSession(context.Background(), s1)
+	c.setSession(context.Background(), s2) // s2 replaces s1
 
 	// The stale s1's goroutine unwinds and tries to delete by PK — must be
 	// a no-op because the map now holds s2, not s1.
@@ -81,7 +81,7 @@ func TestDelSession_IdentityChecked(t *testing.T) {
 
 	// A nil session deletes unconditionally (legacy callers).
 	s3 := testSession(pk)
-	require.True(t, c.setSession(context.Background(), s3))
+	c.setSession(context.Background(), s3)
 	c.delSession(context.Background(), pk, nil)
 	_, ok = c.session(pk)
 	require.False(t, ok)
