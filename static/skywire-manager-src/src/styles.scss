@@ -87,13 +87,16 @@ button:focus {
 }
 .mat-mdc-form-field input.mat-mdc-input-element::placeholder,
 .mat-mdc-form-field textarea.mat-mdc-input-element::placeholder {
-  color: rgba(255, 255, 255, 0.45) !important;
+  // Was 0.45 — placeholder hints (e.g. "127.0.0.1:1080") were barely
+  // legible against the dark field. 0.6 keeps them clearly subordinate
+  // to entered text while remaining readable.
+  color: rgba(255, 255, 255, 0.6) !important;
 }
 // Outline / floating label tone — slightly dimmer so it doesn't
 // compete with the entered text.
 .mat-mdc-form-field .mdc-floating-label,
 .mat-mdc-form-field .mat-mdc-floating-label {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.78);
 }
 .mat-mdc-form-field .mdc-notched-outline__leading,
 .mat-mdc-form-field .mdc-notched-outline__notch,

@@ -47,7 +47,22 @@
 }
 
 .dim {
-  color: rgba(255, 255, 255, 0.55);
+  // Secondary text. Was 0.55 alpha, which fell below a readable contrast
+  // ratio on the translucid table background — bumped to 0.72.
+  color: rgba(255, 255, 255, 0.72);
+}
+
+// Endpoint + IP are reference data operators copy/paste — they must be
+// clearly legible, not muted. The endpoint was previously rendered with
+// the .dim class on a <code>, which double-dimmed it into the background.
+.endpoint {
+  color: rgba(255, 255, 255, 0.82);
+  word-break: break-all;
+}
+
+.ip {
+  color: #93c5fd; // light blue, distinct + high-contrast on the dark table
+  white-space: nowrap;
 }
 
 .latency-fast {
