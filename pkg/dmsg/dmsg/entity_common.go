@@ -246,15 +246,45 @@ func (c *EntityCommon) SessionCount() int {
 	return n
 }
 
+// setSession installs dSes as THE session for its remote PK and always
+// succeeds. If a session for that PK already exists it is replaced and the
+// predecessor is closed.
+//
+// Newest-session-wins is the correct policy because exactly one session per
+// remote PK is ever valid: a well-behaved peer keeps a single session per
+// remote and only re-dials after its previous link died. The common case is a
+// half-dead link — the TCP died without a FIN/RST, so the old session's serve
+// loop is still parked in AcceptStream and has NOT errored out, leaving the
+// stale session in the map. The previous policy REJECTED the reconnecting
+// session and kept the corpse, so:
+//   - inbound stream bridging (server_session.go: serverSession →
+//     forwardRequest) kept targeting the dead session and blocked for the
+//     full HandshakeTimeout on every dial — observed as "delegated server
+//     advertised but unreachable (5s)", which starved multihop route setup
+//     (every hop dialed pk@136 hung 5s, exhausting the id-reservation budget
+//     → "dmsg error 202 - cannot connect to delegated server"); and
+//   - zombie accept-loop goroutines accumulated (21 serve goroutines observed
+//     on a visor with only 8 reachable servers).
+//
+// The evicted predecessor's serve goroutine unwinds and calls delSession,
+// which is identity-checked so it cannot remove the live replacement.
 func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool {
 	c.sessionsMx.Lock()
-	if _, ok := c.sessions[dSes.RemotePK()]; ok {
+	old, hadOld := c.sessions[dSes.RemotePK()]
+	if hadOld && old == dSes {
 		c.sessionsMx.Unlock()
-		return false
+		return true
 	}
 	c.sessions[dSes.RemotePK()] = dSes
 	cb := c.setSessionCallback
 	c.sessionsMx.Unlock()
+
+	if hadOld {
+		// Close the stale predecessor OUTSIDE sessionsMx — Close does IO
+		// and can take other locks; holding sessionsMx across it risks the
+		// serveStream→session self-deadlock documented in updateServerEntry.
+		_ = old.Close() //nolint:errcheck
+	}
 
 	if cb != nil {
 		if err := cb(ctx); err != nil {
@@ -267,8 +297,19 @@ func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool
 	return true
 }
 
-func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
+// delSession removes the session for pk, but only when the currently-stored
+// session is dSes. The identity check is essential now that setSession
+// replaces stale sessions on reconnect: when an evicted predecessor's serve
+// goroutine unwinds it calls delSession, and an unconditional delete would
+// remove the LIVE replacement that setSession just installed. A nil dSes
+// deletes unconditionally for callers that hold no session reference.
+func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey, dSes *SessionCommon) {
 	c.sessionsMx.Lock()
+	cur, ok := c.sessions[pk]
+	if !ok || (dSes != nil && cur != dSes) {
+		c.sessionsMx.Unlock()
+		return
+	}
 	delete(c.sessions, pk)
 	cb := c.delSessionCallback
 	c.sessionsMx.Unlock()

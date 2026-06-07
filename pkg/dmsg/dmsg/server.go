@@ -590,6 +590,10 @@ func (s *Server) handleSession(conn net.Conn) {
 		dSes.Serve()
 	}
 
-	s.delSession(ctx, dSes.RemotePK())
+	// Identity-checked: only remove the map entry if it is still THIS
+	// session. setSession may have already replaced us with a fresh
+	// reconnect (newest-session-wins); deleting by PK alone would evict
+	// that live successor.
+	s.delSession(ctx, dSes.RemotePK(), dSes.SessionCommon)
 	cancel()
 }
