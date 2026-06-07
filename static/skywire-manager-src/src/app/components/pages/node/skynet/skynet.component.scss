@@ -65,33 +65,41 @@
   margin-bottom: 16px;
 }
 
-.add-form {
+// Compact router-style add bar: a single wrapping row of fields ending
+// in the action button, replacing the old sprawling multi-row add form.
+.add-bar {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 4px 10px;
   margin-top: 8px;
 }
 
-.add-row {
+.f-port   { width: 84px  !important; }
+.f-target { width: 190px !important; }
+.f-text   { width: 150px !important; }
+.f-wl     { width: 190px !important; }
+.f-net    { width: 110px !important; }
+.f-pk     { flex: 1 1 320px; min-width: 240px; }
+
+.add-toggles {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
+  gap: 12px;
+  height: 56px; // align with the outline field height
+  padding: 0 4px;
+  white-space: nowrap;
 }
 
-.field-sm {
-  width: 120px;
+.add-btn {
+  height: 40px;
+  margin-top: 8px;
 }
 
-.field-md {
-  width: 200px;
-}
-
-.field-lg {
-  width: 300px;
-}
-
-.field-pk {
-  width: 100%;
-  max-width: 580px;
+.add-hint {
+  font-size: 12px;
+  margin: 0 0 4px;
+  max-width: 760px;
 }
 
 .edit-icon {

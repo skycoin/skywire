@@ -15,6 +15,10 @@ export interface ServiceHealthEntry {
   status: string;
   latency_ms: number;
   version?: string;
+  transport?: string; // "dmsg" or "http"
+  /** Public ip:port — only DMSG servers carry one (from dmsg all_servers). */
+  ip?: string;
+  error?: string;
 }
 
 /**
