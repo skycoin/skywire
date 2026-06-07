@@ -28,8 +28,8 @@ func (d *countingDialer) Dial(_ context.Context, _ cipher.PubKey, _ uint16) (net
 	return ours, nil
 }
 func (d *countingDialer) Probe(_ context.Context, _ cipher.PubKey, _ uint16) bool { return true }
-func (d *countingDialer) Type() string                                           { return string(types.DMSG) }
-func (d *countingDialer) count() int32                                           { return atomic.LoadInt32(&d.dials) }
+func (d *countingDialer) Type() string                                            { return string(types.DMSG) }
+func (d *countingDialer) count() int32                                            { return atomic.LoadInt32(&d.dials) }
 
 // TestClientPool_Get_DiscardsStalePooledConn is the regression test for the
 // setup-node id-reservation failures: Client.call() arms the stream read
