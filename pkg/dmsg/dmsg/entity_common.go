@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -246,15 +247,45 @@ func (c *EntityCommon) SessionCount() int {
 	return n
 }
 
-func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool {
+// setSession installs dSes as THE session for its remote PK and always
+// succeeds. If a session for that PK already exists it is replaced and the
+// predecessor is closed.
+//
+// Newest-session-wins is the correct policy because exactly one session per
+// remote PK is ever valid: a well-behaved peer keeps a single session per
+// remote and only re-dials after its previous link died. The common case is a
+// half-dead link — the TCP died without a FIN/RST, so the old session's serve
+// loop is still parked in AcceptStream and has NOT errored out, leaving the
+// stale session in the map. The previous policy REJECTED the reconnecting
+// session and kept the corpse, so:
+//   - inbound stream bridging (server_session.go: serverSession →
+//     forwardRequest) kept targeting the dead session and blocked for the
+//     full HandshakeTimeout on every dial — observed as "delegated server
+//     advertised but unreachable (5s)", which starved multihop route setup
+//     (every hop dialed pk@136 hung 5s, exhausting the id-reservation budget
+//     → "dmsg error 202 - cannot connect to delegated server"); and
+//   - zombie accept-loop goroutines accumulated (21 serve goroutines observed
+//     on a visor with only 8 reachable servers).
+//
+// The evicted predecessor's serve goroutine unwinds and calls delSession,
+// which is identity-checked so it cannot remove the live replacement.
+func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) {
 	c.sessionsMx.Lock()
-	if _, ok := c.sessions[dSes.RemotePK()]; ok {
+	old, hadOld := c.sessions[dSes.RemotePK()]
+	if hadOld && old == dSes {
 		c.sessionsMx.Unlock()
-		return false
+		return
 	}
 	c.sessions[dSes.RemotePK()] = dSes
 	cb := c.setSessionCallback
 	c.sessionsMx.Unlock()
+
+	if hadOld {
+		// Close the stale predecessor OUTSIDE sessionsMx — Close does IO
+		// and can take other locks; holding sessionsMx across it risks the
+		// serveStream→session self-deadlock documented in updateServerEntry.
+		_ = old.Close() //nolint:errcheck
+	}
 
 	if cb != nil {
 		if err := cb(ctx); err != nil {
@@ -264,11 +295,21 @@ func (c *EntityCommon) setSession(ctx context.Context, dSes *SessionCommon) bool
 				Warn("Callback returned non-nil error.\n")
 		}
 	}
-	return true
 }
 
-func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey) {
+// delSession removes the session for pk, but only when the currently-stored
+// session is dSes. The identity check is essential now that setSession
+// replaces stale sessions on reconnect: when an evicted predecessor's serve
+// goroutine unwinds it calls delSession, and an unconditional delete would
+// remove the LIVE replacement that setSession just installed. A nil dSes
+// deletes unconditionally for callers that hold no session reference.
+func (c *EntityCommon) delSession(ctx context.Context, pk cipher.PubKey, dSes *SessionCommon) {
 	c.sessionsMx.Lock()
+	cur, ok := c.sessions[pk]
+	if !ok || (dSes != nil && cur != dSes) {
+		c.sessionsMx.Unlock()
+		return
+	}
 	delete(c.sessions, pk)
 	cb := c.delSessionCallback
 	c.sessionsMx.Unlock()
@@ -450,6 +491,21 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr, addrV6 s
 	}
 }
 
+// isEntryNotFound reports whether err is the discovery's "entry not found"
+// result — i.e. the client genuinely has no entry yet, so a fresh sequence-0
+// registration is correct. It checks BOTH the typed sentinel and the message
+// string: the raw httpClient returns the disc.ErrKeyNotFound sentinel, but the
+// dmsgfirst/fallback clients and the test mock stringify it across the
+// dmsg-HTTP boundary (the same reason dmsgfirst string-matches the 202 error),
+// so errors.Is alone is not reliable here. Any OTHER error is transient (the
+// entry probably exists at a sequence we just couldn't read) and must NOT
+// trigger a sequence-0 re-registration, which the discovery rejects 422.
+func isEntryNotFound(err error) bool {
+	return err != nil &&
+		(errors.Is(err, disc.ErrKeyNotFound) ||
+			strings.Contains(err.Error(), disc.ErrKeyNotFound.Error()))
+}
+
 func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType string, protocol string) (err error) {
 	endpoints := c.snapshotDiscoveries()
 	if len(endpoints) == 0 {
@@ -466,8 +522,24 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 	var firstErr error
 	anyOK := false
 	for _, ep := range endpoints {
-		if _, lookupErr := ep.Client.Entry(ctx, c.pk); lookupErr == nil {
+		_, lookupErr := ep.Client.Entry(ctx, c.pk)
+		if lookupErr == nil {
 			anyOK = true
+			continue
+		}
+		// Only a genuine "entry not found" means we should register a fresh
+		// entry at sequence 0. Any other lookup error is transient (EOF /
+		// timeout / dmsg session not ready during the startup burst — the
+		// same race that produces the "Failed to dial server for IP" EOF):
+		// the entry almost certainly EXISTS at some sequence N we just
+		// couldn't read, so POSTing a sequence-0 entry would be rejected
+		// "sequence field of new entry is not sequence of old entry + 1"
+		// (422). Surface the transient error so the caller retries the
+		// initial post once the fetch works, instead of clobbering.
+		if !isEntryNotFound(lookupErr) {
+			if firstErr == nil {
+				firstErr = lookupErr
+			}
 			continue
 		}
 		entry := disc.NewClientEntry(c.pk, 0, srvPKs)
@@ -559,6 +631,14 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, clientType string, srvPKs []cipher.PubKey) error {
 	entry, err := ep.Client.Entry(ctx, c.pk)
 	if err != nil {
+		// Only register a fresh sequence-0 entry when the entry is
+		// genuinely absent. A transient lookup failure (EOF/timeout) does
+		// NOT mean the entry is gone — POSTing sequence 0 over an existing
+		// entry is rejected 422 "not old + 1". Return the error and let the
+		// update loop retry on the next tick.
+		if !isEntryNotFound(err) {
+			return err
+		}
 		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
 		entry.ClientType = clientType
 		if err := entry.Sign(c.sk); err != nil {
