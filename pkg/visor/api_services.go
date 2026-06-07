@@ -199,6 +199,18 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 		return servers[i].PK.String() < servers[j].PK.String()
 	})
 
+	// Map each server PK to its public ip:port from the dmsg-discovery
+	// all_servers cache (refreshed over dmsg). Only DMSG servers carry an
+	// address; the UI shows it in the IP column and a hyphen elsewhere.
+	addrByPK := map[cipher.PubKey]string{}
+	if v.dmsgServersCache != nil {
+		for _, e := range v.dmsgServersCache.All() {
+			if e != nil && e.Server != nil && e.Server.Address != "" {
+				addrByPK[e.Static] = e.Server.Address
+			}
+		}
+	}
+
 	out := make([]ServiceHealthEntry, len(servers))
 	var wg sync.WaitGroup
 	for i, s := range servers {
@@ -209,6 +221,7 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 			Status:    "OK",
 			Transport: "dmsg",
 			LatencyMs: latStr,
+			IP:        addrByPK[s.PK],
 		}
 		// Probe /health via the existing session to get the version.
 		if v.dmsgC != nil {
