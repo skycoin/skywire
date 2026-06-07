@@ -98,53 +98,45 @@
       </table>
       <p *ngIf="ports.length === 0" class="empty-msg">No ports forwarded.</p>
 
-      <!-- Add port form -->
-      <div class="add-form">
-        <div class="add-row">
-          <mat-form-field appearance="outline" class="field-sm">
-            <mat-label>Skynet Port</mat-label>
-            <input matInput [(ngModel)]="newPort" placeholder="80" type="number">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="field-sm">
-            <mat-label>Local Port</mat-label>
-            <input matInput [(ngModel)]="newLocalPort" placeholder="3000" type="number">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="field-md">
-            <mat-label>Target Address</mat-label>
-            <input matInput [(ngModel)]="newProxyAddr" placeholder="192.168.1.20:5432">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="field-md">
-            <mat-label>Label</mat-label>
-            <input matInput [(ngModel)]="newLabel" placeholder="My Service">
-          </mat-form-field>
-        </div>
-        <div class="add-row">
-          <mat-form-field appearance="outline" class="field-lg">
-            <mat-label>Description</mat-label>
-            <input matInput [(ngModel)]="newDesc" placeholder="Optional description">
-          </mat-form-field>
-          <mat-form-field appearance="outline" class="field-lg">
-            <mat-label>Whitelist (optional)</mat-label>
-            <textarea matInput rows="2" [(ngModel)]="newWhitelist"
-                      placeholder="02abc..., 03def... (empty = open to all)"></textarea>
-          </mat-form-field>
-        </div>
-        <div class="add-row">
+      <!-- Add forward: one compact router-style bar (fill a row, hit +) -->
+      <div class="add-bar">
+        <mat-form-field appearance="outline" class="f-port">
+          <mat-label>Port</mat-label>
+          <input matInput [(ngModel)]="newPort" placeholder="80" type="number">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="f-port">
+          <mat-label>Local</mat-label>
+          <input matInput [(ngModel)]="newLocalPort" placeholder="3000" type="number">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="f-target">
+          <mat-label>Target (host:port)</mat-label>
+          <input matInput [(ngModel)]="newProxyAddr" placeholder="192.168.1.20:5432">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="f-text">
+          <mat-label>Label</mat-label>
+          <input matInput [(ngModel)]="newLabel" placeholder="My Service">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="f-text">
+          <mat-label>Description</mat-label>
+          <input matInput [(ngModel)]="newDesc" placeholder="Optional">
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="f-wl">
+          <mat-label>Whitelist PKs</mat-label>
+          <input matInput [(ngModel)]="newWhitelist" placeholder="empty = open to all">
+        </mat-form-field>
+        <div class="add-toggles">
           <mat-checkbox [(ngModel)]="newSkynet" color="primary">Skynet</mat-checkbox>
           <mat-checkbox [(ngModel)]="newDmsg" color="primary">DMSG</mat-checkbox>
-          <mat-checkbox [(ngModel)]="newShowLanding" color="primary">Show on landing page</mat-checkbox>
-          <button mat-raised-button color="primary" (click)="addPort()">
-            <mat-icon>add</mat-icon> Forward
-          </button>
+          <mat-checkbox [(ngModel)]="newShowLanding" color="primary" matTooltip="Show on landing page">Landing</mat-checkbox>
         </div>
-        <p class="section-desc">
-          Target Address overrides Local Port — set it to forward to a host:port elsewhere
-          on the LAN (e.g. <code>192.168.1.20:5432</code>) instead of localhost.
-          Whitelist accepts comma- or whitespace-separated 66-char hex public keys;
-          leave empty to allow all authenticated peers (you can edit the whitelist
-          per-row later, on the table above).
-        </p>
+        <button mat-raised-button color="primary" class="add-btn" (click)="addPort()">
+          <mat-icon>add</mat-icon> Forward
+        </button>
       </div>
+      <p class="add-hint dim">
+        Target overrides Local Port to forward elsewhere on the LAN. Whitelist takes
+        comma/space-separated 66-char hex PKs; empty = all authenticated peers (editable per-row later).
+      </p>
     </div>
   </div>
 
@@ -184,29 +176,27 @@
       </table>
       <p *ngIf="forwards.length === 0" class="empty-msg">No active reverse proxies.</p>
 
-      <div class="add-row">
-        <mat-form-field appearance="outline" class="field-sm">
+      <div class="add-bar">
+        <mat-form-field appearance="outline" class="f-net">
           <mat-label>Network</mat-label>
           <mat-select [(ngModel)]="connectNetwork" panelClass="skynet-select-panel">
             <mat-option value="skynet">skynet</mat-option>
             <mat-option value="dmsg">dmsg</mat-option>
           </mat-select>
         </mat-form-field>
-        <mat-form-field appearance="outline" class="field-pk">
+        <mat-form-field appearance="outline" class="f-pk">
           <mat-label>Remote Public Key</mat-label>
           <input matInput [(ngModel)]="connectPK" placeholder="02abc...">
         </mat-form-field>
-      </div>
-      <div class="add-row">
-        <mat-form-field appearance="outline" class="field-sm">
-          <mat-label>Remote Port</mat-label>
+        <mat-form-field appearance="outline" class="f-port">
+          <mat-label>Remote</mat-label>
           <input matInput [(ngModel)]="connectRemotePort" placeholder="80" type="number">
         </mat-form-field>
-        <mat-form-field appearance="outline" class="field-sm">
-          <mat-label>Local Port</mat-label>
+        <mat-form-field appearance="outline" class="f-port">
+          <mat-label>Local</mat-label>
           <input matInput [(ngModel)]="connectLocalPort" placeholder="9090" type="number">
         </mat-form-field>
-        <button mat-raised-button color="primary" (click)="connect()">
+        <button mat-raised-button color="primary" class="add-btn" (click)="connect()">
           <mat-icon>link</mat-icon> Connect
         </button>
       </div>
