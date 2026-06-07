@@ -714,6 +714,11 @@ type ServiceHealthEntry struct {
 	Error     string `json:"error,omitempty"`
 	LatencyMs int64  `json:"latency_ms"`
 	Transport string `json:"transport,omitempty"` // "dmsg" or "http"
+	// IP is the public ip:port of a DMSG server, sourced from the
+	// dmsg-discovery all_servers endpoint (queried over dmsg). Only DMSG
+	// servers carry an address; other services leave it empty and the UI
+	// renders a hyphen.
+	IP string `json:"ip,omitempty"`
 }
 
 // PortDetail type of port details

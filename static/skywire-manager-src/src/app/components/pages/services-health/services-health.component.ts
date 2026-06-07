@@ -224,17 +224,19 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
     return 'latency-slow';
   }
 
-  /** Extract just the host portion of the service URL, for display. */
-  shortUrl(url: string): string {
+  /**
+   * The health endpoint actually probed for a service: the configured
+   * base URL with a trailing `/health`, scheme included (e.g.
+   * `dmsg://<pk>:80/health`). We build it by string ops rather than the
+   * URL API because the latter does not parse the authority of
+   * non-special schemes like `dmsg://`.
+   */
+  endpointUrl(url: string): string {
     if (!url) {
       return '';
     }
-    try {
-      const u = new URL(url);
-      return u.host;
-    } catch {
-      return url;
-    }
+    const s = url.trim().replace(/\/+$/, '');
+    return /\/health$/i.test(s) ? s : s + '/health';
   }
 
   trackByName(_: number, e: ServiceHealthEntry): string {

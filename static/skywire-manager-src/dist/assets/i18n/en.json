@@ -422,6 +422,7 @@
     "status": "Status",
     "latency": "Latency",
     "version": "Version",
+    "ip": "IP",
     "endpoint": "Endpoint",
     "drill": "Show /health payload",
     "collapse": "Collapse",

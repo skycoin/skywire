@@ -48,6 +48,7 @@
           <th>{{ 'services-health.status' | translate }}</th>
           <th>{{ 'services-health.latency' | translate }}</th>
           <th>{{ 'services-health.version' | translate }}</th>
+          <th>{{ 'services-health.ip' | translate }}</th>
           <th>{{ 'services-health.endpoint' | translate }}</th>
         </tr>
         @for (entry of entries; track trackByName($index, entry)) {
@@ -79,12 +80,19 @@
               }
             </td>
             <td>
-              <code class="dim">{{ shortUrl(entry.url) }}</code>
+              @if (entry.ip) {
+                <code class="ip">{{ entry.ip }}</code>
+              } @else {
+                <span class="dim">—</span>
+              }
+            </td>
+            <td>
+              <code class="endpoint">{{ endpointUrl(entry.url) }}</code>
             </td>
           </tr>
           @if (isDrilled(entry.name)) {
             <tr class="drill-row">
-              <td colspan="6">
+              <td colspan="7">
                 @if (drillLoading[entry.name]) {
                   <div class="drill-loading">
                     <mat-spinner [diameter]="14"></mat-spinner>
@@ -122,9 +130,15 @@
                 <code>{{ entry.version }}</code>
               </div>
             }
+            @if (entry.ip) {
+              <div class="mobile-row">
+                <span class="dim">{{ 'services-health.ip' | translate }}:</span>
+                <code class="ip">{{ entry.ip }}</code>
+              </div>
+            }
             <div class="mobile-row">
               <span class="dim">{{ 'services-health.endpoint' | translate }}:</span>
-              <code class="dim">{{ shortUrl(entry.url) }}</code>
+              <code class="endpoint">{{ endpointUrl(entry.url) }}</code>
             </div>
             @if (entry.error) {
               <div class="error-detail">{{ entry.error }}</div>
