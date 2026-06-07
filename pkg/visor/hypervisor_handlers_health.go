@@ -65,7 +65,10 @@ func (hv *Hypervisor) getSvcFetch() http.HandlerFunc {
 		}
 		w.Header().Set("Content-Type", "application/octet-stream")
 		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write(body); err != nil {
+		// G705 false positive: body is binary service data proxied as
+		// application/octet-stream (not text/html), so it is downloaded, not
+		// rendered — there is no XSS sink here.
+		if _, err := w.Write(body); err != nil { //nolint:gosec // G705: octet-stream proxy payload, not an HTML sink
 			hv.log(r).WithError(err).Warn("getSvcFetch: failed to write response body")
 		}
 	}

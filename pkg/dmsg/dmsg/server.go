@@ -586,10 +586,15 @@ func (s *Server) handleSession(conn net.Conn) {
 	}
 	dSes.sm.mutx.Unlock()
 
-	if s.setSession(ctx, dSes.SessionCommon) {
-		dSes.Serve()
-	}
+	// Newest-session-wins: setSession always installs this session
+	// (replacing and closing any stale predecessor), so always serve it.
+	s.setSession(ctx, dSes.SessionCommon)
+	dSes.Serve()
 
-	s.delSession(ctx, dSes.RemotePK())
+	// Identity-checked: only remove the map entry if it is still THIS
+	// session. setSession may have already replaced us with a fresh
+	// reconnect (newest-session-wins); deleting by PK alone would evict
+	// that live successor.
+	s.delSession(ctx, dSes.RemotePK(), dSes.SessionCommon)
 	cancel()
 }

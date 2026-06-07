@@ -151,27 +151,39 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		ce.log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
 	}
 
-	// Atomically: refuse-if-closed, dedupe, store, and wg.Add(1) under
-	// sessionsMx — pairs with Close which sets ce.closed under the same
-	// lock before wg.Wait. The Add must happen-before any subsequent
+	// Atomically: refuse-if-closed, replace-stale, store, and wg.Add(1)
+	// under sessionsMx — pairs with Close which sets ce.closed under the
+	// same lock before wg.Wait. The Add must happen-before any subsequent
 	// Wait or sync.WaitGroup races (TestEnv race: Add at 159 vs Wait at
 	// client.go:510). The setSessionCallback is invoked outside the lock
 	// to match the previous setSession semantics.
+	//
+	// Newest-session-wins: if a session for this server PK already exists
+	// it is almost certainly a stale half-dead session (the link died
+	// without a clean close, so its serve loop is still parked in
+	// AcceptStream and never freed the map slot). The old code REJECTED the
+	// reconnect and kept the corpse — the visor stayed "connected" to a
+	// server that could no longer carry an inbound bridged stream, so other
+	// visors dialing through it hung for HandshakeTimeout and multihop route
+	// setup starved on "dmsg error 202". Replace the predecessor and close
+	// it; its serve goroutine then unwinds and calls delSession, which is
+	// identity-checked so it cannot evict this live replacement.
 	ce.sessionsMx.Lock()
 	if ce.closed {
 		ce.sessionsMx.Unlock()
 		_ = dSes.Close() //nolint:errcheck
 		return ClientSession{}, errors.New("client closed")
 	}
-	if _, exists := ce.sessions[dSes.RemotePK()]; exists {
-		ce.sessionsMx.Unlock()
-		_ = dSes.Close() //nolint:errcheck
-		return ClientSession{}, errors.New("session already exists")
-	}
+	old, hadOld := ce.sessions[dSes.RemotePK()]
 	ce.sessions[dSes.RemotePK()] = dSes.SessionCommon
 	ce.wg.Add(1)
 	setSessCb := ce.setSessionCallback
 	ce.sessionsMx.Unlock()
+
+	if hadOld && old != dSes.SessionCommon {
+		// Close the stale predecessor outside the lock (Close does IO).
+		_ = old.Close() //nolint:errcheck
+	}
 
 	if setSessCb != nil {
 		if err := setSessCb(ctx); err != nil {
@@ -198,7 +210,10 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			default:
 			}
 			ce.sesMx.Unlock()
-			ce.delSession(ctx, dSes.RemotePK())
+			// Identity-checked: a newer reconnect may have already
+			// replaced this session in the map (newest-session-wins);
+			// deleting by PK alone would evict that live successor.
+			ce.delSession(ctx, dSes.RemotePK(), dSes.SessionCommon)
 		}
 
 		// Trigger disconnect callback.
