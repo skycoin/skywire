@@ -22,22 +22,22 @@ func TestServiceFetchOrder(t *testing.T) {
 		want             []serviceHop
 	}{
 		{
-			name: "dual: dmsg first then http",
+			name:    "dual: dmsg first then http",
 			httpURL: httpURL, dmsgURL: dmsgURL,
 			want: []serviceHop{{dmsg: true, baseURL: dmsgURL}, {dmsg: false, baseURL: httpURL}},
 		},
 		{
-			name: "dmsg-only: dmsg only (the default config)",
+			name:    "dmsg-only: dmsg only (the default config)",
 			httpURL: "", dmsgURL: dmsgURL,
 			want: []serviceHop{{dmsg: true, baseURL: dmsgURL}},
 		},
 		{
-			name: "http-only: http only",
+			name:    "http-only: http only",
 			httpURL: httpURL, dmsgURL: "",
 			want: []serviceHop{{dmsg: false, baseURL: httpURL}},
 		},
 		{
-			name: "neither configured",
+			name:    "neither configured",
 			httpURL: "", dmsgURL: "",
 			want: nil,
 		},
