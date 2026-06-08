@@ -38,6 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynetca"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 // DefaultDomainSuffix is the TLD treated as DMSG addresses when
@@ -248,19 +249,41 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			if _, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok {
-				pkLabel := strings.TrimSuffix(origHost, cfg.DomainSuffix)
-				pk, err := parsePKLabel(pkLabel)
-				if err != nil {
-					return nil, fmt.Errorf("invalid PK in hostname %q: %w", origHost, err)
+				_, route, dest, _, perr := skynetweb.ParseResolverHost(origHost, cfg.DomainSuffix)
+				if perr != nil {
+					return nil, fmt.Errorf("invalid dmsg hostname %q: %w", origHost, perr)
 				}
 				port, err := strconv.ParseUint(origPort, 10, 16)
 				if err != nil {
 					return nil, fmt.Errorf("invalid port: %w", err)
 				}
-				log.WithField("port", port).Debug("SOCKS5 → DMSG direct")
-				stream, err := dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: uint16(port)})
-				if err != nil {
-					return nil, err
+				dstAddr := dmsg.Addr{PK: dest, Port: uint16(port)}
+				var stream net.Conn
+				if len(route) > 0 {
+					// Pinned rendezvous: dial the destination THROUGH the named
+					// dmsg server's session instead of resolving it via
+					// discovery. This lets a browser reach a direct/hidden client
+					// by naming its server — <client-pk>.<server-pk>.dmsg. A
+					// .dmsg address carries a single routing PK (the server); if
+					// more are present the one nearest the destination wins.
+					serverPK := route[len(route)-1]
+					log.WithField("server", serverPK).WithField("port", port).Debug("SOCKS5 → DMSG pinned via server")
+					ses, serr := dmsgC.EnsureAndObtainSession(ctx, serverPK)
+					if serr != nil {
+						return nil, fmt.Errorf("pin via dmsg server %s: %w", serverPK, serr)
+					}
+					str, derr := ses.DialStream(ctx, dstAddr)
+					if derr != nil {
+						return nil, derr
+					}
+					stream = str
+				} else {
+					log.WithField("port", port).Debug("SOCKS5 → DMSG direct")
+					c, derr := dmsgC.Dial(ctx, dstAddr)
+					if derr != nil {
+						return nil, derr
+					}
+					stream = c
 				}
 
 				// Optional TLS MITM: terminate the browser's TLS
@@ -414,22 +437,4 @@ func handleTCPConn(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client,
 	_ = conn.Close()     //nolint:errcheck
 	_ = dmsgConn.Close() //nolint:errcheck
 	<-done
-}
-
-// parsePKLabel accepts either the legacy 66-char hex form or the
-// 53-char base32 DNSLabel form. See pkg/cipher/dnslabel.go for the
-// motivation: only the base32 form fits in a DNS label and an X.509
-// Subject.CommonName, so TLS-MITM browser URLs must use it. Hex is
-// kept accepted for backcompat with plain-HTTP URLs already in use.
-func parsePKLabel(label string) (cipher.PubKey, error) {
-	switch len(label) {
-	case cipher.PubKeyDNSLabelLen: // 53 — base32
-		return cipher.ParseDNSLabel(label)
-	default:
-		var pk cipher.PubKey
-		if err := pk.Set(label); err != nil {
-			return cipher.PubKey{}, err
-		}
-		return pk, nil
-	}
 }
