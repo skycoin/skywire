@@ -821,6 +821,19 @@ func (n *Node) Close() (err error) {
 			rpc.Close() //nolint:errcheck,gosec
 		}
 
+		// Terminate the feeds actor and the per-feed / per-head goroutine
+		// tree it owns. close(closeq) unblocks handle()'s select (every
+		// feed/info channel op is guarded by `case <-closeq`), and its
+		// deferred terminate() closes each nodeFeed -> nodeHead. Without
+		// this, nodeFeeds.handle and all its nodeHead.handle goroutines
+		// LEAK on every Node teardown — a subscriber that reconnects
+		// periodically piled up thousands of parked goroutines, bloating
+		// the heap so GC consumed most of the CPU. Closed before the DB so
+		// any per-head flush completes against an open container.
+		if n.fs != nil {
+			n.fs.close()
+		}
+
 		// Close database.
 		err = n.c.Close() //nolint:errcheck,gosec
 
