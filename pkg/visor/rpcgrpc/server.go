@@ -151,6 +151,10 @@ type PingConf struct {
 	// Mirrors visor.PingConfig.SetupTimeout; adapter converts to
 	// time.Duration. 0 falls back to DialPing's 30s default.
 	SetupTimeoutNs int64
+	// Timeout bounds a single PingOnce round-trip. Mirrors
+	// visor.PingConfig.Timeout; 0 = the visor-side 10s default. The
+	// mux-bw probe loop sets it to the remaining measurement window.
+	Timeout time.Duration
 }
 
 // PingServer implements the gRPC PingService
