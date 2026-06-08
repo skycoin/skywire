@@ -225,7 +225,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					// `subdomain` already encodes the operator's
 					// intent (the URL has labels before the PK).
 					// Use it verbatim as the rewritten Host.
-					stack = newHostRewriteConn(stack, vhost)
+					stack = NewHostRewriteConn(stack, vhost)
 					log.WithField("pk", dest.Hex()).
 						WithField("rewrite_host", vhost).
 						Debug("SOCKS5 → skynet host-rewrite active")

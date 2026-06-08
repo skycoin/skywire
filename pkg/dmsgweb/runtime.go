@@ -249,7 +249,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			if _, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok {
-				_, route, dest, _, perr := skynetweb.ParseResolverHost(origHost, cfg.DomainSuffix)
+				vhost, route, dest, _, perr := skynetweb.ParseResolverHost(origHost, cfg.DomainSuffix)
 				if perr != nil {
 					return nil, fmt.Errorf("invalid dmsg hostname %q: %w", origHost, perr)
 				}
@@ -263,9 +263,10 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					// Pinned rendezvous: dial the destination THROUGH the named
 					// dmsg server's session instead of resolving it via
 					// discovery. This lets a browser reach a direct/hidden client
-					// by naming its server — <client-pk>.<server-pk>.dmsg. A
-					// .dmsg address carries a single routing PK (the server); if
-					// more are present the one nearest the destination wins.
+					// by naming its server — <server-pk>.<client-pk>.dmsg (the
+					// destination is the label adjacent to the suffix; routing PKs
+					// precede it). A .dmsg address carries a single routing PK (the
+					// server); if more are present the one nearest the dest wins.
 					rl := route[len(route)-1]
 					if rl.IsTpID {
 						return nil, fmt.Errorf("dmsg address %q: routing label must be a dmsg server PK, not a transport ID", origHost)
@@ -288,6 +289,15 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 						return nil, derr
 					}
 					stream = c
+				}
+
+				// Rewrite the Host header to the vhost (the labels before the
+				// destination PK) so a vhost-capable backend (caddy/nginx/traefik)
+				// serves the right site — the dmsg counterpart of the skynet
+				// resolver's host-rewrite, which makes magnetosphere.net.<pk>.dmsg
+				// reach the magnetosphere.net site.
+				if vhost != "" {
+					stream = skynetweb.NewHostRewriteConn(stream, vhost)
 				}
 
 				// Optional TLS MITM: terminate the browser's TLS
