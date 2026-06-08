@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -42,6 +43,85 @@ func (g *Graph) GetRoute(ctx context.Context, source, destination cipher.PubKey,
 		return nil, ErrRouteNotFound
 	}
 	return routes, nil
+}
+
+// HopLatencyPenaltyMS is the latency assumed for a transport that has no
+// measured latency. It keeps latency-weighted routing usable when data is
+// missing: an unmeasured edge is treated as worse than a typical measured one
+// (so measured low-latency edges win), and a route of all-unmeasured edges is
+// effectively ranked by hop count (number of hops × penalty) — degrading to the
+// legacy behavior rather than treating missing data as free.
+const HopLatencyPenaltyMS = 500.0
+
+// routeLatency returns a route's total latency in milliseconds: the sum of each
+// hop's measured transport latency from the graph, substituting
+// HopLatencyPenaltyMS for any edge without a measurement.
+func (g *Graph) routeLatency(r routing.Route) float64 {
+	var total float64
+	for _, h := range r.Hops {
+		v, ok := g.graph[h.From]
+		if !ok {
+			total += HopLatencyPenaltyMS
+			continue
+		}
+		conn, ok := v.connections[h.To]
+		if !ok || conn.Latency <= 0 {
+			total += HopLatencyPenaltyMS
+			continue
+		}
+		total += conn.Latency
+	}
+	return total
+}
+
+// GetRouteWeighted returns up to `number` routes from source to destination
+// within [minLen, maxLen]. When byLatency is true it returns the
+// lowest-total-latency routes (a slightly longer path can win over a shorter
+// high-latency one); when false it returns the shortest-hop routes — identical
+// to GetRoute. Latency mode collects a bounded candidate pool from the same BFS
+// and sorts it, so it stays memory-safe on dense graphs.
+func (g *Graph) GetRouteWeighted(ctx context.Context, source, destination cipher.PubKey, minLen, maxLen, number int, byLatency bool) ([]routing.Route, error) {
+	if number <= 0 {
+		number = 1
+	}
+	if !byLatency {
+		return g.GetRoute(ctx, source, destination, minLen, maxLen, number)
+	}
+
+	// Pool larger than `number` so a lower-latency path that BFS emits a little
+	// later (e.g. one more hop, but faster edges) can still win — bounded so
+	// dense graphs don't blow up the sort.
+	poolCap := number * 32
+	if poolCap < 128 {
+		poolCap = 128
+	}
+	if poolCap > 2048 {
+		poolCap = 2048
+	}
+
+	type scored struct {
+		route   routing.Route
+		latency float64
+	}
+	pool := make([]scored, 0, poolCap)
+	err := g.StreamRoutes(ctx, source, destination, minLen, maxLen, func(r routing.Route) bool {
+		pool = append(pool, scored{route: r, latency: g.routeLatency(r)})
+		return len(pool) < poolCap
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(pool) == 0 {
+		return nil, ErrRouteNotFound
+	}
+
+	sort.SliceStable(pool, func(i, j int) bool { return pool[i].latency < pool[j].latency })
+
+	out := make([]routing.Route, 0, number)
+	for i := 0; i < len(pool) && i < number; i++ {
+		out = append(out, pool[i].route)
+	}
+	return out, nil
 }
 
 // DefaultMaxBFSQueue is the default per-call BFS queue cap when the
