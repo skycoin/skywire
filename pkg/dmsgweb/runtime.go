@@ -266,7 +266,11 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 					// by naming its server — <client-pk>.<server-pk>.dmsg. A
 					// .dmsg address carries a single routing PK (the server); if
 					// more are present the one nearest the destination wins.
-					serverPK := route[len(route)-1]
+					rl := route[len(route)-1]
+					if rl.IsTpID {
+						return nil, fmt.Errorf("dmsg address %q: routing label must be a dmsg server PK, not a transport ID", origHost)
+					}
+					serverPK := rl.PK
 					log.WithField("server", serverPK).WithField("port", port).Debug("SOCKS5 → DMSG pinned via server")
 					ses, serr := dmsgC.EnsureAndObtainSession(ctx, serverPK)
 					if serr != nil {
