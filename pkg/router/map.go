@@ -46,7 +46,7 @@ func isRetryableDialErr(err error) bool {
 
 // dialHopWithRetry dials one hop, retrying on a transient dmsg-202 bridge
 // failure with a short linear backoff. It stops early on success, on a
-// non-retryable error, or when ctx is cancelled (e.g. another hop failed
+// non-retryable error, or when ctx is canceled (e.g. another hop failed
 // genuinely, or MakeMapTimeout fired).
 func dialHopWithRetry(ctx context.Context, pk cipher.PubKey, dial func(context.Context, cipher.PubKey) (*Client, error)) (*Client, error) {
 	var (
