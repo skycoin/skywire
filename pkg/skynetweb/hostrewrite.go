@@ -65,11 +65,12 @@ type hostRewriteConn struct {
 	doneCh    chan struct{}
 }
 
-// newHostRewriteConn wraps backend so writes are HTTP-parsed and
+// NewHostRewriteConn wraps backend so writes are HTTP-parsed and
 // have their Host header replaced with targetHost. targetHost must
-// be non-empty; the caller (runtime.go) decides whether to apply
-// the wrapper based on the parsed URL.
-func newHostRewriteConn(backend net.Conn, targetHost string) *hostRewriteConn {
+// be non-empty; the caller decides whether to apply the wrapper based
+// on the parsed URL. Exported so the dmsg resolver (pkg/dmsgweb) can
+// reuse it for the same vhost handling.
+func NewHostRewriteConn(backend net.Conn, targetHost string) net.Conn {
 	if targetHost == "" {
 		// Caller bug — guard rather than silently passing through.
 		// A panic is preferable to silent breakage because this

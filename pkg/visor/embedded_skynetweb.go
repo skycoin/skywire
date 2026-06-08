@@ -19,6 +19,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -30,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
 	"github.com/skycoin/skywire/pkg/transport"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -202,7 +205,14 @@ type routerSkynetDialer struct {
 	nextPort     uint32                 // ephemeral port counter for route fallback
 }
 
-func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
+func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16, route []skynetweb.RouteLabel) (net.Conn, error) {
+	// Explicit source-route from the hostname (<hop>.<dest>.skynet): build the
+	// exact forward+reverse hops and dial them, bypassing the direct-transport
+	// fast path and the route-finder. Single-path only (no mux).
+	if len(route) > 0 {
+		return d.dialSourceRoute(ctx, remote, port, route)
+	}
+
 	// Try direct transport first — no route setup needed, no RSN dependency.
 	// Uses the shared VStreamMux (same instance as the forwarding server).
 	// Dereference at dial time so we pick up a mux that finished
@@ -242,6 +252,128 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 		return nil, err
 	}
 	return conn, nil
+}
+
+// dialSourceRoute builds explicit forward+reverse hops from a parsed route and
+// dials them with DialRoutes (route-finder bypassed). Single-path; the reverse
+// path mirrors the forward path (transport IDs are symmetric, so the same TpIDs
+// are reused with edges swapped).
+func (d *routerSkynetDialer) dialSourceRoute(ctx context.Context, dest cipher.PubKey, port uint16, route []skynetweb.RouteLabel) (net.Conn, error) {
+	fwd, rev, err := d.buildSourceRoute(ctx, dest, route)
+	if err != nil {
+		return nil, fmt.Errorf("skynet source-route to %s: %w", dest, err)
+	}
+	opts := router.DefaultDialOptions()
+	if d.routeTimeout > 0 {
+		opts.KeepAlive = d.routeTimeout
+	}
+	opts.ForwardHops = fwd
+	opts.ReverseHops = rev
+	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec
+	conn, err := d.router.DialRoutes(ctx, dest, lPort, routing.Port(skyenv.SkyForwardingServerPort), opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := skynetweb.PerformHandshake(conn, port); err != nil {
+		_ = conn.Close() //nolint:errcheck,gosec
+		return nil, err
+	}
+	return conn, nil
+}
+
+// buildSourceRoute turns the parsed route into forward+reverse routing hops. A
+// TpID label resolves to its edges (and thus the next visor); a PK label names
+// the next visor, whose transport is found or — for this visor's own hop —
+// created. A final hop to dest is appended unless the chain already ends there.
+func (d *routerSkynetDialer) buildSourceRoute(ctx context.Context, dest cipher.PubKey, route []skynetweb.RouteLabel) (fwd, rev []routing.Hop, err error) {
+	current := d.localPK
+	for _, rl := range route {
+		var next cipher.PubKey
+		var tpID uuid.UUID
+		if rl.IsTpID {
+			tpID = rl.TpID
+			a, b, rerr := d.resolveTpEdges(ctx, tpID)
+			if rerr != nil {
+				return nil, nil, rerr
+			}
+			switch current {
+			case a:
+				next = b
+			case b:
+				next = a
+			default:
+				return nil, nil, fmt.Errorf("transport %s does not connect from %s", tpID, current)
+			}
+		} else {
+			next = rl.PK
+			id, terr := d.findOrCreateTransport(ctx, current, next)
+			if terr != nil {
+				return nil, nil, terr
+			}
+			tpID = id
+		}
+		fwd = append(fwd, routing.Hop{TpID: tpID, From: current, To: next})
+		current = next
+	}
+	if current != dest {
+		id, terr := d.findOrCreateTransport(ctx, current, dest)
+		if terr != nil {
+			return nil, nil, terr
+		}
+		fwd = append(fwd, routing.Hop{TpID: id, From: current, To: dest})
+	}
+	rev = make([]routing.Hop, len(fwd))
+	for i, h := range fwd {
+		rev[len(fwd)-1-i] = routing.Hop{TpID: h.TpID, From: h.To, To: h.From}
+	}
+	return fwd, rev, nil
+}
+
+// resolveTpEdges returns the two visor PKs a transport connects — from the local
+// transport manager (this visor's own transports) or the transport discovery
+// (downstream hops).
+func (d *routerSkynetDialer) resolveTpEdges(ctx context.Context, tpID uuid.UUID) (cipher.PubKey, cipher.PubKey, error) {
+	if mt, e := d.tpM.GetTransportByID(tpID); e == nil {
+		return d.localPK, mt.Remote(), nil
+	}
+	entry, e := d.tpM.Conf.DiscoveryClient.GetTransportByID(ctx, tpID)
+	if e != nil {
+		return cipher.PubKey{}, cipher.PubKey{}, fmt.Errorf("resolve transport %s: %w", tpID, e)
+	}
+	return entry.Edges[0], entry.Edges[1], nil
+}
+
+// findOrCreateTransport returns the ID of a transport connecting from→to. When
+// `from` is this visor it reuses an existing stcpr/sudph transport or creates
+// one; for an intermediate pair it can only find an existing transport via the
+// discovery (no remote-create yet). Skynet routes never use dmsg transports.
+func (d *routerSkynetDialer) findOrCreateTransport(ctx context.Context, from, to cipher.PubKey) (uuid.UUID, error) {
+	if from == d.localPK {
+		for _, t := range []types.Type{types.STCPR, types.SUDPH} {
+			if mt, e := d.tpM.GetTransport(to, t); e == nil {
+				return mt.Entry.ID, nil
+			}
+		}
+		var lastErr error
+		for _, t := range []types.Type{types.STCPR, types.SUDPH} {
+			mt, e := d.tpM.SaveTransport(ctx, to, t, transport.LabelUser)
+			if e == nil {
+				return mt.Entry.ID, nil
+			}
+			lastErr = e
+		}
+		return uuid.UUID{}, fmt.Errorf("no transport to %s and could not create one: %w", to, lastErr)
+	}
+	entries, e := d.tpM.Conf.DiscoveryClient.GetTransportsByEdge(ctx, from)
+	if e != nil {
+		return uuid.UUID{}, fmt.Errorf("look up transports of %s: %w", from, e)
+	}
+	for _, en := range entries {
+		if en.Edges[0] == to || en.Edges[1] == to {
+			return en.ID, nil
+		}
+	}
+	return uuid.UUID{}, fmt.Errorf("no known transport between %s and %s (remote-create not supported yet)", from, to)
 }
 
 func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) error {
