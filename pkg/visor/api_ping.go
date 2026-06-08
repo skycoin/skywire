@@ -224,32 +224,41 @@ func (v *Visor) PingOnce(conf PingConfig) (time.Duration, error) {
 
 	start := time.Now()
 
+	// Bound the ENTIRE probe round-trip (write size → read ack → write ping
+	// → read echo) with a single connection deadline, cleared on return.
+	// Previously each read armed its own 30s deadline, so a stuck probe
+	// blocked up to 30s — and because muxBwProbeLoop calls this synchronously,
+	// that blocked the mux-bw pump WaitGroup well past its measurement window,
+	// hanging the whole `cli visor ping mux-bw --probe-rtt` run. conf.Timeout
+	// lets the caller (the probe loop) cap this to the remaining ctx so a
+	// probe can never outlive the pump. Mirrors PingOnceWithEcho's model.
+	readTimeout := conf.Timeout
+	if readTimeout <= 0 {
+		readTimeout = 10 * time.Second
+	}
+	conn.SetDeadline(time.Now().Add(readTimeout)) //nolint:errcheck,gosec
+	defer conn.SetDeadline(time.Time{})           //nolint:errcheck,gosec
+
 	// Send size message
 	if _, err = conn.Write(size); err != nil {
 		return 0, fmt.Errorf("write size: %w", err)
 	}
 
-	// Read "ok" ack with timeout
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	// Read "ok" ack
 	buf := make([]byte, 32*1024)
 	if _, err = conn.Read(buf); err != nil {
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 		return 0, fmt.Errorf("read ack: %w", err)
 	}
 
 	// Send ping data
 	if _, err = conn.Write(ping); err != nil {
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 		return 0, fmt.Errorf("write ping: %w", err)
 	}
 
-	// Read echo response with timeout
-	conn.SetReadDeadline(time.Now().Add(30 * time.Second)) //nolint:errcheck,gosec
+	// Read echo response
 	if _, err = conn.Read(buf); err != nil {
-		conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 		return 0, fmt.Errorf("read echo: %w", err)
 	}
-	conn.SetReadDeadline(time.Time{}) //nolint:errcheck,gosec
 
 	return time.Since(start), nil
 }
