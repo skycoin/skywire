@@ -128,7 +128,7 @@ func newNodeFeeds(node *Node) (n *nodeFeeds) {
 	return n
 }
 
-func (n *nodeFeeds) close() { //nolint:unused
+func (n *nodeFeeds) close() {
 	n.closeo.Do(func() {
 		close(n.closeq)
 	})
