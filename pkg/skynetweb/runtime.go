@@ -45,8 +45,14 @@ const DefaultDomainSuffix = ".skynet"
 // See pkg/visor/embedded_skynetweb.go for the visor-side adapter
 // that fulfills this interface using router.DialRoutes + the handshake
 // helper below (PerformHandshake).
+//
+// route is an optional explicit source-route to the destination, parsed from
+// the hostname (e.g. <hop>.<dest>.skynet). Each element is a visor PK
+// (any/auto transport) or a specific transport ID. When empty the dialer picks
+// the path itself (direct transport, else route-finder). A non-empty route is
+// single-path: no mux, and the reverse path mirrors the forward path.
 type SkynetDialer interface {
-	DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
+	DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16, route []RouteLabel) (net.Conn, error)
 }
 
 // PerformHandshake runs the skynet client-side handshake on an
@@ -182,17 +188,18 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				if addrPort != "" && addrPort != "80" {
 					hostWithPort = origHost + ":" + addrPort
 				}
-				target, err := parseHostHeader(hostWithPort, cfg.DomainSuffix)
+				vhost, route, dest, hport, err := ParseResolverHost(hostWithPort, cfg.DomainSuffix)
 				if err != nil {
 					return nil, fmt.Errorf("skynet dial: %w", err)
 				}
 
 				done := cfg.Stats.RecordRequest()
-				log.WithField("pk", target.pk.Hex()).
-					WithField("port", target.port).
-					Debug("SOCKS5 → skynet direct")
+				log.WithField("pk", dest.Hex()).
+					WithField("port", hport).
+					WithField("hops", len(route)).
+					Debug("SOCKS5 → skynet")
 
-				conn, err := dialer.DialSkynet(dialCtx, target.pk, target.port)
+				conn, err := dialer.DialSkynet(dialCtx, dest, hport, route)
 				if err != nil {
 					done(err)
 					return nil, fmt.Errorf("skynet dial: %w", err)
@@ -214,13 +221,13 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				// browser is already sending plaintext directly to
 				// hostRewriteConn — same parser, same effect.
 				stack := conn
-				if target.subdomain != "" {
+				if vhost != "" {
 					// `subdomain` already encodes the operator's
 					// intent (the URL has labels before the PK).
 					// Use it verbatim as the rewritten Host.
-					stack = newHostRewriteConn(stack, target.subdomain)
-					log.WithField("pk", target.pk.Hex()).
-						WithField("rewrite_host", target.subdomain).
+					stack = newHostRewriteConn(stack, vhost)
+					log.WithField("pk", dest.Hex()).
+						WithField("rewrite_host", vhost).
 						Debug("SOCKS5 → skynet host-rewrite active")
 				}
 
@@ -231,7 +238,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				// underlying skywire conn is already authenticated
 				// by visor pubkey; the local cert exists only to
 				// satisfy the browser's secure-context machinery.
-				if cfg.TLSMITM && target.port == cfg.TLSPort {
+				if cfg.TLSMITM && hport == cfg.TLSPort {
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
 						_ = stack.Close() //nolint:errcheck,gosec
@@ -308,35 +315,6 @@ func isSkynetHost(host, suffix string) bool {
 	pattern := `\` + suffix + `(:[0-9]+)?$`
 	match, _ := regexp.MatchString(pattern, host) //nolint:errcheck
 	return match
-}
-
-type target struct {
-	pk   cipher.PubKey
-	port uint16
-	// subdomain is the label(s) before the PK in the original
-	// hostname, when the visitor used a vhost-style URL like
-	// "<subdomain>.<pk>.skynet". Empty when the URL was just
-	// "<pk>.skynet". Triggers the Host-header rewrite path in the
-	// dial wiring — see newHostRewriteConn in hostrewrite.go.
-	subdomain string
-}
-
-// parseHostHeader turns "<pk>.skynet[:<port>]" or
-// "<subdomain>.<pk>.skynet[:<port>]" into a target struct. Port
-// defaults to 80 when absent to match conventional HTTP semantics.
-// The subdomain field is non-empty only when there was at least one
-// label before the PK; that signals the runtime to apply the
-// Host-rewrite wrapper.
-func parseHostHeader(host, suffix string) (target, error) {
-	pkLabel, subdomain, port, err := splitHostSubdomain(host, suffix)
-	if err != nil {
-		return target{}, err
-	}
-	pk, err := parsePKLabel(pkLabel)
-	if err != nil {
-		return target{}, fmt.Errorf("invalid pk %q: %w", pkLabel, err)
-	}
-	return target{pk: pk, port: port, subdomain: subdomain}, nil
 }
 
 // parsePKLabel accepts either the legacy 66-char hex form or the
