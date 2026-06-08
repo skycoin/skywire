@@ -671,6 +671,11 @@ type PingConfig struct {
 	// ceiling. mux-bw passes its cfg.SetupTimeout here. 0 falls
 	// back to the existing 30s default.
 	SetupTimeout time.Duration
+	// Timeout bounds a single PingOnce round-trip (ack + echo reads).
+	// 0 = 10s default. mux-bw's probe loop sets this to the remaining
+	// pump/idle window so a stuck probe can't outlive the measurement
+	// and hang the run.
+	Timeout time.Duration
 }
 
 // TestResult type of test result
