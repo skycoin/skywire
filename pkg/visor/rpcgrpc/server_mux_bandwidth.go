@@ -51,6 +51,14 @@ const (
 	// block the pump WaitGroup past the measurement window. Shrunk to the
 	// remaining ctx per-iteration in muxBwProbeLoop.
 	muxBwProbeTimeout = 5 * time.Second
+	// muxBwWarmupDuration is how long to push traffic before measuring,
+	// when probing, so the idle baseline and load phases both run on a
+	// WARM route (routing rules settled at every hop, hop transports
+	// primed). Without it a freshly set-up route is "cold" — early packets
+	// dropped (rules not yet active) or slow (setup still completing) —
+	// which made the idle baseline measure cold-vs-warm instead of
+	// unloaded-vs-loaded (nonsensical negative queueing deltas at 2-3 hops).
+	muxBwWarmupDuration = 5 * time.Second
 )
 
 // muxBwCfg is the normalized request. Pass this around inside the
@@ -211,6 +219,52 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		}})
 		close(eventCh)
 		return <-sendErrCh
+	}
+
+	// Phase 1.4: warm-up. When probing, push traffic on every established
+	// route (real echo bytes on the pump routes to prime their hop
+	// transports; small probes on the probe route to settle its rules) for
+	// muxBwWarmupDuration, DISCARDING everything. This brings the routes to
+	// steady state — rules active at every hop, transports primed — so the
+	// idle baseline and load phases measure a WARM route, not the cold
+	// just-set-up one. Crucially this does NOT tear the conns down (it
+	// avoids muxBwPumpRoute, whose defer closes the route) and does NOT
+	// touch the byte counters, so reported throughput is measurement-only.
+	if cfg.ProbeRTT {
+		warmCtx, warmCancel := context.WithTimeout(ctx, muxBwWarmupDuration)
+		warmWg := &sync.WaitGroup{}
+		warmRoute := func(index int, echo bool) {
+			defer warmWg.Done()
+			conf := PingConf{
+				PK:         cfg.TargetPK,
+				Tries:      1,
+				PcktSize:   cfg.PacketSizeKb,
+				LocalRoute: cfg.LocalRoute,
+				RouteIndex: index,
+			}
+			for warmCtx.Err() == nil {
+				if echo {
+					_, _, _, _ = s.visor.PingOnceWithEcho(conf, true) //nolint:errcheck
+				} else {
+					probeConf := conf
+					probeConf.PcktSize = 1
+					probeConf.Timeout = muxBwProbeTimeout
+					_, _ = s.visor.PingOnce(probeConf) //nolint:errcheck
+				}
+			}
+		}
+		for _, r := range routes {
+			if r.established.Load() {
+				warmWg.Add(1)
+				go warmRoute(r.index, true)
+			}
+		}
+		if probeRoute != nil && probeRoute.established.Load() {
+			warmWg.Add(1)
+			go warmRoute(probeRoute.index, false)
+		}
+		warmWg.Wait()
+		warmCancel()
 	}
 
 	// Phase 1.5: optional idle-baseline probe. Runs the probe loop
