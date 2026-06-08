@@ -163,7 +163,12 @@ func (a *API) getPairedRoutes(w http.ResponseWriter, r *http.Request) {
 		dstPK := edge[1]
 		graph := graphs[srcPK]
 
-		forwardRoutes, err := graph.GetRoute(r.Context(), srcPK, dstPK, minHops, maxHops, numRoutes)
+		// Latency-weighted by default: the graph is already built from
+		// GetTransportsByEdge, which overlays each edge's measured latency, so
+		// returning lowest-total-latency routes (with a per-hop penalty for
+		// unmeasured edges) costs nothing extra and replaces the old
+		// shortest-hop-but-arbitrary ordering.
+		forwardRoutes, err := graph.GetRouteWeighted(r.Context(), srcPK, dstPK, minHops, maxHops, numRoutes, true)
 		if err != nil {
 			a.handleError(w, r, http.StatusNotFound, err)
 			return
