@@ -52,7 +52,7 @@ func init() {
 	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
 	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP), dht (visor's local DHT store), auto (DHT then TPD)")
 	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
-	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", true, "rank routes by cumulative transport latency (lowest first) — the default, matching the route-finder service; use --by-latency=false for the cheaper streaming shortest-hop path (full set must be in hand to sort by latency)")
+	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", false, "rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort")
 	clirpc.RegisterFetchFlags(calcCmd)
 }
 
