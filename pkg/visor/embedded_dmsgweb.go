@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
@@ -36,6 +37,10 @@ import (
 // Default SOCKS5 listener port — matches `skywire dmsg web` so the two
 // surfaces behave identically from a browser's perspective.
 const defaultDmsgWebProxyPort = 4445
+
+// dmsgWebReadyWait bounds how long serve() waits for the dmsg client to be
+// ready before binding the listener anyway.
+const dmsgWebReadyWait = 20 * time.Second
 
 // EmbeddedDmsgWeb holds the runtime state for the visor-hosted
 // dmsgweb resolver. Safe for concurrent Start/Stop calls.
@@ -164,6 +169,18 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		}
 	}
 
+	// Best-effort, BOUNDED wait for the dmsg client so the first request
+	// doesn't race the initial discovery publish — but never block the
+	// listener bind indefinitely (the app must come up and accept
+	// connections regardless; early requests just fail until dmsg is ready).
+	select {
+	case <-e.dmsgC.Ready():
+	case <-time.After(dmsgWebReadyWait):
+		e.log.Warn("dmsgweb: dmsg client not ready within timeout; serving anyway")
+	case <-ctx.Done():
+		return
+	}
+
 	e.log.WithField("socks_port", cfg.ProxyPort).
 		WithField("domain", cfg.DomainSuffix).
 		WithField("tls_mitm", cfg.TLSMITM).
@@ -202,14 +219,13 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 		return nil
 	}
 
-	// Wait for the visor's dmsg client to be ready before spinning up
-	// the resolver so the first browser request doesn't race the
-	// initial discovery publish.
-	select {
-	case <-v.dmsgC.Ready():
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	// NOTE: do NOT block here on v.dmsgC.Ready(). This init runs under a
+	// bounded boot context; when dmsg is slow to publish (e.g. churn right
+	// after a restart) the wait outlived that context, returned early, and
+	// the app was never registered — so its SOCKS5 listener never bound
+	// (4445), while skynetweb (which doesn't wait on dmsg) came up fine. The
+	// readiness wait now lives in serve(), bounded, so the app always
+	// registers and binds; only the first requests race a not-yet-ready dmsg.
 
 	// Auto-chain: if the config doesn't explicitly set an upstream
 	// and skynet_web is also configured, wire dmsgweb → skynetweb so
