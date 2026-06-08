@@ -3,9 +3,12 @@ package router
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -14,6 +17,59 @@ import (
 // the primary cause of goroutine accumulation in the setup-node (113+ stuck goroutines
 // observed in production pprof dumps).
 const MakeMapTimeout = 60 * time.Second
+
+// dialHopAttempts bounds how many times a single hop's reservation dial is
+// tried before giving up. A dmsg-202 ("cannot connect to delegated server")
+// during route-id reservation is almost always transient: the hop is online and
+// reachable again within seconds — a dmsg server on the path briefly churned
+// (dropped/zombied a session). Each re-dial re-runs DialStream's own
+// multi-server selection, so after a short backoff it routes around the churn.
+// Without this, one transient blip on ONE hop fails the entire reservation and
+// trips the far more expensive whole-route-setup retry above it. Bounded by the
+// MakeMapTimeout ctx.
+const dialHopAttempts = 3
+
+// isRetryableDialErr reports whether a hop dial failed with a transient dmsg
+// bridge error (dmsg 202) that is worth re-dialing.
+func isRetryableDialErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, dmsg.ErrCannotConnectToDelegated) {
+		return true
+	}
+	// The sentinel can be lost when the error is reconstructed from a wire code
+	// or wrapped as a plain string; fall back to the message (same approach as
+	// pkg/dmsg/disc/dmsgfirst).
+	return strings.Contains(err.Error(), "cannot connect to delegated server")
+}
+
+// dialHopWithRetry dials one hop, retrying on a transient dmsg-202 bridge
+// failure with a short linear backoff. It stops early on success, on a
+// non-retryable error, or when ctx is cancelled (e.g. another hop failed
+// genuinely, or MakeMapTimeout fired).
+func dialHopWithRetry(ctx context.Context, pk cipher.PubKey, dial func(context.Context, cipher.PubKey) (*Client, error)) (*Client, error) {
+	var (
+		client *Client
+		err    error
+	)
+	for attempt := 0; attempt < dialHopAttempts; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-time.After(time.Duration(attempt) * time.Second):
+			case <-ctx.Done():
+				return nil, err
+			}
+		}
+		if client, err = dial(ctx, pk); err == nil {
+			return client, nil
+		}
+		if !isRetryableDialErr(err) || ctx.Err() != nil {
+			return nil, err
+		}
+	}
+	return nil, err
+}
 
 // Map is a map of router RPC clients associated with the router's visor PK.
 type Map map[cipher.PubKey]*Client
@@ -44,7 +100,9 @@ func MakeMap(ctx context.Context, dialer network.Dialer, pks []cipher.PubKey) (M
 
 	for _, pk := range pks {
 		go func(pk cipher.PubKey) {
-			client, err := NewClient(ctx, dialer, pk)
+			client, err := dialHopWithRetry(ctx, pk, func(c context.Context, pk cipher.PubKey) (*Client, error) {
+				return NewClient(c, dialer, pk)
+			})
 			results <- dialResult{client: client, err: err}
 		}(pk)
 	}
@@ -141,7 +199,9 @@ func MakePooledMap(ctx context.Context, pool *ClientPool, pks []cipher.PubKey) (
 
 	for _, pk := range pks {
 		go func(pk cipher.PubKey) {
-			client, err := pool.Get(ctx, pk)
+			client, err := dialHopWithRetry(ctx, pk, func(c context.Context, pk cipher.PubKey) (*Client, error) {
+				return pool.Get(c, pk)
+			})
 			results <- dialResult{client: client, err: err}
 		}(pk)
 	}
