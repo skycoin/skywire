@@ -155,6 +155,92 @@ func StartDmsgWithDirectClient(ctx context.Context, dlog *logging.Logger, pk cip
 	}
 }
 
+// StartDmsgSelfHostedDisc starts a SINGLE dmsg client that reaches the
+// (dmsg-only) discovery over its OWN sessions — instead of the previous default
+// path, which spun up N separate "bootstrap" direct clients sharing this same
+// key just to carry discovery HTTP. A dmsg server permits one session per PK, so
+// those bootstrap clients and the main client kicked each other off every shared
+// server, producing a continuous reconnect/re-dial storm (observed on
+// dmsgweb-surveys at ~30 session events/sec).
+//
+// How it avoids the bootstrap clients: a direct disc client is preloaded with
+// every dmsg server entry plus a synthetic entry for the discovery server, so
+// this one client can connect to servers AND dial the discovery server without
+// any prior discovery lookup. Discovery HTTP (peer lookups) is then routed over
+// this client's own sessions via dmsghttp. PutEntry is a no-op through the
+// fallback wrapper, so the client doesn't register itself — it only dials out.
+// Reaching direct/hidden services still works through DialStream's existing
+// dmsg-100 fallback (dialViaConnectedServers over the same sessions).
+func StartDmsgSelfHostedDisc(ctx context.Context, dlog *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, dmsgDiscAddr string, dmsgSessions int) (dmsgC *dmsg.Client, stop func(), err error) {
+	if dlog == nil {
+		return nil, nil, fmt.Errorf("nil logger")
+	}
+
+	// Preload direct entries: every dmsg server (so AvailableServers works with
+	// no discovery round-trip) plus a synthetic entry for the discovery server
+	// (so we can dial it directly over dmsg).
+	var entries []*disc.Entry
+	var delegatedServers []cipher.PubKey
+	for i := range dmsg.Prod.DmsgServers {
+		entries = append(entries, &dmsg.Prod.DmsgServers[i])
+		delegatedServers = append(delegatedServers, dmsg.Prod.DmsgServers[i].Static)
+	}
+	if discPK := dmsg.ExtractPKFromDmsgAddr(dmsgDiscAddr); discPK != "" {
+		var discoveryPK cipher.PubKey
+		if uerr := discoveryPK.UnmarshalText([]byte(discPK)); uerr == nil {
+			entries = append(entries, &disc.Entry{
+				Version: "0.0.1",
+				Static:  discoveryPK,
+				Client:  &disc.Client{DelegatedServers: delegatedServers},
+			})
+		}
+	}
+	// Synthetic entry for our OWN client. Without it the client's start-up
+	// self-lookup misses the direct client and falls back to an HTTP-disc dial of
+	// the discovery server before any session can reach it — which stalls Ready.
+	entries = append(entries, &disc.Entry{
+		Version: "0.0.1",
+		Static:  pk,
+		Client:  &disc.Client{DelegatedServers: delegatedServers},
+	})
+	directClient := direct.NewClient(entries, dlog)
+
+	// dmsgSessions <= 0 means "connect to all servers" (e.g. `dmsg web -e 0`),
+	// not an error. MinSessions is the number of sessions the client must
+	// establish before Ready; capping it at the known server count keeps the
+	// client from blocking forever waiting for more sessions than exist.
+	if dmsgSessions <= 0 || dmsgSessions > len(dmsg.Prod.DmsgServers) {
+		dmsgSessions = len(dmsg.Prod.DmsgServers)
+	}
+
+	// HTTP discovery fallback (for looking up arbitrary regular peers) rides this
+	// client's own sessions. The transport is bound after the client is created;
+	// no request is issued before Serve starts below, so the empty Transport is
+	// never used.
+	httpClient := &http.Client{}
+	httpDisc := disc.NewHTTP(dmsgDiscAddr, httpClient, dlog)
+	fallbackDisc := NewFallbackDiscClient(directClient, httpDisc, dlog)
+
+	dmsgC = dmsg.NewClient(pk, sk, fallbackDisc, &dmsg.Config{MinSessions: dmsgSessions})
+	httpClient.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
+	dlog.Debug("Created single dmsg client with self-hosted discovery over its own sessions.")
+
+	go dmsgC.Serve(ctx)
+
+	stop = func() {
+		cerr := dmsgC.Close()
+		dlog.WithError(cerr).Debug("Disconnected from dmsg network.")
+	}
+	select {
+	case <-ctx.Done():
+		stop()
+		return nil, nil, ctx.Err()
+	case <-dmsgC.Ready():
+		dlog.Debug("Dmsg network ready.")
+		return dmsgC, stop, nil
+	}
+}
+
 // cachingDiscClient wraps a discovery client and caches a synthetic entry
 type cachingDiscClient struct {
 	base           disc.APIClient
