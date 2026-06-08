@@ -107,7 +107,7 @@ func TestSplitHostSubdomain(t *testing.T) {
 // received the request with Host: rewritten.
 func TestHostRewriteConn_RewritesHostHeader(t *testing.T) {
 	backend := newFakeConn()
-	hr := newHostRewriteConn(backend, "example.com")
+	hr := NewHostRewriteConn(backend, "example.com")
 	defer hr.Close() //nolint:errcheck,gosec
 
 	// Browser request. Host header should be the .skynet-flavor URL;
@@ -154,7 +154,7 @@ func TestHostRewriteConn_RewritesHostHeader(t *testing.T) {
 // each get Host rewritten.
 func TestHostRewriteConn_RewritesTwoSequentialRequests(t *testing.T) {
 	backend := newFakeConn()
-	hr := newHostRewriteConn(backend, "example.com")
+	hr := NewHostRewriteConn(backend, "example.com")
 	defer hr.Close() //nolint:errcheck,gosec
 
 	body := "GET /a HTTP/1.1\r\nHost: example.com.<pk>.skynet\r\n\r\n" +

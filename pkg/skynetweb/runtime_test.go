@@ -159,7 +159,7 @@ type fakeDialer struct {
 	onDial func() (net.Conn, error)
 }
 
-func (f fakeDialer) DialSkynet(_ context.Context, _ cipher.PubKey, _ uint16) (net.Conn, error) {
+func (f fakeDialer) DialSkynet(_ context.Context, _ cipher.PubKey, _ uint16, _ []RouteLabel) (net.Conn, error) {
 	if f.onDial == nil {
 		return nil, errors.New("fakeDialer: no onDial set")
 	}
