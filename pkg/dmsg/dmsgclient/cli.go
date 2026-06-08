@@ -92,54 +92,15 @@ func InitDmsgWithFlags(ctx context.Context, dlog *logging.Logger, pk cipher.PubK
 		return StartDmsgWithDirectClient(ctx, dlog, pk, sk, DmsgSessions)
 	}
 
-	// Default dmsghttp mode
-	var dmsgHTTP *http.Client
-	var dmsgClients []*dmsg.Client
-	var closeFns []func()
-
-	dlog.Debug("Starting DMSG direct clients.")
-	for _, server := range dmsg.Prod.DmsgServers {
-		if len(dmsgClients) >= DmsgSessions {
-			break
-		}
-
-		dmsgDC, closeFn, err := StartDmsgDirectWithServers(ctx, dlog, pk, sk, DmsgDiscAddr, []*disc.Entry{&server}, DmsgSessions, dmsg.ExtractPKFromDmsgAddr(DmsgDiscAddr))
-		if err != nil {
-			dlog.WithError(err).Error("Failed to start DMSG direct client. Skipping server...")
-			continue
-		}
-
-		dmsgClients = append(dmsgClients, dmsgDC)
-		closeFns = append(closeFns, closeFn)
-	}
-
-	if len(dmsgClients) == 0 {
-		dlog.Fatal("Failed to start any DMSG direct clients.")
-	}
-
-	// Build HTTP client with fallback round tripper
-	dmsgHTTP = &http.Client{
-		Transport: NewFallbackRoundTripper(ctx, dmsgClients),
-	}
-
-	dlog.Debug("Checking discovery /health using DMSG HTTP client.")
-	resp, err := dmsgHTTP.Get(DmsgDiscAddr + "/health")
-	if err != nil {
-		for _, fn := range closeFns {
-			fn()
-		}
-		dlog.WithError(err).Fatal("All DMSG transports failed to reach discovery /health")
-	}
-	defer ioutil.CloseQuietly(resp.Body, dlog)
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		dlog.WithError(err).Error("Failed to read discovery /health response body")
-	} else {
-		dlog.Infof("Received response from dmsg-discovery server %s/health:\n%s", DmsgDiscAddr, string(body))
-	}
-
-	return StartDmsgWithSyntheticDiscovery(ctx, dlog, pk, sk, dmsgHTTP, DmsgDiscAddr, DmsgSessions)
+	// Default mode: a SINGLE dmsg client that reaches the dmsg-only discovery
+	// over its OWN sessions. This previously started N direct "bootstrap" clients
+	// (one per server) sharing pk/sk just to carry discovery HTTP, then a main
+	// client on top — all under one PK. A dmsg server allows one session per PK,
+	// so the bootstrap clients and the main client kicked each other off every
+	// shared server, producing a continuous reconnect storm. StartDmsgSelfHostedDisc
+	// folds them into one client; direct/hidden peers are still reachable via
+	// DialStream's existing dmsg-100 fallback over the same sessions.
+	return StartDmsgSelfHostedDisc(ctx, dlog, pk, sk, DmsgDiscAddr, DmsgSessions)
 }
 
 // StartDmsg starts dmsg returns a dmsg client for the given dmsg discovery
