@@ -47,6 +47,18 @@ const (
 	defaultMuxBwProbeInterval  = 100 * time.Millisecond
 	defaultMuxBwSampleInterval = 1 * time.Second
 	muxBwEventChannelCapacity  = 256
+	// muxBwProbeTimeout caps a single RTT probe's round-trip so it cannot
+	// block the pump WaitGroup past the measurement window. Shrunk to the
+	// remaining ctx per-iteration in muxBwProbeLoop.
+	muxBwProbeTimeout = 5 * time.Second
+	// muxBwWarmupDuration is how long to push traffic before measuring,
+	// when probing, so the idle baseline and load phases both run on a
+	// WARM route (routing rules settled at every hop, hop transports
+	// primed). Without it a freshly set-up route is "cold" — early packets
+	// dropped (rules not yet active) or slow (setup still completing) —
+	// which made the idle baseline measure cold-vs-warm instead of
+	// unloaded-vs-loaded (nonsensical negative queueing deltas at 2-3 hops).
+	muxBwWarmupDuration = 5 * time.Second
 )
 
 // muxBwCfg is the normalized request. Pass this around inside the
@@ -158,6 +170,17 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		routes[i] = &muxBwRouteState{index: i}
 	}
 
+	// Dedicated probe route. When probing, the RTT probe rides its OWN
+	// route/conn (index = cfg.Routes), never a pump route's. PingOnceWithEcho
+	// (the pump) clears the conn deadline on every call; on a conn shared
+	// with the probe that wiped the probe's read deadline mid-read, so the
+	// probe blocked forever and hung the whole run. Kept OUT of `routes` so
+	// it is never pumped, sampled, or counted toward throughput.
+	var probeRoute *muxBwRouteState
+	if cfg.ProbeRTT {
+		probeRoute = &muxBwRouteState{index: cfg.Routes}
+	}
+
 	setupWg := &sync.WaitGroup{}
 	setupStart := time.Now()
 	for i := 0; i < cfg.Routes; i++ {
@@ -166,6 +189,15 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 			defer setupWg.Done()
 			s.muxBwSetupRoute(ctx, &cfg, rs, emit)
 		}(routes[i])
+	}
+	if probeRoute != nil {
+		setupWg.Add(1)
+		go func(rs *muxBwRouteState) {
+			defer setupWg.Done()
+			// Suppress this route's RouteEstablished so the dedicated probe
+			// route stays invisible in the route list / counts.
+			s.muxBwSetupRoute(ctx, &cfg, rs, muxBwDropRouteEstablished(emit))
+		}(probeRoute)
 	}
 	setupWg.Wait()
 	setupTotal := time.Since(setupStart)
@@ -189,6 +221,52 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		return <-sendErrCh
 	}
 
+	// Phase 1.4: warm-up. When probing, push traffic on every established
+	// route (real echo bytes on the pump routes to prime their hop
+	// transports; small probes on the probe route to settle its rules) for
+	// muxBwWarmupDuration, DISCARDING everything. This brings the routes to
+	// steady state — rules active at every hop, transports primed — so the
+	// idle baseline and load phases measure a WARM route, not the cold
+	// just-set-up one. Crucially this does NOT tear the conns down (it
+	// avoids muxBwPumpRoute, whose defer closes the route) and does NOT
+	// touch the byte counters, so reported throughput is measurement-only.
+	if cfg.ProbeRTT {
+		warmCtx, warmCancel := context.WithTimeout(ctx, muxBwWarmupDuration)
+		warmWg := &sync.WaitGroup{}
+		warmRoute := func(index int, echo bool) {
+			defer warmWg.Done()
+			conf := PingConf{
+				PK:         cfg.TargetPK,
+				Tries:      1,
+				PcktSize:   cfg.PacketSizeKb,
+				LocalRoute: cfg.LocalRoute,
+				RouteIndex: index,
+			}
+			for warmCtx.Err() == nil {
+				if echo {
+					_, _, _, _ = s.visor.PingOnceWithEcho(conf, true) //nolint:errcheck
+				} else {
+					probeConf := conf
+					probeConf.PcktSize = 1
+					probeConf.Timeout = muxBwProbeTimeout
+					_, _ = s.visor.PingOnce(probeConf) //nolint:errcheck
+				}
+			}
+		}
+		for _, r := range routes {
+			if r.established.Load() {
+				warmWg.Add(1)
+				go warmRoute(r.index, true)
+			}
+		}
+		if probeRoute != nil && probeRoute.established.Load() {
+			warmWg.Add(1)
+			go warmRoute(probeRoute.index, false)
+		}
+		warmWg.Wait()
+		warmCancel()
+	}
+
 	// Phase 1.5: optional idle-baseline probe. Runs the probe loop
 	// only (no pump goroutines, no sampler) for IdleBaselineDuration.
 	// Captures a clean RTT distribution on the same routes the pump
@@ -198,33 +276,20 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 	// before the pump phase starts.
 	idleProbeSamples := make([]int64, 0)
 	var idleProbesMu sync.Mutex
-	if cfg.IdleBaselineDuration > 0 && cfg.ProbeRTT {
-		// Find the first established route for the idle probe.
-		// Same selection as the loaded-phase probe below — we want
-		// both phases riding the same route so the queueing-delay
-		// comparison is apples-to-apples.
-		idleProbeIndex := -1
-		for _, r := range routes {
-			if r.established.Load() {
-				idleProbeIndex = r.index
-				break
-			}
-		}
-		if idleProbeIndex >= 0 {
-			idleCtx, idleCancel := context.WithTimeout(ctx, cfg.IdleBaselineDuration)
-			idleStart := time.Now()
-			idleWg := &sync.WaitGroup{}
-			idleWg.Add(1)
-			go func() {
-				defer idleWg.Done()
-				// Reuse the existing probe loop; it doesn't care whether
-				// a pump is concurrently running — passing only the idle
-				// samples slice means accumulator-direction is correct.
-				s.muxBwProbeLoop(idleCtx, &cfg, idleProbeIndex, idleStart, &idleProbesMu, &idleProbeSamples, emit)
-			}()
-			idleWg.Wait()
-			idleCancel()
-		}
+	if cfg.IdleBaselineDuration > 0 && probeRoute != nil && probeRoute.established.Load() {
+		// Idle baseline rides the SAME dedicated probe route the loaded
+		// phase uses, so queueing delay (loaded_pXX - idle_pXX) is an
+		// apples-to-apples comparison on identical paths.
+		idleCtx, idleCancel := context.WithTimeout(ctx, cfg.IdleBaselineDuration)
+		idleStart := time.Now()
+		idleWg := &sync.WaitGroup{}
+		idleWg.Add(1)
+		go func() {
+			defer idleWg.Done()
+			s.muxBwProbeLoop(idleCtx, &cfg, probeRoute.index, idleStart, &idleProbesMu, &idleProbeSamples, emit)
+		}()
+		idleWg.Wait()
+		idleCancel()
 	}
 
 	// Phase 2: pump bytes through each established route + run the
@@ -259,28 +324,16 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 		s.muxBwSamplerLoop(pumpCtx, &cfg, routes, pumpStart, &peakSend, &peakRecv, emit)
 	}()
 
-	// Probe (optional).
-	if cfg.ProbeRTT {
-		// Find first established route for the probe — pass its
-		// RouteIndex into muxBwProbeLoop so the probe rides the
-		// same conn as the actual established route. Previously the
-		// probe hardcoded RouteIndex 0; when only a non-zero route
-		// established (e.g. Phase D where only R2 came up out of
-		// N=8) every probe failed with "no ping connection".
-		var probeTarget *muxBwRouteState
-		for _, r := range routes {
-			if r.established.Load() {
-				probeTarget = r
-				break
-			}
-		}
-		if probeTarget != nil {
-			pumpWg.Add(1)
-			go func(idx int) {
-				defer pumpWg.Done()
-				s.muxBwProbeLoop(pumpCtx, &cfg, idx, pumpStart, &probesMu, &probeSamples, emit)
-			}(probeTarget.index)
-		}
+	// Probe (optional) — rides the dedicated probe route, NOT a pump conn,
+	// so the pump's per-call deadline clears can't wipe the probe's read
+	// deadline. If the probe route failed setup, probing is skipped (the
+	// pump still runs); queueing delay is simply unavailable for that run.
+	if cfg.ProbeRTT && probeRoute != nil && probeRoute.established.Load() {
+		pumpWg.Add(1)
+		go func(idx int) {
+			defer pumpWg.Done()
+			s.muxBwProbeLoop(pumpCtx, &cfg, idx, pumpStart, &probesMu, &probeSamples, emit)
+		}(probeRoute.index)
 	}
 
 	pumpWg.Wait()
@@ -345,6 +398,19 @@ func (s *PingServer) StreamMuxBandwidth(req *MuxBandwidthRequest, stream PingSer
 
 	close(eventCh)
 	return <-sendErrCh
+}
+
+// muxBwDropRouteEstablished wraps emit to swallow RouteEstablished events.
+// Used for the dedicated probe route so it never surfaces as an extra
+// "R{N}" in the route list / counts — it exists only to give the RTT
+// probe its own conn, isolated from the pump.
+func muxBwDropRouteEstablished(emit func(isMuxBandwidthEvent_Payload)) func(isMuxBandwidthEvent_Payload) {
+	return func(p isMuxBandwidthEvent_Payload) {
+		if _, ok := p.(*MuxBandwidthEvent_RouteEstablished); ok {
+			return
+		}
+		emit(p)
+	}
 }
 
 // muxBwSetupRoute dials one route + emits a RouteEstablished event.
@@ -620,6 +686,20 @@ func (s *PingServer) muxBwProbeLoop(
 			// connection for ... call DialPing first" events at
 			// every run-end. Cosmetic but noisy.
 			if ctx.Err() != nil {
+				return
+			}
+			// Bound this probe so its reads cannot outlive the measurement
+			// window (pumpCtx / idleCtx). Without this, PingOnce's default
+			// read deadline blocks pumpWg.Wait() past the run end — the
+			// mux-bw "never returns" hang. Cap at muxBwProbeTimeout, shrunk
+			// to whatever ctx time remains.
+			probeConf.Timeout = muxBwProbeTimeout
+			if dl, ok := ctx.Deadline(); ok {
+				if rem := time.Until(dl); rem < probeConf.Timeout {
+					probeConf.Timeout = rem
+				}
+			}
+			if probeConf.Timeout <= 0 {
 				return
 			}
 			sequence++
