@@ -318,6 +318,7 @@ func (a *visorPingAdapter) PingOnce(conf rpcgrpc.PingConf) (time.Duration, error
 		LocalRoute: conf.LocalRoute,
 		RouteIndex: conf.RouteIndex,
 		MinHops:    conf.MinHops,
+		Timeout:    conf.Timeout,
 	})
 }
 
