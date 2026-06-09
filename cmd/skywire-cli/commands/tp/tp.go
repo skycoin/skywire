@@ -677,13 +677,13 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 
 	// Print header
 	if showMore && bwDays > 0 {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\trecv\tsent")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency\trecv\tsent")
 		internal.Catch(cmdFlags, err)
 	} else if showMore {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tversion\tcountry\tservices\tlatency")
 		internal.Catch(cmdFlags, err)
 	} else if bwDays > 0 {
-		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\trecv\tsent")
+		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel\tlatency\trecv\tsent")
 		internal.Catch(cmdFlags, err)
 	} else {
 		_, err := fmt.Fprintln(w, "type\tid\tremote_pk\tmode\tlabel")
@@ -699,6 +699,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		Version   string          `json:"version,omitempty"`
 		Country   string          `json:"country,omitempty"`
 		Services  string          `json:"services,omitempty"`
+		LatencyMS float64         `json:"latency_ms,omitempty"`
 		RecvBytes uint64          `json:"recv_bytes,omitempty"`
 		SentBytes uint64          `json:"sent_bytes,omitempty"`
 		Inactive  bool            `json:"inactive,omitempty"`
@@ -786,23 +787,25 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 			Version:   version,
 			Country:   country,
 			Services:  services,
+			LatencyMS: tp.LatencyMS,
 			RecvBytes: recvBytes,
 			SentBytes: sentBytes,
 		}
 		outputTPS = append(outputTPS, oTP)
 
+		latency := formatLatencyMS(tp.LatencyMS)
 		if showMore && bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services,
-				formatBytes(recvBytes), formatBytes(sentBytes))
+				latency, formatBytes(recvBytes), formatBytes(sentBytes))
 			internal.Catch(cmdFlags, err)
 		} else if showMore {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services)
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, version, country, services, latency)
 			internal.Catch(cmdFlags, err)
 		} else if bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label,
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				tp.Type, tp.ID, tp.Remote, tpMode, tp.Label, latency,
 				formatBytes(recvBytes), formatBytes(sentBytes))
 			internal.Catch(cmdFlags, err)
 		} else {
@@ -825,17 +828,17 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		outputTPS = append(outputTPS, oTP)
 
 		if showMore && bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				"-", itp.ID, "-", "inactive", "-", "-", "-", "-",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				"-", itp.ID, "-", "inactive", "-", "-", "-", "-", "-",
 				formatBytes(itp.RecvBytes), formatBytes(itp.SentBytes))
 			internal.Catch(cmdFlags, err)
 		} else if showMore {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				"-", itp.ID, "-", "inactive", "-", "-", "-", "-")
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				"-", itp.ID, "-", "inactive", "-", "-", "-", "-", "-")
 			internal.Catch(cmdFlags, err)
 		} else if bwDays > 0 {
-			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-				"-", itp.ID, "-", "inactive", "-",
+			_, err := fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				"-", itp.ID, "-", "inactive", "-", "-",
 				formatBytes(itp.RecvBytes), formatBytes(itp.SentBytes))
 			internal.Catch(cmdFlags, err)
 		} else {
