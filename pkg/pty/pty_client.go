@@ -91,6 +91,23 @@ func (sc *PtyClient) Write(b []byte) (int, error) {
 	return n, processRPCError(err)
 }
 
+// WriteAsync writes to the pty WITHOUT waiting for the RPC reply, so an
+// interactive caller (the web terminal's input loop) isn't blocked a full
+// round-trip per keystroke. Ordering is preserved — net/rpc serializes
+// request sends, and the send encodes b before returning, so the caller may
+// reuse the buffer. The per-write result and error are intentionally dropped:
+// a broken conn surfaces on the Read path, which tears the session down.
+// Returns an error only if the client is already closed.
+func (sc *PtyClient) WriteAsync(b []byte) error {
+	select {
+	case <-sc.done:
+		return io.ErrClosedPipe
+	default:
+	}
+	sc.rpcC.Go(sc.rpcMethod("Write"), &b, new(int), nil)
+	return nil
+}
+
 func (*PtyClient) rpcMethod(m string) string {
 	return PtyRPCName + "." + m
 }
