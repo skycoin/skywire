@@ -384,6 +384,7 @@ type bufferedWSWriter struct {
 	closed   bool
 	interval time.Duration
 	done     chan struct{}
+	wake     chan struct{}
 }
 
 func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWSWriter {
@@ -392,6 +393,7 @@ func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWS
 		buf:      make([]byte, 0, 4096),
 		interval: flushInterval,
 		done:     make(chan struct{}),
+		wake:     make(chan struct{}, 1),
 	}
 	go bw.flushLoop()
 	return bw
@@ -399,21 +401,46 @@ func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWS
 
 func (bw *bufferedWSWriter) Write(p []byte) (int, error) {
 	bw.mu.Lock()
-	defer bw.mu.Unlock()
 	if bw.closed {
+		bw.mu.Unlock()
 		return 0, io.ErrClosedPipe
 	}
+	wasEmpty := len(bw.buf) == 0
 	bw.buf = append(bw.buf, p...)
+	bw.mu.Unlock()
+	// Nudge the flusher on an idle->first-write so interactive echo (the PTY
+	// echoing each keystroke) flushes promptly instead of waiting out a fixed
+	// tick. Non-blocking: the data is already buffered; this is only a signal.
+	if wasEmpty {
+		select {
+		case bw.wake <- struct{}{}:
+		default:
+		}
+	}
 	return len(p), nil
 }
 
+// flushLoop coalesces output bursts — it never writes more than once per
+// interval, but flushes an idle->first-write immediately. The old fixed ticker
+// added up to `interval` of latency to EVERY keystroke's echo; waking on write
+// makes interactive echo prompt while still batching high-frequency bulk output.
 func (bw *bufferedWSWriter) flushLoop() {
-	ticker := time.NewTicker(bw.interval)
-	defer ticker.Stop()
+	var lastFlush time.Time
 	for {
 		select {
-		case <-ticker.C:
+		case <-bw.wake:
+			if wait := bw.interval - time.Since(lastFlush); wait > 0 {
+				t := time.NewTimer(wait)
+				select {
+				case <-t.C:
+				case <-bw.done:
+					t.Stop()
+					bw.flush() // Final flush
+					return
+				}
+			}
 			bw.flush()
+			lastFlush = time.Now()
 		case <-bw.done:
 			bw.flush() // Final flush
 			return
