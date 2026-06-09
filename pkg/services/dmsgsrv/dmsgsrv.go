@@ -370,19 +370,18 @@ func (s *service) serveDmsgSurfaces(
 		json.NewEncoder(w).Encode(resp) //nolint:errcheck,gosec
 	})
 
+	// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated) instead of a
+	// separate :81 listener. The ring buffer captures recent global-logger output.
+	rb := logging.NewRingBuffer(0)
+	logging.AddHook(logging.NewWriteHook(rb))
+	handler := dmsghttp.WithDebug(healthMux, deployment.Prod.SurveyWhitelist, rb.Bytes)
 	go func() {
-		if err := dmsghttp.ListenAndServe(ctx, cfg.SecKey, healthMux, dClient,
+		if err := dmsghttp.ListenAndServe(ctx, cfg.SecKey, handler, dClient,
 			dmsg.DefaultDmsgHTTPPort, dmsgC, log); err != nil {
-			log.WithError(err).Error("DMSG HTTP health server stopped")
+			log.WithError(err).Error("DMSG HTTP server stopped")
 		}
 	}()
-	log.Infof("DMSG HTTP health endpoint available at %s", dmsgAddr)
-
-	go func() {
-		if debugErr := dmsghttp.ServeDebug(ctx, dmsgC, log, deployment.Prod.SurveyWhitelist); debugErr != nil {
-			log.Errorf("dmsghttp.ServeDebug: %v", debugErr)
-		}
-	}()
+	log.Infof("DMSG HTTP (health/debug) available at %s", dmsgAddr)
 
 	if cfg.EnableRouteSetup {
 		go s.serveRouteSetup(ctx, dmsgC)
