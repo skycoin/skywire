@@ -258,9 +258,10 @@ func buildRoute(path []*vertex) (routing.Route, error) {
 			return routing.Route{}, errors.New("connection not found between vertices")
 		}
 		route.Hops = append(route.Hops, routing.Hop{
-			From: from.edge,
-			To:   to.edge,
-			TpID: conn.ID,
+			From:    from.edge,
+			To:      to.edge,
+			TpID:    conn.ID,
+			Latency: conn.Latency, // measured per-edge latency (ms); 0 if unmeasured
 		})
 	}
 	return route, nil

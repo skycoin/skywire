@@ -29,6 +29,19 @@ type Route struct {
 	KeepAlive time.Duration   `json:"keep_alive"`
 }
 
+// TotalLatency returns the route's predicted one-way latency: the sum of its
+// hops' measured per-edge latencies (ms, populated by the route-finder). Hops
+// with no measurement contribute 0, so a route crossing unmeasured edges
+// reports a lower bound — callers that must penalize unmeasured edges should
+// inspect per-hop Hop.Latency directly.
+func (r Route) TotalLatency() float64 {
+	var total float64
+	for _, h := range r.Hops {
+		total += h.Latency
+	}
+	return total
+}
+
 func (r Route) String() string {
 	res := fmt.Sprintf("[KeepAlive: %s] %s\n", r.KeepAlive, r.Desc.String())
 	for _, hop := range r.Hops {
@@ -138,6 +151,12 @@ type Hop struct {
 	TpID uuid.UUID
 	From cipher.PubKey
 	To   cipher.PubKey
+	// Latency is this hop's measured transport latency in milliseconds, as
+	// recorded by the route-finder from per-edge TPD data (0/omitted when the
+	// edge has no measurement). It is informational — it lets callers rank or
+	// display routes by predicted latency without re-querying, and is NOT used
+	// in route-rule setup. Older route-finders simply omit it.
+	Latency float64 `json:"Latency,omitempty"`
 }
 
 // String implements fmt.Stringer
