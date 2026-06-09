@@ -245,20 +245,19 @@ func (s *service) runDMSG(
 
 	go updateServers(ctx, a, dClient, dmsgDC, cfg.DmsgServerType, log)
 
-	go func() {
-		if dmsgErr := dmsghttp.ListenAndServe(ctx, sk, a, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, log); dmsgErr != nil {
-			log.Errorf("dmsghttp.ListenAndServe: %v", dmsgErr)
-			cancel()
-		}
-	}()
-
 	wl := deployment.Prod.SurveyWhitelist
 	if cfg.TestEnvironment {
 		wl = deployment.Test.SurveyWhitelist
 	}
+	// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated) instead of a
+	// separate :81 listener. The ring buffer captures recent global-logger output.
+	rb := logging.NewRingBuffer(0)
+	logging.AddHook(logging.NewWriteHook(rb))
+	handler := dmsghttp.WithDebug(a, wl, rb.Bytes)
 	go func() {
-		if debugErr := dmsghttp.ServeDebug(ctx, dmsgDC, log, wl); debugErr != nil {
-			log.Errorf("dmsghttp.ServeDebug: %v", debugErr)
+		if dmsgErr := dmsghttp.ListenAndServe(ctx, sk, handler, dClient, dmsg.DefaultDmsgHTTPPort, dmsgDC, log); dmsgErr != nil {
+			log.Errorf("dmsghttp.ListenAndServe: %v", dmsgErr)
+			cancel()
 		}
 	}()
 

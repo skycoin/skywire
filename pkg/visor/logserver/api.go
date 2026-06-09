@@ -216,9 +216,13 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 	// stray lines from libraries that don't follow the format don't sneak past
 	// a strict --min-level filter).
 	authRoute.GET("/visor.log", func(c *gin.Context) {
-		logFile := filepath.Join(localPath, "visor.log")
+		// The visor writes its rotating log to LocalPath/log/skywire.log
+		// (visor.go, via lumberjackrus). The endpoint previously looked at
+		// LocalPath/visor.log — wrong subdir AND filename — so it always 404'd
+		// even with file logging enabled.
+		logFile := filepath.Join(localPath, "log", "skywire.log")
 		if _, err := os.Stat(logFile); err != nil {
-			c.String(http.StatusNotFound, "visor.log not found (start visor with -s flag)")
+			c.String(http.StatusNotFound, "%s not found (is file logging enabled?)", logFile)
 			return
 		}
 		q := c.Request.URL.Query()
