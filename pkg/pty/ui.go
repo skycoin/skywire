@@ -3,6 +3,7 @@ package pty
 
 import (
 	"bytes"
+	"context"
 	stdjson "encoding/json"
 	"fmt"
 	"io"
@@ -174,13 +175,29 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 			return
 		}
 
-		// websocket keep alive
+		// Keepalive: send a websocket PING every 10s. The browser's ws library
+		// auto-pongs, so this keeps BOTH directions warm (NAT/proxies silently
+		// drop idle conns) AND detects a dead peer — Ping errors when no pong
+		// returns, so we close the session cleanly instead of leaving a
+		// half-open conn that surfaces later as an "inexplicable" error. The
+		// old null-byte DATA frame only warmed server->browser and couldn't
+		// notice a dead browser.
 		go func() {
+			t := time.NewTicker(10 * time.Second)
+			defer t.Stop()
 			for {
-				if _, err := wsConn.Write([]byte("\x00")); err != nil {
+				select {
+				case <-r.Context().Done():
 					return
+				case <-t.C:
+					pctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+					err := ws.Ping(pctx)
+					cancel()
+					if err != nil {
+						_ = ws.Close(websocket.StatusGoingAway, "keepalive ping failed") //nolint:errcheck
+						return
+					}
 				}
-				time.Sleep(10 * time.Second)
 			}
 		}()
 
@@ -212,8 +229,24 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 			closeDone()
 		}()
 		go func() {
-			_, _ = io.Copy(ptyC, wsReader) //nolint:errcheck
-			closeDone()
+			defer closeDone()
+			// Pipeline keystrokes: fire each write without blocking a full RPC
+			// round-trip per keystroke (the old io.Copy used the synchronous
+			// Write, so fast typing / paste queued behind per-key acks). Order
+			// is preserved; a broken conn surfaces on the output path above and
+			// closes the session.
+			buf := make([]byte, 4096)
+			for {
+				n, rerr := wsReader.Read(buf)
+				if n > 0 {
+					if werr := ptyC.WriteAsync(buf[:n]); werr != nil {
+						return
+					}
+				}
+				if rerr != nil {
+					return
+				}
+			}
 		}()
 		<-done
 	}
@@ -384,6 +417,7 @@ type bufferedWSWriter struct {
 	closed   bool
 	interval time.Duration
 	done     chan struct{}
+	wake     chan struct{}
 }
 
 func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWSWriter {
@@ -392,6 +426,7 @@ func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWS
 		buf:      make([]byte, 0, 4096),
 		interval: flushInterval,
 		done:     make(chan struct{}),
+		wake:     make(chan struct{}, 1),
 	}
 	go bw.flushLoop()
 	return bw
@@ -399,21 +434,46 @@ func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWS
 
 func (bw *bufferedWSWriter) Write(p []byte) (int, error) {
 	bw.mu.Lock()
-	defer bw.mu.Unlock()
 	if bw.closed {
+		bw.mu.Unlock()
 		return 0, io.ErrClosedPipe
 	}
+	wasEmpty := len(bw.buf) == 0
 	bw.buf = append(bw.buf, p...)
+	bw.mu.Unlock()
+	// Nudge the flusher on an idle->first-write so interactive echo (the PTY
+	// echoing each keystroke) flushes promptly instead of waiting out a fixed
+	// tick. Non-blocking: the data is already buffered; this is only a signal.
+	if wasEmpty {
+		select {
+		case bw.wake <- struct{}{}:
+		default:
+		}
+	}
 	return len(p), nil
 }
 
+// flushLoop coalesces output bursts — it never writes more than once per
+// interval, but flushes an idle->first-write immediately. The old fixed ticker
+// added up to `interval` of latency to EVERY keystroke's echo; waking on write
+// makes interactive echo prompt while still batching high-frequency bulk output.
 func (bw *bufferedWSWriter) flushLoop() {
-	ticker := time.NewTicker(bw.interval)
-	defer ticker.Stop()
+	var lastFlush time.Time
 	for {
 		select {
-		case <-ticker.C:
+		case <-bw.wake:
+			if wait := bw.interval - time.Since(lastFlush); wait > 0 {
+				t := time.NewTimer(wait)
+				select {
+				case <-t.C:
+				case <-bw.done:
+					t.Stop()
+					bw.flush() // Final flush
+					return
+				}
+			}
 			bw.flush()
+			lastFlush = time.Now()
 		case <-bw.done:
 			bw.flush() // Final flush
 			return
