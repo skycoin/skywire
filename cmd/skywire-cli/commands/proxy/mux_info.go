@@ -61,21 +61,24 @@ Examples:
 			if err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RouteGroupMuxInfo: %w", err))
 			}
-			renderMuxInfo(cmd, infos)
+			newMuxRateTracker().render(cmd, infos)
 			return
 		}
 
 		// Watch mode: clear screen between refreshes for a top-style view.
-		// First emit fires immediately, then every muxInfoWatch.
+		// First emit fires immediately, then every muxInfoWatch. One tracker
+		// lives across ticks so it can derive per-leg throughput from the byte
+		// deltas between polls.
 		ticker := time.NewTicker(muxInfoWatch)
 		defer ticker.Stop()
+		tracker := newMuxRateTracker()
 		for {
 			fmt.Print("\033[H\033[2J") // clear screen
 			infos, err := rpcClient.RouteGroupMuxInfo(muxInfoApp)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "RouteGroupMuxInfo: %v\n", err)
 			} else {
-				renderMuxInfo(cmd, infos)
+				tracker.render(cmd, infos)
 			}
 			fmt.Printf("\n[refresh %s — ctrl+c to stop]\n", muxInfoWatch)
 			<-ticker.C
@@ -111,6 +114,28 @@ type muxLegInfo struct {
 	RecvPackets uint64  `json:"recv_packets"`
 }
 
+// muxRateTracker remembers the previous poll's per-leg byte counters so
+// --watch can render throughput (rate), each leg's share of the total, and an
+// aggregate — the live "what am I getting" view — instead of just cumulative
+// counters. Keyed by route-group descriptor + leg index (both stable across
+// polls). A one-shot render uses a fresh tracker, so rates show "-".
+type muxRateTracker struct {
+	prev map[string]muxLegBytes
+	at   time.Time
+}
+
+type muxLegBytes struct{ sent, recv uint64 }
+
+func newMuxRateTracker() *muxRateTracker { return &muxRateTracker{prev: map[string]muxLegBytes{}} }
+
+// humanRate renders a bytes/sec rate (0 or negative → "0B/s").
+func humanRate(bytesPerSec float64) string {
+	if bytesPerSec <= 0 {
+		return "0B/s"
+	}
+	return humanBytes(uint64(bytesPerSec)) + "/s"
+}
+
 // renderMuxInfo prints the visor's mux-info response. We re-marshal/
 // unmarshal through the local muxRouteGroupInfo struct so the CLI's
 // render logic doesn't reach into the visor package's internal type
@@ -119,7 +144,7 @@ type muxLegInfo struct {
 // infos is the value returned by rpcClient.RouteGroupMuxInfo; we
 // take it as 'any' so the CLI doesn't import the visor type
 // directly.
-func renderMuxInfo(cmd *cobra.Command, infos any) {
+func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 	// JSON path: marshal the wire response directly. Re-encoding via
 	// our local mirror struct preserves field naming and avoids
 	// importing the visor type for json contract reasons.
@@ -145,6 +170,14 @@ func renderMuxInfo(cmd *cobra.Command, infos any) {
 		return
 	}
 
+	// Throughput is a rate, so it needs two samples. On the first render (or a
+	// one-shot) t.at is zero — rates / share / aggregate show "-"; --watch
+	// fills them in from the second tick onward.
+	now := time.Now()
+	elapsed := now.Sub(t.at).Seconds()
+	haveRates := !t.at.IsZero() && elapsed > 0
+	next := make(map[string]muxLegBytes)
+
 	for ri, rg := range rgs {
 		fmt.Printf("rg[%d] %s:%d → %s:%d  mux=%v sack=%v  legs=%d\n",
 			ri,
@@ -155,30 +188,77 @@ func renderMuxInfo(cmd *cobra.Command, infos any) {
 		// Sort legs by index so the row order is stable across snapshots.
 		sort.SliceStable(rg.Legs, func(i, j int) bool { return rg.Legs[i].Index < rg.Legs[j].Index })
 
+		// rg descriptor is the stable cross-poll key (the list index can shift).
+		rgKey := fmt.Sprintf("%s:%d>%s:%d", rg.Desc.SrcPK, rg.Desc.SrcPort, rg.Desc.DstPK, rg.Desc.DstPort)
+
+		// Pass 1: per-leg recv/sent rate from the byte delta since last poll,
+		// plus the rg totals (for the aggregate line + each leg's share).
+		recvRate := make([]float64, len(rg.Legs))
+		sentRate := make([]float64, len(rg.Legs))
+		var totRecv, totSent float64
+		for li, leg := range rg.Legs {
+			key := fmt.Sprintf("%s#%d", rgKey, leg.Index)
+			if haveRates {
+				if p, ok := t.prev[key]; ok {
+					if leg.RecvBytes >= p.recv { // guard counter reset (rg recreated)
+						recvRate[li] = float64(leg.RecvBytes-p.recv) / elapsed
+					}
+					if leg.SentBytes >= p.sent {
+						sentRate[li] = float64(leg.SentBytes-p.sent) / elapsed
+					}
+				}
+			}
+			next[key] = muxLegBytes{sent: leg.SentBytes, recv: leg.RecvBytes}
+			totRecv += recvRate[li]
+			totSent += sentRate[li]
+		}
+
+		// Pass 2: render. recv/s, sent/s, share, health are the live signals;
+		// recv/sent are the cumulative totals. share surfaces the self-healing
+		// story — one leg at ~100% means the others are degraded/dropped.
 		var b bytes.Buffer
 		w := tabwriter.NewWriter(&b, 0, 0, 3, ' ', 0)
-		fmt.Fprintln(w, "  leg\ttp_id\ttype\tremote\tlatency\tsent\tsent_pkts\trecv\trecv_pkts") //nolint:errcheck
-		for _, leg := range rg.Legs {
+		fmt.Fprintln(w, "  leg\ttp_id\ttype\tremote\tlatency\trecv/s\tsent/s\tshare\thealth\trecv\tsent") //nolint:errcheck
+		active := 0
+		for li, leg := range rg.Legs {
 			lat := "-"
 			if leg.LatencyMS > 0 {
 				lat = fmt.Sprintf("%.0fms", leg.LatencyMS)
 			}
-			fmt.Fprintf(w, "  %d\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%d\n", //nolint:errcheck
+			rrate, srate, share := "-", "-", "-"
+			if haveRates {
+				rrate, srate = humanRate(recvRate[li]), humanRate(sentRate[li])
+				share = "0%"
+				if totRecv > 0 {
+					share = fmt.Sprintf("%.0f%%", recvRate[li]/totRecv*100)
+				}
+			}
+			health := "idle"
+			if recvRate[li] > 0 || sentRate[li] > 0 {
+				health, active = "active", active+1
+			}
+			fmt.Fprintf(w, "  %d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", //nolint:errcheck
 				leg.Index,
 				shortTpID(leg.TransportID),
 				leg.TpType,
 				shortPK(leg.RemotePK),
-				lat,
-				humanBytes(leg.SentBytes), leg.SentPackets,
-				humanBytes(leg.RecvBytes), leg.RecvPackets,
+				lat, rrate, srate, share, health,
+				humanBytes(leg.RecvBytes), humanBytes(leg.SentBytes),
 			)
 		}
 		w.Flush() //nolint:errcheck,gosec
 		fmt.Print(b.String())
+		if haveRates {
+			fmt.Printf("  total  recv/s=%s  sent/s=%s  (%d/%d legs active)\n",
+				humanRate(totRecv), humanRate(totSent), active, len(rg.Legs))
+		}
 		if ri < len(rgs)-1 {
 			fmt.Println()
 		}
 	}
+
+	t.prev = next
+	t.at = now
 }
 
 func shortPK(pk string) string {
