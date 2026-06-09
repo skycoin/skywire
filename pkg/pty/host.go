@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/rpc"
 	"net/url"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -33,6 +34,15 @@ type Host struct {
 
 	cliN  int32
 	connN int32
+
+	// execPool caches established one-shot Exec sessions keyed by
+	// (remote PK, port, dialer) so repeated `cli pty exec` to the same
+	// peer skip the dial + handshake (the ~10-15s/exec cost). See
+	// exec_pool.go — the remote Exec gateway is stateless, so reuse is
+	// safe, and a failed Exec retires the session so a dead conn never
+	// wedges.
+	execMu   sync.Mutex
+	execPool map[execKey]*pooledExec
 }
 
 // NewHost creates a new pty.Host with a given dmsg.Client and
@@ -84,19 +94,40 @@ func (h *Host) ExecRemoteVia(ctx context.Context, dialer StreamDialer, rPK ciphe
 	if rPort == 0 {
 		rPort = DefaultPort
 	}
+	key := execKey{pk: rPK, port: rPort, dialer: fmt.Sprintf("%T", dialer)}
+
+	// Fast path: reuse a pooled session, skipping the dial + handshake (the
+	// dominant ~10-15s/exec). Safe because the remote Exec gateway is
+	// stateless (exec_gateway.go). On an RPC/connection error — NOT a
+	// non-zero command exit, which returns err==nil with the code in resp —
+	// releaseExec retires the dead session; we return the error rather than
+	// silently re-dialing + re-running (the command may already have run, so
+	// auto-retry isn't at-most-once safe). The caller's retry then re-dials
+	// because the stale session is gone.
+	if pe := h.acquireExec(key); pe != nil {
+		resp, err := pe.sess.Exec(req)
+		h.releaseExec(key, pe, err)
+		return resp, err
+	}
+
+	// Cold path: no pooled session — dial + handshake, run, then pool the
+	// live session instead of tearing it down.
 	stream, err := dialer.DialStream(ctx, rPK, rPort)
 	if err != nil {
 		return nil, fmt.Errorf("dmsgpty: dial %s:%d: %w", rPK, rPort, err)
 	}
-	defer stream.Close() //nolint:errcheck
-
 	ptyC, err := NewPtyClient(stream)
 	if err != nil {
+		_ = stream.Close() //nolint:errcheck
 		return nil, fmt.Errorf("dmsgpty: new pty client: %w", err)
 	}
-	defer ptyC.Close() //nolint:errcheck
-
-	return ptyC.Exec(req)
+	resp, err := ptyC.Exec(req)
+	if err != nil {
+		_ = ptyC.Close() //nolint:errcheck // closes the underlying stream too
+		return nil, err
+	}
+	h.cacheExec(key, ptyC)
+	return resp, nil
 }
 
 // ServeCLI listens for CLI connections via the provided listener.
