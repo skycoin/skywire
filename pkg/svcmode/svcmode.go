@@ -311,8 +311,19 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 
 		if cfg.Mode.IncludesDmsg() {
 			cfg.Log.Infof("svcmode: dmsghttp listener on port %d", cfg.DmsgPort)
+			handler := cfg.Handler
+			if len(cfg.SurveyWhitelist) > 0 {
+				// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated)
+				// instead of a separate :81 listener. The ring buffer captures
+				// recent log output (the service uses the global logger via
+				// MustGetLogger) so /debug/log needs no disk file.
+				rb := logging.NewRingBuffer(0)
+				logging.AddHook(logging.NewWriteHook(rb))
+				handler = dmsghttp.WithDebug(cfg.Handler, cfg.SurveyWhitelist, rb.Bytes)
+				cfg.Log.Info("svcmode: debug (pprof + /debug/log) served on dmsg :80, survey-gated")
+			}
 			go func() {
-				if err := dmsghttp.ListenAndServe(ctx, cfg.SK, cfg.Handler,
+				if err := dmsghttp.ListenAndServe(ctx, cfg.SK, handler,
 					boot.DClient, cfg.DmsgPort, boot.Client, cfg.Log); err != nil && !errors.Is(err, context.Canceled) {
 					select {
 					case h.errCh <- fmt.Errorf("dmsghttp: %w", err):
@@ -320,14 +331,6 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 					}
 				}
 			}()
-
-			if len(cfg.SurveyWhitelist) > 0 {
-				go func() {
-					if err := dmsghttp.ServeDebug(ctx, boot.Client, cfg.Log, cfg.SurveyWhitelist); err != nil && !errors.Is(err, context.Canceled) {
-						cfg.Log.WithError(err).Warn("svcmode: ServeDebug exited with error")
-					}
-				}()
-			}
 		} else {
 			cfg.Log.Info("svcmode: dmsg client bootstrapped for outbound use (no dmsghttp listener; mode=http)")
 		}
