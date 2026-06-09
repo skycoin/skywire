@@ -22,7 +22,7 @@ import (
 )
 
 func TestDebugMux_PprofEndpoints(t *testing.T) {
-	mux := dmsghttp.DebugMux()
+	mux := dmsghttp.DebugMux(nil)
 
 	endpoints := []string{
 		"/debug/pprof/",
