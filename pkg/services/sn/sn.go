@@ -293,18 +293,20 @@ func (s *service) startDMSGHealth(
 	})
 
 	snClient := sn.DmsgClient()
+	// Fold pprof + /debug/log onto the main dmsg :80 (survey-gated) instead of a
+	// separate :81 listener. The ring buffer captures route-setup logs (the
+	// router logs via the global logger) so /debug/log needs no disk file —
+	// e.g. the live id-reservation failures behind the /stats counters.
+	rb := logging.NewRingBuffer(0)
+	logging.AddHook(logging.NewWriteHook(rb))
+	handler := dmsghttp.WithDebug(mux, deployment.Prod.SurveyWhitelist, rb.Bytes)
 	go func() {
-		if err := dmsghttp.ListenAndServe(ctx, conf.SK, mux, nil,
+		if err := dmsghttp.ListenAndServe(ctx, conf.SK, handler, nil,
 			dmsg.DefaultDmsgHTTPPort, snClient, log); err != nil {
-			log.WithError(err).Error("DMSG HTTP health server stopped")
+			log.WithError(err).Error("DMSG HTTP server stopped")
 		}
 	}()
-	go func() {
-		if err := dmsghttp.ServeDebug(ctx, snClient, log, deployment.Prod.SurveyWhitelist); err != nil {
-			log.WithError(err).Error("DMSG HTTP debug server stopped")
-		}
-	}()
-	log.Infof("DMSG HTTP health endpoint available at %s", dmsgAddr)
+	log.Infof("DMSG HTTP (health/stats/debug) available at %s", dmsgAddr)
 }
 
 // getHTTPClient returns an *http.Client for the given service URL,

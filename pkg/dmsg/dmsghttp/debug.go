@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -14,11 +15,15 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
-// DefaultDebugPort is the dmsg port used for serving debug/pprof endpoints.
+// DefaultDebugPort is the dmsg port historically used for serving debug/pprof on
+// its own listener. Prefer WithDebug to fold the same endpoints onto the
+// service's main dmsg :80 handler (one port for /health + /metrics + /debug/*).
 const DefaultDebugPort = uint16(81)
 
-// DebugMux returns an http.ServeMux with standard pprof endpoints registered.
-func DebugMux() *http.ServeMux {
+// DebugMux returns an http.ServeMux with the standard pprof endpoints, plus
+// /debug/log serving logSource() when it is non-nil — the service's recent log
+// output from an in-memory ring buffer (no disk file, no -s flag).
+func DebugMux(logSource func() []byte) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
@@ -28,7 +33,29 @@ func DebugMux() *http.ServeMux {
 	for _, p := range []string{"heap", "goroutine", "threadcreate", "block", "mutex", "allocs"} {
 		mux.Handle("/debug/pprof/"+p, pprof.Handler(p))
 	}
+	if logSource != nil {
+		mux.HandleFunc("/debug/log", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			_, _ = w.Write(logSource()) //nolint:errcheck
+		})
+	}
 	return mux
+}
+
+// WithDebug returns a handler that serves the survey-gated debug endpoints
+// (/debug/pprof/* and, when logSource != nil, /debug/log) on the SAME listener
+// as next, delegating every other path to next. This consolidates pprof + logs
+// onto the service's main dmsg :80 instead of a separate debug port (matching
+// the visor's logserver). Only /debug/* is whitelist-gated; next is unchanged.
+func WithDebug(next http.Handler, whitelistPKs []cipher.PubKey, logSource func() []byte) http.Handler {
+	debug := WhitelistMiddleware(whitelistPKs, DebugMux(logSource))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/debug/") {
+			debug.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // WhitelistMiddleware wraps an http.Handler with public-key-based access control.
@@ -68,6 +95,9 @@ func WhitelistMiddleware(whitelistedPKs []cipher.PubKey, next http.Handler) http
 // provided whitelist public keys. It blocks until the context is canceled or
 // an error occurs.
 //
+// Deprecated: prefer WithDebug, which folds pprof + /debug/log onto the
+// service's main dmsg :80 handler instead of a separate :81 listener.
+//
 // An empty whitelist is logged at WARN and the middleware will reject every
 // request — see WhitelistMiddleware for rationale.
 func ServeDebug(ctx context.Context, dmsgC *dmsg.Client, log *logging.Logger, whitelistPKs []cipher.PubKey) error {
@@ -76,7 +106,7 @@ func ServeDebug(ctx context.Context, dmsgC *dmsg.Client, log *logging.Logger, wh
 	} else {
 		log.WithField("whitelisted_pks", len(whitelistPKs)).Info("ServeDebug: pprof access restricted to whitelisted PKs")
 	}
-	handler := WhitelistMiddleware(whitelistPKs, DebugMux())
+	handler := WhitelistMiddleware(whitelistPKs, DebugMux(nil))
 
 	lis, err := dmsgC.Listen(DefaultDebugPort)
 	if err != nil {
