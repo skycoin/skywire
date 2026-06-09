@@ -3,6 +3,7 @@ package pty
 
 import (
 	"bytes"
+	"context"
 	stdjson "encoding/json"
 	"fmt"
 	"io"
@@ -174,13 +175,29 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 			return
 		}
 
-		// websocket keep alive
+		// Keepalive: send a websocket PING every 10s. The browser's ws library
+		// auto-pongs, so this keeps BOTH directions warm (NAT/proxies silently
+		// drop idle conns) AND detects a dead peer — Ping errors when no pong
+		// returns, so we close the session cleanly instead of leaving a
+		// half-open conn that surfaces later as an "inexplicable" error. The
+		// old null-byte DATA frame only warmed server->browser and couldn't
+		// notice a dead browser.
 		go func() {
+			t := time.NewTicker(10 * time.Second)
+			defer t.Stop()
 			for {
-				if _, err := wsConn.Write([]byte("\x00")); err != nil {
+				select {
+				case <-r.Context().Done():
 					return
+				case <-t.C:
+					pctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+					err := ws.Ping(pctx)
+					cancel()
+					if err != nil {
+						_ = ws.Close(websocket.StatusGoingAway, "keepalive ping failed") //nolint:errcheck
+						return
+					}
 				}
-				time.Sleep(10 * time.Second)
 			}
 		}()
 
@@ -212,8 +229,24 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 			closeDone()
 		}()
 		go func() {
-			_, _ = io.Copy(ptyC, wsReader) //nolint:errcheck
-			closeDone()
+			defer closeDone()
+			// Pipeline keystrokes: fire each write without blocking a full RPC
+			// round-trip per keystroke (the old io.Copy used the synchronous
+			// Write, so fast typing / paste queued behind per-key acks). Order
+			// is preserved; a broken conn surfaces on the output path above and
+			// closes the session.
+			buf := make([]byte, 4096)
+			for {
+				n, rerr := wsReader.Read(buf)
+				if n > 0 {
+					if werr := ptyC.WriteAsync(buf[:n]); werr != nil {
+						return
+					}
+				}
+				if rerr != nil {
+					return
+				}
+			}
 		}()
 		<-done
 	}
