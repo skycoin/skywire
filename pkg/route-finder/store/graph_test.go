@@ -198,6 +198,13 @@ func TestGetRouteWeighted(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, lat, 1)
 	require.Len(t, lat[0].Hops, 3)
+
+	// Each hop carries its measured per-edge latency (the exposed field), and
+	// Route.TotalLatency sums them — populated in both modes via buildRoute.
+	require.Equal(t, 400.0, hop[0].Hops[0].Latency)
+	require.Equal(t, 800.0, hop[0].TotalLatency())
+	require.Equal(t, 100.0, lat[0].Hops[0].Latency)
+	require.Equal(t, 300.0, lat[0].TotalLatency())
 }
 
 func TestNewGraph(t *testing.T) {
