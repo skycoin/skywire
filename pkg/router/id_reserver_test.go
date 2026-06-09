@@ -4,7 +4,10 @@ package router
 import (
 	"context"
 	"errors"
+	"net"
+	"net/rpc"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // We check the contents of 'idReserver.rec' is as expected after calling 'NewIDReserver'.
@@ -280,4 +284,73 @@ func TestIdReserver_ReserveIDs_NoSiblingCancelOnFailure(t *testing.T) {
 	cIDs := idr.ids[pkC]
 	idr.mx.Unlock()
 	assert.Len(t, cIDs, 1, "healthy sibling C should reserve its ID despite A failing")
+}
+
+// shutdownGateway is a mock router.RPCGateway whose ReserveIDs returns net/rpc's
+// "connection is shut down" — the error a stale pooled connection produces.
+type shutdownGateway struct{}
+
+func (shutdownGateway) ReserveIDs(_ uint8, _ *[]routing.RouteID) error {
+	return errors.New("connection is shut down")
+}
+
+// flakyReserveDialer serves a shutdownGateway on the FIRST dial to each pk and a
+// working mockGatewayForDialer on every subsequent dial — modeling a pooled
+// connection that is dead on first use but reachable on a fresh re-dial.
+type flakyReserveDialer struct {
+	t  *testing.T
+	mu sync.Mutex
+	n  map[cipher.PubKey]int
+}
+
+func (d *flakyReserveDialer) Type() string                                      { return string(types.DMSG) }
+func (d *flakyReserveDialer) Probe(context.Context, cipher.PubKey, uint16) bool { return true }
+
+func (d *flakyReserveDialer) Dial(_ context.Context, pk cipher.PubKey, _ uint16) (net.Conn, error) {
+	d.mu.Lock()
+	k := d.n[pk]
+	d.n[pk]++
+	d.mu.Unlock()
+
+	var gw interface{} = &mockGatewayForDialer{}
+	if k == 0 {
+		gw = shutdownGateway{}
+	}
+	connC, connS := net.Pipe()
+	rpcS := rpc.NewServer()
+	require.NoError(d.t, rpcS.RegisterName(RPCName, gw))
+	go rpcS.ServeConn(connS)
+	d.t.Cleanup(func() {
+		assert.NoError(d.t, connC.Close())
+		assert.NoError(d.t, connS.Close())
+	})
+	return connC, nil
+}
+
+// TestIdReserver_ReserveIDs_RetriesStalePooledConn covers the fix for the #1 live
+// route-setup failure (id_reservation, ~59% on a real RSN): a pooled connection
+// returning "connection is shut down" must be re-dialed fresh and the
+// reservation retried, instead of failing the whole route. Without the retry,
+// ReserveIDs returns that error directly.
+func TestIdReserver_ReserveIDs_RetriesStalePooledConn(t *testing.T) {
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+	d := &flakyReserveDialer{t: t, n: make(map[cipher.PubKey]int)}
+
+	rtIDR, err := NewIDReserver(context.TODO(), d, nil, [][]routing.Hop{makeHops(pkA, pkB)})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, rtIDR.Close()) })
+
+	ctx, cancel := context.WithTimeout(context.TODO(), 3*time.Second)
+	defer cancel()
+
+	// The first pooled conn to each hop is dead → "connection is shut down"; the
+	// reserver must re-dial fresh and succeed.
+	require.NoError(t, rtIDR.ReserveIDs(ctx))
+
+	// Each hop was dialed at least twice: the initial dead conn + one re-dial.
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	assert.GreaterOrEqual(t, d.n[pkA], 2, "hop A should have been re-dialed")
+	assert.GreaterOrEqual(t, d.n[pkB], 2, "hop B should have been re-dialed")
 }
