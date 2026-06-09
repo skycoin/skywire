@@ -67,6 +67,18 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		if serviceType == "" {
 			return &FetchCXOResult{Reason: "sd-services: missing service type"}, nil
 		}
+		// Lazily hold FeedSDServices so the on-demand sync runs, mirroring
+		// tpd-metrics / tpd-uptime / all-transports (each AcquireFor's its tab
+		// in its fetch helper). Without this, servicesFromCXO only ever reads a
+		// snapshot some OTHER consumer (autoconnect, hvui) happened to warm — so
+		// on a visor with no such consumer, `cli tp -m` / `proxy list` /
+		// `vpn list` miss FeedSDServices forever. AcquireFor starts the cycle
+		// (the first probe still misses while it syncs); the close-grace window
+		// keeps it warm so the next probe hits.
+		if mgr := v.CXOSubMgr(); mgr != nil {
+			mgr.AcquireFor(TabCLIServices)
+			defer mgr.ReleaseFor(TabCLIServices)
+		}
 		services, ok := v.servicesFromCXO(serviceType, "", "")
 		if !ok {
 			return &FetchCXOResult{Reason: "sd-services: cache miss"}, nil

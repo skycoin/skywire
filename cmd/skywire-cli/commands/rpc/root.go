@@ -701,17 +701,16 @@ func getCLICacheIfEnabled(cachefile string) *clicache.Cache {
 	return cliCache
 }
 
-// FetchServiceURL fetches a URL from a deployment service using a three-step chain:
+// FetchServiceURL fetches a URL from a deployment service using a CXO/DMSG-first
+// chain:
+//  0. CXO — read the visor's local subscriber-cache snapshot (no round-trip)
 //  1. RPC — ask the running visor to proxy the request over DMSG (DmsgHTTP RPC)
-//  2. DMSG direct — create ephemeral DMSG client and fetch directly
-//  3. HTTP — direct HTTP request as last resort
+//  2. DMSG direct — ephemeral DMSG client (only when --no-rpc)
+//  3. HTTP — direct HTTP, ONLY for services with no DMSG equivalent (e.g.
+//     ip.skycoin.com). The dmsg-mapped deployment services get NO HTTP
+//     fallback — the deprecated plain-HTTP hop is gone for them.
 //
-// Steps can be disabled via --no-rpc, --no-dmsg, and --no-http flags.
-//
-// This pattern ensures CLI commands work for:
-//   - Visors running with DMSG (step 1)
-//   - Standalone CLI without a running visor on DMSG network (step 2)
-//   - Environments without DMSG connectivity (step 3)
+// Steps can be disabled via --no-cxo, --no-rpc, --no-dmsg, and --no-http flags.
 func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	var lastErr error
 
@@ -798,8 +797,15 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 		}
 	}
 
-	// Step 3: Direct HTTP fallback
-	if !NoHTTP {
+	// Step 3: Direct HTTP — last resort, ONLY for services with no DMSG path.
+	// The dmsg-mapped deployment services (sd/tpd/ar/rf/ut/dmsgd) are reachable
+	// over CXO + DMSG and intentionally get NO HTTP fallback: a plain-HTTP hop
+	// through their HTTP edge is the path being deprecated, so a dmsg-mapped
+	// service that fails CXO+DMSG now errors here rather than silently dropping
+	// to clearnet. HTTP survives only for HTTP-only services with no dmsg
+	// equivalent — currently just ip.skycoin.com (the public-IP echo the
+	// proxy/VPN exit-IP check uses; cli visor ip no longer needs it).
+	if !NoHTTP && DmsgURLForHTTP(url) == "" && !isDmsgURL(url) {
 		httpClient := &http.Client{Timeout: 30 * time.Second}
 		resp, err := httpClient.Get(url) //nolint:gosec
 		if err != nil {
