@@ -150,7 +150,12 @@ func (idr *idReserver) ReserveIDs(ctx context.Context) error {
 
 	for pk, n := range idr.rec {
 		go func(pk cipher.PubKey, n uint8) {
+			// Read under idr.mx: a sibling goroutine's redial() writes rcM[pk]
+			// under the same lock, so an unlocked read here is a data race on
+			// the shared map (different keys still touch the map's internals).
+			idr.mx.Lock()
 			client := idr.rcM.Client(pk)
+			idr.mx.Unlock()
 			if client == nil {
 				// NOTE: deliberately do NOT cancel the shared ctx on a single
 				// hop's failure. cancel() here propagated to every sibling
