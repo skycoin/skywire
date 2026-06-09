@@ -1,25 +1,19 @@
-// Package clivisor cmd/skywire-cli/commands/visor/info.go
+// Package clivisor cmd/skywire-cli/commands/visor/ip.go
 package clivisor
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
-	"github.com/spf13/pflag"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
-	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
-var geoipURL string
-
 func init() {
-	RootCmd.Flags().StringVar(&geoipURL, "geoip", deployment.Prod.GeoIP, "url of geoip service")
 	RootCmd.AddCommand(ipCmd)
 }
 
@@ -32,57 +26,20 @@ var ipCmd = &cobra.Command{
 		mLog.SetLevel(logrus.PanicLevel)
 		logger := mLog.PackageLogger("visor_ip_information")
 
-		ip, err := getIPAddress(cmd.Flags(), geoipURL)
-		if err != nil {
-			internal.Catch(cmd.Flags(), err)
+		// Discover the public IP + NAT type in a single STUN round, using the
+		// embedded STUN-server list. No HTTP hop through ip.skycoin.com (the
+		// public-IP echo) or conf.skywire.skycoin.com (the STUN-server list):
+		// STUN's mapped address IS the public IP, so the geoip echo was always
+		// redundant with the NAT check this command already runs, and the STUN
+		// servers ship in the binary. (Geolocation of that IP is a separate,
+		// trivial follow-up; ip.skycoin.com stays up for the proxy/VPN exit-IP
+		// check, but the CLI no longer depends on it.)
+		sc := network.GetStunDetails(skyenv.GetStunServers(), logger)
+		var ip string
+		if sc.PublicIP != nil {
+			ip = sc.PublicIP.IP()
 		}
-		isPublic := isPublic(cmd.Flags(), logger)
-		internal.PrintOutput(cmd.Flags(), ip, fmt.Sprintf("IP: %s\nPublic Status: %s\n", ip, isPublic))
+		internal.PrintOutput(cmd.Flags(), ip,
+			fmt.Sprintf("IP: %s\nPublic Status: %s\n", ip, sc.NATType.String()))
 	},
-}
-
-func getIPAddress(cmdFlags *pflag.FlagSet, geoipURL string) (string, error) {
-	var info ipInfo
-
-	body, err := clirpc.FetchServiceURL(cmdFlags, geoipURL)
-	if err != nil {
-		return info.IP, err
-	}
-	err = json.Unmarshal(body, &info)
-	if err != nil {
-		return info.IP, err
-	}
-	return info.IP, err
-}
-
-type ipInfo struct {
-	IP string `json:"ip_address"`
-}
-
-func isPublic(cmdFlags *pflag.FlagSet, logger *logging.Logger) string {
-	stunServers, err := getStunServers(cmdFlags)
-	if err != nil {
-		return err.Error()
-	}
-	sc := network.GetStunDetails(stunServers, logger)
-	return sc.NATType.String()
-}
-
-func getStunServers(cmdFlags *pflag.FlagSet) ([]string, error) {
-	var info stunInfo
-
-	confURL := deployment.ProdConf.Conf
-	body, err := clirpc.FetchServiceURL(cmdFlags, confURL+"/")
-	if err != nil {
-		return info.Stun, err
-	}
-	err = json.Unmarshal(body, &info)
-	if err != nil {
-		return info.Stun, err
-	}
-	return info.Stun, err
-}
-
-type stunInfo struct {
-	Stun []string `json:"stun_servers"`
 }
