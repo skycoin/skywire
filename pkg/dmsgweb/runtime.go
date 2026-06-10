@@ -295,8 +295,10 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				// destination PK) so a vhost-capable backend (caddy/nginx/traefik)
 				// serves the right site — the dmsg counterpart of the skynet
 				// resolver's host-rewrite, which makes magnetosphere.net.<pk>.dmsg
-				// reach the magnetosphere.net site.
-				if vhost != "" {
+				// reach the magnetosphere.net site. Only wrap a plaintext-HTTP
+				// stream: skip on the TLS port with MITM off, where the browser
+				// sends raw TLS that the HTTP parser would corrupt.
+				if vhost != "" && (uint16(port) != cfg.TLSPort || cfg.TLSMITM) {
 					stream = skynetweb.NewHostRewriteConn(stream, vhost)
 				}
 
