@@ -525,8 +525,18 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 
 	var reply, err = c.sendRequest(&msg.RqObject{Key: key})
 
+	// Each send below is guarded with <-f.closeq (the nodeHead's close
+	// channel, promoted via the embedded *nodeHead). handle() — the only
+	// receiver of successq/failureq — stops draining them once it takes its
+	// own <-closeq and terminates, so an unguarded send on these unbuffered
+	// channels would block forever; the deferred await.Done() would never
+	// fire and nodeHead.close's await.Wait() would deadlock (the hang that
+	// t.Skip'd the #3047 leak test).
 	if err != nil {
-		f.failureq <- failedRequest{c, seq, key, err}
+		select {
+		case f.failureq <- failedRequest{c, seq, key, err}:
+		case <-f.closeq:
+		}
 		return
 	}
 
@@ -535,7 +545,10 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 		var rk = cipher.SumSHA256(x.Value)
 
 		if rk != key {
-			f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}
+			select {
+			case f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}:
+			case <-f.closeq:
+			}
 			return
 		}
 
@@ -545,10 +558,16 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 			return
 		}
 
-		f.successq <- c
+		select {
+		case f.successq <- c:
+		case <-f.closeq:
+		}
 
 	default:
-		f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}
+		select {
+		case f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}:
+		case <-f.closeq:
+		}
 	}
 
 }
