@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -511,6 +512,18 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 		}
 	}()
 
+	// Track rules as they are installed on remote hops so a later failure can
+	// tear them down instead of orphaning them (each orphan pins its
+	// NextTransportID against teardown until the ~10-min keepalive GC). This
+	// defer is registered AFTER the rtIDR defer above, so by LIFO it runs
+	// FIRST — while the idReserver's per-PK clients are still live.
+	installed := newInstalledRules()
+	defer func() {
+		if err != nil {
+			installed.teardown(ctx, log, rtIDR)
+		}
+	}()
+
 	// Generate forward and reverse routes.
 	fwdRt, revRt := biRt.ForwardAndReverse()
 	srcPK := biRt.Desc.Src()
@@ -528,8 +541,9 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 	log.Infof("Generated routing rules:\nInitiating edge: %v\nResponding edge: %v\nIntermediaries: %v",
 		initEdge.String(), respEdge.String(), interRules.String())
 
-	// Broadcast intermediary rules to intermediary routers.
-	if err := BroadcastIntermediaryRules(ctx, log, rtIDR, interRules); err != nil {
+	// Broadcast intermediary rules to intermediary routers. Pass the tracker
+	// so each hop's successful install is recorded for teardown-on-failure.
+	if err = BroadcastIntermediaryRules(ctx, log, rtIDR, interRules, installed); err != nil {
 		return routing.EdgeRules{}, err
 	}
 
@@ -539,6 +553,9 @@ func CreateRouteGroup(ctx context.Context, dialer network.Dialer, pool *ClientPo
 	if err != nil || !ok {
 		return routing.EdgeRules{}, fmt.Errorf("failed to broadcast rules to destination router: %v", err)
 	}
+	// Destination edge installed successfully — track it too, so any failure
+	// step added below this point still tears it down.
+	installed.add(biRt.Desc.DstPK(), respEdge.Forward, respEdge.Reverse)
 
 	// Return rules to initiating router.
 	return initEdge, nil
@@ -630,7 +647,10 @@ func GenerateRules(idR IDReserver, routes []routing.Route) (fwdRules, revRules, 
 }
 
 // BroadcastIntermediaryRules broadcasts routing rules to the intermediary routers.
-func BroadcastIntermediaryRules(ctx context.Context, log logrus.FieldLogger, rtIDR IDReserver, interRules RulesMap) (err error) {
+// On each hop's successful install it records the installed RouteIDs into
+// `installed` (when non-nil) so a later setup failure can tear them down
+// instead of orphaning them.
+func BroadcastIntermediaryRules(ctx context.Context, log logrus.FieldLogger, rtIDR IDReserver, interRules RulesMap, installed *installedRules) (err error) {
 	log.WithField("intermediary_routers", len(interRules)).Debug("Broadcasting intermediary rules...")
 	defer func() {
 		if err != nil {
@@ -659,10 +679,86 @@ func BroadcastIntermediaryRules(ctx context.Context, log logrus.FieldLogger, rtI
 			// healthy intermediaries mid-broadcast and leaving a half-installed
 			// route. firstError below waits for all N and returns the first
 			// error; each call is bounded by its own per-call rpcDeadline.
-			_, err := rtIDR.Client(pk).AddIntermediaryRules(ctx, rules)
+			ok, err := rtIDR.Client(pk).AddIntermediaryRules(ctx, rules)
+			if err == nil && ok && installed != nil {
+				installed.add(pk, rules...)
+			}
 			errCh <- err
 		}(pk, rules)
 	}
 
 	return firstError(len(interRules), errCh)
+}
+
+// installedRules tracks, per remote hop PK, the RouteIDs that CreateRouteGroup
+// has successfully installed, so a later setup failure can tear them down
+// instead of orphaning them. The RouteID stored per rule is its KeyRouteID —
+// the key under which the installing router stores the rule and therefore the
+// exact ID its DelRules expects.
+type installedRules struct {
+	mu sync.Mutex
+	m  map[cipher.PubKey][]routing.RouteID
+}
+
+func newInstalledRules() *installedRules {
+	return &installedRules{m: make(map[cipher.PubKey][]routing.RouteID)}
+}
+
+func (ir *installedRules) add(pk cipher.PubKey, rules ...routing.Rule) {
+	if len(rules) == 0 {
+		return
+	}
+	ir.mu.Lock()
+	defer ir.mu.Unlock()
+	for _, rule := range rules {
+		ir.m[pk] = append(ir.m[pk], rule.KeyRouteID())
+	}
+}
+
+// teardown best-effort deletes every tracked rule from its hop, reusing the
+// idReserver's live per-PK clients. It runs only on the error path. If the
+// inbound ctx is already done (the common trigger — setup failed on a
+// deadline), it derives a fresh bounded context so the teardown RPCs still get
+// sent: cleanup must not be skipped just because the request that necessitated
+// it timed out. Errors are logged, never returned — this is cleanup.
+func (ir *installedRules) teardown(ctx context.Context, log logrus.FieldLogger, rtIDR IDReserver) {
+	ir.mu.Lock()
+	snapshot := make(map[cipher.PubKey][]routing.RouteID, len(ir.m))
+	for pk, ids := range ir.m {
+		if len(ids) > 0 {
+			snapshot[pk] = ids
+		}
+	}
+	ir.mu.Unlock()
+	if len(snapshot) == 0 {
+		return
+	}
+
+	tctx := ctx
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		tctx, cancel = context.WithTimeout(context.Background(), rpcDeadline)
+		defer cancel()
+	}
+
+	var wg sync.WaitGroup
+	for pk, ids := range snapshot {
+		client := rtIDR.Client(pk)
+		if client == nil {
+			log.WithField("hop", pk).Debug("orphan-rule teardown: no live client for hop; skipping")
+			continue
+		}
+		wg.Add(1)
+		go func(pk cipher.PubKey, ids []routing.RouteID, client *Client) {
+			defer wg.Done()
+			if _, err := client.DelRules(tctx, ids); err != nil {
+				log.WithError(err).WithField("hop", pk).
+					Debug("orphan-rule teardown: DelRules failed (rules will GC in ~10m)")
+				return
+			}
+			log.WithField("hop", pk).WithField("count", len(ids)).
+				Debug("orphan-rule teardown: deleted installed rules")
+		}(pk, ids, client)
+	}
+	wg.Wait()
 }
