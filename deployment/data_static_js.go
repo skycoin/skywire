@@ -66,9 +66,15 @@ var prodData = Services{
 		{Static: "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13", Server: struct {
 			Address string `json:"address"`
 		}{Address: "45.79.213.251:30087"}},
-		{Static: "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0", Server: struct {
+		{Static: "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7", Server: struct {
 			Address string `json:"address"`
-		}{Address: "143.42.59.213:30081"}},
+		}{Address: "172.105.179.5:30085"}},
+		{Static: "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7", Server: struct {
+			Address string `json:"address"`
+		}{Address: "172.104.166.8:30084"}},
+		{Static: "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf", Server: struct {
+			Address string `json:"address"`
+		}{Address: "172.235.168.146:30081"}},
 		{Static: "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7", Server: struct {
 			Address string `json:"address"`
 		}{Address: "70.121.13.123:9083"}},
@@ -135,9 +141,15 @@ var testData = Services{
 		{Static: "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13", Server: struct {
 			Address string `json:"address"`
 		}{Address: "45.79.213.251:30087"}},
-		{Static: "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0", Server: struct {
+		{Static: "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7", Server: struct {
 			Address string `json:"address"`
-		}{Address: "143.42.59.213:30081"}},
+		}{Address: "172.105.179.5:30085"}},
+		{Static: "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7", Server: struct {
+			Address string `json:"address"`
+		}{Address: "172.104.166.8:30084"}},
+		{Static: "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf", Server: struct {
+			Address string `json:"address"`
+		}{Address: "172.235.168.146:30081"}},
 		{Static: "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7", Server: struct {
 			Address string `json:"address"`
 		}{Address: "70.121.13.123:9083"}},
