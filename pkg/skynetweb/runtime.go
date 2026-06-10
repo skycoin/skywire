@@ -217,11 +217,14 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				//   Browser  ──TLS──► MITMTerminate ──plaintext──► hostRewriteConn ──plaintext──► raw conn ──► backend
 				//
 				// hostRewriteConn parses HTTP/1.1 between MITM
-				// decryption and the wire. If MITM is off, the
-				// browser is already sending plaintext directly to
-				// hostRewriteConn — same parser, same effect.
+				// decryption and the wire. It must only wrap a stream
+				// that is actually plaintext HTTP: a non-TLS port, or
+				// the TLS port WITH MITM (which decrypts to plaintext
+				// first). On the TLS port with MITM off, the browser
+				// sends raw TLS — feeding that to the HTTP parser
+				// corrupts the stream and kills the connection.
 				stack := conn
-				if vhost != "" {
+				if vhost != "" && (hport != cfg.TLSPort || cfg.TLSMITM) {
 					// `subdomain` already encodes the operator's
 					// intent (the URL has labels before the PK).
 					// Use it verbatim as the rewritten Host.

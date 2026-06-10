@@ -229,12 +229,17 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 				Debug("Skynet: using direct transport (no route)")
 			conn := &vstreamConn{VStream: stream}
 			if err := skynetweb.PerformHandshake(conn, port); err != nil {
+				// A handshake failure on a LIVE direct transport (the server
+				// returned an error / the port is closed) is a real error:
+				// return it rather than silently falling through to a multihop
+				// route, which masks the error and burns route-setup budget.
+				// Only a transport-DIAL failure (mux.Dial err) falls through.
 				conn.Close() //nolint:errcheck,gosec
-			} else {
-				return conn, nil
+				return nil, err
 			}
+			return conn, nil
 		}
-		// No direct transport — fall through to route-based dial.
+		// No direct transport (dial failed) — fall through to route-based dial.
 	}
 
 	var opts *router.DialOptions
