@@ -1083,10 +1083,13 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
 	oldMTp, err := tm.GetTransportByID(tpID)
-	if err == nil {
+	if err == nil && !oldMTp.IsClosed() {
 		tm.Logger.Debug("Found an old mTp from internal map.")
 		return oldMTp, nil
 	}
+	// A closed-but-not-yet-reaped transport (cleanupTransports polls on a 1s
+	// tick) must not be handed back as if it were live — the stale-conn trap.
+	// Fall through to create a fresh one.
 
 	tm.mx.RLock()
 	client, ok := tm.netClients[netType]
@@ -1170,8 +1173,12 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		if tp.transport != nil {
-			remoteRaw := tp.transport.RemoteRawAddr().String()
+		// Use getTransport() (locks transportMx) rather than reading
+		// tp.transport directly: close() can nil it between the nil-check and
+		// the deref — a data race and a nil-deref crash.
+		netTp := tp.getTransport()
+		if netTp != nil {
+			remoteRaw := netTp.RemoteRawAddr().String()
 			if tp.Entry.Type == types.STCPR && remoteRaw != "" {
 				addrs = append(addrs, remoteRaw)
 			}
