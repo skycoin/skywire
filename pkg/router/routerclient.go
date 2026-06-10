@@ -112,6 +112,16 @@ func (c *Client) AddIntermediaryRules(ctx context.Context, rules []routing.Rule)
 	return ok, err
 }
 
+// DelRules removes the routing rules identified by routeIDs from the remote
+// router. Used by CreateRouteGroup's partial-failure cleanup to tear down the
+// rules it installed on this hop before returning an error, instead of
+// orphaning them for the ~10-min keepalive GC.
+func (c *Client) DelRules(ctx context.Context, routeIDs []routing.RouteID) (ok bool, err error) {
+	const method = "DelRules"
+	err = c.call(ctx, method, routeIDs, &ok)
+	return ok, err
+}
+
 // ReserveIDs reserves n IDs and returns them.
 func (c *Client) ReserveIDs(ctx context.Context, n uint8) (rtIDs []routing.RouteID, err error) {
 	const method = "ReserveIDs"

@@ -308,7 +308,7 @@ func TestBroadcastIntermediaryRules(t *testing.T) {
 			defer cancel()
 
 			// act
-			err := BroadcastIntermediaryRules(ctx, logrus.New(), rtIDR, rules)
+			err := BroadcastIntermediaryRules(ctx, logrus.New(), rtIDR, rules, nil)
 
 			// assert
 			if tc.failingRouters > 0 {
