@@ -727,6 +727,11 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 	<<< PACKET MANAGEMENT >>>
 */
 
+// writeTimeout bounds a single transport write so a half-open conn cannot
+// park a write goroutine (and its packet buffer) forever. The write side had
+// no deadline at all; this mirrors readPacket's readTimeout.
+const writeTimeout = 1 * time.Minute
+
 // WritePacket writes a packet to the remote.
 // Respects context cancellation to prevent blocking forever on dead transports.
 func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
@@ -735,6 +740,15 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 	if mt.transport == nil {
 		mt.transportMx.Unlock()
 		return fmt.Errorf("write packet: cannot write to transport, transport is not set up")
+	}
+
+	// Capture the transport under the lock so the goroutine below never reads
+	// the shared mt.transport field (which setTransport/close can mutate once
+	// we release the lock on the ctx-cancel path — a data race). Set a write
+	// deadline so the goroutine can't park in Write forever on a half-open conn.
+	tp := mt.transport
+	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		mt.log.WithError(err).Debug("Failed to set write deadline")
 	}
 
 	// Run the write in a goroutine so we can respect context cancellation.
@@ -751,7 +765,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 				ch <- writeResult{0, fmt.Errorf("panic in transport write: %v", r)}
 			}
 		}()
-		n, err := mt.transport.Write(packet)
+		n, err := tp.Write(packet)
 		ch <- writeResult{n, err}
 	}()
 
@@ -790,13 +804,22 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 // counter has always counted all packets because readPacket
 // is the only inbound path.
 func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
+	// Capture the transport, then write WITHOUT holding transportMx: a wedged
+	// conn must not block here while holding the lock, which would freeze the
+	// whole transport — including its own close(), getTransport(), and every
+	// other method that needs the lock. WritePacket already avoids this via its
+	// goroutine; WriteRawPacket (cascade + VStreamMux direct-dial traffic) did
+	// not, and held the lock across an unbounded Write.
 	mt.transportMx.Lock()
-	if mt.transport == nil {
-		mt.transportMx.Unlock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	if tp == nil {
 		return fmt.Errorf("write raw packet: transport not set up")
 	}
-	n, err := mt.transport.Write(packet)
-	mt.transportMx.Unlock()
+	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		mt.log.WithError(err).Debug("Failed to set write deadline")
+	}
+	n, err := tp.Write(packet)
 	if err != nil {
 		mt.close()
 		return err
