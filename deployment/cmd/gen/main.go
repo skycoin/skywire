@@ -78,11 +78,24 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// Resolve paths relative to the generator's own location so the
-	// generator works whether invoked via `go generate` (cwd =
-	// deployment/) or `go run .` from this dir.
-	jsonPath := filepath.Join(wd, "../../services-config.json")
-	outPath := filepath.Join(wd, "../../data_static_js.go")
+	// Resolve services-config.json robustly across both invocation
+	// styles: `go generate ./deployment/` runs with cwd = deployment/,
+	// while `go run .` runs with cwd = deployment/cmd/gen/. Probe each
+	// candidate base and use the one that has the file. (A previous
+	// fixed "../../" assumed the cmd/gen cwd and broke under go generate,
+	// overshooting to the repo parent.)
+	var base string
+	for _, rel := range []string{".", "../.."} {
+		if _, statErr := os.Stat(filepath.Join(wd, rel, "services-config.json")); statErr == nil {
+			base = filepath.Join(wd, rel)
+			break
+		}
+	}
+	if base == "" {
+		log.Fatalf("services-config.json not found relative to cwd %s", wd)
+	}
+	jsonPath := filepath.Join(base, "services-config.json")
+	outPath := filepath.Join(base, "data_static_js.go")
 
 	raw, err := os.ReadFile(jsonPath) //nolint:gosec // generator reads a known repo-relative input
 	if err != nil {
