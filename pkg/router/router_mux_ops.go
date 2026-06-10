@@ -246,6 +246,13 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 	if idx < 0 {
 		return fmt.Errorf("transport %s not found in route group", tpID)
 	}
+	// The primary leg (index 0) is privileged throughout the route group:
+	// ping/pong/SACK and latency attribution hardcode tps[0], and the mux
+	// selector treats leg 0 as always-ready. Removing it silently breaks the
+	// group, so refuse it (the last-leg guard above does not cover this).
+	if idx == 0 {
+		return errors.New("cannot remove the primary leg (index 0) of a route group")
+	}
 
 	// Collect rule IDs to delete
 	var deadRuleIDs []routing.RouteID
@@ -268,8 +275,10 @@ func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uu
 		rg.rt.DelRules(deadRuleIDs)
 	}
 
-	// Rebuild selector
+	// Compact the per-leg counter/readiness arrays in lockstep with the
+	// tps/fwd/rvs compaction above, then rebuild the selector.
 	if rg.mux != nil {
+		rg.mux.removeLegs(idx)
 		rg.mux.rebuildWeights(rg.tps)
 	}
 
