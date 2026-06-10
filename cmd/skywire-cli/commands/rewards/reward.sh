@@ -8,7 +8,7 @@
 #date_shares.csv      reward shares CSV
 #date_stats.txt       statistical data
 #date_ut.json         backup of uptime tracker data (single day)
-#date_ut.txt          $ skywire cli ut > date_ut.txt
+#date_ut.txt          $ skywire cli ut tpd > date_ut.txt (long-form: pk date pct)
 #date.txt             transaction ID of reward distribution transaction - indicates rewards sent if exists
 ################################################################################
 # Prevent running this script when rewards have already been distributed
@@ -26,16 +26,42 @@ if [[ -z ${_wdate} ]] ; then
 #_wdate=$(date --date="yesterday" +%Y-%m-%d) ./reward.sh
 fi
 ####################################################
-# Pin the UT cache to hist/ instead of the default `/tmp/<UThost>/`.
-# Default cacheDirPath() uses os.TempDir() which is shared across all
-# UIDs; if any other user (e.g. a root-owned visor on the same host)
-# touches that path first it's created mode 0750 root:root and the
-# reward service (running as the rewards user) silently EACCES on the
-# jq read below. Bash truncates the redirect target BEFORE jq runs,
-# so the failure surfaces as an empty hist/<date>_ut.json — which
-# `ParseHistoricUptimeData` then skips, freezing the version-history
-# chart on the last good day.
-skywire cli ut --cdu hist/ | tee "hist/${_wdate}_ut.txt"
+# Source uptime data from the TPD-integrated uptime tracker instead of
+# the standalone UT service. TPD records transport-discovery
+# registrations — a stronger reachability signal than plain visor→UT
+# heartbeats. Visors that heartbeat but never register a transport
+# (so add no usable capacity) were previously credited by standalone
+# UT but contribute nothing to the network; switching to TPD removes
+# those phantom visors from the eligible set. Empirically the
+# eligible-PK pool changes by ~10–15% per day in either direction.
+#
+# Pin the cache to hist/ for the same reason --cdu hist/ did
+# previously: default cacheDirPath() uses os.TempDir() which is shared
+# across UIDs; a root-owned visor on the same host can claim it first
+# at mode 0750 root:root and the reward service silently EACCES.
+#
+# `ut tpd --since <d> --until <d>` emits wide-form text:
+#     pk  ver  on  YYYY-MM-DD
+# Reshape to long form `pk YYYY-MM-DD pct` (the format --utfile reads),
+# dropping rows where the per-day column is '-' (no data for that
+# date — visor offline that day or new to the network).
+skywire cli ut tpd --since "${_wdate}" --until "${_wdate}" --cache-dir hist/ \
+    | awk -v d="${_wdate}" 'NR > 1 && $4 != "-" { print $1, d, $4 }' \
+    | tee "hist/${_wdate}_ut.txt"
+# Fetch the same day as JSON for hist/uptimes.json. Same schema as the
+# previous standalone-source uptimes.json — array of
+# {pk, on, version, daily:{date:pct,...}} — so the jq slice below
+# (and any other consumer of hist/uptimes.json such as the
+# version-history chart) keeps working without modification. Atomic
+# via .tmp + mv on success so a failed fetch leaves the previous
+# (possibly populated) file intact instead of zeroing it.
+if skywire cli ut tpd --since "${_wdate}" --until "${_wdate}" --cache-dir hist/ --json \
+       > "hist/uptimes.json.tmp" 2>/dev/null; then
+    mv "hist/uptimes.json.tmp" "hist/uptimes.json"
+else
+    echo "WARN: failed to fetch TPD UT as JSON for ${_wdate}" >&2
+    rm -f "hist/uptimes.json.tmp"
+fi
 # Extract just the target date's data from the user-owned cache into
 # a date-specific file. Write to a .tmp first and mv-on-success so a
 # failed jq leaves the previous (possibly populated) file intact
