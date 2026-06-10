@@ -183,6 +183,49 @@ func (m *routeMux) growLegs(n int) {
 	m.legMu.Unlock()
 }
 
+// removeLegs drops the given ORIGINAL leg indices from legs[] and ready[] so
+// they stay aligned with the rg's compacted tps[]/fwd[]/rvs[] after a leg is
+// removed (RemoveMuxRouteByTransport / pruneDeadTransports). It rebuilds both
+// slices skipping the dropped indices (order-independent), then re-asserts the
+// leg-0-always-ready invariant — leg 0 may have been promoted from an aux when
+// a primary transport is pruned. Without this lockstep compaction the arrays
+// desync from tps[]: readiness and per-leg accounting attach to the wrong leg,
+// which can flip a live leg to not-ready (the mux>=2 hang — see the ready[]
+// note above) or mis-attribute bytes after an index is reused. The counterpart
+// to growLegs.
+func (m *routeMux) removeLegs(indices ...int) {
+	if len(indices) == 0 {
+		return
+	}
+	drop := make(map[int]bool, len(indices))
+	for _, i := range indices {
+		drop[i] = true
+	}
+	m.legMu.Lock()
+	if len(m.legs) > 0 {
+		kept := make([]*legCounters, 0, len(m.legs))
+		for i, c := range m.legs {
+			if !drop[i] {
+				kept = append(kept, c)
+			}
+		}
+		m.legs = kept
+	}
+	if len(m.ready) > 0 {
+		kept := make([]bool, 0, len(m.ready))
+		for i, r := range m.ready {
+			if !drop[i] {
+				kept = append(kept, r)
+			}
+		}
+		m.ready = kept
+		if len(m.ready) > 0 {
+			m.ready[0] = true // the (possibly newly-promoted) primary is always ready
+		}
+	}
+	m.legMu.Unlock()
+}
+
 // markLegReady records that leg idx has carried inbound traffic, so it
 // is now safe to select for sending. Idempotent and bounds-checked.
 func (m *routeMux) markLegReady(idx int) {
