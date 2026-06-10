@@ -33,7 +33,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/disc/dmsgfirst"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -200,8 +199,27 @@ func (s *service) Run(ctx context.Context) error {
 		return errors.New("dmsg-server: no dmsg-discoveries configured; set 'discovery' or 'dmsg' in config")
 	}
 
-	primaryHTTP := disc.NewHTTP(deployments[0].Discovery, &http.Client{}, log)
-	srv := dmsg.NewServer(cfg.PubKey, cfg.SecKey, primaryHTTP, &srvConf, m)
+	// Strict dmsg-only: every deployment must carry a discovery_dmsg PK so the
+	// server registers + resolves over dmsg with no plain-HTTP egress.
+	discPKs := make([]cipher.PubKey, len(deployments))
+	for i, d := range deployments {
+		pk := dmsgserver.PKFromDmsgURL(d.DiscoveryDmsg)
+		if pk == (cipher.PubKey{}) {
+			return fmt.Errorf("dmsg-server: deployment %q has no discovery_dmsg; "+
+				"strict dmsg-only registration requires it", d.Discovery)
+		}
+		discPKs[i] = pk
+	}
+
+	// Build the transit dmsg client BEFORE the server so even the first
+	// (seq-0) registration goes over dmsg, never plain HTTP.
+	dmsgC, dClient, closeDmsg, err := s.buildTransitDmsg(ctx, deployments, discPKs)
+	if err != nil {
+		return fmt.Errorf("dmsg-server: build transit dmsg client: %w", err)
+	}
+	defer closeDmsg()
+
+	srv := dmsg.NewServer(cfg.PubKey, cfg.SecKey, newDmsgOnly(dmsgC, discPKs[0], log), &srvConf, m)
 	srv.SetLogger(log)
 
 	if geoDB, err := geoip.OpenEmbedded(); err != nil {
@@ -225,10 +243,10 @@ func (s *service) Run(ctx context.Context) error {
 	for i := 1; i < len(deployments); i++ {
 		extra := deployments[i]
 		srv.AddDiscoveryDualStack(
-			disc.NewHTTP(extra.Discovery, &http.Client{}, log),
+			newDmsgOnly(dmsgC, discPKs[i], log),
 			extra.AdvertisedAddress,
 			extra.AdvertisedAddressV6,
-			dmsgserver.PKFromDmsgURL(extra.DiscoveryDmsg),
+			discPKs[i],
 		)
 	}
 
@@ -268,87 +286,24 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}()
 
-	go s.serveDmsgSurfaces(runCtx, cancel, srv, deployments)
+	go s.serveDmsgSurfaces(runCtx, cancel, dmsgC, dClient)
 
 	<-runCtx.Done()
 	return nil
 }
 
-// serveDmsgSurfaces blocks until the server's outbound dmsg client
-// is ready, then upgrades each configured discovery to dmsgfirst,
-// stands up the DMSG-side health/pprof endpoints, and conditionally
-// hosts the integrated route setup-node.
+// serveDmsgSurfaces stands up the DMSG-side health/pprof endpoints on the
+// already-built transit dmsg client and conditionally hosts the integrated
+// route setup-node. The discovery clients are already dmsg-only (built in Run
+// before the server starts), so there is no discovery upgrade here.
 func (s *service) serveDmsgSurfaces(
 	ctx context.Context,
 	cancel context.CancelFunc,
-	srv *dmsg.Server,
-	deployments []dmsgserver.Deployment,
+	dmsgC *dmsg.Client,
+	dClient disc.APIClient,
 ) {
 	cfg := &s.cfg.Config
 	log := s.log
-
-	select {
-	case <-srv.Ready():
-	case <-ctx.Done():
-		return
-	}
-
-	serverEntry := &disc.Entry{
-		Version: "0.0.1",
-		Static:  cfg.PubKey,
-		Server: &disc.Server{
-			Address:           cfg.PublicAddress,
-			AvailableSessions: cfg.MaxSessions,
-		},
-	}
-
-	// Build the transit set: union of (a) per-discovery servers
-	// from the config, (b) embedded deployment keyring, minus self.
-	servers := []*disc.Entry{serverEntry}
-	seenPK := map[cipher.PubKey]struct{}{cfg.PubKey: {}}
-	addServer := func(e *disc.Entry) {
-		if e == nil {
-			return
-		}
-		if _, ok := seenPK[e.Static]; ok {
-			return
-		}
-		seenPK[e.Static] = struct{}{}
-		servers = append(servers, e)
-	}
-	for _, d := range deployments {
-		for _, e := range d.Servers {
-			addServer(e)
-		}
-	}
-	for i := range dmsg.Prod.DmsgServers {
-		addServer(&dmsg.Prod.DmsgServers[i])
-	}
-	entries := direct.GetAllEntries(cipher.PubKeys{cfg.PubKey}, servers)
-	dClient := direct.NewClient(entries, log)
-
-	debugConfig := &dmsg.Config{MinSessions: 0}
-	dmsgC, closeDebug, err := direct.StartDmsg(ctx, log, cfg.PubKey, cfg.SecKey, dClient, debugConfig)
-	if err != nil {
-		log.WithError(err).Error("failed to start dmsg client for server services")
-		return
-	}
-	defer closeDebug()
-
-	// Upgrade each configured discovery client from plain HTTP to
-	// dmsgfirst when DiscoveryDmsg is set; otherwise stay on HTTP.
-	upgraded := make([]disc.APIClient, len(deployments))
-	for i, d := range deployments {
-		pk := dmsgserver.PKFromDmsgURL(d.DiscoveryDmsg)
-		if pk == (cipher.PubKey{}) {
-			upgraded[i] = disc.NewHTTP(d.Discovery, &http.Client{}, log)
-			log.WithField("url", d.Discovery).Debug("discovery_dmsg unset; staying on plain HTTP")
-			continue
-		}
-		upgraded[i] = dmsgfirst.New(dmsgC, pk, d.Discovery, &http.Client{}, log)
-		log.WithField("url", d.Discovery).WithField("pk", pk).Info("discovery upgraded to dmsg-first registration")
-	}
-	srv.SetDiscoveryClients(upgraded)
 
 	startedAt := time.Now()
 	dmsgAddr := fmt.Sprintf("%s:%d", cfg.PubKey.Hex(), dmsg.DefaultDmsgHTTPPort)
@@ -449,4 +404,72 @@ func (s *service) serveRouteSetup(ctx context.Context, dmsgC *dmsg.Client) {
 			rpcS.ServeConn(conn)
 		}()
 	}
+}
+
+// newDmsgOnly returns a disc.APIClient that registers + resolves the discovery
+// STRICTLY over dmsg, with NO plain-HTTP fallback. dmsgC must be able to
+// resolve discPK over dmsg (a direct.Client synthetic entry delegating to the
+// transit servers). Mirrors dmsgfirst's primary leg without the fallback
+// wrapper, so there is no plain-HTTP egress at all.
+func newDmsgOnly(dmsgC *dmsg.Client, discPK cipher.PubKey, log *logging.Logger) disc.APIClient {
+	dmsgURL := fmt.Sprintf("http://%s:%d", discPK.Hex(), dmsg.DefaultDmsgHTTPPort)
+	tr := dmsghttp.MakeHTTPTransport(context.Background(), dmsgC)
+	return disc.NewHTTP(dmsgURL, &http.Client{Transport: tr}, log)
+}
+
+// buildTransitDmsg stands up the server's outbound/transit dmsg client before
+// the server itself, so the very first (seq-0) registration can ride dmsg. The
+// direct client resolves the transit servers (self + per-deployment +
+// embedded) AND every discovery PK locally — the discovery PKs as synthetic
+// client entries delegating to all transit servers — so the client connects to
+// the seed servers directly (no discovery lookup) and can dial each discovery
+// through a peer relay. No discovery HTTP is contacted. Returns the dmsg
+// client, the direct disc client (reused by the DMSG health/pprof listener),
+// and a close func.
+func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver.Deployment, discPKs []cipher.PubKey) (*dmsg.Client, disc.APIClient, func(), error) {
+	cfg := &s.cfg.Config
+	log := s.log
+
+	serverEntry := &disc.Entry{
+		Version: "0.0.1",
+		Static:  cfg.PubKey,
+		Server: &disc.Server{
+			Address:           cfg.PublicAddress,
+			AvailableSessions: cfg.MaxSessions,
+		},
+	}
+	servers := []*disc.Entry{serverEntry}
+	seenPK := map[cipher.PubKey]struct{}{cfg.PubKey: {}}
+	addServer := func(e *disc.Entry) {
+		if e == nil {
+			return
+		}
+		if _, ok := seenPK[e.Static]; ok {
+			return
+		}
+		seenPK[e.Static] = struct{}{}
+		servers = append(servers, e)
+	}
+	for _, d := range deployments {
+		for _, e := range d.Servers {
+			addServer(e)
+		}
+	}
+	for i := range dmsg.Prod.DmsgServers {
+		addServer(&dmsg.Prod.DmsgServers[i])
+	}
+
+	// Resolve self (transit identity) + every discovery PK locally. Giving
+	// GetAllEntries the discovery PKs creates a synthetic client entry per
+	// discovery delegating to all transit servers, so DialStream(discPK)
+	// resolves without a discovery lookup and rides a peer relay.
+	keys := append(cipher.PubKeys{cfg.PubKey}, discPKs...)
+	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
+
+	conf := &dmsg.Config{MinSessions: 0}
+	dmsgC, closeFn, err := direct.StartDmsg(ctx, log, cfg.PubKey, cfg.SecKey, dClient, conf)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return dmsgC, dClient, closeFn, nil
 }
