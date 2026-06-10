@@ -363,6 +363,14 @@ func (c *Container) RootByHash(
 // with user-provided DB.
 func (c *Container) Close() (err error) {
 
+	// Stop the embedded Index's indexStat.secondLoop goroutine first.
+	// Container defines its own Close, which shadows the embedded
+	// Index.Close — so without this call it never runs and every Container
+	// teardown leaks one secondLoop goroutine (proven: N close cycles leak
+	// N goroutines). i.stat.Close runs before any Index.Close error, so the
+	// goroutine is reaped regardless of the best-effort return.
+	_ = c.Index.Close() //nolint:errcheck,gosec
+
 	// the Cache.Close closes CXDS
 	if err = c.Cache.Close(); err == nil {
 		err = c.db.Close() //nolint:errcheck,gosec

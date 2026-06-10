@@ -23,12 +23,11 @@ import (
 // shows the CXDS growing ~80 MB/min — so the subscriber path is the trigger.
 // This asserts the publisher's CXDS stays bounded with a subscriber attached.
 func TestPublisherCleanupBoundedWithSubscriber(t *testing.T) {
-	t.Skip("FIXME: hangs (whole-suite timeout) on current develop — the TCP " +
-		"publisher<->subscriber sync or Close wedges after an upstream CXO change " +
-		"(goroutine stuck in skyobject.indexStat.secondLoop). The #3047 cache-leak " +
-		"fix this validated is merged and intact; skipping to unblock CI until the " +
-		"sync/close hang is root-caused.")
-
+	// Re-enabled: the Close hang was a blocking failureq/successq send in
+	// fillHead.request (now guarded by <-f.closeq, pkg/cxo/node/head.go) plus a
+	// leaked indexStat.secondLoop goroutine (Container.Close now closes the
+	// embedded Index, pkg/cxo/skyobject/container.go). With both fixed,
+	// Node.Close no longer deadlocks and this validates the #3047 fix again.
 	pkA, skA := cipher.GenerateKeyPair()
 
 	pub, err := NewWithTCP("127.0.0.1:0", skA, PubConfig{
