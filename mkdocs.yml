@@ -66,6 +66,15 @@ nav:
   - Home: index.md
   - Guides: guides/README.md
   - Command Reference: skywire/README.md
+  - Apps:
+      - PTY:
+          - pty/README.md
+          - pty/skywire-pty.md
+          - pty/standalone-pty.md
+      - Skychat:
+          - skychat/README.md
+          - skychat/skychat-visor.md
+          - skychat/standalone-skychat.md
   - Specs: specs/index.md
   - Rewards: rewards/index.md
   - Blog: https://blog.theskywirenetwork.net
