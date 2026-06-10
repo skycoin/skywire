@@ -110,6 +110,10 @@ dig-services: ## show IP addresses for the services
 dmsghttp: ## update dmsghttp-config.json
 	scripts/dmsghttp.sh
 
+dmsg-servers: ## update embedded dmsg_servers in deployment/services-config.json from the discovery, over dmsg
+	go run . dmsg conf pull
+	go generate ./deployment/
+
 count-dmsg-disc-entries:
 	curl -sL $(jq -r '.prod.dmsg_discovery' services-config.json)/dmsg-discovery/entries | jq '. | length'
 
