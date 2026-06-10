@@ -129,6 +129,17 @@ type Config struct {
 	MaxSessions      int           `json:"max_sessions"`
 	Peers            []PeerConfig  `json:"peers,omitempty"`
 	EnableRouteSetup bool          `json:"enable_route_setup,omitempty"`
+
+	// AnnounceAsPeer makes this (typically non-public) server announce
+	// itself as a forwardable peer over every outbound peer link it
+	// dials, so its clients become reachable inbound without it being
+	// registered in the discovery. AcceptPeerAnnouncements lets a
+	// (typically public) server honor such announcements, filing the
+	// announcing session in its peer set; AcceptedPeerPKs, when non-empty,
+	// restricts which announcers are honored (allowlist).
+	AnnounceAsPeer          bool            `json:"announce_as_peer,omitempty"`
+	AcceptPeerAnnouncements bool            `json:"accept_peer_announcements,omitempty"`
+	AcceptedPeerPKs         []cipher.PubKey `json:"accepted_peer_pks,omitempty"`
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server

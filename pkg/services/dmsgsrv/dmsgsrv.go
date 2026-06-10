@@ -188,10 +188,13 @@ func (s *service) Run(ctx context.Context) error {
 	}
 
 	srvConf := dmsg.ServerConfig{
-		MaxSessions:    cfg.MaxSessions,
-		UpdateInterval: cfg.UpdateInterval,
-		AuthPassphrase: s.cfg.AuthPassphrase,
-		Peers:          peers,
+		MaxSessions:             cfg.MaxSessions,
+		UpdateInterval:          cfg.UpdateInterval,
+		AuthPassphrase:          s.cfg.AuthPassphrase,
+		Peers:                   peers,
+		AnnounceAsPeer:          cfg.AnnounceAsPeer,
+		AcceptPeerAnnouncements: cfg.AcceptPeerAnnouncements,
+		AcceptedPeerPKs:         cfg.AcceptedPeerPKs,
 	}
 
 	deployments := cfg.NormalizedDeployments()
