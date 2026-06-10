@@ -1214,6 +1214,13 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 	rg.fwd = aliveFwd
 	rg.rvs = aliveRvs
 
+	// Compact the per-leg counter/readiness arrays in lockstep so they stay
+	// aligned with the pruned tps[]/fwd[]/rvs[]. droppedIdx are the original
+	// pre-compaction indices.
+	if rg.mux != nil {
+		rg.mux.removeLegs(droppedIdx...)
+	}
+
 	rg.logger.Infof("Pruned dead transports: %d alive, %d removed", len(aliveTps), len(deadRuleIDs)/2)
 	return droppedIdx
 }
