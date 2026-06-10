@@ -292,6 +292,30 @@ For running and configuring a visor see
 [docs/guides/visor.md](docs/guides/visor.md) and
 [docs/guides/configuration.md](docs/guides/configuration.md).
 
+## Resource usage
+
+Approximate memory footprint, measured from live deployment nodes via pprof
+(`HeapInuse`) cross-referenced with process RSS. Both figures scale roughly
+linearly, so the per-unit cost is derived from the slope between two nodes with
+very different counts (which cancels out the fixed base).
+
+- **Visor:** ~110 MB base (Go runtime + bundled apps + CXO cache) plus
+  **~90 KB of live heap per transport**. The transport mesh is a *minor*
+  contributor — a visor with 190 transports uses ~125 MB of heap, one with
+  ~860 transports ~185 MB. (Per-transport RSS, including the two goroutine
+  stacks and the socket / KCP buffers, is higher — on the order of ~300 KB —
+  but the heap slope is the reliable cross-host figure since a memory-pressured
+  node's RSS is distorted by swap.) The base, not the mesh, dominates a visor's
+  footprint.
+- **dmsg server:** **~0.5 MB of RSS per connected client** (the per-client
+  noise session + yamux mux + relay stream buffers). A server relaying ~850
+  clients uses ~430 MB. This scales directly with client count, so a busy relay
+  must be sized for its peak client load — a 1 GB host saturates and swaps at
+  roughly ~1k clients when it also runs a visor. Cap a relay's `max_sessions`
+  to bound its footprint and shed excess load to other servers.
+
+Measured 2026-06-10 across v1.3.66 / v1.3.67 nodes; numbers are approximate.
+
 ## Skywire Cli (command line interface)
 
 `skywire cli` is the primary interface to a running Skywire visor.
