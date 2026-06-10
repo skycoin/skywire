@@ -203,8 +203,15 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		}()
 		ce.log.WithField("remote_pk", dSes.RemotePK()).Debug("Serving session.")
 		err := dSes.serve()
-		if !isClosed(ce.done) {
-			ce.sesMx.Lock()
+		// Hold sesMx across the done-check AND the errCh send so it is atomic
+		// with Close()'s sesMx-guarded close(ce.errCh): either we send before
+		// errCh is closed, or we observe done closed and skip the send.
+		// Checking done unlocked (the prior code) raced Close -> send on a
+		// closed channel -> recovered panic + skipped delSession/disconnect.
+		ce.sesMx.Lock()
+		if isClosed(ce.done) {
+			ce.sesMx.Unlock()
+		} else {
 			select {
 			case ce.errCh <- fmt.Errorf("failed to serve dialed session to %s: %v", dSes.RemotePK(), err):
 			default:
