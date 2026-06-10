@@ -53,9 +53,21 @@
         }
       },
       {
-        "static": "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
+        "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
-          "address": "143.42.59.213:30081"
+          "address": "172.105.179.5:30085"
+        }
+      },
+      {
+        "static": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+        "server": {
+          "address": "172.104.166.8:30084"
+        }
+      },
+      {
+        "static": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "server": {
+          "address": "172.235.168.146:30081"
         }
       },
       {
@@ -140,9 +152,21 @@
         }
       },
       {
-        "static": "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
+        "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
-          "address": "143.42.59.213:30081"
+          "address": "172.105.179.5:30085"
+        }
+      },
+      {
+        "static": "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7",
+        "server": {
+          "address": "172.104.166.8:30084"
+        }
+      },
+      {
+        "static": "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf",
+        "server": {
+          "address": "172.235.168.146:30081"
         }
       },
       {
