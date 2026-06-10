@@ -1198,6 +1198,16 @@ func (c *Cache) Want(
 	}
 	if len(it.val) != 0 { // putFillingItem cached the value
 		c.is[key] = it
+	} else if inc > 0 {
+		// putFillingItem declined the value (> CacheMaxItemSize, stale, or the
+		// cache is disabled): the item is NOT published into c.is, so the
+		// filler's later Finc finds no entry and never decrements. But the
+		// speculative c.db().Get(key, inc) above already bumped the CXDS rc by
+		// inc — left pinned, that DB object is never reclaimed by RemoveObjects
+		// (one leak per declined >1 MiB filled leaf). Undo the speculative ref.
+		// This is the rc-side completion of the #3047 phantom-cache fix (which
+		// stopped the c.is phantom but left this DB-rc residual).
+		_, _ = c.db().Inc(key, -inc) //nolint:errcheck // best-effort undo
 	}
 	return err
 }
