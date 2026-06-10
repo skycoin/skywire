@@ -330,3 +330,63 @@ func SignBytes(b []byte, sk cipher.SecKey) (cipher.Sig, error) {
 	}
 	return sig, nil
 }
+
+// PeerAnnounce is sent by a dialing dmsg server on its first stream
+// after connecting to another server, declaring "I am a server-peer;
+// you may forward client streams to me over this connection." It lets a
+// non-public server (not in the discovery, never dialed by anyone)
+// become reachable inbound: the accepting server, if it opts in, files
+// the announced session in its peer set, so streams destined for the
+// announcer's clients are forwarded back down the link the announcer
+// dialed out. Signed by the announcer's SK and bound to the noise-
+// authenticated session remote (Verify enforces SrcPK == session remote
+// PK), so it cannot be spoofed onto someone else's session.
+type PeerAnnounce struct {
+	Timestamp int64
+	SrcPK     cipher.PubKey // the announcing server's PK
+
+	raw SignedObject `enc:"-"` // back reference.
+}
+
+// MakeSignedPeerAnnounce encodes and signs a PeerAnnounce into a SignedObject.
+func MakeSignedPeerAnnounce(a *PeerAnnounce, sk cipher.SecKey) (SignedObject, error) {
+	obj, err := encodeGob(a)
+	if err != nil {
+		return nil, fmt.Errorf("dmsg: encode peer announce: %w", err)
+	}
+	sig, err := SignBytes(obj, sk)
+	if err != nil {
+		return nil, err
+	}
+	signedObj := append(sig[:], obj...)
+	a.raw = signedObj
+	return signedObj, nil
+}
+
+// ObtainPeerAnnounce obtains a PeerAnnounce from the encoded object bytes.
+func (so SignedObject) ObtainPeerAnnounce() (PeerAnnounce, error) {
+	if !so.Valid() {
+		return PeerAnnounce{}, ErrSignedObjectInvalid
+	}
+	var a PeerAnnounce
+	err := decodeGob(&a, so[sigLen:])
+	a.raw = so
+	return a, err
+}
+
+// Verify checks the PeerAnnounce: SrcPK must be non-null, must equal the
+// session's noise-authenticated remote PK (so an announce can only claim
+// the PK that handshook this session — anti-spoof), and the signature
+// must be valid for SrcPK.
+func (a PeerAnnounce) Verify(remoteStatic cipher.PubKey) error {
+	if a.SrcPK.Null() {
+		return ErrReqInvalidSrcPK
+	}
+	if a.SrcPK != remoteStatic {
+		return ErrReqInvalidSrcPK
+	}
+	if err := cipher.VerifyPubKeySignedPayload(a.SrcPK, a.raw.Sig(), a.raw.Object()); err != nil {
+		return ErrReqInvalidSig.Wrap(err)
+	}
+	return nil
+}

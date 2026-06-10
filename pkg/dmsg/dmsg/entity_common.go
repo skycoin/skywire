@@ -67,6 +67,17 @@ type EntityCommon struct {
 	// Only set on Server entities; nil for clients.
 	peerSessionsFunc func() []*SessionCommon
 
+	// acceptPeerAnnouncements, peerAnnounceAllowedFunc and
+	// promoteToPeerFunc support inbound peer announcements: a non-public
+	// server (not in discovery, never dialed by anyone) announcing itself
+	// as a forwardable peer over the link it dials out. Only set on
+	// Server entities that opt in. promoteToPeerFunc files the announced
+	// inbound session in the server's peer set so the reverse path can
+	// forward client streams to it.
+	acceptPeerAnnouncements bool
+	peerAnnounceAllowedFunc func(remotePK cipher.PubKey) bool
+	promoteToPeerFunc       func(remotePK cipher.PubKey, ses *SessionCommon)
+
 	// lastPushedSrvPKs is the set of delegated server PKs most recently
 	// pushed to the dmsg discovery. It is used by updateClientEntry to
 	// short-circuit redundant GET/PUT round-trips when nothing has
@@ -221,6 +232,24 @@ func (c *EntityCommon) peerServerSessions() []ServerSession {
 		sessions[i] = ServerSession{SessionCommon: ses}
 	}
 	return sessions
+}
+
+// peerAnnounceAllowed reports whether an inbound peer announcement from
+// remotePK should be honored (feature opted in + PK allowlisted).
+func (c *EntityCommon) peerAnnounceAllowed(remotePK cipher.PubKey) bool {
+	if c.peerAnnounceAllowedFunc == nil {
+		return false
+	}
+	return c.peerAnnounceAllowedFunc(remotePK)
+}
+
+// promoteToPeer files an announced inbound session in the server's peer
+// set so the reverse path can forward client streams to it. No-op when
+// the feature is not configured.
+func (c *EntityCommon) promoteToPeer(remotePK cipher.PubKey, ses *SessionCommon) {
+	if c.promoteToPeerFunc != nil {
+		c.promoteToPeerFunc(remotePK, ses)
+	}
 }
 
 // clientSession obtains a session as a client.
