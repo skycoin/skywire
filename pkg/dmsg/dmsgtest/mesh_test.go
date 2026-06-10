@@ -198,3 +198,183 @@ func TestServerMesh_CrossServerDial(t *testing.T) {
 	srvB.Close()
 	srvWg.Wait()
 }
+
+// nonPublicReverseSetup stands up a public server S_pub (AcceptPeerAnnouncements
+// = accept) and a non-public server S_priv that dials S_pub and announces
+// itself as a forwardable peer; S_priv is NOT registered in the public
+// discovery. It then connects client A (reachable only via S_priv) and client B
+// (on S_pub), and attempts B's dial of A. The dial can only succeed via the
+// announced reverse-forward path. Returns B's dial result so callers can assert
+// both the gate-on (success) and gate-off (failure) behavior.
+func nonPublicReverseSetup(t *testing.T, ctx context.Context, accept bool) (streamB *dmsg.Stream, accA func() (*dmsg.Stream, error), cleanup func(), dialErr error) {
+	t.Helper()
+
+	// Public discovery — only S_pub registers here.
+	sharedDC := disc.NewMock(0)
+
+	pkPub, skPub := cipher.GenerateKeyPair()
+	lisPub, err := nettest.NewLocalListener("tcp")
+	require.NoError(t, err)
+	pkPriv, skPriv := cipher.GenerateKeyPair()
+
+	confPub := &dmsg.ServerConfig{
+		MaxSessions:             10,
+		UpdateInterval:          dmsg.DefaultUpdateInterval,
+		AcceptPeerAnnouncements: accept,
+		AcceptedPeerPKs:         []cipher.PubKey{pkPriv},
+	}
+
+	lisPriv, err := nettest.NewLocalListener("tcp")
+	require.NoError(t, err)
+	privDC := disc.NewMock(0) // S_priv's own discovery, so its clients can find it
+	confPriv := &dmsg.ServerConfig{
+		MaxSessions:    10,
+		UpdateInterval: dmsg.DefaultUpdateInterval,
+		AnnounceAsPeer: true,
+		Peers:          []dmsg.PeerEntry{{PK: pkPub, Addr: lisPub.Addr().String()}},
+	}
+
+	srvPub := dmsg.NewServer(pkPub, skPub, sharedDC, confPub, nil)
+	srvPriv := dmsg.NewServer(pkPriv, skPriv, privDC, confPriv, nil)
+
+	var srvWg sync.WaitGroup
+	srvWg.Add(2)
+	go func() { defer srvWg.Done(); srvPub.Serve(lisPub, "") }()
+	go func() { defer srvWg.Done(); srvPriv.Serve(lisPriv, "") }()
+
+	select {
+	case <-srvPub.Ready():
+	case <-ctx.Done():
+		t.Fatal("S_pub not ready")
+	}
+	select {
+	case <-srvPriv.Ready():
+	case <-ctx.Done():
+		t.Fatal("S_priv not ready")
+	}
+
+	// The defining property: S_priv is NOT in the public discovery.
+	_, err = sharedDC.Entry(ctx, pkPriv)
+	require.Error(t, err, "S_priv must not be registered in the public discovery")
+
+	// Let the peer announcement complete over the outbound link.
+	time.Sleep(5 * time.Second)
+
+	// Client A — reachable only via S_priv.
+	dcA := disc.NewMock(0)
+	entryPriv, err := privDC.Entry(ctx, pkPriv)
+	require.NoError(t, err)
+	require.NoError(t, dcA.PostEntry(ctx, entryPriv))
+
+	pkA, skA := cipher.GenerateKeyPair()
+	clientA := dmsg.NewClient(pkA, skA, dcA, &dmsg.Config{MinSessions: 1})
+	go clientA.Serve(ctx)
+	select {
+	case <-clientA.Ready():
+	case <-ctx.Done():
+		t.Fatal("Client A not ready")
+	}
+
+	const port = uint16(200)
+	lisA, err := clientA.Listen(port)
+	require.NoError(t, err)
+
+	// Client B — on S_pub; must resolve A's entry (delegated server = S_priv).
+	dcB := disc.NewMock(0)
+	entryPub, err := sharedDC.Entry(ctx, pkPub)
+	require.NoError(t, err)
+	require.NoError(t, dcB.PostEntry(ctx, entryPub))
+	entryA, _ := dcA.Entry(ctx, pkA)
+	require.NoError(t, dcB.PostEntry(ctx, entryA))
+
+	pkB, skB := cipher.GenerateKeyPair()
+	clientB := dmsg.NewClient(pkB, skB, dcB, &dmsg.Config{MinSessions: 1})
+	go clientB.Serve(ctx)
+	select {
+	case <-clientB.Ready():
+	case <-ctx.Done():
+		t.Fatal("Client B not ready")
+	}
+
+	// B dials A — only possible via the announced reverse-forward path.
+	for attempt := 0; attempt < 3; attempt++ {
+		streamB, dialErr = clientB.DialStream(ctx, dmsg.Addr{PK: pkA, Port: port})
+		if dialErr == nil {
+			break
+		}
+		t.Logf("Reverse dial attempt %d: %v", attempt+1, dialErr)
+		time.Sleep(2 * time.Second)
+	}
+
+	accA = lisA.AcceptStream
+	cleanup = func() {
+		if streamB != nil {
+			streamB.Close()
+		}
+		lisA.Close()
+		clientA.Close()
+		clientB.Close()
+		srvPub.Close()
+		srvPriv.Close()
+		srvWg.Wait()
+	}
+	return streamB, accA, cleanup, dialErr
+}
+
+// TestNonPublicServer_ReverseDial verifies the inbound-peer-announcement
+// reverse path: a non-public server (NOT in the public discovery) dials a
+// public server and announces itself as a forwardable peer, after which a
+// client on the public server can dial a client reachable ONLY through the
+// non-public server, with full bidirectional transfer.
+func TestNonPublicServer_ReverseDial(t *testing.T) {
+	const timeout = 40 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	streamB, accA, cleanup, dialErr := nonPublicReverseSetup(t, ctx, true)
+	defer cleanup()
+
+	require.NoError(t, dialErr, "reverse dial must succeed when announcements are accepted")
+	require.NotNil(t, streamB)
+
+	connA, err := accA()
+	require.NoError(t, err)
+	defer connA.Close()
+
+	payload := cipher.RandByte(1024)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); _, wErr := streamB.Write(payload); assert.NoError(t, wErr) }()
+	recv := make([]byte, len(payload))
+	_, err = io.ReadFull(connA, recv)
+	require.NoError(t, err)
+	wg.Wait()
+	require.True(t, bytes.Equal(payload, recv), "data mismatch: B -> A")
+
+	wg.Add(1)
+	go func() { defer wg.Done(); _, wErr := connA.Write(payload); assert.NoError(t, wErr) }()
+	recv2 := make([]byte, len(payload))
+	_, err = io.ReadFull(streamB, recv2)
+	require.NoError(t, err)
+	wg.Wait()
+	require.True(t, bytes.Equal(payload, recv2), "data mismatch: A -> B")
+
+	t.Log("Non-public-server reverse-dial test passed.")
+}
+
+// TestNonPublicServer_ReverseDial_GateOff is the negative control: with
+// AcceptPeerAnnouncements disabled on the public server, the same reverse dial
+// must FAIL — proving it is the announcement gate (not the static-peer path)
+// that makes the non-public server's clients reachable inbound.
+func TestNonPublicServer_ReverseDial_GateOff(t *testing.T) {
+	const timeout = 40 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	streamB, _, cleanup, dialErr := nonPublicReverseSetup(t, ctx, false)
+	defer cleanup()
+
+	require.Error(t, dialErr, "reverse dial must fail when announcements are not accepted")
+	require.Nil(t, streamB)
+}
