@@ -14,6 +14,14 @@
 // retires the session, so the caller's next exec re-dials. A dead pooled
 // conn is never silently reused — the trap that bit the RSN pool (a TTL
 // outliving the underlying conn → handing out shut-down connections).
+//
+// Locking discipline: execMu guards the pool map and every pooledExec
+// field, but is NEVER held across a session Close. *PtyClient.Close() is a
+// synchronous, un-timeouted RPC round-trip (Stop() + rpcC.Close()) over a
+// possibly-dead stream; since execMu is Host-global, closing under it would
+// stall every peer's pooled-exec ops behind one dead peer's slow Close.
+// retireLocked therefore RETURNS the session to close and each public
+// method closes it after releasing the lock.
 package pty
 
 import (
@@ -56,17 +64,22 @@ type pooledExec struct {
 // return the caller MUST call releaseExec exactly once.
 func (h *Host) acquireExec(key execKey) *pooledExec {
 	h.execMu.Lock()
-	defer h.execMu.Unlock()
 	pe := h.execPool[key]
 	if pe == nil || pe.dead {
+		h.execMu.Unlock()
 		return nil
 	}
 	if pe.refs == 0 && time.Since(pe.lastUsed) > execSessionTTL {
-		h.retireLocked(key, pe) // idle too long → force a fresh dial
+		stale := h.retireLocked(key, pe) // idle too long → force a fresh dial
+		h.execMu.Unlock()
+		if stale != nil {
+			_ = stale.Close() //nolint:errcheck,gosec
+		}
 		return nil
 	}
 	pe.refs++
 	pe.lastUsed = time.Now()
+	h.execMu.Unlock()
 	return pe
 }
 
@@ -75,51 +88,63 @@ func (h *Host) acquireExec(key execKey) *pooledExec {
 // err==nil) — the session is retired so no one reuses a dead conn.
 func (h *Host) releaseExec(key execKey, pe *pooledExec, execErr error) {
 	h.execMu.Lock()
-	defer h.execMu.Unlock()
 	pe.refs--
 	pe.lastUsed = time.Now()
-	if execErr != nil && !pe.dead {
-		h.retireLocked(key, pe)
-		return
+	var toClose execSession
+	switch {
+	case execErr != nil && !pe.dead:
+		toClose = h.retireLocked(key, pe)
+	case pe.dead && pe.refs == 0:
+		// A concurrent Exec retired it while we were in flight; close once
+		// we're the last one out.
+		toClose = pe.sess
 	}
-	// A concurrent Exec may have retired it while we were in flight; close
-	// once we're the last one out.
-	if pe.dead && pe.refs == 0 {
-		_ = pe.sess.Close() //nolint:errcheck
+	h.execMu.Unlock()
+	if toClose != nil {
+		_ = toClose.Close() //nolint:errcheck,gosec
 	}
 }
 
-// retireLocked unmaps pe and closes it if no Exec is in flight; if one still
-// is (refs>0), it's marked dead so no new caller reuses it and the last
-// releaseExec closes it. Caller holds execMu.
-func (h *Host) retireLocked(key execKey, pe *pooledExec) {
+// retireLocked unmaps pe and marks it dead, returning the session the CALLER
+// must Close() AFTER releasing execMu (or nil if an Exec is still in flight —
+// the last releaseExec closes it then). It never closes under the lock; see
+// the package "Locking discipline" note. Caller holds execMu.
+func (h *Host) retireLocked(key execKey, pe *pooledExec) execSession {
 	pe.dead = true
 	if h.execPool[key] == pe {
 		delete(h.execPool, key)
 	}
 	if pe.refs == 0 {
-		_ = pe.sess.Close() //nolint:errcheck
+		return pe.sess
 	}
+	return nil
 }
 
 // cacheExec stores a freshly-dialed live session for reuse and
 // opportunistically retires idle ones (bounds the pool by recently-active
 // peers without a background goroutine). First-writer wins if another
-// goroutine cached the same key concurrently.
+// goroutine cached the same key concurrently. All Close()s happen after the
+// lock is released.
 func (h *Host) cacheExec(key execKey, sess execSession) {
 	h.execMu.Lock()
-	defer h.execMu.Unlock()
+	var toClose []execSession
 	for k, pe := range h.execPool {
 		if pe.refs == 0 && time.Since(pe.lastUsed) > execSessionTTL {
-			h.retireLocked(k, pe)
+			if stale := h.retireLocked(k, pe); stale != nil {
+				toClose = append(toClose, stale)
+			}
 		}
 	}
 	if existing := h.execPool[key]; existing != nil && !existing.dead {
-		_ = sess.Close() //nolint:errcheck // lost the race; don't leak ours
-		return
+		toClose = append(toClose, sess) // lost the race; don't leak ours
+	} else {
+		if h.execPool == nil {
+			h.execPool = make(map[execKey]*pooledExec)
+		}
+		h.execPool[key] = &pooledExec{sess: sess, lastUsed: time.Now()}
 	}
-	if h.execPool == nil {
-		h.execPool = make(map[execKey]*pooledExec)
+	h.execMu.Unlock()
+	for _, s := range toClose {
+		_ = s.Close() //nolint:errcheck,gosec
 	}
-	h.execPool[key] = &pooledExec{sess: sess, lastUsed: time.Now()}
 }

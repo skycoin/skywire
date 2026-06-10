@@ -10,11 +10,14 @@ import (
 )
 
 // fakeExecSession is a stand-in for *PtyClient that counts Exec/Close calls
-// and can be told to fail Exec (simulating a dead conn).
+// and can be told to fail Exec (simulating a dead conn) or block in Close
+// (simulating a slow Close over a dead stream).
 type fakeExecSession struct {
-	execN  int
-	failAt int // fail Exec at/after this call number; 0 = never
-	closed int
+	execN        int
+	failAt       int // fail Exec at/after this call number; 0 = never
+	closed       int
+	closeEntered chan struct{} // non-nil: signals (cap-1) that Close was entered
+	blockClose   chan struct{} // non-nil: Close blocks until this is closed
 }
 
 func (f *fakeExecSession) Exec(*CommandExecReq) (*CommandExecResult, error) {
@@ -25,7 +28,19 @@ func (f *fakeExecSession) Exec(*CommandExecReq) (*CommandExecResult, error) {
 	return &CommandExecResult{ExitCode: 0}, nil
 }
 
-func (f *fakeExecSession) Close() error { f.closed++; return nil }
+func (f *fakeExecSession) Close() error {
+	f.closed++
+	if f.closeEntered != nil {
+		select {
+		case f.closeEntered <- struct{}{}:
+		default:
+		}
+	}
+	if f.blockClose != nil {
+		<-f.blockClose
+	}
+	return nil
+}
 
 func testKey() execKey {
 	var pk cipher.PubKey
@@ -124,4 +139,41 @@ func TestExecPool_ConcurrentReleaseClosesOnce(t *testing.T) {
 	if got := h.acquireExec(k); got != nil {
 		t.Fatal("retired session should not be re-acquirable")
 	}
+}
+
+// execMu must never be held across a session Close: a slow/blocking Close on
+// one peer must not freeze pooled-exec ops for other peers. Regression test
+// for the audit finding that retireLocked/releaseExec/cacheExec closed the
+// session inline under the Host-global execMu — a blocking *PtyClient.Close()
+// (an un-timeouted RPC round-trip) would stall every other peer behind it.
+func TestExecPool_CloseNotUnderLock(t *testing.T) {
+	h := &Host{}
+	kA := execKey{port: 1, dialer: "a"}
+	kB := execKey{port: 2, dialer: "b"}
+	entered := make(chan struct{}, 1)
+	release := make(chan struct{})
+	h.cacheExec(kA, &fakeExecSession{closeEntered: entered, blockClose: release})
+	h.cacheExec(kB, &fakeExecSession{})
+
+	// Retire A; its Close() blocks until release is closed. If Close ran
+	// under execMu, the whole pool is frozen meanwhile.
+	go func() {
+		pe := h.acquireExec(kA)
+		h.releaseExec(kA, pe, errors.New("dead"))
+	}()
+	<-entered // A.Close() is now in progress (and blocked)
+
+	// An op on a DIFFERENT key must not block behind A's Close.
+	got := make(chan *pooledExec, 1)
+	go func() { got <- h.acquireExec(kB) }()
+	select {
+	case pe := <-got:
+		if pe == nil {
+			t.Fatal("acquireExec(kB) returned nil")
+		}
+	case <-time.After(2 * time.Second):
+		close(release)
+		t.Fatal("acquireExec(kB) blocked behind another peer's Close — execMu held across Close")
+	}
+	close(release) // let A.Close() finish
 }
