@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -169,7 +170,16 @@ func (c *Config) NormalizedDeployments() []Deployment {
 	case c.Discovery != "" || c.DiscoveryDmsg != "":
 		src = []Deployment{{Discovery: c.Discovery, DiscoveryDmsg: c.DiscoveryDmsg}}
 	default:
-		return nil
+		// No explicit dmsg/discovery block in the config: fall back to
+		// the embedded deployment config so a dmsg server needs no
+		// `config gen` step to track deployment changes — the binary
+		// carries the current discovery + servers. The explicit cases
+		// above stay authoritative.
+		src = []Deployment{{
+			Discovery:     deployment.Prod.DmsgDiscovery,
+			DiscoveryDmsg: deployment.Prod.DmsgDiscoveryDmsg,
+			Servers:       deployment.Prod.ToDiscEntries(),
+		}}
 	}
 	out := make([]Deployment, len(src))
 	for i, d := range src {
