@@ -95,6 +95,18 @@ Example:
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unknown preset %q (want: fastest|balanced|resilient)", args[0]))
 		}
 
+		// GROW dials fresh disjoint routes server-side, which can exceed
+		// the 30s default RPC deadline when a candidate route is slow to
+		// set up. Without headroom the client gives up while the visor is
+		// still establishing the leg — the leg lands but the tick
+		// misreports "context deadline exceeded" / "grew 0". Give the
+		// loop's client room to cover GrowMuxRoute's server-side budget;
+		// the fast prune/info calls return immediately regardless. Only
+		// override the untouched default so an explicit --timeout wins.
+		if clirpc.Timeout == 30 {
+			clirpc.Timeout = 120
+		}
+
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
