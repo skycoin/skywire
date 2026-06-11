@@ -218,6 +218,120 @@ func (r *router) AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []rout
 	return nil
 }
 
+// GrowMuxRoute adds disjoint auxiliary legs to an existing multiplexed
+// route group until it has `target` total legs, or until route planning
+// can no longer find a disjoint path. It is the runtime, additive
+// counterpart to establishMuxRoutes (which plans the initial leg set at
+// dial time): mux-auto calls it to restore redundancy after legs are
+// pruned or die. Returns the number of legs actually added.
+//
+// Each new leg is planned to avoid the intermediate visors already used
+// by the live legs (best-effort, from the rg's first-hop transport
+// edges) plus those claimed by earlier iterations, so the added legs
+// diverge from the existing ones. Legs are added via AddMuxRouteByHops,
+// which re-validates and refuses a leg whose first hop duplicates an
+// existing one. minHops threads the caller's hop-count floor so a
+// multihop mux grows with multihop legs (a 0 floor falls back to
+// r.conf.MinHops, which may pick the direct transport).
+func (r *router) GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int) (int, error) {
+	r.mx.Lock()
+	nrg, ok := r.rgsNs[desc]
+	r.mx.Unlock()
+	if !ok {
+		return 0, fmt.Errorf("no active route group for %s", desc.String())
+	}
+	if nrg.rg.mux == nil {
+		return 0, errors.New("route group does not have mux enabled")
+	}
+
+	lPK := desc.DstPK() // this visor (entry point)
+	rPK := desc.SrcPK() // peer
+	log := r.scopedLog(desc.SrcPort())
+
+	// Current leg count + first-hop transport IDs (so planning excludes
+	// re-picking an existing first hop, which AddMuxRouteByHops rejects).
+	nrg.rg.mu.Lock()
+	current := 0
+	excludeIDs := make([]uuid.UUID, 0, len(nrg.rg.tps))
+	for _, tp := range nrg.rg.tps {
+		if tp == nil {
+			continue
+		}
+		current++
+		excludeIDs = append(excludeIDs, tp.Entry.ID)
+	}
+	nrg.rg.mu.Unlock()
+
+	deficit := target - current
+	if deficit <= 0 {
+		return 0, nil
+	}
+
+	// Seed the disjoint-exclude set with the live legs' intermediates;
+	// accumulate each planned leg's intermediates so successive legs
+	// diverge from ALL prior ones (same discipline as establishMuxRoutes).
+	excludePKs := intermediatesOfRouteGroup(nrg, lPK, rPK)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
+	const maxConsecutiveFailures = 2
+	consecutiveFailures := 0
+	added := 0
+	for added < deficit {
+		if ctx.Err() != nil {
+			break
+		}
+		muxOpts := &DialOptions{
+			MinForwardRts:          1,
+			MaxForwardRts:          1,
+			MinConsumeRts:          1,
+			MaxConsumeRts:          1,
+			Retries:                1,
+			MinHops:                minHops,
+			ExcludeTransportIDs:    excludeIDs,
+			ExcludeIntermediatePKs: excludePKs,
+			ExcludeDMSG:            true,
+		}
+
+		fwd, rev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+		if err != nil {
+			fwd, rev, err = r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
+		}
+		if err != nil {
+			consecutiveFailures++
+			log.Debugf("GrowMuxRoute: no disjoint path for leg %d/%d: %v", current+added+1, target, err)
+			if consecutiveFailures >= maxConsecutiveFailures {
+				break
+			}
+			continue
+		}
+
+		// Claim this path's intermediates regardless of add outcome, so
+		// the next iteration diverges from it.
+		excludePKs = append(excludePKs, intermediatesOfHops(fwd, lPK, rPK)...)
+		excludePKs = append(excludePKs, intermediatesOfHops(rev, rPK, lPK)...)
+
+		if err := r.AddMuxRouteByHops(desc, fwd, rev); err != nil {
+			consecutiveFailures++
+			log.Debugf("GrowMuxRoute: add leg %d/%d failed: %v", current+added+1, target, err)
+			if consecutiveFailures >= maxConsecutiveFailures {
+				break
+			}
+			continue
+		}
+		excludeIDs = append(excludeIDs, fwd[0].TpID)
+		consecutiveFailures = 0
+		added++
+	}
+
+	if added > 0 {
+		log.Infof("GrowMuxRoute: added %d leg(s) to route group %s (now %d/%d total)",
+			added, desc.String(), current+added, target)
+	}
+	return added, nil
+}
+
 // RemoveMuxRouteByTransport removes a specific transport's route from a mux group.
 func (r *router) RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error {
 	r.mx.Lock()

@@ -268,6 +268,11 @@ type MuxRouteInput struct {
 	Reverse []routing.Hop
 	// TransportID identifies the leg to remove; unused by AddMuxRoute.
 	TransportID uuid.UUID
+	// Target is the desired total leg count for GrowMuxRoute and MinHops
+	// is the hop-count floor for the legs it adds. Both unused by
+	// Add/RemoveMuxRoute.
+	Target  int
+	MinHops int
 	// SrcPort disambiguates between concurrent rg's owned by the same
 	// app (one per concurrent SOCKS5 connection on skysocks-client,
 	// etc.). Zero means "auto-pick if exactly one rg is active for

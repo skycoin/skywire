@@ -763,6 +763,10 @@ func (mc *mockRPCClient) AddMuxRoute(_ string, _, _ []routing.Hop, _ uint16) err
 	return nil
 }
 
+func (mc *mockRPCClient) GrowMuxRoute(_ string, _, _ int, _ uint16) (int, error) {
+	return 0, nil
+}
+
 func (mc *mockRPCClient) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
 	return nil
 }

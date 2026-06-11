@@ -168,6 +168,17 @@ func (r *RPC) AddMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
 	return r.visor.AddMuxRoute(in.AppName, in.Forward, in.Reverse, in.SrcPort)
 }
 
+// GrowMuxRoute adds disjoint legs to an app's active rg up to a target count
+func (r *RPC) GrowMuxRoute(in *MuxRouteInput, out *int) (err error) {
+	defer rpcutil.LogCall(r.log, "GrowMuxRoute", in)(out, &err)
+	added, err := r.visor.GrowMuxRoute(in.AppName, in.Target, in.MinHops, in.SrcPort)
+	if err != nil {
+		return err
+	}
+	*out = added
+	return nil
+}
+
 // RemoveMuxRoute removes a mux route from an app's active connection
 func (r *RPC) RemoveMuxRoute(in *MuxRouteInput, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "RemoveMuxRoute", in)(nil, &err)
