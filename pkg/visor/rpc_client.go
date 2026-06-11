@@ -819,6 +819,16 @@ func (rc *rpcClient) AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort
 	return rc.Call("AddMuxRoute", &MuxRouteInput{AppName: appName, Forward: fwd, Reverse: rev, SrcPort: srcPort}, &struct{}{})
 }
 
+// GrowMuxRoute adds disjoint legs to the app's active rg until it has
+// `target` total legs (failover redundancy); minHops floors the added
+// legs' hop count. srcPort disambiguates as in AddMuxRoute. Returns the
+// number of legs added.
+func (rc *rpcClient) GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error) {
+	var added int
+	err := rc.Call("GrowMuxRoute", &MuxRouteInput{AppName: appName, Target: target, MinHops: minHops, SrcPort: srcPort}, &added)
+	return added, err
+}
+
 // RemoveMuxRoute drops the leg over tpID from the app's active rg.
 // srcPort disambiguates as in AddMuxRoute.
 func (rc *rpcClient) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
