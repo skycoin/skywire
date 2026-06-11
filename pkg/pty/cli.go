@@ -195,6 +195,27 @@ func (cli *CLI) servePty(ctx context.Context, ptyC *PtyClient, cmd string, args 
 		}
 	}()
 
+	// dmsg-stream keepalive. An idle interactive session rides a dmsg
+	// stream whose 2-minute idle read deadline (StreamIdleTimeout) is
+	// refreshed only on a successful read; with no typing or output it
+	// would be torn down every ~2 minutes. A periodic no-op Ping RPC
+	// forces a response read well within that window — the dmsg analog of
+	// SSH's ServerAliveInterval.
+	go func() {
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := ptyC.Ping(); err != nil {
+					return
+				}
+			}
+		}
+	}()
+
 	// Write loop.
 	go func() {
 		defer cancel()
