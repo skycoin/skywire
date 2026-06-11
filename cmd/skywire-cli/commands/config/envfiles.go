@@ -264,6 +264,15 @@ const envfileLinux = `#
 #	The directory must contain a compose.yaml or docker-compose.yml.
 #DEPLOY_DIR=''
 
+#--	Extra services to restart after a successful binary update.
+#	Bash array of systemd unit names, restarted at the END of
+#	skywire-update — ONLY when a new binary was actually installed (never
+#	on a no-op update tick or a plain 'skywire autoconfig' run). Use for
+#	standalone units that depend on the skywire binary, e.g. a separate
+#	dmsgweb SOCKS5 proxy. The skywire service is always restarted on
+#	update; do not list it here.
+#RESTART_SERVICES=('dmsgweb-surveys.service')
+
 ### Miscellaneous #######################################################
 
 #--	Set secret key
