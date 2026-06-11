@@ -256,6 +256,11 @@ func checkPty(t *testing.T, ptyC *PtyClient, msg string) {
 		require.Equal(t, msg, string(readB))
 	}
 
+	// The keepalive Ping (used by the interactive terminal to refresh the
+	// dmsg stream's idle read deadline) must round-trip through the host —
+	// direct and proxied.
+	require.NoError(t, ptyC.Ping())
+
 	require.NoError(t, ptyC.Stop())
 }
 
