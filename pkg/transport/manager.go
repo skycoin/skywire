@@ -897,7 +897,14 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			mTp.Serve(tm.readCh)
 
 			tm.mx.Lock()
-			delete(tm.tps, mTp.Entry.ID)
+			// Identity-checked delete: a concurrent dial/accept to the same
+			// peer resolves to this same deterministic tpID and may have
+			// replaced us in the map. Only remove the entry if it's still us —
+			// otherwise we'd evict a live successor (route lookups would then
+			// fail on a transport whose conn is actually fine).
+			if cur, ok := tm.tps[mTp.Entry.ID]; ok && cur == mTp {
+				delete(tm.tps, mTp.Entry.ID)
+			}
 			tm.mx.Unlock()
 		}()
 
@@ -1150,10 +1157,20 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		mTp.closeWithoutDeregister()
 		return nil, err
 	}
-	go mTp.Serve(tm.readCh)
 	tm.mx.Lock()
+	// The lock was released during the dial above (up to ~20s). A concurrent
+	// accept or dial to the same peer — same deterministic tpID — may have
+	// installed a live transport meanwhile. Don't clobber it: discard the one
+	// we just dialed (its TPD entry is shared with the survivor under the same
+	// tpID, so close WITHOUT deregistering) and return the winner.
+	if existing, ok := tm.tps[tpID]; ok && !existing.IsClosed() {
+		tm.mx.Unlock()
+		mTp.closeWithoutDeregister()
+		return existing, nil
+	}
 	tm.tps[tpID] = mTp
 	tm.mx.Unlock()
+	go mTp.Serve(tm.readCh)
 
 	// Check AR transport limit after dialing a new transport.
 	go tm.checkARLimit()
