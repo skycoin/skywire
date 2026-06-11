@@ -181,6 +181,7 @@ type API interface {
 	RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error)
 	ActiveRoutes() ([]AppRouteStatus, error)
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
+	GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error)
 	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)

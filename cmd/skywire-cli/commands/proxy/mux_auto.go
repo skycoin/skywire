@@ -39,6 +39,7 @@ var (
 	muxAutoSrcPort uint16
 	muxAutoWatch   time.Duration
 	muxAutoDry     bool
+	muxAutoMinHops int
 )
 
 // autoPreset captures a routing intent. keep is the total leg count to
@@ -61,7 +62,8 @@ func init() {
 	muxAutoCmd.Flags().StringVarP(&muxAutoApp, "name", "n", "skysocks-client", "app to adapt")
 	muxAutoCmd.Flags().Uint16Var(&muxAutoSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
 	muxAutoCmd.Flags().DurationVarP(&muxAutoWatch, "watch", "w", 0, "re-evaluate every interval (e.g. 5s); 0 = decide once and exit")
-	muxAutoCmd.Flags().BoolVar(&muxAutoDry, "dry-run", false, "print the prune decision without acting")
+	muxAutoCmd.Flags().BoolVar(&muxAutoDry, "dry-run", false, "print the prune/grow decision without acting")
+	muxAutoCmd.Flags().IntVar(&muxAutoMinHops, "min-hops", 2, "hop-count floor for legs added when growing toward the preset (>=2 keeps grown legs multihop)")
 	RootCmd.AddCommand(muxAutoCmd)
 }
 
@@ -77,9 +79,10 @@ Presets converge the mux to the K lowest-latency legs:
   balanced   primary + 3 lowest-latency legs
   resilient  up to 8 lowest-latency legs (max redundancy)
 
-PRUNE-based for now; growing the set (route-calc + mux-add on leg loss) is
-the next increment. Pair with 'mux-info --watch' in another terminal to see
-the effect.
+Each tick PRUNES excess/slowest legs toward the preset, then GROWS the set
+back up with fresh disjoint legs (visor-side route-calc + mux-add, honoring
+--min-hops) when live legs drop below the target — adaptive failover both
+ways. Pair with 'mux-info --watch' in another terminal to see the effect.
 
 Example:
   skywire cli proxy mux-auto fastest --watch 5s
@@ -90,6 +93,18 @@ Example:
 		p, ok := autoPresets[strings.ToLower(args[0])]
 		if !ok {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unknown preset %q (want: fastest|balanced|resilient)", args[0]))
+		}
+
+		// GROW dials fresh disjoint routes server-side, which can exceed
+		// the 30s default RPC deadline when a candidate route is slow to
+		// set up. Without headroom the client gives up while the visor is
+		// still establishing the leg — the leg lands but the tick
+		// misreports "context deadline exceeded" / "grew 0". Give the
+		// loop's client room to cover GrowMuxRoute's server-side budget;
+		// the fast prune/info calls return immediately regardless. Only
+		// override the untouched default so an explicit --timeout wins.
+		if clirpc.Timeout == 30 {
+			clirpc.Timeout = 120
 		}
 
 		rpcClient, err := clirpc.Client(cmd.Flags())
@@ -128,12 +143,32 @@ Example:
 				pruned++
 				fmt.Printf("  - pruned leg %s (%.0fms)\n", shortTpID(d.tpID.String()), d.lat)
 			}
+			// GROW: after pruning, restore redundancy. When live legs are
+			// below the preset target, add disjoint legs. Planning runs
+			// visor-side (GrowMuxRoute) because mux-info only exposes each
+			// leg's first-hop PK, not the full chains needed for a correct
+			// disjoint exclude-set.
+			live := len(rg.Legs) - pruned
+			grown := 0
+			switch {
+			case muxAutoDry && live < p.keep:
+				fmt.Printf("  would grow %d leg(s) toward keep=%d\n", p.keep-live, p.keep)
+			case !muxAutoDry && live < p.keep:
+				added, gerr := rpcClient.GrowMuxRoute(muxAutoApp, p.keep, muxAutoMinHops, muxAutoSrcPort)
+				if gerr != nil {
+					fmt.Fprintf(os.Stderr, "  grow: %v\n", gerr)
+				} else if added > 0 {
+					grown = added
+					fmt.Printf("  + grew %d leg(s) toward keep=%d\n", added, p.keep)
+				}
+			}
+
 			acted, verb := pruned, "pruned"
 			if muxAutoDry {
 				acted, verb = len(drops), "would prune"
 			}
-			fmt.Printf("[%s] preset=%s: %d legs, keep<=%d, %s %d\n",
-				time.Now().Format("15:04:05"), args[0], len(rg.Legs), p.keep, verb, acted)
+			fmt.Printf("[%s] preset=%s: %d legs, keep<=%d, %s %d, grew %d\n",
+				time.Now().Format("15:04:05"), args[0], len(rg.Legs), p.keep, verb, acted, grown)
 			return nil
 		}
 
