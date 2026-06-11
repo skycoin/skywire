@@ -370,8 +370,12 @@ func (v *Visor) SetRewardAddress(p string) (string, error) {
 	if err != nil {
 		return p, fmt.Errorf("failed to write config to file. err=%v", err)
 	}
-	// generate survey after set/update reward address
-	GenerateSurvey(v, v.log, false)
+	// Refresh the survey in the background. Setting the reward address must
+	// not block on survey generation — the address is already persisted above,
+	// and survey-gen depends on the address, not the other way around. Running
+	// it synchronously made SetRewardAddress hang whenever the survey's dmsg
+	// IP lookup couldn't complete (see GenerateSurvey's IP-lookup loop).
+	go GenerateSurvey(v, v.log, false)
 	return p, nil
 }
 
