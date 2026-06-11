@@ -572,9 +572,15 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 		case <-serveDone:
 		}
 
-		// Clean up.
+		// Clean up. Identity-checked delete: an inbound PeerAnnounce from
+		// the same PK (addAcceptedPeerSession) may have replaced our
+		// outbound session in the map. Deleting by PK alone would then
+		// evict that live successor — matching the identity-checked
+		// deletes used everywhere else (handleSession, delSession).
 		s.peerSessionsMx.Lock()
-		delete(s.peerSessions, peer.PK)
+		if s.peerSessions[peer.PK] == ses {
+			delete(s.peerSessions, peer.PK)
+		}
 		s.peerSessionsMx.Unlock()
 		ses.Close() //nolint:errcheck,gosec
 
