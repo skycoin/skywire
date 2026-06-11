@@ -33,6 +33,38 @@ func (r *router) rulesGC() {
 	for _, rule := range removedRules {
 		r.removeRouteGroupOfRule(rule)
 	}
+
+	r.sweepClosedRouteGroups()
+}
+
+// sweepClosedRouteGroups removes route-group map entries whose underlying
+// RouteGroup has already closed itself.
+//
+// Most teardowns are reaped via removeRouteGroupOfRule (the rules expire,
+// CollectGarbage returns them, the rg is popped). But a route group that
+// closes ITSELF — the keep-alive failure path (maxConsecutiveWriteFailures →
+// rg.Close), a self-heal/rotation-induced close, or a close whose rules it
+// already deleted in RouteGroup.close — leaves an orphaned entry in rgsNs/
+// rgsRaw: the rg deleted its own rules from the routing table, so
+// CollectGarbage never returns them and removeRouteGroupOfRule is never
+// invoked for that descriptor. Under sustained setup/teardown/failure churn
+// these orphaned entries accumulate without bound (each is also walked by
+// SetMuxMode / ActiveRouteStatuses / RouteGroupMuxInfoForApp, so the leak
+// also slows those scans). This additive sweep drops them; it changes no
+// routing semantics — only already-closed groups are removed.
+func (r *router) sweepClosedRouteGroups() {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+	for desc, nrg := range r.rgsNs {
+		if nrg == nil || nrg.isClosed() {
+			delete(r.rgsNs, desc)
+		}
+	}
+	for desc, rg := range r.rgsRaw {
+		if rg == nil || rg.isClosed() {
+			delete(r.rgsRaw, desc)
+		}
+	}
 }
 
 func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
