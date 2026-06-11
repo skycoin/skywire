@@ -12,7 +12,6 @@ import (
 	ipc "github.com/james-barrow/golang-ipc"
 
 	"github.com/skycoin/skywire/pkg/app"
-	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -95,10 +94,24 @@ func (c *Client) ListenAndServe(addr string) error {
 	}
 }
 
+// Liveness-probe tuning for sessionKeepAliveLoop. A route group can be
+// torn down router-side (remote visor restart, all mux legs dropped)
+// WITHOUT the underlying conn delivering EOF, so session.IsClosed() may
+// never flip and ListenAndServe would block forever in Accept(). A timed
+// yamux ping detects that. The interval/timeout are generous and we
+// require consecutive failures so a merely-slow multihop route is not
+// mistaken for a dead one (a false close just costs one reconnect cycle).
+const (
+	livenessProbeInterval = 15 * time.Second
+	livenessProbeTimeout  = 10 * time.Second
+	livenessFailThreshold = 2
+)
+
 func (c *Client) sessionKeepAliveLoop() {
-	ticker := time.NewTicker(router.DefaultRouteKeepAlive / 2)
+	ticker := time.NewTicker(livenessProbeInterval)
 	defer ticker.Stop()
 
+	fails := 0
 	for {
 		select {
 		case <-c.closeC:
@@ -109,7 +122,39 @@ func (c *Client) sessionKeepAliveLoop() {
 
 				return
 			}
+			if c.sessionAlive(livenessProbeTimeout) {
+				fails = 0
+
+				continue
+			}
+			fails++
+			if fails >= livenessFailThreshold {
+				if c.appCl != nil {
+					c.appCl.Log().Warnf("Liveness probe failed %dx; route group gone, closing for reconnect", fails)
+				}
+				c.close()
+
+				return
+			}
 		}
+	}
+}
+
+// sessionAlive reports whether a yamux ping round-trips within timeout.
+// A silently torn-down rg conn never pongs; the timer catches that. The
+// ping runs in a goroutine so a wedged ping cannot stall the loop —
+// Close() tears down the session, which unblocks the pending ping.
+func (c *Client) sessionAlive(timeout time.Duration) bool {
+	done := make(chan error, 1)
+	go func() {
+		_, err := c.session.Ping()
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		return err == nil
+	case <-time.After(timeout):
+		return false
 	}
 }
 
@@ -186,6 +231,11 @@ func (c *Client) Close() error {
 		}
 
 		close(c.closeC)
+		// Tear down the yamux session so reconnect builds a fresh one
+		// and any in-flight liveness ping unblocks.
+		if c.session != nil {
+			err = c.session.Close()
+		}
 	})
 
 	return err
