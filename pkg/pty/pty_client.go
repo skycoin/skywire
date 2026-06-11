@@ -161,3 +161,11 @@ func (sc *PtyClient) StartWithSize(name string, arg []string, c *WinSize, env []
 func (sc *PtyClient) SetPtySize(size *WinSize) error {
 	return sc.call("SetPtySize", size, &empty)
 }
+
+// Ping issues a no-op RPC round-trip. The interactive web terminal calls
+// it periodically as a keepalive: the response read refreshes the dmsg
+// stream's idle read deadline, so a terminal left idle isn't dropped
+// after StreamIdleTimeout (2m). The dmsg analog of SSH ServerAliveInterval.
+func (sc *PtyClient) Ping() error {
+	return sc.call("Ping", &empty, &empty)
+}

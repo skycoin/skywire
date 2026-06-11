@@ -27,6 +27,10 @@ type PtyGateway interface {
 	Write(reqB *[]byte, respN *int) error
 	SetPtySize(size *WinSize, _ *struct{}) error
 	Exec(req *CommandExecReq, resp *CommandExecResult) error
+	// Ping is a no-op round-trip used as a dmsg-stream keepalive for the
+	// interactive terminal — its response read refreshes the stream's
+	// idle read deadline. See pkg/pty/ui.go's keepalive goroutine.
+	Ping(_, _ *struct{}) error
 }
 
 // CommandReq represents a pty command.
@@ -87,6 +91,14 @@ func (g *LocalPtyGateway) SetPtySize(size *WinSize, _ *struct{}) error {
 	return g.ses.SetPtySize(size)
 }
 
+// Ping is a no-op keepalive round-trip. The interactive web terminal
+// calls it periodically so an idle pty stream keeps refreshing its
+// StreamIdleTimeout read deadline and isn't torn down after 2 minutes of
+// inactivity (the dmsg analog of SSH's ServerAliveInterval).
+func (g *LocalPtyGateway) Ping(_, _ *struct{}) error {
+	return nil
+}
+
 // SetPtySize sets the remote pty's window size.
 func (g *ProxiedPtyGateway) SetPtySize(size *WinSize, _ *struct{}) error {
 	return g.ptyC.SetPtySize(size)
@@ -132,4 +144,9 @@ func (g *ProxiedPtyGateway) Write(reqB *[]byte, respN *int) error {
 	var err error
 	*respN, err = g.ptyC.Write(*reqB)
 	return err
+}
+
+// Ping forwards the keepalive round-trip to the remote pty.
+func (g *ProxiedPtyGateway) Ping(_, _ *struct{}) error {
+	return g.ptyC.Ping()
 }
