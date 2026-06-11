@@ -235,6 +235,23 @@ func (v *Visor) AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint
 	return v.router.AddMuxRouteByHops(desc, fwd, rev)
 }
 
+// GrowMuxRoute implements API. Adds disjoint legs to the app's active rg
+// until it has `target` total legs (or route planning can no longer find
+// a disjoint path), for failover redundancy. minHops floors the added
+// legs' hop count so a multihop mux grows with multihop legs. srcPort
+// disambiguates concurrent rg's (0 auto-picks when exactly one is
+// active). Returns the number of legs actually added.
+func (v *Visor) GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error) {
+	if v.router == nil {
+		return 0, errors.New("router not available")
+	}
+	desc, err := v.findRouteDescForApp(appName, srcPort)
+	if err != nil {
+		return 0, err
+	}
+	return v.router.GrowMuxRoute(desc, target, minHops)
+}
+
 // RemoveMuxRoute implements API. Drops the leg over the given
 // transport from the app's active rg; srcPort disambiguates as in
 // AddMuxRoute.

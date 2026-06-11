@@ -521,6 +521,10 @@ func (proxyDefaultAPI) AddMuxRoute(_ string, _ []routing.Hop, _ []routing.Hop, _
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GrowMuxRoute(_ string, _, _ int, _ uint16) (int, error) {
+	return 0, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
 	return ErrProxyNotSupported
 }
