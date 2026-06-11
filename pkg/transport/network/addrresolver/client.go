@@ -125,6 +125,7 @@ type httpClient struct {
 	remoteUDPAddr    string
 	sudphConn        net.PacketConn
 	sudphArConn      net.Conn
+	sudphArConnMu    sync.Mutex
 	sudphLocalAddr   LocalAddresses
 	clientPublicIP   string
 	clientPublicIPv6 string
@@ -544,7 +545,9 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 		return nil, err
 	}
 
+	c.sudphArConnMu.Lock()
 	c.sudphArConn = arConn
+	c.sudphArConnMu.Unlock()
 	c.sudphLocalAddr = localAddresses
 
 	// addrCh is the long-lived channel returned to the caller. It survives
@@ -668,7 +671,9 @@ func (c *httpClient) serveSUDPHReconnect(filter *pfilter.PacketFilter, hs Handsh
 		}
 		backoff = sudphReconnectInitialBackoff
 		arConn = newConn
+		c.sudphArConnMu.Lock()
 		c.sudphArConn = arConn
+		c.sudphArConnMu.Unlock()
 		c.sudphLocalAddr = newLocalAddrs
 		c.log.Info("SUDPH reconnected to address-resolver")
 	}
@@ -1066,7 +1071,9 @@ func (c *httpClient) delBindSUDPHLoop() {
 	defer c.delBindSudphWg.Done()
 	<-c.closed
 
+	c.sudphArConnMu.Lock()
 	arConn := c.sudphArConn
+	c.sudphArConnMu.Unlock()
 	if arConn == nil {
 		return
 	}
