@@ -38,13 +38,19 @@ const (
 
 	// handshakeAwaitTimeout bounds the dial-side wait for the remote's
 	// reciprocal route-group handshake. A handshake is a single small packet
-	// each way, so even a 6-hop high-latency route completes in a few seconds;
-	// 30s was ~20x the worst realistic RTT and meant a single flaky / dead
-	// intermediate stalled the whole dial for half a minute before the
-	// retry-with-exclude loop in DialRoutes could try another candidate. A
-	// tighter bound turns "remote not responding" into a fast failure that the
-	// fallback loop converts into the next candidate route. See DialRoutes.
-	handshakeAwaitTimeout = 12 * time.Second
+	// each way, so even a 3-hop high-latency route completes in ~1-2s
+	// (measured: 3-hop loaded p99 RTT ~1.1s). The route-finder ranks
+	// candidates by latency, NOT liveness, so a low-latency-but-dead
+	// intermediate is picked FIRST and burns this full timeout before the
+	// retry-with-exclude loop in DialRoutes can try another candidate — the
+	// dominant cost of slow multihop setup (measured 2-hop ~21s / 3-hop ~58s
+	// when attempt #1 hit a dead hop, vs ~3s when it hit a live one). 30s was
+	// ~20x and 12s ~10x the worst realistic RTT; 6s (~3-5x) keeps a safe
+	// margin while making each bad-first attempt cheaper, so more retries fit
+	// under the per-route setup-timeout — faster success AND fewer outright
+	// timeouts. A genuinely slow-but-alive route that trips this just costs
+	// one extra (now cheaper) retry. See DialRoutes.
+	handshakeAwaitTimeout = 6 * time.Second
 
 	maxHops       = 1000
 	retryDuration = 2 * time.Second
