@@ -98,6 +98,12 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 		const (
 			ipLookupAttemptTimeout = 30 * time.Second
 			ipLookupRetryDelay     = 15 * time.Second
+			// One-shot (non-routine) refreshes — e.g. the background goroutine
+			// SetRewardAddress now spawns — give up after a few attempts so they
+			// can't spin forever when dmsg IP lookup is unavailable. The periodic
+			// survey (routine=true) still retries indefinitely and backstops it
+			// once dmsg recovers.
+			ipLookupOneShotMaxAttempts = 3
 		)
 		for attempt := 1; ; attempt++ {
 			ctx, cancel := context.WithTimeout(context.Background(), ipLookupAttemptTimeout)
@@ -108,6 +114,10 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 				break
 			}
 			log.WithError(err).Warnf("Public IP lookup via dmsg failed (attempt %d) — retrying", attempt)
+			if !routine && attempt >= ipLookupOneShotMaxAttempts {
+				log.Warn("Giving up IP lookup for one-shot survey refresh; the periodic survey will retry")
+				return
+			}
 			time.Sleep(ipLookupRetryDelay)
 		}
 
