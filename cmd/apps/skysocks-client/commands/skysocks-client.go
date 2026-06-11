@@ -229,23 +229,34 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 	// cycle; a failure logs + sleeps + retries indefinitely.
 	// The visor-side restart_policy still wins as a backstop —
 	// if this proc itself panics, the restart loop catches it.
-	delay := time.Duration(reconnectDelay) * time.Second
+	baseDelay := time.Duration(reconnectDelay) * time.Second
+	const maxReconnectDelay = 30 * time.Second
+	delay := baseDelay
 	for {
-		if err := runCycle(); err != nil {
-			if cycleCtx.Err() != nil {
-				// Ctx-induced unwind, not a real failure.
-				return nil
-			}
+		start := time.Now()
+		err := runCycle()
+		if cycleCtx.Err() != nil {
+			// Ctx-induced unwind (signal / visor stop), not a failure.
+			return nil
+		}
+		if err != nil {
 			log.WithError(err).Warnf("Reconnecting in %v", delay)
 			setAppStatus(appCl, log, appserver.AppDetailedStatusReconnecting)
-		}
-		if cycleCtx.Err() != nil {
-			return nil
 		}
 		select {
 		case <-cycleCtx.Done():
 			return nil
 		case <-time.After(delay):
+		}
+		// Back off while the remote stays unreachable; reset once a
+		// cycle has actually served for a while (remote came back).
+		if time.Since(start) > maxReconnectDelay {
+			delay = baseDelay
+		} else if delay < maxReconnectDelay {
+			delay *= 2
+			if delay > maxReconnectDelay {
+				delay = maxReconnectDelay
+			}
 		}
 	}
 }
