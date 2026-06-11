@@ -87,6 +87,7 @@ var (
 	isResetSkysocks            bool
 	setPublicAutoconnect       string
 	minHops                    int
+	cascadeRouteSetup          bool
 	isUsr                      bool
 	isPublic                   bool
 	disablePublicAutoConn      bool
