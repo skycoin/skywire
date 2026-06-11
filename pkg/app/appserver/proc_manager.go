@@ -72,6 +72,7 @@ type procManager struct {
 
 	lis     net.Listener
 	conns   map[string]net.Conn
+	connsMx sync.Mutex
 	connsWG sync.WaitGroup
 
 	discF      *appdisc.Factory
@@ -130,9 +131,11 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 
 func (m *procManager) serve() {
 	defer func() {
+		m.connsMx.Lock()
 		for _, conn := range m.conns {
 			_ = conn.Close() //nolint:errcheck
 		}
+		m.connsMx.Unlock()
 	}()
 
 	for {
@@ -144,11 +147,22 @@ func (m *procManager) serve() {
 			m.log.WithError(err).Debug("Failed to accept app conn, continuing")
 			continue
 		}
-		m.conns[conn.RemoteAddr().String()] = conn
+		key := conn.RemoteAddr().String()
+		m.connsMx.Lock()
+		m.conns[key] = conn
+		m.connsMx.Unlock()
 
 		m.connsWG.Add(1)
-		go func(conn net.Conn) {
+		go func(conn net.Conn, key string) {
 			defer m.connsWG.Done()
+			// Drop the map entry when this conn's handler returns. Without
+			// this, m.conns accumulates one dead entry per app (re)connect
+			// for the visor's lifetime — a slow leak under app-restart churn.
+			defer func() {
+				m.connsMx.Lock()
+				delete(m.conns, key)
+				m.connsMx.Unlock()
+			}()
 
 			if ok := m.handleConn(conn); !ok {
 				if err := conn.Close(); err != nil {
@@ -156,7 +170,7 @@ func (m *procManager) serve() {
 						Warn("Failed to close problematic app conn.")
 				}
 			}
-		}(conn)
+		}(conn, key)
 	}
 }
 
@@ -304,6 +318,13 @@ func (m *procManager) Deregister(key appcommon.ProcKey) error {
 	m.mx.Lock()
 	proc := m.procsByKey[key]
 	m.mx.Unlock()
+
+	// A duplicate or stale Deregister (e.g. a double DeregisterApp during
+	// churn) yields a nil proc; dereferencing proc.appName would nil-panic
+	// and crash the whole visor. Return ErrNoSuchApp instead.
+	if proc == nil {
+		return ErrNoSuchApp
+	}
 
 	_, err := m.pop(proc.appName) //nolint:errcheck
 
