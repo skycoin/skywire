@@ -274,8 +274,12 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 		if existingProc.IsRunning() {
 			return appcommon.ProcKey{}, ErrAppAlreadyStarted
 		}
-		// Dead proc — clean it up so we can restart
+		// Dead proc — clean it up so we can restart. Close its connCh first so
+		// any AwaitConn goroutine spawned for it at Register time unblocks
+		// instead of leaking forever. Stop() can't be used here: it early-returns
+		// (errProcNotStarted) on a not-running proc without closing connCh.
 		log.WithField("app", conf.AppName).Warn("Found dead proc in registry, cleaning up for restart")
+		existingProc.connOnce.Do(func() { close(existingProc.connCh) })
 		delete(m.procs, conf.AppName)
 		if existingProc.conf.ProcKey != (appcommon.ProcKey{}) {
 			delete(m.procsByKey, existingProc.conf.ProcKey)
