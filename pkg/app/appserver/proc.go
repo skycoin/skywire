@@ -365,8 +365,14 @@ func (p *Proc) startInProcess() error {
 		}
 
 		go func() {
-			<-p.readyCh
-			p.disc.Start()
+			select {
+			case <-p.readyCh:
+				p.disc.Start()
+			case <-p.appCtx.Done():
+				// Torn down before the app reported Running — don't start
+				// discovery for a now-dead app; just exit instead of leaking
+				// this goroutine blocked on readyCh forever.
+			}
 		}()
 		defer p.disc.Stop()
 
@@ -397,6 +403,12 @@ func (p *Proc) startInProcess() error {
 }
 
 func (p *Proc) startExternal() error {
+	// Lifecycle context, canceled on teardown (Stop -> appCancelCtx, and the
+	// deferred m.Stop in the goroutine below). Mirrors startInProcess so the
+	// readyCh waiter can wake on teardown instead of leaking when an external
+	// app dies before it ever reports Running.
+	p.appCtx, p.appCancelCtx = context.WithCancel(context.Background()) //nolint:gosec
+
 	if err := p.cmd.Start(); err != nil {
 		p.waitMx.Unlock()
 		return err
@@ -438,8 +450,14 @@ func (p *Proc) startExternal() error {
 		}
 
 		go func() {
-			<-p.readyCh
-			p.disc.Start()
+			select {
+			case <-p.readyCh:
+				p.disc.Start()
+			case <-p.appCtx.Done():
+				// Torn down before the app reported Running — don't start
+				// discovery for a now-dead app; just exit instead of leaking
+				// this goroutine blocked on readyCh forever.
+			}
 		}()
 		defer p.disc.Stop()
 
