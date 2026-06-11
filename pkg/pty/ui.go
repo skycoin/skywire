@@ -221,6 +221,33 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		// io
 		done, once := make(chan struct{}), new(sync.Once)
 		closeDone := func() { once.Do(func() { close(done) }) }
+
+		// dmsg-stream keepalive. The interactive pty rides a dmsg stream
+		// whose 2-minute idle read deadline (StreamIdleTimeout) is
+		// refreshed only on a successful read. An idle terminal (no
+		// typing, no shell output) produces no reads, so the stream would
+		// otherwise be torn down every ~2 minutes. A periodic no-op Ping
+		// RPC forces a response read well within that window — the dmsg
+		// analog of SSH's ServerAliveInterval. (The ws Ping above only
+		// warms the browser<->hypervisor websocket, not the dmsg stream.)
+		go func() {
+			t := time.NewTicker(30 * time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-r.Context().Done():
+					return
+				case <-done:
+					return
+				case <-t.C:
+					if err := ptyC.Ping(); err != nil {
+						// Stream gone; the output pump closes the session.
+						return
+					}
+				}
+			}
+		}()
+
 		go func() {
 			// Buffer PTY output and flush periodically to reduce WebSocket message count
 			bw := newBufferedWSWriter(wsConn, 16*time.Millisecond)
