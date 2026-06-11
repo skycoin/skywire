@@ -208,6 +208,7 @@ func init() {
 	}
 	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${TPSETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
+	genConfigCmd.Flags().BoolVar(&cascadeRouteSetup, "cascade", false, "opt into source-driven cascade route setup (default: legacy setup-node path)")
 	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
 	gHiddenFlags = append(gHiddenFlags, "sn")
 	genConfigCmd.Flags().BoolVar(&dmsgDiscConfig, "dmsgdisc", false, "generate config for dmsg-discovery service")
@@ -1105,6 +1106,10 @@ func configureRouting() {
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
 		MinHops:            1,
 		CalculateRoutes:    enableCalculateRoutes,
+		// Cascade route setup is opt-in (--cascade); the legacy setup-node
+		// path stays the default until the cascade multihop data-plane bug
+		// is fixed and enough of the network has updated to support it.
+		EnableCascadeRouteSetup: cascadeRouteSetup,
 	}
 
 	if muxRoutes > 0 {
@@ -1114,6 +1119,11 @@ func configureRouting() {
 	if oldConfCache != nil && oldConfCache.Routing != nil {
 		if oldConfCache.Routing.MinHops != 0 {
 			conf.Routing.MinHops = oldConfCache.Routing.MinHops
+		}
+		// Preserve an opted-in cascade across regen (matches MinHops). To turn
+		// it back off, edit enable_cascade_route_setup in the JSON directly.
+		if oldConfCache.Routing.EnableCascadeRouteSetup {
+			conf.Routing.EnableCascadeRouteSetup = true
 		}
 	}
 }
