@@ -106,6 +106,11 @@ func TestSessionReattach_RejectsForeignOwner(t *testing.T) {
 // TestStartSession_ReturnsID checks the id-returning start path end to end
 // against a real shell, and that the id is registry-resolvable.
 func TestStartSession_ReturnsID(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Spawning a real conpty needs a console the windows CI runner lacks;
+		// the repo's other real-pty tests skip windows for the same reason.
+		t.Skip("real pty spawn is unix-only in CI")
+	}
 	owner, _ := cipher.GenerateKeyPair()
 	h := &Host{sessions: newSessionRegistry()}
 	gw := newSessionPtyGateway(h, owner)
