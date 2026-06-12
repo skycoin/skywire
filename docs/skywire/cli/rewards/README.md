@@ -31,25 +31,27 @@ skywire cli rewards
 ## Flags
 
 ```
-  -s, --loglvl string    [ debug | warn | error | fatal | panic | trace ] (default "info")
-  -d, --date string      date for which to calculate reward (default "2026-05-26")
-  -k, --pk string        check reward for pubkey
-  -n, --noarch strings   disallowed architectures, comma separated (default [null,wasm])
-  -w, --a1 strings       pool 1 allowed arch, comma separated (default [arm64,arm,ppc64,riscv64,loong64,mips,mips64,mips64le,mipsle,ppc64le,s390x])
-  -x, --a2 strings       pool 2 allowed arch, comma separated (default [amd64,386])
-  -y, --year int         yearly total rewards per pool (default 408000)
-  -u, --utfile string    uptime tracker data file (default "ut.txt")
-  -p, --lpath string     path to the surveys (default "log_collecting")
-  -0, --h0               hide statistical data
-  -1, --h1               hide survey csv data
-  -2, --h2               hide reward csv data
-  -e, --err              account for non rewarded keys
-  -r, --process          run complete reward processing workflow
-  -t, --require-tp       require minimum transports (from hist/YYYY-MM-DD_transports.txt) (default true)
-  -T, --tp-hist string   path to transport history directory (default "hist")
-  -b, --require-bw       require minimum bandwidth (proportional reward based on bandwidth)
-  -B, --min-bw uint      minimum bandwidth in bytes to qualify (used with --require-bw) (default 64)
-  -S, --sat-exp float    regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal) (default 0.5)
+  -s, --loglvl string      [ debug | warn | error | fatal | panic | trace ] (default "info")
+  -d, --date string        date for which to calculate reward (default "2026-06-11")
+  -k, --pk string          check reward for pubkey
+  -n, --noarch strings     disallowed architectures, comma separated (default [null,wasm])
+  -w, --a1 strings         pool 1 allowed arch, comma separated (default [arm64,arm,ppc64,riscv64,loong64,mips,mips64,mips64le,mipsle,ppc64le,s390x])
+  -x, --a2 strings         pool 2 allowed arch, comma separated (default [amd64,386])
+  -y, --year int           yearly total rewards per pool (default 408000)
+  -u, --utfile string      uptime tracker data file (default "ut.txt")
+  -p, --lpath string       path to the surveys (default "log_collecting")
+  -0, --h0                 hide statistical data
+  -1, --h1                 hide survey csv data
+  -2, --h2                 hide reward csv data
+  -e, --err                account for non rewarded keys
+  -r, --process            run complete reward processing workflow
+  -t, --require-tp         require minimum transports from hist/YYYY-MM-DD_transports.txt (deprecated — TPD-integrated UT data now gates >= 2 transports inherently; this flag is kept only for historical re-runs of dates before the migration)
+  -T, --tp-hist string     path to transport history directory (default "hist")
+  -b, --require-bw         require minimum bandwidth (proportional reward based on bandwidth)
+      --no-bw-pool         recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool (requires -b)
+  -B, --min-bw uint        minimum bandwidth in bytes to qualify (used with --require-bw) (default 64)
+  -S, --sat-exp float      regional saturation exponent (1.0=no derating, 0.5=sqrt, 0=all countries equal) (default 0.5)
+      --bw-sat-exp float   bandwidth saturation exponent applied to pool 2 (1.0=strict bytes-proportional, 0.5=sqrt, 0=all senders equal) (default 0.5)
 ```
 
 ## Global Flags

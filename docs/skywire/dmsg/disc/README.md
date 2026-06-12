@@ -29,14 +29,14 @@ Response Examples:
 GET /health
 {
       "build_info": {
-        "commit": "<commit>",
-        "date": "<build-date>",
-        "version": "<version>"
+        "commit": "abc1234",
+        "date": "2024-01-15T10:30:00Z",
+        "version": "v1.3.29"
       },
-      "dmsg_address": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb:80",
+      "dmsg_address": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7:80",
       "dmsg_servers": [
-        "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
-        "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
+        "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
+        "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"
       ],
       "started_at": "2024-01-15T10:00:00Z"
     }
@@ -45,8 +45,8 @@ GET /dmsg-discovery/entry/{pk} (client entry)
 {
       "client": {
         "delegated_servers": [
-          "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
-          "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
+          "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
+          "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"
         ]
       },
       "sequence": 1,
@@ -60,9 +60,9 @@ GET /dmsg-discovery/entry/{pk} (server entry)
       "version": "",
       "sequence": 0,
       "timestamp": 0,
-      "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+      "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
       "server": {
-        "address": "139.162.160.227:30086",
+        "address": "172.105.179.5:30085",
         "availableSessions": 0
       }
     }
@@ -90,8 +90,8 @@ GET /dmsg-discovery/entries (all client and server entries)
       {
         "client": {
           "delegated_servers": [
-            "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
-            "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
+            "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
+            "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"
           ]
         },
         "sequence": 1,
@@ -103,9 +103,9 @@ GET /dmsg-discovery/entries (all client and server entries)
         "version": "",
         "sequence": 0,
         "timestamp": 0,
-        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
-          "address": "139.162.160.227:30086",
+          "address": "172.105.179.5:30085",
           "availableSessions": 0
         }
       },
@@ -113,9 +113,9 @@ GET /dmsg-discovery/entries (all client and server entries)
         "version": "",
         "sequence": 0,
         "timestamp": 0,
-        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
-          "address": "139.162.173.101:30082",
+          "address": "139.162.160.227:30086",
           "availableSessions": 0
         }
       }
@@ -126,8 +126,8 @@ GET /dmsg-discovery/visorEntries (client entries only)
       {
         "client": {
           "delegated_servers": [
-            "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
-            "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd"
+            "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
+            "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb"
           ]
         },
         "sequence": 1,
@@ -143,9 +143,9 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "version": "",
         "sequence": 0,
         "timestamp": 0,
-        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
-          "address": "139.162.160.227:30086",
+          "address": "172.105.179.5:30085",
           "availableSessions": 0
         }
       },
@@ -153,9 +153,9 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "version": "",
         "sequence": 0,
         "timestamp": 0,
-        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
-          "address": "139.162.173.101:30082",
+          "address": "139.162.160.227:30086",
           "availableSessions": 0
         }
       }
@@ -167,9 +167,9 @@ GET /dmsg-discovery/all_servers (all server entries)
         "version": "",
         "sequence": 0,
         "timestamp": 0,
-        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
+        "static": "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7",
         "server": {
-          "address": "139.162.160.227:30086",
+          "address": "172.105.179.5:30085",
           "availableSessions": 0
         }
       },
@@ -177,9 +177,9 @@ GET /dmsg-discovery/all_servers (all server entries)
         "version": "",
         "sequence": 0,
         "timestamp": 0,
-        "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
+        "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
-          "address": "139.162.173.101:30082",
+          "address": "139.162.160.227:30086",
           "availableSessions": 0
         }
       }
@@ -187,7 +187,7 @@ GET /dmsg-discovery/all_servers (all server entries)
 
 GET /dmsg-discovery/servers/clients
 {
-      "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb": [
+      "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7": [
         "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
         "024ec47420176680816e0406250e7156465e4531f5b26057c9f6297bb0303558c7"
       ]

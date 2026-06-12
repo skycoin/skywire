@@ -75,9 +75,9 @@ this reads the reward server's already-published results — no local data
 needed.
 
 Examples:
-  skywire cli rewards lookup 0324c17a...f1
-  skywire cli rewards lookup --file pklist.txt --days 5
-  skywire cli rewards lookup --file pklist.txt --rewarded-only --json`,
+  skywire cli reward lookup 0324c17a...f1
+  skywire cli reward lookup --file pklist.txt --days 5
+  skywire cli reward lookup --file pklist.txt --rewarded-only --json`,
 	Run: func(cmd *cobra.Command, args []string) {
 		pks, err := collectLookupPKs(args, lookupFile)
 		if err != nil {

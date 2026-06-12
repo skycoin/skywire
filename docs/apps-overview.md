@@ -33,8 +33,8 @@ be the same machine.
 |---|---|---|---|
 | [PTY](pty/README.md) | shell / sftp host | `skywire cli pty` | dmsg `22` |
 | [Skychat](skychat/README.md) | messaging | `skywire cli skychat` | `1` |
-| [SkyNet server](skynet/README.md) | port-forward host | `skywire cli skynet srv` | forwarding `47` |
-| [SkyNet client](skynet/client.md) | port-forward client | `skywire cli skynet` | `47` |
+| [SkyNet server](skynet/README.md) | port-forward host | `skywire cli skynet srv` | forwarding `57` |
+| [SkyNet client](skynet/client.md) | port-forward client | `skywire cli skynet` | `57` |
 | [SOCKS5 server](skysocks/README.md) | SOCKS5 proxy host | `skywire cli proxy server` | `3` |
 | [SOCKS5 client](skysocks/client.md) | SOCKS5 proxy client | `skywire cli proxy` | `13` |
 | [VPN server](vpn/README.md) | VPN host | `skywire cli vpn server` | `44` |
