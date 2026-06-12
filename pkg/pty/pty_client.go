@@ -19,6 +19,13 @@ type PtyClient struct {
 	rpcC *rpc.Client
 	done chan struct{}
 	once sync.Once
+
+	// writeDone receives completed WriteAsync RPC calls so a later
+	// WriteAsync can surface a prior write's error, instead of silently
+	// dropping keystrokes until the Read path eventually notices the
+	// broken conn. Buffered; net/rpc drops replies (with a log line)
+	// rather than crashing if it ever fills.
+	writeDone chan *rpc.Call
 }
 
 // NewPtyClient creates a new pty client that interacts with a local pty.
@@ -30,9 +37,10 @@ func NewPtyClient(conn io.ReadWriteCloser) (*PtyClient, error) {
 		return nil, err
 	}
 	return &PtyClient{
-		log:  logging.MustGetLogger("pty:pty-client"),
-		rpcC: rpc.NewClient(conn),
-		done: make(chan struct{}),
+		log:       logging.MustGetLogger("pty:pty-client"),
+		rpcC:      rpc.NewClient(conn),
+		done:      make(chan struct{}),
+		writeDone: make(chan *rpc.Call, 64),
 	}, nil
 }
 
@@ -47,9 +55,10 @@ func NewProxyClient(conn io.ReadWriteCloser, rPK cipher.PubKey, rPort uint16) (*
 		return nil, err
 	}
 	return &PtyClient{
-		log:  logging.MustGetLogger("pty:proxy-client"),
-		rpcC: rpc.NewClient(conn),
-		done: make(chan struct{}),
+		log:       logging.MustGetLogger("pty:proxy-client"),
+		rpcC:      rpc.NewClient(conn),
+		done:      make(chan struct{}),
+		writeDone: make(chan *rpc.Call, 64),
 	}, nil
 }
 
@@ -95,16 +104,31 @@ func (sc *PtyClient) Write(b []byte) (int, error) {
 // interactive caller (the web terminal's input loop) isn't blocked a full
 // round-trip per keystroke. Ordering is preserved — net/rpc serializes
 // request sends, and the send encodes b before returning, so the caller may
-// reuse the buffer. The per-write result and error are intentionally dropped:
-// a broken conn surfaces on the Read path, which tears the session down.
-// Returns an error only if the client is already closed.
+// reuse the buffer.
+//
+// It returns an error if the client is closed OR if a PRIOR async write has
+// since failed: completed Write calls land on sc.writeDone, and each call
+// reaps them first, so a broken conn surfaces on the input path within a
+// keystroke or two instead of only when the Read path notices it.
 func (sc *PtyClient) WriteAsync(b []byte) error {
 	select {
 	case <-sc.done:
 		return io.ErrClosedPipe
 	default:
 	}
-	sc.rpcC.Go(sc.rpcMethod("Write"), &b, new(int), nil)
+	// Reap completed prior writes; report the first error encountered.
+	for {
+		select {
+		case call := <-sc.writeDone:
+			if call.Error != nil {
+				return processRPCError(call.Error)
+			}
+			continue
+		default:
+		}
+		break
+	}
+	sc.rpcC.Go(sc.rpcMethod("Write"), &b, new(int), sc.writeDone)
 	return nil
 }
 
