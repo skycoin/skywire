@@ -39,21 +39,65 @@ func newSessionPtyGateway(h *Host, owner cipher.PubKey) *sessionPtyGateway {
 }
 
 // Start spawns the shell, wraps it in a persistent session, registers it, and
-// attaches this gateway as the first follower.
+// attaches this gateway as the first follower. Legacy clients use this and
+// never learn the session id, so they can't reattach — but the shell still
+// survives a stream drop until the GC reaps it.
 func (g *sessionPtyGateway) Start(req *CommandReq, _ *struct{}) error {
+	_, err := g.start(req)
+	return err
+}
+
+// StartSession is Start that also returns the new session id, so a
+// persistence-aware client can stash it and Attach after a reconnect. Hosts
+// without persistence don't expose this method; the client falls back to Start
+// on an rpc "method not found".
+func (g *sessionPtyGateway) StartSession(req *CommandReq, sid *string) error {
+	id, err := g.start(req)
+	if err != nil {
+		return err
+	}
+	*sid = id
+	return nil
+}
+
+// start spawns the shell + registers the session, returning its id.
+func (g *sessionPtyGateway) start(req *CommandReq) (string, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.sess != nil {
-		return ErrPtyAlreadyRunning
+		return "", ErrPtyAlreadyRunning
 	}
 	p := NewPty()
 	if err := p.Start(req.Name, req.Arg, req.Size, req.Env); err != nil {
-		return err
+		return "", err
 	}
 	sess := newPtySession(newSessionID(), g.owner, p)
 	g.h.sessions.add(sess)
 	g.sess = sess
 	g.rdr = sess.follow()
+	return sess.id, nil
+}
+
+// Attach rebinds this (fresh) gateway to an already-running session by id,
+// replaying the buffered output produced while detached. Used by a reconnecting
+// client after its stream dropped. Fails if the gateway already Started, if no
+// such session exists (reaped / wrong id), or if the session belongs to a
+// different owner — so one peer can't hijack another's shell.
+func (g *sessionPtyGateway) Attach(sid *string, _ *struct{}) error {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.sess != nil {
+		return ErrPtyAlreadyRunning
+	}
+	sess, ok := g.h.sessions.get(*sid)
+	if !ok {
+		return ErrSessionNotFound
+	}
+	if sess.ownerPK != g.owner {
+		return ErrSessionNotOwned
+	}
+	g.sess = sess
+	g.rdr = sess.followReplay()
 	return nil
 }
 

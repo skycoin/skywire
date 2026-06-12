@@ -156,6 +156,26 @@ func (sc *PtyClient) Start(name string, env []string, arg ...string) error {
 	}, &empty)
 }
 
+// StartSession starts the pty like Start but returns a persistent-session id the
+// caller can stash and later Attach to after a reconnect. Only persistence-aware
+// hosts expose it; on an older host the RPC returns a "method not found" error
+// (processRPCError surfaces it) and the caller should fall back to Start, giving
+// up reconnect support against that host. An empty id with nil error means the
+// host ran StartSession but isn't tracking a session (shouldn't happen).
+func (sc *PtyClient) StartSession(name string, env []string, arg ...string) (string, error) {
+	var sid string
+	err := sc.call("StartSession", &CommandReq{Name: name, Arg: arg, Env: env}, &sid)
+	return sid, processRPCError(err)
+}
+
+// Attach rebinds to an existing persistent session by id (from a prior
+// StartSession), replaying output produced while the client was disconnected.
+// Returns an error if the session was reaped or is owned by another key, in
+// which case the caller should start a fresh session.
+func (sc *PtyClient) Attach(sid string) error {
+	return processRPCError(sc.call("Attach", &sid, &empty))
+}
+
 // Exec runs a one-shot command on the remote host without a PTY.
 // Same trust model as Start; see exec_gateway.go for the cap +
 // timeout semantics. Returns the captured stdout/stderr/exit-code

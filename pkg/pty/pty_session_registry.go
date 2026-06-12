@@ -16,10 +16,19 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+)
+
+// Reattach errors. ErrSessionNotFound means the id is unknown — the session was
+// never created, already Stop'd, or GC-reaped after its idle TTL. Both are
+// surfaced to a reconnecting client so it can fall back to starting fresh.
+var (
+	ErrSessionNotFound = errors.New("dmsgpty: session not found")
+	ErrSessionNotOwned = errors.New("dmsgpty: session owned by a different public key")
 )
 
 // Defaults for the persistent-session GC. The TTL is how long a detached
