@@ -8,15 +8,17 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-func (ui *UI) uiStartSize(ptyC *PtyClient) error {
+// uiWinSize returns the initial pty window size and environment for a web
+// terminal. The Start/StartSession/Attach decision is made in ui.go so the
+// persistent-session reconnect logic stays platform-independent.
+func (ui *UI) uiWinSize() (*WinSize, []string, error) {
 	ws, err := NewWinSize(&windows.Coord{
 		X: wsCols,
 		Y: wsRows,
 	})
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	// UI sessions use xterm-256color as they're accessed via web terminal
-	env := []string{"TERM=xterm-256color"}
-	return ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, ws, env)
+	return ws, []string{"TERM=xterm-256color"}, nil
 }

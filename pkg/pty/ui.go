@@ -175,16 +175,33 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		}
 		defer func() { log.WithError(ptyC.Close()).Debug("Closed ptyC.") }()
 
-		if err = ui.uiStartSize(ptyC); err != nil {
+		// Resolve to a pty session: reattach when the browser passed a ?sid=
+		// (reconnect), else start fresh. A fresh persistent session yields an id
+		// we hand the browser so its next reconnect can reattach the same shell.
+		reqSID := r.URL.Query().Get("sid")
+		newSID, reattached, err := ui.startOrAttach(ptyC, reqSID)
+		if err != nil {
 			writeWSError(log, wsConn, err)
 			return
 		}
+		if newSID != "" {
+			sendSessionID(r.Context(), ws, newSID)
+			log.WithField("session", newSID).Debug("Started persistent pty session.")
+		}
+		if reattached {
+			log.WithField("session", reqSID).Debug("Reattached to persistent pty session.")
+		}
 
-		uiAddr := fmt.Sprintf("(%s) %s%s", r.Proto, r.Host, r.URL.Path)
-		if err := ui.writeBanner(wsConn, uiAddr, sID); err != nil {
-			err := fmt.Errorf("failed to write banner: %w", err)
-			writeWSError(log, wsConn, err)
-			return
+		// The banner + startup commands belong to a fresh session only — on a
+		// reattach the replayed ring already carries the prior screen, and
+		// re-running the commands would double-execute them.
+		if !reattached {
+			uiAddr := fmt.Sprintf("(%s) %s%s", r.Proto, r.Host, r.URL.Path)
+			if err := ui.writeBanner(wsConn, uiAddr, sID); err != nil {
+				err := fmt.Errorf("failed to write banner: %w", err)
+				writeWSError(log, wsConn, err)
+				return
+			}
 		}
 
 		// Keepalive: send a websocket PING every 10s. The browser's ws library
@@ -218,8 +235,10 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		// bare "\n" gets interpreted by the pty as Enter and the
 		// shell re-renders the prompt, producing a doubled-prompt
 		// on every fresh session.
-		if cmdStr := urlCommands(r, customCommands); cmdStr != "" {
-			ptyC.Write([]byte(cmdStr)) //nolint
+		if !reattached {
+			if cmdStr := urlCommands(r, customCommands); cmdStr != "" {
+				ptyC.Write([]byte(cmdStr)) //nolint
+			}
 		}
 
 		// Create WebSocket reader that handles resize messages
@@ -299,6 +318,70 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 
 func isWebsocket(h http.Header) bool {
 	return h.Get("Upgrade") == "websocket"
+}
+
+// startOrAttach resolves this websocket to a pty session. When sid is non-empty
+// (a browser reconnect) it tries to reattach to that persistent session,
+// replaying buffered output; on any attach failure (session reaped, wrong
+// owner) it falls back to starting fresh. A fresh start uses StartSession to get
+// a session id the browser can stash for its next reconnect; against an older
+// host without persistence (StartSession returns "method not found") it falls
+// back to the classic StartWithSize and returns an empty id (no reconnect
+// continuity, unchanged behavior). Returns (newSessionID, reattached, err):
+// newSessionID is non-empty only when a NEW persistent session was created.
+func (ui *UI) startOrAttach(ptyC *PtyClient, sid string) (string, bool, error) {
+	size, env, err := ui.uiWinSize()
+	if err != nil {
+		return "", false, err
+	}
+	if sid != "" {
+		if aerr := ptyC.Attach(sid); aerr == nil {
+			// Reattached: match the (possibly resized) browser terminal.
+			_ = ptyC.SetPtySize(size) //nolint:errcheck
+			return "", true, nil
+		}
+		// Session gone or not ours — fall through to a fresh start.
+	}
+	newSID, serr := ptyC.StartSession(ui.conf.CmdName, ui.conf.CmdArgs, size, env)
+	if serr != nil {
+		if isRPCMethodNotFound(serr) {
+			// Old host without persistence: classic one-shot start.
+			return "", false, ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, size, env)
+		}
+		return "", false, serr
+	}
+	return newSID, false, nil
+}
+
+// isRPCMethodNotFound reports whether err is net/rpc's "method not found" — the
+// signal that the remote host predates a given RPC (here StartSession), so the
+// caller can degrade gracefully instead of treating it as a hard failure.
+func isRPCMethodNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "can't find method") || strings.Contains(s, "can't find service")
+}
+
+// sessionCtrlMsg is the JSON control frame the server sends the browser (as a
+// websocket TEXT frame, distinct from the binary pty data) to hand it the
+// persistent session id. The browser stashes it and passes it back as ?sid= on
+// reconnect so the same shell is reattached.
+type sessionCtrlMsg struct {
+	Type string `json:"type"` // always "session"
+	ID   string `json:"id"`
+}
+
+// sendSessionID delivers the persistent session id to the browser over a TEXT
+// frame. Best-effort: a failure here only costs reconnect continuity, not the
+// session itself.
+func sendSessionID(ctx context.Context, ws *websocket.Conn, sid string) {
+	b, err := stdjson.Marshal(sessionCtrlMsg{Type: "session", ID: sid})
+	if err != nil {
+		return
+	}
+	_ = ws.Write(ctx, websocket.MessageText, b) //nolint:errcheck
 }
 
 // ErrorJSON displays errors in JSON format.
