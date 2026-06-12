@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/creack/pty"
 )
@@ -45,6 +46,17 @@ func (s *Pty) Stop() error {
 	s.pty = nil
 	// Reap the child process to avoid zombies.
 	if s.cmd != nil {
+		// Force-terminate the shell's process GROUP before waiting. Closing the
+		// master alone relies on the foreground app exiting on SIGHUP/EOF, which
+		// a program like cat / vim / top may not do — leaving cmd.Wait to block
+		// forever. That matters for the persistent-session GC, which reaps
+		// detached sessions whose shells may sit in such a program. The shell is
+		// a session/group leader (creack/pty sets Setsid, so pgid == pid), so
+		// the negative pid targets the whole group. Best-effort — an
+		// already-exited process just yields ESRCH.
+		if p := s.cmd.Process; p != nil && p.Pid > 0 {
+			_ = syscall.Kill(-p.Pid, syscall.SIGKILL) //nolint:errcheck
+		}
 		_ = s.cmd.Wait() //nolint:errcheck
 		s.cmd = nil
 	}
@@ -52,27 +64,38 @@ func (s *Pty) Stop() error {
 }
 
 // Read reads any stdout or stderr outputs from the pty.
+//
+// The lock is held only to capture the *os.File, NOT across the blocking read:
+// the read can block indefinitely (waiting for shell output), and holding the
+// RLock that whole time would deadlock Stop, which needs the write lock to close
+// the fd. Capturing then reading outside the lock lets Stop close the fd, which
+// unblocks this read with an error. Safe against fd reuse because os.File.Read
+// returns ErrClosed (without touching the raw fd) once the file is closed.
 func (s *Pty) Read(b []byte) (int, error) {
 	s.mx.RLock()
-	defer s.mx.RUnlock()
+	f := s.pty
+	s.mx.RUnlock()
 
-	if s.pty == nil {
+	if f == nil {
 		return 0, ErrPtyNotRunning
 	}
 
-	return s.pty.Read(b)
+	return f.Read(b)
 }
 
-// Write writes to the stdin of the pty.
+// Write writes to the stdin of the pty. Like Read, it captures the *os.File
+// under the lock and writes outside it — a write can block when the pty buffer
+// is full, and holding the lock would deadlock Stop.
 func (s *Pty) Write(b []byte) (int, error) {
 	s.mx.RLock()
-	defer s.mx.RUnlock()
+	f := s.pty
+	s.mx.RUnlock()
 
-	if s.pty == nil {
+	if f == nil {
 		return 0, ErrPtyNotRunning
 	}
 
-	return s.pty.Write(b)
+	return f.Write(b)
 }
 
 // Start runs a command with the given command name, args, optional window size, and optional environment variables.

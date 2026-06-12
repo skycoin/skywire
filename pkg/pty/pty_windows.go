@@ -46,27 +46,34 @@ func (s *Pty) Stop() error {
 }
 
 // Read reads any stdout or stderr outputs from the pty.
+//
+// The lock is held only to capture the ConPty, NOT across the blocking read:
+// holding the RLock across an indefinitely-blocking read would deadlock Stop,
+// which needs the write lock to close the pty. See the unix counterpart.
 func (s *Pty) Read(b []byte) (int, error) {
 	s.mx.RLock()
-	defer s.mx.RUnlock()
+	p := s.pty
+	s.mx.RUnlock()
 
-	if s.pty == nil {
+	if p == nil {
 		return 0, ErrPtyNotRunning
 	}
 
-	return s.pty.OutPipe().Read(b)
+	return p.OutPipe().Read(b)
 }
 
-// Write writes to the stdin of the pty.
+// Write writes to the stdin of the pty. Captures the ConPty under the lock and
+// writes outside it, for the same deadlock-avoidance reason as Read.
 func (s *Pty) Write(b []byte) (int, error) {
 	s.mx.RLock()
-	defer s.mx.RUnlock()
+	p := s.pty
+	s.mx.RUnlock()
 
-	if s.pty == nil {
+	if p == nil {
 		return 0, ErrPtyNotRunning
 	}
 
-	res, err := s.pty.Write(b)
+	res, err := p.Write(b)
 	return int(res), err
 }
 

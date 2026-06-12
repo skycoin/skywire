@@ -126,6 +126,16 @@ type Pty struct {
 	// can `cli pty shell <pk>@<host>:<port>` — no dmsg-discovery dependency,
 	// lower latency for known endpoints, same PK-based auth model.
 	SshListen string `json:"ssh_listen,omitempty"`
+
+	// PersistentSessions, when true, keeps an interactive pty's shell
+	// running across a dropped stream instead of killing it: the host
+	// detaches the follower and a reconnecting client (the hypervisor web
+	// terminal, or `cli pty`) reattaches by session id, replaying buffered
+	// output. A bounded GC reaps detached sessions after an idle TTL so an
+	// abandoned shell can't leak. Off by default — opt in per visor; the
+	// web terminal degrades to fresh-shell-on-reconnect against hosts that
+	// have it off.
+	PersistentSessions bool `json:"persistent_sessions,omitempty"`
 }
 
 // Dmsgscp configures the dmsgscp-host (scp-over-dmsg daemon).
