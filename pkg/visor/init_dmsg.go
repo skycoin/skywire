@@ -454,7 +454,12 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 }
 
 // dmsgServicePKs extracts public keys from dmsg:// URLs in the visor config.
-// Falls back to embedded deployment defaults for missing fields.
+// Falls back to embedded deployment defaults for each missing field so a
+// minimal config (which is the common case — most operators only override
+// the few fields they need) still seeds every direct-client deployment
+// service. Without these fallbacks all but ConfDmsg dropped to "" silently,
+// so DialStream for e.g. TPD hit the HTTP discovery, found no entry (TPD
+// is direct-client by design), and bailed with "entry not found".
 func (v *Visor) dmsgServicePKs() cipher.PubKeys {
 	pick := func(a, b string) string {
 		if a != "" {
@@ -463,16 +468,21 @@ func (v *Visor) dmsgServicePKs() cipher.PubKeys {
 		return b
 	}
 	dmsgURLs := []string{
-		v.conf.Dmsg.DiscoveryDmsg,
-		v.conf.Transport.DiscoveryDmsg,
-		v.conf.Transport.AddressResolverDmsg,
-		v.conf.Routing.RouteFinderDmsg,
-		v.conf.Launcher.ServiceDiscDmsg,
+		pick(v.conf.Dmsg.DiscoveryDmsg, deployment.Prod.DmsgDiscoveryDmsg),
+		pick(v.conf.Transport.DiscoveryDmsg, deployment.Prod.TransportDiscoveryDmsg),
+		pick(v.conf.Transport.AddressResolverDmsg, deployment.Prod.AddressResolverDmsg),
+		pick(v.conf.Routing.RouteFinderDmsg, deployment.Prod.RouteFinderDmsg),
+		pick(v.conf.Launcher.ServiceDiscDmsg, deployment.Prod.ServiceDiscoveryDmsg),
 		pick(v.conf.ConfServiceDmsg, deployment.Prod.ConfDmsg),
 	}
+	// UptimeTracker is the only nullable sub-config; treat a nil block
+	// the same as an empty AddrDmsg field and fall through to the embedded
+	// default so we still seed UT's PK on minimal configs.
+	utDmsg := deployment.Prod.UptimeTrackerDmsg
 	if v.conf.UptimeTracker != nil {
-		dmsgURLs = append(dmsgURLs, v.conf.UptimeTracker.AddrDmsg)
+		utDmsg = pick(v.conf.UptimeTracker.AddrDmsg, utDmsg)
 	}
+	dmsgURLs = append(dmsgURLs, utDmsg)
 	var pks cipher.PubKeys
 	for _, rawURL := range dmsgURLs {
 		if rawURL == "" {
@@ -499,10 +509,23 @@ func (v *Visor) dmsgServicePKs() cipher.PubKeys {
 // The synthetic entries list ALL known DMSG server PKs as delegated servers.
 // This lets DialStream try each server the visor is connected to — one of
 // them will be able to forward the stream to the service.
+//
+// Server PK list: prefer the visor config's explicit dmsg.servers list,
+// fall back to the embedded prod set (dmsg.Prod.DmsgServers) when the
+// config has none. Most minimal configs leave dmsg.servers empty and
+// rely on discovery to populate sessions at runtime; before this
+// fallback the seed returned early in that case and the service-PK
+// entries were never installed, so direct-client services like TPD
+// remained unreachable via DialStream until a manual seed.
 func (v *Visor) seedDmsgServiceEntries(dmsgC *dmsg.Client, log *logging.Logger) {
 	var serverPKs []cipher.PubKey
 	for _, srv := range v.conf.Dmsg.Servers {
 		serverPKs = append(serverPKs, srv.Static)
+	}
+	if len(serverPKs) == 0 {
+		for _, srv := range dmsg.Prod.DmsgServers {
+			serverPKs = append(serverPKs, srv.Static)
+		}
 	}
 	if len(serverPKs) == 0 {
 		return
