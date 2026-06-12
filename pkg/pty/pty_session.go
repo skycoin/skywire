@@ -221,8 +221,9 @@ func (s *ptySession) stop() error {
 // blocking for new bytes and surfacing close. Multiple readers can follow one
 // session independently.
 type sessionReader struct {
-	s   *ptySession
-	pos int64
+	s    *ptySession
+	pos  int64
+	once sync.Once // guards Close so a double-detach can't under-count followers
 }
 
 // Read returns output produced at or after this reader's offset, blocking until
@@ -254,8 +255,10 @@ func (r *sessionReader) Read(p []byte) (int, error) {
 	}
 }
 
-// Close detaches this reader from the session (the session itself keeps running).
+// Close detaches this reader from the session (the session itself keeps
+// running). Idempotent: a gateway may detach both on stream teardown and on an
+// explicit Stop, and a double call must not under-count the session's followers.
 func (r *sessionReader) Close() error {
-	r.s.detach()
+	r.once.Do(r.s.detach)
 	return nil
 }
