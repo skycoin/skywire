@@ -9,8 +9,8 @@ hosted on another Skywire visor as if it were running locally.
 The SkyNet client is a visor-native application that:
 
 - Connects to a remote SkyNet server over a Skywire transport.
-- Forwards a remote port to a local address.
-- Supports both HTTP and raw-TCP forwarding modes.
+- Forwards a remote TCP port to a local address — protocol-agnostic, so it
+  works for web servers, SSH, databases, and any other TCP service.
 - Can run multiple instances at once.
 
 ## Usage
@@ -23,12 +23,16 @@ The client is controlled via `skywire cli skynet`.
 # Connect to a server and forward the remote port to a local one
 skywire cli skynet start --pk <server-public-key> --remote 8080 --local 9000
 
-# Raw-TCP mode (databases, SSH, streaming — any non-HTTP traffic)
-skywire cli skynet start --pk <server-pk> --remote 3306 --local 3306 --raw-tcp
+# A non-HTTP service (database, SSH, …) works the same way
+skywire cli skynet start --pk <server-pk> --remote 3306 --local 3306
 
 # With a custom instance name
 skywire cli skynet start --pk <server-pk> --remote 8080 --local 9000 --name my-connection
 ```
+
+Multi-hop and multiplexed-route options (`--min-hops`, `--routes`,
+`--forward-mux` / `--reverse-mux`, …) are available too — see the
+[command reference](../skywire/README.md).
 
 ### Check status
 
@@ -41,22 +45,6 @@ skywire cli skynet status
 ```bash
 skywire cli skynet stop --name skynet-client-9000
 ```
-
-## Forwarding modes
-
-### HTTP mode (default)
-
-Best for web servers and HTTP-based services; handles request/response
-patterns efficiently.
-
-### Raw-TCP mode (`--raw-tcp`)
-
-Best for:
-
-- Database connections (MySQL, PostgreSQL)
-- SSH tunnelling
-- Streaming protocols
-- Any non-HTTP TCP traffic
 
 ## Configuration
 
@@ -76,7 +64,7 @@ A SkyNet client can be declared in `skywire-config.json` under `apps`:
 ```bash
 # Server side (remote visor) — expose a local web server
 python -m http.server 8080
-skywire cli skynet srv start --port 8080
+skywire cli skynet srv start --ports 8080
 
 # Client side (your visor) — forward it to localhost:9000
 SERVER_PK="02abc..."   # the server's public key
