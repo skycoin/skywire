@@ -16,9 +16,12 @@ skywire cli svc health
 ## Flags
 
 ```
-      --direct       query services directly instead of via visor RPC
-      --json         print output as JSON
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --direct               query services directly instead of via visor RPC
+      --dmsg-server string   route the /health check through ONE specific dmsg server (PK or PK@host:port) using a standalone direct dmsg client — tests per-server reachability of --service, even for direct-client services not in discovery
+      --json                 print output as JSON
+      --port uint16          service dmsg port for the /health endpoint (default: 80, the dmsghttp log-server port) (default 80)
+      --rpc string           RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --service string       check ONE service by its dmsg PK (e.g. the dmsg-discovery), routed over dmsg; required with --dmsg-server
 ```
 
 ## Global Flags

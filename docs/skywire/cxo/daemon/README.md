@@ -22,6 +22,7 @@ skywire cxo daemon
       --mem-db                          use in-memory database
       --public                          public server
       --rpc string                      RPC listening address (default ":8871")
+      --sk string                       node identity secret key (hex); empty = random ephemeral identity (PK changes each restart)
       --tcp string                      TCP listening address (default ":8870")
       --tcp-pings duration              pings interval of TCP connections (default 1m58s)
       --tcp-response-timeout duration   response timeout of TCP connections (default 59s)

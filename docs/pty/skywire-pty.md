@@ -49,7 +49,8 @@ The legacy key `dmsgpty` is still accepted on load.
     "whitelist": [
       "0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c"
     ],
-    "ssh_listen": ":2022"
+    "ssh_listen": ":2022",
+    "persistent_sessions": false
   }
 }
 ```
@@ -60,6 +61,18 @@ The legacy key `dmsgpty` is still accepted on load.
 | `cli_network` / `cli_address` | local control socket. Default `unix` / `/tmp/pty.sock`. |
 | `whitelist` | client PKs allowed to connect (in addition to the implicit ones below). |
 | `ssh_listen` | optional direct-TCP entry point (`:2022`, `0.0.0.0:2022`, …). **Empty (default) = dmsg/skynet only.** |
+| `persistent_sessions` | keep an interactive shell running across a dropped stream instead of killing it, so a reconnecting client reattaches to the **same** shell and replays the output produced while disconnected. Default `false`. See below. |
+
+### Persistent sessions (reconnect)
+
+With `persistent_sessions: true`, a dropped pty stream no longer kills the
+shell: the host detaches it and a reconnecting client — the hypervisor web
+terminal, or `cli pty` — reattaches by session id and replays the buffered
+output, instead of dropping you into a fresh shell. The web terminal does this
+automatically on a connection blip; against a visor that has the flag **off**
+(the default) it falls back to a fresh shell, with no change in behavior. A
+bounded garbage-collector reaps a detached session after it has been idle (no
+client attached) past a timeout, so an abandoned shell can't leak.
 
 ### Who is authorized
 
