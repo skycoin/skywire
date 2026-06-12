@@ -110,6 +110,10 @@ func (r *router) Serve(ctx context.Context) error {
 
 	go r.serveSetup()
 
+	// Reclaim frames parked during the route-group registration window whose
+	// route group never registers (see router_pending.go).
+	go r.pending.runSweep(ctx, r.logger)
+
 	return nil
 }
 
@@ -238,6 +242,16 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	// we put raw rg so it can be accessible to the router when handshake packets come in
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()
+
+	// Re-dispatch any frames that arrived for this descriptor during the
+	// rule-save -> registration window (the receive-side setup race). They were
+	// parked instead of dropped; deliver them now that the route group exists so
+	// a handshake frame that raced registration still completes the handshake.
+	for _, pp := range r.pending.take(rules.Desc) {
+		if err := rg.handlePacket(pp.pkt); err != nil {
+			log.WithError(err).Debug("Failed to re-dispatch parked packet after route group registration")
+		}
+	}
 
 	if nsConf.Initiator {
 		if err := rg.sendHandshake(true); err != nil {

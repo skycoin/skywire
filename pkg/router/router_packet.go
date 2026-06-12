@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
 )
@@ -96,6 +97,13 @@ func (r *router) dispatchToRouteGroup(ctx context.Context, packet routing.Packet
 		return rg.handlePacket(packet)
 	}
 
+	// The rule resolved but no route group is registered yet: this frame
+	// arrived in the rule-save -> route-group-register window (the receive-side
+	// setup race). Park it and re-dispatch on registration instead of dropping
+	// it, which would otherwise stall the noise handshake. See router_pending.go.
+	if r.pending.park(desc, packet, time.Now()) {
+		return nil
+	}
 	return errRouteDescNotExist
 }
 
