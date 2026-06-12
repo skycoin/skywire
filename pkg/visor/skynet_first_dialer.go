@@ -57,6 +57,10 @@ type skynetFirstUIDialer struct {
 	rAddr dmsg.Addr
 }
 
+// Compile-time check that the dialer satisfies the scheme-aware interface the
+// pty UI handler probes for via ?scheme=.
+var _ pty.SchemeUIDialer = (*skynetFirstUIDialer)(nil)
+
 // SkynetFirstUIDialer returns a dmsgpty UIDialer that prefers the
 // skywire router for the pty stream and falls back to dmsg. The
 // dmsg client is required as the fallback transport.
@@ -122,6 +126,33 @@ func (d *skynetFirstUIDialer) Dial() (net.Conn, error) {
 	dmsgCtx, dmsgCancel := context.WithTimeout(context.Background(), dmsgFallbackDialTimeout)
 	defer dmsgCancel()
 	return d.dmsgC.Dial(dmsgCtx, d.rAddr)
+}
+
+// DialScheme implements pty.SchemeUIDialer, letting the hypervisor UI force a
+// transport via ?scheme=. "dmsg" skips the skynet attempt entirely (use when a
+// stale skynet route to the peer wedges the default skynet-first path);
+// "skynet" tries only skynet with no dmsg fallback; anything else is the
+// default skynet-first behavior.
+func (d *skynetFirstUIDialer) DialScheme(scheme string) (net.Conn, error) {
+	switch scheme {
+	case "dmsg":
+		if d.dmsgC == nil {
+			return nil, errNilDmsgClient
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), dmsgFallbackDialTimeout)
+		defer cancel()
+		return d.dmsgC.Dial(ctx, d.rAddr)
+	case "skynet":
+		ctx, cancel := context.WithTimeout(context.Background(), skynetFirstDialTimeout)
+		defer cancel()
+		return appnet.DialContext(ctx, appnet.Addr{
+			Net:    appnet.TypeSkynet,
+			PubKey: d.rAddr.PK,
+			Port:   routing.Port(d.rAddr.Port),
+		})
+	default:
+		return d.Dial()
+	}
 }
 
 func (d *skynetFirstUIDialer) AddrString() string {

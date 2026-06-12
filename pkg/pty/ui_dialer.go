@@ -14,6 +14,16 @@ type UIDialer interface {
 	AddrString() string
 }
 
+// SchemeUIDialer is an optional extension of UIDialer for dialers that can
+// reach the peer over more than one transport scheme. When the pty handler
+// receives ?scheme=dmsg or ?scheme=skynet it calls DialScheme, letting an
+// operator force a transport — e.g. fall back to dmsg when the skynet route to
+// a peer is wedged. Dialers that don't implement this just use Dial().
+type SchemeUIDialer interface {
+	UIDialer
+	DialScheme(scheme string) (net.Conn, error)
+}
+
 // DmsgUIDialer returns a UIDialer that dials with dmsg.
 func DmsgUIDialer(dmsgC *dmsg.Client, rAddr dmsg.Addr) UIDialer {
 	return &dmsgUIDialer{dmsgC: dmsgC, rAddr: rAddr}
