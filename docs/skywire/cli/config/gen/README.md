@@ -30,8 +30,9 @@ skywire cli config gen
   -a, --url string                  services conf url
                                      (default "http://conf.skywire.skycoin.com")
   -t, --testenv                     use test deployment (ports offset +10000 from prod)
-  -d, --dmsghttp                    use only dmsg for skywire services (no http)
+  -d, --dmsghttp                    use only dmsg for skywire services, no http (this is the default)
       --http                        use only http for skywire services (no dmsg)
+      --dual                        use http for skywire services with dmsg as fallback (dual)
   -D, --dmsgconf string             dmsghttp config path
       --nofetch                     do not fetch the services from the service conf url
   -S, --svcconf string              fallback service configuration file
@@ -43,6 +44,7 @@ skywire cli config gen
       --sudph int                   udp transport listening port (0 = random)
       --routesetup string           add route setup node PKs
       --tpsetup string              add transport setup node PKs
+      --cascade                     opt into source-driven cascade route setup (default: legacy setup-node path)
       --sn                          generate config for route setup node
       --dmsgdisc                    generate config for dmsg-discovery service
       --dmsgsrv                     generate config for dmsg-server service
@@ -55,6 +57,7 @@ skywire cli config gen
   -j, --hvpks string                list of public keys to add as hypervisor
   -c, --noauth                      disable authentication for hypervisor UI
   -e, --auth                        enable auth on hypervisor UI
+      --pk-endpoint                 expose unauthenticated GET /api/pk on the hypervisor (skybian / Arch-ARM image builds set this)
       --dmsgpty string              add dmsgpty whitelist PKs
       --survey string               add survey whitelist PKs
   -l, --publicip                    display visor ip in service discovery

@@ -2,27 +2,40 @@
 
 [← skywire cli dmsg](../README.md)
 
-Probe a remote visor on a specific dmsg port via dmsg.
+Probe a remote port's reachability. The probe performs a full noise
+handshake to the destination; if a listener is active, the handshake completes
+and the probe reports success.
 
-The probe performs a full DialStream (noise handshake) through the dmsg server
-bridge to the destination. If a listener is active on the specified port, the
-handshake completes and the probe reports success. If nothing is listening,
-the probe reports failure.
+TRANSPORTS:
+  (default)   dmsg — DialStream through a dmsg server bridge to <pk>:<port>.
+  --skynet    skynet — dial a route over skywire's p2p transports to <pk>:<port>
+              (uses the local visor's router; RPC only).
+  --via tcp://<pk>@host:port
+              a direct noise-TCP connection (no dmsg, no router). Reports
+              whether the noise handshake to that endpoint completes for <pk>.
 
-By default, the probe uses the local visor's dmsg client via RPC. Use -s to
-bootstrap a standalone dmsg client (no running visor required).
+IDENTITY (dmsg / tcp):
+  By default dmsg probes use the local visor's dmsg client via RPC. Use -s for a
+  standalone client with an ephemeral key, or --sk <hex> to run standalone with
+  a SPECIFIC identity (no visor needed). --via tcp uses --sk or an ephemeral key.
 
-Common ports:
+  --server <server-pk> forces a dmsg probe through a specific dmsg server, to ask
+  "is <pk> reachable VIA this server?" — works in both RPC and standalone modes.
+
+Common dmsg ports:
   80   - dmsghttp log server (/health, /ping)
   136  - route setup await port (used by RSN for route establishment)
-  22   - dmsgpty (remote terminal)
+  22   - pty (remote terminal)
   7    - dmsg ctrl
   8    - dmsg ping
 
 Examples:
-  skywire cli dmsg probe <pk> 136        # via visor RPC
-  skywire cli dmsg probe -s <pk> 136     # standalone (no visor needed)
-  skywire cli dmsg probe -s <pk> 80      # check if log server is up
+  skywire cli dmsg probe <pk> 136                    # dmsg via visor RPC
+  skywire cli dmsg probe -s <pk> 136                 # dmsg standalone (ephemeral key)
+  skywire cli dmsg probe --sk <hex> <pk> 80          # dmsg standalone with a specific key
+  skywire cli dmsg probe --server <srv> <pk> 136     # dmsg via a specific server
+  skywire cli dmsg probe --skynet <pk> 136           # over skynet (routed transports)
+  skywire cli dmsg probe --via tcp://<pk>@host:8801  # direct noise-TCP connection
 
 ## Usage
 
@@ -35,18 +48,21 @@ skywire cli dmsg probe <public-key> <port>
 ```
       --parallel int           parallel probes when --ports is set (caps simultaneous DialStreams) (default 8)
       --ports string           multi-port sweep — comma list with optional ranges, e.g. '22,80,1000-1010,5000'. When set, the positional <port> arg is ignored and one row per port is printed.
-  -s, --standalone             use a standalone dmsg client (no running visor needed)
+      --server string          dmsg: force the probe through this specific dmsg server (pk hex) — per-server reachability
+      --sk string              standalone dmsg client using THIS secret key (hex); implies --standalone, no visor RPC
+      --skynet                 probe over skynet (skywire's routed p2p transports) instead of dmsg — uses the visor's router
+  -s, --standalone             use a standalone dmsg client with an ephemeral key (no running visor needed)
   -v, --verbose                stream visor's dmsg-layer logs to stderr while probing (single-port mode only)
       --verbose-level string   minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
+      --via string             probe a direct noise-TCP connection instead of dmsg: tcp://<pk>@host:port (uses --sk or an ephemeral key)
 ```
 
 ## Global Flags
 
 ```
-  -h, --help              show help menu
-      --json              print output as JSON
-      --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
-      --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
+  -h, --help          show help menu
+      --json          print output as JSON
+      --timeout int   RPC timeout in seconds (0 = unlimited) (default 30)
 ```
 
 ---

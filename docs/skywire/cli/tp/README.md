@@ -30,6 +30,7 @@ skywire cli tp
 - [metrics](metrics/README.md) — Transport discovery bandwidth metrics
 - [net-stats](net-stats/README.md) — Network-wide transport statistics
 - [rm](rm/README.md) — Remove transport(s) by id
+- [route-addr](route-addr/README.md) — Build a source-routed resolver address (<tpid>...<dest>.skynet) for a PK path
 - [tpd-health](tpd-health/README.md) — Transport discovery health and version info
 - [tpd-stats](tpd-stats/README.md) — List visors by transport count from transport discovery
 - [tree](tree/README.md) — tree map of transports on the skywire network

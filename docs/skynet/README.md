@@ -18,7 +18,7 @@ The SkyNet server is a visor-native application that:
 - Exposes a local TCP port to other Skywire visors.
 - Supports whitelist-based access control by public key.
 - Works over STCPR, SUDPH, or DMSG transports.
-- Registers with the visor's built-in forwarding service (port `47`).
+- Registers with the visor's built-in forwarding service (port `57`).
 
 ## Usage
 
@@ -27,14 +27,14 @@ The server is controlled via `skywire cli skynet srv`.
 ### Start a server
 
 ```bash
-# Expose local port 8080
-skywire cli skynet srv start --port 8080
+# Expose local port 8080 (--ports takes a comma-separated list)
+skywire cli skynet srv start --ports 8080
 
-# With a custom instance name
-skywire cli skynet srv start --port 3000 --name my-server
+# Expose several ports, with a custom instance name
+skywire cli skynet srv start --ports 3000,9000 --name my-server
 
 # Restrict access to specific public keys (whitelist)
-skywire cli skynet srv start --port 8080 --wl 02abc...,03def...
+skywire cli skynet srv start --ports 8080 --whitelist 02abc...,03def...
 ```
 
 ### Check status
@@ -46,11 +46,8 @@ skywire cli skynet srv status
 ### Stop a server
 
 ```bash
-# By name
+# By instance name (defaults to skynet-<first-port>)
 skywire cli skynet srv stop --name skynet-8080
-
-# By port
-skywire cli skynet srv stop --port 8080
 ```
 
 ## Configuration
@@ -61,7 +58,7 @@ so it starts with the visor:
 ```json
 {
   "name": "skynet",
-  "args": ["--port", "8080"],
+  "args": ["--ports", "8080"],
   "auto_start": false,
   "port": 90
 }
@@ -70,7 +67,7 @@ so it starts with the visor:
 ## How it works
 
 1. The server registers with the visor's built-in forwarding service on
-   port `47`.
+   port `57`.
 2. A remote [SkyNet client](client.md) connects via a Skywire transport.
 3. Traffic is forwarded between the remote client and the local TCP port.
 4. All communication is encrypted by the Skywire transport layer.

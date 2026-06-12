@@ -2,15 +2,32 @@
 
 [← skywire cli visor hv](../README.md)
 
-List all visors connected to this hypervisor with summary info.
+List visors connected to this hypervisor.
 
-Queries each remote visor over its DMSG connection for version, uptime,
-transport count, and other details. The local visor is shown first.
+By default renders the same multi-section structure the hvui shows: the
+local hypervisor with its directly-connected visors first, then each
+sub-hypervisor (connected to this hypervisor) as its own section with
+a chain breadcrumb and that hypervisor's directly-connected visors. A
+visor reachable via multiple hypervisors appears in every relevant
+section by design. Sub-hypervisor sections dedup by PK.
+
+The columns match the hvui's node-list table: PK, LABEL (the visor's
+hostname), VERSION, UPTIME, TP (transport count), APPS, IP, CC
+(country code), STATUS.
+
+For the legacy single flat-table output (e.g. for scripts), pass --flat.
 
 ## Usage
 
 ```
 skywire cli visor hv ls
+```
+
+## Flags
+
+```
+      --flat   single flat table instead of one section per hypervisor
+      --load   add LOAD (1m/cores), MEM%, and DISK% columns per visor
 ```
 
 ## Global Flags

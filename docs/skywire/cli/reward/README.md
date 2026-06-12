@@ -13,6 +13,7 @@ skywire cli reward <address | xpub> || [flags]
 
 ## Subcommands
 
+- [lookup](lookup/README.md) — Look up reward history for public keys (over dmsg)
 - [rules](rules/README.md) — display the mainnet rules
 
 ## Flags

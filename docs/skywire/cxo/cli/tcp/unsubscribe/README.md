@@ -7,7 +7,7 @@ Unsubscribe from a feed via TCP connection
 ## Usage
 
 ```
-skywire cxo cli tcp unsubscribe <address> <public-key>
+skywire cxo cli tcp unsubscribe <public-key>@<address> | <address> <public-key>
 ```
 
 ## Global Flags

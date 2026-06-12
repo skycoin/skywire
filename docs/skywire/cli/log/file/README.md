@@ -6,12 +6,34 @@ Stream /visor.log from one visor over dmsghttp. Visor must have been
 started with -s/--save-log; without that flag the file doesn't exist
 and the endpoint returns 404.
 
+Filtering flags translate to URL query params applied server-side, so
+the visor only ships lines that match — useful over slow dmsg/skynet
+hops where pulling the whole file is wasteful.
+
+  --min-level    keep lines >= severity
+  --module       regex on [module] tag
+  --grep         regex on full line
+  --since-line   skip first N lines
+  --limit        stop after N matches
+  --follow / -f  tail -f mode
+
 Gated by the remote visor's survey_whitelist.
 
 ## Usage
 
 ```
 skywire cli log file <pk>
+```
+
+## Flags
+
+```
+      --min-level string   keep only lines >= this severity (trace|debug|info|warn|error|fatal|panic); empty = no filter
+      --module string      regex filter on the [module] tag (e.g. 'sudph' or '^tp:')
+      --grep string        regex filter on the full line text
+      --since-line int     skip the first N lines (1-based) — useful for resume after disconnect
+      --limit int          stop after N matching lines (0 = no limit)
+  -f, --follow             keep streaming new appends after EOF (tail -f); cancel with ctrl+c
 ```
 
 ## Global Flags

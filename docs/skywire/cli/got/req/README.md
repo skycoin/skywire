@@ -26,7 +26,7 @@ skywire cli got req <METHOD> <URL>
   -D, --data string      request body (or @filename to read from file)
   -H, --header strings   HTTP header "Key: Value"
   -o, --output string    write response body to file
-  -x, --proxy string     SOCKS5 proxy address (host:port)
+  -x, --proxy string     SOCKS5 proxy (host:port, socks5://host:port, or socks5h://host:port — h has the proxy resolve the destination, e.g. dmsgweb's <pk>.dmsg)
   -v, --verbose          print response headers
 ```
 

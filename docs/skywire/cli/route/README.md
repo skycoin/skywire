@@ -17,6 +17,7 @@ skywire cli route
 - [find](find/README.md) — Query the Route Finder
 - [groups](groups/README.md) — List active route groups
 - [minhops](minhops/README.md) — Set minimum hops for route calculation at runtime
+- [policy](policy/README.md) — skylark routing-policy tooling (RFC #2882)
 - [rm](rm/README.md) — Remove routing rule
 - [rsn-remote-stats](rsn-remote-stats/README.md) — Query a standalone Route Setup Node's statistics
 - [rsn-stats](rsn-stats/README.md) — Show embedded Route Setup Node request statistics

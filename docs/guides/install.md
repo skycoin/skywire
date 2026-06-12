@@ -3,7 +3,7 @@
 Skywire can be installed by package, downloaded as a release binary, or
 compiled from source via `go install` / `go run`.
 
-## `go install` or `go run` Skywire (go1.25+)
+## `go install` or `go run` Skywire (go1.26+)
 
 Skywire commands can be executed via `go run`:
 
@@ -12,7 +12,7 @@ $ go run github.com/skycoin/skywire@develop
 ┌─┐┬┌─┬ ┬┬ ┬┬┬─┐┌─┐
 └─┐├┴┐└┬┘││││├┬┘├┤
 └─┘┴ ┴ ┴ └┴┘┴┴└─└─┘
-v1.3.54
+v1.3.67
 built with go1.26.3
 
 Available Commands:
@@ -35,123 +35,14 @@ go run github.com/skycoin/skywire@develop cli config gen -br #print the config &
 go run github.com/skycoin/skywire@develop visor #uses skywire-config.json by default
 ```
 
-The new config omits the `"binary"` field and the first two arguments `app <app-name>` :
+By default the bundled apps (vpn, skysocks, skychat, …) run **in-process** —
+there are no separate app binaries to install or manage, and `config gen`
+produces this config automatically. For most users nothing else is needed.
 
-```
-[
-  {
-    "name": "vpn-client",
-    "args": [
-      "--dns",
-      "1.1.1.1"
-    ],
-    "auto_start": false,
-    "port": 43
-  },
-  {
-    "name": "skychat",
-    "args": [
-      "--addr",
-      ":8001"
-    ],
-    "auto_start": true,
-    "port": 1
-  },
-  {
-    "name": "skysocks",
-    "auto_start": true,
-    "port": 3
-  },
-  {
-    "name": "skysocks-client",
-    "args": [
-      "--addr",
-      ":1080"
-    ],
-    "auto_start": false,
-    "port": 13
-  },
-  {
-    "name": "vpn-server",
-    "auto_start": false,
-    "port": 44
-  }
-]
-```
-
-For comparison, the external apps launcher config:
-
-```
-[
-  {
-    "name": "vpn-client",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "vpn-client",
-      "--dns",
-      "1.1.1.1"
-    ],
-    "auto_start": false,
-    "port": 43
-  },
-  {
-    "name": "skychat",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "skychat",
-      "--addr",
-      ":8001"
-    ],
-    "auto_start": true,
-    "port": 1
-  },
-  {
-    "name": "skysocks",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "skysocks"
-    ],
-    "auto_start": true,
-    "port": 3
-  },
-  {
-    "name": "skysocks-client",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "skysocks-client",
-      "--addr",
-      ":1080"
-    ],
-    "auto_start": false,
-    "port": 13
-  },
-  {
-    "name": "vpn-server",
-    "binary": "skywire",
-    "args": [
-      "app",
-      "vpn-server"
-    ],
-    "auto_start": false,
-    "port": 44
-  }
-]
-```
-
-To run the visor native applications with _external_ apps configuration, one must first have the skywire binary explicitly installed:
-```
-go install github.com/skycoin/skywire@develop
-```
-Then, either:
-* place the binary in the current working directory where skywire is running
-OR
-* set the`bin_path` in the skywire-config.json to the directory containing the skywire binary
-
-Running a custom skywire visor app requires that the binary for that app exists in the directory specified by `"bin_path"` in the visor's config
+> Want the visor to launch apps as **separate executables** instead — e.g. to
+> run a custom app? See
+> [Running apps as external binaries](#running-apps-as-external-binaries) at the
+> end of this page.
 
 ## Installing Skywire from Release
 
@@ -222,6 +113,34 @@ environment.systemPackages = [ skywire.packages.${system}.skywire ];
 See the [nix details page](../extras/nix.md) for the per-arch hash-fill
 flow on `skywire-bin`, the visor's `--apps-dir` integration, and
 the static-binary sanity check.
+
+## Running apps as external binaries
+
+*Advanced — most users should use the default in-process apps described above.*
+
+By default each app entry in `skywire-config.json` just names the app and its
+args, and the visor runs it inside its own process:
+
+```json
+{ "name": "skysocks", "auto_start": true, "port": 3 }
+```
+
+To launch an app as a **separate executable** instead, the entry adds a
+`"binary"` field and prepends `app <app-name>` to its args:
+
+```json
+{ "name": "skysocks", "binary": "skywire", "args": ["app", "skysocks"], "auto_start": true, "port": 3 }
+```
+
+This requires the app binaries to be reachable. Install skywire:
+
+```
+go install github.com/skycoin/skywire@develop
+```
+
+then either run the visor from the directory containing the binary, or set
+`"bin_path"` in `skywire-config.json` to the directory holding the app
+binaries. A custom app must have its binary present in `bin_path`.
 
 ## Docker
 
