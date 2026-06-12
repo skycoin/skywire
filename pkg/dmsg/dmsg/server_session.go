@@ -83,7 +83,7 @@ func (ss *ServerSession) Serve() {
 				continue
 			}
 
-			log.Info("Initiating stream.")
+			log.Debug("Initiating stream.")
 			go func(sStr *smux.Stream) {
 				defer func() { <-sem }()
 				defer func() {
@@ -92,7 +92,7 @@ func (ss *ServerSession) Serve() {
 					}
 				}()
 				err := ss.serveStream(log, sStr, ss.sm.addr)
-				log.WithError(err).Info("Stopped stream.")
+				log.WithError(err).Debug("Stopped stream.")
 			}(sStr)
 		}
 	} else {
@@ -119,7 +119,7 @@ func (ss *ServerSession) Serve() {
 				continue
 			}
 
-			log.Info("Initiating stream.")
+			log.Debug("Initiating stream.")
 			go func(yStr *yamux.Stream) {
 				defer func() { <-sem }()
 				defer func() {
@@ -128,7 +128,7 @@ func (ss *ServerSession) Serve() {
 					}
 				}()
 				err := ss.serveStream(log, yStr, ss.sm.addr)
-				log.WithError(err).Info("Stopped stream.")
+				log.WithError(err).Debug("Stopped stream.")
 			}(yStr)
 		}
 	}
@@ -314,7 +314,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout}
 	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
 
-	log.Info("Serving stream.")
+	log.Debug("Serving stream.")
 	ss.m.RecordStream(metrics.DeltaConnect)
 	defer ss.m.RecordStream(metrics.DeltaDisconnect)
 	return netutil.CopyReadWriteCloser(yStr, yStr2)
