@@ -146,9 +146,21 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		// Use binary mode for PTY data - text mode fails on non-UTF-8 bytes
 		wsConn := websocket.NetConn(r.Context(), ws, websocket.MessageBinary)
 
-		// open pty
+		// open pty. ?scheme=dmsg / ?scheme=skynet lets an operator force a
+		// transport when the default (skynet-first) is wedged to this peer;
+		// dialers that don't support schemes ignore it and use Dial().
 		logWS(wsConn, "Dialing...")
-		ptyConn, err := ui.dialer.Dial()
+		var ptyConn net.Conn
+		if scheme := r.URL.Query().Get("scheme"); scheme != "" {
+			if sd, ok := ui.dialer.(SchemeUIDialer); ok {
+				log.WithField("scheme", scheme).Debug("Dialing pty with operator-forced scheme.")
+				ptyConn, err = sd.DialScheme(scheme)
+			} else {
+				ptyConn, err = ui.dialer.Dial()
+			}
+		} else {
+			ptyConn, err = ui.dialer.Dial()
+		}
 		if err != nil {
 			writeWSError(log, wsConn, err)
 			return
@@ -276,6 +288,12 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 			}
 		}()
 		<-done
+
+		// The session ended — the pty stream dropped, the shell exited, or a
+		// keepalive failed. Tell the browser explicitly instead of leaving a
+		// frozen, blank-looking terminal, so the user reloads to reconnect
+		// rather than wondering whether it has hung.
+		logWS(wsConn, "\r\n\x1b[33m[skywire: session closed — reload the page to reconnect]\x1b[0m\r\n")
 	}
 }
 
