@@ -23,10 +23,45 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/host"
+	"github.com/shirou/gopsutil/v3/load"
 	"github.com/shirou/gopsutil/v3/mem"
 	gnet "github.com/shirou/gopsutil/v3/net"
 	"github.com/shirou/gopsutil/v3/process"
 )
+
+// LoadStats is a lightweight, always-meaningful resource snapshot used by
+// `cli visor hv ls --load`: load averages (which, unlike a single CPUPercent
+// sample, need no prior baseline to be meaningful) plus instantaneous memory
+// and root-disk usage percentages. Cheap to gather (a few /proc reads + one
+// statfs), so it's populated on every Summary without a sampling interval.
+type LoadStats struct {
+	Load1           float64 `json:"load1"`
+	Load5           float64 `json:"load5"`
+	Load15          float64 `json:"load15"`
+	CPUCores        int     `json:"cpu_cores"`
+	MemUsedPercent  float64 `json:"mem_used_percent"`
+	DiskUsedPercent float64 `json:"disk_used_percent"`
+}
+
+// collectLoadStats gathers a LoadStats snapshot. Every field degrades
+// independently: a metric whose syscall fails (e.g. load.Avg on Windows) is
+// left at zero rather than failing the whole snapshot.
+func collectLoadStats() *LoadStats {
+	ls := &LoadStats{}
+	if avg, err := load.Avg(); err == nil && avg != nil {
+		ls.Load1, ls.Load5, ls.Load15 = avg.Load1, avg.Load5, avg.Load15
+	}
+	if n, err := cpu.Counts(true); err == nil {
+		ls.CPUCores = n
+	}
+	if vm, err := mem.VirtualMemory(); err == nil && vm != nil {
+		ls.MemUsedPercent = vm.UsedPercent
+	}
+	if du, err := disk.Usage("/"); err == nil && du != nil {
+		ls.DiskUsedPercent = du.UsedPercent
+	}
+	return ls
+}
 
 // HostStatsInfo carries a snapshot of host system + visor process
 // resource utilization. Returned by Visor.HostStats and surfaced

@@ -200,6 +200,7 @@ func (v *Visor) Summary() (*Summary, error) {
 		ConnectedDmsgServers: connectedDmsgServers,
 		DMSGServers:          dmsgServers,
 		IsHypervisor:         v.IsHypervisorEnabled(),
+		Load:                 collectLoadStats(),
 	}
 	if v.conf.Hypervisor != nil {
 		summary.HypervisorAddr = v.conf.Hypervisor.HTTPAddr
