@@ -24,7 +24,7 @@ func TestSessionRegistry_AddGetRemoveCount(t *testing.T) {
 	require.Equal(t, 0, r.count())
 
 	s, fp := newTestSession(t)
-	defer func() { _ = fp.Stop() }()
+	defer fp.Stop() //nolint:errcheck,gosec
 	r.add(s)
 	require.Equal(t, 1, r.count())
 
@@ -46,13 +46,13 @@ func TestSessionRegistry_ReapIdleRespectsTTL(t *testing.T) {
 
 	// Attached session (a follower present) is never reaped, however old.
 	attached, fpA := newTestSession(t)
-	defer func() { _ = fpA.Stop() }()
+	defer fpA.Stop()      //nolint:errcheck
 	_ = attached.follow() // never detached
 	r.add(attached)
 
 	// Detached session: a follower attached then closed, so lastDetach is set.
 	detached, fpD := newTestSession(t)
-	defer func() { _ = fpD.Stop() }()
+	defer fpD.Stop() //nolint:errcheck
 	rdr := detached.follow()
 	require.NoError(t, rdr.Close())
 	r.add(detached)
@@ -77,7 +77,7 @@ func TestSessionRegistry_ReapClosedImmediately(t *testing.T) {
 	r.add(s)
 
 	// Exit the shell: the pump closes the session.
-	_ = fp.Stop()
+	fp.Stop() //nolint:errcheck,gosec
 	require.Eventually(t, s.isClosed, time.Second, 5*time.Millisecond)
 
 	// A closed session is reaped even with a huge TTL (it can't be reattached).

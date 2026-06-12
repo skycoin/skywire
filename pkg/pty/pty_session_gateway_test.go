@@ -32,7 +32,7 @@ func newGatewayWithSession(t *testing.T) (*Host, *sessionPtyGateway, *ptySession
 // pump keeps running and a later follower still sees fresh output.
 func TestSessionGateway_DetachKeepsSessionAlive(t *testing.T) {
 	h, gw, sess, fp := newGatewayWithSession(t)
-	defer func() { _ = fp.Stop() }()
+	defer fp.Stop() //nolint:errcheck
 
 	gw.detach() // simulate stream teardown
 
@@ -42,7 +42,7 @@ func TestSessionGateway_DetachKeepsSessionAlive(t *testing.T) {
 
 	// The pump is still alive: a new follower reads output fed after detach.
 	rdr := sess.follow()
-	defer func() { _ = rdr.Close() }()
+	defer rdr.Close() //nolint:errcheck
 	fp.feed([]byte("after-detach"))
 	buf := make([]byte, 64)
 	n := mustReadWithin(t, rdr, buf)
@@ -53,7 +53,7 @@ func TestSessionGateway_DetachKeepsSessionAlive(t *testing.T) {
 // path: Stop evicts from the registry and kills the shell (followers see EOF).
 func TestSessionGateway_StopRemovesAndKills(t *testing.T) {
 	h, gw, sess, fp := newGatewayWithSession(t)
-	defer func() { _ = fp.Stop() }()
+	defer fp.Stop() //nolint:errcheck
 
 	require.NoError(t, gw.Stop(nil, nil))
 
@@ -67,7 +67,7 @@ func TestSessionGateway_StopRemovesAndKills(t *testing.T) {
 // stdin and Read returns pumped output via the gateway's follower.
 func TestSessionGateway_ReadWrite(t *testing.T) {
 	_, gw, _, fp := newGatewayWithSession(t)
-	defer func() { _ = fp.Stop() }()
+	defer fp.Stop() //nolint:errcheck
 
 	// Write forwards to the pty's stdin.
 	in := []byte("echo hi\n")
@@ -96,10 +96,10 @@ func TestSessionGateway_ReadWrite(t *testing.T) {
 // second still-attached follower keeps the session non-idle.
 func TestSessionGateway_DoubleDetachSafe(t *testing.T) {
 	_, gw, sess, fp := newGatewayWithSession(t)
-	defer func() { _ = fp.Stop() }()
+	defer fp.Stop() //nolint:errcheck
 
 	other := sess.follow() // a second viewer stays attached
-	defer func() { _ = other.Close() }()
+	defer other.Close()    //nolint:errcheck
 
 	gw.detach()
 	gw.detach() // must be a no-op the second time

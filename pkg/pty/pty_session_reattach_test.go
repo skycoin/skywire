@@ -43,7 +43,7 @@ func TestSessionReattach_ReplaysMissedOutput(t *testing.T) {
 	h := &Host{sessions: newSessionRegistry()}
 
 	gw1, sess, fp := startFakeSession(t, h, owner)
-	defer func() { _ = fp.Stop() }()
+	defer fp.Stop() //nolint:errcheck
 
 	// Stream drops.
 	gw1.detach()
@@ -97,7 +97,7 @@ func TestSessionReattach_RejectsForeignOwner(t *testing.T) {
 	h := &Host{sessions: newSessionRegistry()}
 
 	_, sess, fp := startFakeSession(t, h, ownerA)
-	defer func() { _ = fp.Stop() }()
+	defer fp.Stop() //nolint:errcheck
 
 	gwB := newSessionPtyGateway(h, ownerB)
 	require.ErrorIs(t, gwB.Attach(&sess.id, nil), ErrSessionNotOwned)
@@ -113,7 +113,7 @@ func TestStartSession_ReturnsID(t *testing.T) {
 	var sid string
 	require.NoError(t, gw.StartSession(&CommandReq{Name: testShell()}, &sid))
 	require.NotEmpty(t, sid)
-	defer func() { _ = gw.Stop(nil, nil) }()
+	defer gw.Stop(nil, nil) //nolint:errcheck
 
 	got, ok := h.sessions.get(sid)
 	require.True(t, ok)

@@ -273,7 +273,7 @@ func TestHost_PersistentSessionReattach(t *testing.T) {
 
 	// Drop the stream WITHOUT Stop — the shell must survive for reattach.
 	cancel1()
-	_ = connC1.Close()
+	connC1.Close() //nolint:errcheck,gosec
 	require.False(t, sess.isClosed(), "a dropped stream must not kill the shell")
 	_, ok = host.sessions.get(sid)
 	require.True(t, ok, "session must stay registered after a stream drop")
@@ -295,7 +295,7 @@ func TestHost_PersistentSessionReattach(t *testing.T) {
 	require.False(t, ok, "Stop must evict the session from the registry")
 
 	cancel2()
-	_ = connC2.Close()
+	connC2.Close() //nolint:errcheck,gosec
 }
 
 // readContains reads from ptyC until it has seen marker or the deadline passes.
