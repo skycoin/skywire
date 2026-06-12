@@ -258,7 +258,7 @@ func TestHost_PersistentSessionReattach(t *testing.T) {
 	// `cat` keeps the shell alive (blocked on stdin) yet exits promptly when
 	// Stop closes the pty (stdin EOF) — unlike `sleep`, which would make Stop's
 	// cmd.Wait block for the full duration.
-	sid, err := ptyC1.StartSession(DefaultCmd, []string{"-c", "echo REPLAY_MARKER; cat"}, sz, nil)
+	sid, err := ptyC1.StartSession(DefaultCmd, []string{"-c", "cat"}, sz, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, sid)
 
@@ -268,8 +268,16 @@ func TestHost_PersistentSessionReattach(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, cipher.PubKey{}, sess.ownerPK)
 
-	require.True(t, readContains(t, ptyC1, "REPLAY_MARKER", 5*time.Second),
-		"first connection should see the shell's output")
+	// Produce the marker by WRITING it (cat echoes stdin back), not via a
+	// startup `echo`: a startup echo can be pumped into the ring before
+	// follow() captures the follower's start offset, so the first connection
+	// (which doesn't replay) races to see it — flaky under -race on CI. A write
+	// happens strictly after the follower is attached, so its echo is always in
+	// view here AND buffered in the ring for the reattach replay below.
+	_, werr := ptyC1.Write([]byte("REPLAY_MARKER\n"))
+	require.NoError(t, werr)
+	require.True(t, readContains(t, ptyC1, "REPLAY_MARKER", 30*time.Second),
+		"first connection should see the echoed marker")
 
 	// Drop the stream WITHOUT Stop — the shell must survive for reattach.
 	cancel1()
@@ -287,7 +295,7 @@ func TestHost_PersistentSessionReattach(t *testing.T) {
 	ptyC2, err := NewPtyClient(connC2)
 	require.NoError(t, err)
 	require.NoError(t, ptyC2.Attach(sid))
-	require.True(t, readContains(t, ptyC2, "REPLAY_MARKER", 5*time.Second),
+	require.True(t, readContains(t, ptyC2, "REPLAY_MARKER", 30*time.Second),
 		"reattach must replay the output produced before the drop")
 
 	require.NoError(t, ptyC2.Stop())
