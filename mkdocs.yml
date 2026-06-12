@@ -67,6 +67,7 @@ nav:
   - Guides: guides/README.md
   - Command Reference: skywire/README.md
   - Apps:
+      - Overview: apps-overview.md
       - PTY:
           - pty/README.md
           - pty/skywire-pty.md
