@@ -633,7 +633,14 @@ func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
 //   - Otherwise we fetch via FetchServiceURL and write the response through
 //     to the bbolt cache for the next call.
 //   - On fetch failure, a stale cached entry is returned as a last resort
-//     rather than propagating an empty string.
+//     rather than propagating an empty string — UNLESS the caller passed
+//     cacheFilesAge == 0, which signals "I want fresh data, no fallback".
+//     A loud failure is better than a silent stale response for callers
+//     that explicitly opted out of caching (e.g. nightly reward calcs
+//     that script against today's date and have no way to detect that
+//     the body they got was yesterday's).
+//   - When a stale entry IS returned, a warning is logged so callers
+//     who didn't opt out can still notice the data isn't fresh.
 //
 // Returns the response body as a string, or "" if every path failed and
 // there was no cache to fall back on. Errors are logged at debug level.
@@ -652,9 +659,14 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 	body, err := FetchServiceURL(cmdFlags, thisurl)
 	if err != nil {
 		logger.Debugf("FetchCachedServiceURL: all fetch paths failed for %s: %v", thisurl, err)
-		// Last-ditch: return stale cache if we have one.
-		if cache != nil {
+		// Last-ditch: return stale cache if we have one, but only when
+		// the caller hasn't explicitly opted out of caching. cacheFilesAge
+		// == 0 means "fresh only, don't lie to me with yesterday's data";
+		// honoring that here keeps --cache-age 0 semantically meaningful
+		// even when the fresh-fetch chain has failed.
+		if cache != nil && cacheFilesAge > 0 {
 			if e, ok := cache.Get(thisurl); ok {
+				logger.Warnf("FetchCachedServiceURL: fresh fetch failed for %s; serving stale cache (data may be out of date)", thisurl)
 				return string(e.Body)
 			}
 		}
