@@ -2,11 +2,7 @@
 
 [← skywire app](../README.md)
 
-```
-┌─┐┬┌─┬ ┬┌─┐┌─┐┌─┐┬┌─┌─┐
-└─┐├┴┐└┬┘└─┐│ ││  ├┴┐└─┐
-└─┘┴ ┴ ┴ └─┘└─┘└─┘┴ ┴└─┘
-```
+skywire socks5 proxy — pair of server (serve) and client (client) subcommands
 
 ## Usage
 
@@ -14,12 +10,10 @@
 skywire app skysocks
 ```
 
-## Flags
+## Subcommands
 
-```
-      --port uint16        routing port for communication between app and visor
-      --whitelist string   comma-separated list of public keys allowed to connect (empty = allow all)
-```
+- [client](client/README.md) — Run the skysocks client (was: `skywire app skysocks-client`)
+- [serve](serve/README.md) — Run the skysocks server (was: `skywire app skysocks`)
 
 ## Global Flags
 

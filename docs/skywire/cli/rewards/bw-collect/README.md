@@ -2,18 +2,28 @@
 
 [← skywire cli rewards](../README.md)
 
-Fetches per-visor bandwidth data from TPD and records daily bandwidth.
+Fetches per-transport bandwidth data from TPD and records the daily
+per-edge sent totals so the reward calculator can credit each visor
+only for the bytes it actually sent — and only when the sender itself
+is reward-eligible. Counterparty eligibility is irrelevant under the
+sender-pays model: an eligible visor's transport to an ineligible peer
+still earns the eligible side credit for what it sent.
 
 This command:
 1. Fetches all transport metrics from TPD /metrics?days=1&bandwidth=true&edges=true
 2. Builds a PK→IP map from hardware surveys to detect same-LAN transports
-3. Excludes bandwidth from transports where both edges share the same external IP
-4. Aggregates remaining bandwidth per visor
-5. Writes hist/YYYY-MM-DD_bandwidth.json as map[string]uint64 (pk → daily bytes)
-6. Caches results in /tmp/tpd_bandwidth.json with 5-min TTL
+3. Excludes transports where both edges share the same external IP (same-LAN sybil)
+4. For each remaining transport, records (a, b, sent_a, sent_b) where
+   sent_a = min(A.Sent, B.Recv) and sent_b = min(B.Sent, A.Recv)
+   — sender-pays, capped by the receiver's confirmation so a one-sided
+   .sent inflation cannot pump credit
+5. Writes hist/YYYY-MM-DD_bandwidth.json as the v2 BandwidthData schema
+6. Caches the raw transport list in /tmp/tpd_bandwidth_v2.json (5-min TTL)
 
-Visors below the minimum bandwidth threshold are excluded.
-Designed to be run hourly by the reward service.
+The minimum-bandwidth filter and counterparty-eligibility filter are
+both applied later by the reward calculator — bw-collect does not have
+the eligibility set at run time and the data is needed pre-filter for
+sender-side aggregation. Designed to be run hourly by the reward service.
 
 ## Usage
 
@@ -29,6 +39,8 @@ skywire cli rewards bw-collect
   -p, --hist string     path to history directory for daily files (default "hist")
   -b, --min-bw uint     minimum bandwidth in bytes to qualify (default 64)
   -l, --lpath string    path to hardware surveys (for same-LAN detection) (default "log_collecting")
+      --days int        TPD ?days= window to fetch (max 35); only the entries whose Date matches --date are counted (default 1)
+      --date string     UTC date the output file is named for and the only Daily entry counted (default: today)
       --rpc string      RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
       --no-cxo          skip CXO subscriber-cache step
       --no-rpc          skip visor RPC (DmsgHTTP) step

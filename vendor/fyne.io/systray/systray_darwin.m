@@ -289,11 +289,19 @@ NSMenuItem *find_menu_item(NSMenu *ourMenu, NSNumber *menuId) {
 
 - (void)show_menu
 {
-  self->statusItem.button.highlighted = YES;
-  [self->menu popUpMenuPositioningItem:nil
-                            atLocation:NSMakePoint(0, 0)
-                                inView:self->statusItem.button];
-  self->statusItem.button.highlighted = NO;
+  // Attach the menu and synthesize a click so AppKit positions it natively,
+  // then detach it in menuDidClose: so the next click reaches the button
+  // action (and the Go tap handlers) again.
+  self->statusItem.menu = self->menu;
+  [self->statusItem.button performClick:nil];
+}
+
+- (void)menuDidClose:(NSMenu *)menu {
+  // Defer the detach so we don't pull the menu out from under AppKit
+  // while it is still tearing the menu down.
+  dispatch_async(dispatch_get_main_queue(), ^{
+    self->statusItem.menu = nil;
+  });
 }
 
 - (void) show_menu_item:(NSNumber*) menuId

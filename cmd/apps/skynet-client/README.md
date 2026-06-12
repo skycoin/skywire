@@ -6,8 +6,7 @@ SkyNet client connects to remote SkyNet servers and forwards their ports to loca
 
 The SkyNet client is a visor-native application that:
 - Connects to remote SkyNet servers via Skywire transports
-- Forwards remote ports to local addresses
-- Supports both HTTP and raw TCP forwarding modes
+- Forwards a remote TCP port to a local address (protocol-agnostic)
 - Can run multiple instances simultaneously
 
 ## Usage
@@ -21,7 +20,7 @@ The SkyNet client is controlled via `skywire cli skynet`:
 skywire cli skynet start --pk <server-public-key> --remote 8080 --local 9000
 
 # Use raw TCP mode (for non-HTTP traffic like databases, SSH, etc.)
-skywire cli skynet start --pk <server-pk> --remote 3306 --local 3306 --raw-tcp
+skywire cli skynet start --pk <server-pk> --remote 3306 --local 3306
 
 # With custom name
 skywire cli skynet start --pk <server-pk> --remote 8080 --local 9000 --name my-connection
@@ -49,21 +48,9 @@ SkyNet clients can be configured in `skywire-config.json` under the apps section
   "name": "skynet-client",
   "args": ["--pk", "02abc...", "--remote", "8080", "--local", "9000"],
   "auto_start": false,
-  "port": 47
+  "port": 57
 }
 ```
-
-## Forwarding Modes
-
-### HTTP Mode (default)
-Best for web servers and HTTP-based services. Handles request-response patterns efficiently.
-
-### Raw TCP Mode (`--raw-tcp`)
-Best for:
-- Database connections (MySQL, PostgreSQL)
-- SSH tunneling
-- Streaming protocols
-- Any non-HTTP TCP traffic
 
 ## Example: Accessing a Remote Web Server
 
@@ -71,7 +58,7 @@ Best for:
 # On the server side (remote visor)
 # Start a local web server and expose it via SkyNet
 python -m http.server 8080
-skywire cli skynet srv start --port 8080
+skywire cli skynet srv start --ports 8080
 
 # On the client side (your visor)
 SERVER_PK="02abc..."  # Server's public key

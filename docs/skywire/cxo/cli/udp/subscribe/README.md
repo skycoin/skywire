@@ -7,7 +7,7 @@ Subscribe to a feed via UDP connection
 ## Usage
 
 ```
-skywire cxo cli udp subscribe <address> <public-key>
+skywire cxo cli udp subscribe <public-key>@<address> | <address> <public-key>
 ```
 
 ## Global Flags

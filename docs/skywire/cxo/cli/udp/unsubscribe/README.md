@@ -7,7 +7,7 @@ Unsubscribe from a feed via UDP connection
 ## Usage
 
 ```
-skywire cxo cli udp unsubscribe <address> <public-key>
+skywire cxo cli udp unsubscribe <public-key>@<address> | <address> <public-key>
 ```
 
 ## Global Flags

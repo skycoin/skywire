@@ -2,13 +2,19 @@
 
 [← skywire cli visor hv](../README.md)
 
-Change the password for the hypervisor UI's "admin" account.
+Set the password for the hypervisor UI's "admin" account.
 Mirrors the /api/change-password endpoint the UI uses, but without
 the HTTP session check (RPC is local-only and already privileged).
 
-Both --old and --new are required. Use the value-only form (avoid
-shell history capturing the password) by sourcing them from an
-env-var or a process-substitution.
+Normal change: --old and --new are both required.
+
+--force sets --new without the old password — to reset a forgotten
+password, or to set the password for the first time from the CLI
+(creating the "admin" account if none exists, so you don't need the
+UI's create-account page). All existing sessions are invalidated.
+
+Avoid shell history capturing the password by sourcing the values
+from an env-var or a process-substitution.
 
 ## Usage
 
@@ -19,8 +25,9 @@ skywire cli visor hv passwd
 ## Flags
 
 ```
-      --new string   new password (prompts if unset)
-      --old string   current password (prompts if unset)
+      --force        set --new without the old password (reset a forgotten password, or first-time set)
+      --new string   new password
+      --old string   current password (required unless --force)
 ```
 
 ## Global Flags

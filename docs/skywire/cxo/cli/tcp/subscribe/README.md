@@ -7,7 +7,7 @@ Subscribe to a feed via TCP connection
 ## Usage
 
 ```
-skywire cxo cli tcp subscribe <address> <public-key>
+skywire cxo cli tcp subscribe <public-key>@<address> | <address> <public-key>
 ```
 
 ## Global Flags

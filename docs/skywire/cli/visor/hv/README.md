@@ -19,12 +19,11 @@ skywire cli visor hv
 - [cpk](cpk/README.md) — Public key of remote hypervisor(s) set in config
 - [disable](disable/README.md) — Disable hypervisor UI at runtime
 - [enable](enable/README.md) — Enable hypervisor UI at runtime
-- [ls](ls/README.md) — List visors connected to this hypervisor
-- [passwd](passwd/README.md) — Change the hypervisor UI admin password
+- [ls](ls/README.md) — List visors connected to this hypervisor (default: one section per hypervisor)
+- [passwd](passwd/README.md) — Set the hypervisor UI admin password
 - [pk](pk/README.md) — Public key of remote hypervisor(s)
 - [rm](rm/README.md) — Disconnect from a remote hypervisor at runtime
 - [status](status/README.md) — Check if hypervisor is enabled
-- [tree](tree/README.md) — Tree view of visors per hypervisor (local + direct sub-hypervisors)
 - [tui](tui/README.md) — Hypervisor terminal UI
 - [ui](ui/README.md) — Open Hypervisor UI in default browser
 

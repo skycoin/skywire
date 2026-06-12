@@ -10,13 +10,13 @@ To expose a local port over the Skywire network:
 
 ```bash
 # Start a server exposing local port 8080
-skywire cli skynet srv start --port 8080
+skywire cli skynet srv start --ports 8080
 
 # Start with a custom name
-skywire cli skynet srv start --port 3000 --name my-web-server
+skywire cli skynet srv start --ports 3000 --name my-web-server
 
 # Restrict access to specific public keys (whitelist)
-skywire cli skynet srv start --port 8080 --wl 02abc...,03def...
+skywire cli skynet srv start --ports 8080 --whitelist 02abc...,03def...
 ```
 
 Check server status:
@@ -24,11 +24,9 @@ Check server status:
 skywire cli skynet srv status
 ```
 
-Stop a server:
+Stop a server (by instance name, default `skynet-<first-port>`):
 ```bash
 skywire cli skynet srv stop --name skynet-8080
-# Or stop by port
-skywire cli skynet srv stop --port 8080
 ```
 
 ## Connecting with SkyNet Client
@@ -39,8 +37,8 @@ To forward a remote SkyNet server port to your localhost:
 # Connect to a remote server and forward to local port
 skywire cli skynet start --pk <server-public-key> --remote 8080 --local 9000
 
-# Use raw TCP mode (for non-HTTP traffic)
-skywire cli skynet start --pk <server-pk> --remote 3306 --local 3306 --raw-tcp
+# A non-HTTP service (database, SSH, …) works the same way
+skywire cli skynet start --pk <server-pk> --remote 3306 --local 3306
 ```
 
 This makes the remote service available at `localhost:9000`.
@@ -63,7 +61,7 @@ On the server visor:
 python -m http.server 8080
 
 # Expose it via SkyNet
-skywire cli skynet srv start --port 8080
+skywire cli skynet srv start --ports 8080
 ```
 
 On the client visor:

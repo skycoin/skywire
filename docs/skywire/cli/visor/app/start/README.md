@@ -13,8 +13,9 @@ skywire cli visor app start <name>
 ## Flags
 
 ```
-      --external   force external launcher
-      --internal   force internal launcher
+      --external                force external launcher
+      --internal                force internal launcher
+      --routing-policy string   per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm. Installed before the app starts; backend dispatched by file extension. Pass an empty string or "none" to clear a previously-installed override.
 ```
 
 ## Global Flags

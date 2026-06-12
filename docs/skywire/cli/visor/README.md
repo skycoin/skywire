@@ -39,8 +39,7 @@ skywire cli visor
 ## Flags
 
 ```
-      --geoip string   url of geoip service (default "http://ip.skycoin.com")
-      --rpc string     RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
 ```
 
 ## Global Flags
