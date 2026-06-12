@@ -2,6 +2,7 @@
 package pty
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -219,6 +220,124 @@ func TestHost(t *testing.T) {
 	delWhitelistA()
 	delWhitelistB()
 	env.Shutdown()
+}
+
+// TestHost_PersistentSessionReattach drives the full persistence path over the
+// real RPC wire: StartSession returns an id, a dropped stream leaves the shell
+// running (not killed), and a fresh connection Attaches by id and replays the
+// buffered output. This complements the deterministic gateway/registry unit
+// tests by confirming the StartSession/Attach RPC plumbing end to end.
+func TestHost_PersistentSessionReattach(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("pty reattach test is unix-only")
+	}
+
+	env := dmsgtest.NewEnv(t, dmsgtest.DefaultTimeout)
+	defaultConf := dmsg.Config{MinSessions: 2}
+	require.NoError(t, env.Startup(dmsgtest.DefaultTimeout, 2, 2, &defaultConf))
+	t.Cleanup(env.Shutdown)
+
+	dcA := env.AllClients()[0]
+	wlA, delWL := tempWhitelist(t, dcA)
+	defer delWL()
+	require.NoError(t, wlA.Add(dcA.LocalPK()))
+
+	host := NewHost(dcA, wlA)
+	host.SetPersistentSessions(true, time.Minute)
+	hMux := cliEndpoints(host)
+
+	// Connection 1: start a persistent session that emits a marker then idles.
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	connH1, connC1 := net.Pipe()
+	go host.serveConn(ctx1, logging.MustGetLogger("reattach_1"), &hMux, connH1)
+
+	ptyC1, err := NewPtyClient(connC1)
+	require.NoError(t, err)
+
+	sz := &WinSize{Rows: 24, Cols: 80}
+	// `cat` keeps the shell alive (blocked on stdin) yet exits promptly when
+	// Stop closes the pty (stdin EOF) — unlike `sleep`, which would make Stop's
+	// cmd.Wait block for the full duration.
+	sid, err := ptyC1.StartSession(DefaultCmd, []string{"-c", "cat"}, sz, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, sid)
+
+	// Registry-tracked under the connection's owner (zero PK — the local pipe
+	// ctx carries none).
+	sess, ok := host.sessions.get(sid)
+	require.True(t, ok)
+	require.Equal(t, cipher.PubKey{}, sess.ownerPK)
+
+	// Produce the marker by WRITING it (cat echoes stdin back), not via a
+	// startup `echo`: a startup echo can be pumped into the ring before
+	// follow() captures the follower's start offset, so the first connection
+	// (which doesn't replay) races to see it — flaky under -race on CI. A write
+	// happens strictly after the follower is attached, so its echo is always in
+	// view here AND buffered in the ring for the reattach replay below.
+	_, werr := ptyC1.Write([]byte("REPLAY_MARKER\n"))
+	require.NoError(t, werr)
+	require.True(t, readContains(t, ptyC1, "REPLAY_MARKER", 30*time.Second),
+		"first connection should see the echoed marker")
+
+	// Drop the stream WITHOUT Stop — the shell must survive for reattach.
+	cancel1()
+	connC1.Close() //nolint:errcheck,gosec
+	require.False(t, sess.isClosed(), "a dropped stream must not kill the shell")
+	_, ok = host.sessions.get(sid)
+	require.True(t, ok, "session must stay registered after a stream drop")
+
+	// Connection 2: reattach by id; the ring replays the marker.
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	connH2, connC2 := net.Pipe()
+	go host.serveConn(ctx2, logging.MustGetLogger("reattach_2"), &hMux, connH2)
+
+	ptyC2, err := NewPtyClient(connC2)
+	require.NoError(t, err)
+	require.NoError(t, ptyC2.Attach(sid))
+	require.True(t, readContains(t, ptyC2, "REPLAY_MARKER", 30*time.Second),
+		"reattach must replay the output produced before the drop")
+
+	require.NoError(t, ptyC2.Stop())
+	_, ok = host.sessions.get(sid)
+	require.False(t, ok, "Stop must evict the session from the registry")
+
+	cancel2()
+	connC2.Close() //nolint:errcheck,gosec
+}
+
+// readContains reads from ptyC until it has seen marker or the deadline passes.
+// Each read runs in its own goroutine with its own buffer so a slow read left
+// blocking past the deadline can't race the caller.
+func readContains(t *testing.T, ptyC *PtyClient, marker string, d time.Duration) bool {
+	t.Helper()
+	deadline := time.Now().Add(d)
+	var acc []byte
+	for time.Now().Before(deadline) {
+		type res struct {
+			b   []byte
+			err error
+		}
+		ch := make(chan res, 1)
+		go func() {
+			b := make([]byte, 4096)
+			n, err := ptyC.Read(b)
+			ch <- res{b[:n], err}
+		}()
+		select {
+		case r := <-ch:
+			acc = append(acc, r.b...)
+			if bytes.Contains(acc, []byte(marker)) {
+				return true
+			}
+			if r.err != nil {
+				return false
+			}
+		case <-time.After(time.Until(deadline)):
+			return bytes.Contains(acc, []byte(marker))
+		}
+	}
+	return bytes.Contains(acc, []byte(marker))
 }
 
 func tempWhitelist(t *testing.T, c *dmsg.Client) (Whitelist, func()) {

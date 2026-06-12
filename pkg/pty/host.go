@@ -35,6 +35,14 @@ type Host struct {
 	cliN  int32
 	connN int32
 
+	// sessions tracks persistent detach/reattach pty sessions. Always
+	// allocated; only used when persistSessions is set. See
+	// pty_session_registry.go.
+	sessions   *sessionRegistry
+	persistMu  sync.Mutex
+	persist    bool
+	sessionTTL time.Duration
+
 	// execPool caches established one-shot Exec sessions keyed by
 	// (remote PK, port, dialer) so repeated `cli pty exec` to the same
 	// peer skip the dial + handshake (the ~10-15s/exec cost). See
@@ -68,7 +76,54 @@ func NewHostWithDialer(dmsgC *dmsg.Client, wl Whitelist, dialer StreamDialer) *H
 	host.dmsgC = dmsgC
 	host.dialer = dialer
 	host.wl = wl
+	host.sessions = newSessionRegistry()
 	return host
+}
+
+// SetPersistentSessions enables (or disables) host-side pty session
+// persistence: when on, an interactive pty's shell survives a dropped stream
+// (the host detaches the follower instead of killing the shell) and lingers in
+// the registry until reattached or GC'd. ttl bounds how long a detached,
+// follower-less session lives before the GC reaps it; ttl <= 0 uses
+// defaultSessionTTL. Off by default — the caller (the visor, from config) opts
+// in, then runs RunSessionGC to start the sweeper.
+func (h *Host) SetPersistentSessions(enable bool, ttl time.Duration) {
+	if ttl <= 0 {
+		ttl = defaultSessionTTL
+	}
+	h.persistMu.Lock()
+	h.persist = enable
+	h.sessionTTL = ttl
+	h.persistMu.Unlock()
+}
+
+// persistentSessions reports whether persistence is enabled, with its TTL.
+func (h *Host) persistentSessions() (bool, time.Duration) {
+	h.persistMu.Lock()
+	defer h.persistMu.Unlock()
+	return h.persist, h.sessionTTL
+}
+
+// RunSessionGC periodically reaps detached/exited persistent sessions until ctx
+// is done. No-op (returns immediately) when persistence isn't enabled. The
+// visor runs this in a goroutine for the lifetime of the pty listeners.
+func (h *Host) RunSessionGC(ctx context.Context) {
+	enabled, ttl := h.persistentSessions()
+	if !enabled {
+		return
+	}
+	t := time.NewTicker(defaultSessionGCTick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			if n := h.sessions.reap(now, ttl); n > 0 {
+				h.log().Debugf("pty session GC reaped %d idle/exited session(s)", n)
+			}
+		}
+	}
 }
 
 // ExecRemote runs a one-shot command on the remote dmsgpty host at
@@ -243,8 +298,9 @@ func (h *Host) ListenAndServe(ctx context.Context, port uint16) error {
 		log = log.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
 		log.Debug("dmsg.Stream accepted.")
 		log = stream.Logger().WithField("dmsgpty", "stream")
+		connCtx := withRemotePK(ctx, rPK)
 		go func() {
-			h.serveConn(ctx, log, &mux, stream)
+			h.serveConn(connCtx, log, &mux, stream)
 			atomic.AddInt32(&h.connN, -1)
 		}()
 	}
@@ -333,8 +389,9 @@ func (h *Host) ListenAndServeNet(ctx context.Context, lis net.Listener, extractP
 
 		logC = logC.WithField("conn_id", atomic.AddInt32(&h.connN, 1))
 		logC.Debug("net.Conn accepted.")
+		connCtx := withRemotePK(ctx, rPK)
 		go func() {
-			h.serveConn(ctx, logC, &mux, conn)
+			h.serveConn(connCtx, logC, &mux, conn)
 			atomic.AddInt32(&h.connN, -1)
 		}()
 	}
@@ -406,6 +463,20 @@ func handleWhitelist(h *Host) handleFunc {
 func handlePty(h *Host) handleFunc {
 	//	return func(ctx context.Context, uri *url.URL, rpcS *rpc.Server) error {
 	return func(ctx context.Context, _ *url.URL, rpcS *rpc.Server) error {
+		// Persistent path: back the gateway with a registry-tracked session
+		// whose pump keeps the shell alive across a dropped stream. On
+		// connection teardown we DETACH (keep the shell) instead of Stop
+		// (kill it); the GC reaps it if no reattach arrives within the TTL.
+		if enabled, _ := h.persistentSessions(); enabled {
+			gw := newSessionPtyGateway(h, remotePKFromCtx(ctx))
+			go func() {
+				<-ctx.Done()
+				gw.detach()
+				h.log().Debug("PTY stream detached (session kept alive).")
+			}()
+			return rpcS.RegisterName(PtyRPCName, gw)
+		}
+		// Classic path: one pty per connection, killed when the stream ends.
 		pty := NewPty()
 		go func() {
 			<-ctx.Done()

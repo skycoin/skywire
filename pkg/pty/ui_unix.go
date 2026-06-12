@@ -8,12 +8,14 @@ import (
 	"github.com/creack/pty"
 )
 
-func (ui *UI) uiStartSize(ptyC *PtyClient) error {
+// uiWinSize returns the initial pty window size and environment for a web
+// terminal. The Start/StartSession/Attach decision is made in ui.go so the
+// persistent-session reconnect logic stays platform-independent.
+func (ui *UI) uiWinSize() (*WinSize, []string, error) {
 	winSize, err := NewWinSize(&pty.Winsize{Rows: wsRows, Cols: wsCols})
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	// UI sessions use xterm-256color as they're accessed via web terminal
-	env := []string{"TERM=xterm-256color"}
-	return ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, winSize, env)
+	return winSize, []string{"TERM=xterm-256color"}, nil
 }
