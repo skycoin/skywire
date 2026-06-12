@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/godbus/dbus/v5/prop"
@@ -21,6 +22,9 @@ func (item *MenuItem) SetIcon(iconBytes []byte) {
 	m, exists := findLayout(int32(item.id))
 	if exists {
 		m.V1["icon-data"] = dbus.MakeVariant(iconBytes)
+		emitItemPropertiesUpdated(int32(item.id), m.V1)
+		// Property-only change; per spec LayoutUpdated isn't required here,
+		// but kept as a fallback for clients that only watch LayoutUpdated.
 		refresh()
 	}
 }
@@ -57,14 +61,34 @@ func copyLayout(in *menuLayout, depth int32) *menuLayout {
 	return &out
 }
 
+// firstGetLayoutDone tracks whether the initial GetLayout response has been served
+// since the last menu reset. libdbusmenu-gtk3 (used by Cinnamon/Xfce/GNOME) requests
+// GetGroupProperties for grandchildren before parents in the first call, causing children
+// to be silently dropped (blank submenus) because parent GtkMenu containers don't exist
+// yet. Returning depth=1 on the first call ensures parents get their GtkMenu containers
+// before grandchildren are introduced in subsequent calls, where the order is correct.
+// After serving depth=1, a goroutine automatically triggers a second GetLayout cycle so
+// submenus populate without requiring user interaction. Multiple goroutines from rapid
+// resets are harmless — they just emit extra LayoutUpdated signals.
+var firstGetLayoutDone bool
+
 // GetLayout is com.canonical.dbusmenu.GetLayout method.
 func (t *tray) GetLayout(parentID int32, recursionDepth int32, propertyNames []string) (revision uint32, layout menuLayout, err *dbus.Error) {
 	initialMenuBuilt.Wait()
 	instance.menuLock.Lock()
 	defer instance.menuLock.Unlock()
 	if m, ok := findLayout(parentID); ok {
+		depth := recursionDepth
+		if !firstGetLayoutDone {
+			firstGetLayoutDone = true
+			depth = 1
+			go func() {
+				time.Sleep(150 * time.Millisecond)
+				refresh()
+			}()
+		}
 		// return copy of menu layout to prevent panic from cuncurrent access to layout
-		return instance.menuVersion, *copyLayout(m, recursionDepth), nil
+		return instance.menuVersion, *copyLayout(m, depth), nil
 	}
 	return
 }
@@ -148,6 +172,13 @@ func (t *tray) AboutToShow(id int32) (needUpdate bool, err *dbus.Error) {
 
 // AboutToShowGroup is com.canonical.dbusmenu.AboutToShowGroup method.
 func (t *tray) AboutToShowGroup(ids []int32) (updatesNeeded []int32, idErrors []int32, err *dbus.Error) {
+	instance.menuLock.RLock()
+	defer instance.menuLock.RUnlock()
+	for _, id := range ids {
+		if m, ok := findLayout(id); ok && len(m.V2) > 0 {
+			updatesNeeded = append(updatesNeeded, id)
+		}
+	}
 	return
 }
 
@@ -193,6 +224,7 @@ type menuLayout = struct {
 
 func addOrUpdateMenuItem(item *MenuItem) {
 	var layout *menuLayout
+	var parentForChildrenDisplayUpdate *menuLayout
 	instance.menuLock.Lock()
 	defer instance.menuLock.Unlock()
 	m, exists := findLayout(int32(item.id))
@@ -210,7 +242,12 @@ func addOrUpdateMenuItem(item *MenuItem) {
 			m, ok := findLayout(int32(item.parent.id))
 			if ok {
 				parent = m
-				parent.V1["children-display"] = dbus.MakeVariant("submenu")
+				if _, already := parent.V1["children-display"]; !already {
+					parent.V1["children-display"] = dbus.MakeVariant("submenu")
+					if parent.V0 != 0 {
+						parentForChildrenDisplayUpdate = parent
+					}
+				}
 			}
 		}
 		parent.V2 = append(parent.V2, dbus.MakeVariant(layout))
@@ -218,6 +255,17 @@ func addOrUpdateMenuItem(item *MenuItem) {
 
 	applyItemToLayout(item, layout)
 	if exists {
+		emitItemPropertiesUpdated(int32(item.id), layout.V1)
+		// Property-only change on an existing item; per spec LayoutUpdated isn't required here,
+		// but kept as a fallback for clients that only watch LayoutUpdated.
+		refresh()
+	} else {
+		// We've added "children-display", that's a property change
+		if parentForChildrenDisplayUpdate != nil {
+			emitItemPropertiesUpdated(parentForChildrenDisplayUpdate.V0, parentForChildrenDisplayUpdate.V1)
+		}
+		// New item appended to a parent's children,
+		// that's a structural change, so LayoutUpdated signal is required
 		refresh()
 	}
 }
@@ -322,6 +370,9 @@ func hideMenuItem(item *MenuItem) {
 	m, exists := findLayout(int32(item.id))
 	if exists {
 		m.V1["visible"] = dbus.MakeVariant(false)
+		emitItemPropertiesUpdated(int32(item.id), m.V1)
+		// Property-only change; per spec LayoutUpdated isn't required here,
+		// but kept as a fallback for clients that only watch LayoutUpdated.
 		refresh()
 	}
 }
@@ -332,7 +383,34 @@ func showMenuItem(item *MenuItem) {
 	m, exists := findLayout(int32(item.id))
 	if exists {
 		m.V1["visible"] = dbus.MakeVariant(true)
+		emitItemPropertiesUpdated(int32(item.id), m.V1)
+		// Property-only change; per spec LayoutUpdated isn't required here,
+		// but kept as a fallback for clients that only watch LayoutUpdated.
 		refresh()
+	}
+}
+
+// emitItemPropertiesUpdated emits the com.canonical.dbusmenu.ItemsPropertiesUpdated
+// signal so desktop clients refresh per-item state (label, enabled, toggle-state,
+// visible, icon-data) without re-querying the whole layout.
+func emitItemPropertiesUpdated(id int32, props map[string]dbus.Variant) {
+	instance.lock.Lock()
+	conn := instance.conn
+	instance.lock.Unlock()
+	if conn == nil {
+		return
+	}
+	err := menu.Emit(conn, &menu.Dbusmenu_ItemsPropertiesUpdatedSignal{
+		Path: menuPath,
+		Body: &menu.Dbusmenu_ItemsPropertiesUpdatedSignalBody{
+			UpdatedProps: []struct {
+				V0 int32
+				V1 map[string]dbus.Variant
+			}{{V0: id, V1: props}},
+		},
+	})
+	if err != nil {
+		log.Printf("systray error: failed to emit items properties updated signal: %v\n", err)
 	}
 }
 
@@ -358,7 +436,6 @@ func refresh() {
 	if err != nil {
 		log.Printf("systray error: failed to emit layout updated signal: %v\n", err)
 	}
-
 }
 
 func resetMenu() {
@@ -366,5 +443,6 @@ func resetMenu() {
 	defer instance.menuLock.Unlock()
 	instance.menu = &menuLayout{}
 	instance.menuVersion++
+	firstGetLayoutDone = false
 	refresh()
 }

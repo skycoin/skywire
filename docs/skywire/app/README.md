@@ -16,13 +16,11 @@ skywire app
 
 ## Subcommands
 
+- [pty](pty/README.md) — Pseudoterminal (interactive shell) server and client
 - [skychat](skychat/README.md) — skywire chat application
-- [skynet-client](skynet-client/README.md) — skywire port forwarding client application
-- [skynet-srv](skynet-srv/README.md) — skywire port forwarding server application
-- [skysocks](skysocks/README.md) — skywire socks5 proxy server application
-- [skysocks-client](skysocks-client/README.md) — skywire socks5 proxy client application
-- [vpn-client](vpn-client/README.md) — skywire vpn client application
-- [vpn-server](vpn-server/README.md) — skywire vpn server application
+- [skynet](skynet/README.md) — skywire port forwarding — pair of server (srv) and client (client) subcommands
+- [skysocks](skysocks/README.md) — skywire socks5 proxy — pair of server (serve) and client (client) subcommands
+- [vpn](vpn/README.md) — skywire VPN — pair of server (serve) and client (client) subcommands
 
 ## Global Flags
 

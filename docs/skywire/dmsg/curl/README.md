@@ -32,7 +32,7 @@ skywire dmsg curl
   -r, --replace            replace existing file with new downloaded
   -t, --try int            download attempts (0 unlimits) (default 1)
   -w, --wait int           time to wait between requests
-  -a, --agent AGENT        identify as AGENT (default "dmsgcurl/v1.3.57-0")
+  -a, --agent AGENT        identify as AGENT (default "dmsgcurl/unknown")
   -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)
 ```
 

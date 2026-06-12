@@ -13,15 +13,16 @@ skywire cli vpn start [pk]
 ## Flags
 
 ```
-      --existing-tp            only use existing transports, don't create new ones
-      --external               force external launcher
-      --geoip string           server public key (default "http://ip.skycoin.com")
-      --internal               force internal launcher
-      --local-route            calculate routes locally instead of using route finder
-  -k, --pk string              server public key
-  -t, --timeout int            starting timeout value in second
-  -v, --verbose                stream the visor's logs scoped to vpn-client (app stdout + tagged router/mux/setup events); ctrl+c stops the vpn and exits
-      --verbose-level string   minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
+      --existing-tp             only use existing transports, don't create new ones
+      --external                force external launcher
+      --geoip string            server public key (default "http://ip.skycoin.com")
+      --internal                force internal launcher
+      --local-route             calculate routes locally instead of using route finder
+  -k, --pk string               server public key
+      --routing-policy string   per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm ("" or "none" clears any previously-installed override)
+  -t, --timeout int             starting timeout value in second
+  -v, --verbose                 stream the visor's logs scoped to vpn-client (app stdout + tagged router/mux/setup events); ctrl+c stops the vpn and exits
+      --verbose-level string    minimum log level when --verbose is set: trace|debug|info|warn|error (default "debug")
 ```
 
 ## Global Flags

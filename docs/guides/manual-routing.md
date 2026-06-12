@@ -14,7 +14,7 @@ connect. Manual routing is an advanced feature for specific use cases._
 First, list existing routes to find an available route ID:
 
 ```bash
-skywire cli visor route ls
+skywire cli route ls
 ```
 
 Create an app/consume rule from your visor to a remote visor:
@@ -27,7 +27,7 @@ LOCAL_PK=$(skywire cli visor pk)
 REMOTE_PK="02..." # VPN server, proxy server, or any visor
 
 # Create consume rule
-skywire cli visor route add a \
+skywire cli route add a \
   -i 1 \              # route ID (increment for each route)
   -l $LOCAL_PK \      # local public key
   -m 43 \             # local port (app-specific: 43=VPN client, 13=proxy client)
@@ -57,7 +57,7 @@ route's local/remote PK and ports match the app's connection requirements.
 Example — VPN client using manual route:
 ```bash
 # 1. Create route with local port 43, remote port 44
-skywire cli visor route add a -i 1 -l $LOCAL_PK -m 43 -p $VPN_SERVER_PK -q 44
+skywire cli route add a -i 1 -l $LOCAL_PK -m 43 -p $VPN_SERVER_PK -q 44
 
 # 2. Start VPN client - it will automatically use route ID 1
 skywire cli vpn start $VPN_SERVER_PK
@@ -72,7 +72,7 @@ Multi-hop routes require coordination between visors. This example creates a 2-h
 **On Visor A (source):**
 ```bash
 # Create forward rule to visor B
-skywire cli visor route add c \
+skywire cli route add c \
   -i 1 \
   -j 2 \              # next route ID (on visor B)
   -k $TRANSPORT_ID \  # transport ID to visor B
@@ -85,7 +85,7 @@ skywire cli visor route add c \
 **On Visor B (intermediary):**
 ```bash
 # Create intermediary forward rule to visor C
-skywire cli visor route add b \
+skywire cli route add b \
   -i 2 \
   -j 3 \              # next route ID (on visor C)
   -k $TRANSPORT_ID    # transport ID to visor C
@@ -94,7 +94,7 @@ skywire cli visor route add b \
 **On Visor C (destination):**
 ```bash
 # Create consume rule
-skywire cli visor route add a \
+skywire cli route add a \
   -i 3 \
   -l $VISOR_C_PK \
   -m 44 \
@@ -107,10 +107,10 @@ skywire cli visor route add a \
 Get transport IDs for multi-hop routing:
 ```bash
 # List all transports
-skywire cli visor tp ls
+skywire cli tp ls
 
 # Find specific transport by remote public key
-skywire cli visor tp ls | grep $REMOTE_PK
+skywire cli tp ls | grep $REMOTE_PK
 ```
 
 ## Route Finder (Automatic Multi-Hop Discovery)
@@ -119,13 +119,13 @@ Query the route finder to discover available multi-hop paths:
 
 ```bash
 # Find routes between two visors
-skywire cli visor route find $SOURCE_PK $DEST_PK
+skywire cli route find $SOURCE_PK $DEST_PK
 
 # With custom hop limits
-skywire cli visor route find $SOURCE_PK $DEST_PK --min 2 --max 3
+skywire cli route find $SOURCE_PK $DEST_PK --min 2 --max 3
 
 # Find routes from local visor to destination (auto-detects local PK)
-skywire cli visor route find $DEST_PK
+skywire cli route find $DEST_PK
 ```
 
 The route finder returns the optimal path, which you can then configure manually using the commands above.
@@ -134,24 +134,24 @@ The route finder returns the optimal path, which you can then configure manually
 
 List all routing rules:
 ```bash
-skywire cli visor route ls
+skywire cli route ls
 ```
 
 View specific route details:
 ```bash
-skywire cli visor route ls -i <route-id>
+skywire cli route ls -i <route-id>
 ```
 
 Remove a routing rule:
 ```bash
-skywire cli visor route rm <route-id>
+skywire cli route rm <route-id>
 ```
 
 ## Troubleshooting
 
 **Routes not being used:**
 - Verify local/remote ports match app requirements (`skywire cli visor app ls`)
-- Check transports exist to the next hop (`skywire cli visor tp ls`)
+- Check transports exist to the next hop (`skywire cli tp ls`)
 - Ensure route IDs are sequential and unique
 - Verify public keys are correct
 

@@ -13,6 +13,7 @@ skywire dmsg conf
 ## Subcommands
 
 - [gen-keys](gen-keys/README.md) — Generate a new dmsg keypair
+- [pull](pull/README.md) — Update services-config.json dmsg_servers from the discovery, over dmsg
 - [verify-keys](verify-keys/README.md) — Derive and print the public key from a secret key
 
 ## Global Flags
