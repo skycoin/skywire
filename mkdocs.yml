@@ -67,6 +67,7 @@ nav:
   - Guides: guides/README.md
   - Command Reference: skywire/README.md
   - Apps:
+      - Overview: apps-overview.md
       - PTY:
           - pty/README.md
           - pty/skywire-pty.md
@@ -75,6 +76,15 @@ nav:
           - skychat/README.md
           - skychat/skychat-visor.md
           - skychat/standalone-skychat.md
+      - SkyNet:
+          - skynet/README.md
+          - skynet/client.md
+      - SOCKS5 Proxy:
+          - skysocks/README.md
+          - skysocks/client.md
+      - VPN:
+          - vpn/README.md
+          - vpn/client.md
   - Specs: specs/index.md
   - Rewards: rewards/index.md
   - Blog: https://blog.theskywirenetwork.net
