@@ -108,6 +108,10 @@ type HVVisorEntry struct {
 	// sub-hypervisor rather than a direct connection. The value is the PK
 	// of the sub-hypervisor that proxies operations on this visor.
 	ProxiedVia *cipher.PubKey `json:"proxied_via,omitempty"`
+	// Load is the visor's resource snapshot (load average, mem %, disk %),
+	// from summary.Load. Rendered by `hv ls --load`. omitempty so older
+	// sub-hypervisor binaries that don't carry it don't break the JSON shape.
+	Load *LoadStats `json:"load,omitempty"`
 }
 
 func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
@@ -124,6 +128,7 @@ func populateEntryFromSummary(entry *HVVisorEntry, summary *Summary) {
 	entry.ConfigVersion = summary.ConfigVersion
 	entry.RewardAddress = summary.RewardAddress
 	entry.Hostname = summary.Overview.Hostname
+	entry.Load = summary.Load
 	if summary.Health != nil {
 		entry.ServicesHealth = summary.Health.ServicesHealth
 	}

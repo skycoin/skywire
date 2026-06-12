@@ -514,6 +514,10 @@ type Summary struct {
 	ConfigVersion        string                           `json:"config_version"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 	IsPublic             bool                             `json:"is_public"`
+	// Load is a lightweight resource snapshot (load average, mem %, disk %)
+	// for the `hv ls --load` view. omitempty so the field is absent on
+	// summaries from older visors that don't populate it.
+	Load *LoadStats `json:"load,omitempty"`
 }
 
 // HealthInfo carries information about visor's services health.
