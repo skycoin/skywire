@@ -878,6 +878,11 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// compat for every other NewHost caller (cmd/dmsg/pty-host,
 	// sshd CLI, tests).
 	host := pty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
+	// Opt-in persistent pty sessions: an interactive shell survives a dropped
+	// stream and a reconnecting client (the web terminal / `cli pty`) reattaches
+	// by id. Default TTL (0 → host default). The GC sweeper is started in the
+	// pty AppFunc where it has a serving-lifetime ctx.
+	host.SetPersistentSessions(conf.PersistentSessions, 0)
 	// Expose the Host on the visor so the RPC layer can drive Exec
 	// directly (see pkg/visor/rpc_visor.go DmsgPtyExec). Without this
 	// the integrated `skywire cli dmsg pty exec` path is forced
@@ -1268,6 +1273,10 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 		wg := new(sync.WaitGroup)
 		listenerCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
+
+		// Reap detached/exited persistent pty sessions for the serving
+		// lifetime. No-op when PersistentSessions is off.
+		go host.RunSessionGC(listenerCtx)
 
 		// dmsg listener — primary entry. ListenAndServe blocks
 		// until listenerCtx cancels or the listener fails.
