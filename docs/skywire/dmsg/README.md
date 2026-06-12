@@ -7,7 +7,7 @@
  │││││└─┐│ ┬
 ─┴┘┴ ┴└─┘└─┘
 <version>
-built with go1.26.2-X:nodwarf5
+built with go1.26.4-X:nodwarf5
 ```
 
 ## Usage
@@ -23,7 +23,6 @@ skywire dmsg
 - [disc](disc/README.md) — DMSG Discovery Server
 - [http](http/README.md) — DMSG http file server
 - [ip](ip/README.md) — DMSG IP utility
-- [pty](pty/README.md) — DMSG pseudoterminal (pty)
 - [self-ping](self-ping/README.md) — DMSG self-ping: dial own PK through a specific server
 - [server](server/README.md) — DMSG Server
 - [socks](socks/README.md) — DMSG socks5 proxy server & client

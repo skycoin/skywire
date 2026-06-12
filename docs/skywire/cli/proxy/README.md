@@ -14,9 +14,11 @@ skywire cli proxy
 
 - [list](list/README.md) — List servers
 - [mux-add](mux-add/README.md) — Add a leg to an active proxy session's mux'd rg from a piped route
+- [mux-auto](mux-auto/README.md) — Adapt a proxy session's mux legs to a preset off live latency
 - [mux-info](mux-info/README.md) — Show per-mux-leg traffic for an active proxy session
 - [mux-mode](mux-mode/README.md) — Change mux scheduler weighting at runtime
 - [mux-rm](mux-rm/README.md) — Remove a leg from an active proxy session's mux'd route group
+- [mux-set](mux-set/README.md) — Reconcile an active proxy session's mux legs to a target set
 - [server](server/README.md) — Skysocks server (SOCKS5 proxy server)
 - [start](start/README.md) — Start the proxy client
 - [status](status/README.md) — Proxy client status
