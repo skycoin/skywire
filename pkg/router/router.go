@@ -409,6 +409,7 @@ type router struct {
 	rt                 routing.Table
 	rgsNs              map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
 	rgsRaw             map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
+	pending            *pendingPackets                              // frames parked during the rule-save -> route-group-register window (see router_pending.go)
 	rpcSrv             *rpc.Server
 	accept             chan routing.EdgeRules
 	done               chan struct{}
@@ -488,6 +489,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		dmsgC:           dmsgC,
 		rgsNs:           make(map[routing.RouteDescriptor]*NoiseRouteGroup),
 		rgsRaw:          make(map[routing.RouteDescriptor]*RouteGroup),
+		pending:         newPendingPackets(),
 		rpcSrv:          rpc.NewServer(),
 		accept:          make(chan routing.EdgeRules, acceptSize),
 		done:            make(chan struct{}),
