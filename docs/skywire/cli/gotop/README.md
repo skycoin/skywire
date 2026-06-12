@@ -23,6 +23,7 @@ skywire cli gotop
   -l, --layout string    layout: default, minimal, battery, procs, kitchensink (default "default")
       --local            run gotop directly using local gopsutil (skip visor gRPC)
       --mbps             show network in Mbps
+  -M, --multiload        multiload-ng-style display (CPU usage broken down by state: user/sys/iowait/irq/steal + total)
       --once             show single snapshot and exit (text mode, remote only)
   -p, --percpu           show per-cpu usage
   -n, --proc-limit int   number of processes to show in remote mode (default 10)

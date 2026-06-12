@@ -26,6 +26,7 @@ skywire cli
 - [mdisc](mdisc/README.md) — Query DMSG Discovery
 - [pk](pk/README.md) — Public key of the visor (alias for `cli visor pk`)
 - [proxy](proxy/README.md) — Skysocks client
+- [pty](pty/README.md) — Remote shell & filesystem over the skywire pty subsystem (key-addressed, noise-XK)
 - [pv](pv/README.md) — Public Visors
 - [resolver](resolver/README.md) — Embedded .dmsg / .skynet resolving SOCKS5 proxies
 - [reward](reward/README.md) — skycoin reward address or xpub key
@@ -37,8 +38,6 @@ skywire cli
 - [skychat](skychat/README.md) — Skychat messaging
 - [skycoin](skycoin/README.md) — Manage skycoin-daemon / skycoin-web instances on the visor
 - [skynet](skynet/README.md) — Skynet port forwarding
-- [ssh](ssh/README.md) — Open a remote shell or exec a command on a peer visor (ssh-equivalent)
-- [sshd](sshd/README.md) — Run a direct-TCP dmsgpty server (ssh-equivalent daemon)
 - [status](status/README.md) — Summary of visor info (alias for `cli visor info`)
 - [survey](survey/README.md) — system survey
 - [svc](svc/README.md) — Query skywire deployment services
@@ -46,6 +45,7 @@ skywire cli
 - [tps](tps/README.md) — Control embedded Transport Setup Node
 - [ut](ut/README.md) — Query uptime tracker
 - [util](util/README.md) — Bundled utility commands
+- [version](version/README.md) — Show the build version and check the latest available release/commit
 - [visor](visor/README.md) — Query the Skywire Visor
 - [vpn](vpn/README.md) — VPN client
 
