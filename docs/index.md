@@ -35,13 +35,13 @@ extend, or understand a Skywire deployment.
 
 !!! note "Per-app and per-service docs"
 
-    **[PTY](pty/README.md)** and **[Skychat](skychat/README.md)** now have
-    full guides in the **Apps** section above. The remaining visor-hosted
-    apps (skysocks, skynet, vpn) and the deployment services
-    (transport-discovery, route-finder, service-discovery, address-resolver,
-    uptime-tracker) still live alongside the source under
-    [`cmd/apps/`](https://github.com/skycoin/skywire/tree/develop/cmd/apps)
-    and [`cmd/svc/`](https://github.com/skycoin/skywire/tree/develop/cmd/svc),
+    The visor-hosted apps — **[PTY](pty/README.md)**,
+    **[Skychat](skychat/README.md)**, **[SkyNet](skynet/README.md)**,
+    **[SOCKS5 proxy](skysocks/README.md)**, and **[VPN](vpn/README.md)** —
+    now have full guides in the **Apps** section above. The deployment
+    services (transport-discovery, route-finder, service-discovery,
+    address-resolver, uptime-tracker) still live alongside the source under
+    [`cmd/svc/`](https://github.com/skycoin/skywire/tree/develop/cmd/svc)
     and will be integrated here in a follow-up.
 
 ## Other resources
