@@ -8,7 +8,7 @@ The SkyNet server is a visor-native application that:
 - Exposes local TCP ports to other Skywire visors
 - Supports whitelist-based access control
 - Works over STCPR, SUDPH, or DMSG transports
-- Runs on the built-in visor forwarding port (47)
+- Runs on the built-in visor forwarding port (57)
 
 ## Usage
 
@@ -58,7 +58,7 @@ SkyNet servers can be configured in `skywire-config.json` under the apps section
 
 ## How It Works
 
-1. The server registers with the visor's built-in forwarding service on port 47
+1. The server registers with the visor's built-in forwarding service on port 57
 2. Remote clients connect via the skynet-client application
 3. Traffic is forwarded between the remote client and the local TCP port
 4. All communication is encrypted via Skywire's transport layer

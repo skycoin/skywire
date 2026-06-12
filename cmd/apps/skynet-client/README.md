@@ -49,7 +49,7 @@ SkyNet clients can be configured in `skywire-config.json` under the apps section
   "name": "skynet-client",
   "args": ["--pk", "02abc...", "--remote", "8080", "--local", "9000"],
   "auto_start": false,
-  "port": 47
+  "port": 57
 }
 ```
 
