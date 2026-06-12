@@ -56,6 +56,15 @@ func (hv *Hypervisor) proxiedVisorConn(pk cipher.PubKey) (Conn, bool) {
 			return Conn{
 				Addr: hyperConn.Addr,
 				API:  newProxiedVisorAPI(pk, hyperConn.API),
+				// Operator actions (RPC) re-route through the
+				// sub-hypervisor, but the pty stream does NOT: this
+				// hypervisor dials the visor's dmsgpty-host directly
+				// over skynet/dmsg (SkynetFirstUIDialer), same as a
+				// directly-connected visor. The visor's dmsgpty
+				// whitelist admits this hypervisor, so the web
+				// terminal works for sub-hypervisor visors too
+				// instead of 503-ing on the nil-PtyUI guard.
+				PtyUI: setupDmsgPtyUI(hv.dmsgC, pk),
 			}, true
 		}
 	}
