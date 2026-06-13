@@ -264,33 +264,10 @@ func (ce *Client) Serve(ctx context.Context) {
 
 	needInitialPost := true
 
-	// minDiscoverInterval is the floor between discover→dial passes of the
-	// loop below. The select at the bottom of the loop normally blocks until a
-	// session drops or the 1-minute ticker fires, but a session whose dial
-	// fails immediately (bad/unreachable server entry, a handshake that errors
-	// or panics on the spot) can signal ce.errCh as fast as it can be
-	// re-dialed — turning this into a tight loop that re-queries dmsg-discovery
-	// (/all_servers, /entries, /entry, …) thousands of times a second and pins
-	// the discovery service at 100% CPU. A floor between passes bounds it to at
-	// most one discover+dial attempt per interval, no matter how fast errCh
-	// fires, without delaying a healthy reconnect meaningfully.
-	const minDiscoverInterval = 1 * time.Second
-	var lastDiscoverPass time.Time
-
 	for {
 		if isClosed(ce.done) {
 			return
 		}
-		if !lastDiscoverPass.IsZero() {
-			if wait := minDiscoverInterval - time.Since(lastDiscoverPass); wait > 0 {
-				select {
-				case <-ce.done:
-					return
-				case <-time.After(wait):
-				}
-			}
-		}
-		lastDiscoverPass = time.Now()
 		var entries []*disc.Entry
 		var err error
 		ce.log.Debug("Discovering dmsg servers...")
