@@ -31,30 +31,37 @@ func TestParseResolverHost(t *testing.T) {
 	h2 := mustPK(t, hop2)
 	t1 := uuid.MustParse(tp1)
 
+	aliases := map[string]cipher.PubKey{"skywire": dp}
+
 	cases := []struct {
 		name      string
 		host      string
 		suffix    string
+		aliases   map[string]cipher.PubKey
 		wantVhost string
 		wantRoute []RouteLabel
 		wantDest  cipher.PubKey
 		wantPort  uint16
 		wantErr   bool
 	}{
-		{"bare dest", dest + ".dmsg", ".dmsg", "", nil, dp, 80, false},
-		{"vhost + dest", "example.com." + dest + ".dmsg", ".dmsg", "example.com", nil, dp, 80, false},
-		{"pinned server (PK)", "example.com." + hop1 + "." + dest + ".dmsg", ".dmsg", "example.com", []RouteLabel{pkLabel(h1)}, dp, 80, false},
-		{"two-hop skynet PKs (source order)", "site." + hop1 + "." + hop2 + "." + dest + ".skynet", ".skynet", "site", []RouteLabel{pkLabel(h1), pkLabel(h2)}, dp, 80, false},
-		{"tpid hop", "site." + tp1 + "." + dest + ".skynet", ".skynet", "site", []RouteLabel{tpLabel(t1)}, dp, 80, false},
-		{"mixed tpid + pk hop", tp1 + "." + hop2 + "." + dest + ".skynet", ".skynet", "", []RouteLabel{tpLabel(t1), pkLabel(h2)}, dp, 80, false},
-		{"explicit port", dest + ".dmsg:8080", ".dmsg", "", nil, dp, 8080, false},
-		{"wrong suffix", dest + ".onion", ".dmsg", "", nil, cipher.PubKey{}, 0, true},
-		{"bad dest", "notapk.dmsg", ".dmsg", "", nil, cipher.PubKey{}, 0, true},
+		{"bare dest", dest + ".dmsg", ".dmsg", nil, "", nil, dp, 80, false},
+		{"vhost + dest", "example.com." + dest + ".dmsg", ".dmsg", nil, "example.com", nil, dp, 80, false},
+		{"pinned server (PK)", "example.com." + hop1 + "." + dest + ".dmsg", ".dmsg", nil, "example.com", []RouteLabel{pkLabel(h1)}, dp, 80, false},
+		{"two-hop skynet PKs (source order)", "site." + hop1 + "." + hop2 + "." + dest + ".skynet", ".skynet", nil, "site", []RouteLabel{pkLabel(h1), pkLabel(h2)}, dp, 80, false},
+		{"tpid hop", "site." + tp1 + "." + dest + ".skynet", ".skynet", nil, "site", []RouteLabel{tpLabel(t1)}, dp, 80, false},
+		{"mixed tpid + pk hop", tp1 + "." + hop2 + "." + dest + ".skynet", ".skynet", nil, "", []RouteLabel{tpLabel(t1), pkLabel(h2)}, dp, 80, false},
+		{"explicit port", dest + ".dmsg:8080", ".dmsg", nil, "", nil, dp, 8080, false},
+		{"alias dest", "skywire.skynet", ".skynet", aliases, "", nil, dp, 80, false},
+		{"alias dest + port", "skywire.dmsg:8080", ".dmsg", aliases, "", nil, dp, 8080, false},
+		{"alias with hop", hop1 + ".skywire.skynet", ".skynet", aliases, "", []RouteLabel{pkLabel(h1)}, dp, 80, false},
+		{"wrong suffix", dest + ".onion", ".dmsg", nil, "", nil, cipher.PubKey{}, 0, true},
+		{"bad dest", "notapk.dmsg", ".dmsg", nil, "", nil, cipher.PubKey{}, 0, true},
+		{"unknown alias (no map)", "skywire.dmsg", ".dmsg", nil, "", nil, cipher.PubKey{}, 0, true},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			vhost, route, gotDest, port, err := ParseResolverHost(c.host, c.suffix)
+			vhost, route, gotDest, port, err := ParseResolverHost(c.host, c.suffix, c.aliases)
 			if c.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got none")

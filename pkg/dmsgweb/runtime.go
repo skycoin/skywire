@@ -99,6 +99,22 @@ type Config struct {
 	// LeafMinter mints per-host leaf certs. Required when TLSMITM
 	// is true; ignored otherwise.
 	LeafMinter skynetca.LeafMinter
+
+	// LocalPK is this visor's public key, used to detect self-lookups for the
+	// SelfLoopback short-circuit.
+	LocalPK cipher.PubKey
+	// SelfLoopback, when true (the default), serves a request whose destination
+	// is LocalPK from the local service in-process via SelfDial, instead of
+	// dialing out over dmsg back to self (a wasteful, 202-prone round-trip).
+	// Set false to force the full transport path — e.g. to test self-transports.
+	SelfLoopback bool
+	// SelfDial returns an in-process connection to the local service registered
+	// on the given dmsg port. Used only when SelfLoopback short-circuits a
+	// self-destined request. Nil disables the short-circuit.
+	SelfDial func(port uint16) (net.Conn, error)
+	// Aliases maps a destination label to a PK (e.g. "skywire" -> LocalPK), so
+	// "skywire.dmsg" resolves exactly like "<pk>.dmsg".
+	Aliases map[string]cipher.PubKey
 }
 
 // DmsgTarget is a (publicKey, dmsgPort) pair used in fixed-mapping mode.
@@ -249,7 +265,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			if _, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok {
-				vhost, route, dest, _, perr := skynetweb.ParseResolverHost(origHost, cfg.DomainSuffix)
+				vhost, route, dest, _, perr := skynetweb.ParseResolverHost(origHost, cfg.DomainSuffix, cfg.Aliases)
 				if perr != nil {
 					return nil, fmt.Errorf("invalid dmsg hostname %q: %w", origHost, perr)
 				}
@@ -257,6 +273,26 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 				if err != nil {
 					return nil, fmt.Errorf("invalid port: %w", err)
 				}
+
+				// Self-lookup short-circuit: a request whose destination is THIS
+				// visor is served from the local service in-process, rather than
+				// dialing out over dmsg back to ourselves (a wasteful, 202-prone
+				// round-trip). Disabled via SelfLoopback=false to exercise the
+				// full self-transport path for testing.
+				if cfg.SelfLoopback && cfg.SelfDial != nil && dest == cfg.LocalPK && len(route) == 0 {
+					log.WithField("port", port).Debug("SOCKS5 → DMSG self-loopback (in-process)")
+					c, derr := cfg.SelfDial(uint16(port))
+					if derr != nil {
+						return nil, derr
+					}
+					// Wrap so LocalAddr()/RemoteAddr() return *net.TCPAddr —
+					// go-socks5 (request.go:194) does an unchecked assertion
+					// when building the BND reply, AFTER this Dial callback
+					// returns (so the recover above does not cover it), and
+					// would panic on the raw net.Pipe conn otherwise.
+					return &tcpAddrConn{Conn: c}, nil
+				}
+
 				dstAddr := dmsg.Addr{PK: dest, Port: uint16(port)}
 				var stream net.Conn
 				if len(route) > 0 {
