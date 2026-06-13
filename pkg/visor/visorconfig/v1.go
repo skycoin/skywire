@@ -252,6 +252,17 @@ type DmsgWebConfig struct {
 	// either is missing or unreadable; it does not refuse to start.
 	TLSCAPath    string `json:"tls_ca_path,omitempty"`
 	TLSCAKeyPath string `json:"tls_ca_key_path,omitempty"`
+	// SelfLoopback, when nil or true (the default), serves a request whose
+	// destination is THIS visor's own PK from the local service in-process
+	// (net.Pipe) instead of dialing out over dmsg back to self — which dmsg
+	// does not loopback and which is 202-prone. Set false to exercise the
+	// full self-dial transport path (testing self-reachability).
+	SelfLoopback *bool `json:"self_loopback,omitempty"`
+	// Aliases maps a friendly destination label to a PK hex or the literal
+	// "self" (this visor). e.g. {"skywire":"self"} makes "skywire.dmsg"
+	// resolve to the local visor. When unset, "skywire"→self is added by
+	// default; set {"skywire":""} to disable that default.
+	Aliases map[string]string `json:"aliases,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the
@@ -293,6 +304,17 @@ type SkynetWebConfig struct {
 	// either is missing or unreadable; it does not refuse to start.
 	TLSCAPath    string `json:"tls_ca_path,omitempty"`
 	TLSCAKeyPath string `json:"tls_ca_key_path,omitempty"`
+	// SelfLoopback, when nil or true (the default), serves a request whose
+	// destination is THIS visor's own PK from the local service in-process
+	// (net.Pipe) instead of dialing a skynet route back to self. Set false
+	// to exercise the full self-route path (valid for skynet, useful for
+	// testing self-transports).
+	SelfLoopback *bool `json:"self_loopback,omitempty"`
+	// Aliases maps a friendly destination label to a PK hex or the literal
+	// "self" (this visor). e.g. {"skywire":"self"} makes "skywire.skynet"
+	// resolve to the local visor. When unset, "skywire"→self is added by
+	// default; set {"skywire":""} to disable that default.
+	Aliases map[string]string `json:"aliases,omitempty"`
 }
 
 // SkymailBridgeConfig configures the embedded SMTP-aware bridge that
