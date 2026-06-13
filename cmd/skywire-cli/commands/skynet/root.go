@@ -34,6 +34,7 @@ var (
 	startRevMinHops int    // per-direction reverse MinHops override
 	startFwdMux     int    // per-direction forward MuxRoutes override
 	startRevMux     int    // per-direction reverse MuxRoutes override
+	startDirect     bool   // force a direct-transport-only route (create on demand, dial 1-hop)
 )
 
 func init() {
@@ -57,6 +58,7 @@ func init() {
 	startCmd.Flags().IntVar(&startRevMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse only; combine with low/0 --min-hops for direct-upstream + multi-hop-downstream)")
 	startCmd.Flags().IntVar(&startFwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
 	startCmd.Flags().IntVar(&startRevMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (download-heavy: --forward-mux 1 --reverse-mux N)")
+	startCmd.Flags().BoolVar(&startDirect, "direct", false, "force a direct-transport-only route: create the transport to the server on demand, dial 1-hop over it, bypass the route-finder; self-heals if the transport drops (e.g. server restart). For reliable control-plane forwards like the rsn-pprof resolving-proxy bridge.")
 	startCmd.MarkFlagsMutuallyExclusive("internal", "external")
 
 	stopCmd.Flags().StringVarP(&clientName, "name", "n", "", "name of the client instance to stop")
@@ -152,6 +154,10 @@ var startCmd = &cobra.Command{
 
 		if startRevMux > 0 {
 			arguments["--reverse-mux"] = fmt.Sprintf("%d", startRevMux)
+		}
+
+		if startDirect {
+			arguments["--direct"] = true
 		}
 
 		err = rpcClient.DoCustomSetting(appName, arguments)

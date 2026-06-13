@@ -142,17 +142,18 @@ func (c *Config) SetDefaults() {
 
 // DialOptions describes dial options.
 type DialOptions struct {
-	MinForwardRts       int
-	MaxForwardRts       int
-	MinConsumeRts       int
-	MaxConsumeRts       int
-	Retries             int
-	UseExistingTpOnly   bool          // If true, only use routes through existing transports, don't create new ones
-	TransportID         uuid.UUID     // If set, use this specific transport (skips route calculation for direct transports)
-	ForwardHops         []routing.Hop // If set, use these hops for forward path (skips route calculation)
-	ReverseHops         []routing.Hop // If set, use these hops for reverse path (skips route calculation)
-	MuxRoutes           int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
-	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
+	MinForwardRts         int
+	MaxForwardRts         int
+	MinConsumeRts         int
+	MaxConsumeRts         int
+	Retries               int
+	UseExistingTpOnly     bool          // If true, only use routes through existing transports, don't create new ones
+	EnsureDirectTransport bool          // If true, create a direct transport to the destination if none exists, then dial direct-only (the `--direct` foot-gun fix). Implies a 1-hop, route-finder-bypassing dial that self-heals when the transport drops.
+	TransportID           uuid.UUID     // If set, use this specific transport (skips route calculation for direct transports)
+	ForwardHops           []routing.Hop // If set, use these hops for forward path (skips route calculation)
+	ReverseHops           []routing.Hop // If set, use these hops for reverse path (skips route calculation)
+	MuxRoutes             int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
+	ExcludeTransportIDs   []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
 	// MinHops, when > 0, is the per-call minimum hop count constraint.
 	// Overrides Config.MinHops for this dial only — needed by callers
 	// that want a non-direct path even when the visor's global
