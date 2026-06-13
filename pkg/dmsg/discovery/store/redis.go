@@ -459,9 +459,22 @@ func (r *redisStore) GetAllVisorSummaries(ctx context.Context, v2 bool, timeline
 
 func (r *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.Time) map[string]string {
 	daily := make(map[string]string)
+
+	// Pipeline all history days' HGet into ONE round-trip instead of
+	// uptimeHistoryDays sequential calls (per-visor cost across ~1375 visors).
+	dates := make([]string, uptimeHistoryDays)
+	cmds := make([]*redis.StringCmd, uptimeHistoryDays)
+	pipe := r.client.Pipeline()
 	for i := 0; i < uptimeHistoryDays; i++ {
-		date := now.AddDate(0, 0, -i).Format("2006-01-02")
-		countStr, err := r.client.HGet(ctx, uptimeKey(pkHex, date), "count").Result()
+		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
+		cmds[i] = pipe.HGet(ctx, uptimeKey(pkHex, dates[i]), "count")
+	}
+	// Missing keys surface as redis.Nil on the individual command; handled per
+	// command below, so a non-nil Exec error (e.g. redis.Nil) is not fatal here.
+	_, _ = pipe.Exec(ctx) //nolint:errcheck
+
+	for i, cmd := range cmds {
+		countStr, err := cmd.Result()
 		if err != nil {
 			continue
 		}
@@ -473,31 +486,49 @@ func (r *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 		if pct > 100 {
 			pct = 100
 		}
-		daily[date] = fmt.Sprintf("%.2f", pct)
+		daily[dates[i]] = fmt.Sprintf("%.2f", pct)
 	}
 	return daily
 }
 
 func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string {
 	timelines := make(map[string]string)
-	for i := 0; i < uptimeHistoryDays; i++ {
-		date := now.AddDate(0, 0, -i).Format("2006-01-02")
-		tlKey := uptimeTimelineKey(pkHex, date)
 
-		pipe := r.client.Pipeline()
-		cmds := make([]*redis.IntCmd, timelineSlots)
-		for slot := 0; slot < timelineSlots; slot++ {
-			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
-		}
-		_, err := pipe.Exec(ctx)
-		if err != nil {
+	// Fetch every history day's timeline bitmap in ONE MGET, then read the bits
+	// locally, instead of uptimeHistoryDays × timelineSlots (288) individual
+	// GETBIT commands. Each timeline is a Redis string bitmap (written with
+	// SETBIT); GET/MGET returns the raw bytes and we extract the 288 bits in Go.
+	// For the full network (~1375 visors × 7 days) the old path issued ~2.7M
+	// GETBIT ops across ~9.6k pipeline round-trips and made GET /uptimes?v=v3
+	// hang past 60s; this collapses it to one MGET per visor.
+	keys := make([]string, uptimeHistoryDays)
+	dates := make([]string, uptimeHistoryDays)
+	for i := 0; i < uptimeHistoryDays; i++ {
+		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
+		keys[i] = uptimeTimelineKey(pkHex, dates[i])
+	}
+
+	vals, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return timelines
+	}
+
+	for i, v := range vals {
+		s, ok := v.(string)
+		if !ok || s == "" {
 			continue
 		}
-
+		raw := []byte(s)
 		var buf [timelineSlots]byte
 		hasAny := false
 		for slot := 0; slot < timelineSlots; slot++ {
-			if cmds[slot].Val() == 1 {
+			// Redis bit ordering: offset 0 is the MSB of byte 0 (matches GETBIT).
+			byteIdx := slot / 8
+			var bit byte
+			if byteIdx < len(raw) {
+				bit = (raw[byteIdx] >> (7 - uint(slot%8))) & 1
+			}
+			if bit == 1 {
 				buf[slot] = '.'
 				hasAny = true
 			} else {
@@ -505,7 +536,7 @@ func (r *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now tim
 			}
 		}
 		if hasAny {
-			timelines[date] = string(buf[:])
+			timelines[dates[i]] = string(buf[:])
 		}
 	}
 	return timelines
