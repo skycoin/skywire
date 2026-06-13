@@ -147,7 +147,7 @@ func (c *Client) SetAppPortOrLog(port routing.Port) {
 
 // Dial dials the remote visor using `remote`.
 func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
-	return c.dial(remote, 0, 0, 0, 0, 0, 0)
+	return c.dial(remote, 0, 0, 0, 0, 0, 0, false)
 }
 
 // DialWithOptions dials remote with per-call dial options.
@@ -171,8 +171,11 @@ func (c *Client) Dial(remote appnet.Addr) (net.Conn, error) {
 // --forward-min-hops / --reverse-min-hops / --forward-mux /
 // --reverse-mux flags) call this instead of Dial; non-mux callers
 // keep using Dial unchanged.
-func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int) (net.Conn, error) {
-	return c.dial(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux)
+//   - direct: when true, forces a direct-transport-only dial — the router
+//     creates a direct transport to the remote if none exists and dials
+//     1-hop over it, bypassing the route-finder (the `--direct` skynet flag).
+func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct bool) (net.Conn, error) {
+	return c.dial(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
 }
 
 // dial is the common body for Dial + DialWithOptions. When all opts
@@ -180,14 +183,14 @@ func (c *Client) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinH
 // existing wire shape for non-mux callers); otherwise sends the
 // DialWithOptions request so the server-side knows to take the
 // SkywireNetworker per-call-opts path.
-func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int) (net.Conn, error) {
+func (c *Client) dial(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct bool) (net.Conn, error) {
 	var (
 		connID    uint16
 		localPort routing.Port
 		err       error
 	)
-	if muxRoutes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
-		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux)
+	if direct || muxRoutes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
+		connID, localPort, err = c.rpcC.DialWithOptions(remote, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
 	} else {
 		connID, localPort, err = c.rpcC.Dial(remote)
 	}

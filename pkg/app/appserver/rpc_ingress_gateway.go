@@ -151,6 +151,11 @@ type DialOptionsReq struct {
 	ReverseMinHops   int
 	ForwardMuxRoutes int
 	ReverseMuxRoutes int
+	// Direct, when true, forces a direct-transport-only dial: the router
+	// creates a direct transport to the destination if none exists, then dials
+	// 1-hop over it, bypassing the route-finder. The `--direct` skynet flag
+	// sets this. In spirit mutually exclusive with MinHops >= 2.
+	Direct bool
 }
 
 // Dial dials to the remote.
@@ -234,7 +239,7 @@ func (r *RPCIngressGateway) dialInternal(remote appnet.Addr, req *DialOptionsReq
 // mock or future alternative networker silently degrades to single-
 // route, preserving correctness with no extra plumbing).
 func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptionsReq) (net.Conn, error) {
-	if req == nil || (req.MuxRoutes <= 1 && req.MinHops <= 1 &&
+	if req == nil || (!req.Direct && req.MuxRoutes <= 1 && req.MinHops <= 1 &&
 		req.ForwardMinHops <= 1 && req.ReverseMinHops <= 1 &&
 		req.ForwardMuxRoutes <= 1 && req.ReverseMuxRoutes <= 1) {
 		return appnet.DialContext(ctx, remote)
@@ -256,6 +261,18 @@ func dialWithMuxRoutes(ctx context.Context, remote appnet.Addr, req *DialOptions
 	opts.ReverseMinHops = req.ReverseMinHops
 	opts.ForwardMuxRoutes = req.ForwardMuxRoutes
 	opts.ReverseMuxRoutes = req.ReverseMuxRoutes
+	if req.Direct {
+		// Force a 1-hop direct dial that creates the transport on demand and
+		// bypasses the route-finder. Mirrors the policy-layer Fallback="direct"
+		// short-circuit (UseExistingTpOnly + MinHops=1), plus EnsureDirectTransport
+		// so a missing/dropped transport is recreated instead of failing.
+		opts.EnsureDirectTransport = true
+		opts.UseExistingTpOnly = true
+		opts.MinHops = 1
+		opts.MuxRoutes = 0
+		opts.ForwardMuxRoutes = 0
+		opts.ReverseMuxRoutes = 0
+	}
 	return sw.DialContextWithOptions(ctx, remote, opts)
 }
 
