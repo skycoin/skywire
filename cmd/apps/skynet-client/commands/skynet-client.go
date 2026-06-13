@@ -64,6 +64,14 @@ var (
 	// aggregate the bulk payload.
 	fwdMux int
 	revMux int
+	// direct, when set, forces a direct-transport-only route to the server:
+	// the router creates a direct transport if none exists and dials 1-hop
+	// over it, bypassing the route-finder. For control-plane forwards (e.g.
+	// the rsn-pprof resolving-proxy bridge) that need a reliable single hop
+	// and must self-heal when the peer restarts and its transport drops —
+	// avoiding the silent flaky-multihop fallback. Mutually exclusive with
+	// --min-hops >= 2 / --routes > 1 (which exist to force multi-hop).
+	direct bool
 	// reconnect, when set, makes per-accept dial failures retry
 	// indefinitely (with --reconnect-delay between attempts) instead
 	// of dropping the local conn on first failure. Closes the gap
@@ -89,6 +97,7 @@ func init() {
 	RootCmd.Flags().IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override (>=2 forces multi-hop on reverse direction only)")
 	RootCmd.Flags().IntVar(&fwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)")
 	RootCmd.Flags().IntVar(&revMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override (>0 sets reverse leg count; canonical download-heavy shape: --forward-mux 1 --reverse-mux N)")
+	RootCmd.Flags().BoolVar(&direct, "direct", false, "force a direct-transport-only route (create the transport on demand, dial 1-hop, bypass the route-finder); self-heals when the peer restarts")
 	RootCmd.Flags().BoolVar(&reconnect, "reconnect", false, "retry per-accept dial indefinitely instead of dropping local conn on remote-visor failure")
 	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between per-accept dial retries when --reconnect is set")
 }
@@ -126,6 +135,7 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 		fs.IntVar(&revMinHops, "reverse-min-hops", 0, "per-direction reverse MinHops override")
 		fs.IntVar(&fwdMux, "forward-mux", 0, "per-direction forward MuxRoutes override")
 		fs.IntVar(&revMux, "reverse-mux", 0, "per-direction reverse MuxRoutes override")
+		fs.BoolVar(&direct, "direct", false, "force a direct-transport-only route (create on demand, dial 1-hop, bypass route-finder)")
 		fs.BoolVar(&reconnect, "reconnect", false, "retry per-accept dial indefinitely on failure")
 		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between per-accept dial retries")
 		if err := fs.Parse(args); err != nil {
@@ -209,11 +219,14 @@ func RunSkynetClient(ctx context.Context, args []string) error {
 	if revMux > 0 {
 		dialShape += fmt.Sprintf(" reverse-mux=%d", revMux)
 	}
+	if direct {
+		dialShape += " direct(force-direct-tp, ensure-on-demand)"
+	}
 	appCl.Log().Infof("Per-accept dial shape: %s", dialShape)
 
 	rawDial := func() (net.Conn, error) {
-		if routes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
-			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux)
+		if direct || routes > 1 || minHops > 1 || fwdMinHops > 1 || revMinHops > 1 || fwdMux > 1 || revMux > 1 {
+			return appCl.DialWithOptions(connApp, routes, minHops, fwdMinHops, revMinHops, fwdMux, revMux, direct)
 		}
 		return appCl.Dial(connApp)
 	}
