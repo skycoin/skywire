@@ -58,7 +58,10 @@ func classifyRouteLabel(label string) (RouteLabel, bool) {
 // ParseResolverHost parses host into its vhost, routing chain, destination PK
 // and port. suffix must start with "." (e.g. ".dmsg", ".skynet"). It errors
 // when the host doesn't end in suffix or the destination label isn't a valid PK.
-func ParseResolverHost(host, suffix string) (vhost string, route []RouteLabel, dest cipher.PubKey, port uint16, err error) {
+//
+// aliases maps a human-friendly destination label (e.g. "skywire") to a PK, so
+// "skywire.dmsg" resolves exactly like "<pk>.dmsg". Nil/empty disables aliasing.
+func ParseResolverHost(host, suffix string, aliases map[string]cipher.PubKey) (vhost string, route []RouteLabel, dest cipher.PubKey, port uint16, err error) {
 	hostPart, portStr, hasPort := splitHostPort(host)
 	port = 80
 	if hasPort {
@@ -81,10 +84,15 @@ func ParseResolverHost(host, suffix string) (vhost string, route []RouteLabel, d
 	last := len(labels) - 1
 
 	// Destination = the label adjacent to the suffix (must be a PK — a route
-	// always ends at a visor, never a transport).
-	dest, err = parsePKLabel(labels[last])
-	if err != nil {
-		return "", nil, cipher.PubKey{}, 0, fmt.Errorf("invalid destination PK %q: %w", labels[last], err)
+	// always ends at a visor, never a transport). An alias label substitutes
+	// for its mapped PK before the PK parse.
+	if aliasPK, ok := aliases[labels[last]]; ok {
+		dest = aliasPK
+	} else {
+		dest, err = parsePKLabel(labels[last])
+		if err != nil {
+			return "", nil, cipher.PubKey{}, 0, fmt.Errorf("invalid destination PK %q: %w", labels[last], err)
+		}
 	}
 
 	// Walk left while labels classify as routing elements (PK or TpID),

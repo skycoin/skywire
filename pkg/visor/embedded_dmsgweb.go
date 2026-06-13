@@ -21,6 +21,7 @@ package visor
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"time"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -45,10 +47,12 @@ const dmsgWebReadyWait = 20 * time.Second
 // EmbeddedDmsgWeb holds the runtime state for the visor-hosted
 // dmsgweb resolver. Safe for concurrent Start/Stop calls.
 type EmbeddedDmsgWeb struct {
-	dmsgC *dmsg.Client
-	cfg   *visorconfig.DmsgWebConfig
-	log   *logging.Logger
-	stats *dmsgweb.Stats // persists across Start/Stop cycles
+	dmsgC    *dmsg.Client
+	cfg      *visorconfig.DmsgWebConfig
+	log      *logging.Logger
+	stats    *dmsgweb.Stats                      // persists across Start/Stop cycles
+	localPK  cipher.PubKey                       // this visor's PK, for self-loopback + "self" alias
+	selfDial func(port uint16) (net.Conn, error) // in-process serve of a local service port (nil disables loopback)
 
 	mu        sync.Mutex
 	running   bool
@@ -59,13 +63,17 @@ type EmbeddedDmsgWeb struct {
 
 // newEmbeddedDmsgWeb is the constructor used by initEmbeddedDmsgWeb.
 // Stats starts counting from construction, so UI can distinguish
-// "resolver never ran" from "running but idle".
-func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC *dmsg.Client, cfg *visorconfig.DmsgWebConfig, log *logging.Logger) *EmbeddedDmsgWeb {
+// "resolver never ran" from "running but idle". localPK + selfDial
+// enable self-loopback (serving requests for this visor's own PK
+// in-process); pass a zero PK / nil selfDial to disable.
+func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC *dmsg.Client, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), cfg *visorconfig.DmsgWebConfig, log *logging.Logger) *EmbeddedDmsgWeb {
 	return &EmbeddedDmsgWeb{
 		dmsgC:     dmsgC,
 		cfg:       cfg,
 		log:       log,
 		stats:     dmsgweb.NewStats(),
+		localPK:   localPK,
+		selfDial:  selfDial,
 		parentCtx: parentCtx,
 	}
 }
@@ -161,6 +169,21 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		Stats:         e.stats,
 	}
 
+	// Self-loopback: serve requests for THIS visor's own PK in-process
+	// (default on) instead of dialing over dmsg back to self. Aliases map
+	// friendly labels (default "skywire") to a PK or self.
+	if e.selfDial != nil && (e.cfg.SelfLoopback == nil || *e.cfg.SelfLoopback) {
+		cfg.LocalPK = e.localPK
+		cfg.SelfLoopback = true
+		cfg.SelfDial = e.selfDial
+	}
+	aliases, err := resolverAliases(e.cfg.Aliases, e.localPK)
+	if err != nil {
+		e.log.WithError(err).Warn("dmsgweb: invalid alias config; using default skywire->self")
+		aliases = map[string]cipher.PubKey{"skywire": e.localPK}
+	}
+	cfg.Aliases = aliases
+
 	// Optional TLS MITM. CA load failure is non-fatal — the
 	// resolver continues without MITM and logs the reason.
 	if e.cfg.TLSMITM {
@@ -195,6 +218,30 @@ func stringOrDefault(v, d string) string {
 		return d
 	}
 	return v
+}
+
+// resolverAliases turns the config alias map (label → "self" | "<pk-hex>")
+// into a label → PK map for ParseResolverHost. "self" resolves to localPK.
+// The label "skywire" → self is included by default; map it to "" to
+// remove that default, or to another target to override it. Shared by the
+// dmsgweb and skynetweb resolvers.
+func resolverAliases(cfg map[string]string, localPK cipher.PubKey) (map[string]cipher.PubKey, error) {
+	out := map[string]cipher.PubKey{"skywire": localPK}
+	for label, target := range cfg {
+		switch target {
+		case "":
+			delete(out, label) // explicit disable / remove default
+		case "self":
+			out[label] = localPK
+		default:
+			var pk cipher.PubKey
+			if err := pk.Set(target); err != nil {
+				return nil, fmt.Errorf("alias %q: invalid PK %q: %w", label, target, err)
+			}
+			out[label] = pk
+		}
+	}
+	return out, nil
 }
 
 func uintOrDefault(v, d uint) uint {
@@ -238,7 +285,7 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 			Info("Auto-chaining dmsgweb → skynetweb for unified proxy")
 	}
 
-	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, cfg, log)
+	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.conf.PK, v.services.SelfDial, cfg, log)
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime
 	v.initLock.Unlock()

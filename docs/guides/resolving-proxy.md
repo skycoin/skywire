@@ -48,6 +48,32 @@ A resolver hostname is `<public-key>.<suffix>:<port>/<path>`:
 - `.dmsg` addresses may carry routing prefixes, e.g. `<server-pk>.<dest-pk>.dmsg`
   pins a specific dmsg rendezvous server. Use `cli tp route-addr` to build one.
 
+### Your own visor (self-loopback + alias)
+
+Requesting **your own visor's PK** through the proxy
+(`http://<self-pk>.dmsg/`) is served **in-process** — the request is handed
+straight to the local service instead of dialing out over dmsg/skynet back to
+yourself (a wasteful, 202-prone round-trip dmsg doesn't loopback anyway). This
+is on by default.
+
+A friendly **alias** makes this convenient: `skywire` resolves to the local
+visor, so `http://skywire.dmsg/` and `http://skywire.skynet/` both open the
+local visor's port-80 landing page through the resolver.
+
+Both are configurable per resolver (`dmsg_web` / `skynet_web` in the visor
+config):
+
+```json5
+{
+  "self_loopback": true,                 // false → take the real self-route (testing)
+  "aliases": { "skywire": "self" }       // map a label to "self" or a PK hex;
+                                         // {"skywire": ""} removes the default
+}
+```
+
+`self_loopback: false` is mainly useful to test that your visor is reachable
+over its **own** transports — valid for skynet (dmsg won't self-loopback).
+
 ## From `curl`
 
 Use `socks5h://` (the `h` makes the **proxy** resolve the hostname — required for

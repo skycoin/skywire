@@ -47,6 +47,7 @@ type EmbeddedSkynetWeb struct {
 	tpM       *transport.Manager
 	skynetMux **transport.VStreamMux // pointer to visor's mux pointer (late-bound)
 	localPK   cipher.PubKey
+	selfDial  func(port uint16) (net.Conn, error) // in-process serve of a local service port (nil disables loopback)
 	cfg       *visorconfig.SkynetWebConfig
 	log       *logging.Logger
 	stats     *skynetweb.Stats
@@ -58,12 +59,13 @@ type EmbeddedSkynetWeb struct {
 	parentCtx context.Context
 }
 
-func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, tpM *transport.Manager, skynetMuxPtr **transport.VStreamMux, localPK cipher.PubKey, cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
+func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, tpM *transport.Manager, skynetMuxPtr **transport.VStreamMux, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
 	return &EmbeddedSkynetWeb{
 		router:    r,
 		tpM:       tpM,
 		skynetMux: skynetMuxPtr,
 		localPK:   localPK,
+		selfDial:  selfDial,
 		cfg:       cfg,
 		log:       log,
 		stats:     skynetweb.NewStats(),
@@ -158,6 +160,22 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		Stats:         e.stats,
 	}
+
+	// Self-loopback: serve requests for THIS visor's own PK in-process
+	// (default on) instead of dialing a skynet route back to self. Set
+	// self_loopback:false to exercise the real self-route (valid for
+	// skynet). Aliases map friendly labels (default "skywire") to a PK.
+	if e.selfDial != nil && (e.cfg.SelfLoopback == nil || *e.cfg.SelfLoopback) {
+		cfg.LocalPK = e.localPK
+		cfg.SelfLoopback = true
+		cfg.SelfDial = e.selfDial
+	}
+	aliases, err := resolverAliases(e.cfg.Aliases, e.localPK)
+	if err != nil {
+		e.log.WithError(err).Warn("skynetweb: invalid alias config; using default skywire->self")
+		aliases = map[string]cipher.PubKey{"skywire": e.localPK}
+	}
+	cfg.Aliases = aliases
 
 	// Optional TLS MITM mode. Loading the CA can fail (file
 	// missing, permissions, malformed) — those failures are not
@@ -390,7 +408,7 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 		log.Warn("skynet_web configured but router not available; skipping")
 		return nil
 	}
-	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.conf.SkynetWeb, log)
+	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.conf.SkynetWeb, log)
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime
 	v.initLock.Unlock()
