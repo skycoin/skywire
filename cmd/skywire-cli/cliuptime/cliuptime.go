@@ -274,7 +274,7 @@ func fetchEntries(c *cobra.Command, baseURL, version string, visors []string, ca
 	cacheFile := cacheFilePath(cacheDir, baseURL, version, pks)
 	raw := clirpc.FetchCachedServiceURL(c.Flags(), cacheFile, fullURL, cacheAge)
 	if raw == "" {
-		return nil, fmt.Errorf("empty response from %s (all fetch paths failed; see --no-rpc / --no-dmsg / --no-http flags)", fullURL)
+		return nil, fmt.Errorf("empty response from %s (all fetch paths failed; see --no-cxo / --no-rpc / --no-dmsg flags)", fullURL)
 	}
 	var out []uptimestats.VisorSummary
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {

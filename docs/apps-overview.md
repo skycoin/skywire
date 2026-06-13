@@ -20,6 +20,7 @@ another connects to it. They are configured in `skywire-config.json` under
 | Expose/reach a **specific TCP port** on a remote visor | **[SkyNet](skynet/README.md)** | Peer-to-peer port forwarding (web servers, SSH, databases) |
 | Open a **remote shell / transfer files** on a visor | **[PTY](pty/README.md)** | Key-addressed shell + sftp over the pty subsystem |
 | **Chat** with other visors | **[Skychat](skychat/README.md)** | Direct and group messaging |
+| Reach a visor or deployment service **by public key** from a browser / `curl` over dmsg | **[Resolving proxy](guides/resolving-proxy.md)** | `.dmsg` / `.skynet` SOCKS5 resolver (`skywire cli resolver`); the supported way to view deployment-service data without a clearnet hop |
 
 VPN vs. SOCKS5 is the most common decision: the **VPN** captures everything
 at the IP layer (and must run server and client on *different machines*),

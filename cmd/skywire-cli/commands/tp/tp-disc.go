@@ -31,11 +31,10 @@ func init() {
 	discTpCmd.Flags().StringVarP(&tpID, "id", "i", "", "obtain transport of given ID")
 	discTpCmd.Flags().StringVarP(&tpPK, "pk", "p", "", "obtain transports by public key")
 	discTpCmd.Flags().StringVar(&tpdURL, "tpdurl", deployment.Prod.TransportDiscovery, "transport discovery url")
-	discTpCmd.Flags().BoolVar(&tpdHTTP, "http", false, "skip the structured visor RPC and query transport discovery via the fetch chain (DmsgHTTP→DMSG→HTTP)")
-	// Wire the common fetch-path flags (--no-cxo/--no-rpc/--no-dmsg/--no-http)
-	// so this command honors them like every other deployment-service fetch.
-	// FetchServiceURL (used in the fallback below) already reads them; they just
-	// weren't registered here, so `tp disc --no-http` errored "unknown flag".
+	discTpCmd.Flags().BoolVar(&tpdHTTP, "http", false, "skip the structured visor RPC and query transport discovery via the fetch chain (CXO→DmsgHTTP→DMSG)")
+	// Wire the common fetch-path flags (--no-cxo/--no-rpc/--no-dmsg) so this
+	// command honors them like every other deployment-service fetch.
+	// FetchServiceURL (used in the fallback below) reads them.
 	clirpc.RegisterFetchFlags(discTpCmd)
 }
 
@@ -65,7 +64,7 @@ var discTpCmd = &cobra.Command{
 		// Skip the structured visor RPC when --http is set, or when --no-rpc
 		// disables the visor RPC step entirely (consistent with the common
 		// fetch chain). In both cases we fall through to FetchServiceURL, which
-		// itself honors --no-cxo/--no-rpc/--no-dmsg/--no-http.
+		// itself honors --no-cxo/--no-rpc/--no-dmsg.
 		useHTTPQuery := tpdHTTP || clirpc.NoRPC
 
 		// Try RPC first unless HTTP query is requested
