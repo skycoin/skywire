@@ -108,6 +108,23 @@ func (r *router) DialRoutes(
 	// set (symmetric or per-direction). Even if only ReverseMinHops > 1,
 	// downgrading globally to 1 would defeat that constraint for the
 	// reverse direction's route-finder query below.
+	// --direct: ensure a direct transport to the destination exists, creating
+	// one on demand if none is open. This is the self-healing half of the
+	// `--direct` foot-gun fix — when the direct transport drops (peer restart,
+	// etc.) the next dial recreates it instead of silently riding a flaky
+	// multihop route (the route-finder only returns a 1-hop route when a live
+	// direct transport is already known to TPD). After this, isTpdExist(rPK) is
+	// true → baseMinHops downgrades to 1, and UseExistingTpOnly (set alongside
+	// EnsureDirectTransport) bypasses the route-finder → a 1-hop direct dial.
+	if opts != nil && opts.EnsureDirectTransport && !r.isTpdExist(rPK) {
+		for _, nt := range []tptypes.Type{tptypes.STCPR, tptypes.SUDPH, tptypes.DMSG} {
+			if _, sErr := r.tm.SaveTransport(ctx, rPK, nt, transport.LabelAutomatic); sErr == nil {
+				log.WithField("tp_type", nt).WithField("remote", rPK).
+					Debug("--direct: created direct transport on demand")
+				break
+			}
+		}
+	}
 	if r.isTpdExist(rPK) && !opts.AnyMinHopsConstraint() {
 		baseMinHops = 1
 	}
