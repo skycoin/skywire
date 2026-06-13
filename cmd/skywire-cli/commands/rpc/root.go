@@ -359,18 +359,17 @@ var (
 	NoRPC bool
 	// NoDmsg disables the direct DMSG HTTP step in FetchServiceURL.
 	NoDmsg bool
-	// NoHTTP disables the HTTP fallback step in FetchServiceURL.
-	NoHTTP bool
 )
 
-// RegisterFetchFlags adds --no-cxo, --no-rpc, --no-dmsg, and --no-http
-// flags to a command. Call this in init() for any command that uses
-// FetchServiceURL.
+// RegisterFetchFlags adds --no-cxo, --no-rpc, and --no-dmsg flags to a command.
+// Call this in init() for any command that uses FetchServiceURL. There is no
+// plain-HTTP step anymore — deployment services are reached over CXO/DMSG only;
+// for ad-hoc browser access, point the browser at the visor's dmsgweb resolving
+// proxy instead of relying on a clearnet hop.
 func RegisterFetchFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&NoCXO, "no-cxo", false, "skip CXO subscriber-cache step")
 	cmd.Flags().BoolVar(&NoRPC, "no-rpc", false, "skip visor RPC (DmsgHTTP) step")
 	cmd.Flags().BoolVar(&NoDmsg, "no-dmsg", false, "skip direct DMSG HTTP step")
-	cmd.Flags().BoolVar(&NoHTTP, "no-http", false, "skip direct HTTP fallback step")
 }
 
 // isDmsgURL reports whether the given URL is a dmsg:// scheme URL that
@@ -713,16 +712,17 @@ func getCLICacheIfEnabled(cachefile string) *clicache.Cache {
 	return cliCache
 }
 
-// FetchServiceURL fetches a URL from a deployment service using a CXO/DMSG-first
-// chain:
+// FetchServiceURL fetches a URL from a deployment service over a CXO/DMSG-only
+// chain — there is NO plain-HTTP fallback:
 //  0. CXO — read the visor's local subscriber-cache snapshot (no round-trip)
 //  1. RPC — ask the running visor to proxy the request over DMSG (DmsgHTTP RPC)
 //  2. DMSG direct — ephemeral DMSG client (only when --no-rpc)
-//  3. HTTP — direct HTTP, ONLY for services with no DMSG equivalent (e.g.
-//     ip.skycoin.com). The dmsg-mapped deployment services get NO HTTP
-//     fallback — the deprecated plain-HTTP hop is gone for them.
 //
-// Steps can be disabled via --no-cxo, --no-rpc, --no-dmsg, and --no-http flags.
+// The plain-HTTP hop was removed deliberately: deployment services are all
+// dmsg-mapped (see DmsgURLForHTTP), the clearnet fallback was firing
+// erroneously, and there's no value in maintaining it — for ad-hoc browser
+// access to deployment data, point the browser at the visor's dmsgweb resolving
+// proxy. Steps can be disabled via --no-cxo, --no-rpc, and --no-dmsg.
 func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	var lastErr error
 
@@ -809,33 +809,9 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 		}
 	}
 
-	// Step 3: Direct HTTP — last resort, ONLY for services with no DMSG path.
-	// The dmsg-mapped deployment services (sd/tpd/ar/rf/ut/dmsgd) are reachable
-	// over CXO + DMSG and intentionally get NO HTTP fallback: a plain-HTTP hop
-	// through their HTTP edge is the path being deprecated, so a dmsg-mapped
-	// service that fails CXO+DMSG now errors here rather than silently dropping
-	// to clearnet. HTTP survives only for HTTP-only services with no dmsg
-	// equivalent — currently just ip.skycoin.com (the public-IP echo the
-	// proxy/VPN exit-IP check uses; cli visor ip no longer needs it).
-	if !NoHTTP && DmsgURLForHTTP(url) == "" && !isDmsgURL(url) {
-		httpClient := &http.Client{Timeout: 30 * time.Second}
-		resp, err := httpClient.Get(url) //nolint:gosec
-		if err != nil {
-			lastErr = fmt.Errorf("HTTP: %w", err)
-			logger.Debugf("HTTP failed for %s: %v", url, err)
-		} else {
-			defer resp.Body.Close() //nolint:errcheck
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read HTTP response: %w", err)
-			}
-			if resp.StatusCode < 300 {
-				return body, nil
-			}
-			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
-			logger.Debugf("HTTP status %d for %s", resp.StatusCode, url)
-		}
-	}
+	// No plain-HTTP fallback: deployment services are reached over CXO/DMSG
+	// only. A dmsg-mapped service that fails CXO + DMSG errors below rather than
+	// dropping to clearnet.
 
 	if lastErr != nil {
 		return nil, lastErr
