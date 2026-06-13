@@ -137,6 +137,14 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 		clientEntryTTL:              clientEntryTTL,
 	}
 
+	// Per-remote rate limiting FIRST, before RealIP — it keys on the
+	// noise-authenticated dmsg PK in RemoteAddr, which RealIP would overwrite
+	// from a (spoofable) X-Real-IP header. Caps any single client so a
+	// busy-looping dmsg client can't pin the service at 100% CPU. Skipped under
+	// load testing, which deliberately drives high request rates.
+	if !enableLoadTesting {
+		r.Use(newRemoteRateLimiter().middleware)
+	}
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
