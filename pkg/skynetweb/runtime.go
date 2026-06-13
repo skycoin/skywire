@@ -120,6 +120,22 @@ type Config struct {
 	// LeafMinter mints per-host leaf certs. Required when TLSMITM
 	// is true; ignored otherwise.
 	LeafMinter skynetca.LeafMinter
+
+	// LocalPK is this visor's public key, used to detect self-lookups for the
+	// SelfLoopback short-circuit.
+	LocalPK cipher.PubKey
+	// SelfLoopback, when true (the default), serves a request whose destination
+	// is LocalPK from the local service in-process via SelfDial, instead of
+	// routing out over skynet back to ourselves. Set false to force the full
+	// self-route path — e.g. to test self-transports (a legitimate use case).
+	SelfLoopback bool
+	// SelfDial returns an in-process connection to the local service registered
+	// on the given port. Used only when SelfLoopback short-circuits a
+	// self-destined request. Nil disables the short-circuit.
+	SelfDial func(port uint16) (net.Conn, error)
+	// Aliases maps a destination label to a PK (e.g. "skywire" -> LocalPK), so
+	// "skywire.skynet" resolves exactly like "<pk>.skynet".
+	Aliases map[string]cipher.PubKey
 }
 
 // Run starts the SOCKS5 proxy. Blocks until ctx is canceled.
@@ -188,9 +204,26 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				if addrPort != "" && addrPort != "80" {
 					hostWithPort = origHost + ":" + addrPort
 				}
-				vhost, route, dest, hport, err := ParseResolverHost(hostWithPort, cfg.DomainSuffix)
+				vhost, route, dest, hport, err := ParseResolverHost(hostWithPort, cfg.DomainSuffix, cfg.Aliases)
 				if err != nil {
 					return nil, fmt.Errorf("skynet dial: %w", err)
+				}
+
+				// Self-lookup short-circuit: serve a request destined for THIS
+				// visor from the local service in-process instead of routing out
+				// over skynet back to ourselves. SelfLoopback=false forces the
+				// full self-route path (a valid self-transport test).
+				if cfg.SelfLoopback && cfg.SelfDial != nil && dest == cfg.LocalPK && len(route) == 0 {
+					log.WithField("port", hport).Debug("SOCKS5 → skynet self-loopback (in-process)")
+					c, derr := cfg.SelfDial(hport)
+					if derr != nil {
+						return nil, derr
+					}
+					// Wrap so LocalAddr()/RemoteAddr() return *net.TCPAddr —
+					// go-socks5 (request.go:194) does an unchecked assertion
+					// when building the BND reply and would panic on the raw
+					// net.Pipe conn's pipeAddr otherwise.
+					return &tcpAddrConn{Conn: c}, nil
 				}
 
 				done := cfg.Stats.RecordRequest()
