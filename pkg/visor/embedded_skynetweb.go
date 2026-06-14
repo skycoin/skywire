@@ -170,12 +170,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		cfg.SelfLoopback = true
 		cfg.SelfDial = e.selfDial
 	}
-	aliases, err := resolverAliases(e.cfg.Aliases, e.localPK)
-	if err != nil {
-		e.log.WithError(err).Warn("skynetweb: invalid alias config; using default skywire->self")
-		aliases = map[string]cipher.PubKey{"skywire": e.localPK}
-	}
-	cfg.Aliases = aliases
+	cfg.Aliases = resolverAliasMap(e.cfg.Alias, e.localPK)
 
 	// Optional TLS MITM mode. Loading the CA can fail (file
 	// missing, permissions, malformed) — those failures are not
