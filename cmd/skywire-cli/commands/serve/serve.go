@@ -44,6 +44,7 @@ var (
 	serveDmsg         bool
 	serveLanding      bool
 	servePreserveHost bool
+	serveInjectPK     bool
 	serveJSON         bool
 )
 
@@ -59,6 +60,10 @@ func init() {
 			"to --to target. Use when the backend (Caddy / nginx / traefik) dispatches "+
 			"its virtual hosts by Host (e.g. paired with the resolver's subdomain rewrite)")
 	servePortCmd.Flags().StringVar(&serveWhitelist, "whitelist", "", "comma-separated PKs allowed to access this port (empty = allow all)")
+	servePortCmd.Flags().BoolVar(&serveInjectPK, "inject-pk", false,
+		"HTTP mode: inject the authenticated caller's PK as the X-Skywire-Remote-PK header "+
+			"(any client-supplied copy is stripped) so the backend can do per-PK auth. "+
+			"Bind the backend to loopback only — see docs/guides/skynet-website-auth.md")
 
 	servePortLsCmd.Flags().BoolVar(&serveJSON, "json", false, "emit raw JSON")
 	RootCmd.Flags().BoolVar(&serveJSON, "json", false, "emit raw JSON")
@@ -135,6 +140,7 @@ Examples:
 			DMSG:          serveDmsg,
 			ShowOnLanding: serveLanding,
 			PreserveHost:  servePreserveHost,
+			InjectPK:      serveInjectPK,
 		}
 
 		// Resolve --to into the right field. The visor schema has two

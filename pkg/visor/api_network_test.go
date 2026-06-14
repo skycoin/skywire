@@ -8,8 +8,53 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// TestStampSkywireIdentity verifies the anti-spoof contract of the
+// inject_pk forward: a client-supplied X-Skywire-* header is overwritten
+// (never trusted), the authentic PK + transport are set, other headers are
+// untouched, and an unidentifiable peer leaves the PK header absent.
+func TestStampSkywireIdentity(t *testing.T) {
+	var pk cipher.PubKey
+	if err := pk.Set("0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c"); err != nil {
+		t.Fatalf("set pk: %v", err)
+	}
+
+	t.Run("authenticated overwrites a spoofed header", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://backend/", nil)
+		req.Header.Set("X-Skywire-Remote-PK", "deadbeef-forged-by-client") // spoof attempt
+		req.Header.Set("X-Skywire-Transport", "lies")
+		req.Header.Set("X-Other", "keep-me")
+
+		stampSkywireIdentity(req, pk, true, "skynet")
+
+		if got := req.Header.Get("X-Skywire-Remote-PK"); got != pk.Hex() {
+			t.Errorf("PK = %q, want authentic %q", got, pk.Hex())
+		}
+		if got := req.Header.Get("X-Skywire-Transport"); got != "skynet" {
+			t.Errorf("transport = %q, want skynet", got)
+		}
+		if got := req.Header.Get("X-Other"); got != "keep-me" {
+			t.Errorf("unrelated header dropped: %q", got)
+		}
+	})
+
+	t.Run("anonymous strips a spoofed header and sets none", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "http://backend/", nil)
+		req.Header.Set("X-Skywire-Remote-PK", "forged") // must not survive
+
+		stampSkywireIdentity(req, cipher.PubKey{}, false, "dmsg")
+
+		if got := req.Header.Get("X-Skywire-Remote-PK"); got != "" {
+			t.Errorf("PK = %q, want absent for unidentified peer", got)
+		}
+		if got := req.Header.Get("X-Skywire-Transport"); got != "dmsg" {
+			t.Errorf("transport = %q, want dmsg", got)
+		}
+	})
+}
 
 // TestBuildReverseProxy_HostRewriteDefault checks the historical
 // default — preserveHost=false → backend sees Host = target.Host —
