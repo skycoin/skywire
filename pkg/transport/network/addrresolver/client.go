@@ -570,10 +570,14 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 // listener and posts the initial register payload. Called once on initial
 // BindSUDPH and again on every reconnect attempt.
 //
-// The underlying packet listener (c.sudphConn) is created on the first call
-// and reused across reconnects so the local UDP port stays stable — both
-// for AR's record of our public address and for any remote visors that
-// already received our (PK, port) tuple via Resolve.
+// A fresh per-connection packet-filter conn (c.sudphConn) is built on every
+// call. kcp client sockets close their underlying conn on Close (see
+// xtaci/kcp-go sess.go: a session with no listener closes s.conn), so the
+// prior c.sudphConn is already dead by reconnect time and reusing it fails
+// every attempt with "use of closed network connection". The local UDP port
+// is the SHARED listener's — filter.NewConn does not allocate a new port — so
+// it stays stable across rebuilds anyway, both for AR's record of our public
+// address and for remote visors that received our (PK, port) tuple via Resolve.
 func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (net.Conn, LocalAddresses, error) {
 	if c.remoteUDPAddr == "" {
 		// dmsg-only AR with no udp_address in /health. Surface a clear
@@ -585,9 +589,13 @@ func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (n
 		return nil, LocalAddresses{}, err
 	}
 
-	if c.sudphConn == nil {
-		c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
+	// Drop any prior (kcp-closed) conn and build a fresh one. The defensive
+	// Close is a no-op when kcp already closed it and guards against leaking a
+	// filter conn on the rare path where it is still open.
+	if c.sudphConn != nil {
+		_ = c.sudphConn.Close() //nolint:errcheck,gosec
 	}
+	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
 
 	_, localPort, err := net.SplitHostPort(c.sudphConn.LocalAddr().String())
 	if err != nil {
