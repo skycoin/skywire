@@ -437,9 +437,26 @@ the raw per-entry JSON; otherwise entries are pretty-printed as
 			}
 			delta, err := rpcClient.RuntimeLogsSince(cursor)
 			if err != nil {
-				// Transient errors shouldn't kill the stream — log
-				// to stderr and try again next tick.
-				fmt.Fprintf(os.Stderr, "RuntimeLogsSince err: %v\n", err)
+				// net/rpc does NOT auto-reconnect: once the underlying
+				// conn drops (e.g. an idle RPC-socket timeout) every later
+				// call fails forever and the stream silently stalls. Re-dial
+				// so it resumes on the next tick instead of dying quietly.
+				fmt.Fprintf(os.Stderr, "RuntimeLogsSince err: %v; reconnecting\n", err)
+				if nc, derr := clirpc.Client(cmd.Flags()); derr == nil {
+					if c, ok := rpcClient.(interface{ Close() error }); ok {
+						_ = c.Close() //nolint:errcheck
+					}
+					rpcClient = nc
+				} else {
+					fmt.Fprintf(os.Stderr, "reconnect failed: %v\n", derr)
+				}
+				continue
+			}
+			if delta.Latest < cursor {
+				// The entry counter went backwards → the visor restarted.
+				// Re-bootstrap from the fresh buffer instead of waiting
+				// forever for a line number that will never come again.
+				cursor = 0
 				continue
 			}
 			cursor = delta.Latest
