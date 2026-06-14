@@ -16,14 +16,16 @@ import (
 )
 
 var (
-	portLabel       string
-	portDesc        string
-	portSkynet      bool
-	portDmsg        bool
-	portShowLanding bool
-	portProxyAddr   string
-	portLocalPort   int
-	portWhitelist   string
+	portLabel        string
+	portDesc         string
+	portSkynet       bool
+	portDmsg         bool
+	portShowLanding  bool
+	portProxyAddr    string
+	portLocalPort    int
+	portWhitelist    string
+	portPreserveHost bool
+	portInjectPK     bool
 )
 
 func init() {
@@ -35,6 +37,8 @@ func init() {
 	portAddCmd.Flags().StringVar(&portProxyAddr, "proxy-addr", "", "forward to this address (host:port) instead of localhost:<local-port>; on port 80 it also replaces the landing page via reverse proxy")
 	portAddCmd.Flags().IntVar(&portLocalPort, "local-port", 0, "local TCP port to forward (default: same as skynet/dmsg port)")
 	portAddCmd.Flags().StringVar(&portWhitelist, "whitelist", "", "comma-separated PKs allowed to access this port (empty = allow all)")
+	portAddCmd.Flags().BoolVar(&portPreserveHost, "preserve-host", false, "pass the incoming Host header through to the backend (required for vhost backends like Caddy/nginx)")
+	portAddCmd.Flags().BoolVar(&portInjectPK, "inject-pk", false, "HTTP mode: inject the authenticated caller's PK as X-Skywire-Remote-PK (strips any client-supplied copy); bind the backend to loopback only")
 
 	portCmd.AddCommand(portAddCmd)
 	portCmd.AddCommand(portRmCmd)
@@ -130,6 +134,8 @@ Examples:
 			ShowOnLanding: portShowLanding,
 			ProxyAddr:     portProxyAddr,
 			Whitelist:     wl,
+			PreserveHost:  portPreserveHost,
+			InjectPK:      portInjectPK,
 		}
 		if err := rpcClient.RegisterForwardedPort(fp); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)

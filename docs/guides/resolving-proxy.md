@@ -48,6 +48,33 @@ A resolver hostname is `<public-key>.<suffix>:<port>/<path>`:
 - `.dmsg` addresses may carry routing prefixes, e.g. `<server-pk>.<dest-pk>.dmsg`
   pins a specific dmsg rendezvous server. Use `cli tp route-addr` to build one.
 
+### Named sites / virtual hosts
+
+A label to the **left** of the destination PK that is *not* itself PK- or
+TpID-shaped becomes a **vhost** — the resolver rewrites the outgoing HTTP `Host:`
+header to it. So:
+
+```
+http://example.com.<visor-pk>.skynet/
+```
+
+dials `<visor-pk>`'s port 80 and sends `Host: example.com`. If that visor forwards
+its port 80 to a reverse proxy (Caddy/nginx/traefik) that dispatches by Host, the
+proxy serves the `example.com` vhost — letting **one visor expose many real-domain
+sites** over skynet (or dmsg). The vhost may have dots (`a.b.example.com.<pk>.skynet`)
+and combine with routing prefixes; it's purely shape-based.
+
+For this to do anything, the destination visor must actually **forward `:80` to the
+vhost server** (`skywire cli serve 80 --preserve-host --proxy-addr 127.0.0.1:8080`);
+if `:80` is just the default landing page, the rewritten Host is ignored.
+`--preserve-host` is what keeps the rewritten Host intact end-to-end. The rewrite
+is skipped on the TLS port when MITM is off (a raw-TLS stream isn't HTTP), but
+applies on plain `:80`.
+
+To make those sites **PK-aware** (different content per caller), see
+[skynet-website-auth.md](skynet-website-auth.md) — the visor can inject the
+authenticated caller's PK as a header the site can trust.
+
 ### Your own visor (self-loopback + alias)
 
 Requesting **your own visor's PK** through the proxy

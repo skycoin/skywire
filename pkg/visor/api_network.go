@@ -74,6 +74,61 @@ func buildReverseProxy(log *logging.Logger, target *url.URL, preserveHost bool) 
 	return proxy
 }
 
+// servePKInjectedForward serves one forwarded HTTP connection by
+// reverse-proxying it to target while stamping the noise-authenticated
+// caller identity into request headers the backend can trust:
+//
+//	X-Skywire-Remote-PK   caller's 66-hex PK (omitted when havePK is false)
+//	X-Skywire-Transport   "dmsg" or "skynet"
+//
+// Any client-supplied copies of those headers are stripped before the
+// authentic values are set, so a caller cannot forge them over this path —
+// the visor (not the client) terminated the skywire transport, so the PK
+// is the cryptographically-verified peer. This is the moral equivalent of
+// an mTLS-terminating proxy exposing the verified client cert to a backend.
+//
+// The header is only meaningful if the backend is reachable ONLY through
+// the visor (bind it to loopback); a backend also exposed directly to
+// clearnet would let a direct client forge the header. See
+// docs/guides/skynet-website-auth.md for the trust model.
+// stampSkywireIdentity rewrites the outbound request so the backend sees the
+// noise-authenticated caller identity and cannot be lied to about it: any
+// client-supplied X-Skywire-* identity headers are stripped first, then the
+// authentic values are set. With havePK false (peer unidentifiable) the PK
+// header is left absent rather than set to a zero value.
+func stampSkywireIdentity(out *http.Request, pk cipher.PubKey, havePK bool, transport string) {
+	out.Header.Del("X-Skywire-Remote-PK")
+	out.Header.Del("X-Skywire-Transport")
+	if havePK {
+		out.Header.Set("X-Skywire-Remote-PK", pk.Hex())
+	}
+	out.Header.Set("X-Skywire-Transport", transport)
+}
+
+func (v *Visor) servePKInjectedForward(conn net.Conn, target, transport string, pk cipher.PubKey, havePK, preserveHost bool) {
+	u := &url.URL{Scheme: "http", Host: target}
+	rp := buildReverseProxy(v.log, u, preserveHost)
+	base := rp.Rewrite
+	rp.Rewrite = func(r *httputil.ProxyRequest) {
+		base(r)
+		stampSkywireIdentity(r.Out, pk, havePK, transport)
+	}
+	// Serve HTTP over this single connection. ConnState closes the
+	// one-shot listener once the connection is done so Serve's accept
+	// loop returns instead of leaking a goroutine.
+	lis := &singleConnListener{conn: conn}
+	srv := &http.Server{
+		Handler:           rp,
+		ReadHeaderTimeout: 30 * time.Second,
+		ConnState: func(_ net.Conn, s http.ConnState) {
+			if s == http.StateClosed || s == http.StateHijacked {
+				_ = lis.Close() //nolint:errcheck
+			}
+		},
+	}
+	_ = srv.Serve(lis) //nolint:errcheck
+}
+
 // refreshWebsiteHandler (re)applies the right website handler to the
 // dmsghttp logserver based on current config + forwarded-port state.
 // Called at startup AND on every register/update/deregister of port 80
@@ -549,13 +604,15 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 			}
 			go func() {
 				defer conn.Close() //nolint:errcheck
-				// Per-port PK whitelist applies regardless of transport.
-				// remotePK pulls the peer's PK from either dmsg.Addr or
-				// appnet.Addr; fail closed if we can't identify them.
+				// Identify the peer once (used for the whitelist gate AND,
+				// when enabled, the X-Skywire-Remote-PK header injection).
+				// remotePK pulls the PK from either dmsg.Addr or appnet.Addr.
 				fp := v.forwardedPorts.Get(port)
+				pk, pkOK := remotePK(conn.RemoteAddr())
+				// Per-port PK whitelist applies regardless of transport;
+				// fail closed if we can't identify the caller.
 				if fp != nil && len(fp.Whitelist) > 0 {
-					pk, ok := remotePK(conn.RemoteAddr())
-					if !ok {
+					if !pkOK {
 						log.Warn("Rejected: cannot identify peer on whitelisted port")
 						return
 					}
@@ -569,6 +626,13 @@ func (v *Visor) startDmsgForwarder(port, localPort int) {
 				target := fmt.Sprintf("localhost:%d", localPort)
 				if fp != nil && fp.ProxyAddr != "" {
 					target = fp.ProxyAddr
+				}
+				// HTTP-aware mode: terminate HTTP and stamp the authenticated
+				// caller PK into a header the backend can trust, instead of a
+				// blind byte splice.
+				if fp != nil && fp.InjectPK {
+					v.servePKInjectedForward(conn, target, transport, pk, pkOK, fp.PreserveHost)
+					return
 				}
 				local, err := net.Dial("tcp", target)
 				if err != nil {
