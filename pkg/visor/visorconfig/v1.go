@@ -252,6 +252,16 @@ type DmsgWebConfig struct {
 	// either is missing or unreadable; it does not refuse to start.
 	TLSCAPath    string `json:"tls_ca_path,omitempty"`
 	TLSCAKeyPath string `json:"tls_ca_key_path,omitempty"`
+	// SelfLoopback, when nil or true (the default), serves a request whose
+	// destination is THIS visor's own PK from the local service in-process
+	// (net.Pipe) instead of dialing out over dmsg back to self — which dmsg
+	// does not loopback and which is 202-prone. Set false to exercise the
+	// full self-dial transport path (testing self-reachability).
+	SelfLoopback *bool `json:"self_loopback,omitempty"`
+	// Alias is a friendly hostname label for THIS visor's own PK, so
+	// "<alias>.dmsg" resolves to the local visor without hardcoding its
+	// public key. Defaults to "skywire" when unset (→ "skywire.dmsg").
+	Alias string `json:"alias,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the
@@ -293,6 +303,16 @@ type SkynetWebConfig struct {
 	// either is missing or unreadable; it does not refuse to start.
 	TLSCAPath    string `json:"tls_ca_path,omitempty"`
 	TLSCAKeyPath string `json:"tls_ca_key_path,omitempty"`
+	// SelfLoopback, when nil or true (the default), serves a request whose
+	// destination is THIS visor's own PK from the local service in-process
+	// (net.Pipe) instead of dialing a skynet route back to self. Set false
+	// to exercise the full self-route path (valid for skynet, useful for
+	// testing self-transports).
+	SelfLoopback *bool `json:"self_loopback,omitempty"`
+	// Alias is a friendly hostname label for THIS visor's own PK, so
+	// "<alias>.skynet" resolves to the local visor without hardcoding its
+	// public key. Defaults to "skywire" when unset (→ "skywire.skynet").
+	Alias string `json:"alias,omitempty"`
 }
 
 // SkymailBridgeConfig configures the embedded SMTP-aware bridge that

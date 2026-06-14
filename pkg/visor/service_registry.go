@@ -84,6 +84,24 @@ func (r *ServiceRegistry) Get(port uint16) (ConnHandler, bool) {
 	return svc.handler, true
 }
 
+// SelfDial returns a client-side net.Conn whose peer is the handler
+// registered on port, served in-process over net.Pipe — no transport,
+// no dmsg/skynet hop, no loopback. Used by the embedded resolving
+// proxies to short-circuit a request destined for THIS visor's own PK
+// instead of dialing out over the network back to self (which dmsg does
+// not loopback and which is 202-prone). Errors if no handler is
+// registered on port. The caller owns the returned conn and must close
+// it; the handler goroutine exits when its end closes.
+func (r *ServiceRegistry) SelfDial(port uint16) (net.Conn, error) {
+	h, ok := r.Get(port)
+	if !ok {
+		return nil, fmt.Errorf("no local service registered on port %d", port)
+	}
+	clientEnd, serverEnd := net.Pipe()
+	go h(serverEnd)
+	return clientEnd, nil
+}
+
 // Ports returns all registered port numbers, sorted ascending.
 func (r *ServiceRegistry) Ports() []uint16 {
 	r.mu.RLock()
