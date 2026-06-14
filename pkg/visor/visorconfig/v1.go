@@ -258,11 +258,10 @@ type DmsgWebConfig struct {
 	// does not loopback and which is 202-prone. Set false to exercise the
 	// full self-dial transport path (testing self-reachability).
 	SelfLoopback *bool `json:"self_loopback,omitempty"`
-	// Aliases maps a friendly destination label to a PK hex or the literal
-	// "self" (this visor). e.g. {"skywire":"self"} makes "skywire.dmsg"
-	// resolve to the local visor. When unset, "skywire"→self is added by
-	// default; set {"skywire":""} to disable that default.
-	Aliases map[string]string `json:"aliases,omitempty"`
+	// Alias is a friendly hostname label for THIS visor's own PK, so
+	// "<alias>.dmsg" resolves to the local visor without hardcoding its
+	// public key. Defaults to "skywire" when unset (→ "skywire.dmsg").
+	Alias string `json:"alias,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the
@@ -310,11 +309,10 @@ type SkynetWebConfig struct {
 	// to exercise the full self-route path (valid for skynet, useful for
 	// testing self-transports).
 	SelfLoopback *bool `json:"self_loopback,omitempty"`
-	// Aliases maps a friendly destination label to a PK hex or the literal
-	// "self" (this visor). e.g. {"skywire":"self"} makes "skywire.skynet"
-	// resolve to the local visor. When unset, "skywire"→self is added by
-	// default; set {"skywire":""} to disable that default.
-	Aliases map[string]string `json:"aliases,omitempty"`
+	// Alias is a friendly hostname label for THIS visor's own PK, so
+	// "<alias>.skynet" resolves to the local visor without hardcoding its
+	// public key. Defaults to "skywire" when unset (→ "skywire.skynet").
+	Alias string `json:"alias,omitempty"`
 }
 
 // SkymailBridgeConfig configures the embedded SMTP-aware bridge that

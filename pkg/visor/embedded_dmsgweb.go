@@ -177,12 +177,7 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		cfg.SelfLoopback = true
 		cfg.SelfDial = e.selfDial
 	}
-	aliases, err := resolverAliases(e.cfg.Aliases, e.localPK)
-	if err != nil {
-		e.log.WithError(err).Warn("dmsgweb: invalid alias config; using default skywire->self")
-		aliases = map[string]cipher.PubKey{"skywire": e.localPK}
-	}
-	cfg.Aliases = aliases
+	cfg.Aliases = resolverAliasMap(e.cfg.Alias, e.localPK)
 
 	// Optional TLS MITM. CA load failure is non-fatal — the
 	// resolver continues without MITM and logs the reason.
@@ -220,28 +215,15 @@ func stringOrDefault(v, d string) string {
 	return v
 }
 
-// resolverAliases turns the config alias map (label → "self" | "<pk-hex>")
-// into a label → PK map for ParseResolverHost. "self" resolves to localPK.
-// The label "skywire" → self is included by default; map it to "" to
-// remove that default, or to another target to override it. Shared by the
-// dmsgweb and skynetweb resolvers.
-func resolverAliases(cfg map[string]string, localPK cipher.PubKey) (map[string]cipher.PubKey, error) {
-	out := map[string]cipher.PubKey{"skywire": localPK}
-	for label, target := range cfg {
-		switch target {
-		case "":
-			delete(out, label) // explicit disable / remove default
-		case "self":
-			out[label] = localPK
-		default:
-			var pk cipher.PubKey
-			if err := pk.Set(target); err != nil {
-				return nil, fmt.Errorf("alias %q: invalid PK %q: %w", label, target, err)
-			}
-			out[label] = pk
-		}
+// resolverAliasMap builds the single-entry label → PK map ParseResolverHost
+// uses to resolve a friendly name for THIS visor. The label defaults to
+// "skywire" when alias is empty (so "skywire.dmsg"/"skywire.skynet" works
+// out of the box). Shared by the dmsgweb and skynetweb resolvers.
+func resolverAliasMap(alias string, localPK cipher.PubKey) map[string]cipher.PubKey {
+	if alias == "" {
+		alias = "skywire"
 	}
-	return out, nil
+	return map[string]cipher.PubKey{alias: localPK}
 }
 
 func uintOrDefault(v, d uint) uint {
