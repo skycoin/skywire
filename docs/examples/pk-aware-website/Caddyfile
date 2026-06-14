@@ -1,0 +1,28 @@
+# PK-aware website demo — Option A (trust by listener, not source IP).
+#
+# Two listeners serve the SAME site:
+#   :80            public/clearnet door — the spoofable header is stripped.
+#   127.0.0.1:8080 skywire-only door — bound to loopback, so only the visor
+#                  can reach it; the PK injected there is authentic.
+#
+# Forward the loopback listener over skynet (NOT :80):
+#   skywire cli serve 80 --inject-pk --preserve-host --proxy-addr 127.0.0.1:8080
+#
+# See docs/guides/skynet-website-auth.md for the trust model.
+
+# --- public clearnet door: never trust the injected header here ---
+:80 {
+	request_header -X-Skywire-Remote-PK
+	import site
+}
+
+# --- skywire-only door: loopback, reachable only via the visor ---
+127.0.0.1:8080 {
+	import site
+}
+
+# The site itself. reverse_proxy passes X-Skywire-Remote-PK through to the
+# backend unchanged, so the backend sees whatever the door decided.
+(site) {
+	reverse_proxy 127.0.0.1:3000
+}
