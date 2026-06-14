@@ -65,6 +65,24 @@ type ForwardedPort struct {
 	//                    backend (Caddy, nginx, traefik) dispatches
 	//                    its virtual hosts by Host header.
 	PreserveHost bool `json:"preserve_host,omitempty"`
+	// InjectPK, when true, makes this forward HTTP-aware: instead of a
+	// raw TCP splice, the visor terminates HTTP and reverse-proxies to
+	// the backend, stamping the noise-authenticated caller into request
+	// headers the backend can trust:
+	//
+	//   X-Skywire-Remote-PK   the caller's 66-hex public key (omitted if
+	//                         the peer can't be identified)
+	//   X-Skywire-Transport   "dmsg" or "skynet"
+	//
+	// Any client-supplied copies of those headers are stripped first, so
+	// they cannot be spoofed over this path. This lets a forwarded website
+	// do per-PK behavior (auth, personalization) that a raw splice can't,
+	// because the backend otherwise never learns who is connecting.
+	//
+	// HTTP only — enabling it on a non-HTTP service breaks the stream. The
+	// header is only trustworthy if the backend is reachable ONLY through
+	// the visor (bind it to loopback); see docs/guides/skynet-website-auth.md.
+	InjectPK bool `json:"inject_pk,omitempty"`
 }
 
 // EffectiveLocalPort returns the local TCP port to forward to.
