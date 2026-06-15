@@ -301,8 +301,18 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 		// Hard-fail loudly so the dial returns a real error to the caller
 		// and the operator can see "remote not responding" instead of a
 		// phantom success.
+		// Enrich the failure with this side's full rule linkage so an
+		// initiator timeout and the peer's wrap-failure log can be compared to
+		// detect a reverse-leg route-ID mismatch: the initiator listens on
+		// rev_key over rev_tp and the responder must stamp its reverse packets
+		// with that same ID over the matching transport. fwd_next is the ID this
+		// side stamps toward the peer (should equal the peer's consume keyRtID).
 		log.WithField("desc", rules.Desc.String()).
 			WithField("timeout", handshakeAwaitTimeout).
+			WithField("fwd_next", rules.Forward.NextRouteID()).
+			WithField("fwd_tp", rules.Forward.NextTransportID()).
+			WithField("rev_key", rules.Reverse.KeyRouteID()).
+			WithField("rev_tp", rules.Reverse.NextTransportID()).
 			Warn("Remote handshake not received within timeout — failing dial")
 		// Clean up rgsRaw + delete the rules we installed locally so the
 		// keyRouteIDs are free for the next attempt.
@@ -348,7 +358,18 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 		// wrapping rg with noise
 		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
-			log.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
+			// Rule linkage on the responder side, to pair with the initiator's
+			// "Remote handshake not received" log: rev_next is the ID this side
+			// stamps on reverse packets (must equal the initiator's rev_key);
+			// fwd_key is what this side consumes on (must equal the initiator's
+			// fwd_next). A "no data captured" wrap-failure usually means the
+			// initiator already timed out and never sent the noise first message.
+			log.WithError(err).
+				WithField("fwd_key", rules.Forward.KeyRouteID()).
+				WithField("fwd_tp", rules.Forward.NextTransportID()).
+				WithField("rev_next", rules.Reverse.NextRouteID()).
+				WithField("rev_tp", rules.Reverse.NextTransportID()).
+				Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
 			if err := rg.Close(); err != nil {
 				log.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}
