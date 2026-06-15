@@ -1015,9 +1015,9 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		tries  = 0
 		factor = 1
 		// tpdDmsgReadyWait bounds how long boot waits for dmsg to be ready
-		// before the DMSG-HTTP transport-discovery attempt. The select on
-		// dmsgC.Ready() returns early once ready; this cap just prevents a
-		// never-ready dmsg from blocking here (it then falls to plain HTTP).
+		// before the transport-discovery attempt. The select on dmsgC.Ready()
+		// returns early once ready; this cap just prevents a never-ready dmsg
+		// from blocking boot here indefinitely.
 		tpdDmsgReadyWait = 60 * time.Second
 	)
 
@@ -1028,39 +1028,32 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		return nil, err
 	}
 
-	// Try DMSG-HTTP first if configured, fall back to plain HTTP
+	// Resolve the transport-discovery URL. Prefer the dmsg address; use the
+	// plain-HTTP URL only when no dmsg address is configured. There is no
+	// fallback between the two transports: a dmsg-only deployment that cannot
+	// yet reach the TPD over dmsg retries the dmsg path rather than silently
+	// degrading to the (empty) HTTP URL — which previously resolved to
+	// http://localhost and wedged boot forever (tries=0).
+	tpdURL := conf.DiscoveryDmsg
+	if tpdURL == "" {
+		tpdURL = conf.Discovery
+	}
+	if tpdURL == "" {
+		return nil, errors.New("no transport discovery configured: both Transport.Discovery and Transport.DiscoveryDmsg are empty")
+	}
+
+	// For a dmsg TPD, wait (bounded) for dmsg sessions to be ready so the first
+	// request does not fail before any session exists.
 	if conf.DiscoveryDmsg != "" && v.dmsgC != nil {
-		// At boot, initTransport can run before dmsg has established its
-		// sessions; without waiting, getHTTPClient(DiscoveryDmsg) fails and we
-		// fall through to the plain-HTTP retrier below — which, for a dmsg-only
-		// deployment, has no working egress and spins forever (tries=0),
-		// wedging the whole visorinit. Wait (bounded) for dmsg first so the
-		// DMSG-HTTP path can succeed; the select returns immediately once ready.
 		select {
 		case <-v.dmsgC.Ready():
 		case <-time.After(tpdDmsgReadyWait):
-			log.Warn("dmsg not ready within timeout for DMSG-HTTP transport discovery; attempting anyway")
+			log.Warn("dmsg not ready within timeout for transport discovery; attempting anyway")
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-		dmsgHTTPC, err := getHTTPClient(ctx, v, conf.DiscoveryDmsg)
-		if err != nil {
-			log.WithError(err).Warn("Failed to get DMSG-HTTP client for TPD, trying plain HTTP")
-		} else {
-			tpdC, err := tpdclient.NewHTTP(conf.DiscoveryDmsg, v.conf.PK, v.conf.SK, dmsgHTTPC, pIP, v.MasterLogger())
-			if err == nil {
-				log.Info("Connected to transport discovery via DMSG-HTTP")
-				return tpdC, nil
-			}
-			log.WithError(err).Warn("DMSG-HTTP transport discovery failed, falling back to plain HTTP")
-		}
 	}
 
-	// Plain HTTP (primary if no DMSG config, fallback if DMSG failed)
-	tpdURL := conf.Discovery
-	if tpdURL == "" && conf.DiscoveryDmsg != "" {
-		tpdURL = conf.DiscoveryDmsg // DMSG-only deployment
-	}
 	httpC, err := getHTTPClient(ctx, v, tpdURL)
 	if err != nil {
 		return nil, err
@@ -1071,7 +1064,7 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+		tpdC, err = tpdclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err
