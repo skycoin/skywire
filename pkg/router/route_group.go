@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -28,6 +30,20 @@ const (
 	// maxConsecutiveWriteFailures is the number of consecutive transport write failures
 	// before the RouteGroup closes itself to stop spamming logs.
 	maxConsecutiveWriteFailures = 5
+
+	// legLivenessInterval is how often each multiplexed leg is probed
+	// end-to-end. pruneDeadTransports only sees a dead LOCAL (first-hop)
+	// transport; a transport dying BEYOND the first hop leaves the local tp
+	// open, so the leg silently black-holes. This probe sends a Ping down each
+	// leg that the destination echoes (Pong) — purely source-side, no wire or
+	// remote-version change (every visor already echoes pings).
+	legLivenessInterval = 30 * time.Second
+	// legPongMissThreshold is the number of consecutive liveness probes with no
+	// echo after which a leg is treated as black-holing and dropped (mirrors
+	// transport-level pongMissThreshold). The leg is removed from the mux but
+	// its (possibly shared) transport is NOT closed, so a false positive simply
+	// triggers a self-heal re-dial — never an outage, and never the last leg.
+	legPongMissThreshold = 3
 )
 
 var (
@@ -187,6 +203,17 @@ type RouteGroup struct {
 	selfHealAdd    func(excludeHops []string)
 	selfHealTarget int
 	healInFlight   atomic.Bool
+
+	// Per-leg end-to-end liveness (issue #2). Keyed by leg transport ID so the
+	// state survives index shifts from prune/append. legPongSeen records
+	// whether the echo for a leg's probe came back since the last tick;
+	// legMissed counts consecutive missed ticks; inflightPings maps a probe's
+	// send-timestamp (the verbatim-echoed correlator) back to the leg it
+	// tested. Guarded by legLivenessMu (NEVER held while taking rg.mu).
+	legLivenessMu sync.Mutex
+	legPongSeen   map[uuid.UUID]bool
+	legMissed     map[uuid.UUID]int
+	inflightPings map[int64]uuid.UUID
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -215,6 +242,9 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		writeDeadline:      deadline.MakePipeDeadline(),
 		handshakeProcessed: make(chan struct{}),
 		networkStats:       newNetworkStats(),
+		legPongSeen:        make(map[uuid.UUID]bool),
+		legMissed:          make(map[uuid.UUID]int),
+		inflightPings:      make(map[int64]uuid.UUID),
 	}
 
 	return rg
@@ -953,6 +983,10 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 
 func (rg *RouteGroup) startOffServiceLoops() {
 	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
+	// Per-leg end-to-end liveness (issue #2): detect mux legs that black-hole
+	// BEYOND the first hop (invisible to pruneDeadTransports' local tp.IsClosed
+	// check) and drop them so self-heal re-dials a live replacement.
+	go rg.servicePacketLoop("leg-liveness", legLivenessInterval, rg.legLivenessServiceFn)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 	// Rotation loop is NOT started here — startOffServiceLoops runs
 	// during initial route-group setup, before the router-side
@@ -1093,6 +1127,177 @@ func (rg *RouteGroup) sendPong(timestamp int64) error {
 	packet := routing.MakePongPacket(rule.NextRouteID(), timestamp)
 
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+}
+
+// legLivenessServiceFn probes each multiplexed leg end-to-end once per tick and
+// drops any leg that has missed legPongMissThreshold consecutive echoes. It
+// exists because pruneDeadTransports only detects a dead LOCAL (first-hop)
+// transport; a transport dying beyond the first hop leaves the local tp open,
+// so the leg silently black-holes and the mux keeps selecting it. The probe
+// reuses the existing Ping→Pong echo (the destination echoes the send-timestamp
+// verbatim), so it is purely source-side: no wire-format or remote-version
+// dependency. Single-leg groups are skipped (no failover target, never drop the
+// last leg), so the common case carries zero overhead.
+func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
+	if rg.isClosed() {
+		return
+	}
+
+	type legProbe struct {
+		tp   *transport.ManagedTransport
+		rule routing.Rule
+		id   uuid.UUID
+	}
+	rg.mu.Lock()
+	probes := make([]legProbe, 0, len(rg.tps))
+	for i, tp := range rg.tps {
+		if tp == nil || tp.IsClosed() || i >= len(rg.fwd) {
+			continue
+		}
+		probes = append(probes, legProbe{tp: tp, rule: rg.fwd[i], id: tp.Entry.ID})
+	}
+	rg.mu.Unlock()
+
+	if len(probes) < 2 {
+		return
+	}
+
+	live := make(map[uuid.UUID]struct{}, len(probes))
+	for _, p := range probes {
+		live[p.id] = struct{}{}
+	}
+
+	// Tally the previous cycle's echoes; a leg already probed that missed
+	// legPongMissThreshold consecutive cycles is declared black-holing.
+	var dead []uuid.UUID
+	rg.legLivenessMu.Lock()
+	for _, p := range probes {
+		if rg.legPongSeen[p.id] {
+			rg.legMissed[p.id] = 0
+		} else if _, probed := rg.legMissed[p.id]; probed {
+			rg.legMissed[p.id]++
+			if rg.legMissed[p.id] >= legPongMissThreshold {
+				dead = append(dead, p.id)
+			}
+		}
+		rg.legPongSeen[p.id] = false
+	}
+	for id := range rg.legMissed {
+		if _, ok := live[id]; !ok {
+			delete(rg.legMissed, id)
+			delete(rg.legPongSeen, id)
+		}
+	}
+	staleBeforeMs := time.Now().UTC().UnixNano()/int64(time.Millisecond) -
+		int64(legPongMissThreshold+2)*legLivenessInterval.Milliseconds()
+	for ts := range rg.inflightPings {
+		if ts < staleBeforeMs {
+			delete(rg.inflightPings, ts)
+		}
+	}
+	rg.legLivenessMu.Unlock()
+
+	if len(dead) > 0 {
+		rg.pruneLivenessDeadLegs(dead)
+	}
+
+	// Probe the surviving legs for the next cycle. Each send-ts is unique
+	// (ms clock + per-leg offset) so two legs probed in the same millisecond
+	// don't collide as inflightPings keys; the destination echoes it verbatim.
+	deadSet := make(map[uuid.UUID]struct{}, len(dead))
+	for _, d := range dead {
+		deadSet[d] = struct{}{}
+	}
+	baseMs := time.Now().UTC().UnixNano() / int64(time.Millisecond)
+	for offset, p := range probes {
+		if _, isDead := deadSet[p.id]; isDead {
+			continue
+		}
+		ts := baseMs + int64(offset)
+		rg.legLivenessMu.Lock()
+		rg.inflightPings[ts] = p.id
+		if _, ok := rg.legMissed[p.id]; !ok {
+			rg.legMissed[p.id] = 0 // mark probed so the next cycle counts misses
+		}
+		rg.legLivenessMu.Unlock()
+		throughput := rg.networkStats.RemoteThroughput()
+		packet := routing.MakePingPacket(p.rule.NextRouteID(), ts, throughput)
+		if err := rg.writePacket(context.Background(), p.tp, packet, p.rule.KeyRouteID()); err != nil {
+			rg.logger.WithError(err).Debugf("leg-liveness: probe write failed on leg %s", p.id)
+		}
+	}
+}
+
+// pruneLivenessDeadLegs drops the given black-holing legs (by transport ID) from
+// the mux WITHOUT closing their (possibly shared) transports, deletes their
+// local rules, compacts the mux, then triggers self-heal. It never drops below
+// one leg, so a false positive at worst causes a self-heal re-dial — never an
+// outage. Mirrors pruneDeadTransports' removal, selecting by liveness instead
+// of tp.IsClosed().
+func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
+	deadSet := make(map[uuid.UUID]struct{}, len(deadIDs))
+	for _, id := range deadIDs {
+		deadSet[id] = struct{}{}
+	}
+
+	rg.mu.Lock()
+	if len(rg.tps) <= 1 {
+		rg.mu.Unlock()
+		return
+	}
+	aliveTps := make([]*transport.ManagedTransport, 0, len(rg.tps))
+	aliveFwd := make([]routing.Rule, 0, len(rg.fwd))
+	aliveRvs := make([]routing.Rule, 0, len(rg.rvs))
+	var deadRuleIDs []routing.RouteID
+	var droppedIdx []int
+	remaining := len(rg.tps)
+	for i, tp := range rg.tps {
+		isDead := false
+		if tp != nil {
+			_, isDead = deadSet[tp.Entry.ID]
+		}
+		if isDead && remaining > 1 {
+			if i < len(rg.fwd) {
+				deadRuleIDs = append(deadRuleIDs, rg.fwd[i].KeyRouteID())
+			}
+			if i < len(rg.rvs) {
+				deadRuleIDs = append(deadRuleIDs, rg.rvs[i].KeyRouteID())
+			}
+			if tp != nil {
+				rg.logger.Infof("leg-liveness: pruning black-holing leg %v (no echo for %d probes; transport stays up)",
+					tp.Entry.ID, legPongMissThreshold)
+			}
+			droppedIdx = append(droppedIdx, i)
+			remaining--
+			continue
+		}
+		aliveTps = append(aliveTps, tp)
+		if i < len(rg.fwd) {
+			aliveFwd = append(aliveFwd, rg.fwd[i])
+		}
+		if i < len(rg.rvs) {
+			aliveRvs = append(aliveRvs, rg.rvs[i])
+		}
+	}
+	if len(droppedIdx) == 0 {
+		rg.mu.Unlock()
+		return
+	}
+	if len(deadRuleIDs) > 0 {
+		rg.rt.DelRules(deadRuleIDs)
+	}
+	rg.tps = aliveTps
+	rg.fwd = aliveFwd
+	rg.rvs = aliveRvs
+	if rg.mux != nil {
+		rg.mux.removeLegs(droppedIdx...)
+	}
+	rg.mu.Unlock()
+
+	for _, idx := range droppedIdx {
+		rg.fireLegChange("liveness-dead", idx)
+	}
+	rg.maybeSelfHeal()
 }
 
 func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn) {
@@ -1678,6 +1883,17 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	payload := packet.Payload()
 
 	sentAtMs := binary.BigEndian.Uint64(payload)
+
+	// Per-leg liveness (issue #2): if this pong echoes one of our outstanding
+	// leg-liveness probes, mark that leg alive. A pong arriving AT ALL proves
+	// the leg's end-to-end round trip works, independent of the latency value
+	// (so this runs before the latency sanity-reject below).
+	rg.legLivenessMu.Lock()
+	if legID, ok := rg.inflightPings[int64(sentAtMs)]; ok { //nolint: gosec
+		rg.legPongSeen[legID] = true
+		delete(rg.inflightPings, int64(sentAtMs)) //nolint: gosec
+	}
+	rg.legLivenessMu.Unlock()
 
 	ms := sentAtMs % 1000
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC() //nolint: gosec
