@@ -249,17 +249,34 @@ func calcPresenceShare(ni nodeinfo, ipCounts, macCounts map[string]int) float64 
 	return share
 }
 
-// applyRegionalSaturation applies diminishing returns scaling based on the
-// number of unique IP addresses per country. Each country's weight is
-// unique_ips^exponent (default sqrt). This scales each visor's share so that
-// the total pool allocation is redistributed to favor geographic diversity.
+// applyRegionalSaturation scales each visor's share by a per-country
+// density factor unique_ips_country^(exponent - 1). This is a per-visor
+// multiplier, not a country-pot allocation: a country's total reward
+// grows linearly with the number of visors (subject to the per-IP cap
+// already enforced in calcPresenceShare), so adding visors at an existing
+// IP within the cap no longer dilutes existing visors' rewards. The
+// renormalization back to the daily pool happens in computePoolRewards.
+//
+// Exponent semantics match the prior implementation:
+//
+//	exponent = 1.0  → scale = 1 everywhere (no derating)
+//	exponent = 0.5  → scale = 1/sqrt(N) (default, sqrt-style saturation)
+//	exponent = 0.0  → scale = 1/N (every country's total reward equal,
+//	                  regardless of how many IPs or visors)
+//
+// Earlier versions of this function computed a country pot from
+// N^exponent and split it equally across the country's visors, which
+// froze each country's total at the single-visor amount and penalized
+// the 2nd-Nth visor at any IP — undoing the per-IP capacity that the
+// per-IP cap was supposed to grant. The new formulation preserves the
+// per-IP visor capacity from calcPresenceShare while still discounting
+// dense-IP countries on a per-visor basis.
 func applyRegionalSaturation(nodes []nodeinfo, exponent float64) {
 	if exponent >= 1.0 || len(nodes) == 0 {
 		return
 	}
 
 	countryIPs := make(map[string]map[string]struct{})
-	countryShares := make(map[string]float64)
 	for _, ni := range nodes {
 		c := ni.Country
 		if c == "" {
@@ -269,30 +286,11 @@ func applyRegionalSaturation(nodes []nodeinfo, exponent float64) {
 			countryIPs[c] = make(map[string]struct{})
 		}
 		countryIPs[c][ni.IPAddr] = struct{}{}
-		countryShares[c] += ni.Share
-	}
-
-	totalWeight := 0.0
-	countryWeight := make(map[string]float64)
-	for c, ips := range countryIPs {
-		w := math.Pow(float64(len(ips)), exponent)
-		countryWeight[c] = w
-		totalWeight += w
-	}
-
-	totalRawShares := 0.0
-	for _, s := range countryShares {
-		totalRawShares += s
-	}
-	if totalRawShares == 0 || totalWeight == 0 {
-		return
 	}
 
 	countryScale := make(map[string]float64)
-	for c, raw := range countryShares {
-		if raw > 0 {
-			countryScale[c] = (countryWeight[c] / totalWeight * totalRawShares) / raw
-		}
+	for c, ips := range countryIPs {
+		countryScale[c] = math.Pow(float64(len(ips)), exponent-1.0)
 	}
 
 	for i := range nodes {
