@@ -320,3 +320,74 @@ func TestRouteMuxRemoveLegsEmpty(t *testing.T) {
 	require.Len(t, m.legs, 2)
 	require.Len(t, m.ready, 2)
 }
+
+// TestPruneLivenessDeadLegs verifies a leg flagged black-holing (by transport
+// ID) is removed from the mux while the others survive — and the transport is
+// not closed (liveness prune drops the leg, not the shared transport).
+func TestPruneLivenessDeadLegs(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 3)
+	deadID := mts[1].Entry.ID
+
+	rg.pruneLivenessDeadLegs([]uuid.UUID{deadID})
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	require.Equal(t, 2, len(rg.tps), "should drop exactly the one black-holing leg")
+	for _, tp := range rg.tps {
+		require.NotEqual(t, deadID, tp.Entry.ID, "the black-holing leg must be gone")
+	}
+	require.False(t, mts[1].IsClosed(), "liveness prune must NOT close the (shared) transport")
+}
+
+// TestPruneLivenessPreservesLastLeg verifies the prune never drops below one
+// leg even if every leg is flagged dead (so a false positive can't cause an
+// outage — at worst a self-heal re-dial).
+func TestPruneLivenessPreservesLastLeg(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 2)
+
+	rg.pruneLivenessDeadLegs([]uuid.UUID{mts[0].Entry.ID, mts[1].Entry.ID})
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	require.Equal(t, 1, len(rg.tps), "must always keep at least one leg")
+}
+
+// TestLegLivenessPrunesSilentLegs verifies the probe loop prunes legs that
+// never echo after legPongMissThreshold cycles (here the mock transports never
+// echo, so all legs are silent and the group collapses to the last leg).
+func TestLegLivenessPrunesSilentLegs(t *testing.T) {
+	rg, _, _ := createMuxRouteGroup(t, 3)
+
+	for i := 0; i < legPongMissThreshold+2; i++ {
+		rg.legLivenessServiceFn(legLivenessInterval)
+	}
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	require.Equal(t, 1, len(rg.tps), "silent legs prune down to the last surviving leg")
+}
+
+// TestLegLivenessKeepsEchoingLeg verifies a leg that keeps echoing its probe is
+// never pruned, even while its silent siblings are dropped.
+func TestLegLivenessKeepsEchoingLeg(t *testing.T) {
+	rg, mts, _ := createMuxRouteGroup(t, 3)
+	keep := mts[0].Entry.ID
+
+	for i := 0; i < legPongMissThreshold+3; i++ {
+		rg.legLivenessMu.Lock()
+		rg.legPongSeen[keep] = true // simulate this leg's echo arriving each cycle
+		rg.legLivenessMu.Unlock()
+		rg.legLivenessServiceFn(legLivenessInterval)
+	}
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	found := false
+	for _, tp := range rg.tps {
+		if tp.Entry.ID == keep {
+			found = true
+		}
+	}
+	require.True(t, found, "a leg that keeps echoing must survive")
+	require.GreaterOrEqual(t, len(rg.tps), 1)
+}
