@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
@@ -16,27 +16,6 @@ func dmsgURL(t *testing.T) (string, string) {
 	t.Helper()
 	pk, _ := cipher.GenerateKeyPair()
 	return fmt.Sprintf("dmsg://%s:80", pk.Hex()), pk.Hex()
-}
-
-// TestParseDmsgURLPK covers the dmsg-URL → PK extraction and the non-dmsg /
-// malformed rejections.
-func TestParseDmsgURLPK(t *testing.T) {
-	raw, hexPK := dmsgURL(t)
-
-	pk, ok := parseDmsgURLPK(raw)
-	require.True(t, ok, "valid dmsg:// URL must parse")
-	assert.Equal(t, hexPK, pk.Hex())
-
-	for _, bad := range []string{
-		"",                           // unset
-		"http://transport.discovery", // plain HTTP — no dmsg PK
-		"https://sd.skycoin.com",
-		"dmsg://not-a-pubkey:80", // dmsg scheme but bad PK
-		"dmsg://:80",             // empty host
-	} {
-		_, ok := parseDmsgURLPK(bad)
-		assert.False(t, ok, "must reject %q", bad)
-	}
 }
 
 // TestServiceAliasMap asserts the canonical acronyms map to the configured
@@ -103,8 +82,37 @@ func TestServiceAliasMapSetupNodes(t *testing.T) {
 	assert.False(t, hasNull, "null setup-node PK must not be aliased")
 }
 
+// TestServiceAliasMapDmsgServers covers dmsg-server aliasing (dmsg0..) and the
+// matching direct-dial PK set, including null-PK skipping.
+func TestServiceAliasMapDmsgServers(t *testing.T) {
+	s0, _ := cipher.GenerateKeyPair()
+	s1, _ := cipher.GenerateKeyPair()
+
+	conf := &visorconfig.V1{
+		Dmsg: &dmsgspec.DmsgConfig{
+			Servers: []*dmsgdisc.Entry{
+				{Static: s0},
+				{Static: s1},
+				{Static: cipher.PubKey{}}, // null PK must be skipped
+			},
+		},
+	}
+
+	m := serviceAliasMap(conf)
+	assert.Equal(t, s0.Hex(), m["dmsg0"].Hex())
+	assert.Equal(t, s1.Hex(), m["dmsg1"].Hex())
+
+	set := dmsgServerPKSet(conf)
+	assert.Contains(t, set, s0)
+	assert.Contains(t, set, s1)
+	assert.NotContains(t, set, cipher.PubKey{}, "null PK must not be in the direct-dial set")
+	assert.Len(t, set, 2)
+}
+
 // TestServiceAliasMapNil guards the nil-config and empty-services paths.
 func TestServiceAliasMapNil(t *testing.T) {
 	assert.Empty(t, serviceAliasMap(nil))
 	assert.Empty(t, serviceAliasMap(&visorconfig.V1{}))
+	assert.Empty(t, dmsgServerPKSet(nil))
+	assert.Empty(t, dmsgServerPKSet(&visorconfig.V1{}))
 }
