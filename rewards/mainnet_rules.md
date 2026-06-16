@@ -192,34 +192,49 @@ Rewards Cutoff date for updating 06-10-2026
 
 ### Uptime
 
+Each visor heartbeats every 5 minutes; the heartbeats (and transport registrations) populate the same underlying uptime data that feeds the rewards pipeline.
 
-Daily uptime statistics for all visors may be accessed via the
+The rewards system reads from the **transport-discovery integrated uptime tracker**. The same data shape is served by three deployment services:
 
-- [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2)
+| Service | Host |
+|---|---|
+| Transport-discovery (used by rewards) | `tpd.skywire.skycoin.com` |
+| DMSG-discovery | `dmsgd.skywire.skycoin.com` |
+| Service-discovery | `sd.skycoin.com` |
 
-or using skywire cli
-
-```
-skywire cli ut -n0 -k <public-key>
-```
-
-For example with a locally running visor:
-```
-skywire cli ut -n0 -k $(skywire cli visor pk)
-```
-
-The uptime for all visors are tracked via the visor connecting to the [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2) at regular intervals (currently, every 5 minutes).
-
-It's possible to check uptime for a given visor's public key in the following ways:
-
-* Directly in the browser
-
-![image](https://github.com/user-attachments/assets/01a13a32-0382-4119-b104-96ff16dfd5d2)
-
-* Using an http client such as `curl` with an appropriate json parser such as `jq` - for exaple:
+**Querying these endpoints directly over plain HTTP is discouraged and will be deprecated.** Use the `skywire cli ut` subcommands, which fetch over the deployment's DMSG path and cache the response locally:
 
 ```
-$ curl -sL https://ut.skywire.skycoin.com/uptimes?v=v2 | jq '[.[] | select(.pk == "02006214d489aee383dc14dea22d1c308a547520f545b914c1e476a7a87064e77b" or .pk == "02001319d25a66609b64cc389bd0dcee6d5b4ab93bd139186c47d1d6cbe955e7e1")]'
+skywire-cli ut tpd     # transport-discovery (rewards source)
+skywire-cli ut mdisc   # dmsg-discovery
+skywire-cli ut sd      # service-discovery
+```
+
+Check uptime for a specific visor (any subcommand works the same way):
+
+```
+skywire cli ut tpd -k <public-key>
+```
+
+For your locally-running visor:
+
+```
+skywire cli ut tpd -k $(skywire cli visor pk)
+```
+
+The default response is v2 (`{ pk, on, version, daily: {YYYY-MM-DD: "pct"} }`). Pass `-T` / `--timeline` for v3, which adds a per-5-minute bitmap rendered as 24 hourly blocks.
+
+Additional useful flags (run `skywire cli ut tpd --help` for the full list):
+
+- `-n / --min-daily N` — only visors whose worst daily uptime is ≥ N percent
+- `--min-version vX.Y.Z` — only visors at that version or newer
+- `-d / --days N` — include the N most-recent days (default: latest only)
+- `--date YYYY-MM-DD` — only include data for a specific day
+- `-l / --list-versions` — show the PK→version distribution
+
+Example v2 output for two visors:
+
+```
 [
   {
     "pk": "02001319d25a66609b64cc389bd0dcee6d5b4ab93bd139186c47d1d6cbe955e7e1",
@@ -248,31 +263,6 @@ $ curl -sL https://ut.skywire.skycoin.com/uptimes?v=v2 | jq '[.[] | select(.pk =
     }
   }
 ]
-
-```
-
-* Using `skywire cli ut` is the recommended approach, as it avoids rate-limiting of requests by caching the data which is fetched from the uptime tracker
-
-```
-$ skywire cli ut --help
-query uptime tracker
-
-Check local visor daily uptime percent with:
- skywire-cli ut -k $(skywire cli visor pk)
-Set cache file location to "" to avoid using cache files
-
-
-
-Flags:
-  -m, --cfa int      update cache files if older than n minutes (default 5)
-      --cfu string   UT cache file location. (default "/tmp/ut.json")
-  -n, --min int      list visors meeting minimum uptime (default 75)
-  -o, --on           list currently online visors
-  -k, --pk string    check uptime for the specified key
-  -s, --stats        count the number of results
-  -t, --stats2       count of versions
-  -u, --url string   specify alternative uptime tracker url (default "http://ut.skywire.skycoin.com")
-
 ```
 
 ### Architecture
