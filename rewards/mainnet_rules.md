@@ -64,7 +64,7 @@ The bandwidth considered for this pool excludes same-LAN transports (where both 
 To receive Skycoin rewards for running skywire, the following requirements must be met:
 
 
-* [1)](#Version) **Minimum skywire [version](#Version) v1.3.50** - Cutoff May 22nd 2026
+* [1)](#Version) **Minimum skywire [version](#Version)** — see the [Version](#Version) section for the schedule of version requirement updates (currently v1.3.59 as of 06-10-2026)
 
 * [2)](#Uptime) **75% [uptime](#Uptime) per day** minimum is required to be eligible to receive rewards
 
@@ -90,32 +90,28 @@ To receive Skycoin rewards for running skywire, the following requirements must 
 
 * [13)](#Survey) **The visor produces a [survey](#Survey)** when queried over dmsg by any keys in the survey_whitelist array by default
 
-* [14)](#Regional-Saturation-Scaling) **[Regional saturation scaling](#Regional-Saturation-Scaling)** is applied to the presence pool to incentivize geographic diversity of the network
 
+### Deployment Changes and the dmsghttp-config
 
-### Exceptions for Deployment Changes with dmsghttp-config (Chinese users)
-
-All the production deployment services may be accessed by the visor over the dmsg network when the visor runs with a dmsghttp config.
-
-This type of config is generated automatically based on region via:
+The dmsghttp-config is the default — and currently the only supported — visor config. It is generated automatically via:
 ```
 skywire cli config gen -b --bestproto
 ```
-to circumvent ISP blocking of http requests.
 
-In order to bootstrap the visor's to connection to the dmsg network (via TCP connection to an individual dmsg server) the [dmsghttp-config.json](/dmsghttp-config.json) is provided with the skywire binary release.
+In order to bootstrap the visor's connection to the dmsg network (via TCP connection to an individual dmsg server), the [dmsghttp-config.json](/dmsghttp-config.json) is provided with the skywire binary release. All production deployment services are then reached by the visor over the dmsg network.
 
-In the instance that the skywire production deployment changes - specifically the dmsg servers:
-* it will be necessary to update to the next version or package release which fixes the dmsg servers.
-OR
-* it will be necessary to manually update the [dmsghttp-config.json](/dmsghttp-config.json) which is provided by your skywire installation.
+In the instance that the skywire production deployment changes — specifically the dmsg servers:
+* it will be necessary to update to the next version or package release which ships an updated dmsghttp-config.json,
 
-Currently, **there is no mechanism for updating the dmsghttp-config.json which does not require an http request** ; a request which may be blocked depending on region.
+  OR
 
-In this instance, the visor will not connect to any service because it is not connected to the dmsg network, so it will not be possible for the visor to accumulate uptime or for the reward system to collect the survey, which are prerequisites for reward eligibility.
+* it will be necessary to manually update the [dmsghttp-config.json](/dmsghttp-config.json) provided by your skywire installation.
 
-As a consequence of this; any visors running a dmsghttp-config, and hence any visors running in regions such as China, the minimum version requirement for obtaining rewards is not only the latest available version,
-but __the latest release of the package__ unless the dmsghttp-config.json is updated manually within your installation.
+Currently, **there is no mechanism for updating the dmsghttp-config.json which does not require an http request** — a request which may be blocked depending on region.
+
+If the visor cannot reach any of the dmsg servers listed in its dmsghttp-config.json, it will not connect to the dmsg network. The reward system will then be unable to collect the visor's survey, and the visor will not accumulate uptime — both prerequisites for reward eligibility.
+
+As a consequence: visors in regions where http requests are blocked (e.g. China) may need the **latest release of the package** rather than only the latest binary, unless the dmsghttp-config.json is updated manually within the installation.
 
 ## Verifying Requirements & Eligibility
 
@@ -196,34 +192,49 @@ Rewards Cutoff date for updating 06-10-2026
 
 ### Uptime
 
+Each visor heartbeats every 5 minutes; the heartbeats (and transport registrations) populate the same underlying uptime data that feeds the rewards pipeline.
 
-Daily uptime statistics for all visors may be accessed via the
+The rewards system reads from the **transport-discovery integrated uptime tracker**. The same data shape is served by three deployment services:
 
-- [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2)
+| Service | Host |
+|---|---|
+| Transport-discovery (used by rewards) | `tpd.skywire.skycoin.com` |
+| DMSG-discovery | `dmsgd.skywire.skycoin.com` |
+| Service-discovery | `sd.skycoin.com` |
 
-or using skywire cli
-
-```
-skywire cli ut -n0 -k <public-key>
-```
-
-For example with a locally running visor:
-```
-skywire cli ut -n0 -k $(skywire cli visor pk)
-```
-
-The uptime for all visors are tracked via the visor connecting to the [uptime tracker](https://ut.skywire.skycoin.com/uptimes?v=v2) at regular intervals (currently, every 5 minutes).
-
-It's possible to check uptime for a given visor's public key in the following ways:
-
-* Directly in the browser
-
-![image](https://github.com/user-attachments/assets/01a13a32-0382-4119-b104-96ff16dfd5d2)
-
-* Using an http client such as `curl` with an appropriate json parser such as `jq` - for exaple:
+**Querying these endpoints directly over plain HTTP is discouraged and will be deprecated.** Use the `skywire cli ut` subcommands, which fetch over the deployment's DMSG path and cache the response locally:
 
 ```
-$ curl -sL https://ut.skywire.skycoin.com/uptimes?v=v2 | jq '[.[] | select(.pk == "02006214d489aee383dc14dea22d1c308a547520f545b914c1e476a7a87064e77b" or .pk == "02001319d25a66609b64cc389bd0dcee6d5b4ab93bd139186c47d1d6cbe955e7e1")]'
+skywire-cli ut tpd     # transport-discovery (rewards source)
+skywire-cli ut mdisc   # dmsg-discovery
+skywire-cli ut sd      # service-discovery
+```
+
+Check uptime for a specific visor (any subcommand works the same way):
+
+```
+skywire cli ut tpd -k <public-key>
+```
+
+For your locally-running visor:
+
+```
+skywire cli ut tpd -k $(skywire cli visor pk)
+```
+
+The default response is v2 (`{ pk, on, version, daily: {YYYY-MM-DD: "pct"} }`). Pass `-T` / `--timeline` for v3, which adds a per-5-minute bitmap rendered as 24 hourly blocks.
+
+Additional useful flags (run `skywire cli ut tpd --help` for the full list):
+
+- `-n / --min-daily N` — only visors whose worst daily uptime is ≥ N percent
+- `--min-version vX.Y.Z` — only visors at that version or newer
+- `-d / --days N` — include the N most-recent days (default: latest only)
+- `--date YYYY-MM-DD` — only include data for a specific day
+- `-l / --list-versions` — show the PK→version distribution
+
+Example v2 output for two visors:
+
+```
 [
   {
     "pk": "02001319d25a66609b64cc389bd0dcee6d5b4ab93bd139186c47d1d6cbe955e7e1",
@@ -252,31 +263,6 @@ $ curl -sL https://ut.skywire.skycoin.com/uptimes?v=v2 | jq '[.[] | select(.pk =
     }
   }
 ]
-
-```
-
-* Using `skywire cli ut` is the recommended approach, as it avoids rate-limiting of requests by caching the data which is fetched from the uptime tracker
-
-```
-$ skywire cli ut --help
-query uptime tracker
-
-Check local visor daily uptime percent with:
- skywire-cli ut -k $(skywire cli visor pk)
-Set cache file location to "" to avoid using cache files
-
-
-
-Flags:
-  -m, --cfa int      update cache files if older than n minutes (default 5)
-      --cfu string   UT cache file location. (default "/tmp/ut.json")
-  -n, --min int      list visors meeting minimum uptime (default 75)
-  -o, --on           list currently online visors
-  -k, --pk string    check uptime for the specified key
-  -s, --stats        count the number of results
-  -t, --stats2       count of versions
-  -u, --url string   specify alternative uptime tracker url (default "http://ut.skywire.skycoin.com")
-
 ```
 
 ### Architecture
@@ -293,7 +279,7 @@ cat /opt/skywire/skywire.json
 
 The service configuration will be automatically updated any time a config is generated or regenerated.
 
-For those visors in China or those running a dmsghttp-config, compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire)
+Compare the dmsghttp-config of your current installation with the dmsghttp-config on the develop branch of [github.com/skycoin/skywire](https://github.com/skycoin/skywire) — the dmsghttp-config is the default config and is used by every visor on the production deployment.
 
 The same data in a different format should be displayed in the [dmsg-discovery all_servers](https://dmsgd.skywire.skycoin.com/dmsg-discovery/all_servers) page. Ensure that the dmsghttp-config.json in your installation has the same ip addresses and ports for the dmsg server keys.
 
@@ -317,32 +303,32 @@ For example, if 9 visors at a given ip address meet the minimum uptime requireme
 
 ### Regional Saturation Scaling
 
-To incentivize geographic diversity of the skywire network, a regional saturation scaling factor is applied to the presence pool. This adjusts each visor's reward share based on how many unique IP addresses are present in the visor's country.
+To incentivize geographic diversity of the skywire network, a regional saturation scaling factor is applied to each visor's presence share. The factor is a per-visor multiplier (not a country-pot allocation) and depends only on the number of unique IP addresses in the visor's country.
 
-The scaling uses a power function on the number of unique IP addresses per country:
+For each qualifying visor:
 
 ```
-country_weight = unique_ips_in_country ^ exponent
-country_proportion = country_weight / sum(all_country_weights)
+visor.share *= unique_ips_in_country ^ (exponent - 1)
 ```
 
-The default exponent is 0.5 (square root). Each country's total reward allocation is then divided among its visors according to their existing shares (after IP and MAC deduplication).
+The default exponent is 0.5, so each visor's per-country scale is `1/sqrt(unique_ips_in_country)`. After scaling, all per-visor shares are renormalized to the daily presence pool.
 
 This means:
-- The first visor in a previously unrepresented country receives the highest per-visor reward
-- Each additional unique IP address in a country still increases that country's total allocation, but with diminishing returns
-- Adding more visors behind an existing IP address does not change the country's unique IP count and therefore does not increase its regional allocation
-- No country is excluded from rewards -- all eligible visors receive rewards regardless of location
+- A country's **total** reward grows linearly with the number of qualifying visors (subject to the per-IP cap), so adding visors 2..cap at an existing IP does not dilute the rewards of existing visors at that IP
+- The **per-visor** reward in a country shrinks as that country accumulates more unique IPs — single-IP countries see the highest per-visor reward, providing a growth incentive in under-represented regions
+- No country is excluded from rewards — all eligible visors receive rewards regardless of location
 
-**Example:** If Country A has 100 unique IPs and Country B has 1 unique IP:
-- Country A's weight is sqrt(100) = 10
-- Country B's weight is sqrt(1) = 1
-- Country A gets 10/11 (~91%) of the combined allocation, not 100/101 (~99%)
-- Country B's single visor is worth approximately 10x more per-IP than each of Country A's
+**Example:** If Country A has 100 unique IPs and Country B has 1 unique IP, at the default exponent 0.5:
+- Country A's per-visor scale: `100^(0.5-1) = 100^(-0.5) = 0.1`
+- Country B's per-visor scale: `1^(0.5-1) = 1.0`
+- Country B's single visor is worth approximately 10× more (per-visor) than each visor in Country A
 
 The geographic location of each visor is determined by GeoIP lookup of the visor's IP address using the embedded MaxMind GeoLite2-City database at the country level.
 
-The exponent can be adjusted via the `--sat-exp` flag (default 0.5). Setting it to 1.0 disables regional saturation scaling entirely.
+The exponent can be adjusted via the `--sat-exp` flag (default 0.5):
+- `1.0` disables regional saturation scaling entirely (all visors have the same per-country scale of 1)
+- `0.5` (default) gives `1/sqrt(N)` scaling — balances the diversity incentive against runaway per-visor extremes
+- Lower exponents (e.g. 0.4) strengthen the discount on dense-IP countries; higher exponents (e.g. 0.7) soften it
 
 ### Skycoin Address
 
