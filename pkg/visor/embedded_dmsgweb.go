@@ -299,6 +299,27 @@ func serviceAliasMap(conf *visorconfig.V1) map[string]cipher.PubKey {
 	if conf.UptimeTracker != nil {
 		add("ut", conf.UptimeTracker.AddrDmsg, conf.UptimeTracker.Addr)
 	}
+
+	// Setup nodes are PK lists (not URLs) that serve /health over a dialable
+	// dmsg stream — verified reachable through the resolving proxy. Index them
+	// rsn0.. / tsn0.. with the bare alias pointing at the first.
+	//
+	// dmsg SERVERS are deliberately NOT aliased: they're relays whose /health
+	// lives on a clearnet metrics port, not on a dmsg stream, so the proxy
+	// cannot reach them by PK.
+	addList := func(prefix string, pks []cipher.PubKey) {
+		for i, pk := range pks {
+			if pk.Null() {
+				continue
+			}
+			m[fmt.Sprintf("%s%d", prefix, i)] = pk
+			if i == 0 {
+				m[prefix] = pk
+			}
+		}
+	}
+	addList("rsn", conf.EffectiveRouteSetupNodes())
+	addList("tsn", conf.EffectiveTransportSetupPKs())
 	return m
 }
 
