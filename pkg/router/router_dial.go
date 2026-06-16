@@ -1231,6 +1231,14 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		if tp == nil {
 			return true
 		}
+		// Skip closed / black-holing first-hop transports. A transport pruned by
+		// pong-liveness is closed+deregistered (see managed_transport), so
+		// IsClosed() catches both explicitly-closed and silently-dead legs — we
+		// must not build a route out over one. This is the local-calc analog
+		// of the per-leg liveness probe: don't originate a leg on a dead edge.
+		if tp.IsClosed() {
+			return true
+		}
 		// Exclude "setup" labeled transports — those are for RSN control-plane
 		// traffic only and must not be used as hops in data routes.
 		if tp.Entry.Label == transport.LabelSetup {
@@ -1776,13 +1784,20 @@ func (r *router) establishMuxRoutes(
 			ExcludeDMSG:            true,
 		}
 
-		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+		// Mux aux legs PREFER local route calc: it picks a disjoint first-hop
+		// from the visor's OWN live transports (liveness- + exclusion-aware),
+		// which the stateless latency-weighted route-finder can't — the RF
+		// returns lowest-latency routes that cluster on the same few
+		// intermediates, capping mux bandwidth scaling (measured: disjointness
+		// collapses at high degree → throughput plateaus). The route-finder is
+		// the fallback for when local calc can't reach a disjoint deep-hop.
+		muxFwd, muxRev, err := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
-			log.Debugf("Mux route %d/%d: route-finder returned no path: %v — trying local-calc fallback",
+			log.Debugf("Mux route %d/%d: local-calc no path: %v — trying route-finder fallback",
 				i+1, maxCount, err)
-			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
-			if localErr != nil {
-				log.Debugf("Mux route %d/%d: local-calc fallback also failed: %v", i+1, maxCount, localErr)
+			rfFwd, rfRev, rfErr := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+			if rfErr != nil {
+				log.Debugf("Mux route %d/%d: route-finder fallback also failed: %v", i+1, maxCount, rfErr)
 				consecutiveFailures++
 				if consecutiveFailures >= maxConsecutiveMuxFailures {
 					log.Debugf("Mux route planning: %d consecutive failures; giving up on remaining %d aux slots",
@@ -1791,7 +1806,7 @@ func (r *router) establishMuxRoutes(
 				}
 				continue
 			}
-			muxFwd, muxRev = localFwd, localRev
+			muxFwd, muxRev = rfFwd, rfRev
 		}
 		consecutiveFailures = 0
 
@@ -1921,13 +1936,18 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 		ExcludeDMSG:            true,
 	}
 
-	muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+	// Prefer local route calc for the replacement/added leg (disjoint first-hop
+	// from the visor's own live transports); route-finder is the fallback for a
+	// disjoint deep-hop not in the local cache. Same rationale as
+	// establishMuxRoutes — keeps self-healed/rotated legs disjoint and off dead
+	// edges, which the stateless route-finder can't guarantee.
+	muxFwd, muxRev, err := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
 	if err != nil {
-		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
-		if localErr != nil {
-			return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, localErr)
+		rfFwd, rfRev, rfErr := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+		if rfErr != nil {
+			return fmt.Errorf("rotation add-leg: no route found (local-calc=%v, route-finder=%v)", err, rfErr)
 		}
-		muxFwd, muxRev = localFwd, localRev
+		muxFwd, muxRev = rfFwd, rfRev
 	}
 
 	muxKeepAlive := DefaultRouteKeepAlive
