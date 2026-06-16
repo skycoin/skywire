@@ -82,37 +82,40 @@ func TestServiceAliasMapSetupNodes(t *testing.T) {
 	assert.False(t, hasNull, "null setup-node PK must not be aliased")
 }
 
-// TestServiceAliasMapDmsgServers covers dmsg-server aliasing (dmsg0..) and the
-// matching direct-dial PK set, including null-PK skipping.
-func TestServiceAliasMapDmsgServers(t *testing.T) {
+// TestDmsgServerAliases covers dmsg-server aliasing (dmsg0.., sorted by PK for
+// stable indices) and the matching direct-dial PK set, including null-PK skip.
+func TestDmsgServerAliases(t *testing.T) {
 	s0, _ := cipher.GenerateKeyPair()
 	s1, _ := cipher.GenerateKeyPair()
 
-	conf := &visorconfig.V1{
-		Dmsg: &dmsgspec.DmsgConfig{
-			Servers: []*dmsgdisc.Entry{
-				{Static: s0},
-				{Static: s1},
-				{Static: cipher.PubKey{}}, // null PK must be skipped
-			},
-		},
+	servers := []*dmsgdisc.Entry{
+		{Static: s0},
+		{Static: s1},
+		{Static: cipher.PubKey{}}, // null PK must be skipped
 	}
 
-	m := serviceAliasMap(conf)
-	assert.Equal(t, s0.Hex(), m["dmsg0"].Hex())
-	assert.Equal(t, s1.Hex(), m["dmsg1"].Hex())
+	aliases, set := dmsgServerAliases(servers)
 
-	set := dmsgServerPKSet(conf)
+	// Indices are assigned in PK-sorted order, so derive the expectation.
+	lo, hi := s0, s1
+	if hi.Hex() < lo.Hex() {
+		lo, hi = hi, lo
+	}
+	assert.Equal(t, lo.Hex(), aliases["dmsg0"].Hex())
+	assert.Equal(t, hi.Hex(), aliases["dmsg1"].Hex())
+	assert.Len(t, aliases, 2)
+
 	assert.Contains(t, set, s0)
 	assert.Contains(t, set, s1)
 	assert.NotContains(t, set, cipher.PubKey{}, "null PK must not be in the direct-dial set")
 	assert.Len(t, set, 2)
 }
 
-// TestServiceAliasMapNil guards the nil-config and empty-services paths.
+// TestServiceAliasMapNil guards the nil-config and empty paths.
 func TestServiceAliasMapNil(t *testing.T) {
 	assert.Empty(t, serviceAliasMap(nil))
 	assert.Empty(t, serviceAliasMap(&visorconfig.V1{}))
-	assert.Empty(t, dmsgServerPKSet(nil))
-	assert.Empty(t, dmsgServerPKSet(&visorconfig.V1{}))
+	a, s := dmsgServerAliases(nil)
+	assert.Empty(t, a)
+	assert.Empty(t, s)
 }
