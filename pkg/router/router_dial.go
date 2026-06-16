@@ -1234,7 +1234,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 		// Skip closed / black-holing first-hop transports. A transport pruned by
 		// pong-liveness is closed+deregistered (see managed_transport), so
 		// IsClosed() catches both explicitly-closed and silently-dead legs — we
-		// must not build a route out over one. This is the local-calc analogue
+		// must not build a route out over one. This is the local-calc analog
 		// of the per-leg liveness probe: don't originate a leg on a dead edge.
 		if tp.IsClosed() {
 			return true
