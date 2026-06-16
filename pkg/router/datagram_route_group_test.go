@@ -14,6 +14,7 @@ import (
 	"net"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -71,47 +72,62 @@ func TestDatagramRouteGroupHandleRejectsNonDatagramPacket(t *testing.T) {
 }
 
 func TestDatagramRouteGroupReadFromBlocksUntilDeadline(t *testing.T) {
-	dg := newTestDatagramGroup(t)
-	defer dg.Close() //nolint:errcheck
+	// synctest: the fake clock makes the 50ms deadline elapse with zero real
+	// wall-clock wait AND deterministically — so the timing assertion can be
+	// exact (== 50ms) instead of the fuzzy ">= 40ms" the real clock forced.
+	synctest.Test(t, func(t *testing.T) {
+		dg := newTestDatagramGroup(t)
+		defer dg.Close() //nolint:errcheck
 
-	require.NoError(t, dg.SetReadDeadline(time.Now().Add(50*time.Millisecond)))
+		require.NoError(t, dg.SetReadDeadline(time.Now().Add(50*time.Millisecond)))
 
-	buf := make([]byte, 1500)
-	start := time.Now()
-	n, _, err := dg.ReadFrom(buf)
-	elapsed := time.Since(start)
+		buf := make([]byte, 1500)
+		start := time.Now()
+		n, _, err := dg.ReadFrom(buf)
+		elapsed := time.Since(start)
 
-	assert.Equal(t, 0, n)
-	require.Error(t, err)
-	var terr net.Error
-	if assert.ErrorAs(t, err, &terr) {
-		assert.True(t, terr.Timeout(), "expected timeout error, got %v", err)
-	}
-	assert.GreaterOrEqual(t, elapsed, 40*time.Millisecond, "ReadFrom returned too early")
+		assert.Equal(t, 0, n)
+		require.Error(t, err)
+		var terr net.Error
+		if assert.ErrorAs(t, err, &terr) {
+			assert.True(t, terr.Timeout(), "expected timeout error, got %v", err)
+		}
+		assert.Equal(t, 50*time.Millisecond, elapsed, "ReadFrom must block until exactly the deadline")
+	})
 }
 
 func TestDatagramRouteGroupCloseUnblocksReadFrom(t *testing.T) {
-	dg := newTestDatagramGroup(t)
+	// synctest: run in an isolated bubble with a fake clock so the goroutine
+	// coordination is deterministic — synctest.Wait() blocks until every
+	// bubbled goroutine is durably blocked, replacing the racy 20ms sleep
+	// ("hope it's in ReadFrom by now") and the arbitrary 1s safety timeout.
+	synctest.Test(t, func(t *testing.T) {
+		dg := newTestDatagramGroup(t)
 
-	done := make(chan error, 1)
-	go func() {
-		buf := make([]byte, 1500)
-		_, _, err := dg.ReadFrom(buf)
-		done <- err
-	}()
+		done := make(chan error, 1)
+		go func() {
+			buf := make([]byte, 1500)
+			_, _, err := dg.ReadFrom(buf)
+			done <- err
+		}()
 
-	// Give the goroutine a moment to enter ReadFrom.
-	time.Sleep(20 * time.Millisecond)
+		// Wait until the goroutine is durably blocked inside ReadFrom.
+		synctest.Wait()
 
-	require.NoError(t, dg.Close())
+		require.NoError(t, dg.Close())
 
-	select {
-	case err := <-done:
-		require.Error(t, err)
-		assert.ErrorIs(t, err, ErrClosed)
-	case <-time.After(time.Second):
-		t.Fatal("Close did not unblock ReadFrom within 1s")
-	}
+		// Close must unblock ReadFrom. Wait for the goroutine to finish; if Close
+		// failed to unblock it, it stays blocked and the non-blocking read below
+		// fails deterministically — no wall-clock timeout needed.
+		synctest.Wait()
+		select {
+		case err := <-done:
+			require.Error(t, err)
+			assert.ErrorIs(t, err, ErrClosed)
+		default:
+			t.Fatal("Close did not unblock ReadFrom")
+		}
+	})
 }
 
 func TestDatagramRouteGroupCloseIsIdempotent(t *testing.T) {
