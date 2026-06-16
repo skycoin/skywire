@@ -20,7 +20,9 @@ func setTCPUserTimeout(c *net.TCPConn, d time.Duration) error {
 	}
 	var serr error
 	if cerr := rc.Control(func(fd uintptr) {
-		serr = unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, unix.TCP_USER_TIMEOUT, int(d.Milliseconds()))
+		// fd is a valid OS descriptor from RawConn.Control (small positive int);
+		// the timeout is a bounded constant — neither conversion can overflow.
+		serr = unix.SetsockoptInt(int(fd), unix.IPPROTO_TCP, unix.TCP_USER_TIMEOUT, int(d.Milliseconds())) //nolint:gosec
 	}); cerr != nil {
 		return cerr
 	}
