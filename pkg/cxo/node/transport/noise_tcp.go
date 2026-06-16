@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/skycoin/noise"
+	"github.com/flynn/noise"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	skynoise "github.com/skycoin/skywire/pkg/dmsg/noise"
