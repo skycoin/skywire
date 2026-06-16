@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"sync"
 	"time"
 
@@ -54,6 +55,13 @@ type EmbeddedDmsgWeb struct {
 	localPK  cipher.PubKey                       // this visor's PK, for self-loopback + "self" alias
 	selfDial func(port uint16) (net.Conn, error) // in-process serve of a local service port (nil disables loopback)
 
+	// serviceAliases maps canonical short labels (tpd, ar, rf, sd, ut, dmsgd)
+	// to the configured deployment services' PKs, so the resolving proxy can
+	// reach a service's HTTP API by name (e.g. http://tpd.dmsg/). Derived once
+	// from the visor config at construction; empty when no service has a
+	// resolvable dmsg PK.
+	serviceAliases map[string]cipher.PubKey
+
 	mu        sync.Mutex
 	running   bool
 	cancel    context.CancelFunc
@@ -66,15 +74,16 @@ type EmbeddedDmsgWeb struct {
 // "resolver never ran" from "running but idle". localPK + selfDial
 // enable self-loopback (serving requests for this visor's own PK
 // in-process); pass a zero PK / nil selfDial to disable.
-func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC *dmsg.Client, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), cfg *visorconfig.DmsgWebConfig, log *logging.Logger) *EmbeddedDmsgWeb {
+func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC *dmsg.Client, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), serviceAliases map[string]cipher.PubKey, cfg *visorconfig.DmsgWebConfig, log *logging.Logger) *EmbeddedDmsgWeb {
 	return &EmbeddedDmsgWeb{
-		dmsgC:     dmsgC,
-		cfg:       cfg,
-		log:       log,
-		stats:     dmsgweb.NewStats(),
-		localPK:   localPK,
-		selfDial:  selfDial,
-		parentCtx: parentCtx,
+		dmsgC:          dmsgC,
+		cfg:            cfg,
+		log:            log,
+		stats:          dmsgweb.NewStats(),
+		localPK:        localPK,
+		selfDial:       selfDial,
+		serviceAliases: serviceAliases,
+		parentCtx:      parentCtx,
 	}
 }
 
@@ -177,7 +186,15 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		cfg.SelfLoopback = true
 		cfg.SelfDial = e.selfDial
 	}
-	cfg.Aliases = resolverAliasMap(e.cfg.Alias, e.localPK)
+	// Canonical service aliases (tpd, ar, rf, …) first, then this visor's own
+	// alias on top so a colliding self-alias always wins.
+	cfg.Aliases = map[string]cipher.PubKey{}
+	for label, pk := range e.serviceAliases {
+		cfg.Aliases[label] = pk
+	}
+	for label, pk := range resolverAliasMap(e.cfg.Alias, e.localPK) {
+		cfg.Aliases[label] = pk
+	}
 
 	// Optional TLS MITM. CA load failure is non-fatal — the
 	// resolver continues without MITM and logs the reason.
@@ -226,6 +243,65 @@ func resolverAliasMap(alias string, localPK cipher.PubKey) map[string]cipher.Pub
 	return map[string]cipher.PubKey{alias: localPK}
 }
 
+// parseDmsgURLPK extracts the visor PK from a "dmsg://<pk>:<port>" service URL.
+// A plain-HTTP URL (or empty / malformed) yields ok=false, since it carries no
+// dmsg PK to resolve through.
+func parseDmsgURLPK(raw string) (cipher.PubKey, bool) {
+	if raw == "" {
+		return cipher.PubKey{}, false
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "dmsg" {
+		return cipher.PubKey{}, false
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(u.Hostname()); err != nil {
+		return cipher.PubKey{}, false
+	}
+	return pk, true
+}
+
+// serviceAliasMap derives canonical short aliases for the deployment services
+// this visor is configured to use, by pulling each service's PK out of its
+// dmsg:// URL. The resolving proxy then reaches a service's HTTP API by name —
+// e.g. `curl -x socks5h://127.0.0.1:4445 http://tpd.dmsg/health`. Services
+// without a resolvable dmsg PK (plain-HTTP-only or unset) are simply omitted.
+// The label set mirrors the existing `cli` service namespace (tpd, ar, rf, …).
+func serviceAliasMap(conf *visorconfig.V1) map[string]cipher.PubKey {
+	m := map[string]cipher.PubKey{}
+	if conf == nil {
+		return m
+	}
+	// add registers the first candidate URL that carries a dmsg PK. The *Dmsg
+	// field is preferred; the primary field is a fallback for configs that put
+	// the dmsg URL there directly.
+	add := func(alias string, candidates ...string) {
+		for _, raw := range candidates {
+			if pk, ok := parseDmsgURLPK(raw); ok {
+				m[alias] = pk
+				return
+			}
+		}
+	}
+	if conf.Dmsg != nil {
+		add("dmsgd", conf.Dmsg.DiscoveryDmsg, conf.Dmsg.Discovery)
+	}
+	if conf.Transport != nil {
+		add("tpd", conf.Transport.DiscoveryDmsg, conf.Transport.Discovery)
+		add("ar", conf.Transport.AddressResolverDmsg, conf.Transport.AddressResolver)
+	}
+	if conf.Routing != nil {
+		add("rf", conf.Routing.RouteFinderDmsg, conf.Routing.RouteFinder)
+	}
+	if conf.Launcher != nil {
+		add("sd", conf.Launcher.ServiceDiscDmsg, conf.Launcher.ServiceDisc)
+	}
+	if conf.UptimeTracker != nil {
+		add("ut", conf.UptimeTracker.AddrDmsg, conf.UptimeTracker.Addr)
+	}
+	return m
+}
+
 func uintOrDefault(v, d uint) uint {
 	if v == 0 {
 		return d
@@ -267,7 +343,7 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 			Info("Auto-chaining dmsgweb → skynetweb for unified proxy")
 	}
 
-	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.conf.PK, v.services.SelfDial, cfg, log)
+	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.conf.PK, v.services.SelfDial, serviceAliasMap(v.conf), cfg, log)
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime
 	v.initLock.Unlock()
