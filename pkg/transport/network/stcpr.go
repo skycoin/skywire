@@ -69,6 +69,7 @@ func (c *stcprClient) dial(ctx context.Context, addr string) (net.Conn, error) {
 	// throughput-side packaging at the kernel level).
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+		configureTCPLiveness(tcpConn)
 	}
 	return conn, nil
 }

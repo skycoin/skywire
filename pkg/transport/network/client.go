@@ -214,6 +214,7 @@ func (c *genericClient) acceptTransport() error {
 	// no-op for non-TCP listeners.
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+		configureTCPLiveness(tcpConn)
 	}
 	remoteAddr := conn.RemoteAddr()
 	c.log.Debugf("Accepted connection from %v", remoteAddr)
