@@ -20,8 +20,8 @@ func TestDHCacheConsistency(t *testing.T) {
 
 	dh := Secp256k1{}
 
-	first := dh.DH(sk1, pk2)  // miss → compute + cache
-	second := dh.DH(sk1, pk2) // hit
+	first, _ := dh.DH(sk1, pk2)  // miss → compute + cache
+	second, _ := dh.DH(sk1, pk2) // hit
 	if !bytes.Equal(first, second) {
 		t.Fatalf("cache hit returned different bytes: %x vs %x", first, second)
 	}
@@ -31,7 +31,7 @@ func TestDHCacheConsistency(t *testing.T) {
 	// generate a cache-lookup key with a guaranteed-different DH
 	// output.
 	pk3, _ := secp256k1.GenerateKeyPair()
-	other := dh.DH(sk1, pk3)
+	other, _ := dh.DH(sk1, pk3)
 	if bytes.Equal(first, other) {
 		t.Fatalf("unrelated (sk,pk) pairs produced the same DH output: %x", first)
 	}
@@ -40,14 +40,14 @@ func TestDHCacheConsistency(t *testing.T) {
 	// cleared still matches the cached value (cache is a no-op
 	// optimization, not a divergence source).
 	resetDHCache()
-	fresh := dh.DH(sk1, pk2)
+	fresh, _ := dh.DH(sk1, pk2)
 	if !bytes.Equal(first, fresh) {
 		t.Fatalf("post-reset compute disagrees with cached value: %x vs %x", fresh, first)
 	}
 
 	// Sanity check: DH is commutative (each party should derive the
 	// same shared secret from their own SK + the peer's PK).
-	commutative := dh.DH(sk2, pk1)
+	commutative, _ := dh.DH(sk2, pk1)
 	if !bytes.Equal(first, commutative) {
 		t.Fatalf("DH not commutative: DH(sk1, pk2)=%x DH(sk2, pk1)=%x", first, commutative)
 	}
@@ -63,7 +63,7 @@ func TestDHCacheEviction(t *testing.T) {
 	// past the cap.
 	for i := 0; i < dhCacheMax*2; i++ {
 		pk, sk := secp256k1.GenerateKeyPair()
-		_ = dh.DH(sk, pk)
+		_, _ = dh.DH(sk, pk)
 		if size := dhCacheSize(); size > dhCacheMax {
 			t.Fatalf("cache exceeded cap: %d > %d at iteration %d", size, dhCacheMax, i)
 		}
@@ -92,12 +92,12 @@ func TestDHCacheStats(t *testing.T) {
 	pk2, sk2 := secp256k1.GenerateKeyPair()
 
 	// First call on each pair = miss.
-	_ = dh.DH(sk1, pk2)
-	_ = dh.DH(sk2, pk1)
+	_, _ = dh.DH(sk1, pk2)
+	_, _ = dh.DH(sk2, pk1)
 	// Repeat — both hits.
-	_ = dh.DH(sk1, pk2)
-	_ = dh.DH(sk2, pk1)
-	_ = dh.DH(sk1, pk2)
+	_, _ = dh.DH(sk1, pk2)
+	_, _ = dh.DH(sk2, pk1)
+	_, _ = dh.DH(sk1, pk2)
 
 	s := GetCacheStats()
 	if s.Hits != 3 {
@@ -119,7 +119,7 @@ func TestDHCacheStats(t *testing.T) {
 	// Push past the cap to trigger evictions.
 	for i := 0; i < dhCacheMax*2; i++ {
 		pk, sk := secp256k1.GenerateKeyPair()
-		_ = dh.DH(sk, pk)
+		_, _ = dh.DH(sk, pk)
 	}
 	s = GetCacheStats()
 	if s.Evictions == 0 {
@@ -145,10 +145,10 @@ func BenchmarkDHCacheHit(b *testing.B) {
 	resetDHCache()
 	dh := Secp256k1{}
 	pk, sk := secp256k1.GenerateKeyPair()
-	_ = dh.DH(sk, pk) // prime the cache
+	_, _ = dh.DH(sk, pk) // prime the cache
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = dh.DH(sk, pk)
+		_, _ = dh.DH(sk, pk)
 	}
 }
 
@@ -167,6 +167,6 @@ func BenchmarkDHCacheMiss(b *testing.B) {
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = dh.DH(keys[i][0], keys[i][1])
+		_, _ = dh.DH(keys[i][0], keys[i][1])
 	}
 }

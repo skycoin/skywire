@@ -7,7 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/skycoin/noise"
+	"github.com/flynn/noise"
 	"github.com/skycoin/skycoin/src/cipher"
 	secp256k1 "github.com/skycoin/skycoin/src/cipher/secp256k1-go"
 )
@@ -98,7 +98,7 @@ func makeDHKey(sk, pk []byte) dhCacheKey {
 // Keys are already validated by the noise handshake state machine, so we
 // skip the redundant NewPubKey/NewSecKey validation and copy directly.
 // cipher.ECDH still performs its own internal validation.
-func (Secp256k1) DH(sk, pk []byte) []byte {
+func (Secp256k1) DH(sk, pk []byte) ([]byte, error) {
 	k := makeDHKey(sk, pk)
 	dhCacheMu.RLock()
 	cached, hit := dhCache[k]
@@ -107,7 +107,7 @@ func (Secp256k1) DH(sk, pk []byte) []byte {
 		dhCacheHits.Add(1)
 		out := make([]byte, 33)
 		copy(out, cached[:])
-		return out
+		return out, nil
 	}
 	dhCacheMisses.Add(1)
 
@@ -117,7 +117,10 @@ func (Secp256k1) DH(sk, pk []byte) []byte {
 	copy(secKey[:], sk)
 	ecdh, err := cipher.ECDH(pubKey, secKey)
 	if err != nil {
-		panic(fmt.Sprintf("noise DH: ECDH failed: %v", err))
+		// flynn/noise's DHFunc returns an error (the old skycoin/noise fork's
+		// signature did not) — surface it as a handshake failure instead of
+		// panicking the whole visor on a malformed peer key.
+		return nil, fmt.Errorf("noise DH: ECDH failed: %w", err)
 	}
 	// DHLen() returns 33; ECDH returns 32-byte SHA256 hash, pad to 33.
 	out := make([]byte, 33)
@@ -140,7 +143,7 @@ func (Secp256k1) DH(sk, pk []byte) []byte {
 	}
 	dhCache[k] = entry
 	dhCacheMu.Unlock()
-	return out
+	return out, nil
 }
 
 // CacheStats is a snapshot of the noise DH cache counters. Hits/Misses

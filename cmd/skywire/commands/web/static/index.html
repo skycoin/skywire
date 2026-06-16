@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>skywire web</title>
+<style>
+:root {
+  --bg: #0a0e14;
+  --fg: #c0caf5;
+  --fg-bright: #f8f9fa;
+  --accent: #7aa2f7;
+  --green: #9ece6a;
+  --dim: #565f89;
+  --panel: rgba(255,255,255,0.025);
+  --border: rgba(255,255,255,0.08);
+  --prompt: #9ece6a;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; padding: 0; min-height: 100vh;
+  background: var(--bg); color: var(--fg);
+  font-family: ui-monospace, "SFMono-Regular", "Menlo", "Cascadia Mono", monospace;
+  font-size: 14px; line-height: 1.5;
+}
+
+.sh {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 18px 22px 80px;
+}
+
+/* Shell prompt — sticky at the top, mimics a terminal's input line. */
+.sh-prompt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(6px);
+}
+.sh-prompt {
+  color: var(--prompt);
+  font-weight: 600;
+  user-select: none;
+  white-space: nowrap;
+}
+.sh-input {
+  flex: 1;
+  background: transparent;
+  color: var(--fg-bright);
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 1em;
+  caret-color: var(--accent);
+}
+
+/* Completions row — pills below the prompt, like shell tab-completions
+   listed inline. */
+.sh-completions {
+  margin: 8px 0;
+  min-height: 28px;
+}
+.sh-comp-header {
+  color: var(--dim);
+  font-size: 0.8em;
+  margin-bottom: 4px;
+}
+.sh-comp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sh-comp-pill {
+  background: rgba(122, 162, 247, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(122, 162, 247, 0.25);
+  border-radius: 3px;
+  padding: 1px 7px;
+  font-size: 0.85em;
+}
+
+/* Help panel — the live cobra help for whatever the prompt is
+   currently pointed at. Plain block-style, mimicking the CLI's
+   own help text. */
+.sh-help {
+  margin: 14px 0;
+}
+.sh-help-header {
+  color: var(--green);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.sh-help-short {
+  color: var(--fg-bright);
+  margin-bottom: 8px;
+}
+.sh-help-long {
+  background: transparent;
+  color: var(--dim);
+  margin: 0 0 12px 0;
+  white-space: pre-wrap;
+  font-size: 0.9em;
+}
+.sh-help-section {
+  color: var(--accent);
+  margin: 10px 0 4px;
+  font-weight: 600;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.sh-help-example {
+  background: transparent;
+  color: var(--dim);
+  margin: 0;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+}
+
+table.sh-flags {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85em;
+}
+table.sh-flags td {
+  vertical-align: top;
+  padding: 2px 12px 2px 0;
+}
+.sh-flag-name { color: var(--accent); white-space: nowrap; }
+.sh-flag-type { color: var(--dim); white-space: nowrap; }
+.sh-flag-usage { color: var(--fg); }
+
+/* Output transcript — terminal-style scrolling pre. */
+#sh-output-wrap {
+  margin-top: 18px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
+.sh-output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+#sh-output-label {
+  color: var(--prompt);
+  font-size: 0.85em;
+}
+.sh-output {
+  background: black;
+  color: var(--fg-bright);
+  padding: 10px 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  max-height: 50vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.85em;
+  margin: 0;
+}
+button {
+  background: transparent;
+  color: #f7768e;
+  border: 1px solid #f7768e;
+  padding: 3px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8em;
+}
+button:hover { background: rgba(247, 118, 142, 0.1); }
+
+/* Scrollbar styling so the dark theme is consistent. */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--dim); }
+::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div id="app">
+  <p style="padding: 20px; color: var(--dim);">Loading skywire web…</p>
+</div>
+<script src="/wasm_exec.js"></script>
+<script>
+(async () => {
+  const go = new Go();
+  try {
+    const resp = await fetch("/b.wasm");
+    if (!resp.ok) {
+      document.getElementById("app").innerHTML =
+        '<pre style="color:#f7768e; padding: 20px;">b.wasm not built — run `make build` in cmd/skywire/commands/web/</pre>';
+      return;
+    }
+    const buf = await resp.arrayBuffer();
+    const mod = await WebAssembly.instantiate(buf, go.importObject);
+    go.run(mod.instance);
+  } catch (e) {
+    document.getElementById("app").innerHTML =
+      '<pre style="color:#f7768e; padding: 20px;">WASM load failed: ' + e.message + '</pre>';
+  }
+})();
+</script>
+</body>
+</html>

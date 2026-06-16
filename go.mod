@@ -67,6 +67,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cloudfoundry-attic/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21
 	github.com/coder/websocket v1.8.14
+	github.com/flynn/noise v1.1.0
 	github.com/gdamore/tcell/v2 v2.13.10
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/hanwen/go-fuse/v2 v2.10.1
@@ -207,7 +208,6 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/shoenig/go-m1cpu v0.2.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
-	github.com/skycoin/noise v0.0.0-20180327030543-2492fe189ae6
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/viper v1.21.0 // indirect
