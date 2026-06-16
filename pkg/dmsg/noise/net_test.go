@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/noise"
+	"github.com/flynn/noise"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
