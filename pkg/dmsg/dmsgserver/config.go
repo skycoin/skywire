@@ -194,6 +194,18 @@ func (c *Config) NormalizedDeployments() []Deployment {
 	}
 	out := make([]Deployment, len(src))
 	for i, d := range src {
+		// A deployment with no explicit transit servers borrows the
+		// embedded set for whichever embedded deployment its discovery
+		// matches (by PK). This lets an operator drop the hand-maintained
+		// `servers` list from a dmsg-server config — keeping discovery_dmsg
+		// and per-deployment knobs like sessions_count — and track the
+		// binary's embedded deployment data instead. Servers stay coupled to
+		// their discovery: an unrecognized discovery is left empty, never
+		// filled from a mismatched deployment. The explicit `default` branch
+		// above already carries embedded servers, so this is a no-op there.
+		if len(d.Servers) == 0 {
+			d.Servers = deployment.EmbeddedServersForDiscoveryDmsg(d.DiscoveryDmsg)
+		}
 		if d.AdvertisedAddress == "" {
 			d.AdvertisedAddress = c.PublicAddress
 		}
