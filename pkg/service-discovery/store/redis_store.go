@@ -23,6 +23,16 @@ var json = jsoniter.ConfigFastest
 const (
 	serviceKeyPrefix   = "service:"
 	serviceTypesSetKey = "service_types"
+
+	// mgetChunkSize bounds how many keys go into a single MGET. Redis is
+	// single-threaded, so one MGET over hundreds of keys (e.g. every
+	// service:skysocks:<pk>) blocks the server for the whole batch —
+	// ~40ms in production — starving every other client's command,
+	// including dmsg-discovery's tiny GET entry:<pk>. Issuing the fan-out
+	// in bounded batches lets redis interleave other clients between
+	// chunks. 256 keeps each MGET well under the starvation threshold
+	// while keeping round-trips low.
+	mgetChunkSize = 256
 )
 
 type redisStore struct {
@@ -145,6 +155,45 @@ func (s *redisStore) Service(ctx context.Context, sType string, addr servicedisc
 	return &service, nil
 }
 
+// mgetChunked issues MGET in bounded batches (mgetChunkSize) and concatenates
+// the results in key order, so a large fan-out does not block single-threaded
+// redis for the whole batch at once. The returned slice has exactly len(keys)
+// entries (nil for missing keys), preserving positional correspondence with
+// keys so callers can map results back by index.
+func (s *redisStore) mgetChunked(ctx context.Context, keys []string) ([]interface{}, error) {
+	values := make([]interface{}, 0, len(keys))
+	for _, batch := range chunkKeys(keys, mgetChunkSize) {
+		got, err := s.client.MGet(ctx, batch...).Result()
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, got...)
+	}
+	return values, nil
+}
+
+// chunkKeys splits keys into consecutive batches of at most size, in order and
+// with no key dropped or duplicated, so concatenating the per-batch MGET
+// results reproduces the single-MGET result positionally. A non-positive size
+// yields a single batch (no chunking).
+func chunkKeys(keys []string, size int) [][]string {
+	if len(keys) == 0 {
+		return nil
+	}
+	if size <= 0 || len(keys) <= size {
+		return [][]string{keys}
+	}
+	chunks := make([][]string, 0, (len(keys)+size-1)/size)
+	for start := 0; start < len(keys); start += size {
+		end := start + size
+		if end > len(keys) {
+			end = len(keys)
+		}
+		chunks = append(chunks, keys[start:end])
+	}
+	return chunks
+}
+
 func (s *redisStore) Services(ctx context.Context, sType, version, country string) ([]servicedisc.Service, *servicedisc.HTTPError) {
 	setKey := s.serviceTypeSetKey(sType)
 
@@ -162,7 +211,7 @@ func (s *redisStore) Services(ctx context.Context, sType, version, country strin
 		keys = append(keys, fmt.Sprintf("%s%s:%s", serviceKeyPrefix, sType, pk))
 	}
 
-	values, err := s.client.MGet(ctx, keys...).Result()
+	values, err := s.mgetChunked(ctx, keys)
 	if err != nil {
 		return nil, s.processErr(err, http.StatusInternalServerError)
 	}
