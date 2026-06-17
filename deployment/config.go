@@ -17,6 +17,7 @@ package deployment
 
 import (
 	_ "embed"
+	"net/url"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -94,6 +95,49 @@ func (s *Services) ToDiscEntries() []*disc.Entry {
 // HasDmsgEndpoints returns true if the deployment has DMSG service endpoints.
 func (s *Services) HasDmsgEndpoints() bool {
 	return s.DmsgDiscoveryDmsg != ""
+}
+
+// pkFromDmsgURL extracts the public key from a `dmsg://<pk>:<port>` URL.
+// Returns the zero PK on empty / malformed / non-PK input.
+func pkFromDmsgURL(raw string) cipher.PubKey {
+	if raw == "" {
+		return cipher.PubKey{}
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return cipher.PubKey{}
+	}
+	var pk cipher.PubKey
+	if pk.Set(u.Hostname()) != nil {
+		return cipher.PubKey{}
+	}
+	return pk
+}
+
+// EmbeddedServersForDiscoveryDmsg returns the embedded dmsg-server transit
+// entries belonging to the embedded deployment whose dmsg-discovery matches
+// discoveryDmsgURL (compared by public key), or nil when nothing matches or the
+// URL is empty/malformed.
+//
+// This lets a dmsg-server omit its `servers` list yet still bootstrap, by
+// borrowing the binary's embedded server set — but ONLY for a recognized
+// discovery, so transit servers stay coupled to the discovery they belong to.
+// An unknown discovery yields nil (the server keeps an empty list), never a
+// mismatched set from a different deployment.
+func EmbeddedServersForDiscoveryDmsg(discoveryDmsgURL string) []*disc.Entry {
+	want := pkFromDmsgURL(discoveryDmsgURL)
+	if (want == cipher.PubKey{}) {
+		return nil
+	}
+	for _, s := range []Services{Prod, Test} {
+		if len(s.DmsgServers) == 0 {
+			continue
+		}
+		if pkFromDmsgURL(s.DmsgDiscoveryDmsg) == want {
+			return s.ToDiscEntries()
+		}
+	}
+	return nil
 }
 
 // Services are URLs, IP addresses, and public keys of the skywire services as deployed.
