@@ -276,6 +276,14 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			if _, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok {
+				// Reserved synthetic directory: serve the alias index in-process.
+				// Never dials out and is not a real PK/alias, so intercept it
+				// before host resolution (which would fail closed on "home").
+				if isHomeHost(origHost, cfg.DomainSuffix) {
+					log.Debug("SOCKS5 → resolver home page (in-process)")
+					return &tcpAddrConn{Conn: serveHomeInProcess(cfg.Aliases, cfg.DomainSuffix, cfg.LocalPK)}, nil
+				}
+
 				vhost, route, dest, _, perr := skynetweb.ParseResolverHost(origHost, cfg.DomainSuffix, cfg.Aliases)
 				if perr != nil {
 					return nil, fmt.Errorf("invalid dmsg hostname %q: %w", origHost, perr)
