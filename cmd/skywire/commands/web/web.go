@@ -29,7 +29,6 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -374,7 +373,7 @@ func handleRun(runs *runRegistry, skywireBin string) http.Handler {
 		cmd.Stderr = cmd.Stdout
 		// SIGINT on cancel so the subprocess gets a chance to clean
 		// up (matters for visor halt, dmsg curl downloads, etc).
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		setProcGroup(cmd)
 
 		if err := cmd.Start(); err != nil {
 			cancel()
@@ -478,9 +477,7 @@ func handleSSE(runs *runRegistry) http.Handler {
 				flusher.Flush()
 			case <-notify:
 				// Client gone — kill the subprocess group.
-				if runEntry.cmd.Process != nil {
-					_ = syscall.Kill(-runEntry.cmd.Process.Pid, syscall.SIGINT) //nolint:errcheck
-				}
+				killProcGroup(runEntry.cmd.Process)
 				return
 			}
 		}
@@ -502,9 +499,7 @@ func handleCancel(runs *runRegistry) http.Handler {
 			http.Error(w, "no such run", http.StatusNotFound)
 			return
 		}
-		if runEntry.cmd.Process != nil {
-			_ = syscall.Kill(-runEntry.cmd.Process.Pid, syscall.SIGINT) //nolint:errcheck
-		}
+		killProcGroup(runEntry.cmd.Process)
 		w.WriteHeader(http.StatusNoContent)
 	})
 }
