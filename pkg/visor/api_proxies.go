@@ -88,7 +88,8 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			// it starts — no data loss, just "not available yet".
 			cfg.UpstreamSOCKS = fmt.Sprintf("127.0.0.1:%d", defaultSkynetWebProxyPort)
 			log := logging.MustGetLogger("embedded_dmsgweb")
-			runtime = newEmbeddedDmsgWeb(v.ctx, v.dmsgC, v.conf.PK, v.services.SelfDial, cfg, log)
+			aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
+			runtime = newEmbeddedDmsgWeb(v.ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, aliases, dmsgSet, cfg, log)
 			v.embeddedDmsgWeb = runtime
 		}
 		v.initLock.Unlock()
