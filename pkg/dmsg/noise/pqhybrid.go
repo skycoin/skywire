@@ -88,7 +88,7 @@ func (k *pqInitiator) decapsulate(ciphertext []byte) (sharedSecret []byte, err e
 // transcript hash (so the derived key is tied to *this* handshake). Breaking the
 // result requires breaking BOTH the classical DH AND ML-KEM-768 — hybrid
 // security. Returns keyLen bytes.
-func combineHybridKey(classicalKey, pqSharedSecret, transcriptHash []byte, keyLen int) ([]byte, error) {
+func combineHybridKey(classicalKey, pqSharedSecret, transcriptHash []byte, keyLen int) ([]byte, error) { //nolint:unparam // keyLen is the HKDF output length, kept explicit though currently always the 32-byte cipher key
 	if len(pqSharedSecret) != pqSharedKeySize {
 		return nil, fmt.Errorf("pq: unexpected ml-kem shared-secret size %d (want %d)", len(pqSharedSecret), pqSharedKeySize)
 	}
