@@ -297,7 +297,7 @@ func serviceAliasMap(conf *visorconfig.V1) map[string]cipher.PubKey {
 		add("ut", conf.UptimeTracker.AddrDmsg, conf.UptimeTracker.Addr)
 	}
 	// Reward system (top-level config fields, not a sub-block).
-	add("reward", conf.RewardSystemDmsg, conf.RewardSystem)
+	add("rewards", conf.RewardSystemDmsg, conf.RewardSystem)
 
 	// Setup nodes are PK lists (not URLs) that serve /health over a dialable
 	// dmsg stream — verified reachable through the resolving proxy. Index them
