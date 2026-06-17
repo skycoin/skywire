@@ -115,6 +115,17 @@ type Config struct {
 	// Aliases maps a destination label to a PK (e.g. "skywire" -> LocalPK), so
 	// "skywire.dmsg" resolves exactly like "<pk>.dmsg".
 	Aliases map[string]cipher.PubKey
+
+	// DirectClient is an optional dmsg client that reaches servers by their
+	// configured address rather than via discovery. A dest in DirectServerPKs
+	// is dialed through it by self-rendezvous (EnsureAndObtainSession(dest) +
+	// DialStream(dest:port)), which makes non-discovery dmsg SERVERS — they
+	// serve /health etc. over dmsg but never register a client entry, so the
+	// discovery client cannot resolve them — reachable by name. Nil disables
+	// this path (dests fall through to the normal discovery dial).
+	DirectClient *dmsg.Client
+	// DirectServerPKs is the set of destination PKs to dial via DirectClient.
+	DirectServerPKs map[cipher.PubKey]struct{}
 }
 
 // DmsgTarget is a (publicKey, dmsgPort) pair used in fixed-mapping mode.
@@ -295,7 +306,25 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 
 				dstAddr := dmsg.Addr{PK: dest, Port: uint16(port)}
 				var stream net.Conn
-				if len(route) > 0 {
+				_, isDirectServer := cfg.DirectServerPKs[dest]
+				switch {
+				case isDirectServer && cfg.DirectClient != nil && len(route) == 0:
+					// Non-discovery dmsg SERVER: dial it through the direct
+					// client by self-rendezvous — connect to the server (the
+					// direct client knows its address) and dial the server's
+					// own listener over that session. The discovery client
+					// can't reach it (no client entry registered).
+					log.WithField("server", dest).WithField("port", port).Debug("SOCKS5 → DMSG direct server")
+					ses, serr := cfg.DirectClient.EnsureAndObtainSession(ctx, dest)
+					if serr != nil {
+						return nil, fmt.Errorf("direct session to dmsg server %s: %w", dest, serr)
+					}
+					str, derr := ses.DialStream(ctx, dstAddr)
+					if derr != nil {
+						return nil, derr
+					}
+					stream = str
+				case len(route) > 0:
 					// Pinned rendezvous: dial the destination THROUGH the named
 					// dmsg server's session instead of resolving it via
 					// discovery. This lets a browser reach a direct/hidden client
@@ -318,7 +347,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 						return nil, derr
 					}
 					stream = str
-				} else {
+				default:
 					log.WithField("port", port).Debug("SOCKS5 → DMSG direct")
 					c, derr := dmsgC.Dial(ctx, dstAddr)
 					if derr != nil {

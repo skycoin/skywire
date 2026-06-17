@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sort"
 	"sync"
 	"time"
 
@@ -30,7 +31,9 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
+	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	dmsgspec "github.com/skycoin/skywire/pkg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -54,6 +57,21 @@ type EmbeddedDmsgWeb struct {
 	localPK  cipher.PubKey                       // this visor's PK, for self-loopback + "self" alias
 	selfDial func(port uint16) (net.Conn, error) // in-process serve of a local service port (nil disables loopback)
 
+	// serviceAliases maps canonical short labels (tpd, ar, rf, sd, ut, dmsgd,
+	// rsn*, tsn*, dmsg*) to the configured deployment services' PKs, so the
+	// resolving proxy can reach a service's HTTP API by name (e.g.
+	// http://tpd.dmsg/). Derived once from the visor config at construction;
+	// empty when no service has a resolvable dmsg PK.
+	serviceAliases map[string]cipher.PubKey
+
+	// directClient + directServerPKs let the resolver reach dmsg SERVERS, which
+	// serve over dmsg-HTTP but register no discovery client entry. A dest in
+	// directServerPKs is dialed through directClient by self-rendezvous instead
+	// of the discovery dial. directClient is the visor's direct dmsg client
+	// (v.dmsgDC); nil disables the path.
+	directClient    *dmsg.Client
+	directServerPKs map[cipher.PubKey]struct{}
+
 	mu        sync.Mutex
 	running   bool
 	cancel    context.CancelFunc
@@ -66,15 +84,18 @@ type EmbeddedDmsgWeb struct {
 // "resolver never ran" from "running but idle". localPK + selfDial
 // enable self-loopback (serving requests for this visor's own PK
 // in-process); pass a zero PK / nil selfDial to disable.
-func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC *dmsg.Client, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), cfg *visorconfig.DmsgWebConfig, log *logging.Logger) *EmbeddedDmsgWeb {
+func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC, directClient *dmsg.Client, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), serviceAliases map[string]cipher.PubKey, directServerPKs map[cipher.PubKey]struct{}, cfg *visorconfig.DmsgWebConfig, log *logging.Logger) *EmbeddedDmsgWeb {
 	return &EmbeddedDmsgWeb{
-		dmsgC:     dmsgC,
-		cfg:       cfg,
-		log:       log,
-		stats:     dmsgweb.NewStats(),
-		localPK:   localPK,
-		selfDial:  selfDial,
-		parentCtx: parentCtx,
+		dmsgC:           dmsgC,
+		cfg:             cfg,
+		log:             log,
+		stats:           dmsgweb.NewStats(),
+		localPK:         localPK,
+		selfDial:        selfDial,
+		serviceAliases:  serviceAliases,
+		directClient:    directClient,
+		directServerPKs: directServerPKs,
+		parentCtx:       parentCtx,
 	}
 }
 
@@ -177,7 +198,18 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		cfg.SelfLoopback = true
 		cfg.SelfDial = e.selfDial
 	}
-	cfg.Aliases = resolverAliasMap(e.cfg.Alias, e.localPK)
+	// Canonical service aliases (tpd, ar, rf, …) first, then this visor's own
+	// alias on top so a colliding self-alias always wins.
+	cfg.Aliases = map[string]cipher.PubKey{}
+	for label, pk := range e.serviceAliases {
+		cfg.Aliases[label] = pk
+	}
+	for label, pk := range resolverAliasMap(e.cfg.Alias, e.localPK) {
+		cfg.Aliases[label] = pk
+	}
+	// Direct-client path for non-discovery dmsg servers.
+	cfg.DirectClient = e.directClient
+	cfg.DirectServerPKs = e.directServerPKs
 
 	// Optional TLS MITM. CA load failure is non-fatal — the
 	// resolver continues without MITM and logs the reason.
@@ -226,6 +258,128 @@ func resolverAliasMap(alias string, localPK cipher.PubKey) map[string]cipher.Pub
 	return map[string]cipher.PubKey{alias: localPK}
 }
 
+// serviceAliasMap derives canonical short aliases for the deployment services
+// this visor is configured to use, by pulling each service's PK out of its
+// dmsg:// URL. The resolving proxy then reaches a service's HTTP API by name —
+// e.g. `curl -x socks5h://127.0.0.1:4445 http://tpd.dmsg/health`. Services
+// without a resolvable dmsg PK (plain-HTTP-only or unset) are simply omitted.
+// The label set mirrors the existing `cli` service namespace (tpd, ar, rf, …).
+func serviceAliasMap(conf *visorconfig.V1) map[string]cipher.PubKey {
+	m := map[string]cipher.PubKey{}
+	if conf == nil {
+		return m
+	}
+	// add registers the first candidate URL that carries a dmsg PK. The *Dmsg
+	// field is preferred; the primary field is a fallback for configs that put
+	// the dmsg URL there directly.
+	add := func(alias string, candidates ...string) {
+		for _, raw := range candidates {
+			if pk := dmsgspec.PKFromDmsgURL(raw); !pk.Null() {
+				m[alias] = pk
+				return
+			}
+		}
+	}
+	if conf.Dmsg != nil {
+		add("dmsgd", conf.Dmsg.DiscoveryDmsg, conf.Dmsg.Discovery)
+	}
+	if conf.Transport != nil {
+		add("tpd", conf.Transport.DiscoveryDmsg, conf.Transport.Discovery)
+		add("ar", conf.Transport.AddressResolverDmsg, conf.Transport.AddressResolver)
+	}
+	if conf.Routing != nil {
+		add("rf", conf.Routing.RouteFinderDmsg, conf.Routing.RouteFinder)
+	}
+	if conf.Launcher != nil {
+		add("sd", conf.Launcher.ServiceDiscDmsg, conf.Launcher.ServiceDisc)
+	}
+	if conf.UptimeTracker != nil {
+		add("ut", conf.UptimeTracker.AddrDmsg, conf.UptimeTracker.Addr)
+	}
+
+	// Setup nodes are PK lists (not URLs) that serve /health over a dialable
+	// dmsg stream — verified reachable through the resolving proxy. Index them
+	// rsn0.. / tsn0.. with the bare alias pointing at the first.
+	//
+	// dmsg SERVERS are deliberately NOT aliased: they're relays whose /health
+	// lives on a clearnet metrics port, not on a dmsg stream, so the proxy
+	// cannot reach them by PK.
+	addList := func(prefix string, pks []cipher.PubKey) {
+		for i, pk := range pks {
+			if pk.Null() {
+				continue
+			}
+			m[fmt.Sprintf("%s%d", prefix, i)] = pk
+			if i == 0 {
+				m[prefix] = pk
+			}
+		}
+	}
+	addList("rsn", conf.EffectiveRouteSetupNodes())
+	addList("tsn", conf.EffectiveTransportSetupPKs())
+	// dmsg-server aliases (dmsg0..) are added separately from the LIVE server
+	// list, not this static config — see dmsgServerAliases / liveDmsgServerEntries.
+	return m
+}
+
+// liveDmsgServerEntries returns the visor's current dmsg-server set: the
+// config's bootstrap servers merged with (and preferring) the on-disk cache
+// the background loop refreshes from dmsg-discovery's all_servers. This is the
+// same list the dmsg clients actually use, so aliases track reality instead of
+// the possibly-stale embedded config (which is bootstrap-only).
+func liveDmsgServerEntries(v *Visor) []*dmsgdisc.Entry {
+	if v == nil || v.conf == nil || v.conf.Dmsg == nil {
+		return nil
+	}
+	// Prefer the live cache (refreshed from dmsg-discovery's all_servers) so
+	// aliases reflect what discovery currently advertises, NOT the stale
+	// bootstrap config. MergePreferringCache unions config+cache by PK, which
+	// would re-introduce decommissioned config-only PKs — so pass nil to get
+	// exactly the cache contents instead.
+	if v.dmsgServersCache != nil {
+		if live := v.dmsgServersCache.MergePreferringCache(nil); len(live) > 0 {
+			return live
+		}
+	}
+	// Bootstrap fallback: empty cache (fresh visor, before the first refresh).
+	return v.conf.Dmsg.ResolvedServers()
+}
+
+// dmsgServerAliases builds dmsg0.. aliases and the matching direct-dial PK set
+// from a server list, sorted by PK for stable indices across restarts. dmsg
+// servers serve /health (etc.) over dmsg-HTTP but register no discovery client
+// entry, so they're reached via the resolver's direct client (self-rendezvous),
+// not the discovery dial. Null PKs are skipped.
+func dmsgServerAliases(servers []*dmsgdisc.Entry) (map[string]cipher.PubKey, map[cipher.PubKey]struct{}) {
+	pks := make([]cipher.PubKey, 0, len(servers))
+	for _, e := range servers {
+		if e == nil || e.Static.Null() {
+			continue
+		}
+		pks = append(pks, e.Static)
+	}
+	sort.Slice(pks, func(i, j int) bool { return pks[i].Hex() < pks[j].Hex() })
+	aliases := make(map[string]cipher.PubKey, len(pks))
+	set := make(map[cipher.PubKey]struct{}, len(pks))
+	for i, pk := range pks {
+		aliases[fmt.Sprintf("dmsg%d", i)] = pk
+		set[pk] = struct{}{}
+	}
+	return aliases, set
+}
+
+// resolverAliasesAndDmsgServers assembles the full alias map (URL services +
+// setup nodes from static config, plus dmsg0.. from the LIVE server list) and
+// the direct-dial dmsg-server PK set, for the embedded dmsg resolver.
+func resolverAliasesAndDmsgServers(v *Visor) (map[string]cipher.PubKey, map[cipher.PubKey]struct{}) {
+	aliases := serviceAliasMap(v.conf)
+	dmsgAliases, set := dmsgServerAliases(liveDmsgServerEntries(v))
+	for label, pk := range dmsgAliases {
+		aliases[label] = pk
+	}
+	return aliases, set
+}
+
 func uintOrDefault(v, d uint) uint {
 	if v == 0 {
 		return d
@@ -267,7 +421,8 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 			Info("Auto-chaining dmsgweb → skynetweb for unified proxy")
 	}
 
-	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.conf.PK, v.services.SelfDial, cfg, log)
+	aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
+	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, aliases, dmsgSet, cfg, log)
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime
 	v.initLock.Unlock()
