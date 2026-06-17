@@ -141,6 +141,20 @@ Notes:
 - An unknown label still **fails closed** — it's neither a PK nor a known alias,
   so it resolves to nothing rather than somewhere wrong.
 
+### Directory page (`home.dmsg`)
+
+`http://home.dmsg/` is a **directory of every alias above**, rendered by the
+resolver itself so you don't have to remember the names. Open it in a browser
+(with the SOCKS5 proxy set) and click through to any service.
+
+It is **synthetic and proxy-only**: the resolver generates the page in-process
+and serves it straight back over the SOCKS5 connection — nothing is dialed out,
+and the visor does **not** serve it on any real port. It exists only *as seen
+through the proxy*. The service links point at each service's `/health` endpoint
+(deployment services don't serve `/`), while the `skywire` link opens your
+visor's real landing page at `/`. `home` is a reserved label (it shadows any
+same-named configured alias).
+
 ## From `curl`
 
 Use `socks5h://` (the `h` makes the **proxy** resolve the hostname — required for
