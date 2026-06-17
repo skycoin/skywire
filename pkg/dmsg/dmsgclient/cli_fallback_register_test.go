@@ -55,16 +55,19 @@ func TestFallbackDiscClient_WriteRouting(t *testing.T) {
 		assert.Zero(t, h.puts+h.posts+h.del, "service variant must NOT publish to HTTP discovery")
 	})
 
-	t.Run("registering variant writes go to HTTP (publish)", func(t *testing.T) {
+	t.Run("registering: Put/DelEntry publish to HTTP, PostEntry no-ops", func(t *testing.T) {
 		d, h := &recordingDisc{}, &recordingDisc{}
 		c := NewRegisteringFallbackDiscClient(d, h, log)
 		require.NoError(t, c.PutEntry(context.Background(), sk, e))
 		require.NoError(t, c.PostEntry(context.Background(), e))
 		require.NoError(t, c.DelEntry(context.Background(), e))
-		assert.Equal(t, 1, h.puts)
-		assert.Equal(t, 1, h.posts)
+		assert.Equal(t, 1, h.puts, "PutEntry = durable post-session registration")
 		assert.Equal(t, 1, h.del)
-		assert.Zero(t, d.puts+d.posts+d.del, "registering variant must NOT write to the direct no-op client")
+		// PostEntry ALWAYS no-ops (direct): it's the PRE-session call that would
+		// otherwise wedge the dmsg serve loop. PutEntry (post-session) registers.
+		assert.Equal(t, 1, d.posts, "PostEntry no-ops via direct even when registering")
+		assert.Zero(t, h.posts, "PostEntry must NOT block-publish pre-session")
+		assert.Zero(t, d.puts+d.del, "Put/DelEntry must NOT hit the direct no-op client")
 	})
 }
 

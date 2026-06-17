@@ -365,12 +365,18 @@ func (f *fallbackDiscClient) Entry(ctx context.Context, pk cipher.PubKey) (*disc
 	return f.http.Entry(ctx, pk)
 }
 
-// PostEntry: registering variant publishes to HTTP discovery; service
-// variant no-ops via the direct client.
+// PostEntry ALWAYS no-ops via the direct client — even in the registering
+// variant. The dmsg serve loop calls PostEntry PRE-session
+// (initilizeClientEntry, "Initial post entry") BEFORE any session exists;
+// routing that to HTTP-over-dmsg would dial dmsg-disc over the client's own
+// not-yet-established sessions, blocking the serve loop on a chicken-egg and
+// starving the rest of the server-dialing loop — the visor gets stuck on a
+// single server / wedges. Durable registration is done by the POST-session
+// updateClientEntry loop via PutEntry (runs only after sessions exist); the
+// dmsg-disc setEntry handler upserts, so PutEntry creates the entry. Mirrors
+// StartDmsgSelfHostedDisc, whose single client works precisely because its
+// PostEntry no-ops and returns instantly so sessions can establish.
 func (f *fallbackDiscClient) PostEntry(ctx context.Context, entry *disc.Entry) error {
-	if f.register {
-		return f.http.PostEntry(ctx, entry)
-	}
 	return f.direct.PostEntry(ctx, entry)
 }
 
