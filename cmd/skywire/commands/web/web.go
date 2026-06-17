@@ -135,7 +135,7 @@ func serve(ctx context.Context, root *cobra.Command) error {
 
 	// Shutdown on ctx cancel — outer command's signal handler
 	// (cobra's default) plumbs SIGINT through.
-	go func() {
+	go func() { //nolint:gosec // G118: shutdown timeout deliberately uses Background — the request ctx is being canceled
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -242,14 +242,9 @@ func buildTree(root *cobra.Command, allow []string) map[string]CommandNode {
 	out := make(map[string]CommandNode)
 	var walk func(c *cobra.Command, path string)
 	walk = func(c *cobra.Command, path string) {
-		if len(allow) > 0 {
-			if _, ok := allowSet[path]; !ok && path != "" {
-				// Not on the allowlist — but still walk children so
-				// allowed descendants can mount under an implicit
-				// breadcrumb. We just don't emit this node's flags
-				// + runnable bit.
-			}
-		}
+		// Non-allowlisted nodes are still walked so allowed descendants can
+		// mount under an implicit breadcrumb; the node itself is emitted with
+		// its flags/runnable bit regardless.
 		children := make([]string, 0, len(c.Commands()))
 		for _, sub := range c.Commands() {
 			if sub.Hidden && len(allow) == 0 {
@@ -280,7 +275,7 @@ func buildTree(root *cobra.Command, allow []string) map[string]CommandNode {
 			Path:     path,
 			Name:     c.Name(),
 			Short:    c.Short,
-			Long:    strings.TrimSpace(c.Long),
+			Long:     strings.TrimSpace(c.Long),
 			Example:  strings.TrimSpace(c.Example),
 			Use:      c.Use,
 			Children: children,
@@ -366,7 +361,7 @@ func handleRun(runs *runRegistry, skywireBin string) http.Handler {
 		argv = append(argv, req.Args...)
 
 		runCtx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel routed to run
-		cmd := exec.CommandContext(runCtx, skywireBin, argv...)
+		cmd := exec.CommandContext(runCtx, skywireBin, argv...)    //nolint:gosec // skywireBin is the resolved self-binary path; argv is trusted CLI input
 		// Combined stdout+stderr to one pipe; we don't distinguish
 		// in the SSE stream (the wasm client just renders sequential
 		// lines, like a terminal would).
@@ -471,7 +466,7 @@ func handleSSE(runs *runRegistry) http.Handler {
 					// emit it as a final event, then close.
 					select {
 					case code := <-runEntry.done:
-						fmt.Fprintf(w, "event: exit\ndata: %d\n\n", code)
+						fmt.Fprintf(w, "event: exit\ndata: %d\n\n", code) //nolint:errcheck
 						flusher.Flush()
 					case <-time.After(5 * time.Second):
 						fmt.Fprintf(w, "event: exit\ndata: -1\n\n") //nolint:errcheck
