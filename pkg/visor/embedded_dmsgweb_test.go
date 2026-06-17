@@ -49,7 +49,7 @@ func TestServiceAliasMap(t *testing.T) {
 	assert.Equal(t, arPK, m["ar"].Hex())
 	assert.Equal(t, rfPK, m["rf"].Hex())
 	assert.Equal(t, sdPK, m["sd"].Hex())
-	assert.Equal(t, rewardPK, m["reward"].Hex())
+	assert.Equal(t, rewardPK, m["rewards"].Hex())
 
 	_, hasUT := m["ut"]
 	assert.False(t, hasUT, "HTTP-only uptime tracker must not be aliased")

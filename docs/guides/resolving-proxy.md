@@ -121,7 +121,7 @@ service's HTTP API by name instead of its 66-char public key. They're
 | `rf` | route finder |
 | `sd` | service discovery |
 | `ut` | uptime tracker |
-| `reward` | reward system |
+| `rewards` | reward system |
 | `rsn`, `rsn0`, `rsn1`, … | route setup nodes (bare label = the first) |
 | `tsn`, `tsn0`, `tsn1`, … | transport setup nodes (bare label = the first) |
 | `dmsg0`, `dmsg1`, … | dmsg servers (the **live** discovery list, sorted by PK) |
@@ -163,7 +163,7 @@ curl -x socks5h://127.0.0.1:4445 'http://sd.dmsg/api/services?type=vpn'
 # transport discovery — all transports
 curl -x socks5h://127.0.0.1:4445 'http://tpd.dmsg/all-transports'
 # reward system
-curl -x socks5h://127.0.0.1:4445 'http://reward.dmsg/'
+curl -x socks5h://127.0.0.1:4445 'http://rewards.dmsg/'
 ```
 
 The aliases are auto-derived from the visor config; the raw public keys also live
