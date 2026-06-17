@@ -27,6 +27,7 @@ func TestServiceAliasMap(t *testing.T) {
 	rfURL, rfPK := dmsgURL(t)
 	sdURL, sdPK := dmsgURL(t)
 	dmsgdURL, dmsgdPK := dmsgURL(t)
+	rewardURL, rewardPK := dmsgURL(t)
 
 	conf := &visorconfig.V1{
 		Dmsg: &dmsgspec.DmsgConfig{DiscoveryDmsg: dmsgdURL},
@@ -35,9 +36,10 @@ func TestServiceAliasMap(t *testing.T) {
 			AddressResolverDmsg: arURL,
 			// AddressResolver (plain) left empty on purpose
 		},
-		Routing:       &visorconfig.Routing{RouteFinderDmsg: rfURL},
-		Launcher:      &visorconfig.Launcher{ServiceDiscDmsg: sdURL},
-		UptimeTracker: &visorconfig.UptimeTracker{Addr: "http://ut.skycoin.com"}, // HTTP only → omitted
+		Routing:          &visorconfig.Routing{RouteFinderDmsg: rfURL},
+		Launcher:         &visorconfig.Launcher{ServiceDiscDmsg: sdURL},
+		UptimeTracker:    &visorconfig.UptimeTracker{Addr: "http://ut.skycoin.com"}, // HTTP only → omitted
+		RewardSystemDmsg: rewardURL,
 	}
 
 	m := serviceAliasMap(conf)
@@ -47,10 +49,11 @@ func TestServiceAliasMap(t *testing.T) {
 	assert.Equal(t, arPK, m["ar"].Hex())
 	assert.Equal(t, rfPK, m["rf"].Hex())
 	assert.Equal(t, sdPK, m["sd"].Hex())
+	assert.Equal(t, rewardPK, m["reward"].Hex())
 
 	_, hasUT := m["ut"]
 	assert.False(t, hasUT, "HTTP-only uptime tracker must not be aliased")
-	assert.Len(t, m, 5, "exactly the 5 resolvable services")
+	assert.Len(t, m, 6, "exactly the 6 resolvable services")
 }
 
 // TestServiceAliasMapSetupNodes covers the PK-list setup nodes: indexed aliases
