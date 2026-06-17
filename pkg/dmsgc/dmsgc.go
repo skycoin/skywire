@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsgc/spec"
 	"github.com/skycoin/skywire/pkg/logging"
 )
@@ -61,7 +62,19 @@ func (d *lanPriorityDisc) AllServers(ctx context.Context) ([]*disc.Entry, error)
 }
 
 // New makes new dmsg client from configuration
-func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC *http.Client, masterLogger *logging.MasterLogger) *dmsg.Client {
+// New builds the visor's SINGLE dmsg client. directClient (when non-nil)
+// carries the preloaded static entries — every dmsg server + a synthetic
+// dmsg-disc entry + the visor's own — so this one client connects and reaches
+// dmsg-disc with no discovery round-trip, replacing the legacy second "direct"
+// client (dmsgDC) that shared this PK and self-evicted on the servers
+// (newest-session-wins). directOnly selects the mode: false (default) =
+// "discovery" (registering fallback: direct-first reads + the visor publishes
+// its entry to dmsg-disc over its own sessions); true = "direct-only" (static
+// direct resolution only, no dmsg-discovery, no registration — experimental).
+// The caller wires httpC.Transport = MakeHTTPTransport(ctx, dmsgC) AFTER this
+// returns, so discovery HTTP rides the client's own sessions (the empty
+// transport is never used before Serve).
+func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *DmsgConfig, httpC *http.Client, directClient disc.APIClient, directOnly bool, masterLogger *logging.MasterLogger) *dmsg.Client {
 	primary := conf.Primary()
 	dmsgConf := &dmsg.Config{
 		MinSessions: primary.SessionsCount,
@@ -89,7 +102,15 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 		deployments = []Deployment{{}}
 	}
 
-	primaryC := disc.NewHTTP(deployments[0].Discovery, httpC, masterLogger.PackageLogger("dmsgC:disc"))
+	// Prefer the plain-HTTP discovery URL; in dmsg-only deployments it is
+	// empty, so fall back to the dmsg:// URL — httpC's transport is dmsg-HTTP
+	// over this very client (wired by the caller post-construction), so the
+	// discovery lookups ride the client's own sessions.
+	discURL := deployments[0].Discovery
+	if discURL == "" {
+		discURL = deployments[0].DiscoveryDmsg
+	}
+	primaryC := disc.NewHTTP(discURL, httpC, masterLogger.PackageLogger("dmsgC:disc"))
 	// When the operator (or a hypervisor's auto-discovery push) has set
 	// HypervisorDiscovery, wrap the public discovery as the fallback
 	// behind it. The hypervisor's proxy serves locally-known PKs from
@@ -107,6 +128,20 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 	if len(primary.LANServers) > 0 {
 		masterLogger.PackageLogger("dmsgC").Infof("Using %d LAN DMSG servers (tried first)", len(primary.LANServers))
 		primaryC = &lanPriorityDisc{APIClient: primaryC, lanEntries: primary.LANServers}
+	}
+
+	// Single-client convergence: resolve seeded direct entries (servers +
+	// dmsg-disc + services) STATICALLY (no HTTP-over-dmsg round-trip to the
+	// entry-less, root-of-trust dmsg-disc — that round-trip is what hot-loops),
+	// while still registering over the client's own sessions. This makes the
+	// ONE dmsgC subsume what the separate dmsgDC used to do, so no second
+	// same-PK client competes for the per-server session slot.
+	if directClient != nil {
+		if directOnly {
+			primaryC = directClient
+		} else {
+			primaryC = dmsgclient.NewRegisteringFallbackDiscClient(directClient, primaryC, masterLogger.PackageLogger("dmsgC:disc:fallback"))
+		}
 	}
 
 	dmsgC := dmsg.NewClient(pk, sk, primaryC, dmsgConf)
