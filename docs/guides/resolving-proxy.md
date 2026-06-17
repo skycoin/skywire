@@ -105,6 +105,42 @@ own PK.
 `self_loopback: false` is mainly useful to test that your visor is reachable
 over its **own** transports — valid for skynet (dmsg won't self-loopback).
 
+### Service aliases (configured deployment services)
+
+Beyond `skywire` (your own visor), the resolver also exposes **short aliases for
+the deployment services this visor is configured to use**, so you can reach a
+service's HTTP API by name instead of its 66-char public key. They're
+**auto-derived from the visor config** — nothing to maintain — and resolve on the
+**`.dmsg`** suffix:
+
+| alias | service |
+|-------|---------|
+| `dmsgd` | dmsg discovery |
+| `tpd` | transport discovery |
+| `ar` | address resolver |
+| `rf` | route finder |
+| `sd` | service discovery |
+| `ut` | uptime tracker |
+| `reward` | reward system |
+| `rsn`, `rsn0`, `rsn1`, … | route setup nodes (bare label = the first) |
+| `tsn`, `tsn0`, `tsn1`, … | transport setup nodes (bare label = the first) |
+| `dmsg0`, `dmsg1`, … | dmsg servers (the **live** discovery list, sorted by PK) |
+
+So `http://tpd.dmsg/health` reaches the transport discovery, `http://rsn.dmsg/health`
+the first route setup node, and `http://dmsg0.dmsg/health` the first dmsg server.
+
+Notes:
+
+- A service is aliased only when it has a resolvable `dmsg://` URL in the config;
+  a plain-HTTP-only (or unset) service is silently omitted.
+- The `dmsg*` servers aren't registered as discovery *clients*, so they're reached
+  via the visor's **direct** dmsg client (self-rendezvous); everything else goes
+  over the normal discovery dial. The `dmsg*` set tracks the **live** discovery
+  list, not the static bootstrap config.
+- `skywire` (your own visor) wins on any name collision.
+- An unknown label still **fails closed** — it's neither a PK nor a known alias,
+  so it resolves to nothing rather than somewhere wrong.
+
 ## From `curl`
 
 Use `socks5h://` (the `h` makes the **proxy** resolve the hostname — required for
@@ -116,17 +152,23 @@ curl -x socks5h://127.0.0.1:4445 http://<visor-pk>.dmsg:80/health
 
 ### Browsing deployment-service data over dmsg
 
+Using the [service aliases](#service-aliases-configured-deployment-services)
+(or the raw `<service-pk>.dmsg` if you prefer):
+
 ```
 # uptime tracker (dmsg-discovery copy); v3 = with the daily timeline
-curl -x socks5h://127.0.0.1:4445 'http://<dmsgd-pk>.dmsg:80/uptimes?v=v3'
+curl -x socks5h://127.0.0.1:4445 'http://dmsgd.dmsg/uptimes?v=v3'
 # service discovery — list VPN servers
-curl -x socks5h://127.0.0.1:4445 'http://<sd-pk>.dmsg:80/api/services?type=vpn'
+curl -x socks5h://127.0.0.1:4445 'http://sd.dmsg/api/services?type=vpn'
 # transport discovery — all transports
-curl -x socks5h://127.0.0.1:4445 'http://<tpd-pk>.dmsg:80/all-transports'
+curl -x socks5h://127.0.0.1:4445 'http://tpd.dmsg/all-transports'
+# reward system
+curl -x socks5h://127.0.0.1:4445 'http://reward.dmsg/'
 ```
 
-Deployment service public keys live in the embedded deployment config; `cli svc`
-and the per-command `--*url` flags also surface them.
+The aliases are auto-derived from the visor config; the raw public keys also live
+in the embedded deployment config, which `cli svc` and the per-command `--*url`
+flags surface.
 
 ## From a browser
 
