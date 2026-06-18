@@ -55,7 +55,19 @@ func New(log *logging.Logger, conf config.Config) *API {
 }
 
 func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
-	dmsgConf := dmsg.DefaultConfig()
+	// Honor conf.Dmsg.SessionsCount the same way RSN does
+	// (pkg/router/setupnode.go:83). dmsg.DefaultConfig hardcodes
+	// MinSessions=1, so without this override TPS would dial a single
+	// random seed server and the Serve loop would park on <-errCh as
+	// soon as that one session establishes. For the registering
+	// variant (TPS publishes its own dmsg-disc entry), that one
+	// session has to also be one that can forward to the discovery PK
+	// — when the random pick can't reach the discovery, PutEntry
+	// returns dmsg error 202 forever and the entry stays unpublished
+	// until the session dies. SessionsCount=6 in the prod TPS configs
+	// covers every seed server so at least one path to the discovery
+	// always exists.
+	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
 
 	// Single dmsg client with self-hosted dmsg-discovery — matches the
 	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsgc/
