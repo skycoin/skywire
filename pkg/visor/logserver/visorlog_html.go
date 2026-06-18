@@ -33,9 +33,35 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// htmlLogPreamble is the <head> + opening <body> for the colorized log view.
+// It includes a tiny inline auto-scroll script (progressive enhancement: the
+// log streams fine with JS disabled, you just scroll manually) that keeps the
+// view pinned to the newest line while the reader is at the bottom, and stops
+// following the instant they scroll up to inspect history.
+const htmlLogPreamble = `<!doctype html><html><head><meta charset="utf-8"><title>skywire.log</title>` +
+	`<style>` +
+	`body{background:#0a0a0a;color:#d0d0d0;font-family:'DejaVu Sans Mono',Menlo,Consolas,monospace;` +
+	`font-size:13px;line-height:1.35;margin:0;padding:12px}` +
+	`pre{margin:0;white-space:pre-wrap;word-break:break-word}` +
+	`</style></head><body>` +
+	`<script>(function(){var stick=true;` +
+	`addEventListener('scroll',function(){stick=(window.innerHeight+window.scrollY)>=document.documentElement.scrollHeight-40;});` +
+	`setInterval(function(){if(stick)window.scrollTo(0,document.documentElement.scrollHeight);},500);})();</script>` +
+	`<pre>`
+
+// logRotatedNotice is emitted inline when the underlying file is rotated or
+// truncated out from under the tail, so the reader sees the discontinuity.
+const logRotatedNotice = `<span style="color:#808080">--- log rotated ---</span>` + "\n"
+
+// logFollowPollInterval is how often the streaming view re-checks the file for
+// appended lines once it has caught up to EOF. Matches the plain-text follow
+// mode in visorlog_filter.go.
+const logFollowPollInterval = 250 * time.Millisecond
 
 // levelColors maps a logrus level token (as it appears upper-cased in the
 // on-disk log) to an inline CSS color. The palette tracks logrus's default
@@ -85,36 +111,42 @@ var logLineRE = regexp.MustCompile(
 var fieldRE = regexp.MustCompile(`([A-Za-z0-9_.\-]+)=("[^"]*"|\S*)`)
 
 // renderVisorLogHTML streams logFile to the client as a terminal-styled HTML
-// page: near-black background, light monospace text, one colored line per log
-// entry keyed off its parsed level. Content is HTML-escaped per line.
+// page (near-black background, light monospace, one colored line per log entry
+// keyed off its parsed level; content HTML-escaped per line) as a never-ending
+// chunked response: it writes the current backlog, then tails the file —
+// flushing each new line as it is appended — until the client disconnects.
 //
-// It streams rather than buffering so a multi-megabyte log doesn't balloon
-// memory, flushing periodically for responsiveness over dmsg/skynet.
+// The response carries no Content-Length, so Go uses chunked transfer-encoding
+// and each Flush reaches the browser (over the dmsg-HTTP tunnel) immediately,
+// giving a live `tail -f`-in-the-browser view without buffering a multi-MB log
+// into memory. Log rotation/truncation is detected and the tail re-opens the
+// new file. The plaintext one-shot (?raw=1) and filtered follow (?follow=1)
+// modes are unaffected.
 func renderVisorLogHTML(c *gin.Context, logFile string) {
 	f, err := os.Open(logFile) //nolint:gosec // path comes from localPath config, not request
 	if err != nil {
 		c.String(http.StatusInternalServerError, "open skywire.log: %v", err)
 		return
 	}
-	defer f.Close() //nolint:errcheck
+	defer func() { _ = f.Close() }() //nolint:errcheck // f is reassigned on rotation; close the final fd
 
 	c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
 	c.Writer.WriteHeader(http.StatusOK)
 
 	// Page head + terminal styling. <pre> preserves the log's own spacing;
 	// per-line <span>s carry the level color.
-	//nolint:errcheck // .golangci.yml has check-blank:true so the _,_ discard alone is not enough; nolint silences errcheck while the discard satisfies gosec G104
-	_, _ = io.WriteString(c.Writer,
-		`<!doctype html><html><head><meta charset="utf-8"><title>skywire.log</title>`+
-			`<style>`+
-			`body{background:#0a0a0a;color:#d0d0d0;font-family:'DejaVu Sans Mono',Menlo,Consolas,monospace;`+
-			`font-size:13px;line-height:1.35;margin:0;padding:12px}`+
-			`pre{margin:0;white-space:pre-wrap;word-break:break-word}`+
-			`</style></head><body><pre>`)
+	if _, werr := io.WriteString(c.Writer, htmlLogPreamble); werr != nil {
+		return
+	}
+	c.Writer.Flush()
 
 	r := bufio.NewReaderSize(f, 64*1024)
 	ctx := c.Request.Context()
-	flushEvery := 0
+	var offset int64 // bytes consumed — used to detect rotation/truncation
+	caughtUp := false
+	batch := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -123,20 +155,50 @@ func renderVisorLogHTML(c *gin.Context, logFile string) {
 		}
 		line, rerr := r.ReadString('\n')
 		if len(line) > 0 {
+			offset += int64(len(line))
 			if _, werr := io.WriteString(c.Writer, colorizeLine(line)); werr != nil {
-				return
+				return // client gone
 			}
-			flushEvery++
-			if flushEvery%256 == 0 {
+			if caughtUp {
+				// Live phase: flush every line for minimal latency.
 				c.Writer.Flush()
+			} else {
+				// Backlog phase: flush in batches to avoid a chunk per line.
+				batch++
+				if batch%256 == 0 {
+					c.Writer.Flush()
+				}
+			}
+			continue
+		}
+		if rerr != nil && rerr != io.EOF {
+			return
+		}
+		// EOF — caught up to the end of the file.
+		if !caughtUp {
+			caughtUp = true
+			c.Writer.Flush() // push the remaining backlog now
+		}
+		// Rotation/truncation: the path now resolves to a file smaller than
+		// where we are reading — reopen from the start of the new file.
+		if fi, serr := os.Stat(logFile); serr == nil && fi.Size() < offset {
+			if nf, oerr := os.Open(logFile); oerr == nil { //nolint:gosec // path from config, not request
+				_ = f.Close() //nolint:errcheck
+				f = nf
+				r.Reset(f)
+				offset = 0
+				_, _ = io.WriteString(c.Writer, logRotatedNotice) //nolint:errcheck
+				c.Writer.Flush()
+				continue
 			}
 		}
-		if rerr != nil {
-			break
+		// Poll for appends.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(logFollowPollInterval):
 		}
 	}
-	_, _ = io.WriteString(c.Writer, "</pre></body></html>") //nolint:errcheck
-	c.Writer.Flush()
 }
 
 // colorizeLine renders a single (raw, unescaped) log line as terminal-style
