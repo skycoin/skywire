@@ -57,62 +57,46 @@ func New(log *logging.Logger, conf config.Config) *API {
 func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	dmsgConf := dmsg.DefaultConfig()
 
-	// Pick the dmsg-discovery URL and the http.Client used to query it.
-	// Mirrors pkg/router/setupnode.go and dmsgclient.StartDmsgSelfHostedDisc:
+	// Single dmsg client with self-hosted dmsg-discovery — matches the
+	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsgc/
+	// dmsgc.go). Plain-HTTP discovery (conf.Dmsg.Discovery) is no longer
+	// supported for deployment services; conf.Dmsg.DiscoveryDmsg + seed
+	// conf.Dmsg.Servers are required.
 	//
-	//   - If conf.Dmsg.Discovery (plain HTTP) is set, use it as before.
-	//   - Else if conf.Dmsg.DiscoveryDmsg + seed servers are set, fall
-	//     into the self-hosted disc pattern: a registering fallback
-	//     disc client whose READ path resolves seeded servers directly
-	//     (no round-trip) and whose WRITE path (PutEntry — so this
-	//     service's own entry IS published to the real dmsg-discovery)
-	//     goes through an http.Client whose Transport is dmsghttp,
-	//     routed over the same dmsg.Client we are building. Self-
-	//     hosted: one client both registers itself and resolves
-	//     bootstrap PKs statically, no plain-HTTP fallback.
-	//   - Else: the original NewHTTP("") path, which returns a no-op
-	//     discovery client; the Serve-loop fallback (#3146) still
-	//     pulls seeded servers from SeedEntryCache for the initial
-	//     dial, but the service can't publish its own entry — useful
-	//     only for air-gapped / single-host setups.
-	discURL := conf.Dmsg.Discovery
+	// Pattern:
+	//   - direct.Client preloaded with the local PK + dmsg-disc PK,
+	//     synthesizing client entries that delegate to every seed
+	//     server. Reads (Entry/AvailableServers) short-circuit through
+	//     this for service PKs and configured servers — no HTTP-over-
+	//     dmsg round-trip to the entry-less, root-of-trust dmsg-disc.
+	//   - disc.NewHTTP against the dmsg:// URL with an empty http.Client.
+	//   - NewRegisteringFallbackDiscClient over (direct, http): READ
+	//     direct-first, WRITE via dmsg-HTTP so the service's own entry
+	//     IS published to the real dmsg-discovery.
+	//   - SINGLE dmsg.Client built against the wrapped disc.
+	//   - SeedEntryCache for every configured server (bootstrap dial
+	//     path + the Serve-loop fallback in #3146).
+	//   - httpC.Transport wired to dmsghttp.MakeHTTPTransport(dmsgC)
+	//     AFTER construction — the transport isn't invoked until the
+	//     first PostEntry/Entry call, by which time Serve has already
+	//     established sessions to the seeded servers. Same ordering the
+	//     visor relies on.
 	httpC := &http.Client{}
-	useSelfHostedDisc := discURL == "" && conf.Dmsg.DiscoveryDmsg != "" && len(conf.Dmsg.Servers) > 0
-	if useSelfHostedDisc {
-		discURL = conf.Dmsg.DiscoveryDmsg
-	}
+	dmsgDisc := disc.NewHTTP(conf.Dmsg.DiscoveryDmsg, httpC, log)
 
-	dmsgDisc := disc.NewHTTP(discURL, httpC, log)
-	discClient := dmsgDisc
-	if useSelfHostedDisc {
-		seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKs(conf.Dmsg.DiscoveryDmsg)...)
-		entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
-		directDisc := direct.NewClient(entries, log)
-		discClient = dmsgclient.NewRegisteringFallbackDiscClient(directDisc, dmsgDisc, log)
-	}
+	seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKs(conf.Dmsg.DiscoveryDmsg)...)
+	entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
+	directDisc := direct.NewClient(entries, log)
+	discClient := dmsgclient.NewRegisteringFallbackDiscClient(directDisc, dmsgDisc, log)
 
 	client := dmsg.NewClient(conf.PK, conf.SK, discClient, dmsgConf)
-
-	// Pre-seed the entry cache with the configured dmsg servers so the
-	// Serve loop's seeded-fallback path (#3146) has something to fall
-	// back to during a fleet cold-start where live discovery briefly
-	// has no entries. Also bootstraps the no-disc-URL fallback path.
 	for _, srv := range conf.Dmsg.Servers {
 		if srv == nil || srv.Static.Null() || srv.Server == nil {
 			continue
 		}
 		client.SeedEntryCache(srv.Static, srv)
 	}
-
-	if useSelfHostedDisc {
-		// Wire the dmsg.Client as its OWN http.Transport so disc.NewHTTP
-		// reaches dmsg-discovery via dmsg-HTTP. Safe to set after
-		// NewClient: the transport isn't dialed until the first PostEntry
-		// /Entry call, by which time Serve has already established
-		// sessions to the seeded servers. Pattern matches
-		// dmsgclient.StartDmsgSelfHostedDisc.
-		httpC.Transport = dmsghttp.MakeHTTPTransport(context.Background(), client)
-	}
+	httpC.Transport = dmsghttp.MakeHTTPTransport(context.Background(), client)
 
 	return client
 }
