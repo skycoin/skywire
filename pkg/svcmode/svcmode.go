@@ -154,11 +154,21 @@ type Config struct {
 	// dmsg.DefaultDmsgHTTPPort (80) if zero.
 	DmsgPort uint16
 
-	// DmsgDiscovery is the URL of the dmsg-discovery service, used
-	// as a fallback for the embedded-server bootstrap and for
-	// periodic server-list refresh. Required when Mode includes
-	// dmsg unless EmbeddedDmsgServers is non-empty.
+	// DmsgDiscovery is the plain-HTTP URL of the dmsg-discovery
+	// service, used as a fallback for the embedded-server bootstrap
+	// and for periodic server-list refresh. Required when Mode
+	// includes dmsg unless EmbeddedDmsgServers or DmsgDiscoveryDmsg
+	// is non-empty. Ignored when DmsgDiscoveryDmsg is set —
+	// deployment services that want strict dmsg-only operation
+	// should leave this empty.
 	DmsgDiscovery string
+
+	// DmsgDiscoveryDmsg is the dmsg-PK URL of the dmsg-discovery
+	// service (form `dmsg://<PK>:<port>`). When set, svcmode routes
+	// all discovery RPC over dmsg-HTTP via the bootstrap dmsg client
+	// — no plain-HTTP egress to dmsg-discovery occurs. Mutually
+	// preferred over DmsgDiscovery; the HTTP field is ignored.
+	DmsgDiscoveryDmsg string
 
 	// DmsgServerType, if non-empty, restricts the dmsg client to
 	// servers whose ServerType matches (e.g. "official").
@@ -268,8 +278,8 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 	// either the embedded server list OR an HTTP discovery URL to
 	// bootstrap against.
 	wantDmsgBootstrap := !cfg.SK.Null()
-	if wantDmsgBootstrap && len(cfg.EmbeddedDmsgServers) == 0 && cfg.DmsgDiscovery == "" {
-		return nil, errors.New("svcmode: dmsg bootstrap requires either EmbeddedDmsgServers or DmsgDiscovery")
+	if wantDmsgBootstrap && len(cfg.EmbeddedDmsgServers) == 0 && cfg.DmsgDiscovery == "" && cfg.DmsgDiscoveryDmsg == "" {
+		return nil, errors.New("svcmode: dmsg bootstrap requires EmbeddedDmsgServers, DmsgDiscoveryDmsg, or DmsgDiscovery")
 	}
 	if cfg.DmsgPort == 0 {
 		cfg.DmsgPort = dmsg.DefaultDmsgHTTPPort
@@ -302,7 +312,7 @@ func Start(ctx context.Context, cfg Config) (*Handle, error) {
 	// a dmsghttp listener — see note at top of Start.
 	if wantDmsgBootstrap {
 		boot, err := cmdutil.BootstrapDmsg(ctx, cfg.Log, cfg.PK, cfg.SK,
-			cfg.EmbeddedDmsgServers, cfg.DmsgDiscovery, cfg.DmsgServerType)
+			cfg.EmbeddedDmsgServers, cfg.DmsgDiscovery, cfg.DmsgDiscoveryDmsg, cfg.DmsgServerType)
 		if err != nil {
 			return nil, fmt.Errorf("svcmode: dmsg bootstrap: %w", err)
 		}
