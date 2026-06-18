@@ -18,11 +18,13 @@ import (
 
 // ClientPool is a thread-safe pool of reusable router RPC clients.
 type ClientPool struct {
-	mu      sync.Mutex
-	clients map[cipher.PubKey]*poolEntry
-	dialer  network.Dialer
-	ttl     time.Duration
-	log     *logging.Logger
+	mu        sync.Mutex
+	clients   map[cipher.PubKey]*poolEntry
+	dialer    network.Dialer
+	ttl       time.Duration
+	log       *logging.Logger
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 type poolEntry struct {
@@ -61,6 +63,7 @@ func NewClientPool(dialer network.Dialer, ttl time.Duration) *ClientPool {
 		dialer:  dialer,
 		ttl:     ttl,
 		log:     logging.MustGetLogger("client_pool"),
+		done:    make(chan struct{}),
 	}
 	go p.evictLoop()
 	return p
@@ -132,6 +135,8 @@ func (p *ClientPool) Size() int {
 
 // Close closes all pooled connections and stops the eviction loop.
 func (p *ClientPool) Close() {
+	// Stop the eviction loop (idempotent — Close may be called more than once).
+	p.closeOnce.Do(func() { close(p.done) })
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for pk, entry := range p.clients {
@@ -143,8 +148,13 @@ func (p *ClientPool) Close() {
 func (p *ClientPool) evictLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
-	for range ticker.C {
-		p.evict()
+	for {
+		select {
+		case <-p.done:
+			return
+		case <-ticker.C:
+			p.evict()
+		}
 	}
 }
 
