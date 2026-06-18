@@ -202,24 +202,69 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 
 	// Init callback: on set session.
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
-		// The first session must update discovery immediately so the
-		// client becomes "ready" (other modules wait on c.ready).
-		// Subsequent sessions use the debounced nudge path.
+		// The first session must update discovery before declaring
+		// Ready so other modules can immediately dial through us; see
+		// the wave of dmsghttp transport tests that fail with
+		// "client entry in discovery has no delegated servers" if
+		// Ready fires pre-publish. Subsequent sessions use the
+		// debounced nudge path.
 		select {
 		case <-c.ready:
 			// Already ready — nudge the update loop.
 			c.nudgeEntryUpdate()
 			return nil
 		default:
-			// First session — update immediately. updateClientEntry
-			// takes sessionsMx itself for its snapshot; holding it
-			// here would self-deadlock via the dmsgfirst path.
-			if err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType); err != nil {
-				return err
-			}
-			c.readyOnce.Do(func() { close(c.ready) })
-			return nil
 		}
+		// First-session path runs the publish on its OWN goroutine,
+		// then waits up to entryUpdateAttemptTimeout for it to finish.
+		// The publish bounds itself with the same per-attempt timeout
+		// the entry loop uses (#3168). If it completes within the
+		// window we close c.ready on its result; if the wait expires
+		// we close c.ready anyway so the rest of the visor doesn't
+		// deadlock on us, and the publish goroutine continues to
+		// completion in the background (its own ctx will fire and
+		// unblock the dmsg-HTTP stream via the transport's ctx
+		// watcher). The updateClientEntryLoop handles further retries
+		// with exponential backoff.
+		//
+		// Originally this called updateClientEntry SYNCHRONOUSLY here
+		// with the unbounded session-dial ctx and closed c.ready only
+		// on success. That blocked the session-add path forever if
+		// the publish stalled — a dmsg-only deployment service
+		// (#3157, #3168) whose only established session couldn't
+		// reach the discovery PK saw the dmsg-HTTP transport get a
+		// stream via DialStream phase 3, then req.Write/ReadResponse
+		// hung on the stream's own deadlines (write: none, read:
+		// StreamIdleTimeout = 2 min). The cascade:
+		//   - first setSessionCallback blocks → dialSession never
+		//     returns → Serve loop's EnsureSession chain freezes;
+		//   - subsequent session callbacks (ready never closed) re-
+		//     enter this default branch and block on
+		//     httpClient.updateMux which the first call holds;
+		//   - updateClientEntryLoop's runUpdate (with the #3168 30 s
+		//     attempt timeout) ALSO blocks on updateMux because mutex
+		//     acquisition does not honor context — so the loop's
+		//     retry never fires either.
+		// The result was a wedged service that logged "Updating
+		// entry" once at startup and then went silent for hours.
+		publishCtx, publishCancel := context.WithTimeout(ctx, entryUpdateAttemptTimeout)
+		publishDone := make(chan error, 1)
+		go func() {
+			defer publishCancel()
+			publishDone <- c.EntityCommon.updateClientEntry(publishCtx, c.done, c.conf.ClientType)
+		}()
+		select {
+		case err := <-publishDone:
+			if err != nil {
+				c.log.WithError(err).Warn("Initial client entry update failed; loop will retry.")
+			}
+		case <-time.After(entryUpdateAttemptTimeout):
+			c.log.Warn("Initial client entry update did not complete within bound; closing Ready and letting the loop retry.")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		c.readyOnce.Do(func() { close(c.ready) })
+		return nil
 	}
 
 	// Init callback: on delete session.
