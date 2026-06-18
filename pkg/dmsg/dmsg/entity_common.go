@@ -632,6 +632,18 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 
 	var firstErr error
 	anyOK := false
+	// Re-check shutdown immediately before the publish IO. The work above
+	// (session snapshot + endpoint resolution) can take time, and Close() may
+	// have fired since the top-of-function check. Without this a PutEntry can
+	// land AFTER Close()'s delEntry, leaving a zombie "advertised but
+	// unreachable" client entry until its TTL — the same pathology fixed on the
+	// server side (#3145). Narrows the window sharply; a full join is deferred
+	// because the client wg machinery intentionally avoids wg.Add on these
+	// background loops to dodge an Add-after-Wait race (see Client.closed and
+	// the comment at client.go:145-148).
+	if isClosed(done) {
+		return nil
+	}
 	for _, ep := range endpoints {
 		if updateErr := c.updateClientEntryOnEndpoint(ctx, ep, clientType, srvPKs); updateErr != nil {
 			if firstErr == nil {
