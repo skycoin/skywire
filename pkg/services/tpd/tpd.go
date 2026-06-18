@@ -209,9 +209,10 @@ func (s *service) Run(ctx context.Context) error {
 		return fmt.Errorf("transport-discovery: invalid mode: %w", err)
 	}
 
-	dmsgDisc := cfg.Dmsg.Discovery
-	if dmsgDisc == "" {
-		dmsgDisc = deployment.Prod.DmsgDiscovery
+	// dmsg-only discovery: see pkg/services/rf/rf.go for rationale.
+	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
+	if dmsgDiscDmsg == "" {
+		dmsgDiscDmsg = dmsg.DiscAddr(false)
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
 	surveyWL := deployment.Prod.SurveyWhitelist
@@ -229,7 +230,7 @@ func (s *service) Run(ctx context.Context) error {
 		PK:                  pk,
 		SK:                  sk,
 		DmsgPort:            dmsgPort,
-		DmsgDiscovery:       dmsgDisc,
+		DmsgDiscoveryDmsg:   dmsgDiscDmsg,
 		DmsgServerType:      cfg.Dmsg.ServerType,
 		EmbeddedDmsgServers: embeddedServers,
 		SurveyWhitelist:     surveyWL,

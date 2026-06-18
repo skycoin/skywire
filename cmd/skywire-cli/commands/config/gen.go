@@ -803,7 +803,7 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 	}
 
 	dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, dmsgLog, pk, sk,
-		dmsg.Prod.DmsgServers, embeddedConf.DmsgDiscovery, "")
+		dmsg.Prod.DmsgServers, embeddedConf.DmsgDiscovery, "", "")
 	if err != nil {
 		logIfNotStdout(log, err, "DMSG bootstrap failed for config fetch")
 		return false

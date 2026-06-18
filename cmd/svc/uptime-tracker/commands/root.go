@@ -53,6 +53,7 @@ var (
 	enableLoadTesting bool
 	testing           bool
 	dmsgDisc          string
+	dmsgDiscDmsg      string
 	sk                cipher.SecKey
 	keyFile           string
 	dmsgPort          uint16
@@ -79,7 +80,8 @@ func init() {
 	RootCmd.Flags().StringVar(&geoipURL, "geoip", deployment.Prod.GeoIP, "url of geoip service\n\r")
 	RootCmd.Flags().BoolVar(&enableLoadTesting, "enable-load-testing", false, "enable load testing")
 	RootCmd.Flags().BoolVarP(&testing, "testing", "t", false, "enable testing to start without redis")
-	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", dmsg.DiscURL(false), "url of dmsg discovery\n\r")
+	RootCmd.Flags().StringVar(&dmsgDisc, "dmsg-disc", "", "plain-HTTP url of dmsg-discovery (deprecated; leave empty for dmsg-only)\n\r")
+	RootCmd.Flags().StringVar(&dmsgDiscDmsg, "dmsg-disc-dmsg", dmsg.DiscAddr(false), "dmsg-PK url of dmsg-discovery (default: embedded prod)\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
@@ -296,6 +298,7 @@ HTTP Endpoints:
 			// DmsgServerType to BootstrapDmsg; preserve that.
 			DmsgServerType:      "",
 			DmsgDiscovery:       dmsgDisc,
+			DmsgDiscoveryDmsg:   dmsgDiscDmsg,
 			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
 			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
 			Log:                 logger,
