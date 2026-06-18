@@ -72,8 +72,18 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	lookupCancel()
 	if err != nil {
 		log.WithError(err).Debug("Failed to get public IP+geo from dmsg server, trying STUN")
-		<-v.stun.ready
-		if v.stun.client.PublicIP != nil {
+		// Bound the STUN wait. initAddressResolver runs early in the init
+		// chain and tr (transport) + cli (RPC) depend on ar, so an unbounded
+		// <-v.stun.ready blocks the WHOLE visor — including the RPC, leaving
+		// the operator with no control — whenever STUN is slow (e.g. during a
+		// deployment-side dmsg/AR hiccup). Proceed without a STUN-derived
+		// public IP after the timeout rather than wedge the control plane.
+		select {
+		case <-v.stun.ready:
+		case <-time.After(20 * time.Second):
+			log.Warn("STUN not ready within 20s; proceeding without a STUN-derived public IP")
+		}
+		if v.stun.client != nil && v.stun.client.PublicIP != nil {
 			pIP = v.stun.client.PublicIP.IP()
 			log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
 		} else {
