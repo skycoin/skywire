@@ -347,6 +347,21 @@ func (ce *Client) Serve(ctx context.Context) {
 				continue
 			}
 		}
+		if len(entries) == 0 && !pinned {
+			// Fallback for dmsg-only deployments and fleet cold-starts:
+			// when the disc.APIClient yields no entries (because the HTTP
+			// discovery URL is empty -> no-op client, or because no
+			// server has registered yet), use the server entries that
+			// were pre-seeded into the entry cache from config. The
+			// pinned paths above are deliberate fail-fast and must not
+			// be silently routed to a different server, so the fallback
+			// applies only to the unpinned default path.
+			if seeded := ce.seededServerEntries(); len(seeded) > 0 {
+				ce.log.WithField("count", len(seeded)).
+					Debug("No entries from discovery; falling back to seeded servers from config.")
+				entries = seeded
+			}
+		}
 		if len(entries) == 0 {
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
 			if pinned {
@@ -794,6 +809,34 @@ func (ce *Client) SeedEntryCache(pk cipher.PubKey, entry *disc.Entry) {
 		fetchedAt: time.Now().Add(100 * 365 * 24 * time.Hour), // effectively permanent
 	}
 	ce.entryCacheMx.Unlock()
+}
+
+// seededServerEntries returns all server-type discovery entries that have
+// been permanently seeded into the entry cache (via SeedEntryCache, typically
+// from the dmsgc config's `servers` list). Used by the main Serve loop as
+// a fallback when the disc.APIClient cannot supply discovery results — e.g.
+// in dmsg-only deployments where the HTTP discovery URL is empty and the
+// no-op discovery client returns nil for AvailableServers/AllServers,
+// or during a fleet-wide cold-start when no servers have registered yet
+// but the configured embedded set is known.
+//
+// Permanent is detected by a fetchedAt > now+50years; SeedEntryCache uses
+// now+100years so the threshold gives plenty of headroom. The returned
+// slice is safe to iterate without holding the lock.
+func (ce *Client) seededServerEntries() []*disc.Entry {
+	const permanentThreshold = 50 * 365 * 24 * time.Hour
+	ce.entryCacheMx.RLock()
+	defer ce.entryCacheMx.RUnlock()
+	out := make([]*disc.Entry, 0, len(ce.entryCache))
+	for _, cached := range ce.entryCache {
+		if cached.entry == nil || cached.entry.Server == nil {
+			continue
+		}
+		if time.Until(cached.fetchedAt) > permanentThreshold {
+			out = append(out, cached.entry)
+		}
+	}
+	return out
 }
 
 // DiscEntry looks up a PK in dmsg-discovery and returns the entry if it
