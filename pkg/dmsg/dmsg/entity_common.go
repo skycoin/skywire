@@ -729,9 +729,71 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 // while shrinking the stale-entry window by 80 %.
 const entryUpdateDebounce = 1 * time.Second
 
+// entryUpdateAttemptTimeout bounds a single updateClientEntry call so a
+// stuck PUT (e.g. dmsg-HTTP stream-dial that the underlying transport never
+// errors out of) doesn't hang the loop forever. Without this, a service
+// whose first PUT-via-dmsg-HTTP raced its dmsg-disc peer's outbound-session
+// establishment could stall here permanently — observed on a fresh dmsg-
+// only deployment service post-autopull: nothing returns, nothing retries,
+// the entry never registers.
+const entryUpdateAttemptTimeout = 30 * time.Second
+
+// entryUpdateMinBackoff / entryUpdateMaxBackoff bracket the exponential
+// backoff applied when updateClientEntry returns a non-nil error. The loop
+// otherwise rearms its timer at c.updateInterval (default 1 min, often 5
+// in service configs) which would leave dmsg-only services unregistered
+// for minutes after a transient publish failure.
+const (
+	entryUpdateMinBackoff = time.Second
+	entryUpdateMaxBackoff = 30 * time.Second
+)
+
+// entryFailureBackoff returns the delay before the next attempt after
+// `consecutiveFailures` consecutive failed updates. Exponential, clamped
+// to entryUpdateMaxBackoff.
+func entryFailureBackoff(consecutiveFailures int) time.Duration {
+	if consecutiveFailures <= 0 {
+		return entryUpdateMinBackoff
+	}
+	d := entryUpdateMinBackoff << (consecutiveFailures - 1) //nolint:gosec
+	if d <= 0 || d > entryUpdateMaxBackoff {
+		return entryUpdateMaxBackoff
+	}
+	return d
+}
+
 func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan struct{}, clientType string) {
 	t := time.NewTimer(c.updateInterval)
 	defer t.Stop()
+
+	// runUpdate calls updateClientEntry with a per-attempt context timeout
+	// and returns whether the attempt succeeded. The timeout bounds a stuck
+	// underlying HTTP/dmsg-HTTP call without affecting the outer ctx the
+	// service runs under.
+	runUpdate := func(label string) bool {
+		callCtx, cancel := context.WithTimeout(ctx, entryUpdateAttemptTimeout)
+		defer cancel()
+		if err := c.updateClientEntry(callCtx, done, clientType); err != nil {
+			c.log.WithError(err).Warnf("Failed to update discovery entry (%s).", label)
+			return false
+		}
+		return true
+	}
+
+	// rearm rearms the timer at either c.updateInterval on success or a
+	// short exponential backoff on failure, so a transient publish failure
+	// (e.g. dmsg-HTTP cold-start race) doesn't leave the service silently
+	// unregistered for minutes.
+	consecutiveFailures := 0
+	rearm := func(ok bool) {
+		if ok {
+			consecutiveFailures = 0
+			t.Reset(c.updateInterval)
+			return
+		}
+		consecutiveFailures++
+		t.Reset(entryFailureBackoff(consecutiveFailures))
+	}
 
 	for {
 		select {
@@ -746,11 +808,7 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 
 			// updateClientEntry takes sessionsMx itself for its snapshot;
 			// holding it here would self-deadlock via the dmsgfirst path.
-			if err := c.updateClientEntry(ctx, done, clientType); err != nil {
-				c.log.WithError(err).Warn("Failed to update discovery entry.")
-			}
-
-			t.Reset(c.updateInterval)
+			rearm(runUpdate("tick"))
 
 		case <-c.entryNudge:
 			// Session added/removed — debounce to batch rapid changes.
@@ -769,10 +827,7 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			}
 		clientUpdate:
 			// See timer-tick comment above re: sessionsMx.
-			if err := c.updateClientEntry(ctx, done, clientType); err != nil {
-				c.log.WithError(err).Warn("Failed to update discovery entry (nudge).")
-			}
-			t.Reset(c.updateInterval)
+			rearm(runUpdate("nudge"))
 		}
 	}
 }
