@@ -516,7 +516,7 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	}
 
 	ctx, cancel := cmdutil.SignalContext(parentCtx, mLog)
-	vis, ok := NewVisor(ctx, conf)
+	vis, ok := NewVisor(ctx, conf, logBroadcaster)
 	if !ok {
 		select {
 		case <-ctx.Done():
@@ -539,7 +539,8 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 		cancel()
 	}
 	vis.SetLogstore(store)
-	vis.SetLogBroadcaster(logBroadcaster)
+	// logBroadcaster is now installed inside NewVisor (before module init) so the
+	// --verbose stream works during startup; no post-init wiring needed here.
 	//	vis.uiAssets = uiAssets
 	if launchBrowser {
 		if conf.Hypervisor == nil {
@@ -554,8 +555,12 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	return nil
 }
 
-// NewVisor constructs new Visor.
-func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
+// NewVisor constructs new Visor. logBcast is the master-logger Broadcaster hook
+// (created and attached to the loggers by the caller); it is installed on the
+// Visor BEFORE module init so the RPC --verbose log stream is available while
+// the visor is still starting up. May be nil (e.g. tests) — SubscribeLogs is
+// nil-safe.
+func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broadcaster) (*Visor, bool) {
 	if conf == nil {
 		conf = initConfig()
 	}
@@ -622,6 +627,13 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	}
 
 	v.ctx = ctx
+	// Install the log broadcaster BEFORE the modules init below (the gRPC/RPC
+	// "cli" module among them) so a `cli ... --verbose` log stream that connects
+	// during startup finds the broadcaster already wired, instead of racing the
+	// post-NewVisor SetLogBroadcaster call and getting "log broadcaster not
+	// available". The broadcaster's logger hooks were attached by the caller, so
+	// entries are already being captured regardless.
+	v.logBcast = logBcast
 	v.services = NewServiceRegistry()
 	v.startedAt = time.Now()
 	v.startupComplete = make(chan struct{})
