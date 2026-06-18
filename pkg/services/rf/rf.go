@@ -182,9 +182,14 @@ func (s *service) Run(ctx context.Context) error {
 		return fmt.Errorf("route-finder: invalid mode: %w", err)
 	}
 
-	dmsgDisc := cfg.Dmsg.Discovery
-	if dmsgDisc == "" {
-		dmsgDisc = dmsg.DiscURL(false)
+	// dmsg-only discovery: the plain-HTTP cfg.Dmsg.Discovery field is
+	// ignored. Operators configure cfg.Dmsg.DiscoveryDmsg explicitly,
+	// or the embedded dmsg-PK URL (deployment.Prod.DmsgDiscoveryDmsg
+	// via dmsg.DiscAddr) is used. svcmode routes discovery RPC over
+	// dmsg-HTTP via the bootstrap dmsg client — no plain-HTTP egress.
+	dmsgDiscDmsg := cfg.Dmsg.DiscoveryDmsg
+	if dmsgDiscDmsg == "" {
+		dmsgDiscDmsg = dmsg.DiscAddr(false)
 	}
 	embeddedServers := dmsgDiscEntries(cfg.Dmsg.Servers)
 	surveyWL := deployment.Prod.SurveyWhitelist
@@ -207,7 +212,7 @@ func (s *service) Run(ctx context.Context) error {
 		PK:                  pk,
 		SK:                  sk,
 		DmsgPort:            dmsgPort,
-		DmsgDiscovery:       dmsgDisc,
+		DmsgDiscoveryDmsg:   dmsgDiscDmsg,
 		DmsgServerType:      cfg.Dmsg.ServerType,
 		EmbeddedDmsgServers: embeddedServers,
 		SurveyWhitelist:     surveyWL,
