@@ -19,6 +19,13 @@ type PtyClient struct {
 	rpcC *rpc.Client
 	done chan struct{}
 	once sync.Once
+
+	// writeDone receives completed WriteAsync RPC calls so a later
+	// WriteAsync can surface a prior write's error, instead of silently
+	// dropping keystrokes until the Read path eventually notices the
+	// broken conn. Buffered; net/rpc drops replies (with a log line)
+	// rather than crashing if it ever fills.
+	writeDone chan *rpc.Call
 }
 
 // NewPtyClient creates a new pty client that interacts with a local pty.
@@ -30,9 +37,10 @@ func NewPtyClient(conn io.ReadWriteCloser) (*PtyClient, error) {
 		return nil, err
 	}
 	return &PtyClient{
-		log:  logging.MustGetLogger("pty:pty-client"),
-		rpcC: rpc.NewClient(conn),
-		done: make(chan struct{}),
+		log:       logging.MustGetLogger("pty:pty-client"),
+		rpcC:      rpc.NewClient(conn),
+		done:      make(chan struct{}),
+		writeDone: make(chan *rpc.Call, 64),
 	}, nil
 }
 
@@ -47,9 +55,10 @@ func NewProxyClient(conn io.ReadWriteCloser, rPK cipher.PubKey, rPort uint16) (*
 		return nil, err
 	}
 	return &PtyClient{
-		log:  logging.MustGetLogger("pty:proxy-client"),
-		rpcC: rpc.NewClient(conn),
-		done: make(chan struct{}),
+		log:       logging.MustGetLogger("pty:proxy-client"),
+		rpcC:      rpc.NewClient(conn),
+		done:      make(chan struct{}),
+		writeDone: make(chan *rpc.Call, 64),
 	}, nil
 }
 
@@ -91,6 +100,38 @@ func (sc *PtyClient) Write(b []byte) (int, error) {
 	return n, processRPCError(err)
 }
 
+// WriteAsync writes to the pty WITHOUT waiting for the RPC reply, so an
+// interactive caller (the web terminal's input loop) isn't blocked a full
+// round-trip per keystroke. Ordering is preserved — net/rpc serializes
+// request sends, and the send encodes b before returning, so the caller may
+// reuse the buffer.
+//
+// It returns an error if the client is closed OR if a PRIOR async write has
+// since failed: completed Write calls land on sc.writeDone, and each call
+// reaps them first, so a broken conn surfaces on the input path within a
+// keystroke or two instead of only when the Read path notices it.
+func (sc *PtyClient) WriteAsync(b []byte) error {
+	select {
+	case <-sc.done:
+		return io.ErrClosedPipe
+	default:
+	}
+	// Reap completed prior writes; report the first error encountered.
+	for {
+		select {
+		case call := <-sc.writeDone:
+			if call.Error != nil {
+				return processRPCError(call.Error)
+			}
+			continue
+		default:
+		}
+		break
+	}
+	sc.rpcC.Go(sc.rpcMethod("Write"), &b, new(int), sc.writeDone)
+	return nil
+}
+
 func (*PtyClient) rpcMethod(m string) string {
 	return PtyRPCName + "." + m
 }
@@ -113,6 +154,25 @@ func (sc *PtyClient) Start(name string, env []string, arg ...string) error {
 		Size: nil,
 		Env:  env,
 	}, &empty)
+}
+
+// StartSession starts the pty like StartWithSize but returns a persistent-session
+// id the caller can stash and later Attach to after a reconnect. Only
+// persistence-aware hosts expose it; on an older host the RPC returns a "method
+// not found" error (see isRPCMethodNotFound) and the caller should fall back to
+// StartWithSize, giving up reconnect support against that host.
+func (sc *PtyClient) StartSession(name string, arg []string, size *WinSize, env []string) (string, error) {
+	var sid string
+	err := sc.call("StartSession", &CommandReq{Name: name, Arg: arg, Size: size, Env: env}, &sid)
+	return sid, processRPCError(err)
+}
+
+// Attach rebinds to an existing persistent session by id (from a prior
+// StartSession), replaying output produced while the client was disconnected.
+// Returns an error if the session was reaped or is owned by another key, in
+// which case the caller should start a fresh session.
+func (sc *PtyClient) Attach(sid string) error {
+	return processRPCError(sc.call("Attach", &sid, &empty))
 }
 
 // Exec runs a one-shot command on the remote host without a PTY.
@@ -143,4 +203,12 @@ func (sc *PtyClient) StartWithSize(name string, arg []string, c *WinSize, env []
 // SetPtySize sets the pty size.
 func (sc *PtyClient) SetPtySize(size *WinSize) error {
 	return sc.call("SetPtySize", size, &empty)
+}
+
+// Ping issues a no-op RPC round-trip. The interactive web terminal calls
+// it periodically as a keepalive: the response read refreshes the dmsg
+// stream's idle read deadline, so a terminal left idle isn't dropped
+// after StreamIdleTimeout (2m). The dmsg analog of SSH ServerAliveInterval.
+func (sc *PtyClient) Ping() error {
+	return sc.call("Ping", &empty, &empty)
 }

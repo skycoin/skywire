@@ -18,7 +18,12 @@ skywire app skychat
 
 ```
       --addr string                   address to bind (default: localhost-only); use "*:PORT" to bind on all interfaces (default ":8001")
-  -c, --config string                 path to skywire.json — only the sk field is read, for TCP-direct identity
+  -c, --config string                 path to skywire.json — only the sk field is read, for TCP-direct / CXO identity
+      --cxo                           enable CXO-backed messaging over native TCP (no dmsg): publish outbound to your CXO feed, subscribe to --cxo-peer feeds. Works in --standalone.
+      --cxo-group string              enable federated CXO GROUP chat with this group id (over native TCP, roster/signing/gossip); members from --cxo-peer, owner from --cxo-group-owner
+      --cxo-group-owner string        group owner PK (your role is owner if it equals your identity, else member)
+      --cxo-listen string             CXO-TCP listen address for your feed (peers dial this) (default ":8802")
+      --cxo-peer strings              subscribe to a peer's CXO feed: tcp://<feedpk>@host:port (repeat for many)
       --dmsg                          listen on dmsg network (default true)
       --internal-token string         shared secret used by the hypervisor's reverse proxy to bypass the password gate; managed automatically by the visor
       --pair-enable                   enable per-partner CXO pair feeds (HTTP /pair endpoints + handshake)
@@ -38,9 +43,9 @@ skywire app skychat
       --sk string                     identity SK for TCP-direct (hex). Overrides env + config.
       --skynet                        listen on skynet network (default true)
       --standalone                    run without a parent visor: skip PROC_CONFIG handshake, disable skynet/dmsg listenLoops, keep --tcp-listen/--tcp-peer + the HTTP control surface. Pair-RPC endpoints become 503 (no visor pair-rpc to relay through). Use this to run a long-lived chat-app that survives visor restarts — reachable via TCP-direct only.
-      --tcp-listen string             accept noise-XK on TCP (e.g. ':8800'); requires --tcp-whitelist + an identity (--sk/-c/env). Bidirectional once established.
+      --tcp-listen string             accept noise-XK on TCP (e.g. ':8800'); needs an identity (--sk/-c/env). --tcp-whitelist optional (empty = open to any authenticated key). Bidirectional once established.
       --tcp-peer strings              persistent outbound TCP-direct peer: tcp://<pk>@host:port (repeat for many). For NAT-side hosts that dial out to public-IP peers.
-      --tcp-whitelist string          comma-separated peer PKs allowed to connect via --tcp-listen (empty rejects all)
+      --tcp-whitelist string          comma-separated peer PKs allowed to connect via --tcp-listen (empty = open to any authenticated key, matching skynet/CXO convention)
 ```
 
 ## Global Flags

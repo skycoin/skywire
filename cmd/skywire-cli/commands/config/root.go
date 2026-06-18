@@ -45,6 +45,7 @@ var (
 	transportSetupPKs          string
 	isDmsgHTTP                 bool
 	isHTTPOnly                 bool
+	isDual                     bool
 	minDmsgSess                int
 	isVpnServerEnable          bool
 	isDisableAuth              bool
@@ -86,6 +87,7 @@ var (
 	isResetSkysocks            bool
 	setPublicAutoconnect       string
 	minHops                    int
+	cascadeRouteSetup          bool
 	isUsr                      bool
 	isPublic                   bool
 	disablePublicAutoConn      bool

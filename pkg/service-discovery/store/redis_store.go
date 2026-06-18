@@ -23,6 +23,16 @@ var json = jsoniter.ConfigFastest
 const (
 	serviceKeyPrefix   = "service:"
 	serviceTypesSetKey = "service_types"
+
+	// mgetChunkSize bounds how many keys go into a single MGET. Redis is
+	// single-threaded, so one MGET over hundreds of keys (e.g. every
+	// service:skysocks:<pk>) blocks the server for the whole batch —
+	// ~40ms in production — starving every other client's command,
+	// including dmsg-discovery's tiny GET entry:<pk>. Issuing the fan-out
+	// in bounded batches lets redis interleave other clients between
+	// chunks. 256 keeps each MGET well under the starvation threshold
+	// while keeping round-trips low.
+	mgetChunkSize = 256
 )
 
 type redisStore struct {
@@ -145,6 +155,45 @@ func (s *redisStore) Service(ctx context.Context, sType string, addr servicedisc
 	return &service, nil
 }
 
+// mgetChunked issues MGET in bounded batches (mgetChunkSize) and concatenates
+// the results in key order, so a large fan-out does not block single-threaded
+// redis for the whole batch at once. The returned slice has exactly len(keys)
+// entries (nil for missing keys), preserving positional correspondence with
+// keys so callers can map results back by index.
+func (s *redisStore) mgetChunked(ctx context.Context, keys []string) ([]interface{}, error) {
+	values := make([]interface{}, 0, len(keys))
+	for _, batch := range chunkKeys(keys, mgetChunkSize) {
+		got, err := s.client.MGet(ctx, batch...).Result()
+		if err != nil {
+			return nil, err
+		}
+		values = append(values, got...)
+	}
+	return values, nil
+}
+
+// chunkKeys splits keys into consecutive batches of at most size, in order and
+// with no key dropped or duplicated, so concatenating the per-batch MGET
+// results reproduces the single-MGET result positionally. A non-positive size
+// yields a single batch (no chunking).
+func chunkKeys(keys []string, size int) [][]string {
+	if len(keys) == 0 {
+		return nil
+	}
+	if size <= 0 || len(keys) <= size {
+		return [][]string{keys}
+	}
+	chunks := make([][]string, 0, (len(keys)+size-1)/size)
+	for start := 0; start < len(keys); start += size {
+		end := start + size
+		if end > len(keys) {
+			end = len(keys)
+		}
+		chunks = append(chunks, keys[start:end])
+	}
+	return chunks
+}
+
 func (s *redisStore) Services(ctx context.Context, sType, version, country string) ([]servicedisc.Service, *servicedisc.HTTPError) {
 	setKey := s.serviceTypeSetKey(sType)
 
@@ -162,7 +211,7 @@ func (s *redisStore) Services(ctx context.Context, sType, version, country strin
 		keys = append(keys, fmt.Sprintf("%s%s:%s", serviceKeyPrefix, sType, pk))
 	}
 
-	values, err := s.client.MGet(ctx, keys...).Result()
+	values, err := s.mgetChunked(ctx, keys)
 	if err != nil {
 		return nil, s.processErr(err, http.StatusInternalServerError)
 	}
@@ -541,11 +590,20 @@ func (s *redisStore) isServiceOnline(ctx context.Context, pkHex string) bool {
 func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.Time) map[string]string {
 	daily := make(map[string]string)
 
+	// Pipeline all history days' HGet into ONE round-trip instead of
+	// uptimeHistoryDays sequential calls (per-visor cost across the network).
+	dates := make([]string, uptimeHistoryDays)
+	cmds := make([]*redis.StringCmd, uptimeHistoryDays)
+	pipe := s.client.Pipeline()
 	for i := 0; i < uptimeHistoryDays; i++ {
-		date := now.AddDate(0, 0, -i).Format("2006-01-02")
-		key := sdUptimeKey(pkHex, date)
+		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
+		cmds[i] = pipe.HGet(ctx, sdUptimeKey(pkHex, dates[i]), "count")
+	}
+	// Missing keys surface as redis.Nil per-command; handled below.
+	_, _ = pipe.Exec(ctx) //nolint:errcheck
 
-		countStr, err := s.client.HGet(ctx, key, "count").Result()
+	for i, cmd := range cmds {
+		countStr, err := cmd.Result()
 		if err != nil {
 			continue
 		}
@@ -558,7 +616,7 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 		if pct > 100 {
 			pct = 100
 		}
-		daily[date] = fmt.Sprintf("%.2f", pct)
+		daily[dates[i]] = fmt.Sprintf("%.2f", pct)
 	}
 
 	return daily
@@ -570,32 +628,48 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 func (s *redisStore) GetDailyTimeline(ctx context.Context, pkHex string, now time.Time) map[string]string {
 	timelines := make(map[string]string)
 
+	// Fetch every history day's timeline bitmap in ONE MGET and read the bits
+	// locally, instead of uptimeHistoryDays × timelineSlots (288) GETBIT
+	// commands. Each timeline is a Redis string bitmap (written with SETBIT);
+	// MGET returns the raw bytes and we extract the 288 bits in Go. The old
+	// per-bit path made GET /uptimes?v=v3 (timeline) hang for the full network
+	// (mirrors the dmsg-discovery fix).
+	keys := make([]string, uptimeHistoryDays)
+	dates := make([]string, uptimeHistoryDays)
 	for i := 0; i < uptimeHistoryDays; i++ {
-		date := now.AddDate(0, 0, -i).Format("2006-01-02")
-		tlKey := sdUptimeTimelineKey(pkHex, date)
+		dates[i] = now.AddDate(0, 0, -i).Format("2006-01-02")
+		keys[i] = sdUptimeTimelineKey(pkHex, dates[i])
+	}
 
-		var buf [timelineSlots]byte
-		pipe := s.client.Pipeline()
-		cmds := make([]*redis.IntCmd, timelineSlots)
-		for slot := 0; slot < timelineSlots; slot++ {
-			cmds[slot] = pipe.GetBit(ctx, tlKey, int64(slot))
-		}
-		if _, err := pipe.Exec(ctx); err != nil {
+	vals, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return timelines
+	}
+
+	for i, v := range vals {
+		str, ok := v.(string)
+		if !ok || str == "" {
 			continue
 		}
-
+		raw := []byte(str)
+		var buf [timelineSlots]byte
 		hasAny := false
 		for slot := 0; slot < timelineSlots; slot++ {
-			if cmds[slot].Val() == 1 {
+			// Redis bit ordering: offset 0 is the MSB of byte 0 (matches GETBIT).
+			byteIdx := slot / 8
+			var bit byte
+			if byteIdx < len(raw) {
+				bit = (raw[byteIdx] >> (7 - uint(slot%8))) & 1
+			}
+			if bit == 1 {
 				buf[slot] = '.'
 				hasAny = true
 			} else {
 				buf[slot] = ' '
 			}
 		}
-
 		if hasAny {
-			timelines[date] = string(buf[:])
+			timelines[dates[i]] = string(buf[:])
 		}
 	}
 

@@ -115,33 +115,16 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.dClient = dClient
 	v.initLock.Unlock()
 
-	// Start DMSG HTTP connection in background so it doesn't block visor startup.
-	// Downstream modules check v.dmsgHTTP != nil before using DMSG transport
-	// and fall back to plain HTTP if it's not ready yet.
-	go func() {
-		dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, v.MasterLogger().PackageLogger("dmsg_http:dmsgDC"),
-			v.conf.PK, v.conf.SK, dClient, dmsg.DefaultConfig())
-		if err != nil {
-			log.WithError(err).Warn("DMSG HTTP transport unavailable")
-			return
-		}
-
-		dmsgHTTP := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
-
-		v.pushCloseStack("dmsg_http", func() error {
-			closeDmsgDC()
-			return nil
-		})
-
-		v.initLock.Lock()
-		v.dmsgHTTP = &dmsgHTTP
-		v.dmsgDC = dmsgDC
-		v.initLock.Unlock()
-		close(v.dmsgHTTPReady)
-
-		log.Info("DMSG HTTP transport ready")
-	}()
-
+	// SINGLE-CLIENT CONVERGENCE: do NOT spin up a separate "direct" dmsg
+	// client (dmsgDC) here. It shared the visor PK with the main dmsgC, and
+	// dmsg servers key sessions by client-PK with newest-session-wins
+	// eviction (#3035), so the two clients evicted each other on every shared
+	// server — a continuous self-eviction storm (server-confirmed ~56
+	// session-deaths/min/server, 100% from visors). initDmsg now builds ONE
+	// dmsgC whose disc is a registering fallback over this dClient (static
+	// direct-first reads + self-registration), and wires v.dmsgHTTP to a
+	// dmsg-HTTP transport over that same client. dClient (set above) carries
+	// the preloaded static entries the single client resolves against.
 	return nil
 }
 
@@ -185,29 +168,9 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// Prefer DMSG-HTTP for discovery if configured (more private, no DNS dependency),
 	// fall back to plain HTTP URL. If HTTP URL is empty (DMSG-only deployment),
 	// DMSG is required — not optional.
-	discURL := primary
-	if primaryDmsg != "" && v.dmsgHTTP != nil {
-		if _, err := getHTTPClient(ctx, v, primaryDmsg); err == nil {
-			discURL = primaryDmsg
-			log.Info("Using DMSG-HTTP for dmsg discovery")
-		} else if discURL != "" {
-			log.WithError(err).Warn("DMSG-HTTP discovery failed, using plain HTTP")
-		} else {
-			return fmt.Errorf("DMSG-only deployment but DMSG discovery unreachable: %w", err)
-		}
-	} else if discURL == "" && primaryDmsg != "" {
-		// DMSG URL set but dmsgHTTP not ready — can't proceed without either
-		discURL = primaryDmsg
-		log.Warn("HTTP discovery URL empty, attempting DMSG discovery without dmsgHTTP transport")
-	}
-
-	httpC, err := getHTTPClient(ctx, v, discURL)
-	if err != nil {
-		return err
-	}
-	// Override the discovery URL used by the DMSG client
+	_ = primary // discovery URL selection now lives in dmsgc.New (Discovery || DiscoveryDmsg)
+	_ = primaryDmsg
 	dmsgConf := *v.conf.Dmsg
-	dmsgConf.Discovery = discURL
 	// --dmsg-server pins the client to one server (discovery filter in
 	// dmsg.Client.serve). Force sessions_count=1 so the client doesn't
 	// burn retries trying to open additional sessions when only one
@@ -225,7 +188,21 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 		log.WithField("dmsg_server", dmsgServer).
 			Info("--dmsg-server set: forcing dmsg.sessions_count=1")
 	}
-	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.MasterLogger())
+
+	// SINGLE-CLIENT CONVERGENCE. One dmsg client with a deferred dmsg-HTTP
+	// transport: build the client with an empty http.Client, then wire its
+	// Transport to MakeHTTPTransport(dmsgC) so discovery lookups AND the
+	// visor's own registration ride this client's own sessions. No request
+	// is issued before Serve, so the empty transport is never used. dmsgc.New
+	// wraps the disc in a registering fallback over v.dClient (preloaded with
+	// servers + dmsg-disc + service entries) so those resolve statically with
+	// no HTTP-over-dmsg round-trip — eliminating the second same-PK client
+	// (dmsgDC) that self-evicted on the dmsg servers.
+	httpC := &http.Client{}
+	directOnly := v.conf.Dmsg != nil && v.conf.Dmsg.DirectOnly
+	dmsgC := dmsgc.New(v.conf.PK, v.conf.SK, v.ebc, &dmsgConf, httpC, v.dClient, directOnly, v.MasterLogger())
+	httpC.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
+
 	wg := new(sync.WaitGroup)
 	wg.Add(1)
 	go func() {
@@ -243,7 +220,14 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 
 	v.initLock.Lock()
 	v.dmsgC = dmsgC
+	v.dmsgDC = dmsgC // single client: dmsgDC consumers (router, resolver, vpn) ride dmsgC
+	v.dmsgHTTP = httpC
 	v.initLock.Unlock()
+	select {
+	case <-v.dmsgHTTPReady:
+	default:
+		close(v.dmsgHTTPReady)
+	}
 
 	// Wait for DMSG to connect before returning. All modules that depend on
 	// dmsg will only start after this, ensuring DMSG is ready before any
@@ -313,58 +297,25 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	// → cache miss → ...) until the goroutine stack overflows.
 	v.seedDmsgServiceEntries(dmsgC, log)
 
-	// Now safe to upgrade. dmsgC's background discovery refreshes
-	// will hit the seeded dmsgdiscPK entry from cache, route
-	// through the delegated-server path, and never recurse back
-	// into the disc client looking for that PK.
-	//
-	// The initial-construction httpC was forced to plain HTTP
-	// whenever initDmsgHTTP's dmsgDC wasn't ready yet (a startup
-	// race), which pinned the dmsgC's discovery refresh to HTTP
-	// for the whole process lifetime — so an outage on the public
-	// HTTP fronting (Caddy, etc.) would break the visor's
-	// discovery refresh even when DMSG was healthy.
-	//
-	// Run the upgrade in a goroutine that waits for v.dmsgHTTPReady
-	// (initDmsgHTTP's dmsgDC) before wiring it in as dmsgfirst's
-	// primary path. dmsgDC is direct.Client-backed — it carries a
-	// synthetic entry for the dmsg-disc PK with all known server PKs
-	// as delegated, so DialStream resolves without ever needing an
-	// HTTP-discovery lookup. Pre-fix the primary used the main dmsgC,
-	// whose own discovery was dmsgfirst, so every Entry/PutEntry call
-	// from the visor's own updateClientEntryLoop fell back to HTTP
-	// after the DMSG primary's DialStream timed out — dmsg-disc has
-	// no entry in its own DB (root of trust, by design) so the dial
-	// never had a chance.
-	//
-	// Until dmsgHTTPReady fires (i.e., dmsgDC has bootstrapped its
-	// session set), dmsgC keeps the plain-HTTP discovery clients
-	// constructed by dmsgc.New. That's the same conservative behavior
-	// as before this fix landed.
-	go func() {
-		select {
-		case <-v.dmsgHTTPReady:
-		case <-ctx.Done():
-			return
-		}
-		v.initLock.Lock()
-		dmsgDC := v.dmsgDC
-		v.initLock.Unlock()
-		if dmsgDC == nil {
-			return
-		}
-		upgradeDmsgDiscToDmsgfirst(dmsgC, dmsgDC, v.conf.Dmsg, log)
-	}()
+	// No dmsgfirst upgrade needed: dmsgc.New already wired dmsgC's disc to a
+	// registering fallback whose HTTP half rides this single client's own
+	// dmsg-HTTP transport (httpC, set above). The one client both registers
+	// itself over dmsg and resolves seeded static entries direct-first.
 
 	// Start periodic config refresh for dynamic key sets
 	go v.startConfigRefresh(ctx) //nolint:errcheck,gosec
 
-	// Refresh the on-disk dmsg-servers cache from dmsg-discovery so the
-	// next bootstrap uses the live addresses, not whatever's in
-	// skywire.json. Uses a separate disc.HTTP client (the dmsg.Client
-	// doesn't expose its inner discovery client).
-	if v.dmsgServersCache != nil && discURL != "" {
-		go v.refreshDmsgServersCacheLoop(ctx, discURL, httpC)
+	// Refresh the on-disk dmsg-servers cache from dmsg-discovery so the next
+	// bootstrap uses live addresses. Rides httpC (the single client's
+	// dmsg-HTTP transport).
+	if v.dmsgServersCache != nil {
+		refreshURL := v.conf.Dmsg.Discovery
+		if refreshURL == "" {
+			refreshURL = v.conf.Dmsg.DiscoveryDmsg
+		}
+		if refreshURL != "" {
+			go v.refreshDmsgServersCacheLoop(ctx, refreshURL, httpC)
+		}
 	}
 
 	return nil
@@ -454,7 +405,12 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 }
 
 // dmsgServicePKs extracts public keys from dmsg:// URLs in the visor config.
-// Falls back to embedded deployment defaults for missing fields.
+// Falls back to embedded deployment defaults for each missing field so a
+// minimal config (which is the common case — most operators only override
+// the few fields they need) still seeds every direct-client deployment
+// service. Without these fallbacks all but ConfDmsg dropped to "" silently,
+// so DialStream for e.g. TPD hit the HTTP discovery, found no entry (TPD
+// is direct-client by design), and bailed with "entry not found".
 func (v *Visor) dmsgServicePKs() cipher.PubKeys {
 	pick := func(a, b string) string {
 		if a != "" {
@@ -463,16 +419,21 @@ func (v *Visor) dmsgServicePKs() cipher.PubKeys {
 		return b
 	}
 	dmsgURLs := []string{
-		v.conf.Dmsg.DiscoveryDmsg,
-		v.conf.Transport.DiscoveryDmsg,
-		v.conf.Transport.AddressResolverDmsg,
-		v.conf.Routing.RouteFinderDmsg,
-		v.conf.Launcher.ServiceDiscDmsg,
+		pick(v.conf.Dmsg.DiscoveryDmsg, deployment.Prod.DmsgDiscoveryDmsg),
+		pick(v.conf.Transport.DiscoveryDmsg, deployment.Prod.TransportDiscoveryDmsg),
+		pick(v.conf.Transport.AddressResolverDmsg, deployment.Prod.AddressResolverDmsg),
+		pick(v.conf.Routing.RouteFinderDmsg, deployment.Prod.RouteFinderDmsg),
+		pick(v.conf.Launcher.ServiceDiscDmsg, deployment.Prod.ServiceDiscoveryDmsg),
 		pick(v.conf.ConfServiceDmsg, deployment.Prod.ConfDmsg),
 	}
+	// UptimeTracker is the only nullable sub-config; treat a nil block
+	// the same as an empty AddrDmsg field and fall through to the embedded
+	// default so we still seed UT's PK on minimal configs.
+	utDmsg := deployment.Prod.UptimeTrackerDmsg
 	if v.conf.UptimeTracker != nil {
-		dmsgURLs = append(dmsgURLs, v.conf.UptimeTracker.AddrDmsg)
+		utDmsg = pick(v.conf.UptimeTracker.AddrDmsg, utDmsg)
 	}
+	dmsgURLs = append(dmsgURLs, utDmsg)
 	var pks cipher.PubKeys
 	for _, rawURL := range dmsgURLs {
 		if rawURL == "" {
@@ -499,10 +460,23 @@ func (v *Visor) dmsgServicePKs() cipher.PubKeys {
 // The synthetic entries list ALL known DMSG server PKs as delegated servers.
 // This lets DialStream try each server the visor is connected to — one of
 // them will be able to forward the stream to the service.
+//
+// Server PK list: prefer the visor config's explicit dmsg.servers list,
+// fall back to the embedded prod set (dmsg.Prod.DmsgServers) when the
+// config has none. Most minimal configs leave dmsg.servers empty and
+// rely on discovery to populate sessions at runtime; before this
+// fallback the seed returned early in that case and the service-PK
+// entries were never installed, so direct-client services like TPD
+// remained unreachable via DialStream until a manual seed.
 func (v *Visor) seedDmsgServiceEntries(dmsgC *dmsg.Client, log *logging.Logger) {
 	var serverPKs []cipher.PubKey
 	for _, srv := range v.conf.Dmsg.Servers {
 		serverPKs = append(serverPKs, srv.Static)
+	}
+	if len(serverPKs) == 0 {
+		for _, srv := range dmsg.Prod.DmsgServers {
+			serverPKs = append(serverPKs, srv.Static)
+		}
 	}
 	if len(serverPKs) == 0 {
 		return
@@ -855,6 +829,11 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// compat for every other NewHost caller (cmd/dmsg/pty-host,
 	// sshd CLI, tests).
 	host := pty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
+	// Opt-in persistent pty sessions: an interactive shell survives a dropped
+	// stream and a reconnecting client (the web terminal / `cli pty`) reattaches
+	// by id. Default TTL (0 → host default). The GC sweeper is started in the
+	// pty AppFunc where it has a serving-lifetime ctx.
+	host.SetPersistentSessions(conf.PersistentSessions, 0)
 	// Expose the Host on the visor so the RPC layer can drive Exec
 	// directly (see pkg/visor/rpc_visor.go DmsgPtyExec). Without this
 	// the integrated `skywire cli dmsg pty exec` path is forced
@@ -1246,6 +1225,10 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 		listenerCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
+		// Reap detached/exited persistent pty sessions for the serving
+		// lifetime. No-op when PersistentSessions is off.
+		go host.RunSessionGC(listenerCtx)
+
 		// dmsg listener — primary entry. ListenAndServe blocks
 		// until listenerCtx cancels or the listener fails.
 		if dmsgPort != 0 {
@@ -1275,7 +1258,7 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 		// Direct-TCP entry point — operator opt-in via
 		// Dmsgpty.SshListen. XK-noise handshake gates each accept;
 		// the whitelist is shared with the dmsg path. Exposed at
-		// CLI as `skywire cli ssh` / `skywire cli sshd`.
+		// CLI as `skywire cli pty shell` / `skywire cli pty host`.
 		if sshAddr != "" {
 			wg.Add(1)
 			go func() {

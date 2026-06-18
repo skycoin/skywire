@@ -137,6 +137,14 @@ func New(log logrus.FieldLogger, db store.Storer, m metrics.Metrics, testMode, e
 		clientEntryTTL:              clientEntryTTL,
 	}
 
+	// Per-remote rate limiting FIRST, before RealIP — it keys on the
+	// noise-authenticated dmsg PK in RemoteAddr, which RealIP would overwrite
+	// from a (spoofable) X-Real-IP header. Caps any single client so a
+	// busy-looping dmsg client can't pin the service at 100% CPU. Skipped under
+	// load testing, which deliberately drives high request rates.
+	if !enableLoadTesting {
+		r.Use(newRemoteRateLimiter().middleware)
+	}
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP) //nolint:staticcheck
 	r.Use(middleware.Logger)
@@ -508,6 +516,27 @@ func (a *API) setEntry() func(w http.ResponseWriter, r *http.Request) {
 		// Recover previous entry. If key not found we insert with sequence 0
 		// If there was a previous entry we check the new one is a valid iteration
 		oldEntry, err := a.db.Entry(r.Context(), entry.Static)
+
+		// Log SERVER registrations (not the high-volume client heartbeats —
+		// servers are a handful) with the registering PK, sequence jump,
+		// advertised address, and source. This makes a colliding or runaway
+		// server entry identifiable from the discovery logs: two different
+		// `src` for one `server_pk`, or a sequence climbing far faster than the
+		// ~1/min heartbeat, points straight at the offender. Placed before the
+		// iteration check so rejected (out-of-sequence) attempts are logged too.
+		if entry.Server != nil {
+			var prevSeq uint64
+			if err == nil && oldEntry != nil {
+				prevSeq = oldEntry.Sequence
+			}
+			a.log(r).WithField("server_pk", entry.Static).
+				WithField("address", entry.Server.Address).
+				WithField("sequence", entry.Sequence).
+				WithField("prev_sequence", prevSeq).
+				WithField("src", r.RemoteAddr).
+				Info("dmsg-server entry registration")
+		}
+
 		if err == disc.ErrKeyNotFound {
 			setErr := a.db.SetEntry(r.Context(), entry, entryTimeout)
 			if setErr != nil {

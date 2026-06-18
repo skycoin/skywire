@@ -110,17 +110,17 @@ skywire cli proxy list #list proxy server keys
 
 Add the transport:
 ```
-skywire cli visor tp add -t <transport-type> <public-key>
+skywire cli tp add -t <transport-type> <public-key>
 ```
 
 View established transports:
 ```
-skywire cli visor tp ls
+skywire cli tp ls
 ```
 
 Remove a transport:
 ```
-skywire cli visor tp rm -i <transport-id>
+skywire cli tp rm -i <transport-id>
 ```
 
 ## Files and folders created by skywire at runtime

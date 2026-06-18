@@ -357,6 +357,38 @@ func (s *UserManager) ChangeAdminPassword(oldPassword, newPassword string) error
 	return nil
 }
 
+// SetAdminPassword sets the "admin" account password WITHOUT requiring
+// the old one, creating the admin account if it doesn't exist yet.
+// Intended for the local privileged RPC path
+// (skywire cli visor hv passwd --force): a forgotten-password reset, or a
+// first-time set straight from the CLI without the UI's create-account
+// page. Enforces the same checkPasswordFormat rules and invalidates every
+// active session for the user so old cookies can't be replayed.
+func (s *UserManager) SetAdminPassword(newPassword string) error {
+	user, err := s.db.User("admin")
+	if err != nil || user == nil {
+		// No admin account yet — create it (first-time set from CLI).
+		var u User
+		if ok := u.SetName("admin"); !ok {
+			return ErrBadUsernameFormat
+		}
+		if err := u.SetPassword(newPassword); err != nil {
+			return err
+		}
+		return s.db.AddUser(u)
+	}
+
+	// Existing admin — overwrite the password without the old one.
+	if err := user.SetPassword(newPassword); err != nil {
+		return err
+	}
+	if err := s.db.SetUser(*user); err != nil {
+		return err
+	}
+	s.delAllSessionsOfUser(user.Name)
+	return nil
+}
+
 func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {
 	cookie, err := r.Cookie(sessionCookieName)
 	if err != nil {

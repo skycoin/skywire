@@ -151,6 +151,7 @@ func buildRouter() *gin.Engine {
 				{"/stats", "0.7"},
 				{"/log-collection", "0.6"},
 				{"/log-collection/tree", "0.6"},
+				{"/log-collection/tree-detail", "0.5"},
 				{"/transport-graph", "0.5"},
 				{"/stats/version-history", "0.5"},
 				{"/stats/bandwidth-history", "0.5"},
@@ -336,6 +337,8 @@ func buildRouter() *gin.Engine {
 			c.Writer.Flush()
 			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
 			c.Writer.Flush()
+			c.Writer.Write([]byte("<p style='margin:6px 0;'>View: <b>flat list</b> &middot; <a href='/log-collection/tree-detail'>detail tree (per-PK health.json + version inline)</a></p>\n")) //nolint:errcheck,gosec
+			c.Writer.Flush()
 			surveycount, _ := script.FindFiles(wd + `/` + "log_backups/").Match("node-info.json").CountLines() //nolint:errcheck,gosec
 			c.Writer.Write([]byte(fmt.Sprintf("Total surveys: %v\n\n", surveycount)))                          //nolint:errcheck,gosec,staticcheck
 			c.Writer.Flush()
@@ -374,6 +377,37 @@ func buildRouter() *gin.Engine {
 					fmt.Fprint(c.Writer, "\n") //nolint:errcheck,gosec
 				}
 			}
+			c.Writer.Flush()
+			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
+			c.Writer.Flush()
+			c.Writer.Write([]byte(htmlend)) //nolint:errcheck,gosec
+			c.Writer.Flush()
+		})
+
+		// Detail tree view — restores the pre-2026-03-28 format that
+		// showed per-PK health.json contents and node-info.json version
+		// inline, so operators can spot version distribution at a glance
+		// without clicking into individual visor pages. Output is the
+		// ANSI tree rendered by `skywire cli log st -d log_backups -r`
+		// (Index header, ├/└ branches, color-coded file types, age +
+		// JSON body for health.json, version field for node-info.json),
+		// converted to HTML. The flat list lives at /log-collection/tree.
+		r1.GET("/log-collection/tree-detail", func(c *gin.Context) {
+			c.Writer.Header().Set("Server", "")
+			c.Writer.Header().Set("Transfer-Encoding", "chunked")
+			c.Writer.WriteHeader(http.StatusOK)
+			c.Writer.Write([]byte(chunkedPageHead("Survey Detail Tree", "Detailed Skywire visor survey tree with inline health.json and version info", "/log-collection/tree-detail"))) //nolint:errcheck,gosec
+			c.Writer.Flush()
+			c.Writer.Write([]byte(navlinks)) //nolint:errcheck,gosec
+			c.Writer.Flush()
+			c.Writer.Write([]byte("<p style='margin:6px 0;'>View: <a href='/log-collection/tree'>flat list</a> &middot; <b>detail tree (per-PK health.json + version inline)</b></p>\n")) //nolint:errcheck,gosec
+			c.Writer.Flush()
+			st, err := script.Exec(`skywire cli log st -d ` + wd + `/log_backups -r`).Bytes()
+			if err != nil {
+				log.WithError(err).Error()
+				c.Writer.Write([]byte(err.Error())) //nolint:errcheck,gosec
+			}
+			c.Writer.Write(ansihtml.ConvertToHTML(st)) //nolint:errcheck,gosec
 			c.Writer.Flush()
 			c.Writer.Write([]byte(htmltoplink)) //nolint:errcheck,gosec
 			c.Writer.Flush()
@@ -771,12 +805,22 @@ func buildRouter() *gin.Engine {
 				calendar = cal()
 			}
 			l += "\n" + string(ansihtml.ConvertToHTML([]byte(calendar)))
-			l += "\n\n<table style='border-collapse: collapse; width: auto;'>\n"
+			// Caption above the daily history table to explain the two
+			// pool columns. Detailed eligibility rules live further
+			// down the page (#Pool-1-Presence, #Pool-2-Bandwidth); this
+			// keeps the meaning of Pool 1 / Pool 2 inline without
+			// requiring readers to scroll.
+			l += "\n\n<p style='margin:8px 0 4px 0;font-size:12px;color:#aaa;'>" +
+				"<b>Pool 1</b> = presence (Skycoin per visor-share). " +
+				"<b>Pool 2</b> = bandwidth (Skycoin per share or per GB, depending on mode). " +
+				"<b>Distributed</b>: <span style='color:#0f0;'>✔</span> broadcast on-chain · <span style='color:#f00;'>✘</span> pending." +
+				"</p>\n"
+			l += "<table style='border-collapse: collapse; width: auto;'>\n"
 			l += "<thead>\n"
 			l += "<tr>\n"
 			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: left;'>Date</th>"
-			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 1</th>"
-			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right;'>Pool 2</th>"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right; font-family: monospace;'>Pool 1</th>"
+			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: right; font-family: monospace;'>Pool 2</th>"
 			l += "<th style='padding: 4px 12px; border-bottom: 1px solid #444; text-align: center;'>Distributed</th>\n"
 			l += "</tr>\n"
 			l += "</thead>\n"
@@ -1181,7 +1225,7 @@ func buildRouter() *gin.Engine {
 
 			l1, err := script.File(wd + `/hist/` + c.Param("date") + ".txt").String()
 			if err != nil {
-				l += "Rewards not distributed yet\n\n"
+				l += "Rewards not distributed yet — awaiting broadcast\n\n"
 			} else {
 				if l1 == "" {
 					l += "Reward txid not recorded\n\n"
@@ -1238,18 +1282,29 @@ func buildRouter() *gin.Engine {
 			if err == nil {
 				l += "\n\nIneligible:\n"
 				for _, line := range l2 {
-					thispk, _ := script.Echo(line).Column(2).String()         //nolint:errcheck,gosec
-					reason, _ := script.Echo(line).Column(3).String()         //nolint:errcheck,gosec
+					// Split on ", " (comma+space) — ineligible.csv reason
+					// values can contain spaces ("No transports", "Invalid
+					// survey", etc), and the prior whitespace-tokenizing
+					// Column() call truncated multi-word reasons to their
+					// first word ("No" instead of "No transports").
+					parts := strings.SplitN(line, ", ", 4)
+					thispk := ""
+					reason := ""
+					if len(parts) >= 3 {
+						thispk = parts[1]
+						reason = parts[2]
+					}
+					pkClean := strings.TrimRight(thispk, ",\n")
 					invalid, _ := script.Echo(line).Match(", , , ,").String() //nolint:errcheck,gosec
 					if invalid != "" {
-						_, err = script.IfExists(wd + `/` + "log_backups/" + thispk + "/node-info.json").Echo("").String()
+						_, err = script.IfExists(wd + `/` + "log_backups/" + pkClean + "/node-info.json").Echo("").String()
 						if err != nil {
-							l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Survey not found\n"
+							l += "<a id='" + pkClean + "'>" + pkClean + "</a>, " + ineligibleReasonLink("Survey not found") + "\n"
 						} else {
-							l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Invalid survey\n"
+							l += "<a id='" + pkClean + "'>" + pkClean + "</a>, " + ineligibleReasonLink("Invalid survey") + "\n"
 						}
 					} else {
-						l += "<a id='" + strings.TrimRight(thispk, ",\n") + "'>" + strings.TrimRight(thispk, ",\n") + "</a>," + " Ineligible " + strings.Replace(reason, ",\n", "\n", -1)
+						l += "<a id='" + pkClean + "'>" + pkClean + "</a>, Ineligible " + ineligibleReasonLink(strings.TrimRight(reason, ",\n")) + "\n"
 					}
 				}
 			}

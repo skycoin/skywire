@@ -32,6 +32,11 @@ type LegStats struct {
 	// not what the peer said it sent.
 	RecvBytes   uint64
 	RecvPackets uint64
+	// Retransmits is how many SACK retransmit packets THIS leg has
+	// carried. A high retransmits:sentPackets ratio marks a lossy leg —
+	// the signal a routing policy needs to shed lossy intermediates and
+	// the scheduler needs to deweight them.
+	Retransmits uint64
 }
 
 type legCounters struct {
@@ -39,6 +44,7 @@ type legCounters struct {
 	sentPackets uint64 // atomic
 	recvBytes   uint64 // atomic
 	recvPackets uint64 // atomic
+	retransmits uint64 // atomic
 }
 
 // routeMux encapsulates route multiplexing state and logic.
@@ -69,6 +75,15 @@ type routeMux struct {
 	// the individual counters.
 	legMu sync.RWMutex
 	legs  []*legCounters
+	// ready[i] reports whether leg i may be SELECTED for sending. The
+	// primary leg (0) is ready from the start; an aux leg only becomes
+	// ready once we have received a packet (data or handshake) on it,
+	// which proves the peer finished registering its rule. Without this,
+	// the selector could steer the first writes onto an aux leg the peer
+	// has not set up yet — those packets are dropped, the reorder buffer
+	// stalls on the missing sequence, and the stream hangs until it is
+	// closed (the mux>=2 "0 bytes / close code 0" bug). Guarded by legMu.
+	ready []bool
 }
 
 // newRouteMux creates a new routeMux instance with all sub-components initialized.
@@ -117,7 +132,7 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 			idx := m.tpSelector.SelectForPayload(payload)
 			if idx < len(tps) {
 				tp := tps[idx]
-				if tp != nil && !tp.IsClosed() {
+				if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 					return tp, fwd[idx], idx, nil
 				}
 			}
@@ -129,19 +144,22 @@ func (m *routeMux) selectTransport(tps []*transport.ManagedTransport, fwd []rout
 		idx := m.tpSelector.Select()
 		if idx < len(tps) {
 			tp := tps[idx]
-			if tp != nil && !tp.IsClosed() {
+			if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 				return tp, fwd[idx], idx, nil
 			}
 		}
 	}
 
-	// Fallback: round-robin with skip-dead
+	// Fallback: round-robin with skip-dead and skip-not-ready. An aux leg
+	// the peer has not confirmed yet is skipped so we never send the first
+	// packets onto a route whose rule the peer has not registered; the
+	// primary leg (0) is always ready, so this loop always finds it.
 	n := uint32(len(tps)) //nolint:gosec
 	start := atomic.AddUint32(&m.tpIndex, 1) - 1
 	for i := uint32(0); i < n; i++ {
 		idx := int((start + i) % n) //nolint:gosec
 		tp := tps[idx]
-		if tp != nil && !tp.IsClosed() {
+		if tp != nil && !tp.IsClosed() && m.legReadyAt(idx) {
 			return tp, fwd[idx], idx, nil
 		}
 	}
@@ -157,7 +175,84 @@ func (m *routeMux) growLegs(n int) {
 	for len(m.legs) < n {
 		m.legs = append(m.legs, &legCounters{})
 	}
+	for len(m.ready) < n {
+		// The primary leg (index 0) is ready immediately; aux legs start
+		// not-ready and are marked ready on the first inbound packet.
+		m.ready = append(m.ready, len(m.ready) == 0)
+	}
 	m.legMu.Unlock()
+}
+
+// removeLegs drops the given ORIGINAL leg indices from legs[] and ready[] so
+// they stay aligned with the rg's compacted tps[]/fwd[]/rvs[] after a leg is
+// removed (RemoveMuxRouteByTransport / pruneDeadTransports). It rebuilds both
+// slices skipping the dropped indices (order-independent), then re-asserts the
+// leg-0-always-ready invariant — leg 0 may have been promoted from an aux when
+// a primary transport is pruned. Without this lockstep compaction the arrays
+// desync from tps[]: readiness and per-leg accounting attach to the wrong leg,
+// which can flip a live leg to not-ready (the mux>=2 hang — see the ready[]
+// note above) or mis-attribute bytes after an index is reused. The counterpart
+// to growLegs.
+func (m *routeMux) removeLegs(indices ...int) {
+	if len(indices) == 0 {
+		return
+	}
+	drop := make(map[int]bool, len(indices))
+	for _, i := range indices {
+		drop[i] = true
+	}
+	m.legMu.Lock()
+	if len(m.legs) > 0 {
+		kept := make([]*legCounters, 0, len(m.legs))
+		for i, c := range m.legs {
+			if !drop[i] {
+				kept = append(kept, c)
+			}
+		}
+		m.legs = kept
+	}
+	if len(m.ready) > 0 {
+		kept := make([]bool, 0, len(m.ready))
+		for i, r := range m.ready {
+			if !drop[i] {
+				kept = append(kept, r)
+			}
+		}
+		m.ready = kept
+		if len(m.ready) > 0 {
+			m.ready[0] = true // the (possibly newly-promoted) primary is always ready
+		}
+	}
+	m.legMu.Unlock()
+}
+
+// markLegReady records that leg idx has carried inbound traffic, so it
+// is now safe to select for sending. Idempotent and bounds-checked.
+func (m *routeMux) markLegReady(idx int) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.Lock()
+	if idx < len(m.ready) {
+		m.ready[idx] = true
+	}
+	m.legMu.Unlock()
+}
+
+// legReadyAt reports whether leg idx may be selected for sending.
+// Out-of-range indices and the never-grown case report not-ready, except
+// the primary leg (0) which is always ready so a group with no readiness
+// info still sends on its primary route.
+func (m *routeMux) legReadyAt(idx int) bool {
+	if idx < 0 {
+		return false
+	}
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if idx >= len(m.ready) {
+		return idx == 0
+	}
+	return m.ready[idx]
 }
 
 // recordSent atomically increments the sent-bytes/packets counters
@@ -190,6 +285,34 @@ func (m *routeMux) recordRecv(idx int, n uint64) {
 	m.legMu.RUnlock()
 }
 
+// recordRetransmit atomically increments the retransmit counter for leg
+// idx (the leg that carried a SACK retransmit). The retransmitted bytes
+// are still recorded via recordSent; this is the separate loss signal.
+func (m *routeMux) recordRetransmit(idx int) {
+	if idx < 0 {
+		return
+	}
+	m.legMu.RLock()
+	if idx < len(m.legs) {
+		atomic.AddUint64(&m.legs[idx].retransmits, 1)
+	}
+	m.legMu.RUnlock()
+}
+
+// retransmitsAt returns leg idx's cumulative retransmit count (0 if out of
+// range), for snapshotLegs / LegInfo without a full Snapshot allocation.
+func (m *routeMux) retransmitsAt(idx int) uint64 {
+	if idx < 0 {
+		return 0
+	}
+	m.legMu.RLock()
+	defer m.legMu.RUnlock()
+	if idx < len(m.legs) {
+		return atomic.LoadUint64(&m.legs[idx].retransmits)
+	}
+	return 0
+}
+
 // snapshotLegs returns a stable copy of the current per-leg counters.
 // Atomic loads, no locking against in-flight increments — the
 // snapshot is point-in-time and the underlying counters keep moving.
@@ -203,6 +326,7 @@ func (m *routeMux) snapshotLegs() []LegStats {
 			SentPackets: atomic.LoadUint64(&c.sentPackets),
 			RecvBytes:   atomic.LoadUint64(&c.recvBytes),
 			RecvPackets: atomic.LoadUint64(&c.recvPackets),
+			Retransmits: atomic.LoadUint64(&c.retransmits),
 		}
 	}
 	m.legMu.RUnlock()

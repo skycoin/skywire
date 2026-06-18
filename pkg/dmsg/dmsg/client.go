@@ -23,7 +23,23 @@ type entryCacheEntry struct {
 	fetchedAt time.Time
 }
 
-const entryCacheTTL = 30 * time.Second
+// entryCacheTTL bounds how long a resolved discovery entry is reused
+// before a fresh lookup. It MUST stay comfortably larger than the
+// callers that re-resolve the same peers on a fixed cadence — most
+// notably the dmsg-tracker (skyenv.DmsgTrackerUpdateInterval, 30s),
+// which re-establishes trackers for the same handful of peers every
+// cycle. When this TTL equalled that interval, every tracker cycle
+// landed just after expiry → cache miss → a burst of concurrent
+// dmsg-discovery dials for the same ~10 peers → contention →
+// canceled/timed-out dials → "cannot connect to delegated server"
+// (202) → HTTP fallback. Sizing the TTL to span many tracker cycles
+// collapses those repeat lookups into one disc hit per peer per TTL,
+// which is what lets the DMSG-primary path stay on dmsg instead of
+// falling back to HTTP. Peer entries are stable (they change only on
+// a dmsg-server reconnect), and a stale entry self-heals: DialStream's
+// mesh phase reaches the peer via any shared server regardless of the
+// cached delegated-server list.
+const entryCacheTTL = 5 * time.Minute
 
 // SessionDialCallback is triggered BEFORE a session is dialed to.
 // If a non-nil error is returned, the session dial is instantly terminated.
@@ -122,6 +138,18 @@ type Client struct {
 	once  sync.Once
 	wg    sync.WaitGroup // tracks background goroutines for clean shutdown
 	sesMx sync.Mutex
+
+	// closed gates new session-serving goroutines once Close has begun.
+	// Protected by EntityCommon.sessionsMx — set true at the start of
+	// Close's critical section and checked in dialSession before
+	// wg.Add(1). Without this gate, a dialSession running concurrently
+	// with Close can race wg.Add against wg.Wait (the race detector
+	// flags this in TestEnv): Close.wg.Wait returns with the counter
+	// at zero just as dialSession is about to wg.Add(1), leaving a
+	// serve-goroutine un-waited-on. Holding sessionsMx around both
+	// the closed-set in Close and the closed-check + Add in
+	// dialSession provides the happens-before edge.
+	closed bool
 }
 
 // AddDiscovery registers an additional dmsg-discovery this client
@@ -482,6 +510,10 @@ func (ce *Client) Close() error {
 		ce.sesMx.Unlock()
 
 		ce.sessionsMx.Lock()
+		// Mark closed before iterating so any concurrent dialSession
+		// blocking on sessionsMx sees the closed flag and bails out
+		// without doing wg.Add(1) (see Client.closed for the race).
+		ce.closed = true
 		for _, dSes := range ce.sessions {
 			ce.log.
 				WithError(dSes.Close()).
@@ -786,6 +818,28 @@ func (ce *Client) DiscEntry(ctx context.Context, pk cipher.PubKey) (*disc.Entry,
 // is no point attempting a full route setup that will time out.
 func (ce *Client) Probe(ctx context.Context, pk cipher.PubKey, port uint16) bool {
 	stream, err := ce.DialStream(ctx, Addr{PK: pk, Port: port})
+	if err != nil {
+		return false
+	}
+	_ = stream.Close() //nolint:errcheck
+	return true
+}
+
+// ProbeViaServer is like Probe but forces the stream through a specific
+// dmsg server (serverPK), so it tests reachability of pk:port VIA that
+// server rather than via whichever delegated/shared server DialStream
+// would otherwise pick. Useful for per-server reachability diagnosis
+// ("is pk reachable through server X but not server Y?"). It ensures a
+// session to serverPK first, then dials the target through that session.
+func (ce *Client) ProbeViaServer(ctx context.Context, pk cipher.PubKey, port uint16, serverPK cipher.PubKey) bool {
+	if _, err := ce.EnsureAndObtainSession(ctx, serverPK); err != nil {
+		return false
+	}
+	session, ok := ce.Session(serverPK)
+	if !ok {
+		return false
+	}
+	stream, err := session.DialStream(ctx, Addr{PK: pk, Port: port})
 	if err != nil {
 		return false
 	}

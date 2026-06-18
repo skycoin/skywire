@@ -38,6 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skynetca"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 // DefaultDomainSuffix is the TLD treated as DMSG addresses when
@@ -98,6 +99,33 @@ type Config struct {
 	// LeafMinter mints per-host leaf certs. Required when TLSMITM
 	// is true; ignored otherwise.
 	LeafMinter skynetca.LeafMinter
+
+	// LocalPK is this visor's public key, used to detect self-lookups for the
+	// SelfLoopback short-circuit.
+	LocalPK cipher.PubKey
+	// SelfLoopback, when true (the default), serves a request whose destination
+	// is LocalPK from the local service in-process via SelfDial, instead of
+	// dialing out over dmsg back to self (a wasteful, 202-prone round-trip).
+	// Set false to force the full transport path — e.g. to test self-transports.
+	SelfLoopback bool
+	// SelfDial returns an in-process connection to the local service registered
+	// on the given dmsg port. Used only when SelfLoopback short-circuits a
+	// self-destined request. Nil disables the short-circuit.
+	SelfDial func(port uint16) (net.Conn, error)
+	// Aliases maps a destination label to a PK (e.g. "skywire" -> LocalPK), so
+	// "skywire.dmsg" resolves exactly like "<pk>.dmsg".
+	Aliases map[string]cipher.PubKey
+
+	// DirectClient is an optional dmsg client that reaches servers by their
+	// configured address rather than via discovery. A dest in DirectServerPKs
+	// is dialed through it by self-rendezvous (EnsureAndObtainSession(dest) +
+	// DialStream(dest:port)), which makes non-discovery dmsg SERVERS — they
+	// serve /health etc. over dmsg but never register a client entry, so the
+	// discovery client cannot resolve them — reachable by name. Nil disables
+	// this path (dests fall through to the normal discovery dial).
+	DirectClient *dmsg.Client
+	// DirectServerPKs is the set of destination PKs to dial via DirectClient.
+	DirectServerPKs map[cipher.PubKey]struct{}
 }
 
 // DmsgTarget is a (publicKey, dmsgPort) pair used in fixed-mapping mode.
@@ -248,19 +276,103 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			if _, ok := dialCtx.Value(dmsgResolverPortKey).(string); ok {
-				pkLabel := strings.TrimSuffix(origHost, cfg.DomainSuffix)
-				pk, err := parsePKLabel(pkLabel)
-				if err != nil {
-					return nil, fmt.Errorf("invalid PK in hostname %q: %w", origHost, err)
+				// Reserved synthetic directory: serve the alias index in-process.
+				// Never dials out and is not a real PK/alias, so intercept it
+				// before host resolution (which would fail closed on "home").
+				if isHomeHost(origHost, cfg.DomainSuffix) {
+					log.Debug("SOCKS5 → resolver home page (in-process)")
+					return &tcpAddrConn{Conn: serveHomeInProcess(cfg.Aliases, cfg.DomainSuffix, cfg.LocalPK)}, nil
+				}
+
+				vhost, route, dest, _, perr := skynetweb.ParseResolverHost(origHost, cfg.DomainSuffix, cfg.Aliases)
+				if perr != nil {
+					return nil, fmt.Errorf("invalid dmsg hostname %q: %w", origHost, perr)
 				}
 				port, err := strconv.ParseUint(origPort, 10, 16)
 				if err != nil {
 					return nil, fmt.Errorf("invalid port: %w", err)
 				}
-				log.WithField("port", port).Debug("SOCKS5 → DMSG direct")
-				stream, err := dmsgC.Dial(ctx, dmsg.Addr{PK: pk, Port: uint16(port)})
-				if err != nil {
-					return nil, err
+
+				// Self-lookup short-circuit: a request whose destination is THIS
+				// visor is served from the local service in-process, rather than
+				// dialing out over dmsg back to ourselves (a wasteful, 202-prone
+				// round-trip). Disabled via SelfLoopback=false to exercise the
+				// full self-transport path for testing.
+				if cfg.SelfLoopback && cfg.SelfDial != nil && dest == cfg.LocalPK && len(route) == 0 {
+					log.WithField("port", port).Debug("SOCKS5 → DMSG self-loopback (in-process)")
+					c, derr := cfg.SelfDial(uint16(port))
+					if derr != nil {
+						return nil, derr
+					}
+					// Wrap so LocalAddr()/RemoteAddr() return *net.TCPAddr —
+					// go-socks5 (request.go:194) does an unchecked assertion
+					// when building the BND reply, AFTER this Dial callback
+					// returns (so the recover above does not cover it), and
+					// would panic on the raw net.Pipe conn otherwise.
+					return &tcpAddrConn{Conn: c}, nil
+				}
+
+				dstAddr := dmsg.Addr{PK: dest, Port: uint16(port)}
+				var stream net.Conn
+				_, isDirectServer := cfg.DirectServerPKs[dest]
+				switch {
+				case isDirectServer && cfg.DirectClient != nil && len(route) == 0:
+					// Non-discovery dmsg SERVER: dial it through the direct
+					// client by self-rendezvous — connect to the server (the
+					// direct client knows its address) and dial the server's
+					// own listener over that session. The discovery client
+					// can't reach it (no client entry registered).
+					log.WithField("server", dest).WithField("port", port).Debug("SOCKS5 → DMSG direct server")
+					ses, serr := cfg.DirectClient.EnsureAndObtainSession(ctx, dest)
+					if serr != nil {
+						return nil, fmt.Errorf("direct session to dmsg server %s: %w", dest, serr)
+					}
+					str, derr := ses.DialStream(ctx, dstAddr)
+					if derr != nil {
+						return nil, derr
+					}
+					stream = str
+				case len(route) > 0:
+					// Pinned rendezvous: dial the destination THROUGH the named
+					// dmsg server's session instead of resolving it via
+					// discovery. This lets a browser reach a direct/hidden client
+					// by naming its server — <server-pk>.<client-pk>.dmsg (the
+					// destination is the label adjacent to the suffix; routing PKs
+					// precede it). A .dmsg address carries a single routing PK (the
+					// server); if more are present the one nearest the dest wins.
+					rl := route[len(route)-1]
+					if rl.IsTpID {
+						return nil, fmt.Errorf("dmsg address %q: routing label must be a dmsg server PK, not a transport ID", origHost)
+					}
+					serverPK := rl.PK
+					log.WithField("server", serverPK).WithField("port", port).Debug("SOCKS5 → DMSG pinned via server")
+					ses, serr := dmsgC.EnsureAndObtainSession(ctx, serverPK)
+					if serr != nil {
+						return nil, fmt.Errorf("pin via dmsg server %s: %w", serverPK, serr)
+					}
+					str, derr := ses.DialStream(ctx, dstAddr)
+					if derr != nil {
+						return nil, derr
+					}
+					stream = str
+				default:
+					log.WithField("port", port).Debug("SOCKS5 → DMSG direct")
+					c, derr := dmsgC.Dial(ctx, dstAddr)
+					if derr != nil {
+						return nil, derr
+					}
+					stream = c
+				}
+
+				// Rewrite the Host header to the vhost (the labels before the
+				// destination PK) so a vhost-capable backend (caddy/nginx/traefik)
+				// serves the right site — the dmsg counterpart of the skynet
+				// resolver's host-rewrite, which makes magnetosphere.net.<pk>.dmsg
+				// reach the magnetosphere.net site. Only wrap a plaintext-HTTP
+				// stream: skip on the TLS port with MITM off, where the browser
+				// sends raw TLS that the HTTP parser would corrupt.
+				if vhost != "" && (uint16(port) != cfg.TLSPort || cfg.TLSMITM) {
+					stream = skynetweb.NewHostRewriteConn(stream, vhost)
 				}
 
 				// Optional TLS MITM: terminate the browser's TLS
@@ -414,22 +526,4 @@ func handleTCPConn(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client,
 	_ = conn.Close()     //nolint:errcheck
 	_ = dmsgConn.Close() //nolint:errcheck
 	<-done
-}
-
-// parsePKLabel accepts either the legacy 66-char hex form or the
-// 53-char base32 DNSLabel form. See pkg/cipher/dnslabel.go for the
-// motivation: only the base32 form fits in a DNS label and an X.509
-// Subject.CommonName, so TLS-MITM browser URLs must use it. Hex is
-// kept accepted for backcompat with plain-HTTP URLs already in use.
-func parsePKLabel(label string) (cipher.PubKey, error) {
-	switch len(label) {
-	case cipher.PubKeyDNSLabelLen: // 53 — base32
-		return cipher.ParseDNSLabel(label)
-	default:
-		var pk cipher.PubKey
-		if err := pk.Set(label); err != nil {
-			return cipher.PubKey{}, err
-		}
-		return pk, nil
-	}
 }

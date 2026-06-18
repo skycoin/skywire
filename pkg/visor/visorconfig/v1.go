@@ -107,8 +107,8 @@ type Pty struct {
 	// `:2022`, `0.0.0.0:2022`, `127.0.0.1:2022`, etc. Empty (default)
 	// disables it: only the dmsg-overlay entry point is served.
 	//
-	// This is the surface that `skywire cli ssh` (client) and
-	// `skywire cli sshd` (server) expose as the OpenSSH-equivalent
+	// This is the surface that `skywire cli pty shell` (client) and
+	// `skywire cli pty host` (server) expose as the OpenSSH-equivalent
 	// shell over skywire identity.
 	//
 	// Auth flow per accepted TCP connection:
@@ -123,9 +123,19 @@ type Pty struct {
 	//      over either transport.
 	//
 	// Motivation: operators who have direct IP reachability to a peer
-	// can `cli ssh <pk>@<host>:<port>` — no dmsg-discovery dependency,
+	// can `cli pty shell <pk>@<host>:<port>` — no dmsg-discovery dependency,
 	// lower latency for known endpoints, same PK-based auth model.
 	SshListen string `json:"ssh_listen,omitempty"`
+
+	// PersistentSessions, when true, keeps an interactive pty's shell
+	// running across a dropped stream instead of killing it: the host
+	// detaches the follower and a reconnecting client (the hypervisor web
+	// terminal, or `cli pty`) reattaches by session id, replaying buffered
+	// output. A bounded GC reaps detached sessions after an idle TTL so an
+	// abandoned shell can't leak. Off by default — opt in per visor; the
+	// web terminal degrades to fresh-shell-on-reconnect against hosts that
+	// have it off.
+	PersistentSessions bool `json:"persistent_sessions,omitempty"`
 }
 
 // Dmsgscp configures the dmsgscp-host (scp-over-dmsg daemon).
@@ -242,6 +252,16 @@ type DmsgWebConfig struct {
 	// either is missing or unreadable; it does not refuse to start.
 	TLSCAPath    string `json:"tls_ca_path,omitempty"`
 	TLSCAKeyPath string `json:"tls_ca_key_path,omitempty"`
+	// SelfLoopback, when nil or true (the default), serves a request whose
+	// destination is THIS visor's own PK from the local service in-process
+	// (net.Pipe) instead of dialing out over dmsg back to self — which dmsg
+	// does not loopback and which is 202-prone. Set false to exercise the
+	// full self-dial transport path (testing self-reachability).
+	SelfLoopback *bool `json:"self_loopback,omitempty"`
+	// Alias is a friendly hostname label for THIS visor's own PK, so
+	// "<alias>.dmsg" resolves to the local visor without hardcoding its
+	// public key. Defaults to "skywire" when unset (→ "skywire.dmsg").
+	Alias string `json:"alias,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the
@@ -283,6 +303,16 @@ type SkynetWebConfig struct {
 	// either is missing or unreadable; it does not refuse to start.
 	TLSCAPath    string `json:"tls_ca_path,omitempty"`
 	TLSCAKeyPath string `json:"tls_ca_key_path,omitempty"`
+	// SelfLoopback, when nil or true (the default), serves a request whose
+	// destination is THIS visor's own PK from the local service in-process
+	// (net.Pipe) instead of dialing a skynet route back to self. Set false
+	// to exercise the full self-route path (valid for skynet, useful for
+	// testing self-transports).
+	SelfLoopback *bool `json:"self_loopback,omitempty"`
+	// Alias is a friendly hostname label for THIS visor's own PK, so
+	// "<alias>.skynet" resolves to the local visor without hardcoding its
+	// public key. Defaults to "skywire" when unset (→ "skywire.skynet").
+	Alias string `json:"alias,omitempty"`
 }
 
 // SkymailBridgeConfig configures the embedded SMTP-aware bridge that
@@ -398,8 +428,22 @@ type Routing struct {
 	// (stcpr > sudph > stcp > dmsg) is used. Types not listed here sort last.
 	TransportPreference []string `json:"transport_preference,omitempty"`
 
+	// EnableCascadeRouteSetup opts INTO the source-driven cascade route-setup
+	// path (RSN signs, source injects the cascade down its own transports,
+	// avoiding the RSN's dmsg dependency). It is OFF by default: the cascade
+	// currently has a multihop data-plane bug (control plane succeeds on every
+	// hop, but the set-up route does not carry traffic), so the legacy path —
+	// where the setup node dials each hop directly over dmsg to install rules —
+	// is the default until that is fixed. Flip this to true (or change the
+	// default) once the cascade data plane is corrected.
+	EnableCascadeRouteSetup bool `json:"enable_cascade_route_setup,omitempty"`
+
 	// PolicyPerDial is an optional operator-supplied routing
 	// policy. Accepts either:
+	//   "preset:<name>"          — a curated policy embedded in the
+	//                              binary, no file or compile needed
+	//                              (e.g. "preset:spread-bw"); presets
+	//                              live in pkg/router/policy/presets
 	//   "@/path/to/policy.star"  — Starlark, file-backed, hot-reloaded
 	//   "@/path/to/policy.wasm"  — WASM, file-backed, hot-reloaded
 	//   "<inline script source>" — small inline Starlark policies

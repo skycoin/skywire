@@ -199,15 +199,19 @@ func viaClient(cmdFlags *pflag.FlagSet, via string, quiet bool) (visor.API, erro
 // rpc.Client running over the bridged conn. The visor opens the
 // underlying stream using its own identity — no separate CLI
 // keypair needed.
-func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint16, quiet bool) (visor.API, error) {
-	var remotePK cipher.PubKey
-	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
-		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf("invalid PK after scheme: %w", err))
-		}
-		return nil, err
-	}
-
+// BridgeConn dials the local visor's CLI RPC port, sends the bridge
+// magic + header, and returns the RAW bridged conn (no rpc.Client
+// wrapper). The visor opens the underlying stream to (remotePK, port)
+// using ITS OWN identity — for scheme=0 (dmsg) that is the visor's
+// authorized dmsg client, so a peer's dmsgpty whitelist sees the
+// visor's PK (e.g. the implicitly-allowed hypervisor) rather than a
+// throwaway CLI key, and there is no dmsg-discovery PK collision.
+//
+// Callers drive whatever protocol they like over the conn and own its
+// lifecycle. `cli pty fs mount <pk>` uses this for its via-visor path
+// (port = skyenv.DmsgPtyPort, then the sftp-subsystem handshake);
+// bridgeClient uses it for the `--via` RPC path (port = visor RPC).
+func BridgeConn(scheme byte, remotePK cipher.PubKey, port uint16) (net.Conn, error) {
 	localAddr := Addr
 	if localAddr == "" || strings.Contains(localAddr, "://") {
 		localAddr = DefaultRPCAddr
@@ -215,12 +219,7 @@ func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint1
 	const dialTimeout = time.Second * 5
 	conn, err := net.DialTimeout("tcp", localAddr, dialTimeout)
 	if err != nil {
-		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf(
-				"--via needs the local visor RPC at %s; dial failed: %w",
-				localAddr, err))
-		}
-		return nil, err
+		return nil, fmt.Errorf("bridge needs the local visor RPC at %s; dial failed: %w", localAddr, err)
 	}
 
 	// Header: 6 magic + 1 scheme + 33 PK + 2 LE port = 42 bytes.
@@ -234,8 +233,24 @@ func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint1
 	binary.LittleEndian.PutUint16(header[40:42], port)
 	if _, err := conn.Write(header); err != nil {
 		conn.Close() //nolint:errcheck,gosec
+		return nil, fmt.Errorf("bridge: write header: %w", err)
+	}
+	return conn, nil
+}
+
+func bridgeClient(cmdFlags *pflag.FlagSet, scheme byte, pkStr string, port uint16, quiet bool) (visor.API, error) {
+	var remotePK cipher.PubKey
+	if err := remotePK.UnmarshalText([]byte(pkStr)); err != nil {
 		if !quiet {
-			internal.PrintError(cmdFlags, fmt.Errorf("bridge: write header: %w", err))
+			internal.PrintError(cmdFlags, fmt.Errorf("invalid PK after scheme: %w", err))
+		}
+		return nil, err
+	}
+
+	conn, err := BridgeConn(scheme, remotePK, port)
+	if err != nil {
+		if !quiet {
+			internal.PrintError(cmdFlags, err)
 		}
 		return nil, err
 	}
@@ -344,18 +359,17 @@ var (
 	NoRPC bool
 	// NoDmsg disables the direct DMSG HTTP step in FetchServiceURL.
 	NoDmsg bool
-	// NoHTTP disables the HTTP fallback step in FetchServiceURL.
-	NoHTTP bool
 )
 
-// RegisterFetchFlags adds --no-cxo, --no-rpc, --no-dmsg, and --no-http
-// flags to a command. Call this in init() for any command that uses
-// FetchServiceURL.
+// RegisterFetchFlags adds --no-cxo, --no-rpc, and --no-dmsg flags to a command.
+// Call this in init() for any command that uses FetchServiceURL. There is no
+// plain-HTTP step anymore — deployment services are reached over CXO/DMSG only;
+// for ad-hoc browser access, point the browser at the visor's dmsgweb resolving
+// proxy instead of relying on a clearnet hop.
 func RegisterFetchFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&NoCXO, "no-cxo", false, "skip CXO subscriber-cache step")
 	cmd.Flags().BoolVar(&NoRPC, "no-rpc", false, "skip visor RPC (DmsgHTTP) step")
 	cmd.Flags().BoolVar(&NoDmsg, "no-dmsg", false, "skip direct DMSG HTTP step")
-	cmd.Flags().BoolVar(&NoHTTP, "no-http", false, "skip direct HTTP fallback step")
 }
 
 // isDmsgURL reports whether the given URL is a dmsg:// scheme URL that
@@ -618,7 +632,14 @@ func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
 //   - Otherwise we fetch via FetchServiceURL and write the response through
 //     to the bbolt cache for the next call.
 //   - On fetch failure, a stale cached entry is returned as a last resort
-//     rather than propagating an empty string.
+//     rather than propagating an empty string — UNLESS the caller passed
+//     cacheFilesAge == 0, which signals "I want fresh data, no fallback".
+//     A loud failure is better than a silent stale response for callers
+//     that explicitly opted out of caching (e.g. nightly reward calcs
+//     that script against today's date and have no way to detect that
+//     the body they got was yesterday's).
+//   - When a stale entry IS returned, a warning is logged so callers
+//     who didn't opt out can still notice the data isn't fresh.
 //
 // Returns the response body as a string, or "" if every path failed and
 // there was no cache to fall back on. Errors are logged at debug level.
@@ -637,9 +658,14 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 	body, err := FetchServiceURL(cmdFlags, thisurl)
 	if err != nil {
 		logger.Debugf("FetchCachedServiceURL: all fetch paths failed for %s: %v", thisurl, err)
-		// Last-ditch: return stale cache if we have one.
-		if cache != nil {
+		// Last-ditch: return stale cache if we have one, but only when
+		// the caller hasn't explicitly opted out of caching. cacheFilesAge
+		// == 0 means "fresh only, don't lie to me with yesterday's data";
+		// honoring that here keeps --cache-age 0 semantically meaningful
+		// even when the fresh-fetch chain has failed.
+		if cache != nil && cacheFilesAge > 0 {
 			if e, ok := cache.Get(thisurl); ok {
+				logger.Warnf("FetchCachedServiceURL: fresh fetch failed for %s; serving stale cache (data may be out of date)", thisurl)
 				return string(e.Body)
 			}
 		}
@@ -686,17 +712,17 @@ func getCLICacheIfEnabled(cachefile string) *clicache.Cache {
 	return cliCache
 }
 
-// FetchServiceURL fetches a URL from a deployment service using a three-step chain:
+// FetchServiceURL fetches a URL from a deployment service over a CXO/DMSG-only
+// chain — there is NO plain-HTTP fallback:
+//  0. CXO — read the visor's local subscriber-cache snapshot (no round-trip)
 //  1. RPC — ask the running visor to proxy the request over DMSG (DmsgHTTP RPC)
-//  2. DMSG direct — create ephemeral DMSG client and fetch directly
-//  3. HTTP — direct HTTP request as last resort
+//  2. DMSG direct — ephemeral DMSG client (only when --no-rpc)
 //
-// Steps can be disabled via --no-rpc, --no-dmsg, and --no-http flags.
-//
-// This pattern ensures CLI commands work for:
-//   - Visors running with DMSG (step 1)
-//   - Standalone CLI without a running visor on DMSG network (step 2)
-//   - Environments without DMSG connectivity (step 3)
+// The plain-HTTP hop was removed deliberately: deployment services are all
+// dmsg-mapped (see DmsgURLForHTTP), the clearnet fallback was firing
+// erroneously, and there's no value in maintaining it — for ad-hoc browser
+// access to deployment data, point the browser at the visor's dmsgweb resolving
+// proxy. Steps can be disabled via --no-cxo, --no-rpc, and --no-dmsg.
 func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 	var lastErr error
 
@@ -783,26 +809,9 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 		}
 	}
 
-	// Step 3: Direct HTTP fallback
-	if !NoHTTP {
-		httpClient := &http.Client{Timeout: 30 * time.Second}
-		resp, err := httpClient.Get(url) //nolint:gosec
-		if err != nil {
-			lastErr = fmt.Errorf("HTTP: %w", err)
-			logger.Debugf("HTTP failed for %s: %v", url, err)
-		} else {
-			defer resp.Body.Close() //nolint:errcheck
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read HTTP response: %w", err)
-			}
-			if resp.StatusCode < 300 {
-				return body, nil
-			}
-			lastErr = fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
-			logger.Debugf("HTTP status %d for %s", resp.StatusCode, url)
-		}
-	}
+	// No plain-HTTP fallback: deployment services are reached over CXO/DMSG
+	// only. A dmsg-mapped service that fails CXO + DMSG errors below rather than
+	// dropping to clearnet.
 
 	if lastErr != nil {
 		return nil, lastErr

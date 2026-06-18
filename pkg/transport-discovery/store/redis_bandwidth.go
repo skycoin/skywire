@@ -25,6 +25,21 @@ func (s *redisStore) bandwidthDailyKey(tpID string, t time.Time) string {
 	return fmt.Sprintf("%s:bw:daily:%s:%s", serviceName, tpID, t.Format("2006-01-02"))
 }
 
+// bandwidthHistoryTTL matches the daily-bandwidth hash TTL (see
+// UpdateBandwidth). The persisted edge pair must outlive the ~5-min
+// registration TTL for as long as the bandwidth data it identifies, so an
+// expired transport's counterparty stays recoverable.
+const bandwidthHistoryTTL = 35 * 24 * time.Hour
+
+// bandwidthEdgesKey stores a transport's real edge pair ("<edge0hex>,<edge1hex>")
+// so recoverBandwidthEdges can identify BOTH edges of an expired transport even
+// when only one edge ever published bandwidth (the common case). Without it the
+// field-name reconstruction recovers only the reporting edge and the
+// counterparty collapses to the zero PK — uncreditable in the reward calc.
+func (s *redisStore) bandwidthEdgesKey(tpID string) string {
+	return fmt.Sprintf("%s:bw:edges:%s", serviceName, tpID)
+}
+
 // Visor-level bandwidth key generators
 func (s *redisStore) visorBandwidthDailyKey(pkHex string, t time.Time) string {
 	return fmt.Sprintf("%s:bw:visor:daily:%s:%s", serviceName, pkHex, t.Format("2006-01-02"))
@@ -45,6 +60,16 @@ func (s *redisStore) visorAllKey() string {
 // this method handles the per-reporter delta arithmetic.
 func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 	reporterPK cipher.PubKey, currentSent, currentRecv uint64) error {
+
+	// Never attribute bandwidth to the zero PubKey. A zero reporter would
+	// write "0000…:sent"/"0000…:recv" fields into the per-transport daily hash
+	// (later read back by recoverBandwidthEdges as a null transport edge) and a
+	// zero-PK per-visor daily key — the source of the null-PK orphan transports
+	// and the ghost-attributed bandwidth seen in /metrics. Defense-in-depth
+	// alongside the aggregator's zero-publisher gate.
+	if reporterPK == (cipher.PubKey{}) {
+		return nil
+	}
 
 	now := time.Now().UTC()
 	reporterHex := reporterPK.Hex()

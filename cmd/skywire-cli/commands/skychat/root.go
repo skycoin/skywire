@@ -52,6 +52,7 @@ func init() {
 	RootCmd.AddCommand(
 		sendCmd,
 		listenCmd,
+		eventsCmd,
 		chatCmd,
 		historyCmd,
 		statusCmd,

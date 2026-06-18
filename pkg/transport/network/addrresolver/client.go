@@ -46,6 +46,14 @@ const (
 	// sudphReconnectMaxBackoff caps the reconnect sleep so a long AR
 	// outage doesn't push the retry interval out indefinitely.
 	sudphReconnectMaxBackoff = 60 * time.Second
+	// sudphARReadTimeout bounds how long the SUDPH read loop waits for any
+	// inbound packet from the AR before treating the connection as dead.
+	// Over KCP-on-UDP a visor's writes keep "succeeding" even after the AR
+	// process is gone (e.g. a redeploy), so an inbound-silence deadline is
+	// the only reliable liveness signal. The AR echoes our 10s heartbeats,
+	// so a live AR resets this every interval; ~4 missed echoes trips it and
+	// drives a reconnect+re-register via serveSUDPHReconnect.
+	sudphARReadTimeout = 40 * time.Second
 )
 
 var (
@@ -117,6 +125,7 @@ type httpClient struct {
 	remoteUDPAddr    string
 	sudphConn        net.PacketConn
 	sudphArConn      net.Conn
+	sudphArConnMu    sync.Mutex
 	sudphLocalAddr   LocalAddresses
 	clientPublicIP   string
 	clientPublicIPv6 string
@@ -536,7 +545,9 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 		return nil, err
 	}
 
+	c.sudphArConnMu.Lock()
 	c.sudphArConn = arConn
+	c.sudphArConnMu.Unlock()
 	c.sudphLocalAddr = localAddresses
 
 	// addrCh is the long-lived channel returned to the caller. It survives
@@ -559,10 +570,14 @@ func (c *httpClient) BindSUDPH(filter *pfilter.PacketFilter, hs Handshake) (<-ch
 // listener and posts the initial register payload. Called once on initial
 // BindSUDPH and again on every reconnect attempt.
 //
-// The underlying packet listener (c.sudphConn) is created on the first call
-// and reused across reconnects so the local UDP port stays stable — both
-// for AR's record of our public address and for any remote visors that
-// already received our (PK, port) tuple via Resolve.
+// A fresh per-connection packet-filter conn (c.sudphConn) is built on every
+// call. kcp client sockets close their underlying conn on Close (see
+// xtaci/kcp-go sess.go: a session with no listener closes s.conn), so the
+// prior c.sudphConn is already dead by reconnect time and reusing it fails
+// every attempt with "use of closed network connection". The local UDP port
+// is the SHARED listener's — filter.NewConn does not allocate a new port — so
+// it stays stable across rebuilds anyway, both for AR's record of our public
+// address and for remote visors that received our (PK, port) tuple via Resolve.
 func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (net.Conn, LocalAddresses, error) {
 	if c.remoteUDPAddr == "" {
 		// dmsg-only AR with no udp_address in /health. Surface a clear
@@ -574,9 +589,13 @@ func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (n
 		return nil, LocalAddresses{}, err
 	}
 
-	if c.sudphConn == nil {
-		c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
+	// Drop any prior (kcp-closed) conn and build a fresh one. The defensive
+	// Close is a no-op when kcp already closed it and guards against leaking a
+	// filter conn on the rare path where it is still open.
+	if c.sudphConn != nil {
+		_ = c.sudphConn.Close() //nolint:errcheck,gosec
 	}
+	c.sudphConn = filter.NewConn(sudphPriority, packetfilter.NewAddressFilter(rAddr, c.mLog))
 
 	_, localPort, err := net.SplitHostPort(c.sudphConn.LocalAddr().String())
 	if err != nil {
@@ -660,7 +679,9 @@ func (c *httpClient) serveSUDPHReconnect(filter *pfilter.PacketFilter, hs Handsh
 		}
 		backoff = sudphReconnectInitialBackoff
 		arConn = newConn
+		c.sudphArConnMu.Lock()
 		c.sudphArConn = arConn
+		c.sudphArConnMu.Unlock()
 		c.sudphLocalAddr = newLocalAddrs
 		c.log.Info("SUDPH reconnected to address-resolver")
 	}
@@ -914,6 +935,25 @@ func (c *httpClient) readSUDPHIntoChan(arConn net.Conn, out chan<- RemoteVisor) 
 
 	buf := make([]byte, 4096)
 	for {
+		select {
+		case <-c.closed:
+			return
+		default:
+		}
+
+		// Bound the read so a silently-dead AR connection (e.g. the AR
+		// process restarted/redeployed) is detected: KCP-on-UDP reads
+		// never EOF and our heartbeat writes keep "succeeding", so without
+		// this deadline the visor would block here forever, never
+		// reconnect, and leave a stale SUDPH entry in the AR. The AR
+		// echoes our heartbeats, so a live AR resets this every interval.
+		if err := arConn.SetReadDeadline(time.Now().Add(sudphARReadTimeout)); err != nil {
+			if !c.isClosed() {
+				c.log.Debugf("SUDPH set read deadline failed (will reconnect): %v", err)
+			}
+			return
+		}
+
 		n, err := arConn.Read(buf)
 		if err != nil {
 			if c.isClosed() {
@@ -922,6 +962,13 @@ func (c *httpClient) readSUDPHIntoChan(arConn net.Conn, out chan<- RemoteVisor) 
 				c.log.Debugf("SUDPH read error (will reconnect): %v", err)
 			}
 			return
+		}
+
+		// Echoed heartbeat from the AR: a liveness signal only (the
+		// successful read above already reset the deadline). Not a
+		// RemoteVisor payload, so skip before unmarshalling.
+		if string(buf[:n]) == UDPKeepHeartbeatMessage {
+			continue
 		}
 
 		c.log.Debugf("New SUDPH message: %v", string(buf[:n]))
@@ -1032,7 +1079,9 @@ func (c *httpClient) delBindSUDPHLoop() {
 	defer c.delBindSudphWg.Done()
 	<-c.closed
 
+	c.sudphArConnMu.Lock()
 	arConn := c.sudphArConn
+	c.sudphArConnMu.Unlock()
 	if arConn == nil {
 		return
 	}

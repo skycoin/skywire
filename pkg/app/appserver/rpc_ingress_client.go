@@ -28,7 +28,7 @@ type RPCIngressClient interface {
 	//   - fwdMux / revMux (per-direction MuxRoutes overrides; setting
 	//     fwdMux=1 + revMux=N yields 1 forward leg + N reverse legs)
 	// All <= 1 is equivalent to plain Dial.
-	DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int) (connID uint16, localPort routing.Port, err error)
+	DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct bool) (connID uint16, localPort routing.Port, err error)
 	Listen(local appnet.Addr) (uint16, error)
 	Accept(lisID uint16) (connID uint16, remote appnet.Addr, err error)
 	Write(connID uint16, b []byte) (int, error)
@@ -96,7 +96,7 @@ func (c *rpcIngressClient) Dial(remote appnet.Addr) (connID uint16, localPort ro
 // DialWithOptions sends `DialWithOptions` command to the server.
 // All fields <= 1 falls through to plain Dial semantics on the server
 // side (no extra round-trip cost beyond the slightly larger request).
-func (c *rpcIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int) (connID uint16, localPort routing.Port, err error) {
+func (c *rpcIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes, minHops, fwdMinHops, revMinHops, fwdMux, revMux int, direct bool) (connID uint16, localPort routing.Port, err error) {
 	req := DialOptionsReq{
 		Addr:             remote,
 		MuxRoutes:        muxRoutes,
@@ -105,6 +105,7 @@ func (c *rpcIngressClient) DialWithOptions(remote appnet.Addr, muxRoutes, minHop
 		ReverseMinHops:   revMinHops,
 		ForwardMuxRoutes: fwdMux,
 		ReverseMuxRoutes: revMux,
+		Direct:           direct,
 	}
 	var resp DialResp
 	if err := c.rpc.Call(c.formatMethod("DialWithOptions"), &req, &resp); err != nil {

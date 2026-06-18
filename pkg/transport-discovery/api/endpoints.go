@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -85,7 +86,7 @@ func (api *API) registerTransportV3(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.store.RegisterTransportsBatch(r.Context(), signed); err != nil {
+	if err := api.store.RegisterTransportsBatch(r.Context(), authPK, signed); err != nil {
 		api.writeError(w, r, err)
 		return
 	}
@@ -146,9 +147,13 @@ func (api *API) registerTransport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The authenticated caller is the registering edge; the store refreshes
+	// only its per-edge index TTL (zero PK falls back to both edges).
+	reporter, _ := r.Context().Value(httpauth.ContextAuthKey).(cipher.PubKey)
+
 	// Register all transports in a single Redis pipeline (batch).
 	// This reduces N separate pipelines to 1, cutting Redis round-trips.
-	if err := api.store.RegisterTransportsBatch(r.Context(), entries); err != nil {
+	if err := api.store.RegisterTransportsBatch(r.Context(), reporter, entries); err != nil {
 		api.writeError(w, r, err)
 		return
 	}
@@ -252,7 +257,16 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries, err := api.store.GetTransportsByEdge(r.Context(), pk)
+	// /transports/edge:<PK> is polled by every visor on a short cadence to
+	// learn its own and peers' transports. Serve a memoized, gzipped response
+	// body so identical repeat polls don't hit Redis or re-marshal per call.
+	raw, gz, err := api.edgeRespCache.body(pk, func() ([]byte, error) {
+		entries, e := api.store.GetTransportsByEdge(r.Context(), pk)
+		if e != nil {
+			return nil, e
+		}
+		return json.Marshal(entries)
+	})
 	if err != nil {
 		if err != store.ErrTransportNotFound {
 			api.log(r).WithError(err).Error("Error getting transport")
@@ -260,7 +274,17 @@ func (api *API) getTransportByEdge(w http.ResponseWriter, r *http.Request) {
 		api.writeError(w, r, err)
 		return
 	}
-	httputil.WriteJSON(w, r, http.StatusOK, entries)
+
+	w.Header().Set("Content-Type", "application/json")
+	if gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(gz) //nolint:errcheck
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw) //nolint:errcheck
 }
 
 func (api *API) getTransportStats(w http.ResponseWriter, r *http.Request) {
@@ -303,20 +327,61 @@ func (api *API) getAllTransports(w http.ResponseWriter, r *http.Request) {
 	if selfTransportsParam == "hide" {
 		selfTransports = false
 	}
-	entries := api.getTransportsFromCache(selfTransports)
-	if entries == nil {
-		var err error
-		entries, err = api.store.GetAllTransports(r.Context(), selfTransports)
+
+	// /all-transports is the dominant TPD egress + CPU driver. Serve a
+	// memoized, gzipped response body so identical multi-MB requests don't
+	// re-marshal and re-send the full list per call. The rare ?pretty=true
+	// caller bypasses the cache (indented form).
+	pretty, _ := httputil.BoolFromQuery(r, "pretty", false) //nolint:errcheck
+	if pretty {
+		entries, err := api.allTransportsEntries(r.Context(), selfTransports)
 		if err != nil {
 			api.writeError(w, r, err)
 			return
 		}
-	}
-	if len(entries) == 0 {
-		api.writeError(w, r, store.ErrTransportNotFound)
+		httputil.WriteJSON(w, r, http.StatusOK, entries)
 		return
 	}
-	httputil.WriteJSON(w, r, http.StatusOK, entries)
+
+	raw, gz, err := api.allTpsRespCache.body(selfTransports, func() ([]byte, error) {
+		entries, e := api.allTransportsEntries(r.Context(), selfTransports)
+		if e != nil {
+			return nil, e
+		}
+		return json.Marshal(entries)
+	})
+	if err != nil {
+		api.writeError(w, r, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Vary", "Accept-Encoding")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(gz) //nolint:errcheck
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(raw) //nolint:errcheck
+}
+
+// allTransportsEntries returns the all-transports list (data cache then store),
+// preserving the empty-list -> ErrTransportNotFound behavior callers expect.
+func (api *API) allTransportsEntries(ctx context.Context, selfTransports bool) ([]*transport.Entry, error) {
+	entries := api.getTransportsFromCache(selfTransports)
+	if entries == nil {
+		var err error
+		entries, err = api.store.GetAllTransports(ctx, selfTransports)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(entries) == 0 {
+		return nil, store.ErrTransportNotFound
+	}
+	return entries, nil
 }
 
 func (api *API) getAllTransportsStats(w http.ResponseWriter, r *http.Request) {

@@ -33,6 +33,20 @@ type ServerConfig struct {
 	UpdateInterval time.Duration
 	AuthPassphrase string
 	Peers          []PeerEntry
+
+	// AnnounceAsPeer makes this server send a signed PeerAnnounce on
+	// every outbound peer link it dials, asking the remote to treat
+	// this server as a forwardable peer. Used by a non-public server
+	// (not registered in discovery) so its clients become reachable
+	// inbound via the link it dialed out.
+	AnnounceAsPeer bool
+	// AcceptPeerAnnouncements lets this server honor inbound PeerAnnounce
+	// frames, filing the announcing session in its peer set so it
+	// forwards client streams back down that link. When AcceptedPeerPKs
+	// is non-empty it acts as an allowlist; empty means accept any
+	// announcer (an open relay surface — set deliberately).
+	AcceptPeerAnnouncements bool
+	AcceptedPeerPKs         []cipher.PubKey
 }
 
 // DefaultServerConfig returns the default server config.
@@ -78,6 +92,11 @@ type Server struct {
 	peerPKs        map[cipher.PubKey]struct{} // set of known peer server PKs
 	peerSessions   map[cipher.PubKey]*SessionCommon
 	peerSessionsMx sync.Mutex
+
+	// Inbound peer-announcement support (non-public servers).
+	announceAsPeer          bool
+	acceptPeerAnnouncements bool
+	acceptedPeerPKs         map[cipher.PubKey]struct{} // allowlist; empty = accept any
 }
 
 // GeoLookupFunc returns geolocation data for the given IP. Returns
@@ -140,6 +159,30 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 		}
 		return sessions
 	}
+
+	// Inbound peer-announcement support: a non-public server announces
+	// itself as a forwardable peer over its outbound links; an accepting
+	// server promotes the announced inbound session into peerSessions.
+	s.announceAsPeer = conf.AnnounceAsPeer
+	s.acceptPeerAnnouncements = conf.AcceptPeerAnnouncements
+	s.acceptedPeerPKs = make(map[cipher.PubKey]struct{}, len(conf.AcceptedPeerPKs))
+	for _, pk := range conf.AcceptedPeerPKs {
+		s.acceptedPeerPKs[pk] = struct{}{}
+	}
+	s.EntityCommon.acceptPeerAnnouncements = conf.AcceptPeerAnnouncements
+	s.EntityCommon.peerAnnounceAllowedFunc = func(remotePK cipher.PubKey) bool {
+		if !s.acceptPeerAnnouncements {
+			return false
+		}
+		s.peerSessionsMx.Lock()
+		defer s.peerSessionsMx.Unlock()
+		if len(s.acceptedPeerPKs) == 0 {
+			return true // empty allowlist = accept any announcer
+		}
+		_, ok := s.acceptedPeerPKs[remotePK]
+		return ok
+	}
+	s.EntityCommon.promoteToPeerFunc = s.addAcceptedPeerSession
 
 	return s
 }
@@ -497,15 +540,47 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 		log.Info("Connected to peer server.")
 		bo = 5 * time.Second // reset backoff on success
 
-		// Block until the yamux session closes or context is done.
+		// Announce ourselves as a forwardable peer over this outbound
+		// link so a non-public server (not in discovery) becomes
+		// reachable inbound: the remote files this session in its peer
+		// set and forwards client streams back down it.
+		if s.announceAsPeer {
+			if aErr := s.sendPeerAnnounce(ses); aErr != nil {
+				log.WithError(aErr).Warn("Failed to announce as peer.")
+			} else {
+				log.Info("Announced as forwardable peer.")
+			}
+		}
+
+		// Serve the outbound peer session so forwarded streams arriving
+		// on it (the reverse path: the remote pushing a client stream
+		// back down this link to one of our local clients) are accepted
+		// and bridged. Without this the outbound link is send-only and
+		// the reverse path cannot be received. Serve returns when the
+		// session closes, which then triggers a reconnect.
+		srvSes := ServerSession{SessionCommon: ses, m: s.m}
+		serveDone := make(chan struct{})
+		go func() {
+			srvSes.Serve()
+			close(serveDone)
+		}()
+
+		// Block until the session closes, the context is done, or shutdown.
 		select {
 		case <-ctx.Done():
 		case <-s.done:
+		case <-serveDone:
 		}
 
-		// Clean up.
+		// Clean up. Identity-checked delete: an inbound PeerAnnounce from
+		// the same PK (addAcceptedPeerSession) may have replaced our
+		// outbound session in the map. Deleting by PK alone would then
+		// evict that live successor — matching the identity-checked
+		// deletes used everywhere else (handleSession, delSession).
 		s.peerSessionsMx.Lock()
-		delete(s.peerSessions, peer.PK)
+		if s.peerSessions[peer.PK] == ses {
+			delete(s.peerSessions, peer.PK)
+		}
 		s.peerSessionsMx.Unlock()
 		ses.Close() //nolint:errcheck,gosec
 
@@ -519,6 +594,56 @@ func (s *Server) isPeerPK(pk cipher.PubKey) bool {
 	_, ok := s.peerPKs[pk]
 	s.peerSessionsMx.Unlock()
 	return ok
+}
+
+// sendPeerAnnounce opens a stream on the given (outbound) peer session,
+// sends a signed PeerAnnounce, and waits for the remote's ack. Used on
+// outbound peer links when AnnounceAsPeer is set, so a non-public server
+// becomes reachable inbound.
+func (s *Server) sendPeerAnnounce(ses *SessionCommon) error {
+	ann := &PeerAnnounce{Timestamp: time.Now().UnixNano(), SrcPK: s.pk}
+	obj, err := MakeSignedPeerAnnounce(ann, s.sk)
+	if err != nil {
+		return err
+	}
+	// Peer sessions are always yamux (maintainPeerConnection never uses smux).
+	str, err := ses.sm.yamux.OpenStream()
+	if err != nil {
+		return err
+	}
+	defer str.Close()                                     //nolint:errcheck,gosec
+	_ = str.SetDeadline(time.Now().Add(HandshakeTimeout)) //nolint:errcheck
+	if err := ses.writeObject(str, obj); err != nil {
+		return err
+	}
+	respObj, err := ses.readObject(str)
+	if err != nil {
+		return err
+	}
+	resp, err := respObj.ObtainStreamResponse()
+	if err != nil {
+		return err
+	}
+	if !resp.Accepted {
+		return errors.New("peer announcement not accepted by remote")
+	}
+	return nil
+}
+
+// addAcceptedPeerSession files an announced inbound session as a
+// forwardable peer: marks it isPeer, records the PK in peerPKs (so a
+// reconnect classifies consistently), and inserts it into peerSessions
+// so forwardViaPeer routes client streams down it. The reverse-path
+// enabler for non-public servers; called via the promoteToPeerFunc hook
+// from serveStream when an inbound announcement is accepted.
+func (s *Server) addAcceptedPeerSession(remotePK cipher.PubKey, ses *SessionCommon) {
+	s.peerSessionsMx.Lock()
+	ses.isPeer = true
+	s.peerPKs[remotePK] = struct{}{}
+	s.peerSessions[remotePK] = ses
+	s.peerSessionsMx.Unlock()
+	s.log.WithField("peer_pk", remotePK).
+		Info("Accepted inbound peer announcement; session is now forwardable.")
 }
 
 func (s *Server) handleSession(conn net.Conn) {
@@ -586,10 +711,29 @@ func (s *Server) handleSession(conn net.Conn) {
 	}
 	dSes.sm.mutx.Unlock()
 
-	if s.setSession(ctx, dSes.SessionCommon) {
-		dSes.Serve()
+	// Newest-session-wins: setSession always installs this session
+	// (replacing and closing any stale predecessor), so always serve it.
+	s.setSession(ctx, dSes.SessionCommon)
+	dSes.Serve()
+
+	// If this inbound session was promoted to a forwardable peer (an
+	// accepted PeerAnnounce from a non-public server), drop it from the
+	// peer set on close — identity-checked so a fresh reconnect that
+	// already replaced us is not evicted. A statically-configured peer's
+	// inbound session is isPeer too but is NOT in peerSessions (only the
+	// outbound dial is), so the identity check makes this a no-op there.
+	if dSes.isPeer {
+		s.peerSessionsMx.Lock()
+		if s.peerSessions[dSes.RemotePK()] == dSes.SessionCommon {
+			delete(s.peerSessions, dSes.RemotePK())
+		}
+		s.peerSessionsMx.Unlock()
 	}
 
-	s.delSession(ctx, dSes.RemotePK())
+	// Identity-checked: only remove the map entry if it is still THIS
+	// session. setSession may have already replaced us with a fresh
+	// reconnect (newest-session-wins); deleting by PK alone would evict
+	// that live successor.
+	s.delSession(ctx, dSes.RemotePK(), dSes.SessionCommon)
 	cancel()
 }

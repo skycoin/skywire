@@ -7,15 +7,30 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
 var (
-	errRouteDescNotExist = errors.New("route descriptor does not exist")
-	errNilNoiseRG        = errors.New("noiseRouteGroup is nil")
-	errNilInitRG         = errors.New("initializing RouteGroup is nil")
+	errRouteDescNotExist    = errors.New("route descriptor does not exist")
+	errNilNoiseRG           = errors.New("noiseRouteGroup is nil")
+	errNilInitRG            = errors.New("initializing RouteGroup is nil")
+	errMalformedClosePacket = errors.New("close packet has empty payload")
 )
+
+// closeCodeFromPacket safely extracts the close code from a ClosePacket. A
+// remote peer fully controls the on-wire payload length (managedTransport reads
+// exactly the declared size), so a malformed/zero-length close payload must not
+// be indexed blindly — doing so panics the router read loop, which has no
+// recover and would take down all routing on the visor.
+func closeCodeFromPacket(packet routing.Packet) (routing.CloseCode, error) {
+	payload := packet.Payload()
+	if len(payload) == 0 {
+		return 0, errMalformedClosePacket
+	}
+	return routing.CloseCode(payload[0]), nil
+}
 
 func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packet) error {
 	switch packet.Type() {
@@ -51,7 +66,11 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 func (r *router) dispatchToRouteGroup(ctx context.Context, packet routing.Packet) error {
 	rule, err := r.GetRule(packet.RouteID())
 	if err != nil {
-		return err
+		// Surface the offending route ID + packet type. A bare "rule not
+		// found" is useless for diagnosing multihop setup failures where a
+		// handshake/data frame arrives stamped with a route ID this visor
+		// never installed a rule for (e.g. a mis-stitched reverse chain).
+		return fmt.Errorf("%w (routeID=%d, pktType=%s)", err, packet.RouteID(), packet.Type())
 	}
 
 	// Forward/intermediary rules get forwarded
@@ -78,6 +97,13 @@ func (r *router) dispatchToRouteGroup(ctx context.Context, packet routing.Packet
 		return rg.handlePacket(packet)
 	}
 
+	// The rule resolved but no route group is registered yet: this frame
+	// arrived in the rule-save -> route-group-register window (the receive-side
+	// setup race). Park it and re-dispatch on registration instead of dropping
+	// it, which would otherwise stall the noise handshake. See router_pending.go.
+	if r.pending.park(desc, packet, time.Now()) {
+		return nil
+	}
 	return errRouteDescNotExist
 }
 
@@ -116,7 +142,10 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return errNilNoiseRG
 	}
 
-	closeCode := routing.CloseCode(packet.Payload()[0])
+	closeCode, err := closeCodeFromPacket(packet)
+	if err != nil {
+		return err
+	}
 
 	if nrg.isClosed() {
 		return io.ErrClosedPipe
@@ -210,7 +239,11 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	case routing.KeepAlivePacket:
 		p = routing.MakeKeepAlivePacket(rule.NextRouteID())
 	case routing.ClosePacket:
-		p = routing.MakeClosePacket(rule.NextRouteID(), routing.CloseCode(packet.Payload()[0]))
+		closeCode, err := closeCodeFromPacket(packet)
+		if err != nil {
+			return err
+		}
+		p = routing.MakeClosePacket(rule.NextRouteID(), closeCode)
 	case routing.PingPacket:
 		timestamp := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset:]))    //nolint:gosec
 		throughput := int64(binary.BigEndian.Uint64(packet[routing.PacketPayloadOffset+8:])) //nolint:gosec

@@ -342,13 +342,25 @@ func (f *fillHead) handleReceivedRoot(cr connRoot) {
 
 }
 
-// value for channels, if hte (*Node).maxFillingParallel
-// is zero, then the skyobject.Filler has no limits for
-// goroutines, but we can't create an unlimited channel,
-// thus we cahnge the zero to 1024 (I think it's enough)
+// maxParallel returns the per-Filler parallelism cap used to size
+// both Filler.limit (max in-flight subtree-walking goroutines per
+// Filler) and Filler.rq (the per-Filler request channel buffer).
+//
+// When (*Node).maxFillingParallel is 0 (Config.MaxFillingParallel
+// wasn't set, e.g. callers that construct Config{} directly instead
+// of via NewConfig), we fall back to the documented package default
+// — skyobject.MaxFillingParallel ("ten parallel subtrees"). The
+// previous fallback was a magic 1024 which sized each Filler's
+// channels to 1024; with a handful of concurrent Fillers that pinned
+// 5000+ goroutines parked in (*Filler).get's select on fill.go:82,
+// creating scheduler pressure visible in production pprof. The
+// skyobject docstring notes the cap "should be closer to number of
+// connections that used to fill a Root" — for the typical CXO node
+// that's <= 20, so 10 is a sensible safety-net default. Operators
+// who want a higher cap set Config.MaxFillingParallel explicitly.
 func (f *fillHead) maxParallel() (mp int) {
 	if mp = f.node().maxFillingParallel; mp <= 0 {
-		mp = 1024 // max parallel requests
+		mp = skyobject.MaxFillingParallel // documented default = 10
 	}
 	return
 }
@@ -513,8 +525,18 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 
 	var reply, err = c.sendRequest(&msg.RqObject{Key: key})
 
+	// Each send below is guarded with <-f.closeq (the nodeHead's close
+	// channel, promoted via the embedded *nodeHead). handle() — the only
+	// receiver of successq/failureq — stops draining them once it takes its
+	// own <-closeq and terminates, so an unguarded send on these unbuffered
+	// channels would block forever; the deferred await.Done() would never
+	// fire and nodeHead.close's await.Wait() would deadlock (the hang that
+	// t.Skip'd the #3047 leak test).
 	if err != nil {
-		f.failureq <- failedRequest{c, seq, key, err}
+		select {
+		case f.failureq <- failedRequest{c, seq, key, err}:
+		case <-f.closeq:
+		}
 		return
 	}
 
@@ -523,7 +545,10 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 		var rk = cipher.SumSHA256(x.Value)
 
 		if rk != key {
-			f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}
+			select {
+			case f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}:
+			case <-f.closeq:
+			}
 			return
 		}
 
@@ -533,10 +558,16 @@ func (f *fillHead) request(c *Conn, seq uint64, key cipher.SHA256) {
 			return
 		}
 
-		f.successq <- c
+		select {
+		case f.successq <- c:
+		case <-f.closeq:
+		}
 
 	default:
-		f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}
+		select {
+		case f.failureq <- failedRequest{c, seq, key, ErrInvalidResponse}:
+		case <-f.closeq:
+		}
 	}
 
 }

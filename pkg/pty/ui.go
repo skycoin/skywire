@@ -3,6 +3,7 @@ package pty
 
 import (
 	"bytes"
+	"context"
 	stdjson "encoding/json"
 	"fmt"
 	"io"
@@ -145,9 +146,21 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		// Use binary mode for PTY data - text mode fails on non-UTF-8 bytes
 		wsConn := websocket.NetConn(r.Context(), ws, websocket.MessageBinary)
 
-		// open pty
+		// open pty. ?scheme=dmsg / ?scheme=skynet lets an operator force a
+		// transport when the default (skynet-first) is wedged to this peer;
+		// dialers that don't support schemes ignore it and use Dial().
 		logWS(wsConn, "Dialing...")
-		ptyConn, err := ui.dialer.Dial()
+		var ptyConn net.Conn
+		if scheme := r.URL.Query().Get("scheme"); scheme != "" {
+			if sd, ok := ui.dialer.(SchemeUIDialer); ok {
+				log.WithField("scheme", scheme).Debug("Dialing pty with operator-forced scheme.")
+				ptyConn, err = sd.DialScheme(scheme)
+			} else {
+				ptyConn, err = ui.dialer.Dial()
+			}
+		} else {
+			ptyConn, err = ui.dialer.Dial()
+		}
 		if err != nil {
 			writeWSError(log, wsConn, err)
 			return
@@ -162,25 +175,58 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		}
 		defer func() { log.WithError(ptyC.Close()).Debug("Closed ptyC.") }()
 
-		if err = ui.uiStartSize(ptyC); err != nil {
+		// Resolve to a pty session: reattach when the browser passed a ?sid=
+		// (reconnect), else start fresh. A fresh persistent session yields an id
+		// we hand the browser so its next reconnect can reattach the same shell.
+		reqSID := r.URL.Query().Get("sid")
+		newSID, reattached, err := ui.startOrAttach(ptyC, reqSID)
+		if err != nil {
 			writeWSError(log, wsConn, err)
 			return
 		}
-
-		uiAddr := fmt.Sprintf("(%s) %s%s", r.Proto, r.Host, r.URL.Path)
-		if err := ui.writeBanner(wsConn, uiAddr, sID); err != nil {
-			err := fmt.Errorf("failed to write banner: %w", err)
-			writeWSError(log, wsConn, err)
-			return
+		if newSID != "" {
+			sendSessionID(r.Context(), ws, newSID)
+			log.WithField("session", newSID).Debug("Started persistent pty session.")
+		}
+		if reattached {
+			log.WithField("session", reqSID).Debug("Reattached to persistent pty session.")
 		}
 
-		// websocket keep alive
+		// The banner + startup commands belong to a fresh session only — on a
+		// reattach the replayed ring already carries the prior screen, and
+		// re-running the commands would double-execute them.
+		if !reattached {
+			uiAddr := fmt.Sprintf("(%s) %s%s", r.Proto, r.Host, r.URL.Path)
+			if err := ui.writeBanner(wsConn, uiAddr, sID); err != nil {
+				err := fmt.Errorf("failed to write banner: %w", err)
+				writeWSError(log, wsConn, err)
+				return
+			}
+		}
+
+		// Keepalive: send a websocket PING every 10s. The browser's ws library
+		// auto-pongs, so this keeps BOTH directions warm (NAT/proxies silently
+		// drop idle conns) AND detects a dead peer — Ping errors when no pong
+		// returns, so we close the session cleanly instead of leaving a
+		// half-open conn that surfaces later as an "inexplicable" error. The
+		// old null-byte DATA frame only warmed server->browser and couldn't
+		// notice a dead browser.
 		go func() {
+			t := time.NewTicker(10 * time.Second)
+			defer t.Stop()
 			for {
-				if _, err := wsConn.Write([]byte("\x00")); err != nil {
+				select {
+				case <-r.Context().Done():
 					return
+				case <-t.C:
+					pctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+					err := ws.Ping(pctx)
+					cancel()
+					if err != nil {
+						_ = ws.Close(websocket.StatusGoingAway, "keepalive ping failed") //nolint:errcheck
+						return
+					}
 				}
-				time.Sleep(10 * time.Second)
 			}
 		}()
 
@@ -189,8 +235,10 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		// bare "\n" gets interpreted by the pty as Enter and the
 		// shell re-renders the prompt, producing a doubled-prompt
 		// on every fresh session.
-		if cmdStr := urlCommands(r, customCommands); cmdStr != "" {
-			ptyC.Write([]byte(cmdStr)) //nolint
+		if !reattached {
+			if cmdStr := urlCommands(r, customCommands); cmdStr != "" {
+				ptyC.Write([]byte(cmdStr)) //nolint
+			}
 		}
 
 		// Create WebSocket reader that handles resize messages
@@ -204,6 +252,33 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 		// io
 		done, once := make(chan struct{}), new(sync.Once)
 		closeDone := func() { once.Do(func() { close(done) }) }
+
+		// dmsg-stream keepalive. The interactive pty rides a dmsg stream
+		// whose 2-minute idle read deadline (StreamIdleTimeout) is
+		// refreshed only on a successful read. An idle terminal (no
+		// typing, no shell output) produces no reads, so the stream would
+		// otherwise be torn down every ~2 minutes. A periodic no-op Ping
+		// RPC forces a response read well within that window — the dmsg
+		// analog of SSH's ServerAliveInterval. (The ws Ping above only
+		// warms the browser<->hypervisor websocket, not the dmsg stream.)
+		go func() {
+			t := time.NewTicker(30 * time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-r.Context().Done():
+					return
+				case <-done:
+					return
+				case <-t.C:
+					if err := ptyC.Ping(); err != nil {
+						// Stream gone; the output pump closes the session.
+						return
+					}
+				}
+			}
+		}()
+
 		go func() {
 			// Buffer PTY output and flush periodically to reduce WebSocket message count
 			bw := newBufferedWSWriter(wsConn, 16*time.Millisecond)
@@ -212,15 +287,101 @@ func (ui *UI) Handler(customCommands map[string][]string) http.HandlerFunc {
 			closeDone()
 		}()
 		go func() {
-			_, _ = io.Copy(ptyC, wsReader) //nolint:errcheck
-			closeDone()
+			defer closeDone()
+			// Pipeline keystrokes: fire each write without blocking a full RPC
+			// round-trip per keystroke (the old io.Copy used the synchronous
+			// Write, so fast typing / paste queued behind per-key acks). Order
+			// is preserved; a broken conn surfaces on the output path above and
+			// closes the session.
+			buf := make([]byte, 4096)
+			for {
+				n, rerr := wsReader.Read(buf)
+				if n > 0 {
+					if werr := ptyC.WriteAsync(buf[:n]); werr != nil {
+						return
+					}
+				}
+				if rerr != nil {
+					return
+				}
+			}
 		}()
 		<-done
+
+		// The session ended — the pty stream dropped, the shell exited, or a
+		// keepalive failed. Tell the browser explicitly instead of leaving a
+		// frozen, blank-looking terminal, so the user reloads to reconnect
+		// rather than wondering whether it has hung.
+		logWS(wsConn, "\r\n\x1b[33m[skywire: session closed — reload the page to reconnect]\x1b[0m\r\n")
 	}
 }
 
 func isWebsocket(h http.Header) bool {
 	return h.Get("Upgrade") == "websocket"
+}
+
+// startOrAttach resolves this websocket to a pty session. When sid is non-empty
+// (a browser reconnect) it tries to reattach to that persistent session,
+// replaying buffered output; on any attach failure (session reaped, wrong
+// owner) it falls back to starting fresh. A fresh start uses StartSession to get
+// a session id the browser can stash for its next reconnect; against an older
+// host without persistence (StartSession returns "method not found") it falls
+// back to the classic StartWithSize and returns an empty id (no reconnect
+// continuity, unchanged behavior). Returns (newSessionID, reattached, err):
+// newSessionID is non-empty only when a NEW persistent session was created.
+func (ui *UI) startOrAttach(ptyC *PtyClient, sid string) (string, bool, error) {
+	size, env, err := ui.uiWinSize()
+	if err != nil {
+		return "", false, err
+	}
+	if sid != "" {
+		if aerr := ptyC.Attach(sid); aerr == nil {
+			// Reattached: match the (possibly resized) browser terminal.
+			_ = ptyC.SetPtySize(size) //nolint:errcheck
+			return "", true, nil
+		}
+		// Session gone or not ours — fall through to a fresh start.
+	}
+	newSID, serr := ptyC.StartSession(ui.conf.CmdName, ui.conf.CmdArgs, size, env)
+	if serr != nil {
+		if isRPCMethodNotFound(serr) {
+			// Old host without persistence: classic one-shot start.
+			return "", false, ptyC.StartWithSize(ui.conf.CmdName, ui.conf.CmdArgs, size, env)
+		}
+		return "", false, serr
+	}
+	return newSID, false, nil
+}
+
+// isRPCMethodNotFound reports whether err is net/rpc's "method not found" — the
+// signal that the remote host predates a given RPC (here StartSession), so the
+// caller can degrade gracefully instead of treating it as a hard failure.
+func isRPCMethodNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "can't find method") || strings.Contains(s, "can't find service")
+}
+
+// sessionCtrlMsg is the JSON control frame the server sends the browser (as a
+// websocket TEXT frame, distinct from the binary pty data) to hand it the
+// persistent session id. The browser stashes it and passes it back as ?sid= on
+// reconnect so the same shell is reattached.
+type sessionCtrlMsg struct {
+	Type string `json:"type"` // always "session"
+	ID   string `json:"id"`
+}
+
+// sendSessionID delivers the persistent session id to the browser over a TEXT
+// frame. Best-effort: a failure here only costs reconnect continuity, not the
+// session itself.
+func sendSessionID(ctx context.Context, ws *websocket.Conn, sid string) {
+	b, err := stdjson.Marshal(sessionCtrlMsg{Type: "session", ID: sid})
+	if err != nil {
+		return
+	}
+	_ = ws.Write(ctx, websocket.MessageText, b) //nolint:errcheck
 }
 
 // ErrorJSON displays errors in JSON format.
@@ -384,6 +545,7 @@ type bufferedWSWriter struct {
 	closed   bool
 	interval time.Duration
 	done     chan struct{}
+	wake     chan struct{}
 }
 
 func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWSWriter {
@@ -392,6 +554,7 @@ func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWS
 		buf:      make([]byte, 0, 4096),
 		interval: flushInterval,
 		done:     make(chan struct{}),
+		wake:     make(chan struct{}, 1),
 	}
 	go bw.flushLoop()
 	return bw
@@ -399,21 +562,46 @@ func newBufferedWSWriter(conn net.Conn, flushInterval time.Duration) *bufferedWS
 
 func (bw *bufferedWSWriter) Write(p []byte) (int, error) {
 	bw.mu.Lock()
-	defer bw.mu.Unlock()
 	if bw.closed {
+		bw.mu.Unlock()
 		return 0, io.ErrClosedPipe
 	}
+	wasEmpty := len(bw.buf) == 0
 	bw.buf = append(bw.buf, p...)
+	bw.mu.Unlock()
+	// Nudge the flusher on an idle->first-write so interactive echo (the PTY
+	// echoing each keystroke) flushes promptly instead of waiting out a fixed
+	// tick. Non-blocking: the data is already buffered; this is only a signal.
+	if wasEmpty {
+		select {
+		case bw.wake <- struct{}{}:
+		default:
+		}
+	}
 	return len(p), nil
 }
 
+// flushLoop coalesces output bursts — it never writes more than once per
+// interval, but flushes an idle->first-write immediately. The old fixed ticker
+// added up to `interval` of latency to EVERY keystroke's echo; waking on write
+// makes interactive echo prompt while still batching high-frequency bulk output.
 func (bw *bufferedWSWriter) flushLoop() {
-	ticker := time.NewTicker(bw.interval)
-	defer ticker.Stop()
+	var lastFlush time.Time
 	for {
 		select {
-		case <-ticker.C:
+		case <-bw.wake:
+			if wait := bw.interval - time.Since(lastFlush); wait > 0 {
+				t := time.NewTimer(wait)
+				select {
+				case <-t.C:
+				case <-bw.done:
+					t.Stop()
+					bw.flush() // Final flush
+					return
+				}
+			}
 			bw.flush()
+			lastFlush = time.Now()
 		case <-bw.done:
 			bw.flush() // Final flush
 			return

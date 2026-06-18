@@ -20,6 +20,7 @@ import (
 	climail "github.com/skycoin/skywire/cmd/skywire-cli/commands/mail"
 	climdisc "github.com/skycoin/skywire/cmd/skywire-cli/commands/mdisc"
 	cliskysocksc "github.com/skycoin/skywire/cmd/skywire-cli/commands/proxy"
+	clipty "github.com/skycoin/skywire/cmd/skywire-cli/commands/pty"
 	clipv "github.com/skycoin/skywire/cmd/skywire-cli/commands/pv"
 	cliresolver "github.com/skycoin/skywire/cmd/skywire-cli/commands/resolver"
 	clireward "github.com/skycoin/skywire/cmd/skywire-cli/commands/reward"
@@ -32,14 +33,13 @@ import (
 	cliskychat "github.com/skycoin/skywire/cmd/skywire-cli/commands/skychat"
 	cliskycoin "github.com/skycoin/skywire/cmd/skywire-cli/commands/skycoin"
 	cliskynet "github.com/skycoin/skywire/cmd/skywire-cli/commands/skynet"
-	clissh "github.com/skycoin/skywire/cmd/skywire-cli/commands/ssh"
-	clisshd "github.com/skycoin/skywire/cmd/skywire-cli/commands/sshd"
 	clisurvey "github.com/skycoin/skywire/cmd/skywire-cli/commands/survey"
 	clisvc "github.com/skycoin/skywire/cmd/skywire-cli/commands/svc"
 	clitp "github.com/skycoin/skywire/cmd/skywire-cli/commands/tp"
 	clitps "github.com/skycoin/skywire/cmd/skywire-cli/commands/tps"
 	cliut "github.com/skycoin/skywire/cmd/skywire-cli/commands/ut"
 	cliutil "github.com/skycoin/skywire/cmd/skywire-cli/commands/util"
+	cliversion "github.com/skycoin/skywire/cmd/skywire-cli/commands/version"
 	clivisor "github.com/skycoin/skywire/cmd/skywire-cli/commands/visor"
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -86,8 +86,7 @@ func init() {
 	cliskysocksc.RootCmd.GroupID = groupApps
 	cliskychat.RootCmd.GroupID = groupApps
 	cliskynet.RootCmd.GroupID = groupApps
-	clissh.RootCmd.GroupID = groupApps
-	clisshd.RootCmd.GroupID = groupApps
+	clipty.RootCmd.GroupID = groupApps
 
 	clitp.RootCmd.GroupID = groupNet
 	clitps.RootCmd.GroupID = groupNet
@@ -108,6 +107,7 @@ func init() {
 
 	cliutil.RootCmd.GroupID = groupUtil
 	cligot.RootCmd.GroupID = groupUtil
+	cliversion.RootCmd.GroupID = groupUtil
 
 	// Install flag-aware `help` command (supports -r/-t/-d). Covers
 	// the case where `skywire cli` is invoked as a subcommand of the
@@ -133,8 +133,7 @@ func init() {
 		climdisc.RootCmd,
 		clisd.RootCmd,
 		cliskychat.RootCmd,
-		clissh.RootCmd,
-		clisshd.RootCmd,
+		clipty.RootCmd,
 		cliskycoin.RootCmd,
 		clicompletion.RootCmd,
 		clilog.RootCmd,
@@ -146,6 +145,7 @@ func init() {
 		clisvc.RootCmd,
 		cliutil.RootCmd,
 		cligot.RootCmd,
+		cliversion.RootCmd,
 
 		// Top-level shortcuts: high-traffic verbs reachable without
 		// the `visor` middle word. Long forms keep working at

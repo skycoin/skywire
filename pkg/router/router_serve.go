@@ -79,13 +79,40 @@ func (r *router) Serve(ctx context.Context) error {
 	for pk := range r.trustedVisors {
 		trustedPKs = append(trustedPKs, pk)
 	}
-	ch := NewCascadeHandler(r.logger, r.conf.PubKey, trustedPKs, r.rt, r.tm)
+	ch := NewCascadeHandler(r.logger, r.conf.PubKey, trustedPKs, r.rt, r.tm, r.IntroduceRules)
+
+	// Source-driven cascade: the visor's route-group dialer owns a send-only
+	// CascadeBuilder that injects RSN-signed cascades down this visor's own
+	// transports. ACKs for those sends arrive on this single registered
+	// cascade handler, so share the dialer's ack registry into it and into
+	// the builder so the handler can deliver ACKs to in-flight sends.
+	if r.conf != nil {
+		if sp, ok := r.conf.RouteGroupDialer.(cascadeSourceProvider); ok {
+			if reg := sp.CascadeAckRegistry(); reg != nil {
+				ch.acks = reg
+				r.logger.Debug("Cascade handler sharing source-driven ack registry")
+			}
+		}
+		// Wire the handler in as the dialer's source-origin processor so the
+		// source consumes the outermost (source-addressed) cascade layer
+		// itself — reserving its own route IDs and relaying inward — instead
+		// of shipping it to the first hop (which would reject the signature).
+		if os, ok := r.conf.RouteGroupDialer.(cascadeOriginSetter); ok {
+			os.SetCascadeOrigin(ch)
+			r.logger.Debug("Cascade handler wired as source-origin processor")
+		}
+	}
+
 	r.tm.SetCascadeHandler(ch.HandlePacket)
 	r.logger.WithField("trusted_rsns", len(trustedPKs)).Debug("Cascade handler registered")
 
 	go r.serveTransportManager(ctx)
 
 	go r.serveSetup()
+
+	// Reclaim frames parked during the route-group registration window whose
+	// route group never registers (see router_pending.go).
+	go r.pending.runSweep(ctx, r.logger)
 
 	return nil
 }
@@ -216,6 +243,16 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	r.rgsRaw[rules.Desc] = rg
 	r.mx.Unlock()
 
+	// Re-dispatch any frames that arrived for this descriptor during the
+	// rule-save -> registration window (the receive-side setup race). They were
+	// parked instead of dropped; deliver them now that the route group exists so
+	// a handshake frame that raced registration still completes the handshake.
+	for _, pp := range r.pending.take(rules.Desc) {
+		if err := rg.handlePacket(pp.pkt); err != nil {
+			log.WithError(err).Debug("Failed to re-dispatch parked packet after route group registration")
+		}
+	}
+
 	if nsConf.Initiator {
 		if err := rg.sendHandshake(true); err != nil {
 			log.WithError(err).Errorf("Failed to send handshake from route group (%s): %v, closing...",
@@ -264,8 +301,15 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 		// Hard-fail loudly so the dial returns a real error to the caller
 		// and the operator can see "remote not responding" instead of a
 		// phantom success.
-		log.WithField("desc", rules.Desc.String()).
-			WithField("timeout", handshakeAwaitTimeout).
+		// Enrich the failure with this side's full rule linkage so an initiator
+		// timeout and the peer's wrap-failure log can be compared to detect a
+		// reverse-leg route-ID mismatch. Both rules are rendered via the
+		// panic-safe Rule.String() (keyRtID/nxtRtID/nxtTpID per rule type);
+		// calling NextRouteID()/NextTransportID() directly panics on a Consume
+		// (reverse) rule.
+		log.WithField("timeout", handshakeAwaitTimeout).
+			WithField("fwd_rule", rules.Forward.String()).
+			WithField("rev_rule", rules.Reverse.String()).
 			Warn("Remote handshake not received within timeout — failing dial")
 		// Clean up rgsRaw + delete the rules we installed locally so the
 		// keyRouteIDs are free for the next attempt.
@@ -311,7 +355,17 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 		// wrapping rg with noise
 		wrappedRG, err := network.EncryptConn(nsConf, rg)
 		if err != nil {
-			log.WithError(err).Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
+			// Rule linkage to pair with the initiator's "Remote handshake not
+			// received" log. Both rules are rendered via the panic-safe
+			// Rule.String() (it prints keyRtID/nxtRtID/nxtTpID per rule type);
+			// calling type-specific accessors like NextRouteID()/NextTransportID()
+			// directly panics on a Consume (reverse) rule. A "no data captured"
+			// wrap-failure usually means the initiator already timed out and never
+			// sent the noise first message.
+			log.WithError(err).
+				WithField("fwd_rule", rules.Forward.String()).
+				WithField("rev_rule", rules.Reverse.String()).
+				Errorf("Failed to wrap route group (%s): %v, closing...", &rules.Desc, err)
 			if err := rg.Close(); err != nil {
 				log.WithError(err).Errorf("Failed to close route group (%s): %v", &rules.Desc, err)
 			}

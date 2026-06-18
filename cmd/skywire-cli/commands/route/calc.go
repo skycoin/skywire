@@ -459,8 +459,10 @@ func (s *memoryStore) GetTransportsByEdge(_ context.Context, pk cipher.PubKey) (
 }
 
 // Unused interface methods - stubs for store.Store compliance
-func (s *memoryStore) RegisterTransport(context.Context, *transport.SignedEntry) error { return nil }
-func (s *memoryStore) RegisterTransportsBatch(context.Context, []*transport.SignedEntry) error {
+func (s *memoryStore) RegisterTransport(context.Context, cipher.PubKey, *transport.SignedEntry) error {
+	return nil
+}
+func (s *memoryStore) RegisterTransportsBatch(context.Context, cipher.PubKey, []*transport.SignedEntry) error {
 	return nil
 }
 func (s *memoryStore) DeregisterTransport(context.Context, uuid.UUID) error { return nil }

@@ -67,6 +67,15 @@ type API struct {
 	transportsCacheFiltered []*transport.Entry // excludes self-transports
 	transportsMu            sync.RWMutex
 
+	// allTpsRespCache memoizes the marshaled (+gzip) /all-transports body so the
+	// dominant-egress endpoint doesn't re-marshal/re-send ~3MB per call.
+	allTpsRespCache *allTransportsRespCache
+
+	// edgeRespCache memoizes the marshaled (+gzip) /transports/edge:<PK> body
+	// per edge so the second-busiest read endpoint collapses identical repeat
+	// polls from the same visor into a single Redis round-trip.
+	edgeRespCache *edgeRespCache
+
 	uptimesCache   []store.VisorSummary
 	uptimesV2Cache []store.VisorSummary
 	uptimesMu      sync.RWMutex
@@ -116,6 +125,8 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore,
 		dmsgAddr:                    dmsgAddr,
 		DmsgServers:                 []string{},
 		backupPath:                  backupPath,
+		allTpsRespCache:             newAllTransportsRespCache(allTransportsRespCacheTTL),
+		edgeRespCache:               newEdgeRespCache(edgeRespCacheTTL),
 	}
 
 	r := chi.NewRouter()

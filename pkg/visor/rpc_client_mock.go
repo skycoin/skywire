@@ -763,6 +763,10 @@ func (mc *mockRPCClient) AddMuxRoute(_ string, _, _ []routing.Hop, _ uint16) err
 	return nil
 }
 
+func (mc *mockRPCClient) GrowMuxRoute(_ string, _, _ int, _ uint16) (int, error) {
+	return 0, nil
+}
+
 func (mc *mockRPCClient) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
 	return nil
 }
@@ -1183,6 +1187,16 @@ func (mc *mockRPCClient) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
 	return true, nil
 }
 
+// DmsgProbeViaServer implements API.
+func (mc *mockRPCClient) DmsgProbeViaServer(_ cipher.PubKey, _ uint16, _ cipher.PubKey) (bool, error) {
+	return true, nil
+}
+
+// SkynetProbe implements API.
+func (mc *mockRPCClient) SkynetProbe(_ cipher.PubKey, _ uint16) (bool, error) {
+	return true, nil
+}
+
 // DmsgConnectAll implements API.
 func (mc *mockRPCClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 	return &DmsgConnectAllResult{}, nil
@@ -1537,6 +1551,11 @@ func (mc *mockRPCClient) RemoveAllHypervisors() (int, error) {
 
 // SetHypervisorPassword implements API.
 func (mc *mockRPCClient) SetHypervisorPassword(string, string) error {
+	return nil
+}
+
+// SetHypervisorPasswordForce implements API.
+func (mc *mockRPCClient) SetHypervisorPasswordForce(string) error {
 	return nil
 }
 

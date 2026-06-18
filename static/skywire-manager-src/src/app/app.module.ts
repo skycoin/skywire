@@ -1,5 +1,5 @@
 import { BrowserModule} from '@angular/platform-browser';
-import { NgModule } from '@angular/core';
+import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { AppComponent } from './app.component';
@@ -33,6 +33,7 @@ import { LogComponent } from './components/pages/node/apps/node-apps-list/log/lo
 import { SettingsComponent } from './components/pages/settings/settings.component';
 import { PasswordComponent } from './components/pages/settings/password/password.component';
 import { ClipboardService } from './services/clipboard.service';
+import { ClientErrorHandler } from './services/client-error-reporter';
 import { ClipboardDirective } from './directives/clipboard.directive';
 import { AppTranslationModule } from './app-translation.module';
 import { ButtonComponent } from './components/layout/button/button.component';
@@ -104,7 +105,6 @@ import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status
 import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
 import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
 import { VpnServerNameComponent } from './components/vpn/layout/vpn-server-name/vpn-server-name.component';
-import { EnterVpnServerPasswordComponent } from './components/vpn/pages/vpn-server-list/enter-vpn-server-password/enter-vpn-server-password.component';
 import { UpdateAllComponent } from './components/layout/update-all/update-all.component';
 import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
 import { RewardsAddressComponent } from './components/pages/node/node-info/node-info-content/rewards-address-config/rewards-address-config.component';
@@ -196,7 +196,6 @@ const globalRippleConfig: RippleGlobalOptions = {
         VpnSettingsComponent,
         EditVpnServerValueComponent,
         VpnServerNameComponent,
-        EnterVpnServerPasswordComponent,
         UpdateAllComponent,
         VpnDnsConfigComponent,
         RewardsAddressComponent,
@@ -226,6 +225,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         MatSlideToggleModule,
         DragDropModule], providers: [
         ClipboardService,
+        { provide: ErrorHandler, useClass: ClientErrorHandler },
         { provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: { duration: 3000, verticalPosition: 'top' } },
         { provide: MAT_DIALOG_DEFAULT_OPTIONS, useValue: { width: '600px', hasBackdrop: true } },
         { provide: ErrorStateMatcher, useClass: ShowOnDirtyErrorStateMatcher },

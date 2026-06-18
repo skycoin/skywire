@@ -521,6 +521,10 @@ func (proxyDefaultAPI) AddMuxRoute(_ string, _ []routing.Hop, _ []routing.Hop, _
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GrowMuxRoute(_ string, _, _ int, _ uint16) (int, error) {
+	return 0, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RemoveMuxRoute(_ string, _ uuid.UUID, _ uint16) error {
 	return ErrProxyNotSupported
 }
@@ -678,6 +682,14 @@ func (proxyDefaultAPI) UIServerStatus() (*UIServerStatus, error) {
 }
 
 func (proxyDefaultAPI) DmsgProbe(_ cipher.PubKey, _ uint16) (bool, error) {
+	return false, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgProbeViaServer(_ cipher.PubKey, _ uint16, _ cipher.PubKey) (bool, error) {
+	return false, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SkynetProbe(_ cipher.PubKey, _ uint16) (bool, error) {
 	return false, ErrProxyNotSupported
 }
 
@@ -902,6 +914,10 @@ func (proxyDefaultAPI) RemoveAllHypervisors() (int, error) {
 }
 
 func (proxyDefaultAPI) SetHypervisorPassword(_ string, _ string) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) SetHypervisorPasswordForce(_ string) error {
 	return ErrProxyNotSupported
 }
 

@@ -14,7 +14,6 @@ import (
 	"github.com/ccding/go-stun/stun"
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -185,15 +184,24 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 
 	conf := v.conf.Launcher
 
-	httpC, err := getHTTPClient(ctx, v, conf.ServiceDisc)
+	// Prefer the HTTP service-discovery URL; fall back to the dmsg URL when the
+	// operator dropped the HTTP one (dmsg-only). getHTTPClient returns the
+	// dmsg-http client for a dmsg:// URL, so the autoconnector still fetches
+	// public visors over dmsg. Same http-or-dmsg selection as route-finder/AR.
+	sdURL := conf.ServiceDisc
+	if sdURL == "" && conf.ServiceDiscDmsg != "" {
+		sdURL = conf.ServiceDiscDmsg
+	}
+
+	httpC, err := getHTTPClient(ctx, v, sdURL)
 	if err != nil {
 		return err
 	}
 
-	if conf.ServiceDisc != "" {
+	if sdURL != "" {
 		factory.PK = v.conf.PK
 		factory.SK = v.conf.SK
-		factory.ServiceDisc = conf.ServiceDisc
+		factory.ServiceDisc = sdURL
 		factory.DisplayNodeIP = conf.DisplayNodeIP
 		factory.HeartbeatInterval = time.Duration(conf.HeartbeatInterval)
 		factory.Client = httpC
@@ -592,9 +600,19 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 		return nil // already running
 	}
 
+	// Prefer the HTTP service-discovery URL; fall back to the dmsg URL when the
+	// operator dropped the HTTP one (dmsg-only). Never silently substitute the
+	// hardcoded prod HTTP discovery: a dropped field is intentional, and pairing
+	// sd.skycoin.com with the dmsg-http client (v.serviceDisc.Client, built from
+	// the dmsg URL in initDiscovery) makes the connector dial sd.skycoin.com over
+	// dmsg → "invalid host address: Invalid public key". Mirror initDiscovery.
 	serviceDisc := v.conf.Launcher.ServiceDisc
-	if serviceDisc == "" { //it might be intentionally blank ; consider revising.
-		serviceDisc = deployment.Prod.ServiceDiscovery
+	if serviceDisc == "" {
+		serviceDisc = v.conf.Launcher.ServiceDiscDmsg
+	}
+	if serviceDisc == "" {
+		log.Debug("service discovery not configured (neither http nor dmsg URL); skipping public autoconnect")
+		return nil
 	}
 
 	// todo: refactor updatedisc: split connecting to services in updatedisc and
@@ -996,6 +1014,11 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		maxBO  = 10 * time.Second
 		tries  = 0
 		factor = 1
+		// tpdDmsgReadyWait bounds how long boot waits for dmsg to be ready
+		// before the transport-discovery attempt. The select on dmsgC.Ready()
+		// returns early once ready; this cap just prevents a never-ready dmsg
+		// from blocking boot here indefinitely.
+		tpdDmsgReadyWait = 60 * time.Second
 	)
 
 	conf := v.conf.Transport
@@ -1005,26 +1028,32 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 		return nil, err
 	}
 
-	// Try DMSG-HTTP first if configured, fall back to plain HTTP
+	// Resolve the transport-discovery URL. Prefer the dmsg address; use the
+	// plain-HTTP URL only when no dmsg address is configured. There is no
+	// fallback between the two transports: a dmsg-only deployment that cannot
+	// yet reach the TPD over dmsg retries the dmsg path rather than silently
+	// degrading to the (empty) HTTP URL — which previously resolved to
+	// http://localhost and wedged boot forever (tries=0).
+	tpdURL := conf.DiscoveryDmsg
+	if tpdURL == "" {
+		tpdURL = conf.Discovery
+	}
+	if tpdURL == "" {
+		return nil, errors.New("no transport discovery configured: both Transport.Discovery and Transport.DiscoveryDmsg are empty")
+	}
+
+	// For a dmsg TPD, wait (bounded) for dmsg sessions to be ready so the first
+	// request does not fail before any session exists.
 	if conf.DiscoveryDmsg != "" && v.dmsgC != nil {
-		dmsgHTTPC, err := getHTTPClient(ctx, v, conf.DiscoveryDmsg)
-		if err != nil {
-			log.WithError(err).Warn("Failed to get DMSG-HTTP client for TPD, trying plain HTTP")
-		} else {
-			tpdC, err := tpdclient.NewHTTP(conf.DiscoveryDmsg, v.conf.PK, v.conf.SK, dmsgHTTPC, pIP, v.MasterLogger())
-			if err == nil {
-				log.Info("Connected to transport discovery via DMSG-HTTP")
-				return tpdC, nil
-			}
-			log.WithError(err).Warn("DMSG-HTTP transport discovery failed, falling back to plain HTTP")
+		select {
+		case <-v.dmsgC.Ready():
+		case <-time.After(tpdDmsgReadyWait):
+			log.Warn("dmsg not ready within timeout for transport discovery; attempting anyway")
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 
-	// Plain HTTP (primary if no DMSG config, fallback if DMSG failed)
-	tpdURL := conf.Discovery
-	if tpdURL == "" && conf.DiscoveryDmsg != "" {
-		tpdURL = conf.DiscoveryDmsg // DMSG-only deployment
-	}
 	httpC, err := getHTTPClient(ctx, v, tpdURL)
 	if err != nil {
 		return nil, err
@@ -1035,7 +1064,7 @@ func connectToTpDisc(ctx context.Context, v *Visor, log *logging.Logger) (transp
 	var tpdC transport.DiscoveryClient
 	retryFunc := func() error {
 		var err error
-		tpdC, err = tpdclient.NewHTTP(conf.Discovery, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+		tpdC, err = tpdclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
 		if err != nil {
 			log.WithError(err).Error("Failed to connect to transport discovery, retrying...")
 			return err

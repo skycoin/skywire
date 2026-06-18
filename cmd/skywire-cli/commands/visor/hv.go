@@ -40,17 +40,21 @@ func init() {
 	hvRmCmd.Flags().BoolVar(&hvRmAll, "all", false, "remove every runtime-added hypervisor connection")
 	hvCmd.AddCommand(hvLsCmd)
 	hvLsCmd.Flags().BoolVar(&hvLsFlat, "flat", false, "single flat table instead of one section per hypervisor")
+	hvLsCmd.Flags().BoolVar(&hvLsLoad, "load", false, "add LOAD (1m/cores), MEM%, and DISK% columns per visor")
 	hvCmd.AddCommand(hvTreeCmd)
 	hvCmd.AddCommand(hvPasswdCmd)
-	hvPasswdCmd.Flags().StringVar(&hvPasswdOld, "old", "", "current password (prompts if unset)")
-	hvPasswdCmd.Flags().StringVar(&hvPasswdNew, "new", "", "new password (prompts if unset)")
+	hvPasswdCmd.Flags().StringVar(&hvPasswdOld, "old", "", "current password (required unless --force)")
+	hvPasswdCmd.Flags().StringVar(&hvPasswdNew, "new", "", "new password")
+	hvPasswdCmd.Flags().BoolVar(&hvPasswdForce, "force", false, "set --new without the old password (reset a forgotten password, or first-time set)")
 }
 
 var (
-	hvRmAll     bool
-	hvPasswdOld string
-	hvPasswdNew string
-	hvLsFlat    bool
+	hvRmAll       bool
+	hvPasswdOld   string
+	hvPasswdNew   string
+	hvPasswdForce bool
+	hvLsFlat      bool
+	hvLsLoad      bool
 )
 
 var hvCmd = &cobra.Command{
@@ -260,21 +264,37 @@ required.`,
 
 var hvPasswdCmd = &cobra.Command{
 	Use:   "passwd",
-	Short: "Change the hypervisor UI admin password",
-	Long: `Change the password for the hypervisor UI's "admin" account.
+	Short: "Set the hypervisor UI admin password",
+	Long: `Set the password for the hypervisor UI's "admin" account.
 Mirrors the /api/change-password endpoint the UI uses, but without
 the HTTP session check (RPC is local-only and already privileged).
 
-Both --old and --new are required. Use the value-only form (avoid
-shell history capturing the password) by sourcing them from an
-env-var or a process-substitution.`,
+Normal change: --old and --new are both required.
+
+--force sets --new without the old password — to reset a forgotten
+password, or to set the password for the first time from the CLI
+(creating the "admin" account if none exists, so you don't need the
+UI's create-account page). All existing sessions are invalidated.
+
+Avoid shell history capturing the password by sourcing the values
+from an env-var or a process-substitution.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		if hvPasswdOld == "" || hvPasswdNew == "" {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("both --old and --new are required"))
+		if hvPasswdNew == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--new is required"))
 		}
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if hvPasswdForce {
+			if err := rpcClient.SetHypervisorPasswordForce(hvPasswdNew); err != nil {
+				internal.PrintFatalError(cmd.Flags(), err)
+			}
+			fmt.Println("Hypervisor UI password set; all existing sessions invalidated.")
+			return
+		}
+		if hvPasswdOld == "" {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--old is required (or use --force to set without it)"))
 		}
 		if err := rpcClient.SetHypervisorPassword(hvPasswdOld, hvPasswdNew); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -283,10 +303,37 @@ env-var or a process-substitution.`,
 	},
 }
 
+// hvLsHeader returns the table header, appending the resource columns when
+// showLoad is set. A function (not a const) so flat- and tree-mode share one
+// definition that tracks the --load flag.
+func hvLsHeader(showLoad bool) string {
+	h := "PK\tLABEL\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS"
+	if showLoad {
+		h += "\tLOAD\tMEM%\tDISK%"
+	}
+	return h
+}
+
+// fmtLoadCells renders the LOAD / MEM% / DISK% cells for a visor. LOAD is the
+// 1-minute average over the core count ("9.43/4") so saturation is obvious at a
+// glance; a value >= cores means the run queue is backed up. "-" when the visor
+// reported no load snapshot (older binary, or the metric was unavailable).
+func fmtLoadCells(e visor.HVVisorEntry) string {
+	if e.Load == nil {
+		return "-\t-\t-"
+	}
+	loadCell := fmt.Sprintf("%.2f", e.Load.Load1)
+	if e.Load.CPUCores > 0 {
+		loadCell = fmt.Sprintf("%.2f/%d", e.Load.Load1, e.Load.CPUCores)
+	}
+	return fmt.Sprintf("%s\t%.0f%%\t%.0f%%", loadCell, e.Load.MemUsedPercent, e.Load.DiskUsedPercent)
+}
+
 // formatHVVisorRow writes a single visor row to the tabwriter with optional
 // row-indent prefix. Centralized so the flat-mode and tree-mode renderings
-// stay in lockstep (same columns, same width, same null sentinels).
-func formatHVVisorRow(tw *tabwriter.Writer, e visor.HVVisorEntry, indent string) {
+// stay in lockstep (same columns, same width, same null sentinels). When
+// showLoad is set it appends the LOAD / MEM% / DISK% cells.
+func formatHVVisorRow(tw *tabwriter.Writer, e visor.HVVisorEntry, indent string, showLoad bool) {
 	pk := e.PK.String()
 	status := "ok"
 	if e.IsLocal {
@@ -318,11 +365,13 @@ func formatHVVisorRow(tw *tabwriter.Writer, e visor.HVVisorEntry, indent string)
 	if label == "" {
 		label = "-"
 	}
-	fmt.Fprintf(tw, "%s%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s\n", //nolint:errcheck
+	row := fmt.Sprintf("%s%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\t%s",
 		indent, pk, label, ver, uptime, e.Transports, e.Apps, ip, cc, status)
+	if showLoad {
+		row += "\t" + fmtLoadCells(e)
+	}
+	fmt.Fprintln(tw, row) //nolint:errcheck
 }
-
-const hvLsTableHeader = "PK\tLABEL\tVERSION\tUPTIME\tTP\tAPPS\tIP\tCC\tSTATUS"
 
 var hvLsCmd = &cobra.Command{
 	Use:   "ls",
@@ -358,9 +407,9 @@ For the legacy single flat-table output (e.g. for scripts), pass --flat.`,
 			}
 			var buf strings.Builder
 			tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, hvLsTableHeader) //nolint:errcheck
+			fmt.Fprintln(tw, hvLsHeader(hvLsLoad)) //nolint:errcheck
 			for _, e := range entries {
-				formatHVVisorRow(tw, e, "")
+				formatHVVisorRow(tw, e, "", hvLsLoad)
 			}
 			tw.Flush() //nolint:errcheck,gosec
 			internal.PrintOutput(cmd.Flags(), entries, buf.String())
@@ -397,9 +446,9 @@ For the legacy single flat-table output (e.g. for scripts), pass --flat.`,
 				continue
 			}
 			tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(tw, "  "+hvLsTableHeader) //nolint:errcheck
+			fmt.Fprintln(tw, "  "+hvLsHeader(hvLsLoad)) //nolint:errcheck
 			for _, e := range section.Visors {
-				formatHVVisorRow(tw, e, "  ")
+				formatHVVisorRow(tw, e, "  ", hvLsLoad)
 			}
 			tw.Flush() //nolint:errcheck,gosec
 		}

@@ -375,6 +375,12 @@ func (_m *MockRouter) AddMuxRouteByHops(_a0 routing.RouteDescriptor, _a1, _a2 []
 	return ret.Error(0)
 }
 
+// GrowMuxRoute provides a mock function
+func (_m *MockRouter) GrowMuxRoute(_a0 routing.RouteDescriptor, _a1, _a2 int) (int, error) {
+	ret := _m.Called(_a0, _a1, _a2)
+	return ret.Int(0), ret.Error(1)
+}
+
 // RemoveMuxRouteByTransport provides a mock function
 func (_m *MockRouter) RemoveMuxRouteByTransport(_a0 routing.RouteDescriptor, _a1 uuid.UUID) error {
 	ret := _m.Called(_a0, _a1)
@@ -443,23 +449,6 @@ func (_m *MockRouter) GetLastRouteCalcTime() time.Duration {
 	}
 
 	return r0
-}
-
-// MeasureTransportLatency provides a mock function with given fields: ctx, remote, tpID
-func (_m *MockRouter) MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error) {
-	ret := _m.Called(ctx, remote, tpID)
-	if len(ret) == 0 {
-		panic("no return value specified for MeasureTransportLatency")
-	}
-	var r0 float64
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, uuid.UUID) (float64, error)); ok {
-		r0, r1 = rf(ctx, remote, tpID)
-	} else {
-		r0 = ret.Get(0).(float64)
-		r1 = ret.Error(1)
-	}
-	return r0, r1
 }
 
 // NewMockRouter creates a new instance of MockRouter. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

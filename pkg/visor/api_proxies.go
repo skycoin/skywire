@@ -88,7 +88,8 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			// it starts — no data loss, just "not available yet".
 			cfg.UpstreamSOCKS = fmt.Sprintf("127.0.0.1:%d", defaultSkynetWebProxyPort)
 			log := logging.MustGetLogger("embedded_dmsgweb")
-			runtime = newEmbeddedDmsgWeb(v.ctx, v.dmsgC, cfg, log)
+			aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
+			runtime = newEmbeddedDmsgWeb(v.ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, aliases, dmsgSet, cfg, log)
 			v.embeddedDmsgWeb = runtime
 		}
 		v.initLock.Unlock()
@@ -119,7 +120,7 @@ func (v *Visor) SetEmbeddedProxyEnabled(kind string, enable bool) error {
 			}
 			cfg := &visorconfig.SkynetWebConfig{Enable: true}
 			log := logging.MustGetLogger("embedded_skynetweb")
-			runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, cfg, log)
+			runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, cfg, log)
 			v.embeddedSkynetWeb = runtime
 		}
 		v.initLock.Unlock()
@@ -270,7 +271,7 @@ func (v *Visor) autoStartSkynetWeb() {
 		}
 		cfg := &visorconfig.SkynetWebConfig{Enable: true}
 		log := logging.MustGetLogger("embedded_skynetweb")
-		runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, cfg, log)
+		runtime = newEmbeddedSkynetWeb(v.ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, cfg, log)
 		v.embeddedSkynetWeb = runtime
 	}
 	v.initLock.Unlock()

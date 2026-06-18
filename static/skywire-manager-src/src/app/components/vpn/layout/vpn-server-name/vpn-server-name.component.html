@@ -31,14 +31,6 @@
     [matTooltip]="'vpn.server-conditions.history-info' | translate"
   >history</mat-icon>
 }
-@if (hasPassword) {
-  <mat-icon
-    class="server-condition-icon"
-    [ngClass]="{'small-text-icon': !adjustIconsForBigText, 'big-text-icon': adjustIconsForBigText}"
-    [inline]="true"
-    [matTooltip]="'vpn.server-conditions.has-password-info' | translate"
-  >lock_outlined</mat-icon>
-}
 <!-- Name. -->
 @if (customName && name && (!pk || name !== pk)) {
   {{ customName }}

@@ -14,9 +14,11 @@ import (
 	"sort"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -696,6 +698,34 @@ func (v *Visor) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	return v.dmsgC.Probe(ctx, pk, port), nil
+}
+
+// DmsgProbeViaServer probes dmsg reachability of pk:port forced through a
+// specific dmsg server (serverPK), for per-server reachability diagnosis.
+// Returns true if reachable via that server.
+func (v *Visor) DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error) {
+	if err := v.mustWaitDmsgReady(); err != nil {
+		return false, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	return v.dmsgC.ProbeViaServer(ctx, pk, port, serverPK), nil
+}
+
+// SkynetProbe probes reachability of pk:port over skynet (skywire's routed
+// p2p transports) by dialing a route to the destination and closing it.
+// A completed dial (route setup + connection) means reachable. Returns
+// true if reachable.
+func (v *Visor) SkynetProbe(pk cipher.PubKey, port uint16) (bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	addr := appnet.Addr{Net: appnet.TypeSkynet, PubKey: pk, Port: routing.Port(port)}
+	conn, err := appnet.DialContext(ctx, addr)
+	if err != nil {
+		return false, nil // unreachable is a result, not an RPC error
+	}
+	_ = conn.Close() //nolint:errcheck
+	return true, nil
 }
 
 // DmsgHTTP implements API. Performs an HTTP request over dmsg using the visor's dmsg client.

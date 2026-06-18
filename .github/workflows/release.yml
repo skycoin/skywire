@@ -20,7 +20,6 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             --repo ${{ github.repository }} \
             --title "${{ github.ref_name }}" \
-            --draft \
             --generate-notes || true
 
   linux:
@@ -304,6 +303,7 @@ jobs:
           Invoke-WebRequest "$base/Product.wxs" -OutFile "scripts\win_installer\Product.wxs"
           Invoke-WebRequest "$base/UI.wxs" -OutFile "scripts\win_installer\UI.wxs"
           Invoke-WebRequest "$base/skywire.bat" -OutFile "scripts\win_installer\skywire.bat"
+          Invoke-WebRequest "$base/skywire-autoconfig.bat" -OutFile "scripts\win_installer\skywire-autoconfig.bat"
           Invoke-WebRequest "$base/images/Banner.png" -OutFile "scripts\win_installer\images\Banner.png"
           Invoke-WebRequest "$base/images/Dialog.png" -OutFile "scripts\win_installer\images\Dialog.png"
           Invoke-WebRequest "$base/images/ico.ico" -OutFile "scripts\win_installer\images\ico.ico"
@@ -407,6 +407,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path "build\apps"
           Copy-Item ..\..\bin\skywire.exe build\skywire.exe
           Copy-Item skywire.bat build\skywire.bat
+          Copy-Item skywire-autoconfig.bat build\skywire-autoconfig.bat
           New-Item -ItemType File -Path "build\new.update"
           Copy-Item ..\..\wintun_extracted\wintun\bin\${{ matrix.wintun_arch }}\wintun.dll build\wintun.dll
 
@@ -482,16 +483,17 @@ jobs:
             --clobber
 
   publish-release:
-    # Flips the draft release to published once every build artifact is
-    # uploaded and the combined checksums file is in place. The
-    # two-phase create-as-draft / publish-when-complete pattern means
-    # users never see a partial release (downloading the tarball before
-    # the checksum file lands, etc.). create-release sets --draft;
-    # this job clears it after every dependent job has succeeded.
+    # create-release publishes the release immediately (no --draft) so it is
+    # never left stranded as a draft when one platform job fails — which is
+    # what happened to v1.3.62/v1.3.63 when the windows MSI job broke and the
+    # old draft-gating publish step (needs all jobs) never ran. This job is a
+    # belt-and-suspenders final pass: it runs regardless of upstream job
+    # outcome (if: always()) and re-asserts the published state.
     needs: [linux, darwin-amd64, darwin-arm64, windows, docker, create-checksums]
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Publish the release
+      - name: Ensure the release is published
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

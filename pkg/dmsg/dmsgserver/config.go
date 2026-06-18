@@ -11,6 +11,7 @@ import (
 
 	"github.com/skycoin/skycoin/src/util/logging"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -128,6 +129,17 @@ type Config struct {
 	MaxSessions      int           `json:"max_sessions"`
 	Peers            []PeerConfig  `json:"peers,omitempty"`
 	EnableRouteSetup bool          `json:"enable_route_setup,omitempty"`
+
+	// AnnounceAsPeer makes this (typically non-public) server announce
+	// itself as a forwardable peer over every outbound peer link it
+	// dials, so its clients become reachable inbound without it being
+	// registered in the discovery. AcceptPeerAnnouncements lets a
+	// (typically public) server honor such announcements, filing the
+	// announcing session in its peer set; AcceptedPeerPKs, when non-empty,
+	// restricts which announcers are honored (allowlist).
+	AnnounceAsPeer          bool            `json:"announce_as_peer,omitempty"`
+	AcceptPeerAnnouncements bool            `json:"accept_peer_announcements,omitempty"`
+	AcceptedPeerPKs         []cipher.PubKey `json:"accepted_peer_pks,omitempty"`
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server
@@ -169,10 +181,31 @@ func (c *Config) NormalizedDeployments() []Deployment {
 	case c.Discovery != "" || c.DiscoveryDmsg != "":
 		src = []Deployment{{Discovery: c.Discovery, DiscoveryDmsg: c.DiscoveryDmsg}}
 	default:
-		return nil
+		// No explicit dmsg/discovery block in the config: fall back to
+		// the embedded deployment config so a dmsg server needs no
+		// `config gen` step to track deployment changes — the binary
+		// carries the current discovery + servers. The explicit cases
+		// above stay authoritative.
+		src = []Deployment{{
+			Discovery:     deployment.Prod.DmsgDiscovery,
+			DiscoveryDmsg: deployment.Prod.DmsgDiscoveryDmsg,
+			Servers:       deployment.Prod.ToDiscEntries(),
+		}}
 	}
 	out := make([]Deployment, len(src))
 	for i, d := range src {
+		// A deployment with no explicit transit servers borrows the
+		// embedded set for whichever embedded deployment its discovery
+		// matches (by PK). This lets an operator drop the hand-maintained
+		// `servers` list from a dmsg-server config — keeping discovery_dmsg
+		// and per-deployment knobs like sessions_count — and track the
+		// binary's embedded deployment data instead. Servers stay coupled to
+		// their discovery: an unrecognized discovery is left empty, never
+		// filled from a mismatched deployment. The explicit `default` branch
+		// above already carries embedded servers, so this is a no-op there.
+		if len(d.Servers) == 0 {
+			d.Servers = deployment.EmbeddedServersForDiscoveryDmsg(d.DiscoveryDmsg)
+		}
 		if d.AdvertisedAddress == "" {
 			d.AdvertisedAddress = c.PublicAddress
 		}

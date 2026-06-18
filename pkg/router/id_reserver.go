@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -44,11 +45,13 @@ type IDReserver interface {
 }
 
 type idReserver struct {
-	total int                                 // the total number of route IDs we reserve from the routers
-	rcM   Map                                 // map of router clients
-	rec   map[cipher.PubKey]uint8             // this records the number of expected rules per visor PK
-	ids   map[cipher.PubKey][]routing.RouteID // this records the obtained rules per visor PK
-	mx    sync.Mutex
+	total  int                                 // the total number of route IDs we reserve from the routers
+	rcM    Map                                 // map of router clients
+	rec    map[cipher.PubKey]uint8             // this records the number of expected rules per visor PK
+	ids    map[cipher.PubKey][]routing.RouteID // this records the obtained rules per visor PK
+	pool   *ClientPool                         // non-nil → re-dial a stale conn through the pool
+	dialer network.Dialer                      // fresh-dial source when pool is nil
+	mx     sync.Mutex
 }
 
 // NewIDReserver creates a new route ID reserver from a dialer and a slice of paths.
@@ -92,11 +95,50 @@ func NewIDReserver(ctx context.Context, dialer network.Dialer, pool *ClientPool,
 
 	// Return result.
 	return &idReserver{
-		total: total,
-		rcM:   clients,
-		rec:   rec,
-		ids:   make(map[cipher.PubKey][]routing.RouteID, total),
+		total:  total,
+		rcM:    clients,
+		rec:    rec,
+		ids:    make(map[cipher.PubKey][]routing.RouteID, total),
+		pool:   pool,
+		dialer: dialer,
 	}, nil
+}
+
+// isPooledConnShutdown reports whether err is net/rpc's "connection is shut
+// down" — returned when a call is made on an already-closed rpc.Client, the
+// signature of a stale connection handed back by the pool.
+func isPooledConnShutdown(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "connection is shut down")
+}
+
+// redial discards a dead client and dials a fresh one for pk, replacing it in
+// the client map so the later rule-install reuses the live connection. Returns
+// nil when no fresh connection can be established (caller surfaces the original
+// error). See ReserveIDs for why this is needed.
+func (idr *idReserver) redial(ctx context.Context, pk cipher.PubKey, dead *Client) *Client {
+	if dead != nil {
+		_ = dead.Close() //nolint:errcheck,gosec // never return a corpse to the pool
+	}
+	var (
+		fresh *Client
+		err   error
+	)
+	switch {
+	case idr.pool != nil:
+		// The pool entry for pk was consumed at build time, so Get dials fresh.
+		fresh, err = idr.pool.Get(ctx, pk)
+	case idr.dialer != nil:
+		fresh, err = NewClient(ctx, idr.dialer, pk)
+	default:
+		return nil
+	}
+	if err != nil || fresh == nil {
+		return nil
+	}
+	idr.mx.Lock()
+	idr.rcM[pk] = fresh
+	idr.mx.Unlock()
+	return fresh
 }
 
 func (idr *idReserver) ReserveIDs(ctx context.Context) error {
@@ -108,15 +150,45 @@ func (idr *idReserver) ReserveIDs(ctx context.Context) error {
 
 	for pk, n := range idr.rec {
 		go func(pk cipher.PubKey, n uint8) {
+			// Read under idr.mx: a sibling goroutine's redial() writes rcM[pk]
+			// under the same lock, so an unlocked read here is a data race on
+			// the shared map (different keys still touch the map's internals).
+			idr.mx.Lock()
 			client := idr.rcM.Client(pk)
+			idr.mx.Unlock()
 			if client == nil {
-				cancel()
+				// NOTE: deliberately do NOT cancel the shared ctx on a single
+				// hop's failure. cancel() here propagated to every sibling
+				// goroutine still blocked in client.ReserveIDs(ctx); their
+				// Client.call() reacts to ctx.Done() by closing the underlying
+				// (pooled) DMSG stream — RST-ing perfectly healthy
+				// intermediates mid-reservation and turning one hop's blip into
+				// a whole-route setup failure (the "RST race" that made
+				// multi-hop / mux route setup fail at a high rate). Each hop is
+				// independently bounded by its own per-call rpcDeadline, and
+				// firstError below already waits for all N goroutines and
+				// returns the first error — so a genuinely dead hop still fails
+				// the route, without resetting the healthy hops.
 				errCh <- fmt.Errorf("reserve routeID from %s failed: no client available", pk)
 				return
 			}
 			rtIDs, err := client.ReserveIDs(ctx, n)
+			if isPooledConnShutdown(err) {
+				// Stale pooled connection. ClientPool.Get's liveness check
+				// (client_pool.go) only discards conns idle past the stream
+				// read deadline — so a conn that died for any OTHER reason (the
+				// intermediate restarted, its dmsg session/transport dropped)
+				// is handed back as a corpse and this first call returns
+				// "connection is shut down". Re-dial fresh ONCE and retry: a
+				// reachable hop succeeds on the retry, a genuinely-dead one
+				// still fails below. This was the dominant route-setup failure
+				// (id_reservation, ~59% on a live RSN) — a single bad pooled
+				// conn was failing the whole reservation with no retry.
+				if fresh := idr.redial(ctx, pk, client); fresh != nil {
+					rtIDs, err = fresh.ReserveIDs(ctx, n)
+				}
+			}
 			if err != nil {
-				cancel()
 				errCh <- fmt.Errorf("reserve routeID from %s failed: %w", pk, err)
 				return
 			}

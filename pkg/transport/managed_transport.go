@@ -100,16 +100,22 @@ type ManagedTransport struct {
 	// goroutine. atomic so the manager's central maintenance loop can
 	// touch it lock-free.
 	pingReadyAtNanos atomic.Int64
-	// pingFallbackFired is set to true after the RSN-latency fallback
-	// has been invoked once, so the maintenance loop never invokes it
-	// twice for the same transport. CompareAndSwap ensures
-	// invokeLatencyFallback is called exactly once even under
-	// concurrent ticks.
-	pingFallbackFired atomic.Bool
 
-	// manager back-reference for latency fallback (RSN-based measurement
-	// when remote visor doesn't support transport-level ping).
-	manager *Manager
+	// pongSeen is set true on the first transport pong ever received on
+	// this transport, ARMING the half-open-link detector. Until a peer
+	// has answered at least one ping we never close on missed pongs —
+	// older visors that don't implement transport ping/pong would
+	// otherwise be falsely reaped, severing working links to them.
+	pongSeen atomic.Bool
+	// missedPongs counts pings sent with no intervening pong. Reset to 0
+	// on every pong received and whenever the underlying transport is
+	// (re)set. Once pongSeen is true and this reaches pongMissThreshold,
+	// the far end has gone silent (a half-open link the OS hasn't torn
+	// down) — the transport is closed + deregistered so it stops being
+	// re-registered and routed through. This is what makes a dead edge's
+	// transports actually expire from TPD instead of being kept alive by
+	// the still-live edge's re-registration.
+	missedPongs atomic.Int64
 
 	// cascadeHandler handles cascade protocol packets (route ID 0).
 	// Set by the transport manager from the router's CascadeHandler.
@@ -254,6 +260,13 @@ func (mt *ManagedTransport) GetBandwidth() *BandwidthData {
 // goroutine.
 const transportPingInterval = 60 * time.Second
 
+// pongMissThreshold is the number of consecutive transport pings with no
+// intervening pong after which an ARMED (pongSeen) transport is treated as a
+// dead half-open link and closed. At transportPingInterval (60s) this is ~3
+// minutes of silence — long enough to ride out a brief blip or a momentarily
+// slow peer, short enough that dead edges drain from TPD promptly.
+const pongMissThreshold = 3
+
 // Serve serves and manages the transport.
 //
 // Goroutine layout: one readLoop goroutine plus the Serve goroutine
@@ -363,12 +376,6 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 	}
 }
 
-// transportPingGracePeriod is how long we wait for a transport-level pong
-// before falling back to RSN-based latency measurement. This covers the
-// case where the remote visor is running old code that doesn't support
-// transport ping frames.
-const transportPingGracePeriod = 90 * time.Second
-
 // tickPing is invoked once per transportPingInterval by the manager's
 // central maintenance goroutine. It encapsulates the state machine the
 // per-transport pingLoop used to run on its own goroutine:
@@ -387,6 +394,20 @@ func (mt *ManagedTransport) tickPing() {
 		return
 	}
 
+	// Half-open-link detection: if the peer has answered a ping before
+	// (pongSeen) but has since gone silent for pongMissThreshold
+	// consecutive pings, the far end is gone while our local socket
+	// still looks "open" (no RST). Close + deregister so the dead edge
+	// stops being re-registered and routed through. Guarded by pongSeen
+	// so peers that never implement transport ping/pong are untouched.
+	if mt.pongSeen.Load() && mt.missedPongs.Load() >= pongMissThreshold {
+		mt.log.WithField("missed_pongs", mt.missedPongs.Load()).
+			WithField("remote", mt.Remote()).
+			Warn("Transport peer stopped answering pings; closing half-open transport")
+		mt.close()
+		return
+	}
+
 	// First time observed ready — stamp + send first ping. CAS makes
 	// the stamp idempotent in case the maintenance loop ever overlaps
 	// with itself (a precaution; in the current design only one
@@ -397,20 +418,6 @@ func (mt *ManagedTransport) tickPing() {
 	}
 
 	mt.sendTransportPing()
-
-	// Fallback: if grace period has elapsed and no pong-derived
-	// latency arrived, fall back to RSN-based measurement (for peers
-	// running old code without transport-ping support). CompareAndSwap
-	// ensures we hand off to invokeLatencyFallback exactly once.
-	readyAt := time.Unix(0, mt.pingReadyAtNanos.Load())
-	if !mt.pingFallbackFired.Load() &&
-		time.Since(readyAt) > transportPingGracePeriod &&
-		mt.GetLatency() == 0 &&
-		mt.manager != nil &&
-		mt.pingFallbackFired.CompareAndSwap(false, true) {
-		mt.log.Debug("No transport pong received, falling back to RSN latency measurement")
-		mt.manager.invokeLatencyFallback(mt.rPK, mt)
-	}
 }
 
 // sendTransportPing writes a transport-level ping packet. Bytes are
@@ -430,6 +437,8 @@ func (mt *ManagedTransport) sendTransportPing() {
 		mt.log.WithError(err).Debug("Failed to send transport ping")
 		return
 	}
+	// Count this ping as awaiting a pong; handleTransportPong resets it.
+	mt.missedPongs.Add(1)
 	if n > routing.PacketHeaderSize {
 		mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
 	}
@@ -469,6 +478,11 @@ func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
 	if len(payload) < routing.TransportPingPayloadSize {
 		return
 	}
+	// A valid pong proves the far end is alive: arm the detector and
+	// reset the miss counter, regardless of the RTT-outlier filtering
+	// below (an outlier-RTT pong still proves liveness).
+	mt.pongSeen.Store(true)
+	mt.missedPongs.Store(0)
 	sentAt := int64(binary.BigEndian.Uint64(payload[:8])) //nolint:gosec
 	rttMs := float64(time.Now().UnixNano()-sentAt) / 1e6
 	if rttMs <= 0 {
@@ -676,6 +690,10 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) {
 		mt.transport = nil
 	}
 
+	// Fresh underlying connection — reset the half-open miss counter so a
+	// stale count from a prior connection can't immediately reap the new one.
+	mt.missedPongs.Store(0)
+
 	// Set new underlying transport.
 	mt.transport = newTransport
 	select {
@@ -709,6 +727,11 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 	<<< PACKET MANAGEMENT >>>
 */
 
+// writeTimeout bounds a single transport write so a half-open conn cannot
+// park a write goroutine (and its packet buffer) forever. The write side had
+// no deadline at all; this mirrors readPacket's readTimeout.
+const writeTimeout = 1 * time.Minute
+
 // WritePacket writes a packet to the remote.
 // Respects context cancellation to prevent blocking forever on dead transports.
 func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Packet) error {
@@ -717,6 +740,15 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 	if mt.transport == nil {
 		mt.transportMx.Unlock()
 		return fmt.Errorf("write packet: cannot write to transport, transport is not set up")
+	}
+
+	// Capture the transport under the lock so the goroutine below never reads
+	// the shared mt.transport field (which setTransport/close can mutate once
+	// we release the lock on the ctx-cancel path — a data race). Set a write
+	// deadline so the goroutine can't park in Write forever on a half-open conn.
+	tp := mt.transport
+	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		mt.log.WithError(err).Debug("Failed to set write deadline")
 	}
 
 	// Run the write in a goroutine so we can respect context cancellation.
@@ -733,7 +765,7 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 				ch <- writeResult{0, fmt.Errorf("panic in transport write: %v", r)}
 			}
 		}()
-		n, err := mt.transport.Write(packet)
+		n, err := tp.Write(packet)
 		ch <- writeResult{n, err}
 	}()
 
@@ -772,13 +804,22 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 // counter has always counted all packets because readPacket
 // is the only inbound path.
 func (mt *ManagedTransport) WriteRawPacket(packet routing.Packet) error {
+	// Capture the transport, then write WITHOUT holding transportMx: a wedged
+	// conn must not block here while holding the lock, which would freeze the
+	// whole transport — including its own close(), getTransport(), and every
+	// other method that needs the lock. WritePacket already avoids this via its
+	// goroutine; WriteRawPacket (cascade + VStreamMux direct-dial traffic) did
+	// not, and held the lock across an unbounded Write.
 	mt.transportMx.Lock()
-	if mt.transport == nil {
-		mt.transportMx.Unlock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	if tp == nil {
 		return fmt.Errorf("write raw packet: transport not set up")
 	}
-	n, err := mt.transport.Write(packet)
-	mt.transportMx.Unlock()
+	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		mt.log.WithError(err).Debug("Failed to set write deadline")
+	}
+	n, err := tp.Write(packet)
 	if err != nil {
 		mt.close()
 		return err

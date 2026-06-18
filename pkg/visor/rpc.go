@@ -268,6 +268,11 @@ type MuxRouteInput struct {
 	Reverse []routing.Hop
 	// TransportID identifies the leg to remove; unused by AddMuxRoute.
 	TransportID uuid.UUID
+	// Target is the desired total leg count for GrowMuxRoute and MinHops
+	// is the hop-count floor for the legs it adds. Both unused by
+	// Add/RemoveMuxRoute.
+	Target  int
+	MinHops int
 	// SrcPort disambiguates between concurrent rg's owned by the same
 	// app (one per concurrent SOCKS5 connection on skysocks-client,
 	// etc.). Zero means "auto-pick if exactly one rg is active for
@@ -318,6 +323,13 @@ type SetEmbeddedProxyUpstreamRequest struct {
 type DmsgProbeRequest struct {
 	PK   cipher.PubKey
 	Port uint16
+}
+
+// DmsgProbeViaServerRequest is the argument for the DmsgProbeViaServer RPC.
+type DmsgProbeViaServerRequest struct {
+	PK       cipher.PubKey
+	Port     uint16
+	ServerPK cipher.PubKey
 }
 type TPSAddTransportIn struct {
 	TargetPK cipher.PubKey
@@ -450,6 +462,15 @@ type HypervisorPasswordChangeIn struct {
 func (r *RPC) SetHypervisorPassword(in *HypervisorPasswordChangeIn, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetHypervisorPassword", nil)(nil, &err)
 	return r.visor.SetHypervisorPassword(in.OldPassword, in.NewPassword)
+}
+
+// SetHypervisorPasswordForce sets the hypervisor UI admin password
+// without the old one (reset / first-time set). Local-only RPC; same
+// privileged-local rationale as SetHypervisorPassword. OldPassword in the
+// request is ignored.
+func (r *RPC) SetHypervisorPasswordForce(in *HypervisorPasswordChangeIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetHypervisorPasswordForce", nil)(nil, &err)
+	return r.visor.SetHypervisorPasswordForce(in.NewPassword)
 }
 
 type DHTSyncRequest struct {

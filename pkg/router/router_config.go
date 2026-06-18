@@ -108,19 +108,18 @@ func (r *router) Close() error {
 }
 
 func (r *router) isTpdExist(rPK cipher.PubKey) bool {
-	// check stcpr transport if exist
-	_, err := r.tm.GetTransport(rPK, types.STCPR)
-	if err == nil {
-		return true
+	// A transport only counts for the direct-route downgrade if it is still
+	// OPEN. Previously this checked existence only; a closed/stale transport
+	// would still downgrade MinHops to 1, so the route-finder would hand back a
+	// 1-hop route over a dead direct transport that then fails setup. That is
+	// the stale-direct path that made `cli route trace` (default min-hops 1)
+	// report a direct route the live dial path would skip.
+	for _, netType := range []types.Type{types.STCPR, types.SUDPH, types.DMSG} {
+		if tp, err := r.tm.GetTransport(rPK, netType); err == nil && !tp.IsClosed() {
+			return true
+		}
 	}
-	// check sudph transport if exist
-	_, err = r.tm.GetTransport(rPK, types.SUDPH)
-	if err == nil {
-		return true
-	}
-	// check dmsg transport if exist
-	_, err = r.tm.GetTransport(rPK, types.DMSG)
-	return err == nil
+	return false
 }
 
 // DialHook returns the routing-policy hook installed via

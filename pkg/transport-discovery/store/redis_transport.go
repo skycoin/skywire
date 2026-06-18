@@ -14,7 +14,7 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.SignedEntry) error {
+func (s *redisStore) RegisterTransport(ctx context.Context, _ cipher.PubKey, sEntry *transport.SignedEntry) error {
 	entry := sEntry.Entry
 	if entry == nil {
 		return ErrBadEntry
@@ -49,11 +49,23 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 	edgeAKey := s.edgeKey(entry.Edges[0])
 	edgeBKey := s.edgeKey(entry.Edges[1])
 
-	// Always apply TTL so stale transports expire when visors stop re-registering.
+	// Refresh BOTH edges' per-edge index. The route-finder explores via the
+	// per-edge indexes and a route group is bidirectional, so an edge whose
+	// index is missing cannot be used as a route SOURCE — multi-hop setup then
+	// fails through otherwise-live transports.
+	//
+	// #2980 previously refreshed only the reporter's edge to drain "ghost"
+	// transports (an online edge keeping an offline peer routable), but that
+	// assumed BOTH edges independently re-register a live transport; the
+	// non-reporter (accepter) edge is not reliably refreshed, so live visors
+	// vanished as a route source and bidirectional setup broke network-wide.
+	// Ghost drainage is now handled at the source by #2979 (half-open
+	// detection deregisters a transport once the far end stops ponging) plus
+	// the per-transport main-entry TTL below, so refreshing both edges is safe.
 	pipe := s.client.Pipeline()
 	pipe.Set(ctx, tpKey, string(raw), s.ttl)
-	pipe.SAdd(ctx, edgeAKey, entry.ID.String())
 	pipe.SAdd(ctx, s.allTpsIndexKey(), entry.ID.String())
+	pipe.SAdd(ctx, edgeAKey, entry.ID.String())
 	if s.ttl > 0 {
 		pipe.Expire(ctx, edgeAKey, s.ttl)
 	}
@@ -71,6 +83,16 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 	}
 	pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
 
+	// Persist the real edge pair (35-day TTL, matching the daily bandwidth) so
+	// recoverBandwidthEdges can identify the counterparty after this transport
+	// expires — even when that edge never publishes its own bandwidth, which is
+	// the common case and the reason ~half of expired transports otherwise lose
+	// their second edge to the zero PK.
+	if entry.Edges[0] != (cipher.PubKey{}) && entry.Edges[1] != (cipher.PubKey{}) {
+		pipe.Set(ctx, s.bandwidthEdgesKey(entry.ID.String()),
+			entry.Edges[0].Hex()+","+entry.Edges[1].Hex(), bandwidthHistoryTTL)
+	}
+
 	if _, err := pipe.Exec(ctx); err != nil {
 		return err
 	}
@@ -86,7 +108,7 @@ func (s *redisStore) RegisterTransport(ctx context.Context, sEntry *transport.Si
 // pipeline. This reduces TCP round-trips from N pipelines (one per transport)
 // to 1 pipeline for the entire batch. At ~50 registrations/sec × 8 commands
 // each, this cuts Redis syscall overhead significantly.
-func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*transport.SignedEntry) error {
+func (s *redisStore) RegisterTransportsBatch(ctx context.Context, _ cipher.PubKey, entries []*transport.SignedEntry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -120,9 +142,10 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*tra
 		tpKey := s.transportKey(entry.ID)
 		edgeAKey := s.edgeKey(entry.Edges[0])
 
+		// Refresh BOTH edges' per-edge index (see RegisterTransport).
 		pipe.Set(ctx, tpKey, string(raw), s.ttl)
-		pipe.SAdd(ctx, edgeAKey, entry.ID.String())
 		pipe.SAdd(ctx, s.allTpsIndexKey(), entry.ID.String())
+		pipe.SAdd(ctx, edgeAKey, entry.ID.String())
 		if s.ttl > 0 {
 			pipe.Expire(ctx, edgeAKey, s.ttl)
 		}
@@ -136,6 +159,13 @@ func (s *redisStore) RegisterTransportsBatch(ctx context.Context, entries []*tra
 		pipe.SAdd(ctx, s.visorAllKey(), entry.Edges[0].Hex())
 		if entry.Edges[0] != entry.Edges[1] {
 			pipe.SAdd(ctx, s.visorAllKey(), entry.Edges[1].Hex())
+		}
+
+		// Persist the real edge pair (35-day TTL) so recoverBandwidthEdges keeps
+		// the counterparty identifiable after expiry — see RegisterTransport.
+		if entry.Edges[0] != (cipher.PubKey{}) && entry.Edges[1] != (cipher.PubKey{}) {
+			pipe.Set(ctx, s.bandwidthEdgesKey(entry.ID.String()),
+				entry.Edges[0].Hex()+","+entry.Edges[1].Hex(), bandwidthHistoryTTL)
 		}
 	}
 

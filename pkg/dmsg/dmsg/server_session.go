@@ -83,7 +83,7 @@ func (ss *ServerSession) Serve() {
 				continue
 			}
 
-			log.Info("Initiating stream.")
+			log.Debug("Initiating stream.")
 			go func(sStr *smux.Stream) {
 				defer func() { <-sem }()
 				defer func() {
@@ -92,7 +92,7 @@ func (ss *ServerSession) Serve() {
 					}
 				}()
 				err := ss.serveStream(log, sStr, ss.sm.addr)
-				log.WithError(err).Info("Stopped stream.")
+				log.WithError(err).Debug("Stopped stream.")
 			}(sStr)
 		}
 	} else {
@@ -119,7 +119,7 @@ func (ss *ServerSession) Serve() {
 				continue
 			}
 
-			log.Info("Initiating stream.")
+			log.Debug("Initiating stream.")
 			go func(yStr *yamux.Stream) {
 				defer func() { <-sem }()
 				defer func() {
@@ -128,7 +128,7 @@ func (ss *ServerSession) Serve() {
 					}
 				}()
 				err := ss.serveStream(log, yStr, ss.sm.addr)
-				log.WithError(err).Info("Stopped stream.")
+				log.WithError(err).Debug("Stopped stream.")
 			}(yStr)
 		}
 	}
@@ -165,39 +165,54 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 	}
 
 	// Not a ping — the 2 bytes are the length prefix of a normal object.
-	// Pass them through to readRequest via a prefixed reader.
+	// Pass them through via a prefixed reader.
 	prefixedReader := io.MultiReader(bytes.NewReader(header), yStr)
 
-	readRequest := func() (StreamRequest, error) {
-		obj, err := ss.readObject(prefixedReader)
-		if err != nil {
-			return StreamRequest{}, err
-		}
-		req, err := obj.ObtainStreamRequest()
-		if err != nil {
-			return StreamRequest{}, err
-		}
-		// Timestamp validation: we pass 0 because concurrent streams from
-		// the same client can have timestamps that arrive out of order at
-		// the server. Strict monotonic enforcement would reject valid
-		// concurrent requests. The noise encryption layer already prevents
-		// replay at the session level via nonce tracking.
-		if err := req.Verify(0); err != nil {
-			return StreamRequest{}, err
-		}
-		// For peer sessions, the SrcAddr.PK is the original client, not the
-		// peer server. The request signature is still verified above.
-		if !ss.isPeer && req.SrcAddr.PK != ss.rPK {
-			return StreamRequest{}, ErrReqInvalidSrcPK
-		}
-		return req, nil
-	}
-
-	// Read request.
-	req, err := readRequest()
+	obj, err := ss.readObject(prefixedReader)
 	if err != nil {
 		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
 		return err
+	}
+
+	// Inbound peer announcement: when this server opts in, a dialing
+	// server's first stream may carry a signed PeerAnnounce that promotes
+	// this session to a forwardable peer — the reverse-path enabler for a
+	// non-public server. Checked before the StreamRequest path; a normal
+	// request decoded as an announce has a null/foreign SrcPK and fails
+	// Verify, so it falls through harmlessly.
+	if ss.entity.acceptPeerAnnouncements && !ss.isPeer {
+		if ann, aErr := obj.ObtainPeerAnnounce(); aErr == nil {
+			if ann.Verify(ss.rPK) == nil && ss.entity.peerAnnounceAllowed(ss.rPK) {
+				ss.entity.promoteToPeer(ss.rPK, ss.SessionCommon)
+				resp := StreamResponse{ReqHash: obj.Hash(), Accepted: true}
+				ackObj, mErr := MakeSignedStreamResponse(&resp, ss.entity.LocalSK())
+				if mErr != nil {
+					return mErr
+				}
+				return ss.writeObject(yStr, ackObj)
+			}
+		}
+	}
+
+	req, err := obj.ObtainStreamRequest()
+	if err != nil {
+		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
+		return err
+	}
+	// Timestamp validation: we pass 0 because concurrent streams from
+	// the same client can have timestamps that arrive out of order at
+	// the server. Strict monotonic enforcement would reject valid
+	// concurrent requests. The noise encryption layer already prevents
+	// replay at the session level via nonce tracking.
+	if err := req.Verify(0); err != nil {
+		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
+		return err
+	}
+	// For peer sessions, the SrcAddr.PK is the original client, not the
+	// peer server. The request signature is still verified above.
+	if !ss.isPeer && req.SrcAddr.PK != ss.rPK {
+		ss.m.RecordStream(metrics.DeltaFailed) // record failed stream
+		return ErrReqInvalidSrcPK
 	}
 
 	log = log.
@@ -299,7 +314,7 @@ func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteC
 	yStr = &idleTimeoutConn{rwc: yStr, timeout: streamIdleTimeout}
 	yStr2 = &idleTimeoutConn{rwc: yStr2, timeout: streamIdleTimeout}
 
-	log.Info("Serving stream.")
+	log.Debug("Serving stream.")
 	ss.m.RecordStream(metrics.DeltaConnect)
 	defer ss.m.RecordStream(metrics.DeltaDisconnect)
 	return netutil.CopyReadWriteCloser(yStr, yStr2)

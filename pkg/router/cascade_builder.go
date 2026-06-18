@@ -20,15 +20,25 @@ import (
 )
 
 // CascadeBuilder constructs and sends cascade messages.
+//
+// It serves two roles depending on how it is constructed:
+//
+//   - RSN-side (NewCascadeBuilder): holds the RSN's rsnPK/rsnSK and SIGNS
+//     each per-hop cascade layer. The RSN-side builder is a pure signing
+//     oracle — it builds bytes and never sends them itself.
+//   - Source-side (NewSourceCascadeBuilder): holds a zero rsnSK and never
+//     signs; it only INJECTS pre-signed cascade bytes (received from the
+//     RSN over RPC) into the source's own transports and collects ACKs.
 type CascadeBuilder struct {
 	log   *logging.Logger
 	rsnPK cipher.PubKey
 	rsnSK cipher.SecKey
 	tm    *transport.Manager
 
-	// For receiving ACKs (shared with the cascade handler).
-	pendingAcks   map[uint64]chan routing.Packet
-	pendingAcksMu sync.Mutex
+	// acks correlates sessionIDs to waiting senders. On the source visor
+	// it is shared with the CascadeHandler so ACKs arriving on the single
+	// registered cascade handler are delivered to this builder.
+	acks *ackRegistry
 
 	sessionCounter uint64
 	sessionMu      sync.Mutex
@@ -37,7 +47,7 @@ type CascadeBuilder struct {
 	installTimeout time.Duration
 }
 
-// NewCascadeBuilder creates a builder for the RSN.
+// NewCascadeBuilder creates a signing builder for the RSN.
 func NewCascadeBuilder(
 	log *logging.Logger,
 	rsnPK cipher.PubKey,
@@ -49,8 +59,32 @@ func NewCascadeBuilder(
 		rsnPK:          rsnPK,
 		rsnSK:          rsnSK,
 		tm:             tm,
-		pendingAcks:    make(map[uint64]chan routing.Packet),
-		reserveTimeout: 10 * time.Second,
+		acks:           newAckRegistry(),
+		reserveTimeout: 6 * time.Second,
+		installTimeout: 10 * time.Second,
+	}
+}
+
+// NewSourceCascadeBuilder creates a send-only builder for the SOURCE visor.
+//
+// It carries no RSN secret key (it never signs) and shares the ack registry
+// with the visor's CascadeHandler so that ACKs arriving on the visor's
+// single registered cascade handler are routed back to in-flight sends. The
+// source-side builder injects pre-signed cascade bytes — produced by the RSN
+// via the CascadeSign* RPCs — into the source's own transports.
+func NewSourceCascadeBuilder(
+	log *logging.Logger,
+	tm *transport.Manager,
+	acks *ackRegistry,
+) *CascadeBuilder {
+	if acks == nil {
+		acks = newAckRegistry()
+	}
+	return &CascadeBuilder{
+		log:            log,
+		tm:             tm,
+		acks:           acks,
+		reserveTimeout: 6 * time.Second,
 		installTimeout: 10 * time.Second,
 	}
 }
@@ -122,10 +156,15 @@ func (cb *CascadeBuilder) BuildReserveMessage(hops []routing.Hop, reserveN uint8
 
 // BuildInstallMessage constructs a nested install cascade from last hop to first.
 // rulesPerHop maps each visor PK to the rules that should be installed on it.
+// edgeDesc, when non-zero, is stamped onto the TERMINAL hop's layer (the
+// responding destination) so that hop calls router.IntroduceRules — creating a
+// route group — instead of only installing forwarding rules. Pass the zero
+// RouteDescriptor for a path whose terminal must not introduce a route group.
 func (cb *CascadeBuilder) BuildInstallMessage(
 	hops []routing.Hop,
 	sessionID uint64,
 	rulesPerHop map[cipher.PubKey][]routing.Rule,
+	edgeDesc routing.RouteDescriptor,
 ) ([]byte, error) {
 	if len(hops) == 0 {
 		return nil, fmt.Errorf("cascade: no hops")
@@ -164,6 +203,11 @@ func (cb *CascadeBuilder) BuildInstallMessage(
 			RelayTpID: targets[i].relayTpID,
 			Payload:   innerPayload,
 		}
+		// Mark the terminal hop (the responding destination) as a route-group
+		// edge so it calls IntroduceRules. Signed below along with the rest.
+		if i == len(targets)-1 {
+			msg.EdgeDesc = edgeDesc
+		}
 		if err := msg.Sign(targets[i].pk, cb.rsnSK); err != nil {
 			return nil, fmt.Errorf("cascade sign hop %d: %w", i, err)
 		}
@@ -191,15 +235,10 @@ func (cb *CascadeBuilder) SendCascade(ctx context.Context, firstHopTpID uuid.UUI
 	}
 
 	// Register for ACK.
-	waitCh := make(chan routing.Packet, 1)
-	cb.pendingAcksMu.Lock()
-	cb.pendingAcks[sessionID] = waitCh
-	cb.pendingAcksMu.Unlock()
+	waitCh := cb.acks.register(sessionID)
 
 	if err := tp.WriteRawPacket(pkt); err != nil {
-		cb.pendingAcksMu.Lock()
-		delete(cb.pendingAcks, sessionID)
-		cb.pendingAcksMu.Unlock()
+		cb.acks.unregister(sessionID)
 		return nil, fmt.Errorf("cascade: write to first hop: %w", err)
 	}
 
@@ -207,14 +246,10 @@ func (cb *CascadeBuilder) SendCascade(ctx context.Context, firstHopTpID uuid.UUI
 	case ackPkt := <-waitCh:
 		return routing.UnmarshalCascadeAck(ackPkt.Payload())
 	case <-ctx.Done():
-		cb.pendingAcksMu.Lock()
-		delete(cb.pendingAcks, sessionID)
-		cb.pendingAcksMu.Unlock()
+		cb.acks.unregister(sessionID)
 		return nil, ctx.Err()
 	case <-time.After(timeout):
-		cb.pendingAcksMu.Lock()
-		delete(cb.pendingAcks, sessionID)
-		cb.pendingAcksMu.Unlock()
+		cb.acks.unregister(sessionID)
 		return nil, fmt.Errorf("cascade: ACK timeout (session %d)", sessionID)
 	}
 }
@@ -229,15 +264,12 @@ func (cb *CascadeBuilder) HandleAck(p routing.Packet, _ *transport.ManagedTransp
 	if err != nil {
 		return
 	}
+	cb.acks.dispatch(ack.SessionID, p)
+}
 
-	cb.pendingAcksMu.Lock()
-	waitCh, ok := cb.pendingAcks[ack.SessionID]
-	if ok {
-		delete(cb.pendingAcks, ack.SessionID)
-	}
-	cb.pendingAcksMu.Unlock()
-
-	if ok {
-		waitCh <- p
-	}
+// AckRegistry returns the builder's ack registry so a CascadeHandler on the
+// same visor can share it (the source visor has one registered cascade
+// handler that must deliver ACKs to this builder's in-flight sends).
+func (cb *CascadeBuilder) AckRegistry() *ackRegistry {
+	return cb.acks
 }

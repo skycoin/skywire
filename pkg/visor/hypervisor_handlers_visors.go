@@ -599,7 +599,7 @@ func (hv *Hypervisor) getAllVisorsSummary() http.HandlerFunc {
 		// flicker that operators flag as "nodes are stale". 30s
 		// (the original value) caught only inline RPC slowness
 		// and missed the steady-state 2-min idle pattern entirely.
-		const cacheFreshWindow = 3 * time.Minute
+		// (cacheFreshWindow is now a package const — see hypervisor.go.)
 
 		for _, entry := range remotes {
 			go func(pk cipher.PubKey, c Conn) {

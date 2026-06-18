@@ -17,7 +17,6 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -97,13 +96,37 @@ func (r *router) DialRoutes(
 	// direct transport when one happens to exist would defeat the constraint
 	// (this was the symptom of `mux-bw --min-hops 2` riding direct stcpr
 	// instead of going via intermediates).
-	defaultMinHops := r.conf.MinHops
+	// baseMinHops is a LOCAL effective min-hops for this dial. We must NOT
+	// mutate the shared r.conf.MinHops here: DialRoutes runs concurrently per
+	// app dial, so writing the field both races other in-flight dials and —
+	// because the old restore only ran on the success path while 7 early
+	// `return nil, err` sit between mutation and restore — would permanently
+	// pin the visor-global MinHops to 1 after the first failed dial, silently
+	// disabling the operator's min-hops policy for every subsequent dial.
+	baseMinHops := r.conf.MinHops
 	// Suppress the direct-tp downgrade when ANY min-hops constraint is
 	// set (symmetric or per-direction). Even if only ReverseMinHops > 1,
 	// downgrading globally to 1 would defeat that constraint for the
 	// reverse direction's route-finder query below.
+	// --direct: ensure a direct transport to the destination exists, creating
+	// one on demand if none is open. This is the self-healing half of the
+	// `--direct` foot-gun fix — when the direct transport drops (peer restart,
+	// etc.) the next dial recreates it instead of silently riding a flaky
+	// multihop route (the route-finder only returns a 1-hop route when a live
+	// direct transport is already known to TPD). After this, isTpdExist(rPK) is
+	// true → baseMinHops downgrades to 1, and UseExistingTpOnly (set alongside
+	// EnsureDirectTransport) bypasses the route-finder → a 1-hop direct dial.
+	if opts != nil && opts.EnsureDirectTransport && !r.isTpdExist(rPK) {
+		for _, nt := range []tptypes.Type{tptypes.STCPR, tptypes.SUDPH, tptypes.DMSG} {
+			if _, sErr := r.tm.SaveTransport(ctx, rPK, nt, transport.LabelAutomatic); sErr == nil {
+				log.WithField("tp_type", nt).WithField("remote", rPK).
+					Debug("--direct: created direct transport on demand")
+				break
+			}
+		}
+	}
 	if r.isTpdExist(rPK) && !opts.AnyMinHopsConstraint() {
-		r.conf.MinHops = 1
+		baseMinHops = 1
 	}
 
 	// Check if existing transport only mode is set on the router
@@ -114,7 +137,7 @@ func (r *router) DialRoutes(
 	// Only run route setup hooks (which may create new transports) if UseExistingTpOnly is false
 	// on both the router level and the dial options level
 	useExistingOnly := routerExistingTpOnly || (opts != nil && opts.UseExistingTpOnly)
-	if r.conf.MinHops == 1 && !useExistingOnly {
+	if baseMinHops == 1 && !useExistingOnly {
 		r.routeSetupHookMu.Lock()
 		if len(r.routeSetupHooks) != 0 {
 			for _, rsf := range r.routeSetupHooks {
@@ -143,13 +166,21 @@ func (r *router) DialRoutes(
 	r.forceLocalRoutesMu.Lock()
 	forceLocal := r.forceLocalRoutes
 	r.forceLocalRoutesMu.Unlock()
-	const maxRetries = 3
+	// maxRetries bounds how many candidate routes the fallback loop below
+	// walks before giving up. On each setup failure we exclude the failing
+	// intermediate and re-fetch a fresh route (a different intermediate), so
+	// a higher bound = more of the candidate set tried before the dial fails.
+	// Multihop setups over flaky intermediates need several tries to land a
+	// healthy path; combined with the tightened handshake/cascade timeouts
+	// (fast per-attempt failure) this stays well within a reasonable dial
+	// budget while greatly improving multihop establishment odds.
+	const maxRetries = 6
 	maxFetchAttempts := maxRetries
 	if forceLocal {
 		maxFetchAttempts = 1
 	}
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts, baseMinHops)
 		if err != nil {
 			if attempt < maxFetchAttempts {
 				log.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
@@ -240,12 +271,32 @@ func (r *router) DialRoutes(
 			if ctx.Err() != nil {
 				return nil, ctx.Err()
 			}
-			// Check if this is a "no suitable transport" error (stale TPD data)
-			if errors.Is(err, ErrNoSuitableTransport) {
-				if attempt < maxRetries {
-					log.WithError(err).Warnf("Route handshake failed due to transport issue (attempt %d/%d), querying route-finder for fresh route...", attempt, maxRetries)
-					continue
+			// The dialer (cascade or DMSG) returned SUCCESS — routing rules
+			// were installed on every hop — yet saveRouteGroupRules failed:
+			// the route's reverse handshake never completed, so the data
+			// plane is dead. This is the dominant multihop failure mode: an
+			// intermediate that ACKs rule-install (so the source-driven
+			// cascade reports success and the dialer never falls back to the
+			// legacy setup-node path) but does not actually forward packets.
+			//
+			// Because the cascade already "succeeded", neither the dialer's
+			// own cascade->DMSG fallback nor the old ErrNoSuitableTransport
+			// branch fired here, so a single bad intermediate failed the
+			// whole dial. Treat a dead route like any other retryable route
+			// failure: exclude THIS route's intermediates and re-fetch a
+			// fresh route through different ones. Walking candidate
+			// intermediates is what turns probabilistic multihop setup into
+			// reliable setup. Direct routes (no intermediates) that aren't a
+			// stale-TPD error still fail fast — retrying the same direct path
+			// to a down peer would only burn the budget.
+			deadInter := intermediatePKsOfPath(forwardPath, lPK, rPK)
+			if (len(deadInter) > 0 || errors.Is(err, ErrNoSuitableTransport)) && attempt < maxRetries {
+				for _, ipk := range deadInter {
+					opts = appendExcludeIntermediate(opts, ipk)
 				}
+				log.WithError(err).Warnf("Route setup failed at handshake/data plane (attempt %d/%d); excluding %d intermediate(s) and retrying with a fresh route",
+					attempt, maxRetries, len(deadInter))
+				continue
 			}
 			return nil, fmt.Errorf("saveRouteGroupRules: %w", err)
 		}
@@ -283,15 +334,22 @@ func (r *router) DialRoutes(
 			})
 		}
 
-		// Rotation hook (RFC #2882 — periodic-tick / bandwidth-
-		// spreading). The dial-side DialHook may also implement
-		// RotationHook; when it does AND the policy returned
-		// RotationIntervalSeconds > 0, the route group's rotation
-		// servicePacketLoop fires the hook periodically. The
-		// applyAdd callback closes over the current dial context
-		// and forwardDesc so the rotation can add aux legs that
-		// match the original dial shape.
-		if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+		// Add-leg callback for any multiplexed dial. It closes over the
+		// dial context + forwardDesc so a replacement leg matches the
+		// original dial shape (same peer, ports, min-hops, app). Used by
+		// BOTH the route group's self-healing (restore the degree in the
+		// background when a leg dies) AND the periodic rotation hook
+		// (policy on_tick / bandwidth-spreading, RFC #2882).
+		muxTarget := 1
+		if opts != nil {
+			if eff := opts.EffectiveMuxRoutes(true); eff > muxTarget {
+				muxTarget = eff
+			}
+			if eff := opts.EffectiveMuxRoutes(false); eff > muxTarget {
+				muxTarget = eff
+			}
+		}
+		if muxTarget > 1 {
 			optsCopy := *opts
 			fwdDescCopy := forwardDesc
 			nrgCapture := nrg
@@ -306,17 +364,31 @@ func (r *router) DialRoutes(
 					}
 				}
 				if err := r.addOneAuxForwardLeg(addCtx, nrgCapture, &optsCopy, fwdDescCopy, excludePKs); err != nil {
-					r.logger.WithError(err).Debug("Rotation add-leg failed; route group keeps current leg set")
+					r.logger.WithError(err).Debug("Mux add-leg failed; route group keeps current leg set")
 				}
 			}
-			interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
-			nrg.rg.SetRotation(rh, applyAdd, interval)
+			// Self-healing: any leg death triggers a background replacement
+			// dial to restore the requested degree, while surviving legs
+			// carry the traffic. General to every mux dial, not just ones
+			// with a rotation policy.
+			nrg.rg.SetSelfHeal(applyAdd, muxTarget)
+
+			// Top up an initial shortfall: establishMuxRoutes sets up aux
+			// legs best-effort, so a flaky intermediate can leave the group
+			// below the requested degree at dial time. Heal it now in the
+			// background (same mechanism as runtime leg death) — the dial
+			// still returns immediately on the legs that did establish.
+			nrg.rg.maybeSelfHeal()
+
+			// Periodic rotation (policy on_tick) reuses the same callback.
+			if rh, ok := r.conf.DialHook.(RotationHook); ok && rh != nil && opts.RotationIntervalSeconds > 0 {
+				interval := time.Duration(opts.RotationIntervalSeconds) * time.Second
+				nrg.rg.SetRotation(rh, applyAdd, interval)
+			}
 		}
 
-		// reset MinHops default value if changed before
-		if defaultMinHops != 1 {
-			r.conf.MinHops = defaultMinHops
-		}
+		// NOTE: no MinHops restore needed — baseMinHops is a local var now,
+		// r.conf.MinHops is never mutated by the dial path.
 
 		return nrg, nil
 	}
@@ -493,14 +565,18 @@ func (r *router) PingRoute(
 	r.forceLocalRoutesMu.Lock()
 	pingForceLocal := r.forceLocalRoutes
 	r.forceLocalRoutesMu.Unlock()
-	const maxRetries = 3
+	// Match DialRoutes: walk up to 6 candidate intermediates (excluding the
+	// dead route's hops each time) before giving up, so a flaky intermediate
+	// that ACKs install but won't forward doesn't fail the whole probe.
+	const maxRetries = 6
 	pingMaxFetch := maxRetries
 	if pingForceLocal {
 		pingMaxFetch = 1
 	}
 	var lastErr error
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts)
+		// PingRoute has no direct-tp downgrade; use the visor-global base.
+		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts, r.conf.MinHops)
 		if err != nil {
 			if pingForceLocal {
 				lastErr = fmt.Errorf("local route calc: %w", err)
@@ -526,6 +602,14 @@ func (r *router) PingRoute(
 				opts = appendExcludeIntermediate(opts, failedPK)
 				log.WithError(err).Warnf("Ping route setup failed on intermediate %s (attempt %d/%d); excluding from next route-finder pick",
 					failedPK, attempt, maxRetries)
+			} else {
+				// Handshake/data-plane failure: the error names the dst, not
+				// the intermediate that ACKed install but won't forward. Exclude
+				// the whole dead route's intermediates so the retry diverges —
+				// same rationale as DialRoutes' saveRouteGroupRules retry.
+				for _, ipk := range intermediatePKsOfPath(forwardPath, lPK, rPK) {
+					opts = appendExcludeIntermediate(opts, ipk)
+				}
 			}
 			if attempt < maxRetries {
 				log.WithError(err).Warnf("Ping route setup failed (attempt %d/%d), retrying...", attempt, maxRetries)
@@ -540,51 +624,12 @@ func (r *router) PingRoute(
 	return nil, fmt.Errorf("failed to establish ping route after %d attempts: %w", maxRetries, lastErr)
 }
 
-// MeasureTransportLatency measures the latency of a specific transport by creating
-// a temporary direct route over that transport, performing ping/pong measurements,
-// and returning average latency. Used as a fallback when the remote visor doesn't
-// support transport-level ping frames.
-func (r *router) MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error) {
-	r.logger.Debugf("Measuring latency (RSN fallback) for transport %s to %s", tpID, remote)
-
-	opts := &DialOptions{TransportID: tpID}
-	lPort := routing.Port(skyenv.LatencyProbePort)
-	rPort := routing.Port(skyenv.LatencyProbePort)
-
-	conn, err := r.PingRoute(ctx, remote, lPort, rPort, opts)
-	if err != nil {
-		return 0, fmt.Errorf("failed to establish ping route: %w", err)
-	}
-	defer conn.Close() //nolint:errcheck,gosec
-
-	// Extract the RouteGroup for ping measurement.
-	rg, ok := conn.(*RouteGroup)
-	if !ok {
-		if nrg, ok := conn.(*NoiseRouteGroup); ok {
-			rg = nrg.rg
-		} else {
-			return 0, errors.New("unexpected connection type")
-		}
-	}
-
-	const pingCount = 5
-	min, max, avg, err := rg.MeasureLatency(ctx, pingCount)
-	if err != nil {
-		return 0, fmt.Errorf("failed to measure latency: %w", err)
-	}
-
-	r.logger.Debugf("Transport %s latency (RSN): min=%.2f max=%.2f avg=%.2f ms", tpID, min, max, avg)
-
-	r.mx.Lock()
-	if tp := r.tm.Transport(tpID); tp != nil {
-		tp.SetLatencyStats(transport.LatencyStats{Min: min, Max: max, Avg: avg})
-	}
-	r.mx.Unlock()
-
-	return avg, nil
-}
-
-func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions) (fwd, rev []routing.Hop, err error) {
+// baseMinHops is the per-dial base min-hops to use when opts carries no
+// per-call / per-direction override. The caller (DialRoutes) computes it as a
+// LOCAL value — applying the direct-transport downgrade there rather than
+// mutating the shared r.conf.MinHops, which used to race across concurrent
+// dials and permanently lose the constraint on any early-return error path.
+func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions, baseMinHops uint16) (fwd, rev []routing.Hop, err error) {
 	if log == nil {
 		log = r.logger
 	}
@@ -638,8 +683,8 @@ fetchRoutesAgain:
 	// asymmetric constraints can't be expressed in one round-trip.
 	fwdEff := opts.EffectiveMinHops(true)
 	revEff := opts.EffectiveMinHops(false)
-	fwdMinHops := r.conf.MinHops
-	revMinHops := r.conf.MinHops
+	fwdMinHops := baseMinHops
+	revMinHops := baseMinHops
 	if fwdEff > 0 {
 		fwdMinHops = uint16(fwdEff) //nolint:gosec // bounded by caller; CLI flag values are small
 	}
@@ -1184,6 +1229,14 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 
 	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
 		if tp == nil {
+			return true
+		}
+		// Skip closed / black-holing first-hop transports. A transport pruned by
+		// pong-liveness is closed+deregistered (see managed_transport), so
+		// IsClosed() catches both explicitly-closed and silently-dead legs — we
+		// must not build a route out over one. This is the local-calc analog
+		// of the per-leg liveness probe: don't originate a leg on a dead edge.
+		if tp.IsClosed() {
 			return true
 		}
 		// Exclude "setup" labeled transports — those are for RSN control-plane
@@ -1731,13 +1784,20 @@ func (r *router) establishMuxRoutes(
 			ExcludeDMSG:            true,
 		}
 
-		muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
+		// Mux aux legs PREFER local route calc: it picks a disjoint first-hop
+		// from the visor's OWN live transports (liveness- + exclusion-aware),
+		// which the stateless latency-weighted route-finder can't — the RF
+		// returns lowest-latency routes that cluster on the same few
+		// intermediates, capping mux bandwidth scaling (measured: disjointness
+		// collapses at high degree → throughput plateaus). The route-finder is
+		// the fallback for when local calc can't reach a disjoint deep-hop.
+		muxFwd, muxRev, err := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
 		if err != nil {
-			log.Debugf("Mux route %d/%d: route-finder returned no path: %v — trying local-calc fallback",
+			log.Debugf("Mux route %d/%d: local-calc no path: %v — trying route-finder fallback",
 				i+1, maxCount, err)
-			localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
-			if localErr != nil {
-				log.Debugf("Mux route %d/%d: local-calc fallback also failed: %v", i+1, maxCount, localErr)
+			rfFwd, rfRev, rfErr := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+			if rfErr != nil {
+				log.Debugf("Mux route %d/%d: route-finder fallback also failed: %v", i+1, maxCount, rfErr)
 				consecutiveFailures++
 				if consecutiveFailures >= maxConsecutiveMuxFailures {
 					log.Debugf("Mux route planning: %d consecutive failures; giving up on remaining %d aux slots",
@@ -1746,7 +1806,7 @@ func (r *router) establishMuxRoutes(
 				}
 				continue
 			}
-			muxFwd, muxRev = localFwd, localRev
+			muxFwd, muxRev = rfFwd, rfRev
 		}
 		consecutiveFailures = 0
 
@@ -1876,13 +1936,18 @@ func (r *router) addOneAuxForwardLeg(ctx context.Context, nrg *NoiseRouteGroup, 
 		ExcludeDMSG:            true,
 	}
 
-	muxFwd, muxRev, err := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts)
+	// Prefer local route calc for the replacement/added leg (disjoint first-hop
+	// from the visor's own live transports); route-finder is the fallback for a
+	// disjoint deep-hop not in the local cache. Same rationale as
+	// establishMuxRoutes — keeps self-healed/rotated legs disjoint and off dead
+	// edges, which the stateless route-finder can't guarantee.
+	muxFwd, muxRev, err := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
 	if err != nil {
-		localFwd, localRev, localErr := r.calculateLocalRoutes(ctx, log, lPK, rPK, muxOpts)
-		if localErr != nil {
-			return fmt.Errorf("rotation add-leg: no route found (route-finder=%v, local-calc=%v)", err, localErr)
+		rfFwd, rfRev, rfErr := r.fetchBestRoutes(ctx, log, lPK, rPK, muxOpts, r.conf.MinHops)
+		if rfErr != nil {
+			return fmt.Errorf("rotation add-leg: no route found (local-calc=%v, route-finder=%v)", err, rfErr)
 		}
-		muxFwd, muxRev = localFwd, localRev
+		muxFwd, muxRev = rfFwd, rfRev
 	}
 
 	muxKeepAlive := DefaultRouteKeepAlive
@@ -2013,4 +2078,27 @@ func appendExcludeIntermediate(opts *DialOptions, pk cipher.PubKey) *DialOptions
 	}
 	opts.ExcludeIntermediatePKs = append(opts.ExcludeIntermediatePKs, pk)
 	return opts
+}
+
+// intermediatePKsOfPath returns the distinct intermediate-visor PKs of a
+// forward path: every hop.To that is neither the source nor the destination.
+// For a direct route (src->dst) it returns nil. Used to exclude a dead
+// route's intermediates from the next route-finder pick when a route sets up
+// (rules installed on every hop) but its data plane never carries the
+// handshake — i.e. one of the intermediates ACKs install but won't forward.
+func intermediatePKsOfPath(hops []routing.Hop, src, dst cipher.PubKey) []cipher.PubKey {
+	seen := make(map[cipher.PubKey]struct{}, len(hops))
+	var out []cipher.PubKey
+	for _, h := range hops {
+		pk := h.To
+		if pk == src || pk == dst {
+			continue
+		}
+		if _, ok := seen[pk]; ok {
+			continue
+		}
+		seen[pk] = struct{}{}
+		out = append(out, pk)
+	}
+	return out
 }

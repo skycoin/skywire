@@ -164,27 +164,56 @@ func makeWidget(c gotop.Config, widRule widgetRule) interface{} {
 	var w Metric
 	switch widRule.Widget {
 	case "disk":
-		dw := widgets.NewDiskWidget()
-		w = dw
+		if c.Multiload {
+			// multiload-ng style: aggregate disk read/write throughput graph
+			// instead of the per-partition usage table.
+			d := widgets.NewDiskIOWidget(c.UpdateInterval)
+			if len(c.Colorscheme.Sparklines) > 0 {
+				d.Lines[0].LineColor = ui.Color(c.Colorscheme.Sparklines[0])
+			}
+			d.Lines[0].TitleColor = ui.Color(c.Colorscheme.BorderLabel)
+			if len(c.Colorscheme.Sparklines) > 1 {
+				d.Lines[1].LineColor = ui.Color(c.Colorscheme.Sparklines[1])
+			}
+			d.Lines[1].TitleColor = ui.Color(c.Colorscheme.BorderLabel)
+			w = d
+		} else {
+			dw := widgets.NewDiskWidget()
+			w = dw
+		}
 	case "cpu":
-		cpu := widgets.NewCPUWidget(c.UpdateInterval, c.GraphHorizontalScale, c.AverageLoad, c.PercpuLoad)
+		cpu := widgets.NewCPUWidget(c.UpdateInterval, c.GraphHorizontalScale, c.AverageLoad, c.PercpuLoad, c.Multiload)
 		assignColors(cpu.Data, c.Colorscheme.CPULines, cpu.LineColors)
 		w = cpu
 	case "mem":
-		m := widgets.NewMemWidget(c.UpdateInterval, c.GraphHorizontalScale)
-		assignColors(m.Data, c.Colorscheme.MemLines, m.LineColors)
+		m := widgets.NewMemWidget(c.UpdateInterval, c.GraphHorizontalScale, c.Multiload)
+		if c.Multiload {
+			// Color the used/buff/cache/total components as shades of green
+			// (multiload-ng's RAM convention), regardless of colorscheme.
+			m.AssignShades(widgets.MultiloadMemBase)
+		} else {
+			assignColors(m.Data, c.Colorscheme.MemLines, m.LineColors)
+		}
 		w = m
 	case "batt":
 		b := widgets.NewBatteryWidget(c.GraphHorizontalScale)
 		assignColors(b.Data, c.Colorscheme.BattLines, b.LineColors)
 		w = b
 	case "temp":
-		t := widgets.NewTempWidget(c.TempScale, c.Temps)
-		t.TempLowColor = ui.Color(c.Colorscheme.TempLow)
-		t.TempHighColor = ui.Color(c.Colorscheme.TempHigh)
-		w = t
+		if c.Multiload {
+			// multiload-ng style: plot each sensor as a line over time instead
+			// of the text readout.
+			tg := widgets.NewTempGraphWidget(c.UpdateInterval, c.TempScale, c.Temps, c.GraphHorizontalScale)
+			assignColors(tg.Data, c.Colorscheme.CPULines, tg.LineColors)
+			w = tg
+		} else {
+			t := widgets.NewTempWidget(c.TempScale, c.Temps)
+			t.TempLowColor = ui.Color(c.Colorscheme.TempLow)
+			t.TempHighColor = ui.Color(c.Colorscheme.TempHigh)
+			w = t
+		}
 	case "net":
-		n := widgets.NewNetWidget(c.NetInterface)
+		n := widgets.NewNetWidget(c.UpdateInterval, c.NetInterface)
 		n.Lines[0].LineColor = ui.Color(c.Colorscheme.Sparklines[0])
 		n.Lines[0].TitleColor = ui.Color(c.Colorscheme.BorderLabel)
 		n.Lines[1].LineColor = ui.Color(c.Colorscheme.Sparklines[1])

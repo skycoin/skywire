@@ -45,8 +45,14 @@ const DefaultDomainSuffix = ".skynet"
 // See pkg/visor/embedded_skynetweb.go for the visor-side adapter
 // that fulfills this interface using router.DialRoutes + the handshake
 // helper below (PerformHandshake).
+//
+// route is an optional explicit source-route to the destination, parsed from
+// the hostname (e.g. <hop>.<dest>.skynet). Each element is a visor PK
+// (any/auto transport) or a specific transport ID. When empty the dialer picks
+// the path itself (direct transport, else route-finder). A non-empty route is
+// single-path: no mux, and the reverse path mirrors the forward path.
 type SkynetDialer interface {
-	DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error)
+	DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16, route []RouteLabel) (net.Conn, error)
 }
 
 // PerformHandshake runs the skynet client-side handshake on an
@@ -114,6 +120,22 @@ type Config struct {
 	// LeafMinter mints per-host leaf certs. Required when TLSMITM
 	// is true; ignored otherwise.
 	LeafMinter skynetca.LeafMinter
+
+	// LocalPK is this visor's public key, used to detect self-lookups for the
+	// SelfLoopback short-circuit.
+	LocalPK cipher.PubKey
+	// SelfLoopback, when true (the default), serves a request whose destination
+	// is LocalPK from the local service in-process via SelfDial, instead of
+	// routing out over skynet back to ourselves. Set false to force the full
+	// self-route path — e.g. to test self-transports (a legitimate use case).
+	SelfLoopback bool
+	// SelfDial returns an in-process connection to the local service registered
+	// on the given port. Used only when SelfLoopback short-circuits a
+	// self-destined request. Nil disables the short-circuit.
+	SelfDial func(port uint16) (net.Conn, error)
+	// Aliases maps a destination label to a PK (e.g. "skywire" -> LocalPK), so
+	// "skywire.skynet" resolves exactly like "<pk>.skynet".
+	Aliases map[string]cipher.PubKey
 }
 
 // Run starts the SOCKS5 proxy. Blocks until ctx is canceled.
@@ -182,17 +204,35 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				if addrPort != "" && addrPort != "80" {
 					hostWithPort = origHost + ":" + addrPort
 				}
-				target, err := parseHostHeader(hostWithPort, cfg.DomainSuffix)
+				vhost, route, dest, hport, err := ParseResolverHost(hostWithPort, cfg.DomainSuffix, cfg.Aliases)
 				if err != nil {
 					return nil, fmt.Errorf("skynet dial: %w", err)
 				}
 
-				done := cfg.Stats.RecordRequest()
-				log.WithField("pk", target.pk.Hex()).
-					WithField("port", target.port).
-					Debug("SOCKS5 → skynet direct")
+				// Self-lookup short-circuit: serve a request destined for THIS
+				// visor from the local service in-process instead of routing out
+				// over skynet back to ourselves. SelfLoopback=false forces the
+				// full self-route path (a valid self-transport test).
+				if cfg.SelfLoopback && cfg.SelfDial != nil && dest == cfg.LocalPK && len(route) == 0 {
+					log.WithField("port", hport).Debug("SOCKS5 → skynet self-loopback (in-process)")
+					c, derr := cfg.SelfDial(hport)
+					if derr != nil {
+						return nil, derr
+					}
+					// Wrap so LocalAddr()/RemoteAddr() return *net.TCPAddr —
+					// go-socks5 (request.go:194) does an unchecked assertion
+					// when building the BND reply and would panic on the raw
+					// net.Pipe conn's pipeAddr otherwise.
+					return &tcpAddrConn{Conn: c}, nil
+				}
 
-				conn, err := dialer.DialSkynet(dialCtx, target.pk, target.port)
+				done := cfg.Stats.RecordRequest()
+				log.WithField("pk", dest.Hex()).
+					WithField("port", hport).
+					WithField("hops", len(route)).
+					Debug("SOCKS5 → skynet")
+
+				conn, err := dialer.DialSkynet(dialCtx, dest, hport, route)
 				if err != nil {
 					done(err)
 					return nil, fmt.Errorf("skynet dial: %w", err)
@@ -210,17 +250,20 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				//   Browser  ──TLS──► MITMTerminate ──plaintext──► hostRewriteConn ──plaintext──► raw conn ──► backend
 				//
 				// hostRewriteConn parses HTTP/1.1 between MITM
-				// decryption and the wire. If MITM is off, the
-				// browser is already sending plaintext directly to
-				// hostRewriteConn — same parser, same effect.
+				// decryption and the wire. It must only wrap a stream
+				// that is actually plaintext HTTP: a non-TLS port, or
+				// the TLS port WITH MITM (which decrypts to plaintext
+				// first). On the TLS port with MITM off, the browser
+				// sends raw TLS — feeding that to the HTTP parser
+				// corrupts the stream and kills the connection.
 				stack := conn
-				if target.subdomain != "" {
+				if vhost != "" && (hport != cfg.TLSPort || cfg.TLSMITM) {
 					// `subdomain` already encodes the operator's
 					// intent (the URL has labels before the PK).
 					// Use it verbatim as the rewritten Host.
-					stack = newHostRewriteConn(stack, target.subdomain)
-					log.WithField("pk", target.pk.Hex()).
-						WithField("rewrite_host", target.subdomain).
+					stack = NewHostRewriteConn(stack, vhost)
+					log.WithField("pk", dest.Hex()).
+						WithField("rewrite_host", vhost).
 						Debug("SOCKS5 → skynet host-rewrite active")
 				}
 
@@ -231,7 +274,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 				// underlying skywire conn is already authenticated
 				// by visor pubkey; the local cert exists only to
 				// satisfy the browser's secure-context machinery.
-				if cfg.TLSMITM && target.port == cfg.TLSPort {
+				if cfg.TLSMITM && hport == cfg.TLSPort {
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
 						_ = stack.Close() //nolint:errcheck,gosec
@@ -308,35 +351,6 @@ func isSkynetHost(host, suffix string) bool {
 	pattern := `\` + suffix + `(:[0-9]+)?$`
 	match, _ := regexp.MatchString(pattern, host) //nolint:errcheck
 	return match
-}
-
-type target struct {
-	pk   cipher.PubKey
-	port uint16
-	// subdomain is the label(s) before the PK in the original
-	// hostname, when the visitor used a vhost-style URL like
-	// "<subdomain>.<pk>.skynet". Empty when the URL was just
-	// "<pk>.skynet". Triggers the Host-header rewrite path in the
-	// dial wiring — see newHostRewriteConn in hostrewrite.go.
-	subdomain string
-}
-
-// parseHostHeader turns "<pk>.skynet[:<port>]" or
-// "<subdomain>.<pk>.skynet[:<port>]" into a target struct. Port
-// defaults to 80 when absent to match conventional HTTP semantics.
-// The subdomain field is non-empty only when there was at least one
-// label before the PK; that signals the runtime to apply the
-// Host-rewrite wrapper.
-func parseHostHeader(host, suffix string) (target, error) {
-	pkLabel, subdomain, port, err := splitHostSubdomain(host, suffix)
-	if err != nil {
-		return target{}, err
-	}
-	pk, err := parsePKLabel(pkLabel)
-	if err != nil {
-		return target{}, fmt.Errorf("invalid pk %q: %w", pkLabel, err)
-	}
-	return target{pk: pk, port: port, subdomain: subdomain}, nil
 }
 
 // parsePKLabel accepts either the legacy 66-char hex form or the

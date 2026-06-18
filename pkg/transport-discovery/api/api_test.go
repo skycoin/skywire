@@ -156,7 +156,7 @@ func TestGETTransportByID(t *testing.T) {
 
 	entry := newTestEntry()
 	sEntry := &transport.SignedEntry{Entry: entry, Signatures: [2]cipher.Sig{}}
-	require.NoError(t, mock.RegisterTransport(ctx, sEntry))
+	require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, sEntry))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/transports/id:%s", entry.ID), nil)
@@ -190,7 +190,7 @@ func TestDELETETransportByID(t *testing.T) {
 	sEntry := &transport.SignedEntry{Entry: entry, Signatures: [2]cipher.Sig{}}
 
 	t.Run("can delete own transport", func(t *testing.T) {
-		require.NoError(t, mock.RegisterTransport(ctx, sEntry))
+		require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, sEntry))
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/transports/id:%s", entry.ID), nil)
 		r.Header = validHeaders(t, nil)
@@ -215,7 +215,7 @@ func TestDELETETransportByID(t *testing.T) {
 			Type:  "dmsg",
 		}
 		sEntry := &transport.SignedEntry{Entry: otherVisorEntry, Signatures: [2]cipher.Sig{}}
-		require.NoError(t, mock.RegisterTransport(ctx, sEntry))
+		require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, sEntry))
 
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/transports/id:%s", otherVisorEntry.ID), nil)
@@ -241,7 +241,7 @@ func TestGETTransportByEdge(t *testing.T) {
 
 	entry := newTestEntry()
 	sEntry := &transport.SignedEntry{Entry: entry, Signatures: [2]cipher.Sig{}}
-	require.NoError(t, mock.RegisterTransport(ctx, sEntry))
+	require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, sEntry))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/transports/edge:%s", entry.Edges[0]), nil)
@@ -273,11 +273,11 @@ func TestGETAllTransports(t *testing.T) {
 
 	entry1 := newTestEntry()
 	sEntry1 := &transport.SignedEntry{Entry: entry1, Signatures: [2]cipher.Sig{}}
-	require.NoError(t, mock.RegisterTransport(ctx, sEntry1))
+	require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, sEntry1))
 
 	entry2 := newTestEntry()
 	sEntry2 := &transport.SignedEntry{Entry: entry2, Signatures: [2]cipher.Sig{}}
-	require.NoError(t, mock.RegisterTransport(ctx, sEntry2))
+	require.NoError(t, mock.RegisterTransport(ctx, cipher.PubKey{}, sEntry2))
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/all-transports", nil)

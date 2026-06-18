@@ -36,7 +36,21 @@ const (
 	DefaultRulesGCInterval = 10 * time.Second
 	acceptSize             = 1024
 
-	handshakeAwaitTimeout = 30 * time.Second
+	// handshakeAwaitTimeout bounds the dial-side wait for the remote's
+	// reciprocal route-group handshake. A handshake is a single small packet
+	// each way, so even a 3-hop high-latency route completes in ~1-2s
+	// (measured: 3-hop loaded p99 RTT ~1.1s). The route-finder ranks
+	// candidates by latency, NOT liveness, so a low-latency-but-dead
+	// intermediate is picked FIRST and burns this full timeout before the
+	// retry-with-exclude loop in DialRoutes can try another candidate — the
+	// dominant cost of slow multihop setup (measured 2-hop ~21s / 3-hop ~58s
+	// when attempt #1 hit a dead hop, vs ~3s when it hit a live one). 30s was
+	// ~20x and 12s ~10x the worst realistic RTT; 6s (~3-5x) keeps a safe
+	// margin while making each bad-first attempt cheaper, so more retries fit
+	// under the per-route setup-timeout — faster success AND fewer outright
+	// timeouts. A genuinely slow-but-alive route that trips this just costs
+	// one extra (now cheaper) retry. See DialRoutes.
+	handshakeAwaitTimeout = 6 * time.Second
 
 	maxHops       = 1000
 	retryDuration = 2 * time.Second
@@ -128,17 +142,18 @@ func (c *Config) SetDefaults() {
 
 // DialOptions describes dial options.
 type DialOptions struct {
-	MinForwardRts       int
-	MaxForwardRts       int
-	MinConsumeRts       int
-	MaxConsumeRts       int
-	Retries             int
-	UseExistingTpOnly   bool          // If true, only use routes through existing transports, don't create new ones
-	TransportID         uuid.UUID     // If set, use this specific transport (skips route calculation for direct transports)
-	ForwardHops         []routing.Hop // If set, use these hops for forward path (skips route calculation)
-	ReverseHops         []routing.Hop // If set, use these hops for reverse path (skips route calculation)
-	MuxRoutes           int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
-	ExcludeTransportIDs []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
+	MinForwardRts         int
+	MaxForwardRts         int
+	MinConsumeRts         int
+	MaxConsumeRts         int
+	Retries               int
+	UseExistingTpOnly     bool          // If true, only use routes through existing transports, don't create new ones
+	EnsureDirectTransport bool          // If true, create a direct transport to the destination if none exists, then dial direct-only (the `--direct` foot-gun fix). Implies a 1-hop, route-finder-bypassing dial that self-heals when the transport drops.
+	TransportID           uuid.UUID     // If set, use this specific transport (skips route calculation for direct transports)
+	ForwardHops           []routing.Hop // If set, use these hops for forward path (skips route calculation)
+	ReverseHops           []routing.Hop // If set, use these hops for reverse path (skips route calculation)
+	MuxRoutes             int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
+	ExcludeTransportIDs   []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
 	// MinHops, when > 0, is the per-call minimum hop count constraint.
 	// Overrides Config.MinHops for this dial only — needed by callers
 	// that want a non-direct path even when the visor's global
@@ -344,6 +359,7 @@ type Router interface {
 	GetLastRouteCalcTime() time.Duration
 	ActiveRouteStatuses() []RouteStatus
 	AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error
+	GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int) (int, error)
 	RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error
 
 	// RouteGroupHops returns the stored forward route hops for the route group
@@ -377,10 +393,6 @@ type Router interface {
 	Rule(routing.RouteID) (routing.Rule, error)
 	SaveRule(routing.Rule) error
 	DelRules([]routing.RouteID)
-
-	// MeasureTransportLatency measures latency via RSN route setup.
-	// Used as fallback when the remote visor doesn't support transport-level ping.
-	MeasureTransportLatency(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (float64, error)
 }
 
 // Router implements visor.PacketRouter. It manages routing table by
@@ -398,6 +410,7 @@ type router struct {
 	rt                 routing.Table
 	rgsNs              map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
 	rgsRaw             map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
+	pending            *pendingPackets                              // frames parked during the rule-save -> route-group-register window (see router_pending.go)
 	rpcSrv             *rpc.Server
 	accept             chan routing.EdgeRules
 	done               chan struct{}
@@ -477,6 +490,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		dmsgC:           dmsgC,
 		rgsNs:           make(map[routing.RouteDescriptor]*NoiseRouteGroup),
 		rgsRaw:          make(map[routing.RouteDescriptor]*RouteGroup),
+		pending:         newPendingPackets(),
 		rpcSrv:          rpc.NewServer(),
 		accept:          make(chan routing.EdgeRules, acceptSize),
 		done:            make(chan struct{}),

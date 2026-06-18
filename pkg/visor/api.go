@@ -181,6 +181,7 @@ type API interface {
 	RouteGroupMuxInfo(appName string) ([]MuxRouteGroupInfo, error)
 	ActiveRoutes() ([]AppRouteStatus, error)
 	AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort uint16) error
+	GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error)
 	RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error
 	ServiceHealth() ([]ServiceHealthEntry, error)
 	FetchServiceData(service, path string) ([]byte, error)
@@ -232,6 +233,8 @@ type API interface {
 
 	//dmsg utilities
 	DmsgProbe(pk cipher.PubKey, port uint16) (bool, error)
+	DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error)
+	SkynetProbe(pk cipher.PubKey, port uint16) (bool, error)
 	DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error)
 	SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error)
 	VisorSCP(req VisorSCPRequest) error
@@ -317,6 +320,7 @@ type API interface {
 	RemoveHypervisor(pk cipher.PubKey) error
 	RemoveAllHypervisors() (int, error)
 	SetHypervisorPassword(oldPassword, newPassword string) error
+	SetHypervisorPasswordForce(newPassword string) error
 	CheckAREntry(pk string) ([]string, error)
 	ARSelfInfo() (*ARSelfRegistration, error)
 	TransportRPCCall(remotePK cipher.PubKey, method string, args json.RawMessage) (json.RawMessage, error)
@@ -510,6 +514,10 @@ type Summary struct {
 	ConfigVersion        string                           `json:"config_version"`
 	PublicAutoconnect    bool                             `json:"public_autoconnect"`
 	IsPublic             bool                             `json:"is_public"`
+	// Load is a lightweight resource snapshot (load average, mem %, disk %)
+	// for the `hv ls --load` view. omitempty so the field is absent on
+	// summaries from older visors that don't populate it.
+	Load *LoadStats `json:"load,omitempty"`
 }
 
 // HealthInfo carries information about visor's services health.
@@ -668,6 +676,11 @@ type PingConfig struct {
 	// ceiling. mux-bw passes its cfg.SetupTimeout here. 0 falls
 	// back to the existing 30s default.
 	SetupTimeout time.Duration
+	// Timeout bounds a single PingOnce round-trip (ack + echo reads).
+	// 0 = 10s default. mux-bw's probe loop sets this to the remaining
+	// pump/idle window so a stuck probe can't outlive the measurement
+	// and hang the run.
+	Timeout time.Duration
 }
 
 // TestResult type of test result
@@ -711,6 +724,11 @@ type ServiceHealthEntry struct {
 	Error     string `json:"error,omitempty"`
 	LatencyMs int64  `json:"latency_ms"`
 	Transport string `json:"transport,omitempty"` // "dmsg" or "http"
+	// IP is the public ip:port of a DMSG server, sourced from the
+	// dmsg-discovery all_servers endpoint (queried over dmsg). Only DMSG
+	// servers carry an address; other services leave it empty and the UI
+	// renders a hyphen.
+	IP string `json:"ip,omitempty"`
 }
 
 // PortDetail type of port details

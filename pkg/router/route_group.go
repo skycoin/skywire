@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -28,6 +30,20 @@ const (
 	// maxConsecutiveWriteFailures is the number of consecutive transport write failures
 	// before the RouteGroup closes itself to stop spamming logs.
 	maxConsecutiveWriteFailures = 5
+
+	// legLivenessInterval is how often each multiplexed leg is probed
+	// end-to-end. pruneDeadTransports only sees a dead LOCAL (first-hop)
+	// transport; a transport dying BEYOND the first hop leaves the local tp
+	// open, so the leg silently black-holes. This probe sends a Ping down each
+	// leg that the destination echoes (Pong) — purely source-side, no wire or
+	// remote-version change (every visor already echoes pings).
+	legLivenessInterval = 30 * time.Second
+	// legPongMissThreshold is the number of consecutive liveness probes with no
+	// echo after which a leg is treated as black-holing and dropped (mirrors
+	// transport-level pongMissThreshold). The leg is removed from the mux but
+	// its (possibly shared) transport is NOT closed, so a false positive simply
+	// triggers a self-heal re-dial — never an outage, and never the last leg.
+	legPongMissThreshold = 3
 )
 
 var (
@@ -140,7 +156,8 @@ type RouteGroup struct {
 	// "WaitGroup reused before previous Wait returned" panics.
 	closeDonePending int32         // atomic counter of outstanding close acks
 	closeDoneCh      chan struct{} // closed when closeDonePending reaches 0
-	once             sync.Once
+	once             sync.Once     // guards the readCh/remoteClosed cleanup
+	closedOnce       sync.Once     // guards close(rg.closed) — closable from two paths
 
 	errorMu    sync.RWMutex
 	closeError error
@@ -175,6 +192,28 @@ type RouteGroup struct {
 	rotationHook     RotationHook
 	rotationApplyAdd func(excludeHops []string)
 	rotationInterval time.Duration
+
+	// selfHealAdd restores the multiplexed degree in the background when a
+	// leg dies. pruneDeadTransports drops the dead leg (surviving legs
+	// immediately carry its share via the selector), then maybeSelfHeal
+	// dials replacement aux legs up to selfHealTarget — without blocking
+	// traffic. Wired for EVERY mux dial, not just policy-rotation ones, so
+	// a plain `--routes N` group self-heals too. healInFlight guards against
+	// piling up concurrent heals while a replacement is still dialing.
+	selfHealAdd    func(excludeHops []string)
+	selfHealTarget int
+	healInFlight   atomic.Bool
+
+	// Per-leg end-to-end liveness (issue #2). Keyed by leg transport ID so the
+	// state survives index shifts from prune/append. legPongSeen records
+	// whether the echo for a leg's probe came back since the last tick;
+	// legMissed counts consecutive missed ticks; inflightPings maps a probe's
+	// send-timestamp (the verbatim-echoed correlator) back to the leg it
+	// tested. Guarded by legLivenessMu (NEVER held while taking rg.mu).
+	legLivenessMu sync.Mutex
+	legPongSeen   map[uuid.UUID]bool
+	legMissed     map[uuid.UUID]int
+	inflightPings map[int64]uuid.UUID
 }
 
 // NewRouteGroup creates a new RouteGroup.
@@ -203,6 +242,9 @@ func NewRouteGroup(cfg *RouteGroupConfig, rt routing.Table, desc routing.RouteDe
 		writeDeadline:      deadline.MakePipeDeadline(),
 		handshakeProcessed: make(chan struct{}),
 		networkStats:       newNetworkStats(),
+		legPongSeen:        make(map[uuid.UUID]bool),
+		legMissed:          make(map[uuid.UUID]int),
+		inflightPings:      make(map[int64]uuid.UUID),
 	}
 
 	return rg
@@ -348,8 +390,12 @@ func (rg *RouteGroup) Close() error {
 
 	if rg.isRemoteClosed() {
 		// remote already closed, everything is cleaned up,
-		// we just need to close signal channel at this point
-		close(rg.closed)
+		// we just need to close signal channel at this point.
+		// Guard with closedOnce: two concurrent Close() callers (e.g. an
+		// app-level Close and the GC's removeRouteGroupOfRule->Close) can both
+		// pass the isClosed() gate in the window before the channel is closed,
+		// and a bare close() here would panic with "close of closed channel".
+		rg.closedOnce.Do(func() { close(rg.closed) })
 		return nil
 	}
 
@@ -591,6 +637,77 @@ func (rg *RouteGroup) SetRotation(hook RotationHook, applyAdd func(excludeHops [
 	}
 }
 
+// SetSelfHeal wires the background degree-restoration callback for a
+// multiplexed route group. When a leg is pruned and the live degree drops
+// below target, the route group dials replacement aux legs (via applyAdd)
+// without blocking traffic — surviving legs carry the load meanwhile. target
+// is the requested mux degree (legs the group should maintain). A target of
+// 0 or 1 disables self-heal (a single-leg group has nothing to spread to).
+func (rg *RouteGroup) SetSelfHeal(applyAdd func(excludeHops []string), target int) {
+	rg.mu.Lock()
+	rg.selfHealAdd = applyAdd
+	rg.selfHealTarget = target
+	rg.mu.Unlock()
+}
+
+// aliveLegCount returns the number of live legs (non-nil, unclosed
+// transports). Caller must NOT hold rg.mu.
+func (rg *RouteGroup) aliveLegCount() int {
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+	n := 0
+	for _, tp := range rg.tps {
+		if tp != nil && !tp.IsClosed() {
+			n++
+		}
+	}
+	return n
+}
+
+// maybeSelfHeal restores the multiplexed degree after a leg drop. If the live
+// leg count fell below target and no replacement is already in flight, it
+// dials replacement aux legs in the background until the degree is restored
+// (or a bounded number of attempts is exhausted, so a destination with no
+// remaining disjoint paths can't loop forever). Non-blocking: surviving legs
+// keep carrying traffic while replacements set up. healInFlight bounds this to
+// one concurrent heal so a flapping leg can't spawn a storm of setup dials.
+//
+// Must NOT be called while holding rg.mu.
+func (rg *RouteGroup) maybeSelfHeal() {
+	rg.mu.Lock()
+	add := rg.selfHealAdd
+	target := rg.selfHealTarget
+	rg.mu.Unlock()
+	if add == nil || target <= 1 || rg.isClosed() {
+		return
+	}
+	if rg.aliveLegCount() >= target {
+		return
+	}
+	if !rg.healInFlight.CompareAndSwap(false, true) {
+		return // a replacement is already dialing
+	}
+	go func() {
+		defer rg.healInFlight.Store(false)
+		// Each add(nil) blocks ~one setup-node dial and, on success,
+		// appends one leg. Re-check the live count between attempts and
+		// stop as soon as the degree is restored, the group closes, or we
+		// hit the attempt cap (target+1 gives a little headroom for dials
+		// that fail on a bad intermediate before one lands).
+		for attempt := 0; attempt < target+1; attempt++ {
+			if rg.isClosed() || rg.aliveLegCount() >= target {
+				return
+			}
+			if rg.logger != nil {
+				rg.logger.WithField("alive", rg.aliveLegCount()).
+					WithField("target", target).
+					Debug("Mux self-heal: dialing replacement leg to restore degree")
+			}
+			add(nil)
+		}
+	}()
+}
+
 // snapshotLegs builds a []LegInfo from the current rg.tps. Caller
 // must hold rg.mu. Used by the leg-change fire path to give the
 // policy script a snapshot it can iterate.
@@ -622,6 +739,9 @@ func (rg *RouteGroup) snapshotLegs() []LegInfo {
 			if bw := tp.GetBandwidth(); bw != nil {
 				l.SentBytes = bw.SentBytes
 				l.RecvBytes = bw.RecvBytes
+			}
+			if rg.mux != nil {
+				l.Retransmits = rg.mux.retransmitsAt(i)
 			}
 			l.Hops = sharedHops
 		}
@@ -863,6 +983,10 @@ func (rg *RouteGroup) RouteHopDetails() []RouteHopInfo {
 
 func (rg *RouteGroup) startOffServiceLoops() {
 	go rg.servicePacketLoop("keep-alive", rg.cfg.KeepAliveInterval, rg.keepAliveServiceFn)
+	// Per-leg end-to-end liveness (issue #2): detect mux legs that black-hole
+	// BEYOND the first hop (invisible to pruneDeadTransports' local tp.IsClosed
+	// check) and drop them so self-heal re-dials a live replacement.
+	go rg.servicePacketLoop("leg-liveness", legLivenessInterval, rg.legLivenessServiceFn)
 	// Note: Automatic ping loop removed. Latency is now measured once at transport creation.
 	// Rotation loop is NOT started here — startOffServiceLoops runs
 	// during initial route-group setup, before the router-side
@@ -947,6 +1071,9 @@ func (rg *RouteGroup) dropLegsByIndex(indices []int) {
 	for _, idx := range droppedIdx {
 		rg.fireLegChange("dropped", idx)
 	}
+	if len(droppedIdx) > 0 {
+		rg.maybeSelfHeal()
+	}
 	if rg.logger != nil && len(closed) > 0 {
 		rg.logger.
 			WithField("dropped_indices", closed).
@@ -1000,6 +1127,177 @@ func (rg *RouteGroup) sendPong(timestamp int64) error {
 	packet := routing.MakePongPacket(rule.NextRouteID(), timestamp)
 
 	return rg.writePacket(context.Background(), tp, packet, rule.KeyRouteID())
+}
+
+// legLivenessServiceFn probes each multiplexed leg end-to-end once per tick and
+// drops any leg that has missed legPongMissThreshold consecutive echoes. It
+// exists because pruneDeadTransports only detects a dead LOCAL (first-hop)
+// transport; a transport dying beyond the first hop leaves the local tp open,
+// so the leg silently black-holes and the mux keeps selecting it. The probe
+// reuses the existing Ping→Pong echo (the destination echoes the send-timestamp
+// verbatim), so it is purely source-side: no wire-format or remote-version
+// dependency. Single-leg groups are skipped (no failover target, never drop the
+// last leg), so the common case carries zero overhead.
+func (rg *RouteGroup) legLivenessServiceFn(_ time.Duration) {
+	if rg.isClosed() {
+		return
+	}
+
+	type legProbe struct {
+		tp   *transport.ManagedTransport
+		rule routing.Rule
+		id   uuid.UUID
+	}
+	rg.mu.Lock()
+	probes := make([]legProbe, 0, len(rg.tps))
+	for i, tp := range rg.tps {
+		if tp == nil || tp.IsClosed() || i >= len(rg.fwd) {
+			continue
+		}
+		probes = append(probes, legProbe{tp: tp, rule: rg.fwd[i], id: tp.Entry.ID})
+	}
+	rg.mu.Unlock()
+
+	if len(probes) < 2 {
+		return
+	}
+
+	live := make(map[uuid.UUID]struct{}, len(probes))
+	for _, p := range probes {
+		live[p.id] = struct{}{}
+	}
+
+	// Tally the previous cycle's echoes; a leg already probed that missed
+	// legPongMissThreshold consecutive cycles is declared black-holing.
+	var dead []uuid.UUID
+	rg.legLivenessMu.Lock()
+	for _, p := range probes {
+		if rg.legPongSeen[p.id] {
+			rg.legMissed[p.id] = 0
+		} else if _, probed := rg.legMissed[p.id]; probed {
+			rg.legMissed[p.id]++
+			if rg.legMissed[p.id] >= legPongMissThreshold {
+				dead = append(dead, p.id)
+			}
+		}
+		rg.legPongSeen[p.id] = false
+	}
+	for id := range rg.legMissed {
+		if _, ok := live[id]; !ok {
+			delete(rg.legMissed, id)
+			delete(rg.legPongSeen, id)
+		}
+	}
+	staleBeforeMs := time.Now().UTC().UnixNano()/int64(time.Millisecond) -
+		int64(legPongMissThreshold+2)*legLivenessInterval.Milliseconds()
+	for ts := range rg.inflightPings {
+		if ts < staleBeforeMs {
+			delete(rg.inflightPings, ts)
+		}
+	}
+	rg.legLivenessMu.Unlock()
+
+	if len(dead) > 0 {
+		rg.pruneLivenessDeadLegs(dead)
+	}
+
+	// Probe the surviving legs for the next cycle. Each send-ts is unique
+	// (ms clock + per-leg offset) so two legs probed in the same millisecond
+	// don't collide as inflightPings keys; the destination echoes it verbatim.
+	deadSet := make(map[uuid.UUID]struct{}, len(dead))
+	for _, d := range dead {
+		deadSet[d] = struct{}{}
+	}
+	baseMs := time.Now().UTC().UnixNano() / int64(time.Millisecond)
+	for offset, p := range probes {
+		if _, isDead := deadSet[p.id]; isDead {
+			continue
+		}
+		ts := baseMs + int64(offset)
+		rg.legLivenessMu.Lock()
+		rg.inflightPings[ts] = p.id
+		if _, ok := rg.legMissed[p.id]; !ok {
+			rg.legMissed[p.id] = 0 // mark probed so the next cycle counts misses
+		}
+		rg.legLivenessMu.Unlock()
+		throughput := rg.networkStats.RemoteThroughput()
+		packet := routing.MakePingPacket(p.rule.NextRouteID(), ts, throughput)
+		if err := rg.writePacket(context.Background(), p.tp, packet, p.rule.KeyRouteID()); err != nil {
+			rg.logger.WithError(err).Debugf("leg-liveness: probe write failed on leg %s", p.id)
+		}
+	}
+}
+
+// pruneLivenessDeadLegs drops the given black-holing legs (by transport ID) from
+// the mux WITHOUT closing their (possibly shared) transports, deletes their
+// local rules, compacts the mux, then triggers self-heal. It never drops below
+// one leg, so a false positive at worst causes a self-heal re-dial — never an
+// outage. Mirrors pruneDeadTransports' removal, selecting by liveness instead
+// of tp.IsClosed().
+func (rg *RouteGroup) pruneLivenessDeadLegs(deadIDs []uuid.UUID) {
+	deadSet := make(map[uuid.UUID]struct{}, len(deadIDs))
+	for _, id := range deadIDs {
+		deadSet[id] = struct{}{}
+	}
+
+	rg.mu.Lock()
+	if len(rg.tps) <= 1 {
+		rg.mu.Unlock()
+		return
+	}
+	aliveTps := make([]*transport.ManagedTransport, 0, len(rg.tps))
+	aliveFwd := make([]routing.Rule, 0, len(rg.fwd))
+	aliveRvs := make([]routing.Rule, 0, len(rg.rvs))
+	var deadRuleIDs []routing.RouteID
+	var droppedIdx []int
+	remaining := len(rg.tps)
+	for i, tp := range rg.tps {
+		isDead := false
+		if tp != nil {
+			_, isDead = deadSet[tp.Entry.ID]
+		}
+		if isDead && remaining > 1 {
+			if i < len(rg.fwd) {
+				deadRuleIDs = append(deadRuleIDs, rg.fwd[i].KeyRouteID())
+			}
+			if i < len(rg.rvs) {
+				deadRuleIDs = append(deadRuleIDs, rg.rvs[i].KeyRouteID())
+			}
+			if tp != nil {
+				rg.logger.Infof("leg-liveness: pruning black-holing leg %v (no echo for %d probes; transport stays up)",
+					tp.Entry.ID, legPongMissThreshold)
+			}
+			droppedIdx = append(droppedIdx, i)
+			remaining--
+			continue
+		}
+		aliveTps = append(aliveTps, tp)
+		if i < len(rg.fwd) {
+			aliveFwd = append(aliveFwd, rg.fwd[i])
+		}
+		if i < len(rg.rvs) {
+			aliveRvs = append(aliveRvs, rg.rvs[i])
+		}
+	}
+	if len(droppedIdx) == 0 {
+		rg.mu.Unlock()
+		return
+	}
+	if len(deadRuleIDs) > 0 {
+		rg.rt.DelRules(deadRuleIDs)
+	}
+	rg.tps = aliveTps
+	rg.fwd = aliveFwd
+	rg.rvs = aliveRvs
+	if rg.mux != nil {
+		rg.mux.removeLegs(droppedIdx...)
+	}
+	rg.mu.Unlock()
+
+	for _, idx := range droppedIdx {
+		rg.fireLegChange("liveness-dead", idx)
+	}
+	rg.maybeSelfHeal()
 }
 
 func (rg *RouteGroup) servicePacketLoop(name string, interval time.Duration, f sendServicePacketFn) {
@@ -1064,6 +1362,9 @@ func (rg *RouteGroup) keepAliveServiceFn(interval time.Duration) {
 	for _, idx := range droppedLegs {
 		rg.fireLegChange("dropped", idx)
 	}
+	if len(droppedLegs) > 0 {
+		rg.maybeSelfHeal()
+	}
 }
 
 // pruneDeadTransports removes closed transports from the mux.
@@ -1117,6 +1418,13 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 	rg.tps = aliveTps
 	rg.fwd = aliveFwd
 	rg.rvs = aliveRvs
+
+	// Compact the per-leg counter/readiness arrays in lockstep so they stay
+	// aligned with the pruned tps[]/fwd[]/rvs[]. droppedIdx are the original
+	// pre-compaction indices.
+	if rg.mux != nil {
+		rg.mux.removeLegs(droppedIdx...)
+	}
 
 	rg.logger.Infof("Pruned dead transports: %d alive, %d removed", len(aliveTps), len(deadRuleIDs)/2)
 	return droppedIdx
@@ -1250,17 +1558,25 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		}
 	}
 
-	rules := make([]routing.RouteID, 0, len(rg.fwd))
+	rules := make([]routing.RouteID, 0, len(rg.fwd)+len(rg.rvs))
 	for _, r := range rg.fwd {
+		rules = append(rules, r.KeyRouteID())
+	}
+	// Also delete the reverse/consume rules. Without this they linger in the
+	// routing table until the keep-alive GC reaps them, leaking N stale rules
+	// per close (N legs for a mux group) and opening the window where a packet
+	// resolves the orphaned consume rule but finds no route group
+	// (errRouteDescNotExist log-spam).
+	for _, r := range rg.rvs {
 		rules = append(rules, r.KeyRouteID())
 	}
 
 	rg.rt.DelRules(rules)
 
+	if closeInitiator {
+		rg.closedOnce.Do(func() { close(rg.closed) })
+	}
 	rg.once.Do(func() {
-		if closeInitiator {
-			close(rg.closed)
-		}
 		rg.setRemoteClosed()
 		close(rg.readCh)
 	})
@@ -1271,7 +1587,11 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 	switch packet.Type() {
 	case routing.ClosePacket:
-		return rg.handleClosePacket(routing.CloseCode(packet.Payload()[0]))
+		closeCode, err := closeCodeFromPacket(packet)
+		if err != nil {
+			return err
+		}
+		return rg.handleClosePacket(closeCode)
 	case routing.DataPacket:
 		rg.handshakeProcessedOnce.Do(func() {
 			// first packet is data packet, so we're communicating with the old visor
@@ -1280,6 +1600,23 @@ func (rg *RouteGroup) handlePacket(packet routing.Packet) error {
 		})
 		return rg.handleDataPacket(packet)
 	case routing.HandshakePacket:
+		// A handshake on an aux leg proves the peer registered that leg's
+		// rule, so it is safe to start sending on it. The primary leg's
+		// handshake (which creates the mux below) needs no marking — leg 0
+		// is ready from growLegs. This matters most for download-heavy
+		// flows: the bulk-sending side would otherwise never receive data
+		// on its aux legs and so never learn it may spread onto them.
+		if rg.mux != nil {
+			rg.mu.Lock()
+			rid := packet.RouteID()
+			for i, rule := range rg.rvs {
+				if rule != nil && rule.KeyRouteID() == rid {
+					rg.mux.markLegReady(i)
+					break
+				}
+			}
+			rg.mu.Unlock()
+		}
 		rg.handshakeProcessedOnce.Do(func() {
 			// first packet is handshake packet, so we're communicating with the new visor
 			rg.encrypt = true
@@ -1362,6 +1699,9 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 		for i, rule := range rg.rvs {
 			if rule != nil && rule.KeyRouteID() == rid {
 				rg.mux.recordRecv(i, uint64(packet.Size()))
+				// Inbound traffic on leg i proves the peer registered its
+				// rule for this leg, so it is now safe to send on it.
+				rg.mux.markLegReady(i)
 				break
 			}
 		}
@@ -1490,6 +1830,7 @@ func (rg *RouteGroup) handleSACKPacket(packet routing.Packet) error {
 			// (which may differ from the original send leg — the
 			// retx selector picks fresh, mirroring the data path).
 			rg.mux.recordSent(leg, uint64(retxPacket.Size()))
+			rg.mux.recordRetransmit(leg) // separate loss signal for leg health
 		}
 	}
 	return nil
@@ -1542,6 +1883,17 @@ func (rg *RouteGroup) handlePongPacket(packet routing.Packet) error {
 	payload := packet.Payload()
 
 	sentAtMs := binary.BigEndian.Uint64(payload)
+
+	// Per-leg liveness (issue #2): if this pong echoes one of our outstanding
+	// leg-liveness probes, mark that leg alive. A pong arriving AT ALL proves
+	// the leg's end-to-end round trip works, independent of the latency value
+	// (so this runs before the latency sanity-reject below).
+	rg.legLivenessMu.Lock()
+	if legID, ok := rg.inflightPings[int64(sentAtMs)]; ok { //nolint: gosec
+		rg.legPongSeen[legID] = true
+		delete(rg.inflightPings, int64(sentAtMs)) //nolint: gosec
+	}
+	rg.legLivenessMu.Unlock()
 
 	ms := sentAtMs % 1000
 	sentAt := time.Unix(int64(sentAtMs/1000), int64(ms)*int64(time.Millisecond)).UTC() //nolint: gosec

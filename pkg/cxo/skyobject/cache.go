@@ -1178,13 +1178,37 @@ func (c *Cache) Want(
 
 	sendWanted(gc, Object{key, val, int(urc) - inc, nil})
 
-	// create filling item in the cache
+	// Create the filling item, but publish it into c.is only if
+	// putFillingItem actually caches the value. putFillingItem declines values
+	// larger than CacheMaxItemSize, stale (rc==0) values, and everything while
+	// the cache is disabled — in each case it leaves it.val unset and touches
+	// neither amount nor volume. The original code inserted the item into c.is
+	// *before* that call, so a declined value left a phantom val-empty
+	// "filling" entry in the map: reported by CachedKeys forever (so
+	// RemoveObjects skips the underlying rc==0 CXDS object) yet never fillable
+	// or evictable. That phantom — one per >1 MiB snapshot leaf served to a
+	// subscriber after its Root was superseded — is the TPD-publisher heap leak
+	// under attached subscribers (~80 MB/min, OOM in hours).
 
 	it = new(item)
 	it.fc = inc
-	c.is[key] = it
 
-	err = c.putFillingItem(val, int(urc), it)
+	if err = c.putFillingItem(val, int(urc), it); err != nil {
+		return err
+	}
+	if len(it.val) != 0 { // putFillingItem cached the value
+		c.is[key] = it
+	} else if inc > 0 {
+		// putFillingItem declined the value (> CacheMaxItemSize, stale, or the
+		// cache is disabled): the item is NOT published into c.is, so the
+		// filler's later Finc finds no entry and never decrements. But the
+		// speculative c.db().Get(key, inc) above already bumped the CXDS rc by
+		// inc — left pinned, that DB object is never reclaimed by RemoveObjects
+		// (one leak per declined >1 MiB filled leaf). Undo the speculative ref.
+		// This is the rc-side completion of the #3047 phantom-cache fix (which
+		// stopped the c.is phantom but left this DB-rc residual).
+		_, _ = c.db().Inc(key, -inc) //nolint:errcheck // best-effort undo
+	}
 	return err
 }
 

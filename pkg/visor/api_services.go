@@ -199,6 +199,18 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 		return servers[i].PK.String() < servers[j].PK.String()
 	})
 
+	// Map each server PK to its public ip:port from the dmsg-discovery
+	// all_servers cache (refreshed over dmsg). Only DMSG servers carry an
+	// address; the UI shows it in the IP column and a hyphen elsewhere.
+	addrByPK := map[cipher.PubKey]string{}
+	if v.dmsgServersCache != nil {
+		for _, e := range v.dmsgServersCache.All() {
+			if e != nil && e.Server != nil && e.Server.Address != "" {
+				addrByPK[e.Static] = e.Server.Address
+			}
+		}
+	}
+
 	out := make([]ServiceHealthEntry, len(servers))
 	var wg sync.WaitGroup
 	for i, s := range servers {
@@ -209,6 +221,7 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 			Status:    "OK",
 			Transport: "dmsg",
 			LatencyMs: latStr,
+			IP:        addrByPK[s.PK],
 		}
 		// Probe /health via the existing session to get the version.
 		if v.dmsgC != nil {
@@ -252,34 +265,101 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 	return out
 }
 
+// serviceHop is one transport attempt for a service fetch: a base URL and
+// whether it is reached over DMSG-HTTP or plain HTTP.
+type serviceHop struct {
+	dmsg    bool
+	baseURL string
+}
+
+// serviceFetchOrder encodes the transport preference for fetching service
+// data. DMSG-HTTP is the default service transport, so it is used first
+// whenever a dmsg URL is configured; plain HTTP is the fallback in a dual
+// (http + dmsg) config, or the sole path in an http-only config. Order:
+//
+//	dual    (http + dmsg) -> [dmsg, http]
+//	dmsg-only            -> [dmsg]
+//	http-only            -> [http]
+//	neither              -> []
+func serviceFetchOrder(httpURL, dmsgURL string) []serviceHop {
+	var order []serviceHop
+	if dmsgURL != "" {
+		order = append(order, serviceHop{dmsg: true, baseURL: dmsgURL})
+	}
+	if httpURL != "" {
+		order = append(order, serviceHop{dmsg: false, baseURL: httpURL})
+	}
+	return order
+}
+
 // FetchServiceData fetches data from a deployment service endpoint via the visor's
 // configured URLs. service is one of: tpd, ut, sd, ar, rf, dmsgd.
 // path is the URL path (e.g., "/all-transports/stats").
+//
+// DMSG-HTTP is preferred whenever the service has a dmsg URL configured — it is
+// the default service transport and a dmsg-only visor has no HTTP URL at all.
+// Plain HTTP is used only as the dual-config fallback or the http-only path.
 func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
-	baseURL := ""
+	var httpURL, dmsgURL string
 	switch service {
 	case "tpd":
-		baseURL = v.conf.Transport.Discovery
+		httpURL, dmsgURL = v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg
 	case "ut":
 		if v.conf.UptimeTracker != nil {
-			baseURL = v.conf.UptimeTracker.Addr
+			httpURL, dmsgURL = v.conf.UptimeTracker.Addr, v.conf.UptimeTracker.AddrDmsg
 		}
 	case "sd":
-		baseURL = v.conf.Launcher.ServiceDisc
+		httpURL, dmsgURL = v.conf.Launcher.ServiceDisc, v.conf.Launcher.ServiceDiscDmsg
 	case "ar":
-		baseURL = v.conf.Transport.AddressResolver
+		httpURL, dmsgURL = v.conf.Transport.AddressResolver, v.conf.Transport.AddressResolverDmsg
 	case "rf":
-		baseURL = v.conf.Routing.RouteFinder
+		httpURL, dmsgURL = v.conf.Routing.RouteFinder, v.conf.Routing.RouteFinderDmsg
 	case "dmsgd":
-		baseURL = v.conf.Dmsg.Discovery
+		httpURL = v.conf.Dmsg.Discovery
 	default:
 		return nil, fmt.Errorf("unknown service: %s (valid: tpd, ut, sd, ar, rf, dmsgd)", service)
 	}
-	if baseURL == "" {
+
+	order := serviceFetchOrder(httpURL, dmsgURL)
+	if len(order) == 0 {
 		return nil, fmt.Errorf("service %s not configured", service)
 	}
 
-	url := strings.TrimSuffix(baseURL, "/") + path
+	var lastErr error
+	for _, hop := range order {
+		url := strings.TrimSuffix(hop.baseURL, "/") + path
+		var (
+			body []byte
+			err  error
+		)
+		if hop.dmsg {
+			body, err = v.fetchServiceDataDmsg(url)
+		} else {
+			body, err = fetchServiceDataHTTP(url)
+		}
+		if err == nil {
+			return body, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
+// fetchServiceDataDmsg performs a GET over DMSG-HTTP using the visor's
+// authoritative dmsg client.
+func (v *Visor) fetchServiceDataDmsg(url string) ([]byte, error) {
+	resp, err := v.DmsgHTTP(DmsgHTTPRequest{URL: url, Method: http.MethodGet})
+	if err != nil {
+		return nil, fmt.Errorf("fetch %s over dmsg: %w", url, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("service returned %d over dmsg: %s", resp.StatusCode, string(resp.Body))
+	}
+	return resp.Body, nil
+}
+
+// fetchServiceDataHTTP performs a plain HTTP GET.
+func fetchServiceDataHTTP(url string) ([]byte, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.Get(url) //nolint:gosec
 	if err != nil {

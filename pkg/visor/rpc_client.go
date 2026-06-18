@@ -819,6 +819,16 @@ func (rc *rpcClient) AddMuxRoute(appName string, fwd, rev []routing.Hop, srcPort
 	return rc.Call("AddMuxRoute", &MuxRouteInput{AppName: appName, Forward: fwd, Reverse: rev, SrcPort: srcPort}, &struct{}{})
 }
 
+// GrowMuxRoute adds disjoint legs to the app's active rg until it has
+// `target` total legs (failover redundancy); minHops floors the added
+// legs' hop count. srcPort disambiguates as in AddMuxRoute. Returns the
+// number of legs added.
+func (rc *rpcClient) GrowMuxRoute(appName string, target, minHops int, srcPort uint16) (int, error) {
+	var added int
+	err := rc.Call("GrowMuxRoute", &MuxRouteInput{AppName: appName, Target: target, MinHops: minHops, SrcPort: srcPort}, &added)
+	return added, err
+}
+
 // RemoveMuxRoute drops the leg over tpID from the app's active rg.
 // srcPort disambiguates as in AddMuxRoute.
 func (rc *rpcClient) RemoveMuxRoute(appName string, tpID uuid.UUID, srcPort uint16) error {
@@ -1371,6 +1381,21 @@ func (rc *rpcClient) DmsgProbe(pk cipher.PubKey, port uint16) (bool, error) {
 	return reachable, err
 }
 
+// DmsgProbeViaServer checks dmsg reachability of a remote PK:port forced
+// through a specific dmsg server.
+func (rc *rpcClient) DmsgProbeViaServer(pk cipher.PubKey, port uint16, serverPK cipher.PubKey) (bool, error) {
+	var reachable bool
+	err := rc.Call("DmsgProbeViaServer", &DmsgProbeViaServerRequest{PK: pk, Port: port, ServerPK: serverPK}, &reachable)
+	return reachable, err
+}
+
+// SkynetProbe checks reachability of a remote PK:port over skynet.
+func (rc *rpcClient) SkynetProbe(pk cipher.PubKey, port uint16) (bool, error) {
+	var reachable bool
+	err := rc.Call("SkynetProbe", &DmsgProbeRequest{PK: pk, Port: port}, &reachable)
+	return reachable, err
+}
+
 // DmsgConnectAll triggers a one-shot connect-to-all-dmsg-servers action.
 func (rc *rpcClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 	var resp DmsgConnectAllResult
@@ -1711,6 +1736,14 @@ func (rc *rpcClient) RemoveAllHypervisors() (int, error) {
 func (rc *rpcClient) SetHypervisorPassword(oldPassword, newPassword string) error {
 	return rc.Call("SetHypervisorPassword", &HypervisorPasswordChangeIn{
 		OldPassword: oldPassword,
+		NewPassword: newPassword,
+	}, &struct{}{})
+}
+
+// SetHypervisorPasswordForce sets the hypervisor UI admin password
+// without the old one (reset / first-time set).
+func (rc *rpcClient) SetHypervisorPasswordForce(newPassword string) error {
+	return rc.Call("SetHypervisorPasswordForce", &HypervisorPasswordChangeIn{
 		NewPassword: newPassword,
 	}, &struct{}{})
 }

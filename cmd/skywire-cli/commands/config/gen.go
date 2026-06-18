@@ -159,8 +159,9 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment (ports offset +10000 from prod)")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
-	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg for skywire services (no http)")
+	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg for skywire services, no http (this is the default)")
 	genConfigCmd.Flags().BoolVar(&isHTTPOnly, "http", false, "use only http for skywire services (no dmsg)")
+	genConfigCmd.Flags().BoolVar(&isDual, "dual", false, "use http for skywire services with dmsg as fallback (dual)")
 	genConfigCmd.MarkFlagsMutuallyExclusive("dmsghttp", "http")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
 	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp config path")
@@ -207,6 +208,7 @@ func init() {
 	}
 	genConfigCmd.Flags().StringVar(&transportSetupPKs, "tpsetup", scriptExecArray("${TPSETUPPKS[@]}"), msg)
 	gHiddenFlags = append(gHiddenFlags, "tpsetup")
+	genConfigCmd.Flags().BoolVar(&cascadeRouteSetup, "cascade", false, "opt into source-driven cascade route setup (default: legacy setup-node path)")
 	genConfigCmd.Flags().BoolVar(&snConfig, "sn", false, "generate config for route setup node")
 	gHiddenFlags = append(gHiddenFlags, "sn")
 	genConfigCmd.Flags().BoolVar(&dmsgDiscConfig, "dmsgdisc", false, "generate config for dmsg-discovery service")
@@ -392,7 +394,7 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "timeout")
 	genConfigCmd.Flags().StringVar(&publicVisorRegTimeout, "regtimeout", scriptExecString("${REGTIMEOUT}"), "public visor registration timeout (e.g. 10m)")
 	gHiddenFlags = append(gHiddenFlags, "regtimeout")
-	genConfigCmd.Flags().IntVar(&publicVisorMaxTransports, "maxtransports", 0, "public visor max transports")
+	genConfigCmd.Flags().IntVar(&publicVisorMaxTransports, "maxtransports", scriptExecInt("${MAXTRANSPORTS:-0}"), "public visor max transports")
 	gHiddenFlags = append(gHiddenFlags, "maxtransports")
 	genConfigCmd.Flags().IntVar(&muxRoutes, "muxroutes", 0, "number of parallel mux routes per connection")
 	gHiddenFlags = append(gHiddenFlags, "muxroutes")
@@ -1104,6 +1106,10 @@ func configureRouting() {
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
 		MinHops:            1,
 		CalculateRoutes:    enableCalculateRoutes,
+		// Cascade route setup is opt-in (--cascade); the legacy setup-node
+		// path stays the default until the cascade multihop data-plane bug
+		// is fixed and enough of the network has updated to support it.
+		EnableCascadeRouteSetup: cascadeRouteSetup,
 	}
 
 	if muxRoutes > 0 {
@@ -1113,6 +1119,11 @@ func configureRouting() {
 	if oldConfCache != nil && oldConfCache.Routing != nil {
 		if oldConfCache.Routing.MinHops != 0 {
 			conf.Routing.MinHops = oldConfCache.Routing.MinHops
+		}
+		// Preserve an opted-in cascade across regen (matches MinHops). To turn
+		// it back off, edit enable_cascade_route_setup in the JSON directly.
+		if oldConfCache.Routing.EnableCascadeRouteSetup {
+			conf.Routing.EnableCascadeRouteSetup = true
 		}
 	}
 }
@@ -1219,14 +1230,18 @@ func configureLauncher(log *logging.Logger) {
 	// Configure service URLs based on connection mode:
 	// --dmsghttp: DMSG-only (overwrite HTTP URLs with DMSG URLs)
 	// --http: HTTP-only (no DMSG fields, default HTTP URLs kept)
-	// neither: dual mode (HTTP URLs + DMSG URLs in _dmsg fields)
+	// Service-URL mode: dmsg-only by DEFAULT (dmsg:// URLs in the primary
+	// fields, no http). --dual keeps the http URLs with dmsg in the _dmsg
+	// fallback fields. --http (isHTTPOnly) skips the dmsg fields entirely.
+	// --dmsghttp forces dmsg-only (== the default) for backward compatibility.
+	dmsgOnly := isDmsgHTTP || !isDual
 	if !isHTTPOnly {
 		// Prefer unified services config; fall back to legacy dmsgHTTPServersList
 		if services.HasDmsgEndpoints() {
 			// Unified config: DMSG fields from services-config.json
 			conf.Dmsg.Servers = deployment.DmsgServerEntriesToDisc(services.DmsgServers)
 
-			if isDmsgHTTP {
+			if dmsgOnly {
 				conf.Dmsg.Discovery = services.DmsgDiscoveryDmsg
 				conf.Transport.AddressResolver = services.AddressResolverDmsg
 				conf.Transport.Discovery = services.TransportDiscoveryDmsg
@@ -1253,7 +1268,7 @@ func configureLauncher(log *logging.Logger) {
 			}
 			if dmsgConf != nil {
 				conf.Dmsg.Servers = dmsgConf.DMSGServers
-				if isDmsgHTTP {
+				if dmsgOnly {
 					conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
 					conf.Transport.AddressResolver = dmsgConf.AddressResolver
 					conf.Transport.Discovery = dmsgConf.TransportDiscovery

@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 
-	"github.com/skycoin/noise"
+	"github.com/flynn/noise"
 	"github.com/skycoin/skycoin/src/cipher"
 	secp256k1 "github.com/skycoin/skycoin/src/cipher/secp256k1-go"
 )
@@ -80,6 +81,10 @@ type dhCacheKey [65]byte
 var (
 	dhCacheMu sync.RWMutex
 	dhCache   = make(map[dhCacheKey][33]byte, dhCacheMax)
+
+	dhCacheHits      atomic.Uint64
+	dhCacheMisses    atomic.Uint64
+	dhCacheEvictions atomic.Uint64
 )
 
 func makeDHKey(sk, pk []byte) dhCacheKey {
@@ -93,16 +98,18 @@ func makeDHKey(sk, pk []byte) dhCacheKey {
 // Keys are already validated by the noise handshake state machine, so we
 // skip the redundant NewPubKey/NewSecKey validation and copy directly.
 // cipher.ECDH still performs its own internal validation.
-func (Secp256k1) DH(sk, pk []byte) []byte {
+func (Secp256k1) DH(sk, pk []byte) ([]byte, error) {
 	k := makeDHKey(sk, pk)
 	dhCacheMu.RLock()
 	cached, hit := dhCache[k]
 	dhCacheMu.RUnlock()
 	if hit {
+		dhCacheHits.Add(1)
 		out := make([]byte, 33)
 		copy(out, cached[:])
-		return out
+		return out, nil
 	}
+	dhCacheMisses.Add(1)
 
 	var pubKey cipher.PubKey
 	var secKey cipher.SecKey
@@ -110,7 +117,10 @@ func (Secp256k1) DH(sk, pk []byte) []byte {
 	copy(secKey[:], sk)
 	ecdh, err := cipher.ECDH(pubKey, secKey)
 	if err != nil {
-		panic(fmt.Sprintf("noise DH: ECDH failed: %v", err))
+		// flynn/noise's DHFunc returns an error (the old skycoin/noise fork's
+		// signature did not) — surface it as a handshake failure instead of
+		// panicking the whole visor on a malformed peer key.
+		return nil, fmt.Errorf("noise DH: ECDH failed: %w", err)
 	}
 	// DHLen() returns 33; ECDH returns 32-byte SHA256 hash, pad to 33.
 	out := make([]byte, 33)
@@ -129,10 +139,38 @@ func (Secp256k1) DH(sk, pk []byte) []byte {
 			delete(dhCache, k0)
 			break
 		}
+		dhCacheEvictions.Add(1)
 	}
 	dhCache[k] = entry
 	dhCacheMu.Unlock()
-	return out
+	return out, nil
+}
+
+// CacheStats is a snapshot of the noise DH cache counters. Hits/Misses
+// are counted on every call to (Secp256k1).DH; Evictions is incremented
+// each time a single entry is dropped to make room (one per eviction,
+// not per overflowed insertion).
+type CacheStats struct {
+	Hits      uint64
+	Misses    uint64
+	Evictions uint64
+	Size      int
+	Capacity  int
+}
+
+// GetCacheStats returns a snapshot of the noise DH cache counters.
+// Safe to call concurrently with DH.
+func GetCacheStats() CacheStats {
+	dhCacheMu.RLock()
+	size := len(dhCache)
+	dhCacheMu.RUnlock()
+	return CacheStats{
+		Hits:      dhCacheHits.Load(),
+		Misses:    dhCacheMisses.Load(),
+		Evictions: dhCacheEvictions.Load(),
+		Size:      size,
+		Capacity:  dhCacheMax,
+	}
 }
 
 // DHLen helps to implement `noise.DHFunc`.

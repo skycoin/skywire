@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"regexp"
 	"strconv"
 	"sync"
 	"time"
@@ -442,6 +443,15 @@ func (hv *Hypervisor) ServeRPC(ctx context.Context, dmsgPort uint16) error {
 // the cache is always-fresh from the UI's perspective.
 const hypervisorBackgroundPollInterval = 30 * time.Second
 
+// cacheFreshWindow is how recently a remote visor must have answered a
+// Summary RPC (tracked via summaryCache.seenAt) to count as currently
+// connected. Sized to span the 2-minute dmsg.StreamIdleTimeout plus
+// the peer's redial → hypervisor-accept → next-poll cycle, so a peer
+// whose stream just idle-closed isn't flagged disconnected mid-cycle.
+// Used both by the UI summary handler and by getDmsgSummary to scope
+// the dmsg round-trip tracker to live connections only.
+const cacheFreshWindow = 3 * time.Minute
+
 // runBackgroundSummaryPoll keeps hv.summaryCache fresh independent of
 // UI activity. Spawned once from ServeRPC; runs until ctx cancels.
 // Iterates every entry in remoteVisors, fires Summary() in parallel
@@ -639,6 +649,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/ping", hv.getPong())
 
 			r.Get("/csrf", hv.getCsrf())
+
+			// Browser-side error sink: the hvui forwards window
+			// errors / unhandled rejections / console.error+warn here
+			// so client-side failures land in the visor log. Public
+			// (a broken or pre-login page must still report) but
+			// rate-limited + size-capped — see postClientLog.
+			r.Post("/client-log", hv.postClientLog())
 
 			r.Get("/user-exists", hv.users.UserExists())
 
@@ -855,10 +872,34 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/api/dmsg/health", tpvHandler.ServeHTTP)
 		}
 
-		r.Handle("/*", http.FileServer(http.FS(hv.c.UIAssets)))
+		r.Handle("/*", uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets))))
 	})
 
 	return r
+}
+
+// hashedUIAsset matches Angular's content-hashed build artifacts
+// (e.g. main.3a56986fe6b1bd52.js, styles.<hash>.css, hashed fonts/images).
+// Their content is immutable for a given filename, so they are safe to
+// cache indefinitely.
+var hashedUIAsset = regexp.MustCompile(`\.[0-9a-f]{8,}\.(js|css|woff2?|ttf|eot|otf|svg|png|jpe?g|gif|ico|webp)$`)
+
+// uiCacheControl wraps the embedded-UI file server with sane cache headers.
+// Content-hashed bundles are cached long-term (immutable); everything else
+// — index.html, the i18n JSON, SPA routes — is served no-cache so the
+// browser always revalidates. Without this the visor sent NO Cache-Control
+// at all, so browsers heuristically cached index.html and kept loading a
+// stale bundle hash after a UI redeploy (the "UI changes don't show until a
+// hard refresh" symptom).
+func uiCacheControl(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if hashedUIAsset.MatchString(r.URL.Path) {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 func (hv *Hypervisor) log(r *http.Request) logrus.FieldLogger {
 	return httputil.GetLogger(r)

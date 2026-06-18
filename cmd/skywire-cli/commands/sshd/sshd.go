@@ -64,9 +64,9 @@ func init() {
 		"log level: trace|debug|info|warn|error")
 }
 
-// RootCmd is `skywire cli sshd` — OpenSSH-equivalent server.
+// RootCmd is `skywire cli pty host` — OpenSSH-equivalent server.
 //
-// Registered under skywire-cli's root alongside `cli ssh` (client).
+// Registered under skywire-cli's root alongside `cli pty shell` (client).
 // Compared to OpenSSH's sshd:
 //
 //	sshd_config Port      ↔ --listen
@@ -75,8 +75,8 @@ func init() {
 //	HostbasedAuthentication ↔ noise XK pins both sides via PK
 var RootCmd = &cobra.Command{
 	Use:   "sshd",
-	Short: "Run a direct-TCP dmsgpty server (ssh-equivalent daemon)",
-	Long: `skywire cli sshd — OpenSSH-equivalent server over skywire identity.
+	Short: "Run a direct-TCP pty-subsystem server (peers connect by PK)",
+	Long: `skywire cli pty host — OpenSSH-equivalent server over skywire identity.
 
 Binds a TCP port and serves the dmsgpty protocol over it, gated by an
 XK noise handshake against this server's PK + a whitelist of client
@@ -99,20 +99,20 @@ Use the visor's embedded pty.ssh_listen field instead when:
 
 Examples:
   # Run on :2022 with two PKs allowed, identity from default visor config:
-  skywire cli sshd --listen :2022 --allow 02f9...,03d1...
+  skywire cli pty host --listen :2022 --allow 02f9...,03d1...
 
   # Use a non-default visor config for the server identity:
-  skywire cli sshd --listen :2022 --sk-from-visor /etc/skywire/skywire.json --allow 02f9...
+  skywire cli pty host --listen :2022 --sk-from-visor /etc/skywire/skywire.json --allow 02f9...
 
   # Use a standalone dmsgpty config.json for both identity AND whitelist:
-  skywire cli sshd --listen :2022 --conf /etc/skywire/pty.json`,
+  skywire cli pty host --listen :2022 --conf /etc/skywire/pty.json`,
 	SilenceErrors:         true,
 	SilenceUsage:          true,
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		if sshdListen == "" {
-			return fmt.Errorf("sshd: --listen is required")
+			return fmt.Errorf("pty host: --listen is required")
 		}
 
 		log := logging.MustGetLogger("sshd")
@@ -130,7 +130,7 @@ Examples:
 		}
 		pk, err := sk.PubKey()
 		if err != nil {
-			return fmt.Errorf("sshd: derive PK from SK: %w", err)
+			return fmt.Errorf("pty host: derive PK from SK: %w", err)
 		}
 
 		// Build the whitelist. --allow is the inline form; --conf
@@ -151,7 +151,7 @@ Examples:
 		log.WithField("addr", sshdListen).
 			WithField("pk", pk.String()).
 			WithField("whitelist_size", len(sshdAllow)).
-			Info("sshd: listening")
+			Info("pty host: listening")
 
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -163,10 +163,10 @@ Examples:
 
 		select {
 		case <-ctx.Done():
-			log.Info("sshd: shutting down on signal")
+			log.Info("pty host: shutting down on signal")
 		case err := <-errCh:
 			if err != nil {
-				return fmt.Errorf("sshd: listen %s: %w", sshdListen, err)
+				return fmt.Errorf("pty host: listen %s: %w", sshdListen, err)
 			}
 		}
 		wg.Wait()
@@ -189,7 +189,7 @@ func resolveServerSK(confPath, skFromConfPath string) (cipher.SecKey, error) {
 		if err == nil && c.SK != "" {
 			var sk cipher.SecKey
 			if err := sk.Set(c.SK); err != nil {
-				return zero, fmt.Errorf("sshd: --conf %s sk invalid: %w", confPath, err)
+				return zero, fmt.Errorf("pty host: --conf %s sk invalid: %w", confPath, err)
 			}
 			return sk, nil
 		}
@@ -200,10 +200,10 @@ func resolveServerSK(confPath, skFromConfPath string) (cipher.SecKey, error) {
 	}
 	conf, err := visorconfig.ReadFile(path)
 	if err != nil {
-		return zero, fmt.Errorf("sshd: read visor config %s: %w (use --sk-from-visor or --conf)", path, err)
+		return zero, fmt.Errorf("pty host: read visor config %s: %w (use --sk-from-visor or --conf)", path, err)
 	}
 	if conf.SK == zero {
-		return zero, fmt.Errorf("sshd: visor config %s has empty SK", path)
+		return zero, fmt.Errorf("pty host: visor config %s has empty SK", path)
 	}
 	return conf.SK, nil
 }
@@ -223,7 +223,7 @@ func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error)
 	if confPath != "" {
 		c, err := readDmsgptyConf(confPath)
 		if err != nil {
-			return nil, fmt.Errorf("sshd: --conf %s: %w", confPath, err)
+			return nil, fmt.Errorf("pty host: --conf %s: %w", confPath, err)
 		}
 		for _, s := range c.WL {
 			s = strings.TrimSpace(s)
@@ -232,7 +232,7 @@ func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error)
 			}
 			var pk cipher.PubKey
 			if err := pk.Set(s); err != nil {
-				return nil, fmt.Errorf("sshd: --conf %s: invalid pk %q: %w", confPath, s, err)
+				return nil, fmt.Errorf("pty host: --conf %s: invalid pk %q: %w", confPath, s, err)
 			}
 			keys[pk] = struct{}{}
 		}
@@ -246,14 +246,14 @@ func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error)
 			}
 			var pk cipher.PubKey
 			if err := pk.Set(s); err != nil {
-				return nil, fmt.Errorf("sshd: --allow %q invalid: %w", s, err)
+				return nil, fmt.Errorf("pty host: --allow %q invalid: %w", s, err)
 			}
 			keys[pk] = struct{}{}
 		}
 	}
 
 	if len(keys) == 0 {
-		return nil, fmt.Errorf("sshd: refusing to start with an empty whitelist (use --allow <pk>,... or --conf <path>)")
+		return nil, fmt.Errorf("pty host: refusing to start with an empty whitelist (use --allow <pk>,... or --conf <path>)")
 	}
 
 	// Materialize into an in-memory whitelist.
@@ -263,7 +263,7 @@ func buildSshdWhitelist(confPath string, inline []string) (pty.Whitelist, error)
 	}
 	wl := pty.NewMemoryWhitelist()
 	if err := wl.Add(pks...); err != nil {
-		return nil, fmt.Errorf("sshd: build whitelist: %w", err)
+		return nil, fmt.Errorf("pty host: build whitelist: %w", err)
 	}
 	return wl, nil
 }

@@ -18,9 +18,9 @@ flags are noted below.
 To run skywire, first generate a config:
 
 ```
-skywire cli config gen -birx
+skywire cli config gen -irx
 ```
-* `-b --bestproto` use the best protocol (dmsg | direct) to connect to the skywire production deployment — recommended
+* **service protocol** — the config uses **dmsg only** by default (`-d --dmsghttp`); pass `--http` for HTTP-only, or `--dual` for HTTP with dmsg fallback
 * `-i --ishv` create a local hypervisor configuration (optional)
 * `-r --regen` regenerate a config which may already exist, retaining the keys
 * `-x --retainhv` retain any remote hypervisors set in the config (optional)
@@ -33,7 +33,7 @@ must be run as root.
 
 ## Hypervisor web UI
 
-In order to expose the hypervisor UI, generate a config file with `--is-hypervisor` or `-i` flag:
+In order to expose the hypervisor UI, generate a config file with the `-i` / `--ishv` flag:
 
 ```
 skywire cli config gen -i
@@ -67,11 +67,11 @@ to access a visor, the PubKey of the hypervisor needs to be specified in the
 configuration file. You can add a remote hypervisor to the config with:
 
 ```
-skywire cli config update --hypervisor-pks <public-key>
+skywire cli config update hv --add-pks <public-key>
 ```
 OR:
 ```
-skywire cli config gen --hvpk <public-key>
+skywire cli config gen --hvpks <public-key>
 ```
 
 ## Network Visualization UI

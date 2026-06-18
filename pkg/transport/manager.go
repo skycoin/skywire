@@ -50,11 +50,6 @@ type ManagerConfig struct {
 	ARTransportLimit int
 }
 
-// LatencyFallbackCallback is called when transport-level ping fails to produce
-// latency data (remote visor doesn't support transport ping frames).
-// It falls back to measuring latency via RSN route setup.
-type LatencyFallbackCallback func(ctx context.Context, remote cipher.PubKey, tpID uuid.UUID) (latencyMs float64)
-
 // RouteChecker is called before tearing down an existing transport for re-creation.
 // It returns true if any active routing rule references the given transport ID,
 // meaning the transport is actively carrying route traffic and must not be torn down.
@@ -78,12 +73,6 @@ type Manager struct {
 
 	factory    network.ClientFactory
 	netClients map[types.Type]network.Client
-
-	// latencyFallback is called when transport-level ping doesn't produce
-	// latency data after a grace period (old visor that doesn't support
-	// transport ping frames). Falls back to RSN-based route measurement.
-	latencyFallback   LatencyFallbackCallback
-	latencyFallbackMu sync.RWMutex
 
 	// routeChecker is called before tearing down an existing transport for re-creation.
 	// If it returns true, the transport has active routes and must not be torn down.
@@ -692,39 +681,6 @@ func (tm *Manager) SetSetupRPCHandler(h func(p routing.Packet, mt *ManagedTransp
 }
 
 // SetRouteChecker sets the callback used to determine if a transport has active routes.
-// SetLatencyFallback sets the callback used when transport-level ping fails
-// to produce latency data (remote visor doesn't support transport ping frames).
-func (tm *Manager) SetLatencyFallback(cb LatencyFallbackCallback) {
-	tm.latencyFallbackMu.Lock()
-	defer tm.latencyFallbackMu.Unlock()
-	tm.latencyFallback = cb
-}
-
-// invokeLatencyFallback is called by the managed transport's pingLoop when
-// transport-level pings produce no response after a grace period. It falls
-// back to the RSN-based route measurement for backward compatibility with
-// old visors that don't support transport ping frames.
-func (tm *Manager) invokeLatencyFallback(remote cipher.PubKey, tp *ManagedTransport) {
-	tm.latencyFallbackMu.RLock()
-	cb := tm.latencyFallback
-	tm.latencyFallbackMu.RUnlock()
-
-	if cb == nil {
-		return
-	}
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
-		defer cancel()
-
-		latencyMs := cb(ctx, remote, tp.Entry.ID)
-		if latencyMs > 0 {
-			tp.SetLatency(latencyMs)
-			tm.Logger.Debugf("Transport %s latency (RSN fallback): %.2f ms", tp.Entry.ID, latencyMs)
-		}
-	}()
-}
-
 // When set, transport re-creation is blocked for transports that are currently
 // referenced by routing rules, protecting in-flight route traffic.
 func (tm *Manager) SetRouteChecker(rc RouteChecker) {
@@ -918,7 +874,6 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			mlog:           tm.factory.MLogger,
 			QueueDeletion:  tm.queueDeletion,
 		})
-		mTp.manager = tm
 		tm.cascadeHandlerMu.RLock()
 		mTp.cascadeHandler = tm.cascadeHandler
 		tm.cascadeHandlerMu.RUnlock()
@@ -942,7 +897,14 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			mTp.Serve(tm.readCh)
 
 			tm.mx.Lock()
-			delete(tm.tps, mTp.Entry.ID)
+			// Identity-checked delete: a concurrent dial/accept to the same
+			// peer resolves to this same deterministic tpID and may have
+			// replaced us in the map. Only remove the entry if it's still us —
+			// otherwise we'd evict a live successor (route lookups would then
+			// fail on a transport whose conn is actually fine).
+			if cur, ok := tm.tps[mTp.Entry.ID]; ok && cur == mTp {
+				delete(tm.tps, mTp.Entry.ID)
+			}
 			tm.mx.Unlock()
 		}()
 
@@ -1128,10 +1090,13 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	tm.Logger.Debugf("Initializing TP with ID %s", tpID)
 
 	oldMTp, err := tm.GetTransportByID(tpID)
-	if err == nil {
+	if err == nil && !oldMTp.IsClosed() {
 		tm.Logger.Debug("Found an old mTp from internal map.")
 		return oldMTp, nil
 	}
+	// A closed-but-not-yet-reaped transport (cleanupTransports polls on a 1s
+	// tick) must not be handed back as if it were live — the stale-conn trap.
+	// Fall through to create a fresh one.
 
 	tm.mx.RLock()
 	client, ok := tm.netClients[netType]
@@ -1162,7 +1127,6 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		mlog:           tm.factory.MLogger,
 		QueueDeletion:  tm.queueDeletion,
 	})
-	mTp.manager = tm
 	tm.cascadeHandlerMu.RLock()
 	mTp.cascadeHandler = tm.cascadeHandler
 	tm.cascadeHandlerMu.RUnlock()
@@ -1193,10 +1157,20 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		mTp.closeWithoutDeregister()
 		return nil, err
 	}
-	go mTp.Serve(tm.readCh)
 	tm.mx.Lock()
+	// The lock was released during the dial above (up to ~20s). A concurrent
+	// accept or dial to the same peer — same deterministic tpID — may have
+	// installed a live transport meanwhile. Don't clobber it: discard the one
+	// we just dialed (its TPD entry is shared with the survivor under the same
+	// tpID, so close WITHOUT deregistering) and return the winner.
+	if existing, ok := tm.tps[tpID]; ok && !existing.IsClosed() {
+		tm.mx.Unlock()
+		mTp.closeWithoutDeregister()
+		return existing, nil
+	}
 	tm.tps[tpID] = mTp
 	tm.mx.Unlock()
+	go mTp.Serve(tm.readCh)
 
 	// Check AR transport limit after dialing a new transport.
 	go tm.checkARLimit()
@@ -1216,8 +1190,12 @@ func (tm *Manager) STCPRRemoteAddrs() []string {
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
-		if tp.transport != nil {
-			remoteRaw := tp.transport.RemoteRawAddr().String()
+		// Use getTransport() (locks transportMx) rather than reading
+		// tp.transport directly: close() can nil it between the nil-check and
+		// the deref — a data race and a nil-deref crash.
+		netTp := tp.getTransport()
+		if netTp != nil {
+			remoteRaw := netTp.RemoteRawAddr().String()
 			if tp.Entry.Type == types.STCPR && remoteRaw != "" {
 				addrs = append(addrs, remoteRaw)
 			}

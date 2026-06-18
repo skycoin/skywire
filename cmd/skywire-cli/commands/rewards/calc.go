@@ -222,11 +222,26 @@ func countFrequency(values []string) map[string]int {
 	return counts
 }
 
+// perIPShareLimit returns the per-IP visor reward-share cap in effect
+// on the given calc date. Default is 8 (matching rewards/mainnet_rules.md
+// "Per IP Limit" section). June 2026 is a one-month exception at 12 —
+// see operator announcement 2026-06-03 for the rationale (per-operator
+// request to accommodate visor-relocation work blocked by the
+// bandwidth-pool issues). The limit auto-reverts to 8 on 2026-07-01
+// without any code change required.
+func perIPShareLimit(t time.Time) int {
+	if t.Year() == 2026 && t.Month() == time.June {
+		return 12
+	}
+	return 8
+}
+
 // calcPresenceShare computes a visor's share after IP cap and MAC dedup.
 func calcPresenceShare(ni nodeinfo, ipCounts, macCounts map[string]int) float64 {
 	share := 1.0
-	if count := ipCounts[ni.IPAddr]; count >= 8 {
-		share = 8.0 / float64(count)
+	limit := perIPShareLimit(wDate)
+	if count := ipCounts[ni.IPAddr]; count >= limit {
+		share = float64(limit) / float64(count)
 	}
 	if count := macCounts[ni.MacAddr]; count > 1 {
 		share /= float64(count)
@@ -234,17 +249,34 @@ func calcPresenceShare(ni nodeinfo, ipCounts, macCounts map[string]int) float64 
 	return share
 }
 
-// applyRegionalSaturation applies diminishing returns scaling based on the
-// number of unique IP addresses per country. Each country's weight is
-// unique_ips^exponent (default sqrt). This scales each visor's share so that
-// the total pool allocation is redistributed to favor geographic diversity.
+// applyRegionalSaturation scales each visor's share by a per-country
+// density factor unique_ips_country^(exponent - 1). This is a per-visor
+// multiplier, not a country-pot allocation: a country's total reward
+// grows linearly with the number of visors (subject to the per-IP cap
+// already enforced in calcPresenceShare), so adding visors at an existing
+// IP within the cap no longer dilutes existing visors' rewards. The
+// renormalization back to the daily pool happens in computePoolRewards.
+//
+// Exponent semantics match the prior implementation:
+//
+//	exponent = 1.0  → scale = 1 everywhere (no derating)
+//	exponent = 0.5  → scale = 1/sqrt(N) (default, sqrt-style saturation)
+//	exponent = 0.0  → scale = 1/N (every country's total reward equal,
+//	                  regardless of how many IPs or visors)
+//
+// Earlier versions of this function computed a country pot from
+// N^exponent and split it equally across the country's visors, which
+// froze each country's total at the single-visor amount and penalized
+// the 2nd-Nth visor at any IP — undoing the per-IP capacity that the
+// per-IP cap was supposed to grant. The new formulation preserves the
+// per-IP visor capacity from calcPresenceShare while still discounting
+// dense-IP countries on a per-visor basis.
 func applyRegionalSaturation(nodes []nodeinfo, exponent float64) {
 	if exponent >= 1.0 || len(nodes) == 0 {
 		return
 	}
 
 	countryIPs := make(map[string]map[string]struct{})
-	countryShares := make(map[string]float64)
 	for _, ni := range nodes {
 		c := ni.Country
 		if c == "" {
@@ -254,30 +286,11 @@ func applyRegionalSaturation(nodes []nodeinfo, exponent float64) {
 			countryIPs[c] = make(map[string]struct{})
 		}
 		countryIPs[c][ni.IPAddr] = struct{}{}
-		countryShares[c] += ni.Share
-	}
-
-	totalWeight := 0.0
-	countryWeight := make(map[string]float64)
-	for c, ips := range countryIPs {
-		w := math.Pow(float64(len(ips)), exponent)
-		countryWeight[c] = w
-		totalWeight += w
-	}
-
-	totalRawShares := 0.0
-	for _, s := range countryShares {
-		totalRawShares += s
-	}
-	if totalRawShares == 0 || totalWeight == 0 {
-		return
 	}
 
 	countryScale := make(map[string]float64)
-	for c, raw := range countryShares {
-		if raw > 0 {
-			countryScale[c] = (countryWeight[c] / totalWeight * totalRawShares) / raw
-		}
+	for c, ips := range countryIPs {
+		countryScale[c] = math.Pow(float64(len(ips)), exponent-1.0)
 	}
 
 	for i := range nodes {
@@ -651,7 +664,7 @@ func init() {
 	RootCmd.Flags().BoolVarP(&h2, "h2", "2", false, "hide reward csv data")
 	RootCmd.Flags().BoolVarP(&grr, "err", "e", false, "account for non rewarded keys")
 	RootCmd.Flags().BoolVarP(&processRewards, "process", "r", false, "run complete reward processing workflow")
-	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", true, "require minimum transports (from hist/YYYY-MM-DD_transports.txt)")
+	RootCmd.Flags().BoolVarP(&requireTransports, "require-tp", "t", false, "require minimum transports from hist/YYYY-MM-DD_transports.txt (deprecated — TPD-integrated UT data now gates >= 2 transports inherently; this flag is kept only for historical re-runs of dates before the migration)")
 	RootCmd.Flags().StringVarP(&transportHistPath, "tp-hist", "T", "hist", "path to transport history directory")
 	RootCmd.Flags().BoolVarP(&requireBandwidth, "require-bw", "b", false, "require minimum bandwidth (proportional reward based on bandwidth)")
 	RootCmd.Flags().BoolVar(&noBWPool, "no-bw-pool", false, "recovery mode: skip the bandwidth pool and fold its budget into a doubled presence pool (requires -b)")

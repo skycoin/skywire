@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/skycoin/noise"
+	"github.com/flynn/noise"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -45,14 +45,31 @@ type Noise struct {
 	decNonce uint64 // expect increment with each subsequent packet
 
 	encBuf [nonceSize]byte // reusable nonce buffer for encryption
+
+	// Post-quantum hybrid (ML-KEM-768). PQ is offered UNCONDITIONALLY and
+	// composes with the classical handshake; if the peer doesn't reciprocate
+	// (empty payload — an older visor), we transparently fall back to classical.
+	// No flag, reverse-compatible by construction. See pqhybrid.go +
+	// docs/design/pq-hybrid-noise-handshake.md.
+	suite      noise.CipherSuite // retained to rebuild CipherStates for the hybrid re-key
+	pqInit     *pqInitiator      // initiator's ephemeral ML-KEM keys (lazily generated)
+	pqSendData []byte            // PQ payload queued for the next handshake message
+	pqSecret   []byte            // derived ML-KEM shared secret, once available
+	pqActive   bool              // true once the hybrid key has been mixed in
 }
+
+// PQActive reports whether the session negotiated the post-quantum hybrid (both
+// peers exchanged ML-KEM material and the shared secret was mixed into the
+// transport keys). False means a classical-only handshake (e.g. an older peer).
+func (ns *Noise) PQActive() bool { return ns.pqActive }
 
 // New creates a new Noise with:
 //   - provided pattern for handshake.
 //   - Secp256k1 for the curve.
 func New(pattern noise.HandshakePattern, config Config) (*Noise, error) {
+	suite := noise.NewCipherSuite(Secp256k1{}, noise.CipherChaChaPoly, noise.HashSHA256)
 	nc := noise.Config{
-		CipherSuite: noise.NewCipherSuite(Secp256k1{}, noise.CipherChaChaPoly, noise.HashSHA256),
+		CipherSuite: suite,
 		Random:      rand.Reader,
 		Pattern:     pattern,
 		Initiator:   config.Initiator,
@@ -75,6 +92,7 @@ func New(pattern noise.HandshakePattern, config Config) (*Noise, error) {
 		init:    config.Initiator,
 		pattern: pattern,
 		hs:      hs,
+		suite:   suite,
 	}, nil
 }
 
@@ -103,25 +121,121 @@ func (ns *Noise) GetDecNonce() uint64 {
 }
 
 // MakeHandshakeMessage generates handshake message for a current handshake state.
+// The handshake payload carries the post-quantum offer/response (ML-KEM public
+// key from the initiator, ciphertext from the responder); see pqOfferPayload.
 func (ns *Noise) MakeHandshakeMessage() (res []byte, err error) {
+	payload := ns.pqOfferPayload()
 	if ns.hs.MessageIndex() < len(ns.pattern.Messages)-1 {
-		res, _, _, err = ns.hs.WriteMessage(nil, nil)
+		res, _, _, err = ns.hs.WriteMessage(nil, payload)
 		return
 	}
 
-	res, ns.dec, ns.enc, err = ns.hs.WriteMessage(nil, nil)
+	res, ns.dec, ns.enc, err = ns.hs.WriteMessage(nil, payload)
+	if err == nil {
+		err = ns.applyHybrid()
+	}
 	return res, err
 }
 
 // ProcessHandshakeMessage processes a received handshake message and appends the payload.
 func (ns *Noise) ProcessHandshakeMessage(msg []byte) (err error) {
 	if ns.hs.MessageIndex() < len(ns.pattern.Messages)-1 {
-		_, _, _, err = ns.hs.ReadMessage(nil, msg)
+		var payload []byte
+		payload, _, _, err = ns.hs.ReadMessage(nil, msg)
+		if err == nil {
+			ns.pqHandlePeerPayload(payload)
+		}
 		return
 	}
 
-	_, ns.enc, ns.dec, err = ns.hs.ReadMessage(nil, msg)
+	var payload []byte
+	payload, ns.enc, ns.dec, err = ns.hs.ReadMessage(nil, msg)
+	if err == nil {
+		ns.pqHandlePeerPayload(payload)
+		err = ns.applyHybrid()
+	}
 	return err
+}
+
+// pqOfferPayload returns the post-quantum data to embed in the next handshake
+// message: the initiator's ephemeral ML-KEM public key on its first message, or
+// a responder's ML-KEM ciphertext once it has encapsulated. Returns nil when
+// there's nothing to offer — which produces an empty payload, the natural "I'm
+// not doing PQ / I'm an older visor" signal that yields a classical handshake.
+// Best-effort: an ML-KEM keygen failure silently proceeds classical.
+func (ns *Noise) pqOfferPayload() []byte {
+	if ns.init && ns.pqInit == nil && ns.pqSecret == nil {
+		k, err := newPQInitiator()
+		if err != nil {
+			return nil
+		}
+		ns.pqInit = k
+		return k.PublicKey
+	}
+	if ns.pqSendData != nil {
+		out := ns.pqSendData
+		ns.pqSendData = nil
+		return out
+	}
+	return nil
+}
+
+// pqHandlePeerPayload reacts to a peer's handshake payload: a responder
+// encapsulates against the initiator's ML-KEM public key; an initiator
+// decapsulates the responder's ciphertext. A malformed, empty, or unexpected
+// payload simply leaves PQ off (classical fallback) — it NEVER fails the
+// handshake, which is what makes this reverse-compatible with older visors.
+func (ns *Noise) pqHandlePeerPayload(payload []byte) {
+	if len(payload) == 0 || ns.pqSecret != nil {
+		return
+	}
+	switch {
+	case !ns.init && len(payload) == pqPublicKeySize:
+		ct, ss, err := pqEncapsulate(payload)
+		if err == nil {
+			ns.pqSecret = ss
+			ns.pqSendData = ct
+		}
+	case ns.init && ns.pqInit != nil && len(payload) == pqCiphertextSize:
+		if ss, err := ns.pqInit.decapsulate(payload); err == nil {
+			ns.pqSecret = ss
+		}
+	}
+}
+
+// applyHybrid mixes the ML-KEM shared secret into the post-Split transport
+// CipherStates, binding it to the handshake transcript (ChannelBinding). Both
+// ends derive matching per-direction keys (same ss_pq, same transcript, and the
+// classical enc-key on one side equals the dec-key on the other). No-op when PQ
+// wasn't negotiated. After this, EncryptUnsafe/DecryptUnsafe transparently use
+// the hybrid key via the new CipherState (skywire's external nonce is unchanged).
+func (ns *Noise) applyHybrid() error {
+	if ns.pqSecret == nil || ns.enc == nil || ns.dec == nil {
+		return nil
+	}
+	cb := ns.hs.ChannelBinding()
+	encKey := ns.enc.UnsafeKey()
+	decKey := ns.dec.UnsafeKey()
+	newEnc, err := combineHybridKey(encKey[:], ns.pqSecret, cb, 32)
+	if err != nil {
+		return err
+	}
+	newDec, err := combineHybridKey(decKey[:], ns.pqSecret, cb, 32)
+	if err != nil {
+		return err
+	}
+	var ek, dk [32]byte
+	copy(ek[:], newEnc)
+	copy(dk[:], newDec)
+	ns.enc = noise.UnsafeNewCipherState(ns.suite, ek, 0)
+	ns.dec = noise.UnsafeNewCipherState(ns.suite, dk, 0)
+	ns.pqActive = true
+	// Best-effort wipe of the shared secret; it's no longer needed.
+	for i := range ns.pqSecret {
+		ns.pqSecret[i] = 0
+	}
+	ns.pqSecret = nil
+	return nil
 }
 
 // HandshakeFinished indicate whether handshake was completed.

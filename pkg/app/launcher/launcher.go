@@ -9,6 +9,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -231,6 +232,13 @@ func (l *AppLauncher) AppStates() []*appserver.AppState {
 		names = append(names, app.Name)
 	}
 	l.mx.Unlock()
+
+	// Stable, deterministic order. l.apps is a map, so ranging it returns a
+	// random order on every call — which made the hypervisor UI's apps list
+	// reshuffle on each poll (rows "moving around" and flickering in/out as the
+	// *ngFor re-rendered). Sorting by name pins the order for every consumer
+	// (UI + `cli visor app ls`).
+	sort.Strings(names)
 
 	var states []*appserver.AppState
 	for _, name := range names {
@@ -555,6 +563,15 @@ func makeProcConfig(lc AppLauncherConfig, ac appserver.AppConfig, envs []string)
 	// re-derive it from RunFunc presence.
 	if procConf.RunFunc != nil {
 		procConf.RunMode = appcommon.RunModeInternal
+		// In-tree apps carry an "app <name>" command prefix in Args — the
+		// external-launch form (e.g. `skywire app skysocks-client --srv …`).
+		// An in-process RunFunc is handed Args directly and wants only the
+		// flags; the leading "app <name>" positionals otherwise break parsing
+		// of bare bool flags (pflag treats them as positionals and stops
+		// honoring later bare flags) and leave stray args on the func.
+		if a := procConf.ProcArgs; len(a) >= 2 && a[0] == "app" {
+			procConf.ProcArgs = a[2:]
+		}
 	} else {
 		procConf.RunMode = appcommon.RunModeExternal
 	}

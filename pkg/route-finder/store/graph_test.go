@@ -29,10 +29,10 @@ func newMockStore() *mockStore {
 	}
 }
 
-func (m *mockStore) RegisterTransport(context.Context, *transport.SignedEntry) error {
+func (m *mockStore) RegisterTransport(context.Context, cipher.PubKey, *transport.SignedEntry) error {
 	return nil
 }
-func (m *mockStore) RegisterTransportsBatch(context.Context, []*transport.SignedEntry) error {
+func (m *mockStore) RegisterTransportsBatch(context.Context, cipher.PubKey, []*transport.SignedEntry) error {
 	return nil
 }
 func (m *mockStore) DeregisterTransport(context.Context, uuid.UUID) error {
@@ -155,6 +155,56 @@ func (m *mockStore) SaveEntry(source, destiny cipher.PubKey, _ bool) {
 
 func (m *mockStore) DeleteAll() {
 	m.transports = make(map[cipher.PubKey][]*transport.Entry)
+}
+
+// saveEntryLat is SaveEntry with an ID, type and measured latency, for
+// latency-weighted route tests.
+func (m *mockStore) saveEntryLat(source, destiny cipher.PubKey, latencyMS float64) {
+	entry := &transport.Entry{
+		ID:      uuid.New(),
+		Edges:   transport.SortEdges(source, destiny),
+		Type:    tptypes.STCPR,
+		Latency: latencyMS,
+	}
+	m.transports[source] = append(m.transports[source], entry)
+	m.transports[destiny] = append(m.transports[destiny], entry)
+}
+
+// TestGetRouteWeighted verifies that latency mode prefers a longer route with
+// lower cumulative latency over a shorter, higher-latency one — while hop-count
+// mode still returns the shortest route.
+func TestGetRouteWeighted(t *testing.T) {
+	src, a, b, c, dst := generateNodesPK(t)
+	m := newMockStore()
+	// Short path: src -> a -> dst, two slow edges (400+400 = 800ms).
+	m.saveEntryLat(src, a, 400)
+	m.saveEntryLat(a, dst, 400)
+	// Long path: src -> b -> c -> dst, three fast edges (100*3 = 300ms).
+	m.saveEntryLat(src, b, 100)
+	m.saveEntryLat(b, c, 100)
+	m.saveEntryLat(c, dst, 100)
+
+	g, err := NewGraph(context.Background(), m, src)
+	require.NoError(t, err)
+
+	// Hop-count mode → the shortest (2-hop) route.
+	hop, err := g.GetRouteWeighted(context.Background(), src, dst, 0, 5, 1, false)
+	require.NoError(t, err)
+	require.Len(t, hop, 1)
+	require.Len(t, hop[0].Hops, 2)
+
+	// Latency mode → the lower-total-latency (3-hop) route.
+	lat, err := g.GetRouteWeighted(context.Background(), src, dst, 0, 5, 1, true)
+	require.NoError(t, err)
+	require.Len(t, lat, 1)
+	require.Len(t, lat[0].Hops, 3)
+
+	// Each hop carries its measured per-edge latency (the exposed field), and
+	// Route.TotalLatency sums them — populated in both modes via buildRoute.
+	require.Equal(t, 400.0, hop[0].Hops[0].Latency)
+	require.Equal(t, 800.0, hop[0].TotalLatency())
+	require.Equal(t, 100.0, lat[0].Hops[0].Latency)
+	require.Equal(t, 300.0, lat[0].TotalLatency())
 }
 
 func TestNewGraph(t *testing.T) {
