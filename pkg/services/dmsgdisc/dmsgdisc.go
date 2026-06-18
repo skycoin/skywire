@@ -243,6 +243,14 @@ func (s *service) runDMSG(
 		}
 	}()
 
+	// Cold-start bootstrap: aggressively dial the CONFIGURED/embedded
+	// dmsg-server set immediately, so each server gets a path to register
+	// itself (directly over disc's inbound session, or relayed through any
+	// server disc is already connected to). Distinct from updateServers,
+	// which resolves from the redis store — empty at cold-start, so it can
+	// never bootstrap an empty deployment on its own.
+	go connectConfiguredServers(ctx, servers, dClient, dmsgDC, log)
+
 	go updateServers(ctx, a, dClient, dmsgDC, cfg.DmsgServerType, log)
 
 	wl := deployment.Prod.SurveyWhitelist
@@ -330,6 +338,59 @@ func pollServersUntilFound(ctx context.Context, a *api.API, dmsgServerType strin
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
+		}
+	}
+}
+
+// connectConfiguredServers is the cold-start bootstrap dialer. It keeps
+// sessions open from dmsg-disc to every CONFIGURED dmsg-server (the
+// preloaded cfg.DmsgServers / embedded-keyring set), NOT the redis-store
+// set — at cold-start the store is empty, so a store-driven loop can never
+// be the thing that brings the fleet up.
+//
+// Why disc dialing matters: in the dmsg-only deployment a server registers
+// itself over dmsg-HTTP, which needs a session, which needs a reachable
+// server — circular if every server cold-starts at once. disc breaks the
+// cycle: it dials servers directly from config (no discovery lookup, no
+// circular dependency), and the moment it is connected to even ONE server,
+// every server can reach disc — directly if disc dialed it, or relayed
+// through a disc-connected peer (or via self-loopback for the first one) —
+// and self-register with its own key (proper signature; disc never authors
+// entries it cannot sign).
+//
+// Cadence: tight retry (exponential 1s→30s) while any configured server is
+// still unreachable, then steady 30s maintenance so dropped sessions are
+// re-established promptly. EnsureSession is idempotent — already-connected
+// servers cost a cheap map check.
+func connectConfiguredServers(ctx context.Context, servers []*disc.Entry, dClient disc.APIClient, dmsgC *dmsg.Client, log logrus.FieldLogger) {
+	const minInterval, maxInterval = time.Second, 30 * time.Second
+	interval := minInterval
+	for {
+		connected := 0
+		for _, server := range servers {
+			dClient.PostEntry(ctx, server) //nolint:errcheck,gosec
+			if err := dmsgC.EnsureSession(ctx, server); err != nil {
+				log.WithField("remote_pk", server.Static).WithError(err).
+					Debug("dmsg-disc: dialing configured dmsg-server")
+				continue
+			}
+			connected++
+		}
+		if connected == len(servers) {
+			interval = maxInterval // fully connected: drop to maintenance cadence
+		} else {
+			log.WithField("connected", connected).WithField("total", len(servers)).
+				Info("dmsg-disc: bootstrapping configured dmsg-server sessions")
+			if interval < maxInterval {
+				if interval *= 2; interval > maxInterval {
+					interval = maxInterval
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(interval):
 		}
 	}
 }
