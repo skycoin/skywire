@@ -53,14 +53,23 @@ func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKe
 	}
 
 	ce.sesMx.Lock()
-	defer ce.sesMx.Unlock()
 	// Re-check after re-locking — another goroutine may have raced
 	// us to establish a session for the same server PK while we
 	// were doing the discovery lookup. Use it instead of dialing
 	// a duplicate.
 	if dSes, ok := ce.clientSession(ce.porter, srvPK); ok {
+		ce.sesMx.Unlock()
 		return dSes, nil
 	}
+	ce.sesMx.Unlock()
+	// Dial WITHOUT holding sesMx. With single-client self-hosted discovery
+	// (the client's own dmsg-HTTP transport carries discovery lookups),
+	// dialSession's session-serve / entry-registration path can re-enter
+	// EnsureAndObtainSession through this same client. Holding sesMx here
+	// would re-lock this non-reentrant mutex on the same goroutine and
+	// deadlock the whole dmsg client — a fatal, fleet-wide wedge.
+	// dialSession's sessionsMx insertion is newest-session-wins, so a
+	// racing duplicate dial is replaced (and closed), not leaked.
 	return ce.dialSession(ctx, srvEntry)
 }
 
@@ -68,15 +77,18 @@ func (ce *Client) EnsureAndObtainSession(ctx context.Context, srvPK cipher.PubKe
 // It returns an error if the session does not exist AND cannot be established.
 func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 	ce.sesMx.Lock()
-	defer ce.sesMx.Unlock()
-
 	// If session with server of pk already exists, skip.
 	if _, ok := ce.clientSession(ce.porter, entry.Static); ok {
+		ce.sesMx.Unlock()
 		ce.log.WithField("remote_pk", entry.Static).Debug("Session already exists...")
 		return nil
 	}
+	ce.sesMx.Unlock()
 	entry.Protocol = ce.conf.Protocol
-	// Dial session.
+	// Dial WITHOUT holding sesMx — same re-entrancy hazard as
+	// EnsureAndObtainSession: the dial path can re-enter session
+	// establishment via the self-hosted transport, which would
+	// self-deadlock on the non-reentrant sesMx.
 	_, err := ce.dialSession(ctx, entry)
 	return err
 }
