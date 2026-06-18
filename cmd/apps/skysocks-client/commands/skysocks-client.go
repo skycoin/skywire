@@ -48,6 +48,7 @@ var (
 	appPort        uint16
 	reconnect      bool
 	reconnectDelay int64
+	direct         bool
 )
 
 func init() {
@@ -67,6 +68,7 @@ func init() {
 	// erable proc-level failures.
 	RootCmd.Flags().BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure (vs exiting)")
 	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between in-process reconnect attempts")
+	RootCmd.Flags().BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (create the transport on demand, dial 1-hop, bypass the route-finder + setup node); self-heals when the server restarts")
 }
 
 // RootCmd is the root command for skysocks
@@ -100,6 +102,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure")
 		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between reconnect attempts")
+		fs.BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (1-hop, bypass the route-finder + setup node); self-heals on server restart")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -267,11 +270,20 @@ func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port r
 	var conn net.Conn
 	err := r.Do(ctx, func() error {
 		var err error
-		conn, err = appCl.Dial(appnet.Addr{
+		dstAddr := appnet.Addr{
 			Net:    netType,
 			PubKey: pk,
 			Port:   port,
-		})
+		}
+		if direct {
+			// Direct-transport-only: the router creates a direct transport to
+			// the server if none exists and dials 1-hop over it, bypassing the
+			// route-finder and setup node (and therefore the destination
+			// circuit breaker). Self-heals when the server restarts.
+			conn, err = appCl.DialWithOptions(dstAddr, 0, 0, 0, 0, 0, 0, true)
+		} else {
+			conn, err = appCl.Dial(dstAddr)
+		}
 		return err
 	})
 	if err != nil {
