@@ -244,9 +244,23 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 		log.WithError(lis.Close()).Info("Stopping server...")
 	}()
 
-	if err := s.startUpdateEntryLoop(ctx); err != nil {
-		return err
-	}
+	// Publish this server's discovery entry in the BACKGROUND. startUpdateEntryLoop
+	// blocks on a Retrier that registers over dmsg-HTTP, which needs an upstream
+	// dmsg session — which at cold-start needs THIS server (and its peers) to be
+	// accepting first. Gating Accept on it is a circular, fleet-wide cold-start
+	// trap: every dmsg-server blocks on a registration that can only succeed once
+	// servers are already accepting, so nobody is ever first. Start Accept
+	// immediately; registration completes on its own once dmsg-disc dials in (it
+	// connects to its configured server set — see dmsgdisc.connectConfiguredServers)
+	// and a session exists. Same shape as the buildTransitDmsg cold-start fix one
+	// layer up — accepting before being registered is safe: the listener only
+	// needs the bound socket, and configured/embedded peers reach us without a
+	// discovery entry.
+	go func() {
+		if err := s.startUpdateEntryLoop(ctx); err != nil {
+			s.log.WithError(err).Error("server entry-publish loop exited")
+		}
+	}()
 
 	s.connectToPeers(ctx)
 
