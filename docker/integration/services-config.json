@@ -1,17 +1,11 @@
 {
   "test": {
-    "dmsg_discovery": "http://dmsg-discovery:9090",
-    "transport_discovery": "http://transport-discovery:9094",
-    "address_resolver": "http://address-resolver:9093",
-    "route_finder": "http://route-finder:9092",
     "route_setup_nodes": [
       "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
     ],
     "transport_setup": [
       "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
     ],
-    "uptime_tracker": "http://uptime-tracker:9095",
-    "service_discovery": "http://service-discovery:9091",
     "stun_servers": [
       "174.0.0.17:3478"
     ],
@@ -33,18 +27,12 @@
     "service_discovery_dmsg": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80"
   },
   "prod": {
-    "dmsg_discovery": "http://dmsg-discovery:9090",
-    "transport_discovery": "http://transport-discovery:9094",
-    "address_resolver": "http://address-resolver:9093",
-    "route_finder": "http://route-finder:9092",
     "route_setup_nodes": [
       "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
     ],
     "transport_setup": [
       "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
     ],
-    "uptime_tracker": "http://uptime-tracker:9095",
-    "service_discovery": "http://service-discovery:9091",
     "stun_servers": [
       "174.0.0.17:3478"
     ],

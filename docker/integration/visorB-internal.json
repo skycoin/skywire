@@ -1,81 +1,81 @@
 {
-	"version": "unknown",
-	"sk": "da4f48916e99aa3de794bffe1b5ecd465335e38b55457a9f78b411eb8585e36f",
-	"pk": "0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe",
-	"dmsg": {
-		"discovery": "http://dmsg-discovery:9090",
-		"sessions_count": 1,
-		"servers": [],
-		"servers_type": "all",
-		"protocol": "smux"
-	},
-	"dmsgpty": {
-		"dmsg_port": 22,
-		"cli_network": "unix",
-		"cli_address": "/tmp/dmsgpty.sock"
-	},
-	"transport": {
-		"discovery": "http://transport-discovery:9094",
-		"address_resolver": "http://address-resolver:9093",
-		"public_autoconnect": false,
-		"transport_setup_nodes": [
-			"0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
-		],
-		"stcpr_port": 40551,
-		"sudph_port": 40561
-	},
-	"routing": {
-		"route_setup_nodes": [
+  "version": "unknown",
+  "sk": "da4f48916e99aa3de794bffe1b5ecd465335e38b55457a9f78b411eb8585e36f",
+  "pk": "0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe",
+  "dmsg": {
+    "sessions_count": 1,
+    "servers": [],
+    "servers_type": "all",
+    "protocol": "smux",
+    "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80"
+  },
+  "dmsgpty": {
+    "dmsg_port": 22,
+    "cli_network": "unix",
+    "cli_address": "/tmp/dmsgpty.sock"
+  },
+  "transport": {
+    "public_autoconnect": false,
+    "transport_setup_nodes": [
+      "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
+    ],
+    "stcpr_port": 40551,
+    "sudph_port": 40561,
+    "discovery_dmsg": "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80",
+    "address_resolver_dmsg": "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80"
+  },
+  "routing": {
+    "route_setup_nodes": [
       "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
-			"02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
-		],
-		"route_finder": "http://route-finder:9092",
-		"route_finder_timeout": "10s",
-		"min_hops": 1
-	},
-	"uptime_tracker": {
-		"addr": "http://uptime-tracker:9095"
-	},
-	"launcher": {
-		"service_discovery": "http://service-discovery:9091",
-		"apps": [
-			{
-				"name": "vpn-client",
-				"auto_start": false,
-				"port": 43
-			},
-			{
-				"name": "vpn-server",
-				"auto_start": false,
-				"port": 44
-			}
-		],
-		"server_addr": ":5506",
-		"bin_path": "/release"
-	},
-	"hypervisors": [],
-	"cli_addr": "0.0.0.0:3435",
-	"log_level": "info",
-	"local_path": "./local",
-	"stun_servers": null,
-	"shutdown_timeout": "30s",
-	"restart_check_delay": "1s",
-	"is_public": false,
-	"persistent_transports": null,
-	"hypervisor": {
-		"db_path": "./local/hypervisor/users.db",
-		"enable_auth": false,
-		"cookies": {
-			"hash_key": "fe629f5531a017ab065fee09065a75ae3b57684daa033915eb8dda4cc0bf555678bbce74f8416603e72b0edf744a8d7a2850e6f065092af0ae50c09d6ae0d258",
-			"block_key": "4a8bbf6ac5ff929a18be4a3ec186f6f17f208dd94c9c58d219b0282d584f0727",
-			"expires_duration": 43200000000000,
-			"path": "/",
-			"domain": ""
-		},
-		"dmsg_port": 46,
-		"http_addr": ":8000",
-		"enable_tls": true,
-		"tls_cert_file": "/opt/integration/hypervisor.crt",
-		"tls_key_file": "/opt/integration/hypervisor.key"
-	}
+      "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
+    ],
+    "route_finder_timeout": "10s",
+    "min_hops": 1,
+    "route_finder_dmsg": "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80"
+  },
+  "uptime_tracker": {
+    "addr_dmsg": "dmsg://031ecf9a2aefa62398b305481f9a00365e4a1247ae0ea46bdb92223a43a306a98e:80"
+  },
+  "launcher": {
+    "apps": [
+      {
+        "name": "vpn-client",
+        "auto_start": false,
+        "port": 43
+      },
+      {
+        "name": "vpn-server",
+        "auto_start": false,
+        "port": 44
+      }
+    ],
+    "server_addr": ":5506",
+    "bin_path": "/release",
+    "service_discovery_dmsg": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80"
+  },
+  "hypervisors": [],
+  "cli_addr": "0.0.0.0:3435",
+  "log_level": "info",
+  "local_path": "./local",
+  "stun_servers": null,
+  "shutdown_timeout": "30s",
+  "restart_check_delay": "1s",
+  "is_public": false,
+  "persistent_transports": null,
+  "hypervisor": {
+    "db_path": "./local/hypervisor/users.db",
+    "enable_auth": false,
+    "cookies": {
+      "hash_key": "fe629f5531a017ab065fee09065a75ae3b57684daa033915eb8dda4cc0bf555678bbce74f8416603e72b0edf744a8d7a2850e6f065092af0ae50c09d6ae0d258",
+      "block_key": "4a8bbf6ac5ff929a18be4a3ec186f6f17f208dd94c9c58d219b0282d584f0727",
+      "expires_duration": 43200000000000,
+      "path": "/",
+      "domain": ""
+    },
+    "dmsg_port": 46,
+    "http_addr": ":8000",
+    "enable_tls": true,
+    "tls_cert_file": "/opt/integration/hypervisor.crt",
+    "tls_key_file": "/opt/integration/hypervisor.key"
+  }
 }
