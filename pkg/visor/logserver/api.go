@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -108,6 +109,8 @@ type API struct {
 
 	logger               *logging.Logger
 	startedAt            time.Time
+	publicKey            string // visor PK hex, set via SetIdentity (empty until wired)
+	dmsgAddress          string // <pk>:<dmsg-port>, set via SetIdentity
 	healthStatsProvider  HealthStatsProvider
 	serviceLister        ServiceLister
 	forwardedPortLister  ForwardedPortLister
@@ -235,7 +238,17 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 	// no level/module filters apply, and conservatively dropped when they do (so
 	// stray lines from libraries that don't follow the format don't sneak past
 	// a strict --min-level filter).
-	authRoute.GET("/visor.log", func(c *gin.Context) {
+	//
+	// Output modes:
+	//   default            → terminal-styled HTML (colored per log level)
+	//   ?raw=1 (or Accept   → verbatim plain text (c.File) for log-scraping
+	//     text/plain)
+	//   any filter param   → plain-text streaming filtered mode
+	//
+	// Served at /skywire.log (matching the on-disk filename written by
+	// visor.go's lumberjackrus hook) with /visor.log kept as an alias so
+	// older links and tooling keep working — both routes share this handler.
+	serveVisorLog := func(c *gin.Context) {
 		// The visor writes its rotating log to LocalPath/log/skywire.log
 		// (visor.go, via lumberjackrus). The endpoint previously looked at
 		// LocalPath/visor.log — wrong subdir AND filename — so it always 404'd
@@ -246,13 +259,30 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			return
 		}
 		q := c.Request.URL.Query()
-		if q.Get("min-level") == "" && q.Get("module") == "" && q.Get("grep") == "" &&
-			q.Get("since-line") == "" && q.Get("limit") == "" && q.Get("follow") == "" {
+		// Server-side filtering (always plain text — keeps grep/scrape simple).
+		if q.Get("min-level") != "" || q.Get("module") != "" || q.Get("grep") != "" ||
+			q.Get("since-line") != "" || q.Get("limit") != "" || q.Get("follow") != "" {
+			streamFilteredVisorLog(c, logFile, q)
+			return
+		}
+		// Plain-text escape hatch for log-scraping tooling: ?raw=1 or an
+		// explicit Accept: text/plain (and no text/html preference).
+		raw := q.Get("raw") == "1" || strings.EqualFold(q.Get("raw"), "true")
+		if !raw {
+			accept := c.GetHeader("Accept")
+			if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "text/html") {
+				raw = true
+			}
+		}
+		if raw {
 			c.File(logFile)
 			return
 		}
-		streamFilteredVisorLog(c, logFile, q)
-	})
+		// Default: terminal-styled, level-colored HTML.
+		renderVisorLogHTML(c, logFile)
+	}
+	authRoute.GET("/skywire.log", serveVisorLog)
+	authRoute.GET("/visor.log", serveVisorLog) // backwards-compatible alias
 
 	// pprof endpoints (auth'd) — runtime profiling
 	authRoute.GET("/debug/pprof/", gin.WrapF(pprof.Index))
@@ -330,7 +360,7 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 		if wl {
 			links = append(links, `<a href="/node-info">/node-info</a> - node survey`)
 			links = append(links, `<a href="/node-info/checksum">/node-info/checksum</a> - survey checksum`)
-			links = append(links, `<a href="/visor.log">/visor.log</a> - visor debug log`)
+			links = append(links, `<a href="/skywire.log">/skywire.log</a> - visor debug log`)
 			links = append(links, `<a href="/debug/pprof/">/debug/pprof/</a> - runtime profiling`)
 			if api.statsReader != nil {
 				links = append(links, `<a href="/stats/transports">/stats/transports</a> - live transport snapshot`)
@@ -404,10 +434,23 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			}
 		}
 
+		// Identity header — state which visor this is. Now that resolver
+		// aliases make identity meaningful, the page names itself by PK
+		// (and dmsg address when known). HTML-escaped though both are
+		// fixed-shape hex from config.
+		var idHeader string
+		if api.publicKey != "" {
+			idHeader = fmt.Sprintf(`<p class="pk">public key: %s</p>`, html.EscapeString(api.publicKey))
+			if api.dmsgAddress != "" {
+				idHeader += fmt.Sprintf(`<p class="pk">dmsg address: %s</p>`, html.EscapeString(api.dmsgAddress))
+			}
+		}
+
 		c.Writer.WriteHeader(http.StatusOK)
 		fmt.Fprintf(c.Writer, `<!doctype html><html><head><title>Skywire Visor</title>`+ //nolint:errcheck,gosec
-			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}</style>`+
-			`</head><body><h2>Skywire Visor</h2><pre>%s</pre></body></html>`, strings.Join(links, "\n"))
+			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}`+
+			`.pk{color:#5fd75f;word-break:break-all;margin:2px 0}</style>`+
+			`</head><body><h2>Skywire Visor</h2>%s<pre>%s</pre></body></html>`, idHeader, strings.Join(links, "\n"))
 	})
 
 	// Catch-all: if a custom website handler is set, serve unmatched
@@ -468,6 +511,8 @@ func (api *API) health(c *gin.Context) {
 		ServiceName: "visor",
 		BuildInfo:   buildinfo.Get(),
 		StartedAt:   api.startedAt,
+		PublicKey:   api.publicKey,
+		DmsgAddr:    api.dmsgAddress,
 	}
 
 	// Add transport stats if provider is available
@@ -497,6 +542,15 @@ func (api *API) health(c *gin.Context) {
 // SetHealthStatsProvider sets the health stats provider after initialization.
 func (api *API) SetHealthStatsProvider(provider HealthStatsProvider) {
 	api.healthStatsProvider = provider
+}
+
+// SetIdentity records the visor's public key (hex) and dmsg listening
+// address (`<pk>:<dmsg-port>`) so the /health response is self-identifying
+// like the deployment services, and the landing page can state which visor
+// it is. Called from visor init.
+func (api *API) SetIdentity(publicKey, dmsgAddress string) {
+	api.publicKey = publicKey
+	api.dmsgAddress = dmsgAddress
 }
 
 // SetServiceLister sets the service catalog provider. Called from
