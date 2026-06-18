@@ -16,6 +16,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
@@ -53,55 +54,45 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	type setupNodeKey struct{}
 	ctx := context.WithValue(context.Background(), setupNodeKey{}, true)
 
-	// Pick the dmsg-discovery URL and the HTTP client used to query it.
-	// Mirrors the visor bootstrap (pkg/visor/init_dmsg.go) so the RSN
-	// can talk to dmsg-discovery over DMSG when configured to.
+	// Single dmsg client with self-hosted dmsg-discovery — matches the
+	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsgc/
+	// dmsgc.go) and the transport-setup service in
+	// pkg/transport-setup/api/api.go. Plain-HTTP discovery
+	// (conf.Dmsg.Discovery) is no longer supported for deployment
+	// services; conf.Dmsg.DiscoveryDmsg + seed conf.Dmsg.Servers are
+	// required.
 	//
-	//   - If conf.Dmsg.DiscoveryDmsg is set AND we have static seed
-	//     servers (conf.Dmsg.Servers), bring up a direct dmsg client
-	//     against the seeds, wrap it as a dmsghttp transport, and use
-	//     that as the http.Client for the real disc.NewHTTP. The seed
-	//     servers break the chicken-and-egg of "need DMSG to query
-	//     dmsg-discovery via DMSG."
-	//   - Otherwise: plain HTTP, same as before.
-	discURL := conf.Dmsg.Discovery
+	// The previous code here spun a SECOND dmsg client via direct.StartDmsg
+	// just to back the dmsg-HTTP transport, sharing conf.PK with the
+	// main dmsgC. dmsg servers key sessions by client-PK with newest-
+	// session-wins eviction (#3035), so the two clients evicted each
+	// other on every shared server — the dual-client self-eviction storm
+	// Alpha eliminated for the visor in #3136/#3139. The collapsed
+	// pattern below uses ONE client whose http.Transport is itself,
+	// resolving discovery via a registering-fallback that reads direct-
+	// first (synthetic entries for the local PK + dmsg-service PKs) and
+	// writes via dmsg-HTTP routed through the same client's sessions.
+	seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKsFromConf(conf)...)
+	entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
+	directDisc := direct.NewClient(entries, masterLogger.PackageLogger("rsn:disc:direct"))
+
 	httpC := &http.Client{}
-	if conf.Dmsg.DiscoveryDmsg != "" && len(conf.Dmsg.Servers) > 0 {
-		seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKsFromConf(conf)...)
-		entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
-		dClient := direct.NewClient(entries, masterLogger.PackageLogger("rsn:dmsg_http:direct_client"))
+	dmsgDisc := disc.NewHTTP(conf.Dmsg.DiscoveryDmsg, httpC, packageLogger)
+	discClient := dmsgclient.NewRegisteringFallbackDiscClient(directDisc, dmsgDisc, masterLogger.PackageLogger("rsn:disc:fallback"))
 
-		dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx,
-			masterLogger.PackageLogger("rsn:dmsg_http:dmsgDC"),
-			conf.PK, conf.SK, dClient, dmsg.DefaultConfig())
-		if err != nil {
-			log.WithError(err).Warn("DMSG-HTTP bootstrap failed, falling back to plain HTTP for dmsg-discovery")
-		} else {
-			httpC = &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgDC)}
-			discURL = conf.Dmsg.DiscoveryDmsg
-			log.Info("Using DMSG-HTTP for dmsg-discovery")
-			// closeDmsgDC will run when the setup node shuts down via
-			// its context cancellation; we don't track this in a close
-			// stack here because Node.Stop is not exposed and the
-			// process exits when ctx is canceled.
-			_ = closeDmsgDC
-		}
-	} else if discURL == "" && conf.Dmsg.DiscoveryDmsg != "" {
-		// DMSG URL set but no seed servers — try plain HTTP against
-		// the dmsg URL anyway. dmsg URLs don't work over plain HTTP,
-		// so this will fail at first request, but that's the same
-		// failure mode as before this change.
-		discURL = conf.Dmsg.DiscoveryDmsg
-		log.Warn("DiscoveryDmsg set but no seed servers in conf.Dmsg.Servers; cannot bootstrap dmsg-http")
-	}
-
-	dmsgDisc := disc.NewHTTP(discURL, httpC, packageLogger)
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
-	dmsgC := dmsg.NewClient(conf.PK, conf.SK, dmsgDisc, dmsgConf)
+	dmsgC := dmsg.NewClient(conf.PK, conf.SK, discClient, dmsgConf)
+	for _, srv := range conf.Dmsg.Servers {
+		if srv == nil || srv.Static.Null() || srv.Server == nil {
+			continue
+		}
+		dmsgC.SeedEntryCache(srv.Static, srv)
+	}
+	httpC.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
 	go dmsgC.Serve(ctx)
 
 	log.WithField("local_pk", conf.PK).WithField("dmsg_conf", conf.Dmsg).
-		WithField("disc_url", discURL).
+		WithField("disc_url", conf.Dmsg.DiscoveryDmsg).
 		Info("Connecting to the dmsg network.")
 	<-dmsgC.Ready()
 	log.Info("Connected!")
