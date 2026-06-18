@@ -104,7 +104,7 @@ var logCmd = &cobra.Command{
 		if err != nil {
 			pk, sk = cipher.GenerateKeyPair()
 		}
-		bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers, dmsgDisc, "")
+		bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers, dmsgDisc, "", "")
 		if err != nil {
 			log.WithError(err).Error("Failed to bootstrap dmsg client.")
 			return
