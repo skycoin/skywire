@@ -85,15 +85,6 @@ type DmsgConfig struct {
 	Protocol             string        `json:"-"`
 	LANServers           []*disc.Entry `json:"-"`
 	HypervisorDiscovery  string        `json:"-"`
-
-	// DirectOnly selects the single dmsg client's discovery MODE. Default
-	// false = "discovery" (registering fallback: the visor publishes its
-	// entry to dmsg-discovery and resolves via it, direct-first). true =
-	// "direct-only": static direct client ONLY, no dmsg-discovery — the visor
-	// does not register (unreachable by lookup, can't relay, NOT
-	// rewards-eligible), a stealthy leaf reaching only statically-known
-	// services/servers. Experimental; default stays discovery.
-	DirectOnly bool `json:"direct_only,omitempty"`
 }
 
 // MarshalJSON and UnmarshalJSON live in spec_native.go under
