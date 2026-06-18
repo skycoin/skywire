@@ -54,6 +54,25 @@ func TestRenderHomePage(t *testing.T) {
 	assert.Less(t, strings.Index(page, "This visor"), strings.Index(page, "Deployment services"))
 }
 
+func TestRenderHomePageServiceEndpoints(t *testing.T) {
+	tpdPK, _ := cipher.GenerateKeyPair()
+	dmsgdPK, _ := cipher.GenerateKeyPair()
+
+	// Only tpd + dmsgd configured → only those services get an endpoint
+	// directory; ar/rf/sd/ut/reward (no alias) are skipped.
+	aliases := map[string]cipher.PubKey{"tpd": tpdPK, "dmsgd": dmsgdPK}
+	page := string(renderHomePage(aliases, ".dmsg", cipher.PubKey{}))
+
+	assert.Contains(t, page, "Service API endpoints")
+	// A non-/health endpoint from the manifest, paired with the service's
+	// resolver alias and tunneled through the same proxy.
+	assert.Contains(t, page, `href="http://tpd.dmsg/all-transports"`)
+	assert.Contains(t, page, `href="http://dmsgd.dmsg/dmsg-discovery/available_servers"`)
+	// A service with no configured alias is not rendered.
+	assert.NotContains(t, page, "http://ar.dmsg/resolve")
+	assert.NotContains(t, page, "http://sd.dmsg/api/services")
+}
+
 func TestRenderHomePageNatSort(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	aliases := map[string]cipher.PubKey{"dmsg0": pk, "dmsg2": pk, "dmsg10": pk}
