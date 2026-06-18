@@ -31,6 +31,7 @@ var (
 	stunPath       string
 	domain         string
 	dmsgDisc       string
+	dmsgDiscDmsg   string
 	sk             cipher.SecKey
 	keyFile        string
 	dmsgPort       uint16
@@ -95,7 +96,8 @@ func init() {
 	RootCmd.Flags().StringVar(&tag, "tag", "config_bootstrapper", "logging tag\n\r")
 	RootCmd.Flags().StringVarP(&stunPath, "config", "c", "./config.json", "stun server list file location\n\r")
 	RootCmd.Flags().StringVarP(&domain, "domain", "d", "skywire.skycoin.com", "the domain of the endpoints\n\r")
-	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsg.DiscURL(false), "url of dmsg-discovery\n\r")
+	RootCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", "", "plain-HTTP url of dmsg-discovery (deprecated; leave empty for dmsg-only)\n\r")
+	RootCmd.Flags().StringVar(&dmsgDiscDmsg, "dmsg-disc-dmsg", dmsg.DiscAddr(false), "dmsg-PK url of dmsg-discovery (default: embedded prod)\n\r")
 	RootCmd.Flags().Var(&sk, "sk", "dmsg secret key\n\r")
 	RootCmd.Flags().StringVar(&keyFile, "keyfile", "", "path to file containing secret key (auto-generated if missing)\n\r")
 	RootCmd.Flags().Uint16Var(&dmsgPort, "dmsg-port", dmsg.DefaultDmsgHTTPPort, "dmsg port value\n\r")
@@ -170,6 +172,7 @@ HTTP Endpoints:
 			SK:                  sk,
 			DmsgPort:            dmsgPort,
 			DmsgDiscovery:       dmsgDisc,
+			DmsgDiscoveryDmsg:   dmsgDiscDmsg,
 			DmsgServerType:      dmsgServerType,
 			EmbeddedDmsgServers: dmsg.Prod.DmsgServers,
 			SurveyWhitelist:     deployment.Prod.SurveyWhitelist,
