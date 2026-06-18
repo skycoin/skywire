@@ -500,10 +500,40 @@ func (ce *Client) Serve(ctx context.Context) {
 				if pinned {
 					ce.pinnedFailures.Store(0)
 				}
+				// Start the background loops the moment a session
+				// exists. Pre-fix they were started AFTER the inner
+				// for-loop iterated every seed entry — fine when
+				// EnsureSession returned quickly, but the dial path
+				// runs setSessionCallback synchronously and that
+				// callback's first-session publish blocks for up to
+				// entryUpdateAttemptTimeout (#3172). During that 30 s
+				// window Phase 3 of the publish's own DialStream
+				// recursively dials extra sessions, pushing
+				// SessionCount past MinSessions. When EnsureSession
+				// finally returns, the next iteration of THIS for
+				// loop trips the
+				//   if MinSessions != 0 && SessionCount() >= MinSessions
+				// guard and parks on <-errCh — for the rest of the
+				// process's life if sessions are stable. The for loop
+				// then never completes its iteration and the lines
+				// below (updateClientEntryLoop start) never run, so
+				// the entry-publish retry loop never starts and the
+				// service stays unregistered until the very first
+				// session dies. Idempotent via sync.Once so duplicate
+				// triggers across entries are a no-op.
+				updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
+				pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
+				porterReapLoopOnce.Do(func() { go ce.porterReapLoop(cancellabelCtx) })
+				if ce.conf.MinSessions == 0 {
+					reconnectLoopOnce.Do(func() { go ce.reconnectLoop(cancellabelCtx) })
+				}
 			}
 		}
 
-		// Only start the update entry loop once we have at least one session established.
+		// Defensive: also start loops post-iteration in case the
+		// inner for-loop drained without hitting the success branch
+		// (everything failed, then the loop fell through to the
+		// outer-select retry path). sync.Once makes this safe.
 		updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
 		pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
 		porterReapLoopOnce.Do(func() { go ce.porterReapLoop(cancellabelCtx) })
