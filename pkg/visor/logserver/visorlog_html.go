@@ -74,7 +74,7 @@ func renderVisorLogHTML(c *gin.Context, logFile string) {
 
 	// Page head + terminal styling. <pre> preserves the log's own spacing;
 	// per-line <span>s carry the level color.
-	io.WriteString(c.Writer, //nolint:errcheck
+	_, _ = io.WriteString(c.Writer,
 		`<!doctype html><html><head><meta charset="utf-8"><title>skywire.log</title>`+
 			`<style>`+
 			`body{background:#0a0a0a;color:#d0d0d0;font-family:'DejaVu Sans Mono',Menlo,Consolas,monospace;`+
@@ -99,14 +99,14 @@ func renderVisorLogHTML(c *gin.Context, logFile string) {
 			}
 			flushEvery++
 			if flushEvery%256 == 0 {
-				_ = c.Writer.Flush() //nolint:errcheck
+				c.Writer.Flush()
 			}
 		}
 		if rerr != nil {
 			break
 		}
 	}
-	io.WriteString(c.Writer, "</pre></body></html>") //nolint:errcheck
+	_, _ = io.WriteString(c.Writer, "</pre></body></html>")
 	c.Writer.Flush()
 }
 
