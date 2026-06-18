@@ -25,7 +25,16 @@ func ListenAndServe(ctx context.Context, _ cipher.SecKey, a http.Handler, _ disc
 	log.WithField("dmsg_addr", fmt.Sprintf("dmsg://%v", lis.Addr().String())).
 		Debug("Serving...")
 	srv := &http.Server{
-		ReadTimeout: 3 * time.Second,
+		// ReadTimeout bounds the ENTIRE request read — headers AND body. 3s was
+		// the symmetric oversight to the WriteTimeout fix below: a registration
+		// POST (dmsg-discovery setEntry) whose small signed-entry body is delayed
+		// over a congested dmsg stream during a mass-reconnect thundering herd
+		// exceeded 3s, so the server cut the conn and the client read EOF on the
+		// PUT — the visor then never registers and falls out of discovery. Header
+		// slowloris is still bounded separately by ReadHeaderTimeout (3s) below,
+		// so the body read can safely have WriteTimeout-sized margin (30s, well
+		// under IdleTimeout / the 120s dmsg StreamIdleTimeout).
+		ReadTimeout: 30 * time.Second,
 		// WriteTimeout bounds handler execution + response writing (Go sets it as
 		// the conn write deadline once the request headers are read). 3s was too
 		// short for heavy aggregation endpoints served over dmsg — e.g.
