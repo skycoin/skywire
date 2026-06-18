@@ -20,7 +20,7 @@ func TestSelfDialAsStampsPK(t *testing.T) {
 	gotAddr := make(chan net.Addr, 1)
 	reg.Register(80, "test", func(conn net.Conn) {
 		gotAddr <- conn.RemoteAddr()
-		_ = conn.Close()
+		_ = conn.Close() //nolint:errcheck
 	})
 
 	cli, err := reg.SelfDialAs(80, pk)
@@ -47,7 +47,7 @@ func TestSelfDialAnonymous(t *testing.T) {
 	gotAddr := make(chan net.Addr, 1)
 	reg.Register(80, "test", func(conn net.Conn) {
 		gotAddr <- conn.RemoteAddr()
-		_ = conn.Close()
+		_ = conn.Close() //nolint:errcheck
 	})
 
 	cli, err := reg.SelfDial(80)

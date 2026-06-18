@@ -388,17 +388,18 @@ type FetchConfig struct {
 // instead of relying on a clearnet hop.
 //
 // Flags:
-//   --no-cxo     skip the CXO subscriber-cache step.
-//   --no-rpc     skip the visor RPC (DmsgHTTP) step; forces fall-through to the
-//                direct DMSG step using a CLI-owned dmsg client.
-//   --no-dmsg    skip the direct DMSG HTTP step.
-//   --sk         secret key (hex) for the CLI-owned dmsg client when the direct
-//                step runs (--no-rpc or RPC unavailable). Visible in shell
-//                history — prefer --config for production use.
-//   --config     path to a JSON file supplying {"sk":..., "dmsg":{...}}. SK
-//                precedence: --sk > --config > $DMSG_SK > $DMSGCURL_SK > random
-//                ephemeral. Dmsg.Servers from the config seeds the direct
-//                client; absent, the embedded deployment server set is used.
+//
+//	--no-cxo     skip the CXO subscriber-cache step.
+//	--no-rpc     skip the visor RPC (DmsgHTTP) step; forces fall-through to the
+//	             direct DMSG step using a CLI-owned dmsg client.
+//	--no-dmsg    skip the direct DMSG HTTP step.
+//	--sk         secret key (hex) for the CLI-owned dmsg client when the direct
+//	             step runs (--no-rpc or RPC unavailable). Visible in shell
+//	             history — prefer --config for production use.
+//	--config     path to a JSON file supplying {"sk":..., "dmsg":{...}}. SK
+//	             precedence: --sk > --config > $DMSG_SK > $DMSGCURL_SK > random
+//	             ephemeral. Dmsg.Servers from the config seeds the direct
+//	             client; absent, the embedded deployment server set is used.
 func RegisterFetchFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&NoCXO, "no-cxo", false, "skip CXO subscriber-cache step")
 	cmd.Flags().BoolVar(&NoRPC, "no-rpc", false, "skip visor RPC (DmsgHTTP) step")
