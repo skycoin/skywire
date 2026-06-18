@@ -394,9 +394,9 @@ func isDMSGOnline(v *Visor) bool {
 	// uptime probe that is simply wrong: it can't see dmsg drop mid-run, and
 	// it produces nonsensical comparisons against the live skynet/transport
 	// probe (e.g. skynet uptime appearing higher than dmsg, which is
-	// impossible when both are measured live). ConnectedServers() reads the
+	// impossible when both are measured live). AllSessions() reads the
 	// current client-session set, so this tracks real dmsg connectivity.
-	return len(v.dmsgC.ConnectedServers()) > 0
+	return len(v.dmsgC.AllSessions()) > 0
 }
 
 func countLiveTransports(v *Visor) int {
