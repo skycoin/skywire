@@ -4,6 +4,7 @@ package clirpc
 import (
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -25,6 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -359,17 +361,128 @@ var (
 	NoRPC bool
 	// NoDmsg disables the direct DMSG HTTP step in FetchServiceURL.
 	NoDmsg bool
+	// FetchSK, when set, is the secret key to use for the direct DMSG HTTP
+	// step's ephemeral client. Otherwise the precedence in resolveFetchIdentity
+	// applies (--config -> $DMSG_SK -> $DMSGCURL_SK -> ephemeral random).
+	FetchSK cipher.SecKey
+	// FetchConfigPath is a path to a JSON config supplying the SK and an
+	// optional dmsg-bootstrap section. Lets operators keep the SK out of
+	// shell history. See FetchConfig for the file shape.
+	FetchConfigPath string
 )
 
-// RegisterFetchFlags adds --no-cxo, --no-rpc, and --no-dmsg flags to a command.
-// Call this in init() for any command that uses FetchServiceURL. There is no
-// plain-HTTP step anymore — deployment services are reached over CXO/DMSG only;
-// for ad-hoc browser access, point the browser at the visor's dmsgweb resolving
-// proxy instead of relying on a clearnet hop.
+// FetchConfig is the minimal CLI-side identity/dmsg-bootstrap config consumed
+// by --config. The schema is compatible with a visor's skywire.json: top-level
+// "sk"/"pk" + a "dmsg" block with "discovery_dmsg" and "servers", so the same
+// file can be reused for both purposes. Extra fields in the file are ignored.
+type FetchConfig struct {
+	SK   cipher.SecKey    `json:"sk,omitempty"`
+	PK   cipher.PubKey    `json:"pk,omitempty"`
+	Dmsg dmsgc.DmsgConfig `json:"dmsg,omitempty"`
+}
+
+// RegisterFetchFlags adds the fetch-path flags to a command. Call this in
+// init() for any command that uses FetchServiceURL. There is no plain-HTTP
+// step — deployment services are reached over CXO/DMSG only; for ad-hoc
+// browser access, point the browser at the visor's dmsgweb resolving proxy
+// instead of relying on a clearnet hop.
+//
+// Flags:
+//
+//	--no-cxo     skip the CXO subscriber-cache step.
+//	--no-rpc     skip the visor RPC (DmsgHTTP) step; forces fall-through to the
+//	             direct DMSG step using a CLI-owned dmsg client.
+//	--no-dmsg    skip the direct DMSG HTTP step.
+//	--sk         secret key (hex) for the CLI-owned dmsg client when the direct
+//	             step runs (--no-rpc or RPC unavailable). Visible in shell
+//	             history — prefer --config for production use.
+//	--config     path to a JSON file supplying {"sk":..., "dmsg":{...}}. SK
+//	             precedence: --sk > --config > $DMSG_SK > $DMSGCURL_SK > random
+//	             ephemeral. Dmsg.Servers from the config seeds the direct
+//	             client; absent, the embedded deployment server set is used.
 func RegisterFetchFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&NoCXO, "no-cxo", false, "skip CXO subscriber-cache step")
 	cmd.Flags().BoolVar(&NoRPC, "no-rpc", false, "skip visor RPC (DmsgHTTP) step")
 	cmd.Flags().BoolVar(&NoDmsg, "no-dmsg", false, "skip direct DMSG HTTP step")
+	cmd.Flags().Var(&FetchSK, "sk",
+		"secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak)")
+	cmd.Flags().StringVar(&FetchConfigPath, "config", "",
+		"path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)")
+}
+
+// resolveFetchIdentity picks the secret key and bootstrap server set the
+// direct-DMSG step will use, in this precedence:
+//
+//  1. --sk flag (flags.Changed("sk"))
+//  2. --config path: parsed as FetchConfig; SK and Dmsg.Servers taken from it
+//  3. $DMSG_SK environment variable (same convention as `dmsg curl`/`dmsg cat`)
+//  4. $DMSGCURL_SK environment variable (same convention as log-fetch helpers)
+//  5. ephemeral random key (cipher.GenerateKeyPair)
+//
+// servers comes from --config when set, else from dmsg.Prod.DmsgServers.
+// Returns (pk, sk, servers, label) — label describes the resolution path
+// for logging.
+func resolveFetchIdentity(flags *pflag.FlagSet) (cipher.PubKey, cipher.SecKey, []disc.Entry, string) {
+	servers := dmsg.Prod.DmsgServers
+	label := "ephemeral"
+
+	if flags != nil && flags.Changed("sk") {
+		pk, err := FetchSK.PubKey()
+		if err == nil {
+			return pk, FetchSK, servers, "--sk flag"
+		}
+		logger.Debugf("--sk flag set but pubkey derivation failed: %v; falling through", err)
+	}
+
+	if FetchConfigPath != "" {
+		raw, err := os.ReadFile(FetchConfigPath) //nolint:gosec
+		if err != nil {
+			logger.Debugf("--config %q read failed: %v; falling through", FetchConfigPath, err)
+		} else {
+			var fc FetchConfig
+			if jerr := json.Unmarshal(raw, &fc); jerr != nil {
+				logger.Debugf("--config %q parse failed: %v; falling through", FetchConfigPath, jerr)
+			} else {
+				if len(fc.Dmsg.Servers) > 0 {
+					srv := make([]disc.Entry, 0, len(fc.Dmsg.Servers))
+					for _, e := range fc.Dmsg.Servers {
+						if e == nil {
+							continue
+						}
+						srv = append(srv, *e)
+					}
+					if len(srv) > 0 {
+						servers = srv
+					}
+				}
+				if !fc.SK.Null() {
+					pk, perr := fc.SK.PubKey()
+					if perr == nil {
+						return pk, fc.SK, servers, "--config sk"
+					}
+					logger.Debugf("--config sk pubkey derivation failed: %v", perr)
+				}
+			}
+		}
+	}
+
+	for _, env := range []string{"DMSG_SK", "DMSGCURL_SK"} {
+		if v := os.Getenv(env); v != "" {
+			var sk cipher.SecKey
+			if err := sk.Set(v); err == nil {
+				pk, perr := sk.PubKey()
+				if perr == nil {
+					return pk, sk, servers, "$" + env
+				}
+				logger.Debugf("$%s pubkey derivation failed: %v", env, perr)
+			} else {
+				logger.Debugf("$%s parse failed: %v", env, err)
+			}
+		}
+	}
+
+	pk, sk := cipher.GenerateKeyPair()
+	return pk, sk, servers, label
 }
 
 // isDmsgURL reports whether the given URL is a dmsg:// scheme URL that
@@ -557,20 +670,20 @@ func splitOn(s string, sep byte) []string {
 // and uses a FallbackRoundTripper to try each until one reaches the target service.
 // This matches the pattern used by `skywire dmsg curl -B`: services connect to DMSG
 // servers directly (not via discovery), so we must connect to each server to find them.
-func fetchViaDmsgDirect(dmsgURL string) ([]byte, error) {
+func fetchViaDmsgDirect(flags *pflag.FlagSet, dmsgURL string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 
-	// Keep the ephemeral direct-client loggers quiet. They otherwise
-	// dump session-open / yamux / EOF / entry-delete chatter at debug
-	// level for every fetch, which drowns the caller's own output.
-	// Use a dedicated master logger so we don't mutate the global one.
+	// Keep the direct-client loggers quiet. They otherwise dump
+	// session-open / yamux / EOF / entry-delete chatter at debug level
+	// for every fetch, which drowns the caller's own output. Use a
+	// dedicated master logger so we don't mutate the global one.
 	dmaster := logging.NewMasterLogger()
 	dmaster.SetLevel(logrus.ErrorLevel)
 	dlog := dmaster.PackageLogger("cli:dmsg-fetch")
-	pk, sk := cipher.GenerateKeyPair()
 
-	servers := dmsg.Prod.DmsgServers
+	pk, sk, servers, idSource := resolveFetchIdentity(flags)
+	logger.Debugf("direct DMSG identity: pk=%s source=%s", pk, idSource)
 	if len(servers) == 0 {
 		return nil, fmt.Errorf("no DMSG servers configured")
 	}
@@ -798,7 +911,7 @@ func FetchServiceURL(cmdFlags *pflag.FlagSet, url string) ([]byte, error) {
 		dmsgURL := DmsgURLForHTTP(url)
 		if dmsgURL != "" {
 			logger.Debugf("Trying direct DMSG fetch: %s", dmsgURL)
-			body, err := fetchViaDmsgDirect(dmsgURL)
+			body, err := fetchViaDmsgDirect(cmdFlags, dmsgURL)
 			if err == nil {
 				return body, nil
 			}
