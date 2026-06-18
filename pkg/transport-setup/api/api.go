@@ -60,8 +60,15 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	// Single dmsg client with self-hosted dmsg-discovery — matches the
 	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsgc/
 	// dmsgc.go). Plain-HTTP discovery (conf.Dmsg.Discovery) is no longer
-	// supported for deployment services; conf.Dmsg.DiscoveryDmsg + seed
-	// conf.Dmsg.Servers are required.
+	// supported for deployment services; conf.Dmsg.DiscoveryDmsg is
+	// required.
+	//
+	// The seed-server set is conf.Dmsg.Servers ∪ dmsg.Prod.DmsgServers,
+	// deduped by Static PK with operator-supplied entries first. A
+	// deployment may therefore omit conf.Dmsg.Servers and still
+	// bootstrap — the embedded Prod set is the default. Same merge
+	// shape as dmsgsrv.buildTransitDmsg (pkg/services/dmsgsrv/
+	// dmsgsrv.go) and the RSN (pkg/router/setupnode.go).
 	//
 	// Pattern:
 	//   - direct.Client preloaded with the local PK + dmsg-disc PK,
@@ -74,8 +81,8 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	//     direct-first, WRITE via dmsg-HTTP so the service's own entry
 	//     IS published to the real dmsg-discovery.
 	//   - SINGLE dmsg.Client built against the wrapped disc.
-	//   - SeedEntryCache for every configured server (bootstrap dial
-	//     path + the Serve-loop fallback in #3146).
+	//   - SeedEntryCache for every seed server (bootstrap dial path
+	//     + the Serve-loop fallback in #3146).
 	//   - httpC.Transport wired to dmsghttp.MakeHTTPTransport(dmsgC)
 	//     AFTER construction — the transport isn't invoked until the
 	//     first PostEntry/Entry call, by which time Serve has already
@@ -84,16 +91,32 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	httpC := &http.Client{}
 	dmsgDisc := disc.NewHTTP(conf.Dmsg.DiscoveryDmsg, httpC, log)
 
+	servers := make([]*disc.Entry, 0, len(conf.Dmsg.Servers)+len(dmsg.Prod.DmsgServers))
+	seenPK := map[cipher.PubKey]struct{}{}
+	addServer := func(e *disc.Entry) {
+		if e == nil || e.Static.Null() || e.Server == nil {
+			return
+		}
+		if _, ok := seenPK[e.Static]; ok {
+			return
+		}
+		seenPK[e.Static] = struct{}{}
+		servers = append(servers, e)
+	}
+	for _, e := range conf.Dmsg.Servers {
+		addServer(e)
+	}
+	for i := range dmsg.Prod.DmsgServers {
+		addServer(&dmsg.Prod.DmsgServers[i])
+	}
+
 	seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKs(conf.Dmsg.DiscoveryDmsg)...)
-	entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
+	entries := direct.GetAllEntries(seedKeys, servers)
 	directDisc := direct.NewClient(entries, log)
 	discClient := dmsgclient.NewRegisteringFallbackDiscClient(directDisc, dmsgDisc, log)
 
 	client := dmsg.NewClient(conf.PK, conf.SK, discClient, dmsgConf)
-	for _, srv := range conf.Dmsg.Servers {
-		if srv == nil || srv.Static.Null() || srv.Server == nil {
-			continue
-		}
+	for _, srv := range servers {
 		client.SeedEntryCache(srv.Static, srv)
 	}
 	httpC.Transport = dmsghttp.MakeHTTPTransport(context.Background(), client)
