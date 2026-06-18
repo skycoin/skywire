@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/flynn/noise"
 
@@ -14,6 +15,16 @@ import (
 )
 
 var noiseLogger = logging.MustGetLogger("noise")
+
+// requirePQ, when SKYWIRE_REQUIRE_PQ is set in the environment, makes a
+// handshake that COMPLETED classical-only (no ML-KEM shared secret) HARD-FAIL
+// instead of silently downgrading — the downgrade *prevention* that
+// complements the downgrade *observability* (the warn in applyHybrid). It is
+// the in-process enforcement knob for the unauthenticated-PQ-negotiation
+// finding: a payload-stripping MITM can no longer force a session to classical
+// without the handshake failing. Default OFF: flip on fleet-wide ONLY after
+// every peer is PQ-capable, or handshakes to not-yet-updated visors break.
+var requirePQ = os.Getenv("SKYWIRE_REQUIRE_PQ") != ""
 
 // ErrInvalidCipherText occurs when a ciphertext is received which is too short in size.
 var ErrInvalidCipherText = errors.New("noise decrypt unsafe: ciphertext cannot be less than 8 bytes")
@@ -225,8 +236,18 @@ func (ns *Noise) applyHybrid() error {
 		// once the fleet is fully PQ-capable). Responders can't distinguish
 		// "peer is classical" from "MITM stripped", so only the
 		// initiator-offered case is logged.
-		if ns.init && ns.pqInit != nil && ns.enc != nil && ns.dec != nil {
-			noiseLogger.Warn("post-quantum DOWNGRADE: offered ML-KEM but peer returned no ciphertext; session is CLASSICAL-only (older peer, or a payload-stripping MITM)")
+		if ns.enc != nil && ns.dec != nil {
+			// Handshake completed classical-only.
+			if requirePQ {
+				// Prevention: refuse the downgrade outright. Covers BOTH roles
+				// (initiator whose offer was stripped, and responder who saw no
+				// ML-KEM material), since under enforcement any classical-only
+				// completion is unacceptable.
+				return errors.New("post-quantum required (SKYWIRE_REQUIRE_PQ) but the session negotiated classical-only — refusing the handshake")
+			}
+			if ns.init && ns.pqInit != nil {
+				noiseLogger.Warn("post-quantum DOWNGRADE: offered ML-KEM but peer returned no ciphertext; session is CLASSICAL-only (older peer, or a payload-stripping MITM)")
+			}
 		}
 		return nil
 	}
