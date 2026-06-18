@@ -191,7 +191,21 @@ func (r *skynetResolver) Resolve(ctx context.Context, name string) (context.Cont
 func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Config) error {
 	conf := &socks5.Config{
 		Resolver: &skynetResolver{cfg: cfg},
-		Dial: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+		Dial: func(dialCtx context.Context, network, addr string) (retConn net.Conn, retErr error) {
+			// Fail the single request instead of crashing the whole visor if
+			// anything in the dial path panics. go-socks5 invokes this from its
+			// per-connection serve goroutine with no recover of its own, so an
+			// unguarded panic here (e.g. a nil cfg.Stats / cfg.LeafMinter on a
+			// partially-populated config, or a resolver edge case) propagates
+			// up and takes the process down.
+			defer func() {
+				if rec := recover(); rec != nil {
+					log.WithField("panic", rec).Error("recovered panic in SOCKS5 dial — failing the request, not crashing the visor")
+					retConn = nil
+					retErr = fmt.Errorf("skynet dial: recovered panic: %v", rec)
+				}
+			}()
+
 			origHost, _ := dialCtx.Value(skynetOrigHostKey{}).(string)
 
 			// Check if hostname matches .skynet suffix.
