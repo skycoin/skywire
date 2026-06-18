@@ -143,6 +143,7 @@ type circuitBreaker struct {
 	state            CircuitState
 	openedAt         time.Time // last open/re-open time (reset on each half_open→open transition)
 	firstOpenedAt    time.Time // first time the breaker tripped; used for circuitMaxOpenDuration
+	probeInFlight    bool      // a single half-open probe is in flight; gate concurrent probes
 }
 
 // StatsSnapshot is the public, JSON-friendly view exposed over RPC/CLI.
@@ -323,6 +324,7 @@ func (c *Collector) allowPK(pubKey cipher.PubKey) (bool, string) {
 		br.firstOpenedAt = time.Time{}
 		br.consecutiveFails = 0
 		br.firstFailAt = time.Time{}
+		br.probeInFlight = false
 		if d, ok := c.dests[pk]; ok {
 			d.Circuit = string(CircuitClosed)
 		}
@@ -332,13 +334,25 @@ func (c *Collector) allowPK(pubKey cipher.PubKey) (bool, string) {
 		if time.Since(br.openedAt) < circuitOpenDuration {
 			return false, "circuit open: " + pk + " unreachable"
 		}
-		// Time's up — transition to half-open for a probe attempt.
+		// Time's up — transition to half-open and let THIS caller be the
+		// single probe.
 		br.state = CircuitHalfOpen
+		br.probeInFlight = true
 		if d, ok := c.dests[pk]; ok {
 			d.Circuit = string(CircuitHalfOpen)
 		}
+		return true, ""
 	}
-	// HalfOpen: allow the caller through (they're the probe).
+	// Already HalfOpen: admit only ONE probe at a time. Concurrent callers are
+	// rejected until finish() resolves the probe (Closed on success / Open on
+	// failure, both of which clear probeInFlight). Without this, every caller
+	// arriving during the half-open window stampedes the recovering
+	// destination — a thundering herd against exactly the node that just came
+	// back, which can re-trip the breaker it was meant to test.
+	if br.probeInFlight {
+		return false, "circuit half-open: probe in flight for " + pk
+	}
+	br.probeInFlight = true
 	return true, ""
 }
 
@@ -572,6 +586,7 @@ func (c *Collector) recordCircuitFailureLocked(pk string) {
 	if br.state == CircuitHalfOpen {
 		br.state = CircuitOpen
 		br.openedAt = now
+		br.probeInFlight = false
 		if d, ok := c.dests[pk]; ok {
 			d.Circuit = string(CircuitOpen)
 		}
@@ -600,6 +615,7 @@ func (c *Collector) recordCircuitSuccessLocked(pk string) {
 	}
 	br.consecutiveFails = 0
 	br.firstFailAt = time.Time{}
+	br.probeInFlight = false
 	if br.state != CircuitClosed {
 		br.state = CircuitClosed
 		br.openedAt = time.Time{}
