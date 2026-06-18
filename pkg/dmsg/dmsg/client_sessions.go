@@ -84,12 +84,18 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 		return nil
 	}
 	ce.sesMx.Unlock()
-	entry.Protocol = ce.conf.Protocol
+	// Work on a shallow copy: callers can share one configured *disc.Entry
+	// across concurrent EnsureSession calls (dmsg-disc's connectConfiguredServers
+	// + updateServers both iterate the same preloaded server slice), so
+	// mutating entry.Protocol in place is a data race against those readers.
+	// The shallow copy shares the read-only Server pointer, which is fine.
+	e := *entry
+	e.Protocol = ce.conf.Protocol
 	// Dial WITHOUT holding sesMx — same re-entrancy hazard as
 	// EnsureAndObtainSession: the dial path can re-enter session
 	// establishment via the self-hosted transport, which would
 	// self-deadlock on the non-reentrant sesMx.
-	_, err := ce.dialSession(ctx, entry)
+	_, err := ce.dialSession(ctx, &e)
 	return err
 }
 
