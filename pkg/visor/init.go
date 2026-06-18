@@ -284,6 +284,13 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		if err != nil {
 			return nil, fmt.Errorf("provided URL is invalid: %w", err)
 		}
+		// Defense-in-depth: v.dClient is seeded from the embedded deployment
+		// set in initDmsgHTTP so it is normally never nil, but an
+		// empty-keyring build could still leave it nil — fail the call with a
+		// clear error instead of nil-dereferencing and crashing visor startup.
+		if v.dClient == nil {
+			return nil, fmt.Errorf("dmsg direct client unavailable (no configured/cached/embedded dmsg servers); cannot resolve %s", serviceURL.Host)
+		}
 		// get delegated servers and add them to the client entry
 		servers, err := v.dClient.AvailableServers(ctx)
 		if err != nil {
