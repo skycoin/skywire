@@ -240,9 +240,11 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 	// a strict --min-level filter).
 	//
 	// Output modes:
-	//   default            → terminal-styled HTML (colored per log level)
+	//   default            → terminal-styled HTML (colored per log level),
+	//                        STREAMED: renders the backlog then tails the file
+	//                        live (chunked) until the client disconnects
 	//   ?raw=1 (or Accept   → verbatim plain text (c.File) for log-scraping
-	//     text/plain)
+	//     text/plain)         (one-shot — completes for scrapers)
 	//   any filter param   → plain-text streaming filtered mode
 	//
 	// Served at /skywire.log (matching the on-disk filename written by
