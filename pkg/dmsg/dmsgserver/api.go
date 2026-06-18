@@ -4,6 +4,7 @@ package dmsgserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"math/big"
 	"net"
@@ -92,8 +93,12 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 	}
 	dmsgLis := &proxyproto.Listener{Listener: dmsgLn}
 	go func(l net.Listener, address string) {
-		errCh <- a.dmsgServer.Serve(l, address)
+		serr := a.dmsgServer.Serve(l, address)
 		l.Close() //nolint:errcheck,gosec
+		// Label so a dead DATA PLANE is identifiable, and use %v so a clean
+		// (nil) stop still yields a non-nil signal — ANY stop of the dmsg
+		// protocol Serve must surface, not be silently absorbed.
+		errCh <- fmt.Errorf("dmsg data-plane server stopped: %v", serr)
 	}(dmsgLis, pAddr)
 
 	ln, err := net.Listen("tcp", httpAddr)
@@ -110,10 +115,23 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 		//Addr:              lis,
 		Handler: a.router,
 	}
-	errCh <- srv.Serve(lis)
-	lis.Close() //nolint:errcheck,gosec
+	// Run the HTTP health server in the BACKGROUND too. Previously srv.Serve
+	// blocked here in the foreground, so if the dmsg data-plane Serve died
+	// first its error sat unread in errCh while this kept serving — the HTTP
+	// /health endpoint reported healthy while the protocol listener was dead
+	// (the "looks healthy but can't relay" mask). Now whichever Serve dies
+	// FIRST returns, so the caller (service Run) can restart/exit.
+	go func() {
+		serr := srv.Serve(lis)
+		lis.Close() //nolint:errcheck,gosec
+		errCh <- fmt.Errorf("dmsg http health server stopped: %v", serr)
+	}()
 
-	return <-errCh
+	err = <-errCh
+	// One half died — tear the other down so we don't leak a half-dead server.
+	dmsgLis.Close() //nolint:errcheck,gosec
+	lis.Close()     //nolint:errcheck,gosec
+	return err
 }
 
 // Close closes connection to both http server and dmsg server
