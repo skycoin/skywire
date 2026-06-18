@@ -2,14 +2,19 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-playground/validator/v10"
 
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/transport-setup/config"
@@ -51,20 +56,68 @@ func New(log *logging.Logger, conf config.Config) *API {
 
 func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	dmsgConf := dmsg.DefaultConfig()
-	disc := disc.NewHTTP(conf.Dmsg.Discovery, &http.Client{}, log)
-	client := dmsg.NewClient(conf.PK, conf.SK, disc, dmsgConf)
-	// Pre-seed the entry cache with the configured dmsg servers so the
-	// Serve loop's seeded-fallback path (#3146) has something to fall
-	// back to when conf.Dmsg.Discovery is empty (dmsg-only deployment,
-	// disc.NewHTTP returns a no-op client) or during a fleet cold-start
-	// where live discovery briefly has no entries. Without this, dmsg-
-	// only TPS instances spin on "No entries found" indefinitely even
-	// though tps.json explicitly lists upstream servers.
+
+	// Single dmsg client with self-hosted dmsg-discovery — matches the
+	// visor's post-#3136 bootstrap (pkg/visor/init_dmsg.go + pkg/dmsgc/
+	// dmsgc.go). Plain-HTTP discovery (conf.Dmsg.Discovery) is no longer
+	// supported for deployment services; conf.Dmsg.DiscoveryDmsg + seed
+	// conf.Dmsg.Servers are required.
+	//
+	// Pattern:
+	//   - direct.Client preloaded with the local PK + dmsg-disc PK,
+	//     synthesizing client entries that delegate to every seed
+	//     server. Reads (Entry/AvailableServers) short-circuit through
+	//     this for service PKs and configured servers — no HTTP-over-
+	//     dmsg round-trip to the entry-less, root-of-trust dmsg-disc.
+	//   - disc.NewHTTP against the dmsg:// URL with an empty http.Client.
+	//   - NewRegisteringFallbackDiscClient over (direct, http): READ
+	//     direct-first, WRITE via dmsg-HTTP so the service's own entry
+	//     IS published to the real dmsg-discovery.
+	//   - SINGLE dmsg.Client built against the wrapped disc.
+	//   - SeedEntryCache for every configured server (bootstrap dial
+	//     path + the Serve-loop fallback in #3146).
+	//   - httpC.Transport wired to dmsghttp.MakeHTTPTransport(dmsgC)
+	//     AFTER construction — the transport isn't invoked until the
+	//     first PostEntry/Entry call, by which time Serve has already
+	//     established sessions to the seeded servers. Same ordering the
+	//     visor relies on.
+	httpC := &http.Client{}
+	dmsgDisc := disc.NewHTTP(conf.Dmsg.DiscoveryDmsg, httpC, log)
+
+	seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKs(conf.Dmsg.DiscoveryDmsg)...)
+	entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
+	directDisc := direct.NewClient(entries, log)
+	discClient := dmsgclient.NewRegisteringFallbackDiscClient(directDisc, dmsgDisc, log)
+
+	client := dmsg.NewClient(conf.PK, conf.SK, discClient, dmsgConf)
 	for _, srv := range conf.Dmsg.Servers {
 		if srv == nil || srv.Static.Null() || srv.Server == nil {
 			continue
 		}
 		client.SeedEntryCache(srv.Static, srv)
 	}
+	httpC.Transport = dmsghttp.MakeHTTPTransport(context.Background(), client)
+
 	return client
+}
+
+// dmsgServicePKs extracts the public key from a dmsg:// service URL
+// (e.g. "dmsg://<pk>:<port>") so the dmsg-discovery PK can be added to
+// the static seed-client mapping. Returns an empty slice for blank or
+// malformed URLs — the caller is then bootstrapped with only its own
+// PK in the synthetic seed map, which is the same shape as a brand-new
+// service with no DiscoveryDmsg configured.
+func dmsgServicePKs(discoveryDmsg string) cipher.PubKeys {
+	if discoveryDmsg == "" {
+		return nil
+	}
+	const prefix = "dmsg://"
+	if len(discoveryDmsg) <= len(prefix) || discoveryDmsg[:len(prefix)] != prefix {
+		return nil
+	}
+	var addr dmsg.Addr
+	if err := addr.Set(discoveryDmsg[len(prefix):]); err != nil {
+		return nil
+	}
+	return cipher.PubKeys{addr.PK}
 }
