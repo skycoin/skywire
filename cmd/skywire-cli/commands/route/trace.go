@@ -120,7 +120,7 @@ Output:
 				shortPK(srcPK), shortPK(dstPK), traceRfURL, traceMaxHops)
 		}
 
-		hops := fetchForwardRoute(cmd, srcPK, dstPK)
+		hops := fetchForwardRoute(cmd, rpcClient, srcPK, dstPK)
 		if len(hops) == 0 {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("no route found %s -> %s", shortPK(srcPK), shortPK(dstPK)))
 		}
@@ -195,11 +195,27 @@ type traceHopResult struct {
 // fetchForwardRoute calls the route finder for src→dst, returning
 // the first forward path. Failure-exits the CLI on any error —
 // trace without a known route has nothing to report.
-func fetchForwardRoute(cmd *cobra.Command, srcPK, dstPK cipher.PubKey) []routing.Hop {
-	rfc := rfclient.NewHTTP(traceRfURL, traceTimeout, &http.Client{Timeout: traceTimeout}, nil)
+//
+// Routes the /routes POST over the local visor's DmsgHTTP RPC when a
+// dmsg twin exists for traceRfURL (production default — the visor
+// already has the route-finder PK seeded). Operator-supplied
+// non-deployment route-finder URLs fall back to the plain-HTTP rfclient.
+func fetchForwardRoute(cmd *cobra.Command, rpcClient visor.API, srcPK, dstPK cipher.PubKey) []routing.Hop {
 	forward := [2]cipher.PubKey{srcPK, dstPK}
 	ctx, cancel := context.WithTimeout(context.Background(), traceTimeout)
 	defer cancel()
+
+	if dmsgRfURL := clirpc.DmsgURLForHTTP(traceRfURL); dmsgRfURL != "" {
+		hops, err := findRoutesViaDmsgRPC(ctx, rpcClient, dmsgRfURL, forward)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("route-finder (dmsg): %w", err))
+		}
+		return hops
+	}
+
+	// Custom HTTP route-finder URL the operator passed via --rf.
+	// Honor it over plain HTTP — same legacy path as before this fix.
+	rfc := rfclient.NewHTTP(traceRfURL, traceTimeout, &http.Client{Timeout: traceTimeout}, nil)
 	routes, err := rfc.FindRoutes(ctx, []routing.PathEdges{forward},
 		&rfclient.RouteOptions{MinHops: traceMinHops, MaxHops: traceMaxHops})
 	if err != nil {
@@ -210,6 +226,48 @@ func fetchForwardRoute(cmd *cobra.Command, srcPK, dstPK cipher.PubKey) []routing
 		return nil
 	}
 	return candidates[0]
+}
+
+// findRoutesViaDmsgRPC POSTs /routes to the route-finder over the
+// visor's DmsgHTTP RPC (which rides the visor's already-established
+// dmsg sessions — no per-call dmsg bootstrap). Matches the wire shape
+// rfclient.apiClient.FindRoutes builds inline; kept as a tight inline
+// helper rather than a sibling client in pkg/rfclient because the
+// DmsgHTTP RPC dependency is CLI-scoped.
+func findRoutesViaDmsgRPC(ctx context.Context, rc visor.API, dmsgRfURL string, edge [2]cipher.PubKey) ([]routing.Hop, error) {
+	reqBody := &rfclient.FindRoutesRequest{
+		Edges: []routing.PathEdges{edge},
+		Opts:  &rfclient.RouteOptions{MinHops: traceMinHops, MaxHops: traceMaxHops},
+	}
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("marshal /routes request: %w", err)
+	}
+	_ = ctx // visor.API.DmsgHTTP is synchronous and has no ctx parameter;
+	// the timeout is enforced upstream by the cobra command's traceTimeout
+	// via the route-finder side.
+
+	resp, err := rc.DmsgHTTP(visor.DmsgHTTPRequest{
+		URL:    strings.TrimRight(dmsgRfURL, "/") + "/routes",
+		Method: http.MethodPost,
+		Header: map[string]string{"Content-Type": "application/json"},
+		Body:   body,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var paths map[routing.PathEdges][][]routing.Hop
+	if err := json.Unmarshal(resp.Body, &paths); err != nil {
+		return nil, fmt.Errorf("decode /routes response: %w", err)
+	}
+	candidates := paths[edge]
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+	return candidates[0], nil
 }
 
 // bestOfDmsgPings runs N single-shot dmsg pings to pk and returns
