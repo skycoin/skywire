@@ -231,10 +231,23 @@ func (v *Visor) connectRawTCPSkynet(remotePK cipher.PubKey, remotePort, localPor
 	if err != nil {
 		return uuid.UUID{}, err
 	}
+	// Close the dialed skynet conn (a full route group) on ANY early-return
+	// below — including the normal server-reject reply, which is a routine
+	// runtime condition (remote port not forwarded / caller not whitelisted).
+	// Ownership transfers to forwardConn on success, where cleanup is cleared.
+	// Without this, every reject/marshal/io error leaked one open route group
+	// per ConnectRawTCP attempt, unbounded until visor restart.
+	var cleanup net.Conn = conn
+	defer func() {
+		if cleanup != nil {
+			_ = cleanup.Close() //nolint:errcheck
+		}
+	}()
 	remoteConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
+	cleanup = remoteConn // closing the wrapper closes the embedded conn
 
 	cMsg := clientMsg{Port: remotePort}
 	clientMsgBytes, err := json.Marshal(cMsg)
@@ -265,9 +278,9 @@ func (v *Visor) connectRawTCPSkynet(remotePK cipher.PubKey, remotePort, localPor
 
 	forwardConn, err := appnet.NewRawTCPForwardConn(v.log, "skynet", remoteConn, remotePort, localPort)
 	if err != nil {
-		_ = remoteConn.Close() //nolint:errcheck
-		return uuid.UUID{}, err
+		return uuid.UUID{}, err // deferred cleanup closes remoteConn
 	}
+	cleanup = nil // ownership transferred to forwardConn; do not close
 	forwardConn.Serve()
 	return forwardConn.ID, nil
 }
