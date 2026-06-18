@@ -48,9 +48,11 @@ type EmbeddedSkynetWeb struct {
 	skynetMux **transport.VStreamMux // pointer to visor's mux pointer (late-bound)
 	localPK   cipher.PubKey
 	selfDial  func(port uint16) (net.Conn, error) // in-process serve of a local service port (nil disables loopback)
-	cfg       *visorconfig.SkynetWebConfig
-	log       *logging.Logger
-	stats     *skynetweb.Stats
+	// selfDialAs is the PK-stamping variant of selfDial — see EmbeddedDmsgWeb.
+	selfDialAs func(port uint16, remotePK cipher.PubKey) (net.Conn, error)
+	cfg        *visorconfig.SkynetWebConfig
+	log        *logging.Logger
+	stats      *skynetweb.Stats
 
 	mu        sync.Mutex
 	running   bool
@@ -59,17 +61,18 @@ type EmbeddedSkynetWeb struct {
 	parentCtx context.Context
 }
 
-func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, tpM *transport.Manager, skynetMuxPtr **transport.VStreamMux, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
+func newEmbeddedSkynetWeb(parentCtx context.Context, r router.Router, tpM *transport.Manager, skynetMuxPtr **transport.VStreamMux, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), selfDialAs func(uint16, cipher.PubKey) (net.Conn, error), cfg *visorconfig.SkynetWebConfig, log *logging.Logger) *EmbeddedSkynetWeb {
 	return &EmbeddedSkynetWeb{
-		router:    r,
-		tpM:       tpM,
-		skynetMux: skynetMuxPtr,
-		localPK:   localPK,
-		selfDial:  selfDial,
-		cfg:       cfg,
-		log:       log,
-		stats:     skynetweb.NewStats(),
-		parentCtx: parentCtx,
+		router:     r,
+		tpM:        tpM,
+		skynetMux:  skynetMuxPtr,
+		localPK:    localPK,
+		selfDial:   selfDial,
+		selfDialAs: selfDialAs,
+		cfg:        cfg,
+		log:        log,
+		stats:      skynetweb.NewStats(),
+		parentCtx:  parentCtx,
 	}
 }
 
@@ -169,6 +172,13 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		cfg.LocalPK = e.localPK
 		cfg.SelfLoopback = true
 		cfg.SelfDial = e.selfDial
+		// Self-loopback-authenticated (default on): see EmbeddedDmsgWeb.serve.
+		if e.selfDialAs != nil && (e.cfg.SelfLoopbackAuthenticated == nil || *e.cfg.SelfLoopbackAuthenticated) {
+			localPK := e.localPK
+			cfg.SelfDial = func(port uint16) (net.Conn, error) {
+				return e.selfDialAs(port, localPK)
+			}
+		}
 	}
 	cfg.Aliases = resolverAliasMap(e.cfg.Alias, e.localPK)
 
@@ -403,7 +413,7 @@ func initEmbeddedSkynetWeb(ctx context.Context, v *Visor, log *logging.Logger) e
 		log.Warn("skynet_web configured but router not available; skipping")
 		return nil
 	}
-	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.conf.SkynetWeb, log)
+	runtime := newEmbeddedSkynetWeb(ctx, v.router, v.tpM, &v.skynetFwdMux, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, v.conf.SkynetWeb, log)
 	v.initLock.Lock()
 	v.embeddedSkynetWeb = runtime
 	v.initLock.Unlock()
