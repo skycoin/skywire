@@ -167,6 +167,8 @@ func (ns *Noise) pqOfferPayload() []byte {
 	if ns.init && ns.pqInit == nil && ns.pqSecret == nil {
 		k, err := newPQInitiator()
 		if err != nil {
+			noiseLogger.WithError(err).
+				Warn("post-quantum keygen failed; proceeding with a CLASSICAL-only handshake")
 			return nil
 		}
 		ns.pqInit = k
@@ -211,6 +213,21 @@ func (ns *Noise) pqHandlePeerPayload(payload []byte) {
 // the hybrid key via the new CipherState (skywire's external nonce is unchanged).
 func (ns *Noise) applyHybrid() error {
 	if ns.pqSecret == nil || ns.enc == nil || ns.dec == nil {
+		// Downgrade observability: if we (the initiator) OFFERED an ML-KEM
+		// public key but the handshake completed (enc+dec set) with no shared
+		// secret, the peer returned no/malformed ciphertext — a PQ-capable
+		// handshake silently fell back to classical. That is expected against
+		// an older classical-only peer, but it is ALSO exactly what an active
+		// MITM stripping the ML-KEM payload looks like: PQ negotiation is not
+		// authenticated, so there is no in-band downgrade signal. Surfacing it
+		// is the minimum mitigation — a silent, undetectable downgrade becomes
+		// an observable one (prerequisite to a future require-PQ enforcement
+		// once the fleet is fully PQ-capable). Responders can't distinguish
+		// "peer is classical" from "MITM stripped", so only the
+		// initiator-offered case is logged.
+		if ns.init && ns.pqInit != nil && ns.enc != nil && ns.dec != nil {
+			noiseLogger.Warn("post-quantum DOWNGRADE: offered ML-KEM but peer returned no ciphertext; session is CLASSICAL-only (older peer, or a payload-stripping MITM)")
+		}
 		return nil
 	}
 	cb := ns.hs.ChannelBinding()
