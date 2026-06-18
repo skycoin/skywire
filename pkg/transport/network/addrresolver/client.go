@@ -37,6 +37,12 @@ const (
 	// UDPKeepHeartbeatMessage is used as a heartbeat packet to keep connection alive.
 	UDPKeepHeartbeatMessage = "heartbeat"
 	defaultUDPPort          = "30178"
+	// stcprBindPublicIPWait bounds how long BindSTCPR waits for the visor's
+	// asynchronously-determined public IP before binding without it. Sized to
+	// comfortably cover the dmsg LookupIPGeo (10s) + STUN (20s) fallback path;
+	// on timeout the bind proceeds and the re-registration loop carries the
+	// real IP once it lands.
+	stcprBindPublicIPWait = 35 * time.Second
 	// UDPDelBindMessage is used as a deletebind packet on visor shutdown.
 	UDPDelBindMessage = "delBind"
 	// sudphReconnectInitialBackoff is the initial sleep before the first
@@ -81,6 +87,11 @@ type APIClient interface {
 	TransportsType(ctx context.Context, tpType types.Type) (map[cipher.PubKey][]string, error)
 	Addresses(ctx context.Context) string
 	LocalPublicIP() string
+	// SetPublicIP records the visor's externally-reachable IPs once they have
+	// been determined asynchronously (so the control plane need not wait on
+	// the dmsg/STUN lookup). Passing empty strings signals "determination
+	// finished, none available" and unblocks any pending bind.
+	SetPublicIP(publicIP, publicIPv6 string)
 	Close() error
 }
 
@@ -114,24 +125,35 @@ type VisorData struct {
 // reached via dmsg, when v6 init failed, or when the caller didn't
 // supply a v6 client — preserves pre-#1525 v4-only behavior.
 type httpClient struct {
-	log              *logging.Logger
-	mLog             *logging.MasterLogger
-	httpClient       *httpauthclient.Client
-	httpClientV6     *httpauthclient.Client
-	pk               cipher.PubKey
-	sk               cipher.SecKey
-	remoteHTTPAddr   string
-	remoteHTTPURL    *url.URL
-	remoteUDPAddr    string
-	sudphConn        net.PacketConn
-	sudphArConn      net.Conn
-	sudphArConnMu    sync.Mutex
-	sudphLocalAddr   LocalAddresses
+	log            *logging.Logger
+	mLog           *logging.MasterLogger
+	httpClient     *httpauthclient.Client
+	httpClientV6   *httpauthclient.Client
+	pk             cipher.PubKey
+	sk             cipher.SecKey
+	remoteHTTPAddr string
+	remoteHTTPURL  *url.URL
+	remoteUDPAddr  string
+	sudphConn      net.PacketConn
+	sudphArConn    net.Conn
+	sudphArConnMu  sync.Mutex
+	sudphLocalAddr LocalAddresses
+	// clientPublicIP / clientPublicIPv6 are the visor's externally-reachable
+	// IPs declared to the AR on bind. They may be determined asynchronously
+	// (see SetPublicIP) so the visor's control plane (RPC) need not wait on
+	// the slow dmsg/STUN public-IP lookup — guard every access with pubIPMu.
+	pubIPMu          sync.RWMutex
 	clientPublicIP   string
 	clientPublicIPv6 string
-	ready            chan struct{}
-	closed           chan struct{}
-	delBindSudphWg   sync.WaitGroup
+	// ipReady is closed once the public IP has been determined (or determined
+	// to be unavailable) via SetPublicIP — or immediately at construction when
+	// a non-empty IP was supplied. The bind path waits on it (bounded) so
+	// registrations carry the public IP without blocking the control plane.
+	ipReady        chan struct{}
+	ipReadyOnce    sync.Once
+	ready          chan struct{}
+	closed         chan struct{}
+	delBindSudphWg sync.WaitGroup
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -171,8 +193,16 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC, httpC
 		remoteUDPAddr:    remoteUDP,
 		clientPublicIP:   clientPublicIP,
 		clientPublicIPv6: clientPublicIPv6,
+		ipReady:          make(chan struct{}),
 		ready:            make(chan struct{}),
 		closed:           make(chan struct{}),
+	}
+
+	// When a public IP was supplied at construction the synchronous behavior
+	// is unchanged — mark it ready so the bind path never waits. Callers that
+	// defer the lookup pass "" here and call SetPublicIP once it's known.
+	if clientPublicIP != "" {
+		client.ipReadyOnce.Do(func() { close(client.ipReady) })
 	}
 
 	client.log.Debugf("Remote UDP server: %q", remoteUDP)
@@ -183,7 +213,12 @@ func NewHTTP(remoteAddr string, pk cipher.PubKey, sk cipher.SecKey, httpC, httpC
 }
 
 func (c *httpClient) initHTTPClient(httpC, httpCV6 *http.Client) {
-	httpAuthClient, err := httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
+	// Snapshot the public IP once under the lock — it may be set concurrently
+	// by SetPublicIP. Empty is fine: the SW-PublicIP header is simply omitted
+	// until the next request that the AR observes the source IP for, and the
+	// bind POST body carries the IP independently once SetPublicIP fires.
+	pubIP := c.localPublicIPRaw()
+	httpAuthClient, err := httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, pubIP, c.mLog)
 	if err != nil {
 		c.log.WithError(err).
 			Warnf("Failed to connect to address resolver. STCPR/SUDPH services are temporarily unavailable. Retrying...")
@@ -191,7 +226,7 @@ func (c *httpClient) initHTTPClient(httpC, httpCV6 *http.Client) {
 		retry := netutil.NewRetrier(c.log, 1*time.Second, 10*time.Second, 0, 1)
 
 		err := retry.Do(context.Background(), func() error {
-			httpAuthClient, err = httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.clientPublicIP, c.mLog)
+			httpAuthClient, err = httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpC, c.localPublicIPRaw(), c.mLog)
 			return err
 		})
 
@@ -211,7 +246,7 @@ func (c *httpClient) initHTTPClient(httpC, httpCV6 *http.Client) {
 	// behavior as a pre-#1525 build. The retry+fatal contract from the
 	// primary client doesn't apply here: v6 is additive, not required.
 	if httpCV6 != nil {
-		v6AuthClient, v6Err := httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpCV6, c.clientPublicIP, c.mLog)
+		v6AuthClient, v6Err := httpauthclient.NewClient(context.Background(), c.remoteHTTPAddr, c.pk, c.sk, httpCV6, c.localPublicIPRaw(), c.mLog)
 		if v6Err != nil {
 			c.log.WithError(v6Err).Debug("v6 address-resolver init failed; proceeding v4-only")
 		} else {
@@ -379,14 +414,56 @@ func (c *httpClient) Addresses(_ context.Context) string {
 // This can be used to detect when a remote visor shares the same public IP
 // (i.e., is behind the same NAT), allowing LAN addresses to be tried first.
 func (c *httpClient) LocalPublicIP() string {
-	if c.clientPublicIP == "" {
+	ip := c.localPublicIPRaw()
+	if ip == "" {
 		return ""
 	}
 	// Extract just the IP (without port) from clientPublicIP
-	if host, _, err := net.SplitHostPort(c.clientPublicIP); err == nil {
+	if host, _, err := net.SplitHostPort(ip); err == nil {
 		return host
 	}
+	return ip
+}
+
+// localPublicIPRaw returns the declared public IPv4 (possibly "host:port")
+// under the lock. Empty until determined.
+func (c *httpClient) localPublicIPRaw() string {
+	c.pubIPMu.RLock()
+	defer c.pubIPMu.RUnlock()
 	return c.clientPublicIP
+}
+
+// localPublicIPv6Raw returns the declared public IPv6 under the lock.
+func (c *httpClient) localPublicIPv6Raw() string {
+	c.pubIPMu.RLock()
+	defer c.pubIPMu.RUnlock()
+	return c.clientPublicIPv6
+}
+
+// SetPublicIP records the visor's externally-reachable IPs (determined
+// asynchronously by the visor after dmsg/STUN lookups) and unblocks any bind
+// waiting on awaitPublicIP. Safe to call once with empty strings to signal
+// "determination finished, none available" so binds don't wait the full
+// timeout. Idempotent for the ready signal.
+func (c *httpClient) SetPublicIP(publicIP, publicIPv6 string) {
+	c.pubIPMu.Lock()
+	c.clientPublicIP = publicIP
+	c.clientPublicIPv6 = publicIPv6
+	c.pubIPMu.Unlock()
+	c.ipReadyOnce.Do(func() { close(c.ipReady) })
+}
+
+// awaitPublicIP blocks until the public IP has been determined (SetPublicIP),
+// the client is closed, or the timeout elapses — whichever comes first. It is
+// called off the control-plane critical path (only by the bind goroutines), so
+// a bounded wait here lets the first registration carry the public IP without
+// the RPC ever waiting on dmsg/STUN.
+func (c *httpClient) awaitPublicIP(timeout time.Duration) {
+	select {
+	case <-c.ipReady:
+	case <-c.closed:
+	case <-time.After(timeout):
+	}
 }
 
 // BindSTCPR binds client PK to IP:port on address resolver.
@@ -398,16 +475,25 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		log.Debug("Address resolver became ready, binding")
 	}
 
+	// The visor determines its public IP asynchronously so the RPC control
+	// plane never waits on dmsg/STUN. This bind runs in its own goroutine
+	// (off that critical path), so wait — bounded — for the IP to land. If it
+	// doesn't arrive in time we bind without it; the AR falls back to the
+	// observed source IP and the stcpr re-registration loop carries the real
+	// IP on the next pass once it's known.
+	c.awaitPublicIP(stcprBindPublicIPWait)
+
 	addresses, err := netutil.LocalAddresses()
 	if err != nil {
 		return err
 	}
 
+	clientPublicIP := c.localPublicIPRaw()
 	// Include public IP in addresses list to pass address resolver's hasAddress check
 	// when behind NAT (public IP won't be on local interfaces)
-	if c.clientPublicIP != "" {
+	if clientPublicIP != "" {
 		// Extract just the IP (without port) from clientPublicIP
-		publicIP := c.clientPublicIP
+		publicIP := clientPublicIP
 		if host, _, err := net.SplitHostPort(publicIP); err == nil {
 			publicIP = host
 		}
@@ -428,7 +514,7 @@ func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 		Addresses:  addresses,
 		Port:       port,
 		PublicIP:   c.LocalPublicIP(),
-		PublicIPv6: c.clientPublicIPv6,
+		PublicIPv6: c.localPublicIPv6Raw(),
 	}
 	log.Debugf("Address resolver binding with: %v", addresses)
 	resp, err := c.Post(ctx, stcprBindPath, localAddresses)
@@ -622,7 +708,7 @@ func (c *httpClient) connectSUDPH(filter *pfilter.PacketFilter, hs Handshake) (n
 		Addresses:  addresses,
 		Port:       localPort,
 		PublicIP:   c.LocalPublicIP(),
-		PublicIPv6: c.clientPublicIPv6,
+		PublicIPv6: c.localPublicIPv6Raw(),
 	}
 
 	laData, err := json.Marshal(localAddresses)
