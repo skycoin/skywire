@@ -36,6 +36,16 @@ func (r *router) DialRoutes(
 	opts *DialOptions,
 ) (net.Conn, error) {
 
+	// DialRoutes may be called with nil opts — api_skynet.ConnectRawTCP passes
+	// nil, and while the early path guards with `opts != nil`, the post-setup
+	// success path dereferences it unconditionally (opts.Distribution in
+	// applyDistribution, opts.AppName in the leg-change-hook wiring). Normalize
+	// to a zero-value DialOptions so a successful skynet dial can't nil-deref
+	// and crash the visor.
+	if opts == nil {
+		opts = &DialOptions{}
+	}
+
 	log := r.scopedLogForOpts(opts, lPort)
 
 	if rPK.Null() {
