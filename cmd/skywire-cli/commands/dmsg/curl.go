@@ -21,7 +21,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -349,32 +348,25 @@ func startDmsgClient(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 		return nil, nil, fmt.Errorf("no DMSG servers configured")
 	}
 
-	// Create discovery client using the deployment config's discovery URL.
-	// This uses the embedded config (or SKYDEPLOY override) instead of
-	// a hardcoded URL, so E2E tests with custom deployments work correctly.
-	discURL := deployment.Prod.DmsgDiscovery
-	if discURL == "" {
-		discURL = "http://dmsgd.skywire.skycoin.com"
+	// Bootstrap with the embedded prod server set + dmsg-only Entry()
+	// fallback. No plain-HTTP egress to dmsg-discovery occurs.
+	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers,
+		"", deployment.Prod.DmsgDiscoveryDmsg, "")
+	if err != nil {
+		return nil, nil, fmt.Errorf("dmsg bootstrap: %w", err)
 	}
-	httpClient := &http.Client{Timeout: 30 * time.Second}
-	discClient := disc.NewHTTP(discURL, httpClient, log)
-
-	// Create dmsg client
-	dmsgConfig := dmsg.DefaultConfig()
-	dmsgConfig.MinSessions = 1
-
-	dmsgC := dmsg.NewClient(pk, sk, discClient, dmsgConfig)
-	go dmsgC.Serve(ctx)
+	dmsgC := bootstrap.Client
+	closer := bootstrap.Close
 
 	// Wait for ready
 	select {
 	case <-ctx.Done():
-		_ = dmsgC.Close() //nolint:errcheck
+		closer()
 		return nil, nil, ctx.Err()
 	case <-dmsgC.Ready():
 		log.Debug("DMSG client ready")
 	case <-time.After(30 * time.Second):
-		_ = dmsgC.Close() //nolint:errcheck
+		closer()
 		return nil, nil, fmt.Errorf("timeout waiting for dmsg client")
 	}
 
