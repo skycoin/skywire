@@ -89,7 +89,22 @@ func BootstrapDmsg(
 	// so the dmsg client can dial the embedded set without an HTTP round
 	// trip — useful when the dmsg-discovery's HTTP endpoint is briefly
 	// unreachable (offline install, DNS failure, Caddy outage).
+	//
+	// When dmsgDiscoveryDmsg is set, also seed the dmsg-discovery's own
+	// PK as a synthetic client entry delegating to every bootstrap
+	// server. Without this, Entry() lookups for the dmsg-disc PK fall
+	// through to dmsg-HTTP, whose own routing requires Entry() to
+	// resolve the dmsg-disc PK — recursive lookup that burns CPU at
+	// hundreds of calls/s once dmsg-only routing is in steady state.
+	// Same trick setup-node uses (pkg/router/setupnode.go: see
+	// dmsgServicePKsFromConf) and transport-setup uses
+	// (pkg/transport-setup/api/api.go: dmsgServicePKs).
 	keys := cipher.PubKeys{pk}
+	if dmsgDiscoveryDmsg != "" {
+		if discPK := PKFromDmsgURL(dmsgDiscoveryDmsg); !discPK.Null() {
+			keys = append(keys, discPK)
+		}
+	}
 	directDClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
 
 	// Wrap the direct client with a discovery fallback so per-PK
