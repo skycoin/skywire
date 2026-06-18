@@ -83,7 +83,7 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	}
 
 	dmsgDisc := disc.NewHTTP(discURL, httpC, log)
-	var discClient disc.APIClient = dmsgDisc
+	discClient := dmsgDisc
 	if useSelfHostedDisc {
 		seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKs(conf.Dmsg.DiscoveryDmsg)...)
 		entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
