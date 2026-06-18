@@ -590,6 +590,10 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	// Set visor as health stats provider for /health endpoint
 	lsAPI.SetHealthStatsProvider(v)
+	// Self-identify on /health and the landing page: PK + dmsg listen
+	// address (the log server's own dmsg port, where this surface is served).
+	dmsgAddr := fmt.Sprintf("%s:%d", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort)
+	lsAPI.SetIdentity(v.conf.PK.Hex(), dmsgAddr)
 
 	// Store the log server API reference for public autocheck to use later
 	v.initLock.Lock()
@@ -728,6 +732,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 		// Set visor as health stats provider for /health endpoint
 		localAPI.SetHealthStatsProvider(v)
+		localAPI.SetIdentity(v.conf.PK.Hex(), dmsgAddr)
 
 		// Store the localhost API for potential future use
 		v.logServer.localAPI = localAPI
