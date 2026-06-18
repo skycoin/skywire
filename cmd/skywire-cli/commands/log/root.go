@@ -2,9 +2,32 @@
 package clilog
 
 import (
+	"strings"
+
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 )
+
+// dmsgDiscArgs splits an operator-supplied --dmsg-disc value into the
+// (httpURL, dmsgURL) pair BootstrapDmsg expects. Defaults to the
+// embedded dmsg URL (deployment.Prod.DmsgDiscoveryDmsg) so the
+// per-PK Entry() fallback rides dmsg-HTTP instead of plain HTTP —
+// finishing the dmsg-only conversion #3163/#3174 started.
+//
+// Selection:
+//   - empty or the embedded Prod HTTP default → dmsg URL
+//   - "dmsg://…" → dmsg URL passthrough
+//   - any other "http(s)://…" → operator opted into a custom HTTP
+//     endpoint, route it the old way
+func dmsgDiscArgs(val string) (httpURL, dmsgURL string) {
+	if val == "" || val == deployment.Prod.DmsgDiscovery {
+		return "", deployment.Prod.DmsgDiscoveryDmsg
+	}
+	if strings.HasPrefix(val, "dmsg://") {
+		return "", val
+	}
+	return val, ""
+}
 
 var (
 	dmsgDiscURL    = deployment.Prod.DmsgDiscovery

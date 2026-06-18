@@ -93,7 +93,10 @@ func dmsgHTTPClient(ctx context.Context, timeout time.Duration) (*http.Client, f
 	}
 	log.WithField("source", source).WithField("local_pk", pk.String()).Debug("Resolved survey-whitelist identity for CLI request")
 
-	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, resolvedSK, dmsg.Prod.DmsgServers, dmsgDiscURL, "", "")
+	// Default to dmsg-only discovery; plain HTTP only when the
+	// operator explicitly overrides --dmsg-disc to a custom URL.
+	httpURL, dmsgURL := dmsgDiscArgs(dmsgDiscURL)
+	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, resolvedSK, dmsg.Prod.DmsgServers, httpURL, dmsgURL, "")
 	if err != nil {
 		return nil, func() {}, fmt.Errorf("dmsg bootstrap: %w", err)
 	}
