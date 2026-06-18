@@ -59,8 +59,14 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	// dmsgc.go) and the transport-setup service in
 	// pkg/transport-setup/api/api.go. Plain-HTTP discovery
 	// (conf.Dmsg.Discovery) is no longer supported for deployment
-	// services; conf.Dmsg.DiscoveryDmsg + seed conf.Dmsg.Servers are
-	// required.
+	// services; conf.Dmsg.DiscoveryDmsg is required.
+	//
+	// The seed-server set is conf.Dmsg.Servers ∪ dmsg.Prod.DmsgServers,
+	// deduped by Static PK with operator-supplied entries first. A
+	// deployment may therefore omit conf.Dmsg.Servers and still
+	// bootstrap — the embedded Prod set is the default. Same merge
+	// shape as dmsgsrv.buildTransitDmsg (pkg/services/dmsgsrv/
+	// dmsgsrv.go) so RSNs and dmsg-servers share the cold-start path.
 	//
 	// The previous code here spun a SECOND dmsg client via direct.StartDmsg
 	// just to back the dmsg-HTTP transport, sharing conf.PK with the
@@ -72,8 +78,27 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 	// resolving discovery via a registering-fallback that reads direct-
 	// first (synthetic entries for the local PK + dmsg-service PKs) and
 	// writes via dmsg-HTTP routed through the same client's sessions.
+	servers := make([]*disc.Entry, 0, len(conf.Dmsg.Servers)+len(dmsg.Prod.DmsgServers))
+	seenPK := map[cipher.PubKey]struct{}{}
+	addServer := func(e *disc.Entry) {
+		if e == nil || e.Static.Null() || e.Server == nil {
+			return
+		}
+		if _, ok := seenPK[e.Static]; ok {
+			return
+		}
+		seenPK[e.Static] = struct{}{}
+		servers = append(servers, e)
+	}
+	for _, e := range conf.Dmsg.Servers {
+		addServer(e)
+	}
+	for i := range dmsg.Prod.DmsgServers {
+		addServer(&dmsg.Prod.DmsgServers[i])
+	}
+
 	seedKeys := append(cipher.PubKeys{conf.PK}, dmsgServicePKsFromConf(conf)...)
-	entries := direct.GetAllEntries(seedKeys, conf.Dmsg.Servers)
+	entries := direct.GetAllEntries(seedKeys, servers)
 	directDisc := direct.NewClient(entries, masterLogger.PackageLogger("rsn:disc:direct"))
 
 	httpC := &http.Client{}
@@ -82,10 +107,7 @@ func NewNode(conf *SetupConfig) (*Node, error) {
 
 	dmsgConf := &dmsg.Config{MinSessions: conf.Dmsg.SessionsCount}
 	dmsgC := dmsg.NewClient(conf.PK, conf.SK, discClient, dmsgConf)
-	for _, srv := range conf.Dmsg.Servers {
-		if srv == nil || srv.Static.Null() || srv.Server == nil {
-			continue
-		}
+	for _, srv := range servers {
 		dmsgC.SeedEntryCache(srv.Static, srv)
 	}
 	httpC.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
