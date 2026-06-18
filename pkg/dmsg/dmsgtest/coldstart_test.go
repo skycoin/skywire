@@ -59,8 +59,18 @@ func TestColdStart_UnregisteredDiscReachableViaSharedServer(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("server S not ready")
 	}
-	entryS, err := sharedDC.Entry(ctx, pkS)
-	require.NoError(t, err)
+	// Registration is async — Serve no longer gates Accept on the
+	// entry-publish loop (the cold-start fix), so Ready() means "accepting",
+	// not "registered". Wait for the entry to land in discovery.
+	var entryS *disc.Entry
+	require.Eventually(t, func() bool {
+		e, eerr := sharedDC.Entry(ctx, pkS)
+		if eerr != nil {
+			return false
+		}
+		entryS = e
+		return true
+	}, 15*time.Second, 200*time.Millisecond, "server S must register in discovery")
 
 	// --- "disc": unregistered client that dials OUT to S ------------------
 	// Its discovery knows S (so it can connect to S), but disc never
