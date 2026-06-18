@@ -537,6 +537,37 @@ func (v *Visor) RemoteVisors() ([]string, error) {
 	return visors, nil
 }
 
+// ManagedVisors implements logserver.RelatedNodesProvider. It returns the PKs
+// of the visors this node manages as a hypervisor — the same connected set as
+// `hv ls`. Empty when this node is not acting as a hypervisor (v.conf.Hypervisor
+// nil), so the landing page only shows the managed-visors section for a node
+// that actually IS a hypervisor. Reads v.remoteVisors lock-free, matching the
+// existing RemoteVisors() accessor.
+func (v *Visor) ManagedVisors() []cipher.PubKey {
+	if v == nil || v.conf == nil || v.conf.Hypervisor == nil {
+		return nil
+	}
+	out := make([]cipher.PubKey, 0, len(v.remoteVisors))
+	for _, conn := range v.remoteVisors {
+		out = append(out, conn.Addr.PK)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	return out
+}
+
+// ConfiguredHypervisors implements logserver.RelatedNodesProvider. It returns
+// the PKs of the hypervisors this visor is configured to be managed by
+// (v.conf.Hypervisors).
+func (v *Visor) ConfiguredHypervisors() []cipher.PubKey {
+	if v == nil || v.conf == nil {
+		return nil
+	}
+	out := make([]cipher.PubKey, 0, len(v.conf.Hypervisors))
+	out = append(out, v.conf.Hypervisors...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Hex() < out[j].Hex() })
+	return out
+}
+
 // DmsgPtyExec runs a one-shot command on the remote visor identified
 // by args.RemotePK using this visor's embedded dmsgpty host. Skips
 // the host's CLI control listener (the unix socket / TCP loopback

@@ -56,6 +56,11 @@ type EmbeddedDmsgWeb struct {
 	stats    *dmsgweb.Stats                      // persists across Start/Stop cycles
 	localPK  cipher.PubKey                       // this visor's PK, for self-loopback + "self" alias
 	selfDial func(port uint16) (net.Conn, error) // in-process serve of a local service port (nil disables loopback)
+	// selfDialAs is the PK-stamping variant of selfDial: it makes the
+	// in-process self-loopback conn present remotePK as the caller. Used to
+	// render the self view as authenticated (with localPK). Nil falls back to
+	// the unauthenticated selfDial.
+	selfDialAs func(port uint16, remotePK cipher.PubKey) (net.Conn, error)
 
 	// serviceAliases maps canonical short labels (tpd, ar, rf, sd, ut, dmsgd,
 	// rsn*, tsn*, dmsg*) to the configured deployment services' PKs, so the
@@ -84,7 +89,7 @@ type EmbeddedDmsgWeb struct {
 // "resolver never ran" from "running but idle". localPK + selfDial
 // enable self-loopback (serving requests for this visor's own PK
 // in-process); pass a zero PK / nil selfDial to disable.
-func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC, directClient *dmsg.Client, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), serviceAliases map[string]cipher.PubKey, directServerPKs map[cipher.PubKey]struct{}, cfg *visorconfig.DmsgWebConfig, log *logging.Logger) *EmbeddedDmsgWeb {
+func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC, directClient *dmsg.Client, localPK cipher.PubKey, selfDial func(uint16) (net.Conn, error), selfDialAs func(uint16, cipher.PubKey) (net.Conn, error), serviceAliases map[string]cipher.PubKey, directServerPKs map[cipher.PubKey]struct{}, cfg *visorconfig.DmsgWebConfig, log *logging.Logger) *EmbeddedDmsgWeb {
 	return &EmbeddedDmsgWeb{
 		dmsgC:           dmsgC,
 		cfg:             cfg,
@@ -92,6 +97,7 @@ func newEmbeddedDmsgWeb(parentCtx context.Context, dmsgC, directClient *dmsg.Cli
 		stats:           dmsgweb.NewStats(),
 		localPK:         localPK,
 		selfDial:        selfDial,
+		selfDialAs:      selfDialAs,
 		serviceAliases:  serviceAliases,
 		directClient:    directClient,
 		directServerPKs: directServerPKs,
@@ -197,6 +203,18 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 		cfg.LocalPK = e.localPK
 		cfg.SelfLoopback = true
 		cfg.SelfDial = e.selfDial
+		// Self-loopback-authenticated (default on): present THIS visor's own
+		// PK as the caller so the in-process self view renders the
+		// authenticated landing page (pprof, /visor.log, …). The visor's PK
+		// is always on its own landing-page whitelist; local self-access
+		// through one's own proxy is inherently authorized. Disable with
+		// self_loopback_authenticated:false to render the self view anonymously.
+		if e.selfDialAs != nil && (e.cfg.SelfLoopbackAuthenticated == nil || *e.cfg.SelfLoopbackAuthenticated) {
+			localPK := e.localPK
+			cfg.SelfDial = func(port uint16) (net.Conn, error) {
+				return e.selfDialAs(port, localPK)
+			}
+		}
 	}
 	// Canonical service aliases (tpd, ar, rf, …) first, then this visor's own
 	// alias on top so a colliding self-alias always wins.
@@ -424,7 +442,7 @@ func initEmbeddedDmsgWeb(ctx context.Context, v *Visor, log *logging.Logger) err
 	}
 
 	aliases, dmsgSet := resolverAliasesAndDmsgServers(v)
-	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, aliases, dmsgSet, cfg, log)
+	runtime := newEmbeddedDmsgWeb(ctx, v.dmsgC, v.dmsgDC, v.conf.PK, v.services.SelfDial, v.services.SelfDialAs, aliases, dmsgSet, cfg, log)
 	v.initLock.Lock()
 	v.embeddedDmsgWeb = runtime
 	v.initLock.Unlock()
