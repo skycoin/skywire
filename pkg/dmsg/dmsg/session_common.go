@@ -210,6 +210,20 @@ func (sc *SessionCommon) Ping() (time.Duration, error) {
 // mismatch, so the existing pingDeadThreshold logic can close + redial the
 // dead session. The smux path already worked this way; this brings yamux to
 // parity.
+// sessionPingTimeout bounds the liveness-ping round-trip. It must distinguish
+// a DEAD session from a merely SLOW one: the ping opens a real stream and
+// round-trips a marker through the server's serveStream path, so under load
+// (or Docker's bridged-network latency) a live session's echo can take several
+// seconds. The old 5s was low enough that, during a fleet reconnect storm or
+// cold-start, live sessions false-positive as dead (pingDeadThreshold=2 → ~2
+// failed pings → session killed → re-dial), manufacturing MORE reconnect churn
+// — which floods the dmsg-server accept queues. 18s sits well above worst-case
+// loaded round-trips yet well under the 60s ping interval, so a genuinely dead
+// session is still caught within ~2 cycles. Slow sessions are already
+// deprioritized for dials via RTT-based selection, so there's no benefit to
+// culling them — only the harm of an extra noise handshake.
+const sessionPingTimeout = 18 * time.Second
+
 func (sc *SessionCommon) yamuxPing() (time.Duration, error) {
 	str, err := sc.sm.yamux.OpenStream()
 	if err != nil {
@@ -217,7 +231,7 @@ func (sc *SessionCommon) yamuxPing() (time.Duration, error) {
 	}
 	defer str.Close() //nolint:errcheck
 
-	if err := str.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+	if err := str.SetDeadline(time.Now().Add(sessionPingTimeout)); err != nil {
 		return 0, fmt.Errorf("yamux ping: set deadline: %w", err)
 	}
 
@@ -241,7 +255,7 @@ func (sc *SessionCommon) smuxPing() (time.Duration, error) {
 	}
 	defer str.Close() //nolint:errcheck
 
-	if err := str.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+	if err := str.SetDeadline(time.Now().Add(sessionPingTimeout)); err != nil {
 		return 0, fmt.Errorf("smux ping: set deadline: %w", err)
 	}
 
