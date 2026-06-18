@@ -427,6 +427,13 @@ func (v *Visor) Shutdown() error {
 
 // RuntimeLogs returns visor runtime logs
 func (v *Visor) RuntimeLogs() (string, error) {
+	// Defensive: the logstore is wired early (before module init) but a log
+	// query that races a not-yet-wired logstore must NEVER segfault the whole
+	// visor — return an empty array instead. A nil deref here previously took
+	// the process down (a `cli visor log` during the startup window).
+	if v.logstore == nil {
+		return "[]", nil
+	}
 	var builder strings.Builder
 	builder.WriteString("[")
 	logs, _ := v.logstore.GetLogs()
@@ -457,6 +464,12 @@ type RuntimeLogsDelta struct {
 // runtime-logs buffer; pass the previous response's Latest as
 // `since` to fetch only the new entries since the last poll.
 func (v *Visor) RuntimeLogsSince(since int64) (RuntimeLogsDelta, error) {
+	// Defensive nil-guard — see RuntimeLogs. A `cli visor log --follow` polls
+	// this on a tight loop and reconnects the instant RPC binds on restart, so
+	// it is the most likely caller to race a not-yet-wired logstore.
+	if v.logstore == nil {
+		return RuntimeLogsDelta{}, nil
+	}
 	logs, dropped, latest := v.logstore.GetLogsSince(since)
 	return RuntimeLogsDelta{
 		Entries: logs,
