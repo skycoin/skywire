@@ -76,7 +76,7 @@ func (c *Client) ListenAndServe(addr string) error {
 			// underlying conn on Accept failure, mirroring the session.Open
 			// error path below. Without this, a listener that fails
 			// independently of an orderly Close (so closeC was never
-			// signalled) leaked the whole session. c.close() is sync.Once-
+			// signaled) leaked the whole session. c.close() is sync.Once-
 			// guarded, so it's a no-op when shutdown already triggered this.
 			c.close()
 			return fmt.Errorf("accept: %w", err)
