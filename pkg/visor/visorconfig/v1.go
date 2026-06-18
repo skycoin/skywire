@@ -262,6 +262,15 @@ type DmsgWebConfig struct {
 	// "<alias>.dmsg" resolves to the local visor without hardcoding its
 	// public key. Defaults to "skywire" when unset (→ "skywire.dmsg").
 	Alias string `json:"alias,omitempty"`
+	// SelfLoopbackAuthenticated, when nil or true (the default), makes a
+	// self-loopback request (skywire.dmsg / <self-pk>.dmsg served in-process
+	// via SelfDial) present THIS visor's own PK as the authenticated caller.
+	// The local visor's PK is always on its own landing-page whitelist, so the
+	// in-process self view renders the same authenticated endpoints (pprof,
+	// /visor.log, …) a survey-whitelisted remote peer sees — local self-access
+	// through one's own proxy is inherently authorized. Set false to render the
+	// self-loopback landing page as an anonymous (unauthenticated) caller.
+	SelfLoopbackAuthenticated *bool `json:"self_loopback_authenticated,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the
@@ -313,6 +322,13 @@ type SkynetWebConfig struct {
 	// "<alias>.skynet" resolves to the local visor without hardcoding its
 	// public key. Defaults to "skywire" when unset (→ "skywire.skynet").
 	Alias string `json:"alias,omitempty"`
+	// SelfLoopbackAuthenticated, when nil or true (the default), makes a
+	// self-loopback request (skywire.skynet / <self-pk>.skynet served
+	// in-process via SelfDial) present THIS visor's own PK as the
+	// authenticated caller, so the in-process self view renders the same
+	// authenticated landing-page endpoints a survey-whitelisted remote peer
+	// sees. Set false to render the self-loopback landing page anonymously.
+	SelfLoopbackAuthenticated *bool `json:"self_loopback_authenticated,omitempty"`
 }
 
 // SkymailBridgeConfig configures the embedded SMTP-aware bridge that
