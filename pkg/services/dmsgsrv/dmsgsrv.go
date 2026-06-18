@@ -216,10 +216,7 @@ func (s *service) Run(ctx context.Context) error {
 
 	// Build the transit dmsg client BEFORE the server so even the first
 	// (seq-0) registration goes over dmsg, never plain HTTP.
-	dmsgC, dClient, closeDmsg, err := s.buildTransitDmsg(ctx, deployments, discPKs)
-	if err != nil {
-		return fmt.Errorf("dmsg-server: build transit dmsg client: %w", err)
-	}
+	dmsgC, dClient, closeDmsg := s.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeDmsg()
 
 	srv := dmsg.NewServer(cfg.PubKey, cfg.SecKey, newDmsgOnly(dmsgC, discPKs[0], log), &srvConf, m)
@@ -429,7 +426,7 @@ func newDmsgOnly(dmsgC *dmsg.Client, discPK cipher.PubKey, log *logging.Logger) 
 // through a peer relay. No discovery HTTP is contacted. Returns the dmsg
 // client, the direct disc client (reused by the DMSG health/pprof listener),
 // and a close func.
-func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver.Deployment, discPKs []cipher.PubKey) (*dmsg.Client, disc.APIClient, func(), error) {
+func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver.Deployment, discPKs []cipher.PubKey) (*dmsg.Client, disc.APIClient, func()) {
 	cfg := &s.cfg.Config
 	log := s.log
 
@@ -490,5 +487,5 @@ func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver
 			log.WithError(cerr).Debug("transit dmsg client close")
 		}
 	}
-	return dmsgC, dClient, closeFn, nil
+	return dmsgC, dClient, closeFn
 }

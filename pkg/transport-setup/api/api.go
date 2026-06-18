@@ -53,5 +53,18 @@ func setupDmsgC(conf config.Config, log *logging.Logger) *dmsg.Client {
 	dmsgConf := dmsg.DefaultConfig()
 	disc := disc.NewHTTP(conf.Dmsg.Discovery, &http.Client{}, log)
 	client := dmsg.NewClient(conf.PK, conf.SK, disc, dmsgConf)
+	// Pre-seed the entry cache with the configured dmsg servers so the
+	// Serve loop's seeded-fallback path (#3146) has something to fall
+	// back to when conf.Dmsg.Discovery is empty (dmsg-only deployment,
+	// disc.NewHTTP returns a no-op client) or during a fleet cold-start
+	// where live discovery briefly has no entries. Without this, dmsg-
+	// only TPS instances spin on "No entries found" indefinitely even
+	// though tps.json explicitly lists upstream servers.
+	for _, srv := range conf.Dmsg.Servers {
+		if srv == nil || srv.Static.Null() || srv.Server == nil {
+			continue
+		}
+		client.SeedEntryCache(srv.Static, srv)
+	}
 	return client
 }
