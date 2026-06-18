@@ -293,9 +293,19 @@ func resolveServerEntry(ctx context.Context, spec string, log *logging.Logger) (
 	if addr != "" {
 		return &disc.Entry{Static: srvPK, Server: &disc.Server{Address: addr}}, nil
 	}
+	// Resolve from the embedded deployment list first — no network call,
+	// and covers every prod dmsg-server. Plain-HTTP discovery is the
+	// legacy fallback for the (rare) operator running against a custom
+	// dmsg-server that's only in their discovery; the embedded path
+	// keeps the common production case dmsg-only.
+	for _, e := range deployment.Prod.DmsgServers {
+		if e.Static == srvPK.String() {
+			return &disc.Entry{Static: srvPK, Server: &disc.Server{Address: e.Server.Address}}, nil
+		}
+	}
 	discURL := deployment.Prod.DmsgDiscovery
 	if discURL == "" {
-		discURL = "http://dmsgd.skywire.skycoin.com"
+		return nil, fmt.Errorf("--dmsg-server: %s not in embedded deployment set and no discovery URL available (pass <pk>@<host:port>)", srvPK)
 	}
 	dc := disc.NewHTTP(discURL, &http.Client{Timeout: 15 * time.Second}, log)
 	servers, err := dc.AllServers(ctx)
