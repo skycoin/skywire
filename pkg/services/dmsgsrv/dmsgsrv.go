@@ -470,9 +470,25 @@ func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver
 	dClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
 
 	conf := &dmsg.Config{MinSessions: 0}
-	dmsgC, closeFn, err := direct.StartDmsg(ctx, log, cfg.PubKey, cfg.SecKey, dClient, conf)
-	if err != nil {
-		return nil, nil, nil, err
+	// Start the transit client WITHOUT blocking on Ready(). A dmsg-server's
+	// INBOUND accept loop (bound after this returns) must come up regardless
+	// of whether the server's own OUTBOUND transit client has reached a peer
+	// yet. In a fleet-wide cold-start every server's transit client dials
+	// every other server — all down — so Ready() never fires; blocking here
+	// (the old direct.StartDmsg path) gated the listener and produced a
+	// CIRCULAR BOOTSTRAP TRAP where no server can be the first to listen, so
+	// the whole fleet stays down even though each binary is healthy. Serving
+	// in the background lets THIS server accept inbound sessions immediately;
+	// its own discovery registration completes the moment any peer (or an
+	// inbound visor providing a relay path) appears, which cascades the fleet
+	// back up. Mirrors direct.StartDmsg minus the <-Ready() wait.
+	dmsgC := dmsg.NewClient(cfg.PubKey, cfg.SecKey, dClient, conf)
+	dmsgC.SetLogger(log)
+	go dmsgC.Serve(ctx)
+	closeFn := func() {
+		if cerr := dmsgC.Close(); cerr != nil {
+			log.WithError(cerr).Debug("transit dmsg client close")
+		}
 	}
 	return dmsgC, dClient, closeFn, nil
 }
