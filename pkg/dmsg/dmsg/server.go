@@ -256,7 +256,14 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 	// layer up — accepting before being registered is safe: the listener only
 	// needs the bound socket, and configured/embedded peers reach us without a
 	// discovery entry.
+	// wg-track this goroutine (and the periodic loop it spawns) so Close's
+	// s.wg.Wait() joins them BEFORE delEntry. Otherwise a still-draining
+	// updateServerEntry (PutEntry) can land AFTER delEntry, leaving a zombie
+	// discovery entry that advertises a now-dead server — the exact
+	// "advertised but unreachable" shape that starves route setup.
+	s.wg.Add(1)
 	go func() {
+		defer s.wg.Done()
 		if err := s.startUpdateEntryLoop(ctx); err != nil {
 			s.log.WithError(err).Error("server entry-publish loop exited")
 		}
@@ -314,7 +321,15 @@ func (s *Server) startUpdateEntryLoop(ctx context.Context) error {
 		return err
 	}
 
-	go s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.AdvertisedAddrV6(), s.maxSessions, s.authPassphrase)
+	// wg-track the periodic update loop too. The Add happens while the parent
+	// (the wg-tracked goroutine in Serve) is still running, so the count never
+	// reaches zero between the handoff — Close's Wait joins this loop before
+	// delEntry, so a periodic PutEntry can't resurrect a just-deleted entry.
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.updateServerEntryLoop(ctx, s.AdvertisedAddr(), s.AdvertisedAddrV6(), s.maxSessions, s.authPassphrase)
+	}()
 	return nil
 }
 
