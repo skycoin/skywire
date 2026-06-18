@@ -181,13 +181,21 @@ var pingMarker = []byte{0x00, 0x00}
 
 // Ping obtains the round trip latency of the session.
 func (sc *SessionCommon) Ping() (time.Duration, error) {
+	// Snapshot the mux under the lock, then release it BEFORE the blocking
+	// round-trip. Holding RLock across the up-to-sessionPingTimeout (18s)
+	// round-trip stalled every sm.mutx.Lock() writer — Close / ForceReconnect
+	// blocked up to 18s behind a single in-flight ping. Operating on the
+	// snapshot is safe: if the session is closed concurrently, OpenStream /
+	// Write / Read on the snapshotted mux just error out and the ping fails.
 	sc.sm.mutx.RLock()
-	defer sc.sm.mutx.RUnlock()
-	if sc.sm.yamux != nil {
-		return sc.yamuxPing()
+	yamuxSes := sc.sm.yamux
+	smuxSes := sc.sm.smux
+	sc.sm.mutx.RUnlock()
+	if yamuxSes != nil {
+		return sc.yamuxPing(yamuxSes)
 	}
-	if sc.sm.smux != nil {
-		return sc.smuxPing()
+	if smuxSes != nil {
+		return sc.smuxPing(smuxSes)
 	}
 	return 0, fmt.Errorf("no mux session available for ping")
 }
@@ -224,8 +232,8 @@ func (sc *SessionCommon) Ping() (time.Duration, error) {
 // culling them — only the harm of an extra noise handshake.
 const sessionPingTimeout = 18 * time.Second
 
-func (sc *SessionCommon) yamuxPing() (time.Duration, error) {
-	str, err := sc.sm.yamux.OpenStream()
+func (sc *SessionCommon) yamuxPing(yamuxSes *yamux.Session) (time.Duration, error) {
+	str, err := yamuxSes.OpenStream()
 	if err != nil {
 		return 0, fmt.Errorf("yamux ping: open stream: %w", err)
 	}
@@ -248,8 +256,8 @@ func (sc *SessionCommon) yamuxPing() (time.Duration, error) {
 
 // smuxPing implements ping over smux by opening a temporary stream,
 // writing a ping marker, and waiting for the echo.
-func (sc *SessionCommon) smuxPing() (time.Duration, error) {
-	str, err := sc.sm.smux.OpenStream()
+func (sc *SessionCommon) smuxPing(smuxSes *smux.Session) (time.Duration, error) {
+	str, err := smuxSes.OpenStream()
 	if err != nil {
 		return 0, fmt.Errorf("smux ping: open stream: %w", err)
 	}
