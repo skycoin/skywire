@@ -516,7 +516,7 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	}
 
 	ctx, cancel := cmdutil.SignalContext(parentCtx, mLog)
-	vis, ok := NewVisor(ctx, conf)
+	vis, ok := NewVisor(ctx, conf, logBroadcaster, store)
 	if !ok {
 		select {
 		case <-ctx.Done():
@@ -538,8 +538,9 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 		}
 		cancel()
 	}
-	vis.SetLogstore(store)
-	vis.SetLogBroadcaster(logBroadcaster)
+	// logBroadcaster + logstore are now installed inside NewVisor (before module
+	// init) so the --verbose stream and `cli visor log` work during startup; no
+	// post-init wiring needed here.
 	//	vis.uiAssets = uiAssets
 	if launchBrowser {
 		if conf.Hypervisor == nil {
@@ -554,8 +555,14 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 	return nil
 }
 
-// NewVisor constructs new Visor.
-func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
+// NewVisor constructs new Visor. logBcast (the master-logger Broadcaster hook)
+// and logStore (the in-memory runtime-log ring) are created and attached to the
+// loggers by the caller; both are installed on the Visor BEFORE module init so
+// the RPC log surfaces (--verbose stream + RuntimeLogs/RuntimeLogsSince) work
+// while the visor is still starting up — the RPC binds during module init, so
+// wiring these afterward left a window where a log query hit a nil field and
+// segfaulted the process. Both may be nil (e.g. tests); all readers nil-guard.
+func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broadcaster, logStore logstore.Store) (*Visor, bool) {
 	if conf == nil {
 		conf = initConfig()
 	}
@@ -622,6 +629,15 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1) (*Visor, bool) {
 	}
 
 	v.ctx = ctx
+	// Install the log broadcaster AND logstore BEFORE the modules init below
+	// (the gRPC/RPC "cli" module among them) so log queries that arrive during
+	// startup — a `cli ... --verbose` stream, or `cli visor log[ --follow]`
+	// hitting RuntimeLogs/RuntimeLogsSince — find these wired instead of racing
+	// the post-NewVisor setters and either getting "log broadcaster not
+	// available" or segfaulting on a nil logstore. The hooks were attached to
+	// the loggers by the caller, so entries are already being captured.
+	v.logBcast = logBcast
+	v.logstore = logStore
 	v.services = NewServiceRegistry()
 	v.startedAt = time.Now()
 	v.startupComplete = make(chan struct{})
