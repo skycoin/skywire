@@ -194,11 +194,33 @@ func rewindBody(req *http.Request) error {
 // do writes req to ps and reads back the response. The response body
 // is wrapped so that closing it returns the stream to the idle pool
 // (or discards it on error).
+//
+// A watcher goroutine bounds the write + header-read by closing the
+// stream when req.Context() is canceled. Without it req.Write blocks
+// indefinitely (Stream has no write deadline once handshake completes,
+// see client_session.go:184) and http.ReadResponse blocks for up to
+// StreamIdleTimeout (2 min). Either path produced the wedge that
+// caused #3168 and the dmsg-only deployment-service deadlock cascade:
+// the caller's WithTimeout cancellation went unnoticed because the
+// stream's own deadlines were the only bound.
 func (t *HTTPTransport) do(ps *pooledStream, req *http.Request, requestedGzip bool) (*http.Response, error) {
+	ctx := req.Context()
+	writeReadDone := make(chan struct{})
+	if ctx.Done() != nil {
+		go func() {
+			select {
+			case <-ctx.Done():
+				_ = ps.s.Close() //nolint:errcheck,gosec
+			case <-writeReadDone:
+			}
+		}()
+	}
 	if err := req.Write(ps.s); err != nil {
+		close(writeReadDone)
 		return nil, err
 	}
 	resp, err := http.ReadResponse(ps.br, req)
+	close(writeReadDone)
 	if err != nil {
 		return nil, err
 	}
