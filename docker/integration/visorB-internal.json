@@ -33,9 +33,6 @@
     "min_hops": 1,
     "route_finder_dmsg": "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80"
   },
-  "uptime_tracker": {
-    "addr_dmsg": "dmsg://031ecf9a2aefa62398b305481f9a00365e4a1247ae0ea46bdb92223a43a306a98e:80"
-  },
   "launcher": {
     "apps": [
       {

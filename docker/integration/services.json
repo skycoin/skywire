@@ -5,7 +5,7 @@
       "name": "tpd",
       "addr": ":9094",
       "pprof_addr": ":6094",
-      "redis": "redis://tpd-redis:6379",
+      "redis": "redis://redis:6379/1",
       "entry_timeout": "2m",
       "secret_key": "85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8",
       "uptime_db": "",
@@ -31,7 +31,7 @@
       "name": "rf",
       "addr": ":9092",
       "pprof_addr": ":6092",
-      "redis": "redis://tpd-redis:6379",
+      "redis": "redis://redis:6379/1",
       "secret_key": "640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca",
       "dmsg": {
         "servers": [
@@ -53,7 +53,7 @@
       "type": "dmsg-discovery",
       "name": "dmsgd",
       "addr": ":9090",
-      "redis": "redis://dmsgd-redis:6379",
+      "redis": "redis://redis:6379/0",
       "secret_key": "b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714",
       "test_mode": true
     },
@@ -74,7 +74,7 @@
       "name": "sd",
       "addr": ":9091",
       "pprof_addr": ":6091",
-      "redis": "redis://sd-redis:6379",
+      "redis": "redis://redis:6379/2",
       "entry_timeout": "2m",
       "secret_key": "ccc3ae9993ed03bed80b1f9feb747d7c6ca3342a65c3923191b7527c2c00ef0f",
       "dmsg": {
@@ -99,7 +99,7 @@
       "addr": ":9093",
       "udp_addr": ":9093",
       "pprof_addr": ":6093",
-      "redis": "redis://ar-redis:6379",
+      "redis": "redis://redis:6379/3",
       "entry_timeout": "2m",
       "secret_key": "1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a",
       "dmsg": {
