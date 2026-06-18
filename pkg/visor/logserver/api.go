@@ -109,8 +109,8 @@ type API struct {
 
 	logger               *logging.Logger
 	startedAt            time.Time
-	publicKey            string // visor PK hex, set via SetIdentity (empty until wired)
-	dmsgAddress          string // <pk>:<dmsg-port>, set via SetIdentity
+	publicKey            string // visor PK hex, shown on the landing page; set via SetIdentity (empty until wired)
+	dmsgAddress          string // <pk>:<dmsg-port>, emitted on /health; set via SetIdentity
 	healthStatsProvider  HealthStatsProvider
 	serviceLister        ServiceLister
 	forwardedPortLister  ForwardedPortLister
@@ -434,16 +434,13 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			}
 		}
 
-		// Identity header — state which visor this is. Now that resolver
-		// aliases make identity meaningful, the page names itself by PK
-		// (and dmsg address when known). HTML-escaped though both are
-		// fixed-shape hex from config.
+		// Identity header — state which visor this is. The landing page
+		// names itself by PK only; the dmsg address is redundant here (it's
+		// just <pk>:<port>) and is carried on /health instead. HTML-escaped
+		// though the PK is fixed-shape hex from config.
 		var idHeader string
 		if api.publicKey != "" {
 			idHeader = fmt.Sprintf(`<p class="pk">public key: %s</p>`, html.EscapeString(api.publicKey))
-			if api.dmsgAddress != "" {
-				idHeader += fmt.Sprintf(`<p class="pk">dmsg address: %s</p>`, html.EscapeString(api.dmsgAddress))
-			}
 		}
 
 		c.Writer.WriteHeader(http.StatusOK)
@@ -507,11 +504,14 @@ func (api *API) SetWebsiteHandler(h http.Handler) {
 }
 
 func (api *API) health(c *gin.Context) {
+	// /health carries the dmsg_address only — the public_key is redundant
+	// (it's the host part of dmsg_address) and is shown on the landing page
+	// instead. PublicKey is left unset; it's omitempty so it drops from the
+	// JSON entirely.
 	resp := httputil.HealthCheckResponse{
 		ServiceName: "visor",
 		BuildInfo:   buildinfo.Get(),
 		StartedAt:   api.startedAt,
-		PublicKey:   api.publicKey,
 		DmsgAddr:    api.dmsgAddress,
 	}
 
@@ -545,9 +545,10 @@ func (api *API) SetHealthStatsProvider(provider HealthStatsProvider) {
 }
 
 // SetIdentity records the visor's public key (hex) and dmsg listening
-// address (`<pk>:<dmsg-port>`) so the /health response is self-identifying
-// like the deployment services, and the landing page can state which visor
-// it is. Called from visor init.
+// address (`<pk>:<dmsg-port>`). The two are surfaced on different pages to
+// avoid redundancy: the landing page names itself by public key, while the
+// /health response carries the dmsg address (whose host part is the same
+// key). Called from visor init.
 func (api *API) SetIdentity(publicKey, dmsgAddress string) {
 	api.publicKey = publicKey
 	api.dmsgAddress = dmsgAddress

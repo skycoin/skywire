@@ -14,10 +14,13 @@ func TestColorizeLine(t *testing.T) {
 		wantBold  bool
 	}{
 		{
+			// The message text stays contiguous and bright; the trailing
+			// `remote=03dd` field is split off into key/value spans, so the
+			// message we assert on is just the prose before the field.
 			name:      "debug line with module",
 			in:        "[2026-06-18T14:54:52-05:00] DEBUG [embedded_tps]: Health check request remote=03dd\n",
 			wantColor: levelColors["DEBUG"],
-			wantText:  "Health check request remote=03dd",
+			wantText:  "Health check request",
 		},
 		{
 			name:      "info line",
@@ -66,6 +69,30 @@ func TestColorizeLine(t *testing.T) {
 				t.Fatalf("expected bold for %s: got %q", tc.name, out)
 			}
 		})
+	}
+}
+
+func TestColorizeLinePerElement(t *testing.T) {
+	// A standard line must split into per-element spans matching the
+	// terminal: dim timestamp, level-colored LEVEL + module, bright
+	// message, and dimmed key / default value for each field.
+	in := "[2026-06-18T15:25:33-05:00] WARN [embedded_tps:dmsg]: Retrying... current_backoff=1.69s\n"
+	out := colorizeLine(in)
+
+	checks := []struct {
+		desc, frag string
+	}{
+		{"dim timestamp", `<span style="color:` + colorTimestamp + `">[2026-06-18T15:25:33-05:00]</span>`},
+		{"level colored", `<span style="color:` + levelColors["WARN"] + `">WARN</span>`},
+		{"module level-colored", `<span style="color:` + levelColors["WARN"] + `">[embedded_tps:dmsg]</span>`},
+		{"bright message", `<span style="color:` + colorMessage + `">Retrying... </span>`},
+		{"dim field key", `<span style="color:` + colorFieldKey + `">current_backoff=</span>`},
+		{"default field value", `<span style="color:` + colorDefault + `">1.69s</span>`},
+	}
+	for _, c := range checks {
+		if !strings.Contains(out, c.frag) {
+			t.Errorf("%s: missing %q in output\n got: %s", c.desc, c.frag, out)
+		}
 	}
 }
 
