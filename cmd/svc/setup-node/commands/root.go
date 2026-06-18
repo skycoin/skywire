@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"net/http"
 	"net/rpc"
 	"os"
 	"path/filepath"
@@ -22,7 +21,6 @@ import (
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsgc"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -160,20 +158,26 @@ var checkHealthCmd = &cobra.Command{
 			log.Fatalf("Invalid setup node public key: %v", err)
 		}
 
-		// generate keys to useae for dmsg client
+		// generate keys to use for dmsg client
 		pk, sk := cipher.GenerateKeyPair()
 
 		// Create logger
 		log := logging.MustGetLogger("health-check")
 
-		// Start DMSG client
+		// Start DMSG client. Use cmdutil.BootstrapDmsg in dmsg-only
+		// mode (dmsgDisc empty, dmsgDiscoveryDmsg set) so the
+		// ephemeral client routes all discovery via dmsg-HTTP — no
+		// plain-HTTP egress to dmsg-discovery (Caddy fronting was
+		// retired in #3174's wake; HTTP is 404 in prod). Embedded
+		// dmsg-server set seeds the initial bootstrap.
 		ctx := context.Background()
-		dmsgDisc := disc.NewHTTP(deployment.Prod.DmsgDiscovery, &http.Client{}, log)
-		dmsgC := dmsg.NewClient(pk, sk, dmsgDisc, &dmsg.Config{MinSessions: 1})
-
-		go dmsgC.Serve(ctx)
-		log.Info("Connecting to DMSG network...")
-		<-dmsgC.Ready()
+		bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk,
+			dmsg.Prod.DmsgServers, "", dmsg.DiscAddr(false), "")
+		if err != nil {
+			log.Fatalf("Failed to bootstrap dmsg: %v", err)
+		}
+		defer bootstrap.Close()
+		dmsgC := bootstrap.Client
 		log.Info("Connected to DMSG network")
 		log.Infoln("dialing route setup-node: ", snpk.String())
 
