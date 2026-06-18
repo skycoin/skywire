@@ -251,7 +251,11 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					done(err)
 					return nil, fmt.Errorf("skynet dial: %w", err)
 				}
-				done(nil)
+				// done() is recorded at the ACTUAL outcome paths below, not
+				// here: the request is not truly successful until the full
+				// conn stack (host-rewrite + optional MITM-leaf mint) is
+				// built. Recording done(nil) right after the dial mis-counted
+				// a request that then failed at MITM-leaf minting as a success.
 
 				// Build the conn stack inside-out. The raw skywire
 				// conn is the innermost layer. Optional host-rewrite
@@ -292,11 +296,13 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
 						_ = stack.Close() //nolint:errcheck,gosec
+						done(lerr)
 						return nil, fmt.Errorf("skynet mitm leaf: %w", lerr)
 					}
 					stack = skynetca.MITMTerminate(stack, leaf)
 				}
 
+				done(nil)
 				return &tcpAddrConn{Conn: stack}, nil
 			}
 
