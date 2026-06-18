@@ -98,7 +98,22 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	servers := shuffleServers(configured)
 
 	if len(servers) == 0 {
-		return nil
+		// No configured/cached dmsg servers (a minimal dmsg-only config on
+		// first boot, before dmsg_servers.json is written). Fall back to the
+		// embedded deployment set so v.dClient is NEVER left nil — mirrors
+		// seedDmsgServiceEntries' dmsg.Prod.DmsgServers fallback. A nil
+		// v.dClient nil-derefs getHTTPClient on dmsg:// URLs (crashes visor
+		// startup) AND makes dmsgc.New fall through to a plain-HTTP disc with
+		// no seeded server entries, whose first resolve recurses
+		// resolve->RoundTrip->resolve into a goroutine-stack overflow.
+		servers = shuffleServers(deployment.Prod.ToDiscEntries())
+		if len(servers) == 0 {
+			// Truly nothing embedded (e.g. an empty-keyring build); leaving
+			// dClient nil is unavoidable, but downstream nil-guards must hold.
+			return nil
+		}
+		log.WithField("count", len(servers)).
+			Warn("no configured/cached dmsg servers; seeding direct client from embedded deployment set")
 	}
 
 	keys = append(keys, v.conf.PK)
