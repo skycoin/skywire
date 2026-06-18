@@ -237,7 +237,7 @@ func (v *Visor) connectRawTCPSkynet(remotePK cipher.PubKey, remotePort, localPor
 	// Ownership transfers to forwardConn on success, where cleanup is cleared.
 	// Without this, every reject/marshal/io error leaked one open route group
 	// per ConnectRawTCP attempt, unbounded until visor restart.
-	var cleanup net.Conn = conn
+	cleanup := conn
 	defer func() {
 		if cleanup != nil {
 			_ = cleanup.Close() //nolint:errcheck
