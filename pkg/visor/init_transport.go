@@ -105,7 +105,10 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return nil
 	})
 
-	go v.resolvePublicIPForAR(arClient, log)
+	// Deliberately decoupled from the init ctx: resolvePublicIPForAR uses the
+	// visor's long-lived v.ctx, since the init ctx is canceled once this
+	// function returns and would kill the background lookup prematurely.
+	go v.resolvePublicIPForAR(arClient, log) //nolint:gosec // G118: intentional — uses v.ctx, not the request-scoped init ctx (which is canceled when init returns)
 
 	return nil
 }
