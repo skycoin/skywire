@@ -20,6 +20,8 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 )
 
@@ -101,6 +103,40 @@ func (r *ServiceRegistry) SelfDial(port uint16) (net.Conn, error) {
 	go h(serverEnd)
 	return clientEnd, nil
 }
+
+// SelfDialAs is SelfDial but stamps the server-end conn's RemoteAddr with
+// remotePK (as a dmsg.Addr, which stringifies to "<pk>:<port>") so the
+// in-process handler sees a noise-authenticated-equivalent caller identity.
+//
+// Used by the embedded resolving proxies' self-loopback path: a request for
+// THIS visor's own PK is served in-process over net.Pipe (no transport, no
+// remote PK), which would otherwise render as anonymous on the landing page.
+// Stamping the visor's OWN PK — which is always on its own landing-page
+// whitelist — makes the self view authenticated, because local self-access
+// through one's own proxy is inherently authorized. Only the SERVER end is
+// stamped (the side the handler reads RemoteAddr from); the returned client
+// end is unchanged. The port stamped into the addr is informational only —
+// the landing-page whitelist check keys off the PK host part.
+func (r *ServiceRegistry) SelfDialAs(port uint16, remotePK cipher.PubKey) (net.Conn, error) {
+	h, ok := r.Get(port)
+	if !ok {
+		return nil, fmt.Errorf("no local service registered on port %d", port)
+	}
+	clientEnd, serverEnd := net.Pipe()
+	go h(&pkAddrConn{Conn: serverEnd, remote: dmsg.Addr{PK: remotePK, Port: port}})
+	return clientEnd, nil
+}
+
+// pkAddrConn overrides RemoteAddr so an in-process self-loopback conn reports a
+// dmsg.Addr ("<pk>:<port>") instead of net.Pipe's address-less pipeAddr. The
+// HTTP server populates Request.RemoteAddr from RemoteAddr().String(), and the
+// logserver landing page extracts the caller PK from it via net.SplitHostPort.
+type pkAddrConn struct {
+	net.Conn
+	remote net.Addr
+}
+
+func (c *pkAddrConn) RemoteAddr() net.Addr { return c.remote }
 
 // Ports returns all registered port numbers, sorted ascending.
 func (r *ServiceRegistry) Ports() []uint16 {

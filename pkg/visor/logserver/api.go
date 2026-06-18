@@ -74,6 +74,25 @@ type CXOFeedEntry struct {
 	System      bool   `json:"system,omitempty"`
 }
 
+// RelatedNodesProvider exposes this node's mesh relationships for the
+// landing page: the visors a hypervisor manages, and the hypervisors a
+// visor is configured to trust. Both are shown ONLY to an authenticated
+// (survey-whitelisted, or self-loopback) caller — they reveal the node's
+// management topology — and rendered as links to each peer's landing page
+// (http://<pk>.dmsg), reachable through a resolving proxy.
+//
+// Implemented by the visor. A nil provider (or empty slices) renders no
+// related-nodes section.
+type RelatedNodesProvider interface {
+	// ManagedVisors returns the PKs of the visors this node currently
+	// manages as a hypervisor (the same set as `hv ls`). Empty when this
+	// node is not acting as a hypervisor or has no connected visors.
+	ManagedVisors() []cipher.PubKey
+	// ConfiguredHypervisors returns the PKs of the hypervisors this visor
+	// is configured to be managed by (v.conf.Hypervisors).
+	ConfiguredHypervisors() []cipher.PubKey
+}
+
 // CXOFeedsLister provides the list of CXO feeds the visor is publishing.
 // Returns the always-on system feed (stats/telemetry) plus any
 // user-registered feeds. Pure metadata — actual feed content is served
@@ -87,15 +106,16 @@ type CXOFeedsLister interface {
 type API struct {
 	http.Handler
 
-	logger              *logging.Logger
-	startedAt           time.Time
-	healthStatsProvider HealthStatsProvider
-	serviceLister       ServiceLister
-	forwardedPortLister ForwardedPortLister
-	cxoFeedsLister      CXOFeedsLister
-	statsReader         StatsReader             // visor-local telemetry store, set via SetStatsReader
-	uptimeRecorder      *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
-	websiteHandler      http.Handler            // optional: serves unmatched routes (custom website)
+	logger               *logging.Logger
+	startedAt            time.Time
+	healthStatsProvider  HealthStatsProvider
+	serviceLister        ServiceLister
+	forwardedPortLister  ForwardedPortLister
+	cxoFeedsLister       CXOFeedsLister
+	relatedNodesProvider RelatedNodesProvider
+	statsReader          StatsReader             // visor-local telemetry store, set via SetStatsReader
+	uptimeRecorder       *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
+	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
 	// ptyHandler serves /pty (web terminal) when set by the visor.
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
 	// PKs + hypervisor PKs + the visor's own PK).
@@ -329,6 +349,29 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 					links = append(links, `<a href="/pty">/pty</a> - web terminal (dmsgpty)`)
 				}
 			}
+
+			// Related nodes — shown ONLY to authenticated callers (this
+			// section is gated strictly on `wl`). As LINKS to each peer's
+			// landing page over a resolving proxy (http://<pk>.dmsg).
+			if api.relatedNodesProvider != nil {
+				// Part 2: visors this node manages as a hypervisor.
+				if managed := api.relatedNodesProvider.ManagedVisors(); len(managed) > 0 {
+					links = append(links, "")
+					links = append(links, "managed visors (this hypervisor):")
+					for _, pk := range managed {
+						links = append(links, fmt.Sprintf(`  <a href="http://%s.dmsg">%s.dmsg</a>`, pk.Hex(), pk.Hex()))
+					}
+				}
+				// Part 3: hypervisors this visor is configured to trust.
+				if hvs := api.relatedNodesProvider.ConfiguredHypervisors(); len(hvs) > 0 {
+					links = append(links, "")
+					links = append(links, "configured hypervisors:")
+					for _, pk := range hvs {
+						links = append(links, fmt.Sprintf(`  <a href="http://%s.dmsg">%s.dmsg</a>`, pk.Hex(), pk.Hex()))
+					}
+					links = append(links, `  <small>(an hv link resolves only through a proxy that can route to it)</small>`)
+				}
+			}
 		}
 		// Add forwarded ports visible on the landing page.
 		// Use the request Host to construct proper URLs that work
@@ -484,6 +527,13 @@ func (api *API) SetPtyHandler(h http.Handler, whitelist pty.Whitelist) {
 
 func (api *API) SetCXOFeedsLister(lister CXOFeedsLister) {
 	api.cxoFeedsLister = lister
+}
+
+// SetRelatedNodesProvider installs the provider whose managed-visors and
+// configured-hypervisors lists are shown (as links) on the landing page to
+// authenticated callers. Called from visor init.
+func (api *API) SetRelatedNodesProvider(p RelatedNodesProvider) {
+	api.relatedNodesProvider = p
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {
