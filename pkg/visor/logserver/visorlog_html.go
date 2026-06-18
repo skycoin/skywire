@@ -99,7 +99,7 @@ func renderVisorLogHTML(c *gin.Context, logFile string) {
 			}
 			flushEvery++
 			if flushEvery%256 == 0 {
-				c.Writer.Flush()
+				_ = c.Writer.Flush() //nolint:errcheck
 			}
 		}
 		if rerr != nil {
