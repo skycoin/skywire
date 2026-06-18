@@ -18,6 +18,11 @@ type MockAPIClient struct {
 	mock.Mock
 }
 
+// SetPublicIP provides a mock function with given fields: publicIP, publicIPv6
+func (_m *MockAPIClient) SetPublicIP(publicIP string, publicIPv6 string) {
+	_m.Called(publicIP, publicIPv6)
+}
+
 // Addresses provides a mock function with given fields: ctx
 func (_m *MockAPIClient) Addresses(ctx context.Context) string {
 	ret := _m.Called(ctx)
