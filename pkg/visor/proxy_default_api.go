@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
@@ -91,6 +92,22 @@ func (proxyDefaultAPI) DisableHypervisorPersist(_ bool) error {
 
 func (proxyDefaultAPI) IsHypervisorEnabled() bool {
 	return false
+}
+
+func (proxyDefaultAPI) EnableHypervisorUIPersist(_ bool) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DisableHypervisorUIPersist(_ bool) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) IsHypervisorUIServing() bool {
+	return false
+}
+
+func (proxyDefaultAPI) DmsgPortHits() []dmsg.PortHit {
+	return nil
 }
 
 func (proxyDefaultAPI) Uptime() (float64, error) {
