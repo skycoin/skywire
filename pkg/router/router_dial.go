@@ -270,10 +270,12 @@ func (r *router) DialRoutes(
 		}
 
 		appName := ""
+		datagram := false
 		if opts != nil {
 			appName = opts.AppName
+			datagram = opts.Datagram
 		}
-		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName)
+		nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName, datagram)
 		if err != nil {
 			// Clean up saved rules on failure
 			r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
@@ -463,10 +465,12 @@ func (r *router) setupPingRoute(
 	}
 
 	appName := ""
+	datagram := false
 	if opts != nil {
 		appName = opts.AppName
+		datagram = opts.Datagram
 	}
-	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName)
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, appName, datagram)
 	if err != nil {
 		// Clean up saved rules if route group setup fails
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})

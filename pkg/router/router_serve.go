@@ -57,7 +57,10 @@ func (r *router) AcceptRoutes(ctx context.Context) (net.Conn, error) {
 	}
 
 	// IntroduceRules / accepted-route path: no app context to thread.
-	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "")
+	// Accept-side datagram intent comes from the local serving port
+	// being registered as faithful-UDP-capable (RegisterDatagramPort).
+	datagram := r.isDatagramPort(rules.Desc.DstPort())
+	nrg, err := r.saveRouteGroupRules(ctx, rules, nsConf, "", datagram)
 	if err != nil {
 		// Clean up saved rules if route group setup fails
 		r.rt.DelRules([]routing.RouteID{rules.Forward.KeyRouteID(), rules.Reverse.KeyRouteID()})
@@ -197,7 +200,7 @@ func (r *router) serveSetup() {
 // nolint: gocyclo
 //
 //gocyclo:ignore
-func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config, appName string) (*NoiseRouteGroup, error) {
+func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRules, nsConf noise.Config, appName string, datagram bool) (*NoiseRouteGroup, error) {
 	// Check context before starting
 	if ctx.Err() != nil {
 		return nil, ctx.Err()
@@ -393,6 +396,14 @@ func (r *router) saveRouteGroupRules(ctx context.Context, rules routing.EdgeRule
 	r.rgsNs[rules.Desc] = nrg
 	delete(r.rgsRaw, rules.Desc)
 	r.mx.Unlock()
+
+	// Faithful-UDP (#2607): when this end intends datagram mode for the
+	// route, build a DatagramRouteGroup sibling over the same rules +
+	// transport, keyed off the reliable session's Noise ChannelBinding.
+	// Best-effort and additive — never affects the reliable route.
+	if datagram {
+		r.buildDatagramSibling(rules, nsConf, nrg.Conn, tp)
+	}
 
 	return nrg, nil
 }
