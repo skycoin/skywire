@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -29,6 +30,17 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 	}
 	cSes.porter = porter
 	return cSes, nil
+}
+
+// makeClientSessionQUIC builds a client session over an already-handshaked QUIC
+// connection (#2607). No Noise handshake — initQUIC just records the conn; the
+// QUIC TLS already authenticated rPK and encrypts the hop.
+func makeClientSessionQUIC(entity *EntityCommon, porter *netutil.Porter, qc *quic.Conn, rPK cipher.PubKey) ClientSession {
+	var cSes ClientSession
+	cSes.SessionCommon = new(SessionCommon)
+	cSes.SessionCommon.initQUIC(entity, qc, rPK)
+	cSes.porter = porter
+	return cSes
 }
 
 // Close closes the client session and reaps any porter entries for streams

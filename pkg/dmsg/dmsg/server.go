@@ -4,11 +4,13 @@ package dmsg
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -16,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
+	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
 // ErrClosed is returned when an operation is attempted on a closed server.
@@ -673,6 +676,105 @@ func (s *Server) addAcceptedPeerSession(remotePK cipher.PubKey, ses *SessionComm
 	s.peerSessionsMx.Unlock()
 	s.log.WithField("peer_pk", remotePK).
 		Info("Accepted inbound peer announcement; session is now forwardable.")
+}
+
+// ServeQUIC starts a QUIC listener for dmsg-over-QUIC (#2607) on the given UDP
+// socket and advertises advertisedUDPAddr in discovery (Server.AddressUDP +
+// Protocol "quic"). It runs alongside the TCP Serve: QUIC-capable clients dial
+// QUIC for native stream multiplexing + a datagram channel, everyone else stays
+// on TCP. Blocks until the listener errors or the server closes.
+func (s *Server) ServeQUIC(udpConn net.PacketConn, advertisedUDPAddr string) error {
+	cert, err := skyquic.NewCertificate(s.pk, s.sk)
+	if err != nil {
+		return fmt.Errorf("dmsg-quic: identity cert: %w", err)
+	}
+	// Server-side: accept any valid skywire PK; the peer PK is learned from
+	// the verified client certificate (see quicPeerPK).
+	tlsConf := skyquic.TLSConfig(cert, nil, nil)
+	lis, err := quic.Listen(udpConn, tlsConf, &quic.Config{
+		EnableDatagrams: true,
+		MaxIdleTimeout:  60 * time.Second,
+		KeepAlivePeriod: 25 * time.Second,
+	})
+	if err != nil {
+		return fmt.Errorf("dmsg-quic: listen: %w", err)
+	}
+	s.advertisedUDPAddr = advertisedUDPAddr
+	s.log.WithField("addr_udp", advertisedUDPAddr).Info("Serving dmsg over QUIC.")
+	for {
+		qc, err := lis.Accept(context.Background())
+		if err != nil {
+			if isClosed(s.done) {
+				return nil
+			}
+			return fmt.Errorf("dmsg-quic: accept: %w", err)
+		}
+		go s.handleQUICConn(qc)
+	}
+}
+
+// quicPeerPK returns the skywire PK the connecting client authenticated with via
+// its PK-bound QUIC TLS certificate (pkg/skyquic, option A).
+func quicPeerPK(qc *quic.Conn) (cipher.PubKey, error) {
+	certs := qc.ConnectionState().TLS.PeerCertificates
+	if len(certs) == 0 {
+		return cipher.PubKey{}, errors.New("dmsg-quic: peer presented no certificate")
+	}
+	raw := make([][]byte, len(certs))
+	for i, c := range certs {
+		raw[i] = c.Raw
+	}
+	return skyquic.VerifyCert(raw)
+}
+
+// handleQUICConn serves an accepted QUIC connection as a dmsg server session —
+// the QUIC-stream analog of handleSession (no Noise; the QUIC TLS already
+// authenticated the peer PK + encrypts the hop).
+func (s *Server) handleQUICConn(qc *quic.Conn) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.WithField("panic", r).WithField("remote_quic", qc.RemoteAddr()).
+				Error("Recovered from panic in handleQUICConn, connection will be closed")
+			qc.CloseWithError(0, "panic") //nolint:errcheck,gosec
+		}
+	}()
+
+	log := s.log.WithField("remote_quic", qc.RemoteAddr())
+	pk, err := quicPeerPK(qc)
+	if err != nil {
+		log.WithError(err).Warn("Failed to authenticate QUIC peer")
+		qc.CloseWithError(0, "auth failed") //nolint:errcheck,gosec
+		return
+	}
+
+	dSes := makeServerSessionQUIC(s.m, &s.EntityCommon, qc, pk)
+	log = log.WithField("remote_pk", pk)
+	if s.isPeerPK(pk) {
+		dSes.isPeer = true
+		log.Info("Started peer server session (quic).")
+	} else {
+		log.Info("Started session (quic).")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		awaitDone(ctx, s.done)
+		log.WithError(dSes.Close()).Info("Stopped session.")
+	}()
+	log.Infof("quic stream session initial for %s", pk.String())
+
+	s.setSession(ctx, dSes.SessionCommon)
+	dSes.Serve()
+
+	if dSes.isPeer {
+		s.peerSessionsMx.Lock()
+		if s.peerSessions[pk] == dSes.SessionCommon {
+			delete(s.peerSessions, pk)
+		}
+		s.peerSessionsMx.Unlock()
+	}
+	s.delSession(ctx, pk, dSes.SessionCommon)
+	cancel()
 }
 
 func (s *Server) handleSession(conn net.Conn) {
