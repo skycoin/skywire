@@ -93,6 +93,18 @@ func (proxyDefaultAPI) IsHypervisorEnabled() bool {
 	return false
 }
 
+func (proxyDefaultAPI) EnableHypervisorUIPersist(_ bool) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DisableHypervisorUIPersist(_ bool) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) IsHypervisorUIServing() bool {
+	return false
+}
+
 func (proxyDefaultAPI) Uptime() (float64, error) {
 	return 0, ErrProxyNotSupported
 }

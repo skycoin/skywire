@@ -278,6 +278,25 @@ func (rc *rpcClient) IsHypervisorEnabled() bool {
 	return out
 }
 
+// EnableHypervisorUIPersist starts only the web UI (RPC/tracking unaffected).
+func (rc *rpcClient) EnableHypervisorUIPersist(persist bool) error {
+	return rc.Call("EnableHypervisorUI", &persist, &struct{}{})
+}
+
+// DisableHypervisorUIPersist stops only the web UI (RPC/tracking + hv ls stay up).
+func (rc *rpcClient) DisableHypervisorUIPersist(persist bool) error {
+	return rc.Call("DisableHypervisorUI", &persist, &struct{}{})
+}
+
+// IsHypervisorUIServing calls IsHypervisorUIServing
+func (rc *rpcClient) IsHypervisorUIServing() bool {
+	var out bool
+	if err := rc.Call("IsHypervisorUIServing", &struct{}{}, &out); err != nil {
+		return false
+	}
+	return out
+}
+
 // Uptime calls Uptime
 func (rc *rpcClient) Uptime() (float64, error) {
 	var out float64

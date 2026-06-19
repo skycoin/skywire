@@ -40,6 +40,9 @@ type API interface {
 	EnableHypervisorPersist(persist bool) error
 	DisableHypervisorPersist(persist bool) error
 	IsHypervisorEnabled() bool
+	EnableHypervisorUIPersist(persist bool) error
+	DisableHypervisorUIPersist(persist bool) error
+	IsHypervisorUIServing() bool
 	Uptime() (float64, error)
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)

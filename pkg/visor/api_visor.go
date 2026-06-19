@@ -253,6 +253,54 @@ func (v *Visor) IsHypervisorEnabled() bool {
 	return v.hvInstance.IsEnabled()
 }
 
+// IsHypervisorUIServing implements API. Reports whether the web UI is serving.
+func (v *Visor) IsHypervisorUIServing() bool {
+	if v.hvInstance == nil {
+		return false
+	}
+	return v.hvInstance.IsUIServing()
+}
+
+// EnableHypervisorUIPersist starts the hypervisor web UI (RPC/tracking
+// unaffected) and optionally persists the change.
+func (v *Visor) EnableHypervisorUIPersist(persist bool) error {
+	if v.hvInstance == nil {
+		return fmt.Errorf("hypervisor not configured — add \"hypervisor\" section to visor config")
+	}
+	if err := v.hvInstance.EnableUI(); err != nil {
+		return err
+	}
+	if persist {
+		return v.persistHypervisorUIDisabled(false)
+	}
+	return nil
+}
+
+// DisableHypervisorUIPersist stops the hypervisor web UI but keeps the DMSG-RPC
+// listener, managed-visor tracking, and `hv ls` running. Optionally persists.
+func (v *Visor) DisableHypervisorUIPersist(persist bool) error {
+	if v.hvInstance == nil {
+		return fmt.Errorf("hypervisor not configured — add \"hypervisor\" section to visor config")
+	}
+	if err := v.hvInstance.DisableUI(); err != nil {
+		return err
+	}
+	if persist {
+		return v.persistHypervisorUIDisabled(true)
+	}
+	return nil
+}
+
+// persistHypervisorUIDisabled writes the web-UI disable state to the config.
+func (v *Visor) persistHypervisorUIDisabled(disable bool) error {
+	if v.conf.Hypervisor == nil {
+		config := visorconfig.DefaultHypervisorConfig()
+		v.conf.Hypervisor = &config
+	}
+	v.conf.Hypervisor.UIDisable = disable
+	return v.conf.Flush()
+}
+
 // EnableHypervisorPersist enables the hypervisor and optionally persists to config.
 func (v *Visor) EnableHypervisorPersist(persist bool) error {
 	if err := v.EnableHypervisor(); err != nil {

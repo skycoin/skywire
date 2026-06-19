@@ -230,6 +230,15 @@ func (mc *mockRPCClient) DisableHypervisorPersist(_ bool) error { return nil }
 // IsHypervisorEnabled implements API
 func (mc *mockRPCClient) IsHypervisorEnabled() bool { return false }
 
+// EnableHypervisorUIPersist implements API
+func (mc *mockRPCClient) EnableHypervisorUIPersist(_ bool) error { return nil }
+
+// DisableHypervisorUIPersist implements API
+func (mc *mockRPCClient) DisableHypervisorUIPersist(_ bool) error { return nil }
+
+// IsHypervisorUIServing implements API
+func (mc *mockRPCClient) IsHypervisorUIServing() bool { return false }
+
 // Uptime implements API
 func (mc *mockRPCClient) Uptime() (float64, error) {
 	return time.Since(mc.startedAt).Seconds(), nil
