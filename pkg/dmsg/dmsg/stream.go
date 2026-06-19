@@ -4,11 +4,13 @@ package dmsg
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
@@ -17,10 +19,17 @@ import (
 )
 
 // Stream represents a dmsg connection between two dmsg clients.
+//
+// Exactly one of yStr / sStr / qStr is non-nil — the underlying mux stream that
+// carries this dmsg stream (yamux, smux, or a native QUIC stream for #2607
+// dmsg-over-QUIC). The end-to-end client↔client Noise (ns/nsConn) rides on top
+// of whichever it is, so client↔client confidentiality through the relay is
+// identical across transports.
 type Stream struct {
 	ses  *ClientSession // back reference
 	yStr *yamux.Stream
 	sStr *smux.Stream
+	qStr *quic.Stream
 	// The following fields are to be filled after handshake.
 	lAddr   Addr
 	rAddr   Addr
@@ -31,13 +40,45 @@ type Stream struct {
 	log     logrus.FieldLogger
 }
 
+// muxStreamConn is the minimal interface the dmsg stream protocol needs from
+// the underlying mux stream — satisfied by *yamux.Stream, *smux.Stream, and
+// *quic.Stream alike.
+type muxStreamConn interface {
+	io.Reader
+	io.Writer
+	io.Closer
+	SetDeadline(time.Time) error
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
+
+// muxStream returns the active underlying mux stream. Exactly one of the three
+// stream fields is set for a given Stream.
+func (s *Stream) muxStream() muxStreamConn {
+	switch {
+	case s.sStr != nil:
+		return s.sStr
+	case s.qStr != nil:
+		return s.qStr
+	default:
+		return s.yStr
+	}
+}
+
 func newInitiatingStream(cSes *ClientSession) (*Stream, error) {
-	if cSes.sm.smux != nil {
+	switch {
+	case cSes.sm.smux != nil:
 		sStr, err := cSes.sm.smux.OpenStream()
 		if err != nil {
 			return nil, err
 		}
 		return &Stream{ses: cSes, sStr: sStr}, nil
+	case cSes.sm.quic != nil:
+		qStr, err := cSes.sm.quic.OpenStreamSync(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		return &Stream{ses: cSes, qStr: qStr}, nil
 	}
 	yStr, err := cSes.sm.yamux.OpenStream()
 	if err != nil {
@@ -48,12 +89,19 @@ func newInitiatingStream(cSes *ClientSession) (*Stream, error) {
 }
 
 func newRespondingStream(cSes *ClientSession) (*Stream, error) {
-	if cSes.sm.smux != nil {
+	switch {
+	case cSes.sm.smux != nil:
 		sStr, err := cSes.sm.smux.AcceptStream()
 		if err != nil {
 			return nil, err
 		}
 		return &Stream{ses: cSes, sStr: sStr}, nil
+	case cSes.sm.quic != nil:
+		qStr, err := cSes.sm.quic.AcceptStream(context.Background())
+		if err != nil {
+			return nil, err
+		}
+		return &Stream{ses: cSes, qStr: qStr}, nil
 	}
 	yStr, err := cSes.sm.yamux.AcceptStream()
 	if err != nil {
@@ -73,11 +121,8 @@ func (s *Stream) Close() error {
 	if closeFn != nil {
 		closeFn()
 	}
-	if s.sStr != nil {
-		return s.sStr.Close()
-	}
-	if s.yStr != nil {
-		return s.yStr.Close()
+	if s.sStr != nil || s.yStr != nil || s.qStr != nil {
+		return s.muxStream().Close()
 	}
 	return nil
 }
@@ -120,11 +165,7 @@ func (s *Stream) writeRequest(rAddr Addr) (req StreamRequest, err error) {
 	}
 
 	// Write request.
-	if s.sStr != nil {
-		err = s.ses.writeObject(s.sStr, obj)
-		return req, err
-	}
-	err = s.ses.writeObject(s.yStr, obj)
+	err = s.ses.writeObject(s.muxStream(), obj)
 	return req, err
 }
 
@@ -162,24 +203,14 @@ func (s *Stream) writeIPRequestWithGeo(rAddr Addr, geo bool) (req StreamRequest,
 	}
 
 	// Write request.
-	if s.sStr != nil {
-		err = s.ses.writeObject(s.sStr, obj)
-		return req, err
-	}
-	err = s.ses.writeObject(s.yStr, obj)
+	err = s.ses.writeObject(s.muxStream(), obj)
 	return req, err
 }
 
 func (s *Stream) readRequest() (req StreamRequest, err error) {
 	var obj SignedObject
-	if s.sStr != nil {
-		if obj, err = s.ses.readObject(s.sStr); err != nil {
-			return req, err
-		}
-	} else {
-		if obj, err = s.ses.readObject(s.yStr); err != nil {
-			return req, err
-		}
+	if obj, err = s.ses.readObject(s.muxStream()); err != nil {
+		return req, err
 	}
 
 	if req, err = obj.ObtainStreamRequest(); err != nil {
@@ -229,14 +260,8 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 		return err
 	}
 
-	if s.sStr != nil {
-		if err := s.ses.writeObject(s.sStr, obj); err != nil {
-			return err
-		}
-	} else {
-		if err := s.ses.writeObject(s.yStr, obj); err != nil {
-			return err
-		}
+	if err := s.ses.writeObject(s.muxStream(), obj); err != nil {
+		return err
 	}
 
 	// Push stream to listener.
@@ -244,18 +269,9 @@ func (s *Stream) writeResponse(reqHash cipher.SHA256) error {
 }
 
 func (s *Stream) readResponse(req StreamRequest) error {
-	var obj SignedObject
-	var err error
-	if s.sStr != nil {
-		obj, err = s.ses.readObject(s.sStr)
-		if err != nil {
-			return err
-		}
-	} else {
-		obj, err = s.ses.readObject(s.yStr)
-		if err != nil {
-			return err
-		}
+	obj, err := s.ses.readObject(s.muxStream())
+	if err != nil {
+		return err
 	}
 	resp, err := obj.ObtainStreamResponse()
 	if err != nil {
@@ -274,18 +290,9 @@ func (s *Stream) readResponse(req StreamRequest) error {
 // the geo fields zero — callers must be prepared to fall back to a
 // local lookup.
 func (s *Stream) readIPGeoResponse(req StreamRequest) (StreamResponse, error) {
-	var obj SignedObject
-	var err error
-	if s.sStr != nil {
-		obj, err = s.ses.readObject(s.sStr)
-		if err != nil {
-			return StreamResponse{}, err
-		}
-	} else {
-		obj, err = s.ses.readObject(s.yStr)
-		if err != nil {
-			return StreamResponse{}, err
-		}
+	obj, err := s.ses.readObject(s.muxStream())
+	if err != nil {
+		return StreamResponse{}, err
 	}
 	resp, err := obj.ObtainStreamResponse()
 	if err != nil {
@@ -311,11 +318,10 @@ func (s *Stream) prepareFields(init bool, lAddr, rAddr Addr) error {
 	s.lAddr = lAddr
 	s.rAddr = rAddr
 	s.ns = ns
-	if s.sStr != nil {
-		s.nsConn = noise.NewReadWriter(s.sStr, s.ns)
-	} else {
-		s.nsConn = noise.NewReadWriter(s.yStr, s.ns)
-	}
+	// The end-to-end client↔client Noise wraps whichever mux stream carries
+	// this dmsg stream (yamux/smux/QUIC) — identical across transports, so the
+	// relay never sees client↔client plaintext regardless of dmsg-over-QUIC.
+	s.nsConn = noise.NewReadWriter(s.muxStream(), s.ns)
 	s.log = s.ses.log.WithField("stream", s.lAddr.ShortString()+"->"+s.rAddr.ShortString())
 	return nil
 }
@@ -347,10 +353,14 @@ func (s *Stream) ServerPK() cipher.PubKey {
 
 // StreamID returns the stream ID.
 func (s *Stream) StreamID() uint32 {
-	if s.sStr != nil {
+	switch {
+	case s.sStr != nil:
 		return s.sStr.ID()
+	case s.qStr != nil:
+		return uint32(s.qStr.StreamID()) //nolint:gosec // QUIC stream id, truncated for logging only
+	default:
+		return s.yStr.StreamID()
 	}
-	return s.yStr.StreamID()
 }
 
 // Read implements io.Reader.
@@ -408,24 +418,15 @@ func (s *Stream) Write(b []byte) (int, error) {
 
 // SetDeadline implements net.Conn
 func (s *Stream) SetDeadline(t time.Time) error {
-	if s.sStr != nil {
-		return s.sStr.SetDeadline(t)
-	}
-	return s.yStr.SetDeadline(t)
+	return s.muxStream().SetDeadline(t)
 }
 
 // SetReadDeadline implements net.Conn
 func (s *Stream) SetReadDeadline(t time.Time) error {
-	if s.sStr != nil {
-		return s.sStr.SetReadDeadline(t)
-	}
-	return s.yStr.SetReadDeadline(t)
+	return s.muxStream().SetReadDeadline(t)
 }
 
 // SetWriteDeadline implements net.Conn
 func (s *Stream) SetWriteDeadline(t time.Time) error {
-	if s.sStr != nil {
-		return s.sStr.SetWriteDeadline(t)
-	}
-	return s.yStr.SetWriteDeadline(t)
+	return s.muxStream().SetWriteDeadline(t)
 }
