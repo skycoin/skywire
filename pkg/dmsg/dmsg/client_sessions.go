@@ -6,13 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"time"
 
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 	"github.com/xtaci/smux"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
 // EnsureAndObtainSession attempts to obtain a session.
@@ -105,68 +108,92 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
 	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
-	const network = "tcp"
-	var conn net.Conn
+	// Pick transport: QUIC when the server advertises a QUIC endpoint +
+	// Protocol "quic" (#2607 dmsg-over-QUIC), else the legacy TCP path.
+	network := "tcp"
+	dialAddr := entry.Server.Address
+	if entry.Protocol == "quic" && entry.Server.AddressUDP != "" {
+		network = "quic"
+		dialAddr = entry.Server.AddressUDP
+	}
+	var dSes ClientSession
 
 	// Trigger dial callback.
-	if err := ce.conf.Callbacks.OnSessionDial(network, entry.Server.Address); err != nil {
+	if err := ce.conf.Callbacks.OnSessionDial(network, dialAddr); err != nil {
 		return ClientSession{}, fmt.Errorf("session dial is rejected by callback: %w", err)
 	}
 	defer func() {
 		if err != nil {
 			// Trigger disconnect callback when dial fails.
-			ce.conf.Callbacks.OnSessionDisconnect(network, entry.Server.Address, err)
+			ce.conf.Callbacks.OnSessionDisconnect(network, dialAddr, err)
 		}
 	}()
 
-	proxyAddr, ok := ctx.Value("socks5_proxy").(string)
-	if ok && proxyAddr != "" {
-		socksDialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
-		if err != nil {
-			return ClientSession{}, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
-		}
-		conn, err = socksDialer.Dial(network, entry.Server.Address)
-		if err != nil {
-			return ClientSession{}, fmt.Errorf("failed to dial through SOCKS5 proxy: %w", err)
-		}
-	} else {
-		conn, err = net.DialTimeout(network, entry.Server.Address, DialTimeout)
-		if err != nil {
-			return ClientSession{}, fmt.Errorf("failed to dial: %w", err)
+	if network == "quic" {
+		if dSes, err = ce.dialSessionQUIC(ctx, entry); err != nil {
+			// QUIC dial failed (e.g. UDP blocked by a firewall). Fall back to
+			// the server's TCP endpoint, which a QUIC-advertising server also
+			// listens on (dual-listen). Only give up if there is no TCP address.
+			if entry.Server.Address == "" {
+				return ClientSession{}, err
+			}
+			ce.log.WithError(err).Debugf("QUIC dial to %s failed, falling back to TCP", entry.Static)
+			network = "tcp"
+			dialAddr = entry.Server.Address
+		} else {
+			ce.log.Infof("quic stream session initial for %s", dSes.RemotePK().String())
 		}
 	}
-	// TCP_NODELAY on the visor→dmsg-server TCP socket. The dmsg
-	// session carries all dmsg streams (skypty traffic, dmsg-HTTP,
-	// visor-RPC over dmsg, skychat, etc.). Without this, Nagle's
-	// algorithm batches small writes — per-keystroke pty bytes
-	// from the hypervisor UI's skypty hit 40–200ms of delay each,
-	// felt as lag on every key press. dmsg streams demux many
-	// logical flows onto one TCP conn; the demux-side throughput
-	// gains of Nagle aren't material for skywire's mix, and the
-	// interactive-latency loss is severe.
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
-	}
+	if network == "tcp" {
+		var conn net.Conn
+		proxyAddr, ok := ctx.Value("socks5_proxy").(string)
+		if ok && proxyAddr != "" {
+			socksDialer, err := proxy.SOCKS5("tcp", proxyAddr, nil, proxy.Direct)
+			if err != nil {
+				return ClientSession{}, fmt.Errorf("failed to create SOCKS5 dialer: %w", err)
+			}
+			conn, err = socksDialer.Dial(network, dialAddr)
+			if err != nil {
+				return ClientSession{}, fmt.Errorf("failed to dial through SOCKS5 proxy: %w", err)
+			}
+		} else {
+			conn, err = net.DialTimeout(network, dialAddr, DialTimeout)
+			if err != nil {
+				return ClientSession{}, fmt.Errorf("failed to dial: %w", err)
+			}
+		}
+		// TCP_NODELAY on the visor→dmsg-server TCP socket. The dmsg
+		// session carries all dmsg streams (skypty traffic, dmsg-HTTP,
+		// visor-RPC over dmsg, skychat, etc.). Without this, Nagle's
+		// algorithm batches small writes — per-keystroke pty bytes
+		// from the hypervisor UI's skypty hit 40–200ms of delay each,
+		// felt as lag on every key press. dmsg streams demux many
+		// logical flows onto one TCP conn; the demux-side throughput
+		// gains of Nagle aren't material for skywire's mix, and the
+		// interactive-latency loss is severe.
+		if tcpConn, ok := conn.(*net.TCPConn); ok {
+			_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+		}
 
-	dSes, err := makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static)
-	if err != nil {
-		conn.Close() //nolint:errcheck,gosec
-		return ClientSession{}, err
-	}
-	if entry.Protocol == "smux" {
-		dSes.sm.smux, err = smux.Client(conn, SmuxConfig())
-		if err != nil {
+		if dSes, err = makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static); err != nil {
 			conn.Close() //nolint:errcheck,gosec
 			return ClientSession{}, err
 		}
-		ce.log.Infof("smux stream session initial for %s", dSes.RemotePK().String())
-	} else {
-		dSes.sm.yamux, err = yamux.Client(conn, YamuxConfig())
-		if err != nil {
-			conn.Close() //nolint:errcheck,gosec
-			return ClientSession{}, err
+		if entry.Protocol == "smux" {
+			dSes.sm.smux, err = smux.Client(conn, SmuxConfig())
+			if err != nil {
+				conn.Close() //nolint:errcheck,gosec
+				return ClientSession{}, err
+			}
+			ce.log.Infof("smux stream session initial for %s", dSes.RemotePK().String())
+		} else {
+			dSes.sm.yamux, err = yamux.Client(conn, YamuxConfig())
+			if err != nil {
+				conn.Close() //nolint:errcheck,gosec
+				return ClientSession{}, err
+			}
+			ce.log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
 		}
-		ce.log.Infof("yamux stream session initial for %s", dSes.RemotePK().String())
 	}
 
 	// Atomically: refuse-if-closed, replace-stale, store, and wg.Add(1)
@@ -242,10 +269,43 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		}
 
 		// Trigger disconnect callback.
-		ce.conf.Callbacks.OnSessionDisconnect(network, entry.Server.Address, err)
+		ce.conf.Callbacks.OnSessionDisconnect(network, dialAddr, err)
 	}()
 
 	return dSes, nil
+}
+
+// dialSessionQUIC dials a dmsg server's QUIC endpoint and builds a QUIC-backed
+// client session (#2607 dmsg-over-QUIC). The PK-bound QUIC TLS (pkg/skyquic,
+// option A) authenticates the server's skywire PK and encrypts the hop; the
+// session runs over native QUIC streams with no Noise handshake. EnableDatagrams
+// so the session can later expose an unreliable datagram channel.
+func (ce *Client) dialSessionQUIC(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+	udpAddr, err := net.ResolveUDPAddr("udp", entry.Server.AddressUDP)
+	if err != nil {
+		return ClientSession{}, fmt.Errorf("quic: resolve %q: %w", entry.Server.AddressUDP, err)
+	}
+	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
+	if err != nil {
+		return ClientSession{}, fmt.Errorf("quic: bind dial socket: %w", err)
+	}
+	cert, err := skyquic.NewCertificate(ce.pk, ce.sk)
+	if err != nil {
+		udpConn.Close() //nolint:errcheck,gosec
+		return ClientSession{}, fmt.Errorf("quic: identity cert: %w", err)
+	}
+	rPK := entry.Static
+	tlsConf := skyquic.TLSConfig(cert, &rPK, nil) // pin the server PK
+	qc, err := quic.Dial(ctx, udpConn, udpAddr, tlsConf, &quic.Config{
+		EnableDatagrams: true,
+		KeepAlivePeriod: 25 * time.Second,
+		MaxIdleTimeout:  60 * time.Second,
+	})
+	if err != nil {
+		udpConn.Close() //nolint:errcheck,gosec
+		return ClientSession{}, fmt.Errorf("quic: dial %s: %w", entry.Server.AddressUDP, err)
+	}
+	return makeClientSessionQUIC(&ce.EntityCommon, ce.porter, qc, rPK), nil
 }
 
 // Session obtains an established session.

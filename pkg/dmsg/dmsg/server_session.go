@@ -3,15 +3,18 @@ package dmsg
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"time"
 
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/netutil"
 )
@@ -41,6 +44,17 @@ func makeServerSession(m metrics.Metrics, entity *EntityCommon, conn net.Conn) (
 	}
 	sSes.m = m
 	return sSes, nil
+}
+
+// makeServerSessionQUIC builds a server session over an already-handshaked QUIC
+// connection (#2607). No Noise handshake — the QUIC TLS authenticated rPK
+// (learned from the peer's certificate) and encrypts the hop.
+func makeServerSessionQUIC(m metrics.Metrics, entity *EntityCommon, qc *quic.Conn, rPK cipher.PubKey) *ServerSession {
+	var sSes ServerSession
+	sSes.SessionCommon = new(SessionCommon)
+	sSes.SessionCommon.initQUIC(entity, qc, rPK)
+	sSes.m = m
+	return &sSes
 }
 
 // Close implements io.Closer
@@ -95,6 +109,35 @@ func (ss *ServerSession) Serve() {
 				log.WithError(err).Debug("Stopped stream.")
 			}(sStr)
 		}
+	} else if ss.sm.quic != nil {
+		for {
+			qStr, err := ss.sm.quic.AcceptStream(context.Background())
+			if err != nil {
+				ss.log.WithError(err).Info("Stopping session...")
+				return
+			}
+			log := ss.log.WithField("quic_id", uint32(qStr.StreamID())) //nolint:gosec // logging only
+
+			select {
+			case sem <- struct{}{}:
+			default:
+				log.Warn("Max concurrent streams reached, rejecting stream.")
+				qStr.Close() //nolint:errcheck,gosec
+				continue
+			}
+
+			log.Debug("Initiating stream.")
+			go func(qStr *quic.Stream) {
+				defer func() { <-sem }()
+				defer func() {
+					if r := recover(); r != nil {
+						log.WithField("panic", r).Error("Recovered from panic in serveStream")
+					}
+				}()
+				err := ss.serveStream(log, qStr, ss.sm.addr)
+				log.WithError(err).Debug("Stopped stream.")
+			}(qStr)
+		}
 	} else {
 		for {
 			yStr, err := ss.sm.yamux.AcceptStream()
@@ -139,7 +182,9 @@ func (ss *ServerSession) Serve() {
 func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, addr net.Addr) error {
 	// Set a deadline for the initial stream request read so a slow or
 	// malicious client cannot hold a goroutine and semaphore slot indefinitely.
-	if conn, ok := yStr.(net.Conn); ok {
+	// Asserted on SetReadDeadline (not net.Conn) so QUIC streams — which have
+	// the method but aren't full net.Conns — are covered too.
+	if conn, ok := yStr.(interface{ SetReadDeadline(time.Time) error }); ok {
 		if err := conn.SetReadDeadline(time.Now().Add(HandshakeTimeout)); err != nil {
 			return fmt.Errorf("set read deadline: %w", err)
 		}
