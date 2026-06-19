@@ -141,7 +141,16 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		// CXOFeed values used by the manager — values match across
 		// both sides by construction.
 		hv.tpvizServer.SetCXOSubMgr(&cxoSubMgrAdapter{v: visor})
-		hv.tpvizServer.Start()
+		// Start tpviz's initial data population in the BACKGROUND. Start()
+		// synchronously fetches geoip + refreshes its TPD/SD caches over the
+		// (prod, HTTP) deployment URLs; if any of those is slow or closed
+		// (e.g. the deployment HTTP front door is down) the blocking fetch
+		// would stall NewHypervisor → initHypervisor → and the hypervisor's
+		// own HTTP (:http_addr) + DMSG-RPC (:dmsg_port) servers would never
+		// come up, so managed visors can't connect ("306 - no associated
+		// listener"). The control plane must not depend on tpviz's upstream;
+		// tpviz serves empty/stale until its first refresh lands.
+		go hv.tpvizServer.Start()
 	}
 
 	return hv, nil
