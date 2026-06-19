@@ -57,6 +57,12 @@ type EntityCommon struct {
 
 	updateInterval time.Duration // Minimum duration between discovery entry updates.
 
+	// advertisedUDPAddr is the QUIC (UDP) endpoint a server also listens on,
+	// set by Server.ServeQUIC. When non-empty, the discovery entry carries
+	// Server.AddressUDP + Protocol="quic" so QUIC-capable clients dial QUIC
+	// (#2607 dmsg-over-QUIC). Empty for clients and TCP-only servers.
+	advertisedUDPAddr string
+
 	// noListenerHits records inbound stream requests to ports this client has
 	// no listener on (dmsg error 306). Bounded; surfaced via NoListenerHits.
 	noListenerHits *portHitTracker
@@ -464,9 +470,10 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	sessionsDelta := entry.Server.AvailableSessions != availableSessions
 	addrDelta := entry.Server.Address != addr
 	addrV6Delta := entry.Server.AddressV6 != addrV6
+	udpDelta := entry.Server.AddressUDP != c.advertisedUDPAddr
 
 	// No update needed if entry has no delta AND update is not due.
-	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !due {
+	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !due {
 		return nil
 	}
 
@@ -482,6 +489,14 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	if addrV6Delta {
 		entry.Server.AddressV6 = addrV6
 		log = log.WithField("addr_v6", entry.Server.AddressV6)
+	}
+	// Advertise the QUIC (UDP) endpoint + Protocol "quic" when the server runs
+	// a QUIC listener (#2607 dmsg-over-QUIC). QUIC-capable clients dial it;
+	// others keep using Address (TCP).
+	if c.advertisedUDPAddr != "" {
+		entry.Server.AddressUDP = c.advertisedUDPAddr
+		entry.Protocol = "quic"
+		log = log.WithField("addr_udp", entry.Server.AddressUDP)
 	}
 	// Propagate DHT bootstrap status to discovery entry.
 	entry.Server.DHTBootstrap = c.dhtBootstrap

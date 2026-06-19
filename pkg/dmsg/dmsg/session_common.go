@@ -2,7 +2,9 @@
 package dmsg
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/chen3feng/safecast"
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
@@ -43,11 +46,16 @@ type SessionCommon struct {
 	log logrus.FieldLogger
 }
 
-// SessionManager blablabla
+// SessionManager holds the active multiplexer for a session. Exactly one of
+// yamux / smux / quic is non-nil. yamux and smux multiplex streams over a
+// single reliable conn (TCP); quic is a QUIC connection whose native streams
+// ARE the dmsg streams (no separate mux) and which also carries an unreliable
+// datagram channel — #2607 dmsg-over-QUIC.
 type SessionManager struct {
 	mutx  sync.RWMutex
 	yamux *yamux.Session
 	smux  *smux.Session
+	quic  *quic.Conn
 	addr  net.Addr
 }
 
@@ -124,10 +132,89 @@ func (sc *SessionCommon) initServer(entity *EntityCommon, conn net.Conn) error {
 	return nil
 }
 
+// quicAddrConn adapts a *quic.Conn to net.Conn for the addr-only accessors
+// (LocalTCPAddr/RemoteTCPAddr/SrcConn) on a QUIC session. The session never
+// reads/writes it directly — QUIC data flows over QUIC streams — so Read/Write
+// are inert stubs.
+type quicAddrConn struct{ qc *quic.Conn }
+
+func (c quicAddrConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (c quicAddrConn) Write([]byte) (int, error)        { return 0, io.ErrClosedPipe }
+func (c quicAddrConn) Close() error                     { return c.qc.CloseWithError(0, "") }
+func (c quicAddrConn) LocalAddr() net.Addr              { return c.qc.LocalAddr() }
+func (c quicAddrConn) RemoteAddr() net.Addr             { return c.qc.RemoteAddr() }
+func (c quicAddrConn) SetDeadline(time.Time) error      { return nil }
+func (c quicAddrConn) SetReadDeadline(time.Time) error  { return nil }
+func (c quicAddrConn) SetWriteDeadline(time.Time) error { return nil }
+
+// ErrDatagramsUnsupported is returned by the session datagram API for non-QUIC
+// sessions (TCP+yamux/smux carries reliable streams only).
+var ErrDatagramsUnsupported = errors.New("dmsg: session does not support datagrams (not a QUIC session)")
+
+// SupportsDatagrams reports whether this session can carry unreliable datagrams
+// — true only for QUIC sessions (#2607 dmsg-over-QUIC).
+func (sc *SessionCommon) SupportsDatagrams() bool {
+	sc.sm.mutx.RLock()
+	defer sc.sm.mutx.RUnlock()
+	return sc.sm.quic != nil
+}
+
+// WriteDatagram sends an unreliable datagram over the session's QUIC connection
+// (RFC 9221) — UDP-over-dmsg. Returns ErrDatagramsUnsupported on non-QUIC
+// sessions. Datagrams ride the same PK-bound-TLS-encrypted QUIC connection as
+// the session's streams; this gives dmsg a genuine datagram channel that the
+// reliable yamux/smux mux cannot.
+func (sc *SessionCommon) WriteDatagram(b []byte) error {
+	sc.sm.mutx.RLock()
+	qc := sc.sm.quic
+	sc.sm.mutx.RUnlock()
+	if qc == nil {
+		return ErrDatagramsUnsupported
+	}
+	return qc.SendDatagram(b)
+}
+
+// ReadDatagram receives an unreliable datagram from the session's QUIC
+// connection. Returns ErrDatagramsUnsupported on non-QUIC sessions.
+func (sc *SessionCommon) ReadDatagram(ctx context.Context) ([]byte, error) {
+	sc.sm.mutx.RLock()
+	qc := sc.sm.quic
+	sc.sm.mutx.RUnlock()
+	if qc == nil {
+		return nil, ErrDatagramsUnsupported
+	}
+	return qc.ReceiveDatagram(ctx)
+}
+
+// initQUIC sets up a session (client or server) over a QUIC connection — no
+// Noise handshake. The PK-bound QUIC TLS (pkg/skyquic, option A) already
+// authenticated the peer's skywire PK and encrypts the client↔server hop;
+// dmsg streams ARE QUIC streams. rPK is the peer PK: the dialer knows it up
+// front; the server learns it from the verified QUIC TLS certificate.
+func (sc *SessionCommon) initQUIC(entity *EntityCommon, qc *quic.Conn, rPK cipher.PubKey) {
+	sc.entity = entity
+	sc.rPK = rPK
+	sc.netConn = quicAddrConn{qc: qc}
+	sc.sm.quic = qc
+	sc.sm.addr = qc.RemoteAddr()
+	sc.ns = nil
+	sc.nw = nil
+	sc.log = entity.log.WithField("session", rPK)
+}
+
 // writeEncryptedGob encrypts with noise and prefixed with uint16 (2 additional bytes).
 func (sc *SessionCommon) writeObject(w io.Writer, obj SignedObject) error {
 	sc.wMx.Lock()
-	p := sc.ns.EncryptUnsafe(obj)
+	// QUIC sessions (sc.ns == nil) skip the per-object Noise encryption: the
+	// QUIC stream is already TLS-encrypted (PK-bound), and the object stays
+	// signed so dmsg-level authentication is unchanged. Other sessions keep
+	// the Noise layer.
+	var p []byte
+	if sc.ns == nil {
+		p = append([]byte(nil), obj...)
+	} else {
+		p = sc.ns.EncryptUnsafe(obj)
+	}
 	sc.wMx.Unlock()
 	p = append(make([]byte, 2), p...)
 	lps2, ok := safecast.To[uint16](len(p) - 2)
@@ -147,6 +234,12 @@ func (sc *SessionCommon) readObject(r io.Reader) (SignedObject, error) {
 	pb := make([]byte, binary.BigEndian.Uint16(lb))
 	if _, err := io.ReadFull(r, pb); err != nil {
 		return nil, err
+	}
+
+	// QUIC sessions (sc.ns == nil) read the signed object straight off the
+	// already-encrypted QUIC stream — no Noise decrypt, no nonce window.
+	if sc.ns == nil {
+		return SignedObject(pb), nil
 	}
 
 	sc.rMx.Lock()
@@ -296,10 +389,13 @@ func (sc *SessionCommon) Close() error {
 	}
 	var err error
 	sc.sm.mutx.Lock()
-	if sc.sm.smux != nil {
+	switch {
+	case sc.sm.smux != nil:
 		err = sc.sm.smux.Close()
-	} else if sc.sm.yamux != nil {
+	case sc.sm.yamux != nil:
 		err = sc.sm.yamux.Close()
+	case sc.sm.quic != nil:
+		err = sc.sm.quic.CloseWithError(0, "session closed")
 	}
 	sc.sm.mutx.Unlock()
 	sc.rMx.Lock()
