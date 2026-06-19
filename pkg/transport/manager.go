@@ -1170,7 +1170,10 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	}
 	tm.tps[tpID] = mTp
 	tm.mx.Unlock()
-	go mTp.Serve(tm.readCh)
+	// Serve runs for the transport's lifetime, not the dial's; its internal
+	// datagram-read context correctly derives from Background (a short-lived
+	// dial ctx would kill the QUIC datagram loop prematurely). #2607.
+	go mTp.Serve(tm.readCh) //nolint:gosec // G118: long-lived transport goroutine, not request-scoped
 
 	// Check AR transport limit after dialing a new transport.
 	go tm.checkARLimit()
