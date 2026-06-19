@@ -12,6 +12,7 @@ import (
 
 	"github.com/chen3feng/safecast"
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
@@ -43,11 +44,16 @@ type SessionCommon struct {
 	log logrus.FieldLogger
 }
 
-// SessionManager blablabla
+// SessionManager holds the active multiplexer for a session. Exactly one of
+// yamux / smux / quic is non-nil. yamux and smux multiplex streams over a
+// single reliable conn (TCP); quic is a QUIC connection whose native streams
+// ARE the dmsg streams (no separate mux) and which also carries an unreliable
+// datagram channel — #2607 dmsg-over-QUIC.
 type SessionManager struct {
 	mutx  sync.RWMutex
 	yamux *yamux.Session
 	smux  *smux.Session
+	quic  *quic.Conn
 	addr  net.Addr
 }
 
@@ -127,7 +133,16 @@ func (sc *SessionCommon) initServer(entity *EntityCommon, conn net.Conn) error {
 // writeEncryptedGob encrypts with noise and prefixed with uint16 (2 additional bytes).
 func (sc *SessionCommon) writeObject(w io.Writer, obj SignedObject) error {
 	sc.wMx.Lock()
-	p := sc.ns.EncryptUnsafe(obj)
+	// QUIC sessions (sc.ns == nil) skip the per-object Noise encryption: the
+	// QUIC stream is already TLS-encrypted (PK-bound), and the object stays
+	// signed so dmsg-level authentication is unchanged. Other sessions keep
+	// the Noise layer.
+	var p []byte
+	if sc.ns == nil {
+		p = append([]byte(nil), obj...)
+	} else {
+		p = sc.ns.EncryptUnsafe(obj)
+	}
 	sc.wMx.Unlock()
 	p = append(make([]byte, 2), p...)
 	lps2, ok := safecast.To[uint16](len(p) - 2)
@@ -147,6 +162,12 @@ func (sc *SessionCommon) readObject(r io.Reader) (SignedObject, error) {
 	pb := make([]byte, binary.BigEndian.Uint16(lb))
 	if _, err := io.ReadFull(r, pb); err != nil {
 		return nil, err
+	}
+
+	// QUIC sessions (sc.ns == nil) read the signed object straight off the
+	// already-encrypted QUIC stream — no Noise decrypt, no nonce window.
+	if sc.ns == nil {
+		return SignedObject(pb), nil
 	}
 
 	sc.rMx.Lock()
@@ -296,10 +317,13 @@ func (sc *SessionCommon) Close() error {
 	}
 	var err error
 	sc.sm.mutx.Lock()
-	if sc.sm.smux != nil {
+	switch {
+	case sc.sm.smux != nil:
 		err = sc.sm.smux.Close()
-	} else if sc.sm.yamux != nil {
+	case sc.sm.yamux != nil:
 		err = sc.sm.yamux.Close()
+	case sc.sm.quic != nil:
+		err = sc.sm.quic.CloseWithError(0, "session closed")
 	}
 	sc.sm.mutx.Unlock()
 	sc.rMx.Lock()
