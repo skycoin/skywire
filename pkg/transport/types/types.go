@@ -15,4 +15,9 @@ const (
 	STCP Type = "stcp"
 	// DMSG is a type of a transport that works through an intermediary service
 	DMSG Type = "dmsg"
+	// QUIC is a type of a transport that works via QUIC over UDP, resolving
+	// addresses using the address-resolver service. Gives reliable streams
+	// plus RFC 9221 unreliable datagrams; the TLS session is bound to the
+	// skywire static key (#2607 QUIC follow-on).
+	QUIC Type = "quic"
 )

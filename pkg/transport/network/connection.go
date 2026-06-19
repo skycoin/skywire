@@ -3,6 +3,7 @@ package network
 
 import (
 	"bufio"
+	"context"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -49,11 +50,36 @@ type Transport interface {
 	Network() types.Type
 }
 
+// DatagramConn is implemented by transport connections that carry unreliable
+// datagrams natively over the wire (currently QUIC, RFC 9221). When a
+// transport's underlying conn supports it, the router sends faithful-UDP
+// DatagramPackets over this channel instead of the reliable stream —
+// realizing genuine UDP semantics (no head-of-line blocking, loss tolerance).
+// Reliable-only transports (TCP/KCP/dmsg) don't implement it, and the router
+// transparently falls back to the reliable stream.
+type DatagramConn interface {
+	WriteDatagram(b []byte) error
+	ReadDatagram(ctx context.Context) ([]byte, error)
+}
+
 type transport struct {
 	net.Conn
 	lAddr, rAddr  dmsg.Addr
 	freePort      func()
 	transportType types.Type
+	// dgram is the underlying conn's native datagram channel, captured in
+	// encrypt() before the noise wrapper (stream-only) replaces c.Conn. Nil
+	// for reliable-only transports.
+	dgram DatagramConn
+}
+
+// Datagram returns the transport's native datagram channel and true when the
+// underlying connection supports unreliable datagrams (QUIC); otherwise
+// (nil, false). The concrete method (not on the Transport interface) is
+// consumed via a type assertion in pkg/transport so reliable-only transports
+// and mocks need no changes.
+func (c *transport) Datagram() (DatagramConn, bool) {
+	return c.dgram, c.dgram != nil
 }
 
 // DoHandshake performs given handshake over given raw connection and wraps
@@ -85,6 +111,15 @@ func doHandshake(rawConn net.Conn, hs handshake.Handshake, netType types.Type, t
 }
 
 func (c *transport) encrypt(lPK cipher.PubKey, lSK cipher.SecKey, initator bool) error {
+	// Capture a native datagram channel (QUIC) before the noise wrapper
+	// replaces c.Conn — the wrapper is stream-only and can't carry datagrams.
+	// The captured channel rides the raw QUIC connection (its own TLS gives
+	// hop-by-hop encryption; the payload is already end-to-end AEAD-sealed by
+	// the DatagramRouteGroup).
+	if dc, ok := c.Conn.(DatagramConn); ok {
+		c.dgram = dc
+	}
+
 	config := noise.Config{
 		LocalPK:   lPK,
 		LocalSK:   lSK,

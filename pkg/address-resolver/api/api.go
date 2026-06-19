@@ -231,6 +231,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 
 		r.Post("/bind/stcpr", api.bind)
 		r.Delete("/bind/stcpr", api.delBind)
+		r.Post("/bind/quic", api.bindQUIC)
 		r.Get("/resolve/{type}/{pk}", api.resolve)
 	})
 
@@ -339,8 +340,22 @@ func splitFamilyAddr(addr string) (v4, v6 string) {
 }
 
 func (a *API) bind(w http.ResponseWriter, r *http.Request) {
+	a.bindForType(w, r, types.STCPR)
+}
+
+// bindQUIC handles POST /bind/quic — registers the visor's QUIC UDP address
+// (#2607 QUIC follow-on). Same validation as STCPR; stored under the QUIC type
+// for peers to Resolve.
+func (a *API) bindQUIC(w http.ResponseWriter, r *http.Request) {
+	a.bindForType(w, r, types.QUIC)
+}
+
+// bindForType is the shared body for the address-registration handlers. The
+// transport type selects the store bucket peers Resolve against; STCPR
+// additionally mirrors to the secondary (v6) AR.
+func (a *API) bindForType(w http.ResponseWriter, r *http.Request, tpType types.Type) {
 	remoteAddr := httpauth.GetRemoteAddr(r)
-	a.logger(r).Infof("New POST /bind/stcpr request from %v", remoteAddr)
+	a.logger(r).Infof("New POST /bind/%s request from %v", tpType, remoteAddr)
 
 	ctx := r.Context()
 
@@ -352,7 +367,7 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 
 	rawBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		a.logger(r).WithError(err).Errorf("Failed to read /bind/stcpr request body")
+		a.logger(r).WithError(err).Errorf("Failed to read /bind/%s request body", tpType)
 	}
 
 	var localAddresses addrresolver.LocalAddresses
@@ -367,15 +382,15 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 		// a Docker bridge (e.g., 172.x.y.z) rather than its real public
 		// IP. If the visor declared a known-public PublicIP in the bind
 		// payload, trust that instead; rejecting the bind would lose all
-		// AR coverage for that visor's STCPR. Visors that don't declare
+		// AR coverage for that visor's transport. Visors that don't declare
 		// (older clients, or genuinely-misconfigured proxy/IPv6 traffic)
 		// still hit the original reject below.
 		if localAddresses.PublicIP != "" && netutil.IsPublicIP(net.ParseIP(localAddresses.PublicIP)) {
-			a.logger(r).Infof("STCPR: observed %v non-public; using declared PublicIP %v for %v",
-				remoteAddr, localAddresses.PublicIP, pk)
+			a.logger(r).Infof("%s: observed %v non-public; using declared PublicIP %v for %v",
+				tpType, remoteAddr, localAddresses.PublicIP, pk)
 			remoteAddr = localAddresses.PublicIP
 		} else {
-			err := fmt.Sprintf("Cannot bind %v to %v (STCPR). Invalid IP address in request: %v", pk, remoteAddr, localAddresses)
+			err := fmt.Sprintf("Cannot bind %v to %v (%s). Invalid IP address in request: %v", pk, remoteAddr, tpType, localAddresses)
 			a.logger(r).Errorf(err)
 			a.writeJSON(w, r, http.StatusBadRequest, &Error{
 				Error: err,
@@ -387,7 +402,7 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 	if !a.hasAddress(remoteAddr, localAddresses) {
 		// visor didn't provide the IP it's trying to bind from
 		// probably is behind NAT and shouldn't bind
-		err := fmt.Sprintf("Cannot bind %v to %v (STCPR). Remote address not present in request: %v", pk, remoteAddr, localAddresses)
+		err := fmt.Sprintf("Cannot bind %v to %v (%s). Remote address not present in request: %v", pk, remoteAddr, tpType, localAddresses)
 		a.logger(r).Errorf(err)
 
 		a.writeJSON(w, r, http.StatusBadRequest, &Error{
@@ -410,7 +425,7 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 		if isPublicIPv6(net.ParseIP(localAddresses.PublicIPv6)) {
 			v6Addr = localAddresses.PublicIPv6
 		} else {
-			a.logger(r).Debugf("STCPR: ignoring declared PublicIPv6 %q (not a public IPv6)", localAddresses.PublicIPv6)
+			a.logger(r).Debugf("%s: ignoring declared PublicIPv6 %q (not a public IPv6)", tpType, localAddresses.PublicIPv6)
 		}
 	}
 	visorData := addrresolver.VisorData{
@@ -419,17 +434,19 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 		LocalAddresses: localAddresses,
 	}
 
-	if err := a.store.Bind(ctx, types.STCPR, pk, visorData); err != nil {
+	if err := a.store.Bind(ctx, tpType, pk, visorData); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		a.logger(r).Errorf("Failed to bind PK (STCPR): %v", err)
+		a.logger(r).Errorf("Failed to bind PK (%s): %v", tpType, err)
 
 		return
 	}
 
-	a.mirrorSTCPR(pk, &visorData)
+	if tpType == types.STCPR {
+		a.mirrorSTCPR(pk, &visorData)
+	}
 
 	w.WriteHeader(http.StatusOK)
-	a.logger(r).Debugf("Bound %v to %v (STCPR)", pk, remoteAddr)
+	a.logger(r).Debugf("Bound %v to %v (%s)", pk, remoteAddr, tpType)
 }
 
 func (a *API) delBind(w http.ResponseWriter, r *http.Request) {

@@ -399,6 +399,17 @@ func initStcprClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
+// initQuicClient starts the experimental QUIC transport when a quic_port is
+// configured (#2607 QUIC follow-on). Opt-in: a zero port leaves it disabled.
+func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.Transport == nil || v.conf.Transport.QUICPort == 0 {
+		return nil
+	}
+	log.Infof("Initializing QUIC transport on UDP port %d", v.conf.Transport.QUICPort)
+	v.tpM.InitClient(ctx, types.QUIC, v.conf.Transport.QUICPort)
+	return nil
+}
+
 func initStcpClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	if v.conf.STCP != nil {
 		v.tpM.InitClient(ctx, types.STCP, 0)
