@@ -26,104 +26,26 @@ networks:
       com.docker.network.bridge.name: br-intra
 
 services:
-  dmsgd-redis:
+  # Single shared redis for every discovery service. Each service uses
+  # its own logical DB (redis://redis:6379/<N>) to preserve the keyspace
+  # isolation the previous per-service redis containers gave:
+  #   /0 dmsg-discovery   /1 transport-discovery + route-finder (shared,
+  #   route-finder reads TPD's transport data)   /2 service-discovery
+  #   /3 address-resolver
+  redis:
     image: "redis:alpine"
     networks:
       srv:
         ipv4_address: 175.0.0.250
       intra:
         ipv4_address: 174.0.0.250
-    container_name: "dmsgd-redis"
-    hostname: dmsgd-redis
+    container_name: "redis"
+    hostname: redis
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
-
-  ar-redis:
-    image: "redis:alpine"
-    networks:
-      srv:
-        ipv4_address: 175.0.0.251
-      intra:
-        ipv4_address: 174.0.0.251
-    container_name: "ar-redis"
-    hostname: ar-redis
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  sd-redis:
-    image: "redis:alpine"
-    networks:
-      srv:
-        ipv4_address: 175.0.0.252
-      intra:
-        ipv4_address: 174.0.0.252
-    container_name: "sd-redis"
-    hostname: sd-redis
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  tpd-redis:
-    image: "redis:alpine"
-    networks:
-      srv:
-        ipv4_address: 175.0.0.253
-      intra:
-        ipv4_address: 174.0.0.253
-    container_name: "tpd-redis"
-    hostname: tpd-redis
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  ut-redis:
-    image: "redis:alpine"
-    networks:
-      srv:
-        ipv4_address: 175.0.0.255
-      intra:
-        ipv4_address: 174.0.0.255
-    container_name: "ut-redis"
-    hostname: ut-redis
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-
-  postgres-db:
-    image: "postgres:alpine"
-    networks:
-      srv:
-        ipv4_address: 175.0.0.248
-      intra:
-        ipv4_address: 174.0.0.248
-    environment:
-      - GODEBUG=madvdontneed=1
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=postgres
-    # ports:
-    #   - '5432:5432'
-    shm_size: 256mb
-    container_name: "postgres-db"
-    hostname: postgres-db
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 5s
-      retries: 15
-      start_period: 15s
 
   # deployment-services collapses the nine deployment-side containers
   # (transport-discovery, route-finder, dmsg-discovery, dmsg-server,
@@ -172,13 +94,7 @@ services:
         aliases:
           - stun-server
     depends_on:
-      tpd-redis:
-        condition: service_healthy
-      sd-redis:
-        condition: service_healthy
-      ar-redis:
-        condition: service_healthy
-      dmsgd-redis:
+      redis:
         condition: service_healthy
     restart: always
     environment:
@@ -217,30 +133,10 @@ services:
     stdin_open: true # docker run -i
     tty: true        # docker run -t
 
-  uptime-tracker:
-    privileged: true
-    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
-    hostname: uptime-tracker
-    container_name: "uptime-tracker"
-    restart: always
-    networks:
-      srv:
-        ipv4_address: 175.0.0.7
-      intra:
-        ipv4_address: 174.0.0.7
-    depends_on:
-      ut-redis:
-        condition: service_healthy
-      postgres-db:
-        condition: service_healthy
-    environment:
-      - GODEBUG=madvdontneed=1
-      - PG_USER=postgres
-      - PG_PASSWORD=postgres
-      - PG_DATABASE=postgres
-    entrypoint: "/release/skywire svc ut --addr :9095 --pprof :6095 --pg-host postgres-db --pg-port 5432 --redis redis://ut-redis:6379 --sk e20681b4fd1eb1904ebfbf8fba79a138bbac481e1c3f77bcfab3a877525fda32 --dmsg-disc http://dmsg-discovery:9090"
-    stdin_open: true # docker run -i
-    tty: true        # docker run -t
+  # NOTE: the standalone uptime-tracker service (+ its postgres + redis) was
+  # removed — uptime tracking is now integrated into every discovery service
+  # (TPD et al.), so the deprecated `skywire svc ut` deployment is no longer
+  # part of the e2e topology.
 
   # skywire visors, which by being on a different network are to be isolated from the first one
 
@@ -265,7 +161,6 @@ services:
       - "route-finder:174.0.0.17"
       - "address-resolver:174.0.0.17"
       - "service-discovery:174.0.0.17"
-      - "uptime-tracker:174.0.0.7"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -311,7 +206,6 @@ services:
       - "route-finder:174.0.0.17"
       - "address-resolver:174.0.0.17"
       - "service-discovery:174.0.0.17"
-      - "uptime-tracker:174.0.0.7"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -366,7 +260,6 @@ services:
       - "route-finder:174.0.0.17"
       - "address-resolver:174.0.0.17"
       - "service-discovery:174.0.0.17"
-      - "uptime-tracker:174.0.0.7"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
@@ -391,23 +284,12 @@ services:
       retries: 30
       start_period: 10s
 
-  network-monitor:
-    image: "${REGISTRY}/skywire:${DOCKER_TAG}"
-    hostname: network-monitor
-    container_name: "network-monitor"
-    networks:
-      srv:
-        ipv4_address: 175.0.0.30
-      intra:
-        ipv4_address: 174.0.0.30
-    environment:
-      - GODEBUG=madvdontneed=1
-    entrypoint: "/release/skywire svc nm --addr :9080 --pprof :6080 --ut-url http://uptime-tracker:9095 --tpd-url http://transport-discovery:9094 --sd-url http://service-discovery:9091 --dmsgd-url http://dmsg-discovery:9090 --ar-url http://address-resolver:9093"
-    depends_on:
-      - visor-c
-    restart: always
-    stdin_open: true # docker run -i
-    tty: true        # docker run -t
+  # network-monitor was removed from the e2e topology: it was already
+  # disabled (never started by `make e2e-run`, excluded from env_test's
+  # expected containers) and its `svc nm` entrypoint monitored services
+  # over plain HTTP — including the now-removed uptime-tracker. The
+  # pkg/network-monitor code is unaffected; re-add a dmsg-only container
+  # here if e2e network monitoring is wanted again.
 
   e2e-test:
     image: golang:1.26-alpine
@@ -430,7 +312,6 @@ services:
       - "route-finder:174.0.0.17"
       - "address-resolver:174.0.0.17"
       - "service-discovery:174.0.0.17"
-      - "uptime-tracker:174.0.0.7"
       - "setup-node:174.0.0.17"
       - "stun-server:174.0.0.17"
       - "transport-setup:174.0.0.17"
