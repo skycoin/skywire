@@ -26,6 +26,7 @@ var (
 	portWhitelist    string
 	portPreserveHost bool
 	portInjectPK     bool
+	portUDP          bool
 )
 
 func init() {
@@ -39,10 +40,16 @@ func init() {
 	portAddCmd.Flags().StringVar(&portWhitelist, "whitelist", "", "comma-separated PKs allowed to access this port (empty = allow all)")
 	portAddCmd.Flags().BoolVar(&portPreserveHost, "preserve-host", false, "pass the incoming Host header through to the backend (required for vhost backends like Caddy/nginx)")
 	portAddCmd.Flags().BoolVar(&portInjectPK, "inject-pk", false, "HTTP mode: inject the authenticated caller's PK as X-Skywire-Remote-PK (strips any client-supplied copy); bind the backend to loopback only")
+	portAddCmd.Flags().BoolVar(&portUDP, "udp", false, "faithful-UDP mode: serve the local port as a UDP datagram service over skynet (loss-tolerant, unordered) instead of TCP")
+
+	udpDialCmd.Flags().IntVar(&portLocalPort, "local-port", 0, "local UDP port to bind (default: same as the remote port)")
 
 	portCmd.AddCommand(portAddCmd)
 	portCmd.AddCommand(portRmCmd)
 	portCmd.AddCommand(portLsCmd)
+	portCmd.AddCommand(udpDialCmd)
+	portCmd.AddCommand(udpStopCmd)
+	portCmd.AddCommand(udpLsCmd)
 	RootCmd.AddCommand(portCmd)
 }
 
@@ -136,6 +143,7 @@ Examples:
 			Whitelist:     wl,
 			PreserveHost:  portPreserveHost,
 			InjectPK:      portInjectPK,
+			UDP:           portUDP,
 		}
 		if err := rpcClient.RegisterForwardedPort(fp); err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -177,4 +185,84 @@ func dashIfEmpty(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// udpDialCmd opens a client-side faithful-UDP forward (#2607): bridge a
+// local UDP socket to a remote forwarded_ports.udp service over skynet.
+var udpDialCmd = &cobra.Command{
+	Use:   "udp-dial <remote-pk> <remote-port>",
+	Short: "Forward a local UDP port to a remote forwarded_ports.udp service over skynet",
+	Long: `Open a faithful-UDP (datagram) forward to a remote visor's UDP service.
+
+The remote visor must serve the port with 'skynet port add <port> --udp'.
+This binds 127.0.0.1:<local-port> locally; your UDP app sends there and the
+datagrams reach the remote service (and replies come back) — loss-tolerant
+and unordered, like real UDP.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var pk cipher.PubKey
+		if err := pk.Set(args[0]); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid remote PK: %w", err))
+		}
+		rPort, err := strconv.Atoi(args[1])
+		if err != nil || rPort < 1 || rPort > 65535 {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid remote port: %s", args[1]))
+		}
+		lPort := portLocalPort
+		if lPort == 0 {
+			lPort = rPort
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.DialUDPForward(pk, rPort, lPort); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		fmt.Printf("UDP forward up: 127.0.0.1:%d -> %s:%d\n", lPort, pk, rPort)
+	},
+}
+
+// udpStopCmd tears down a client-side faithful-UDP forward by local port.
+var udpStopCmd = &cobra.Command{
+	Use:   "udp-stop <local-port>",
+	Short: "Stop a client-side UDP forward",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		lPort, err := strconv.Atoi(args[0])
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid local port: %s", args[0]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.StopUDPForward(lPort); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		fmt.Printf("UDP forward on local port %d stopped\n", lPort)
+	},
+}
+
+// udpLsCmd lists active client-side faithful-UDP forwards.
+var udpLsCmd = &cobra.Command{
+	Use:   "udp-ls",
+	Short: "List active client-side UDP forwards",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		ports, err := rpcClient.ListUDPForwards()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if len(ports) == 0 {
+			fmt.Println("No active UDP forwards.")
+			return
+		}
+		for _, p := range ports {
+			fmt.Printf("127.0.0.1:%d\n", p)
+		}
+	},
 }

@@ -578,6 +578,18 @@ func (proxyDefaultAPI) DeregisterTCPPort(_ int) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) DialUDPForward(_ cipher.PubKey, _, _ int) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) StopUDPForward(_ int) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ListUDPForwards() ([]int, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) ListTCPPorts() ([]int, error) {
 	return nil, ErrProxyNotSupported
 }

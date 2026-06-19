@@ -1030,6 +1030,21 @@ func (mc *mockRPCClient) DeregisterTCPPort(_ int) error {
 	return nil
 }
 
+// DialUDPForward implements API.
+func (mc *mockRPCClient) DialUDPForward(_ cipher.PubKey, _, _ int) error {
+	return nil
+}
+
+// StopUDPForward implements API.
+func (mc *mockRPCClient) StopUDPForward(_ int) error {
+	return nil
+}
+
+// ListUDPForwards implements API.
+func (mc *mockRPCClient) ListUDPForwards() ([]int, error) {
+	return nil, nil
+}
+
 // ListTCPPorts implements API.
 func (mc *mockRPCClient) ListTCPPorts() ([]int, error) {
 	return nil, nil
