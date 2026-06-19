@@ -304,6 +304,14 @@ type ConnectIn struct {
 	RemotePort int
 	LocalPort  int
 }
+
+// UDPForwardIn is the argument for DialUDPForward (#2607): dial a remote
+// forwarded_ports.udp service and bridge it to a local UDP socket.
+type UDPForwardIn struct {
+	RemotePK   cipher.PubKey
+	RemotePort int
+	LocalPort  int
+}
 type StopAllPingsOut struct {
 	Stopped int
 	Errors  []string

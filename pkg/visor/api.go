@@ -201,6 +201,12 @@ type API interface {
 	RegisterForwardedPort(p ForwardedPort) error
 	UpdateForwardedPort(p ForwardedPort) error
 	ListForwardedPorts() ([]ForwardedPort, error)
+	// DialUDPForward / StopUDPForward / ListUDPForwards drive client-side
+	// faithful-UDP port forwarding (#2607): bridge a local UDP socket to
+	// a remote forwarded_ports.udp service via DialPacket.
+	DialUDPForward(remotePK cipher.PubKey, remotePort, localPort int) error
+	StopUDPForward(localPort int) error
+	ListUDPForwards() ([]int, error)
 	ConnectRawTCP(network string, remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	DisconnectRawTCP(id uuid.UUID) error
 	ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error)
