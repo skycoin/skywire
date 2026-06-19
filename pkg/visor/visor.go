@@ -181,6 +181,13 @@ type Visor struct {
 	dmsgFwdMu        sync.Mutex
 	dmsgFwdListeners map[int]context.CancelFunc
 
+	// udpClientBridges holds active client-side faithful-UDP forwards
+	// (#2607), keyed by the local UDP port they bind. Each bridges a
+	// local UDP socket to a remote forwarded_ports.udp service via
+	// DialPacket. Started by DialUDPForward, stopped by StopUDPForward.
+	udpFwdMu         sync.Mutex
+	udpClientBridges map[int]*UDPBridge
+
 	// Service handler registry — maps ports to connection handlers
 	// so the sky-forwarding server can dispatch without localhost TCP.
 	services *ServiceRegistry
@@ -591,6 +598,7 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 		forwardedPorts:   NewForwardedPorts(filepath.Join(conf.LocalPath, "forwarded_ports.json")),
 		dmsgServersCache: NewDmsgServersCache(filepath.Join(conf.LocalPath, "dmsg_servers.json")),
 		dmsgFwdListeners: make(map[int]context.CancelFunc),
+		udpClientBridges: make(map[int]*UDPBridge),
 		dmsgTracker: dtmState{
 			ready: make(chan struct{}),
 		},
