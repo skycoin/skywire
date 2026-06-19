@@ -29,6 +29,7 @@ func (v *Visor) Overview() (*Overview, error) {
 	var tSummaries []*TransportSummary
 	var publicIP string
 	var isSymmetricNAT bool
+	var natType string
 	if v == nil {
 		return &Overview{}, ErrVisorNotAvailable
 	}
@@ -43,6 +44,7 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 
 	if v.isStunReady() {
+		natType = v.stun.client.NATType.String()
 		switch v.stun.client.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
 			publicIP = v.stun.client.PublicIP.IP()
@@ -74,6 +76,7 @@ func (v *Visor) Overview() (*Overview, error) {
 		RoutesCount:     routesCount,
 		PublicIP:        publicIP,
 		IsSymmetricNAT:  isSymmetricNAT,
+		NATType:         natType,
 	}
 
 	// Add geolocation data if available
