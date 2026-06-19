@@ -281,6 +281,20 @@ func (ns *Noise) HandshakeFinished() bool {
 	return ns.hs.MessageIndex() == len(ns.pattern.Messages)
 }
 
+// ChannelBinding returns a value that uniquely identifies the completed
+// handshake session — the Noise handshake hash. Both peers derive an identical
+// value, and it is bound to the full transcript (static keys + ephemerals + any
+// PQ hybrid payload), so it is safe to use as keying material for a sibling
+// channel keyed off the same session. The faithful-UDP path (#2607) HKDFs this
+// into a per-datagram AEAD master key so the datagram sibling of a route shares
+// the reliable route's authenticated session without a second handshake.
+//
+// Only meaningful once HandshakeFinished() is true; before that the binding is
+// still over a partial transcript.
+func (ns *Noise) ChannelBinding() []byte {
+	return ns.hs.ChannelBinding()
+}
+
 // LocalStatic returns the local static public key.
 func (ns *Noise) LocalStatic() cipher.PubKey {
 	return ns.pk
