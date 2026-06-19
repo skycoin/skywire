@@ -11,6 +11,26 @@ func (r *RPC) RegisterTCPPort(port *int, _ *struct{}) (err error) {
 	return r.visor.RegisterTCPPort(*port)
 }
 
+// DialUDPForward starts a client-side faithful-UDP forward (#2607).
+func (r *RPC) DialUDPForward(in *UDPForwardIn, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DialUDPForward", in)(nil, &err)
+	return r.visor.DialUDPForward(in.RemotePK, in.RemotePort, in.LocalPort)
+}
+
+// StopUDPForward stops a client-side faithful-UDP forward by local port.
+func (r *RPC) StopUDPForward(localPort *int, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "StopUDPForward", localPort)(nil, &err)
+	return r.visor.StopUDPForward(*localPort)
+}
+
+// ListUDPForwards lists active client-side faithful-UDP forwards.
+func (r *RPC) ListUDPForwards(_ *struct{}, out *[]int) (err error) {
+	defer rpcutil.LogCall(r.log, "ListUDPForwards", nil)(out, &err)
+	ports, err := r.visor.ListUDPForwards()
+	*out = ports
+	return err
+}
+
 // DeregisterTCPPort deregisters the local port that can be accessed by remote visors
 func (r *RPC) DeregisterTCPPort(port *int, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "DeregisterTCPPort", port)(nil, &err)

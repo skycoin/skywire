@@ -1182,6 +1182,23 @@ func (rc *rpcClient) RegisterTCPPort(localPort int) error {
 	return rc.Call("RegisterTCPPort", &localPort, &struct{}{})
 }
 
+// DialUDPForward calls DialUDPForward (#2607 client-side UDP forward).
+func (rc *rpcClient) DialUDPForward(remotePK cipher.PubKey, remotePort, localPort int) error {
+	return rc.Call("DialUDPForward", &UDPForwardIn{RemotePK: remotePK, RemotePort: remotePort, LocalPort: localPort}, &struct{}{})
+}
+
+// StopUDPForward calls StopUDPForward.
+func (rc *rpcClient) StopUDPForward(localPort int) error {
+	return rc.Call("StopUDPForward", &localPort, &struct{}{})
+}
+
+// ListUDPForwards calls ListUDPForwards.
+func (rc *rpcClient) ListUDPForwards() ([]int, error) {
+	var out []int
+	err := rc.Call("ListUDPForwards", &struct{}{}, &out)
+	return out, err
+}
+
 // DeregisterTCPPort calls DeregisterTCPPort.
 func (rc *rpcClient) DeregisterTCPPort(localPort int) error {
 	err := rc.Call("DeregisterTCPPort", &localPort, &struct{}{})
