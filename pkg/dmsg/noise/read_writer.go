@@ -224,6 +224,12 @@ func (rw *ReadWriter) RemoteStatic() cipher.PubKey {
 	return rw.ns.RemoteStatic()
 }
 
+// ChannelBinding returns the completed handshake's channel binding — see
+// Noise.ChannelBinding. Meaningful only after Handshake has returned.
+func (rw *ReadWriter) ChannelBinding() []byte {
+	return rw.ns.ChannelBinding()
+}
+
 // InitiatorHandshake performs a noise handshake as an initiator.
 func InitiatorHandshake(ns *Noise, r *bufio.Reader, w io.Writer) error {
 	for {
