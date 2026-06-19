@@ -108,11 +108,17 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
 	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
-	// Pick transport: QUIC when the server advertises a QUIC endpoint +
-	// Protocol "quic" (#2607 dmsg-over-QUIC), else the legacy TCP path.
+	// Pick transport. WS when the client prefers it and the server advertises
+	// one (forced in the js/wasm build, which has no raw socket); else QUIC when
+	// the server advertises a QUIC endpoint + Protocol "quic" (#2607 dmsg-over-
+	// QUIC); else the legacy TCP path.
 	network := "tcp"
 	dialAddr := entry.Server.Address
-	if entry.Protocol == "quic" && entry.Server.AddressUDP != "" {
+	switch {
+	case ce.conf.PreferWS && entry.Server.AddressWS != "":
+		network = "ws"
+		dialAddr = entry.Server.AddressWS
+	case entry.Protocol == "quic" && entry.Server.AddressUDP != "":
 		network = "quic"
 		dialAddr = entry.Server.AddressUDP
 	}
@@ -129,6 +135,22 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		}
 	}()
 
+	if network == "ws" {
+		if dSes, err = ce.dialSessionWS(ctx, entry); err != nil {
+			// WS dial failed. Fall back to the server's TCP endpoint when there
+			// is one (native clients on a restrictive network that briefly
+			// permits TCP). The js/wasm build has no TCP address to fall back
+			// to, so an empty Address simply surfaces the WS error.
+			if entry.Server.Address == "" {
+				return ClientSession{}, err
+			}
+			ce.log.WithError(err).Debugf("WS dial to %s failed, falling back to TCP", entry.Static)
+			network = "tcp"
+			dialAddr = entry.Server.Address
+		} else {
+			ce.log.Infof("ws stream session initial for %s", dSes.RemotePK().String())
+		}
+	}
 	if network == "quic" {
 		if dSes, err = ce.dialSessionQUIC(ctx, entry); err != nil {
 			// QUIC dial failed (e.g. UDP blocked by a firewall). Fall back to

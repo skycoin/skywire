@@ -196,6 +196,17 @@ type Server struct {
 	AddressUDP   string `json:"address_udp,omitempty"`
 	AddressUDPV6 string `json:"address_udp_v6,omitempty"`
 
+	// AddressWS is the optional WebSocket endpoint a server also listens on
+	// (dmsg-over-WebSocket). It carries a full ws:// or wss:// URL including
+	// path (e.g. "wss://dmsg1.skywire.skycoin.com/dmsg"). A WS connection is
+	// a net.Conn, so the session runs the SAME Noise+yamux stack as the TCP
+	// Address — WS is purely a browser-reachable / CDN-frontable / restrictive-
+	// network transport, orthogonal to Protocol (which still selects the mux).
+	// The primary consumer is a dmsg client compiled to js/wasm, which cannot
+	// open a raw TCP or UDP socket and so can only reach the mesh over WS.
+	// Backward-compatible: omitempty + older clients/servers ignore it.
+	AddressWS string `json:"address_ws,omitempty"`
+
 	// AvailableSessions is the number of available sessions that the server can currently accept.
 	AvailableSessions int `json:"availableSessions"`
 
@@ -212,6 +223,9 @@ func (s *Server) String() string {
 	res := fmt.Sprintf("\taddress: %s\n", s.Address)
 	if s.AddressUDP != "" {
 		res += fmt.Sprintf("\taddress (quic/udp): %s\n", s.AddressUDP)
+	}
+	if s.AddressWS != "" {
+		res += fmt.Sprintf("\taddress (websocket): %s\n", s.AddressWS)
 	}
 	res += fmt.Sprintf("\tavailable sessions: %d\n", s.AvailableSessions)
 

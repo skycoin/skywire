@@ -129,7 +129,7 @@ func init() {
 	// Deregister command flags
 	deregisterCmd.Flags().StringVarP(&deregPK, "pk", "p", "", "public key(s) to deregister (comma-separated for multiple)")
 	deregisterCmd.Flags().StringVarP(&deregType, "type", "t", "", "service type: vpn, visor, skysocks (or proxy)")
-	deregisterCmd.Flags().StringVar(&deregSDURL, "sd-url", "http://sd.skycoin.com", "service discovery URL (only used with --sk)\n\r")
+	deregisterCmd.Flags().StringVar(&deregSDURL, "sd-url", deployment.Prod.ServiceDiscovery, "service discovery URL (only used with --sk)\n\r")
 	deregisterCmd.Flags().StringVar(&deregNMSK, "sk", "", "secret key for signing (if not provided, uses visor RPC)")
 	deregisterCmd.Flags().BoolVarP(&deregAllTypes, "all-types", "a", false, "deregister from all service types (vpn, visor, skysocks)")
 	deregisterCmd.Flags().StringVarP(&deregRPCAddr, "rpc", "r", "localhost:3435", "visor RPC address (used when --sk is not provided)\n\r")
