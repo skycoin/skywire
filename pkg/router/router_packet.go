@@ -48,6 +48,8 @@ func (r *router) handleTransportPacket(ctx context.Context, packet routing.Packe
 		return r.dispatchToRouteGroup(ctx, packet)
 	case routing.SACKPacket:
 		return r.handleSACKRouterPacket(ctx, packet)
+	case routing.DatagramPacket:
+		return r.handleDatagramPacket(ctx, packet)
 	case routing.TransportPingPacket, routing.TransportPongPacket,
 		routing.CascadeSetupPacket, routing.CascadeAckPacket, routing.DHTPacket,
 		routing.SetupRPCPacket, routing.VisorRPCPacket:
@@ -112,6 +114,46 @@ func (r *router) dispatchToRouteGroup(ctx context.Context, packet routing.Packet
 // distinct code path in handleTransportPacket.
 func (r *router) handleDataHandshakePacket(ctx context.Context, packet routing.Packet) error {
 	return r.dispatchToRouteGroup(ctx, packet)
+}
+
+// handleDatagramPacket dispatches a faithful-UDP DatagramPacket (#2607). It
+// mirrors dispatchToRouteGroup but routes to the datagram route-group map and,
+// critically, does NOT park frames for an as-yet-unregistered descriptor: a
+// datagram is loss-tolerant by definition, so a frame that races route-group
+// registration is simply dropped rather than buffered. An intermediary rule
+// forwards the datagram to the next hop unchanged.
+func (r *router) handleDatagramPacket(ctx context.Context, packet routing.Packet) error {
+	rule, err := r.GetRule(packet.RouteID())
+	if err != nil {
+		return fmt.Errorf("%w (routeID=%d, pktType=%s)", err, packet.RouteID(), packet.Type())
+	}
+
+	// Forward/intermediary rules relay the datagram to the next hop.
+	if rt := rule.Type(); rt == routing.RuleForward || rt == routing.RuleIntermediary {
+		return r.forwardPacket(ctx, packet, rule)
+	}
+
+	// Consume rule: deliver to the local datagram route group.
+	desc := rule.RouteDescriptor()
+	dg, ok := r.datagramRouteGroup(desc)
+	if !ok || dg == nil {
+		// No group registered (yet, or already torn down). Drop — faithful
+		// UDP tolerates loss; parking/retransmit would violate the semantics.
+		r.logger.WithField("desc", desc.String()).
+			Debug("DatagramPacket for unregistered route group, dropping")
+		return nil
+	}
+
+	if err := dg.Handle(packet); err != nil {
+		// A closed group means the route should be torn down; de-register so
+		// subsequent datagrams take the fast drop path above.
+		if errors.Is(err, io.ErrClosedPipe) {
+			r.removeDatagramRouteGroup(desc)
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) error {
@@ -259,6 +301,15 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 		}
 	case routing.SACKPacket:
 		p = routing.MakeSACKPacket(rule.NextRouteID(), packet.SACKLastContiguousSeq(), packet.SACKBitmap())
+	case routing.DatagramPacket:
+		// Faithful-UDP relay (#2607): re-stamp the next-hop route ID and pass
+		// the opaque (AEAD-sealed) payload through unchanged — intermediaries
+		// never decrypt, the seal is end-to-end.
+		var err error
+		p, err = routing.MakeDatagramPacket(rule.NextRouteID(), packet.Payload())
+		if err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("packet of type %s can't be forwarded", packet.Type())
 	}
