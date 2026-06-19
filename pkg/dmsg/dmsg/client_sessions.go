@@ -131,10 +131,20 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 
 	if network == "quic" {
 		if dSes, err = ce.dialSessionQUIC(ctx, entry); err != nil {
-			return ClientSession{}, err
+			// QUIC dial failed (e.g. UDP blocked by a firewall). Fall back to
+			// the server's TCP endpoint, which a QUIC-advertising server also
+			// listens on (dual-listen). Only give up if there is no TCP address.
+			if entry.Server.Address == "" {
+				return ClientSession{}, err
+			}
+			ce.log.WithError(err).Debugf("QUIC dial to %s failed, falling back to TCP", entry.Static)
+			network = "tcp"
+			dialAddr = entry.Server.Address
+		} else {
+			ce.log.Infof("quic stream session initial for %s", dSes.RemotePK().String())
 		}
-		ce.log.Infof("quic stream session initial for %s", dSes.RemotePK().String())
-	} else {
+	}
+	if network == "tcp" {
 		var conn net.Conn
 		proxyAddr, ok := ctx.Value("socks5_proxy").(string)
 		if ok && proxyAddr != "" {
