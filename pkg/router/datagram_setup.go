@@ -24,12 +24,49 @@
 package router
 
 import (
+	"context"
+	"fmt"
+	"io"
 	"net"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/noise"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
+
+// DialRoutesDatagram implements Router. It dials a normal route with
+// opts.Datagram forced on — so saveRouteGroupRules builds a datagram
+// sibling alongside the reliable RouteGroup — then returns both the
+// reliable conn and the registered sibling. The caller MUST keep the
+// reliable conn alive for the sibling to function (the rules/transport
+// are shared; closing the reliable conn tears the route down and reaps
+// the sibling).
+func (r *router) DialRoutesDatagram(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, *DatagramRouteGroup, error) {
+	if opts == nil {
+		opts = DefaultDialOptions()
+	}
+	opts.Datagram = true
+
+	conn, err := r.DialRoutes(ctx, rPK, lPort, rPort, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// The sibling is keyed by the same descriptor the initiator's route
+	// uses: NewRouteDescriptor(localPK, rPK, lPort, rPort) — see the dial
+	// path's forwardDesc.
+	desc := routing.NewRouteDescriptor(r.conf.PubKey, rPK, lPort, rPort)
+	dg, ok := r.datagramRouteGroup(desc)
+	if !ok || dg == nil {
+		// Route came up reliably but the peer never registered datagram
+		// intent for rPort, so no sibling exists. Tear the route down — a
+		// datagram dial that can't carry datagrams is a failed dial.
+		conn.Close() //nolint:errcheck,gosec // tearing down on the error path
+		return nil, nil, fmt.Errorf("datagram: route to %s:%d established but peer registered no datagram sibling (is the remote port in datagram mode?)", rPK, rPort)
+	}
+	return conn, dg, nil
+}
 
 // channelBinder is satisfied by the Noise-encrypted conn returned by
 // network.EncryptConn (concrete *noise.Conn). It exposes the completed
@@ -37,6 +74,48 @@ import (
 // reliable session without a second handshake.
 type channelBinder interface {
 	ChannelBinding() []byte
+}
+
+// acceptDatagramBuf bounds the accept-side datagram backlog. A datagram
+// sibling that can't be queued (consumer not draining) is dropped — its
+// route still exists, the consumer just missed the accept; nothing on
+// the live network depends on a particular sibling being accepted.
+const acceptDatagramBuf = 64
+
+// datagramAccept pairs an accepted (accept-side) datagram sibling with
+// the local port the route targets, so the consumer (the forwarded-UDP
+// server loop) knows which local service to bridge it to.
+type datagramAccept struct {
+	dg      *DatagramRouteGroup
+	dstPort routing.Port
+}
+
+// AcceptDatagram blocks until a new accept-side datagram sibling is
+// available (built by saveRouteGroupRules for an inbound route whose
+// local port had datagram intent), or ctx is done. Returns the sibling
+// and the local port it targets. The forwarded_ports.udp server loop
+// drains this and bridges each sibling to its local UDP service.
+func (r *router) AcceptDatagram(ctx context.Context) (*DatagramRouteGroup, routing.Port, error) {
+	select {
+	case <-ctx.Done():
+		return nil, 0, ctx.Err()
+	case <-r.done:
+		return nil, 0, io.ErrClosedPipe
+	case a := <-r.acceptDatagram:
+		return a.dg, a.dstPort, nil
+	}
+}
+
+// offerAcceptDatagram non-blockingly hands an accept-side sibling to the
+// consumer. Dropped (with a log) if the backlog is full — the route is
+// unaffected, only this accept notification is lost.
+func (r *router) offerAcceptDatagram(dg *DatagramRouteGroup, dstPort routing.Port) {
+	select {
+	case r.acceptDatagram <- datagramAccept{dg: dg, dstPort: dstPort}:
+	default:
+		r.logger.WithField("dst_port", dstPort).
+			Warn("datagram accept backlog full, dropping sibling notification")
+	}
 }
 
 // RegisterDatagramPort marks a local port as faithful-UDP-capable, so
@@ -138,4 +217,12 @@ func (r *router) buildDatagramSibling(rules routing.EdgeRules, nsConf noise.Conf
 
 	r.logger.WithField("desc", rules.Desc.String()).
 		Debugf("datagram sibling registered (role=%d)", myRole)
+
+	// Accept side: hand the sibling to the consumer (the forwarded-UDP
+	// server loop) so it can bridge it to the local service. The dial
+	// side keeps the sibling for itself (returned by DialRoutesDatagram),
+	// so it is NOT offered here.
+	if !nsConf.Initiator {
+		r.offerAcceptDatagram(dg, rules.Desc.DstPort())
+	}
 }

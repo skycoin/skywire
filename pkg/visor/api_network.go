@@ -332,11 +332,17 @@ func (v *Visor) RegisterTCPPort(localPort int) error {
 
 // DeregisterTCPPort implements API.
 func (v *Visor) DeregisterTCPPort(localPort int) error {
-	if v.forwardedPorts.Get(localPort) == nil {
+	fp := v.forwardedPorts.Get(localPort)
+	if fp == nil {
 		return fmt.Errorf("port :%v not registered", localPort)
 	}
 	// Stop DMSG listener if running.
 	v.stopDmsgForwarder(localPort)
+	// Clear faithful-UDP datagram intent so new inbound datagram routes
+	// to this port stop building siblings (#2607).
+	if fp.UDP && v.router != nil {
+		v.router.UnregisterDatagramPort(routing.Port(fp.Port)) //nolint:gosec // port fits routing.Port
+	}
 	// Remove from both the rich store and legacy allowed map.
 	v.allowed.mu.Lock()
 	delete(v.allowed.ports, localPort)
@@ -385,6 +391,12 @@ func (v *Visor) RegisterForwardedPort(p ForwardedPort) error {
 	// Create a DMSG listener for this port so .dmsg:<port> works.
 	if p.DMSG {
 		v.startDmsgForwarder(p.Port, p.LocalPort)
+	}
+	// Faithful-UDP (#2607): mark datagram intent so the router's accept
+	// side builds a sibling for inbound datagram routes to this port. The
+	// accept loop (serveUDPForwards) bridges them to the local service.
+	if p.UDP && v.router != nil {
+		v.router.RegisterDatagramPort(routing.Port(p.Port)) //nolint:gosec // port fits routing.Port
 	}
 	// If this is the dmsghttp port (80) entry, refresh the logserver's
 	// website handler so a new ProxyAddr takes effect immediately.

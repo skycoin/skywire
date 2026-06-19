@@ -99,6 +99,15 @@ func initSkynetForwardPorts(_ context.Context, v *Visor, log *logging.Logger) er
 			v.startDmsgForwarder(fp.Port, fp.LocalPort)
 		}
 	}
+
+	// Faithful-UDP forwarding (#2607): register datagram intent for
+	// persisted UDP ports and start the accept loop that bridges
+	// inbound datagram routes to their local UDP services. The loop runs
+	// for the visor's lifetime; runtime UDP-port registrations come in
+	// via RegisterForwardedPort.
+	v.registerUDPForwardPorts()
+	go v.serveUDPForwards(log)
+
 	return nil
 }
 

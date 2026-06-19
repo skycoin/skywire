@@ -142,6 +142,81 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	}, nil
 }
 
+// DialPacketContext implements PacketNetworker — it opens a faithful-UDP
+// (#2607) datagram conn to addr. The dial goes through route setup with
+// Datagram intent, which builds a DatagramRouteGroup sibling over the
+// reliable route; the returned conn wraps that sibling and keeps the
+// reliable route alive (closing the packet conn tears the route down and
+// frees the local port).
+//
+// The remote port must also be in datagram mode (the accept side must
+// have called RegisterDatagramPort) or the dial fails — both ends opt in
+// locally, there is no wire negotiation.
+func (r *SkywireNetworker) DialPacketContext(ctx context.Context, addr Addr) (_ DatagramPacketConn, err error) {
+	localPort, freePort, err := r.porter.ReserveEphemeral(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			freePort()
+		}
+	}()
+
+	opts := router.DefaultDialOptions()
+	opts.AppName = AppNameFromContext(ctx)
+	// Datagram routes go through route setup (the sibling is built in
+	// saveRouteGroupRules). The AppDirectMux shortcut + mux fan-out are
+	// not supported for datagrams yet, so don't take the direct path and
+	// leave MuxRoutes at its single-route default. DialRoutesDatagram
+	// forces opts.Datagram = true.
+
+	reliable, dg, err := r.r.DialRoutesDatagram(ctx, addr.PubKey, routing.Port(localPort), addr.Port, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return &skywirePacketConn{
+		DatagramRouteGroup: dg,
+		reliable:           reliable,
+		freePort:           freePort,
+	}, nil
+}
+
+// skywirePacketConn is the faithful-UDP conn handed to apps via
+// DialPacket. It IS the DatagramRouteGroup (ReadFrom/WriteTo/MaxPayload/
+// InboundDropped/AEADAuthFailures all promoted) but owns two extra
+// resources whose lifetimes are tied to it: the reliable route the
+// sibling rides on, and the reserved local port.
+type skywirePacketConn struct {
+	*router.DatagramRouteGroup
+	reliable  net.Conn
+	freePort  func()
+	closeOnce sync.Once
+}
+
+// Close tears the whole datagram conn down: the sibling, then the
+// reliable route (whose ClosePacket reaps the peer's sibling too), then
+// the local port. Idempotent.
+func (c *skywirePacketConn) Close() error {
+	var err error
+	c.closeOnce.Do(func() {
+		dErr := c.DatagramRouteGroup.Close()
+		rErr := c.reliable.Close()
+		c.freePort()
+		if rErr != nil {
+			err = rErr
+			return
+		}
+		err = dErr
+	})
+	return err
+}
+
+// compile-time check that the wrapper still satisfies the app-facing
+// datagram contract after overriding Close.
+var _ DatagramPacketConn = (*skywirePacketConn)(nil)
+
 // tryDirectDial attempts to dial `addr` via the AppDirectMux. Returns
 // (conn, true) on success or (nil, false) on any failure — the caller
 // then falls back to the route-setup path. Any error is logged at
