@@ -85,7 +85,7 @@ func (a *ServerAPI) SetDmsgServer(srv *dmsg.Server) {
 
 // ListenAndServe runs dmsg Serve function alongside health endpoint
 func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 
 	dmsgLn, err := net.Listen("tcp", lAddr)
 	if err != nil {
@@ -100,6 +100,23 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 		// protocol Serve must surface, not be silently absorbed.
 		errCh <- fmt.Errorf("dmsg data-plane server stopped: %v", serr)
 	}(dmsgLis, pAddr)
+
+	// dmsg-over-QUIC (#2607): also listen on UDP (same port number as TCP) so
+	// QUIC-capable clients get a session with native QUIC stream multiplexing +
+	// an unreliable datagram channel. Best-effort + additive — a QUIC bind
+	// failure leaves the TCP listener serving normally, and non-QUIC clients
+	// keep using the advertised TCP Address. QUIC clients discover this via the
+	// Server.AddressUDP + Protocol="quic" the entry now advertises.
+	if udpConn, uerr := net.ListenPacket("udp", lAddr); uerr != nil {
+		logging.MustGetLogger("dmsg_server").WithError(uerr).
+			Warn("dmsg-over-QUIC: failed to bind UDP listener; serving TCP only")
+	} else {
+		go func(udp net.PacketConn, advertised string) {
+			serr := a.dmsgServer.ServeQUIC(udp, advertised)
+			udp.Close() //nolint:errcheck,gosec
+			errCh <- fmt.Errorf("dmsg QUIC server stopped: %v", serr)
+		}(udpConn, pAddr)
+	}
 
 	ln, err := net.Listen("tcp", httpAddr)
 	if err != nil {

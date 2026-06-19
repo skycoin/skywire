@@ -185,6 +185,17 @@ type Server struct {
 	// Address as today.
 	AddressV6 string `json:"address_v6,omitempty"`
 
+	// AddressUDP / AddressUDPV6 are the optional QUIC (UDP) endpoints a
+	// server also listens on (#2607 dmsg-over-QUIC). A QUIC-speaking server
+	// populates these alongside the TCP Address(es) and advertises
+	// Entry.Protocol="quic"; QUIC-capable clients dial these for a session
+	// with native QUIC stream multiplexing + an unreliable datagram channel,
+	// while clients/servers that don't know QUIC ignore the fields and use
+	// the TCP Address as today. Fully backward-compatible (omitempty +
+	// dual-listen). The UDP port may share the TCP port number.
+	AddressUDP   string `json:"address_udp,omitempty"`
+	AddressUDPV6 string `json:"address_udp_v6,omitempty"`
+
 	// AvailableSessions is the number of available sessions that the server can currently accept.
 	AvailableSessions int `json:"availableSessions"`
 
@@ -199,6 +210,9 @@ type Server struct {
 // String implements stringer
 func (s *Server) String() string {
 	res := fmt.Sprintf("\taddress: %s\n", s.Address)
+	if s.AddressUDP != "" {
+		res += fmt.Sprintf("\taddress (quic/udp): %s\n", s.AddressUDP)
+	}
 	res += fmt.Sprintf("\tavailable sessions: %d\n", s.AvailableSessions)
 
 	return res
