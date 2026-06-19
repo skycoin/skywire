@@ -94,11 +94,17 @@ func quicTLSConfig(cert tls.Certificate, expectedRemotePK *cipher.PubKey, onPeer
 		Certificates: []tls.Certificate{cert},
 		// We bypass the standard chain/hostname/expiry verification and run
 		// our own skywire-identity check in VerifyPeerCertificate.
-		InsecureSkipVerify:    true, //nolint:gosec // custom PK-binding verification below
-		ClientAuth:            tls.RequireAnyClientCert,
-		MinVersion:            tls.VersionTLS13,
-		NextProtos:            []string{quicTLSNextProto},
-		VerifyPeerCertificate: makeVerifyPeerCertificate(expectedRemotePK, onPeerPK),
+		InsecureSkipVerify: true, //nolint:gosec // custom PK-binding verification below
+		ClientAuth:         tls.RequireAnyClientCert,
+		MinVersion:         tls.VersionTLS13,
+		NextProtos:         []string{quicTLSNextProto},
+		// Disable session resumption so the full handshake — and thus our
+		// VerifyPeerCertificate identity check — runs on every connection.
+		// A resumed session could otherwise skip the cert check and let a
+		// peer reuse a ticket without re-proving its skywire PK. Transports
+		// are long-lived (one per peer), so the per-handshake cost is amortized.
+		SessionTicketsDisabled: true,
+		VerifyPeerCertificate:  makeVerifyPeerCertificate(expectedRemotePK, onPeerPK),
 	}
 }
 
