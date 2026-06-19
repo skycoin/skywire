@@ -16,6 +16,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -229,10 +230,24 @@ func (v *Visor) Health() (*HealthInfo, error) {
 	return hi, nil
 }
 
+// hvNotReadyErr distinguishes "no hypervisor section in the config" from
+// "hypervisor section present but its instance isn't initialized yet". The
+// latter happens when the hv module hasn't run — usually because the visor is
+// still starting up, or its init stalled (e.g. a dependency hung) — and the
+// caller raced it. The old code returned the "not configured" message in BOTH
+// cases, sending operators with a perfectly good hypervisor config off to
+// "add a hypervisor section" that already exists.
+func (v *Visor) hvNotReadyErr() error {
+	if v.conf == nil || v.conf.Hypervisor == nil {
+		return fmt.Errorf("hypervisor not configured — add \"hypervisor\" section to visor config")
+	}
+	return fmt.Errorf("hypervisor configured but not initialized yet — the visor may still be starting up (or its init stalled); check the visor log and retry")
+}
+
 // EnableHypervisor implements API.
 func (v *Visor) EnableHypervisor() error {
 	if v.hvInstance == nil {
-		return fmt.Errorf("hypervisor not configured — add \"hypervisor\" section to visor config")
+		return v.hvNotReadyErr()
 	}
 	return v.hvInstance.Enable(context.Background())
 }
@@ -251,6 +266,63 @@ func (v *Visor) IsHypervisorEnabled() bool {
 		return false
 	}
 	return v.hvInstance.IsEnabled()
+}
+
+// IsHypervisorUIServing implements API. Reports whether the web UI is serving.
+func (v *Visor) IsHypervisorUIServing() bool {
+	if v.hvInstance == nil {
+		return false
+	}
+	return v.hvInstance.IsUIServing()
+}
+
+// DmsgPortHits implements API. Returns inbound dmsg stream requests that hit a
+// local port with no listener (dmsg error 306), keyed by (src PK, dst port).
+func (v *Visor) DmsgPortHits() []dmsg.PortHit {
+	if v.dmsgC == nil {
+		return nil
+	}
+	return v.dmsgC.NoListenerHits()
+}
+
+// EnableHypervisorUIPersist starts the hypervisor web UI (RPC/tracking
+// unaffected) and optionally persists the change.
+func (v *Visor) EnableHypervisorUIPersist(persist bool) error {
+	if v.hvInstance == nil {
+		return v.hvNotReadyErr()
+	}
+	if err := v.hvInstance.EnableUI(); err != nil {
+		return err
+	}
+	if persist {
+		return v.persistHypervisorUIDisabled(false)
+	}
+	return nil
+}
+
+// DisableHypervisorUIPersist stops the hypervisor web UI but keeps the DMSG-RPC
+// listener, managed-visor tracking, and `hv ls` running. Optionally persists.
+func (v *Visor) DisableHypervisorUIPersist(persist bool) error {
+	if v.hvInstance == nil {
+		return v.hvNotReadyErr()
+	}
+	if err := v.hvInstance.DisableUI(); err != nil {
+		return err
+	}
+	if persist {
+		return v.persistHypervisorUIDisabled(true)
+	}
+	return nil
+}
+
+// persistHypervisorUIDisabled writes the web-UI disable state to the config.
+func (v *Visor) persistHypervisorUIDisabled(disable bool) error {
+	if v.conf.Hypervisor == nil {
+		config := visorconfig.DefaultHypervisorConfig()
+		v.conf.Hypervisor = &config
+	}
+	v.conf.Hypervisor.UIDisable = disable
+	return v.conf.Flush()
 }
 
 // EnableHypervisorPersist enables the hypervisor and optionally persists to config.
