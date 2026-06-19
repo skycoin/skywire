@@ -179,6 +179,8 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 	}
 
 	defer r.removeNoiseRouteGroup(desc)
+	// Reap the faithful-UDP sibling (if any) with the reliable route (#2607).
+	defer r.closeDatagramSibling(desc)
 
 	if nrg == nil {
 		return errNilNoiseRG

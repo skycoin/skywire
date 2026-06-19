@@ -185,6 +185,13 @@ func (c *Conn) Write(b []byte) (int, error) {
 	return c.ns.Write(b)
 }
 
+// ChannelBinding returns the completed handshake's channel binding — see
+// Noise.ChannelBinding. Lets a caller key a sibling channel (e.g. the
+// faithful-UDP datagram route, #2607) off this encrypted route's session.
+func (c *Conn) ChannelBinding() []byte {
+	return c.ns.ChannelBinding()
+}
+
 // LocalAddr returns the local address of the connection.
 func (c *Conn) LocalAddr() net.Addr {
 	return &Addr{
