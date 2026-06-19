@@ -31,6 +31,7 @@ const (
 	// sudphPriority is used to set an order how connection filters apply.
 	sudphPriority            = 1
 	stcprBindPath            = "/bind/stcpr"
+	quicBindPath             = "/bind/quic"
 	addrChSize               = 1024
 	udpKeepHeartbeatInterval = 10 * time.Second
 	sudphReRegisterInterval  = 90 * time.Second
@@ -81,6 +82,7 @@ type Error struct {
 // APIClient implements address resolver API client.
 type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
+	BindQUIC(ctx context.Context, port string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
 	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
@@ -467,6 +469,69 @@ func (c *httpClient) awaitPublicIP(timeout time.Duration) {
 }
 
 // BindSTCPR binds client PK to IP:port on address resolver.
+// BindQUIC registers this visor's QUIC UDP port with the address resolver
+// (mirrors BindSTCPR — an HTTP POST of the local addresses + port, stored
+// under the "quic" type for peers to Resolve). The declared port is the
+// visor's QUIC listen port; for publicly-reachable visors the AR's observed
+// source IP + this port are reachable. (NAT-mapped UDP discovery / hole
+// punching is a follow-up; this path targets reachable nodes first.)
+func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
+	log := c.log.WithField("func", "httpClient.BindQUIC")
+	if !c.isReady() {
+		log.Debug("Address resolver is not ready yet, waiting...")
+		<-c.ready
+		log.Debug("Address resolver became ready, binding")
+	}
+
+	c.awaitPublicIP(stcprBindPublicIPWait)
+
+	addresses, err := netutil.LocalAddresses()
+	if err != nil {
+		return err
+	}
+	clientPublicIP := c.localPublicIPRaw()
+	if clientPublicIP != "" {
+		publicIP := clientPublicIP
+		if host, _, err := net.SplitHostPort(publicIP); err == nil {
+			publicIP = host
+		}
+		found := false
+		for _, addr := range addresses {
+			if addr == publicIP {
+				found = true
+				break
+			}
+		}
+		if !found {
+			addresses = append(addresses, publicIP)
+		}
+	}
+
+	localAddresses := LocalAddresses{
+		Addresses:  addresses,
+		Port:       port,
+		PublicIP:   c.LocalPublicIP(),
+		PublicIPv6: c.localPublicIPv6Raw(),
+	}
+	log.Debugf("Address resolver binding QUIC with: %v port %s", addresses, port)
+	resp, err := c.Post(ctx, quicBindPath, localAddresses)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return fmt.Errorf("rate limited by address resolver (status 429)")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
+	}
+	return nil
+}
+
 func (c *httpClient) BindSTCPR(ctx context.Context, port string) error {
 	log := c.log.WithField("func", "httpClient.BindSTCPR")
 	if !c.isReady() {

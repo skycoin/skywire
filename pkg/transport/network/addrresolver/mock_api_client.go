@@ -59,6 +59,24 @@ func (_m *MockAPIClient) BindSTCPR(ctx context.Context, port string) error {
 	return r0
 }
 
+// BindQUIC provides a mock function with given fields: ctx, port
+func (_m *MockAPIClient) BindQUIC(ctx context.Context, port string) error {
+	ret := _m.Called(ctx, port)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BindQUIC")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, port)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // BindSUDPH provides a mock function with given fields: filter, handshake
 func (_m *MockAPIClient) BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error) {
 	ret := _m.Called(filter, handshake)
