@@ -16,6 +16,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -259,6 +260,15 @@ func (v *Visor) IsHypervisorUIServing() bool {
 		return false
 	}
 	return v.hvInstance.IsUIServing()
+}
+
+// DmsgPortHits implements API. Returns inbound dmsg stream requests that hit a
+// local port with no listener (dmsg error 306), keyed by (src PK, dst port).
+func (v *Visor) DmsgPortHits() []dmsg.PortHit {
+	if v.dmsgC == nil {
+		return nil
+	}
+	return v.dmsgC.NoListenerHits()
 }
 
 // EnableHypervisorUIPersist starts the hypervisor web UI (RPC/tracking

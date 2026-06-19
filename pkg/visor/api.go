@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
@@ -43,6 +44,7 @@ type API interface {
 	EnableHypervisorUIPersist(persist bool) error
 	DisableHypervisorUIPersist(persist bool) error
 	IsHypervisorUIServing() bool
+	DmsgPortHits() []dmsg.PortHit
 	Uptime() (float64, error)
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)

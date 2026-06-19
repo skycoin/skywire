@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -293,6 +294,15 @@ func (rc *rpcClient) IsHypervisorUIServing() bool {
 	var out bool
 	if err := rc.Call("IsHypervisorUIServing", &struct{}{}, &out); err != nil {
 		return false
+	}
+	return out
+}
+
+// DmsgPortHits calls DmsgPortHits
+func (rc *rpcClient) DmsgPortHits() []dmsg.PortHit {
+	var out []dmsg.PortHit
+	if err := rc.Call("DmsgPortHits", &struct{}{}, &out); err != nil {
+		return nil
 	}
 	return out
 }
