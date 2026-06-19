@@ -299,7 +299,55 @@ func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	}()
 
 	go mt.readLoop(readCh)
+
+	// On a datagram-capable transport (QUIC), also drain the native datagram
+	// channel into the same readCh so faithful-UDP DatagramPackets the router
+	// dispatches arrive over real unreliable datagrams (no HOL blocking). The
+	// context is canceled when Serve returns (i.e. mt.done fires), unblocking
+	// the blocking ReadDatagram.
+	if dc, ok := datagramConnOf(mt.transport); ok {
+		mt.wg.Add(1)
+		// Serve is a transport-lifetime goroutine with no request-scoped
+		// parent; Background is correct here. Canceled below when Serve returns.
+		ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // G118: long-lived transport goroutine
+		defer cancel()
+		go mt.datagramReadLoop(ctx, dc, readCh)
+	}
+
 	<-mt.done
+}
+
+// datagramReadLoop drains the transport's native datagram channel (QUIC) into
+// readCh. Each datagram is a routing.Packet (a faithful-UDP DatagramPacket,
+// end-to-end AEAD-sealed). Faithful-UDP semantics: if readCh is momentarily
+// full the datagram is dropped rather than blocking, matching what a real UDP
+// receiver would do under load.
+func (mt *ManagedTransport) datagramReadLoop(ctx context.Context, dc network.DatagramConn, readCh chan<- routing.Packet) {
+	defer mt.wg.Done()
+	log := mt.log.WithField("src", "datagram_read_loop")
+	for {
+		b, err := dc.ReadDatagram(ctx)
+		if err != nil {
+			log.WithError(err).Debug("Datagram read loop stopping")
+			return
+		}
+		if len(b) < routing.PacketHeaderSize {
+			continue // runt / not a routing packet
+		}
+		p := routing.Packet(b)
+		if n := len(b); n > routing.PacketHeaderSize {
+			mt.logRecv(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
+		}
+		select {
+		case <-mt.done:
+			return
+		case <-ctx.Done():
+			return
+		case readCh <- p:
+		default:
+			// readCh full — drop (faithful-UDP loss tolerance).
+		}
+	}
 }
 
 // readLoop continuously reads packets from the underlying transport
@@ -786,6 +834,46 @@ func (mt *ManagedTransport) WritePacket(ctx context.Context, packet routing.Pack
 		mt.transportMx.Unlock()
 		return nil
 	}
+}
+
+// datagramConnOf returns the transport's native datagram channel (QUIC) and
+// true when the underlying connection supports unreliable datagrams. Uses a
+// type assertion so reliable-only transports and mocks need no interface change.
+func datagramConnOf(tp network.Transport) (network.DatagramConn, bool) {
+	dt, ok := tp.(interface {
+		Datagram() (network.DatagramConn, bool)
+	})
+	if !ok {
+		return nil, false
+	}
+	return dt.Datagram()
+}
+
+// WriteDatagram writes a (faithful-UDP) packet over the transport's native
+// datagram channel when available (QUIC RFC 9221) — no head-of-line blocking,
+// genuine loss tolerance. If the transport has no datagram channel, or the
+// datagram send fails (e.g. the payload exceeds the path MTU), it falls back
+// to the reliable stream so the packet is still delivered. The payload is
+// already end-to-end AEAD-sealed by the DatagramRouteGroup; QUIC's own TLS
+// adds hop-by-hop encryption to the datagram.
+func (mt *ManagedTransport) WriteDatagram(ctx context.Context, packet routing.Packet) error {
+	mt.transportMx.Lock()
+	tp := mt.transport
+	mt.transportMx.Unlock()
+	if tp == nil {
+		return fmt.Errorf("write datagram: cannot write to transport, transport is not set up")
+	}
+	if dc, ok := datagramConnOf(tp); ok {
+		if err := dc.WriteDatagram(packet); err == nil {
+			if n := len(packet); n > routing.PacketHeaderSize {
+				mt.logSent(uint64(n - routing.PacketHeaderSize)) //nolint:gosec
+			}
+			return nil
+		}
+		// Datagram send failed (too large for the path MTU, or transient) —
+		// fall back to the reliable stream below so the packet still arrives.
+	}
+	return mt.WritePacket(ctx, packet)
 }
 
 // WriteRawPacket writes a pre-constructed packet to the transport.

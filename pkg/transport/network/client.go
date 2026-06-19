@@ -97,6 +97,8 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		return newStcpr(resolved, port), nil
 	case types.SUDPH:
 		return newSudph(resolved, port), nil
+	case types.QUIC:
+		return newQuic(resolved, port), nil
 	case types.DMSG:
 		return newDmsgClient(f.DmsgC), nil
 	}
