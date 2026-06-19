@@ -101,6 +101,72 @@ func TestQUICConnMutualPKAuth(t *testing.T) {
 	mu.Unlock()
 }
 
+// TestQUICDatagramRoundTrip proves the RFC 9221 datagram channel works over a
+// real QUIC connection through the quicStreamConn wrapper — this is what makes
+// faithful-UDP wire-real (no head-of-line blocking, unreliable delivery).
+func TestQUICDatagramRoundTrip(t *testing.T) {
+	srvPK, srvSK := cipher.GenerateKeyPair()
+	cliPK, cliSK := cipher.GenerateKeyPair()
+	srvCert, err := newQUICCertificate(srvPK, srvSK)
+	require.NoError(t, err)
+	cliCert, err := newQUICCertificate(cliPK, cliSK)
+	require.NoError(t, err)
+
+	srvTLS := quicTLSConfig(srvCert, nil, nil)
+	cliTLS := quicTLSConfig(cliCert, &srvPK, nil)
+	qconf := &quic.Config{EnableDatagrams: true, HandshakeIdleTimeout: 5 * time.Second}
+
+	srvUDP := quicTestUDP(t)
+	defer srvUDP.Close() //nolint:errcheck
+	lis, err := quic.Listen(srvUDP, srvTLS, qconf)
+	require.NoError(t, err)
+	defer lis.Close() //nolint:errcheck
+
+	srvConnCh := make(chan *quic.Conn, 1)
+	go func() {
+		conn, err := lis.Accept(context.Background())
+		if err != nil {
+			srvConnCh <- nil
+			return
+		}
+		// Accept the stream the client opens to drive the handshake to completion.
+		if _, err := conn.AcceptStream(context.Background()); err != nil {
+			srvConnCh <- nil
+			return
+		}
+		srvConnCh <- conn
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cliUDP := quicTestUDP(t)
+	defer cliUDP.Close() //nolint:errcheck
+	cliConn, err := quic.Dial(ctx, cliUDP, srvUDP.LocalAddr(), cliTLS, qconf)
+	require.NoError(t, err)
+	defer cliConn.CloseWithError(0, "done") //nolint:errcheck,gosec
+
+	// Open + write a stream to force the handshake (datagrams require a
+	// completed handshake).
+	stream, err := cliConn.OpenStreamSync(ctx)
+	require.NoError(t, err)
+	_, err = stream.Write([]byte("x"))
+	require.NoError(t, err)
+
+	srvConn := <-srvConnCh
+	require.NotNil(t, srvConn)
+	defer srvConn.CloseWithError(0, "done") //nolint:errcheck,gosec
+
+	// Datagram round-trip via the wrapper.
+	cliWrap := &quicStreamConn{conn: cliConn}
+	srvWrap := &quicStreamConn{conn: srvConn}
+
+	payload := []byte("faithful-udp-over-quic")
+	require.NoError(t, cliWrap.WriteDatagram(payload))
+	got, err := srvWrap.ReadDatagram(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, payload, got)
+}
+
 // TestQUICConnRejectsWrongServerPK verifies the client-side pin: dialing a
 // server while expecting a different PK fails the handshake.
 func TestQUICConnRejectsWrongServerPK(t *testing.T) {

@@ -67,6 +67,23 @@ type quicStreamConn struct {
 func (c *quicStreamConn) LocalAddr() net.Addr  { return c.conn.LocalAddr() }
 func (c *quicStreamConn) RemoteAddr() net.Addr { return c.conn.RemoteAddr() }
 
+// WriteDatagram / ReadDatagram expose the QUIC connection's RFC 9221
+// unreliable datagram channel, making *quicStreamConn a DatagramConn. The
+// router sends faithful-UDP DatagramPackets over this channel (no head-of-line
+// blocking, genuine loss tolerance) instead of the reliable stream. These run
+// on the raw QUIC connection — below the noise stream wrapper — so the
+// transport layer captures the capability before wrapping (see transport.encrypt).
+func (c *quicStreamConn) WriteDatagram(b []byte) error {
+	return c.conn.SendDatagram(b)
+}
+
+func (c *quicStreamConn) ReadDatagram(ctx context.Context) ([]byte, error) {
+	return c.conn.ReceiveDatagram(ctx)
+}
+
+// compile-time assertion that *quicStreamConn provides the native datagram channel.
+var _ DatagramConn = (*quicStreamConn)(nil)
+
 func (c *quicStreamConn) Close() error {
 	_ = c.Stream.Close() //nolint:errcheck,gosec // half-close the stream, then the conn
 	err := c.conn.CloseWithError(0, "closed")
