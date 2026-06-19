@@ -71,6 +71,14 @@ type Config struct {
 	ClientType           string
 	ConnectedServersType string
 	Protocol             string
+
+	// PreferWS makes the client dial a server's WebSocket endpoint
+	// (Server.AddressWS) when one is advertised, in preference to TCP/QUIC,
+	// falling back to TCP on WS failure. Native clients leave this false
+	// (raw TCP/QUIC is strictly better for them); it exists for restrictive
+	// networks where only HTTP(S)/443 egress is allowed, and is forced true
+	// in the js/wasm build, which has no other transport available.
+	PreferWS bool
 }
 
 // Ensure ensures all config values are set.

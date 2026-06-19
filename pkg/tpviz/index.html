@@ -425,10 +425,10 @@
         </div>
     </div>
     <script>
-        // Use local API endpoint when served from Go server
-        const API_BASE = window.location.hostname === '' || window.location.protocol === 'file:'
-            ? 'https://tpd.skywire.skycoin.com'
-            : '';
+        // Always use the serving origin's relative /api endpoints. The Go
+        // server proxies transport data (over dmsg when embedded in a visor),
+        // so the page never talks to a hardcoded clearnet deployment URL.
+        const API_BASE = '';
 
         let network = null, allData = null, uptimeData = null, servicesData = null;
         let nodesDataset = null, edgesDataset = null, visorConnections = {};

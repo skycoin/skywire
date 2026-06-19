@@ -41,7 +41,10 @@ func init() {
 	vizCmd.Flags().StringVar(&vizCacheDirDMSG, "cdd", tpviz.CacheDirFromURL(deployment.Prod.DmsgDiscovery), "DMSG cache dir (\"\" to disable)")
 	vizCmd.Flags().IntVarP(&vizCacheMaxAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	vizCmd.Flags().StringVar(&vizTPDURL, "tpd-url", deployment.Prod.TransportDiscovery, "transport discovery URL")
-	vizCmd.Flags().StringVarP(&vizUTURL, "ut-url", "w", deployment.Prod.TransportDiscovery, "uptime tracker URL")
+	// The standalone uptime tracker is decommissioned; default empty so tp-viz
+	// does not fetch a dead clearnet endpoint. Pass --ut-url explicitly only for
+	// a custom standalone uptime source.
+	vizCmd.Flags().StringVarP(&vizUTURL, "ut-url", "w", "", "uptime tracker URL (empty = disabled)")
 	vizCmd.Flags().StringVar(&vizSDURL, "sd-url", deployment.Prod.ServiceDiscovery, "service discovery URL")
 	vizCmd.Flags().StringVar(&vizDMSGURL, "dmsg-url", deployment.Prod.DmsgDiscovery, "DMSG discovery URL")
 	vizCmd.Flags().BoolVar(&vizNoCache, "no-cache", false, "disable caching, always fetch fresh data")

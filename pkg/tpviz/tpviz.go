@@ -132,17 +132,20 @@ func DefaultConfig() Config {
 		Addr:         "127.0.0.1",
 		Port:         8080,
 		CacheDirTPD:  CacheDirFromURL(deployment.Prod.TransportDiscovery),
-		CacheDirUT:   CacheDirFromURL(deployment.Prod.UptimeTracker),
 		CacheDirSD:   CacheDirFromURL(deployment.Prod.ServiceDiscovery),
 		CacheDirDMSG: CacheDirFromURL(deployment.Prod.DmsgDiscovery),
 		CacheMaxAge:  5,
 		TPDURL:       deployment.Prod.TransportDiscovery,
-		UTURL:        deployment.Prod.UptimeTracker,
-		SDURL:        deployment.Prod.ServiceDiscovery,
-		DMSGURL:      deployment.Prod.DmsgDiscovery,
-		NoCache:      false,
-		AutoRefresh:  true,
-		GeoIPURL:     deployment.Prod.GeoIP,
+		// UTURL intentionally empty: the standalone uptime tracker is
+		// decommissioned. An operator can still pass --ut-url for a custom
+		// standalone deployment, but the default no longer points at a dead
+		// clearnet endpoint.
+		UTURL:       "",
+		SDURL:       deployment.Prod.ServiceDiscovery,
+		DMSGURL:     deployment.Prod.DmsgDiscovery,
+		NoCache:     false,
+		AutoRefresh: true,
+		GeoIPURL:    deployment.Prod.GeoIP,
 	}
 }
 
@@ -151,6 +154,12 @@ func DefaultConfig() Config {
 type VisorAPI interface {
 	Overview() (*VisorOverview, error)
 	RoutingRules() ([]routing.Rule, error)
+	// AllTransports returns the network-wide all-transports JSON snapshot the
+	// visor holds via its dmsg/CXO-backed transport-discovery feed — the same
+	// payload TPD's HTTP /all-transports serves, but obtained over dmsg with no
+	// clearnet request. Returns an error on a CXO cache miss (feed not yet
+	// populated); the caller surfaces that rather than falling back to clearnet.
+	AllTransports(ctx context.Context) ([]byte, error)
 	AddTransport(ctx context.Context, remotePK, tpType string) (*TransportSummary, error)
 	RemoveTransport(ctx context.Context, tpID string) error
 	DMSGHealth(ctx context.Context, pk string) (*DMSGHealthResponse, error)
@@ -421,6 +430,15 @@ func (s *Server) SetVisorAPI(api VisorAPI, pubKey string) {
 	}
 }
 
+// getVisorAPI returns the embedded visor API under the read lock, or nil when
+// the server runs standalone (no visor). Used by handlers that prefer a
+// dmsg-backed visor source over a clearnet HTTP fetch.
+func (s *Server) getVisorAPI() VisorAPI {
+	s.visorMu.RLock()
+	defer s.visorMu.RUnlock()
+	return s.visorAPI
+}
+
 // SetTPSAPI sets the embedded Transport Setup Node API.
 // When set, the UI will show transport creation controls.
 func (s *Server) SetTPSAPI(api TPSAPI) {
@@ -536,11 +554,16 @@ func (s *Server) setupRoutes() {
 
 		// Get actual cache file ages in seconds
 		tpdCacheFile := CacheFilePath(s.config.CacheDirTPD, s.config.TPDURL+"/all-transports")
-		utCacheFile := CacheFilePath(s.config.CacheDirUT, s.config.UTURL+"/uptimes?v=v2")
 		sdCacheFile := CacheFilePath(s.config.CacheDirSD, s.config.SDURL+"/api/services?type=visor")
 		tpdAge := s.getCacheAgeSeconds(tpdCacheFile)
-		utAge := s.getCacheAgeSeconds(utCacheFile)
 		sdAge := s.getCacheAgeSeconds(sdCacheFile)
+
+		// Uptime tracker is decommissioned by default; only report its age
+		// when an operator configured a standalone UTURL.
+		var utAge int64
+		if s.config.UTURL != "" {
+			utAge = s.getCacheAgeSeconds(CacheFilePath(s.config.CacheDirUT, s.config.UTURL+"/uptimes?v=v2"))
+		}
 
 		// Find the oldest cache age
 		maxAge := tpdAge
@@ -605,6 +628,24 @@ func (s *Server) setupRoutes() {
 }
 
 func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
+	// When embedded in a visor, source the all-transports snapshot from the
+	// visor's dmsg/CXO-backed transport-discovery feed — never clearnet HTTP.
+	// On a CXO cache miss the feed is simply not populated yet; surface 503 and
+	// let the UI retry rather than reaching out to a (deprecated) clearnet TPD.
+	if api := s.getVisorAPI(); api != nil {
+		data, err := api.AllTransports(r.Context())
+		if err != nil {
+			http.Error(w, fmt.Sprintf("all-transports not ready over dmsg: %v", err), http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("X-Skywire-Source", "dmsg")
+		w.Write(data) //nolint:errcheck,gosec
+		return
+	}
+
+	// Standalone mode (no visor): fetch from the operator-supplied TPDURL.
 	tpdURL := s.config.TPDURL + "/all-transports"
 	cacheFile := CacheFilePath(s.config.CacheDirTPD, tpdURL)
 	data, err := s.getData(cacheFile, tpdURL)
@@ -619,6 +660,18 @@ func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// The standalone uptime tracker has been decommissioned. With no UTURL
+	// configured, serve an empty uptime map so the UI's liveness overlay
+	// degrades gracefully (no node marked offline-by-UT) instead of erroring
+	// against a dead clearnet endpoint.
+	if s.config.UTURL == "" {
+		w.Write([]byte("[]")) //nolint:errcheck,gosec
+		return
+	}
+
 	utURL := s.config.UTURL + "/uptimes?v=v2"
 	cacheFile := CacheFilePath(s.config.CacheDirUT, utURL)
 	data, err := s.getData(cacheFile, utURL)
@@ -627,8 +680,6 @@ func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Write([]byte(data)) //nolint:errcheck,gosec
 }
 
@@ -993,13 +1044,19 @@ func (s *Server) refreshCacheFile(cacheFile, url string) {
 
 // refreshCache proactively refreshes all cache files
 func (s *Server) refreshCache() {
-	// Build URL to cache file mapping dynamically
-	tpdURL := s.config.TPDURL + "/all-transports"
-	utURL := s.config.UTURL + "/uptimes?v=v2"
-
-	urls := map[string]string{
-		CacheFilePath(s.config.CacheDirTPD, tpdURL): tpdURL,
-		CacheFilePath(s.config.CacheDirUT, utURL):   utURL,
+	// Build URL to cache file mapping dynamically. Only clearnet-fetch what is
+	// actually served that way: when embedded in a visor, all-transports comes
+	// from the dmsg/CXO feed (handleTransports), not a cached clearnet TPD, so
+	// skip the TPD fetch. The standalone uptime tracker is decommissioned, so
+	// only fetch uptimes when an operator explicitly configured a UTURL.
+	urls := map[string]string{}
+	if s.getVisorAPI() == nil && s.config.TPDURL != "" {
+		tpdURL := s.config.TPDURL + "/all-transports"
+		urls[CacheFilePath(s.config.CacheDirTPD, tpdURL)] = tpdURL
+	}
+	if s.config.UTURL != "" {
+		utURL := s.config.UTURL + "/uptimes?v=v2"
+		urls[CacheFilePath(s.config.CacheDirUT, utURL)] = utURL
 	}
 
 	for cacheFile, url := range urls {
