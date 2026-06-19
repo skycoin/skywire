@@ -71,10 +71,12 @@ type Hypervisor struct {
 	summaryCacheMx sync.RWMutex
 
 	// Runtime state for enable/disable toggle
-	httpSrv   *http.Server // nil when disabled
-	srvCancel context.CancelFunc
-	enabled   bool
-	enableMu  sync.Mutex
+	httpSrv        *http.Server // nil when the web UI isn't serving
+	srvCancel      context.CancelFunc
+	enabled        bool      // DMSG RPC + managed-visor tracking active
+	uiServing      bool      // web UI (HTTP) server active — independent of `enabled`
+	tpvizStartOnce sync.Once // tpviz is start-once (its Stop closes a chan that can't be reopened)
+	enableMu       sync.Mutex
 }
 
 // cachedSummary is one entry in Hypervisor.summaryCache.
@@ -117,12 +119,12 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		summaryCache: make(map[cipher.PubKey]cachedSummary),
 	}
 
-	// tpviz is started unconditionally whenever a hypervisor has a
-	// local visor — the hvui's network-visualizer tab is always shown
-	// in the home top bar, so gating the backend on a config flag
-	// just produced 404s on /tp-viz/ for older configs that hadn't
-	// flipped enable=true. The TPViz config block still tunes
-	// SurveyDir and CacheMaxAge; only the on/off gate is removed.
+	// tpviz is constructed whenever a hypervisor has a local visor — the
+	// hvui's network-visualizer tab is always shown in the home top bar, so
+	// gating the backend on a config flag just produced 404s on /tp-viz/ for
+	// older configs. The TPViz config block still tunes SurveyDir and
+	// CacheMaxAge. It is STARTED (and stopped) with the web UI in startUI/
+	// stopUI, since it only backs UI routes.
 	if visor != nil {
 		tpvizCfg := tpviz.DefaultConfig()
 		if config.TPViz.SurveyDir != "" {
@@ -141,20 +143,20 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 		// CXOFeed values used by the manager — values match across
 		// both sides by construction.
 		hv.tpvizServer.SetCXOSubMgr(&cxoSubMgrAdapter{v: visor})
-		// Start tpviz's initial data population in the BACKGROUND. Start()
-		// synchronously fetches geoip + refreshes its TPD/SD caches over the
-		// (prod, HTTP) deployment URLs; if any of those is slow or closed
-		// (e.g. the deployment HTTP front door is down) the blocking fetch
-		// would stall NewHypervisor → initHypervisor → and the hypervisor's
-		// own HTTP (:http_addr) + DMSG-RPC (:dmsg_port) servers would never
-		// come up, so managed visors can't connect ("306 - no associated
-		// listener"). The control plane must not depend on tpviz's upstream;
-		// tpviz serves empty/stale until its first refresh lands.
-		go hv.tpvizServer.Start()
+		// tpviz backs the web UI's network-visualizer tab, so it is
+		// started/stopped with the UI (see startUI/stopUI) — and started
+		// ASYNC there because Start() synchronously fetches geoip + refreshes
+		// its TPD/SD caches over the (prod, HTTP) deployment URLs, which must
+		// never block the hypervisor's control plane from coming up.
 	}
 
 	return hv, nil
 }
+
+// Enable starts the hypervisor: the DMSG-RPC listener + managed-visor tracking
+// (the secure, whitelist-gated surface that backs `hv ls`) always, and the web
+// UI unless UIDisable is set. The UI can be toggled independently afterward via
+// EnableUI/DisableUI without affecting the RPC/tracking.
 func (hv *Hypervisor) Enable(ctx context.Context) error {
 	hv.enableMu.Lock()
 	defer hv.enableMu.Unlock()
@@ -166,7 +168,8 @@ func (hv *Hypervisor) Enable(ctx context.Context) error {
 	srvCtx, cancel := context.WithCancel(ctx)
 	hv.srvCancel = cancel
 
-	// Start DMSG RPC listener for remote visors (waits for DMSG to be ready)
+	// Start DMSG RPC listener for remote visors (waits for DMSG to be ready).
+	// This is the source of managed-visor data and is independent of the web UI.
 	if hv.dmsgC != nil {
 		go func() {
 			<-hv.dmsgC.Ready()
@@ -178,21 +181,39 @@ func (hv *Hypervisor) Enable(ctx context.Context) error {
 		}()
 	}
 
-	// Start HTTP server
-	handler := hv.HTTPHandler()
+	// The web UI is optional and independent of the RPC/tracking above.
+	if !hv.c.UIDisable {
+		if err := hv.startUI(); err != nil {
+			cancel()
+			hv.srvCancel = nil
+			return err
+		}
+	} else {
+		hv.logger.Info("Hypervisor web UI disabled (ui_disable); DMSG-RPC + managed-visor tracking + hv ls active")
+	}
+
+	hv.enabled = true
+	hv.logger.Info("Hypervisor enabled")
+	return nil
+}
+
+// startUI starts the web UI HTTP server (and tpviz, which backs its
+// network-visualizer tab). Caller must hold enableMu. No-op if already serving.
+func (hv *Hypervisor) startUI() error {
+	if hv.uiServing {
+		return nil
+	}
 	hv.httpSrv = &http.Server{
-		Handler:           handler,
+		Handler:           hv.HTTPHandler(),
 		ReadTimeout:       5 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-
 	lis, err := net.Listen("tcp", hv.c.HTTPAddr)
 	if err != nil {
-		cancel()
+		hv.httpSrv = nil
 		return fmt.Errorf("hypervisor HTTP listen %s: %w", hv.c.HTTPAddr, err)
 	}
-
 	go func() {
 		hv.logger.Infof("Hypervisor HTTP serving on %s", hv.c.HTTPAddr)
 		var srvErr error
@@ -205,15 +226,63 @@ func (hv *Hypervisor) Enable(ctx context.Context) error {
 			hv.logger.WithError(srvErr).Error("Hypervisor HTTP server error")
 		}
 	}()
-
-	// Start tpviz if configured
+	// tpviz fetches geoip + prod-HTTP TPD/SD caches synchronously — start async
+	// so a slow/closed upstream can't block (see #3181). Start it AT MOST ONCE
+	// for the hypervisor's lifetime: tpviz.Stop() closes a channel created in
+	// NewServer that Start() doesn't recreate, so a stop+start cycle would panic
+	// on a double close. It's a cheap background cache refresher, so leaving it
+	// running across UI toggles (and until process exit) is fine.
 	if hv.tpvizServer != nil {
-		hv.tpvizServer.Start()
+		hv.tpvizStartOnce.Do(func() { go hv.tpvizServer.Start() })
 	}
-
-	hv.enabled = true
-	hv.logger.Info("Hypervisor enabled")
+	hv.uiServing = true
 	return nil
+}
+
+// stopUI shuts down the web UI HTTP server. Caller must hold enableMu. tpviz is
+// deliberately NOT stopped here — it's start-once (its Stop closes a one-shot
+// channel) and a cheap background refresher, so it keeps running across UI
+// toggles. The HTTP handler is what gates access; with the server down the
+// tpviz routes are unreachable regardless.
+func (hv *Hypervisor) stopUI() {
+	if hv.httpSrv != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := hv.httpSrv.Shutdown(shutdownCtx); err != nil {
+			hv.logger.WithError(err).Warn("Hypervisor HTTP shutdown error")
+		}
+		hv.httpSrv = nil
+	}
+	hv.uiServing = false
+}
+
+// EnableUI starts just the web UI, leaving the DMSG-RPC/tracking untouched.
+// Requires the hypervisor to be enabled.
+func (hv *Hypervisor) EnableUI() error {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+	if !hv.enabled {
+		return fmt.Errorf("hypervisor not enabled; run 'skywire cli visor hv enable' first")
+	}
+	hv.c.UIDisable = false
+	return hv.startUI()
+}
+
+// DisableUI stops just the web UI; the DMSG-RPC listener, managed-visor
+// tracking, and `hv ls` keep working.
+func (hv *Hypervisor) DisableUI() error {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+	hv.c.UIDisable = true
+	hv.stopUI()
+	return nil
+}
+
+// IsUIServing reports whether the web UI HTTP server is currently serving.
+func (hv *Hypervisor) IsUIServing() bool {
+	hv.enableMu.Lock()
+	defer hv.enableMu.Unlock()
+	return hv.uiServing
 }
 func (hv *Hypervisor) Disable() error {
 	hv.enableMu.Lock()
@@ -223,15 +292,8 @@ func (hv *Hypervisor) Disable() error {
 		return nil
 	}
 
-	// Stop HTTP server
-	if hv.httpSrv != nil {
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer shutdownCancel()
-		if err := hv.httpSrv.Shutdown(shutdownCtx); err != nil {
-			hv.logger.WithError(err).Warn("Hypervisor HTTP shutdown error")
-		}
-		hv.httpSrv = nil
-	}
+	// Stop the web UI (HTTP server + tpviz).
+	hv.stopUI()
 
 	// Cancel DMSG RPC context (stops listener)
 	if hv.srvCancel != nil {
@@ -248,11 +310,6 @@ func (hv *Hypervisor) Disable() error {
 		delete(hv.remoteVisors, pk)
 	}
 	hv.vsMu.Unlock()
-
-	// Stop tpviz
-	if hv.tpvizServer != nil {
-		hv.tpvizServer.Stop()
-	}
 
 	hv.enabled = false
 	hv.logger.Info("Hypervisor disabled")

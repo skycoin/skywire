@@ -65,9 +65,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		BinPath:       skyenv.AppBinPath,
 		DisplayNodeIP: false,
 	}
-	conf.UptimeTracker = &UptimeTracker{
-		Addr: services.UptimeTracker,
-	}
+	// The standalone uptime-tracker is deprecated — uptime is now tracked by
+	// the discovery services (TPD et al.). Generated configs no longer include
+	// an `uptime_tracker` block; the field is nil and initUptimeTracker skips
+	// it. Runtime readers all nil-guard conf.UptimeTracker.
 	conf.CLIAddr = skyenv.RPCAddr
 	conf.LogLevel = skyenv.LogLevel
 	conf.LocalPath = skyenv.LocalPath
@@ -105,7 +106,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				conf.Dmsg.Discovery = dmsgHTTPServersList.Test.DMSGDiscovery
 				conf.Transport.AddressResolver = dmsgHTTPServersList.Test.AddressResolver
 				conf.Transport.Discovery = dmsgHTTPServersList.Test.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Test.UptimeTracker
 				conf.Routing.RouteFinder = dmsgHTTPServersList.Test.RouteFinder
 				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Test.ServiceDiscovery
 			} else {
@@ -113,7 +113,6 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 				conf.Dmsg.Discovery = dmsgHTTPServersList.Prod.DMSGDiscovery
 				conf.Transport.AddressResolver = dmsgHTTPServersList.Prod.AddressResolver
 				conf.Transport.Discovery = dmsgHTTPServersList.Prod.TransportDiscovery
-				conf.UptimeTracker.Addr = dmsgHTTPServersList.Prod.UptimeTracker
 				conf.Routing.RouteFinder = dmsgHTTPServersList.Prod.RouteFinder
 				conf.Launcher.ServiceDisc = dmsgHTTPServersList.Prod.ServiceDiscovery
 			}

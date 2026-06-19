@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/util/rpcutil"
 )
@@ -35,6 +36,35 @@ func (r *RPC) DisableHypervisor(persist *bool, _ *struct{}) (err error) {
 // IsHypervisorEnabled returns whether the hypervisor is currently serving.
 func (r *RPC) IsHypervisorEnabled(_ *struct{}, out *bool) (err error) {
 	*out = r.visor.IsHypervisorEnabled()
+	return nil
+}
+
+// EnableHypervisorUI starts only the hypervisor web UI; the DMSG-RPC listener
+// and managed-visor tracking are unaffected. Persists when persist is true.
+func (r *RPC) EnableHypervisorUI(persist *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "EnableHypervisorUI", persist)(nil, &err)
+	p := persist != nil && *persist
+	return r.visor.EnableHypervisorUIPersist(p)
+}
+
+// DisableHypervisorUI stops only the hypervisor web UI; the DMSG-RPC listener,
+// managed-visor tracking, and hv ls keep working. Persists when persist is true.
+func (r *RPC) DisableHypervisorUI(persist *bool, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "DisableHypervisorUI", persist)(nil, &err)
+	p := persist != nil && *persist
+	return r.visor.DisableHypervisorUIPersist(p)
+}
+
+// IsHypervisorUIServing returns whether the hypervisor web UI is serving.
+func (r *RPC) IsHypervisorUIServing(_ *struct{}, out *bool) (err error) {
+	*out = r.visor.IsHypervisorUIServing()
+	return nil
+}
+
+// DmsgPortHits returns inbound dmsg stream requests that hit a local port with
+// no listener (dmsg error 306), keyed by (src PK, dst port).
+func (r *RPC) DmsgPortHits(_ *struct{}, out *[]dmsg.PortHit) (err error) {
+	*out = r.visor.DmsgPortHits()
 	return nil
 }
 
