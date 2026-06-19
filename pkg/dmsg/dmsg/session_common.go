@@ -2,7 +2,9 @@
 package dmsg
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -144,6 +146,45 @@ func (c quicAddrConn) RemoteAddr() net.Addr             { return c.qc.RemoteAddr
 func (c quicAddrConn) SetDeadline(time.Time) error      { return nil }
 func (c quicAddrConn) SetReadDeadline(time.Time) error  { return nil }
 func (c quicAddrConn) SetWriteDeadline(time.Time) error { return nil }
+
+// ErrDatagramsUnsupported is returned by the session datagram API for non-QUIC
+// sessions (TCP+yamux/smux carries reliable streams only).
+var ErrDatagramsUnsupported = errors.New("dmsg: session does not support datagrams (not a QUIC session)")
+
+// SupportsDatagrams reports whether this session can carry unreliable datagrams
+// — true only for QUIC sessions (#2607 dmsg-over-QUIC).
+func (sc *SessionCommon) SupportsDatagrams() bool {
+	sc.sm.mutx.RLock()
+	defer sc.sm.mutx.RUnlock()
+	return sc.sm.quic != nil
+}
+
+// WriteDatagram sends an unreliable datagram over the session's QUIC connection
+// (RFC 9221) — UDP-over-dmsg. Returns ErrDatagramsUnsupported on non-QUIC
+// sessions. Datagrams ride the same PK-bound-TLS-encrypted QUIC connection as
+// the session's streams; this gives dmsg a genuine datagram channel that the
+// reliable yamux/smux mux cannot.
+func (sc *SessionCommon) WriteDatagram(b []byte) error {
+	sc.sm.mutx.RLock()
+	qc := sc.sm.quic
+	sc.sm.mutx.RUnlock()
+	if qc == nil {
+		return ErrDatagramsUnsupported
+	}
+	return qc.SendDatagram(b)
+}
+
+// ReadDatagram receives an unreliable datagram from the session's QUIC
+// connection. Returns ErrDatagramsUnsupported on non-QUIC sessions.
+func (sc *SessionCommon) ReadDatagram(ctx context.Context) ([]byte, error) {
+	sc.sm.mutx.RLock()
+	qc := sc.sm.quic
+	sc.sm.mutx.RUnlock()
+	if qc == nil {
+		return nil, ErrDatagramsUnsupported
+	}
+	return qc.ReceiveDatagram(ctx)
+}
 
 // initQUIC sets up a session (client or server) over a QUIC connection — no
 // Noise handshake. The PK-bound QUIC TLS (pkg/skyquic, option A) already
