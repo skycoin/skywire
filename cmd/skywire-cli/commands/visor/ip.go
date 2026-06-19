@@ -8,8 +8,9 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -26,15 +27,25 @@ var ipCmd = &cobra.Command{
 		mLog.SetLevel(logrus.PanicLevel)
 		logger := mLog.PackageLogger("visor_ip_information")
 
-		// Discover the public IP + NAT type in a single STUN round, using the
-		// embedded STUN-server list. No HTTP hop through ip.skycoin.com (the
-		// public-IP echo) or conf.skywire.skycoin.com (the STUN-server list):
-		// STUN's mapped address IS the public IP, so the geoip echo was always
-		// redundant with the NAT check this command already runs, and the STUN
-		// servers ship in the binary. (Geolocation of that IP is a separate,
-		// trivial follow-up; ip.skycoin.com stays up for the proxy/VPN exit-IP
-		// check, but the CLI no longer depends on it.)
-		sc := network.GetStunDetails(skyenv.GetStunServers(), logger)
+		// The visor already resolved its public IP + NAT type via STUN at
+		// startup (for SUDPH/STCPR + the address resolver) and holds it in its
+		// Overview. Just ask the running visor for what it already knows —
+		// re-running STUN here would be redundant work and could even disagree
+		// with the visor's own view. Only when no visor is reachable do we fall
+		// back to a standalone STUN round (embedded default servers, the only
+		// option without a visor config to read).
+		if rpcClient, err := clirpc.Client(cmd.Flags()); err == nil {
+			if ov, err := rpcClient.Overview(); err == nil {
+				internal.PrintOutput(cmd.Flags(), ov.PublicIP,
+					fmt.Sprintf("IP: %s\nPublic Status: %s\n", ov.PublicIP, ov.NATType))
+				return
+			}
+		}
+
+		// Standalone fallback: no visor reachable, so run STUN ourselves. No HTTP
+		// hop through ip.skycoin.com / conf.skywire.skycoin.com — STUN's mapped
+		// address IS the public IP, and the server list ships in the binary.
+		sc := network.GetStunDetails(deployment.Prod.StunServers, logger)
 		var ip string
 		if sc.PublicIP != nil {
 			ip = sc.PublicIP.IP()

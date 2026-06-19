@@ -24,11 +24,9 @@ const (
 
 // tpdPerKeyStatsURL returns the transport discovery per-key stats URL from the deployment config.
 func tpdPerKeyStatsURL() string {
-	base := deployment.Prod.TransportDiscovery
-	if base == "" {
-		base = "https://tpd.skywire.skycoin.com"
-	}
-	return strings.TrimRight(base, "/") + "/all-transports/per-key-stats"
+	// No hardcoded clearnet fallback — services-config.json (via deployment.Prod)
+	// is the single source of truth for the transport-discovery URL.
+	return strings.TrimRight(deployment.Prod.TransportDiscovery, "/") + "/all-transports/per-key-stats"
 }
 
 // PerKeyStats is a map from PK hex to transport counts by type (includes "total" key)

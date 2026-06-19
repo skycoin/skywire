@@ -121,7 +121,17 @@ type Config struct {
 	// present). The local TCP listener is unchanged — wildcard binds
 	// already accept both families; this field is purely a discovery
 	// advertisement.
-	PublicAddressV6  string        `json:"public_address_v6,omitempty"`
+	PublicAddressV6 string `json:"public_address_v6,omitempty"`
+	// WSAddress is the local "host:port" the server binds a plaintext
+	// WebSocket listener on (dmsg-over-WebSocket). Empty disables WS — the
+	// default, so no extra port opens unless the operator opts in. TLS for
+	// wss:// is expected to be terminated by a front proxy.
+	WSAddress string `json:"ws_address,omitempty"`
+	// PublicAddressWS is the full ws:// or wss:// URL (including the /dmsg
+	// path) that this WS endpoint is reachable at and advertises in discovery
+	// (Server.AddressWS), e.g. "wss://dmsg1.skywire.skycoin.com/dmsg". Required
+	// when WSAddress is set, otherwise clients learn no URL to dial.
+	PublicAddressWS  string        `json:"public_address_ws,omitempty"`
 	LocalAddress     string        `json:"local_address"`
 	HTTPAddress      string        `json:"health_endpoint_address"`
 	LogLevel         string        `json:"log_level"`

@@ -286,6 +286,29 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}()
 
+	// dmsg-over-WebSocket (optional, off by default): bind a plaintext WS
+	// listener and advertise its public URL so WS-only clients — chiefly the
+	// js/wasm build, which cannot open a raw TCP/UDP socket — can reach this
+	// server. Best-effort and additive: a bind failure leaves TCP/QUIC serving
+	// normally. Requires both ws_address (bind) and public_address_ws
+	// (advertised URL); without the URL clients learn nothing to dial.
+	if cfg.WSAddress != "" && cfg.PublicAddressWS != "" {
+		wsLis, werr := net.Listen("tcp", cfg.WSAddress)
+		if werr != nil {
+			log.WithError(werr).Warnf("dmsg-ws: failed to bind WS listener on %s; serving without WebSocket", cfg.WSAddress)
+		} else {
+			log.WithField("ws_addr", cfg.WSAddress).WithField("ws_url", cfg.PublicAddressWS).Info("Serving dmsg over WebSocket...")
+			go func() {
+				if err := srv.ServeWS(wsLis, cfg.PublicAddressWS); err != nil {
+					log.Errorf("ServeWS: %v", err)
+					cancel()
+				}
+			}()
+		}
+	} else if cfg.WSAddress != "" {
+		log.Warn("dmsg-ws: ws_address set without public_address_ws; WebSocket disabled (no URL to advertise)")
+	}
+
 	go s.serveDmsgSurfaces(runCtx, cancel, dmsgC, dClient)
 
 	<-runCtx.Done()

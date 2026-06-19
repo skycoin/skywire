@@ -63,6 +63,14 @@ type EntityCommon struct {
 	// (#2607 dmsg-over-QUIC). Empty for clients and TCP-only servers.
 	advertisedUDPAddr string
 
+	// advertisedWSAddr is the WebSocket endpoint a server also listens on, set
+	// by Server.ServeWS. When non-empty, the discovery entry carries
+	// Server.AddressWS (a full ws:// or wss:// URL) so WS-only clients — chiefly
+	// the js/wasm build — can reach this server. Orthogonal to Protocol: WS
+	// runs the same Noise+yamux stack as TCP. Empty for clients and servers
+	// without a WS listener.
+	advertisedWSAddr string
+
 	// noListenerHits records inbound stream requests to ports this client has
 	// no listener on (dmsg error 306). Bounded; surfaced via NoListenerHits.
 	noListenerHits *portHitTracker
@@ -471,9 +479,10 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	addrDelta := entry.Server.Address != addr
 	addrV6Delta := entry.Server.AddressV6 != addrV6
 	udpDelta := entry.Server.AddressUDP != c.advertisedUDPAddr
+	wsDelta := entry.Server.AddressWS != c.advertisedWSAddr
 
 	// No update needed if entry has no delta AND update is not due.
-	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !due {
+	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !due {
 		return nil
 	}
 
@@ -497,6 +506,15 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		entry.Server.AddressUDP = c.advertisedUDPAddr
 		entry.Protocol = "quic"
 		log = log.WithField("addr_udp", entry.Server.AddressUDP)
+	}
+	// Advertise the WebSocket endpoint when the server runs a WS listener
+	// (dmsg-over-WebSocket). Unlike QUIC this does NOT touch Protocol: WS runs
+	// the same Noise+yamux stack, so the entry can carry Address (TCP),
+	// AddressUDP (QUIC) and AddressWS simultaneously, each dialed by the
+	// clients that can use it.
+	if c.advertisedWSAddr != "" {
+		entry.Server.AddressWS = c.advertisedWSAddr
+		log = log.WithField("addr_ws", entry.Server.AddressWS)
 	}
 	// Propagate DHT bootstrap status to discovery entry.
 	entry.Server.DHTBootstrap = c.dhtBootstrap

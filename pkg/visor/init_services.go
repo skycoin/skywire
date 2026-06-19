@@ -819,6 +819,15 @@ func (a *visorAPIAdapter) RoutingRules() ([]routing.Rule, error) {
 	return a.v.RoutingRules()
 }
 
+// AllTransports implements tpviz.VisorAPI. It returns the network-wide
+// all-transports snapshot from the visor's dmsg/CXO-backed transport-discovery
+// feed (with-self, so the local visor's own transports appear in the graph) —
+// no clearnet HTTP. Returns the not-ready error on a CXO cache miss; tpviz
+// surfaces that instead of falling back to a deprecated clearnet TPD.
+func (a *visorAPIAdapter) AllTransports(_ context.Context) ([]byte, error) {
+	return a.v.FetchAllTransportsCXO(true)
+}
+
 // Close implements tpviz.VisorAPI.
 func (a *visorAPIAdapter) Close() error {
 	// Don't actually close the visor - the adapter doesn't own it
