@@ -87,7 +87,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 	// MessageBinary: dmsg frames are raw bytes, not UTF-8 text. context.Background
 	// bounds the conn to its own lifetime (not the HTTP request's), so a read/
-	// write does not get cancelled when net/http thinks the handler is "done".
+	// write does not get canceled when net/http thinks the handler is "done".
 	conn := websocket.NetConn(context.Background(), c, websocket.MessageBinary)
 	defer conn.Close() //nolint:errcheck,gosec
 

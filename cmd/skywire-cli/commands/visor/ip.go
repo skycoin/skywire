@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
@@ -34,7 +34,7 @@ var ipCmd = &cobra.Command{
 		// servers ship in the binary. (Geolocation of that IP is a separate,
 		// trivial follow-up; ip.skycoin.com stays up for the proxy/VPN exit-IP
 		// check, but the CLI no longer depends on it.)
-		sc := network.GetStunDetails(skyenv.GetStunServers(), logger)
+		sc := network.GetStunDetails(deployment.Prod.StunServers, logger)
 		var ip string
 		if sc.PublicIP != nil {
 			ip = sc.PublicIP.IP()
