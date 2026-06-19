@@ -120,6 +120,89 @@ func (_m *MockRouter) IntroduceRules(rules routing.EdgeRules) error {
 	return r0
 }
 
+// DialRoutesDatagram provides a mock function with given fields: ctx, rPK, lPort, rPort, opts
+func (_m *MockRouter) DialRoutesDatagram(ctx context.Context, rPK cipher.PubKey, lPort routing.Port, rPort routing.Port, opts *DialOptions) (net.Conn, *DatagramRouteGroup, error) {
+	ret := _m.Called(ctx, rPK, lPort, rPort, opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DialRoutesDatagram")
+	}
+
+	var r0 net.Conn
+	var r1 *DatagramRouteGroup
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, routing.Port, routing.Port, *DialOptions) (net.Conn, *DatagramRouteGroup, error)); ok {
+		return rf(ctx, rPK, lPort, rPort, opts)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, cipher.PubKey, routing.Port, routing.Port, *DialOptions) net.Conn); ok {
+		r0 = rf(ctx, rPK, lPort, rPort, opts)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(net.Conn)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, cipher.PubKey, routing.Port, routing.Port, *DialOptions) *DatagramRouteGroup); ok {
+		r1 = rf(ctx, rPK, lPort, rPort, opts)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).(*DatagramRouteGroup)
+		}
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, cipher.PubKey, routing.Port, routing.Port, *DialOptions) error); ok {
+		r2 = rf(ctx, rPK, lPort, rPort, opts)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// RegisterDatagramPort provides a mock function with given fields: port
+func (_m *MockRouter) RegisterDatagramPort(port routing.Port) {
+	_m.Called(port)
+}
+
+// UnregisterDatagramPort provides a mock function with given fields: port
+func (_m *MockRouter) UnregisterDatagramPort(port routing.Port) {
+	_m.Called(port)
+}
+
+// AcceptDatagram provides a mock function with given fields: ctx
+func (_m *MockRouter) AcceptDatagram(ctx context.Context) (*DatagramRouteGroup, routing.Port, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AcceptDatagram")
+	}
+
+	var r0 *DatagramRouteGroup
+	var r1 routing.Port
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context) (*DatagramRouteGroup, routing.Port, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) *DatagramRouteGroup); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*DatagramRouteGroup)
+		}
+	}
+	if rf, ok := ret.Get(1).(func(context.Context) routing.Port); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Get(1).(routing.Port)
+	}
+	if rf, ok := ret.Get(2).(func(context.Context) error); ok {
+		r2 = rf(ctx)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
 // PingRoute provides a mock function with given fields: ctx, rPK, lPort, rPort, opts
 func (_m *MockRouter) PingRoute(ctx context.Context, rPK cipher.PubKey, lPort routing.Port, rPort routing.Port, opts *DialOptions) (net.Conn, error) {
 	ret := _m.Called(ctx, rPK, lPort, rPort, opts)
