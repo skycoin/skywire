@@ -267,6 +267,67 @@ func TestGetPairedRoutes_NoRoute(t *testing.T) {
 	}
 }
 
+// A NumRoutes above routesCeiling must be clamped (covers the clamp branch).
+func TestGetPairedRoutes_NumRoutesClamped(t *testing.T) {
+	src, dst := newPK(t), newPK(t)
+	s := newFakeStore()
+	s.saveEntry(src, dst)
+	api := newTestAPI(s)
+
+	rec := postRoutes(t, api, rfclient.FindRoutesRequest{
+		Edges: []routing.PathEdges{{src, dst}},
+		Opts:  &rfclient.RouteOptions{MaxHops: 5, NumRoutes: 65535}, // >> routesCeiling
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// writeJSON must fall back to 500 when the object cannot be marshaled.
+func TestWriteJSON_MarshalError(t *testing.T) {
+	api := newTestAPI(newFakeStore())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+
+	// A channel value is not JSON-marshalable.
+	api.writeJSON(rec, req, http.StatusOK, map[string]any{"bad": make(chan int)})
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", rec.Code)
+	}
+	if rec.Body.Len() != 0 {
+		t.Errorf("expected empty body on marshal failure, got %q", rec.Body.String())
+	}
+}
+
+// failingWriter is an http.ResponseWriter whose Write always errors, exercising
+// writeJSON's write-error logging branch.
+type failingWriter struct {
+	header http.Header
+	code   int
+}
+
+func (f *failingWriter) Header() http.Header {
+	if f.header == nil {
+		f.header = http.Header{}
+	}
+	return f.header
+}
+func (f *failingWriter) Write([]byte) (int, error) { return 0, errors.New("write boom") }
+func (f *failingWriter) WriteHeader(code int)       { f.code = code }
+
+func TestWriteJSON_WriteError(t *testing.T) {
+	api := newTestAPI(newFakeStore())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	fw := &failingWriter{}
+
+	// Marshals fine, but the write fails — handler must not panic.
+	api.writeJSON(fw, req, http.StatusOK, map[string]string{"ok": "yes"})
+	if fw.code != http.StatusOK {
+		t.Fatalf("WriteHeader code = %d, want 200", fw.code)
+	}
+}
+
 // enableMetrics=true exercises the metrics middleware registration branch in New.
 func TestNew_WithMetrics(t *testing.T) {
 	api := New(newFakeStore(), logrus.New(), true, "")
