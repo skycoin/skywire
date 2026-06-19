@@ -65,12 +65,11 @@ func NewEnv() *TestEnv {
 		serviceNames: []string{
 			// Nine deployment-side services (tpd, rf, dmsg-disc,
 			// dmsg-server, sn, sd, ar, tps, stun) collapsed into
-			// /deployment-services in compose; uptime-tracker
-			// stays separate pending its replacement by TPD's
-			// uptime tracking. network-monitor is intentionally
-			// disabled in the production deployment.
+			// /deployment-services in compose. The standalone
+			// uptime-tracker was removed — uptime tracking is now
+			// integrated into the discovery services. network-monitor
+			// is intentionally disabled in the production deployment.
 			"/deployment-services",
-			"/uptime-tracker",
 		},
 		visorNames: []string{
 			"/" + visorA,

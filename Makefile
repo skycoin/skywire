@@ -492,10 +492,13 @@ e2e-run: ## E2E. Start e2e environment and wait for all health checks to pass
 	@# After #2471 the nine deployment-side services (tpd, rf,
 	@# dmsg-disc, dmsg-server, sn, sd, ar, tps, stun) collapse into
 	@# one `deployment-services` container; the previous per-service
-	@# staging is replaced by one wait on the supervisor.
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait dmsgd-redis ar-redis sd-redis tpd-redis ut-redis postgres-db"
+	@# staging is replaced by one wait on the supervisor. The five
+	@# per-service redis containers are now a single `redis` (each
+	@# service uses its own logical DB), and the deprecated
+	@# uptime-tracker + its postgres are gone (uptime is integrated
+	@# into the discovery services).
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait redis"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait deployment-services"
-	bash -c "DOCKER_TAG=e2e docker compose up -d uptime-tracker"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b"
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c"
 	bash -c "DOCKER_TAG=e2e docker compose ps"
