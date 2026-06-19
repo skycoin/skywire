@@ -58,11 +58,25 @@ func (r *router) sweepClosedRouteGroups() {
 	for desc, nrg := range r.rgsNs {
 		if nrg == nil || nrg.isClosed() {
 			delete(r.rgsNs, desc)
+			// Couple the faithful-UDP sibling's lifetime to the reliable
+			// route (#2607): when the reliable group is reaped, reap its
+			// datagram sibling too. dg.Close is independent of r.mx.
+			if dg := r.rgsDatagrams[desc]; dg != nil {
+				delete(r.rgsDatagrams, desc)
+				dg.Close() //nolint:errcheck,gosec // idempotent, always returns nil
+			}
 		}
 	}
 	for desc, rg := range r.rgsRaw {
 		if rg == nil || rg.isClosed() {
 			delete(r.rgsRaw, desc)
+		}
+	}
+	// Defensive: drop any datagram sibling that closed itself
+	// (e.g. consecutive write failures tripped its IsAlive threshold).
+	for desc, dg := range r.rgsDatagrams {
+		if dg == nil || dg.isClosed() {
+			delete(r.rgsDatagrams, desc)
 		}
 	}
 }
@@ -84,6 +98,10 @@ func (r *router) removeRouteGroupOfRule(rule routing.Rule) {
 	rDesc := rule.RouteDescriptor()
 	log.WithField("rt_desc", rDesc.String()).
 		Debug("Closing route group associated with rule...")
+
+	// Reap the faithful-UDP sibling (if any) with the reliable route (#2607);
+	// fires on every return path below. No-op when no sibling exists.
+	defer r.closeDatagramSibling(rDesc)
 
 	// First try noise-wrapped route groups (fully initialized)
 	nrg, ok := r.popNoiseRouteGroup(rDesc)

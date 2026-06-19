@@ -154,6 +154,15 @@ type DialOptions struct {
 	ReverseHops           []routing.Hop // If set, use these hops for reverse path (skips route calculation)
 	MuxRoutes             int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
 	ExcludeTransportIDs   []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
+	// Datagram, when true, asks the dial to build a faithful-UDP
+	// DatagramRouteGroup sibling over the established route (#2607).
+	// The route's reliable RouteGroup is still set up exactly as
+	// usual (and is what carries the one-time Noise handshake whose
+	// ChannelBinding keys the datagram AEAD); the datagram sibling is
+	// built alongside it once the handshake completes. The accept
+	// side opts in independently via RegisterDatagramPort — both ends
+	// must locally intend datagram mode for it to work.
+	Datagram bool
 	// MinHops, when > 0, is the per-call minimum hop count constraint.
 	// Overrides Config.MinHops for this dial only — needed by callers
 	// that want a non-direct path even when the visor's global
@@ -411,6 +420,7 @@ type router struct {
 	rgsNs              map[routing.RouteDescriptor]*NoiseRouteGroup    // Noise-wrapped route groups to push incoming reads from transports.
 	rgsRaw             map[routing.RouteDescriptor]*RouteGroup         // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
 	rgsDatagrams       map[routing.RouteDescriptor]*DatagramRouteGroup // faithful-UDP (DatagramPacket) route groups, keyed like rgsNs; #2607 stage-4 dispatch
+	datagramPorts      map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
 	pending            *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)
 	rpcSrv             *rpc.Server
 	accept             chan routing.EdgeRules
@@ -492,6 +502,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		rgsNs:           make(map[routing.RouteDescriptor]*NoiseRouteGroup),
 		rgsRaw:          make(map[routing.RouteDescriptor]*RouteGroup),
 		rgsDatagrams:    make(map[routing.RouteDescriptor]*DatagramRouteGroup),
+		datagramPorts:   make(map[routing.Port]struct{}),
 		pending:         newPendingPackets(),
 		rpcSrv:          rpc.NewServer(),
 		accept:          make(chan routing.EdgeRules, acceptSize),
