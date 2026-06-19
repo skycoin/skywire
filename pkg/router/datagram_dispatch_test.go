@@ -25,9 +25,12 @@ import (
 // transport manager and is covered separately.
 func newDispatchTestRouter() *router {
 	return &router{
-		logger:       logging.MustGetLogger("test_dg_dispatch"),
-		rt:           routing.NewTable(logging.MustGetLogger("test_dg_rt")),
-		rgsDatagrams: make(map[routing.RouteDescriptor]*DatagramRouteGroup),
+		logger:         logging.MustGetLogger("test_dg_dispatch"),
+		rt:             routing.NewTable(logging.MustGetLogger("test_dg_rt")),
+		rgsDatagrams:   make(map[routing.RouteDescriptor]*DatagramRouteGroup),
+		datagramPorts:  make(map[routing.Port]struct{}),
+		acceptDatagram: make(chan datagramAccept, acceptDatagramBuf),
+		done:           make(chan struct{}),
 	}
 }
 

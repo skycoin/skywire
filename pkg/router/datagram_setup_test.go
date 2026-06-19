@@ -110,7 +110,6 @@ type fakeNoBinderConn struct{ net.Conn }
 // TestDatagramPortRegistry covers the accept-side intent registry.
 func TestDatagramPortRegistry(t *testing.T) {
 	r := newDispatchTestRouter()
-	r.datagramPorts = make(map[routing.Port]struct{})
 
 	assert.False(t, r.isDatagramPort(80))
 	r.RegisterDatagramPort(80)
@@ -118,4 +117,39 @@ func TestDatagramPortRegistry(t *testing.T) {
 	assert.False(t, r.isDatagramPort(81))
 	r.UnregisterDatagramPort(80)
 	assert.False(t, r.isDatagramPort(80))
+}
+
+// TestBuildDatagramSiblingAcceptSideOffers verifies that an accept-side
+// sibling (Initiator=false) is handed to AcceptDatagram with the right
+// local port, while a dial-side sibling (Initiator=true) is NOT offered
+// (the dialer keeps it via DialRoutesDatagram).
+func TestBuildDatagramSiblingAcceptSideOffers(t *testing.T) {
+	r := newDispatchTestRouter()
+
+	localPK, localSK := cipher.GenerateKeyPair()
+	remotePK, _ := cipher.GenerateKeyPair()
+	binding := []byte("session-binding-for-accept-offer")
+
+	// Accept side: dst port 7777 is the local serving port.
+	consume := routing.ConsumeRule(time.Hour, routing.RouteID(3), localPK, remotePK, 1234, 7777)
+	desc := consume.RouteDescriptor()
+	acceptConf := noise.Config{LocalPK: localPK, LocalSK: localSK, RemotePK: remotePK, Initiator: false}
+	rules := routing.EdgeRules{Desc: desc, Forward: consume, Reverse: consume}
+	r.buildDatagramSibling(rules, acceptConf, fakeBinderConn{cb: binding}, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	dg, dstPort, err := r.AcceptDatagram(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, dg)
+	assert.Equal(t, routing.Port(7777), dstPort, "accept must surface the local serving port")
+
+	// Dial side: same shape but Initiator=true must NOT offer.
+	dialConf := noise.Config{LocalPK: localPK, LocalSK: localSK, RemotePK: remotePK, Initiator: true}
+	r.buildDatagramSibling(rules, dialConf, fakeBinderConn{cb: binding}, nil)
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel2()
+	_, _, err = r.AcceptDatagram(ctx2)
+	assert.ErrorIs(t, err, context.DeadlineExceeded, "dial-side sibling must not be offered to AcceptDatagram")
 }
