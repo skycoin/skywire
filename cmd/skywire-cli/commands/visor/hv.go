@@ -26,6 +26,10 @@ var (
 func init() {
 	RootCmd.AddCommand(hvCmd)
 	hvCmd.AddCommand(hvuiCmd)
+	hvuiCmd.AddCommand(hvUIEnableCmd)
+	hvUIEnableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
+	hvuiCmd.AddCommand(hvUIDisableCmd)
+	hvUIDisableCmd.Flags().BoolVarP(&hvPersist, "persist", "w", false, "write change to config file")
 	hvCmd.AddCommand(hvpkCmd)
 	hvpkCmd.Flags().StringVarP(&path, "input", "i", "", "path of input config file.")
 	hvpkCmd.Flags().BoolVarP(&pkg, "pkg", "p", false, "read from /opt/skywire/skywire.json")
@@ -136,10 +140,50 @@ func HypervisorPort(cmdFlags *pflag.FlagSet) string {
 	return fmt.Sprintf(":%s", ports["hypervisor"])
 }
 
+var hvUIEnableCmd = &cobra.Command{
+	Use:   "enable",
+	Short: "Start the hypervisor web UI (leaves DMSG-RPC + hv ls running)",
+	Long:  "Start ONLY the hypervisor web UI. The DMSG-RPC listener, managed-visor tracking, and `hv ls` are unaffected. Requires the hypervisor to be enabled.\nUse -w to also persist the change to the config file.",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		if err := rpcClient.EnableHypervisorUIPersist(hvPersist); err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		if hvPersist {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI enabled (persisted to config)\n", "Hypervisor web UI enabled (persisted to config)\n")
+		} else {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI enabled\n", "Hypervisor web UI enabled\n")
+		}
+	},
+}
+
+var hvUIDisableCmd = &cobra.Command{
+	Use:   "disable",
+	Short: "Stop the hypervisor web UI (keeps DMSG-RPC + hv ls running)",
+	Long:  "Stop ONLY the hypervisor web UI (the HTTP server). The DMSG-RPC listener, managed-visor tracking, and `hv ls` over the visor RPC keep working — useful to shrink the public attack surface while retaining CLI access to connected visors.\nUse -w to also persist the change to the config file.",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		if err := rpcClient.DisableHypervisorUIPersist(hvPersist); err != nil {
+			internal.PrintFatalRPCError(cmd.Flags(), err)
+		}
+		if hvPersist {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI disabled (persisted to config)\n", "Hypervisor web UI disabled (persisted to config)\n")
+		} else {
+			internal.PrintOutput(cmd.Flags(), "Hypervisor web UI disabled\n", "Hypervisor web UI disabled\n")
+		}
+	},
+}
+
 var hvEnableCmd = &cobra.Command{
 	Use:   "enable",
-	Short: "Enable hypervisor UI at runtime",
-	Long:  "Enable hypervisor UI at runtime.\nUse -w to also persist the change to the config file.",
+	Short: "Enable the hypervisor (DMSG-RPC + tracking + web UI) at runtime",
+	Long:  "Enable the hypervisor — DMSG-RPC listener, managed-visor tracking, and the web UI (unless ui_disable is set). Use `hv ui enable/disable` to toggle just the web UI.\nUse -w to also persist the change to the config file.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
@@ -158,8 +202,8 @@ var hvEnableCmd = &cobra.Command{
 
 var hvDisableCmd = &cobra.Command{
 	Use:   "disable",
-	Short: "Disable hypervisor UI at runtime",
-	Long:  "Disable hypervisor UI at runtime.\nUse -w to also persist the change to the config file.",
+	Short: "Disable the hypervisor entirely (DMSG-RPC + tracking + web UI) at runtime",
+	Long:  "Disable the whole hypervisor — stops the DMSG-RPC listener, disconnects managed visors, and stops the web UI (so `hv ls` no longer works). To stop ONLY the web UI while keeping CLI access, use `hv ui disable`.\nUse -w to also persist the change to the config file.",
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {

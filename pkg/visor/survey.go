@@ -81,7 +81,11 @@ func GenerateSurvey(v *Visor, log *logging.Logger, routine bool) {
 		survey.ServicesURLs.RouteFinder = v.conf.Routing.RouteFinder
 		survey.ServicesURLs.RouteSetupNodes = v.conf.EffectiveRouteSetupNodes()
 		survey.ServicesURLs.TransportSetupPKs = v.conf.EffectiveTransportSetupPKs()
-		survey.ServicesURLs.UptimeTracker = v.conf.UptimeTracker.Addr
+		// uptime_tracker is deprecated and absent from generated configs, so it
+		// may be nil — guard the deref.
+		if v.conf.UptimeTracker != nil {
+			survey.ServicesURLs.UptimeTracker = v.conf.UptimeTracker.Addr
+		}
 		survey.ServicesURLs.ServiceDiscovery = v.conf.Launcher.ServiceDisc
 		survey.ServicesURLs.SurveyWhitelist = v.conf.EffectiveSurveyWhitelist()
 		survey.ServicesURLs.StunServers = v.conf.StunServers

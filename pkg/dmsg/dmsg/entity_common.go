@@ -57,6 +57,10 @@ type EntityCommon struct {
 
 	updateInterval time.Duration // Minimum duration between discovery entry updates.
 
+	// noListenerHits records inbound stream requests to ports this client has
+	// no listener on (dmsg error 306). Bounded; surfaced via NoListenerHits.
+	noListenerHits *portHitTracker
+
 	log  logrus.FieldLogger
 	mlog *logging.MasterLogger
 
@@ -119,7 +123,20 @@ func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClien
 	c.sessionsMx = new(sync.Mutex)
 	c.updateInterval = updateInterval
 	c.entryNudge = make(chan struct{}, 1)
+	c.noListenerHits = newPortHitTracker(defaultPortHitCap)
 	c.log = log
+}
+
+// NoListenerHits returns a snapshot of inbound stream requests this client
+// rejected because no listener was bound on the destination port (dmsg error
+// 306), keyed by (source PK, destination port), most-recent first.
+func (c *EntityCommon) NoListenerHits() []PortHit {
+	return c.noListenerHits.snapshot()
+}
+
+// recordNoListenerHit notes one no-listener inbound request. Nil-safe.
+func (c *EntityCommon) recordNoListenerHit(srcPK cipher.PubKey, dstPort uint16) {
+	c.noListenerHits.record(srcPK, dstPort)
 }
 
 // addDiscovery appends an additional dmsg-discovery to register with.

@@ -321,6 +321,12 @@ func (cs *ClientSession) serve() error {
 			// listener-miss diagnostics show the originator PK and
 			// the destination port. Fields default to zero values when
 			// the failure happens before prepareFields runs.
+			//
+			// Track no-listener hits (someone tried to reach a port we
+			// aren't serving) so they can be surfaced via NoListenerHits.
+			if errors.Is(err, ErrReqNoListener) {
+				cs.entity.recordNoListenerHit(dStr.rAddr.PK, dStr.lAddr.Port)
+			}
 			cs.log.WithError(err).
 				WithField("src_pk", dStr.rAddr.PK).
 				WithField("src_port", dStr.rAddr.Port).

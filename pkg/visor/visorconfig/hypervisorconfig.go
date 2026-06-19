@@ -55,7 +55,12 @@ func (hk *Key) UnmarshalText(text []byte) error {
 
 // HypervisorConfig configures the hypervisor.
 type HypervisorConfig struct {
-	Enable     bool          `json:"enable"` // Whether the hypervisor is enabled (starts HTTP + DMSG on visor startup).
+	Enable bool `json:"enable"` // Whether the hypervisor is enabled (starts DMSG RPC + tracking + web UI on visor startup).
+	// UIDisable, when true, suppresses ONLY the web UI (HTTP) server while the
+	// hypervisor's DMSG-RPC listener + managed-visor tracking (and `hv ls` over
+	// the visor RPC) stay active. Toggled at runtime with `hv ui enable/disable`.
+	// Default false (UI served) — backward-compatible with configs that omit it.
+	UIDisable  bool          `json:"ui_disable,omitempty"`
 	UIAssets   fs.FS         `json:"-"`
 	PK         cipher.PubKey `json:"-"`
 	SK         cipher.SecKey `json:"-"`
