@@ -282,7 +282,12 @@ func (dg *DatagramRouteGroup) WriteTo(data []byte, addr net.Addr) (int, error) {
 	default:
 	}
 
-	if err := tp.WritePacket(ctx, packet); err != nil {
+	// Prefer the transport's native datagram channel (QUIC RFC 9221) so the
+	// datagram rides the wire with real UDP semantics — no head-of-line
+	// blocking, genuine loss tolerance. WriteDatagram falls back to the
+	// reliable stream when the transport has no datagram channel (stcp/sudph/
+	// dmsg) or the datagram is too large, so this is always correct.
+	if err := tp.WriteDatagram(ctx, packet); err != nil {
 		atomic.AddInt32(&dg.consecutiveWriteFailures, 1)
 		return 0, err
 	}
