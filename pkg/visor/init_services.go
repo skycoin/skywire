@@ -69,48 +69,72 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 		return nil
 	}
 
-	httpC, err := getHTTPClient(ctx, v, utURL)
-	if err != nil {
-		return err
+	// Connect to the uptime tracker IN THE BACKGROUND. utclient.NewHTTP runs a
+	// blocking auth handshake with infinite exponential-backoff retry, so a
+	// synchronous connect here hangs initUptimeTracker forever whenever the UT
+	// service is unreachable (e.g. it is being deprecated/torn down — "dmsg
+	// error 202 - cannot connect to delegated server"). That stalls the whole
+	// `visor` module from completing, which blocks every module that depends on
+	// it — most visibly the hypervisor, whose HTTP + DMSG-RPC servers then never
+	// start and managed visors fail to connect ("306 - no associated listener").
+	// UT is non-critical (transport re-registration also records uptime), so it
+	// must never gate startup. Use the visor's long-lived ctx, not the init ctx.
+	bgCtx := v.ctx
+	if bgCtx == nil {
+		bgCtx = context.Background()
 	}
-
-	pIP, err := getPublicIP(v, utURL)
-	if err != nil {
-		return err
-	}
-
-	ut, err := utclient.NewHTTP(utURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
-	if err != nil {
-		v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
-		return nil
-	}
-
-	// Also create a heartbeat client for the TPD so visors without
-	// transports still report uptime. The TPD's /v4/update endpoint
-	// uses the same auth + protocol as the uptime tracker.
-	var tpdUT utclient.APIClient
-	tpdURL := v.conf.Transport.Discovery
-	if tpdURL == "" && v.conf.Transport.DiscoveryDmsg != "" {
-		tpdURL = v.conf.Transport.DiscoveryDmsg
-	}
-	if tpdURL != "" {
-		tpdHTTP, err := getHTTPClient(ctx, v, tpdURL)
+	go func() { //nolint:gosec,contextcheck
+		httpC, err := getHTTPClient(bgCtx, v, utURL)
 		if err != nil {
-			log.WithError(err).Warn("Failed to create TPD heartbeat client")
-		} else {
-			tpdPIP, _ := getPublicIP(v, tpdURL) //nolint:errcheck
-			tpdClient, err := utclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, tpdHTTP, tpdPIP, v.MasterLogger())
+			v.log.WithError(err).Warn("uptime tracker: failed to build http client")
+			return
+		}
+
+		pIP, err := getPublicIP(v, utURL)
+		if err != nil {
+			v.log.WithError(err).Warn("uptime tracker: failed to resolve public IP")
+			return
+		}
+
+		ut, err := utclient.NewHTTP(utURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+		if err != nil {
+			v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
+			return
+		}
+
+		// Also create a heartbeat client for the TPD so visors without
+		// transports still report uptime. The TPD's /v4/update endpoint
+		// uses the same auth + protocol as the uptime tracker.
+		var tpdUT utclient.APIClient
+		tpdURL := v.conf.Transport.Discovery
+		if tpdURL == "" && v.conf.Transport.DiscoveryDmsg != "" {
+			tpdURL = v.conf.Transport.DiscoveryDmsg
+		}
+		if tpdURL != "" {
+			tpdHTTP, err := getHTTPClient(bgCtx, v, tpdURL)
 			if err != nil {
-				log.WithError(err).Warn("Failed to connect to TPD for heartbeat")
+				log.WithError(err).Warn("Failed to create TPD heartbeat client")
 			} else {
-				tpdUT = tpdClient
+				tpdPIP, _ := getPublicIP(v, tpdURL) //nolint:errcheck
+				tpdClient, err := utclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, tpdHTTP, tpdPIP, v.MasterLogger())
+				if err != nil {
+					log.WithError(err).Warn("Failed to connect to TPD for heartbeat")
+				} else {
+					tpdUT = tpdClient
+				}
 			}
 		}
-	}
 
-	ticker := time.NewTicker(tickDuration)
+		ticker := time.NewTicker(tickDuration)
+		v.pushCloseStack("uptime_tracker", func() error {
+			ticker.Stop()
+			return nil
+		})
 
-	go func() { //nolint:gosec
+		v.initLock.Lock()
+		v.uptimeTracker = ut
+		v.initLock.Unlock()
+
 		for range ticker.C {
 			c := context.Background()
 			if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
@@ -131,15 +155,6 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 			}
 		}
 	}()
-
-	v.pushCloseStack("uptime_tracker", func() error {
-		ticker.Stop()
-		return nil
-	})
-
-	v.initLock.Lock()
-	v.uptimeTracker = ut
-	v.initLock.Unlock()
 
 	return nil
 }
