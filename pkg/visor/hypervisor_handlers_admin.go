@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -154,69 +155,44 @@ func (hv *Hypervisor) proxyRewardSystem() http.HandlerFunc {
 			return
 		}
 
-		// Read from visor config (configurable), fall back to deployment defaults
+		// Reward system is reached over dmsg only — plain HTTP to deployment
+		// services is no longer supported. The dmsg URL may live in either config
+		// field (the dmsg-only default stores it in the "http" field).
 		rewardDmsg := ""
-		rewardHTTP := ""
 		if hv.visor != nil && hv.visor.conf != nil {
 			rewardDmsg = hv.visor.conf.RewardSystemDmsg
-			rewardHTTP = hv.visor.conf.RewardSystem
+			if !strings.HasPrefix(rewardDmsg, "dmsg://") {
+				rewardDmsg = hv.visor.conf.RewardSystem
+			}
 		}
-		if rewardDmsg == "" {
+		if !strings.HasPrefix(rewardDmsg, "dmsg://") {
 			rewardDmsg = deployment.Prod.RewardSystemDmsg
 		}
-		if rewardHTTP == "" {
-			rewardHTTP = deployment.Prod.RewardSystem
-		}
 		log := hv.visor.MasterLogger().PackageLogger("reward_proxy")
-		var fetchErr error
 
-		// Try DMSG first via the visor's DmsgHTTP
-		if rewardDmsg != "" && hv.visor != nil {
-			dmsgURL := rewardDmsg + "/" + path
-			log.Debugf("Fetching reward data via DMSG: %s", dmsgURL)
-			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
-				URL:    dmsgURL,
-				Method: "GET",
-			})
-			if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-				log.Debugf("DMSG fetch succeeded: %d bytes, status %d", len(resp.Body), resp.StatusCode)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(resp.StatusCode)
-				w.Write(resp.Body) //nolint:errcheck,gosec
-				return
-			}
-			if err != nil {
-				log.WithError(err).Warn("DMSG fetch failed, falling back to HTTP")
-				fetchErr = err
-			} else {
-				log.Warnf("DMSG fetch returned non-success status: %d", resp.StatusCode)
-			}
+		if !strings.HasPrefix(rewardDmsg, "dmsg://") || hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, "no reward system dmsg URL configured")
+			return
 		}
-
-		// Fall back to plain HTTP
-		if rewardHTTP != "" {
-			httpURL := rewardHTTP + "/" + path
-			log.Debugf("Fetching reward data via HTTP: %s", httpURL)
-			client := &http.Client{Timeout: 15 * time.Second}
-			resp, err := client.Get(httpURL) //nolint:gosec
-			if err == nil {
-				defer resp.Body.Close()          //nolint:errcheck
-				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-				log.Debugf("HTTP fetch succeeded: %d bytes, status %d", len(body), resp.StatusCode)
-				w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-				w.WriteHeader(resp.StatusCode)
-				w.Write(body) //nolint:errcheck,gosec
-				return
-			}
-			log.WithError(err).Warn("HTTP fetch also failed")
-			fetchErr = err
+		dmsgURL := rewardDmsg + "/" + path
+		log.Debugf("Fetching reward data via DMSG: %s", dmsgURL)
+		resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
+			URL:    dmsgURL,
+			Method: "GET",
+		})
+		if err == nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(resp.StatusCode)
+			w.Write(resp.Body) //nolint:errcheck,gosec
+			return
 		}
-
-		if fetchErr != nil {
-			httputil.WriteJSON(w, r, http.StatusBadGateway, fmt.Errorf("reward system unreachable: %w", fetchErr))
-		} else {
-			httputil.WriteJSON(w, r, http.StatusServiceUnavailable, "no reward system URL configured")
+		if err != nil {
+			log.WithError(err).Warn("reward system DMSG fetch failed")
+			httputil.WriteJSON(w, r, http.StatusBadGateway, fmt.Errorf("reward system unreachable over dmsg: %w", err))
+			return
 		}
+		log.Warnf("reward system DMSG fetch returned status %d", resp.StatusCode)
+		httputil.WriteJSON(w, r, http.StatusBadGateway, "reward system returned non-success over dmsg")
 	}
 }
 

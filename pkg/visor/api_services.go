@@ -74,44 +74,36 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 		}{"Uptime Tracker", svcURLs{v.conf.UptimeTracker.Addr, v.conf.UptimeTracker.AddrDmsg}})
 	}
 
-	// Use the visor's direct DMSG HTTP client first (v.dmsgHTTP). It
-	// connects through a direct client with pre-loaded entries for all
-	// deployment services — no discovery lookup needed. Falls back to
-	// HTTP if the direct client isn't ready or the probe fails.
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	// Probe every service over dmsg only — plain HTTP to deployment services is
+	// no longer supported. v.dmsgHTTP connects through a direct client with
+	// pre-loaded entries for all deployment services (no discovery lookup). The
+	// dmsg URL may live in either field: the dmsg-only default config stores it
+	// in the "http" field (e.g. service_discovery = "dmsg://..."), legacy dual
+	// configs use the *_dmsg field — pick whichever holds the dmsg:// URL.
 	var dmsgClient *http.Client
 	select {
 	case <-v.dmsgHTTPReady:
 		dmsgClient = v.dmsgHTTP
 	default:
-		// Not ready yet; will use HTTP only.
+		// Not ready yet; services report N/A this poll.
 	}
 
 	httpResults := make([]ServiceHealthEntry, len(httpServices))
 	var wg sync.WaitGroup
 	for i, svc := range httpServices {
-		if svc.urls.httpURL == "" && svc.urls.dmsgURL == "" {
+		dmsgURL := svc.urls.dmsgURL
+		if !strings.HasPrefix(dmsgURL, "dmsg://") {
+			dmsgURL = svc.urls.httpURL
+		}
+		if !strings.HasPrefix(dmsgURL, "dmsg://") || dmsgClient == nil {
 			httpResults[i] = ServiceHealthEntry{Name: svc.name, Status: "N/A"}
 			continue
 		}
 		wg.Add(1)
-		go func(i int, name string, urls svcURLs) {
+		go func(i int, name, url string) {
 			defer wg.Done()
-			// Try DMSG first if a dmsg URL is configured.
-			if urls.dmsgURL != "" && dmsgClient != nil {
-				entry := doHealthProbe(dmsgClient, name, urls.dmsgURL, "dmsg")
-				if entry.Status == "OK" {
-					httpResults[i] = entry
-					return
-				}
-			}
-			// Fall back to HTTP.
-			if urls.httpURL != "" {
-				httpResults[i] = doHealthProbe(httpClient, name, urls.httpURL, "http")
-				return
-			}
-			httpResults[i] = ServiceHealthEntry{Name: name, Status: "N/A"}
-		}(i, svc.name, svc.urls)
+			httpResults[i] = doHealthProbe(dmsgClient, name, url, "dmsg")
+		}(i, svc.name, dmsgURL)
 	}
 	wg.Wait()
 
