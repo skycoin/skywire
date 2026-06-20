@@ -115,6 +115,9 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	network := "tcp"
 	dialAddr := entry.Server.Address
 	switch {
+	case ce.conf.PreferWT && entry.Server.AddressWT != "":
+		network = "wt"
+		dialAddr = entry.Server.AddressWT
 	case ce.conf.PreferWS && entry.Server.AddressWS != "":
 		network = "ws"
 		dialAddr = entry.Server.AddressWS
@@ -135,6 +138,21 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		}
 	}()
 
+	if network == "wt" {
+		if dSes, err = ce.dialSessionWT(ctx, entry); err != nil {
+			// WT dial failed. Fall back to the server's TCP endpoint when there is
+			// one (native tooling on a network that also permits TCP). A browser
+			// WT client has no TCP fallback, but it doesn't take this native path.
+			if entry.Server.Address == "" {
+				return ClientSession{}, err
+			}
+			ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to TCP", entry.Static)
+			network = "tcp"
+			dialAddr = entry.Server.Address
+		} else {
+			ce.log.Infof("wt stream session initial for %s", dSes.RemotePK().String())
+		}
+	}
 	if network == "ws" {
 		if dSes, err = ce.dialSessionWS(ctx, entry); err != nil {
 			// WS dial failed. Fall back to the server's TCP endpoint when there
