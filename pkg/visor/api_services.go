@@ -268,26 +268,21 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 // serviceHop is one transport attempt for a service fetch: a base URL and
 // whether it is reached over DMSG-HTTP or plain HTTP.
 type serviceHop struct {
-	dmsg    bool
 	baseURL string
 }
 
-// serviceFetchOrder encodes the transport preference for fetching service
-// data. DMSG-HTTP is the default service transport, so it is used first
-// whenever a dmsg URL is configured; plain HTTP is the fallback in a dual
-// (http + dmsg) config, or the sole path in an http-only config. Order:
-//
-//	dual    (http + dmsg) -> [dmsg, http]
-//	dmsg-only            -> [dmsg]
-//	http-only            -> [http]
-//	neither              -> []
+// serviceFetchOrder returns the dmsg endpoints to fetch service data from.
+// Deployment services are dmsg-only: plain HTTP is no longer supported, so only
+// dmsg:// URLs are used and clearnet URLs are ignored. The dmsg URL may live in
+// either argument — the dmsg-only default config stores it in the "http" field
+// (e.g. service_discovery = "dmsg://..."), legacy dual configs use the *_dmsg
+// field — so both are checked and any dmsg:// one is taken.
 func serviceFetchOrder(httpURL, dmsgURL string) []serviceHop {
 	var order []serviceHop
-	if dmsgURL != "" {
-		order = append(order, serviceHop{dmsg: true, baseURL: dmsgURL})
-	}
-	if httpURL != "" {
-		order = append(order, serviceHop{dmsg: false, baseURL: httpURL})
+	for _, u := range []string{dmsgURL, httpURL} {
+		if strings.HasPrefix(u, "dmsg://") {
+			order = append(order, serviceHop{baseURL: u})
+		}
 	}
 	return order
 }
@@ -328,15 +323,7 @@ func (v *Visor) FetchServiceData(service, path string) ([]byte, error) {
 	var lastErr error
 	for _, hop := range order {
 		url := strings.TrimSuffix(hop.baseURL, "/") + path
-		var (
-			body []byte
-			err  error
-		)
-		if hop.dmsg {
-			body, err = v.fetchServiceDataDmsg(url)
-		} else {
-			body, err = fetchServiceDataHTTP(url)
-		}
+		body, err := v.fetchServiceDataDmsg(url)
 		if err == nil {
 			return body, nil
 		}
@@ -358,28 +345,21 @@ func (v *Visor) fetchServiceDataDmsg(url string) ([]byte, error) {
 	return resp.Body, nil
 }
 
-// fetchServiceDataHTTP performs a plain HTTP GET.
-func fetchServiceDataHTTP(url string) ([]byte, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	resp, err := client.Get(url) //nolint:gosec
+// servicesFromDmsg queries service discovery for service entries matching the
+// given type over dmsg (the CXO snapshot is the primary path; this is the
+// dmsg-HTTP fallback). Deployment services are dmsg-only — no plain HTTP.
+func (v *Visor) servicesFromDmsg(serviceType, version, country string) ([]servicedisc.Service, error) {
+	sdURL := v.conf.Launcher.ServiceDiscDmsg
+	if sdURL == "" {
+		sdURL = v.conf.Launcher.ServiceDisc
+	}
+	if !strings.HasPrefix(sdURL, "dmsg://") {
+		return nil, fmt.Errorf("service discovery is not a dmsg:// URL")
+	}
+	httpC, err := getHTTPClient(context.Background(), v, sdURL)
 	if err != nil {
-		return nil, fmt.Errorf("fetch %s: %w", url, err)
+		return nil, err
 	}
-	defer resp.Body.Close() //nolint:errcheck,gosec
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("service returned %d: %s", resp.StatusCode, string(body))
-	}
-	return body, nil
-}
-
-// servicesFromHTTP queries service discovery for service entries
-// matching the given type, with optional version + country filters.
-func (v *Visor) servicesFromHTTP(serviceType, version, country string) ([]servicedisc.Service, error) {
 	log := logging.MustGetLogger("servicedisc")
 	vLog := logging.NewMasterLogger()
 	vLog.SetLevel(logrus.InfoLevel)
@@ -387,9 +367,9 @@ func (v *Visor) servicesFromHTTP(serviceType, version, country string) ([]servic
 		Type:          serviceType,
 		PK:            v.conf.PK,
 		SK:            v.conf.SK,
-		DiscAddr:      v.conf.Launcher.ServiceDisc,
+		DiscAddr:      sdURL,
 		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
-	}, &http.Client{Timeout: 20 * time.Second}, "")
+	}, httpC, "")
 	return sdClient.Services(context.Background(), 0, version, country)
 }
 
@@ -397,7 +377,7 @@ func (v *Visor) servicesFromHTTP(serviceType, version, country string) ([]servic
 // services/<serviceType>/<pk>/entry and rebuilds a []Service
 // honoring optional version + country filters. Returns ok=false when
 // the manager isn't installed, the snapshot is empty, or every leaf
-// failed to parse — caller falls through to servicesFromHTTP.
+// failed to parse — caller falls through to servicesFromDmsg.
 func (v *Visor) servicesFromCXO(serviceType, version, country string) ([]servicedisc.Service, bool) {
 	mgr := v.CXOSubMgr()
 	if mgr == nil {
@@ -439,7 +419,7 @@ func (v *Visor) VPNServers(version, country string) ([]servicedisc.Service, erro
 	if services, ok := v.servicesFromCXO(servicedisc.ServiceTypeVPN, version, country); ok {
 		return services, nil
 	}
-	return v.servicesFromHTTP(servicedisc.ServiceTypeVPN, version, country)
+	return v.servicesFromDmsg(servicedisc.ServiceTypeVPN, version, country)
 }
 
 // ProxyServers gets available proxy servers — CXO snapshot first,
@@ -448,7 +428,7 @@ func (v *Visor) ProxyServers(version, country string) ([]servicedisc.Service, er
 	if services, ok := v.servicesFromCXO(servicedisc.ServiceTypeProxy, version, country); ok {
 		return services, nil
 	}
-	return v.servicesFromHTTP(servicedisc.ServiceTypeProxy, version, country)
+	return v.servicesFromDmsg(servicedisc.ServiceTypeProxy, version, country)
 }
 
 // PublicVisors gets available public visors — CXO snapshot first,
@@ -457,7 +437,7 @@ func (v *Visor) PublicVisors(version, country string) ([]servicedisc.Service, er
 	if services, ok := v.servicesFromCXO(servicedisc.ServiceTypeVisor, version, country); ok {
 		return services, nil
 	}
-	return v.servicesFromHTTP(servicedisc.ServiceTypeVisor, version, country)
+	return v.servicesFromDmsg(servicedisc.ServiceTypeVisor, version, country)
 }
 
 // DeregisterService deregisters the specified public keys from service discovery.
