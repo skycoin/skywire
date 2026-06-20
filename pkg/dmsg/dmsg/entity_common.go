@@ -3,6 +3,7 @@ package dmsg
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -70,6 +71,15 @@ type EntityCommon struct {
 	// runs the same Noise+yamux stack as TCP. Empty for clients and servers
 	// without a WS listener.
 	advertisedWSAddr string
+
+	// advertisedWTAddr / advertisedWTCertHash are the WebTransport (HTTP/3)
+	// endpoint a server also listens on, set by Server.ServeWebTransport. When
+	// non-empty, the discovery entry carries Server.AddressWT + CertHashWT (the
+	// SHA-256 of the server's self-signed WT cert, hex) so a browser can dial by
+	// bare IP with no CA — it pins CertHashWT in its WebTransport
+	// serverCertificateHashes. Empty for clients and non-WT servers.
+	advertisedWTAddr     string
+	advertisedWTCertHash [32]byte
 
 	// noListenerHits records inbound stream requests to ports this client has
 	// no listener on (dmsg error 306). Bounded; surfaced via NoListenerHits.
@@ -480,9 +490,14 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	addrV6Delta := entry.Server.AddressV6 != addrV6
 	udpDelta := entry.Server.AddressUDP != c.advertisedUDPAddr
 	wsDelta := entry.Server.AddressWS != c.advertisedWSAddr
+	wtCertHashHex := ""
+	if c.advertisedWTAddr != "" {
+		wtCertHashHex = hex.EncodeToString(c.advertisedWTCertHash[:])
+	}
+	wtDelta := entry.Server.AddressWT != c.advertisedWTAddr || entry.Server.CertHashWT != wtCertHashHex
 
 	// No update needed if entry has no delta AND update is not due.
-	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !due {
+	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !wtDelta && !due {
 		return nil
 	}
 
@@ -515,6 +530,15 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	if c.advertisedWSAddr != "" {
 		entry.Server.AddressWS = c.advertisedWSAddr
 		log = log.WithField("addr_ws", entry.Server.AddressWS)
+	}
+	// Advertise the WebTransport endpoint + its cert hash when the server runs a
+	// WT listener (dmsg-over-WebTransport). Like WS this does NOT touch Protocol —
+	// it carries the same Noise+yamux stack. The cert hash lets a browser pin a
+	// CA-free self-signed cert via serverCertificateHashes.
+	if c.advertisedWTAddr != "" {
+		entry.Server.AddressWT = c.advertisedWTAddr
+		entry.Server.CertHashWT = wtCertHashHex
+		log = log.WithField("addr_wt", entry.Server.AddressWT)
 	}
 	// Propagate DHT bootstrap status to discovery entry.
 	entry.Server.DHTBootstrap = c.dhtBootstrap

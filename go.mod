@@ -76,6 +76,7 @@ require (
 	github.com/peterh/liner v1.2.2
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
 	github.com/pkg/sftp v1.13.10
+	github.com/quic-go/webtransport-go v0.11.0
 	github.com/rivo/tview v0.42.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/tetratelabs/wazero v1.12.0
@@ -96,6 +97,7 @@ require (
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21 // indirect
 	github.com/containerd/log v0.1.0 // indirect
+	github.com/dunglas/httpsfv v1.1.0 // indirect
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect

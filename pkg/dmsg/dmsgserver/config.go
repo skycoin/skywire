@@ -131,7 +131,20 @@ type Config struct {
 	// path) that this WS endpoint is reachable at and advertises in discovery
 	// (Server.AddressWS), e.g. "wss://dmsg1.skywire.skycoin.com/dmsg". Required
 	// when WSAddress is set, otherwise clients learn no URL to dial.
-	PublicAddressWS  string        `json:"public_address_ws,omitempty"`
+	PublicAddressWS string `json:"public_address_ws,omitempty"`
+	// WTAddress is the local "host:port" the server binds a UDP socket on for
+	// the WebTransport (HTTP/3-over-QUIC) listener (dmsg-over-WebTransport).
+	// Empty disables WT — the default, so no extra port opens unless the
+	// operator opts in. Unlike WS, no front proxy / CA cert is needed: the
+	// server presents a short-lived self-signed ECDSA cert and advertises its
+	// SHA-256 (CertHashWT) for a browser to pin.
+	WTAddress string `json:"wt_address,omitempty"`
+	// PublicAddressWT is the full https:// URL (including the /dmsg path) that
+	// this WebTransport endpoint is reachable at and advertises in discovery
+	// (Server.AddressWT), e.g. "https://1.2.3.4:8443/dmsg". Required when
+	// WTAddress is set, otherwise clients learn no URL to dial. It should use a
+	// bare IP (the browser pins the cert hash, not a hostname).
+	PublicAddressWT  string        `json:"public_address_wt,omitempty"`
 	LocalAddress     string        `json:"local_address"`
 	HTTPAddress      string        `json:"health_endpoint_address"`
 	LogLevel         string        `json:"log_level"`
