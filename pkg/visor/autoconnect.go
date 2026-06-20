@@ -438,9 +438,21 @@ func (a *autoconnector) fetchPubAddresses(ctx context.Context, v *Visor) ([]ciph
 		return nil, nil
 	}
 	var services []servicedisc.Service
-	retrier := netutil.NewDefaultRetrier(a.log)
+	// Bounded, fail-fast fetch. The Run loop's ticker (PublicServiceDelay)
+	// already retries this every cycle, so the per-tick fetch must NOT retry
+	// forever: NewDefaultRetrier uses DefaultTries=0 (infinite), so against an
+	// unreachable service-discovery — e.g. a clearnet SD that's dead on a
+	// dmsg-only deployment — retrier.Do never returns, and fetchPubAddresses
+	// WEDGES the entire autoconnect loop: no public visors are ever fetched and
+	// no transports are ever created (observed on a v1.3.77 visor stuck here).
+	// A few bounded tries + a per-fetch timeout make a dead SD degrade to "no
+	// public visors this tick"; the loop moves on and re-checks the CXO snapshot
+	// next cycle.
+	retrier := netutil.NewRetrier(a.log, time.Second, 5*time.Second, 3, netutil.DefaultFactor)
 	fetch := func() (err error) {
-		services, err = a.client.Services(ctx, a.maxConns, "", "")
+		fctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		services, err = a.client.Services(fctx, a.maxConns, "", "")
 		return err
 	}
 	if err := retrier.Do(ctx, fetch); err != nil {

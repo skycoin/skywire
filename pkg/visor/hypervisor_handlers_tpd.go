@@ -63,17 +63,19 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 			return
 		}
 
-		tpdHTTP := strings.TrimSuffix(hv.visor.conf.Transport.Discovery, "/")
+		// TPD is reached over dmsg only — plain HTTP to deployment services is no
+		// longer supported. The dmsg URL may live in either field (the dmsg-only
+		// default stores it in the "http" field).
 		tpdDmsg := strings.TrimSuffix(hv.visor.conf.Transport.DiscoveryDmsg, "/")
-		if tpdHTTP == "" {
-			tpdHTTP = strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
+		if !strings.HasPrefix(tpdDmsg, "dmsg://") {
+			tpdDmsg = strings.TrimSuffix(hv.visor.conf.Transport.Discovery, "/")
 		}
-		if tpdDmsg == "" {
+		if !strings.HasPrefix(tpdDmsg, "dmsg://") {
 			tpdDmsg = strings.TrimSuffix(deployment.Prod.TransportDiscoveryDmsg, "/")
 		}
 
-		// Step 2: DMSG-HTTP via the visor's DmsgHTTP RPC.
-		if tpdDmsg != "" {
+		// DMSG-HTTP via the visor's DmsgHTTP RPC.
+		if strings.HasPrefix(tpdDmsg, "dmsg://") {
 			dmsgURL := tpdDmsg + path
 			log.Debugf("fetching TPD metrics via DMSG: %s", dmsgURL)
 			resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
@@ -88,34 +90,17 @@ func (hv *Hypervisor) getNetworkTransports() http.HandlerFunc {
 				return
 			}
 			if err != nil {
-				log.WithError(err).Warn("DMSG fetch failed, falling back to HTTP")
+				log.WithError(err).Warn("TPD metrics DMSG fetch failed")
 			} else {
-				log.Warnf("DMSG fetch returned %d, falling back to HTTP", resp.StatusCode)
+				log.Warnf("TPD metrics DMSG fetch returned %d", resp.StatusCode)
 			}
-		}
-
-		// Step 3: plain HTTP. Same chain the CLI's FetchServiceURL uses.
-		if tpdHTTP != "" {
-			httpURL := tpdHTTP + path
-			log.Debugf("fetching TPD metrics via HTTP: %s", httpURL)
-			client := &http.Client{Timeout: 15 * time.Second}
-			resp, err := client.Get(httpURL) //nolint:gosec // operator-controlled URL from visor config
-			if err != nil {
-				httputil.WriteJSON(w, r, http.StatusBadGateway,
-					map[string]string{"error": "tpd unreachable: " + err.Error()})
-				return
-			}
-			defer resp.Body.Close()          //nolint:errcheck
-			body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-			w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-			w.Header().Set("X-Skywire-Metrics-Source", "http")
-			w.WriteHeader(resp.StatusCode)
-			_, _ = w.Write(body) //nolint:errcheck,gosec
+			httputil.WriteJSON(w, r, http.StatusBadGateway,
+				map[string]string{"error": "tpd unreachable over dmsg"})
 			return
 		}
 
 		httputil.WriteJSON(w, r, http.StatusServiceUnavailable,
-			map[string]string{"error": "no TPD URL configured"})
+			map[string]string{"error": "no TPD dmsg URL configured"})
 	}
 }
 
