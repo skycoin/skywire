@@ -4,6 +4,7 @@ package cmdutil
 import (
 	"context"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -24,10 +25,18 @@ type DmsgBootstrap struct {
 
 // BootstrapDmsg creates a DMSG client for a service using the bootstrap priority:
 //  1. Embedded deployment config (dmsg.Prod/Test servers) — no network needed
-//  2. HTTP discovery fallback if embedded servers are empty
+//  2. HTTP discovery fallback (only when dmsgDiscoveryDmsg is empty AND
+//     dmsgDisc is set) if embedded servers are empty
+//
+// dmsgDiscoveryDmsg, when non-empty, switches the discovery fallback and
+// the background refresh onto dmsg-HTTP — the http.Client used by the
+// disc.APIClient gets its Transport wired to dmsghttp.MakeHTTPTransport,
+// routing all discovery RPC over the dmsg client's sessions. No plain-
+// HTTP egress occurs in this mode; dmsgDisc is ignored.
 //
 // After connecting, a background goroutine refreshes the server list from
-// discovery (preferring DMSG transport, falling back to HTTP).
+// discovery: dmsg-HTTP only when dmsgDiscoveryDmsg is set, otherwise
+// dmsg-first with HTTP fallback.
 func BootstrapDmsg(
 	ctx context.Context,
 	log *logging.Logger,
@@ -35,6 +44,7 @@ func BootstrapDmsg(
 	sk cipher.SecKey,
 	embeddedServers []disc.Entry,
 	dmsgDisc string,
+	dmsgDiscoveryDmsg string,
 	dmsgServerType string,
 ) (*DmsgBootstrap, error) {
 	// Step 1: Use embedded servers for initial bootstrap
@@ -47,8 +57,12 @@ func BootstrapDmsg(
 		log.Infof("Using %d embedded DMSG servers for bootstrap", len(servers))
 	}
 
-	// Step 2: If no embedded servers, fall back to HTTP discovery
-	if len(servers) == 0 && dmsgDisc != "" {
+	// Step 2: If no embedded servers AND we're in plain-HTTP mode,
+	// fall back to HTTP discovery to seed the initial server set.
+	// In dmsg-only mode (dmsgDiscoveryDmsg set) there is no plain-HTTP
+	// fallback — operators ship a non-empty embedded set or the
+	// service simply has no targets to dial at boot.
+	if len(servers) == 0 && dmsgDiscoveryDmsg == "" && dmsgDisc != "" {
 		log.Info("No embedded DMSG servers, fetching from discovery via HTTP...")
 		servers = dmsghttp.GetServers(ctx, dmsgDisc, dmsgServerType, log)
 	}
@@ -75,10 +89,25 @@ func BootstrapDmsg(
 	// so the dmsg client can dial the embedded set without an HTTP round
 	// trip — useful when the dmsg-discovery's HTTP endpoint is briefly
 	// unreachable (offline install, DNS failure, Caddy outage).
+	//
+	// When dmsgDiscoveryDmsg is set, also seed the dmsg-discovery's own
+	// PK as a synthetic client entry delegating to every bootstrap
+	// server. Without this, Entry() lookups for the dmsg-disc PK fall
+	// through to dmsg-HTTP, whose own routing requires Entry() to
+	// resolve the dmsg-disc PK — recursive lookup that burns CPU at
+	// hundreds of calls/s once dmsg-only routing is in steady state.
+	// Same trick setup-node uses (pkg/router/setupnode.go: see
+	// dmsgServicePKsFromConf) and transport-setup uses
+	// (pkg/transport-setup/api/api.go: dmsgServicePKs).
 	keys := cipher.PubKeys{pk}
+	if dmsgDiscoveryDmsg != "" {
+		if discPK := PKFromDmsgURL(dmsgDiscoveryDmsg); !discPK.Null() {
+			keys = append(keys, discPK)
+		}
+	}
 	directDClient := direct.NewClient(direct.GetAllEntries(keys, servers), log)
 
-	// Wrap the direct client with an HTTP-discovery fallback so per-PK
+	// Wrap the direct client with a discovery fallback so per-PK
 	// Entry() lookups query the real dmsg-discovery instead of the
 	// in-memory bootstrap set. Without this, dmsg.DialStream returned
 	// "dmsg error 100 - entry is not found in discovery" for every PK
@@ -87,11 +116,22 @@ func BootstrapDmsg(
 	// stay on the direct client so the bootstrap phase is unchanged;
 	// only the Entry() path now consults real discovery.
 	//
-	// When dmsgDisc is empty the caller has explicitly opted out of
-	// HTTP discovery (e.g. fully air-gapped deployments) — keep the
-	// direct-only behavior in that case.
+	// When dmsgDiscoveryDmsg is set, the fallback http.Client has its
+	// Transport wired to dmsghttp.MakeHTTPTransport(ctx, dmsgDC) AFTER
+	// dmsgDC is constructed but BEFORE Serve runs — same single-client
+	// trick post-#3161 setup-node/transport-setup use to dodge the
+	// dual-client self-eviction storm. The dmsg client and the http
+	// client that backs its disc fallback are wired to each other.
+	// When dmsgDiscoveryDmsg is empty the caller has explicitly opted
+	// out of dmsg-only discovery; plain-HTTP behavior follows dmsgDisc.
 	dClient := directDClient
-	if dmsgDisc != "" {
+	var dmsgHTTPC *http.Client
+	switch {
+	case dmsgDiscoveryDmsg != "":
+		dmsgHTTPC = &http.Client{}
+		httpDiscClient := disc.NewHTTP(dmsgDiscoveryDmsg, dmsgHTTPC, log)
+		dClient = dmsgclient.NewFallbackDiscClient(directDClient, httpDiscClient, log)
+	case dmsgDisc != "":
 		httpDiscClient := disc.NewHTTP(dmsgDisc, &http.Client{Timeout: 30 * time.Second}, log)
 		dClient = dmsgclient.NewFallbackDiscClient(directDClient, httpDiscClient, log)
 	}
@@ -102,15 +142,50 @@ func BootstrapDmsg(
 		ConnectedServersType: dmsgServerType,
 	}
 
-	dmsgDC, closeDmsgDC, err := direct.StartDmsg(ctx, log, pk, sk, dClient, config)
-	if err != nil {
-		return nil, err
+	// Build dmsgDC inline (rather than via direct.StartDmsg) so the
+	// dmsg-HTTP transport can be wired into dmsgHTTPC AFTER NewClient
+	// but BEFORE Serve. The disc fallback is invoked lazily — only on
+	// Entry() for PKs not in the direct seed — so wiring before Serve
+	// is sufficient; any earlier-startup AvailableServers / PostEntry
+	// short-circuit through the direct client.
+	dmsgDC := dmsg.NewClient(pk, sk, dClient, config)
+	dmsgDC.SetLogger(log)
+	for _, e := range servers {
+		if e == nil || e.Static.Null() || e.Server == nil {
+			continue
+		}
+		dmsgDC.SeedEntryCache(e.Static, e)
+	}
+	if dmsgDiscoveryDmsg != "" {
+		dmsgHTTPC.Transport = dmsghttp.MakeHTTPTransport(ctx, dmsgDC)
 	}
 
-	// Background: refresh servers — try DMSG first, fall back to HTTP.
-	// Updates are PostEntry'd into the direct client so AllServers stays
-	// current; the fallback wrapper delegates PostEntry to direct.
-	go updateServersDmsgFirst(ctx, dClient, dmsgDC, dmsgDisc, dmsgServerType, log)
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		dmsgDC.Serve(ctx)
+	}()
+	closeDmsgDC := func() {
+		if err := dmsgDC.Close(); err != nil {
+			log.WithError(err).Debug("Disconnected from dmsg network.")
+		}
+		wg.Wait()
+	}
+
+	select {
+	case <-ctx.Done():
+		closeDmsgDC()
+		return nil, ctx.Err()
+	case <-dmsgDC.Ready():
+	}
+
+	// Background: refresh servers. dmsg-only when dmsgDiscoveryDmsg
+	// is set (no plain-HTTP egress); otherwise dmsg-first with HTTP
+	// fallback. Updates are PostEntry'd into the direct client so
+	// AllServers stays current; the fallback wrapper delegates
+	// PostEntry to direct.
+	go updateServersDmsgFirst(ctx, dClient, dmsgDC, dmsgDisc, dmsgDiscoveryDmsg, dmsgServerType, log)
 
 	return &DmsgBootstrap{
 		Client:  dmsgDC,
@@ -120,16 +195,24 @@ func BootstrapDmsg(
 }
 
 // updateServersDmsgFirst periodically refreshes the DMSG server list.
-// It tries to reach discovery over DMSG first (private, no DNS dependency),
-// falling back to HTTP if DMSG fails.
+// dmsgDiscoveryDmsg (when non-empty) forces dmsg-HTTP — no plain-HTTP
+// egress. Otherwise tries dmsg first, falls back to plain HTTP on
+// dmsgDisc.
 func updateServersDmsgFirst(
 	ctx context.Context,
 	dClient disc.APIClient,
 	dmsgC *dmsg.Client,
 	dmsgDisc string,
+	dmsgDiscoveryDmsg string,
 	dmsgServerType string,
 	log *logging.Logger,
 ) {
+	if dmsgDisc == "" && dmsgDiscoveryDmsg == "" {
+		// Nothing to refresh against; the embedded seed is the
+		// final word for this process. Same behavior as pre-
+		// existing code when dmsgDisc was empty.
+		return
+	}
 	ticker := time.NewTicker(10 * time.Minute)
 	defer ticker.Stop()
 
@@ -138,7 +221,7 @@ func updateServersDmsgFirst(
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			servers := fetchServers(ctx, dmsgC, dmsgDisc, dmsgServerType, log)
+			servers := fetchServers(ctx, dmsgC, dmsgDisc, dmsgDiscoveryDmsg, dmsgServerType, log)
 			for _, server := range servers {
 				dClient.PostEntry(ctx, server) //nolint:errcheck,gosec
 				if err := dmsgC.EnsureSession(ctx, server); err != nil {
@@ -149,15 +232,40 @@ func updateServersDmsgFirst(
 	}
 }
 
-// fetchServers tries to get servers over DMSG first, falls back to HTTP.
+// fetchServers refreshes the dmsg-server list from discovery. dmsg-HTTP
+// is the only path when dmsgDiscoveryDmsg is set; otherwise dmsg-first
+// over dmsgDisc with a plain-HTTP fallback on the same URL.
 func fetchServers(
 	ctx context.Context,
 	dmsgC *dmsg.Client,
 	dmsgDisc string,
+	dmsgDiscoveryDmsg string,
 	dmsgServerType string,
 	log *logging.Logger,
 ) []*disc.Entry {
-	// Try DMSG transport first
+	// dmsg-only mode: dmsg-HTTP exclusively. No plain-HTTP egress
+	// regardless of dmsgDisc — operators have opted out of HTTP and
+	// a failed refresh is preferable to a silent fallback.
+	if dmsgDiscoveryDmsg != "" {
+		if dmsgC == nil {
+			return nil
+		}
+		dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
+		dmsgDiscClient := disc.NewHTTP(dmsgDiscoveryDmsg, dmsgHTTP, log)
+
+		timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		servers, err := dmsgDiscClient.AllServers(timeoutCtx)
+		cancel()
+		if err != nil {
+			log.WithError(err).Debug("dmsg-HTTP server refresh failed (dmsg-only mode; no HTTP fallback)")
+			return nil
+		}
+		log.Debugf("Refreshed %d servers via dmsg-HTTP", len(servers))
+		return filterByType(servers, dmsgServerType)
+	}
+
+	// Legacy plain-HTTP-permitted mode: try dmsg first, fall back to
+	// HTTP on the same URL.
 	if dmsgC != nil {
 		dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 		dmsgDiscClient := disc.NewHTTP(dmsgDisc, dmsgHTTP, log)

@@ -231,10 +231,23 @@ func (v *Visor) connectRawTCPSkynet(remotePK cipher.PubKey, remotePort, localPor
 	if err != nil {
 		return uuid.UUID{}, err
 	}
+	// Close the dialed skynet conn (a full route group) on ANY early-return
+	// below — including the normal server-reject reply, which is a routine
+	// runtime condition (remote port not forwarded / caller not whitelisted).
+	// Ownership transfers to forwardConn on success, where cleanup is cleared.
+	// Without this, every reject/marshal/io error leaked one open route group
+	// per ConnectRawTCP attempt, unbounded until visor restart.
+	cleanup := conn
+	defer func() {
+		if cleanup != nil {
+			_ = cleanup.Close() //nolint:errcheck
+		}
+	}()
 	remoteConn, err := appnet.WrapConn(conn)
 	if err != nil {
 		return uuid.UUID{}, err
 	}
+	cleanup = remoteConn // closing the wrapper closes the embedded conn
 
 	cMsg := clientMsg{Port: remotePort}
 	clientMsgBytes, err := json.Marshal(cMsg)
@@ -265,9 +278,9 @@ func (v *Visor) connectRawTCPSkynet(remotePK cipher.PubKey, remotePort, localPor
 
 	forwardConn, err := appnet.NewRawTCPForwardConn(v.log, "skynet", remoteConn, remotePort, localPort)
 	if err != nil {
-		_ = remoteConn.Close() //nolint:errcheck
-		return uuid.UUID{}, err
+		return uuid.UUID{}, err // deferred cleanup closes remoteConn
 	}
+	cleanup = nil // ownership transferred to forwardConn; do not close
 	forwardConn.Serve()
 	return forwardConn.ID, nil
 }
@@ -319,11 +332,17 @@ func (v *Visor) RegisterTCPPort(localPort int) error {
 
 // DeregisterTCPPort implements API.
 func (v *Visor) DeregisterTCPPort(localPort int) error {
-	if v.forwardedPorts.Get(localPort) == nil {
+	fp := v.forwardedPorts.Get(localPort)
+	if fp == nil {
 		return fmt.Errorf("port :%v not registered", localPort)
 	}
 	// Stop DMSG listener if running.
 	v.stopDmsgForwarder(localPort)
+	// Clear faithful-UDP datagram intent so new inbound datagram routes
+	// to this port stop building siblings (#2607).
+	if fp.UDP && v.router != nil {
+		v.router.UnregisterDatagramPort(routing.Port(fp.Port)) //nolint:gosec // port fits routing.Port
+	}
 	// Remove from both the rich store and legacy allowed map.
 	v.allowed.mu.Lock()
 	delete(v.allowed.ports, localPort)
@@ -372,6 +391,12 @@ func (v *Visor) RegisterForwardedPort(p ForwardedPort) error {
 	// Create a DMSG listener for this port so .dmsg:<port> works.
 	if p.DMSG {
 		v.startDmsgForwarder(p.Port, p.LocalPort)
+	}
+	// Faithful-UDP (#2607): mark datagram intent so the router's accept
+	// side builds a sibling for inbound datagram routes to this port. The
+	// accept loop (serveUDPForwards) bridges them to the local service.
+	if p.UDP && v.router != nil {
+		v.router.RegisterDatagramPort(routing.Port(p.Port)) //nolint:gosec // port fits routing.Port
 	}
 	// If this is the dmsghttp port (80) entry, refresh the logserver's
 	// website handler so a new ProxyAddr takes effect immediately.

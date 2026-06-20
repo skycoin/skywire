@@ -122,7 +122,22 @@ func (env *Env) newServer(ctx context.Context, updateInterval time.Duration) (*d
 		_ = srv.Close() //nolint:errcheck
 		return nil, ctx.Err()
 	case <-srv.Ready():
-		return srv, nil
+	}
+
+	// Serve no longer gates Accept on the entry-publish loop (the cold-start
+	// fix in dmsg.Server.Serve), so Ready() now means "accepting", not
+	// "registered". Tests built on this helper expect the server discoverable
+	// on return, so wait for its entry to land in discovery.
+	for {
+		if _, eerr := env.d.Entry(ctx, srv.LocalPK()); eerr == nil {
+			return srv, nil
+		}
+		select {
+		case <-ctx.Done():
+			_ = srv.Close() //nolint:errcheck
+			return nil, ctx.Err()
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
 }
 

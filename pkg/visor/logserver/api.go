@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -74,6 +75,25 @@ type CXOFeedEntry struct {
 	System      bool   `json:"system,omitempty"`
 }
 
+// RelatedNodesProvider exposes this node's mesh relationships for the
+// landing page: the visors a hypervisor manages, and the hypervisors a
+// visor is configured to trust. Both are shown ONLY to an authenticated
+// (survey-whitelisted, or self-loopback) caller — they reveal the node's
+// management topology — and rendered as links to each peer's landing page
+// (http://<pk>.dmsg), reachable through a resolving proxy.
+//
+// Implemented by the visor. A nil provider (or empty slices) renders no
+// related-nodes section.
+type RelatedNodesProvider interface {
+	// ManagedVisors returns the PKs of the visors this node currently
+	// manages as a hypervisor (the same set as `hv ls`). Empty when this
+	// node is not acting as a hypervisor or has no connected visors.
+	ManagedVisors() []cipher.PubKey
+	// ConfiguredHypervisors returns the PKs of the hypervisors this visor
+	// is configured to be managed by (v.conf.Hypervisors).
+	ConfiguredHypervisors() []cipher.PubKey
+}
+
 // CXOFeedsLister provides the list of CXO feeds the visor is publishing.
 // Returns the always-on system feed (stats/telemetry) plus any
 // user-registered feeds. Pure metadata — actual feed content is served
@@ -87,15 +107,18 @@ type CXOFeedsLister interface {
 type API struct {
 	http.Handler
 
-	logger              *logging.Logger
-	startedAt           time.Time
-	healthStatsProvider HealthStatsProvider
-	serviceLister       ServiceLister
-	forwardedPortLister ForwardedPortLister
-	cxoFeedsLister      CXOFeedsLister
-	statsReader         StatsReader             // visor-local telemetry store, set via SetStatsReader
-	uptimeRecorder      *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
-	websiteHandler      http.Handler            // optional: serves unmatched routes (custom website)
+	logger               *logging.Logger
+	startedAt            time.Time
+	publicKey            string // visor PK hex, shown on the landing page; set via SetIdentity (empty until wired)
+	dmsgAddress          string // <pk>:<dmsg-port>, emitted on /health; set via SetIdentity
+	healthStatsProvider  HealthStatsProvider
+	serviceLister        ServiceLister
+	forwardedPortLister  ForwardedPortLister
+	cxoFeedsLister       CXOFeedsLister
+	relatedNodesProvider RelatedNodesProvider
+	statsReader          StatsReader             // visor-local telemetry store, set via SetStatsReader
+	uptimeRecorder       *serviceuptime.Recorder // service-self uptime, set via SetUptimeRecorder
+	websiteHandler       http.Handler            // optional: serves unmatched routes (custom website)
 	// ptyHandler serves /pty (web terminal) when set by the visor.
 	// Gated by ptyWhitelist — typically the dmsgpty whitelist (configured
 	// PKs + hypervisor PKs + the visor's own PK).
@@ -215,7 +238,19 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 	// no level/module filters apply, and conservatively dropped when they do (so
 	// stray lines from libraries that don't follow the format don't sneak past
 	// a strict --min-level filter).
-	authRoute.GET("/visor.log", func(c *gin.Context) {
+	//
+	// Output modes:
+	//   default            → terminal-styled HTML (colored per log level),
+	//                        STREAMED: renders the backlog then tails the file
+	//                        live (chunked) until the client disconnects
+	//   ?raw=1 (or Accept   → verbatim plain text (c.File) for log-scraping
+	//     text/plain)         (one-shot — completes for scrapers)
+	//   any filter param   → plain-text streaming filtered mode
+	//
+	// Served at /skywire.log (matching the on-disk filename written by
+	// visor.go's lumberjackrus hook) with /visor.log kept as an alias so
+	// older links and tooling keep working — both routes share this handler.
+	serveVisorLog := func(c *gin.Context) {
 		// The visor writes its rotating log to LocalPath/log/skywire.log
 		// (visor.go, via lumberjackrus). The endpoint previously looked at
 		// LocalPath/visor.log — wrong subdir AND filename — so it always 404'd
@@ -226,13 +261,30 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			return
 		}
 		q := c.Request.URL.Query()
-		if q.Get("min-level") == "" && q.Get("module") == "" && q.Get("grep") == "" &&
-			q.Get("since-line") == "" && q.Get("limit") == "" && q.Get("follow") == "" {
+		// Server-side filtering (always plain text — keeps grep/scrape simple).
+		if q.Get("min-level") != "" || q.Get("module") != "" || q.Get("grep") != "" ||
+			q.Get("since-line") != "" || q.Get("limit") != "" || q.Get("follow") != "" {
+			streamFilteredVisorLog(c, logFile, q)
+			return
+		}
+		// Plain-text escape hatch for log-scraping tooling: ?raw=1 or an
+		// explicit Accept: text/plain (and no text/html preference).
+		raw := q.Get("raw") == "1" || strings.EqualFold(q.Get("raw"), "true")
+		if !raw {
+			accept := c.GetHeader("Accept")
+			if strings.Contains(accept, "text/plain") && !strings.Contains(accept, "text/html") {
+				raw = true
+			}
+		}
+		if raw {
 			c.File(logFile)
 			return
 		}
-		streamFilteredVisorLog(c, logFile, q)
-	})
+		// Default: terminal-styled, level-colored HTML.
+		renderVisorLogHTML(c, logFile)
+	}
+	authRoute.GET("/skywire.log", serveVisorLog)
+	authRoute.GET("/visor.log", serveVisorLog) // backwards-compatible alias
 
 	// pprof endpoints (auth'd) — runtime profiling
 	authRoute.GET("/debug/pprof/", gin.WrapF(pprof.Index))
@@ -310,7 +362,7 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 		if wl {
 			links = append(links, `<a href="/node-info">/node-info</a> - node survey`)
 			links = append(links, `<a href="/node-info/checksum">/node-info/checksum</a> - survey checksum`)
-			links = append(links, `<a href="/visor.log">/visor.log</a> - visor debug log`)
+			links = append(links, `<a href="/skywire.log">/skywire.log</a> - visor debug log`)
 			links = append(links, `<a href="/debug/pprof/">/debug/pprof/</a> - runtime profiling`)
 			if api.statsReader != nil {
 				links = append(links, `<a href="/stats/transports">/stats/transports</a> - live transport snapshot`)
@@ -327,6 +379,29 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 				remoteHost, _, err := net.SplitHostPort(c.Request.RemoteAddr)
 				if err == nil && ptyPKAllowed(api.ptyWhitelist, remoteHost) {
 					links = append(links, `<a href="/pty">/pty</a> - web terminal (dmsgpty)`)
+				}
+			}
+
+			// Related nodes — shown ONLY to authenticated callers (this
+			// section is gated strictly on `wl`). As LINKS to each peer's
+			// landing page over a resolving proxy (http://<pk>.dmsg).
+			if api.relatedNodesProvider != nil {
+				// Part 2: visors this node manages as a hypervisor.
+				if managed := api.relatedNodesProvider.ManagedVisors(); len(managed) > 0 {
+					links = append(links, "")
+					links = append(links, "managed visors (this hypervisor):")
+					for _, pk := range managed {
+						links = append(links, fmt.Sprintf(`  <a href="http://%s.dmsg">%s.dmsg</a>`, pk.Hex(), pk.Hex()))
+					}
+				}
+				// Part 3: hypervisors this visor is configured to trust.
+				if hvs := api.relatedNodesProvider.ConfiguredHypervisors(); len(hvs) > 0 {
+					links = append(links, "")
+					links = append(links, "configured hypervisors:")
+					for _, pk := range hvs {
+						links = append(links, fmt.Sprintf(`  <a href="http://%s.dmsg">%s.dmsg</a>`, pk.Hex(), pk.Hex()))
+					}
+					links = append(links, `  <small>(an hv link resolves only through a proxy that can route to it)</small>`)
 				}
 			}
 		}
@@ -361,10 +436,20 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			}
 		}
 
+		// Identity header — state which visor this is. The landing page
+		// names itself by PK only; the dmsg address is redundant here (it's
+		// just <pk>:<port>) and is carried on /health instead. HTML-escaped
+		// though the PK is fixed-shape hex from config.
+		var idHeader string
+		if api.publicKey != "" {
+			idHeader = fmt.Sprintf(`<p class="pk">public key: %s</p>`, html.EscapeString(api.publicKey))
+		}
+
 		c.Writer.WriteHeader(http.StatusOK)
 		fmt.Fprintf(c.Writer, `<!doctype html><html><head><title>Skywire Visor</title>`+ //nolint:errcheck,gosec
-			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}</style>`+
-			`</head><body><h2>Skywire Visor</h2><pre>%s</pre></body></html>`, strings.Join(links, "\n"))
+			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}`+
+			`.pk{color:#5fd75f;word-break:break-all;margin:2px 0}</style>`+
+			`</head><body><h2>Skywire Visor</h2>%s<pre>%s</pre></body></html>`, idHeader, strings.Join(links, "\n"))
 	})
 
 	// Catch-all: if a custom website handler is set, serve unmatched
@@ -421,10 +506,15 @@ func (api *API) SetWebsiteHandler(h http.Handler) {
 }
 
 func (api *API) health(c *gin.Context) {
+	// /health carries the dmsg_address only — the public_key is redundant
+	// (it's the host part of dmsg_address) and is shown on the landing page
+	// instead. PublicKey is left unset; it's omitempty so it drops from the
+	// JSON entirely.
 	resp := httputil.HealthCheckResponse{
 		ServiceName: "visor",
 		BuildInfo:   buildinfo.Get(),
 		StartedAt:   api.startedAt,
+		DmsgAddr:    api.dmsgAddress,
 	}
 
 	// Add transport stats if provider is available
@@ -456,6 +546,16 @@ func (api *API) SetHealthStatsProvider(provider HealthStatsProvider) {
 	api.healthStatsProvider = provider
 }
 
+// SetIdentity records the visor's public key (hex) and dmsg listening
+// address (`<pk>:<dmsg-port>`). The two are surfaced on different pages to
+// avoid redundancy: the landing page names itself by public key, while the
+// /health response carries the dmsg address (whose host part is the same
+// key). Called from visor init.
+func (api *API) SetIdentity(publicKey, dmsgAddress string) {
+	api.publicKey = publicKey
+	api.dmsgAddress = dmsgAddress
+}
+
 // SetServiceLister sets the service catalog provider. Called from
 // visor init after the ServiceRegistry is populated.
 func (api *API) SetServiceLister(lister ServiceLister) {
@@ -484,6 +584,13 @@ func (api *API) SetPtyHandler(h http.Handler, whitelist pty.Whitelist) {
 
 func (api *API) SetCXOFeedsLister(lister CXOFeedsLister) {
 	api.cxoFeedsLister = lister
+}
+
+// SetRelatedNodesProvider installs the provider whose managed-visors and
+// configured-hypervisors lists are shown (as links) on the landing page to
+// authenticated callers. Called from visor init.
+func (api *API) SetRelatedNodesProvider(p RelatedNodesProvider) {
+	api.relatedNodesProvider = p
 }
 
 func whitelistAuth(whitelistedPKs []cipher.PubKey) gin.HandlerFunc {

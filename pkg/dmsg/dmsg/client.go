@@ -71,6 +71,14 @@ type Config struct {
 	ClientType           string
 	ConnectedServersType string
 	Protocol             string
+
+	// PreferWS makes the client dial a server's WebSocket endpoint
+	// (Server.AddressWS) when one is advertised, in preference to TCP/QUIC,
+	// falling back to TCP on WS failure. Native clients leave this false
+	// (raw TCP/QUIC is strictly better for them); it exists for restrictive
+	// networks where only HTTP(S)/443 egress is allowed, and is forced true
+	// in the js/wasm build, which has no other transport available.
+	PreferWS bool
 }
 
 // Ensure ensures all config values are set.
@@ -202,24 +210,69 @@ func NewClient(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Conf
 
 	// Init callback: on set session.
 	c.EntityCommon.setSessionCallback = func(ctx context.Context) error {
-		// The first session must update discovery immediately so the
-		// client becomes "ready" (other modules wait on c.ready).
-		// Subsequent sessions use the debounced nudge path.
+		// The first session must update discovery before declaring
+		// Ready so other modules can immediately dial through us; see
+		// the wave of dmsghttp transport tests that fail with
+		// "client entry in discovery has no delegated servers" if
+		// Ready fires pre-publish. Subsequent sessions use the
+		// debounced nudge path.
 		select {
 		case <-c.ready:
 			// Already ready — nudge the update loop.
 			c.nudgeEntryUpdate()
 			return nil
 		default:
-			// First session — update immediately. updateClientEntry
-			// takes sessionsMx itself for its snapshot; holding it
-			// here would self-deadlock via the dmsgfirst path.
-			if err := c.EntityCommon.updateClientEntry(ctx, c.done, c.conf.ClientType); err != nil {
-				return err
-			}
-			c.readyOnce.Do(func() { close(c.ready) })
-			return nil
 		}
+		// First-session path runs the publish on its OWN goroutine,
+		// then waits up to entryUpdateAttemptTimeout for it to finish.
+		// The publish bounds itself with the same per-attempt timeout
+		// the entry loop uses (#3168). If it completes within the
+		// window we close c.ready on its result; if the wait expires
+		// we close c.ready anyway so the rest of the visor doesn't
+		// deadlock on us, and the publish goroutine continues to
+		// completion in the background (its own ctx will fire and
+		// unblock the dmsg-HTTP stream via the transport's ctx
+		// watcher). The updateClientEntryLoop handles further retries
+		// with exponential backoff.
+		//
+		// Originally this called updateClientEntry SYNCHRONOUSLY here
+		// with the unbounded session-dial ctx and closed c.ready only
+		// on success. That blocked the session-add path forever if
+		// the publish stalled — a dmsg-only deployment service
+		// (#3157, #3168) whose only established session couldn't
+		// reach the discovery PK saw the dmsg-HTTP transport get a
+		// stream via DialStream phase 3, then req.Write/ReadResponse
+		// hung on the stream's own deadlines (write: none, read:
+		// StreamIdleTimeout = 2 min). The cascade:
+		//   - first setSessionCallback blocks → dialSession never
+		//     returns → Serve loop's EnsureSession chain freezes;
+		//   - subsequent session callbacks (ready never closed) re-
+		//     enter this default branch and block on
+		//     httpClient.updateMux which the first call holds;
+		//   - updateClientEntryLoop's runUpdate (with the #3168 30 s
+		//     attempt timeout) ALSO blocks on updateMux because mutex
+		//     acquisition does not honor context — so the loop's
+		//     retry never fires either.
+		// The result was a wedged service that logged "Updating
+		// entry" once at startup and then went silent for hours.
+		publishCtx, publishCancel := context.WithTimeout(ctx, entryUpdateAttemptTimeout)
+		publishDone := make(chan error, 1)
+		go func() {
+			defer publishCancel()
+			publishDone <- c.EntityCommon.updateClientEntry(publishCtx, c.done, c.conf.ClientType)
+		}()
+		select {
+		case err := <-publishDone:
+			if err != nil {
+				c.log.WithError(err).Warn("Initial client entry update failed; loop will retry.")
+			}
+		case <-time.After(entryUpdateAttemptTimeout):
+			c.log.Warn("Initial client entry update did not complete within bound; closing Ready and letting the loop retry.")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		c.readyOnce.Do(func() { close(c.ready) })
+		return nil
 	}
 
 	// Init callback: on delete session.
@@ -347,6 +400,21 @@ func (ce *Client) Serve(ctx context.Context) {
 				continue
 			}
 		}
+		if len(entries) == 0 && !pinned {
+			// Fallback for dmsg-only deployments and fleet cold-starts:
+			// when the disc.APIClient yields no entries (because the HTTP
+			// discovery URL is empty -> no-op client, or because no
+			// server has registered yet), use the server entries that
+			// were pre-seeded into the entry cache from config. The
+			// pinned paths above are deliberate fail-fast and must not
+			// be silently routed to a different server, so the fallback
+			// applies only to the unpinned default path.
+			if seeded := ce.seededServerEntries(); len(seeded) > 0 {
+				ce.log.WithField("count", len(seeded)).
+					Debug("No entries from discovery; falling back to seeded servers from config.")
+				entries = seeded
+			}
+		}
 		if len(entries) == 0 {
 			ce.log.Warnf("No entries found. Retrying after %s...", ce.bo.String())
 			if pinned {
@@ -440,10 +508,40 @@ func (ce *Client) Serve(ctx context.Context) {
 				if pinned {
 					ce.pinnedFailures.Store(0)
 				}
+				// Start the background loops the moment a session
+				// exists. Pre-fix they were started AFTER the inner
+				// for-loop iterated every seed entry — fine when
+				// EnsureSession returned quickly, but the dial path
+				// runs setSessionCallback synchronously and that
+				// callback's first-session publish blocks for up to
+				// entryUpdateAttemptTimeout (#3172). During that 30 s
+				// window Phase 3 of the publish's own DialStream
+				// recursively dials extra sessions, pushing
+				// SessionCount past MinSessions. When EnsureSession
+				// finally returns, the next iteration of THIS for
+				// loop trips the
+				//   if MinSessions != 0 && SessionCount() >= MinSessions
+				// guard and parks on <-errCh — for the rest of the
+				// process's life if sessions are stable. The for loop
+				// then never completes its iteration and the lines
+				// below (updateClientEntryLoop start) never run, so
+				// the entry-publish retry loop never starts and the
+				// service stays unregistered until the very first
+				// session dies. Idempotent via sync.Once so duplicate
+				// triggers across entries are a no-op.
+				updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
+				pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
+				porterReapLoopOnce.Do(func() { go ce.porterReapLoop(cancellabelCtx) })
+				if ce.conf.MinSessions == 0 {
+					reconnectLoopOnce.Do(func() { go ce.reconnectLoop(cancellabelCtx) })
+				}
 			}
 		}
 
-		// Only start the update entry loop once we have at least one session established.
+		// Defensive: also start loops post-iteration in case the
+		// inner for-loop drained without hitting the success branch
+		// (everything failed, then the loop fell through to the
+		// outer-select retry path). sync.Once makes this safe.
 		updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
 		pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
 		porterReapLoopOnce.Do(func() { go ce.porterReapLoop(cancellabelCtx) })
@@ -794,6 +892,34 @@ func (ce *Client) SeedEntryCache(pk cipher.PubKey, entry *disc.Entry) {
 		fetchedAt: time.Now().Add(100 * 365 * 24 * time.Hour), // effectively permanent
 	}
 	ce.entryCacheMx.Unlock()
+}
+
+// seededServerEntries returns all server-type discovery entries that have
+// been permanently seeded into the entry cache (via SeedEntryCache, typically
+// from the dmsgc config's `servers` list). Used by the main Serve loop as
+// a fallback when the disc.APIClient cannot supply discovery results — e.g.
+// in dmsg-only deployments where the HTTP discovery URL is empty and the
+// no-op discovery client returns nil for AvailableServers/AllServers,
+// or during a fleet-wide cold-start when no servers have registered yet
+// but the configured embedded set is known.
+//
+// Permanent is detected by a fetchedAt > now+50years; SeedEntryCache uses
+// now+100years so the threshold gives plenty of headroom. The returned
+// slice is safe to iterate without holding the lock.
+func (ce *Client) seededServerEntries() []*disc.Entry {
+	const permanentThreshold = 50 * 365 * 24 * time.Hour
+	ce.entryCacheMx.RLock()
+	defer ce.entryCacheMx.RUnlock()
+	out := make([]*disc.Entry, 0, len(ce.entryCache))
+	for _, cached := range ce.entryCache {
+		if cached.entry == nil || cached.entry.Server == nil {
+			continue
+		}
+		if time.Until(cached.fetchedAt) > permanentThreshold {
+			out = append(out, cached.entry)
+		}
+	}
+	return out
 }
 
 // DiscEntry looks up a PK in dmsg-discovery and returns the entry if it

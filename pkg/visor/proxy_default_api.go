@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
@@ -91,6 +92,22 @@ func (proxyDefaultAPI) DisableHypervisorPersist(_ bool) error {
 
 func (proxyDefaultAPI) IsHypervisorEnabled() bool {
 	return false
+}
+
+func (proxyDefaultAPI) EnableHypervisorUIPersist(_ bool) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DisableHypervisorUIPersist(_ bool) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) IsHypervisorUIServing() bool {
+	return false
+}
+
+func (proxyDefaultAPI) DmsgPortHits() []dmsg.PortHit {
+	return nil
 }
 
 func (proxyDefaultAPI) Uptime() (float64, error) {
@@ -559,6 +576,18 @@ func (proxyDefaultAPI) RegisterTCPPort(_ int) error {
 
 func (proxyDefaultAPI) DeregisterTCPPort(_ int) error {
 	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DialUDPForward(_ cipher.PubKey, _, _ int) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) StopUDPForward(_ int) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ListUDPForwards() ([]int, error) {
+	return nil, ErrProxyNotSupported
 }
 
 func (proxyDefaultAPI) ListTCPPorts() ([]int, error) {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -28,6 +29,7 @@ func (v *Visor) Overview() (*Overview, error) {
 	var tSummaries []*TransportSummary
 	var publicIP string
 	var isSymmetricNAT bool
+	var natType string
 	if v == nil {
 		return &Overview{}, ErrVisorNotAvailable
 	}
@@ -42,6 +44,7 @@ func (v *Visor) Overview() (*Overview, error) {
 	}
 
 	if v.isStunReady() {
+		natType = v.stun.client.NATType.String()
 		switch v.stun.client.NATType {
 		case stun.NATNone, stun.NATFull, stun.NATRestricted, stun.NATPortRestricted:
 			publicIP = v.stun.client.PublicIP.IP()
@@ -73,6 +76,7 @@ func (v *Visor) Overview() (*Overview, error) {
 		RoutesCount:     routesCount,
 		PublicIP:        publicIP,
 		IsSymmetricNAT:  isSymmetricNAT,
+		NATType:         natType,
 	}
 
 	// Add geolocation data if available
@@ -229,10 +233,24 @@ func (v *Visor) Health() (*HealthInfo, error) {
 	return hi, nil
 }
 
+// hvNotReadyErr distinguishes "no hypervisor section in the config" from
+// "hypervisor section present but its instance isn't initialized yet". The
+// latter happens when the hv module hasn't run — usually because the visor is
+// still starting up, or its init stalled (e.g. a dependency hung) — and the
+// caller raced it. The old code returned the "not configured" message in BOTH
+// cases, sending operators with a perfectly good hypervisor config off to
+// "add a hypervisor section" that already exists.
+func (v *Visor) hvNotReadyErr() error {
+	if v.conf == nil || v.conf.Hypervisor == nil {
+		return fmt.Errorf("hypervisor not configured — add \"hypervisor\" section to visor config")
+	}
+	return fmt.Errorf("hypervisor configured but not initialized yet — the visor may still be starting up (or its init stalled); check the visor log and retry")
+}
+
 // EnableHypervisor implements API.
 func (v *Visor) EnableHypervisor() error {
 	if v.hvInstance == nil {
-		return fmt.Errorf("hypervisor not configured — add \"hypervisor\" section to visor config")
+		return v.hvNotReadyErr()
 	}
 	return v.hvInstance.Enable(context.Background())
 }
@@ -251,6 +269,63 @@ func (v *Visor) IsHypervisorEnabled() bool {
 		return false
 	}
 	return v.hvInstance.IsEnabled()
+}
+
+// IsHypervisorUIServing implements API. Reports whether the web UI is serving.
+func (v *Visor) IsHypervisorUIServing() bool {
+	if v.hvInstance == nil {
+		return false
+	}
+	return v.hvInstance.IsUIServing()
+}
+
+// DmsgPortHits implements API. Returns inbound dmsg stream requests that hit a
+// local port with no listener (dmsg error 306), keyed by (src PK, dst port).
+func (v *Visor) DmsgPortHits() []dmsg.PortHit {
+	if v.dmsgC == nil {
+		return nil
+	}
+	return v.dmsgC.NoListenerHits()
+}
+
+// EnableHypervisorUIPersist starts the hypervisor web UI (RPC/tracking
+// unaffected) and optionally persists the change.
+func (v *Visor) EnableHypervisorUIPersist(persist bool) error {
+	if v.hvInstance == nil {
+		return v.hvNotReadyErr()
+	}
+	if err := v.hvInstance.EnableUI(); err != nil {
+		return err
+	}
+	if persist {
+		return v.persistHypervisorUIDisabled(false)
+	}
+	return nil
+}
+
+// DisableHypervisorUIPersist stops the hypervisor web UI but keeps the DMSG-RPC
+// listener, managed-visor tracking, and `hv ls` running. Optionally persists.
+func (v *Visor) DisableHypervisorUIPersist(persist bool) error {
+	if v.hvInstance == nil {
+		return v.hvNotReadyErr()
+	}
+	if err := v.hvInstance.DisableUI(); err != nil {
+		return err
+	}
+	if persist {
+		return v.persistHypervisorUIDisabled(true)
+	}
+	return nil
+}
+
+// persistHypervisorUIDisabled writes the web-UI disable state to the config.
+func (v *Visor) persistHypervisorUIDisabled(disable bool) error {
+	if v.conf.Hypervisor == nil {
+		config := visorconfig.DefaultHypervisorConfig()
+		v.conf.Hypervisor = &config
+	}
+	v.conf.Hypervisor.UIDisable = disable
+	return v.conf.Flush()
 }
 
 // EnableHypervisorPersist enables the hypervisor and optionally persists to config.
@@ -427,6 +502,13 @@ func (v *Visor) Shutdown() error {
 
 // RuntimeLogs returns visor runtime logs
 func (v *Visor) RuntimeLogs() (string, error) {
+	// Defensive: the logstore is wired early (before module init) but a log
+	// query that races a not-yet-wired logstore must NEVER segfault the whole
+	// visor — return an empty array instead. A nil deref here previously took
+	// the process down (a `cli visor log` during the startup window).
+	if v.logstore == nil {
+		return "[]", nil
+	}
 	var builder strings.Builder
 	builder.WriteString("[")
 	logs, _ := v.logstore.GetLogs()
@@ -457,6 +539,12 @@ type RuntimeLogsDelta struct {
 // runtime-logs buffer; pass the previous response's Latest as
 // `since` to fetch only the new entries since the last poll.
 func (v *Visor) RuntimeLogsSince(since int64) (RuntimeLogsDelta, error) {
+	// Defensive nil-guard — see RuntimeLogs. A `cli visor log --follow` polls
+	// this on a tight loop and reconnects the instant RPC binds on restart, so
+	// it is the most likely caller to race a not-yet-wired logstore.
+	if v.logstore == nil {
+		return RuntimeLogsDelta{}, nil
+	}
 	logs, dropped, latest := v.logstore.GetLogsSince(since)
 	return RuntimeLogsDelta{
 		Entries: logs,

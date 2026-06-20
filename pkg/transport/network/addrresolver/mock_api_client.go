@@ -18,6 +18,11 @@ type MockAPIClient struct {
 	mock.Mock
 }
 
+// SetPublicIP provides a mock function with given fields: publicIP, publicIPv6
+func (_m *MockAPIClient) SetPublicIP(publicIP string, publicIPv6 string) {
+	_m.Called(publicIP, publicIPv6)
+}
+
 // Addresses provides a mock function with given fields: ctx
 func (_m *MockAPIClient) Addresses(ctx context.Context) string {
 	ret := _m.Called(ctx)
@@ -42,6 +47,24 @@ func (_m *MockAPIClient) BindSTCPR(ctx context.Context, port string) error {
 
 	if len(ret) == 0 {
 		panic("no return value specified for BindSTCPR")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
+		r0 = rf(ctx, port)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// BindQUIC provides a mock function with given fields: ctx, port
+func (_m *MockAPIClient) BindQUIC(ctx context.Context, port string) error {
+	ret := _m.Called(ctx, port)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BindQUIC")
 	}
 
 	var r0 error

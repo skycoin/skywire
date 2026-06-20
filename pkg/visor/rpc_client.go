@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -274,6 +275,34 @@ func (rc *rpcClient) IsHypervisorEnabled() bool {
 	var out bool
 	if err := rc.Call("IsHypervisorEnabled", &struct{}{}, &out); err != nil {
 		return false
+	}
+	return out
+}
+
+// EnableHypervisorUIPersist starts only the web UI (RPC/tracking unaffected).
+func (rc *rpcClient) EnableHypervisorUIPersist(persist bool) error {
+	return rc.Call("EnableHypervisorUI", &persist, &struct{}{})
+}
+
+// DisableHypervisorUIPersist stops only the web UI (RPC/tracking + hv ls stay up).
+func (rc *rpcClient) DisableHypervisorUIPersist(persist bool) error {
+	return rc.Call("DisableHypervisorUI", &persist, &struct{}{})
+}
+
+// IsHypervisorUIServing calls IsHypervisorUIServing
+func (rc *rpcClient) IsHypervisorUIServing() bool {
+	var out bool
+	if err := rc.Call("IsHypervisorUIServing", &struct{}{}, &out); err != nil {
+		return false
+	}
+	return out
+}
+
+// DmsgPortHits calls DmsgPortHits
+func (rc *rpcClient) DmsgPortHits() []dmsg.PortHit {
+	var out []dmsg.PortHit
+	if err := rc.Call("DmsgPortHits", &struct{}{}, &out); err != nil {
+		return nil
 	}
 	return out
 }
@@ -1151,6 +1180,23 @@ func (rc *rpcClient) ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, erro
 // RegisterTCPPort calls RegisterTCPPort.
 func (rc *rpcClient) RegisterTCPPort(localPort int) error {
 	return rc.Call("RegisterTCPPort", &localPort, &struct{}{})
+}
+
+// DialUDPForward calls DialUDPForward (#2607 client-side UDP forward).
+func (rc *rpcClient) DialUDPForward(remotePK cipher.PubKey, remotePort, localPort int) error {
+	return rc.Call("DialUDPForward", &UDPForwardIn{RemotePK: remotePK, RemotePort: remotePort, LocalPort: localPort}, &struct{}{})
+}
+
+// StopUDPForward calls StopUDPForward.
+func (rc *rpcClient) StopUDPForward(localPort int) error {
+	return rc.Call("StopUDPForward", &localPort, &struct{}{})
+}
+
+// ListUDPForwards calls ListUDPForwards.
+func (rc *rpcClient) ListUDPForwards() ([]int, error) {
+	var out []int
+	err := rc.Call("ListUDPForwards", &struct{}{}, &out)
+	return out, err
 }
 
 // DeregisterTCPPort calls DeregisterTCPPort.

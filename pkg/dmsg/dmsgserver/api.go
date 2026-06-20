@@ -4,6 +4,7 @@ package dmsgserver
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"math/big"
 	"net"
@@ -84,7 +85,7 @@ func (a *ServerAPI) SetDmsgServer(srv *dmsg.Server) {
 
 // ListenAndServe runs dmsg Serve function alongside health endpoint
 func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
-	errCh := make(chan error, 2)
+	errCh := make(chan error, 3)
 
 	dmsgLn, err := net.Listen("tcp", lAddr)
 	if err != nil {
@@ -92,9 +93,30 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 	}
 	dmsgLis := &proxyproto.Listener{Listener: dmsgLn}
 	go func(l net.Listener, address string) {
-		errCh <- a.dmsgServer.Serve(l, address)
+		serr := a.dmsgServer.Serve(l, address)
 		l.Close() //nolint:errcheck,gosec
+		// Label so a dead DATA PLANE is identifiable, and use %v so a clean
+		// (nil) stop still yields a non-nil signal — ANY stop of the dmsg
+		// protocol Serve must surface, not be silently absorbed.
+		errCh <- fmt.Errorf("dmsg data-plane server stopped: %v", serr)
 	}(dmsgLis, pAddr)
+
+	// dmsg-over-QUIC (#2607): also listen on UDP (same port number as TCP) so
+	// QUIC-capable clients get a session with native QUIC stream multiplexing +
+	// an unreliable datagram channel. Best-effort + additive — a QUIC bind
+	// failure leaves the TCP listener serving normally, and non-QUIC clients
+	// keep using the advertised TCP Address. QUIC clients discover this via the
+	// Server.AddressUDP + Protocol="quic" the entry now advertises.
+	if udpConn, uerr := net.ListenPacket("udp", lAddr); uerr != nil {
+		logging.MustGetLogger("dmsg_server").WithError(uerr).
+			Warn("dmsg-over-QUIC: failed to bind UDP listener; serving TCP only")
+	} else {
+		go func(udp net.PacketConn, advertised string) {
+			serr := a.dmsgServer.ServeQUIC(udp, advertised)
+			udp.Close() //nolint:errcheck,gosec
+			errCh <- fmt.Errorf("dmsg QUIC server stopped: %v", serr)
+		}(udpConn, pAddr)
+	}
 
 	ln, err := net.Listen("tcp", httpAddr)
 	if err != nil {
@@ -110,10 +132,23 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 		//Addr:              lis,
 		Handler: a.router,
 	}
-	errCh <- srv.Serve(lis)
-	lis.Close() //nolint:errcheck,gosec
+	// Run the HTTP health server in the BACKGROUND too. Previously srv.Serve
+	// blocked here in the foreground, so if the dmsg data-plane Serve died
+	// first its error sat unread in errCh while this kept serving — the HTTP
+	// /health endpoint reported healthy while the protocol listener was dead
+	// (the "looks healthy but can't relay" mask). Now whichever Serve dies
+	// FIRST returns, so the caller (service Run) can restart/exit.
+	go func() {
+		serr := srv.Serve(lis)
+		lis.Close() //nolint:errcheck,gosec
+		errCh <- fmt.Errorf("dmsg http health server stopped: %v", serr)
+	}()
 
-	return <-errCh
+	err = <-errCh
+	// One half died — tear the other down so we don't leak a half-dead server.
+	dmsgLis.Close() //nolint:errcheck,gosec
+	lis.Close()     //nolint:errcheck,gosec
+	return err
 }
 
 // Close closes connection to both http server and dmsg server

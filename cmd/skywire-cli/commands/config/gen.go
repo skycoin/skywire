@@ -803,7 +803,7 @@ func fetchServiceConfigDmsg(log *logging.Logger) bool {
 	}
 
 	dmsgBoot, err := cmdutil.BootstrapDmsg(ctx, dmsgLog, pk, sk,
-		dmsg.Prod.DmsgServers, embeddedConf.DmsgDiscovery, "")
+		dmsg.Prod.DmsgServers, embeddedConf.DmsgDiscovery, "", "")
 	if err != nil {
 		logIfNotStdout(log, err, "DMSG bootstrap failed for config fetch")
 		return false
@@ -1144,9 +1144,9 @@ func configureLauncher(log *logging.Logger) {
 		BinPath:       skyenv.AppBinPath,
 		DisplayNodeIP: isDisplayNodeIP,
 	}
-	conf.UptimeTracker = &visorconfig.UptimeTracker{
-		Addr: services.UptimeTracker, //utilenv.UptimeTrackerAddr,
-	}
+	// The standalone uptime-tracker is deprecated (uptime is now tracked by the
+	// discovery services). Generated configs no longer carry an `uptime_tracker`
+	// block — conf.UptimeTracker stays nil and initUptimeTracker skips it.
 	if cliAddr != "" {
 		conf.CLIAddr = offsetAddr(cliAddr)
 	} else {
@@ -1245,7 +1245,6 @@ func configureLauncher(log *logging.Logger) {
 				conf.Dmsg.Discovery = services.DmsgDiscoveryDmsg
 				conf.Transport.AddressResolver = services.AddressResolverDmsg
 				conf.Transport.Discovery = services.TransportDiscoveryDmsg
-				conf.UptimeTracker.Addr = services.UptimeTrackerDmsg
 				conf.Routing.RouteFinder = services.RouteFinderDmsg
 				conf.Launcher.ServiceDisc = services.ServiceDiscoveryDmsg
 			} else {
@@ -1254,9 +1253,6 @@ func configureLauncher(log *logging.Logger) {
 				conf.Transport.DiscoveryDmsg = services.TransportDiscoveryDmsg
 				conf.Routing.RouteFinderDmsg = services.RouteFinderDmsg
 				conf.Launcher.ServiceDiscDmsg = services.ServiceDiscoveryDmsg
-				if conf.UptimeTracker != nil && services.UptimeTrackerDmsg != "" {
-					conf.UptimeTracker.AddrDmsg = services.UptimeTrackerDmsg
-				}
 			}
 		} else if dmsgHTTPServersList != nil {
 			// Legacy fallback: separate dmsghttp-config.json
@@ -1272,7 +1268,6 @@ func configureLauncher(log *logging.Logger) {
 					conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
 					conf.Transport.AddressResolver = dmsgConf.AddressResolver
 					conf.Transport.Discovery = dmsgConf.TransportDiscovery
-					conf.UptimeTracker.Addr = dmsgConf.UptimeTracker
 					conf.Routing.RouteFinder = dmsgConf.RouteFinder
 					conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
 				} else {
@@ -1281,9 +1276,6 @@ func configureLauncher(log *logging.Logger) {
 					conf.Transport.DiscoveryDmsg = dmsgConf.TransportDiscovery
 					conf.Routing.RouteFinderDmsg = dmsgConf.RouteFinder
 					conf.Launcher.ServiceDiscDmsg = dmsgConf.ServiceDiscovery
-					if conf.UptimeTracker != nil && dmsgConf.UptimeTracker != "" {
-						conf.UptimeTracker.AddrDmsg = dmsgConf.UptimeTracker
-					}
 				}
 			}
 		}

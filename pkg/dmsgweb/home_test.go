@@ -26,24 +26,35 @@ func TestRenderHomePage(t *testing.T) {
 	dmsg0PK, _ := cipher.GenerateKeyPair()
 	rsnPK, _ := cipher.GenerateKeyPair()
 
+	// "other" is a deployment-service alias with NO manifest entry, so it stays
+	// in the flat "Deployment services" index and keeps its plain /health link.
+	otherPK, _ := cipher.GenerateKeyPair()
 	aliases := map[string]cipher.PubKey{
 		"skywire": selfPK,
 		"tpd":     tpdPK,
+		"other":   otherPK,
 		"dmsg0":   dmsg0PK,
 		"rsn":     rsnPK,
 	}
 	page := string(renderHomePage(aliases, ".dmsg", selfPK))
 
-	// Grouped under the right headings.
+	// Grouped under the right headings. "tpd" has a manifest, so it renders as a
+	// "Service API endpoints" section; "other" has none, so it falls under the
+	// flat "Deployment services" index.
 	assert.Contains(t, page, "This visor")
 	assert.Contains(t, page, "Deployment services")
+	assert.Contains(t, page, "Service API endpoints")
 	assert.Contains(t, page, "Setup nodes")
 	assert.Contains(t, page, "dmsg servers")
 
-	// Service links target /health (services don't serve "/"); the visor's own
-	// landing page does, so the self link stays at "/".
+	// /health renders once for tpd — from the manifest section (not also from
+	// the flat index, which now omits manifested services).
 	assert.Contains(t, page, `href="http://tpd.dmsg/health"`)
+	assert.Equal(t, 1, strings.Count(page, `href="http://tpd.dmsg/health"`), "/health must render exactly once for tpd")
+	// The visor's own landing page serves "/"; non-manifest services keep their
+	// plain /health link.
 	assert.Contains(t, page, `href="http://skywire.dmsg/"`)
+	assert.Contains(t, page, `href="http://other.dmsg/health"`)
 	assert.Contains(t, page, `href="http://dmsg0.dmsg/health"`)
 
 	// Full 66-char PKs, never truncated.
@@ -52,6 +63,55 @@ func TestRenderHomePage(t *testing.T) {
 
 	// The self alias is in the "This visor" group, ahead of the service group.
 	assert.Less(t, strings.Index(page, "This visor"), strings.Index(page, "Deployment services"))
+}
+
+func TestRenderHomePageServiceEndpoints(t *testing.T) {
+	tpdPK, _ := cipher.GenerateKeyPair()
+	dmsgdPK, _ := cipher.GenerateKeyPair()
+
+	// Only tpd + dmsgd configured → only those services get an endpoint
+	// directory; ar/rf/sd/ut/reward (no alias) are skipped.
+	aliases := map[string]cipher.PubKey{"tpd": tpdPK, "dmsgd": dmsgdPK}
+	page := string(renderHomePage(aliases, ".dmsg", cipher.PubKey{}))
+
+	assert.Contains(t, page, "Service API endpoints")
+	// A no-param GET endpoint from the manifest stays a plain link, paired with
+	// the service's resolver alias and tunneled through the same proxy.
+	assert.Contains(t, page, `href="http://tpd.dmsg/all-transports"`)
+	assert.Contains(t, page, `href="http://dmsgd.dmsg/dmsg-discovery/available_servers"`)
+	// A service with no configured alias is not rendered.
+	assert.NotContains(t, page, "http://ar.dmsg/resolve")
+	assert.NotContains(t, page, "http://sd.dmsg/api/services")
+
+	// Path-param endpoints render an input + Open button, NOT a broken link with
+	// an URL-encoded "{pk}" placeholder.
+	assert.NotContains(t, page, "%7Bpk%7D", "path placeholders must not be URL-encoded into a dead link")
+	assert.NotContains(t, page, `href="http://tpd.dmsg/transports/id:{id}"`)
+	assert.Contains(t, page, `data-kind="path" data-name="id"`)
+	assert.Contains(t, page, `data-path="/transports/id:{id}"`)
+	assert.Contains(t, page, `onclick="skyOpen(this)"`)
+
+	// Query-param endpoints surface an input per declared query param.
+	assert.Contains(t, page, `data-kind="query" data-name="v"`)
+	assert.Contains(t, page, `data-kind="query" data-name="visors"`)
+}
+
+func TestRenderHomePagePostEndpoint(t *testing.T) {
+	rfPK, _ := cipher.GenerateKeyPair()
+	page := string(renderHomePage(map[string]cipher.PubKey{"rf": rfPK}, ".dmsg", cipher.PubKey{}))
+
+	// route-finder POST /routes renders a body textarea + Send button (which
+	// fetches through the proxy) instead of a navigating link.
+	assert.Contains(t, page, "Service API endpoints")
+	assert.Contains(t, page, `onclick="skySend(this)"`)
+	assert.Contains(t, page, `textarea data-kind="body"`)
+	assert.Contains(t, page, `pre data-kind="resp"`)
+	// The body hint / example JSON is surfaced as the textarea placeholder.
+	assert.Contains(t, page, "&#34;Edges&#34;")
+	// rf /health (a no-param GET) is still a plain link, rendered once.
+	assert.Equal(t, 1, strings.Count(page, `href="http://rf.dmsg/health"`))
+	// The explorer JS is present.
+	assert.Contains(t, page, "function skySend(")
 }
 
 func TestRenderHomePageNatSort(t *testing.T) {

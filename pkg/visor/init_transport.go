@@ -57,23 +57,101 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		return err
 	}
 
-	// Get public IP (and ideally geolocation) from a connected
-	// dmsg-server. LookupIPGeo asks the server to fold in the geoip
-	// data using its own embedded MaxMind DB so the visor doesn't
-	// need an HTTP round-trip to the geoip service. Older
-	// dmsg-servers without the geo lookup hook return GeoCountry=""
-	// — we fall back to the visor's own embedded LookupGeo in that
-	// case. STUN is the last-resort path when dmsg can't answer.
-	var pIP string
-	var serverGeo *GeoData
+	// Check AR transport limit — if negative, never register with AR.
+	if v.conf.Transport != nil && v.conf.Transport.ARTransportLimit < 0 {
+		log.Info("AR registration disabled (ar_transport_limit < 0)")
+		if v.conf.Transport.PublicAutoconnect {
+			log.Warn("ar_transport_limit < 0 conflicts with public_autoconnect — public visors must be discoverable")
+		}
+	}
 
+	// #1525 Phase 2b: when the AR URL is plain HTTP (not dmsg://),
+	// build a SECOND http.Client whose Transport.DialContext forces
+	// "tcp6". The AR client uses it to fire a secondary BindSTCPR
+	// POST so the AR server captures the visor's v6 source family
+	// (via splitFamilyAddr) and stores RemoteAddrV6 alongside
+	// RemoteAddr. nil for dmsg://-routed AR — v6 forcing is
+	// meaningless when the transport is a dmsg stream rather than
+	// raw TCP. Also nil if the operator builds a custom httpC that
+	// already specifies its own Transport, since we don't want to
+	// silently override their dial choice.
+	var httpCV6 *http.Client
+	if arURL := arURL; strings.HasPrefix(arURL, "http://") || strings.HasPrefix(arURL, "https://") {
+		httpCV6 = newV6ForcedHTTPClient()
+	}
+
+	// Construct the AR client immediately with an EMPTY public IP. Determining
+	// the visor's public IP needs a dmsg LookupIPGeo and/or a STUN probe that
+	// can take tens of seconds when dmsg is slow at boot. ar is a transitive
+	// dependency of the RPC (cli → tr → ar), and the init module runner has no
+	// per-module timeout — so doing that lookup synchronously here wedges the
+	// visor's entire control plane until dmsg/STUN answer. Instead push the IP
+	// in asynchronously via SetPublicIP (see resolvePublicIPForAR); BindSTCPR
+	// waits for it (bounded, off the RPC critical path), so registrations still
+	// carry the public IP while the RPC binds promptly.
+	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, httpCV6, "", "", log, v.MasterLogger())
+	if err != nil {
+		err = fmt.Errorf("failed to create address resolver client: %w", err)
+		return err
+	}
+
+	v.initLock.Lock()
+	v.arClient = arClient
+	v.initLock.Unlock()
+
+	doneCh := make(chan struct{}, 1)
+	v.pushCloseStack("address_resolver", func() error {
+		doneCh <- struct{}{}
+		return nil
+	})
+
+	// Deliberately decoupled from the init ctx: resolvePublicIPForAR uses the
+	// visor's long-lived v.ctx, since the init ctx is canceled once this
+	// function returns and would kill the background lookup prematurely.
+	go v.resolvePublicIPForAR(arClient, log) //nolint:gosec // G118: intentional — uses v.ctx, not the request-scoped init ctx (which is canceled when init returns)
+
+	return nil
+}
+
+// resolvePublicIPForAR determines the visor's public IP(s) and geolocation —
+// via a connected dmsg-server (LookupIPGeo, then the Phase 2c family-aware
+// lookup), falling back to STUN — and pushes the result into the AR client. It
+// runs in the background, off the ar→tr→cli(RPC) init critical path, so the
+// slow lookup never delays the control plane. SetPublicIP is always called
+// exactly once (even with empty values) so the bind path's bounded wait is
+// released the moment the determination concludes.
+func (v *Visor) resolvePublicIPForAR(arClient addrresolver.APIClient, log *logging.Logger) {
+	ctx := v.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	var pIP, pIPv6 string
+	// Always publish the outcome — even an empty result unblocks BindSTCPR's
+	// bounded wait so the data plane stops waiting and binds with whatever the
+	// AR can observe from the source IP.
+	defer func() { arClient.SetPublicIP(pIP, pIPv6) }()
+
+	// Get public IP (and ideally geolocation) from a connected dmsg-server.
+	// LookupIPGeo asks the server to fold in the geoip data using its own
+	// embedded MaxMind DB so the visor doesn't need an HTTP round-trip to the
+	// geoip service. Older dmsg-servers without the geo lookup hook return
+	// GeoCountry="" — we fall back to the visor's own embedded LookupGeo in
+	// that case. STUN is the last-resort path when dmsg can't answer.
+	var serverGeo *GeoData
 	lookupCtx, lookupCancel := context.WithTimeout(ctx, 10*time.Second)
 	resp, err := v.dmsgC.LookupIPGeo(lookupCtx, nil)
 	lookupCancel()
 	if err != nil {
 		log.WithError(err).Debug("Failed to get public IP+geo from dmsg server, trying STUN")
-		<-v.stun.ready
-		if v.stun.client.PublicIP != nil {
+		select {
+		case <-v.stun.ready:
+		case <-time.After(20 * time.Second):
+			log.Warn("STUN not ready within 20s; proceeding without a STUN-derived public IP")
+		case <-ctx.Done():
+			return
+		}
+		if v.stun.client != nil && v.stun.client.PublicIP != nil {
 			pIP = v.stun.client.PublicIP.IP()
 			log.WithField("public_ip", pIP).Debug("Got public IP from STUN")
 		} else {
@@ -106,7 +184,6 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	// families. A v4-only visor (or a dual-stack visor whose only
 	// reachable dmsg-server is v4) leaves pIPv6 empty and the visor
 	// proceeds without a v6 declaration — same as pre-Phase-2c.
-	var pIPv6 string
 	if v.dmsgC != nil {
 		v4FamilyIP, v6FamilyIP := v.dmsgC.LookupIPsByFamily(ctx)
 		// Prefer the family-aware results when populated; fall back to
@@ -133,46 +210,6 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		v.geo.data = geoData
 		v.geo.mu.Unlock()
 	}
-
-	// Check AR transport limit — if negative, never register with AR.
-	if v.conf.Transport != nil && v.conf.Transport.ARTransportLimit < 0 {
-		log.Info("AR registration disabled (ar_transport_limit < 0)")
-		if v.conf.Transport.PublicAutoconnect {
-			log.Warn("ar_transport_limit < 0 conflicts with public_autoconnect — public visors must be discoverable")
-		}
-	}
-
-	// #1525 Phase 2b: when the AR URL is plain HTTP (not dmsg://),
-	// build a SECOND http.Client whose Transport.DialContext forces
-	// "tcp6". The AR client uses it to fire a secondary BindSTCPR
-	// POST so the AR server captures the visor's v6 source family
-	// (via splitFamilyAddr) and stores RemoteAddrV6 alongside
-	// RemoteAddr. nil for dmsg://-routed AR — v6 forcing is
-	// meaningless when the transport is a dmsg stream rather than
-	// raw TCP. Also nil if the operator builds a custom httpC that
-	// already specifies its own Transport, since we don't want to
-	// silently override their dial choice.
-	var httpCV6 *http.Client
-	if arURL := arURL; strings.HasPrefix(arURL, "http://") || strings.HasPrefix(arURL, "https://") {
-		httpCV6 = newV6ForcedHTTPClient()
-	}
-	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, httpCV6, pIP, pIPv6, log, v.MasterLogger())
-	if err != nil {
-		err = fmt.Errorf("failed to create address resolver client: %w", err)
-		return err
-	}
-
-	v.initLock.Lock()
-	v.arClient = arClient
-	v.initLock.Unlock()
-
-	doneCh := make(chan struct{}, 1)
-	v.pushCloseStack("address_resolver", func() error {
-		doneCh <- struct{}{}
-		return nil
-	})
-
-	return nil
 }
 
 func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
@@ -216,8 +253,17 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		lookupCancel()
 		if err != nil {
 			logger.WithError(err).Debug("Failed to get public IP from dmsg server, trying STUN")
-			<-v.stun.ready
-			if v.stun.client.PublicIP != nil {
+			// Bound the STUN wait — an unbounded <-v.stun.ready blocks the
+			// discovery module (and the launcher that depends on it) whenever
+			// STUN is slow at boot, the same wedge class as the AR path.
+			select {
+			case <-v.stun.ready:
+			case <-time.After(20 * time.Second):
+				logger.Warn("STUN not ready within 20s; service discovery proceeding without a STUN-derived public IP")
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+			if v.stun.client != nil && v.stun.client.PublicIP != nil {
 				pIP = v.stun.client.PublicIP.IP()
 				logger.WithField("public_ip", pIP).Debug("Got public IP from STUN for service discovery")
 			} else {
@@ -350,6 +396,17 @@ func initSudphClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 func initStcprClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	v.tpM.InitClient(ctx, types.STCPR, v.conf.Transport.StcprPort)
+	return nil
+}
+
+// initQuicClient starts the experimental QUIC transport when a quic_port is
+// configured (#2607 QUIC follow-on). Opt-in: a zero port leaves it disabled.
+func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {
+	if v.conf.Transport == nil || v.conf.Transport.QUICPort == 0 {
+		return nil
+	}
+	log.Infof("Initializing QUIC transport on UDP port %d", v.conf.Transport.QUICPort)
+	v.tpM.InitClient(ctx, types.QUIC, v.conf.Transport.QUICPort)
 	return nil
 }
 

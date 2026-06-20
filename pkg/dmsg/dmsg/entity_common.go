@@ -57,6 +57,24 @@ type EntityCommon struct {
 
 	updateInterval time.Duration // Minimum duration between discovery entry updates.
 
+	// advertisedUDPAddr is the QUIC (UDP) endpoint a server also listens on,
+	// set by Server.ServeQUIC. When non-empty, the discovery entry carries
+	// Server.AddressUDP + Protocol="quic" so QUIC-capable clients dial QUIC
+	// (#2607 dmsg-over-QUIC). Empty for clients and TCP-only servers.
+	advertisedUDPAddr string
+
+	// advertisedWSAddr is the WebSocket endpoint a server also listens on, set
+	// by Server.ServeWS. When non-empty, the discovery entry carries
+	// Server.AddressWS (a full ws:// or wss:// URL) so WS-only clients — chiefly
+	// the js/wasm build — can reach this server. Orthogonal to Protocol: WS
+	// runs the same Noise+yamux stack as TCP. Empty for clients and servers
+	// without a WS listener.
+	advertisedWSAddr string
+
+	// noListenerHits records inbound stream requests to ports this client has
+	// no listener on (dmsg error 306). Bounded; surfaced via NoListenerHits.
+	noListenerHits *portHitTracker
+
 	log  logrus.FieldLogger
 	mlog *logging.MasterLogger
 
@@ -119,7 +137,20 @@ func (c *EntityCommon) init(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClien
 	c.sessionsMx = new(sync.Mutex)
 	c.updateInterval = updateInterval
 	c.entryNudge = make(chan struct{}, 1)
+	c.noListenerHits = newPortHitTracker(defaultPortHitCap)
 	c.log = log
+}
+
+// NoListenerHits returns a snapshot of inbound stream requests this client
+// rejected because no listener was bound on the destination port (dmsg error
+// 306), keyed by (source PK, destination port), most-recent first.
+func (c *EntityCommon) NoListenerHits() []PortHit {
+	return c.noListenerHits.snapshot()
+}
+
+// recordNoListenerHit notes one no-listener inbound request. Nil-safe.
+func (c *EntityCommon) recordNoListenerHit(srcPK cipher.PubKey, dstPort uint16) {
+	c.noListenerHits.record(srcPK, dstPort)
 }
 
 // addDiscovery appends an additional dmsg-discovery to register with.
@@ -447,9 +478,11 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	sessionsDelta := entry.Server.AvailableSessions != availableSessions
 	addrDelta := entry.Server.Address != addr
 	addrV6Delta := entry.Server.AddressV6 != addrV6
+	udpDelta := entry.Server.AddressUDP != c.advertisedUDPAddr
+	wsDelta := entry.Server.AddressWS != c.advertisedWSAddr
 
 	// No update needed if entry has no delta AND update is not due.
-	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !due {
+	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !due {
 		return nil
 	}
 
@@ -465,6 +498,23 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	if addrV6Delta {
 		entry.Server.AddressV6 = addrV6
 		log = log.WithField("addr_v6", entry.Server.AddressV6)
+	}
+	// Advertise the QUIC (UDP) endpoint + Protocol "quic" when the server runs
+	// a QUIC listener (#2607 dmsg-over-QUIC). QUIC-capable clients dial it;
+	// others keep using Address (TCP).
+	if c.advertisedUDPAddr != "" {
+		entry.Server.AddressUDP = c.advertisedUDPAddr
+		entry.Protocol = "quic"
+		log = log.WithField("addr_udp", entry.Server.AddressUDP)
+	}
+	// Advertise the WebSocket endpoint when the server runs a WS listener
+	// (dmsg-over-WebSocket). Unlike QUIC this does NOT touch Protocol: WS runs
+	// the same Noise+yamux stack, so the entry can carry Address (TCP),
+	// AddressUDP (QUIC) and AddressWS simultaneously, each dialed by the
+	// clients that can use it.
+	if c.advertisedWSAddr != "" {
+		entry.Server.AddressWS = c.advertisedWSAddr
+		log = log.WithField("addr_ws", entry.Server.AddressWS)
 	}
 	// Propagate DHT bootstrap status to discovery entry.
 	entry.Server.DHTBootstrap = c.dhtBootstrap
@@ -632,6 +682,18 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 
 	var firstErr error
 	anyOK := false
+	// Re-check shutdown immediately before the publish IO. The work above
+	// (session snapshot + endpoint resolution) can take time, and Close() may
+	// have fired since the top-of-function check. Without this a PutEntry can
+	// land AFTER Close()'s delEntry, leaving a zombie "advertised but
+	// unreachable" client entry until its TTL — the same pathology fixed on the
+	// server side (#3145). Narrows the window sharply; a full join is deferred
+	// because the client wg machinery intentionally avoids wg.Add on these
+	// background loops to dodge an Add-after-Wait race (see Client.closed and
+	// the comment at client.go:145-148).
+	if isClosed(done) {
+		return nil
+	}
 	for _, ep := range endpoints {
 		if updateErr := c.updateClientEntryOnEndpoint(ctx, ep, clientType, srvPKs); updateErr != nil {
 			if firstErr == nil {
@@ -717,9 +779,71 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 // while shrinking the stale-entry window by 80 %.
 const entryUpdateDebounce = 1 * time.Second
 
+// entryUpdateAttemptTimeout bounds a single updateClientEntry call so a
+// stuck PUT (e.g. dmsg-HTTP stream-dial that the underlying transport never
+// errors out of) doesn't hang the loop forever. Without this, a service
+// whose first PUT-via-dmsg-HTTP raced its dmsg-disc peer's outbound-session
+// establishment could stall here permanently — observed on a fresh dmsg-
+// only deployment service post-autopull: nothing returns, nothing retries,
+// the entry never registers.
+const entryUpdateAttemptTimeout = 30 * time.Second
+
+// entryUpdateMinBackoff / entryUpdateMaxBackoff bracket the exponential
+// backoff applied when updateClientEntry returns a non-nil error. The loop
+// otherwise rearms its timer at c.updateInterval (default 1 min, often 5
+// in service configs) which would leave dmsg-only services unregistered
+// for minutes after a transient publish failure.
+const (
+	entryUpdateMinBackoff = time.Second
+	entryUpdateMaxBackoff = 30 * time.Second
+)
+
+// entryFailureBackoff returns the delay before the next attempt after
+// `consecutiveFailures` consecutive failed updates. Exponential, clamped
+// to entryUpdateMaxBackoff.
+func entryFailureBackoff(consecutiveFailures int) time.Duration {
+	if consecutiveFailures <= 0 {
+		return entryUpdateMinBackoff
+	}
+	d := entryUpdateMinBackoff << (consecutiveFailures - 1) //nolint:gosec
+	if d <= 0 || d > entryUpdateMaxBackoff {
+		return entryUpdateMaxBackoff
+	}
+	return d
+}
+
 func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan struct{}, clientType string) {
 	t := time.NewTimer(c.updateInterval)
 	defer t.Stop()
+
+	// runUpdate calls updateClientEntry with a per-attempt context timeout
+	// and returns whether the attempt succeeded. The timeout bounds a stuck
+	// underlying HTTP/dmsg-HTTP call without affecting the outer ctx the
+	// service runs under.
+	runUpdate := func(label string) bool {
+		callCtx, cancel := context.WithTimeout(ctx, entryUpdateAttemptTimeout)
+		defer cancel()
+		if err := c.updateClientEntry(callCtx, done, clientType); err != nil {
+			c.log.WithError(err).Warnf("Failed to update discovery entry (%s).", label)
+			return false
+		}
+		return true
+	}
+
+	// rearm rearms the timer at either c.updateInterval on success or a
+	// short exponential backoff on failure, so a transient publish failure
+	// (e.g. dmsg-HTTP cold-start race) doesn't leave the service silently
+	// unregistered for minutes.
+	consecutiveFailures := 0
+	rearm := func(ok bool) {
+		if ok {
+			consecutiveFailures = 0
+			t.Reset(c.updateInterval)
+			return
+		}
+		consecutiveFailures++
+		t.Reset(entryFailureBackoff(consecutiveFailures))
+	}
 
 	for {
 		select {
@@ -734,11 +858,7 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 
 			// updateClientEntry takes sessionsMx itself for its snapshot;
 			// holding it here would self-deadlock via the dmsgfirst path.
-			if err := c.updateClientEntry(ctx, done, clientType); err != nil {
-				c.log.WithError(err).Warn("Failed to update discovery entry.")
-			}
-
-			t.Reset(c.updateInterval)
+			rearm(runUpdate("tick"))
 
 		case <-c.entryNudge:
 			// Session added/removed — debounce to batch rapid changes.
@@ -757,10 +877,7 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			}
 		clientUpdate:
 			// See timer-tick comment above re: sessionsMx.
-			if err := c.updateClientEntry(ctx, done, clientType); err != nil {
-				c.log.WithError(err).Warn("Failed to update discovery entry (nudge).")
-			}
-			t.Reset(c.updateInterval)
+			rearm(runUpdate("nudge"))
 		}
 	}
 }

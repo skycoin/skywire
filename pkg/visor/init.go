@@ -57,6 +57,8 @@ var (
 	stcprC vinit.Module
 	// STCP module
 	stcpC vinit.Module
+	// QUIC module (#2607 QUIC follow-on)
+	quicC vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	ptyModule vinit.Module
 	// Dmsg module
@@ -158,6 +160,7 @@ func registerModules(logger *logging.MasterLogger) {
 	sudphC = maker("sudph", initSudphClient, &sc, &tr)
 	stcprC = maker("stcpr", initStcprClient, &tr)
 	stcpC = maker("stcp", initStcpClient, &tr)
+	quicC = maker("quic", initQuicClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
 	// dmsghttp_logserver mounts /pty on top of dmsgpty's CLI socket
@@ -226,7 +229,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// store. See init_group.go.
 	groupingMod = maker("grouping", initGrouping, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
@@ -283,6 +286,13 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 	if serviceURL.Scheme == "dmsg" {
 		if err != nil {
 			return nil, fmt.Errorf("provided URL is invalid: %w", err)
+		}
+		// Defense-in-depth: v.dClient is seeded from the embedded deployment
+		// set in initDmsgHTTP so it is normally never nil, but an
+		// empty-keyring build could still leave it nil — fail the call with a
+		// clear error instead of nil-dereferencing and crashing visor startup.
+		if v.dClient == nil {
+			return nil, fmt.Errorf("dmsg direct client unavailable (no configured/cached/embedded dmsg servers); cannot resolve %s", serviceURL.Host)
 		}
 		// get delegated servers and add them to the client entry
 		servers, err := v.dClient.AvailableServers(ctx)

@@ -191,7 +191,21 @@ func (r *skynetResolver) Resolve(ctx context.Context, name string) (context.Cont
 func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Config) error {
 	conf := &socks5.Config{
 		Resolver: &skynetResolver{cfg: cfg},
-		Dial: func(dialCtx context.Context, network, addr string) (net.Conn, error) {
+		Dial: func(dialCtx context.Context, network, addr string) (retConn net.Conn, retErr error) {
+			// Fail the single request instead of crashing the whole visor if
+			// anything in the dial path panics. go-socks5 invokes this from its
+			// per-connection serve goroutine with no recover of its own, so an
+			// unguarded panic here (e.g. a nil cfg.Stats / cfg.LeafMinter on a
+			// partially-populated config, or a resolver edge case) propagates
+			// up and takes the process down.
+			defer func() {
+				if rec := recover(); rec != nil {
+					log.WithField("panic", rec).Error("recovered panic in SOCKS5 dial — failing the request, not crashing the visor")
+					retConn = nil
+					retErr = fmt.Errorf("skynet dial: recovered panic: %v", rec)
+				}
+			}()
+
 			origHost, _ := dialCtx.Value(skynetOrigHostKey{}).(string)
 
 			// Check if hostname matches .skynet suffix.
@@ -237,7 +251,11 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					done(err)
 					return nil, fmt.Errorf("skynet dial: %w", err)
 				}
-				done(nil)
+				// done() is recorded at the ACTUAL outcome paths below, not
+				// here: the request is not truly successful until the full
+				// conn stack (host-rewrite + optional MITM-leaf mint) is
+				// built. Recording done(nil) right after the dial mis-counted
+				// a request that then failed at MITM-leaf minting as a success.
 
 				// Build the conn stack inside-out. The raw skywire
 				// conn is the innermost layer. Optional host-rewrite
@@ -278,11 +296,13 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					leaf, lerr := cfg.LeafMinter.For(origHost)
 					if lerr != nil {
 						_ = stack.Close() //nolint:errcheck,gosec
+						done(lerr)
 						return nil, fmt.Errorf("skynet mitm leaf: %w", lerr)
 					}
 					stack = skynetca.MITMTerminate(stack, leaf)
 				}
 
+				done(nil)
 				return &tcpAddrConn{Conn: stack}, nil
 			}
 

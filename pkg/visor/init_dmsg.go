@@ -98,7 +98,22 @@ func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	servers := shuffleServers(configured)
 
 	if len(servers) == 0 {
-		return nil
+		// No configured/cached dmsg servers (a minimal dmsg-only config on
+		// first boot, before dmsg_servers.json is written). Fall back to the
+		// embedded deployment set so v.dClient is NEVER left nil — mirrors
+		// seedDmsgServiceEntries' dmsg.Prod.DmsgServers fallback. A nil
+		// v.dClient nil-derefs getHTTPClient on dmsg:// URLs (crashes visor
+		// startup) AND makes dmsgc.New fall through to a plain-HTTP disc with
+		// no seeded server entries, whose first resolve recurses
+		// resolve->RoundTrip->resolve into a goroutine-stack overflow.
+		servers = shuffleServers(deployment.Prod.ToDiscEntries())
+		if len(servers) == 0 {
+			// Truly nothing embedded (e.g. an empty-keyring build); leaving
+			// dClient nil is unavoidable, but downstream nil-guards must hold.
+			return nil
+		}
+		log.WithField("count", len(servers)).
+			Warn("no configured/cached dmsg servers; seeding direct client from embedded deployment set")
 	}
 
 	keys = append(keys, v.conf.PK)
@@ -575,6 +590,10 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 	// Set visor as health stats provider for /health endpoint
 	lsAPI.SetHealthStatsProvider(v)
+	// Self-identify on /health and the landing page: PK + dmsg listen
+	// address (the log server's own dmsg port, where this surface is served).
+	dmsgAddr := fmt.Sprintf("%s:%d", v.conf.PK.Hex(), visorconfig.DmsgHTTPPort)
+	lsAPI.SetIdentity(v.conf.PK.Hex(), dmsgAddr)
 
 	// Store the log server API reference for public autocheck to use later
 	v.initLock.Lock()
@@ -593,6 +612,9 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 	// what ports are available for skynet forwarding.
 	lsAPI.SetServiceLister(v.services)
 	lsAPI.SetForwardedPortLister(v.forwardedPorts)
+	// Related nodes (managed visors + configured hypervisors) — shown as
+	// links to authenticated callers on the landing page.
+	lsAPI.SetRelatedNodesProvider(v)
 
 	// Mount the dmsgpty web terminal at /pty, gated by the same
 	// whitelist the dmsgpty Host enforces on direct connections —
@@ -710,6 +732,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 
 		// Set visor as health stats provider for /health endpoint
 		localAPI.SetHealthStatsProvider(v)
+		localAPI.SetIdentity(v.conf.PK.Hex(), dmsgAddr)
 
 		// Store the localhost API for potential future use
 		v.logServer.localAPI = localAPI

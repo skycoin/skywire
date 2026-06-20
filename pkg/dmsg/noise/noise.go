@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/flynn/noise"
 
@@ -14,6 +15,16 @@ import (
 )
 
 var noiseLogger = logging.MustGetLogger("noise")
+
+// requirePQ, when SKYWIRE_REQUIRE_PQ is set in the environment, makes a
+// handshake that COMPLETED classical-only (no ML-KEM shared secret) HARD-FAIL
+// instead of silently downgrading — the downgrade *prevention* that
+// complements the downgrade *observability* (the warn in applyHybrid). It is
+// the in-process enforcement knob for the unauthenticated-PQ-negotiation
+// finding: a payload-stripping MITM can no longer force a session to classical
+// without the handshake failing. Default OFF: flip on fleet-wide ONLY after
+// every peer is PQ-capable, or handshakes to not-yet-updated visors break.
+var requirePQ = os.Getenv("SKYWIRE_REQUIRE_PQ") != ""
 
 // ErrInvalidCipherText occurs when a ciphertext is received which is too short in size.
 var ErrInvalidCipherText = errors.New("noise decrypt unsafe: ciphertext cannot be less than 8 bytes")
@@ -167,6 +178,8 @@ func (ns *Noise) pqOfferPayload() []byte {
 	if ns.init && ns.pqInit == nil && ns.pqSecret == nil {
 		k, err := newPQInitiator()
 		if err != nil {
+			noiseLogger.WithError(err).
+				Warn("post-quantum keygen failed; proceeding with a CLASSICAL-only handshake")
 			return nil
 		}
 		ns.pqInit = k
@@ -211,6 +224,31 @@ func (ns *Noise) pqHandlePeerPayload(payload []byte) {
 // the hybrid key via the new CipherState (skywire's external nonce is unchanged).
 func (ns *Noise) applyHybrid() error {
 	if ns.pqSecret == nil || ns.enc == nil || ns.dec == nil {
+		// Downgrade observability: if we (the initiator) OFFERED an ML-KEM
+		// public key but the handshake completed (enc+dec set) with no shared
+		// secret, the peer returned no/malformed ciphertext — a PQ-capable
+		// handshake silently fell back to classical. That is expected against
+		// an older classical-only peer, but it is ALSO exactly what an active
+		// MITM stripping the ML-KEM payload looks like: PQ negotiation is not
+		// authenticated, so there is no in-band downgrade signal. Surfacing it
+		// is the minimum mitigation — a silent, undetectable downgrade becomes
+		// an observable one (prerequisite to a future require-PQ enforcement
+		// once the fleet is fully PQ-capable). Responders can't distinguish
+		// "peer is classical" from "MITM stripped", so only the
+		// initiator-offered case is logged.
+		if ns.enc != nil && ns.dec != nil {
+			// Handshake completed classical-only.
+			if requirePQ {
+				// Prevention: refuse the downgrade outright. Covers BOTH roles
+				// (initiator whose offer was stripped, and responder who saw no
+				// ML-KEM material), since under enforcement any classical-only
+				// completion is unacceptable.
+				return errors.New("post-quantum required (SKYWIRE_REQUIRE_PQ) but the session negotiated classical-only — refusing the handshake")
+			}
+			if ns.init && ns.pqInit != nil {
+				noiseLogger.Warn("post-quantum DOWNGRADE: offered ML-KEM but peer returned no ciphertext; session is CLASSICAL-only (older peer, or a payload-stripping MITM)")
+			}
+		}
 		return nil
 	}
 	cb := ns.hs.ChannelBinding()
@@ -241,6 +279,20 @@ func (ns *Noise) applyHybrid() error {
 // HandshakeFinished indicate whether handshake was completed.
 func (ns *Noise) HandshakeFinished() bool {
 	return ns.hs.MessageIndex() == len(ns.pattern.Messages)
+}
+
+// ChannelBinding returns a value that uniquely identifies the completed
+// handshake session — the Noise handshake hash. Both peers derive an identical
+// value, and it is bound to the full transcript (static keys + ephemerals + any
+// PQ hybrid payload), so it is safe to use as keying material for a sibling
+// channel keyed off the same session. The faithful-UDP path (#2607) HKDFs this
+// into a per-datagram AEAD master key so the datagram sibling of a route shares
+// the reliable route's authenticated session without a second handshake.
+//
+// Only meaningful once HandshakeFinished() is true; before that the binding is
+// still over a partial transcript.
+func (ns *Noise) ChannelBinding() []byte {
+	return ns.hs.ChannelBinding()
 }
 
 // LocalStatic returns the local static public key.

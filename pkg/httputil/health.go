@@ -16,6 +16,7 @@ type HealthCheckResponse struct {
 	ServiceName       string          `json:"service_name,omitempty"`
 	BuildInfo         *buildinfo.Info `json:"build_info,omitempty"`
 	StartedAt         time.Time       `json:"started_at"`
+	PublicKey         string          `json:"public_key,omitempty"`
 	DmsgAddr          string          `json:"dmsg_address,omitempty"`
 	DmsgDiscovery     string          `json:"dmsg_discovery,omitempty"`
 	DmsgServers       []string        `json:"dmsg_servers,omitempty"`

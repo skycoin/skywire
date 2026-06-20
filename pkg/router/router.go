@@ -154,6 +154,15 @@ type DialOptions struct {
 	ReverseHops           []routing.Hop // If set, use these hops for reverse path (skips route calculation)
 	MuxRoutes             int           // Number of parallel routes to establish (0 or 1 = single route, >1 = mux)
 	ExcludeTransportIDs   []uuid.UUID   // Transport IDs to exclude from route calculation (for mux)
+	// Datagram, when true, asks the dial to build a faithful-UDP
+	// DatagramRouteGroup sibling over the established route (#2607).
+	// The route's reliable RouteGroup is still set up exactly as
+	// usual (and is what carries the one-time Noise handshake whose
+	// ChannelBinding keys the datagram AEAD); the datagram sibling is
+	// built alongside it once the handshake completes. The accept
+	// side opts in independently via RegisterDatagramPort — both ends
+	// must locally intend datagram mode for it to work.
+	Datagram bool
 	// MinHops, when > 0, is the per-call minimum hop count constraint.
 	// Overrides Config.MinHops for this dial only — needed by callers
 	// that want a non-direct path even when the visor's global
@@ -337,6 +346,26 @@ type Router interface {
 	DialRoutes(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
 	PingRoute(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, error)
 
+	// DialRoutesDatagram dials a faithful-UDP (#2607) route. It performs a
+	// normal DialRoutes (forcing opts.Datagram=true so the reliable route's
+	// Noise handshake also keys a DatagramRouteGroup sibling), then returns
+	// both the reliable conn (which the caller must keep alive — closing it
+	// tears down the route and the sibling) and the datagram sibling. Errors
+	// if the peer did not also register datagram intent for the port (no
+	// sibling registered).
+	DialRoutesDatagram(ctx context.Context, rPK cipher.PubKey, lPort, rPort routing.Port, opts *DialOptions) (net.Conn, *DatagramRouteGroup, error)
+
+	// RegisterDatagramPort / UnregisterDatagramPort mark a local port as
+	// faithful-UDP-capable (#2607). The accept side builds a datagram
+	// sibling only for routes whose local port is registered.
+	RegisterDatagramPort(port routing.Port)
+	UnregisterDatagramPort(port routing.Port)
+
+	// AcceptDatagram blocks until an accept-side datagram sibling is
+	// available (or ctx/visor is done), returning it and the local port
+	// it targets. Drained by the forwarded_ports.udp server loop.
+	AcceptDatagram(ctx context.Context) (*DatagramRouteGroup, routing.Port, error)
+
 	// AcceptRoutes should block until we receive an AddRules packet from SetupNode
 	// that contains ConsumeRule(s) or ForwardRule(s).
 	// Then the following should happen:
@@ -408,9 +437,12 @@ type router struct {
 	trustedVisors      map[cipher.PubKey]struct{}
 	tm                 *transport.Manager
 	rt                 routing.Table
-	rgsNs              map[routing.RouteDescriptor]*NoiseRouteGroup // Noise-wrapped route groups to push incoming reads from transports.
-	rgsRaw             map[routing.RouteDescriptor]*RouteGroup      // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
-	pending            *pendingPackets                              // frames parked during the rule-save -> route-group-register window (see router_pending.go)
+	rgsNs              map[routing.RouteDescriptor]*NoiseRouteGroup    // Noise-wrapped route groups to push incoming reads from transports.
+	rgsRaw             map[routing.RouteDescriptor]*RouteGroup         // Not-yet-noise-wrapped route groups. when one of these gets wrapped, it gets removed from here
+	rgsDatagrams       map[routing.RouteDescriptor]*DatagramRouteGroup // faithful-UDP (DatagramPacket) route groups, keyed like rgsNs; #2607 stage-4 dispatch
+	datagramPorts      map[routing.Port]struct{}                       // local ports with faithful-UDP intent; the accept side builds a datagram sibling only for these (#2607 on-demand-by-local-intent)
+	acceptDatagram     chan datagramAccept                             // accept-side datagram siblings, drained by AcceptDatagram (the forwarded_ports.udp server loop)
+	pending            *pendingPackets                                 // frames parked during the rule-save -> route-group-register window (see router_pending.go)
 	rpcSrv             *rpc.Server
 	accept             chan routing.EdgeRules
 	done               chan struct{}
@@ -490,6 +522,9 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		dmsgC:           dmsgC,
 		rgsNs:           make(map[routing.RouteDescriptor]*NoiseRouteGroup),
 		rgsRaw:          make(map[routing.RouteDescriptor]*RouteGroup),
+		rgsDatagrams:    make(map[routing.RouteDescriptor]*DatagramRouteGroup),
+		datagramPorts:   make(map[routing.Port]struct{}),
+		acceptDatagram:  make(chan datagramAccept, acceptDatagramBuf),
 		pending:         newPendingPackets(),
 		rpcSrv:          rpc.NewServer(),
 		accept:          make(chan routing.EdgeRules, acceptSize),

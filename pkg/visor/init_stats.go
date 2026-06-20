@@ -387,12 +387,16 @@ func isDMSGOnline(v *Visor) bool {
 	if v.dmsgC == nil {
 		return false
 	}
-	select {
-	case <-v.dmsgC.Ready():
-		return true
-	default:
-		return false
-	}
+	// Live check: dmsg is online iff it currently holds at least one server
+	// session. Do NOT use Ready() here — Ready() is a one-shot latch
+	// (readyOnce closes it on FIRST readiness and it never reopens), so it
+	// reports "ready ever since startup", not "ready now". As a per-sample
+	// uptime probe that is simply wrong: it can't see dmsg drop mid-run, and
+	// it produces nonsensical comparisons against the live skynet/transport
+	// probe (e.g. skynet uptime appearing higher than dmsg, which is
+	// impossible when both are measured live). AllSessions() reads the
+	// current client-session set, so this tracks real dmsg connectivity.
+	return len(v.dmsgC.AllSessions()) > 0
 }
 
 func countLiveTransports(v *Visor) int {

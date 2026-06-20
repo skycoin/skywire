@@ -141,6 +141,45 @@ func (r *router) removeNoiseRouteGroup(desc routing.RouteDescriptor) {
 	delete(r.rgsNs, desc)
 }
 
+// datagramRouteGroup returns the faithful-UDP route group registered for desc,
+// if any. Mirrors noiseRouteGroup; the datagram groups live in their own map so
+// a DatagramPacket is never confused with a reliable RouteGroup keyed by the
+// same descriptor. #2607 stage-4 dispatch.
+func (r *router) datagramRouteGroup(desc routing.RouteDescriptor) (*DatagramRouteGroup, bool) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+
+	dg, ok := r.rgsDatagrams[desc]
+
+	return dg, ok
+}
+
+// setDatagramRouteGroup registers (or replaces) the datagram route group for
+// desc. A pre-existing group for the same descriptor is closed first so a
+// re-dial doesn't leak the old pump. Called by the route-setup integration once
+// it constructs a DatagramRouteGroup.
+func (r *router) setDatagramRouteGroup(desc routing.RouteDescriptor, dg *DatagramRouteGroup) {
+	r.mx.Lock()
+	old, ok := r.rgsDatagrams[desc]
+	r.rgsDatagrams[desc] = dg
+	r.mx.Unlock()
+
+	if ok && old != nil && old != dg {
+		if err := old.Close(); err != nil {
+			r.logger.WithError(err).Debugf("Failed to close replaced datagram route group %s", desc.String())
+		}
+	}
+}
+
+// removeDatagramRouteGroup de-registers the datagram route group for desc. The
+// caller owns closing the group; this only drops the dispatch mapping.
+func (r *router) removeDatagramRouteGroup(desc routing.RouteDescriptor) {
+	r.mx.Lock()
+	defer r.mx.Unlock()
+
+	delete(r.rgsDatagrams, desc)
+}
+
 func (r *router) IntroduceRules(rules routing.EdgeRules) error {
 	// Save rules immediately to avoid race with incoming transport packets
 	if err := r.SaveRoutingRules(rules.Forward, rules.Reverse); err != nil {

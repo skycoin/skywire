@@ -2,7 +2,9 @@
 package dmsg
 
 import (
+	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/chen3feng/safecast"
 	"github.com/hashicorp/yamux"
+	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
@@ -43,11 +46,16 @@ type SessionCommon struct {
 	log logrus.FieldLogger
 }
 
-// SessionManager blablabla
+// SessionManager holds the active multiplexer for a session. Exactly one of
+// yamux / smux / quic is non-nil. yamux and smux multiplex streams over a
+// single reliable conn (TCP); quic is a QUIC connection whose native streams
+// ARE the dmsg streams (no separate mux) and which also carries an unreliable
+// datagram channel — #2607 dmsg-over-QUIC.
 type SessionManager struct {
 	mutx  sync.RWMutex
 	yamux *yamux.Session
 	smux  *smux.Session
+	quic  *quic.Conn
 	addr  net.Addr
 }
 
@@ -124,10 +132,89 @@ func (sc *SessionCommon) initServer(entity *EntityCommon, conn net.Conn) error {
 	return nil
 }
 
+// quicAddrConn adapts a *quic.Conn to net.Conn for the addr-only accessors
+// (LocalTCPAddr/RemoteTCPAddr/SrcConn) on a QUIC session. The session never
+// reads/writes it directly — QUIC data flows over QUIC streams — so Read/Write
+// are inert stubs.
+type quicAddrConn struct{ qc *quic.Conn }
+
+func (c quicAddrConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (c quicAddrConn) Write([]byte) (int, error)        { return 0, io.ErrClosedPipe }
+func (c quicAddrConn) Close() error                     { return c.qc.CloseWithError(0, "") }
+func (c quicAddrConn) LocalAddr() net.Addr              { return c.qc.LocalAddr() }
+func (c quicAddrConn) RemoteAddr() net.Addr             { return c.qc.RemoteAddr() }
+func (c quicAddrConn) SetDeadline(time.Time) error      { return nil }
+func (c quicAddrConn) SetReadDeadline(time.Time) error  { return nil }
+func (c quicAddrConn) SetWriteDeadline(time.Time) error { return nil }
+
+// ErrDatagramsUnsupported is returned by the session datagram API for non-QUIC
+// sessions (TCP+yamux/smux carries reliable streams only).
+var ErrDatagramsUnsupported = errors.New("dmsg: session does not support datagrams (not a QUIC session)")
+
+// SupportsDatagrams reports whether this session can carry unreliable datagrams
+// — true only for QUIC sessions (#2607 dmsg-over-QUIC).
+func (sc *SessionCommon) SupportsDatagrams() bool {
+	sc.sm.mutx.RLock()
+	defer sc.sm.mutx.RUnlock()
+	return sc.sm.quic != nil
+}
+
+// WriteDatagram sends an unreliable datagram over the session's QUIC connection
+// (RFC 9221) — UDP-over-dmsg. Returns ErrDatagramsUnsupported on non-QUIC
+// sessions. Datagrams ride the same PK-bound-TLS-encrypted QUIC connection as
+// the session's streams; this gives dmsg a genuine datagram channel that the
+// reliable yamux/smux mux cannot.
+func (sc *SessionCommon) WriteDatagram(b []byte) error {
+	sc.sm.mutx.RLock()
+	qc := sc.sm.quic
+	sc.sm.mutx.RUnlock()
+	if qc == nil {
+		return ErrDatagramsUnsupported
+	}
+	return qc.SendDatagram(b)
+}
+
+// ReadDatagram receives an unreliable datagram from the session's QUIC
+// connection. Returns ErrDatagramsUnsupported on non-QUIC sessions.
+func (sc *SessionCommon) ReadDatagram(ctx context.Context) ([]byte, error) {
+	sc.sm.mutx.RLock()
+	qc := sc.sm.quic
+	sc.sm.mutx.RUnlock()
+	if qc == nil {
+		return nil, ErrDatagramsUnsupported
+	}
+	return qc.ReceiveDatagram(ctx)
+}
+
+// initQUIC sets up a session (client or server) over a QUIC connection — no
+// Noise handshake. The PK-bound QUIC TLS (pkg/skyquic, option A) already
+// authenticated the peer's skywire PK and encrypts the client↔server hop;
+// dmsg streams ARE QUIC streams. rPK is the peer PK: the dialer knows it up
+// front; the server learns it from the verified QUIC TLS certificate.
+func (sc *SessionCommon) initQUIC(entity *EntityCommon, qc *quic.Conn, rPK cipher.PubKey) {
+	sc.entity = entity
+	sc.rPK = rPK
+	sc.netConn = quicAddrConn{qc: qc}
+	sc.sm.quic = qc
+	sc.sm.addr = qc.RemoteAddr()
+	sc.ns = nil
+	sc.nw = nil
+	sc.log = entity.log.WithField("session", rPK)
+}
+
 // writeEncryptedGob encrypts with noise and prefixed with uint16 (2 additional bytes).
 func (sc *SessionCommon) writeObject(w io.Writer, obj SignedObject) error {
 	sc.wMx.Lock()
-	p := sc.ns.EncryptUnsafe(obj)
+	// QUIC sessions (sc.ns == nil) skip the per-object Noise encryption: the
+	// QUIC stream is already TLS-encrypted (PK-bound), and the object stays
+	// signed so dmsg-level authentication is unchanged. Other sessions keep
+	// the Noise layer.
+	var p []byte
+	if sc.ns == nil {
+		p = append([]byte(nil), obj...)
+	} else {
+		p = sc.ns.EncryptUnsafe(obj)
+	}
 	sc.wMx.Unlock()
 	p = append(make([]byte, 2), p...)
 	lps2, ok := safecast.To[uint16](len(p) - 2)
@@ -147,6 +234,12 @@ func (sc *SessionCommon) readObject(r io.Reader) (SignedObject, error) {
 	pb := make([]byte, binary.BigEndian.Uint16(lb))
 	if _, err := io.ReadFull(r, pb); err != nil {
 		return nil, err
+	}
+
+	// QUIC sessions (sc.ns == nil) read the signed object straight off the
+	// already-encrypted QUIC stream — no Noise decrypt, no nonce window.
+	if sc.ns == nil {
+		return SignedObject(pb), nil
 	}
 
 	sc.rMx.Lock()
@@ -181,13 +274,21 @@ var pingMarker = []byte{0x00, 0x00}
 
 // Ping obtains the round trip latency of the session.
 func (sc *SessionCommon) Ping() (time.Duration, error) {
+	// Snapshot the mux under the lock, then release it BEFORE the blocking
+	// round-trip. Holding RLock across the up-to-sessionPingTimeout (18s)
+	// round-trip stalled every sm.mutx.Lock() writer — Close / ForceReconnect
+	// blocked up to 18s behind a single in-flight ping. Operating on the
+	// snapshot is safe: if the session is closed concurrently, OpenStream /
+	// Write / Read on the snapshotted mux just error out and the ping fails.
 	sc.sm.mutx.RLock()
-	defer sc.sm.mutx.RUnlock()
-	if sc.sm.yamux != nil {
-		return sc.yamuxPing()
+	yamuxSes := sc.sm.yamux
+	smuxSes := sc.sm.smux
+	sc.sm.mutx.RUnlock()
+	if yamuxSes != nil {
+		return sc.yamuxPing(yamuxSes)
 	}
-	if sc.sm.smux != nil {
-		return sc.smuxPing()
+	if smuxSes != nil {
+		return sc.smuxPing(smuxSes)
 	}
 	return 0, fmt.Errorf("no mux session available for ping")
 }
@@ -210,14 +311,28 @@ func (sc *SessionCommon) Ping() (time.Duration, error) {
 // mismatch, so the existing pingDeadThreshold logic can close + redial the
 // dead session. The smux path already worked this way; this brings yamux to
 // parity.
-func (sc *SessionCommon) yamuxPing() (time.Duration, error) {
-	str, err := sc.sm.yamux.OpenStream()
+// sessionPingTimeout bounds the liveness-ping round-trip. It must distinguish
+// a DEAD session from a merely SLOW one: the ping opens a real stream and
+// round-trips a marker through the server's serveStream path, so under load
+// (or Docker's bridged-network latency) a live session's echo can take several
+// seconds. The old 5s was low enough that, during a fleet reconnect storm or
+// cold-start, live sessions false-positive as dead (pingDeadThreshold=2 → ~2
+// failed pings → session killed → re-dial), manufacturing MORE reconnect churn
+// — which floods the dmsg-server accept queues. 18s sits well above worst-case
+// loaded round-trips yet well under the 60s ping interval, so a genuinely dead
+// session is still caught within ~2 cycles. Slow sessions are already
+// deprioritized for dials via RTT-based selection, so there's no benefit to
+// culling them — only the harm of an extra noise handshake.
+const sessionPingTimeout = 18 * time.Second
+
+func (sc *SessionCommon) yamuxPing(yamuxSes *yamux.Session) (time.Duration, error) {
+	str, err := yamuxSes.OpenStream()
 	if err != nil {
 		return 0, fmt.Errorf("yamux ping: open stream: %w", err)
 	}
 	defer str.Close() //nolint:errcheck
 
-	if err := str.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+	if err := str.SetDeadline(time.Now().Add(sessionPingTimeout)); err != nil {
 		return 0, fmt.Errorf("yamux ping: set deadline: %w", err)
 	}
 
@@ -234,14 +349,14 @@ func (sc *SessionCommon) yamuxPing() (time.Duration, error) {
 
 // smuxPing implements ping over smux by opening a temporary stream,
 // writing a ping marker, and waiting for the echo.
-func (sc *SessionCommon) smuxPing() (time.Duration, error) {
-	str, err := sc.sm.smux.OpenStream()
+func (sc *SessionCommon) smuxPing(smuxSes *smux.Session) (time.Duration, error) {
+	str, err := smuxSes.OpenStream()
 	if err != nil {
 		return 0, fmt.Errorf("smux ping: open stream: %w", err)
 	}
 	defer str.Close() //nolint:errcheck
 
-	if err := str.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+	if err := str.SetDeadline(time.Now().Add(sessionPingTimeout)); err != nil {
 		return 0, fmt.Errorf("smux ping: set deadline: %w", err)
 	}
 
@@ -274,10 +389,13 @@ func (sc *SessionCommon) Close() error {
 	}
 	var err error
 	sc.sm.mutx.Lock()
-	if sc.sm.smux != nil {
+	switch {
+	case sc.sm.smux != nil:
 		err = sc.sm.smux.Close()
-	} else if sc.sm.yamux != nil {
+	case sc.sm.yamux != nil:
 		err = sc.sm.yamux.Close()
+	case sc.sm.quic != nil:
+		err = sc.sm.quic.CloseWithError(0, "session closed")
 	}
 	sc.sm.mutx.Unlock()
 	sc.rMx.Lock()

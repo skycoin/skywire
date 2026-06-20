@@ -15,6 +15,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/router"
@@ -40,6 +41,10 @@ type API interface {
 	EnableHypervisorPersist(persist bool) error
 	DisableHypervisorPersist(persist bool) error
 	IsHypervisorEnabled() bool
+	EnableHypervisorUIPersist(persist bool) error
+	DisableHypervisorUIPersist(persist bool) error
+	IsHypervisorUIServing() bool
+	DmsgPortHits() []dmsg.PortHit
 	Uptime() (float64, error)
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
@@ -196,6 +201,12 @@ type API interface {
 	RegisterForwardedPort(p ForwardedPort) error
 	UpdateForwardedPort(p ForwardedPort) error
 	ListForwardedPorts() ([]ForwardedPort, error)
+	// DialUDPForward / StopUDPForward / ListUDPForwards drive client-side
+	// faithful-UDP port forwarding (#2607): bridge a local UDP socket to
+	// a remote forwarded_ports.udp service via DialPacket.
+	DialUDPForward(remotePK cipher.PubKey, remotePort, localPort int) error
+	StopUDPForward(localPort int) error
+	ListUDPForwards() ([]int, error)
 	ConnectRawTCP(network string, remotePK cipher.PubKey, remotePort, localPort int) (uuid.UUID, error)
 	DisconnectRawTCP(id uuid.UUID) error
 	ListRawTCP() (map[uuid.UUID]*appnet.RawTCPForwardConn, error)
@@ -454,22 +465,26 @@ type HealthCheckable interface {
 
 // Overview provides a range of basic information about a Visor.
 type Overview struct {
-	PubKey              cipher.PubKey         `json:"local_pk"`
-	BuildInfo           *buildinfo.Info       `json:"build_info"`
-	AppProtoVersion     string                `json:"app_protocol_version"`
-	Apps                []*appserver.AppState `json:"apps"`
-	Transports          []*TransportSummary   `json:"transports"`
-	RoutesCount         int                   `json:"routes_count"`
-	LocalIP             string                `json:"local_ip"`
-	PublicIP            string                `json:"public_ip"`
-	IsSymmetricNAT      bool                  `json:"is_symmetic_nat"`
-	CountryCode         string                `json:"country_code,omitempty"`
-	RegionName          string                `json:"region_name,omitempty"`
-	CityName            string                `json:"city_name,omitempty"`
-	Latitude            float64               `json:"latitude,omitempty"`
-	Longitude           float64               `json:"longitude,omitempty"`
-	Hypervisors         []cipher.PubKey       `json:"hypervisors"`
-	ConnectedHypervisor []cipher.PubKey       `json:"connected_hypervisor"`
+	PubKey          cipher.PubKey         `json:"local_pk"`
+	BuildInfo       *buildinfo.Info       `json:"build_info"`
+	AppProtoVersion string                `json:"app_protocol_version"`
+	Apps            []*appserver.AppState `json:"apps"`
+	Transports      []*TransportSummary   `json:"transports"`
+	RoutesCount     int                   `json:"routes_count"`
+	LocalIP         string                `json:"local_ip"`
+	PublicIP        string                `json:"public_ip"`
+	IsSymmetricNAT  bool                  `json:"is_symmetic_nat"`
+	// NATType is the visor's STUN-classified NAT type (e.g. "Full cone NAT",
+	// "Symmetric NAT"), determined once at startup. Surfaced so `cli visor ip`
+	// reports the visor's already-known result instead of re-running STUN.
+	NATType             string          `json:"nat_type,omitempty"`
+	CountryCode         string          `json:"country_code,omitempty"`
+	RegionName          string          `json:"region_name,omitempty"`
+	CityName            string          `json:"city_name,omitempty"`
+	Latitude            float64         `json:"latitude,omitempty"`
+	Longitude           float64         `json:"longitude,omitempty"`
+	Hypervisors         []cipher.PubKey `json:"hypervisors"`
+	ConnectedHypervisor []cipher.PubKey `json:"connected_hypervisor"`
 	// Hostname is the operating-system hostname the visor process
 	// sees at the time of the Overview call. Best-effort:
 	// os.Hostname() failures (sandbox / containerized environments

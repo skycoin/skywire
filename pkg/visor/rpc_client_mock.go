@@ -18,6 +18,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -229,6 +230,18 @@ func (mc *mockRPCClient) DisableHypervisorPersist(_ bool) error { return nil }
 
 // IsHypervisorEnabled implements API
 func (mc *mockRPCClient) IsHypervisorEnabled() bool { return false }
+
+// EnableHypervisorUIPersist implements API
+func (mc *mockRPCClient) EnableHypervisorUIPersist(_ bool) error { return nil }
+
+// DisableHypervisorUIPersist implements API
+func (mc *mockRPCClient) DisableHypervisorUIPersist(_ bool) error { return nil }
+
+// IsHypervisorUIServing implements API
+func (mc *mockRPCClient) IsHypervisorUIServing() bool { return false }
+
+// DmsgPortHits implements API
+func (mc *mockRPCClient) DmsgPortHits() []dmsg.PortHit { return nil }
 
 // Uptime implements API
 func (mc *mockRPCClient) Uptime() (float64, error) {
@@ -1015,6 +1028,21 @@ func (mc *mockRPCClient) RegisterTCPPort(_ int) error {
 // DeregisterTCPPort implements API.
 func (mc *mockRPCClient) DeregisterTCPPort(_ int) error {
 	return nil
+}
+
+// DialUDPForward implements API.
+func (mc *mockRPCClient) DialUDPForward(_ cipher.PubKey, _, _ int) error {
+	return nil
+}
+
+// StopUDPForward implements API.
+func (mc *mockRPCClient) StopUDPForward(_ int) error {
+	return nil
+}
+
+// ListUDPForwards implements API.
+func (mc *mockRPCClient) ListUDPForwards() ([]int, error) {
+	return nil, nil
 }
 
 // ListTCPPorts implements API.
