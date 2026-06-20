@@ -207,6 +207,24 @@ type Server struct {
 	// Backward-compatible: omitempty + older clients/servers ignore it.
 	AddressWS string `json:"address_ws,omitempty"`
 
+	// AddressWT is the optional WebTransport (HTTP/3-over-QUIC) endpoint a server
+	// also listens on (dmsg-over-WebTransport). It carries a full https:// URL
+	// including path (e.g. "https://1.2.3.4:8443/dmsg"). Like AddressWS it is a
+	// net.Conn-style single stream carrying the SAME Noise+yamux stack — the
+	// session is identical, only the underlying transport differs. WebTransport's
+	// value over WS is that a browser can reach it by BARE IP with no CA-issued
+	// certificate: the browser pins CertHashWT (below) in its WebTransport
+	// serverCertificateHashes constructor. Backward-compatible: omitempty + older
+	// clients/servers ignore it.
+	AddressWT string `json:"address_wt,omitempty"`
+
+	// CertHashWT is the lowercase-hex SHA-256 of the DER of the self-signed ECDSA
+	// certificate served on AddressWT. It is the value a browser pins in the
+	// WebTransport serverCertificateHashes option to reach AddressWT with no CA.
+	// The server rotates its cert (<=14-day validity, browser-enforced) and
+	// re-advertises this hash. Empty unless AddressWT is set.
+	CertHashWT string `json:"cert_hash_wt,omitempty"`
+
 	// AvailableSessions is the number of available sessions that the server can currently accept.
 	AvailableSessions int `json:"availableSessions"`
 
@@ -226,6 +244,9 @@ func (s *Server) String() string {
 	}
 	if s.AddressWS != "" {
 		res += fmt.Sprintf("\taddress (websocket): %s\n", s.AddressWS)
+	}
+	if s.AddressWT != "" {
+		res += fmt.Sprintf("\taddress (webtransport): %s\n", s.AddressWT)
 	}
 	res += fmt.Sprintf("\tavailable sessions: %d\n", s.AvailableSessions)
 
