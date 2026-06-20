@@ -6,12 +6,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestServiceFetchOrder pins the transport-preference rule for service data
-// fetches: DMSG-HTTP is the default service transport, so it is tried first
-// whenever a dmsg URL is configured; plain HTTP is only the dual-config
-// fallback or the http-only path. Regression guard for the blank hypervisor
-// "network" tab — a dmsg-only visor (no HTTP service_discovery URL) must still
-// reach service-discovery over dmsg instead of failing "not configured".
+// TestServiceFetchOrder pins the dmsg-only fetch rule: only dmsg:// endpoints
+// are used (plain HTTP to deployment services is no longer supported), and the
+// dmsg URL is taken from whichever field holds it — the dmsg-only default config
+// stores it in the "http" field (service_discovery = "dmsg://..."), legacy dual
+// configs use the *_dmsg field. Clearnet URLs are dropped entirely.
 func TestServiceFetchOrder(t *testing.T) {
 	const httpURL = "http://sd.example"
 	const dmsgURL = "dmsg://0204890f:80"
@@ -22,19 +21,24 @@ func TestServiceFetchOrder(t *testing.T) {
 		want             []serviceHop
 	}{
 		{
-			name:    "dual: dmsg first then http",
+			name:    "dual (http + dmsg): only dmsg is used, clearnet dropped",
 			httpURL: httpURL, dmsgURL: dmsgURL,
-			want: []serviceHop{{dmsg: true, baseURL: dmsgURL}, {dmsg: false, baseURL: httpURL}},
+			want: []serviceHop{{baseURL: dmsgURL}},
 		},
 		{
-			name:    "dmsg-only: dmsg only (the default config)",
+			name:    "dmsg-only via the dmsg field",
 			httpURL: "", dmsgURL: dmsgURL,
-			want: []serviceHop{{dmsg: true, baseURL: dmsgURL}},
+			want: []serviceHop{{baseURL: dmsgURL}},
 		},
 		{
-			name:    "http-only: http only",
+			name:    "dmsg-only default: dmsg URL stored in the http field",
+			httpURL: dmsgURL, dmsgURL: "",
+			want: []serviceHop{{baseURL: dmsgURL}},
+		},
+		{
+			name:    "clearnet-only: dropped (plain HTTP unsupported)",
 			httpURL: httpURL, dmsgURL: "",
-			want: []serviceHop{{dmsg: false, baseURL: httpURL}},
+			want: nil,
 		},
 		{
 			name:    "neither configured",

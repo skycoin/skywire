@@ -210,7 +210,7 @@ func (p *visorPolicyProvider) refreshSDGeo() {
 		var entries []servicedisc.Service
 		if services, ok := p.visor.servicesFromCXO(t, "", ""); ok {
 			entries = services
-		} else if services, err := p.visor.servicesFromHTTP(t, "", ""); err == nil {
+		} else if services, err := p.visor.servicesFromDmsg(t, "", ""); err == nil {
 			entries = services
 		} else if p.visor.log != nil {
 			p.visor.log.WithError(err).WithField("service_type", t).
