@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -36,20 +35,16 @@ import (
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	// Try DMSG-HTTP first for address resolver if configured
-	arURL := conf.AddressResolver
-	if conf.AddressResolverDmsg != "" && v.dmsgC != nil {
-		if dmsgC, err := getHTTPClient(ctx, v, conf.AddressResolverDmsg); err == nil {
-			arURL = conf.AddressResolverDmsg
-			_ = dmsgC // URL is enough, getHTTPClient sets up DMSG routing
-			log.Info("Using DMSG-HTTP for address resolver")
-		} else if arURL != "" {
-			log.WithError(err).Warn("DMSG-HTTP address resolver failed, using plain HTTP")
-		} else {
-			return fmt.Errorf("address resolver: DMSG-only but unreachable: %w", err)
-		}
-	} else if arURL == "" && conf.AddressResolverDmsg != "" {
-		arURL = conf.AddressResolverDmsg
+	// Address resolver is dmsg-only — plain HTTP to the AR is no longer
+	// supported. The dmsg URL lives in AddressResolverDmsg (legacy dual configs)
+	// or AddressResolver (dmsg-only default, which stores the dmsg:// URL there).
+	// getHTTPClient rejects a non-dmsg URL, so a clearnet AR fails loud.
+	arURL := conf.AddressResolverDmsg
+	if arURL == "" {
+		arURL = conf.AddressResolver
+	}
+	if arURL == "" {
+		return fmt.Errorf("address resolver URL not configured")
 	}
 
 	httpC, err := getHTTPClient(ctx, v, arURL)
@@ -65,20 +60,8 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		}
 	}
 
-	// #1525 Phase 2b: when the AR URL is plain HTTP (not dmsg://),
-	// build a SECOND http.Client whose Transport.DialContext forces
-	// "tcp6". The AR client uses it to fire a secondary BindSTCPR
-	// POST so the AR server captures the visor's v6 source family
-	// (via splitFamilyAddr) and stores RemoteAddrV6 alongside
-	// RemoteAddr. nil for dmsg://-routed AR — v6 forcing is
-	// meaningless when the transport is a dmsg stream rather than
-	// raw TCP. Also nil if the operator builds a custom httpC that
-	// already specifies its own Transport, since we don't want to
-	// silently override their dial choice.
-	var httpCV6 *http.Client
-	if arURL := arURL; strings.HasPrefix(arURL, "http://") || strings.HasPrefix(arURL, "https://") {
-		httpCV6 = newV6ForcedHTTPClient()
-	}
+	// AR is dmsg://-routed, so the v6-forced clearnet client (#1525 Phase 2b,
+	// only meaningful for a plain-HTTP AR over raw TCP) is gone — pass nil.
 
 	// Construct the AR client immediately with an EMPTY public IP. Determining
 	// the visor's public IP needs a dmsg LookupIPGeo and/or a STUN probe that
@@ -89,7 +72,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	// in asynchronously via SetPublicIP (see resolvePublicIPForAR); BindSTCPR
 	// waits for it (bounded, off the RPC critical path), so registrations still
 	// carry the public IP while the RPC binds promptly.
-	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, httpCV6, "", "", log, v.MasterLogger())
+	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, nil, "", "", log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
