@@ -25,8 +25,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
-	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httputil"
@@ -1788,25 +1786,17 @@ func serveStandalone(r1 *gin.Engine) {
 	if err != nil {
 		pk, sk = cipher.GenerateKeyPair()
 	}
-	dconf := dmsg.DefaultConfig()
-	dconf.MinSessions = dmsgSess
-	dmsgclient := dmsg.NewClient(pk, sk, disc.NewHTTP(dmsgDisc, &http.Client{}, log), dconf)
-	defer func() {
-		if err := dmsgclient.Close(); err != nil {
-			log.WithError(err).Error("Failed to close DMSG client")
-		}
-	}()
-
-	go dmsgclient.Serve(context.Background())
-
-	select {
-	case <-ctx.Done():
-		log.WithError(ctx.Err()).Warn("Context canceled while waiting for DMSG client")
-		return
-	case <-dmsgclient.Ready():
+	// Bootstrap dmsg WITHOUT clearnet discovery: the deployment is dmsg-only and
+	// the clearnet dmsg-discovery HTTP frontend is gone (404). StartDmsgEmbedded
+	// seeds from the embedded dmsg-server set and registers/resolves over dmsg,
+	// so this reward-over-dmsg listener becomes reachable by PK.
+	dmsgClient, stopDmsg, err := dmsgclient.StartDmsgEmbedded(ctx, log, pk, sk, false)
+	if err != nil {
+		log.WithError(err).Fatal("Failed to start DMSG client")
 	}
+	defer stopDmsg()
 
-	lis, err := dmsgclient.Listen(dmsgPort) //nolint: gosec
+	lis, err := dmsgClient.Listen(dmsgPort) //nolint: gosec
 	if err != nil {
 		log.WithError(err).Fatal("Failed to listen on DMSG port")
 	}
