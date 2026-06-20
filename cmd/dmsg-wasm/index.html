@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<!--
+  Dev harness for the WASM browser dmsg client (cmd/dmsg-wasm).
+
+  Loads wasm_exec.js + dmsg.wasm, then exercises the globalThis.skywireDmsg
+  API: connect by (optional) secret key to a discovery URL, then dial a remote
+  public key + port and exchange messages.
+
+  This is a non-inlined DEV harness (separate dmsg.wasm + wasm_exec.js). For
+  distribution the same page can be shipped as a single self-contained .html
+  with wasm_exec.js inline and dmsg.wasm base64-inlined + WebAssembly.instantiate
+  (no fetch, no static host) — see the build target.
+
+  Requires a dmsg server that advertises a WebSocket endpoint (Server.AddressWS,
+  i.e. ws_address + public_address_ws set, reachable as wss://). The browser can
+  only reach dmsg over WebSocket.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>skywire dmsg — WASM client</title>
+<style>
+  body { font: 14px/1.5 monospace; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+  input { font: inherit; width: 100%; box-sizing: border-box; margin: 2px 0; }
+  button { font: inherit; margin: 4px 0; cursor: pointer; }
+  #log { white-space: pre-wrap; background: #111; color: #0f0; padding: .5rem; height: 240px; overflow: auto; }
+  fieldset { margin: .5rem 0; }
+</style>
+</head>
+<body>
+<h2>skywire dmsg — browser WASM client</h2>
+
+<fieldset>
+  <legend>1. connect</legend>
+  <input id="disco" placeholder="discovery URL (e.g. https://dmsgd.skywire.skycoin.com)">
+  <input id="sk" placeholder="secret key hex (blank = ephemeral identity)">
+  <button id="connect">connect</button>
+  <div>my PK: <span id="pk">—</span></div>
+</fieldset>
+
+<fieldset>
+  <legend>2. dial a peer</legend>
+  <input id="rpk" placeholder="remote public key hex">
+  <input id="port" value="80" placeholder="port">
+  <button id="dial">dial</button>
+  <button id="listen">listen on port</button>
+</fieldset>
+
+<fieldset>
+  <legend>3. message</legend>
+  <input id="msg" placeholder="message">
+  <button id="send">send</button>
+</fieldset>
+
+<div id="log"></div>
+
+<script src="wasm_exec.js"></script>
+<script>
+  const log = (...a) => {
+    const el = document.getElementById("log");
+    el.textContent += a.join(" ") + "\n";
+    el.scrollTop = el.scrollHeight;
+  };
+  let stream = null;
+
+  const go = new Go();
+  WebAssembly.instantiateStreaming(fetch("dmsg.wasm"), go.importObject).then(r => {
+    go.run(r.instance);
+    log("wasm loaded; skywireDmsg ready");
+  });
+
+  const wire = s => {
+    stream = s;
+    s.onMessage(m => log("« " + m));
+    log("stream open");
+  };
+
+  document.getElementById("connect").onclick = async () => {
+    try {
+      const pk = await skywireDmsg.connect(
+        document.getElementById("sk").value.trim(),
+        document.getElementById("disco").value.trim());
+      document.getElementById("pk").textContent = pk;
+      log("connected as " + pk);
+    } catch (e) { log("connect error: " + e); }
+  };
+
+  document.getElementById("dial").onclick = async () => {
+    try {
+      wire(await skywireDmsg.dial(
+        document.getElementById("rpk").value.trim(),
+        parseInt(document.getElementById("port").value, 10)));
+    } catch (e) { log("dial error: " + e); }
+  };
+
+  document.getElementById("listen").onclick = () => {
+    const r = skywireDmsg.listen(parseInt(document.getElementById("port").value, 10), wire);
+    if (r instanceof Error) log("listen error: " + r);
+    else log("listening on port " + document.getElementById("port").value);
+  };
+
+  document.getElementById("send").onclick = () => {
+    if (!stream) { log("no stream — dial or accept first"); return; }
+    const m = document.getElementById("msg").value;
+    stream.send(m);
+    log("» " + m);
+  };
+</script>
+</body>
+</html>
