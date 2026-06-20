@@ -657,18 +657,20 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 		return nil // already running
 	}
 
-	// Prefer the HTTP service-discovery URL; fall back to the dmsg URL when the
-	// operator dropped the HTTP one (dmsg-only). Never silently substitute the
-	// hardcoded prod HTTP discovery: a dropped field is intentional, and pairing
-	// sd.skycoin.com with the dmsg-http client (v.serviceDisc.Client, built from
-	// the dmsg URL in initDiscovery) makes the connector dial sd.skycoin.com over
-	// dmsg → "invalid host address: Invalid public key". Mirror initDiscovery.
-	serviceDisc := v.conf.Launcher.ServiceDisc
+	// Prefer the dmsg SD URL. The autoconnect's discovery client is the
+	// dmsg-HTTP transport (v.serviceDisc.Client, built from the dmsg URL in
+	// initDiscovery), so a clearnet HTTP SD URL can't work here anyway — pairing
+	// e.g. sd.skycoin.com with the dmsg-http client makes the connector dial it
+	// over dmsg → "invalid host address: Invalid public key". The default config
+	// is dmsg-only (the dmsg URL lives in ServiceDisc); legacy dual configs put
+	// it in ServiceDiscDmsg. Take whichever holds the dmsg URL, never a clearnet
+	// one — no plain-HTTP service-discovery fallback.
+	serviceDisc := v.conf.Launcher.ServiceDiscDmsg
 	if serviceDisc == "" {
-		serviceDisc = v.conf.Launcher.ServiceDiscDmsg
+		serviceDisc = v.conf.Launcher.ServiceDisc
 	}
 	if serviceDisc == "" {
-		log.Debug("service discovery not configured (neither http nor dmsg URL); skipping public autoconnect")
+		log.Debug("service discovery not configured (no dmsg URL); skipping public autoconnect")
 		return nil
 	}
 
