@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -35,7 +36,7 @@ import (
 //
 // seedServers must carry Server.AddressWS for the WebSocket dial to be chosen;
 // a browser build has no working TCP/QUIC fallback.
-func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, seedServers []*disc.Entry, discDmsgAddr string) (*dmsg.Client, func(), error) {
+func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, seedServers []*disc.Entry, discDmsgAddr string, preferWS bool) (*dmsg.Client, func(), error) {
 	if len(seedServers) == 0 {
 		return nil, nil, errors.New("dmsg: no seed servers provided")
 	}
@@ -69,7 +70,7 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	dClient := direct.NewClient(entries, log)
 
 	conf := dmsg.DefaultConfig()
-	conf.PreferWS = true
+	conf.PreferWS = preferWS // browser (wasm) seeds over WebSocket; native uses TCP
 	conf.MinSessions = 1
 
 	dmsgC, stop, err := direct.StartDmsg(ctx, log, pk, sk, dClient, conf)
@@ -92,4 +93,21 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	}
 
 	return dmsgC, stop, nil
+}
+
+// StartDmsgEmbedded starts a dmsg client seeded from the embedded production
+// dmsg-server set (dmsg.Prod.DmsgServers) and with discovery over dmsg
+// (deployment.Prod.DmsgDiscoveryDmsg) — a self-contained, clearnet-free dmsg
+// bootstrap for native standalone tools (e.g. the reward UI) on a dmsg-only
+// deployment, where the clearnet HTTP discovery is gone. preferWS=false uses TCP.
+func StartDmsgEmbedded(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, preferWS bool) (*dmsg.Client, func(), error) {
+	servers := dmsg.Prod.DmsgServers
+	if len(servers) == 0 {
+		return nil, nil, errors.New("dmsg: no embedded dmsg servers in deployment config")
+	}
+	seeds := make([]*disc.Entry, len(servers))
+	for i := range servers {
+		seeds[i] = &servers[i]
+	}
+	return StartDmsgSeeded(ctx, log, pk, sk, seeds, deployment.Prod.DmsgDiscoveryDmsg, preferWS)
 }

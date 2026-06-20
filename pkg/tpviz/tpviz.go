@@ -6,6 +6,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -63,6 +64,19 @@ type Config struct {
 	SDURL string
 	// DMSGURL is the DMSG discovery URL
 	DMSGURL string
+	// TPDURLDmsg / SDURLDmsg / DMSGURLDmsg are the dmsg:// forms of the
+	// deployment-discovery URLs (default from deployment.Prod.*Dmsg). When a
+	// dmsg HTTP client is set (SetDmsgHTTPClient), deployment discovery is
+	// fetched over dmsg using these instead of the clearnet URLs above —
+	// required on a dmsg-only deployment.
+	TPDURLDmsg  string
+	SDURLDmsg   string
+	DMSGURLDmsg string
+	// AllowClearnetDisc forces the legacy clearnet deployment-discovery fetches
+	// even with no dmsg client / visor API. Default false: on a dmsg-only
+	// deployment the clearnet HTTP frontends are dead (404), so the fetches are
+	// gated to avoid spamming them.
+	AllowClearnetDisc bool
 	// NoCache disables caching when true
 	NoCache bool
 	// AutoRefresh enables auto-refresh of cache at specified interval
@@ -136,6 +150,9 @@ func DefaultConfig() Config {
 		CacheDirDMSG: CacheDirFromURL(deployment.Prod.DmsgDiscovery),
 		CacheMaxAge:  5,
 		TPDURL:       deployment.Prod.TransportDiscovery,
+		TPDURLDmsg:   deployment.Prod.TransportDiscoveryDmsg,
+		SDURLDmsg:    deployment.Prod.ServiceDiscoveryDmsg,
+		DMSGURLDmsg:  deployment.Prod.DmsgDiscoveryDmsg,
 		// UTURL intentionally empty: the standalone uptime tracker is
 		// decommissioned. An operator can still pass --ut-url for a custom
 		// standalone deployment, but the default no longer points at a dead
@@ -261,6 +278,14 @@ type Server struct {
 	visorCache    *LocalVisorData
 	embeddedMode  bool                         // true when visor API is set directly (not via RPC)
 	prevBandwidth map[string]bandwidthSnapshot // track previous bandwidth for deltas
+
+	// dmsgHTTP, when set (SetDmsgHTTPClient), is an HTTP-over-dmsg client used to
+	// fetch deployment discovery (TPD/SD/DMSG) over dmsg instead of clearnet —
+	// required on a dmsg-only deployment where the clearnet HTTP discovery
+	// frontends are gone (404). When nil AND no visor API is set, the clearnet
+	// deployment auto-refresh is GATED (skipped) rather than spamming dead URLs.
+	dmsgMuHTTP sync.RWMutex
+	dmsgHTTP   *http.Client
 
 	// Websocket clients for local visor data streaming
 	wsClientsMu sync.RWMutex
@@ -437,6 +462,89 @@ func (s *Server) getVisorAPI() VisorAPI {
 	s.visorMu.RLock()
 	defer s.visorMu.RUnlock()
 	return s.visorAPI
+}
+
+// SetDmsgHTTPClient installs an HTTP-over-dmsg client so deployment discovery
+// (TPD/SD/DMSG) is fetched over dmsg instead of the (now-dead) clearnet HTTP
+// frontends. Standalone tpviz embeds (e.g. the reward UI) call this with a
+// dmsg-backed client; the deployment URLs are then resolved to their dmsg://
+// forms. Pass nil to disable.
+func (s *Server) SetDmsgHTTPClient(c *http.Client) {
+	s.dmsgMuHTTP.Lock()
+	s.dmsgHTTP = c
+	s.dmsgMuHTTP.Unlock()
+}
+
+func (s *Server) getDmsgHTTP() *http.Client {
+	s.dmsgMuHTTP.RLock()
+	defer s.dmsgMuHTTP.RUnlock()
+	return s.dmsgHTTP
+}
+
+// tpdBase / sdBase / dmsgBase return the discovery base URL to use: the dmsg://
+// form when a dmsg HTTP client is installed (dmsg-only deployment), else the
+// legacy clearnet URL.
+func (s *Server) tpdBase() string {
+	if s.getDmsgHTTP() != nil && s.config.TPDURLDmsg != "" {
+		return s.config.TPDURLDmsg
+	}
+	return s.config.TPDURL
+}
+func (s *Server) sdBase() string {
+	if s.getDmsgHTTP() != nil && s.config.SDURLDmsg != "" {
+		return s.config.SDURLDmsg
+	}
+	return s.config.SDURL
+}
+func (s *Server) dmsgBase() string {
+	if s.getDmsgHTTP() != nil && s.config.DMSGURLDmsg != "" {
+		return s.config.DMSGURLDmsg
+	}
+	return s.config.DMSGURL
+}
+
+// fetchAny fetches url over dmsg when it is a dmsg:// address and a dmsg HTTP
+// client is installed, else over clearnet. Used for deployment-discovery
+// resources so the same call site works on both clearnet and dmsg-only
+// deployments.
+func (s *Server) fetchAny(url string) (string, error) {
+	if strings.HasPrefix(url, "dmsg://") {
+		c := s.getDmsgHTTP()
+		if c == nil {
+			return "", errors.New("dmsg URL requested but no dmsg HTTP client set")
+		}
+		resp, err := c.Get(url)
+		if err != nil {
+			return "", err
+		}
+		defer resp.Body.Close() //nolint:errcheck,gosec
+		if resp.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		}
+		var buf bytes.Buffer
+		if _, err := io.Copy(&buf, resp.Body); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
+	}
+	return s.fetchAny(url)
+}
+
+// errGatedClearnet is returned when a clearnet deployment fetch is
+// suppressed (dmsg-only deployment, no dmsg client / visor API to source over
+// dmsg). Callers treat it as "no data available", not a hard error to log noisily.
+var errGatedClearnet = errors.New("clearnet deployment discovery gated (dmsg-only; no dmsg client)")
+
+// deploymentFetchGated reports whether clearnet deployment-discovery fetches
+// should be suppressed. They are gated when there is neither a dmsg HTTP client
+// nor a visor API to source the data over dmsg — i.e. the only remaining option
+// would be the dead clearnet HTTP frontends. An operator can still force the
+// legacy clearnet behavior by setting AllowClearnetDisc in the config.
+func (s *Server) deploymentFetchGated() bool {
+	if s.config.AllowClearnetDisc {
+		return false
+	}
+	return s.getDmsgHTTP() == nil && s.getVisorAPI() == nil
 }
 
 // SetTPSAPI sets the embedded Transport Setup Node API.
@@ -719,19 +827,19 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 	services := make(map[string]ServiceInfo)
 
 	// Fetch proxy services
-	proxyData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeProxy)
+	proxyData, err := s.fetchAny(s.sdBase() + "/api/services?type=" + servicedisc.ServiceTypeProxy)
 	if err == nil {
 		s.parseServices(proxyData, "proxy", services)
 	}
 
 	// Fetch VPN services
-	vpnData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeVPN)
+	vpnData, err := s.fetchAny(s.sdBase() + "/api/services?type=" + servicedisc.ServiceTypeVPN)
 	if err == nil {
 		s.parseServices(vpnData, "vpn", services)
 	}
 
 	// Fetch visor services
-	visorData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeVisor)
+	visorData, err := s.fetchAny(s.sdBase() + "/api/services?type=" + servicedisc.ServiceTypeVisor)
 	if err == nil {
 		s.parseServices(visorData, "visor", services)
 	}
@@ -982,7 +1090,7 @@ func (s *Server) parseServices(data, serviceType string, services map[string]Ser
 // getData fetches data from the URL via HTTP or from cached file
 func (s *Server) getData(cacheFile, url string) (string, error) {
 	if s.config.NoCache || cacheFile == "" {
-		return fetchURL(url)
+		return s.fetchAny(url)
 	}
 
 	s.cacheMu.RLock()
@@ -990,7 +1098,7 @@ func (s *Server) getData(cacheFile, url string) (string, error) {
 	if err != nil {
 		s.cacheMu.RUnlock()
 		// Cache file doesn't exist, fetch synchronously
-		data, err := fetchURL(url)
+		data, err := s.fetchAny(url)
 		if err != nil {
 			return "", err
 		}
@@ -1028,7 +1136,7 @@ func (s *Server) refreshCacheFile(cacheFile, url string) {
 	}
 	s.cacheMu.RUnlock()
 
-	data, err := fetchURL(url)
+	data, err := s.fetchAny(url)
 	if err != nil {
 		s.log.WithField("url", url).WithError(err).Warn("Auto-refresh failed")
 		return
@@ -1050,8 +1158,11 @@ func (s *Server) refreshCache() {
 	// skip the TPD fetch. The standalone uptime tracker is decommissioned, so
 	// only fetch uptimes when an operator explicitly configured a UTURL.
 	urls := map[string]string{}
-	if s.getVisorAPI() == nil && s.config.TPDURL != "" {
-		tpdURL := s.config.TPDURL + "/all-transports"
+	// TPD: embedded-in-visor uses the dmsg/CXO feed (handleTransports), so skip.
+	// Standalone fetches over dmsg (tpdBase → dmsg://) when a dmsg client is set;
+	// gated otherwise so a dmsg-only deployment doesn't hit the dead clearnet TPD.
+	if s.getVisorAPI() == nil && s.config.TPDURL != "" && !s.deploymentFetchGated() {
+		tpdURL := s.tpdBase() + "/all-transports"
 		urls[CacheFilePath(s.config.CacheDirTPD, tpdURL)] = tpdURL
 	}
 	if s.config.UTURL != "" {
@@ -1071,7 +1182,7 @@ func (s *Server) refreshCache() {
 		}
 
 		// Fetch and update
-		data, err := fetchURL(url)
+		data, err := s.fetchAny(url)
 		if err != nil {
 			s.log.WithField("url", url).WithError(err).Warn("Auto-refresh failed")
 			continue
@@ -1097,6 +1208,12 @@ func (s *Server) refreshCache() {
 
 // refreshSDCache refreshes the service discovery cache
 func (s *Server) refreshSDCache() {
+	// Gated on a dmsg-only deployment with no dmsg client / visor API: the
+	// clearnet SD frontend is dead, and the SD fetch goes over dmsg only when a
+	// dmsg client is set (sdBase → dmsg://).
+	if s.getDmsgHTTP() == nil && s.deploymentFetchGated() {
+		return
+	}
 	cacheFile := s.sdCacheFile()
 	if cacheFile == "" {
 		return
@@ -1112,19 +1229,19 @@ func (s *Server) refreshSDCache() {
 	services := make(map[string]ServiceInfo)
 
 	// Fetch proxy services
-	proxyData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeProxy)
+	proxyData, err := s.fetchAny(s.sdBase() + "/api/services?type=" + servicedisc.ServiceTypeProxy)
 	if err == nil {
 		s.parseServices(proxyData, "proxy", services)
 	}
 
 	// Fetch VPN services
-	vpnData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeVPN)
+	vpnData, err := s.fetchAny(s.sdBase() + "/api/services?type=" + servicedisc.ServiceTypeVPN)
 	if err == nil {
 		s.parseServices(vpnData, "vpn", services)
 	}
 
 	// Fetch visor services
-	visorData, err := fetchURL(s.config.SDURL + "/api/services?type=" + servicedisc.ServiceTypeVisor)
+	visorData, err := s.fetchAny(s.sdBase() + "/api/services?type=" + servicedisc.ServiceTypeVisor)
 	if err == nil {
 		s.parseServices(visorData, "visor", services)
 	}
@@ -1156,6 +1273,12 @@ func (s *Server) dmsgCacheFiles() (servers, entries, clients string) {
 // which handles all three sub-fetches (servers, entries, clients) with disk caching and geoip.
 func (s *Server) refreshDMSGCache() {
 	if s.config.DMSGURL == "" || s.config.CacheDirDMSG == "" {
+		return
+	}
+	// Gated on a dmsg-only deployment with no dmsg client / visor API: the
+	// clearnet DMSG-discovery frontend is dead. With a dmsg client set, the
+	// fetch goes over dmsg (dmsgBase → dmsg://).
+	if s.getDmsgHTTP() == nil && s.deploymentFetchGated() {
 		return
 	}
 
@@ -2011,7 +2134,7 @@ func (s *Server) handleDMSGServersClients(w http.ResponseWriter, _ *http.Request
 		http.Error(w, "DMSG discovery URL not configured", http.StatusServiceUnavailable)
 		return
 	}
-	body, err := fetchURL(s.config.DMSGURL + "/dmsg-discovery/servers/clients")
+	body, err := s.fetchAny(s.dmsgBase() + "/dmsg-discovery/servers/clients")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("upstream fetch failed: %v", err), http.StatusBadGateway)
 		return
@@ -2378,7 +2501,7 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 	serversCacheFile, entriesCacheFile, clientsCacheFile := s.dmsgCacheFiles()
 
 	// Fetch servers (with disk caching)
-	serversJSON, err := s.getDMSGSubData(serversCacheFile, s.config.DMSGURL+"/dmsg-discovery/all_servers")
+	serversJSON, err := s.getDMSGSubData(serversCacheFile, s.dmsgBase()+"/dmsg-discovery/all_servers")
 	if err != nil {
 		return nil, fmt.Errorf("fetch servers: %w", err)
 	}
@@ -2420,7 +2543,7 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 	}
 
 	// Fetch entries (with disk caching)
-	entriesJSON, err := s.getDMSGSubData(entriesCacheFile, s.config.DMSGURL+"/dmsg-discovery/entries")
+	entriesJSON, err := s.getDMSGSubData(entriesCacheFile, s.dmsgBase()+"/dmsg-discovery/entries")
 	if err != nil {
 		s.log.WithError(err).Warn("Failed to fetch DMSG entries")
 	} else {
@@ -2432,7 +2555,7 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 	}
 
 	// Fetch clients by server (with disk caching, fault-tolerant)
-	clientsJSON, err := s.getDMSGSubData(clientsCacheFile, s.config.DMSGURL+"/dmsg-discovery/servers/clients")
+	clientsJSON, err := s.getDMSGSubData(clientsCacheFile, s.dmsgBase()+"/dmsg-discovery/servers/clients")
 	if err != nil {
 		s.log.WithError(err).Debug("Failed to fetch clients by server (endpoint may not be available)")
 	} else {
@@ -2457,7 +2580,7 @@ func (s *Server) getDMSGData() (*DMSGData, error) {
 // Mirrors the getData() pattern: fresh cache → return cached; stale → return stale + background refresh; missing → fetch synchronously.
 func (s *Server) getDMSGSubData(cacheFile, url string) (string, error) {
 	if s.config.NoCache || cacheFile == "" {
-		return fetchURL(url)
+		return s.fetchAny(url)
 	}
 
 	s.cacheMu.RLock()
@@ -2465,7 +2588,7 @@ func (s *Server) getDMSGSubData(cacheFile, url string) (string, error) {
 	if err != nil {
 		s.cacheMu.RUnlock()
 		// Cache file doesn't exist, fetch synchronously
-		data, err := fetchURL(url)
+		data, err := s.fetchAny(url)
 		if err != nil {
 			return "", err
 		}

@@ -27,6 +27,8 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/tpviz"
@@ -234,6 +236,27 @@ func buildRouter() *gin.Engine {
 		tpvizCfg.SurveyDir = filepath.Join(wd, "log_backups") // Survey data for IP grouping
 		tpvizServer := tpviz.NewServer(tpvizCfg)
 		tpvizServer.Start() // Initialize cache and start auto-refresh
+
+		// Source deployment discovery (TPD/SD/DMSG) over dmsg instead of the
+		// now-dead clearnet HTTP frontends: start an embedded dmsg client
+		// (seeded from the deployment's dmsg servers, discovery over dmsg) and
+		// hand tp-viz an HTTP-over-dmsg client. Background + best-effort so the
+		// UI starts immediately; until dmsg connects, tp-viz gates the clearnet
+		// fetches (no 404 spam). Standalone only — when hosted by a visor the
+		// visor's CXO feeds tp-viz instead.
+		if !disableTpVizAPI {
+			go func() {
+				dlog := logging.MustGetLogger("tpviz-dmsg")
+				pk, sk := cipher.GenerateKeyPair()
+				dmsgC, _, err := dmsgclient.StartDmsgEmbedded(context.Background(), dlog, pk, sk, false)
+				if err != nil {
+					dlog.WithError(err).Warn("tp-viz: dmsg client for discovery failed to start; network-viz tabs disabled")
+					return
+				}
+				tpvizServer.SetDmsgHTTPClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(context.Background(), dmsgC)})
+				dlog.Info("tp-viz: deployment discovery now sourced over dmsg")
+			}()
+		}
 
 		// Delegate /api/* to tpviz server (uses file caching to avoid rate limits)
 		// When hosted by the visor, /api/* routes are disabled to prevent

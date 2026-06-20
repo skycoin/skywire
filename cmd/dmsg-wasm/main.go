@@ -115,7 +115,7 @@ func jsConnect(_ js.Value, args []js.Value) interface{} {
 		}
 
 		log := logging.NewMasterLogger().PackageLogger("dmsg_wasm")
-		c, _, err := dmsgclient.StartDmsgSeeded(ctx, log, pk, sk, []*disc.Entry{seed}, discDmsgAddr)
+		c, _, err := dmsgclient.StartDmsgSeeded(ctx, log, pk, sk, []*disc.Entry{seed}, discDmsgAddr, true)
 		if err != nil {
 			return nil, err
 		}
