@@ -598,7 +598,7 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	primary := v.dmsgDC
 	v.initLock.Unlock()
-	upgradeDmsgDiscToDmsgfirst(tpsDmsgC, primary, v.conf.Dmsg, log)
+	upgradeDmsgDiscToDmsgOnly(tpsDmsgC, primary, v.conf.Dmsg, log)
 
 	v.initLock.Lock()
 	v.embeddedTPS = &embeddedTPS{
