@@ -1,4 +1,4 @@
-//go:build !js
+//go:build !tinygo
 
 // Package disc pkg/dmsg/disc/entry_native.go
 //

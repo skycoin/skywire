@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<!--
+  Browser hypervisor UI over dmsg — bootstrap page.
+
+  Registers sw.js (the Service Worker that runs the WASM dmsg client and proxies
+  every request over dmsg), then navigates to "/" — at which point the SW serves
+  the hypervisor's UNMODIFIED Angular UI + API entirely over dmsg, reaching the
+  hypervisor BY PUBLIC KEY. No exposed HTTP port, end-to-end over dmsg.
+
+  Serve this directory over plain http (so plain ws:// to the seed server is
+  allowed), e.g.:  cd build/dmsg-wasm-hv && python -m http.server 8080
+  then open  http://localhost:8080/hv.html
+
+  Requires the target hypervisor to have HypervisorConfig.DmsgUIPort set, and a
+  dmsg server advertising a ws:// AddressWS (the seed below).
+-->
+<html lang="en">
+<head><meta charset="utf-8"><title>Skywire hypervisor (over dmsg)</title>
+<style>body{font:14px monospace;margin:3rem auto;max-width:640px} input{width:100%;margin:2px 0}</style>
+</head>
+<body>
+<h3>Skywire hypervisor — over dmsg, by public key</h3>
+<p>Loads the hypervisor UI in this tab, proxied entirely over dmsg via a WASM dmsg client in a Service Worker.</p>
+<label>hypervisor PK <input id="hvpk" value="0323272a60895f56aad82cb767fb5c413807adcf7c9fb0578b1b1c5807c7f29d4c"></label>
+<label>hypervisor dmsg UI port <input id="hvport" value="8000"></label>
+<label>seed server PK <input id="seedpk" value="0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13"></label>
+<label>seed server ws:// <input id="seedws" value="ws://45.79.213.251:30088/dmsg"></label>
+<label>dmsg-discovery <input id="disc" value="dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80"></label>
+<button id="go">load hypervisor over dmsg</button>
+<pre id="status"></pre>
+<script>
+  const log = m => { document.getElementById('status').textContent += m + '\n'; };
+  document.getElementById('go').onclick = async () => {
+    if (!('serviceWorker' in navigator)) { log('no Service Worker support'); return; }
+    const q = new URLSearchParams({
+      hvpk: document.getElementById('hvpk').value.trim(),
+      hvport: document.getElementById('hvport').value.trim(),
+      seedpk: document.getElementById('seedpk').value.trim(),
+      seedws: document.getElementById('seedws').value.trim(),
+      disc: document.getElementById('disc').value.trim(),
+    });
+    try {
+      log('registering service worker…');
+      await navigator.serviceWorker.register('/sw.js?' + q.toString(), { scope: '/' });
+      await navigator.serviceWorker.ready;
+      log('service worker ready; connecting over dmsg + loading hypervisor…');
+      // Give the SW a moment to boot the wasm + connect, then navigate to "/".
+      setTimeout(() => { location.href = '/'; }, 2000);
+    } catch (e) { log('error: ' + e); }
+  };
+</script>
+</body>
+</html>
