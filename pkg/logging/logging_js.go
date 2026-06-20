@@ -1,4 +1,4 @@
-//go:build js
+//go:build tinygo
 
 // Package logging pkg/logging/logging_js.go
 //
