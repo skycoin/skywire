@@ -359,7 +359,7 @@ func initEmbeddedRouteSetup(ctx context.Context, v *Visor, log *logging.Logger) 
 	v.initLock.Lock()
 	primary := v.dmsgDC
 	v.initLock.Unlock()
-	upgradeDmsgDiscToDmsgfirst(routeSetupDmsgC, primary, v.conf.Dmsg, log)
+	upgradeDmsgDiscToDmsgOnly(routeSetupDmsgC, primary, v.conf.Dmsg, log)
 
 	v.initLock.Lock()
 	v.embeddedRouteSetup = &EmbeddedRouteSetup{
