@@ -36,15 +36,38 @@
 
   // ensure boots the wasm client + connects (once). The first shimmed request
   // awaits this, so the app's initial /api call blocks until dmsg is up.
+  //
+  // Two modes:
+  //  - viewer (default): route /api over dmsg to a REMOTE hypervisor CFG.pk.
+  //  - standalone (CFG.standalone): THIS tab IS the hypervisor — start
+  //    serveHypervisor() so visors listing this PK dial in, and route /api to
+  //    the in-wasm core (hvApi) instead of a remote fetch.
   function ensure() {
     if (readyP) return readyP;
     readyP = (async function () {
       while (!self.skywireDmsg) { await new Promise(function (r) { setTimeout(r, 10); }); }
       var sk = await resolveSK();
       var pk = await self.skywireDmsg.connect(sk, CFG.seedpk, CFG.seedws, CFG.disc);
-      log('connected over dmsg as ' + pk + ' → hypervisor ' + CFG.pk);
+      if (CFG.standalone) {
+        await self.skywireDmsg.serveHypervisor();
+        log('standalone hypervisor serving as ' + pk + ' (visors dial in on port 46)');
+      } else {
+        log('connected over dmsg as ' + pk + ' → hypervisor ' + CFG.pk);
+      }
     })();
     return readyP;
+  }
+
+  // dispatch routes one same-origin request: in standalone mode to the in-wasm
+  // hypervisor core (hvApi), else over dmsg to the remote hypervisor (fetch).
+  // Both resolve to {status, body:Uint8Array, headers}; hvApi has no response
+  // headers of its own, so we synthesize a JSON content-type for the UI.
+  function dispatch(method, path, body, headers) {
+    if (CFG.standalone) {
+      return self.skywireDmsg.hvApi(method, path, body == null ? null : String(body))
+        .then(function (r) { return { status: r.status, body: r.body, headers: { 'Content-Type': 'application/json' } }; });
+    }
+    return self.skywireDmsg.fetch(CFG.pk, method, path, body == null ? null : String(body), headers);
   }
 
   function isLocal(url) {
@@ -96,7 +119,7 @@
       real.send(body); return;
     }
     ensure().then(function () {
-      return self.skywireDmsg.fetch(CFG.pk, self_._m, pathOf(self_._u), body == null ? null : String(body), self_._h);
+      return dispatch(self_._m, pathOf(self_._u), body, self_._h);
     }).then(function (r) {
       self_.status = r.status; self_.statusText = '';
       var txt = new TextDecoder().decode(r.body);
@@ -128,7 +151,7 @@
       else for (var k in init.headers) headers[k] = init.headers[k];
     }
     return ensure().then(function () {
-      return self.skywireDmsg.fetch(CFG.pk, init.method || 'GET', pathOf(url), init.body == null ? null : String(init.body), headers);
+      return dispatch(init.method || 'GET', pathOf(url), init.body, headers);
     }).then(function (r) {
       var h = new Headers();
       for (var k in r.headers) { try { h.set(k, r.headers[k]); } catch (e) {} }
