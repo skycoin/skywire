@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -331,10 +330,8 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		}
 		return v.dmsgHTTP, nil
 	}
-	return &http.Client{
-		Transport: &http.Transport{
-			DisableKeepAlives: true,
-			IdleConnTimeout:   time.Second * 5,
-		},
-	}, nil
+	// Deployment services are dmsg-only: plain HTTP to a deployment service is no
+	// longer supported. A non-dmsg URL here is a misconfiguration (a clearnet
+	// service URL) — fail loud instead of silently building a clearnet client.
+	return nil, fmt.Errorf("deployment service %q is not a dmsg:// URL — plain HTTP to deployment services is no longer supported", service)
 }
