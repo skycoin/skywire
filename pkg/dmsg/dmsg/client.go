@@ -79,6 +79,14 @@ type Config struct {
 	// networks where only HTTP(S)/443 egress is allowed, and is forced true
 	// in the js/wasm build, which has no other transport available.
 	PreferWS bool
+
+	// PreferWT makes the client dial a server's WebTransport endpoint
+	// (Server.AddressWT) when one is advertised, in preference to TCP/QUIC/WS,
+	// falling back to TCP on WT failure. Like PreferWS this is for non-default
+	// clients: it exists chiefly for the native test/tooling path that exercises
+	// the WebTransport listener (the production WT consumer is a browser dialing
+	// directly in JS). Native mesh clients leave this false.
+	PreferWT bool
 }
 
 // Ensure ensures all config values are set.
