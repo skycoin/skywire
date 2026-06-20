@@ -29,7 +29,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/disc/dmsgfirst"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -302,18 +301,18 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	}
 
 	// Seed the DMSG client's entry cache with deployment service PKs
-	// FIRST, before swapping in the dmsgfirst disc client below. The
-	// dmsg-discovery's own PK is in this list, and dmsgfirst's
-	// primary path needs to DialStream to that PK — without the
-	// seed already in place, the moment dmsgC.SetDiscoveryClients
-	// installs dmsgfirst, any background AvailableServers /
-	// PutEntry refresh that dmsgC kicks off recurses (DialStream →
-	// cache miss → disc → dmsgfirst.primary → DialStream(dmsgdiscPK)
-	// → cache miss → ...) until the goroutine stack overflows.
+	// FIRST, before swapping in the dmsg-only disc client below. The
+	// dmsg-discovery's own PK is in this list, and the dmsg-only disc
+	// client's dmsg-HTTP transport needs to DialStream to that PK —
+	// without the seed already in place, the moment dmsgC.SetDiscoveryClients
+	// installs it, any background AvailableServers / PutEntry refresh that
+	// dmsgC kicks off recurses (DialStream → cache miss → disc →
+	// dmsg-HTTP → DialStream(dmsgdiscPK) → cache miss → ...) until the
+	// goroutine stack overflows.
 	v.seedDmsgServiceEntries(dmsgC, log)
 
-	// No dmsgfirst upgrade needed: dmsgc.New already wired dmsgC's disc to a
-	// registering fallback whose HTTP half rides this single client's own
+	// No disc upgrade needed here: dmsgc.New already wired dmsgC's disc to a
+	// registering client whose HTTP half rides this single client's own
 	// dmsg-HTTP transport (httpC, set above). The one client both registers
 	// itself over dmsg and resolves seeded static entries direct-first.
 
@@ -348,31 +347,39 @@ const dmsgServersCacheRefreshInterval = 5 * time.Minute
 // fixed interval. Empty refreshes (dmsgd unreachable, no entries) are
 // skipped — DmsgServersCache.Replace treats empty input as a no-op so
 // a transient outage doesn't wipe the cache.
-// upgradeDmsgDiscToDmsgfirst swaps each of dmsgC's per-deployment
-// disc.APIClient instances for a dmsgfirst-wrapped one so the dmsg
-// client's own discovery refresh tries DMSG first and only falls back
-// to plain HTTP when the dmsg dial fails. The dmsg-discovery's PK is
-// extracted from each deployment's `discovery_dmsg` URL — when that's
-// absent, the entry stays on plain HTTP because dmsgfirst.New needs a
-// PK to dial. A no-op if no deployments yield a non-zero PK.
+// upgradeDmsgDiscToDmsgOnly swaps each of dmsgC's per-deployment disc.APIClient
+// instances for one that registers + resolves the discovery STRICTLY over dmsg
+// (dmsg-HTTP through primaryDmsgC), with NO plain-HTTP fallback. The
+// dmsg-discovery's PK is extracted from each deployment's `discovery_dmsg` URL;
+// when that's absent the entry is left on the explicit plain-HTTP Discovery URL
+// (a legacy / non-dmsg config with no dmsg-disc PK to dial). A no-op if no
+// deployment yields a non-zero PK, or if primaryDmsgC is nil.
 //
-// primaryDmsgC is the dmsg client dmsgfirst will use for its DMSG-
-// primary path. It must be the direct.Client-backed dmsgDC, not the
-// main dmsgC — the main dmsgC's own discovery is what we're
-// upgrading here, so using it for the primary path would recurse on
-// every Entry() lookup. dmsgDC carries the dmsg-disc PK as a synthetic
-// direct.Client entry with all known server PKs as delegated, so its
-// DialStream(dmsg-disc) resolves locally and goes through a session
-// dmsg-disc actually has (it preloads the same server set via
-// direct.StartDmsg in dmsgdisc.go).
-func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
-	if conf == nil {
+// The plain-HTTP RUNTIME fallback was removed here (was: dmsgfirst, which tried
+// dmsg first and retried on plain HTTP when the dmsg dial failed). The
+// deployment discovery services are no longer served over clear HTTP, so a
+// fallback on a transient dmsg failure only added a doomed roundtrip + a WARN
+// per refresh. A transient dmsg error now simply lets the caller retry over
+// dmsg on its next periodic discovery refresh / re-registration, which
+// self-heals once sessions realign. (The pk-absent branch above is NOT that
+// fallback: it is the explicit "operator configured no dmsg discovery" path.)
+//
+// primaryDmsgC is the dmsg client used for the dmsg-HTTP transport. It must be
+// the direct.Client-backed dmsgDC, not the main dmsgC — the main dmsgC's own
+// discovery is what we're upgrading here, so using it would recurse on every
+// Entry() lookup. dmsgDC carries the dmsg-disc PK as a synthetic direct.Client
+// entry with all known server PKs as delegated, so its DialStream(dmsg-disc)
+// resolves locally and goes through a session dmsg-disc actually has (it
+// preloads the same server set via direct.StartDmsg in dmsgdisc.go).
+func upgradeDmsgDiscToDmsgOnly(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
+	if conf == nil || primaryDmsgC == nil {
 		return
 	}
 	deployments := conf.AllDeployments()
 	if len(deployments) == 0 {
 		return
 	}
+	dmsgHTTPClient := &http.Client{Transport: dmsghttp.MakeHTTPTransport(context.Background(), primaryDmsgC)}
 	upgraded := make([]dmsgdisc.APIClient, len(deployments))
 	anyUpgraded := false
 	for i, d := range deployments {
@@ -381,9 +388,10 @@ func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, c
 			upgraded[i] = dmsgdisc.NewHTTP(d.Discovery, &http.Client{}, log)
 			continue
 		}
-		upgraded[i] = dmsgfirst.New(primaryDmsgC, pk, d.Discovery, &http.Client{}, log)
+		dmsgURL := fmt.Sprintf("http://%s:%d", pk.Hex(), dmsg.DefaultDmsgHTTPPort)
+		upgraded[i] = dmsgdisc.NewHTTP(dmsgURL, dmsgHTTPClient, log)
 		anyUpgraded = true
-		log.WithField("url", d.Discovery).WithField("pk", pk).Info("dmsg discovery client upgraded to dmsgfirst (primary via direct-client dmsgDC)")
+		log.WithField("pk", pk).Info("dmsg discovery client upgraded to dmsg-only (no HTTP fallback)")
 	}
 	if !anyUpgraded {
 		return
