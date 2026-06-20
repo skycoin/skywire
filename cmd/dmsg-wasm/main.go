@@ -24,18 +24,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"syscall/js"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
 var (
-	client *dmsg.Client
-	ctx    context.Context
+	client   *dmsg.Client
+	dmsgHTTP *http.Client // HTTP-over-dmsg client, built after connect
+	ctx      context.Context
 )
 
 func main() {
@@ -44,6 +49,7 @@ func main() {
 		"connect": js.FuncOf(jsConnect),
 		"dial":    js.FuncOf(jsDial),
 		"listen":  js.FuncOf(jsListen),
+		"fetch":   js.FuncOf(jsFetch),
 	}
 	js.Global().Set("skywireDmsg", js.ValueOf(api))
 	// Keep the Go runtime alive for the page lifetime.
@@ -114,7 +120,56 @@ func jsConnect(_ js.Value, args []js.Value) interface{} {
 			return nil, err
 		}
 		client = c
+		// HTTP-over-dmsg client for jsFetch (the browser hypervisor UI's transport).
+		dmsgHTTP = &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, c)}
 		return pk.Hex(), nil
+	})
+}
+
+// jsFetch(pkHostHex, method, path, bodyOrNull) -> Promise<{status, body}>.
+//
+// Performs an HTTP request over dmsg to dmsg://<pkHost><path>, where pkHost is a
+// public key (defaulting to the dmsg-HTTP port :80) or an explicit "pk:port".
+// This is the transport the browser hypervisor UI uses to talk to a remote
+// visor/hypervisor BY PUBLIC KEY — no clearnet, no exposed HTTP port. The
+// request rides the client's existing dmsg session(s).
+func jsFetch(_ js.Value, args []js.Value) interface{} {
+	pkHost := args[0].String()
+	method := args[1].String()
+	path := args[2].String()
+	var body string
+	if len(args) > 3 && !args[3].IsNull() && !args[3].IsUndefined() {
+		body = args[3].String()
+	}
+	return promise(func() (interface{}, error) {
+		if dmsgHTTP == nil {
+			return nil, errors.New("not connected; call connect() first")
+		}
+		host := pkHost
+		if !strings.Contains(host, ":") {
+			host += ":80" // default dmsg-HTTP port
+		}
+		if !strings.HasPrefix(path, "/") {
+			path = "/" + path
+		}
+		var bodyR io.Reader
+		if body != "" {
+			bodyR = strings.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, "dmsg://"+host+path, bodyR)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := dmsgHTTP.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close() //nolint:errcheck
+		b, _ := io.ReadAll(resp.Body)
+		res := js.Global().Get("Object").New()
+		res.Set("status", resp.StatusCode)
+		res.Set("body", string(b))
+		return res, nil
 	})
 }
 

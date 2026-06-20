@@ -54,6 +54,13 @@
   <button id="send">send</button>
 </fieldset>
 
+<fieldset>
+  <legend>4. HTTP-over-dmsg (the hypervisor-UI transport — reach a visor/service by PK)</legend>
+  <input id="fpk" placeholder="target PK (e.g. a dmsg service / visor)" value="022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa">
+  <input id="fpath" placeholder="path" value="/health">
+  <button id="fetch">GET over dmsg</button>
+</fieldset>
+
 <div id="log"></div>
 
 <script src="wasm_exec.js"></script>
@@ -109,6 +116,15 @@
     const m = document.getElementById("msg").value;
     stream.send(m);
     log("» " + m);
+  };
+
+  document.getElementById("fetch").onclick = async () => {
+    try {
+      const r = await skywireDmsg.fetch(
+        document.getElementById("fpk").value.trim(), "GET",
+        document.getElementById("fpath").value.trim(), null);
+      log("HTTP " + r.status + " over dmsg:\n" + r.body);
+    } catch (e) { log("fetch error: " + e); }
   };
 </script>
 </body>
