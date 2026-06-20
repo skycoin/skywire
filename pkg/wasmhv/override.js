@@ -9,11 +9,28 @@
 // encsk}. When encsk (password-encrypted secret key) is present, the page first
 // prompts for a password and decrypts it with WebCrypto before connecting; the
 // plaintext key never touches disk.
+//
+// CONTEXT DETECTION (the unified-UI primitive): the override only takes over
+// when it has a mode to take over FOR — a remote hypervisor PK (CFG.pk, viewer
+// mode) or CFG.standalone (this tab is the hypervisor). With neither set (or an
+// explicit CFG.served), the shims are NOT installed and the wasm is NOT booted:
+// native XHR/fetch reach whatever backend served the page, so the SAME artifact
+// behaves as the ordinary visor-served hypervisor UI when a visor serves it, and
+// as a serverless hypervisor when opened from file://. See
+// docs/design/unified-wasm-hypervisor-ui.md.
 (function () {
   var CFG = window.__SKYWIRE_HV__ || {};
   var readyP = null;
 
   function log(m) { try { console.log('[skywire-hv] ' + m); } catch (e) {} }
+
+  // active = "do I have a mode to take over for?" When false, stay dormant and
+  // let the serving backend's /api answer natively (served mode).
+  var active = !CFG.served && (Boolean(CFG.pk) || Boolean(CFG.standalone));
+  if (!active) {
+    log('dormant: no hypervisor mode configured; native fetch/XHR pass through to the serving backend');
+    return;
+  }
 
   // decryptKey returns the dmsg secret-key hex: plaintext CFG.sk if present,
   // else password-decrypts CFG.encsk (AES-GCM, PBKDF2-SHA256). Format of encsk:
