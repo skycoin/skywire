@@ -39,8 +39,7 @@ func isRetryableDialErr(err error) bool {
 		return true
 	}
 	// The sentinel can be lost when the error is reconstructed from a wire code
-	// or wrapped as a plain string; fall back to the message (same approach as
-	// pkg/dmsg/disc/dmsgfirst).
+	// or wrapped as a plain string; fall back to the message.
 	return strings.Contains(err.Error(), "cannot connect to delegated server")
 }
 
