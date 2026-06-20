@@ -231,6 +231,8 @@ github.com/docker/go-units v0.4.0 h1:3uh0PgVws3nIA0Q+MwDC8yjEPf9zjRfZZWXZYDct3Tw
 github.com/docker/go-units v0.4.0/go.mod h1:fgPhTUdO+D/Jk86RDLlptpiXQzgHJF7gydDDbaIK4Dk=
 github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1 h1:6PKU05V7zJIJlTBq7AnEIrLVEUIYF4NjTU2a28Ho6ko=
 github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1/go.mod h1:ytRJ64WkuW4kf6/tuYqBATBCRFUP8X9+LDtgcvE+koI=
+github.com/dunglas/httpsfv v1.1.0 h1:Jw76nAyKWKZKFrpMMcL76y35tOpYHqQPzHQiwDvpe54=
+github.com/dunglas/httpsfv v1.1.0/go.mod h1:zID2mqw9mFsnt7YC3vYQ9/cjq30q41W+1AnDwH8TiMg=
 github.com/dustin/go-humanize v1.0.0/go.mod h1:HtrtbFcZ19U5GC7JDqmcUSB87Iq5E25KnS6fMYU6eOk=
 github.com/elazarl/goproxy v1.8.4 h1:tIHKhYHXf8gQracfoHl8Zy7PG/jhvmIMUR5j8OlPUIM=
 github.com/elazarl/goproxy v1.8.4/go.mod h1:b5xm6W48AUHNpRTCvlnd0YVh+JafCCtsLsJZvvNTz+E=
@@ -698,6 +700,8 @@ github.com/quic-go/qpack v0.6.0 h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=
 github.com/quic-go/qpack v0.6.0/go.mod h1:lUpLKChi8njB4ty2bFLX2x4gzDqXwUpaO1DP9qMDZII=
 github.com/quic-go/quic-go v0.60.0 h1:xcQioE8OM66UQLeUMHltK1CCcOu3JbVB4JAQdDQSB+0=
 github.com/quic-go/quic-go v0.60.0/go.mod h1:wpKpjmPpftl30sL6pFh7REVpjbcCVy4zt2vDyK1TuJk=
+github.com/quic-go/webtransport-go v0.11.0 h1:3afiZq7MHv3gmKCbMwZ8D5M1u0y/1RdONN9KlWp32J0=
+github.com/quic-go/webtransport-go v0.11.0/go.mod h1:SHgEzUFVyj+9WUSuGB1P6Zd351Pww2leWV3SwlTovkA=
 github.com/rivo/tview v0.0.0-20201204190810-5406288b8e4e/go.mod h1:0ha5CGekam8ZV1kxkBxSlh7gfQ7YolUj2P/VruwH0QY=
 github.com/rivo/tview v0.42.0 h1:b/ftp+RxtDsHSaynXTbJb+/n/BxDEi+W3UfF5jILK6c=
 github.com/rivo/tview v0.42.0/go.mod h1:cSfIYfhpSGCjp3r/ECJb+GKS7cGJnqV8vfjQPwoXyfY=
