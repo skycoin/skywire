@@ -226,6 +226,31 @@ func (hv *Hypervisor) startUI() error {
 			hv.logger.WithError(srvErr).Error("Hypervisor HTTP server error")
 		}
 	}()
+
+	// Optionally also serve the SAME handler over dmsg (opt-in DmsgUIPort), so a
+	// browser dmsg client (the WASM hypervisor UI) can reach the fleet BY PUBLIC
+	// KEY — no exposed HTTP port, end-to-end over dmsg. The handler's own
+	// login/CSRF auth applies; the dmsg Noise layer additionally authenticates
+	// the caller's PK. Best-effort + additive: a listen failure leaves the local
+	// HTTP server serving normally.
+	if hv.c.DmsgUIPort != 0 && hv.dmsgC != nil {
+		dmsgUILis, derr := hv.dmsgC.Listen(hv.c.DmsgUIPort)
+		if derr != nil {
+			hv.logger.WithError(derr).Warnf("Hypervisor UI: dmsg listen on port %d failed", hv.c.DmsgUIPort)
+		} else {
+			dmsgUISrv := &http.Server{
+				Handler:           hv.HTTPHandler(),
+				ReadHeaderTimeout: 5 * time.Second,
+			}
+			go func() {
+				hv.logger.Infof("Hypervisor HTTP also serving over dmsg on port %d", hv.c.DmsgUIPort)
+				if derr := dmsgUISrv.Serve(dmsgUILis); derr != nil &&
+					!errors.Is(derr, http.ErrServerClosed) && !errors.Is(derr, dmsg.ErrEntityClosed) {
+					hv.logger.WithError(derr).Error("Hypervisor dmsg UI server error")
+				}
+			}()
+		}
+	}
 	// tpviz fetches geoip + prod-HTTP TPD/SD caches synchronously — start async
 	// so a slow/closed upstream can't block (see #3181). Start it AT MOST ONCE
 	// for the hypervisor's lifetime: tpviz.Stop() closes a channel created in
