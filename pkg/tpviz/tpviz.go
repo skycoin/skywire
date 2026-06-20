@@ -527,13 +527,8 @@ func (s *Server) fetchAny(url string) (string, error) {
 		}
 		return buf.String(), nil
 	}
-	return s.fetchAny(url)
+	return fetchURL(url)
 }
-
-// errGatedClearnet is returned when a clearnet deployment fetch is
-// suppressed (dmsg-only deployment, no dmsg client / visor API to source over
-// dmsg). Callers treat it as "no data available", not a hard error to log noisily.
-var errGatedClearnet = errors.New("clearnet deployment discovery gated (dmsg-only; no dmsg client)")
 
 // deploymentFetchGated reports whether clearnet deployment-discovery fetches
 // should be suppressed. They are gated when there is neither a dmsg HTTP client
