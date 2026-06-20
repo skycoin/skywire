@@ -220,6 +220,13 @@ dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-w
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
 	@echo "built ./build/dmsg-wasm — serve it (e.g. 'cd build/dmsg-wasm && python -m http.server') and open index.html"
 
+dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
+	mkdir -p ./build/dmsg-wasm-hv
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm-hv/dmsg.wasm ./cmd/dmsg-wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/dmsg-wasm-hv/
+	cp ./cmd/dmsg-wasm/sw.js ./cmd/dmsg-wasm/hv.html ./build/dmsg-wasm-hv/
+	@echo "built ./build/dmsg-wasm-hv — serve over http (cd build/dmsg-wasm-hv && python -m http.server 8080) and open http://localhost:8080/hv.html"
+
 dmsg-wasm-inline: dmsg-wasm ## Emit a single self-contained dmsg-client.html (wasm_exec.js + base64 wasm inlined, no static host needed)
 	@cd ./build/dmsg-wasm && { \
 	  printf '<!DOCTYPE html><html><head><meta charset="utf-8"><title>skywire dmsg</title></head><body><script>'; \
