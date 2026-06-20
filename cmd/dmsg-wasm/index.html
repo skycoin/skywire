@@ -31,9 +31,11 @@
 <h2>skywire dmsg — browser WASM client</h2>
 
 <fieldset>
-  <legend>1. connect</legend>
-  <input id="disco" placeholder="discovery URL (e.g. https://dmsgd.skywire.skycoin.com)">
+  <legend>1. connect (seed a WebSocket dmsg server, then discovery runs over dmsg)</legend>
   <input id="sk" placeholder="secret key hex (blank = ephemeral identity)">
+  <input id="seedpk" placeholder="seed server PK" value="0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13">
+  <input id="seedws" placeholder="seed server ws:// URL" value="ws://45.79.213.251:30088/dmsg">
+  <input id="disc" placeholder="dmsg-discovery dmsg:// addr" value="dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80">
   <button id="connect">connect</button>
   <div>my PK: <span id="pk">—</span></div>
 </fieldset>
@@ -77,9 +79,12 @@
 
   document.getElementById("connect").onclick = async () => {
     try {
+      log("connecting over WebSocket…");
       const pk = await skywireDmsg.connect(
         document.getElementById("sk").value.trim(),
-        document.getElementById("disco").value.trim());
+        document.getElementById("seedpk").value.trim(),
+        document.getElementById("seedws").value.trim(),
+        document.getElementById("disc").value.trim());
       document.getElementById("pk").textContent = pk;
       log("connected as " + pk);
     } catch (e) { log("connect error: " + e); }

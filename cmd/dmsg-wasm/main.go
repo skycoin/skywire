@@ -24,12 +24,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"syscall/js"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -69,12 +69,20 @@ func promise(fn func() (interface{}, error)) interface{} {
 	return js.Global().Get("Promise").New(handler)
 }
 
-// jsConnect(skHexOrEmpty, discoveryURL) -> Promise<pkHex>. Empty secret key
-// generates an ephemeral identity. Forces PreferWS so the session is dialed
-// over the server's WebSocket endpoint (the only transport a browser has).
+// jsConnect(skHexOrEmpty, seedServerPKHex, seedServerWSURL, discDmsgAddr)
+// -> Promise<pkHex>.
+//
+// A browser can't reach a dmsg-only discovery until it has a server, so we seed
+// one server directly: its PK + WebSocket URL (e.g. "ws://host:port/dmsg"). The
+// client connects to it over WS (forced PreferWS), then upgrades discovery to
+// run over dmsg (discDmsgAddr = "dmsg://<disc-pk>:80") so it can register itself
+// + resolve peers. Empty secret key → ephemeral identity. See
+// dmsgclient.StartDmsgSeeded.
 func jsConnect(_ js.Value, args []js.Value) interface{} {
 	skHex := args[0].String()
-	discoveryURL := args[1].String()
+	seedPKHex := args[1].String()
+	seedWSURL := args[2].String()
+	discDmsgAddr := args[3].String()
 	return promise(func() (interface{}, error) {
 		var pk cipher.PubKey
 		var sk cipher.SecKey
@@ -90,19 +98,22 @@ func jsConnect(_ js.Value, args []js.Value) interface{} {
 			}
 		}
 
-		log := logging.NewMasterLogger().PackageLogger("dmsg_wasm")
-		dc := disc.NewHTTP(discoveryURL, http.DefaultClient, log)
-		conf := dmsg.DefaultConfig()
-		conf.PreferWS = true // browser: WebSocket transport only
-		client = dmsg.NewClient(pk, sk, dc, conf)
-		client.SetLogger(log)
-		go client.Serve(ctx)
-
-		select {
-		case <-client.Ready():
-		case <-ctx.Done():
-			return nil, ctx.Err()
+		var seedPK cipher.PubKey
+		if err := seedPK.UnmarshalText([]byte(seedPKHex)); err != nil {
+			return nil, fmt.Errorf("bad seed server pk: %w", err)
 		}
+		seed := &disc.Entry{
+			Version: "0.0.1",
+			Static:  seedPK,
+			Server:  &disc.Server{AddressWS: seedWSURL},
+		}
+
+		log := logging.NewMasterLogger().PackageLogger("dmsg_wasm")
+		c, _, err := dmsgclient.StartDmsgSeeded(ctx, log, pk, sk, []*disc.Entry{seed}, discDmsgAddr)
+		if err != nil {
+			return nil, err
+		}
+		client = c
 		return pk.Hex(), nil
 	})
 }
