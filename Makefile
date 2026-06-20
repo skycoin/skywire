@@ -213,6 +213,31 @@ tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo (smalle
 	tinygo build -o ./pkg/tpviz/dist/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/dist/
 
+dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-wasm
+	mkdir -p ./build/dmsg-wasm
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/dmsg-wasm/
+	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
+	@echo "built ./build/dmsg-wasm — serve it (e.g. 'cd build/dmsg-wasm && python -m http.server') and open index.html"
+
+dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
+	mkdir -p ./build/dmsg-wasm-hv
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm-hv/dmsg.wasm ./cmd/dmsg-wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/dmsg-wasm-hv/
+	cp ./cmd/dmsg-wasm/sw.js ./cmd/dmsg-wasm/hv.html ./build/dmsg-wasm-hv/
+	@echo "built ./build/dmsg-wasm-hv — serve over http (cd build/dmsg-wasm-hv && python -m http.server 8080) and open http://localhost:8080/hv.html"
+
+dmsg-wasm-inline: dmsg-wasm ## Emit a single self-contained dmsg-client.html (wasm_exec.js + base64 wasm inlined, no static host needed)
+	@cd ./build/dmsg-wasm && { \
+	  printf '<!DOCTYPE html><html><head><meta charset="utf-8"><title>skywire dmsg</title></head><body><script>'; \
+	  cat wasm_exec.js; \
+	  printf '</script><script>const _b="'; base64 -w0 dmsg.wasm; printf '";'; \
+	  printf 'const _go=new Go();const _u8=Uint8Array.from(atob(_b),c=>c.charCodeAt(0));'; \
+	  printf 'WebAssembly.instantiate(_u8,_go.importObject).then(r=>{_go.run(r.instance);console.log("skywireDmsg ready");});'; \
+	  printf '</script></body></html>'; \
+	} > dmsg-client.html
+	@echo "built ./build/dmsg-wasm/dmsg-client.html (single self-contained file, base64-inlined wasm)"
+
 tpviz-ui: ## Build transport visualizer TypeScript UI into pkg/tpviz/legacy for embedding
 	cd ./pkg/tpviz/ui && npm install && npm run build
 
