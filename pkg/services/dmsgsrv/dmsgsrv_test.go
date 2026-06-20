@@ -200,10 +200,7 @@ func TestBuildTransitDmsg(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	dmsgC, dClient, closeFn, err := svc.buildTransitDmsg(ctx, deployments, discPKs)
-	if err != nil {
-		t.Fatalf("buildTransitDmsg: %v", err)
-	}
+	dmsgC, dClient, closeFn := svc.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeFn()
 	if dmsgC == nil {
 		t.Error("nil dmsg client")
@@ -217,10 +214,7 @@ func TestNewDmsgOnly(t *testing.T) {
 	svc, deployments, discPKs := newTestService(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	dmsgC, _, closeFn, err := svc.buildTransitDmsg(ctx, deployments, discPKs)
-	if err != nil {
-		t.Fatalf("buildTransitDmsg: %v", err)
-	}
+	dmsgC, _, closeFn := svc.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeFn()
 
 	client := newDmsgOnly(dmsgC, discPKs[0], testLog())
@@ -232,16 +226,13 @@ func TestNewDmsgOnly(t *testing.T) {
 func TestServeDmsgSurfaces(t *testing.T) {
 	svc, deployments, discPKs := newTestService(t)
 	ctx, cancel := context.WithCancel(t.Context())
-	dmsgC, dClient, closeFn, err := svc.buildTransitDmsg(ctx, deployments, discPKs)
-	if err != nil {
-		t.Fatalf("buildTransitDmsg: %v", err)
-	}
+	dmsgC, dClient, closeFn := svc.buildTransitDmsg(ctx, deployments, discPKs)
 	defer closeFn()
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		// serveDmsgSurfaces blocks on <-ctx.Done(); cancelling below
+		// serveDmsgSurfaces blocks on <-ctx.Done(); canceling below
 		// makes it return after wiring up the health/debug surfaces.
 		svc.serveDmsgSurfaces(ctx, cancel, dmsgC, dClient)
 	}()
@@ -261,11 +252,7 @@ func TestServeDmsgSurfaces(t *testing.T) {
 func TestServeRouteSetup(t *testing.T) {
 	svc, deployments, discPKs := newTestService(t)
 	ctx, cancel := context.WithCancel(t.Context())
-	dmsgC, _, closeFn, err := svc.buildTransitDmsg(ctx, deployments, discPKs)
-	if err != nil {
-		t.Fatalf("buildTransitDmsg: %v", err)
-	}
-
+	dmsgC, _, closeFn := svc.buildTransitDmsg(ctx, deployments, discPKs)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
