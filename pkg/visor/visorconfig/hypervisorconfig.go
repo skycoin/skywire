@@ -76,16 +76,23 @@ type HypervisorConfig struct {
 	// hypervisor_handlers_misc.go. No omitempty — the field is
 	// always serialized so operators see it in the generated
 	// config and know it exists.
-	EnablePKEndpoint bool               `json:"enable_pk_endpoint"`
-	Cookies          CookieConfig       `json:"cookies"`                   // Configures cookies (for session management).
-	DmsgDiscovery    string             `json:"-"`                         // Dmsg discovery address.
-	DmsgPort         uint16             `json:"dmsg_port,omitempty"`       // Dmsg port to serve on.
-	HTTPAddr         string             `json:"http_addr"`                 // HTTP address to serve API/web UI on.
-	EnableTLS        bool               `json:"enable_tls"`                // Whether to enable TLS.
-	TLSCertFile      string             `json:"tls_cert_file"`             // TLS cert file location.
-	TLSKeyFile       string             `json:"tls_key_file"`              // TLS key file location.
-	TPViz            TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
-	LANDmsgServer    *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
+	EnablePKEndpoint bool         `json:"enable_pk_endpoint"`
+	Cookies          CookieConfig `json:"cookies"`             // Configures cookies (for session management).
+	DmsgDiscovery    string       `json:"-"`                   // Dmsg discovery address.
+	DmsgPort         uint16       `json:"dmsg_port,omitempty"` // Dmsg port to serve the (gob) management RPC on.
+	HTTPAddr         string       `json:"http_addr"`           // HTTP address to serve API/web UI on.
+	// DmsgUIPort, when non-zero, also serves the hypervisor HTTP API + web UI
+	// over a dmsg listener on this port — so a browser dmsg client (the WASM
+	// hypervisor UI) can reach the fleet BY PUBLIC KEY with no exposed HTTP
+	// port, end-to-end over dmsg. Off by default (0): exposing fleet control
+	// over dmsg is opt-in. The handler's own login/CSRF auth still applies; the
+	// dmsg Noise layer additionally authenticates the caller's PK.
+	DmsgUIPort    uint16             `json:"dmsg_ui_port,omitempty"`
+	EnableTLS     bool               `json:"enable_tls"`                // Whether to enable TLS.
+	TLSCertFile   string             `json:"tls_cert_file"`             // TLS cert file location.
+	TLSKeyFile    string             `json:"tls_key_file"`              // TLS key file location.
+	TPViz         TPVizConfig        `json:"tp_viz"`                    // Transport visualizer config.
+	LANDmsgServer *LANDmsgServerConf `json:"lan_dmsg_server,omitempty"` // LAN DMSG server config.
 	// CXOSubscribeInterval is the resync floor for the on-demand
 	// CXO subscription manager. Subscriptions stay open while a UI
 	// tab is acquired; the manager won't tear down a feed sooner

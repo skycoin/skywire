@@ -1,4 +1,4 @@
-//go:build !js
+//go:build !tinygo
 
 // Package disc pkg/dmsg/disc/interface_native.go
 //
