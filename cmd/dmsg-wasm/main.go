@@ -35,25 +35,67 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
 var (
 	client   *dmsg.Client
 	dmsgHTTP *http.Client // HTTP-over-dmsg client, built after connect
+	hvCore   *wasmhv.Core // set in standalone-hypervisor mode
+	selfPK   cipher.PubKey
 	ctx      context.Context
 )
 
 func main() {
 	ctx = context.Background()
 	api := map[string]interface{}{
-		"connect": js.FuncOf(jsConnect),
-		"dial":    js.FuncOf(jsDial),
-		"listen":  js.FuncOf(jsListen),
-		"fetch":   js.FuncOf(jsFetch),
+		"connect":         js.FuncOf(jsConnect),
+		"dial":            js.FuncOf(jsDial),
+		"listen":          js.FuncOf(jsListen),
+		"fetch":           js.FuncOf(jsFetch),
+		"serveHypervisor": js.FuncOf(jsServeHypervisor),
+		"hvApi":           js.FuncOf(jsHvAPI),
 	}
 	js.Global().Set("skywireDmsg", js.ValueOf(api))
 	// Keep the Go runtime alive for the page lifetime.
 	select {}
+}
+
+// jsServeHypervisor() -> nil. STANDALONE hypervisor mode: start accepting visor
+// dials on the hypervisor dmsg port (46). Visors that list this client's PK as
+// a hypervisor dial in and are RPC'd by the in-wasm hypervisor core. Call after
+// connect(). The UI then routes /api to hvApi() (in-wasm) instead of fetch()
+// (remote hypervisor over dmsg).
+func jsServeHypervisor(js.Value, []js.Value) interface{} {
+	if client == nil {
+		return js.Global().Get("Error").New("not connected; call connect() first")
+	}
+	hvCore = wasmhv.NewCore(selfPK, client)
+	go hvCore.Serve(ctx) //nolint:errcheck
+	return nil
+}
+
+// jsHvAPI(method, path, bodyOrNull) -> Promise<{status, body}>. Serves a
+// hypervisor /api request from the in-wasm core (standalone mode).
+func jsHvAPI(_ js.Value, args []js.Value) interface{} {
+	method := args[0].String()
+	path := args[1].String()
+	var body []byte
+	if len(args) > 2 && !args[2].IsNull() && !args[2].IsUndefined() {
+		body = []byte(args[2].String())
+	}
+	return promise(func() (interface{}, error) {
+		if hvCore == nil {
+			return nil, errors.New("hypervisor not serving; call serveHypervisor() first")
+		}
+		status, b := hvCore.ServeHTTP(method, path, body)
+		res := js.Global().Get("Object").New()
+		res.Set("status", status)
+		buf := js.Global().Get("Uint8Array").New(len(b))
+		js.CopyBytesToJS(buf, b)
+		res.Set("body", buf)
+		return res, nil
+	})
 }
 
 // promise wraps a goroutine result as a JS Promise: fn returns (value, error),
@@ -120,6 +162,7 @@ func jsConnect(_ js.Value, args []js.Value) interface{} {
 			return nil, err
 		}
 		client = c
+		selfPK = pk
 		// HTTP-over-dmsg client for jsFetch (the browser hypervisor UI's transport).
 		dmsgHTTP = &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, c)}
 		return pk.Hex(), nil
