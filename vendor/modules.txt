@@ -286,6 +286,9 @@ github.com/docker/go-units
 # github.com/droundy/goopt v0.0.0-20220217183150-48d6390ad4d1
 ## explicit
 github.com/droundy/goopt
+# github.com/dunglas/httpsfv v1.1.0
+## explicit; go 1.14
+github.com/dunglas/httpsfv
 # github.com/elazarl/goproxy v1.8.4
 ## explicit; go 1.23.0
 github.com/elazarl/goproxy
@@ -748,6 +751,9 @@ github.com/quic-go/quic-go/qlog
 github.com/quic-go/quic-go/qlogwriter
 github.com/quic-go/quic-go/qlogwriter/jsontext
 github.com/quic-go/quic-go/quicvarint
+# github.com/quic-go/webtransport-go v0.11.0
+## explicit; go 1.25.0
+github.com/quic-go/webtransport-go
 # github.com/rivo/tview v0.42.0
 ## explicit; go 1.18
 github.com/rivo/tview
