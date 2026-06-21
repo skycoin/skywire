@@ -126,7 +126,56 @@ manager, and route-setup responder.
   worth compiling into wasm vs. keeping the tab a signaling-and-DataChannel leaf
   that delegates routing to a paired full visor.
 
-## 7. What landed with this design
+## 7. How much of the visor ports? (measured frontier)
+
+Measured with `go list -deps -tags tinygo` (GOOS=js) and confirmed by
+`tinygo build ./cmd/wasm-visor-probe`. The recurring blockers are a small set:
+**quic-go** (the raw-socket networks), **net/http** (RF/TPD/AR discovery
+clients), **net/rpc** (app-event + RSN cascade), and **os/exec** (app
+subprocesses).
+
+| package | blockers | note |
+|---|---|---|
+| `pkg/routing` | ✅ none | routing rules/types — **compiles under TinyGo today** |
+| `pkg/visor/visorconfig` | ✅ none | config + keyring — **compiles today** |
+| `pkg/transport/network` | quic-go | per-network files; browser needs only `dmsg.go` |
+| `pkg/app/appevent` | net/rpc | app↔visor event channel |
+| `pkg/router` | quic-go, net/http, net/rpc | finder client + RSN cascade + the networks |
+| `pkg/transport` | quic-go, net/http, net/rpc | TPD client + the networks |
+| `pkg/app/appnet` | quic-go, net/http, net/rpc | |
+| `pkg/visor` | + os/exec | the app-**subprocess** model is the deepest gap |
+
+`cmd/wasm-visor-probe` is the living frontier check — add imports as packages
+port; what `tinygo build` accepts is what's portable.
+
+### Phased plan
+
+1. **Networks: dmsg-only browser build.** Split `pkg/transport/network` so the
+   browser build compiles `dmsg.go` (+ the future `webrtc`) and tags out
+   `quic.go`/`sudph.go`/`stcpr.go` + `pkg/skyquic` + the STUN/addr-resolver bits.
+   This drops quic-go from `pkg/transport` and `pkg/router`. (Mirrors the dmsg
+   QUIC extraction already done.)
+2. **net/http-free service clients.** RF, TPD, and AR each talk HTTP to a service;
+   port them over dmsg with `dmsgclient.FetchOverDmsg` (the disc client pattern),
+   behind native/tinygo tags. Drops net/http from transport + router.
+3. **net/rpc.** Tag out (or gob-RPC, à la wasmhv) `appevent`'s RPC channel and
+   `router/cascade_source.go`'s RSN oracle for the browser build. With 1–3,
+   `pkg/transport` and `pkg/router` should hit the probe.
+4. **In-process apps (the fork).** `pkg/app/appserver` launches apps as OS
+   processes — impossible in a tab. A browser visor needs apps as in-process
+   goroutines behind the same app contract (this is also the unified-app-framework
+   direction, issue #2775). Decision: how many apps (skychat? a web server?) get
+   an in-process mode, vs. keeping the tab a routing leaf paired with a full visor.
+5. **Persistence + glue.** Config/transport-log/route-store over a browser store
+   (localStorage/IndexedDB via syscall/js) instead of the filesystem; assemble a
+   `cmd/wasm-visor` that wires router + transport-manager(dmsg/webrtc) + route-setup
+   responder + in-process apps.
+
+Phases 1–3 are mechanical (tag splits + the proven HTTP-over-dmsg pattern) and get
+a **routing+transport core** into the browser. Phase 4 is the real architectural
+decision. Phase 5 makes it a visor.
+
+## 8. What landed with this design
 
 - `pkg/dmsg/dmsg/ws_js_tinygo.go` — browser WebSocket `net.Conn` dmsg carrier.
 - `pkg/dmsg/dmsg/wt_js_tinygo.go` — browser WebTransport `net.Conn` dmsg carrier
