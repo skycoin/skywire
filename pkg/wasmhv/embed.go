@@ -9,3 +9,11 @@ import _ "embed"
 //
 //go:embed override.js
 var OverrideJS []byte
+
+// WasmExecJS is Go's lib/wasm/wasm_exec.js, vendored here so a generated file is
+// self-contained. It MUST match the Go toolchain that built the embedded/passed
+// dmsg.wasm — refresh it with the wasm build (the Makefile bundle target copies
+// it from $(go env GOROOT)/lib/wasm/wasm_exec.js).
+//
+//go:embed wasm_exec.js
+var WasmExecJS []byte
