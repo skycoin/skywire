@@ -287,7 +287,7 @@ func (s *Server) Serve(lis net.Listener, addr string) error {
 		// here, response packets from server to visor would still
 		// Nagle-batch even if the visor's outbound side was clean.
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+			setTCPNoDelay(tcpConn)
 		}
 
 		if s.SessionCount() >= s.maxSessions {
@@ -530,7 +530,7 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 		// routed across the dmsg mesh shouldn't pay 40–200ms of
 		// Nagle batching at each hop.
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+			setTCPNoDelay(tcpConn)
 		}
 
 		ses := new(SessionCommon)
