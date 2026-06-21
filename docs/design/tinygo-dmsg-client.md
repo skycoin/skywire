@@ -79,13 +79,35 @@ The session core should hold QUIC behind a small interface so the concrete
   only).
 
 Each step keeps the **regular `go build ./...` + full `pkg/dmsg/...` test suite
-green**, and the result is validated on a live visor (QUIC sessions must still
-form) — this is the most-tested code in the tree, so the bar is no regressions,
+green** — this is the most-tested code in the tree, so the bar is no regressions,
 proven, before merge.
 
-### Phase 3 — prove it + a build target
+**Status: done.** `quic_iface.go` / `quic_native.go` / `quic_stub.go` land the
+interface + adapters + stubs; the six core files hold `quicConn` / `quicStream`;
+`wt.go` is `!tinygo`; `victoria_metrics.go` is `!tinygo` (server-only); and
+`pkg/logging` now builds real logrus on all targets (logrus/json compile under
+TinyGo 0.41, so the no-op stub — which couldn't satisfy `logrus.FieldLogger` for
+the full client — was dropped). `pkg/dmsg/dmsg` is verified quic-free under
+`go list -tags tinygo`.
 
-A `cmd/` probe (or a `_test` build) and a `Makefile` `dmsg-tinygo` target
+Writing the first dmsg-over-QUIC round-trip test (`quic_test.go`) to validate the
+extraction also surfaced **two latent bugs** in the QUIC stream path that no test
+had ever exercised, both now fixed: server `forwardRequest` opened the
+destination stream via a smux/else-yamux branch (nil-deref panic for a QUIC
+destination), and the client accept loop never treated a QUIC `AcceptStream`
+error as terminal (spun forever → hung `Close()`).
+
+### Phase 3 — finish the peripheral deps, then prove it + a build target
+
+The remaining TinyGo blocker (for the `wasip1`/IoT target) is **`pkg/netutil`**:
+`net.go` uses `net.Interface.Addrs()` (absent in TinyGo's `net`) and the
+GOOS-split `DefaultNetworkInterface` has no wasip1 variant. The dmsg client only
+needs `netutil`'s Porter + retrier, not the interface-enumeration helpers, so the
+fix is a `!tinygo` split + a small tinygo stub for the enum functions (the same
+pattern used for QUIC/metrics). Expect a short tail of similar peripheral
+packages after it.
+
+Then: a `cmd/` probe (or a `_test` build) and a `Makefile` `dmsg-tinygo` target
 (`tinygo build -target wasip1`) that compiles the client, wired into CI so the
 TinyGo build can't silently regress. For the browser, a TinyGo `wasm` build
 additionally needs `net/http` out of the graph (drop the server serve paths +
