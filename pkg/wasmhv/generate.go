@@ -125,7 +125,12 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 	if err != nil {
 		return nil, err
 	}
+	assetsJS, err := assetMapJS(uiFS)
+	if err != nil {
+		return nil, err
+	}
 	head := "\n<script>" + cfgJS + "</script>\n" +
+		"<script>" + assetsJS + "</script>\n" +
 		"<script>" + jsSafe(wasmExecJS) + "</script>\n" +
 		"<script>" + wasmJS + "</script>\n" +
 		"<script>" + jsSafe(overrideJS) + "</script>\n"
@@ -220,6 +225,88 @@ func wasmBootstrap(wasm []byte) (string, error) {
   var res = await WebAssembly.instantiate(buf, go.importObject);
   go.run(res.instance);
 })();`, nil
+}
+
+// assetMapJS inlines the UI's runtime assets (everything under assets/ — i18n
+// JSON, images, fonts) into a JS object the standalone file serves locally:
+//
+//	self.__SKYWIRE_ASSETS__ = {"/assets/i18n/en.json":{ct:"application/json",b:"<base64>"}, ...}
+//
+// override.js's serve() returns these directly (no backend, no dmsg round-trip),
+// so a file:// hypervisor.html shows translations + images. Empty string when the
+// FS has no assets/ dir. The base64 inflates the file ~33% over the raw asset
+// size (gzip / excluding the country-flag PNGs are future size levers).
+func assetMapJS(uiFS fs.FS) (string, error) {
+	if _, err := fs.Stat(uiFS, "assets"); err != nil {
+		return "self.__SKYWIRE_ASSETS__={};", nil //nolint:nilerr // no assets dir → empty map
+	}
+	var b strings.Builder
+	b.WriteString("self.__SKYWIRE_ASSETS__={")
+	first := true
+	err := fs.WalkDir(uiFS, "assets", func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, rErr := fs.ReadFile(uiFS, path)
+		if rErr != nil {
+			return rErr
+		}
+		if !first {
+			b.WriteByte(',')
+		}
+		first = false
+		b.WriteString(jsString("/" + path))
+		b.WriteString(":{ct:")
+		b.WriteString(jsString(assetContentType(path)))
+		b.WriteString(",b:")
+		b.WriteString(jsString(base64.StdEncoding.EncodeToString(data)))
+		b.WriteByte('}')
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("inline assets: %w", err)
+	}
+	b.WriteString("};")
+	return b.String(), nil
+}
+
+// assetContentType maps a file extension to a MIME type for the inlined assets.
+func assetContentType(path string) string {
+	dot := strings.LastIndexByte(path, '.')
+	if dot < 0 {
+		return "application/octet-stream"
+	}
+	switch strings.ToLower(path[dot+1:]) {
+	case "json":
+		return "application/json"
+	case "png":
+		return "image/png"
+	case "svg":
+		return "image/svg+xml"
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "gif":
+		return "image/gif"
+	case "webp":
+		return "image/webp"
+	case "css":
+		return "text/css"
+	case "js":
+		return "text/javascript"
+	case "woff2":
+		return "font/woff2"
+	case "woff":
+		return "font/woff"
+	case "ttf":
+		return "font/ttf"
+	case "eot":
+		return "application/vnd.ms-fontobject"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 // jsSafe prevents an inlined script's bytes from prematurely closing the

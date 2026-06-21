@@ -99,6 +99,29 @@
     catch (e) { return url; }
   }
 
+  // assetResponse serves a runtime asset (i18n JSON, images, fonts) inlined into
+  // a standalone file by `cli hv gen` (self.__SKYWIRE_ASSETS__: path -> {ct,b}).
+  // This lets the UI render translations + images with NO backend and NO dmsg
+  // round-trip. Returns null for anything not in the map (e.g. /api/*).
+  function assetResponse(path) {
+    var m = self.__SKYWIRE_ASSETS__;
+    if (!m) return null;
+    var p = path.split('?')[0].split('#')[0];
+    var bare = p.replace(/^\//, '');
+    var a = m[p] || m[bare] || m['/' + bare];
+    if (!a) return null;
+    var bytes = Uint8Array.from(atob(a.b), function (c) { return c.charCodeAt(0); });
+    return { status: 200, body: bytes, headers: { 'Content-Type': a.ct } };
+  }
+
+  // serve resolves one same-origin request: an inlined asset first (instant, no
+  // dmsg), else the dmsg/hvApi dispatch once the client is up.
+  function serve(method, path, body, headers) {
+    var a = assetResponse(path);
+    if (a) return Promise.resolve(a);
+    return ensure().then(function () { return dispatch(method, path, body, headers); });
+  }
+
   // --- XMLHttpRequest shim (Angular HttpClient's default backend) ---
   var RealXHR = window.XMLHttpRequest;
   function ShimXHR() {
@@ -135,9 +158,7 @@
       };
       real.send(body); return;
     }
-    ensure().then(function () {
-      return dispatch(self_._m, pathOf(self_._u), body, self_._h);
-    }).then(function (r) {
+    serve(self_._m, pathOf(self_._u), body, self_._h).then(function (r) {
       self_.status = r.status; self_.statusText = '';
       var txt = new TextDecoder().decode(r.body);
       self_.responseText = txt;
@@ -167,9 +188,7 @@
       if (init.headers.forEach) init.headers.forEach(function (v, k) { headers[k] = v; });
       else for (var k in init.headers) headers[k] = init.headers[k];
     }
-    return ensure().then(function () {
-      return dispatch(init.method || 'GET', pathOf(url), init.body, headers);
-    }).then(function (r) {
+    return serve(init.method || 'GET', pathOf(url), init.body, headers).then(function (r) {
       var h = new Headers();
       for (var k in r.headers) { try { h.set(k, r.headers[k]); } catch (e) {} }
       return new Response(r.body, { status: r.status, headers: h });
