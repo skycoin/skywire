@@ -97,21 +97,37 @@ destination stream via a smux/else-yamux branch (nil-deref panic for a QUIC
 destination), and the client accept loop never treated a QUIC `AcceptStream`
 error as terminal (spun forever → hung `Close()`).
 
-### Phase 3 — finish the peripheral deps, then prove it + a build target
+### Phase 3 — peripheral deps + a build target *(done)*
 
-The remaining TinyGo blocker (for the `wasip1`/IoT target) is **`pkg/netutil`**:
-`net.go` uses `net.Interface.Addrs()` (absent in TinyGo's `net`) and the
-GOOS-split `DefaultNetworkInterface` has no wasip1 variant. The dmsg client only
-needs `netutil`'s Porter + retrier, not the interface-enumeration helpers, so the
-fix is a `!tinygo` split + a small tinygo stub for the enum functions (the same
-pattern used for QUIC/metrics). Expect a short tail of similar peripheral
-packages after it.
+**The dmsg client now compiles under TinyGo for the `wasip1` (IoT) target.**
+`tinygo build -target wasip1 -no-debug -opt=z` produces a **~2.2 MB** wasm binary
+(`make tinygo-dmsg`; build-check main at `cmd/dmsg-tinygo-probe`).
 
-Then: a `cmd/` probe (or a `_test` build) and a `Makefile` `dmsg-tinygo` target
-(`tinygo build -target wasip1`) that compiles the client, wired into CI so the
-TinyGo build can't silently regress. For the browser, a TinyGo `wasm` build
-additionally needs `net/http` out of the graph (drop the server serve paths +
-metrics http from the client subset) — lower priority than the IoT target.
+The peripheral blockers cleared, each with the same `!tinygo`-split-plus-stub or
+de-tag-the-obsolete-`!tinygo` pattern:
+
+- **`pkg/netutil`** — `net.go` used `net.Interface.Addrs()` (absent in TinyGo's
+  `net`) and a GOOS-split `DefaultNetworkInterface` with no wasip1 variant. Pure
+  helpers stay in `net.go`; the interface-enumeration + ipinfo HTTP probe move to
+  `net_native.go` (`!tinygo`) with stubs in `net_tinygo.go`.
+- **`pkg/dmsg/disc`** — `Entry.Sign` / `VerifySignature` were `!tinygo` (stale
+  "json can't run under TinyGo" assumption); de-tagged, with a stdlib
+  `encoding/json` codec shim (`interface_tinygo.go`) replacing the jsoniter one.
+- **`pkg/dmsg/dmsg`** — `*net.TCPConn.SetNoDelay` (absent in TinyGo) wrapped in a
+  build-tagged `setTCPNoDelay` helper (no-op on TinyGo).
+- **`deployment`** — `EnvServices` moved from `config_native.go` (`!tinygo`) to
+  the untagged `config.go` so `pkg/dmsg/dmsg`'s `InitConfig` can decode the
+  embedded config on TinyGo too.
+
+Plus the Phase-2 carry-overs: real logrus on all targets, the QUIC/WebTransport
+`!tinygo` split, and the VictoriaMetrics impl tagged server-only.
+
+**Next:** wire `make tinygo-dmsg` into CI so the TinyGo build can't silently
+regress. For the browser, a TinyGo `wasm` (js) build additionally needs
+`net/http` out of the graph (drop the server serve paths + metrics http from the
+client subset) — lower priority than the IoT target. And the real embedded work
+beyond *compiling*: a transport (W5500 hardware TCP offload or a userspace stack)
++ tuned yamux window sizes for MCU RAM (see the hardware notes).
 
 ### Beyond
 
