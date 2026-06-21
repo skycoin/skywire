@@ -1,4 +1,12 @@
+//go:build !tinygo
+
 // Package metrics pkg/dmsg/metrics/victoria_metrics.go
+//
+// The VictoriaMetrics-backed Metrics impl pulls third_party/VictoriaMetrics
+// (runtime.MemStats fields TinyGo doesn't expose) + pkg/metricsutil, so it is
+// tagged out of the TinyGo build. NewVictoriaMetrics is only constructed by the
+// dmsg SERVER services (dmsgsrv/dmsgdisc), never the client core, which uses the
+// no-op Empty metrics. See docs/design/tinygo-dmsg-client.md.
 package metrics
 
 import (

@@ -1,5 +1,3 @@
-//go:build !tinygo
-
 // Package logging pkg/logging/ringbuffer.go
 package logging
 

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/quic-go/quic-go"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -32,16 +31,8 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 	return cSes, nil
 }
 
-// makeClientSessionQUIC builds a client session over an already-handshaked QUIC
-// connection (#2607). No Noise handshake — initQUIC just records the conn; the
-// QUIC TLS already authenticated rPK and encrypts the hop.
-func makeClientSessionQUIC(entity *EntityCommon, porter *netutil.Porter, qc *quic.Conn, rPK cipher.PubKey) ClientSession {
-	var cSes ClientSession
-	cSes.SessionCommon = new(SessionCommon)
-	cSes.SessionCommon.initQUIC(entity, qc, rPK)
-	cSes.porter = porter
-	return cSes
-}
+// makeClientSessionQUIC (the QUIC client-session constructor) lives in
+// quic_native.go (//go:build !tinygo).
 
 // Close closes the client session and reaps any porter entries for streams
 // belonging to this session. Without this reaping, ephemeral ports stay
@@ -311,6 +302,14 @@ func (cs *ClientSession) serve() error {
 				sessionClosed = sessionClosed || errors.Is(err, yamux.ErrSessionShutdown) || cs.sm.yamux.IsClosed()
 			case cs.sm.smux != nil:
 				sessionClosed = sessionClosed || cs.sm.smux.IsClosed()
+			case cs.sm.quic != nil:
+				// quic-go's AcceptStream blocks until a stream arrives or the
+				// connection is done; it never returns a transient error. So any
+				// error here is terminal — treat the session as closed and exit
+				// the accept loop. Without this the loop spun forever on a closed
+				// QUIC session ("session closed"), hanging ClientSession.Close()
+				// on the never-exiting goroutine. (#2607 dmsg-over-QUIC.)
+				sessionClosed = true
 			}
 			if sessionClosed {
 				cs.log.WithError(err).Debug("Session shut down, stopping accept loop.")
