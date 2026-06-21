@@ -55,6 +55,7 @@ type v1JSON struct {
 	UserSurveyWhitelist []cipher.PubKey `json:"user_survey_whitelist,omitempty"`
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
 	CLIAddr             string          `json:"cli_addr"`
+	KeyRing             *KeyRing        `json:"keyring,omitempty"`
 
 	LogLevel             string                       `json:"log_level"`
 	LocalPath            string                       `json:"local_path"`
@@ -112,6 +113,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.UserSurveyWhitelist = mirror.UserSurveyWhitelist
 	v.Hypervisors = mirror.Hypervisors
 	v.CLIAddr = mirror.CLIAddr
+	v.KeyRing = mirror.KeyRing
 	v.LogLevel = mirror.LogLevel
 	v.LocalPath = mirror.LocalPath
 	v.StunServers = mirror.StunServers

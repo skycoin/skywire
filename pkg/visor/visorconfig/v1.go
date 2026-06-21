@@ -44,6 +44,11 @@ type V1 struct {
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
 	CLIAddr             string          `json:"cli_addr"`
 
+	// KeyRing is a small wallet-like set of deterministically-derived keys (from
+	// the visor secret key). Currently mints standalone-hypervisor identities
+	// (cli hv gen). Optional; absent on visors that never derived one.
+	KeyRing *KeyRing `json:"keyring,omitempty"`
+
 	LogLevel             string                       `json:"log_level"`
 	LocalPath            string                       `json:"local_path"`
 	StunServers          []string                     `json:"stun_servers"`
