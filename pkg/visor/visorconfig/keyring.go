@@ -1,8 +1,6 @@
 package visorconfig
 
 import (
-	scoincipher "github.com/skycoin/skycoin/src/cipher"
-
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
@@ -11,20 +9,20 @@ import (
 // spirit of a skycoin deterministic wallet.
 const KeyRingTypeDeterministic = "deterministic"
 
-// KeyEntry is one deterministically-derived key in the visor KeyRing — shaped
-// like a skycoin wallet entry (address / public_key / secret_key) plus the
-// derivation index and a purpose label.
+// KeyEntry is one deterministically-derived keypair in the visor KeyRing — the
+// derivation index, a purpose label, and the public/secret key. (No skycoin
+// address: the keyring's only use is the standalone-hypervisor identity keypair,
+// not a payment wallet.)
 type KeyEntry struct {
 	Index     uint32 `json:"index"`
 	Label     string `json:"label,omitempty"`
-	Address   string `json:"address"`
 	PublicKey string `json:"public_key"`
 	SecretKey string `json:"secret_key"`
 }
 
 // KeyRing is a small wallet-like set of deterministically-derived keys recorded
 // in the visor config, shaped loosely like a skycoin deterministic wallet (a
-// type + tracked next-index + entries with address/public_key/secret_key).
+// type + tracked next-index + entries with public/secret keys).
 //
 // The keys are derived ONE-WAY from the visor secret key (the implicit seed) via
 // cipher.DeriveChildKey, so they are regenerable from the one visor key (no
@@ -48,7 +46,6 @@ func (v1 *V1) deriveKeyEntry(label string, index uint32) (KeyEntry, error) {
 	return KeyEntry{
 		Index:     index,
 		Label:     label,
-		Address:   scoincipher.AddressFromPubKey(scoincipher.PubKey(pk)).String(),
 		PublicKey: pk.Hex(),
 		SecretKey: sk.Hex(),
 	}, nil
