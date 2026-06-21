@@ -213,6 +213,10 @@ tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo (smalle
 	tinygo build -o ./pkg/tpviz/dist/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/dist/
 
+tinygo-dmsg: ## Build-check the dmsg client under TinyGo (IoT target wasip1); ~2.2MB -opt=z
+	tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
+	@echo "built ./build/dmsg-tinygo.wasm — the dmsg client compiles under TinyGo (see docs/design/tinygo-dmsg-client.md)"
+
 dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-wasm
 	mkdir -p ./build/dmsg-wasm
 	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm

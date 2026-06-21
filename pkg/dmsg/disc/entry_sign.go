@@ -1,12 +1,11 @@
-//go:build !tinygo
-
-// Package disc pkg/dmsg/disc/entry_native.go
+// Package disc pkg/dmsg/disc/entry_sign.go
 //
-// Sign + VerifySignature use json.Marshal on the Entry to produce
-// the canonical signed payload. encoding/json drags reflect runtime
-// helpers TinyGo's stdlib doesn't ship, so the methods are split
-// off the WASM build. The install-page WASM never signs or verifies
-// discovery entries — those operations are visor-runtime only.
+// Sign + VerifySignature use the package-wide `json` codec on the Entry to
+// produce the canonical signed payload. They build on all targets: the codec is
+// jsoniter on native (interface_native.go) and stdlib encoding/json on TinyGo
+// (interface_tinygo.go), so a TinyGo dmsg client can sign + register its own
+// discovery entry. (Previously //go:build !tinygo, on the now-stale assumption
+// that encoding/json couldn't run under TinyGo.)
 package disc
 
 import (
