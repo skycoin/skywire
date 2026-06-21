@@ -209,7 +209,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		// gains of Nagle aren't material for skywire's mix, and the
 		// interactive-latency loss is severe.
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+			setTCPNoDelay(tcpConn)
 		}
 
 		if dSes, err = makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static); err != nil {

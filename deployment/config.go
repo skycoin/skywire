@@ -17,6 +17,7 @@ package deployment
 
 import (
 	_ "embed"
+	"encoding/json"
 	"net/url"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -41,6 +42,18 @@ custom deployment configuration (e.g., for private networks or testing).
 //
 //go:embed services-config.json
 var ServicesJSON []byte
+
+// EnvServices is the wrapper struct for the outer JSON — i.e. the 'prod' or
+// 'test' deployment config. It lives in this untagged file (importing
+// encoding/json, which compiles under TinyGo 0.41) so consumers like
+// pkg/dmsg/dmsg's InitConfig can unmarshal the embedded config on every target,
+// including a TinyGo dmsg client. The native init() in config_native.go and the
+// static-literal init() in config_js.go both populate Prod/Test; this type is
+// just the shared shape they (and dmsg) decode into.
+type EnvServices struct {
+	Test json.RawMessage `json:"test"`
+	Prod json.RawMessage `json:"prod"`
+}
 
 // EnvServices is defined in config_native.go (lives there because
 // its json.RawMessage fields need encoding/json, which is
