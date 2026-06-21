@@ -50,6 +50,8 @@ func main() {
 		"fetch":           js.FuncOf(jsFetch),
 		"serveHypervisor": js.FuncOf(jsServeHypervisor),
 		"hvApi":           js.FuncOf(jsHvAPI),
+		"webrtcDial":      js.FuncOf(jsWebrtcDial),
+		"webrtcListen":    js.FuncOf(jsWebrtcListen),
 	}
 	js.Global().Set("skywireDmsg", js.ValueOf(api))
 	// Keep the Go runtime alive for the page lifetime.
