@@ -1,8 +1,4 @@
-//go:build !tinygo
-
 // Package logging pkg/logging/hooks.go
-//
-// Tagged off WASM — see logging_js.go for the build-tag rationale.
 package logging
 
 import (

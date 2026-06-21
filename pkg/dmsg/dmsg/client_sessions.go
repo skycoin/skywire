@@ -6,16 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/quic-go/quic-go"
 	"github.com/xtaci/smux"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
 // EnsureAndObtainSession attempts to obtain a session.
@@ -315,38 +312,9 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	return dSes, nil
 }
 
-// dialSessionQUIC dials a dmsg server's QUIC endpoint and builds a QUIC-backed
-// client session (#2607 dmsg-over-QUIC). The PK-bound QUIC TLS (pkg/skyquic,
-// option A) authenticates the server's skywire PK and encrypts the hop; the
-// session runs over native QUIC streams with no Noise handshake. EnableDatagrams
-// so the session can later expose an unreliable datagram channel.
-func (ce *Client) dialSessionQUIC(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", entry.Server.AddressUDP)
-	if err != nil {
-		return ClientSession{}, fmt.Errorf("quic: resolve %q: %w", entry.Server.AddressUDP, err)
-	}
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-	if err != nil {
-		return ClientSession{}, fmt.Errorf("quic: bind dial socket: %w", err)
-	}
-	cert, err := skyquic.NewCertificate(ce.pk, ce.sk)
-	if err != nil {
-		udpConn.Close() //nolint:errcheck,gosec
-		return ClientSession{}, fmt.Errorf("quic: identity cert: %w", err)
-	}
-	rPK := entry.Static
-	tlsConf := skyquic.TLSConfig(cert, &rPK, nil) // pin the server PK
-	qc, err := quic.Dial(ctx, udpConn, udpAddr, tlsConf, &quic.Config{
-		EnableDatagrams: true,
-		KeepAlivePeriod: 25 * time.Second,
-		MaxIdleTimeout:  60 * time.Second,
-	})
-	if err != nil {
-		udpConn.Close() //nolint:errcheck,gosec
-		return ClientSession{}, fmt.Errorf("quic: dial %s: %w", entry.Server.AddressUDP, err)
-	}
-	return makeClientSessionQUIC(&ce.EntityCommon, ce.porter, qc, rPK), nil
-}
+// dialSessionQUIC (the QUIC client dial) lives in quic_native.go (//go:build
+// !tinygo); the TinyGo build has a stub in quic_stub.go that errors so the dial
+// falls back to TCP/WS.
 
 // Session obtains an established session.
 func (ce *Client) Session(pk cipher.PubKey) (ClientSession, bool) {
