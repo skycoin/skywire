@@ -4,7 +4,11 @@ package cipher
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -123,6 +127,25 @@ func GenerateKeyPair() (PubKey, SecKey) {
 func GenerateDeterministicKeyPair(seed []byte) (PubKey, SecKey, error) {
 	pk, sk, err := cipher.GenerateDeterministicKeyPair(seed)
 	return PubKey(pk), SecKey(sk), err
+}
+
+// DeriveChildKey derives a child keypair from a parent secret key, deterministic
+// and one-way: the seed is HMAC-SHA256(parentSK, label||index), a PRF whose
+// output reveals nothing about parentSK, fed to GenerateDeterministicKeyPair. So
+// a leaked child key can't expose the parent, the same (parentSK, label, index)
+// always yields the same key (regenerable — no separate backup), and label +
+// index namespace distinct child identities from one root. The label should be a
+// purpose-scoped domain string (e.g. "skywire-standalone-hypervisor:v1:").
+func DeriveChildKey(parentSK SecKey, label string, index uint32) (PubKey, SecKey, error) {
+	if parentSK.Null() {
+		return PubKey{}, SecKey{}, errors.New("cipher: DeriveChildKey: parent secret key is null")
+	}
+	var idx [4]byte
+	binary.BigEndian.PutUint32(idx[:], index)
+	mac := hmac.New(sha256.New, parentSK[:])
+	_, _ = mac.Write([]byte(label)) //nolint:errcheck // hash.Write never errors
+	_, _ = mac.Write(idx[:])        //nolint:errcheck
+	return GenerateDeterministicKeyPair(mac.Sum(nil))
 }
 
 // NewPubKey converts []byte to a PubKey

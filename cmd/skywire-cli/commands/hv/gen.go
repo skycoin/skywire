@@ -2,14 +2,13 @@
 package clihv
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
@@ -30,7 +29,7 @@ func init() {
 	genCmd.Flags().StringVar(&genWasm, "wasm", "", "path to the js/wasm dmsg-client binary (build: make dmsg-wasm) [required]")
 	genCmd.Flags().StringVarP(&genOut, "out", "o", "hypervisor.html", "output file")
 	genCmd.Flags().StringVarP(&genConf, "conf", "c", "", "visor config to derive the standalone key from (uses its sk)")
-	genCmd.Flags().Uint32Var(&genIndex, "index", 0, "derivation index — distinct indices mint distinct standalone identities from one root")
+	genCmd.Flags().Uint32Var(&genIndex, "index", 0, "with -c: re-derive keyring entry at this index (read-only); omit to mint+record the next one")
 	genCmd.Flags().StringVar(&genSK, "sk", "", "explicit standalone secret key (hex) — skips derivation")
 	genCmd.Flags().StringVar(&genPassword, "password", "", "encrypt the baked-in key with this password (recommended)")
 	genCmd.Flags().StringVar(&genViewerPK, "viewer-pk", "", "viewer mode: dial this remote hypervisor PK (default: standalone — visors dial in)")
@@ -105,52 +104,45 @@ train users to type secret keys into pages from external hosts.`,
 }
 
 // resolveKey returns the standalone secret-key hex to bake in: explicit (--sk),
-// derived from the config's visor key (-c [+--index]), or "" (ephemeral). When
-// deriving, it prints the derived public key — the PK to set as the visors'
-// remote hypervisor (standalone mode).
+// minted from the visor config's KeyRing (-c), or "" (ephemeral).
+//
+// With -c and no explicit --index, it MINTS the next keyring key (deterministic,
+// derived one-way from the visor key), records it in the config's KeyRing, and
+// flushes — the wallet "derive a new address" behavior. With --index N it
+// re-derives entry N read-only (idempotent regeneration; no config write).
+// Either way it prints the derived address + PK (the PK to set as the visors'
+// remote hypervisor in standalone mode).
 func resolveKey(cmd *cobra.Command) (string, error) {
 	switch {
 	case genSK != "":
 		var sk cipher.SecKey
 		if err := sk.Set(genSK); err != nil {
-			return "", fmt.Errorf("bad --sk: %w", err)
+			return "", err
 		}
 		return genSK, nil
 	case genConf != "":
-		parentSK, err := configSK(genConf)
+		conf, err := visorconfig.ReadFile(genConf)
 		if err != nil {
 			return "", err
 		}
-		pk, sk, err := wasmhv.DeriveStandaloneKey(parentSK, genIndex)
-		if err != nil {
-			return "", err
+		var entry visorconfig.KeyEntry
+		if cmd.Flags().Changed("index") {
+			if entry, err = conf.DeriveKeyEntry(wasmhv.StandaloneKeyLabel, genIndex); err != nil {
+				return "", err
+			}
+			cmd.Printf("re-derived keyring entry %d — address %s, PK %s\n", entry.Index, entry.Address, entry.PublicKey)
+		} else {
+			if entry, err = conf.MintKey(wasmhv.StandaloneKeyLabel); err != nil {
+				return "", err
+			}
+			if err = conf.Flush(); err != nil {
+				return "", err
+			}
+			cmd.Printf("minted keyring entry %d (recorded in %s) — address %s, PK %s\n", entry.Index, genConf, entry.Address, entry.PublicKey)
 		}
-		cmd.Printf("derived standalone hypervisor PK (index %d): %s\n", genIndex, pk.Hex())
-		return sk.Hex(), nil
+		return entry.SecretKey, nil
 	default:
 		cmd.PrintErrln("note: no --sk or -c given; the file uses an ephemeral identity (a fresh key each load)")
 		return "", nil
 	}
-}
-
-// configSK reads the visor secret key from a config file's top-level "sk".
-func configSK(path string) (cipher.SecKey, error) {
-	b, err := os.ReadFile(path) //nolint:gosec // operator-supplied path
-	if err != nil {
-		return cipher.SecKey{}, fmt.Errorf("read config %q: %w", path, err)
-	}
-	var c struct {
-		SK string `json:"sk"`
-	}
-	if err := json.Unmarshal(b, &c); err != nil {
-		return cipher.SecKey{}, fmt.Errorf("parse config %q: %w", path, err)
-	}
-	if c.SK == "" {
-		return cipher.SecKey{}, fmt.Errorf("config %q has no \"sk\"", path)
-	}
-	var sk cipher.SecKey
-	if err := sk.Set(c.SK); err != nil {
-		return cipher.SecKey{}, fmt.Errorf("config %q has invalid sk: %w", path, err)
-	}
-	return sk, nil
 }
