@@ -22,9 +22,11 @@ func fakeUI() fstest.MapFS {
 		`<script src="main.def.js" type="module"></script>` +
 		`</head><body><app-root></app-root></body></html>`
 	return fstest.MapFS{
-		"index.html":     {Data: []byte(index)},
-		"main.def.js":    {Data: []byte("console.log('app'); var x='</script>';")},
-		"styles.abc.css": {Data: []byte("body{margin:0}")},
+		"index.html":          {Data: []byte(index)},
+		"main.def.js":         {Data: []byte("console.log('app'); var x='</script>';")},
+		"styles.abc.css":      {Data: []byte("body{margin:0}")},
+		"assets/i18n/en.json": {Data: []byte(`{"hello":"world"}`)},
+		"assets/img/logo.png": {Data: []byte("\x89PNG\x00binary")},
 	}
 }
 
@@ -64,6 +66,14 @@ func TestGenerateStandalone_Structure(t *testing.T) {
 	require.Contains(t, s, "/*override*/")
 	require.Less(t, strings.Index(s, "/*override*/"), strings.Index(s, "console.log('app')"),
 		"override.js must precede the Angular app chunk")
+
+	// Runtime assets inlined into the served map with the right path + content
+	// type, base64-encoded.
+	require.Contains(t, s, "self.__SKYWIRE_ASSETS__={")
+	require.Contains(t, s, `"/assets/i18n/en.json":{ct:"application/json",b:"`+
+		base64.StdEncoding.EncodeToString([]byte(`{"hello":"world"}`))+`"}`)
+	require.Contains(t, s, `"/assets/img/logo.png":{ct:"image/png",b:"`+
+		base64.StdEncoding.EncodeToString([]byte("\x89PNG\x00binary"))+`"}`)
 }
 
 func TestGenerateStandalone_ViewerMode(t *testing.T) {
