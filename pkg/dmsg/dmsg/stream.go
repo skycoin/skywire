@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
@@ -29,7 +28,7 @@ type Stream struct {
 	ses  *ClientSession // back reference
 	yStr *yamux.Stream
 	sStr *smux.Stream
-	qStr *quic.Stream
+	qStr quicStream
 	// The following fields are to be filled after handshake.
 	lAddr   Addr
 	rAddr   Addr
@@ -357,7 +356,7 @@ func (s *Stream) StreamID() uint32 {
 	case s.sStr != nil:
 		return s.sStr.ID()
 	case s.qStr != nil:
-		return uint32(s.qStr.StreamID()) //nolint:gosec // QUIC stream id, truncated for logging only
+		return s.qStr.quicStreamID()
 	default:
 		return s.yStr.StreamID()
 	}
