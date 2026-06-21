@@ -50,7 +50,4 @@ func TestKeyRingMintAndDerive(t *testing.T) {
 	wantPK, _, err := cipher.DeriveChildKey(sk, label, 0)
 	require.NoError(t, err)
 	require.Equal(t, wantPK.Hex(), e0.PublicKey)
-
-	// A non-empty skycoin address was recorded.
-	require.NotEmpty(t, e0.Address)
 }

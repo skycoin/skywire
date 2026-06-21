@@ -130,7 +130,7 @@ func resolveKey(cmd *cobra.Command) (string, error) {
 			if entry, err = conf.DeriveKeyEntry(wasmhv.StandaloneKeyLabel, genIndex); err != nil {
 				return "", err
 			}
-			cmd.Printf("re-derived keyring entry %d — address %s, PK %s\n", entry.Index, entry.Address, entry.PublicKey)
+			cmd.Printf("re-derived keyring entry %d — PK %s\n", entry.Index, entry.PublicKey)
 		} else {
 			if entry, err = conf.MintKey(wasmhv.StandaloneKeyLabel); err != nil {
 				return "", err
@@ -138,7 +138,7 @@ func resolveKey(cmd *cobra.Command) (string, error) {
 			if err = conf.Flush(); err != nil {
 				return "", err
 			}
-			cmd.Printf("minted keyring entry %d (recorded in %s) — address %s, PK %s\n", entry.Index, genConf, entry.Address, entry.PublicKey)
+			cmd.Printf("minted keyring entry %d (recorded in %s) — PK %s\n", entry.Index, genConf, entry.PublicKey)
 		}
 		return entry.SecretKey, nil
 	default:
