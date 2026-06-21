@@ -1,4 +1,12 @@
+//go:build !tinygo
+
 // Package dmsg pkg/dmsg/dmsg/wt.go: dmsg-over-WebTransport.
+//
+// Build tag: WebTransport pulls in quic-go + webtransport-go, neither of which
+// compiles under TinyGo (quic-go needs crypto/tls.QUICEncryptionLevel). It is a
+// server-side + browser transport, so a TinyGo (IoT) dmsg client doesn't need
+// it; the //go:build !tinygo tag keeps it out of the TinyGo graph. See
+// docs/design/tinygo-dmsg-client.md.
 //
 // WebTransport (HTTP/3 over QUIC) is the one browser-reachable transport that
 // does NOT need a CA-issued TLS certificate: the browser's WebTransport
