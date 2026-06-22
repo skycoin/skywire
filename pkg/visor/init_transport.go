@@ -675,7 +675,10 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 	if err != nil {
 		return err
 	}
-	connector := MakeConnector(conf, 3, v.tpM, v.dmsgC, v.serviceDisc.Client, pIP, log, v.MasterLogger())
+	// serviceDisc.Client is typed `any` (it is net/http-free on the appdisc
+	// struct so appdisc compiles under TinyGo); recover the *http.Client here.
+	httpClient, _ := v.serviceDisc.Client.(*http.Client)
+	connector := MakeConnector(conf, 3, v.tpM, v.dmsgC, httpClient, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel stored in v.autoconnect.cancel, called in pushCloseStack
 	v.autoconnect.cancel = cancel
