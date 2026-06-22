@@ -41,7 +41,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -116,7 +115,11 @@ func jsStatus(js.Value, []js.Value) interface{} {
 	st["tpManager"] = tpM != nil
 	st["router"] = rtr != nil
 	st["procManager"] = procM != nil
-	st["booted"] = dmsgC != nil && tpM != nil && rtr != nil && procM != nil
+	// The EDGE is dmsg + transport + router (rule reception + packet forwarding).
+	// procManager (in-process app hosting) is a separate, later concern — it
+	// net.Listen("tcp")s, which a browser can't do, so it is not on the edge
+	// boot path yet.
+	st["booted"] = dmsgC != nil && tpM != nil && rtr != nil
 	if tpM != nil {
 		st["transports"] = tpM.TransportCount()
 	}
@@ -181,15 +184,12 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		return pk, fmt.Errorf("setup listen: %w", lerr)
 	}
 	vlog("router: setup listener ok")
-	// KNOWN RUNTIME LIMITATION (validated 2026-06-22 via this harness):
-	// router.New() HANGS under TinyGo at rpcSrv.Register(NewRPCGateway). gobimpl's
-	// reflection-based server calls reflect.Type.Method(i), which TinyGo's runtime
-	// reflect does not support — NumMethod() works but Method(i) never returns, so
-	// boot stops at "router: New…". The dmsg + transport.Manager layers above are
-	// validated working in-browser. Fix = a reflection-free gobrpc server (explicit
-	// handler map instead of method enumeration + Value.Call). See
-	// docs/design/wasm-visor-p2p.md.
-	vlog("router: New… (NOTE: hangs under TinyGo until the gobrpc server is reflection-free)")
+	// router.New() used to HANG here under TinyGo: it registers the setup RPC
+	// gateway, and gobimpl's reflection-based server called reflect.Type.Method(i),
+	// which TinyGo's runtime reflect doesn't support (NumMethod works, Method(i)
+	// never returns). Fixed by the reflection-free gobrpc server — the router now
+	// registers explicit handlers under TinyGo (router_setup_rpc_tinygo.go) instead
+	// of reflection. Validated in-browser via this harness.
 	rConf := &router.Config{
 		Logger:             mLog.PackageLogger("router"),
 		MasterLogger:       mLog,
@@ -212,15 +212,18 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}()
 	vlog("router: serving")
 
-	// 4. in-process app server (RunModeInternal). No app registered yet — the
-	// in-process skychat AppFunc is the next step.
-	pm, err := appserver.NewProcManager(mLog, &appdisc.Factory{}, eb, ":0", "")
-	if err != nil {
-		return pk, fmt.Errorf("proc manager: %w", err)
-	}
-	procM = pm
-
+	// EDGE booted: dmsg + transport + router are up. The tab now receives route
+	// rules and forwards/consumes packets — a routable skynet edge.
+	vlog("EDGE booted: dmsg + transport + router up")
 	fmt.Printf("wasm-visor: edge booted pk=%s\n", pk.Hex())
+
+	// 4. in-process app server (RunModeInternal) — DEFERRED (procM stays nil).
+	// appserver.NewProcManager net.Listen("tcp")s for the external-app IPC
+	// ingress, which a browser cannot do (it blocks under TinyGo/js). In-process
+	// skychat needs a browser-adapted ProcManager (no TCP ingress; net.Pipe
+	// in-process conns only) — the next step toward "edge + in-process skychat".
+	// Wiring NewProcManager here would hang the boot.
+
 	return pk, nil
 }
 
