@@ -15,9 +15,22 @@
 // JS API on globalThis.skywireVisor:
 //
 //	const pk = await skywireVisor.boot(skHexOrEmpty, seedPkHex, seedWsURL, discDmsgAddr)
-//	skywireVisor.status()  // → { pk, transports, routes }
+//	skywireVisor.status()  // → { pk, booted, dmsg, tpManager, router, procManager, transports, routes }
 //
-// Build: tinygo build -target wasm -o wasm-visor.wasm ./cmd/wasm-visor
+// Build + run the dev harness (index.html drives boot/status/reload, and connects
+// back to the cmd/dmsg-wasm serve.go control bridge so a shell can drive the tab):
+//
+//	make tinygo-wasm-visor                       # → build/wasm-visor/
+//	go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor
+//	# open http://localhost:8085/ , then drive from a shell:
+//	curl -s localhost:8085/ctl/tabs
+//	curl -s -XPOST 'localhost:8085/ctl/cmd?tab=<id>' \
+//	     -d '{"action":"boot","args":["","<seedPK>","<seedWS>","<discDmsgAddr>"]}'
+//	curl -s 'localhost:8085/ctl/log?tab=<id>'
+//
+// bootEdge emits vlog() step markers through the __skylog bridge so each
+// subsystem's progress is visible in /ctl/log — that is what pinned the
+// router.New TinyGo-reflect hang documented below.
 package main
 
 import (
@@ -37,6 +50,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
@@ -50,6 +64,16 @@ var (
 	rtr    router.Router
 	procM  appserver.ProcManager
 )
+
+// vlog emits a step message to the browser console AND, when present, the
+// __skylog bridge the dev harness wires to /ctl/log — so boot progress is
+// visible from the shell.
+func vlog(msg string) {
+	fmt.Println("[visor] " + msg)
+	if h := js.Global().Get("__skylog"); h.Type() == js.TypeFunction {
+		h.Invoke("[visor] " + msg)
+	}
+}
 
 func main() {
 	ctx = context.Background()
@@ -76,12 +100,23 @@ func jsBoot(_ js.Value, args []js.Value) interface{} {
 	})
 }
 
-// jsStatus() → { pk, transports, routes }.
+// jsStatus() → { pk, booted, dmsg, tpManager, router, procManager, transports, routes }.
+// The boolean subsystem flags make a fully-initialized edge distinguishable from
+// a half-boot (where a Serve() tripped and left a subsystem nil).
 func jsStatus(js.Value, []js.Value) interface{} {
-	st := map[string]interface{}{"pk": "", "transports": 0, "routes": 0}
+	st := map[string]interface{}{
+		"pk": "", "booted": false,
+		"dmsg": false, "tpManager": false, "router": false, "procManager": false,
+		"transports": 0, "routes": 0,
+	}
 	if !selfPK.Null() {
 		st["pk"] = selfPK.Hex()
 	}
+	st["dmsg"] = dmsgC != nil
+	st["tpManager"] = tpM != nil
+	st["router"] = rtr != nil
+	st["procManager"] = procM != nil
+	st["booted"] = dmsgC != nil && tpM != nil && rtr != nil && procM != nil
 	if tpM != nil {
 		st["transports"] = tpM.TransportCount()
 	}
@@ -108,11 +143,13 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		return pk, fmt.Errorf("bad seed server pk: %w", err)
 	}
 	seed := &disc.Entry{Version: "0.0.1", Static: seedPK, Server: &disc.Server{AddressWS: seedWSURL}}
+	vlog("dmsg: connecting…")
 	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, []*disc.Entry{seed}, discDmsgAddr, true)
 	if err != nil {
 		return pk, fmt.Errorf("dmsg: %w", err)
 	}
 	dmsgC = c
+	vlog("dmsg: ok")
 
 	// 2. transport manager (dmsg-only; no AR, no TPD registration yet).
 	eb := appevent.NewBroadcaster(mLog.PackageLogger("eb"), time.Second)
@@ -128,29 +165,52 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		return pk, fmt.Errorf("transport manager: %w", err)
 	}
 	tpM = tm
+	vlog("tp_manager: ok; init dmsg client…")
 	tm.InitDmsgClient(ctx, dmsgC)
+	vlog("tp_manager: dmsg client inited; serving…")
 	go tm.Serve(ctx)
+	vlog("tp_manager: serving")
 
 	// 3. edge router (receives route rules + forwards/consumes packets). nil
 	// RouteFinder/RouteGroupDialer → the route-SOURCE path is the build-tagged
-	// TinyGo stub (a browser leaf does not originate routes).
-	rConf := &router.Config{
-		Logger:           mLog.PackageLogger("router"),
-		MasterLogger:     mLog,
-		PubKey:           pk,
-		SecKey:           sk,
-		TransportManager: tm,
+	// TinyGo stub (a browser leaf does not originate routes). We open the dmsg
+	// setup listener here and pass it as AwaitSetupListener.
+	vlog("router: dmsg Listen(setup :136)…")
+	setupLis, lerr := dmsgC.Listen(skyenv.DmsgAwaitSetupPort)
+	if lerr != nil {
+		return pk, fmt.Errorf("setup listen: %w", lerr)
 	}
+	vlog("router: setup listener ok")
+	// KNOWN RUNTIME LIMITATION (validated 2026-06-22 via this harness):
+	// router.New() HANGS under TinyGo at rpcSrv.Register(NewRPCGateway). gobimpl's
+	// reflection-based server calls reflect.Type.Method(i), which TinyGo's runtime
+	// reflect does not support — NumMethod() works but Method(i) never returns, so
+	// boot stops at "router: New…". The dmsg + transport.Manager layers above are
+	// validated working in-browser. Fix = a reflection-free gobrpc server (explicit
+	// handler map instead of method enumeration + Value.Call). See
+	// docs/design/wasm-visor-p2p.md.
+	vlog("router: New… (NOTE: hangs under TinyGo until the gobrpc server is reflection-free)")
+	rConf := &router.Config{
+		Logger:             mLog.PackageLogger("router"),
+		MasterLogger:       mLog,
+		PubKey:             pk,
+		SecKey:             sk,
+		TransportManager:   tm,
+		AwaitSetupListener: setupLis,
+	}
+	vlog("router: New…")
 	r, err := router.New(dmsgC, rConf, nil)
 	if err != nil {
 		return pk, fmt.Errorf("router: %w", err)
 	}
 	rtr = r
+	vlog("router: New ok; serving…")
 	go func() {
 		if err := r.Serve(ctx); err != nil {
 			mLog.PackageLogger("router").WithError(err).Error("router.Serve returned")
 		}
 	}()
+	vlog("router: serving")
 
 	// 4. in-process app server (RunModeInternal). No app registered yet — the
 	// in-process skychat AppFunc is the next step.
