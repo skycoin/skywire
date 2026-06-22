@@ -61,6 +61,22 @@
   <button id="fetch">GET over dmsg</button>
 </fieldset>
 
+<fieldset>
+  <legend>5. in-wasm hypervisor (serve the standalone HV core from this tab)</legend>
+  <button id="servehv">serveHypervisor</button>
+  <input id="hvpath" placeholder="hvApi path" value="/api/visors">
+  <button id="hvapi">hvApi GET</button>
+</fieldset>
+
+<fieldset>
+  <legend>6. WebRTC p2p (direct datachannel; signaling rides dmsg :47)</legend>
+  <button id="rtclisten">webrtcListen</button>
+  <input id="rtcpk" placeholder="remote PK to webrtcDial">
+  <button id="rtcdial">webrtcDial</button>
+  <input id="rtcmsg" placeholder="message over the datachannel">
+  <button id="rtcsend">rtc send</button>
+</fieldset>
+
 <div id="log"></div>
 
 <script src="wasm_exec.js"></script>
@@ -118,13 +134,47 @@
     log("» " + m);
   };
 
+  const td = new TextDecoder();
+
   document.getElementById("fetch").onclick = async () => {
     try {
       const r = await skywireDmsg.fetch(
         document.getElementById("fpk").value.trim(), "GET",
         document.getElementById("fpath").value.trim(), null);
-      log("HTTP " + r.status + " over dmsg:\n" + r.body);
+      // body is a Uint8Array (binary-safe); decode for display.
+      log("HTTP " + r.status + " over dmsg:\n" + td.decode(r.body));
     } catch (e) { log("fetch error: " + e); }
+  };
+
+  document.getElementById("servehv").onclick = () => {
+    const r = skywireDmsg.serveHypervisor();
+    log(r instanceof Error ? "serveHypervisor error: " + r : "hypervisor core serving");
+  };
+
+  document.getElementById("hvapi").onclick = async () => {
+    try {
+      const r = await skywireDmsg.hvApi("GET", document.getElementById("hvpath").value.trim(), null);
+      log("hvApi " + r.status + ":\n" + td.decode(r.body));
+    } catch (e) { log("hvApi error: " + e); }
+  };
+
+  let rtc = null;
+  const wireRTC = c => { rtc = c; c.onMessage(m => log("rtc « " + m)); log("webrtc datachannel open"); };
+
+  document.getElementById("rtclisten").onclick = () => {
+    const r = skywireDmsg.webrtcListen(wireRTC);
+    log(r instanceof Error ? "webrtcListen error: " + r : "webrtcListen armed (dmsg :47)");
+  };
+
+  document.getElementById("rtcdial").onclick = async () => {
+    try { wireRTC(await skywireDmsg.webrtcDial(document.getElementById("rtcpk").value.trim())); }
+    catch (e) { log("webrtcDial error: " + e); }
+  };
+
+  document.getElementById("rtcsend").onclick = () => {
+    if (!rtc) { log("no datachannel — webrtcDial/Listen first"); return; }
+    const m = document.getElementById("rtcmsg").value;
+    rtc.send(m); log("rtc » " + m);
   };
 </script>
 </body>
