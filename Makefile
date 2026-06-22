@@ -222,7 +222,14 @@ dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-w
 	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/dmsg-wasm/
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
-	@echo "built ./build/dmsg-wasm — serve it (e.g. 'cd build/dmsg-wasm && python -m http.server') and open index.html"
+	@echo "built ./build/dmsg-wasm — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
+
+tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~21MB) into build/dmsg-wasm
+	mkdir -p ./build/dmsg-wasm
+	tinygo build -target wasm -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/dmsg-wasm/
+	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
+	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
 
 dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
 	mkdir -p ./build/dmsg-wasm-hv

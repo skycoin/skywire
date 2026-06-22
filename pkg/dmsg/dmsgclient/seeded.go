@@ -4,14 +4,12 @@ package dmsgclient
 import (
 	"context"
 	"errors"
-	"net/http"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -71,7 +69,12 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 
 	conf := dmsg.DefaultConfig()
 	conf.PreferWS = preferWS // browser (wasm) seeds over WebSocket; native uses TCP
-	conf.MinSessions = 1
+	// MinSessions 2 (not 1): once bootstrapped via the seed and registered in
+	// discovery, the client learns the live server list from discovery
+	// (seededDiscClient.AvailableServers → real) and holds a SECOND session, so a
+	// single seed going down doesn't sever the client (and orphan it from the
+	// discovery it would need to find another server). Capped at the known set.
+	conf.MinSessions = 2
 
 	dmsgC, stop, err := direct.StartDmsg(ctx, log, pk, sk, dClient, conf)
 	if err != nil {
@@ -83,13 +86,18 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 		// preloaded direct client first (the seed servers + the discovery PK
 		// short-circuit, so resolving the discovery's own location never recurses
 		// into HTTP-over-dmsg), and only unknown peers + WRITES go to the
-		// dmsg-backed HTTP client — which publishes our entry to the real
+		// dmsg-backed discovery client — which publishes our entry to the real
 		// discovery and makes us inbound-reachable by PK. Replacing the disc
 		// outright (instead of falling back) makes teardown recurse resolving the
 		// discovery server's own entry.
-		dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
-		httpDisc := disc.NewHTTP(discDmsgAddr, dmsgHTTP, log)
-		dmsgC.SetDiscoveryClients([]disc.APIClient{NewRegisteringFallbackDiscClient(dClient, httpDisc, log)})
+		//
+		// upgradeDiscovery is build-tagged: native uses dmsghttp (net/http) as the
+		// backing disc client; TinyGo uses the net/http-free dmsgDiscClient
+		// (HTTP/1.1 straight over a dmsg stream). On failure we degrade to
+		// seed-only rather than failing the whole client.
+		if err := upgradeDiscovery(ctx, log, dmsgC, dClient, seedServers, discDmsgAddr); err != nil {
+			log.WithError(err).Warn("dmsg: discovery upgrade failed; continuing seed-only (dialable but can't resolve new peers)")
+		}
 	}
 
 	return dmsgC, stop, nil

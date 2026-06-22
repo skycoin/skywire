@@ -11,7 +11,6 @@ package wasmhv
 import (
 	"context"
 	"encoding/json"
-	"net/rpc"
 	"sync"
 	"time"
 
@@ -98,22 +97,22 @@ type Summary struct {
 // --- the core ---
 
 // Core is a standalone wasm hypervisor: it accepts visor dials and tracks an
-// rpc.Client per connected visor.
+// gob RPC client per connected visor (net/rpc wire protocol, no net/rpc import).
 type Core struct {
 	pk    cipher.PubKey
 	dmsgC *dmsg.Client
 
 	mu     sync.RWMutex
-	visors map[cipher.PubKey]*rpc.Client
+	visors map[cipher.PubKey]*gobRPCClient
 }
 
 // NewCore returns a Core for the given dmsg client + this hypervisor's PK.
 func NewCore(pk cipher.PubKey, dmsgC *dmsg.Client) *Core {
-	return &Core{pk: pk, dmsgC: dmsgC, visors: make(map[cipher.PubKey]*rpc.Client)}
+	return &Core{pk: pk, dmsgC: dmsgC, visors: make(map[cipher.PubKey]*gobRPCClient)}
 }
 
 // Serve listens on the hypervisor dmsg port and accepts visor dials. Each
-// accepted stream is wrapped in an rpc.Client (the dialing visor serves its RPC
+// accepted stream is wrapped in a gob RPC client (the dialing visor serves its RPC
 // over it). Blocks until the listener errors or ctx is done.
 func (c *Core) Serve(ctx context.Context) error {
 	lis, err := c.dmsgC.Listen(DmsgHypervisorPort)
@@ -127,7 +126,7 @@ func (c *Core) Serve(ctx context.Context) error {
 			return err
 		}
 		remotePK := stream.RawRemoteAddr().PK
-		client := rpc.NewClient(stream)
+		client := newGobRPCClient(stream)
 		c.mu.Lock()
 		if old := c.visors[remotePK]; old != nil {
 			old.Close() //nolint:errcheck,gosec
