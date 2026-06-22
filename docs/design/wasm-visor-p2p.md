@@ -200,6 +200,21 @@ Phases 1–3 are mechanical (tag splits + the proven HTTP-over-dmsg pattern) and
 a **routing+transport core** into the browser. Phase 4 reuses the existing internal
 launcher. Phase 5 makes it a visor.
 
+**Phase-1 status + the AR/appevent cascade (measured 2026-06-22, partly committed).**
+The raw-socket carrier *files* (quic/sudph/stun) are tagged `!tinygo` (committed) —
+native unaffected. But two fields on the PUBLIC `network.ClientFactory` keep the
+package non-portable: `ARClient addrresolver.APIClient` (→ net/http + packetfilter,
+which pulls quic-go) and `EB *appevent.Broadcaster` (→ net/rpc). `eb` is used only by
+stcp/stcpr (`SendTCPDial`); `ar` by resolvedClient + dialVisor + stcpr/sudph/quic.
+Interface-abstracting both in the network package is clean — BUT the blocker just
+moves UP: `pkg/transport.Manager` constructs `ClientFactory{ARClient:…, EB:…}` with
+the concrete types, and `pkg/visor` constructs the Manager. So a real port must
+thread AR + appevent (and the net/http-free RF/TPD/AR clients + net/rpc removal)
+through **network → transport → visor** consistently — a broad restructure of
+production-critical transport APIs, not a contained tag split. Do it as a focused
+per-layer effort (interfaces + a network registry), validated with the autonomous
+browser harness, rather than rushed.
+
 ## 8. Which apps fit a wasm visor?
 
 The governing rule: **an app works in a wasm visor iff everything it does is either
