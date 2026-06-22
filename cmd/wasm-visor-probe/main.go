@@ -22,9 +22,17 @@
 //	                            client (addrresolver) and event broadcaster (appevent)
 //	                            are typed `any`, ARClient() and the disc-404 check are
 //	                            build-tagged so net/http + net/rpc stay native-only.
+//	   pkg/router             — EDGE-ONLY: the forwarding/data plane (packet read/
+//	                            forward/consume, routing table, route groups, rule
+//	                            reception via the gobrpc server, cascade receive/relay)
+//	                            compiles. The route-SOURCE plane (route finding,
+//	                            RSN/setup-node clients, client pool, cascade build,
+//	                            mux establishment, DialRoutes) is //go:build !tinygo;
+//	                            router_source_tinygo.go stubs those Router methods so
+//	                            *router still satisfies Router. net/rpc is gone via
+//	                            pkg/gobrpc; net/http via rfclient/setupnode tagging.
 //
 //	⛔ BLOCKED (blocker → fix):
-//	   pkg/router             net/http (routefinder) + net/rpc (cascade_source RSN)
 //	   pkg/app/appnet         net/http + net/rpc
 //	   pkg/app/appevent       net/rpc — app↔visor event channel
 //	   pkg/visor              + os/exec (the app-SUBPROCESS model — needs in-process apps)
@@ -35,6 +43,7 @@ package main
 import (
 	"fmt"
 
+	_ "github.com/skycoin/skywire/pkg/router"
 	_ "github.com/skycoin/skywire/pkg/routing"
 	_ "github.com/skycoin/skywire/pkg/transport"
 	_ "github.com/skycoin/skywire/pkg/transport/network"

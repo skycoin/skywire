@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/client_pool.go
 //
 // ClientPool keeps reusable RPC connections to remote visors so the
