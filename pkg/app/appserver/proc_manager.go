@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"sync"
 	"time"
 
@@ -249,10 +248,8 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 		return 0, err
 	}
 
-	if proc.cmd == nil {
-		return 0, nil
-	}
-	return appcommon.ProcID(proc.cmd.Process.Pid), nil //nolint: gosec
+	// 0 for in-process apps (and on TinyGo); the external PID otherwise.
+	return appcommon.ProcID(proc.pid()), nil //nolint: gosec
 }
 
 // Register registers a proc for an external app.
@@ -371,7 +368,7 @@ func (m *procManager) Wait(name string) error {
 	// While waiting for p.Wait() call, we need app to present in the processes list,
 	// so we cannot pop it before p.Wait().
 	if err := p.Wait(); err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
+		if !isExitError(err) {
 			err = fmt.Errorf("failed to run app executable %s: %w", name, err)
 		}
 

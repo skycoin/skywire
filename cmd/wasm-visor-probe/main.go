@@ -43,6 +43,7 @@ package main
 import (
 	"fmt"
 
+	_ "github.com/skycoin/skywire/pkg/app/appserver"
 	_ "github.com/skycoin/skywire/pkg/router"
 	_ "github.com/skycoin/skywire/pkg/routing"
 	_ "github.com/skycoin/skywire/pkg/transport"
