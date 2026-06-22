@@ -4,23 +4,28 @@ package network
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/handshake"
 	"github.com/skycoin/skywire/pkg/transport/network/porter"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
+
+// tcpDialAnnouncer is the interface satisfied by *appevent.Broadcaster that the TCP carriers
+// (stcp/stcpr) use to emit TCPDial app-events. Declared as a local interface so
+// this file (and the dmsg/stcp carriers that compile under TinyGo) does not
+// import pkg/app/appevent — which pulls net/rpc, broken on the TinyGo target.
+// *appevent.Broadcaster satisfies it; the visor passes it through ClientFactory.EB.
+type tcpDialAnnouncer interface {
+	SendTCPDial(ctx context.Context, remoteNet, remoteAddr string)
+}
 
 // Client provides access to skywire network
 // It allows dialing remote visors using their public keys, as
@@ -56,10 +61,17 @@ type ClientFactory struct {
 	SK         cipher.SecKey
 	ListenAddr string
 	PKTable    stcp.PKTable
-	ARClient   addrresolver.APIClient
-	EB         *appevent.Broadcaster
-	DmsgC      *dmsg.Client
-	MLogger    *logging.MasterLogger
+	// ARClient is the address-resolver client (addrresolver.APIClient). Typed as
+	// `any` so this file doesn't import addrresolver — which pulls net/http +
+	// packetfilter (→ quic-go), none of which compile on the TinyGo target. Only
+	// the AR-resolved carriers (stcpr/sudph/quic, all //go:build !tinygo) consume
+	// it, via a type-assert in makeResolvedClient (client_resolved.go). The visor
+	// passes a real addrresolver.APIClient; a nil/absent one is fine for a
+	// dmsg-only (e.g. browser) client.
+	ARClient any
+	EB       tcpDialAnnouncer
+	DmsgC    *dmsg.Client
+	MLogger  *logging.MasterLogger
 	// OnExternalSTCPR is called when an incoming STCPR connection is detected
 	// from an external (non-LAN) IP address. This validates that the visor is
 	// reachable from the internet.
@@ -88,21 +100,17 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 	generic.listenAddr = f.ListenAddr
 	generic.onExternalSTCPR = f.OnExternalSTCPR
 
-	resolved := &resolvedClient{genericClient: generic, ar: f.ARClient}
-
 	switch netType {
 	case types.STCP:
 		return newStcp(generic, f.PKTable), nil
-	case types.STCPR:
-		return newStcpr(resolved, port), nil
-	case types.SUDPH:
-		return makeSudphClient(resolved, port)
-	case types.QUIC:
-		return makeQuicClient(resolved, port)
 	case types.DMSG:
 		return newDmsgClient(f.DmsgC), nil
 	}
-	return nil, fmt.Errorf("cannot initiate client, type %s not supported", netType)
+	// STCPR / SUDPH / QUIC all ride the address resolver + raw UDP/TCP — none of
+	// which exist on the TinyGo/browser target. makeResolvedClient is build-tagged
+	// (real on native in client_resolved.go; an unsupported-error stub under
+	// //go:build tinygo), so this file stays addrresolver-free.
+	return f.makeResolvedClient(netType, generic, port)
 }
 
 // genericClient unites common logic for all clients
@@ -121,7 +129,7 @@ type genericClient struct {
 	log    *logging.Logger
 	mLog   *logging.MasterLogger
 	porter *porter.Porter
-	eb     *appevent.Broadcaster
+	eb     tcpDialAnnouncer
 
 	connListener    net.Listener
 	listeners       map[uint16]*listener
@@ -214,10 +222,7 @@ func (c *genericClient) acceptTransport() error {
 	// reverse direction of any interactive stream. UDP-based
 	// sudph isn't affected (no Nagle); the type assertion is a
 	// no-op for non-TCP listeners.
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
-		configureTCPLiveness(tcpConn)
-	}
+	tuneTCPConn(conn)
 	remoteAddr := conn.RemoteAddr()
 	c.log.Debugf("Accepted connection from %v", remoteAddr)
 
@@ -345,149 +350,6 @@ func (c *genericClient) Close() error {
 // Type implements interface
 func (c *genericClient) Type() types.Type {
 	return c.netType
-}
-
-// resolvedClient is a wrapper around genericClient,
-// for the types of transports that use address resolver service
-// to resolve addresses of remote visors
-type resolvedClient struct {
-	*genericClient
-	ar addrresolver.APIClient
-}
-
-type dialFunc func(ctx context.Context, addr string) (net.Conn, error)
-
-// dialVisor uses address resovler to obtain network address of the target visor
-// and dials that visor address(es)
-// dial process is specific to transport type and is provided by the client
-func (c *resolvedClient) dialVisor(ctx context.Context, rPK cipher.PubKey, dial dialFunc) (net.Conn, error) {
-	visorData, err := c.ar.Resolve(ctx, string(c.netType), rPK)
-	if err != nil {
-		return nil, fmt.Errorf("resolve PK: %w", err)
-	}
-	c.log.Debugf("Resolved PK %v to visor data %v", rPK, visorData)
-
-	// For self-connections (rPK == local PK), always try local addresses first
-	// to avoid NAT hairpinning issues when connecting via public IP
-	isSelfConnection := rPK == c.lPK
-
-	// Check if the remote visor shares our public IP (same NAT)
-	// In this case, we should try LAN addresses first to avoid NAT hairpinning issues
-	samePublicIP := false
-	localPublicIP := c.ar.LocalPublicIP()
-	if localPublicIP != "" && visorData.RemoteAddr != "" {
-		remoteIP := visorData.RemoteAddr
-		// Extract just the IP if RemoteAddr includes a port
-		if host, _, err := net.SplitHostPort(remoteIP); err == nil {
-			remoteIP = host
-		}
-		samePublicIP = localPublicIP == remoteIP
-		if samePublicIP {
-			c.log.Debugf("Remote visor shares same public IP (%s), trying LAN addresses first", localPublicIP)
-		}
-	}
-
-	if visorData.IsLocal || isSelfConnection || samePublicIP {
-		if isSelfConnection {
-			c.log.Debug("Detected self-connection, trying local addresses to avoid NAT issues")
-		}
-		// Get the public IP to filter it out from LAN addresses
-		remotePublicIP := visorData.RemoteAddr
-		if host, _, err := net.SplitHostPort(remotePublicIP); err == nil {
-			remotePublicIP = host
-		}
-		for _, host := range visorData.Addresses {
-			// Skip loopback addresses unless it's a self-connection
-			if !isSelfConnection && (host == "127.0.0.1" || host == "::1") {
-				continue
-			}
-			// Skip the public IP - we'll fall back to it anyway
-			if host == remotePublicIP {
-				continue
-			}
-			addr := net.JoinHostPort(host, visorData.Port)
-			c.log.Debugf("Trying LAN address: %s", addr)
-			conn, err := dial(ctx, addr)
-			if err == nil {
-				c.log.Debugf("Successfully connected via LAN address: %s", addr)
-				return conn, nil
-			}
-			c.log.WithError(err).Debugf("Failed to dial %s, trying next address", addr)
-		}
-	}
-
-	// Happy Eyeballs (#1525 Phase 3): when AR has both a v6 and v4
-	// public address for the peer, try v6 first; fall back to v4 on
-	// any v6 failure (refused, timeout, unreachable). Sequential —
-	// no parallel race, no double-noise-handshake risk. The v6 attempt
-	// gets a bounded window (v6HeadStart) so a black-holed v6 route
-	// doesn't extend the overall dial materially beyond the v4 path's
-	// own connect time.
-	//
-	// Backward-compat: v6-only and v4-only peers are dispatched
-	// directly (no head-start cost). The pre-#1525 single-stack
-	// behavior — "RemoteAddrV6 is empty" — falls through the
-	// addrV6 == "" branch and dials RemoteAddr exactly like before.
-	addrV4 := canonicalAddr(visorData.RemoteAddr, visorData.Port)
-	addrV6 := canonicalAddr(visorData.RemoteAddrV6, visorData.Port)
-	switch {
-	case addrV6 != "" && addrV4 != "":
-		c.log.Debugf("Happy Eyeballs: dual-stack %s (v6) / %s (v4)", addrV6, addrV4)
-		return happyEyeballsDial(ctx, addrV6, addrV4, dial, c.log)
-	case addrV6 != "":
-		c.log.Debugf("Dialing v6-only public address: %s", addrV6)
-		return dial(ctx, addrV6)
-	case addrV4 != "":
-		c.log.Debugf("Dialing v4-only public address: %s", addrV4)
-		return dial(ctx, addrV4)
-	default:
-		return nil, fmt.Errorf("visor data has neither RemoteAddr nor RemoteAddrV6")
-	}
-}
-
-// v6HeadStart bounds the v6 attempt in happyEyeballsDial. Modeled
-// on RFC 8305's 250ms head-start, widened to 1s to give a slow but
-// reachable v6 route a fair chance before falling back to v4. A
-// black-holed v6 route still bounds the extra latency to this much.
-const v6HeadStart = time.Second
-
-// canonicalAddr returns "" when raw is empty (lets the caller branch
-// on "v6 unavailable"), otherwise appends port when raw is bare-host.
-// Mirrors the inline check the pre-#1525 dialer did so the v4/v6
-// branches stay symmetric.
-func canonicalAddr(raw, port string) string {
-	if raw == "" {
-		return ""
-	}
-	if _, _, err := net.SplitHostPort(raw); err != nil {
-		return net.JoinHostPort(raw, port)
-	}
-	return raw
-}
-
-// happyEyeballsDial tries v6 first with a v6HeadStart-bounded sub-ctx,
-// falls back to v4 on any v6 failure. Sequential by design: one
-// socket + one noise handshake in flight at a time. Caller-supplied
-// ctx still bounds the overall dial; the v6 sub-ctx only narrows the
-// v6 attempt's deadline within ctx's window.
-func happyEyeballsDial(ctx context.Context, addrV6, addrV4 string, dial dialFunc, log *logging.Logger) (net.Conn, error) {
-	v6Ctx, cancel := context.WithTimeout(ctx, v6HeadStart)
-	conn, v6Err := dial(v6Ctx, addrV6)
-	cancel()
-	if v6Err == nil {
-		log.Debugf("Happy Eyeballs: v6 connected: %s", addrV6)
-		return conn, nil
-	}
-	if ctx.Err() != nil {
-		return nil, fmt.Errorf("happy eyeballs: ctx done during v6 attempt: %w", ctx.Err())
-	}
-	log.WithError(v6Err).Debugf("Happy Eyeballs: v6 %s failed, falling back to v4 %s", addrV6, addrV4)
-	conn, v4Err := dial(ctx, addrV4)
-	if v4Err != nil {
-		return nil, fmt.Errorf("happy eyeballs: v6 (%s) failed: %v; v4 (%s) failed: %w", addrV6, v6Err, addrV4, v4Err)
-	}
-	log.Debugf("Happy Eyeballs: v4 fallback connected: %s", addrV4)
-	return conn, nil
 }
 
 // isPrivateIP checks if an IP address is in a private range

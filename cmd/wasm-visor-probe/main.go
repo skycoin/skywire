@@ -11,14 +11,18 @@
 //	✅ COMPILES TODAY (imported below):
 //	   pkg/routing            — routing rules/types, pure
 //	   pkg/visor/visorconfig  — config types + keyring
+//	   pkg/transport/network  — the transport client layer (genericClient + dmsg
+//	                            carrier). Raw-socket carriers (stcpr/sudph/quic/
+//	                            stun/tcp-liveness) + the AR-resolved machinery are
+//	                            //go:build !tinygo; ClientFactory.ARClient is `any`
+//	                            and EB is a local interface so addrresolver/appevent
+//	                            stay out of the graph. TCP tuning is build-tagged.
 //
 //	⛔ BLOCKED (blocker → fix):
-//	   pkg/router             quic-go  → split raw-socket networks (stcp/sudph/quic) behind tags
-//	                          net/http → net/http-free routefinder client (dmsgclient.FetchOverDmsg pattern)
-//	                          net/rpc  → cascade_source.go RSN oracle (gob-RPC like wasmhv, or tag out)
-//	   pkg/transport          quic-go + net/http (TPD client) + net/rpc
-//	   pkg/transport/network  quic-go (quic.go/sudph.go/stcpr.go) — keep dmsg.go only for browser
-//	   pkg/app/appnet         quic-go + net/http + net/rpc
+//	   pkg/transport          net/http (TPD client) + net/rpc — net/http-free TPD
+//	                          client (FetchOverDmsg) + tag/abstract the net/rpc bits
+//	   pkg/router             net/http (routefinder) + net/rpc (cascade_source RSN)
+//	   pkg/app/appnet         net/http + net/rpc
 //	   pkg/app/appevent       net/rpc — app↔visor event channel
 //	   pkg/visor              + os/exec (the app-SUBPROCESS model — needs in-process apps)
 //
@@ -29,6 +33,7 @@ import (
 	"fmt"
 
 	_ "github.com/skycoin/skywire/pkg/routing"
+	_ "github.com/skycoin/skywire/pkg/transport/network"
 	_ "github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
