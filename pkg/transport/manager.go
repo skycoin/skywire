@@ -12,14 +12,12 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
-	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	tspec "github.com/skycoin/skywire/pkg/transport/spec"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -59,9 +57,15 @@ type RouteChecker func(tpID uuid.UUID) bool
 type Manager struct {
 	Logger   *logging.Logger
 	Conf     *ManagerConfig
-	tps      map[uuid.UUID]*ManagedTransport
-	arClient addrresolver.APIClient
-	ebc      *appevent.Broadcaster
+	tps map[uuid.UUID]*ManagedTransport
+	// arClient is the address-resolver client (addrresolver.APIClient on native
+	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
+	// the TinyGo graph; recover it via the build-tagged ARClient() getter.
+	arClient any
+	// ebc is the app-event broadcaster (*appevent.Broadcaster on native builds).
+	// Typed `any` so appevent (net/rpc) stays out of the TinyGo graph; it is only
+	// stored and forwarded, never method-called here.
+	ebc any
 
 	readCh chan routing.Packet
 	mx     sync.RWMutex
@@ -130,7 +134,11 @@ type Manager struct {
 
 // NewManager creates a Manager with the provided configuration and transport factories.
 // 'factories' should be ordered by preference.
-func NewManager(log *logging.Logger, arClient addrresolver.APIClient, ebc *appevent.Broadcaster, config *ManagerConfig, factory network.ClientFactory) (*Manager, error) {
+// arClient must be an addrresolver.APIClient (native builds); ebc an
+// *appevent.Broadcaster. Both are typed `any` to keep addrresolver (net/http)
+// and appevent (net/rpc) out of the TinyGo graph — concrete callers are
+// unaffected since a concrete value satisfies `any`.
+func NewManager(log *logging.Logger, arClient any, ebc any, config *ManagerConfig, factory network.ClientFactory) (*Manager, error) {
 	if log == nil {
 		log = logging.MustGetLogger("tp_manager")
 	}
@@ -602,10 +610,8 @@ func (tm *Manager) checkARLimit() {
 		tm.arDeregisteredMu.Unlock()
 		tm.Logger.WithField("count", count).WithField("limit", limit).
 			Info("AR transport limit reached — deregistering from address resolver")
-		if tm.arClient != nil {
-			if err := tm.arClient.Close(); err != nil {
-				tm.Logger.WithError(err).Warn("Failed to close AR client during deregistration")
-			}
+		if err := tm.closeARClient(); err != nil {
+			tm.Logger.WithError(err).Warn("Failed to close AR client during deregistration")
 		}
 	} else {
 		tm.arDeregisteredMu.Unlock()
@@ -1042,9 +1048,14 @@ func (tm *Manager) GetTransportsByLabels(labels ...Label) []*ManagedTransport {
 	return trs
 }
 
-// ARClient returns the address resolver client used by this transport manager.
-func (tm *Manager) ARClient() addrresolver.APIClient {
-	return tm.arClient
+// closeARClient closes the address-resolver client if one is set. arClient is
+// typed `any` (to keep addrresolver out of the TinyGo graph), so recover the
+// Close method via an interface assert; a nil or non-closer arClient is a no-op.
+func (tm *Manager) closeARClient() error {
+	if c, ok := tm.arClient.(interface{ Close() error }); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 // SaveTransportOptions contains options for transport creation.
@@ -1360,8 +1371,7 @@ func (tm *Manager) Close() {
 			tm.Logger.WithError(err).Warnf("Failed to close %s client", client.Type())
 		}
 	}
-	err := tm.arClient.Close()
-	if err != nil {
+	if err := tm.closeARClient(); err != nil {
 		tm.Logger.WithError(err).Warnf("Failed to close arClient")
 	}
 	tm.wg.Wait()
