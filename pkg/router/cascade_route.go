@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/cascade_route.go
 //
 // createRouteGroupCascade implements the two-phase cascade protocol
