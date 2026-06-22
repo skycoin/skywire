@@ -7,16 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/rpc"
 	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/orandin/lumberjackrus"
 	"github.com/sirupsen/logrus"
 
@@ -24,9 +21,9 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
@@ -37,7 +34,9 @@ var (
 // Proc is an instance of a skywire app. It encapsulates the running process itself and the RPC server for app/visor
 // communication.
 type Proc struct {
-	ipcServer   *ipc.Server
+	// ipcServer is the Windows IPC server (*ipc.Server on native builds). Typed
+	// `any` so golang-ipc stays out of the TinyGo graph; see proc_external_*.go.
+	ipcServer   any
 	ipcServerWg sync.WaitGroup
 	disc        appdisc.Updater // app discovery client
 	conf        appcommon.ProcConfig
@@ -46,7 +45,9 @@ type Proc struct {
 	logDB     appcommon.LogStore
 	masterLog *logging.MasterLogger // master logger for in-process apps
 
-	cmd       *exec.Cmd
+	// cmd is the external app's OS process (*exec.Cmd on native builds). Typed
+	// `any` so os/exec stays out of the TinyGo graph; nil for in-process apps.
+	cmd       any
 	isRunning int32
 	waitMx    sync.Mutex
 	waitErr   error
@@ -92,27 +93,12 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 	}
 	moduleName := fmt.Sprintf("proc:%s:%s", conf.AppName, conf.ProcKey)
 
-	var cmd *exec.Cmd
+	// cmd is non-nil only for external-mode apps on native builds; the os/exec
+	// machinery lives in proc_external_native.go (build-tagged out of TinyGo).
+	cmd := newExternalCmd(conf, mLog, moduleName)
 	var stderr io.ReadCloser
 
-	if conf.EffectiveRunMode() == appcommon.RunModeExternal {
-		envs := conf.Envs()
-		cmd = exec.Command(conf.BinaryLoc, conf.ProcArgs...) //nolint:gosec
-		cmd.Env = append(os.Environ(), envs...)
-		cmd.Dir = conf.ProcWorkDir
-		// Drop privileges before exec when AppConfig set User/Group.
-		// applyProcCredentials is POSIX-only (the windows build returns
-		// a hard error so a misconfiguration surfaces loudly). When
-		// the lookup fails or the visor lacks CAP_SETUID, we leave the
-		// cmd ready-to-run and let exec.Start surface the kernel's
-		// EPERM at startup; the resulting log line points at proc.go.
-		if conf.ProcUser != "" {
-			if cerr := applyProcCredentials(cmd, conf.ProcUser, conf.ProcGroup); cerr != nil {
-				mLog.PackageLogger(moduleName).WithError(cerr).
-					Warnf("Could not set credentials for %s; spawning under the visor's UID instead", conf.AppName)
-			}
-		}
-	} else if conf.ProcUser != "" || conf.ProcGroup != "" {
+	if conf.EffectiveRunMode() != appcommon.RunModeExternal && (conf.ProcUser != "" || conf.ProcGroup != "") {
 		// In-process apps can't drop privileges per-goroutine — the
 		// runtime moves them between OS threads, and setuid is
 		// process-wide anyway. Surface the misconfiguration so the
@@ -132,13 +118,7 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 			storeLog(appLog, logStorePath)
 		}
 
-		if cmd != nil {
-			cmd.Stdout = appLog.WithField("_module", moduleName).WithField("func", "(STDOUT)").WriterLevel(logrus.DebugLevel)
-
-			errorLog := appLog.WithField("_module", moduleName).WithField("func", "(STDERR)")
-			stderr, _ = cmd.StderrPipe() //nolint:errcheck
-			printStdErr(stderr, errorLog)
-		}
+		stderr = attachCmdLogs(cmd, appLog, moduleName)
 	}
 
 	p := &Proc{
@@ -164,11 +144,6 @@ func NewProc(mLog *logging.MasterLogger, conf appcommon.ProcConfig, disc appdisc
 // Logs obtains the log store.
 func (p *Proc) Logs() appcommon.LogStore {
 	return p.logDB
-}
-
-// Cmd returns the internal cmd name.
-func (p *Proc) Cmd() *exec.Cmd {
-	return p.cmd
 }
 
 // StartTime returns app start time.
@@ -376,104 +351,14 @@ func (p *Proc) startInProcess() error {
 		}()
 		defer p.disc.Stop()
 
-		if runtime.GOOS == "windows" {
-			ipcServer, err := ipc.StartServer(p.appName, nil)
-			if err != nil {
-				p.appCancelCtx()
-				p.waitMx.Unlock()
-				p.ipcServerWg.Done()
-				return
-			}
-			p.ipcServer = ipcServer
+		if err := p.startWindowsIPCServer(); err != nil {
+			p.appCancelCtx()
+			p.waitMx.Unlock()
 			p.ipcServerWg.Done()
+			return
 		}
 
 		<-p.appCtx.Done()
-
-		if err := p.conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
-			p.log.WithError(err).Warn("Closing proc conn returned unexpected error.")
-		}
-		p.rpcGW.cm.CloseAll()
-		p.rpcGW.lm.CloseAll()
-
-		p.waitMx.Unlock()
-	}()
-
-	return nil
-}
-
-func (p *Proc) startExternal() error {
-	// Lifecycle context, canceled on teardown (Stop -> appCancelCtx, and the
-	// deferred m.Stop in the goroutine below). Mirrors startInProcess so the
-	// readyCh waiter can wake on teardown instead of leaking when an external
-	// app dies before it ever reports Running.
-	p.appCtx, p.appCancelCtx = context.WithCancel(context.Background()) //nolint:gosec
-
-	if err := p.cmd.Start(); err != nil {
-		p.waitMx.Unlock()
-		return err
-	}
-
-	go func() {
-		waitErrCh := make(chan error)
-		go func() {
-			waitErrCh <- p.cmd.Wait()
-			close(waitErrCh)
-		}()
-
-		defer func() {
-			_ = p.m.SetError(p.appName, p.err) //nolint:errcheck
-			_ = p.m.Stop(p.appName)            //nolint:errcheck
-		}()
-
-		select {
-		case _, ok := <-p.connCh:
-			if !ok {
-				_ = p.cmd.Process.Kill() //nolint:errcheck
-				p.waitMx.Unlock()
-
-				return
-			}
-		case waitErr := <-waitErrCh:
-			p.waitErr = waitErr
-			p.waitMx.Unlock()
-
-			p.connOnce.Do(func() { close(p.connCh) })
-
-			return
-		}
-
-		if ok := p.AwaitConn(); !ok {
-			_ = p.cmd.Process.Kill() //nolint:errcheck
-			p.waitMx.Unlock()
-			return
-		}
-
-		go func() {
-			select {
-			case <-p.readyCh:
-				p.disc.Start()
-			case <-p.appCtx.Done():
-				// Torn down before the app reported Running — don't start
-				// discovery for a now-dead app; just exit instead of leaking
-				// this goroutine blocked on readyCh forever.
-			}
-		}()
-		defer p.disc.Stop()
-
-		if runtime.GOOS == "windows" {
-			ipcServer, err := ipc.StartServer(p.appName, nil)
-			if err != nil {
-				_ = p.cmd.Process.Kill() //nolint:errcheck
-				p.waitMx.Unlock()
-				p.ipcServerWg.Done()
-				return
-			}
-			p.ipcServer = ipcServer
-			p.ipcServerWg.Done()
-		}
-
-		p.waitErr = <-waitErrCh
 
 		if err := p.conn.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			p.log.WithError(err).Warn("Closing proc conn returned unexpected error.")
@@ -497,29 +382,17 @@ func (p *Proc) Stop() error {
 		p.appCancelCtx()
 	}
 
-	if p.cmd != nil && p.cmd.Process != nil {
-		if runtime.GOOS != "windows" {
-			err := p.cmd.Process.Signal(os.Interrupt)
-			if err != nil {
-				return err
-			}
-		} else {
-			p.ipcServerWg.Wait()
-			if p.ipcServer != nil {
-				if err := p.ipcServer.Write(skyenv.IPCShutdownMessageType, []byte("")); err != nil {
-					return err
-				}
-			}
-		}
+	// External app: deliver the stop signal (SIGINT / IPC shutdown). No-op for
+	// in-process apps and on TinyGo (see proc_external_*.go).
+	if err := p.signalStop(); err != nil {
+		return err
 	}
 
 	p.disc.Stop()
 
 	p.waitMx.Lock()
 	defer func() {
-		if p.ipcServer != nil {
-			p.ipcServer.Close()
-		}
+		p.closeIPCServer()
 		if p.cmdStderr != nil {
 			_ = p.cmdStderr.Close() //nolint:errcheck
 		}
