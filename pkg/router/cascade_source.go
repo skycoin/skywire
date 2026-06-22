@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/cascade_source.go
 //
 // Source-driven cascade orchestration.
@@ -29,21 +31,6 @@ import (
 	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/routing"
 )
-
-// cascadeSourceProvider is implemented by route-group dialers that own a
-// source-side CascadeBuilder. The router uses it at Serve time to share the
-// builder's ack registry with the visor's single CascadeHandler.
-type cascadeSourceProvider interface {
-	CascadeAckRegistry() *ackRegistry
-}
-
-// cascadeOriginSetter is implemented by route-group dialers that drive
-// source-driven cascade. The router calls SetCascadeOrigin at Serve time to
-// hand the dialer the visor's CascadeHandler, which the dialer uses to consume
-// the source-addressed outermost cascade layer locally.
-type cascadeOriginSetter interface {
-	SetCascadeOrigin(p cascadeOriginProcessor)
-}
 
 // errCascadeSignUnimplemented signals that the RSN does not implement the
 // CascadeSign* RPCs (an un-upgraded setup node). Callers fall back to the
