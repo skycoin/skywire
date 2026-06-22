@@ -62,7 +62,13 @@ func (c *gobRPCClient) Call(serviceMethod string, args, reply interface{}) error
 		return err
 	}
 	if resp.Error != "" {
-		_ = c.dec.Decode(nil) //nolint:errcheck // discard the empty error body to stay aligned
+		// The server still writes an (empty) reply body after an error response;
+		// read + discard it so the gob stream stays aligned for the next call.
+		// net/rpc sends struct{}{} (invalidRequest) as that body — decode into a
+		// matching throwaway pointer. (gob's Decode(nil) would also discard, but
+		// `go vet` flags the literal nil as "call of Decode passes non-pointer".)
+		var discard struct{}
+		_ = c.dec.Decode(&discard) //nolint:errcheck
 		return errors.New(resp.Error)
 	}
 	return c.dec.Decode(reply)
