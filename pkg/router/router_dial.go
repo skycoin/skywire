@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // router_dial.go contains route dialing and route finding logic.
 package router
 
