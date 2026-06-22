@@ -231,6 +231,12 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
 	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
 
+tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+appserver) with TinyGo into build/wasm-visor
+	mkdir -p ./build/wasm-visor
+	tinygo build -target wasm -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/
+	@echo "built ./build/wasm-visor (TinyGo) — the browser visor EDGE assembly (skywireVisor.boot/status)"
+
 dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
 	mkdir -p ./build/dmsg-wasm-hv
 	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm-hv/dmsg.wasm ./cmd/dmsg-wasm
