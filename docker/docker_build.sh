@@ -13,13 +13,26 @@ build_arch="$3"
 git_branch="$(git rev-parse --abbrev-ref HEAD)"
 git_commit="$(git rev-parse HEAD)"
 bldkit="1"
-platform="--platform=linux/amd64"
+
+# Default to the host architecture so local builds produce images that match
+# the machine they run on (e.g. linux/arm64 on Apple Silicon). Override for
+# cross-arch builds by passing a full platform string as the third argument,
+# e.g. `docker_build.sh e2e "" linux/amd64`.
+host_arch="$(go env GOARCH 2>/dev/null)"
+if [[ "$host_arch" == "" ]]; then
+  case "$(uname -m)" in
+    x86_64) host_arch="amd64" ;;
+    aarch64 | arm64) host_arch="arm64" ;;
+    *) host_arch="amd64" ;;
+  esac
+fi
+platform="--platform=linux/${host_arch}"
 
 # shellcheck disable=SC2153
 registry="$REGISTRY"
 
 # shellcheck disable=SC2153
-base_image=golang:1.26-alpine
+base_image=golang:1.26.1-alpine
 
 if [[ "$#" != 2 ]]; then
   echo "docker_build.sh <IMAGE_TAG> <GO_BUILDOPTS>"
