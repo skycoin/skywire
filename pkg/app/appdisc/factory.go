@@ -2,23 +2,25 @@
 package appdisc
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/geo"
 	"github.com/skycoin/skywire/pkg/logging"
-	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // Note: HeartbeatInterval default is skyenv.ServiceDiscUpdateInterval (90 seconds)
 
 // Factory creates appdisc.Updater instances based on the app name.
+//
+// The updater constructors (VisorUpdater/PublicVisorUpdater/AppUpdater) build
+// service-discovery HTTP clients and so live in factory_native.go
+// (//go:build !tinygo); on the TinyGo js/wasm target factory_tinygo.go hands
+// out emptyUpdater. Client is typed `any` (an *http.Client on native) so this
+// shared struct definition stays net/http-free.
 type Factory struct {
 	Log               logrus.FieldLogger
 	MLog              *logging.MasterLogger
@@ -26,10 +28,10 @@ type Factory struct {
 	SK                cipher.SecKey
 	ServiceDisc       string // Address of service-discovery
 	DisplayNodeIP     bool
-	Client            *http.Client
+	Client            any // *http.Client on native builds
 	ClientPublicIP    string
-	HeartbeatInterval time.Duration     // Interval for service discovery heartbeats
-	Geo               *geo.LocationData // Visor's geolocation; included in service entries
+	HeartbeatInterval time.Duration // Interval for service discovery heartbeats
+	Geo               any           // *geo.LocationData on native builds; visor geolocation in service entries
 }
 
 func (f *Factory) setDefaults() {
@@ -41,114 +43,5 @@ func (f *Factory) setDefaults() {
 	}
 	if f.HeartbeatInterval <= 0 {
 		f.HeartbeatInterval = skyenv.ServiceDiscUpdateInterval
-	}
-}
-
-// VisorUpdater obtains a visor updater.
-func (f *Factory) VisorUpdater(port uint16) Updater {
-	// Always return empty updater if keys are not set.
-	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
-		return &emptyUpdater{}
-	}
-
-	conf := servicedisc.Config{
-		Type:          servicedisc.ServiceTypeVisor,
-		PK:            f.PK,
-		SK:            f.SK,
-		Port:          port,
-		DiscAddr:      f.ServiceDisc,
-		DisplayNodeIP: f.DisplayNodeIP,
-		Geo:           f.Geo,
-	}
-
-	return newServiceUpdater(
-		f.Log,
-		servicedisc.NewClient(f.Log, f.MLog, conf, f.Client, f.ClientPublicIP),
-		f.HeartbeatInterval,
-	)
-}
-
-// PublicVisorUpdater obtains a public visor updater with validation logic.
-// It wraps a regular service updater and monitors for external STCPR connections
-// and transport count to determine if the visor should stay registered.
-func (f *Factory) PublicVisorUpdater(
-	port uint16,
-	registrationTimeout time.Duration,
-	maxTransports int,
-	getTransportCount func() int,
-) *PublicVisorUpdater {
-	// Always return nil if keys are not set.
-	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
-		return nil
-	}
-
-	conf := servicedisc.Config{
-		Type:          servicedisc.ServiceTypeVisor,
-		PK:            f.PK,
-		SK:            f.SK,
-		Port:          port,
-		DiscAddr:      f.ServiceDisc,
-		DisplayNodeIP: f.DisplayNodeIP,
-		Geo:           f.Geo,
-	}
-
-	inner := newServiceUpdater(
-		f.Log,
-		servicedisc.NewClient(f.Log, f.MLog, conf, f.Client, f.ClientPublicIP),
-		f.HeartbeatInterval,
-	)
-
-	return NewPublicVisorUpdater(
-		f.Log,
-		inner,
-		registrationTimeout,
-		maxTransports,
-		getTransportCount,
-	)
-}
-
-// AppUpdater obtains an app updater based on the app name and configuration.
-func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
-	// Always return empty updater if keys are not set.
-	if f.setDefaults(); f.PK.Null() || f.SK.Null() {
-		return &emptyUpdater{}, false
-	}
-
-	log := f.Log.WithField("appName", conf.AppName)
-
-	// Do not update in service discovery if passcode-protected or whitelist-protected.
-	if conf.ContainsFlag("passcode") && conf.ArgVal("passcode") != "" {
-		return &emptyUpdater{}, false
-	}
-	if conf.ContainsFlag("whitelist") && conf.ArgVal("whitelist") != "" {
-		return &emptyUpdater{}, false
-	}
-
-	getServiceDiscConf := func(conf appcommon.ProcConfig, sType string) servicedisc.Config {
-		return servicedisc.Config{
-			Type:     sType,
-			PK:       f.PK,
-			SK:       f.SK,
-			Port:     uint16(conf.RoutingPort),
-			DiscAddr: f.ServiceDisc,
-			Geo:      f.Geo,
-		}
-	}
-
-	switch conf.AppName {
-	case skyenv.VPNServerName:
-		return newServiceUpdater(
-			log,
-			servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeVPN), f.Client, f.ClientPublicIP),
-			f.HeartbeatInterval,
-		), true
-	case skyenv.SkysocksName:
-		return newServiceUpdater(
-			log,
-			servicedisc.NewClient(log, f.MLog, getServiceDiscConf(conf, servicedisc.ServiceTypeSkysocks), f.Client, f.ClientPublicIP),
-			f.HeartbeatInterval,
-		), true
-	default:
-		return &emptyUpdater{}, false
 	}
 }
