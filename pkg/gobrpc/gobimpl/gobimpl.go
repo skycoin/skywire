@@ -246,10 +246,39 @@ type service struct {
 type Server struct {
 	mu         sync.Mutex
 	serviceMap map[string]*service
+	handlers   map[string]HandlerFunc
 }
 
 // NewServer returns a new Server, mirroring net/rpc.NewServer.
 func NewServer() *Server { return &Server{serviceMap: make(map[string]*service)} }
+
+// HandlerFunc handles one RPC method WITHOUT reflection: it decodes its argument
+// from dec (exactly one gob value, to keep the stream aligned) and returns the
+// reply value to send back. This is the TinyGo-safe alternative to Register —
+// TinyGo's runtime reflect can't enumerate methods (reflect.Type.Method hangs)
+// or invoke them (reflect.Value.Call), so reflection-based Register/ServeConn
+// dispatch deadlocks there. Registered via (*Server).HandleFunc and dispatched
+// by ServeConn ahead of the reflection path. The wire format is identical, so a
+// HandleFunc-based server still interoperates with a stdlib net/rpc client.
+type HandlerFunc func(dec *gob.Decoder) (reply interface{}, err error)
+
+// HandleFunc registers a reflection-free handler for serviceMethod
+// (e.g. "RPCGateway.AddEdgeRules"). See HandlerFunc.
+func (server *Server) HandleFunc(serviceMethod string, h HandlerFunc) {
+	server.mu.Lock()
+	if server.handlers == nil {
+		server.handlers = make(map[string]HandlerFunc)
+	}
+	server.handlers[serviceMethod] = h
+	server.mu.Unlock()
+}
+
+func (server *Server) handler(serviceMethod string) HandlerFunc {
+	server.mu.Lock()
+	h := server.handlers[serviceMethod]
+	server.mu.Unlock()
+	return h
+}
 
 // Dial connects to a gobrpc server at the given network address, mirroring
 // net/rpc.Dial.
@@ -356,6 +385,19 @@ func (server *Server) ServeConn(conn io.ReadWriteCloser) {
 		var req Request
 		if err := dec.Decode(&req); err != nil {
 			break
+		}
+
+		// Reflection-free path (TinyGo-safe): if a HandleFunc is registered for
+		// this method, it decodes its own arg from dec (synchronously, so the
+		// gob stream stays ordered) and returns the reply. No reflect involved.
+		if h := server.handler(req.ServiceMethod); h != nil {
+			reply, herr := h(dec)
+			errmsg := ""
+			if herr != nil {
+				errmsg = herr.Error()
+			}
+			server.sendResponse(sending, enc, &req, reply, errmsg)
+			continue
 		}
 
 		svc, mtype, lookupErr := server.lookup(req.ServiceMethod)

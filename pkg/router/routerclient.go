@@ -20,9 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
 
-// RPCName is the RPC gateway object name.
-const RPCName = "RPCGateway"
-
 // Client is used to interact with the router's API remotely. The setup node uses this.
 type Client struct {
 	rpc  *rpc.Client

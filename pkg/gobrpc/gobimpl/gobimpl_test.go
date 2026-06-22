@@ -1,6 +1,7 @@
 package gobimpl_test
 
 import (
+	"encoding/gob"
 	"errors"
 	"io"
 	"net"
@@ -130,6 +131,52 @@ func TestStdlibClient_ToGobimplServer(t *testing.T) {
 	}
 	if reply.C != 4 {
 		t.Fatalf("post-unknown Multiply = %d, want 4", reply.C)
+	}
+}
+
+// TestHandleFunc_ReflectionFree drives a stdlib net/rpc client against a gobimpl
+// server registered via the reflection-free HandleFunc path (no Register, no
+// reflect) — the path the TinyGo wasm-visor needs because TinyGo's runtime
+// reflect can't enumerate/invoke methods. Proves wire-compat + stream alignment.
+func TestHandleFunc_ReflectionFree(t *testing.T) {
+	srvConn, cliConn := pipePair()
+
+	srv := gobimpl.NewServer()
+	srv.HandleFunc("Arith.Multiply", func(dec *gob.Decoder) (interface{}, error) {
+		var args Args
+		if err := dec.Decode(&args); err != nil {
+			return nil, err
+		}
+		return Reply{C: args.A * args.B}, nil
+	})
+	srv.HandleFunc("Arith.Boom", func(dec *gob.Decoder) (interface{}, error) {
+		var args Args
+		_ = dec.Decode(&args) //nolint:errcheck // must still consume the arg body
+		return nil, errors.New("boom")
+	})
+	go srv.ServeConn(srvConn)
+
+	c := rpc.NewClient(cliConn)
+	defer c.Close() //nolint:errcheck
+
+	var reply Reply
+	if err := c.Call("Arith.Multiply", Args{A: 6, B: 7}, &reply); err != nil {
+		t.Fatalf("Multiply: %v", err)
+	}
+	if reply.C != 42 {
+		t.Fatalf("Multiply = %d, want 42", reply.C)
+	}
+
+	// Error path: surfaced AND the stream stays aligned for the next call.
+	if err := c.Call("Arith.Boom", Args{}, &Reply{}); err == nil || err.Error() != "boom" {
+		t.Fatalf("Boom err = %v, want \"boom\"", err)
+	}
+	reply = Reply{}
+	if err := c.Call("Arith.Multiply", Args{A: 3, B: 4}, &reply); err != nil {
+		t.Fatalf("post-error Multiply: %v", err)
+	}
+	if reply.C != 12 {
+		t.Fatalf("post-error Multiply = %d, want 12", reply.C)
 	}
 }
 
