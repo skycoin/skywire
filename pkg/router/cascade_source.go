@@ -22,11 +22,11 @@ package router
 import (
 	"context"
 	"fmt"
-	"net/rpc"
 	"strings"
 
 	"github.com/sirupsen/logrus"
 
+	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
