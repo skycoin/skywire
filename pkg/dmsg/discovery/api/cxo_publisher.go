@@ -49,6 +49,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -59,6 +60,26 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
+
+// clientsByServerCXOBatchWindow coalesces the publisher's tree mutations before
+// it re-encodes + publishes the clients-by-server tree.
+//
+// Why override the treestore default (1s): publishIfDirty clones AND re-encodes
+// the ENTIRE in-memory tree per publish (cloneMemNode / encodeNode / delRoot —
+// O(tree size), independent of how many leaves changed). The clients-by-server
+// tree spans every delegated (server, client) pair across the whole network, so
+// at the 1s default, under the steady register + heartbeat churn there is always
+// something dirty and the full tree is re-cloned+encoded every second. That made
+// dmsg-discovery GC-bound at ~2.8 cores (observed 2026-06-22: 286% CPU, ~55% in
+// scanObject/sweep, ~1.5 TB cumulative alloc under cxo clone/encode).
+//
+// A larger window does NOT make any single publish more expensive (the encode
+// cost is the tree's CURRENT size, not the mutation count since last publish) —
+// it just publishes less often. This feed only drives the hypervisor's network
+// visualizer, where 30s staleness is imperceptible, so a coarse window cuts the
+// whole-tree re-encode frequency ~30x for no meaningful loss. (TPD's CXO
+// publishers run 60s; this sits between that and the old 1s.)
+const clientsByServerCXOBatchWindow = 30 * time.Second
 
 // json is the package-scope jsoniter.ConfigFastest value declared
 // in api.go. We reuse it here to avoid pulling in encoding/json
@@ -103,9 +124,10 @@ func StartClientsByServerCXOPublisher(dmsgC *dmsg.Client, sk cipher.SecKey, logg
 	log := logging.MustGetLogger("dmsgd-cxo-clients-pub")
 
 	pub, err := treestore.NewWithDMSG(dmsgC, sk, treestore.PubConfig{
-		Logger:     log,
-		InMemoryDB: true, // recomputed from redis on every mutation
-		DmsgPort:   skyenv.DmsgDMSGDClientsByServerCXOPort,
+		Logger:      log,
+		InMemoryDB:  true, // recomputed from redis on every mutation
+		DmsgPort:    skyenv.DmsgDMSGDClientsByServerCXOPort,
+		BatchWindow: clientsByServerCXOBatchWindow, // coarse: this feed only drives network-viz; avoids per-second whole-tree re-encode (see const doc)
 	})
 	if err != nil {
 		return nil, err
