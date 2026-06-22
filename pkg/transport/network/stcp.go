@@ -55,10 +55,7 @@ func (c *stcpClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 	}
 	// TCP_NODELAY — see stcpr.go's matching comment. Interactive
 	// traffic (skypty, ssh, RPC) bottlenecks on Nagle without this.
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		_ = tcpConn.SetNoDelay(true) //nolint:errcheck
-		configureTCPLiveness(tcpConn)
-	}
+	tuneTCPConn(conn)
 
 	c.log.Debugf("Dialed %v:%v@%v", rPK, rPort, conn.RemoteAddr())
 	tp, err := c.initTransport(ctx, conn, rPK, rPort)

@@ -231,16 +231,17 @@ func (s *service) startCascade(
 		}
 	}
 
+	eb := appevent.NewBroadcaster(log, 0)
 	factory := network.ClientFactory{
 		PK:         conf.PK,
 		SK:         conf.SK,
 		ListenAddr: conf.Transport.STCPRAddr,
 		ARClient:   arC,
-		EB:         appevent.NewBroadcaster(log, 0),
+		EB:         eb,
 		MLogger:    mLog,
 	}
 
-	tpM, tpErr := transport.NewManager(log, arC, factory.EB, &tpMConf, factory)
+	tpM, tpErr := transport.NewManager(log, arC, eb, &tpMConf, factory)
 	if tpErr != nil {
 		log.WithError(tpErr).Warn("Failed to create transport manager — cascade disabled")
 		return
