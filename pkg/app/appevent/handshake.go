@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/rpc"
 	"os"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 )
 
 // DoReqHandshake performs a request handshake which is initiated from an app.
