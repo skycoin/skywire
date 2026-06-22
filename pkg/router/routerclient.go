@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router routerclient.go
 package router
 

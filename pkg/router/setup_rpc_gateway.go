@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/setup_rpc_gateway.go
 package router
 

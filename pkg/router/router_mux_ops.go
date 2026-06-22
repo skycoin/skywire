@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // router_mux_ops.go contains mux route operations on the router.
 package router
 
