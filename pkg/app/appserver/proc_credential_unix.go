@@ -1,5 +1,5 @@
-//go:build !windows
-// +build !windows
+//go:build !windows && !tinygo
+// +build !windows,!tinygo
 
 // Package appserver pkg/app/appserver/proc_credential_unix.go
 //
