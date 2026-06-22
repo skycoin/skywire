@@ -41,6 +41,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -115,11 +116,10 @@ func jsStatus(js.Value, []js.Value) interface{} {
 	st["tpManager"] = tpM != nil
 	st["router"] = rtr != nil
 	st["procManager"] = procM != nil
-	// The EDGE is dmsg + transport + router (rule reception + packet forwarding).
-	// procManager (in-process app hosting) is a separate, later concern — it
-	// net.Listen("tcp")s, which a browser can't do, so it is not on the edge
-	// boot path yet.
-	st["booted"] = dmsgC != nil && tpM != nil && rtr != nil
+	// booted = the edge (dmsg + transport + router: rule reception + packet
+	// forwarding) plus the in-process app host (procManager). No app is running
+	// yet — that's the in-process-skychat step.
+	st["booted"] = dmsgC != nil && tpM != nil && rtr != nil && procM != nil
 	if tpM != nil {
 		st["transports"] = tpM.TransportCount()
 	}
@@ -212,18 +212,23 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}()
 	vlog("router: serving")
 
-	// EDGE booted: dmsg + transport + router are up. The tab now receives route
-	// rules and forwards/consumes packets — a routable skynet edge.
-	vlog("EDGE booted: dmsg + transport + router up")
-	fmt.Printf("wasm-visor: edge booted pk=%s\n", pk.Hex())
+	vlog("router: serving — EDGE up (dmsg + transport + router)")
 
-	// 4. in-process app server (RunModeInternal) — DEFERRED (procM stays nil).
-	// appserver.NewProcManager net.Listen("tcp")s for the external-app IPC
-	// ingress, which a browser cannot do (it blocks under TinyGo/js). In-process
-	// skychat needs a browser-adapted ProcManager (no TCP ingress; net.Pipe
-	// in-process conns only) — the next step toward "edge + in-process skychat".
-	// Wiring NewProcManager here would hang the boot.
+	// 4. in-process app server (RunModeInternal). The browser-adapted
+	// appserver.NewProcManager no longer net.Listen("tcp")s under TinyGo (a
+	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP
+	// ingress. No app registered yet — in-process skychat (an appcommon.AppFunc)
+	// is the next step.
+	vlog("proc_manager: New…")
+	pm, err := appserver.NewProcManager(mLog, &appdisc.Factory{}, eb, "", "")
+	if err != nil {
+		return pk, fmt.Errorf("proc manager: %w", err)
+	}
+	procM = pm
+	vlog("proc_manager: ok")
 
+	vlog("EDGE + app-host booted")
+	fmt.Printf("wasm-visor: booted pk=%s\n", pk.Hex())
 	return pk, nil
 }
 
