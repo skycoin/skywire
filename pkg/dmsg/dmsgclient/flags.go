@@ -1,4 +1,9 @@
+//go:build !tinygo
+
 // Package dmsgclient pkg/dmsgclient/flags.go
+//
+// CLI flag wiring (cobra) — excluded from TinyGo builds. The TinyGo wasm HV
+// drives dmsg programmatically (StartDmsgSeeded), not via cobra flags.
 package dmsgclient
 
 import (

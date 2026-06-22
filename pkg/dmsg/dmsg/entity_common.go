@@ -208,6 +208,17 @@ func (c *EntityCommon) setDiscoveryClients(clients []disc.APIClient) {
 	if len(c.discoveries) > 0 {
 		c.dc = c.discoveries[0].Client
 	}
+	// A new discovery client means the entry must be (re)published there, even if
+	// the delegated-server set is unchanged. Clear the last-pushed snapshot so the
+	// next updateClientEntry isn't short-circuited by the SamePubKeys guard, and
+	// nudge the update loop. Without this, a client that swaps a bootstrap disc
+	// client for the real one (the seeded browser path) connects but never
+	// registers — the initial publish ran against the bootstrap client and marked
+	// the (unchanged) server set as already-pushed.
+	c.pushedSrvPKsMx.Lock()
+	c.lastPushedSrvPKs = nil
+	c.pushedSrvPKsMx.Unlock()
+	c.nudgeEntryUpdate()
 }
 
 // snapshotDiscoveries returns a copy of the discovery list, safe for
