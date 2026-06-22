@@ -3,11 +3,11 @@ package appserver
 
 import (
 	"fmt"
-	"net/rpc"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appnet"
+	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
