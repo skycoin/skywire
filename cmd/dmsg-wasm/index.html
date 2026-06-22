@@ -191,6 +191,87 @@
     const m = document.getElementById("rtcmsg").value;
     rtc.send(m); log("rtc » " + m);
   };
+
+  // ---- control bridge -------------------------------------------------------
+  // Lets an external operator (curl against the serving server) drive THIS tab,
+  // so two tabs can be orchestrated headlessly. No-ops if the server has no
+  // /ctl endpoints (plain static host) — the manual buttons above still work.
+  (function () {
+    const tabId = "tab-" + Math.random().toString(36).slice(2, 8);
+    const banner = document.createElement("div");
+    banner.style.cssText = "margin:.3rem 0;color:#06c";
+    banner.textContent = "control id: " + tabId;
+    document.body.insertBefore(banner, document.getElementById("log"));
+
+    const post = (path, body) =>
+      fetch(path, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }).catch(() => {});
+    const clog = (...a) => { log(...a); post("/ctl/log?tab=" + tabId, a.join(" ")); };
+
+    const H = {};      // named stream/conn handles
+    let myPK = "";
+
+    async function exec(c) {
+      const a = c.args || [];
+      switch (c.action) {
+        case "connect":
+          myPK = await skywireDmsg.connect(a[0] || "", a[1], a[2], a[3] || "");
+          document.getElementById("pk").textContent = myPK;
+          return myPK;
+        case "pk": return myPK;
+        case "fetch": {
+          const r = await skywireDmsg.fetch(a[0], a[1] || "GET", a[2] || "/", null);
+          return { status: r.status, body: td.decode(r.body) };
+        }
+        case "serveHypervisor":
+          return skywireDmsg.serveHypervisor() instanceof Error ? "error" : "serving";
+        case "hvApi": {
+          const r = await skywireDmsg.hvApi(a[1] || "GET", a[0] || "/api/visors", null);
+          return { status: r.status, body: td.decode(r.body) };
+        }
+        case "listen":
+          skywireDmsg.listen(a[0] || 80, s => {
+            H.inbound = s; clog("inbound stream on :" + (a[0] || 80));
+            s.onMessage(m => clog("inbound recv: " + m));
+          });
+          return "listening on :" + (a[0] || 80);
+        case "dial": {
+          const s = await skywireDmsg.dial(a[0], a[1] || 80);
+          H.dialed = s; s.onMessage(m => clog("dialed recv: " + m));
+          return "dialed";
+        }
+        case "send": {
+          const h = H[a[0] || "dialed"];
+          if (!h) throw new Error("no handle: " + (a[0] || "dialed"));
+          h.send(a[1] || "ping"); return "sent";
+        }
+        case "webrtcListen":
+          skywireDmsg.webrtcListen(conn => {
+            H.rtc = conn; clog("rtc datachannel accepted");
+            conn.onMessage(m => clog("rtc recv: " + m));
+          });
+          return "webrtc listening (dmsg :47)";
+        case "webrtcDial": {
+          const conn = await skywireDmsg.webrtcDial(a[0]);
+          H.rtc = conn; conn.onMessage(m => clog("rtc recv: " + m));
+          return "webrtc datachannel open";
+        }
+        case "rtcsend": {
+          if (!H.rtc) throw new Error("no datachannel");
+          H.rtc.send(a[0] || "ping"); return "rtc sent";
+        }
+        default: throw new Error("unknown action: " + c.action);
+      }
+    }
+
+    const es = new EventSource("/ctl/events?tab=" + tabId);
+    es.onopen = () => clog("control bridge connected as " + tabId);
+    es.onerror = () => { /* no control server present; stay a manual harness */ };
+    es.onmessage = async ev => {
+      let c; try { c = JSON.parse(ev.data); } catch { return; }
+      try { const v = await exec(c); post("/ctl/result", { id: c.id, ok: true, value: v }); }
+      catch (e) { post("/ctl/result", { id: c.id, ok: false, error: e.message || String(e) }); }
+    };
+  })();
 </script>
 </body>
 </html>
