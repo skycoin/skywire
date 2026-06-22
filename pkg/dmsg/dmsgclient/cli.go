@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package dmsgclient pkg/dmsgclient/cli.go
 package dmsgclient
 

@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package network pkg/transport/network/sudph.go
 package network
 
@@ -34,6 +36,13 @@ type sudphClient struct {
 	packetListener  net.PacketConn
 	sudphVisorsConn net.PacketConn
 	port            int
+}
+
+// makeSudphClient is the build-tagged SUDPH constructor used by MakeClient. The
+// TinyGo build (sudph_tinygo.go) returns an unsupported error so the browser
+// graph never pulls kcp-go/pfilter (which transitively import quic-go).
+func makeSudphClient(resolved *resolvedClient, port int) (Client, error) {
+	return newSudph(resolved, port), nil
 }
 
 func newSudph(resolved *resolvedClient, port int) Client {
