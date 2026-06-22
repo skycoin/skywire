@@ -211,6 +211,8 @@
     const clog = (...a) => { log(...a); post("/ctl/log?tab=" + tabId, a.join(" ")); };
     // WebRTC (Go/wasm) signaling+ICE progress is routed here via window.__wrtclog.
     window.__wrtclog = m => clog("[rtc] " + m);
+    // dmsg-disc-over-dmsg (Go/wasm) internals routed here via window.__skylog.
+    window.__skylog = m => clog("[disc] " + m);
 
     const H = {};      // named stream/conn handles
     let myPK = "";
@@ -277,6 +279,12 @@
         default: throw new Error("unknown action: " + c.action);
       }
     }
+
+    // Signal true readiness (wasm loaded + API present) so an operator driving
+    // reloads knows when commands will actually work, not just when SSE connected.
+    const readyPoll = setInterval(() => {
+      if (window.skywireDmsg && skywireDmsg.connect) { clearInterval(readyPoll); clog("skywireDmsg READY " + tabId); }
+    }, 100);
 
     const es = new EventSource("/ctl/events?tab=" + tabId);
     es.onopen = () => clog("control bridge connected as " + tabId);

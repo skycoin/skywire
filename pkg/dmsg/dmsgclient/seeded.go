@@ -69,7 +69,12 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 
 	conf := dmsg.DefaultConfig()
 	conf.PreferWS = preferWS // browser (wasm) seeds over WebSocket; native uses TCP
-	conf.MinSessions = 1
+	// MinSessions 2 (not 1): once bootstrapped via the seed and registered in
+	// discovery, the client learns the live server list from discovery
+	// (seededDiscClient.AvailableServers → real) and holds a SECOND session, so a
+	// single seed going down doesn't sever the client (and orphan it from the
+	// discovery it would need to find another server). Capped at the known set.
+	conf.MinSessions = 2
 
 	dmsgC, stop, err := direct.StartDmsg(ctx, log, pk, sk, dClient, conf)
 	if err != nil {
@@ -90,7 +95,7 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 		// backing disc client; TinyGo uses the net/http-free dmsgDiscClient
 		// (HTTP/1.1 straight over a dmsg stream). On failure we degrade to
 		// seed-only rather than failing the whole client.
-		if err := upgradeDiscovery(ctx, log, dmsgC, dClient, discDmsgAddr); err != nil {
+		if err := upgradeDiscovery(ctx, log, dmsgC, dClient, seedServers, discDmsgAddr); err != nil {
 			log.WithError(err).Warn("dmsg: discovery upgrade failed; continuing seed-only (dialable but can't resolve new peers)")
 		}
 	}

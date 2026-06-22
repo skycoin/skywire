@@ -91,6 +91,9 @@ func errFromBody(body []byte) error {
 	if m.Message == disc.ErrValidationWrongSequence.Error() {
 		return disc.ErrValidationWrongSequence
 	}
+	if m.Message == disc.ErrKeyNotFound.Error() {
+		return disc.ErrKeyNotFound // so isEntryNotFound / errors.Is recognize it
+	}
 	return errors.New(m.Message)
 }
 
@@ -123,8 +126,10 @@ func (c *dmsgDiscClient) PostEntry(ctx context.Context, entry *disc.Entry) error
 	}
 	res, err := c.do(ctx, "POST", "/dmsg-discovery/entry/", body)
 	if err != nil {
+		jslog("PostEntry: do err: " + err.Error())
 		return err
 	}
+	jslog(fmt.Sprintf("PostEntry: status=%d body=%s", res.status, strings.TrimSpace(string(res.body))))
 	if res.status != 200 {
 		return errFromBody(res.body)
 	}

@@ -73,7 +73,9 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	// SSE: a tab subscribes here to receive commands.
+	// SSE: a tab subscribes here to receive commands. On reconnect (page reload,
+	// same id), install a FRESH events channel as the tab's current one so
+	// commands go to the live connection — not a lingering old reader.
 	mux.HandleFunc("/ctl/events", func(w http.ResponseWriter, r *http.Request) {
 		t := getTab(r.URL.Query().Get("tab"))
 		fl, ok := w.(http.Flusher)
@@ -81,6 +83,11 @@ func main() {
 			http.Error(w, "no flush", 500)
 			return
 		}
+		ch := make(chan string, 8)
+		t.mu.Lock()
+		t.events = ch
+		t.mu.Unlock()
+
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Cache-Control", "no-cache")
 		fmt.Fprint(w, ": connected\n\n")
@@ -88,7 +95,7 @@ func main() {
 		log.Printf("tab connected: %s", t.id)
 		for {
 			select {
-			case msg := <-t.events:
+			case msg := <-ch:
 				fmt.Fprintf(w, "data: %s\n\n", msg)
 				fl.Flush()
 			case <-r.Context().Done():
@@ -181,9 +188,12 @@ func main() {
 		mu.Unlock()
 		defer func() { mu.Lock(); delete(pending, c.ID); mu.Unlock() }()
 
+		t.mu.Lock()
+		evCh := t.events
+		t.mu.Unlock()
 		b, _ := json.Marshal(c)
 		select {
-		case t.events <- string(b):
+		case evCh <- string(b):
 		case <-time.After(5 * time.Second):
 			http.Error(w, "tab not receiving", 504)
 			return
