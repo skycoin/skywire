@@ -232,6 +232,24 @@ Two caveats that shape what's worth building first:
    immediately useful), and tells phase-4's internal-app set to start with those,
    not the proxy/VPN family.
 
+## 8a. Known issue: seeded wasm client doesn't register in discovery
+
+Browser validation found that the TinyGo wasm client **connects to a dmsg server
+(session established) but does NOT register its entry in dmsg-discovery** — a
+lookup of its own PK returns 404. Peers still reach it via the **connected-servers
+fallback** (dmsg-100: a peer sharing a dmsg server is bridged without a discovery
+entry), which is why dmsg dial/listen + WebRTC signaling all worked between two
+tabs. But arbitrary peers that don't share a server can't resolve it.
+
+The dmsg client's `updateClientEntryLoop` → `EntityCommon.updateClientEntry` →
+`PutEntry` runs once at connect (periodic retry only every 5 min,
+`DefaultUpdateInterval*5`), so the initial registration via the net/http-free
+`dmsgDiscClient.PutEntry` is failing silently. To investigate: instrument
+`updateClientEntry` + `dmsgDiscClient.PutEntry`/`PostEntry`; likely the POST over
+dmsg, the entry signing, or an `Entry()` precheck under TinyGo. Not blocking
+(fallback covers shared-server reachability) but required for register-and-be-
+found-by-anyone reachability.
+
 ## 9. What landed with this design
 
 - `pkg/dmsg/dmsg/ws_js_tinygo.go` — browser WebSocket `net.Conn` dmsg carrier.
