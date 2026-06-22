@@ -161,10 +161,17 @@ port; what `tinygo build` accepts is what's portable.
 ### Phased plan
 
 1. **Networks: dmsg-only browser build.** Split `pkg/transport/network` so the
-   browser build compiles `dmsg.go` (+ the future `webrtc`) and tags out
-   `quic.go`/`sudph.go`/`stcpr.go` + `pkg/skyquic` + the STUN/addr-resolver bits.
-   This drops quic-go from `pkg/transport` and `pkg/router`. (Mirrors the dmsg
-   QUIC extraction already done.)
+   browser build compiles `dmsg.go` (+ the future `webrtc`) and tags out the
+   raw-socket networks. Concretely (measured): quic-go enters this package only
+   via `quic.go` + `quic_identity.go`; the cascade is `network.go`'s factory,
+   which constructs the per-network clients (stcp/stcpr/sudph/quic via raw
+   net.Listen/Dial + skyquic). The split: tag `quic.go`/`quic_identity.go`/
+   `stcp.go`/`stcpr.go`/`sudph.go`/`stun_client.go`/`tcp_liveness.go` `!tinygo`,
+   and split `network.go`'s factory into a native (all networks) + tinygo
+   (dmsg-only) variant. Native is unaffected (the tagged files stay in native
+   builds) so this is a COMPILE-time refactor, not a runtime change — iterate the
+   tinygo build until it accepts the dmsg-only factory. This drops quic-go from
+   `pkg/transport` and `pkg/router`.
 2. **net/http-free service clients.** RF, TPD, and AR each talk HTTP to a service;
    port them over dmsg with `dmsgclient.FetchOverDmsg` (the disc client pattern),
    behind native/tinygo tags. Drops net/http from transport + router.
