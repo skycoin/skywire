@@ -17,6 +17,12 @@ type Server = gobimpl.Server
 // Call is gobimpl.Call (net/rpc-compatible).
 type Call = gobimpl.Call
 
+// HandlerFunc is gobimpl.HandlerFunc — a reflection-free RPC method handler.
+// TinyGo can't run net/rpc's reflection dispatch, so servers register handlers
+// via (*Server).HandleFunc instead of Register. Native builds use net/rpc and
+// have no equivalent (this alias is TinyGo-only).
+type HandlerFunc = gobimpl.HandlerFunc
+
 // NewClient mirrors net/rpc.NewClient.
 var NewClient = gobimpl.NewClient
 
