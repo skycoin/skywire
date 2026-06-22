@@ -20,6 +20,7 @@ import (
 	"encoding/gob"
 	"errors"
 	"io"
+	"net"
 	"reflect"
 	"strings"
 	"sync"
@@ -250,6 +251,29 @@ type Server struct {
 // NewServer returns a new Server, mirroring net/rpc.NewServer.
 func NewServer() *Server { return &Server{serviceMap: make(map[string]*service)} }
 
+// Dial connects to a gobrpc server at the given network address, mirroring
+// net/rpc.Dial.
+func Dial(network, address string) (*Client, error) {
+	conn, err := net.Dial(network, address)
+	if err != nil {
+		return nil, err
+	}
+	return NewClient(conn), nil
+}
+
+// Accept accepts connections on the listener and serves requests for each
+// incoming connection, mirroring net/rpc.Server.Accept. It blocks; callers
+// typically invoke it in a goroutine.
+func (server *Server) Accept(lis net.Listener) {
+	for {
+		conn, err := lis.Accept()
+		if err != nil {
+			return
+		}
+		go server.ServeConn(conn)
+	}
+}
+
 func isExportedOrBuiltin(t reflect.Type) bool {
 	for t.Kind() == reflect.Ptr {
 		t = t.Elem()
@@ -264,12 +288,19 @@ func isExportedOrBuiltin(t reflect.Type) bool {
 // Register publishes the receiver's methods that follow the net/rpc method
 // signature `func(args T1, reply *T2) error`, mirroring net/rpc.Server.Register.
 func (server *Server) Register(rcvr any) error {
+	return server.RegisterName(reflect.Indirect(reflect.ValueOf(rcvr)).Type().Name(), rcvr)
+}
+
+// RegisterName is like Register but uses the provided name for the service
+// rather than the receiver's concrete type name, mirroring
+// net/rpc.Server.RegisterName.
+func (server *Server) RegisterName(name string, rcvr any) error {
 	s := &service{
 		typ:    reflect.TypeOf(rcvr),
 		rcvr:   reflect.ValueOf(rcvr),
 		method: make(map[string]*methodType),
+		name:   name,
 	}
-	s.name = reflect.Indirect(s.rcvr).Type().Name()
 	if s.name == "" {
 		return errors.New("gobrpc.Register: no service name for type " + s.typ.String())
 	}

@@ -36,5 +36,8 @@ var NewClient = rpc.NewClient
 // NewServer mirrors net/rpc.NewServer.
 var NewServer = rpc.NewServer
 
+// Dial mirrors net/rpc.Dial.
+var Dial = rpc.Dial
+
 // ErrShutdown mirrors net/rpc.ErrShutdown.
 var ErrShutdown = rpc.ErrShutdown

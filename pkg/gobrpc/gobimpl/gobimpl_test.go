@@ -166,6 +166,54 @@ func TestGobimplClient_AsyncGo(t *testing.T) {
 	wg.Wait()
 }
 
+// TestRegisterName_Accept_Dial exercises the net/rpc-Dial/RegisterName/Accept
+// surface over a real TCP listener — both gobimpl↔gobimpl and stdlib↔gobimpl —
+// the path appevent's event channel uses.
+func TestRegisterName_Accept_Dial(t *testing.T) {
+	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer lis.Close() //nolint:errcheck
+
+	srv := gobimpl.NewServer()
+	// RegisterName publishes under an explicit service name (not the type name).
+	if err := srv.RegisterName("Calc", Arith{}); err != nil {
+		t.Fatalf("RegisterName: %v", err)
+	}
+	go srv.Accept(lis)
+
+	addr := lis.Addr().String()
+
+	// gobimpl client over Dial.
+	c, err := gobimpl.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("gobimpl.Dial: %v", err)
+	}
+	defer c.Close() //nolint:errcheck
+	var reply Reply
+	if err := c.Call("Calc.Multiply", Args{A: 9, B: 9}, &reply); err != nil {
+		t.Fatalf("Multiply: %v", err)
+	}
+	if reply.C != 81 {
+		t.Fatalf("Multiply = %d, want 81", reply.C)
+	}
+
+	// stdlib net/rpc client against the same gobimpl Accept server (wire-compat).
+	sc, err := rpc.Dial("tcp", addr)
+	if err != nil {
+		t.Fatalf("rpc.Dial: %v", err)
+	}
+	defer sc.Close() //nolint:errcheck
+	reply = Reply{}
+	if err := sc.Call("Calc.Multiply", Args{A: 7, B: 6}, &reply); err != nil {
+		t.Fatalf("stdlib Multiply: %v", err)
+	}
+	if reply.C != 42 {
+		t.Fatalf("stdlib Multiply = %d, want 42", reply.C)
+	}
+}
+
 // TestClient_CloseUnblocksPending verifies Close terminates an in-flight call
 // (the cancellation pattern the router relies on: select on ctx.Done then Close).
 func TestClient_CloseUnblocksPending(t *testing.T) {
