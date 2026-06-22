@@ -1,11 +1,4 @@
-//go:build !js
-
 // Package routing pkg/routing/rule.go
-//
-// Build-tag-gated off the WASM path because it imports
-// github.com/google/uuid (which transitively pulls encoding/json
-// and reflect helpers TinyGo's stdlib lacks). Rules are router
-// data-plane state; the WASM install-page graph doesn't need them.
 package routing
 
 import (
