@@ -1,13 +1,4 @@
-//go:build !js
-
 // Package routing pkg/routing/table.go
-//
-// Build-tag-gated off the WASM path because it imports
-// github.com/google/uuid (transitive encoding/json + reflect
-// helpers TinyGo's stdlib lacks) and pkg/logging (logrus
-// transitively pulls encoding/json too). Routing tables are
-// router data-plane state; the WASM install-page graph
-// doesn't reach this code.
 package routing
 
 import (
