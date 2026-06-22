@@ -544,62 +544,7 @@ func TestEnv_Tp(t *testing.T) {
 	}
 }
 
-// func TestEnv_Route(t *testing.T) {
-// 	env := NewEnv().GatherContainersInfo().
-// 		GatherVisorPKs([]string{visorA, visorB, visorC})
-
-// 	rules, err := env.VisorRouteLsRules(visorA)
-// 	require.NoError(t, err)
-// 	var routeID routing.RouteID
-// 	routeID = 0
-// 	for _, rule := range rules {
-// 		if routeID < rule.ID {
-// 			routeID = rule.ID
-// 		}
-// 	}
-// 	routeID = routeID + 1
-// 	localPK := env.visorPKs[visorA]
-// 	localPort := "1"
-
-// 	remotePK := env.visorPKs[visorB]
-// 	remotePort := "2"
-
-// 	appRKey, err := env.VisorRouteAddAppRule(visorA, fmt.Sprint(routeID), localPK, localPort, remotePK, remotePort)
-// 	require.NoError(t, err)
-
-// 	appRRule, err := env.VisorRouteRule(visorA, appRKey.RoutingRuleKey)
-// 	require.NoError(t, err)
-// 	require.Equal(t, "Consume", appRRule.Type)
-// 	require.Equal(t, localPort, appRRule.LocalPort)
-// 	require.Equal(t, remotePK, appRRule.RemotePK)
-// 	require.Equal(t, remotePort, appRRule.RemotePort)
-
-// 	out, err := env.VisorRouteRmRule(visorA, appRRule.ID)
-// 	require.NoError(t, err)
-// 	require.Equal(t, "OK", out)
-
-// 	fwdNextTpID := uuid.New()
-
-// 	fwdRKey, err := env.VisorRouteAddFwdRule(visorA, fmt.Sprint(routeID+1), fmt.Sprint(routeID+1), fwdNextTpID.String(), localPK, localPort, remotePK, remotePort)
-// 	require.NoError(t, err)
-
-// 	fwdRRule, err := env.VisorRouteRule(visorA, fwdRKey.RoutingRuleKey)
-// 	require.NoError(t, err)
-// 	require.Equal(t, routeID+1, fwdRRule.ID)
-// 	require.Equal(t, "Forward", fwdRRule.Type)
-// 	require.Equal(t, fmt.Sprint(routeID+1), fwdRRule.NextRouteID)
-// 	require.Equal(t, fwdNextTpID.String(), fwdRRule.NextTpID)
-// 	require.Equal(t, localPort, appRRule.LocalPort)
-// 	require.Equal(t, remotePK, appRRule.RemotePK)
-// 	require.Equal(t, remotePort, appRRule.RemotePort)
-
-// 	intFwdNextTpID := uuid.New()
-// 	intFwdRKey, err := env.VisorRouteAddIntFwdRule(visorA, fmt.Sprint(routeID+2), fmt.Sprint(routeID+2), intFwdNextTpID.String())
-// 	require.NoError(t, err)
-// 	intFwdRRule, err := env.VisorRouteRule(visorA, intFwdRKey.RoutingRuleKey)
-// 	require.NoError(t, err)
-// 	require.Equal(t, routeID+2, intFwdRRule.ID)
-// 	require.Equal(t, "IntermediaryForward", intFwdRRule.Type)
-// 	require.Equal(t, fmt.Sprint(routeID+2), intFwdRRule.NextRouteID)
-// 	require.Equal(t, intFwdNextTpID.String(), intFwdRRule.NextTpID)
-// }
+// Multi-hop routing is covered end-to-end by TestMultiHopRoute in
+// multihop_test.go, which forces skysocks traffic through an intermediary visor
+// and asserts both legs carry it. (The former commented-out TestEnv_Route only
+// poked the add-rule CLI with fabricated transport UUIDs and routed no traffic.)
