@@ -72,6 +72,14 @@ func awaitJS(p js.Value) (js.Value, error) {
 // webrtcSignalPort is the dmsg port the WebRTC signaling listener accepts on.
 const webrtcSignalPort uint16 = 47
 
+// wlog routes WebRTC signaling/ICE progress to a JS hook (window.__wrtclog) when
+// present, so the control bridge / page can surface it. No-op otherwise.
+func wlog(msg string) {
+	if h := js.Global().Get("__wrtclog"); h.Truthy() {
+		h.Invoke(msg)
+	}
+}
+
 // signalMsg is one signaling message exchanged over the dmsg SignalChannel.
 type signalMsg struct {
 	Type      string `json:"type"`                // "offer" | "answer" | "candidate"
@@ -125,7 +133,11 @@ func (c *dmsgSignalChannel) recv() (signalMsg, error) {
 		return signalMsg{}, err
 	}
 	var m signalMsg
-	return m, json.Unmarshal(b, &m)
+	// NOTE: `return m, json.Unmarshal(b, &m)` is WRONG — Go leaves the order of
+	// the result-value read vs the call unspecified, and TinyGo reads m (empty)
+	// BEFORE Unmarshal populates it. Decode first, then return.
+	err := json.Unmarshal(b, &m)
+	return m, err
 }
 
 func (c *dmsgSignalChannel) Close() error { return c.s.Close() }
@@ -134,6 +146,7 @@ func (c *dmsgSignalChannel) Close() error { return c.s.Close() }
 // the offer, applies the answer and remote candidates from sc, and returns once
 // the DataChannel is open.
 func dialWebRTC(ctx context.Context, sc SignalChannel, iceServers js.Value) (net.Conn, error) {
+	wlog("dial: start")
 	pc := newPeerConnection(iceServers)
 	dc := pc.Call("createDataChannel", "skywire", map[string]interface{}{"ordered": true})
 	conn := newWebRTCConn(dc)
@@ -151,18 +164,23 @@ func dialWebRTC(ctx context.Context, sc SignalChannel, iceServers js.Value) (net
 	if err := sc.send(signalMsg{Type: "offer", SDP: offer.Get("sdp").String()}); err != nil {
 		return nil, fmt.Errorf("send offer: %w", err)
 	}
+	wlog("dial: offer sent, waiting for datachannel")
 	if err := conn.waitOpen(ctx); err != nil {
+		wlog("dial: waitOpen failed: " + err.Error())
 		return nil, err
 	}
+	wlog("dial: datachannel OPEN")
 	return conn, nil
 }
 
 // acceptWebRTC is the ANSWERER: it waits for the offer on sc, answers it, and
 // returns the DataChannel (delivered via pc.ondatachannel) once it is open.
 func acceptWebRTC(ctx context.Context, sc SignalChannel, iceServers js.Value) (net.Conn, error) {
+	wlog("accept: start")
 	pc := newPeerConnection(iceServers)
 	dcCh := make(chan js.Value, 1)
 	onDC := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+		wlog("accept: ondatachannel fired")
 		select {
 		case dcCh <- args[0].Get("channel"):
 		default:
@@ -175,15 +193,16 @@ func acceptWebRTC(ctx context.Context, sc SignalChannel, iceServers js.Value) (n
 	go pumpRemoteSignals(ctx, pc, sc, func(offerSDP string) error {
 		desc := map[string]interface{}{"type": "offer", "sdp": offerSDP}
 		if _, err := awaitJS(pc.Call("setRemoteDescription", desc)); err != nil {
-			return err
+			return fmt.Errorf("setRemoteDescription(offer): %w", err)
 		}
 		answer, err := awaitJS(pc.Call("createAnswer"))
 		if err != nil {
-			return err
+			return fmt.Errorf("createAnswer: %w", err)
 		}
 		if _, err := awaitJS(pc.Call("setLocalDescription", answer)); err != nil {
-			return err
+			return fmt.Errorf("setLocalDescription(answer): %w", err)
 		}
+		wlog("accept: answer sent")
 		return sc.send(signalMsg{Type: "answer", SDP: answer.Get("sdp").String()})
 	})
 
@@ -191,10 +210,13 @@ func acceptWebRTC(ctx context.Context, sc SignalChannel, iceServers js.Value) (n
 	case dc := <-dcCh:
 		conn := newWebRTCConn(dc)
 		if err := conn.waitOpen(ctx); err != nil {
+			wlog("accept: waitOpen failed: " + err.Error())
 			return nil, err
 		}
+		wlog("accept: datachannel OPEN")
 		return conn, nil
 	case <-ctx.Done():
+		wlog("accept: ctx done before datachannel")
 		return nil, ctx.Err()
 	}
 }
@@ -206,7 +228,16 @@ func newPeerConnection(iceServers js.Value) js.Value {
 	if iceServers.Truthy() {
 		cfg.Set("iceServers", iceServers)
 	}
-	return js.Global().Get("RTCPeerConnection").New(cfg)
+	pc := js.Global().Get("RTCPeerConnection").New(cfg)
+	pc.Set("oniceconnectionstatechange", js.FuncOf(func(js.Value, []js.Value) interface{} {
+		wlog("iceConnectionState=" + pc.Get("iceConnectionState").String())
+		return nil
+	}))
+	pc.Set("onconnectionstatechange", js.FuncOf(func(js.Value, []js.Value) interface{} {
+		wlog("connectionState=" + pc.Get("connectionState").String())
+		return nil
+	}))
+	return pc
 }
 
 // wireLocalCandidates forwards locally-gathered ICE candidates to the peer over
@@ -215,14 +246,25 @@ func wireLocalCandidates(pc js.Value, sc SignalChannel) {
 	onCand := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
 		cand := args[0].Get("candidate")
 		if !cand.Truthy() {
+			wlog("local ICE gathering complete")
 			return nil // null candidate = gathering complete
 		}
-		_ = sc.send(signalMsg{ //nolint:errcheck
+		mid := ""
+		if v := cand.Get("sdpMid"); v.Truthy() {
+			mid = v.String()
+		}
+		line := 0
+		if v := cand.Get("sdpMLineIndex"); v.Truthy() {
+			line = v.Int()
+		}
+		if err := sc.send(signalMsg{
 			Type:      "candidate",
 			Candidate: cand.Get("candidate").String(),
-			SDPMid:    cand.Get("sdpMid").String(),
-			SDPMLine:  cand.Get("sdpMLineIndex").Int(),
-		})
+			SDPMid:    mid,
+			SDPMLine:  line,
+		}); err != nil {
+			wlog("send candidate err: " + err.Error())
+		}
 		return nil
 	})
 	pc.Set("onicecandidate", onCand)
@@ -232,28 +274,58 @@ func wireLocalCandidates(pc js.Value, sc SignalChannel) {
 // onOffer (answerer only) handles an inbound offer; for the offerer it is nil
 // and an "answer" sets the remote description.
 func pumpRemoteSignals(ctx context.Context, pc js.Value, sc SignalChannel, onOffer func(sdp string) error) {
+	remoteSet := false
+	var queued []signalMsg // candidates that arrived before the remote description
+	addCand := func(m signalMsg) {
+		cand := js.Global().Get("Object").New()
+		cand.Set("candidate", m.Candidate)
+		cand.Set("sdpMid", m.SDPMid)
+		cand.Set("sdpMLineIndex", m.SDPMLine)
+		if _, err := awaitJS(pc.Call("addIceCandidate", cand)); err != nil {
+			wlog("addIceCandidate err: " + err.Error())
+		}
+	}
+	flush := func() {
+		remoteSet = true
+		for _, c := range queued {
+			addCand(c)
+		}
+		queued = nil
+	}
 	for {
 		if ctx.Err() != nil {
 			return
 		}
 		m, err := sc.recv()
 		if err != nil {
+			wlog("signal stream ended: " + err.Error())
 			return
 		}
+		wlog("signal recv: " + m.Type)
 		switch m.Type {
 		case "offer":
 			if onOffer != nil {
-				_ = onOffer(m.SDP) //nolint:errcheck
+				if err := onOffer(m.SDP); err != nil {
+					wlog("onOffer err: " + err.Error())
+				} else {
+					flush()
+				}
 			}
 		case "answer":
 			desc := map[string]interface{}{"type": "answer", "sdp": m.SDP}
-			_, _ = awaitJS(pc.Call("setRemoteDescription", desc)) //nolint:errcheck
+			if _, err := awaitJS(pc.Call("setRemoteDescription", desc)); err != nil {
+				wlog("setRemoteDescription(answer) err: " + err.Error())
+			} else {
+				flush()
+			}
 		case "candidate":
-			cand := js.Global().Get("Object").New()
-			cand.Set("candidate", m.Candidate)
-			cand.Set("sdpMid", m.SDPMid)
-			cand.Set("sdpMLineIndex", m.SDPMLine)
-			_, _ = awaitJS(pc.Call("addIceCandidate", cand)) //nolint:errcheck
+			// addIceCandidate fails if the remote description isn't set yet, so
+			// buffer until it is (the classic trickle-ICE ordering fix).
+			if remoteSet {
+				addCand(m)
+			} else {
+				queued = append(queued, m)
+			}
 		}
 	}
 }
@@ -288,6 +360,7 @@ func newWebRTCConn(dc js.Value) *webRTCConn {
 	c := &webRTCConn{dc: dc, notify: make(chan struct{}), openCh: make(chan struct{})}
 
 	onOpen := js.FuncOf(func(js.Value, []js.Value) interface{} {
+		wlog("datachannel onopen")
 		c.openOnce.Do(func() { close(c.openCh) })
 		return nil
 	})

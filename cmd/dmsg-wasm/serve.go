@@ -138,6 +138,15 @@ func main() {
 		}
 	})
 
+	// Clear a tab's buffered logs (so each test reads fresh output).
+	mux.HandleFunc("/ctl/clear", func(w http.ResponseWriter, r *http.Request) {
+		t := getTab(r.URL.Query().Get("tab"))
+		t.mu.Lock()
+		t.logs = nil
+		t.mu.Unlock()
+		w.WriteHeader(204)
+	})
+
 	// List connected tabs.
 	mux.HandleFunc("/ctl/tabs", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -187,7 +196,17 @@ func main() {
 		}
 	})
 
-	mux.Handle("/", http.FileServer(http.Dir(*dir)))
+	// Static files with no-cache headers, so a reload always fetches the freshly
+	// built wasm/page (lets the operator drive reloads without cache-busting).
+	fs := http.FileServer(http.Dir(*dir))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/favicon.ico" {
+			w.WriteHeader(204)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store, must-revalidate")
+		fs.ServeHTTP(w, r)
+	})
 
 	log.Printf("serving %s at http://localhost%s/ (control bridge at /ctl/*)", *dir, *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux)) //nolint:gosec

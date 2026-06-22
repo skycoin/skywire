@@ -112,10 +112,20 @@ manager, and route-setup responder.
 
 - **ICE servers.** Browser↔browser through NAT needs STUN, and symmetric NAT
   needs TURN — both are clearnet dependencies that cut against the no-clearnet
-  goal. Options: rely on host candidates only (works when one peer is public,
-  e.g. a visor), run a skywire-hosted STUN/TURN, or treat WebRTC as a
+  goal. Skywire already ships STUN servers (the deployment's `StunServers`, used
+  for sudph NAT detection); WebRTC reuses them as ICE servers, so no third-party
+  STUN. Options for the harder cases: rely on host candidates only (works when one
+  peer is public, e.g. a visor), run a skywire-hosted TURN, or treat WebRTC as a
   same-network / public-peer optimization and keep dmsg as the universal path.
   The signaling layer is dmsg-native regardless; only the media path needs ICE.
+- **Config source = the VISOR's config, not the embedded default.** The test
+  harness (cmd/dmsg-wasm) exposes `deployment.Prod.StunServers` — the embedded
+  defaults. But when the UI is generated/embedded BY a visor (the standalone-HV
+  generator, `cli hv gen`), it must inject THAT visor's runtime config — its
+  configured STUN servers, dmsg servers, discovery, and service URLs — which may
+  differ on custom/private deployments. The generator already inlines config; the
+  STUN/ICE config (and any other deployment-specific values) rides along.
+  See the `TODO(wasm-visor)` in cmd/dmsg-wasm/main.go.
 - **TPD trust for ephemeral tabs.** A tab churns more than a visor; TPD edge TTL
   and the finder's liveness weighting (see the dead-edge work) need to tolerate
   high-churn leaf edges without polluting routes for everyone.

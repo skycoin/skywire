@@ -197,7 +197,10 @@
   // so two tabs can be orchestrated headlessly. No-ops if the server has no
   // /ctl endpoints (plain static host) — the manual buttons above still work.
   (function () {
-    const tabId = "tab-" + Math.random().toString(36).slice(2, 8);
+    // Stable per-tab id across reloads (sessionStorage is per-tab + survives
+    // reload), so the operator keeps the same control id when driving reloads.
+    let tabId = sessionStorage.getItem("ctlTabId");
+    if (!tabId) { tabId = "tab-" + Math.random().toString(36).slice(2, 8); sessionStorage.setItem("ctlTabId", tabId); }
     const banner = document.createElement("div");
     banner.style.cssText = "margin:.3rem 0;color:#06c";
     banner.textContent = "control id: " + tabId;
@@ -206,9 +209,17 @@
     const post = (path, body) =>
       fetch(path, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }).catch(() => {});
     const clog = (...a) => { log(...a); post("/ctl/log?tab=" + tabId, a.join(" ")); };
+    // WebRTC (Go/wasm) signaling+ICE progress is routed here via window.__wrtclog.
+    window.__wrtclog = m => clog("[rtc] " + m);
 
     const H = {};      // named stream/conn handles
     let myPK = "";
+    // ICE servers for WebRTC: the deployment's OWN STUN servers (exposed by the
+    // wasm from deployment.Prod.StunServers — the same ones the visor uses for
+    // sudph NAT detection), so a server-reflexive candidate is gathered without a
+    // third-party STUN dependency. Needed because mDNS .local host candidates
+    // don't resolve reliably between localhost tabs.
+    const iceServers = () => (skywireDmsg.stunServers || []).map(u => ({ urls: u }));
 
     async function exec(c) {
       const a = c.args || [];
@@ -248,10 +259,10 @@
           skywireDmsg.webrtcListen(conn => {
             H.rtc = conn; clog("rtc datachannel accepted");
             conn.onMessage(m => clog("rtc recv: " + m));
-          });
+          }, iceServers());
           return "webrtc listening (dmsg :47)";
         case "webrtcDial": {
-          const conn = await skywireDmsg.webrtcDial(a[0]);
+          const conn = await skywireDmsg.webrtcDial(a[0], iceServers());
           H.rtc = conn; conn.onMessage(m => clog("rtc recv: " + m));
           return "webrtc datachannel open";
         }
@@ -259,6 +270,10 @@
           if (!H.rtc) throw new Error("no datachannel");
           H.rtc.send(a[0] || "ping"); return "rtc sent";
         }
+        case "reload":
+          // Defer so the result POST goes out before the page unloads.
+          setTimeout(() => location.reload(), 150);
+          return "reloading";
         default: throw new Error("unknown action: " + c.action);
       }
     }

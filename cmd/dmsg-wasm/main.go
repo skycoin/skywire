@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"syscall/js"
 
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -53,6 +54,21 @@ func main() {
 		"webrtcDial":      js.FuncOf(jsWebrtcDial),
 		"webrtcListen":    js.FuncOf(jsWebrtcListen),
 	}
+	// Expose the deployment's own STUN servers (the ones the visor uses for sudph
+	// NAT detection) as WebRTC ICE server URLs — so WebRTC uses skywire infra, not
+	// a third-party STUN.
+	//
+	// TODO(wasm-visor): this uses the EMBEDDED default deployment config
+	// (deployment.Prod). When this UI is generated/embedded BY a visor (the
+	// standalone-HV generator, `cli hv gen`), it must instead inject THAT visor's
+	// runtime config — its configured StunServers, dmsg servers, discovery, and
+	// service URLs — which may differ from the embedded defaults (custom/private
+	// deployments). The generator already inlines config; STUN should ride along.
+	var stun []interface{}
+	for _, s := range deployment.Prod.StunServers {
+		stun = append(stun, "stun:"+s)
+	}
+	api["stunServers"] = stun
 	js.Global().Set("skywireDmsg", js.ValueOf(api))
 	// Keep the Go runtime alive for the page lifetime.
 	select {}
