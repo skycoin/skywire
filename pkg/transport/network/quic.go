@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package network pkg/transport/network/quic.go: a QUIC-based skywire
 // transport. Mirrors the sudph/stcpr structure (AR-resolved, UDP-based)
 // but rides quic-go instead of KCP: the connection is secured by the
@@ -45,6 +47,13 @@ type quicClient struct {
 	listener *quic.Listener
 	tlsCert  tls.Certificate
 	qconf    *quic.Config
+}
+
+// makeQuicClient is the build-tagged QUIC constructor used by MakeClient. On
+// non-TinyGo it builds a real quicClient; the TinyGo build (quic_tinygo.go)
+// returns an unsupported error so the browser graph never pulls quic-go.
+func makeQuicClient(resolved *resolvedClient, port int) (Client, error) {
+	return newQuic(resolved, port), nil
 }
 
 func newQuic(resolved *resolvedClient, port int) Client {
