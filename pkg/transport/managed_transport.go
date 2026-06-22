@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,9 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -50,8 +47,10 @@ var (
 
 // ManagedTransportConfig is a configuration for managed transport.
 type ManagedTransportConfig struct {
-	client          network.Client
-	ebc             *appevent.Broadcaster
+	client network.Client
+	// ebc is the app-event broadcaster (*appevent.Broadcaster on native builds);
+	// typed `any` to keep appevent (net/rpc) out of the TinyGo graph.
+	ebc             any
 	DC              DiscoveryClient
 	LS              LogStore
 	RemotePK        cipher.PubKey
@@ -764,7 +763,7 @@ func (mt *ManagedTransport) deleteFromDiscovery() error {
 				Warn("Failed to update transport status.")
 			return err
 		}
-		if httpErr, ok := err.(*httputil.HTTPError); ok && httpErr.Status == http.StatusNotFound {
+		if isDiscNotFound(err) {
 			return nil
 		}
 		return err
