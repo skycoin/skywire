@@ -463,6 +463,17 @@ func (o *RenderOptions) ShowNodeStatus(s NodeStatus) bool {
 
 // Helper functions
 
+// shortPK returns the first 8 hex chars of a public key for compact on-canvas
+// graph-node and HTML sidebar labels (callers typically append "…"). This is
+// display-only truncation in the visualizer UI — it is NOT for logs, where
+// public keys must always be rendered in full.
+func shortPK(pk string) string {
+	if len(pk) <= 8 {
+		return pk
+	}
+	return pk[:8]
+}
+
 // itoa converts int to string without fmt
 func itoa(i int) string {
 	if i == 0 {
