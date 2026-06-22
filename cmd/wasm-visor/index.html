@@ -1,0 +1,98 @@
+<!doctype html>
+<!--
+  cmd/wasm-visor dev harness — loads wasm_exec_tinygo.js + wasm-visor.wasm and
+  exercises globalThis.skywireVisor (boot/status). Connects back to the
+  cmd/dmsg-wasm serve.go control bridge (SSE /ctl/events) so a shell can drive
+  the tab:  curl -s localhost:8085/ctl/tabs
+            curl -s -XPOST 'localhost:8085/ctl/cmd?tab=<id>' \
+                 -d '{"action":"boot","args":["","<seedPK>","<seedWS>","<discDmsgAddr>"]}'
+            curl -s 'localhost:8085/ctl/log?tab=<id>'
+  Serve it from the same dir as serve.go's -dir (drop this + wasm-visor.wasm +
+  wasm_exec_tinygo.js into build/dmsg-wasm/, open http://localhost:8085/visor.html).
+-->
+<html>
+<head><meta charset="utf-8"><title>wasm-visor</title></head>
+<body style="font-family:monospace;background:#111;color:#ddd;padding:1em">
+<h3>skywire wasm-visor (edge)</h3>
+<div>
+  sk <input id="sk" size="10" placeholder="(empty = ephemeral)">
+  seedPK <input id="seedpk" size="20" value="0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13">
+  seedWS <input id="seedws" size="30" value="ws://45.79.213.251:30088/dmsg">
+  disc <input id="disc" size="20" value="dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80">
+  <button onclick="doBoot()">boot</button>
+  <button onclick="doStatus()">status</button>
+</div>
+<pre id="out" style="white-space:pre-wrap;max-height:70vh;overflow:auto"></pre>
+
+<script src="wasm_exec_tinygo.js"></script>
+<script>
+  const out = document.getElementById("out");
+  const log = (...a) => { out.textContent += a.join(" ") + "\n"; out.scrollTop = out.scrollHeight; };
+
+  const go = new Go();
+  // TinyGo's wasm_exec.js omits the gojs runtime.getRandomData import that the
+  // crypto-using Go runtime needs to seed itself; inject it only when absent.
+  if (go.importObject.gojs && !go.importObject.gojs["runtime.getRandomData"]) {
+    go.importObject.gojs["runtime.getRandomData"] = (ptr, len) =>
+      crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
+  }
+  fetch("wasm-visor.wasm").then(r => r.arrayBuffer())
+    .then(buf => WebAssembly.instantiate(buf, go.importObject))
+    .then(res => {
+      go.run(res.instance);
+      log("wasm loaded; skywireVisor ready: " + Object.keys(globalThis.skywireVisor || {}).join(", "));
+    })
+    .catch(e => log("wasm load error: " + e));
+
+  async function doBoot() {
+    try {
+      const pk = await skywireVisor.boot(
+        document.getElementById("sk").value.trim(),
+        document.getElementById("seedpk").value.trim(),
+        document.getElementById("seedws").value.trim(),
+        document.getElementById("disc").value.trim());
+      log("booted pk=" + pk);
+    } catch (e) { log("boot error: " + (e.message || e)); }
+  }
+  function doStatus() { log("status: " + JSON.stringify(skywireVisor.status())); }
+
+  // ---- control bridge (drives this tab from a shell via serve.go) ----
+  (function () {
+    let tabId = sessionStorage.getItem("ctlTabId");
+    if (!tabId) { tabId = "visor-" + Math.random().toString(36).slice(2, 8); sessionStorage.setItem("ctlTabId", tabId); }
+    log("control tab id: " + tabId);
+    const post = (path, body) =>
+      fetch(path, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }).catch(() => {});
+    const clog = (...a) => { log(...a); post("/ctl/log?tab=" + tabId, a.join(" ")); };
+    window.__skylog = m => clog("[dmsg] " + m);
+
+    async function exec(c) {
+      const a = c.args || [];
+      switch (c.action) {
+        case "boot":
+          return await skywireVisor.boot(a[0] || "", a[1] || "", a[2] || "", a[3] || "");
+        case "status":
+          return skywireVisor.status();
+        case "reload":
+          post("/ctl/log?tab=" + tabId, "reloading");
+          setTimeout(() => location.reload(), 150);
+          return "reloading";
+        default: throw new Error("unknown action: " + c.action);
+      }
+    }
+
+    const readyPoll = setInterval(() => {
+      if (window.skywireVisor && skywireVisor.boot) { clearInterval(readyPoll); clog("skywireVisor READY " + tabId); }
+    }, 200);
+
+    const es = new EventSource("/ctl/events?tab=" + tabId);
+    es.onmessage = async (ev) => {
+      const c = JSON.parse(ev.data);
+      try { const v = await exec(c); post("/ctl/result", { id: c.id, ok: true, value: v }); }
+      catch (e) { post("/ctl/result", { id: c.id, ok: false, error: e.message || String(e) }); }
+    };
+    es.onerror = () => {};
+  })();
+</script>
+</body>
+</html>

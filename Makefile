@@ -231,11 +231,12 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
 	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
 
-tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+appserver) with TinyGo into build/wasm-visor
+tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+appserver) + dev harness into build/wasm-visor
 	mkdir -p ./build/wasm-visor
 	tinygo build -target wasm -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
-	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/
-	@echo "built ./build/wasm-visor (TinyGo) — the browser visor EDGE assembly (skywireVisor.boot/status)"
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec_tinygo.js
+	cp ./cmd/wasm-visor/index.html ./build/wasm-visor/
+	@echo "built ./build/wasm-visor (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
 
 dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
 	mkdir -p ./build/dmsg-wasm-hv
