@@ -171,7 +171,13 @@ port; what `tinygo build` accepts is what's portable.
    (dmsg-only) variant. Native is unaffected (the tagged files stay in native
    builds) so this is a COMPILE-time refactor, not a runtime change — iterate the
    tinygo build until it accepts the dmsg-only factory. This drops quic-go from
-   `pkg/transport` and `pkg/router`.
+   `pkg/transport` and `pkg/router`. NOTE (measured): the cascade reaches
+   `client.go`'s core `Config` struct (embeds `stcp.PKTable`) and the
+   `makeClient` type-switch, so a clean split likely wants the per-network
+   constructors behind a small interface/registry (register dmsg untagged,
+   stcp/stcpr/sudph/quic in `!tinygo` init) rather than a giant tagged switch —
+   an invasive but mechanical restructure of core transport code. Do it as its
+   own reviewed PR, validated with the autonomous browser harness.
 2. **net/http-free service clients.** RF, TPD, and AR each talk HTTP to a service;
    port them over dmsg with `dmsgclient.FetchOverDmsg` (the disc client pattern),
    behind native/tinygo tags. Drops net/http from transport + router.
