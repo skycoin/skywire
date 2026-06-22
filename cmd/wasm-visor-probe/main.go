@@ -17,10 +17,13 @@
 //	                            //go:build !tinygo; ClientFactory.ARClient is `any`
 //	                            and EB is a local interface so addrresolver/appevent
 //	                            stay out of the graph. TCP tuning is build-tagged.
+//	   pkg/transport          — the transport Manager + ManagedTransport. DiscoveryClient
+//	                            is an abstract interface (no net/http here); the AR
+//	                            client (addrresolver) and event broadcaster (appevent)
+//	                            are typed `any`, ARClient() and the disc-404 check are
+//	                            build-tagged so net/http + net/rpc stay native-only.
 //
 //	⛔ BLOCKED (blocker → fix):
-//	   pkg/transport          net/http (TPD client) + net/rpc — net/http-free TPD
-//	                          client (FetchOverDmsg) + tag/abstract the net/rpc bits
 //	   pkg/router             net/http (routefinder) + net/rpc (cascade_source RSN)
 //	   pkg/app/appnet         net/http + net/rpc
 //	   pkg/app/appevent       net/rpc — app↔visor event channel
@@ -33,6 +36,7 @@ import (
 	"fmt"
 
 	_ "github.com/skycoin/skywire/pkg/routing"
+	_ "github.com/skycoin/skywire/pkg/transport"
 	_ "github.com/skycoin/skywire/pkg/transport/network"
 	_ "github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
