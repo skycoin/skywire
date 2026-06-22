@@ -89,10 +89,25 @@
   let stream = null;
 
   const go = new Go();
-  WebAssembly.instantiateStreaming(fetch("dmsg.wasm"), go.importObject).then(r => {
-    go.run(r.instance);
-    log("wasm loaded; skywireDmsg ready");
-  });
+  // TinyGo's wasm_exec.js omits the gojs `runtime.getRandomData` import the Go
+  // runtime needs to seed itself (the crypto path) — so a crypto-using TinyGo
+  // wasm fails to instantiate ("function import requires a callable"). Inject it
+  // ONLY when absent, leaving the standard-Go build untouched (its wasm_exec.js
+  // already provides getRandomData, via a different sp-based ABI). TinyGo passes
+  // a []byte as (ptr, len, cap) and exposes linear memory as `memory`.
+  if (go.importObject.gojs && !go.importObject.gojs["runtime.getRandomData"]) {
+    go.importObject.gojs["runtime.getRandomData"] = (ptr, len) =>
+      crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
+  }
+  // Use fetch+arrayBuffer (not instantiateStreaming) so it works regardless of
+  // the server's wasm MIME type.
+  fetch("dmsg.wasm").then(r => r.arrayBuffer())
+    .then(buf => WebAssembly.instantiate(buf, go.importObject))
+    .then(r => {
+      go.run(r.instance);
+      log("wasm loaded; skywireDmsg ready: " + Object.keys(globalThis.skywireDmsg || {}).join(", "));
+    })
+    .catch(e => log("WASM LOAD FAILED: " + e));
 
   const wire = s => {
     stream = s;
