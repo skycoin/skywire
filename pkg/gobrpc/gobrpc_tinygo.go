@@ -23,5 +23,8 @@ var NewClient = gobimpl.NewClient
 // NewServer mirrors net/rpc.NewServer.
 var NewServer = gobimpl.NewServer
 
+// Dial mirrors net/rpc.Dial.
+var Dial = gobimpl.Dial
+
 // ErrShutdown mirrors net/rpc.ErrShutdown.
 var ErrShutdown = gobimpl.ErrShutdown
