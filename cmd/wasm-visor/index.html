@@ -80,6 +80,11 @@
           const arr = JSON.parse(j);
           return { count: Array.isArray(arr) ? arr.length : 0, sample: Array.isArray(arr) ? arr.slice(0, 1) : arr };
         }
+        case "dialTransport": {
+          // a = [peerPK, netType("ws"|"wt"), url, certHash?]
+          const id = await skywireVisor.dialTransport(a[0] || "", a[1] || "wt", a[2] || "", a[3] || "");
+          return { transport: id };
+        }
         case "status":
           return skywireVisor.status();
         case "reload":
