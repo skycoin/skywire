@@ -27,4 +27,13 @@ const (
 	// browser's WebSocket API) but not accept it (no server) — server-visors run
 	// the WS listener; see pkg/transport/network/ws_native.go / ws_tinygo.go.
 	WS Type = "ws"
+	// WT is a type of a transport that works visor-to-visor over a direct
+	// WebTransport (HTTP/3 over QUIC) link, resolving the peer's https:// endpoint
+	// and pinned cert hash via a table. Like the dmsg WebTransport carrier, the
+	// server presents a short-lived self-signed cert pinned by SHA-256 (no CA, no
+	// domain) and the client→server PK is authenticated in the Noise handshake. A
+	// browser visor can DIAL it (the browser WebTransport API, serverCertificate-
+	// Hashes) but not accept it (no server) — server-visors run the WT listener;
+	// see pkg/transport/network/wt_native.go / wt_tinygo.go.
+	WT Type = "wt"
 )
