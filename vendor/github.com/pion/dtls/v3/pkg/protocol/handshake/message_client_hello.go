@@ -31,42 +31,41 @@ type MessageClientHello struct {
 
 const handshakeMessageClientHelloVariableWidthStart = 34
 
-// Type returns the Handshake Type
+// Type returns the Handshake Type.
 func (m MessageClientHello) Type() Type {
 	return TypeClientHello
 }
 
-// Marshal encodes the Handshake
+// Marshal encodes the Handshake.
 func (m *MessageClientHello) Marshal() ([]byte, error) {
 	if len(m.Cookie) > 255 {
 		return nil, errCookieTooLong
 	}
 
 	out := make([]byte, handshakeMessageClientHelloVariableWidthStart)
-	out[0] = m.Version.Major
-	out[1] = m.Version.Minor
+	out[0], out[1] = m.Version.Major, m.Version.Minor //nolint:gosec // out is initialized with length 34
 
 	rand := m.Random.MarshalFixed()
 	copy(out[2:], rand[:])
 
-	out = append(out, byte(len(m.SessionID)))
-	out = append(out, m.SessionID...)
+	out = append(out, byte(len(m.SessionID))) //nolint:makezero // todo: fix
+	out = append(out, m.SessionID...)         //nolint:makezero // todo: fix
 
-	out = append(out, byte(len(m.Cookie)))
-	out = append(out, m.Cookie...)
-	out = append(out, encodeCipherSuiteIDs(m.CipherSuiteIDs)...)
-	out = append(out, protocol.EncodeCompressionMethods(m.CompressionMethods)...)
+	out = append(out, byte(len(m.Cookie)))                                        //nolint:makezero // todo: fix
+	out = append(out, m.Cookie...)                                                //nolint:makezero // todo: fix
+	out = append(out, encodeCipherSuiteIDs(m.CipherSuiteIDs)...)                  //nolint:makezero // todo: fix
+	out = append(out, protocol.EncodeCompressionMethods(m.CompressionMethods)...) //nolint:makezero // todo: fix
 
 	extensions, err := extension.Marshal(m.Extensions)
 	if err != nil {
 		return nil, err
 	}
 
-	return append(out, extensions...), nil
+	return append(out, extensions...), nil //nolint:makezero // todo: fix
 }
 
-// Unmarshal populates the message from encoded data
-func (m *MessageClientHello) Unmarshal(data []byte) error {
+// Unmarshal populates the message from encoded data.
+func (m *MessageClientHello) Unmarshal(data []byte) error { //nolint:cyclop
 	if len(data) < 2+RandomLength {
 		return errBufferTooSmall
 	}
@@ -137,5 +136,6 @@ func (m *MessageClientHello) Unmarshal(data []byte) error {
 		return err
 	}
 	m.Extensions = extensions
+
 	return nil
 }

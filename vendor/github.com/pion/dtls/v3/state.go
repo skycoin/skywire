@@ -13,10 +13,11 @@ import (
 	"github.com/pion/dtls/v3/pkg/crypto/prf"
 	"github.com/pion/dtls/v3/pkg/crypto/signaturehash"
 	"github.com/pion/dtls/v3/pkg/protocol/handshake"
-	"github.com/pion/transport/v3/replaydetector"
+	"github.com/pion/transport/v4/replaydetector"
 )
 
-// State holds the dtls connection state and implements both encoding.BinaryMarshaler and encoding.BinaryUnmarshaler
+// State holds the dtls connection state and implements both encoding.BinaryMarshaler and
+// encoding.BinaryUnmarshaler.
 type State struct {
 	localEpoch, remoteEpoch   atomic.Value
 	localSequenceNumber       []uint64 // uint48
@@ -24,6 +25,8 @@ type State struct {
 	masterSecret              []byte
 	cipherSuite               CipherSuite // nil if a cipherSuite hasn't been chosen
 	CipherSuiteID             CipherSuiteID
+
+	remoteSupportsRenegotiation bool // True when Client Hello contained renegotiation extension
 
 	srtpProtectionProfile         atomic.Value // Negotiated SRTPProtectionProfile
 	remoteSRTPMasterKeyIdentifier []byte
@@ -88,7 +91,7 @@ type serializedState struct {
 	NegotiatedProtocol    string
 }
 
-var errCipherSuiteNotSet = &InternalError{Err: errors.New("cipher suite not set")} //nolint:goerr113
+var errCipherSuiteNotSet = &InternalError{Err: errors.New("cipher suite not set")} //nolint:err113
 
 func (s *State) clone() (*State, error) {
 	serialized, err := s.serialize()
@@ -112,6 +115,7 @@ func (s *State) serialize() (*serializedState, error) {
 	remoteRnd := s.remoteRandom.MarshalFixed()
 
 	epoch := s.getLocalEpoch()
+
 	return &serializedState{
 		LocalEpoch:            s.getLocalEpoch(),
 		RemoteEpoch:           s.getRemoteEpoch(),
@@ -193,10 +197,11 @@ func (s *State) initCipherSuite() error {
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
-// MarshalBinary is a binary.BinaryMarshaler.MarshalBinary implementation
+// MarshalBinary is a binary.BinaryMarshaler.MarshalBinary implementation.
 func (s *State) MarshalBinary() ([]byte, error) {
 	serialized, err := s.serialize()
 	if err != nil {
@@ -208,10 +213,11 @@ func (s *State) MarshalBinary() ([]byte, error) {
 	if err := enc.Encode(*serialized); err != nil {
 		return nil, err
 	}
+
 	return buf.Bytes(), nil
 }
 
-// UnmarshalBinary is a binary.BinaryUnmarshaler.UnmarshalBinary implementation
+// UnmarshalBinary is a binary.BinaryUnmarshaler.UnmarshalBinary implementation.
 func (s *State) UnmarshalBinary(data []byte) error {
 	enc := gob.NewDecoder(bytes.NewBuffer(data))
 	var serialized serializedState
@@ -227,7 +233,7 @@ func (s *State) UnmarshalBinary(data []byte) error {
 // ExportKeyingMaterial returns length bytes of exported key material in a new
 // slice as defined in RFC 5705.
 // This allows protocols to use DTLS for key establishment, but
-// then use some of the keying material for their own purposes
+// then use some of the keying material for their own purposes.
 func (s *State) ExportKeyingMaterial(label string, context []byte, length int) ([]byte, error) {
 	if s.getLocalEpoch() == 0 {
 		return nil, errHandshakeInProgress
@@ -246,6 +252,7 @@ func (s *State) ExportKeyingMaterial(label string, context []byte, length int) (
 	} else {
 		seed = append(append(seed, remoteRandom[:]...), localRandom[:]...)
 	}
+
 	return prf.PHash(s.masterSecret, seed, length, s.cipherSuite.HashFunc())
 }
 
@@ -253,6 +260,7 @@ func (s *State) getRemoteEpoch() uint16 {
 	if remoteEpoch, ok := s.remoteEpoch.Load().(uint16); ok {
 		return remoteEpoch
 	}
+
 	return 0
 }
 
@@ -260,6 +268,7 @@ func (s *State) getLocalEpoch() uint16 {
 	if localEpoch, ok := s.localEpoch.Load().(uint16); ok {
 		return localEpoch
 	}
+
 	return 0
 }
 
@@ -287,7 +296,7 @@ func (s *State) setLocalConnectionID(v []byte) {
 	s.localConnectionID.Store(v)
 }
 
-// RemoteRandomBytes returns the remote client hello random bytes
+// RemoteRandomBytes returns the remote client hello random bytes.
 func (s *State) RemoteRandomBytes() [handshake.RandomBytesLength]byte {
 	return s.remoteRandom.RandomBytes
 }
