@@ -529,13 +529,12 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	logger.Debug("Initializing DMSG transport client...")
 	v.tpM.InitDmsgClient(ctx, dmsgC)
 
-	// WebRTC (opt-in) signals over dmsg, so its client is started only now that
-	// the manager has the dmsg client. InitClient also starts the dmsg signaling
-	// listener, so the visor ACCEPTS WebRTC dials (e.g. from browser visors).
-	if v.conf.Transport != nil && v.conf.Transport.WebRTC {
-		logger.Info("Initializing WebRTC transport client (opt-in)...")
-		v.tpM.InitClient(ctx, tptypes.WEBRTC, 0)
-	}
+	// WebRTC signals over dmsg, so its client is started only now that the manager
+	// has the dmsg client. InitClient also starts the dmsg signaling listener, so
+	// the visor ACCEPTS WebRTC dials (e.g. from browser visors). On by default,
+	// like stcpr/sudph — a visor accepts every transport type it can.
+	logger.Info("Initializing WebRTC transport client...")
+	v.tpM.InitClient(ctx, tptypes.WEBRTC, 0)
 
 	// dmsgctrl setup — listen for incoming control streams (ping/pong).
 	// Each accepted Control is self-serving (handles ping/pong in its own goroutine).

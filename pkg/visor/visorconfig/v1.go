@@ -405,13 +405,6 @@ type Transport struct {
 	// until proven on the fleet. A fixed port is preferable to ephemeral so the
 	// address-resolver registration + any firewall rule are stable.
 	QUICPort int `json:"quic_port,omitempty"`
-	// WebRTC enables the WebRTC DataChannel transport (ICE NAT-traversal;
-	// signaling rides dmsg). false (default/omitted) disables it — opt-in until
-	// proven on the fleet. When enabled the visor ACCEPTS WebRTC dials (so browser
-	// visors, which can't do stcpr/sudph/quic, can reach it) and can create them
-	// via `tp add webrtc`. ICE uses the configured StunServers. No fixed port:
-	// pion gathers ephemeral UDP host candidates and traverses NAT via ICE.
-	WebRTC bool `json:"webrtc,omitempty"`
 	// ARTransportLimit controls address resolver registration for privacy:
 	//   0 (default): stay registered indefinitely
 	//   N > 0: deregister from AR after N transports are established
