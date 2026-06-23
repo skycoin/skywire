@@ -34,9 +34,23 @@ func (f *ClientFactory) makeResolvedClient(netType types.Type, generic *genericC
 	case types.STCPR:
 		return newStcpr(resolved, port), nil
 	case types.SUDPH:
-		return makeSudphClient(resolved, port)
+		c, err := makeSudphClient(resolved, port)
+		if err != nil {
+			return nil, err
+		}
+		if sc := f.sharedUDPConn(protoSUDPH); sc != nil {
+			c.(*sudphClient).sharedConn = sc // unified transport port
+		}
+		return c, nil
 	case types.QUIC:
-		return makeQuicClient(resolved, port)
+		c, err := makeQuicClient(resolved, port)
+		if err != nil {
+			return nil, err
+		}
+		if sc := f.sharedUDPConn(protoQUIC); sc != nil {
+			c.(*quicClient).sharedConn = sc // unified transport port
+		}
+		return c, nil
 	}
 	return nil, fmt.Errorf("cannot initiate client, type %s not supported", netType)
 }

@@ -499,6 +499,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 		},
 	}
+	// Unified transport port (opt-in): when transport_port is set, QUIC + sudph
+	// share one master UDP socket (demuxed) instead of binding a port each. 0 =
+	// per-type binding (default). See docs/design/transport-port-unification.md.
+	if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
+		if err := factory.EnableUnifiedUDP(v.conf.Transport.TransportPort); err != nil {
+			return fmt.Errorf("unified transport port: %w", err)
+		}
+		log.Infof("Unified transport port: QUIC + sudph share UDP port %d", v.conf.Transport.TransportPort)
+		v.pushCloseStack("transport.unified_udp", factory.CloseUnifiedUDP)
+	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)

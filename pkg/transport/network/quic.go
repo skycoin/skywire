@@ -57,7 +57,7 @@ type quicClient struct {
 // makeQuicClient is the build-tagged QUIC constructor used by MakeClient. On
 // non-TinyGo it builds a real quicClient; the TinyGo build (quic_tinygo.go)
 // returns an unsupported error so the browser graph never pulls quic-go.
-func makeQuicClient(resolved *resolvedClient, port int) (Client, error) {
+func makeQuicClient(resolved *resolvedClient, port int) (Client, error) { //nolint:unparam // error is for build-tag parity with the tinygo stub
 	return newQuic(resolved, port), nil
 }
 
