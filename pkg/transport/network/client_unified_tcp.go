@@ -41,3 +41,14 @@ func (f *ClientFactory) CloseUnifiedTCP() error {
 	}
 	return nil
 }
+
+// stcprSharedListenerFor returns the shared stcpr virtual listener only when
+// stcpr rides the master port — i.e. its per-type port (stcpr_port) is 0. A
+// non-zero stcpr_port breaks stcpr out onto its own port even when transport_port
+// is set. Returns nil → per-type binding.
+func (f *ClientFactory) stcprSharedListenerFor(perTypePort int) net.Listener {
+	if perTypePort != 0 {
+		return nil
+	}
+	return f.stcprSharedListener
+}

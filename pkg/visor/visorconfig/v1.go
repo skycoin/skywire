@@ -400,11 +400,14 @@ type Transport struct {
 	LogStore              *LogStore       `json:"log_store"`
 	StcprPort             int             `json:"stcpr_port"`
 	SudphPort             int             `json:"sudph_port"`
-	// TransportPort, when non-zero, is the single UDP port the UDP transport types
-	// (QUIC + sudph) share — one listening socket, demultiplexed by protocol (see
-	// docs/design/transport-port-unification.md) — instead of binding a port each.
-	// 0 (default/omitted) keeps the per-type binding (sudph_port/quic_port). Opt-in
-	// while the unified-port path proves out; the per-type ports stay honored.
+	// TransportPort, when non-zero, is the single port number the transport types
+	// share: QUIC + sudph on <port>/udp and stcpr + WS on <port>/tcp, each socket
+	// demultiplexed by protocol (see docs/design/transport-port-unification.md),
+	// instead of binding a port each. 0 (default/omitted) keeps per-type binding.
+	// Per-type ports remain an override: a type whose own port (stcpr_port /
+	// sudph_port / quic_port) is non-zero breaks OUT onto that dedicated port even
+	// when transport_port is set; left 0 it rides the shared port. Opt-in while the
+	// unified-port path proves out.
 	TransportPort int `json:"transport_port,omitempty"`
 	// QUICPort optionally PINS the UDP port for the QUIC transport (#2607). QUIC
 	// is on by default (like stcpr/sudph); 0 (default/omitted) binds an ephemeral
