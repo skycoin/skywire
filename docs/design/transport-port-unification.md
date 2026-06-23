@@ -101,6 +101,18 @@ mode is the by-PK `dialTransport` trigger, since signaling rides dmsg.
    AR record with a URL + WT cert-hash; may require an AR-service change — to be
    confirmed).
 5. **Config collapse**: `transport_port` master + per-type overrides; keep the old
-   keys as overrides for compatibility.
+   keys as overrides for compatibility. (done — a non-zero per-type port breaks
+   that type out onto its own socket; 0 rides the master.)
 
 Each step is independently shippable.
+
+## Status
+
+- **Done:** QUIC default-on; UDP demux (quic+sudph) over one socket; TCP demux
+  (stcpr+WS, cmux) over one socket; `transport_port` opt-in wiring; per-type-port
+  override (break-out). A visor with `transport_port: N` listens for every type on
+  `N/tcp` + `N/udp`. Each carrier validated over its demux with real traffic.
+- **Remaining:** AR-integrate WS/WT for discovery (needs an address-resolver
+  service change — new bind/resolve for ws/wt + WT cert-hash storage); webrtc over
+  the shared UDP socket (optional — pion `SetICEUDPMux`); a static `PK → endpoint`
+  table for quic/sudph (the STCP model generalized).

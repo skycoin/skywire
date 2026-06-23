@@ -30,11 +30,14 @@ import (
 func (f *ClientFactory) makeResolvedClient(netType types.Type, generic *genericClient, port int) (Client, error) {
 	ar, _ := f.ARClient.(addrresolver.APIClient)
 	resolved := &resolvedClient{genericClient: generic, ar: ar}
+	// Unified transport port: a type rides the master socket only when its
+	// per-type port (the `port` arg) is 0; a non-zero per-type port breaks it out
+	// onto its own socket (see sharedUDPConnFor / stcprSharedListenerFor).
 	switch netType {
 	case types.STCPR:
 		c := newStcpr(resolved, port)
-		if f.stcprSharedListener != nil { // unified transport port
-			c.(*stcprClient).sharedListener = f.stcprSharedListener
+		if lis := f.stcprSharedListenerFor(port); lis != nil {
+			c.(*stcprClient).sharedListener = lis
 		}
 		return c, nil
 	case types.SUDPH:
@@ -42,8 +45,8 @@ func (f *ClientFactory) makeResolvedClient(netType types.Type, generic *genericC
 		if err != nil {
 			return nil, err
 		}
-		if sc := f.sharedUDPConn(protoSUDPH); sc != nil {
-			c.(*sudphClient).sharedConn = sc // unified transport port
+		if sc := f.sharedUDPConnFor(protoSUDPH, port); sc != nil {
+			c.(*sudphClient).sharedConn = sc
 		}
 		return c, nil
 	case types.QUIC:
@@ -51,8 +54,8 @@ func (f *ClientFactory) makeResolvedClient(netType types.Type, generic *genericC
 		if err != nil {
 			return nil, err
 		}
-		if sc := f.sharedUDPConn(protoQUIC); sc != nil {
-			c.(*quicClient).sharedConn = sc // unified transport port
+		if sc := f.sharedUDPConnFor(protoQUIC, port); sc != nil {
+			c.(*quicClient).sharedConn = sc
 		}
 		return c, nil
 	}

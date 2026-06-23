@@ -52,3 +52,15 @@ func (f *ClientFactory) sharedUDPConn(proto udpProto) net.PacketConn {
 	}
 	return nil
 }
+
+// sharedUDPConnFor returns the shared demux conn for proto only when the type
+// rides the master port — i.e. its per-type port is 0. A non-zero per-type port
+// (e.g. quic_port / sudph_port) breaks that type out onto its own socket even
+// when transport_port is set, so an operator can pin one type to a dedicated port
+// while the rest share. Returns nil → per-type binding.
+func (f *ClientFactory) sharedUDPConnFor(proto udpProto, perTypePort int) net.PacketConn {
+	if perTypePort != 0 {
+		return nil
+	}
+	return f.sharedUDPConn(proto)
+}
