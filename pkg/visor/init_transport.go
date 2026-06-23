@@ -457,6 +457,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		listenAddr = v.conf.STCP.ListeningAddress
 	}
 	v.stcpTable = table
+	// WebRTC ICE servers (only when the opt-in WebRTC transport is enabled): the
+	// configured STUN servers, prefixed with the stun: scheme the WebRTC stack
+	// wants. Set on the factory now; the WEBRTC client is started after dmsg comes
+	// up (init_dmsg → InitClient), since its signaling rides the dmsg client.
+	var iceURLs []string
+	if v.conf.Transport != nil && v.conf.Transport.WebRTC {
+		for _, s := range v.conf.StunServers {
+			iceURLs = append(iceURLs, "stun:"+s)
+		}
+	}
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
 		SK:         v.conf.SK,
@@ -465,6 +475,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		ARClient:   v.arClient,
 		EB:         v.ebc,
 		MLogger:    v.MasterLogger(),
+		ICEURLs:    iceURLs,
 		// OnExternalSTCPR notifies the public visor updater when an external
 		// connection is received, validating that the visor is internet-reachable
 		OnExternalSTCPR: func() {
