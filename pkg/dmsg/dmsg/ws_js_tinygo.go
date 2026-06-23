@@ -261,3 +261,12 @@ func (c *wsConnJS) SetWriteDeadline(time.Time) error { return nil }
 
 // SetDeadline sets the read deadline (write has none).
 func (c *wsConnJS) SetDeadline(t time.Time) error { return c.SetReadDeadline(t) }
+
+// DialWebSocketJS dials a browser-native WebSocket to url and returns it as a
+// net.Conn. It is the TinyGo/js WebSocket dialer, exported so the WS transport
+// carrier (pkg/transport/network) can reuse the same tested net.Conn adapter a
+// browser visor uses to reach a dmsg server — here to reach a peer visor's WS
+// transport endpoint.
+func DialWebSocketJS(ctx context.Context, url string) (net.Conn, error) {
+	return dialWebSocketJS(ctx, url)
+}
