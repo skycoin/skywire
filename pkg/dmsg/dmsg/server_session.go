@@ -132,13 +132,15 @@ func (ss *ServerSession) Serve() {
 		for {
 			yStr, err := ss.sm.yamux.AcceptStream()
 			if err != nil {
-				if err == yamux.ErrSessionShutdown || err == io.EOF || ss.sm.yamux.IsClosed() {
-					ss.log.WithError(err).Info("Stopping session...")
-					return
-				}
-				ss.log.WithError(err).Warn("Failed to accept yamux stream, continuing...")
-				time.Sleep(streamErrorBackoff)
-				continue
+				// yamux.AcceptStream has no transient errors — any error is the
+				// session's terminal shutdown error. For a QUIC-backed carrier
+				// (WebTransport) that is the underlying quic-go "Application error
+				// 0x0 (remote): session closed", NOT yamux.ErrSessionShutdown, and
+				// it can arrive before yamux.IsClosed() flips — so the old narrow
+				// check spun this loop forever ("Failed to accept yamux stream,
+				// continuing"). Stop the session on any accept error.
+				ss.log.WithError(err).Info("Stopping session...")
+				return
 			}
 
 			log := ss.log.WithField("yamux_id", yStr.StreamID())
