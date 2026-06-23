@@ -51,7 +51,7 @@ func TestWebSocketSession(t *testing.T) {
 	// Two WS-preferring clients.
 	wsConf := func() *Config {
 		c := DefaultConfig()
-		c.PreferWS = true
+		c.Carriers = []string{CarrierWS}
 		return c
 	}
 	pkA, skA := GenKeyPair(t, "client A")

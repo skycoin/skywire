@@ -4,9 +4,9 @@
 //
 // A standard-Go js/wasm build of the dmsg client (NOT TinyGo — the client
 // pulls logrus + encoding/gob via the RPC paths, which need full reflection).
-// The browser sandbox can't open raw TCP/UDP sockets, so this build forces
-// Config.PreferWS: every session is dialed over the dmsg server's WebSocket
-// endpoint (Server.AddressWS). Inbound reachability still works — once the
+// The browser sandbox can't open raw TCP/UDP sockets, so this build forces the
+// WS carrier (Config.Carriers = ["ws"]): every session is dialed over the dmsg
+// server's WebSocket endpoint (Server.AddressWS). Inbound reachability still works — once the
 // client has an outbound WSS session to a dmsg server, peers dial it BY PUBLIC
 // KEY and the server bridges those streams back down the same WSS connection.
 // So a browser tab is a first-class, inbound-reachable dmsg peer.
@@ -135,7 +135,7 @@ func promise(fn func() (interface{}, error)) interface{} {
 //
 // A browser can't reach a dmsg-only discovery until it has a server, so we seed
 // one server directly: its PK + WebSocket URL (e.g. "ws://host:port/dmsg"). The
-// client connects to it over WS (forced PreferWS), then upgrades discovery to
+// client connects to it over WS (forced WS carrier), then upgrades discovery to
 // run over dmsg (discDmsgAddr = "dmsg://<disc-pk>:80") so it can register itself
 // + resolve peers. Empty secret key → ephemeral identity. See
 // dmsgclient.StartDmsgSeeded.

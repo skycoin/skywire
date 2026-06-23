@@ -68,7 +68,9 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	dClient := direct.NewClient(entries, log)
 
 	conf := dmsg.DefaultConfig()
-	conf.PreferWS = preferWS // browser (wasm) seeds over WebSocket; native uses TCP
+	if preferWS { // browser (wasm) seeds over WebSocket; native uses TCP (empty)
+		conf.Carriers = []string{dmsg.CarrierWS}
+	}
 	// MinSessions 2 (not 1): once bootstrapped via the seed and registered in
 	// discovery, the client learns the live server list from discovery
 	// (seededDiscClient.AvailableServers → real) and holds a SECOND session, so a
