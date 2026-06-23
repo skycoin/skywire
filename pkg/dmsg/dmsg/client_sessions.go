@@ -102,26 +102,44 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 // It is expected that the session is created and served before the context cancels, otherwise an error will be returned.
 // NOTE: This should not be called directly as it may lead to session duplicates.
 // Only `ensureSession` or `EnsureAndObtainSession` should call this function.
+// pickCarrier chooses the dmsg carrier (network + dial address) for a server
+// entry from an ordered carrier preference. The first listed carrier the server
+// advertises wins. Empty list or no match falls back to the default: QUIC when
+// the server advertises a QUIC endpoint (Protocol "quic" + AddressUDP), else the
+// legacy TCP path. Unknown carrier names are skipped. Pure — unit-tested.
+func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
+	for _, c := range carriers {
+		switch c {
+		case CarrierWT:
+			if entry.Server.AddressWT != "" {
+				return CarrierWT, entry.Server.AddressWT
+			}
+		case CarrierWS:
+			if entry.Server.AddressWS != "" {
+				return CarrierWS, entry.Server.AddressWS
+			}
+		case CarrierQUIC:
+			if entry.Protocol == "quic" && entry.Server.AddressUDP != "" {
+				return CarrierQUIC, entry.Server.AddressUDP
+			}
+		case CarrierTCP:
+			return CarrierTCP, entry.Server.Address
+		}
+	}
+	if entry.Protocol == "quic" && entry.Server.AddressUDP != "" {
+		return CarrierQUIC, entry.Server.AddressUDP
+	}
+	return CarrierTCP, entry.Server.Address
+}
+
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
 	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
-	// Pick transport. WS when the client prefers it and the server advertises
-	// one (forced in the js/wasm build, which has no raw socket); else QUIC when
-	// the server advertises a QUIC endpoint + Protocol "quic" (#2607 dmsg-over-
-	// QUIC); else the legacy TCP path.
-	network := "tcp"
-	dialAddr := entry.Server.Address
-	switch {
-	case ce.conf.PreferWT && entry.Server.AddressWT != "":
-		network = "wt"
-		dialAddr = entry.Server.AddressWT
-	case ce.conf.PreferWS && entry.Server.AddressWS != "":
-		network = "ws"
-		dialAddr = entry.Server.AddressWS
-	case entry.Protocol == "quic" && entry.Server.AddressUDP != "":
-		network = "quic"
-		dialAddr = entry.Server.AddressUDP
-	}
+	// Pick the carrier from the client's ordered Carriers preference: the first
+	// listed carrier the server advertises wins; empty/no-match falls back to the
+	// default (QUIC when advertised, else TCP). The chosen carrier is dialed below
+	// with a TCP fallback on failure.
+	network, dialAddr := pickCarrier(ce.conf.Carriers, entry)
 	var dSes ClientSession
 
 	// Trigger dial callback.
