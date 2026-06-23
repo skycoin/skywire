@@ -104,6 +104,7 @@ type Core struct {
 
 	mu     sync.RWMutex
 	visors map[cipher.PubKey]*gobRPCClient
+	self   SelfProvider // the tab's OWN visor (nil for a plain standalone HV)
 }
 
 // NewCore returns a Core for the given dmsg client + this hypervisor's PK.
