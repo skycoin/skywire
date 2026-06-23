@@ -20,6 +20,8 @@
 //	await skywireVisor.dialTransport(peerPkHex, "wt", "https://host:port/skywire", certHashHex)
 //	await skywireVisor.dialTransport(peerPkHex, "ws", "ws://host:port/")
 //	await skywireVisor.dialTransport(peerPkHex, "webrtc") // direct DataChannel, signaling over dmsg
+//	// fetch arbitrary content over dmsg (browse a skynet/dmsg site by PK):
+//	await skywireVisor.fetchDmsg("<pk>" /*or "pk:port"*/, "GET", "/", null) // → {status, body, headers}
 //
 // Build + run the dev harness (index.html drives boot/status/reload, and connects
 // back to the cmd/dmsg-wasm serve.go control bridge so a shell can drive the tab):
@@ -102,6 +104,7 @@ func main() {
 		"hvApi":         js.FuncOf(jsHvAPI),
 		"tpdEdge":       js.FuncOf(jsTPDEdge),
 		"dialTransport": js.FuncOf(jsDialTransport),
+		"fetchDmsg":     js.FuncOf(jsFetchDmsg),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -326,6 +329,48 @@ func jsHvAPI(_ js.Value, args []js.Value) interface{} {
 		buf := js.Global().Get("Uint8Array").New(len(b))
 		js.CopyBytesToJS(buf, b)
 		res.Set("body", buf)
+		return res, nil
+	})
+}
+
+// jsFetchDmsg(pkHost, method, path, bodyOrNull) → Promise<{status, body, headers}>.
+// Fetches arbitrary content over dmsg (HTTP/1.1 over a dmsg stream, net/http-free)
+// from another visor/site addressed by PK — the primitive for browsing skynet/dmsg
+// websites from the tab and for reaching any dmsg-served HTTP endpoint. pkHost is a
+// PK or "pk:port" (port defaults to 80). IP-anonymous + uncensorable: no DNS, no
+// IP, all over dmsg.
+func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
+	pkHost := args[0].String()
+	method := "GET"
+	if len(args) > 1 && !args[1].IsNull() && !args[1].IsUndefined() && args[1].String() != "" {
+		method = args[1].String()
+	}
+	path := "/"
+	if len(args) > 2 && args[2].String() != "" {
+		path = args[2].String()
+	}
+	var body []byte
+	if len(args) > 3 && !args[3].IsNull() && !args[3].IsUndefined() {
+		body = []byte(args[3].String())
+	}
+	return promise(func() (interface{}, error) {
+		if dmsgC == nil {
+			return nil, errors.New("not booted; call boot() first")
+		}
+		status, respHeaders, b, err := dmsgclient.FetchOverDmsg(ctx, dmsgC, method, pkHost, path, nil, body)
+		if err != nil {
+			return nil, err
+		}
+		res := js.Global().Get("Object").New()
+		res.Set("status", status)
+		buf := js.Global().Get("Uint8Array").New(len(b))
+		js.CopyBytesToJS(buf, b)
+		res.Set("body", buf)
+		hdrs := js.Global().Get("Object").New()
+		for k, v := range respHeaders {
+			hdrs.Set(k, v)
+		}
+		res.Set("headers", hdrs)
 		return res, nil
 	})
 }
