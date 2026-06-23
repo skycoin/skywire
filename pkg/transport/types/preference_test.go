@@ -30,10 +30,10 @@ func TestDefaultPreferenceOrder(t *testing.T) {
 	}
 }
 
-// TestParsePreferenceOrder confirms every known type (including the ones added)
+// TestParsePreferenceOrder confirms every known type (canonical "squic" included)
 // parses, and unknown strings are dropped.
 func TestParsePreferenceOrder(t *testing.T) {
-	in := []string{"stcpr", "quic", "sudph", "stcp", "webrtc", "ws", "wt", "dmsg", "nope"}
+	in := []string{"stcpr", "squic", "sudph", "stcp", "webrtc", "ws", "wt", "dmsg", "nope"}
 	got := ParsePreferenceOrder(in)
 	want := []Type{STCPR, QUIC, SUDPH, STCP, WEBRTC, WS, WT, DMSG}
 	if len(got) != len(want) {
@@ -43,6 +43,24 @@ func TestParsePreferenceOrder(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("parsed[%d]=%s, want %s", i, got[i], want[i])
 		}
+	}
+}
+
+// TestQUICLegacyAlias confirms the canonical QUIC wire name is "squic" and the
+// pre-rename "quic" still parses + normalizes for back-compat.
+func TestQUICLegacyAlias(t *testing.T) {
+	if QUIC != "squic" {
+		t.Fatalf("QUIC canonical wire name = %q, want squic", QUIC)
+	}
+	if NormalizeType(QUICLegacy) != QUIC {
+		t.Fatalf(`NormalizeType("quic") = %q, want squic`, NormalizeType(QUICLegacy))
+	}
+	if NormalizeType(QUIC) != QUIC {
+		t.Fatalf("NormalizeType is not idempotent on the canonical name")
+	}
+	// Both names parse to QUIC in a preference list.
+	if got := ParsePreferenceOrder([]string{"quic"}); len(got) != 1 || got[0] != QUIC {
+		t.Fatalf(`ParsePreferenceOrder(["quic"]) = %v, want [squic]`, got)
 	}
 }
 

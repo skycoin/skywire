@@ -222,13 +222,16 @@ func (v *Visor) AddTransport(remote cipher.PubKey, tpType string, timeout time.D
 		return nil, fmt.Errorf("--no-register flag is only valid for user-labeled transports")
 	}
 
-	v.log.Debugf("Saving transport to %v via %v with label %s", remote, tpType, tpLabel)
+	// Accept the legacy "quic" wire name as well as the canonical "squic".
+	netType := types.NormalizeType(types.Type(tpType))
+
+	v.log.Debugf("Saving transport to %v via %v with label %s", remote, netType, tpLabel)
 
 	opts := transport.SaveTransportOptions{
 		NoRegister: noRegister,
 	}
 
-	tp, err := v.tpM.SaveTransportWithOptions(ctx, remote, types.Type(tpType), tpLabel, opts)
+	tp, err := v.tpM.SaveTransportWithOptions(ctx, remote, netType, tpLabel, opts)
 	if err != nil {
 		return nil, err
 	}
