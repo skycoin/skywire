@@ -299,3 +299,13 @@ func (c *wtConnJS) SetReadDeadline(t time.Time) error {
 }
 func (c *wtConnJS) SetWriteDeadline(time.Time) error { return nil }
 func (c *wtConnJS) SetDeadline(t time.Time) error    { return c.SetReadDeadline(t) }
+
+// DialWebTransportJS dials a browser-native WebTransport to url, pinning the
+// server cert by certHashHex (lowercase SHA-256 hex), and returns one
+// bidirectional stream as a net.Conn. It is the TinyGo/js WebTransport dialer,
+// exported so the WT transport carrier (pkg/transport/network) can reuse the same
+// tested cert-pinned net.Conn adapter a browser visor uses to reach a dmsg
+// server — here to reach a peer visor's WT transport endpoint.
+func DialWebTransportJS(ctx context.Context, url, certHashHex string) (net.Conn, error) {
+	return dialWebTransportJS(ctx, url, certHashHex)
+}
