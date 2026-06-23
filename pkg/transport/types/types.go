@@ -20,4 +20,11 @@ const (
 	// plus RFC 9221 unreliable datagrams; the TLS session is bound to the
 	// skywire static key (#2607 QUIC follow-on).
 	QUIC Type = "quic"
+	// WS is a type of a transport that works visor-to-visor over a direct
+	// WebSocket, resolving the peer's wss:// endpoint via a PK table. Unlike the
+	// dmsg WebSocket carrier (which reaches a dmsg server), this is a first-class
+	// skywire transport between two visors. A browser visor can DIAL it (the
+	// browser's WebSocket API) but not accept it (no server) — server-visors run
+	// the WS listener; see pkg/transport/network/ws_native.go / ws_tinygo.go.
+	WS Type = "ws"
 )

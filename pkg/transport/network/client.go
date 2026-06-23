@@ -61,6 +61,9 @@ type ClientFactory struct {
 	SK         cipher.SecKey
 	ListenAddr string
 	PKTable    stcp.PKTable
+	// WSTable maps a peer PK to its direct WebSocket (wss://) URL for the WS
+	// transport type. Reuses stcp.PKTable (PK→URL); empty/absent disables WS.
+	WSTable stcp.PKTable
 	// ARClient is the address-resolver client (addrresolver.APIClient). Typed as
 	// `any` so this file doesn't import addrresolver — which pulls net/http +
 	// packetfilter (→ quic-go), none of which compile on the TinyGo target. Only
@@ -103,6 +106,8 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 	switch netType {
 	case types.STCP:
 		return newStcp(generic, f.PKTable), nil
+	case types.WS:
+		return newWS(generic, f.WSTable), nil
 	case types.DMSG:
 		return newDmsgClient(f.DmsgC), nil
 	}
