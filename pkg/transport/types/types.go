@@ -15,11 +15,16 @@ const (
 	STCP Type = "stcp"
 	// DMSG is a type of a transport that works through an intermediary service
 	DMSG Type = "dmsg"
-	// QUIC is a type of a transport that works via QUIC over UDP, resolving
-	// addresses using the address-resolver service. Gives reliable streams
-	// plus RFC 9221 unreliable datagrams; the TLS session is bound to the
-	// skywire static key (#2607 QUIC follow-on).
-	QUIC Type = "quic"
+	// QUIC (wire name "squic" — skywire-quic, matching stcp/stcpr/sudph) is a
+	// type of a transport that works via QUIC over UDP, resolving addresses using
+	// the address-resolver service. Gives reliable streams plus RFC 9221
+	// unreliable datagrams; the TLS session is bound to the skywire static key
+	// (#2607 QUIC follow-on). The legacy wire name "quic" is still accepted on
+	// input (NormalizeType / the preference parser) for back-compat.
+	QUIC Type = "squic"
+	// QUICLegacy is the pre-rename wire name for QUIC, accepted on input so older
+	// configs / CLI invocations / discovery entries keep working. Not emitted.
+	QUICLegacy Type = "quic"
 	// WS is a type of a transport that works visor-to-visor over a direct
 	// WebSocket, resolving the peer's wss:// endpoint via a PK table. Unlike the
 	// dmsg WebSocket carrier (which reaches a dmsg server), this is a first-class
@@ -45,3 +50,14 @@ const (
 	// see pkg/transport/network/wt_native.go / wt_tinygo.go.
 	WT Type = "wt"
 )
+
+// NormalizeType maps a legacy transport-type wire name to its canonical Type, so
+// older configs / CLI invocations / discovery entries keep working after a
+// rename. Currently only "quic" → "squic" (QUIC). Canonical or unknown values
+// pass through unchanged.
+func NormalizeType(t Type) Type {
+	if t == QUICLegacy {
+		return QUIC
+	}
+	return t
+}
