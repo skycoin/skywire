@@ -26,7 +26,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -141,3 +143,106 @@ func (c *webrtcClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16
 	}
 	return tp, nil
 }
+
+// Start implements Client: accept inbound WebRTC transports. It listens for
+// signaling streams on the dmsg client's webrtcSignalPort; each one runs the
+// answerer handshake (build-tagged: pion on native, the browser RTCPeerConnection
+// under TinyGo/js) and the negotiated DataChannel net.Conn is delivered to the
+// shared acceptTransports loop via webrtcListener. WebRTC is symmetric, so unlike
+// WS/WT a browser visor can accept as well as dial.
+func (c *webrtcClient) Start() error {
+	if c.connListener != nil {
+		return ErrAlreadyListening
+	}
+	if c.dmsgC == nil {
+		return ErrWebRTCNoDmsg
+	}
+	go c.serve()
+	return nil
+}
+
+func (c *webrtcClient) serve() {
+	lis, err := newWebRTCListener(c.dmsgC, c.iceURLs)
+	if err != nil {
+		c.log.Errorf("Failed to start WebRTC signaling listener: %v", err)
+		return
+	}
+	c.acceptTransports(lis)
+}
+
+// webrtcListener fronts the dmsg signaling listener as a net.Listener: each
+// accepted signaling stream is answered and its DataChannel net.Conn delivered
+// from Accept().
+type webrtcListener struct {
+	dmsgLis *dmsg.Listener
+	iceURLs []string
+	conns   chan net.Conn
+	done    chan struct{}
+	once    sync.Once
+}
+
+func newWebRTCListener(dmsgC *dmsg.Client, iceURLs []string) (*webrtcListener, error) {
+	dl, err := dmsgC.Listen(webrtcSignalPort)
+	if err != nil {
+		return nil, err
+	}
+	l := &webrtcListener{
+		dmsgLis: dl,
+		iceURLs: iceURLs,
+		conns:   make(chan net.Conn),
+		done:    make(chan struct{}),
+	}
+	go l.acceptLoop()
+	return l, nil
+}
+
+func (l *webrtcListener) acceptLoop() {
+	for {
+		str, err := l.dmsgLis.AcceptStream()
+		if err != nil {
+			return
+		}
+		go func(s *dmsg.Stream) {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			conn, err := webrtcAccept(ctx, s, l.iceURLs)
+			if err != nil {
+				s.Close() //nolint:errcheck,gosec
+				return
+			}
+			select {
+			case l.conns <- conn:
+			case <-l.done:
+				conn.Close() //nolint:errcheck,gosec
+			}
+		}(str)
+	}
+}
+
+// Accept implements net.Listener.
+func (l *webrtcListener) Accept() (net.Conn, error) {
+	select {
+	case c := <-l.conns:
+		return c, nil
+	case <-l.done:
+		return nil, net.ErrClosed
+	}
+}
+
+// Close implements net.Listener.
+func (l *webrtcListener) Close() error {
+	l.once.Do(func() {
+		close(l.done)
+		l.dmsgLis.Close() //nolint:errcheck,gosec
+	})
+	return nil
+}
+
+// Addr implements net.Listener.
+func (l *webrtcListener) Addr() net.Addr { return webrtcAddr{} }
+
+// webrtcAddr is the net.Addr for a WebRTC DataChannel conn (both carriers).
+type webrtcAddr struct{}
+
+func (webrtcAddr) Network() string { return "webrtc" }
+func (webrtcAddr) String() string  { return "webrtc-datachannel" }
