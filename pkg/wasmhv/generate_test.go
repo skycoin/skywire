@@ -85,6 +85,34 @@ func TestGenerateStandalone_ViewerMode(t *testing.T) {
 	require.NotContains(t, string(out), "standalone:true")
 }
 
+// TestGenerateStandalone_VisorMode verifies the wasm-VISOR target emits CFG.visor
+// (so override.js boots via skywireVisor + routes /api to the visor's hvApi) and
+// injects the TinyGo getRandomData shim the key-generating visor build needs.
+func TestGenerateStandalone_VisorMode(t *testing.T) {
+	out, err := GenerateStandalone(fakeUI(),
+		[]byte("globalThis.Go=function(){};"), // stand-in TinyGo wasm_exec.js
+		[]byte("\x00asm-visor"), []byte("/*override*/"),
+		StandaloneConfig{Visor: true, SeedPK: "0371ab", Disc: "dmsg://022e:80"})
+	require.NoError(t, err)
+	s := string(out)
+	require.Contains(t, s, "visor:true")
+	require.NotContains(t, s, "standalone:true")
+	require.NotContains(t, s, `{pk:`, "visor mode has no remote hypervisor pk field")
+	// The TinyGo getRandomData shim must be present so the wasm instantiates.
+	require.Contains(t, s, `runtime.getRandomData`)
+	require.Contains(t, s, "DecompressionStream")
+}
+
+// TestGenerateStandalone_NoShimForGoTarget confirms the non-visor (Go wasm) path
+// does NOT inject the TinyGo getRandomData shim (Go's wasm_exec.js provides it).
+func TestGenerateStandalone_NoShimForGoTarget(t *testing.T) {
+	out, err := GenerateStandalone(fakeUI(),
+		[]byte("globalThis.Go=function(){};"), []byte("w"), []byte("o"),
+		StandaloneConfig{Standalone: true})
+	require.NoError(t, err)
+	require.NotContains(t, string(out), `runtime.getRandomData`)
+}
+
 // TestGenerateStandalone_EncryptedKey verifies the baked-in encsk decrypts with
 // the exact PBKDF2-SHA256(200000) + AES-GCM scheme override.js resolveSK uses:
 // base64([16-salt | 12-iv | ciphertext]).

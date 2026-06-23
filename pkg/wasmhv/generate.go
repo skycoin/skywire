@@ -41,6 +41,15 @@ type StandaloneConfig struct {
 	Standalone   bool
 	HypervisorPK string // CFG.pk for viewer mode
 
+	// Visor, when true, targets a full wasm-VISOR (cmd/wasm-visor, TinyGo) rather
+	// than the standalone wasm dmsg-client hypervisor: it emits CFG.visor (so
+	// override.js boots via globalThis.skywireVisor and routes /api to the visor's
+	// in-wasm hvApi) and injects the TinyGo getRandomData shim into the WASM
+	// bootstrap (TinyGo's wasm_exec.js omits that gojs import, which a key-
+	// generating build needs). The caller must pass the TinyGo wasm-visor binary
+	// and TinyGo's wasm_exec.js.
+	Visor bool
+
 	// dmsg bootstrap: a seed server (PK + ws:// URL) the browser connects to
 	// first, then upgrades discovery to run over dmsg.
 	SeedPK string
@@ -121,7 +130,7 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 	if err != nil {
 		return nil, err
 	}
-	wasmJS, err := wasmBootstrap(wasm)
+	wasmJS, err := wasmBootstrap(wasm, cfg.Visor)
 	if err != nil {
 		return nil, err
 	}
@@ -153,9 +162,12 @@ func configJS(cfg StandaloneConfig) (string, error) {
 			fields = append(fields, fmt.Sprintf("%s:%s", k, jsString(v)))
 		}
 	}
-	if cfg.Standalone {
+	switch {
+	case cfg.Visor:
+		fields = append(fields, "visor:true")
+	case cfg.Standalone:
 		fields = append(fields, "standalone:true")
-	} else {
+	default:
 		add("pk", cfg.HypervisorPK)
 	}
 	add("seedpk", cfg.SeedPK)
@@ -202,9 +214,12 @@ func encryptKey(secretKeyHex, password string) (string, error) {
 }
 
 // wasmBootstrap gzips the wasm, base64s it, and emits the JS that decompresses
-// it in-browser (DecompressionStream) and instantiates + runs it. Go's wasm sets
-// globalThis.skywireDmsg and then blocks, so go.run is fired (not awaited).
-func wasmBootstrap(wasm []byte) (string, error) {
+// it in-browser (DecompressionStream) and instantiates + runs it. The wasm sets
+// its global (skywireDmsg / skywireVisor) and then blocks, so go.run is fired
+// (not awaited). When tinygo is true (the wasm-visor target), the gojs
+// runtime.getRandomData import that TinyGo's wasm_exec.js omits is injected — a
+// key-generating TinyGo build fails to instantiate without it.
+func wasmBootstrap(wasm []byte, tinygo bool) (string, error) {
 	var gz bytes.Buffer
 	w, err := gzip.NewWriterLevel(&gz, gzip.BestCompression)
 	if err != nil {
@@ -217,11 +232,20 @@ func wasmBootstrap(wasm []byte) (string, error) {
 		return "", err
 	}
 	b64 := base64.StdEncoding.EncodeToString(gz.Bytes())
+	shim := ""
+	if tinygo {
+		shim = `
+  if (go.importObject.gojs && !go.importObject.gojs["runtime.getRandomData"]) {
+    go.importObject.gojs["runtime.getRandomData"] = function(ptr, len){
+      crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
+    };
+  }`
+	}
 	return `(async function(){
   var b64 = "` + b64 + `";
   var bin = Uint8Array.from(atob(b64), function(c){ return c.charCodeAt(0); });
   var buf = await new Response(new Blob([bin]).stream().pipeThrough(new DecompressionStream("gzip"))).arrayBuffer();
-  var go = new Go();
+  var go = new Go();` + shim + `
   var res = await WebAssembly.instantiate(buf, go.importObject);
   go.run(res.instance);
 })();`, nil
