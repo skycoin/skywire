@@ -71,6 +71,10 @@
       switch (c.action) {
         case "boot":
           return await skywireVisor.boot(a[0] || "", a[1] || "", a[2] || "", a[3] || "");
+        case "hvApi": {
+          const r = await skywireVisor.hvApi(a[0] || "GET", a[1] || "/api/visors", a[2] || null);
+          return { status: r.status, body: new TextDecoder().decode(r.body) };
+        }
         case "status":
           return skywireVisor.status();
         case "reload":

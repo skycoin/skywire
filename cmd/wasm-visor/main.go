@@ -35,6 +35,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"syscall/js"
 	"time"
@@ -53,6 +54,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
 var (
@@ -63,6 +65,7 @@ var (
 	tpM    *transport.Manager
 	rtr    router.Router
 	procM  appserver.ProcManager
+	hvCore *wasmhv.Core
 )
 
 // vlog emits a step message to the browser console AND, when present, the
@@ -80,6 +83,7 @@ func main() {
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
 		"boot":   js.FuncOf(jsBoot),
 		"status": js.FuncOf(jsStatus),
+		"hvApi":  js.FuncOf(jsHvAPI),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -107,7 +111,7 @@ func jsStatus(js.Value, []js.Value) interface{} {
 	st := map[string]interface{}{
 		"pk": "", "booted": false,
 		"dmsg": false, "tpManager": false, "router": false, "procManager": false,
-		"transports": 0, "routes": 0,
+		"hypervisor": false, "transports": 0, "routes": 0,
 	}
 	if !selfPK.Null() {
 		st["pk"] = selfPK.Hex()
@@ -116,6 +120,7 @@ func jsStatus(js.Value, []js.Value) interface{} {
 	st["tpManager"] = tpM != nil
 	st["router"] = rtr != nil
 	st["procManager"] = procM != nil
+	st["hypervisor"] = hvCore != nil
 	// booted = the edge (dmsg + transport + router: rule reception + packet
 	// forwarding) plus the in-process app host (procManager). No app is running
 	// yet — that's the in-process-skychat step.
@@ -227,9 +232,47 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	procM = pm
 	vlog("proc_manager: ok")
 
-	vlog("EDGE + app-host booted")
+	// 5. hypervisor core: the tab also acts as a hypervisor — visors dial INTO it
+	// on the dmsg hypervisor port and it RPC-controls them (gobrpc CLIENT, which
+	// works under TinyGo). The HV UI's /api requests are served in-wasm via
+	// skywireVisor.hvApi(). This is the HV-UI path: the tab is a visor edge AND a
+	// hypervisor, so skychat etc. are reached through the HV UI rather than by
+	// porting the app.
+	vlog("hypervisor: serving…")
+	hvCore = wasmhv.NewCore(pk, dmsgC)
+	go func() {
+		if err := hvCore.Serve(ctx); err != nil {
+			mLog.PackageLogger("hypervisor").WithError(err).Error("hvCore.Serve returned")
+		}
+	}()
+	vlog("hypervisor: serving")
+
+	vlog("EDGE + app-host + hypervisor booted")
 	fmt.Printf("wasm-visor: booted pk=%s\n", pk.Hex())
 	return pk, nil
+}
+
+// jsHvAPI(method, path, bodyOrNull) → Promise<{status, body}>. Serves a
+// hypervisor /api request from the in-wasm wasmhv.Core.
+func jsHvAPI(_ js.Value, args []js.Value) interface{} {
+	method := args[0].String()
+	path := args[1].String()
+	var body []byte
+	if len(args) > 2 && !args[2].IsNull() && !args[2].IsUndefined() {
+		body = []byte(args[2].String())
+	}
+	return promise(func() (interface{}, error) {
+		if hvCore == nil {
+			return nil, errors.New("hypervisor not serving; boot() first")
+		}
+		status, b := hvCore.ServeHTTP(method, path, body)
+		res := js.Global().Get("Object").New()
+		res.Set("status", status)
+		buf := js.Global().Get("Uint8Array").New(len(b))
+		js.CopyBytesToJS(buf, b)
+		res.Set("body", buf)
+		return res, nil
+	})
 }
 
 func keysFromHex(skHex string) (cipher.PubKey, cipher.SecKey, error) {
