@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	types "github.com/skycoin/skywire/pkg/transport/types"
@@ -35,23 +36,39 @@ type WTEntry struct {
 
 // WTTable maps a peer PK to its WebTransport dial target (URL + pinned cert
 // hash). It is the WT analog of stcp.PKTable, which carries only a bare address.
+// SetEntry allows entries to be added at runtime (e.g. learned from a peer or a
+// JS hook), mirroring stcp.PKTable.SetAddr.
 type WTTable interface {
 	Entry(pk cipher.PubKey) (WTEntry, bool)
+	SetEntry(pk cipher.PubKey, e WTEntry)
 }
 
-// wtMemoryTable is an in-memory WTTable.
+// wtMemoryTable is an in-memory, concurrency-safe WTTable.
 type wtMemoryTable struct {
+	mu      sync.RWMutex
 	entries map[cipher.PubKey]WTEntry
 }
 
-// NewWTTable returns an in-memory WTTable from the given entries.
+// NewWTTable returns an in-memory WTTable seeded with the given entries (may be
+// nil for an empty, runtime-populated table).
 func NewWTTable(entries map[cipher.PubKey]WTEntry) WTTable {
+	if entries == nil {
+		entries = make(map[cipher.PubKey]WTEntry)
+	}
 	return &wtMemoryTable{entries: entries}
 }
 
 func (t *wtMemoryTable) Entry(pk cipher.PubKey) (WTEntry, bool) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	e, ok := t.entries[pk]
 	return e, ok
+}
+
+func (t *wtMemoryTable) SetEntry(pk cipher.PubKey, e WTEntry) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.entries[pk] = e
 }
 
 // wtClient is the WT-transport implementation of Client. table maps a peer PK to

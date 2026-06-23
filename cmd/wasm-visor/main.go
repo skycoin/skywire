@@ -16,6 +16,9 @@
 //
 //	const pk = await skywireVisor.boot(skHexOrEmpty, seedPkHex, seedWsURL, discDmsgAddr)
 //	skywireVisor.status()  // → { pk, booted, dmsg, tpManager, router, procManager, transports, routes }
+//	// dial a direct visor↔visor transport from this tab to a peer that listens:
+//	await skywireVisor.dialTransport(peerPkHex, "wt", "https://host:port/skywire", certHashHex)
+//	await skywireVisor.dialTransport(peerPkHex, "ws", "ws://host:port/")
 //
 // Build + run the dev harness (index.html drives boot/status/reload, and connects
 // back to the cmd/dmsg-wasm serve.go control bridge so a shell can drive the tab):
@@ -55,7 +58,9 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
@@ -69,6 +74,12 @@ var (
 	procM  appserver.ProcManager
 	hvCore *wasmhv.Core
 	tpd    transport.DiscoveryClient
+
+	// wsTable / wtTable hold the dial targets (peer PK → endpoint) for the
+	// browser-dialable direct transports. They are mutable so the dialTransport
+	// JS hook can add a target just before SaveTransport dials it.
+	wsTable stcp.PKTable
+	wtTable network.WTTable
 )
 
 // vlog emits a step message to the browser console AND, when present, the
@@ -84,10 +95,11 @@ func vlog(msg string) {
 func main() {
 	ctx = context.Background()
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
-		"boot":    js.FuncOf(jsBoot),
-		"status":  js.FuncOf(jsStatus),
-		"hvApi":   js.FuncOf(jsHvAPI),
-		"tpdEdge": js.FuncOf(jsTPDEdge),
+		"boot":          js.FuncOf(jsBoot),
+		"status":        js.FuncOf(jsStatus),
+		"hvApi":         js.FuncOf(jsHvAPI),
+		"tpdEdge":       js.FuncOf(jsTPDEdge),
+		"dialTransport": js.FuncOf(jsDialTransport),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -173,7 +185,15 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}
 	tpd = tpdclient.NewDmsg(dmsgC, tpdPK, pk, sk, mLog)
 	eb := appevent.NewBroadcaster(mLog.PackageLogger("eb"), time.Second)
-	factory := network.ClientFactory{PK: pk, SK: sk, DmsgC: dmsgC, MLogger: mLog, EB: eb}
+	// Browser-dialable direct transports (WS / WT). The tables start empty and are
+	// populated at dial time by the dialTransport JS hook; the tab can DIAL these
+	// (browser WebSocket / WebTransport) but never accept them.
+	wsTable = stcp.NewTable(nil)
+	wtTable = network.NewWTTable(nil)
+	factory := network.ClientFactory{
+		PK: pk, SK: sk, DmsgC: dmsgC, MLogger: mLog, EB: eb,
+		WSTable: wsTable, WTTable: wtTable,
+	}
 	tmConf := &transport.ManagerConfig{
 		PubKey:          pk,
 		SecKey:          sk,
@@ -190,6 +210,14 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	vlog("tp_manager: dmsg client inited; serving…")
 	go tm.Serve(ctx)
 	vlog("tp_manager: serving")
+	// Register the browser-dialable direct transport clients. Their Start() fails
+	// closed under TinyGo (a tab can't run a WS/WT listener) — logged, non-fatal —
+	// but Dial works, so SaveTransport(WS|WT) can create an outbound transport to a
+	// peer that runs the listener. This makes WS/WT "known" networks for the
+	// dialTransport hook.
+	tm.InitClient(ctx, types.WS, 0)
+	tm.InitClient(ctx, types.WT, 0)
+	vlog("tp_manager: WS/WT dial clients registered")
 
 	// 3. edge router (receives route rules + forwards/consumes packets). nil
 	// RouteFinder/RouteGroupDialer → the route-SOURCE path is the build-tagged
@@ -353,5 +381,57 @@ func jsTPDEdge(_ js.Value, args []js.Value) interface{} {
 		}
 		b, _ := json.Marshal(entries) //nolint:errcheck
 		return string(b), nil
+	})
+}
+
+// jsDialTransport(pkHex, netType, url, certHash) creates a direct visor↔visor
+// transport from this tab to a peer that runs the listener:
+//   - netType "ws": url is the peer's ws:// (or wss://) WebSocket endpoint.
+//   - netType "wt": url is the peer's https:// WebTransport endpoint and
+//     certHash is the lowercase SHA-256 hex of its self-signed cert (CA-free,
+//     the browser serverCertificateHashes model).
+//
+// It registers the dial target in the appropriate table, then SaveTransport dials
+// it (browser WebSocket / WebTransport) and registers the new edge in the TPD over
+// dmsg — so peers' route-finders can path to this tab over the new link. Returns
+// the transport ID on success.
+func jsDialTransport(_ js.Value, args []js.Value) interface{} {
+	pkHex := args[0].String()
+	netType := args[1].String()
+	url := args[2].String()
+	certHash := ""
+	if len(args) > 3 {
+		certHash = args[3].String()
+	}
+	return promise(func() (interface{}, error) {
+		if tpM == nil {
+			return nil, errors.New("not booted; call boot() first")
+		}
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+			return nil, fmt.Errorf("bad pk: %w", err)
+		}
+		switch types.Type(netType) {
+		case types.WS:
+			if wsTable == nil {
+				return nil, errors.New("ws table not initialized")
+			}
+			wsTable.SetAddr(pk, url)
+		case types.WT:
+			if wtTable == nil {
+				return nil, errors.New("wt table not initialized")
+			}
+			if certHash == "" {
+				return nil, errors.New("wt requires a cert hash (4th arg)")
+			}
+			wtTable.SetEntry(pk, network.WTEntry{URL: url, CertHash: certHash})
+		default:
+			return nil, fmt.Errorf("unsupported transport type %q (use ws or wt)", netType)
+		}
+		tp, err := tpM.SaveTransport(ctx, pk, types.Type(netType), transport.LabelUser)
+		if err != nil {
+			return nil, fmt.Errorf("save transport: %w", err)
+		}
+		return tp.Entry.ID.String(), nil
 	})
 }
