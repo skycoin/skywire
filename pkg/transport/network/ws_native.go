@@ -39,10 +39,18 @@ func (c *wsClient) Start() error {
 }
 
 func (c *wsClient) serve() {
-	lis, err := newWSListener(c.listenAddr)
-	if err != nil {
-		c.log.Errorf("Failed to start WS listener on %q: %v", c.listenAddr, err)
-		return
+	var lis *wsListener
+	if c.sharedListener != nil {
+		// Unified transport port: run the WS HTTP server over the shared listener's
+		// HTTP virtual listener instead of binding our own.
+		lis = newWSListenerOver(c.sharedListener)
+	} else {
+		var err error
+		lis, err = newWSListener(c.listenAddr)
+		if err != nil {
+			c.log.Errorf("Failed to start WS listener on %q: %v", c.listenAddr, err)
+			return
+		}
 	}
 	c.acceptTransports(lis)
 }
@@ -62,6 +70,13 @@ func newWSListener(addr string) (*wsListener, error) {
 	if err != nil {
 		return nil, err
 	}
+	return newWSListenerOver(tcpLis), nil
+}
+
+// newWSListenerOver runs the WebSocket HTTP server over an already-bound TCP
+// listener (e.g. the HTTP virtual listener of a unified transport_port demux),
+// rather than binding its own.
+func newWSListenerOver(tcpLis net.Listener) *wsListener {
 	l := &wsListener{
 		addr:  tcpLis.Addr(),
 		conns: make(chan net.Conn),
@@ -71,7 +86,7 @@ func newWSListener(addr string) (*wsListener, error) {
 	mux.HandleFunc("/", l.handle)
 	l.srv = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
 	go l.srv.Serve(tcpLis) //nolint:errcheck
-	return l, nil
+	return l
 }
 
 func (l *wsListener) handle(w http.ResponseWriter, r *http.Request) {
