@@ -32,7 +32,11 @@ func (f *ClientFactory) makeResolvedClient(netType types.Type, generic *genericC
 	resolved := &resolvedClient{genericClient: generic, ar: ar}
 	switch netType {
 	case types.STCPR:
-		return newStcpr(resolved, port), nil
+		c := newStcpr(resolved, port)
+		if f.stcprSharedListener != nil { // unified transport port
+			c.(*stcprClient).sharedListener = f.stcprSharedListener
+		}
+		return c, nil
 	case types.SUDPH:
 		c, err := makeSudphClient(resolved, port)
 		if err != nil {

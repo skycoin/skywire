@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
@@ -28,6 +29,11 @@ import (
 type wsClient struct {
 	*genericClient
 	table stcp.PKTable
+	// sharedListener, when set, is the TCP listener the WS HTTP server serves over
+	// instead of binding its own — the HTTP virtual listener of a unified
+	// transport_port socket (see tcpDemux, !tinygo). net.Listener so this stays in
+	// the untagged file; only ws_native.go (the server) consumes it.
+	sharedListener net.Listener
 }
 
 func newWS(generic *genericClient, table stcp.PKTable) Client {
