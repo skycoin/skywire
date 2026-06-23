@@ -65,7 +65,7 @@ func TestWebTransportSession(t *testing.T) {
 	// Two WT-preferring clients.
 	wtConf := func() *Config {
 		c := DefaultConfig()
-		c.PreferWT = true
+		c.Carriers = []string{CarrierWT}
 		return c
 	}
 	pkA, skA := GenKeyPair(t, "client A")
@@ -152,7 +152,7 @@ func TestWebTransportCertHashMismatch(t *testing.T) {
 
 	pkA, skA := GenKeyPair(t, "client A")
 	conf := DefaultConfig()
-	conf.PreferWT = true
+	conf.Carriers = []string{CarrierWT}
 	clientA := NewClient(pkA, skA, dc, conf)
 	clientA.SetLogger(logging.MustGetLogger("wt_client_bad"))
 	go clientA.Serve(context.Background())
