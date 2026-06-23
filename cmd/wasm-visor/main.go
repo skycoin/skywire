@@ -22,6 +22,8 @@
 //	await skywireVisor.dialTransport(peerPkHex, "webrtc") // direct DataChannel, signaling over dmsg
 //	// fetch arbitrary content over dmsg (browse a skynet/dmsg site by PK):
 //	await skywireVisor.fetchDmsg("<pk>" /*or "pk:port"*/, "GET", "/", null) // → {status, body, headers}
+//	// self-host content over dmsg (others reach it via fetchDmsg(<this-pk>, ...)):
+//	skywireVisor.serveContent({ "/": {ct:"text/html", body:"<h1>hi from a tab</h1>"} })
 //
 // Build + run the dev harness (index.html drives boot/status/reload, and connects
 // back to the cmd/dmsg-wasm serve.go control bridge so a shell can drive the tab):
@@ -105,6 +107,7 @@ func main() {
 		"tpdEdge":       js.FuncOf(jsTPDEdge),
 		"dialTransport": js.FuncOf(jsDialTransport),
 		"fetchDmsg":     js.FuncOf(jsFetchDmsg),
+		"serveContent":  js.FuncOf(jsServeContent),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
