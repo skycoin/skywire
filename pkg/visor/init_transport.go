@@ -385,11 +385,23 @@ func initStcprClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 // initQuicClient starts the experimental QUIC transport when a quic_port is
 // configured (#2607 QUIC follow-on). Opt-in: a zero port leaves it disabled.
 func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	if v.conf.Transport == nil || v.conf.Transport.QUICPort == 0 {
-		return nil
+	// QUIC is on by default, like stcpr/sudph — a visor accepts every transport
+	// type it can. quic_port (if set) PINS the UDP port for a stable firewall
+	// rule / AR registration; left 0 it binds an ephemeral port, exactly as
+	// sudph_port does. The QUIC client registers whatever port it actually bound
+	// with the address resolver (BindQUIC), so a random port works and survives
+	// restarts via re-registration. QUIC doesn't hole-punch (it dials AR-resolved
+	// addresses), so unlike sudph it needs no STUN gate and starts immediately.
+	port := 0
+	if v.conf.Transport != nil {
+		port = v.conf.Transport.QUICPort
 	}
-	log.Infof("Initializing QUIC transport on UDP port %d", v.conf.Transport.QUICPort)
-	v.tpM.InitClient(ctx, types.QUIC, v.conf.Transport.QUICPort)
+	if port == 0 {
+		log.Info("Initializing QUIC transport on an ephemeral UDP port")
+	} else {
+		log.Infof("Initializing QUIC transport on UDP port %d", port)
+	}
+	v.tpM.InitClient(ctx, types.QUIC, port)
 	return nil
 }
 

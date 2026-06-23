@@ -400,10 +400,11 @@ type Transport struct {
 	LogStore              *LogStore       `json:"log_store"`
 	StcprPort             int             `json:"stcpr_port"`
 	SudphPort             int             `json:"sudph_port"`
-	// QUICPort enables the experimental QUIC transport on the given UDP port
-	// (#2607 QUIC follow-on). 0 (default/omitted) disables it — QUIC is opt-in
-	// until proven on the fleet. A fixed port is preferable to ephemeral so the
-	// address-resolver registration + any firewall rule are stable.
+	// QUICPort optionally PINS the UDP port for the QUIC transport (#2607). QUIC
+	// is on by default (like stcpr/sudph); 0 (default/omitted) binds an ephemeral
+	// port — exactly as sudph_port does. Set a fixed port when a stable firewall
+	// rule is wanted; the bound port is registered with the address resolver
+	// either way, so a random port works and survives restarts.
 	QUICPort int `json:"quic_port,omitempty"`
 	// ARTransportLimit controls address resolver registration for privacy:
 	//   0 (default): stay registered indefinitely
