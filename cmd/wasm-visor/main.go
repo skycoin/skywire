@@ -49,6 +49,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -280,6 +281,10 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// porting the app.
 	vlog("hypervisor: serving…")
 	hvCore = wasmhv.NewCore(pk, dmsgC)
+	// The tab is a visor AND its own hypervisor: surface THIS visor in the HV UI
+	// (identity / routes / transports), read from its own transport.Manager +
+	// router, alongside any remote visors that dial in.
+	hvCore.SetSelf(visorSelf{})
 	go func() {
 		if err := hvCore.Serve(ctx); err != nil {
 			mLog.PackageLogger("hypervisor").WithError(err).Error("hvCore.Serve returned")
@@ -382,6 +387,50 @@ func jsTPDEdge(_ js.Value, args []js.Value) interface{} {
 		b, _ := json.Marshal(entries) //nolint:errcheck
 		return string(b), nil
 	})
+}
+
+// visorSelf is the wasmhv.SelfProvider for the tab's own visor: it reads the
+// local identity, route count, and transports straight from this process's
+// router + transport.Manager, so the HV UI shows THIS visor (not just remote
+// visors that dial in).
+type visorSelf struct{}
+
+func (visorSelf) SelfPK() cipher.PubKey { return selfPK }
+
+func (visorSelf) SelfOverview() wasmhv.Overview {
+	ov := wasmhv.Overview{PubKey: selfPK, BuildInfo: buildinfo.Get()}
+	if rtr != nil {
+		ov.RoutesCount = rtr.RoutesCount()
+	}
+	return ov
+}
+
+func (s visorSelf) SelfSummary() wasmhv.Summary {
+	ov := s.SelfOverview()
+	return wasmhv.Summary{
+		Overview:     &ov,
+		Health:       &wasmhv.HealthInfo{ServicesHealth: "healthy"},
+		Online:       true,
+		IsHypervisor: true,
+	}
+}
+
+func (visorSelf) SelfTransports() []*wasmhv.TransportSummary {
+	out := []*wasmhv.TransportSummary{}
+	if tpM == nil {
+		return out
+	}
+	tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
+		out = append(out, &wasmhv.TransportSummary{
+			ID:     mt.Entry.ID,
+			Local:  selfPK,
+			Remote: mt.Remote(),
+			Type:   string(mt.Type()),
+			Label:  string(mt.Entry.Label),
+		})
+		return true
+	})
+	return out
 }
 
 // jsDialTransport(pkHex, netType, url, certHash) creates a direct visor↔visor
