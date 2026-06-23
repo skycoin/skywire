@@ -503,11 +503,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// share one master UDP socket (demuxed) instead of binding a port each. 0 =
 	// per-type binding (default). See docs/design/transport-port-unification.md.
 	if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
-		if err := factory.EnableUnifiedUDP(v.conf.Transport.TransportPort); err != nil {
-			return fmt.Errorf("unified transport port: %w", err)
+		port := v.conf.Transport.TransportPort
+		if err := factory.EnableUnifiedUDP(port); err != nil {
+			return fmt.Errorf("unified transport port (udp): %w", err)
 		}
-		log.Infof("Unified transport port: QUIC + sudph share UDP port %d", v.conf.Transport.TransportPort)
+		if err := factory.EnableUnifiedTCP(port); err != nil {
+			return fmt.Errorf("unified transport port (tcp): %w", err)
+		}
+		log.Infof("Unified transport port %d: QUIC+sudph share UDP, stcpr+WS share TCP", port)
 		v.pushCloseStack("transport.unified_udp", factory.CloseUnifiedUDP)
+		v.pushCloseStack("transport.unified_tcp", factory.CloseUnifiedTCP)
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
