@@ -457,15 +457,15 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		listenAddr = v.conf.STCP.ListeningAddress
 	}
 	v.stcpTable = table
-	// WebRTC ICE servers (only when the opt-in WebRTC transport is enabled): the
-	// configured STUN servers, prefixed with the stun: scheme the WebRTC stack
-	// wants. Set on the factory now; the WEBRTC client is started after dmsg comes
-	// up (init_dmsg → InitClient), since its signaling rides the dmsg client.
+	// WebRTC ICE servers: the configured STUN servers, prefixed with the stun:
+	// scheme the WebRTC stack wants. Set on the factory now; the WEBRTC client is
+	// started after dmsg comes up (init_dmsg → InitClient), since its signaling
+	// rides the dmsg client. WebRTC is on by default, like stcpr/sudph — a visor
+	// accepts every transport type it can, so browser visors (which can't do
+	// stcpr/sudph/quic) can always reach it.
 	var iceURLs []string
-	if v.conf.Transport != nil && v.conf.Transport.WebRTC {
-		for _, s := range v.conf.StunServers {
-			iceURLs = append(iceURLs, "stun:"+s)
-		}
+	for _, s := range v.conf.StunServers {
+		iceURLs = append(iceURLs, "stun:"+s)
 	}
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
