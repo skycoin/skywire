@@ -46,7 +46,7 @@ type sudphClient struct {
 // makeSudphClient is the build-tagged SUDPH constructor used by MakeClient. The
 // TinyGo build (sudph_tinygo.go) returns an unsupported error so the browser
 // graph never pulls kcp-go/pfilter (which transitively import quic-go).
-func makeSudphClient(resolved *resolvedClient, port int) (Client, error) {
+func makeSudphClient(resolved *resolvedClient, port int) (Client, error) { //nolint:unparam // error is for build-tag parity with the tinygo stub
 	return newSudph(resolved, port), nil
 }
 
