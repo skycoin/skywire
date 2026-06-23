@@ -67,6 +67,9 @@ type ClientFactory struct {
 	// WTTable maps a peer PK to its direct WebTransport endpoint + pinned cert
 	// hash for the WT transport type. A nil/absent table disables WT dialing.
 	WTTable WTTable
+	// ICEURLs are the STUN/TURN URLs used for ICE by the WEBRTC transport type
+	// (skywire's own STUN, reused from sudph). Empty = host candidates only.
+	ICEURLs []string
 	// ARClient is the address-resolver client (addrresolver.APIClient). Typed as
 	// `any` so this file doesn't import addrresolver — which pulls net/http +
 	// packetfilter (→ quic-go), none of which compile on the TinyGo target. Only
@@ -113,6 +116,8 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		return newWS(generic, f.WSTable), nil
 	case types.WT:
 		return newWT(generic, f.WTTable), nil
+	case types.WEBRTC:
+		return newWebRTC(generic, f.DmsgC, f.ICEURLs), nil
 	case types.DMSG:
 		return newDmsgClient(f.DmsgC), nil
 	}
