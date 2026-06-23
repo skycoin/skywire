@@ -47,8 +47,9 @@ func (c *Core) selfRoute(self SelfProvider, sub string) (int, []byte) {
 	case "transports":
 		return jsonResp(self.SelfTransports())
 	case "transport-types":
-		// The browser-dialable direct transport types the wasm-visor supports.
-		return jsonResp([]string{"dmsg", "ws", "wt"})
+		// The direct transport types the wasm-visor can create (WebRTC is a
+		// symmetric DataChannel; ws/wt are browser-dial-only).
+		return jsonResp([]string{"dmsg", "ws", "wt", "webrtc"})
 	}
 	return 404, []byte(`{"error":"self visor subroute not implemented in wasm core"}`)
 }

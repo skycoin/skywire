@@ -19,6 +19,7 @@
 //	// dial a direct visor↔visor transport from this tab to a peer that listens:
 //	await skywireVisor.dialTransport(peerPkHex, "wt", "https://host:port/skywire", certHashHex)
 //	await skywireVisor.dialTransport(peerPkHex, "ws", "ws://host:port/")
+//	await skywireVisor.dialTransport(peerPkHex, "webrtc") // direct DataChannel, signaling over dmsg
 //
 // Build + run the dev harness (index.html drives boot/status/reload, and connects
 // back to the cmd/dmsg-wasm serve.go control bridge so a shell can drive the tab):
@@ -191,9 +192,15 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// (browser WebSocket / WebTransport) but never accept them.
 	wsTable = stcp.NewTable(nil)
 	wtTable = network.NewWTTable(nil)
+	// WebRTC ICE servers: the deployment's own STUN (reused from sudph). The
+	// bare host:port entries need the stun: URL scheme the WebRTC stack expects.
+	var iceURLs []string
+	for _, s := range deployment.Prod.StunServers {
+		iceURLs = append(iceURLs, "stun:"+s)
+	}
 	factory := network.ClientFactory{
 		PK: pk, SK: sk, DmsgC: dmsgC, MLogger: mLog, EB: eb,
-		WSTable: wsTable, WTTable: wtTable,
+		WSTable: wsTable, WTTable: wtTable, ICEURLs: iceURLs,
 	}
 	tmConf := &transport.ManagerConfig{
 		PubKey:          pk,
@@ -218,7 +225,10 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// dialTransport hook.
 	tm.InitClient(ctx, types.WS, 0)
 	tm.InitClient(ctx, types.WT, 0)
-	vlog("tp_manager: WS/WT dial clients registered")
+	// WebRTC is symmetric: InitClient also starts the dmsg signaling listener
+	// (port 47), so the tab can ACCEPT WebRTC DataChannels, not just dial them.
+	tm.InitClient(ctx, types.WEBRTC, 0)
+	vlog("tp_manager: WS/WT/WebRTC dial clients registered")
 
 	// 3. edge router (receives route rules + forwards/consumes packets). nil
 	// RouteFinder/RouteGroupDialer → the route-SOURCE path is the build-tagged
@@ -439,15 +449,19 @@ func (visorSelf) SelfTransports() []*wasmhv.TransportSummary {
 //   - netType "wt": url is the peer's https:// WebTransport endpoint and
 //     certHash is the lowercase SHA-256 hex of its self-signed cert (CA-free,
 //     the browser serverCertificateHashes model).
+//   - netType "webrtc": no url — signaling rides dmsg by PK; a direct DataChannel
+//     is negotiated to the peer (which must also run a WebRTC transport).
 //
-// It registers the dial target in the appropriate table, then SaveTransport dials
-// it (browser WebSocket / WebTransport) and registers the new edge in the TPD over
-// dmsg — so peers' route-finders can path to this tab over the new link. Returns
-// the transport ID on success.
+// It registers any dial target in the appropriate table, then SaveTransport dials
+// it and registers the new edge in the TPD over dmsg — so peers' route-finders can
+// path to this tab over the new link. Returns the transport ID on success.
 func jsDialTransport(_ js.Value, args []js.Value) interface{} {
 	pkHex := args[0].String()
 	netType := args[1].String()
-	url := args[2].String()
+	url := ""
+	if len(args) > 2 {
+		url = args[2].String()
+	}
 	certHash := ""
 	if len(args) > 3 {
 		certHash = args[3].String()
@@ -474,8 +488,10 @@ func jsDialTransport(_ js.Value, args []js.Value) interface{} {
 				return nil, errors.New("wt requires a cert hash (4th arg)")
 			}
 			wtTable.SetEntry(pk, network.WTEntry{URL: url, CertHash: certHash})
+		case types.WEBRTC:
+			// No dial target: WebRTC signals to the peer by PK over dmsg.
 		default:
-			return nil, fmt.Errorf("unsupported transport type %q (use ws or wt)", netType)
+			return nil, fmt.Errorf("unsupported transport type %q (use ws, wt, or webrtc)", netType)
 		}
 		tp, err := tpM.SaveTransport(ctx, pk, types.Type(netType), transport.LabelUser)
 		if err != nil {
