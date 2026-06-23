@@ -37,6 +37,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
@@ -527,6 +528,14 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	logger := dmsgC.Logger()
 	logger.Debug("Initializing DMSG transport client...")
 	v.tpM.InitDmsgClient(ctx, dmsgC)
+
+	// WebRTC (opt-in) signals over dmsg, so its client is started only now that
+	// the manager has the dmsg client. InitClient also starts the dmsg signaling
+	// listener, so the visor ACCEPTS WebRTC dials (e.g. from browser visors).
+	if v.conf.Transport != nil && v.conf.Transport.WebRTC {
+		logger.Info("Initializing WebRTC transport client (opt-in)...")
+		v.tpM.InitClient(ctx, tptypes.WEBRTC, 0)
+	}
 
 	// dmsgctrl setup — listen for incoming control streams (ping/pong).
 	// Each accepted Control is self-serving (handles ping/pong in its own goroutine).
