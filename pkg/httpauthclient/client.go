@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package httpauthclient http authorizatioon
 package httpauthclient
 
