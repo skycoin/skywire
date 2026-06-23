@@ -33,7 +33,8 @@ func newVertex(edgeID cipher.PubKey, transports []*transport.Entry) *vertex {
 			neighbourPk = tr.Edges[0]
 		}
 		// When multiple transports exist between the same edges, prefer the
-		// one with the lower TypePreference (STCPR > SUDPH > STCP > DMSG).
+		// one with the lower TypePreference (see tptypes.defaultPreference:
+		// STCPR > QUIC > SUDPH > STCP > WEBRTC > WS > WT > DMSG).
 		if existing, ok := connections[neighbourPk]; ok &&
 			tptypes.TypePreference(tr.Type) >= tptypes.TypePreference(existing.Type) {
 			continue
