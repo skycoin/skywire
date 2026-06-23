@@ -42,11 +42,16 @@ const quicErrNoStream quic.ApplicationErrorCode = 1
 
 type quicClient struct {
 	*resolvedClient
-	port     int
-	udpConn  net.PacketConn
-	listener *quic.Listener
-	tlsCert  tls.Certificate
-	qconf    *quic.Config
+	port int
+	// sharedConn, when set, is the UDP socket QUIC listens over instead of
+	// binding its own — the QUIC demux conn of a unified transport_port socket
+	// (see udpDemux). nil = bind a dedicated socket (the default / per-type-port
+	// behavior). The master socket's lifecycle is owned by the demux, not here.
+	sharedConn net.PacketConn
+	udpConn    net.PacketConn
+	listener   *quic.Listener
+	tlsCert    tls.Certificate
+	qconf      *quic.Config
 }
 
 // makeQuicClient is the build-tagged QUIC constructor used by MakeClient. On
@@ -238,20 +243,27 @@ func (c *quicClient) serve() {
 
 func (c *quicClient) listen() (net.Listener, error) {
 	var udpConn net.PacketConn
-	var err error
-	confPort := ""
-	if c.port != 0 {
-		confPort = fmt.Sprintf(":%d", c.port)
-	}
-	for {
-		udpConn, err = net.ListenPacket("udp", confPort)
-		if err != nil {
-			c.log.WithError(err).Warnf("Failed to listen on UDP port %d", c.port)
-			c.port++
+	if c.sharedConn != nil {
+		// Unified transport port: listen over the shared socket's QUIC demux conn.
+		// quic.Listen does not own the PacketConn, so the master socket lifecycle
+		// stays with the demux.
+		udpConn = c.sharedConn
+	} else {
+		var err error
+		confPort := ""
+		if c.port != 0 {
 			confPort = fmt.Sprintf(":%d", c.port)
-			continue
 		}
-		break
+		for {
+			udpConn, err = net.ListenPacket("udp", confPort)
+			if err != nil {
+				c.log.WithError(err).Warnf("Failed to listen on UDP port %d", c.port)
+				c.port++
+				confPort = fmt.Sprintf(":%d", c.port)
+				continue
+			}
+			break
+		}
 	}
 	c.udpConn = udpConn
 
