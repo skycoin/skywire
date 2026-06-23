@@ -72,22 +72,26 @@ type Config struct {
 	ConnectedServersType string
 	Protocol             string
 
-	// PreferWS makes the client dial a server's WebSocket endpoint
-	// (Server.AddressWS) when one is advertised, in preference to TCP/QUIC,
-	// falling back to TCP on WS failure. Native clients leave this false
-	// (raw TCP/QUIC is strictly better for them); it exists for restrictive
-	// networks where only HTTP(S)/443 egress is allowed, and is forced true
-	// in the js/wasm build, which has no other transport available.
-	PreferWS bool
-
-	// PreferWT makes the client dial a server's WebTransport endpoint
-	// (Server.AddressWT) when one is advertised, in preference to TCP/QUIC/WS,
-	// falling back to TCP on WT failure. Like PreferWS this is for non-default
-	// clients: it exists chiefly for the native test/tooling path that exercises
-	// the WebTransport listener (the production WT consumer is a browser dialing
-	// directly in JS). Native mesh clients leave this false.
-	PreferWT bool
+	// Carriers is the ordered preference of dmsg CARRIERS — how this client
+	// reaches a dmsg server — by name: "tcp", "ws", "wt", "quic". The first
+	// listed carrier the server advertises is dialed (falling back to TCP on dial
+	// failure). The carrier is transparent above the session: every dmsg stream is
+	// the same Noise+yamux regardless, so this only affects how bytes reach the
+	// rendezvous server. Empty (the native default) = QUIC when the server
+	// advertises it, else TCP — raw sockets are strictly better for native
+	// clients. It exists for restrictive networks (e.g. only 443/HTTPS egress →
+	// ["wt"] or ["ws"]) and is set to ["ws"] in the js/wasm build, which has no
+	// raw socket. Unknown names are ignored.
+	Carriers []string
 }
+
+// Carrier names for Config.Carriers.
+const (
+	CarrierTCP  = "tcp"
+	CarrierWS   = "ws"
+	CarrierWT   = "wt"
+	CarrierQUIC = "quic"
+)
 
 // Ensure ensures all config values are set.
 func (c *Config) Ensure() {
