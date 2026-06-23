@@ -27,6 +27,14 @@ const (
 	// browser's WebSocket API) but not accept it (no server) — server-visors run
 	// the WS listener; see pkg/transport/network/ws_native.go / ws_tinygo.go.
 	WS Type = "ws"
+	// WEBRTC is a type of a transport that works visor-to-visor over a direct
+	// WebRTC DataChannel (DTLS+SCTP, NAT-traversed via ICE). It is the genuinely
+	// peer-to-peer transport: the payload rides a direct encrypted pipe between two
+	// leaves, no relay. dmsg is the signaling side-channel (SDP offer/answer + ICE
+	// candidates over a dmsg stream on a fixed port); once the DataChannel opens it
+	// is adapted to a net.Conn carrying the usual Noise+yamux session. Both ends can
+	// be browsers (syscall/js) or native (pion); see pkg/transport/network/webrtc*.
+	WEBRTC Type = "webrtc"
 	// WT is a type of a transport that works visor-to-visor over a direct
 	// WebTransport (HTTP/3 over QUIC) link, resolving the peer's https:// endpoint
 	// and pinned cert hash via a table. Like the dmsg WebTransport carrier, the

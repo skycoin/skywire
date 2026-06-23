@@ -1,0 +1,143 @@
+// Package network pkg/transport/network/webrtc.go
+//
+// WEBRTC is a first-class skywire transport type: a direct visor-to-visor link
+// over a WebRTC DataChannel (DTLS+SCTP, NAT-traversed via ICE). Unlike WS/WT
+// (which dial a single listening endpoint), WebRTC is genuinely peer-to-peer —
+// the payload rides a direct encrypted pipe between the two leaves, no relay.
+//
+// WebRTC needs a signaling side-channel to exchange the SDP offer/answer and ICE
+// candidates BEFORE the direct pipe exists. dmsg is that channel: the dialing
+// visor opens a dmsg stream to the peer's signaling port (webrtcSignalPort) and
+// the two run the offer/answer/ICE handshake over it (signalConn — 4-byte
+// length-prefixed JSON, the SAME wire format the browser carrier uses, so a
+// native pion visor and a browser visor interoperate). Once the DataChannel
+// opens it is adapted to a net.Conn and flows through the SAME genericClient
+// initTransport (Noise + yamux) path as every other carrier.
+//
+// The carrier is build-tagged: webrtc_native.go (pion) on native; the browser
+// (TinyGo/js) dials the browser-native RTCPeerConnection. Both can dial AND
+// accept (WebRTC is symmetric), unlike WS/WT where a browser can only dial.
+package network
+
+import (
+	"context"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"sync"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	types "github.com/skycoin/skywire/pkg/transport/types"
+)
+
+// webrtcSignalPort is the dmsg port the WebRTC signaling listener accepts on
+// (mirror of the browser carrier's port 47, so native and browser interoperate).
+const webrtcSignalPort uint16 = 47
+
+// signalMsg is one signaling message exchanged over the dmsg signaling stream.
+// The JSON field set + names match the browser carrier exactly (interop).
+type signalMsg struct {
+	Type      string `json:"type"`                // "offer" | "answer" | "candidate"
+	SDP       string `json:"sdp,omitempty"`       // for offer/answer
+	Candidate string `json:"candidate,omitempty"` // for an ICE candidate
+	SDPMid    string `json:"sdpMid,omitempty"`
+	SDPMLine  int    `json:"sdpMLineIndex,omitempty"`
+}
+
+// signalConn frames signalMsgs as 4-byte big-endian length-prefixed JSON over an
+// io.ReadWriteCloser (a dmsg stream in production, a net.Pipe in tests). send is
+// safe for concurrent use: ICE candidates (from the OnICECandidate callback) and
+// the offer/answer (from the pump) are sent from different goroutines, so the
+// header+body pair must be written atomically.
+type signalConn struct {
+	rwc   io.ReadWriteCloser
+	wmu   sync.Mutex
+	hdr   [4]byte
+	rdHdr [4]byte
+}
+
+func (c *signalConn) send(m signalMsg) error {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	binary.BigEndian.PutUint32(c.hdr[:], uint32(len(b))) //nolint:gosec // len(b) of a marshaled signalMsg is far below 2^32
+	if _, err := c.rwc.Write(c.hdr[:]); err != nil {
+		return err
+	}
+	_, err = c.rwc.Write(b)
+	return err
+}
+
+func (c *signalConn) recv() (signalMsg, error) {
+	if _, err := io.ReadFull(c.rwc, c.rdHdr[:]); err != nil {
+		return signalMsg{}, err
+	}
+	n := binary.BigEndian.Uint32(c.rdHdr[:])
+	if n > 1<<20 {
+		return signalMsg{}, fmt.Errorf("signal frame too large: %d", n)
+	}
+	b := make([]byte, n)
+	if _, err := io.ReadFull(c.rwc, b); err != nil {
+		return signalMsg{}, err
+	}
+	var m signalMsg
+	err := json.Unmarshal(b, &m)
+	return m, err
+}
+
+func (c *signalConn) Close() error { return c.rwc.Close() }
+
+// webrtcClient is the WEBRTC-transport implementation of Client. It signals over
+// the dmsg client (dialing/accepting webrtcSignalPort) and negotiates a direct
+// DataChannel per peer.
+type webrtcClient struct {
+	*genericClient
+	dmsgC   *dmsg.Client
+	iceURLs []string // STUN/TURN URLs for ICE (skywire's own STUN; may be empty)
+}
+
+func newWebRTC(generic *genericClient, dmsgC *dmsg.Client, iceURLs []string) Client {
+	client := &webrtcClient{genericClient: generic, dmsgC: dmsgC, iceURLs: iceURLs}
+	client.netType = types.WEBRTC
+	return client
+}
+
+// ErrWebRTCNoDmsg is returned when the WebRTC client has no dmsg client to signal
+// over (signaling rides dmsg).
+var ErrWebRTCNoDmsg = errors.New("webrtc: no dmsg client for signaling")
+
+// Dial implements Client: open a dmsg signaling stream to the peer, run the
+// offerer handshake (build-tagged: pion on native, the browser RTCPeerConnection
+// under TinyGo/js), and wrap the negotiated DataChannel in a skywire transport.
+func (c *webrtcClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (Transport, error) {
+	if c.isClosed() {
+		return nil, io.ErrClosedPipe
+	}
+	if c.dmsgC == nil {
+		return nil, ErrWebRTCNoDmsg
+	}
+	c.log.Debugf("Dialing WebRTC %v (signaling over dmsg:%d)", rPK, webrtcSignalPort)
+
+	str, err := c.dmsgC.DialStream(ctx, dmsg.Addr{PK: rPK, Port: webrtcSignalPort})
+	if err != nil {
+		return nil, fmt.Errorf("webrtc: dial signaling: %w", err)
+	}
+	conn, err := webrtcDial(ctx, str, c.iceURLs)
+	if err != nil {
+		str.Close() //nolint:errcheck,gosec
+		return nil, err
+	}
+
+	tp, err := c.initTransport(ctx, conn, rPK, rPort)
+	if err != nil {
+		conn.Close() //nolint:errcheck,gosec
+		return nil, err
+	}
+	return tp, nil
+}
