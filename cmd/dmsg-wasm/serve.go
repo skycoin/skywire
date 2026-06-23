@@ -13,6 +13,13 @@
 //	curl -s localhost:8085/ctl/tabs
 //	curl -s -XPOST 'localhost:8085/ctl/cmd?tab=<id>' -d '{"action":"connect","args":["","<seedPK>","<seedWS>","<discAddr>"]}'
 //	curl -s 'localhost:8085/ctl/log?tab=<id>'
+//
+// To PROVE two wasm-visor instances meshing in one shot (serving build/wasm-visor):
+//
+//	go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor
+//	# open two tabs, note their ids from /ctl/tabs, then:
+//	curl -s 'localhost:8085/ctl/meshtest?a=<tabA>&b=<tabB>&seedpk=<pk>&seedws=<ws>&disc=<dmsg://pk:80>'
+//	# → boots both, dials a WebRTC transport a→b, verifies both see a transport.
 package main
 
 import (
@@ -63,6 +70,43 @@ func getTab(id string) *tab {
 		tabs[id] = t
 	}
 	return t
+}
+
+// sendCmd queues one command for a tab over SSE and waits for its result. Shared
+// by /ctl/cmd (single command) and /ctl/meshtest (a scripted sequence).
+func sendCmd(tabID, action string, args ...interface{}) (result, error) {
+	mu.Lock()
+	t := tabs[tabID]
+	mu.Unlock()
+	if t == nil {
+		return result{}, fmt.Errorf("no such tab %q (open it first)", tabID)
+	}
+	if args == nil {
+		args = []interface{}{}
+	}
+	mu.Lock()
+	seq++
+	c := command{ID: fmt.Sprintf("c%d", seq), Action: action, Args: args}
+	ch := make(chan result, 1)
+	pending[c.ID] = ch
+	mu.Unlock()
+	defer func() { mu.Lock(); delete(pending, c.ID); mu.Unlock() }()
+
+	t.mu.Lock()
+	evCh := t.events
+	t.mu.Unlock()
+	b, _ := json.Marshal(c)
+	select {
+	case evCh <- string(b):
+	case <-time.After(5 * time.Second):
+		return result{}, fmt.Errorf("tab %q not receiving", tabID)
+	}
+	select {
+	case res := <-ch:
+		return res, nil
+	case <-time.After(40 * time.Second):
+		return result{}, fmt.Errorf("tab %q command %q timeout", tabID, action)
+	}
 }
 
 func main() {
@@ -180,30 +224,75 @@ func main() {
 			http.Error(w, err.Error(), 400)
 			return
 		}
-		mu.Lock()
-		seq++
-		c.ID = fmt.Sprintf("c%d", seq)
-		ch := make(chan result, 1)
-		pending[c.ID] = ch
-		mu.Unlock()
-		defer func() { mu.Lock(); delete(pending, c.ID); mu.Unlock() }()
-
-		t.mu.Lock()
-		evCh := t.events
-		t.mu.Unlock()
-		b, _ := json.Marshal(c)
-		select {
-		case evCh <- string(b):
-		case <-time.After(5 * time.Second):
-			http.Error(w, "tab not receiving", 504)
+		res, err := sendCmd(id, c.Action, c.Args...)
+		if err != nil {
+			http.Error(w, err.Error(), 504)
 			return
 		}
-		select {
-		case res := <-ch:
-			_ = json.NewEncoder(w).Encode(res)
-		case <-time.After(40 * time.Second):
-			http.Error(w, "command timeout", 504)
+		_ = json.NewEncoder(w).Encode(res)
+	})
+
+	// Mesh test: boot two wasm-visor tabs, form a WebRTC transport from a→b, and
+	// verify both ends see a transport. One curl proves two browser visors meshing.
+	//
+	//	curl -s 'localhost:8085/ctl/meshtest?a=<tabA>&b=<tabB>&seedpk=<pk>&seedws=<ws>&disc=<dmsg://pk:80>'
+	mux.HandleFunc("/ctl/meshtest", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		a, b := q.Get("a"), q.Get("b")
+		seedpk, seedws, disc := q.Get("seedpk"), q.Get("seedws"), q.Get("disc")
+		var steps []map[string]interface{}
+		record := func(name string, res result, err error) bool {
+			s := map[string]interface{}{"step": name}
+			if err != nil {
+				s["error"] = err.Error()
+			} else {
+				s["ok"] = res.OK
+				s["value"] = res.Value
+				if res.Error != "" {
+					s["error"] = res.Error
+				}
+			}
+			steps = append(steps, s)
+			return err == nil && res.OK
 		}
+		finish := func(pass bool, msg string) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"pass": pass, "summary": msg, "steps": steps})
+		}
+
+		// 1. boot both tabs (ephemeral identities).
+		bootA, err := sendCmd(a, "boot", "", seedpk, seedws, disc)
+		if !record("boot:a", bootA, err) {
+			finish(false, "tab a failed to boot")
+			return
+		}
+		bootB, err := sendCmd(b, "boot", "", seedpk, seedws, disc)
+		if !record("boot:b", bootB, err) {
+			finish(false, "tab b failed to boot")
+			return
+		}
+		pkB, _ := bootB.Value.(string)
+		if pkB == "" {
+			finish(false, "tab b boot did not return a public key")
+			return
+		}
+
+		// 2. dial a WebRTC transport a → b (signaling rides dmsg).
+		dial, err := sendCmd(a, "dialTransport", pkB, "webrtc")
+		if !record("dialTransport:a→b(webrtc)", dial, err) {
+			finish(false, "WebRTC transport a→b failed")
+			return
+		}
+
+		// 3. both ends should now report >=1 transport.
+		statA, errA := sendCmd(a, "status")
+		record("status:a", statA, errA)
+		statB, errB := sendCmd(b, "status")
+		record("status:b", statB, errB)
+		ta := transportCount(statA.Value)
+		tb := transportCount(statB.Value)
+		pass := ta >= 1 && tb >= 1
+		finish(pass, fmt.Sprintf("transports: a=%d b=%d (want >=1 each)", ta, tb))
 	})
 
 	// Static files with no-cache headers, so a reload always fetches the freshly
@@ -220,4 +309,20 @@ func main() {
 
 	log.Printf("serving %s at http://localhost%s/ (control bridge at /ctl/*)", *dir, *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux)) //nolint:gosec
+}
+
+// transportCount extracts the "transports" count from a wasm-visor status value
+// (skywireVisor.status() → {..., transports: N}). JSON numbers decode to float64.
+func transportCount(v interface{}) int {
+	m, ok := v.(map[string]interface{})
+	if !ok {
+		return 0
+	}
+	switch n := m["transports"].(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	}
+	return 0
 }
