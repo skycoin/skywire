@@ -85,6 +85,12 @@ type ClientFactory struct {
 	// from an external (non-LAN) IP address. This validates that the visor is
 	// reachable from the internet.
 	OnExternalSTCPR func()
+
+	// udpDemux holds a *udpDemux (the unified transport_port shared UDP socket)
+	// when EnableUnifiedUDP has been called; nil otherwise → per-type UDP binding.
+	// Typed `any` because udpDemux is //go:build !tinygo (quic-go/kcp-go), and this
+	// struct is in the untagged file; the !tinygo client_unified_udp.go manages it.
+	udpDemux any
 }
 
 // MakeClient creates a new client of specified type
