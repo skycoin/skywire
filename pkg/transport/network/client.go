@@ -91,6 +91,15 @@ type ClientFactory struct {
 	// Typed `any` because udpDemux is //go:build !tinygo (quic-go/kcp-go), and this
 	// struct is in the untagged file; the !tinygo client_unified_udp.go manages it.
 	udpDemux any
+	// tcpDemux holds a *tcpDemux (the unified transport_port shared TCP listener,
+	// cmux) when EnableUnifiedTCP has been called. `any` for the same reason as
+	// udpDemux; managed by the !tinygo client_unified_tcp.go.
+	tcpDemux any
+	// stcprSharedListener / wsSharedListener are the tcpDemux's per-protocol
+	// virtual listeners, set by EnableUnifiedTCP. net.Listener (stdlib), so the
+	// WS case in MakeClient (untagged) can read wsSharedListener directly.
+	stcprSharedListener net.Listener
+	wsSharedListener    net.Listener
 }
 
 // MakeClient creates a new client of specified type
@@ -119,7 +128,11 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 	case types.STCP:
 		return newStcp(generic, f.PKTable), nil
 	case types.WS:
-		return newWS(generic, f.WSTable), nil
+		wc := newWS(generic, f.WSTable)
+		if f.wsSharedListener != nil { // unified transport port
+			wc.(*wsClient).sharedListener = f.wsSharedListener
+		}
+		return wc, nil
 	case types.WT:
 		return newWT(generic, f.WTTable), nil
 	case types.WEBRTC:
