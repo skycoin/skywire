@@ -35,13 +35,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"syscall/js"
 	"time"
 
-	"github.com/google/uuid"
-
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -54,6 +55,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
+	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
@@ -66,6 +68,7 @@ var (
 	rtr    router.Router
 	procM  appserver.ProcManager
 	hvCore *wasmhv.Core
+	tpd    transport.DiscoveryClient
 )
 
 // vlog emits a step message to the browser console AND, when present, the
@@ -81,9 +84,10 @@ func vlog(msg string) {
 func main() {
 	ctx = context.Background()
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
-		"boot":   js.FuncOf(jsBoot),
-		"status": js.FuncOf(jsStatus),
-		"hvApi":  js.FuncOf(jsHvAPI),
+		"boot":    js.FuncOf(jsBoot),
+		"status":  js.FuncOf(jsStatus),
+		"hvApi":   js.FuncOf(jsHvAPI),
+		"tpdEdge": js.FuncOf(jsTPDEdge),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -159,13 +163,21 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	dmsgC = c
 	vlog("dmsg: ok")
 
-	// 2. transport manager (dmsg-only; no AR, no TPD registration yet).
+	// 2. transport manager (dmsg-only). The transport-discovery client registers
+	// the tab's transport edges OVER DMSG (net/http-free), against the deployment's
+	// transport_discovery_dmsg endpoint — so peers' route-finders can find paths to
+	// the tab once it dials a visor↔visor transport.
+	tpdPK, perr := dmsgURLPK(deployment.Prod.TransportDiscoveryDmsg)
+	if perr != nil {
+		return pk, fmt.Errorf("tpd dmsg url: %w", perr)
+	}
+	tpd = tpdclient.NewDmsg(dmsgC, tpdPK, pk, sk, mLog)
 	eb := appevent.NewBroadcaster(mLog.PackageLogger("eb"), time.Second)
 	factory := network.ClientFactory{PK: pk, SK: sk, DmsgC: dmsgC, MLogger: mLog, EB: eb}
 	tmConf := &transport.ManagerConfig{
 		PubKey:          pk,
 		SecKey:          sk,
-		DiscoveryClient: noopTPD{},
+		DiscoveryClient: tpd,
 		LogStore:        transport.InMemoryTransportLogStore(),
 	}
 	tm, err := transport.NewManager(mLog.PackageLogger("tp_manager"), nil, eb, tmConf, factory)
@@ -308,33 +320,38 @@ func promise(fn func() (interface{}, error)) interface{} {
 	return js.Global().Get("Promise").New(handler)
 }
 
-// noopTPD is a no-op transport.DiscoveryClient: a browser edge does not (yet)
-// register its transports in the transport discovery (that path is HTTP/native;
-// a dmsg-based TPD client is a follow-up). Route setup TO this edge therefore
-// relies on the dialing peer already knowing the edge's transport.
-type noopTPD struct{}
+// dmsgURLPK extracts the public key from a "dmsg://<pk>:<port>" URL.
+func dmsgURLPK(raw string) (cipher.PubKey, error) {
+	s := strings.TrimPrefix(raw, "dmsg://")
+	if i := strings.IndexByte(s, ':'); i >= 0 {
+		s = s[:i]
+	}
+	var pk cipher.PubKey
+	if err := pk.UnmarshalText([]byte(s)); err != nil {
+		return cipher.PubKey{}, fmt.Errorf("parse pk from %q: %w", raw, err)
+	}
+	return pk, nil
+}
 
-func (noopTPD) RegisterTransports(context.Context, ...*transport.SignedEntry) error { return nil }
-func (noopTPD) RegisterTransportsV3(context.Context, string, ...*transport.Entry) error {
-	return nil
-}
-func (noopTPD) GetTransportByID(context.Context, uuid.UUID) (*transport.Entry, error) {
-	return nil, nil
-}
-func (noopTPD) GetTransportsByEdge(context.Context, cipher.PubKey) ([]*transport.Entry, error) {
-	return nil, nil
-}
-func (noopTPD) GetAllTransports(context.Context) ([]*transport.Entry, error) { return nil, nil }
-func (noopTPD) GetTransportStats(context.Context, cipher.PubKey) (*transport.TransportStats, error) {
-	return nil, nil
-}
-func (noopTPD) GetAllTransportsStats(context.Context) (*transport.NetworkTransportStats, error) {
-	return nil, nil
-}
-func (noopTPD) GetAllTransportsPerKeyStats(context.Context) (transport.PerKeyStats, error) {
-	return nil, nil
-}
-func (noopTPD) DeleteTransport(context.Context, uuid.UUID) error { return nil }
-func (noopTPD) DeleteTransports(context.Context, []uuid.UUID) (int, error) {
-	return 0, nil
+// jsTPDEdge(pkHex) → Promise<entriesJSON>. Queries the transport discovery (over
+// dmsg) for the transports registered by edge pkHex — used to validate the
+// dmsg-TPD client against the live TPD (e.g. this host's full visor and its many
+// registered transports).
+func jsTPDEdge(_ js.Value, args []js.Value) interface{} {
+	pkHex := args[0].String()
+	return promise(func() (interface{}, error) {
+		if tpd == nil {
+			return nil, errors.New("not booted; call boot() first")
+		}
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+			return nil, fmt.Errorf("bad pk: %w", err)
+		}
+		entries, err := tpd.GetTransportsByEdge(ctx, pk)
+		if err != nil {
+			return nil, err
+		}
+		b, _ := json.Marshal(entries) //nolint:errcheck
+		return string(b), nil
+	})
 }
