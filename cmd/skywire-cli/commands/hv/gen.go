@@ -23,10 +23,14 @@ var (
 	genSeedPK   string
 	genSeedWS   string
 	genDisc     string
+	genVisor    bool
+	genWasmExec string
 )
 
 func init() {
-	genCmd.Flags().StringVar(&genWasm, "wasm", "", "path to the js/wasm dmsg-client binary (build: make dmsg-wasm) [required]")
+	genCmd.Flags().StringVar(&genWasm, "wasm", "", "path to the wasm binary: the js/wasm dmsg-client (make dmsg-wasm), or the TinyGo wasm-visor with --visor [required]")
+	genCmd.Flags().BoolVar(&genVisor, "visor", false, "target a full wasm-VISOR (cmd/wasm-visor, TinyGo) — edge + router + its own hypervisor — instead of the standalone dmsg-client hypervisor")
+	genCmd.Flags().StringVar(&genWasmExec, "wasm-exec", "", "path to wasm_exec.js (REQUIRED with --visor: TinyGo's differs from Go's; build/wasm-visor/wasm_exec_tinygo.js)")
 	genCmd.Flags().StringVarP(&genOut, "out", "o", "hypervisor.html", "output file")
 	genCmd.Flags().StringVarP(&genConf, "conf", "c", "", "visor config to derive the standalone key from (uses its sk)")
 	genCmd.Flags().Uint32Var(&genIndex, "index", 0, "with -c: re-derive keyring entry at this index (read-only); omit to mint+record the next one")
@@ -46,7 +50,10 @@ var genCmd = &cobra.Command{
 The output is a single file (Angular UI + WASM dmsg client + override.js + your
 config, all inlined) you can open from file:// — no server. By default it is a
 STANDALONE hypervisor (visors dial in); --viewer-pk makes it dial a remote
-hypervisor instead.
+hypervisor instead. --visor targets a full wasm-VISOR (edge + router + its own
+hypervisor, TinyGo) — pass the wasm-visor binary as --wasm plus its TinyGo
+--wasm-exec; the page then runs a complete visor in the tab and serves its own
+hypervisor UI.
 
 Identity: --sk sets an explicit key; otherwise -c <config> derives a standalone
 key from the visor's secret key (one-way + deterministic — regenerable, and a
@@ -81,8 +88,22 @@ train users to type secret keys into pages from external hosts.`,
 			os.Exit(1)
 		}
 
+		// A wasm-visor is TinyGo: its wasm_exec.js differs from Go's embedded one,
+		// so it must be supplied. The standalone (Go) dmsg-client uses the embedded.
+		wasmExec := wasmhv.WasmExecJS
+		if genWasmExec != "" {
+			if wasmExec, err = os.ReadFile(genWasmExec); err != nil { //nolint:gosec // operator-supplied path
+				cmd.PrintErrln("read --wasm-exec:", err)
+				os.Exit(1)
+			}
+		} else if genVisor {
+			cmd.PrintErrln("--visor requires --wasm-exec (TinyGo's wasm_exec.js; build/wasm-visor/wasm_exec_tinygo.js)")
+			os.Exit(1)
+		}
+
 		cfg := wasmhv.StandaloneConfig{
-			Standalone:   genViewerPK == "",
+			Visor:        genVisor,
+			Standalone:   !genVisor && genViewerPK == "",
 			HypervisorPK: genViewerPK,
 			SeedPK:       genSeedPK,
 			SeedWS:       genSeedWS,
@@ -90,7 +111,7 @@ train users to type secret keys into pages from external hosts.`,
 			SecretKey:    skHex,
 			Password:     genPassword,
 		}
-		html, err := wasmhv.GenerateStandalone(uiFS, wasmhv.WasmExecJS, wasm, wasmhv.OverrideJS, cfg)
+		html, err := wasmhv.GenerateStandalone(uiFS, wasmExec, wasm, wasmhv.OverrideJS, cfg)
 		if err != nil {
 			cmd.PrintErrln("generate:", err)
 			os.Exit(1)
