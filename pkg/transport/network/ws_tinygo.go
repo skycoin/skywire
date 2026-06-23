@@ -2,29 +2,22 @@
 
 // Package network pkg/transport/network/ws_tinygo.go
 //
-// TinyGo WS-transport carrier. Serving is impossible in a browser (no listening
-// socket), so Start fails closed. Dialing IS possible via the browser's native
-// WebSocket API, but coder/websocket (used natively) pulls net/http, which does
-// not compile here — so the browser dial is wired in a follow-up that adapts the
-// syscall/js WebSocket to a net.Conn (the same pattern as the dmsg WS carrier's
-// ws_js_tinygo.go). Until then it fails closed so the package builds and a
-// browser visor can still use its other transports (dmsg).
+// TinyGo WS-transport: the SERVE side. A browser (or any TinyGo target) cannot
+// run the WebSocket HTTP server a WS transport listener needs, so Start fails
+// closed on all TinyGo builds. The DIAL side is target-specific: ws_browser.go
+// (tinygo && js && wasm) dials the browser-native WebSocket; ws_tinygo_nows.go
+// (other TinyGo targets) stubs it.
 package network
 
-import (
-	"context"
-	"errors"
-	"net"
-)
+import "errors"
 
-// errWSUnsupported is returned by the TinyGo WS carrier stubs.
-var errWSUnsupported = errors.New("ws: not supported on this build yet (TinyGo) — browser WebSocket dial is a follow-up; serving needs a listening socket a browser lacks")
+// errWSServe is returned by Start on TinyGo (no listening socket).
+var errWSServe = errors.New("ws: serving not supported on this build (TinyGo) — a browser/embedded target has no listening socket")
 
-func wsDial(_ context.Context, _ string) (net.Conn, error) {
-	return nil, errWSUnsupported
-}
+// errWSDial is returned by the WS dial stub on non-browser TinyGo targets.
+var errWSDial = errors.New("ws: WebSocket dial not supported on this TinyGo target")
 
-// Start implements Client: a browser cannot accept WS transports.
+// Start implements Client: a browser/embedded TinyGo target cannot accept WS.
 func (c *wsClient) Start() error {
-	return errWSUnsupported
+	return errWSServe
 }
