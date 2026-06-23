@@ -74,6 +74,11 @@ func (c *Core) visorRoute(method, rest string, body []byte) (int, []byte) {
 	if len(parts) == 2 {
 		sub = parts[1]
 	}
+	// The tab's OWN visor is served locally (its transport.Manager + router),
+	// not over a gob RPC dial.
+	if self := c.selfProvider(); self != nil && self.SelfPK() == pk {
+		return c.selfRoute(self, sub)
+	}
 	switch {
 	case sub == "":
 		return jsonResp(c.overviewOf(pk))
@@ -198,7 +203,8 @@ func (c *Core) transportRoute(method string, pk cipher.PubKey, tid string) (int,
 	return 404, []byte(`{"error":"transport subroute not implemented in wasm core"}`)
 }
 
-// allOverviews concurrently fetches every connected visor's Overview.
+// allOverviews concurrently fetches every connected visor's Overview, with the
+// tab's OWN visor (if any) listed first.
 func (c *Core) allOverviews() []Overview {
 	pks := c.connectedPKs()
 	out := make([]Overview, len(pks))
@@ -208,10 +214,14 @@ func (c *Core) allOverviews() []Overview {
 		go func(i int, pk cipher.PubKey) { defer wg.Done(); out[i] = c.overviewOf(pk) }(i, pk)
 	}
 	wg.Wait()
+	if self := c.selfProvider(); self != nil {
+		out = append([]Overview{self.SelfOverview()}, out...)
+	}
 	return out
 }
 
-// allSummaries concurrently fetches every connected visor's Summary.
+// allSummaries concurrently fetches every connected visor's Summary, with the
+// tab's OWN visor (if any) listed first.
 func (c *Core) allSummaries() []Summary {
 	pks := c.connectedPKs()
 	out := make([]Summary, len(pks))
@@ -221,6 +231,9 @@ func (c *Core) allSummaries() []Summary {
 		go func(i int, pk cipher.PubKey) { defer wg.Done(); out[i] = c.summaryOf(pk) }(i, pk)
 	}
 	wg.Wait()
+	if self := c.selfProvider(); self != nil {
+		out = append([]Summary{self.SelfSummary()}, out...)
+	}
 	return out
 }
 
