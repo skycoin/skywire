@@ -26,7 +26,7 @@
 
   // active = "do I have a mode to take over for?" When false, stay dormant and
   // let the serving backend's /api answer natively (served mode).
-  var active = !CFG.served && (Boolean(CFG.pk) || Boolean(CFG.standalone));
+  var active = !CFG.served && (Boolean(CFG.pk) || Boolean(CFG.standalone) || Boolean(CFG.visor));
   if (!active) {
     log('dormant: no hypervisor mode configured; native fetch/XHR pass through to the serving backend');
     return;
@@ -54,16 +54,26 @@
   // ensure boots the wasm client + connects (once). The first shimmed request
   // awaits this, so the app's initial /api call blocks until dmsg is up.
   //
-  // Two modes:
+  // Three modes:
   //  - viewer (default): route /api over dmsg to a REMOTE hypervisor CFG.pk.
-  //  - standalone (CFG.standalone): THIS tab IS the hypervisor — start
-  //    serveHypervisor() so visors listing this PK dial in, and route /api to
-  //    the in-wasm core (hvApi) instead of a remote fetch.
+  //  - standalone (CFG.standalone): THIS tab IS the hypervisor (wasm dmsg client) —
+  //    start serveHypervisor() so visors listing this PK dial in, and route /api
+  //    to the in-wasm core (hvApi) instead of a remote fetch.
+  //  - visor (CFG.visor): THIS tab is a full wasm-VISOR (TinyGo: edge + router +
+  //    its own hypervisor). boot() brings the whole stack up (and the HV core);
+  //    /api routes to the visor's in-wasm hvApi, which surfaces THIS visor plus
+  //    any visors that dial in. globalThis.skywireVisor, not skywireDmsg.
   function ensure() {
     if (readyP) return readyP;
     readyP = (async function () {
-      while (!self.skywireDmsg) { await new Promise(function (r) { setTimeout(r, 10); }); }
       var sk = await resolveSK();
+      if (CFG.visor) {
+        while (!self.skywireVisor) { await new Promise(function (r) { setTimeout(r, 10); }); }
+        var vpk = await self.skywireVisor.boot(sk, CFG.seedpk, CFG.seedws, CFG.disc);
+        log('wasm-visor booted as ' + vpk + ' (edge + hypervisor; /api → in-wasm core)');
+        return;
+      }
+      while (!self.skywireDmsg) { await new Promise(function (r) { setTimeout(r, 10); }); }
       var pk = await self.skywireDmsg.connect(sk, CFG.seedpk, CFG.seedws, CFG.disc);
       if (CFG.standalone) {
         await self.skywireDmsg.serveHypervisor();
@@ -75,11 +85,15 @@
     return readyP;
   }
 
-  // dispatch routes one same-origin request: in standalone mode to the in-wasm
-  // hypervisor core (hvApi), else over dmsg to the remote hypervisor (fetch).
-  // Both resolve to {status, body:Uint8Array, headers}; hvApi has no response
-  // headers of its own, so we synthesize a JSON content-type for the UI.
+  // dispatch routes one same-origin request: a wasm-visor / standalone hypervisor
+  // tab answers /api from its in-wasm core (hvApi); a viewer routes over dmsg to a
+  // remote hypervisor (fetch). Both resolve to {status, body:Uint8Array, headers};
+  // hvApi has no response headers of its own, so we synthesize a JSON content-type.
   function dispatch(method, path, body, headers) {
+    if (CFG.visor) {
+      return self.skywireVisor.hvApi(method, path, body == null ? null : String(body))
+        .then(function (r) { return { status: r.status, body: r.body, headers: { 'Content-Type': 'application/json' } }; });
+    }
     if (CFG.standalone) {
       return self.skywireDmsg.hvApi(method, path, body == null ? null : String(body))
         .then(function (r) { return { status: r.status, body: r.body, headers: { 'Content-Type': 'application/json' } }; });
