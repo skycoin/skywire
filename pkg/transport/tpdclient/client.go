@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package tpdclient implements transport discovery client
 package tpdclient
 

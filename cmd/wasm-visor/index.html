@@ -75,6 +75,11 @@
           const r = await skywireVisor.hvApi(a[0] || "GET", a[1] || "/api/visors", a[2] || null);
           return { status: r.status, body: new TextDecoder().decode(r.body) };
         }
+        case "tpdEdge": {
+          const j = await skywireVisor.tpdEdge(a[0]);
+          const arr = JSON.parse(j);
+          return { count: Array.isArray(arr) ? arr.length : 0, sample: Array.isArray(arr) ? arr.slice(0, 1) : arr };
+        }
         case "status":
           return skywireVisor.status();
         case "reload":
