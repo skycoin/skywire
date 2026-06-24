@@ -127,10 +127,26 @@
     );
   }
 
+  // inlineCss rewrites same-site url(...) references in a stylesheet to base64
+  // data: URIs fetched over dmsg, so background-images/fonts/@import assets load
+  // (they'd otherwise resolve against the dead iframe origin). base is the path
+  // the stylesheet itself was loaded from, for relative url() resolution.
+  const CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
+  async function inlineCss(pk, base, css) {
+    const uniq = [...new Set([...css.matchAll(CSS_URL)].map(m => m[2]).filter(sameSite))];
+    if (!uniq.length) return css;
+    const map = {};
+    await Promise.all(uniq.map(u => skywireVisor.fetchDmsg(pk, "GET", resolvePath(u, base), null)
+      .then(r => { map[u] = "data:" + ctOf(r.headers, u) + ";base64," + bytesToB64(r.body); })
+      .catch(() => {})));
+    return css.replace(CSS_URL, (m, q, u) => map[u] ? 'url("' + map[u] + '")' : m);
+  }
+
   // renderSite shows a fetched dmsg page in the sandboxed iframe: it inlines the
-  // page's same-site subresources (stylesheets/images/scripts) by fetching each
-  // over dmsg, and injects navShimSrc so links + the site's fetch route over dmsg
-  // too. So a whole site renders and navigates with no DNS, no IP, no CA.
+  // page's same-site subresources (stylesheets/images/scripts, and url() assets
+  // referenced from CSS) by fetching each over dmsg, and injects navShimSrc so
+  // links + the site's fetch route over dmsg too. So a whole site renders and
+  // navigates with no DNS, no IP, no CA.
   async function renderSite(pk, path, html) {
     currentSitePK = pk;
     document.getElementById("browsepk").value = pk;
@@ -148,11 +164,16 @@
       doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(el => {
         const href = el.getAttribute("href");
         if (!sameSite(href)) return;
-        jobs.push(skywireVisor.fetchDmsg(pk, "GET", resolvePath(href, path), null).then(r => {
-          const style = doc.createElement("style");
-          style.textContent = new TextDecoder().decode(r.body);
-          el.replaceWith(style);
-        }).catch(() => {}));
+        const cssPath = resolvePath(href, path);
+        jobs.push(skywireVisor.fetchDmsg(pk, "GET", cssPath, null)
+          .then(r => inlineCss(pk, cssPath, new TextDecoder().decode(r.body)))
+          .then(css => { const style = doc.createElement("style"); style.textContent = css; el.replaceWith(style); })
+          .catch(() => {}));
+      });
+      // url() assets in the page's own inline <style> blocks (resolve vs the page).
+      doc.querySelectorAll("style").forEach(el => {
+        if (!/url\(/i.test(el.textContent || "")) return;
+        jobs.push(inlineCss(pk, path, el.textContent).then(css => { el.textContent = css; }).catch(() => {}));
       });
       doc.querySelectorAll("img[src],script[src],source[src]").forEach(el => {
         const src = el.getAttribute("src");
