@@ -29,13 +29,11 @@ discovery query — and mirrors transport.MakeTransportID().
 
 The returned ID is independent of PK order: id(T, A, B) == id(T, B, A).
 
-Valid transport types: dmsg, stcp, stcpr, sudph (default: dmsg)`,
+Valid transport types: stcpr, squic, sudph, stcp, webrtc, ws, wt, dmsg (default: dmsg)`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		switch idTpType {
-		case "dmsg", "stcp", "stcpr", "sudph":
-		default:
-			internal.Catch(cmd.Flags(), fmt.Errorf("invalid transport type %q (valid: dmsg, stcp, stcpr, sudph)", idTpType))
+		if !tptypes.Valid(tptypes.Type(idTpType)) {
+			internal.Catch(cmd.Flags(), fmt.Errorf("invalid transport type %q (valid: %v)", idTpType, tptypes.Known()))
 		}
 
 		var pk1, pk2 cipher.PubKey

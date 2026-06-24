@@ -74,8 +74,12 @@ var addTpCmd = &cobra.Command{
 	Args:                  cobra.MinimumNArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
-		if transportType != "dmsg" && transportType != "stcpr" && transportType != "sudph" && transportType != "stcp" && transportType != "" {
-			logger.Fatal("Invalid transport type specified:", transportType)
+		// Validate against the canonical type set (types.Known()) rather than a
+		// hard-coded subset, so newly-added types (squic, webrtc, ws, wt) are
+		// accepted without editing the CLI. The visor still validates and may
+		// refuse a type it can't dial (e.g. ws/wt without an endpoint).
+		if transportType != "" && !types.Valid(types.Type(transportType)) {
+			logger.Fatalf("Invalid transport type %q; valid types: %v", transportType, types.Known())
 		}
 		if stcpAddr != "" && transportType != "stcp" {
 			logger.Fatal("--addr flag requires -t stcp")
