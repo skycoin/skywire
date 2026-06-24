@@ -1,50 +1,58 @@
-# wasm-visor binary: never commit it; distribute it like any other binary
+# wasm-visor binary: embed it with the visor, without git-history accumulation
 
 ## The problem
 
 The standard-Go `wasm-visor.wasm` (the browser visor, since TinyGo can't do TLS —
-see [tinygo issue #3259]) is **~38 MB**, and it changes on every build. Git keeps
-every version of a tracked file forever, so committing it — or `go:embed`-ing it
-into a tracked package — would add a fresh ~38 MB blob to history on every change,
-permanently bloating the repository. We only ever need the *current* build.
+see [tinygo issue #3259]) is **~37 MB** and changes on every build. We want it
+**shipped inside the skywire binary** (so `cli hv gen` — and, later, the visor
+serving the HV UI — produce a browser visor with no external file), but git keeps
+every version of a tracked file forever, so committing it or `go:embed`-ing a
+*tracked* copy would add a fresh multi-MB blob to history on every change.
 
-## The rule
+## The approach: build-tagged embed of a gitignored binary
 
-**The `wasm-visor.wasm` binary is never tracked in git.** Verified policy:
+The binary is embedded, but the embedded file is **never committed**:
 
-- It builds only into `build/` (`make wasm-visor` → `build/wasm-visor-go/`,
-  `make tinygo-wasm-visor` → `build/wasm-visor/`), and `build/` is `.gitignore`d.
-- It is **not** `go:embed`-ed anywhere. The single-file hypervisor generator
-  (`skywire cli hv gen`) reads the wasm from a `--wasm <path>` flag at generation
-  time; it does not bake the binary into the repo.
-- `git ls-files '*.wasm'` must never list a `wasm-visor` binary. (It does list a
-  few small, intentionally-tracked wasm artifacts — tpviz, doc examples, vendored
-  skycoin-lite — which are a separate, pre-existing decision.)
+- `make wasm-visor` builds the wasm and writes a gzip of it to
+  `pkg/wasmhv/wasmbin/wasm-visor.wasm.gz` (~8 MB). That path is `.gitignore`d.
+- `pkg/wasmhv/wasmbin` embeds it **only under the `embedwasm` build tag**
+  (`embed_on.go`: `//go:embed wasm-visor.wasm.gz`). Default builds compile
+  `embed_off.go` instead and carry nothing — so a plain `go build ./...` (CI,
+  lint, dev) neither needs the file nor pays the size.
+- `make build-embedwasm` runs `make wasm-visor` then
+  `go build -tags embedwasm` — this is the build that ships the wasm-visor inside
+  skywire (~8 MB larger).
 
-Do **not** add a `//go:embed wasm-visor.wasm` to make `cli hv gen` "just work"
-without a build. That is exactly the history-bloat trap.
+Because the `.wasm.gz` is gitignored and produced at build time, **git history
+never accumulates the binary** — only the tiny source files in `wasmbin/` are
+tracked. Each build simply overwrites the local gz.
 
-## How it gets to users instead
+Do **not** commit `pkg/wasmhv/wasmbin/wasm-visor.wasm.gz` (it's gitignored for
+this reason) or change the embed to a non-tag-gated `go:embed` of a tracked file.
 
-The wasm-visor is distributed the same way skywire's other binaries are — built
-by the release pipeline, never via git:
+## Consuming it
 
-- **Release asset** — the release build runs `make wasm-visor` and attaches
-  `wasm-visor.wasm` (+ `wasm_exec.js`) to the GitHub release / packages. `cli hv
-  gen --wasm <downloaded-path>` consumes it.
-- **Package** — the apt/AUR packages can ship the prebuilt wasm under the skywire
-  data dir, and `cli hv gen` defaults to that path.
-- **Build on demand** — a developer runs `make wasm-visor` and points `--wasm` at
-  `build/wasm-visor-go/wasm-visor.wasm`.
+`skywire cli hv gen` sources the wasm in this order:
 
-If we ever do want a "latest-only, no history" copy reachable by URL, mirror the
-apt-repo pattern (`updgithub.sh`): a dedicated artifacts location that is
-force-pushed to a single commit (history wiped each update), never the main repo.
+1. `--wasm <path>` if given (e.g. a TinyGo build, which also needs `--wasm-exec`);
+2. otherwise the **embedded** std-Go wasm-visor (`wasmbin.Embedded()`), which uses
+   Go's embedded `wasm_exec.js` — no `--wasm-exec` needed;
+3. otherwise an error telling you to pass `--wasm` or build `-tags embedwasm`.
+
+So a release-built skywire (`make build-embedwasm`) runs `cli hv gen` with no
+flags. A default-built skywire still works via `--wasm`.
+
+## Release / packaging
+
+Build the shipped skywire with `make build-embedwasm` so the wasm-visor travels
+with the binary. The `.wasm.gz` is a build artifact, not a committed file; the
+release pipeline produces it via `make wasm-visor` as part of `build-embedwasm`.
 
 ## TODO when TinyGo gains software TLS
 
 Once [tinygo issue #3259] is resolved, the small (~2.2 MB) TinyGo build can do
-HTTPS again and becomes the default, shrinking the artifact ~17×. Same rule
-applies regardless: build it, ship it as an artifact, don't commit it.
+HTTPS again and becomes the default embed, shrinking the addition ~4×. The
+mechanism is unchanged: build it, gzip it to the gitignored embed path, embed
+under the tag.
 
 [tinygo issue #3259]: https://github.com/skycoin/skywire/issues/3259
