@@ -61,3 +61,21 @@ func NormalizeType(t Type) Type {
 	}
 	return t
 }
+
+// Known returns every recognized transport type, in canonical form. This is the
+// single source of truth callers (e.g. the CLI's `tp add` validation) should use
+// instead of hard-coding a subset that drifts as new types are added.
+func Known() []Type {
+	return []Type{STCPR, QUIC, SUDPH, STCP, WEBRTC, WS, WT, DMSG}
+}
+
+// Valid reports whether t names a recognized transport type. Alias-aware (the
+// legacy "quic" name normalizes to "squic"), so older invocations keep working.
+func Valid(t Type) bool {
+	switch NormalizeType(t) {
+	case STCPR, QUIC, SUDPH, STCP, WEBRTC, WS, WT, DMSG:
+		return true
+	default:
+		return false
+	}
+}
