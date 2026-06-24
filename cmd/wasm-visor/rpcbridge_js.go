@@ -35,7 +35,7 @@ func jsServeRPC(_ js.Value, args []js.Value) interface{} {
 		// 32KiB default.
 		c.SetReadLimit(-1)
 		conn := websocket.NetConn(context.Background(), c, websocket.MessageBinary)
-		srv, err := wasmhv.NewRPCServer(visorSelf{})
+		srv, err := wasmhv.NewRPCServer(visorSelf{}, tpController{})
 		if err != nil {
 			return nil, err
 		}

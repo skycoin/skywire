@@ -21,7 +21,7 @@ func TestRPCGateway_OverBridge(t *testing.T) {
 	var pk cipher.PubKey
 	require.NoError(t, pk.Set("0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13"))
 
-	srv, err := NewRPCServer(fakeSelf{pk: pk})
+	srv, err := NewRPCServer(fakeSelf{pk: pk}, nil)
 	require.NoError(t, err)
 
 	hostConn, tabConn := net.Pipe()
@@ -52,7 +52,7 @@ func TestRPCGateway_OverBridge(t *testing.T) {
 // TestRPCGateway_NotBooted confirms the gateway errors cleanly when no visor is
 // wired (rather than panicking or returning a zero value as if booted).
 func TestRPCGateway_NotBooted(t *testing.T) {
-	srv, err := NewRPCServer(nil)
+	srv, err := NewRPCServer(nil, nil)
 	require.NoError(t, err)
 	hostConn, tabConn := net.Pipe()
 	go func() {

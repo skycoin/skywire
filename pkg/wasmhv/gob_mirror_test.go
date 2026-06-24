@@ -91,6 +91,44 @@ func TestMirrorTransportSummaryDecodes(t *testing.T) {
 	require.Equal(t, uint64(222), got.Log.SentBytes)
 }
 
+// TestMirrorTransportSummaryEncodes confirms the REVERSE direction the RPC bridge
+// uses: a wasm-visor encodes its TransportSummary reply and the CLI decodes it
+// into visor.TransportSummary. Without TransportLogEntry.GobEncode, gob describes
+// .Log as a plain struct and the decode fails ("wrong type for received field
+// .Log") — which broke `skywire cli tp ls` over the bridge.
+func TestMirrorTransportSummaryEncodes(t *testing.T) {
+	pkL, _ := cipher.GenerateKeyPair()
+	pkR, _ := cipher.GenerateKeyPair()
+	mirror := &TransportSummary{
+		ID:        uuid.New(),
+		Local:     pkL,
+		Remote:    pkR,
+		Type:      "dmsg",
+		Log:       &TransportLogEntry{RecvBytes: 7, SentBytes: 9},
+		Label:     "user",
+		LatencyMS: 12.5,
+	}
+	var got visor.TransportSummary
+	gobRoundTrip(t, mirror, &got)
+	require.Equal(t, mirror.ID, got.ID)
+	require.Equal(t, "dmsg", string(got.Type))
+	require.Equal(t, "user", string(got.Label))
+	require.NotNil(t, got.Log)
+	require.NotNil(t, got.Log.RecvBytes)
+	require.Equal(t, uint64(7), *got.Log.RecvBytes)
+	require.Equal(t, uint64(9), *got.Log.SentBytes)
+}
+
+// TestMirrorTransportListEmptyEncodes reproduces the exact failure that bit
+// `tp ls`: an EMPTY []*TransportSummary reply must still decode into the CLI's
+// []*visor.TransportSummary (gob transmits the element type description, which
+// must match) — it panicked before TransportLogEntry.GobEncode existed.
+func TestMirrorTransportListEmptyEncodes(t *testing.T) {
+	var got []*visor.TransportSummary
+	gobRoundTrip(t, []*TransportSummary{}, &got)
+	require.Empty(t, got)
+}
+
 // TestMirrorArgsEncode confirms the mirror RPC ARGUMENT types gob-encode into
 // the real visor.* argument types (the direction a control call travels).
 func TestMirrorArgsEncode(t *testing.T) {
