@@ -147,6 +147,8 @@
           // a = [remotePK, port] — originate a route group via the router.
           return await skywireVisor.dialRoute(a[0] || "", a[1] || 80);
         }
+        case "checkRegistered":
+          return await skywireVisor.checkRegistered();
         case "status":
           return skywireVisor.status();
         case "browse": {
