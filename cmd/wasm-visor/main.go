@@ -66,6 +66,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
@@ -114,6 +115,7 @@ func main() {
 		"fetchDmsg":     js.FuncOf(jsFetchDmsg),
 		"serveContent":  js.FuncOf(jsServeContent),
 		"serveRPC":      js.FuncOf(jsServeRPC),
+		"dialRoute":     js.FuncOf(jsDialRoute),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -278,6 +280,11 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		RouteFinder:        rfClient,
 		RouteGroupDialer:   rgDialer,
 		SetupNodes:         deployment.Prod.RouteSetupNodes,
+		// MinHops must be >0 or the router treats routing as DISABLED
+		// (router_dial.go: "routing disabled. (minhop=0)"). 1 enables
+		// origination; a direct transport, when one exists, still downgrades to a
+		// 0-intermediate-hop path.
+		MinHops: 1,
 	}
 	vlog("router: New…")
 	r, err := router.New(dmsgC, rConf, nil)
@@ -608,5 +615,40 @@ func jsDialTransport(_ js.Value, args []js.Value) interface{} {
 			return nil, fmt.Errorf("save transport: %w", err)
 		}
 		return tp.Entry.ID.String(), nil
+	})
+}
+
+// jsDialRoute(pkHex, port) → Promise<{ok, remote, local}>. Originates a route
+// group to a remote visor:port through the ROUTER (the routing layer, using the
+// wired route-finder + setup nodes) — proving end-to-end route setup works from a
+// browser tab. The remote must be reachable via a transport the route-finder
+// knows (so make a transport toward it first). This is the same DialRoutes the
+// in-tab skysocks-client rides; the probe closes the route group immediately.
+func jsDialRoute(_ js.Value, args []js.Value) interface{} {
+	pkHex := args[0].String()
+	port := 80
+	if len(args) > 1 && args[1].Truthy() {
+		port = args[1].Int()
+	}
+	return promise(func() (interface{}, error) {
+		if rtr == nil {
+			return nil, errors.New("not booted; call boot() first")
+		}
+		var pk cipher.PubKey
+		if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
+			return nil, fmt.Errorf("bad pk: %w", err)
+		}
+		dctx, cancel := context.WithTimeout(ctx, 40*time.Second)
+		defer cancel()
+		conn, err := rtr.DialRoutes(dctx, pk, 0, routing.Port(port), router.DefaultDialOptions())
+		if err != nil {
+			return nil, fmt.Errorf("dial route: %w", err)
+		}
+		defer conn.Close() //nolint:errcheck
+		res := js.Global().Get("Object").New()
+		res.Set("ok", true)
+		res.Set("remote", conn.RemoteAddr().String())
+		res.Set("local", conn.LocalAddr().String())
+		return res, nil
 	})
 }
