@@ -133,3 +133,6 @@ skysocks-client
 # stray local artifacts (accidentally committed once; see chore/rm-stray-committed-files)
 /visor.log
 /hist/
+
+# Embedded wasm-visor binary (built by `make wasm-visor`, embedded under -tags embedwasm; never committed)
+pkg/wasmhv/wasmbin/wasm-visor.wasm.gz
