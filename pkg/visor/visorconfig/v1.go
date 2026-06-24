@@ -276,6 +276,19 @@ type DmsgWebConfig struct {
 	// through one's own proxy is inherently authorized. Set false to render the
 	// self-loopback landing page as an anonymous (unauthenticated) caller.
 	SelfLoopbackAuthenticated *bool `json:"self_loopback_authenticated,omitempty"`
+	// ForwardProxy, when true, makes the visor serve a CLEARNET HTTP forward-
+	// proxy over dmsg on ForwardPort: a whitelisted peer (e.g. a browser
+	// wasm-visor that cannot itself do TLS) sends an absolute-URL HTTP request
+	// over dmsg and this visor fetches it from the clearnet and returns the
+	// response. Default off. Access is restricted to the same whitelist that
+	// gates the visor's other privileged dmsg surfaces (own PK + hypervisors +
+	// survey/pty whitelist) — it is NOT an open relay. Egress prefers
+	// UpstreamSOCKS when set (so the exit IP is the skysocks node, not this
+	// visor); only if UpstreamSOCKS is empty does this visor connect directly
+	// (its own IP becomes the exit). See docs/design/dmsg-forward-proxy.md.
+	ForwardProxy bool `json:"forward_proxy,omitempty"`
+	// ForwardPort is the dmsg port the forward-proxy listens on. Default 84.
+	ForwardPort uint16 `json:"forward_port,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the

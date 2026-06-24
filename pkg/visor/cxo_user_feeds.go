@@ -64,6 +64,7 @@ func reservedDmsgPorts() map[uint16]string {
 		skyenv.DmsgGRPCPort:                  "grpc",
 		skyenv.DmsgCXOPort:                   "stats", // system CXO feed
 		80:                                   "dmsg-http",
+		DmsgForwardProxyPort:                 "dmsg-forward-proxy",
 		skyenv.DmsgDHTPort:                   "dht",
 		skyenv.DmsgAwaitSetupPort:            "await-setup",
 	}
