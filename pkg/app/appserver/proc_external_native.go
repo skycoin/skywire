@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo && !js
 
 // Package appserver pkg/app/appserver/proc_external_native.go
 //
