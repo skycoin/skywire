@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo || js
 
 // Package appcommon pkg/app/appcommon/log_store_tinygo.go
 //
