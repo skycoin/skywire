@@ -50,8 +50,10 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
+
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -475,6 +477,46 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 		Online:       true,
 		IsHypervisor: true,
 	}
+}
+
+// tpController is the wasmhv.TransportController backing the RPC gateway's
+// transport-control methods (the CLI's `tp add`/`tp rm`), over this tab's
+// transport.Manager. webrtc/dmsg dial by PK alone; ws/wt need an endpoint and
+// must go through skywireVisor.dialTransport (which carries the url/cert).
+type tpController struct{}
+
+func (tpController) AddTransport(remote cipher.PubKey, tpType string, _ time.Duration) (*wasmhv.TransportSummary, error) {
+	if tpM == nil {
+		return nil, errors.New("not booted; call boot() first")
+	}
+	t := types.Type(tpType)
+	switch t {
+	case types.WEBRTC, types.DMSG:
+		// no endpoint needed (webrtc signals over dmsg; dmsg dials by PK)
+	case types.WS, types.WT:
+		return nil, fmt.Errorf("%s needs a peer endpoint over the CLI path; use skywireVisor.dialTransport(pk, %q, url[, certHash])", tpType, tpType)
+	default:
+		return nil, fmt.Errorf("unsupported transport type %q (cli: webrtc or dmsg)", tpType)
+	}
+	tp, err := tpM.SaveTransport(ctx, remote, t, transport.LabelUser)
+	if err != nil {
+		return nil, fmt.Errorf("save transport: %w", err)
+	}
+	return &wasmhv.TransportSummary{
+		ID:     tp.Entry.ID,
+		Local:  selfPK,
+		Remote: remote,
+		Type:   tpType,
+		Label:  string(transport.LabelUser),
+	}, nil
+}
+
+func (tpController) RemoveTransport(id uuid.UUID) error {
+	if tpM == nil {
+		return errors.New("not booted; call boot() first")
+	}
+	tpM.DeleteTransport(id)
+	return nil
 }
 
 func (visorSelf) SelfTransports() []*wasmhv.TransportSummary {
