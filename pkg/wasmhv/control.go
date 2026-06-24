@@ -64,6 +64,23 @@ type TransportLogEntry struct {
 	SentBytes uint64
 }
 
+// GobEncode mirrors transport.LogEntry.GobEncode: two separately-encoded uint64s.
+// Needed because over the RPC bridge the wasm-visor is the ENCODER; without it
+// gob describes TransportSummary.Log as a plain struct rather than a GobEncoder
+// type, mismatching the CLI's *transport.LogEntry and failing the whole `tp ls`
+// decode ("wrong type for received field .Log").
+func (le *TransportLogEntry) GobEncode() ([]byte, error) {
+	var b bytes.Buffer
+	enc := gob.NewEncoder(&b)
+	if err := enc.Encode(atomic.LoadUint64(&le.RecvBytes)); err != nil {
+		return nil, err
+	}
+	if err := enc.Encode(atomic.LoadUint64(&le.SentBytes)); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}
+
 // GobDecode mirrors transport.LogEntry.GobEncode: two separately-encoded uint64s.
 func (le *TransportLogEntry) GobDecode(b []byte) error {
 	dec := gob.NewDecoder(bytes.NewReader(b))
