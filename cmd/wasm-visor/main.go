@@ -467,8 +467,11 @@ func (visorSelf) SelfOverview() wasmhv.Overview {
 func (s visorSelf) SelfSummary() wasmhv.Summary {
 	ov := s.SelfOverview()
 	return wasmhv.Summary{
-		Overview:     &ov,
-		Health:       &wasmhv.HealthInfo{ServicesHealth: "healthy"},
+		Overview: &ov,
+		Health:   &wasmhv.HealthInfo{ServicesHealth: "healthy"},
+		// Non-nil: the CLI's `visor info` dereferences DmsgStats.RoundTrip
+		// unconditionally. The tab has no dmsg-tracker, so RoundTrip stays 0.
+		DmsgStats:    &wasmhv.DmsgClientSummary{PK: selfPK},
 		Online:       true,
 		IsHypervisor: true,
 	}
