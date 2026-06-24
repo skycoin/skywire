@@ -112,6 +112,8 @@ var (
 	embRouteSetup vinit.Module
 	// Embedded dmsgweb resolver (localhost SOCKS5 for .dmsg browsing)
 	embDmsgWeb vinit.Module
+	// Clearnet HTTP forward-proxy over dmsg (opt-in, whitelist-gated)
+	embFwdProxy vinit.Module
 	// Embedded skynetweb resolver (localhost SOCKS5 for .skynet browsing)
 	embSkynetWeb vinit.Module
 	// Embedded SMTP→skywire bridge (localhost SMTP listener for *.skynet recipients)
@@ -172,6 +174,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ptyModule = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	embRouteSetup = maker("embedded_route_setup", initEmbeddedRouteSetup, &dmsgC)
 	embDmsgWeb = maker("embedded_dmsgweb", initEmbeddedDmsgWeb, &dmsgC)
+	embFwdProxy = maker("dmsg_forward_proxy", initDmsgForwardProxy, &dmsgC)
 	embSkymailBridge = maker("embedded_skymail_bridge", initEmbeddedSkymailBridge, &dmsgC)
 	// routerListener pre-opens DmsgAwaitSetupPort the moment dmsgC is
 	// ready so peers dialing it during the rt-init window (held up by
@@ -228,7 +231,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// store. See init_group.go.
 	groupingMod = maker("grouping", initGrouping, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
