@@ -67,9 +67,22 @@
         document.getElementById("seedws").value.trim(),
         document.getElementById("disc").value.trim());
       log("booted pk=" + pk);
+      startRPC();
     } catch (e) { log("boot error: " + (e.message || e)); }
   }
   function doStatus() { log("status: " + JSON.stringify(skywireVisor.status())); }
+
+  // startRPC dials the host RPC bridge (cmd/dmsg-wasm/serve.go's /ctl/rpc) so the
+  // ordinary `skywire cli --rpc <addr>` can drive this tab. The host logs the addr
+  // (also shown in /ctl/tabs). Best-effort — fine if the page is opened directly.
+  function startRPC() {
+    if (!skywireVisor.serveRPC) return;
+    const tabId = sessionStorage.getItem("ctlTabId") || "tab";
+    const url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ctl/rpc?tab=" + tabId;
+    skywireVisor.serveRPC(url)
+      .then(() => log("rpc bridge serving — see serve.go log / curl /ctl/tabs for the skywire --rpc addr"))
+      .catch(e => log("rpc bridge error: " + (e.message || e)));
+  }
 
   // The dmsg virtual-browser engine lives in browse.js (shared verbatim with the
   // standalone hypervisor overlay). Wire an instance to this harness's browse
@@ -111,8 +124,11 @@
     async function exec(c) {
       const a = c.args || [];
       switch (c.action) {
-        case "boot":
-          return await skywireVisor.boot(a[0] || "", a[1] || "", a[2] || "", a[3] || "");
+        case "boot": {
+          const pk = await skywireVisor.boot(a[0] || "", a[1] || "", a[2] || "", a[3] || "");
+          startRPC(); // expose this tab's visor RPC to `skywire cli` over the bridge
+          return pk;
+        }
         case "hvApi": {
           const r = await skywireVisor.hvApi(a[0] || "GET", a[1] || "/api/visors", a[2] || null);
           return { status: r.status, body: new TextDecoder().decode(r.body) };
