@@ -23,6 +23,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -32,13 +33,18 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/coder/websocket"
+
+	"github.com/skycoin/skywire/pkg/wasmrpc"
 )
 
 type tab struct {
-	id     string
-	events chan string // SSE command frames queued for this tab
-	mu     sync.Mutex
-	logs   []string
+	id      string
+	events  chan string // SSE command frames queued for this tab
+	mu      sync.Mutex
+	logs    []string
+	rpcAddr string // local 127.0.0.1:<port> the wasmrpc bridge fronts (when connected)
 }
 
 type command struct {
@@ -198,15 +204,53 @@ func main() {
 		w.WriteHeader(204)
 	})
 
-	// List connected tabs.
+	// List connected tabs, each with its RPC bridge address (if connected) so a
+	// shell can do: skywire --rpc <rpc> visor info
 	mux.HandleFunc("/ctl/tabs", func(w http.ResponseWriter, r *http.Request) {
+		type tabInfo struct {
+			ID  string `json:"id"`
+			RPC string `json:"rpc,omitempty"`
+		}
 		mu.Lock()
-		ids := make([]string, 0, len(tabs))
-		for id := range tabs {
-			ids = append(ids, id)
+		out := make([]tabInfo, 0, len(tabs))
+		for id, t := range tabs {
+			t.mu.Lock()
+			out = append(out, tabInfo{ID: id, RPC: t.rpcAddr})
+			t.mu.Unlock()
 		}
 		mu.Unlock()
-		_ = json.NewEncoder(w).Encode(ids)
+		_ = json.NewEncoder(w).Encode(out)
+	})
+
+	// RPC bridge: a wasm-visor tab dials this WebSocket and serves its visor RPC
+	// over it; we front it with a local 127.0.0.1:<port> that `skywire cli --rpc`
+	// targets. One bridge per tab; closed when the tab disconnects. See
+	// pkg/wasmrpc.
+	mux.HandleFunc("/ctl/rpc", func(w http.ResponseWriter, r *http.Request) {
+		t := getTab(r.URL.Query().Get("tab"))
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			log.Printf("rpc bridge accept (%s): %v", t.id, err)
+			return
+		}
+		c.SetReadLimit(-1)
+		conn := websocket.NetConn(context.Background(), c, websocket.MessageBinary)
+		bridge, err := wasmrpc.NewBridge(conn, 0, func(m string) { log.Printf("[rpc %s] %s", t.id, m) })
+		if err != nil {
+			log.Printf("rpc bridge (%s): %v", t.id, err)
+			_ = c.Close(websocket.StatusInternalError, "bridge setup failed")
+			return
+		}
+		t.mu.Lock()
+		t.rpcAddr = bridge.Addr()
+		t.mu.Unlock()
+		log.Printf("tab %s RPC bridge UP at %s — drive it: skywire --rpc %s visor info", t.id, bridge.Addr(), bridge.Addr())
+		<-r.Context().Done()
+		_ = bridge.Close()
+		t.mu.Lock()
+		t.rpcAddr = ""
+		t.mu.Unlock()
+		log.Printf("tab %s RPC bridge closed", t.id)
 	})
 
 	// Operator drives a tab: queue a command, wait for its result.
