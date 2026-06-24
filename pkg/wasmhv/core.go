@@ -79,19 +79,29 @@ func (o Overview) MarshalJSON() ([]byte, error) {
 	}{alias(o), []struct{}{}, []struct{}{}})
 }
 
+// DmsgClientSummary mirrors visor/dmsgtracker.DmsgClientSummary. The CLI's
+// `visor info` dereferences summary.DmsgStats.RoundTrip unconditionally, so this
+// must decode to a non-nil pointer (gob matches by field name).
+type DmsgClientSummary struct {
+	PK        cipher.PubKey `json:"public_key"`
+	ServerPK  cipher.PubKey `json:"server_public_key"`
+	RoundTrip time.Duration `json:"round_trip"`
+}
+
 // Summary mirrors the scalar fields of visor.Summary the node table reads.
 type Summary struct {
-	Overview          *Overview   `json:"overview"`
-	Health            *HealthInfo `json:"health"`
-	Uptime            float64     `json:"uptime"`
-	Online            bool        `json:"online"`
-	MinHops           uint16      `json:"min_hops"`
-	RewardAddress     string      `json:"reward_address"`
-	BuildTag          string      `json:"build_tag"`
-	ConfigVersion     string      `json:"config_version"`
-	PublicAutoconnect bool        `json:"public_autoconnect"`
-	IsPublic          bool        `json:"is_public"`
-	IsHypervisor      bool        `json:"is_hypervisor,omitempty"`
+	Overview          *Overview          `json:"overview"`
+	Health            *HealthInfo        `json:"health"`
+	DmsgStats         *DmsgClientSummary `json:"dmsg_stats"`
+	Uptime            float64            `json:"uptime"`
+	Online            bool               `json:"online"`
+	MinHops           uint16             `json:"min_hops"`
+	RewardAddress     string             `json:"reward_address"`
+	BuildTag          string             `json:"build_tag"`
+	ConfigVersion     string             `json:"config_version"`
+	PublicAutoconnect bool               `json:"public_autoconnect"`
+	IsPublic          bool               `json:"is_public"`
+	IsHypervisor      bool               `json:"is_hypervisor,omitempty"`
 }
 
 // --- the core ---
