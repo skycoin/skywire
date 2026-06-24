@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy
+.PHONY : build clean install format  bin build-race deploy build-embedwasm wasm-visor
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
@@ -245,7 +245,13 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browse.js ./build/wasm-visor-go/
-	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go' then open http://localhost:8085/"
+	gzip -9 -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasm-visor.wasm.gz
+	@echo "built ./build/wasm-visor-go (standard Go js/wasm) + embed gz at pkg/wasmhv/wasmbin/ (gitignored)"
+	@echo "  serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'; embed in skywire: 'make build-embedwasm'"
+
+build-embedwasm: wasm-visor ## Build skywire with the std-Go wasm-visor embedded (so `cli hv gen` needs no --wasm). Runs `make wasm-visor` first.
+	${OPTS} go build -tags embedwasm ${BUILD_OPTS} -o $(BUILD_PATH)skywire .
+	@echo "built $(BUILD_PATH)skywire WITH embedded wasm-visor (~8MB larger) — `cli hv gen` works without --wasm"
 
 dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
 	mkdir -p ./build/dmsg-wasm-hv

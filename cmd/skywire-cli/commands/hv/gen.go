@@ -10,6 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 	"github.com/skycoin/skywire/pkg/wasmhv"
+	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
 )
 
 var (
@@ -63,11 +64,6 @@ the baked-in key (the plaintext never touches the file).
 SECURITY: never serve a generated (key-bearing) file from a domain — it would
 train users to type secret keys into pages from external hosts.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		if genWasm == "" {
-			cmd.PrintErrln("--wasm is required (build it with `make dmsg-wasm`)")
-			os.Exit(1)
-		}
-
 		skHex, err := resolveKey(cmd)
 		if err != nil {
 			cmd.PrintErrln("identity:", err)
@@ -77,26 +73,45 @@ train users to type secret keys into pages from external hosts.`,
 			cmd.PrintErrln("warning: the secret key is baked in WITHOUT a password (plaintext on disk); pass --password to encrypt it")
 		}
 
-		wasm, err := os.ReadFile(genWasm) //nolint:gosec // operator-supplied path
-		if err != nil {
-			cmd.PrintErrln("read --wasm:", err)
+		// Source the wasm: an explicit --wasm path wins; otherwise fall back to the
+		// std-Go wasm-visor embedded in this binary (builds with `-tags embedwasm`
+		// after `make wasm-visor`). The embedded one is the standard-Go build, so it
+		// uses Go's wasm_exec.js (the embedded default) — no --wasm-exec needed.
+		var wasm []byte
+		embeddedVisor := false
+		if genWasm != "" {
+			if wasm, err = os.ReadFile(genWasm); err != nil { //nolint:gosec // operator-supplied path
+				cmd.PrintErrln("read --wasm:", err)
+				os.Exit(1)
+			}
+		} else if wasmbin.Embedded() {
+			if wasm, err = wasmbin.Get(); err != nil {
+				cmd.PrintErrln("embedded wasm-visor:", err)
+				os.Exit(1)
+			}
+			genVisor = true // the embedded binary IS the std-Go wasm-visor
+			embeddedVisor = true
+		} else {
+			cmd.PrintErrln("--wasm is required (or build skywire with `-tags embedwasm` after `make wasm-visor` to embed it)")
 			os.Exit(1)
 		}
+
 		uiFS, err := visor.HypervisorUIFS()
 		if err != nil {
 			cmd.PrintErrln("hypervisor UI assets:", err)
 			os.Exit(1)
 		}
 
-		// A wasm-visor is TinyGo: its wasm_exec.js differs from Go's embedded one,
-		// so it must be supplied. The standalone (Go) dmsg-client uses the embedded.
+		// wasm_exec.js: the embedded std-Go wasm-visor (and the Go dmsg-client) use
+		// Go's, which is embedded. A --wasm-supplied wasm-VISOR is TinyGo and needs
+		// its own wasm_exec.js passed via --wasm-exec.
 		wasmExec := wasmhv.WasmExecJS
 		if genWasmExec != "" {
 			if wasmExec, err = os.ReadFile(genWasmExec); err != nil { //nolint:gosec // operator-supplied path
 				cmd.PrintErrln("read --wasm-exec:", err)
 				os.Exit(1)
 			}
-		} else if genVisor {
+		} else if genVisor && !embeddedVisor {
 			cmd.PrintErrln("--visor requires --wasm-exec (TinyGo's wasm_exec.js; build/wasm-visor/wasm_exec_tinygo.js)")
 			os.Exit(1)
 		}
