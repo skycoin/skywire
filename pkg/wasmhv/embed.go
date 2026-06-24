@@ -10,6 +10,15 @@ import _ "embed"
 //go:embed override.js
 var OverrideJS []byte
 
+// BrowseJS is pkg/wasmhv/browse.js — the dmsg virtual-browser engine (the same
+// file the wasm-visor dev harness loads). Injected into a generated standalone
+// file in VISOR mode so the page gets a browse/host overlay (skynet sites
+// rendered + self-hosting over dmsg, via globalThis.skywireVisor). Unused in
+// viewer/standalone-hypervisor modes (no skywireVisor).
+//
+//go:embed browse.js
+var BrowseJS []byte
+
 // WasmExecJS is Go's lib/wasm/wasm_exec.js, vendored here so a generated file is
 // self-contained. It MUST match the Go toolchain that built the embedded/passed
 // dmsg.wasm — refresh it with the wasm build (the Makefile bundle target copies

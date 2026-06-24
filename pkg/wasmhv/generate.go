@@ -144,6 +144,15 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 		"<script>" + wasmJS + "</script>\n" +
 		"<script>" + jsSafe(overrideJS) + "</script>\n"
 
+	// VISOR mode only: ship the dmsg virtual-browser overlay (browse.js engine +
+	// a launcher that mounts a toggleable browse/host panel once skywireVisor is
+	// up). This gives the standalone wasm-visor a real surface to browse skynet/
+	// dmsg sites and self-host content over dmsg — no devtools, no extra page.
+	if cfg.Visor {
+		head += "<script>" + jsSafe(BrowseJS) + "</script>\n" +
+			"<script>" + browseLauncherJS + "</script>\n"
+	}
+
 	loc := reHeadOpen.FindStringIndex(html)
 	if loc == nil {
 		return nil, fmt.Errorf("no <head> in index.html")
@@ -250,6 +259,28 @@ func wasmBootstrap(wasm []byte, tinygo bool) (string, error) {
   go.run(res.instance);
 })();`, nil
 }
+
+// browseLauncherJS waits for the wasm-visor + browse.js to be ready, mounts the
+// browse/host overlay panel (SkywireBrowse.mountPanel), and adds a floating
+// "skynet" button to toggle it. Visor-mode only (it uses skywireVisor.fetchDmsg /
+// serveContent, which exist only in the wasm-visor build).
+const browseLauncherJS = `(function(){
+  if(!(window.__SKYWIRE_HV__||{}).visor) return;
+  function ready(){
+    if(!self.skywireVisor||!self.skywireVisor.fetchDmsg||!self.SkywireBrowse||!document.body){ return setTimeout(ready,200); }
+    var p=self.SkywireBrowse.mountPanel(document,{
+      fetchDmsg:function(){ return self.skywireVisor.fetchDmsg.apply(null,arguments); },
+      serveContent:function(m){ return self.skywireVisor.serveContent(m); },
+      selfPK:function(){ try{ return self.skywireVisor.status().pk; }catch(e){ return ""; } }
+    });
+    var btn=document.createElement("button");
+    btn.textContent="skynet"; btn.title="browse / host dmsg sites";
+    btn.style.cssText="position:fixed;left:12px;bottom:12px;z-index:2147483001;cursor:pointer;background:#7aa2f7;color:#0e0f12;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
+    btn.onclick=function(){ p.toggle(); };
+    document.body.appendChild(btn);
+  }
+  ready();
+})();`
 
 // assetMapJS inlines the UI's runtime assets (everything under assets/ — i18n
 // JSON, images, fonts) into a JS object the standalone file serves locally:
