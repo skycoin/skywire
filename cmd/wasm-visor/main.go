@@ -46,6 +46,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"syscall/js"
 	"time"
@@ -61,7 +62,9 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
@@ -255,6 +258,16 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// never returns). Fixed by the reflection-free gobrpc server — the router now
 	// registers explicit handlers under TinyGo (router_setup_rpc_tinygo.go) instead
 	// of reflection. Validated in-browser via this harness.
+	// Route ORIGINATION: query the route-finder over dmsg and dial route groups
+	// via the deployment's setup nodes, so this tab can SET UP multihop (and mux)
+	// routes — not just receive rules and forward. Legacy setup path
+	// (forceLegacy=true); no embedded route-setup node in a browser leaf. The
+	// std-Go build compiles the full route-source (the TinyGo stub does not apply).
+	rfHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
+	rfClient := rfclient.NewHTTP(deployment.Prod.RouteFinderDmsg, 10*time.Second, rfHTTP, mLog)
+	rgDialer := router.NewSetupNodeDialerFull(nil, router.NewRSNRelayCache(mLog.PackageLogger("router")), tm, true)
+	vlog(fmt.Sprintf("router: route origination wired (rf=%s, %d setup nodes)", deployment.Prod.RouteFinderDmsg, len(deployment.Prod.RouteSetupNodes)))
+
 	rConf := &router.Config{
 		Logger:             mLog.PackageLogger("router"),
 		MasterLogger:       mLog,
@@ -262,6 +275,9 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		SecKey:             sk,
 		TransportManager:   tm,
 		AwaitSetupListener: setupLis,
+		RouteFinder:        rfClient,
+		RouteGroupDialer:   rgDialer,
+		SetupNodes:         deployment.Prod.RouteSetupNodes,
 	}
 	vlog("router: New…")
 	r, err := router.New(dmsgC, rConf, nil)
