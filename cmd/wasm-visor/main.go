@@ -46,6 +46,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"syscall/js"
@@ -107,15 +108,16 @@ func vlog(msg string) {
 func main() {
 	ctx = context.Background()
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
-		"boot":          js.FuncOf(jsBoot),
-		"status":        js.FuncOf(jsStatus),
-		"hvApi":         js.FuncOf(jsHvAPI),
-		"tpdEdge":       js.FuncOf(jsTPDEdge),
-		"dialTransport": js.FuncOf(jsDialTransport),
-		"fetchDmsg":     js.FuncOf(jsFetchDmsg),
-		"serveContent":  js.FuncOf(jsServeContent),
-		"serveRPC":      js.FuncOf(jsServeRPC),
-		"dialRoute":     js.FuncOf(jsDialRoute),
+		"boot":            js.FuncOf(jsBoot),
+		"status":          js.FuncOf(jsStatus),
+		"hvApi":           js.FuncOf(jsHvAPI),
+		"tpdEdge":         js.FuncOf(jsTPDEdge),
+		"dialTransport":   js.FuncOf(jsDialTransport),
+		"fetchDmsg":       js.FuncOf(jsFetchDmsg),
+		"serveContent":    js.FuncOf(jsServeContent),
+		"serveRPC":        js.FuncOf(jsServeRPC),
+		"dialRoute":       js.FuncOf(jsDialRoute),
+		"checkRegistered": js.FuncOf(jsCheckRegistered),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -649,6 +651,42 @@ func jsDialRoute(_ js.Value, args []js.Value) interface{} {
 		res.Set("ok", true)
 		res.Set("remote", conn.RemoteAddr().String())
 		res.Set("local", conn.LocalAddr().String())
+		return res, nil
+	})
+}
+
+// jsCheckRegistered() → Promise<{registered, status, detail}>. Diagnoses dmsg
+// discovery registration: GETs this tab's OWN entry from the dmsg-discovery over
+// the tab's dmsg-HTTP. 200 = registered (RSN can reach us for route setup); 404 =
+// reachable but NOT published (the registration write isn't landing); a transport
+// error = the tab can't even reach the discovery over its one seed session
+// (bootstrap reachability). See docs/design/wasm-visor-discovery-registration.md.
+func jsCheckRegistered(_ js.Value, _ []js.Value) interface{} {
+	return promise(func() (interface{}, error) {
+		if dmsgC == nil {
+			return nil, errors.New("not booted; call boot() first")
+		}
+		httpC := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 25 * time.Second}
+		reqURL := deployment.Prod.DmsgDiscoveryDmsg + "/dmsg-discovery/entry/" + selfPK.Hex()
+		dctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+		defer cancel()
+		req, _ := http.NewRequestWithContext(dctx, http.MethodGet, reqURL, nil)
+		res := js.Global().Get("Object").New()
+		resp, err := httpC.Do(req)
+		if err != nil {
+			res.Set("registered", false)
+			res.Set("status", 0)
+			res.Set("detail", "reach discovery: "+err.Error())
+			return res, nil
+		}
+		defer resp.Body.Close() //nolint:errcheck
+		body, _ := io.ReadAll(resp.Body)
+		if len(body) > 200 {
+			body = body[:200]
+		}
+		res.Set("registered", resp.StatusCode == http.StatusOK)
+		res.Set("status", resp.StatusCode)
+		res.Set("detail", string(body))
 		return res, nil
 	})
 }
