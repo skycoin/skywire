@@ -23,13 +23,20 @@
   <button onclick="doStatus()">status</button>
 </div>
 <div style="margin-top:.6em">
-  browse dmsg site — pk <input id="browsepk" size="40" placeholder="&lt;site-pk&gt; or pk:port">
-  path <input id="browsepath" size="10" value="/">
-  <button onclick="doBrowse()">browse</button>
-  <span style="color:#888">(renders fetched dmsg content in a sandboxed iframe — no DNS, no IP)</span>
+  <b>browse</b> — pk <input id="browsepk" size="40" placeholder="&lt;site-pk&gt; or pk:port">
+  path <input id="browsepath" size="12" value="/">
+  <button onclick="doBrowse()">go</button>
+  <span style="color:#888">(links inside the page route over dmsg too — no DNS, no IP)</span>
 </div>
-<pre id="out" style="white-space:pre-wrap;max-height:35vh;overflow:auto"></pre>
-<iframe id="browseframe" sandbox style="width:100%;height:40vh;background:#fff;border:1px solid #444" title="dmsg site"></iframe>
+<div style="margin-top:.4em">
+  <b>host</b> a page — path <input id="hostpath" size="12" value="/">
+  type <input id="hostct" size="10" value="text/html">
+  <button onclick="doHost()">host</button>
+  <span style="color:#888">(others reach it by your PK, over dmsg)</span>
+  <br><textarea id="hostbody" rows="3" style="width:100%;margin-top:.3em;font-family:monospace" placeholder="&lt;h1&gt;hi from my tab, served over dmsg&lt;/h1&gt;"></textarea>
+</div>
+<pre id="out" style="white-space:pre-wrap;max-height:22vh;overflow:auto"></pre>
+<iframe id="browseframe" sandbox="allow-scripts allow-forms" style="width:100%;height:45vh;background:#fff;border:1px solid #444" title="dmsg site"></iframe>
 
 <script src="wasm_exec_tinygo.js"></script>
 <script>
@@ -63,15 +70,66 @@
   }
   function doStatus() { log("status: " + JSON.stringify(skywireVisor.status())); }
 
-  async function doBrowse() {
-    const pk = document.getElementById("browsepk").value.trim();
-    const path = document.getElementById("browsepath").value.trim() || "/";
+  // currentSitePK is the PK of the site shown in the iframe, so in-page link
+  // clicks (relayed via postMessage) re-fetch from the same site over dmsg.
+  let currentSitePK = "";
+
+  // renderSite shows fetched HTML in the iframe with a small injected shim that
+  // intercepts same-site link clicks and relays the new path to this parent (the
+  // iframe is sandboxed + origin-isolated, so postMessage is the only channel).
+  // That makes links inside a dmsg page navigate over dmsg instead of trying the
+  // harness origin. Resources (css/img) still need inlining or per-resource
+  // routing; this fixes navigation, the common case.
+  function renderSite(pk, path, html) {
+    currentSitePK = pk;
+    document.getElementById("browsepk").value = pk;
+    document.getElementById("browsepath").value = path;
+    const shim =
+      '<base target="_self">' +
+      '<scr' + 'ipt>(function(){' +
+      'var cur=' + JSON.stringify(path) + ';' +
+      'function pathOf(h){try{var u=new URL(h,"http://dmsg"+cur);return u.pathname+u.search;}catch(e){return h;}}' +
+      'document.addEventListener("click",function(e){' +
+      'var a=e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
+      'var h=a.getAttribute("href")||"";if(!h||h.charAt(0)==="#")return;' +
+      'if(/^https?:\\/\\//i.test(h))return;' +          // external absolute → leave
+      'if(/^[a-z][a-z0-9+.-]*:/i.test(h))return;' +     // mailto:, data:, etc → leave
+      'e.preventDefault();parent.postMessage({type:"dmsgnav",path:pathOf(h)},"*");' +
+      '},true);})();</scr' + 'ipt>';
+    document.getElementById("browseframe").srcdoc = shim + html;
+  }
+
+  async function browseTo(pk, path) {
+    pk = (pk || "").trim();
+    path = path || "/";
+    if (!pk) { log("browse: enter a site PK"); return; }
     try {
       const r = await skywireVisor.fetchDmsg(pk, "GET", path, null);
-      const html = new TextDecoder().decode(r.body);
-      document.getElementById("browseframe").srcdoc = html;
+      renderSite(pk, path, new TextDecoder().decode(r.body));
       log("browsed dmsg://" + pk + path + " → " + r.status + " (" + r.body.length + " bytes)");
     } catch (e) { log("browse error: " + (e.message || e)); }
+  }
+
+  function doBrowse() {
+    browseTo(document.getElementById("browsepk").value, document.getElementById("browsepath").value.trim() || "/");
+  }
+
+  // Relayed link clicks from inside the browsed iframe → re-fetch over dmsg.
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.type === "dmsgnav" && currentSitePK) {
+      browseTo(currentSitePK, e.data.path);
+    }
+  });
+
+  function doHost() {
+    const path = document.getElementById("hostpath").value.trim() || "/";
+    const ct = document.getElementById("hostct").value.trim() || "text/html";
+    const body = document.getElementById("hostbody").value;
+    const m = {}; m[path] = { ct: ct, body: body };
+    skywireVisor.serveContent(m);
+    let pk = "(boot first)";
+    try { pk = skywireVisor.status().pk || pk; } catch (e) {}
+    log("hosting " + path + " (" + body.length + "b, " + ct + ") — reach it: browse pk " + pk + " path " + path);
   }
 
   // ---- control bridge (drives this tab from a shell via serve.go) ----
@@ -106,12 +164,18 @@
         case "status":
           return skywireVisor.status();
         case "browse": {
-          // a = [sitePK, method, path, bodyOrNull] — fetch a dmsg site, render it.
-          const r = await skywireVisor.fetchDmsg(a[0] || "", a[1] || "GET", a[2] || "/", a[3] || null);
+          // a = [sitePK, path] — fetch a dmsg site, render it (nav-enabled).
+          const pk = a[0] || "", path = a[1] || "/";
+          const r = await skywireVisor.fetchDmsg(pk, "GET", path, null);
           const html = new TextDecoder().decode(r.body);
-          const frame = document.getElementById("browseframe");
-          if (frame) frame.srcdoc = html;
+          renderSite(pk, path, html);
           return { status: r.status, bytes: r.body.length, preview: html.slice(0, 2000) };
+        }
+        case "host": {
+          // a = [path, contentType, body] — self-host a page over dmsg.
+          const m = {}; m[a[0] || "/"] = { ct: a[1] || "text/html", body: a[2] || "" };
+          skywireVisor.serveContent(m);
+          return { hosting: a[0] || "/" };
         }
         case "reload":
           post("/ctl/log?tab=" + tabId, "reloading");
