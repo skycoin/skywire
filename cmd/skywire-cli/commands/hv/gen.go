@@ -73,10 +73,10 @@ train users to type secret keys into pages from external hosts.`,
 			cmd.PrintErrln("warning: the secret key is baked in WITHOUT a password (plaintext on disk); pass --password to encrypt it")
 		}
 
-		// Source the wasm: an explicit --wasm path wins; otherwise fall back to the
-		// std-Go wasm-visor embedded in this binary (builds with `-tags embedwasm`
-		// after `make wasm-visor`). The embedded one is the standard-Go build, so it
-		// uses Go's wasm_exec.js (the embedded default) — no --wasm-exec needed.
+		// Source the wasm: an explicit --wasm path wins; otherwise use the std-Go
+		// wasm-visor embedded in this binary (committed in pkg/wasmhv/wasmbin). The
+		// embedded one is the standard-Go build, so it uses Go's wasm_exec.js (the
+		// embedded default) — no --wasm-exec needed.
 		var wasm []byte
 		embeddedVisor := false
 		if genWasm != "" {
@@ -92,7 +92,7 @@ train users to type secret keys into pages from external hosts.`,
 			genVisor = true // the embedded binary IS the std-Go wasm-visor
 			embeddedVisor = true
 		} else {
-			cmd.PrintErrln("--wasm is required (or build skywire with `-tags embedwasm` after `make wasm-visor` to embed it)")
+			cmd.PrintErrln("no wasm-visor available: pass --wasm, or rebuild skywire after `make embed-wasm-visor`")
 			os.Exit(1)
 		}
 
