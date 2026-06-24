@@ -70,33 +70,103 @@
   }
   function doStatus() { log("status: " + JSON.stringify(skywireVisor.status())); }
 
-  // currentSitePK is the PK of the site shown in the iframe, so in-page link
-  // clicks (relayed via postMessage) re-fetch from the same site over dmsg.
+  // currentSitePK is the PK of the site shown in the iframe, so in-page links
+  // and the site's own fetch/XHR (relayed via postMessage) route to the same
+  // site over dmsg.
   let currentSitePK = "";
 
-  // renderSite shows fetched HTML in the iframe with a small injected shim that
-  // intercepts same-site link clicks and relays the new path to this parent (the
-  // iframe is sandboxed + origin-isolated, so postMessage is the only channel).
-  // That makes links inside a dmsg page navigate over dmsg instead of trying the
-  // harness origin. Resources (css/img) still need inlining or per-resource
-  // routing; this fixes navigation, the common case.
-  function renderSite(pk, path, html) {
+  // same-site = relative or root-relative (no scheme, not //host, not #anchor).
+  // External http(s)/scheme links are left to the browser.
+  function sameSite(u) {
+    return !!u && u.charAt(0) !== "#" && !/^https?:\/\//i.test(u) && !/^\/\//.test(u) && !/^[a-z][a-z0-9+.-]*:/i.test(u);
+  }
+  function resolvePath(href, base) {
+    try { const u = new URL(href, "http://dmsg" + base); return u.pathname + u.search; } catch (e) { return href; }
+  }
+  // Guess a MIME from a path extension (fallback when dmsg omits Content-Type).
+  function mimeOf(path) {
+    const m = (path.split("?")[0].match(/\.([a-z0-9]+)$/i) || [, ""])[1].toLowerCase();
+    return { css: "text/css", js: "text/javascript", mjs: "text/javascript", json: "application/json",
+      png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", svg: "image/svg+xml",
+      webp: "image/webp", ico: "image/x-icon", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf",
+      html: "text/html" }[m] || "application/octet-stream";
+  }
+  function bytesToB64(bytes) {
+    let s = ""; const C = 0x8000;
+    for (let i = 0; i < bytes.length; i += C) s += String.fromCharCode.apply(null, bytes.subarray(i, i + C));
+    return btoa(s);
+  }
+  function ctOf(headers, path) {
+    const ct = headers && (headers["Content-Type"] || headers["content-type"]);
+    return (ct || mimeOf(path)).split(";")[0].trim();
+  }
+
+  // navShimSrc is JS injected (as a <script> built via DOM, so no </script> in a
+  // string) at the top of the browsed iframe's <head>. It (1) intercepts same-site
+  // link clicks → postMessage a nav request to this parent, and (2) overrides
+  // window.fetch so the site's OWN same-site requests are relayed to the parent and
+  // fetched over dmsg — the app-level equivalent of a SOCKS5 proxy for the page.
+  function navShimSrc(path) {
+    return (
+      'var cur=' + JSON.stringify(path) + ';' +
+      'function pathOf(h){try{var u=new URL(h,"http://dmsg"+cur);return u.pathname+u.search;}catch(e){return h;}}' +
+      'function same(u){return !!u&&u.charAt(0)!=="#"&&!/^https?:\\/\\//i.test(u)&&!/^\\/\\//.test(u)&&!/^[a-z][a-z0-9+.-]*:/i.test(u);}' +
+      'document.addEventListener("click",function(e){' +
+      'var a=e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
+      'var h=a.getAttribute("href")||"";if(!same(h))return;' +
+      'e.preventDefault();parent.postMessage({type:"dmsgnav",path:pathOf(h)},"*");' +
+      '},true);' +
+      'var _rq=0,_pend={};' +
+      'window.addEventListener("message",function(e){var d=e.data||{};if(d.type!=="dmsgreply")return;var p=_pend[d.id];if(!p)return;delete _pend[d.id];p(d);});' +
+      'function relay(p,m,b){return new Promise(function(res){var id=++_rq;_pend[id]=res;parent.postMessage({type:"dmsgreq",id:id,path:p,method:m||"GET",body:b||null},"*");});}' +
+      'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);' +
+      'if(!same(u))return _f.apply(this,arguments);' +
+      'return relay(pathOf(u),(init&&init.method)||"GET",(init&&init.body)||null).then(function(r){' +
+      'var body=r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();' +
+      'return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});});};'
+    );
+  }
+
+  // renderSite shows a fetched dmsg page in the sandboxed iframe: it inlines the
+  // page's same-site subresources (stylesheets/images/scripts) by fetching each
+  // over dmsg, and injects navShimSrc so links + the site's fetch route over dmsg
+  // too. So a whole site renders and navigates with no DNS, no IP, no CA.
+  async function renderSite(pk, path, html) {
     currentSitePK = pk;
     document.getElementById("browsepk").value = pk;
     document.getElementById("browsepath").value = path;
-    const shim =
-      '<base target="_self">' +
-      '<scr' + 'ipt>(function(){' +
-      'var cur=' + JSON.stringify(path) + ';' +
-      'function pathOf(h){try{var u=new URL(h,"http://dmsg"+cur);return u.pathname+u.search;}catch(e){return h;}}' +
-      'document.addEventListener("click",function(e){' +
-      'var a=e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
-      'var h=a.getAttribute("href")||"";if(!h||h.charAt(0)==="#")return;' +
-      'if(/^https?:\\/\\//i.test(h))return;' +          // external absolute → leave
-      'if(/^[a-z][a-z0-9+.-]*:/i.test(h))return;' +     // mailto:, data:, etc → leave
-      'e.preventDefault();parent.postMessage({type:"dmsgnav",path:pathOf(h)},"*");' +
-      '},true);})();</scr' + 'ipt>';
-    document.getElementById("browseframe").srcdoc = shim + html;
+    let docHtml;
+    try {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const head = doc.head || doc.documentElement;
+      const base = doc.createElement("base"); base.setAttribute("target", "_self");
+      const sc = doc.createElement("script"); sc.textContent = navShimSrc(path);
+      head.insertBefore(sc, head.firstChild);
+      head.insertBefore(base, head.firstChild);
+
+      const jobs = [];
+      doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(el => {
+        const href = el.getAttribute("href");
+        if (!sameSite(href)) return;
+        jobs.push(skywireVisor.fetchDmsg(pk, "GET", resolvePath(href, path), null).then(r => {
+          const style = doc.createElement("style");
+          style.textContent = new TextDecoder().decode(r.body);
+          el.replaceWith(style);
+        }).catch(() => {}));
+      });
+      doc.querySelectorAll("img[src],script[src],source[src]").forEach(el => {
+        const src = el.getAttribute("src");
+        if (!sameSite(src)) return;
+        jobs.push(skywireVisor.fetchDmsg(pk, "GET", resolvePath(src, path), null).then(r => {
+          el.setAttribute("src", "data:" + ctOf(r.headers, src) + ";base64," + bytesToB64(r.body));
+        }).catch(() => {}));
+      });
+      await Promise.all(jobs);
+      docHtml = "<!doctype html>" + doc.documentElement.outerHTML;
+    } catch (e) {
+      docHtml = html; // parse failed → render the raw HTML
+    }
+    document.getElementById("browseframe").srcdoc = docHtml;
   }
 
   async function browseTo(pk, path) {
@@ -105,7 +175,7 @@
     if (!pk) { log("browse: enter a site PK"); return; }
     try {
       const r = await skywireVisor.fetchDmsg(pk, "GET", path, null);
-      renderSite(pk, path, new TextDecoder().decode(r.body));
+      await renderSite(pk, path, new TextDecoder().decode(r.body));
       log("browsed dmsg://" + pk + path + " → " + r.status + " (" + r.body.length + " bytes)");
     } catch (e) { log("browse error: " + (e.message || e)); }
   }
@@ -114,10 +184,18 @@
     browseTo(document.getElementById("browsepk").value, document.getElementById("browsepath").value.trim() || "/");
   }
 
-  // Relayed link clicks from inside the browsed iframe → re-fetch over dmsg.
-  window.addEventListener("message", function (e) {
-    if (e.data && e.data.type === "dmsgnav" && currentSitePK) {
-      browseTo(currentSitePK, e.data.path);
+  // Relayed from inside the browsed iframe: link clicks (dmsgnav) re-fetch a page;
+  // the site's own fetch (dmsgreq) is served over dmsg and the bytes posted back.
+  window.addEventListener("message", async function (e) {
+    const d = e.data || {};
+    if (d.type === "dmsgnav" && currentSitePK) { browseTo(currentSitePK, d.path); return; }
+    if (d.type === "dmsgreq" && currentSitePK) {
+      try {
+        const r = await skywireVisor.fetchDmsg(currentSitePK, d.method || "GET", d.path, d.body || null);
+        e.source.postMessage({ type: "dmsgreply", id: d.id, status: r.status, ct: ctOf(r.headers, d.path), body: bytesToB64(r.body) }, "*");
+      } catch (err) {
+        e.source.postMessage({ type: "dmsgreply", id: d.id, status: 502, ct: "text/plain", body: btoa("dmsg fetch error") }, "*");
+      }
     }
   });
 
@@ -168,7 +246,7 @@
           const pk = a[0] || "", path = a[1] || "/";
           const r = await skywireVisor.fetchDmsg(pk, "GET", path, null);
           const html = new TextDecoder().decode(r.body);
-          renderSite(pk, path, html);
+          await renderSite(pk, path, html);
           return { status: r.status, bytes: r.body.length, preview: html.slice(0, 2000) };
         }
         case "host": {
