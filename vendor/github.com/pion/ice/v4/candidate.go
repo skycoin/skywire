@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -13,13 +13,13 @@ const (
 	receiveMTU             = 8192
 	defaultLocalPreference = 65535
 
-	// ComponentRTP indicates that the candidate is used for RTP
+	// ComponentRTP indicates that the candidate is used for RTP.
 	ComponentRTP uint16 = 1
-	// ComponentRTCP indicates that the candidate is used for RTCP
+	// ComponentRTCP indicates that the candidate is used for RTCP.
 	ComponentRTCP
 )
 
-// Candidate represents an ICE candidate
+// Candidate represents an ICE candidate.
 type Candidate interface {
 	// An arbitrary string used in the freezing algorithm to
 	// group similar candidates.  It is the same for two candidates that
@@ -52,13 +52,39 @@ type Candidate interface {
 	//  candidate, which is useful for diagnostics and other purposes
 	RelatedAddress() *CandidateRelatedAddress
 
+	// Extensions returns a copy of all extension attributes associated with the ICECandidate.
+	// In the order of insertion, *(key value).
+	// Extension attributes are defined in RFC 5245, Section 15.1:
+	// https://datatracker.ietf.org/doc/html/rfc5245#section-15.1
+	//.
+	Extensions() []CandidateExtension
+	// GetExtension returns the value of the extension attribute associated with the ICECandidate.
+	// Extension attributes are defined in RFC 5245, Section 15.1:
+	// https://datatracker.ietf.org/doc/html/rfc5245#section-15.1
+	//.
+	GetExtension(key string) (value CandidateExtension, ok bool)
+	// AddExtension adds an extension attribute to the ICECandidate.
+	// If an extension with the same key already exists, it will be overwritten.
+	// Extension attributes are defined in RFC 5245, Section 15.1:
+	AddExtension(extension CandidateExtension) error
+	// RemoveExtension removes an extension attribute from the ICECandidate.
+	// Extension attributes are defined in RFC 5245, Section 15.1:
+	RemoveExtension(key string) (ok bool)
+
 	String() string
 	Type() CandidateType
 	TCPType() TCPType
 
 	Equal(other Candidate) bool
 
+	// DeepEqual same as Equal, But it also compares the candidate extensions.
+	DeepEqual(other Candidate) bool
+
 	Marshal() string
+
+	// transportAddressEqual checks if the transport address (IP, Port, NetworkType, TCPType) is equal to another
+	// candidate.
+	transportAddressEqual(other Candidate) bool
 
 	addr() net.Addr
 	filterForLocationTracking() bool
@@ -70,4 +96,6 @@ type Candidate interface {
 	seen(outbound bool)
 	start(a *Agent, conn net.PacketConn, initializedCh <-chan struct{})
 	writeTo(raw []byte, dst Candidate) (int, error)
+
+	replaceRemoteCandidateCacheValues(oldRemote, newRemote Candidate)
 }

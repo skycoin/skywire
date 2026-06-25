@@ -1,8 +1,7 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package webrtc
 
@@ -17,7 +16,7 @@ import (
 )
 
 // srtpWriterFuture blocks Read/Write calls until
-// the SRTP Session is available
+// the SRTP Session is available.
 type srtpWriterFuture struct {
 	ssrc           SSRC
 	rtpSender      *RTPSender
@@ -27,7 +26,7 @@ type srtpWriterFuture struct {
 	closed         bool
 }
 
-func (s *srtpWriterFuture) init(returnWhenNoSRTP bool) error {
+func (s *srtpWriterFuture) init(returnWhenNoSRTP bool) error { //nolint:cyclop
 	if returnWhenNoSRTP {
 		select {
 		case <-s.rtpSender.stopCalled:
@@ -73,6 +72,7 @@ func (s *srtpWriterFuture) init(returnWhenNoSRTP bool) error {
 
 	s.rtcpReadStream.Store(rtcpReadStream)
 	s.rtpWriteStream.Store(rtpWriteStream)
+
 	return nil
 }
 

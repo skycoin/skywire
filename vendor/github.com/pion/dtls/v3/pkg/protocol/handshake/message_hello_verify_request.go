@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package handshake
@@ -27,12 +27,12 @@ type MessageHelloVerifyRequest struct {
 	Cookie  []byte
 }
 
-// Type returns the Handshake Type
+// Type returns the Handshake Type.
 func (m MessageHelloVerifyRequest) Type() Type {
 	return TypeHelloVerifyRequest
 }
 
-// Marshal encodes the Handshake
+// Marshal encodes the Handshake.
 func (m *MessageHelloVerifyRequest) Marshal() ([]byte, error) {
 	if len(m.Cookie) > 255 {
 		return nil, errCookieTooLong
@@ -41,13 +41,13 @@ func (m *MessageHelloVerifyRequest) Marshal() ([]byte, error) {
 	out := make([]byte, 3+len(m.Cookie))
 	out[0] = m.Version.Major
 	out[1] = m.Version.Minor
-	out[2] = byte(len(m.Cookie))
+	out[2] = byte(len(m.Cookie)) //nolint:gosec // G115: cookie length is validated to be <= 255 above.
 	copy(out[3:], m.Cookie)
 
 	return out, nil
 }
 
-// Unmarshal populates the message from encoded data
+// Unmarshal populates the message from encoded data.
 func (m *MessageHelloVerifyRequest) Unmarshal(data []byte) error {
 	if len(data) < 3 {
 		return errBufferTooSmall
@@ -61,5 +61,6 @@ func (m *MessageHelloVerifyRequest) Unmarshal(data []byte) error {
 	m.Cookie = make([]byte, cookieLength)
 
 	copy(m.Cookie, data[3:3+cookieLength])
+
 	return nil
 }

@@ -1,13 +1,15 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
+
+import "slices"
 
 // RTPTransceiverDirection indicates the direction of the RTPTransceiver.
 type RTPTransceiverDirection int
 
 const (
-	// RTPTransceiverDirectionUnknown is the enum's zero-value
+	// RTPTransceiverDirectionUnknown is the enum's zero-value.
 	RTPTransceiverDirectionUnknown RTPTransceiverDirection = iota
 
 	// RTPTransceiverDirectionSendrecv indicates the RTPSender will offer
@@ -67,7 +69,7 @@ func (t RTPTransceiverDirection) String() string {
 	}
 }
 
-// Revers indicate the opposite direction
+// Revers indicate the opposite direction.
 func (t RTPTransceiverDirection) Revers() RTPTransceiverDirection {
 	switch t {
 	case RTPTransceiverDirectionSendonly:
@@ -79,13 +81,15 @@ func (t RTPTransceiverDirection) Revers() RTPTransceiverDirection {
 	}
 }
 
-func haveRTPTransceiverDirectionIntersection(haystack []RTPTransceiverDirection, needle []RTPTransceiverDirection) bool {
+func haveRTPTransceiverDirectionIntersection(
+	haystack []RTPTransceiverDirection,
+	needle []RTPTransceiverDirection,
+) bool {
 	for _, n := range needle {
-		for _, h := range haystack {
-			if n == h {
-				return true
-			}
+		if slices.Contains(haystack, n) {
+			return true
 		}
 	}
+
 	return false
 }

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -26,6 +26,7 @@ func (r *Role) UnmarshalText(text []byte) error {
 	default:
 		return fmt.Errorf("%w %q", errUnknownRole, text)
 	}
+
 	return nil
 }
 
