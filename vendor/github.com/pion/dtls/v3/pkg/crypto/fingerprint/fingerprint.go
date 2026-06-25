@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package fingerprint provides a helper to create fingerprint string from certificate
@@ -16,7 +16,7 @@ var (
 	errInvalidFingerprintLength = errors.New("fingerprint: invalid fingerprint length")
 )
 
-// Fingerprint creates a fingerprint for a certificate using the specified hash algorithm
+// Fingerprint creates a fingerprint for a certificate using the specified hash algorithm.
 func Fingerprint(cert *x509.Certificate, algo crypto.Hash) (string, error) {
 	if !algo.Available() {
 		return "", errHashUnavailable
@@ -28,7 +28,7 @@ func Fingerprint(cert *x509.Certificate, algo crypto.Hash) (string, error) {
 		// https://golang.org/pkg/hash/#Hash
 		i += n
 	}
-	digest := []byte(fmt.Sprintf("%x", h.Sum(nil)))
+	digest := fmt.Appendf(nil, "%x", h.Sum(nil))
 
 	digestlen := len(digest)
 	if digestlen == 0 {

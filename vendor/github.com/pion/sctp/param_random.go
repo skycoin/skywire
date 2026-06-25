@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -11,6 +11,7 @@ type paramRandom struct {
 func (r *paramRandom) marshal() ([]byte, error) {
 	r.typ = random
 	r.raw = r.randomData
+
 	return r.paramHeader.marshal()
 }
 
@@ -20,5 +21,6 @@ func (r *paramRandom) unmarshal(raw []byte) (param, error) {
 		return nil, err
 	}
 	r.randomData = r.raw
+
 	return r, nil
 }

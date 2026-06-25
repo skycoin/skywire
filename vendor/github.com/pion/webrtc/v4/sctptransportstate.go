@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -7,7 +7,7 @@ package webrtc
 type SCTPTransportState int
 
 const (
-	// SCTPTransportStateUnknown is the enum's zero-value
+	// SCTPTransportStateUnknown is the enum's zero-value.
 	SCTPTransportStateUnknown SCTPTransportState = iota
 
 	// SCTPTransportStateConnecting indicates the SCTPTransport is in the

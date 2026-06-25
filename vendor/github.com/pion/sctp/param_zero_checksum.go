@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -27,7 +27,7 @@ type paramZeroChecksumAcceptable struct {
 	edmid uint32
 }
 
-// Zero Checksum parameter error
+// Zero Checksum parameter error.
 var (
 	ErrZeroChecksumParamTooShort = errors.New("zero checksum parameter too short")
 )
@@ -40,6 +40,7 @@ func (r *paramZeroChecksumAcceptable) marshal() ([]byte, error) {
 	r.typ = zeroChecksumAcceptable
 	r.raw = make([]byte, 4)
 	binary.BigEndian.PutUint32(r.raw, r.edmid)
+
 	return r.paramHeader.marshal()
 }
 
@@ -52,5 +53,6 @@ func (r *paramZeroChecksumAcceptable) unmarshal(raw []byte) (param, error) {
 		return nil, ErrZeroChecksumParamTooShort
 	}
 	r.edmid = binary.BigEndian.Uint32(r.raw)
+
 	return r, nil
 }

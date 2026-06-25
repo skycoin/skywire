@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// CandidatePairStats contains ICE candidate pair statistics
+// CandidatePairStats contains ICE candidate pair statistics.
 type CandidatePairStats struct {
 	// Timestamp is the timestamp associated with this object.
 	Timestamp time.Time
@@ -58,9 +58,21 @@ type CandidatePairStats struct {
 	// (LastRequestTimestamp - FirstRequestTimestamp) / RequestsSent.
 	LastRequestTimestamp time.Time
 
+	// FirstResponseTimestamp represents the timestamp at which the first STUN response
+	// was received on this particular candidate pair.
+	FirstResponseTimestamp time.Time
+
 	// LastResponseTimestamp represents the timestamp at which the last STUN response
 	// was received on this particular candidate pair.
 	LastResponseTimestamp time.Time
+
+	// FirstRequestReceivedTimestamp represents the timestamp at which the first
+	// connectivity check request was received.
+	FirstRequestReceivedTimestamp time.Time
+
+	// LastRequestReceivedTimestamp represents the timestamp at which the last
+	// connectivity check request was received.
+	LastRequestReceivedTimestamp time.Time
 
 	// TotalRoundTripTime represents the sum of all round trip time measurements
 	// in seconds since the beginning of the session, based on STUN connectivity
@@ -126,6 +138,33 @@ type CandidatePairStats struct {
 	// ConsentExpiredTimestamp represents the timestamp at which the latest valid
 	// STUN binding response expired.
 	ConsentExpiredTimestamp time.Time
+}
+
+// CandidatePairInfo is a snapshot of a candidate pair's state.
+// Use the ID with Conn.WriteToPair() to write to this specific pair.
+type CandidatePairInfo struct {
+	// ID is the unique identifier for this candidate pair.
+	// Use this with Conn.WriteToPair() to write to this pair.
+	ID uint64
+
+	// LocalCandidateType is the type of the local candidate (host, srflx, prflx, relay).
+	LocalCandidateType CandidateType
+
+	// RemoteCandidateType is the type of the remote candidate (host, srflx, prflx, relay).
+	RemoteCandidateType CandidateType
+
+	// State is the current state of the candidate pair.
+	State CandidatePairState
+
+	// Nominated indicates whether this pair has been nominated.
+	Nominated bool
+
+	// CurrentRoundTripTime is the latest RTT measurement.
+	CurrentRoundTripTime time.Duration
+
+	// RenominationQuality is a score indicating the pair's quality (higher is better).
+	// Considers candidate types (host > srflx > relay), measured RTT, and stability.
+	RenominationQuality float64
 }
 
 // CandidateStats contains ICE candidate statistics related to the ICETransport objects.

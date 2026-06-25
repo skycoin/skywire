@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -19,7 +19,7 @@ func awaitPromise(promise js.Value) (js.Value, error) {
 	resultsChan := make(chan js.Value)
 	errChan := make(chan js.Error)
 
-	thenFunc := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	thenFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 		go func() {
 			resultsChan <- args[0]
 		}()
@@ -27,7 +27,7 @@ func awaitPromise(promise js.Value) (js.Value, error) {
 	})
 	defer thenFunc.Release()
 
-	catchFunc := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	catchFunc := js.FuncOf(func(this js.Value, args []js.Value) any {
 		go func() {
 			errChan <- js.Error{args[0]}
 		}()
@@ -75,7 +75,7 @@ func uint8ToValueOrUndefined(val uint8) js.Value {
 	return js.ValueOf(val)
 }
 
-func interfaceToValueOrUndefined(val interface{}) js.Value {
+func interfaceToValueOrUndefined(val any) js.Value {
 	if val == nil {
 		return js.Undefined()
 	}
@@ -118,6 +118,23 @@ func valueToStrings(val js.Value) []string {
 	return result
 }
 
+func valueToBoolOrFalse(val js.Value) bool {
+	if val.IsNull() || val.IsUndefined() {
+		return false
+	}
+
+	return val.Bool()
+}
+
+func valueToBoolPointer(val js.Value) *bool {
+	if val.IsNull() || val.IsUndefined() {
+		return nil
+	}
+	b := val.Bool()
+
+	return &b
+}
+
 func stringPointerToValue(val *string) js.Value {
 	if val == nil {
 		return js.Undefined()
@@ -132,6 +149,14 @@ func uint16PointerToValue(val *uint16) js.Value {
 	return js.ValueOf(*val)
 }
 
+func boolToValueOrUndefined(val bool) js.Value {
+	if !val {
+		return js.Undefined()
+	}
+
+	return js.ValueOf(val)
+}
+
 func boolPointerToValue(val *bool) js.Value {
 	if val == nil {
 		return js.Undefined()
@@ -140,7 +165,7 @@ func boolPointerToValue(val *bool) js.Value {
 }
 
 func stringsToValue(strings []string) js.Value {
-	val := make([]interface{}, len(strings))
+	val := make([]any, len(strings))
 	for i, s := range strings {
 		val[i] = s
 	}
@@ -155,7 +180,7 @@ func stringEnumToValueOrUndefined(s string) js.Value {
 }
 
 // Converts the return value of recover() to an error.
-func recoveryToError(e interface{}) error {
+func recoveryToError(e any) error {
 	switch e := e.(type) {
 	case error:
 		return e

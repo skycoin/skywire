@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
 
-// errorCauseInvalidMandatoryParameter represents an SCTP error cause
+// errorCauseInvalidMandatoryParameter represents an SCTP error cause.
 type errorCauseInvalidMandatoryParameter struct {
 	errorCauseHeader
 }
@@ -16,7 +16,7 @@ func (e *errorCauseInvalidMandatoryParameter) unmarshal(raw []byte) error {
 	return e.errorCauseHeader.unmarshal(raw)
 }
 
-// String makes errorCauseInvalidMandatoryParameter printable
+// String makes errorCauseInvalidMandatoryParameter printable.
 func (e *errorCauseInvalidMandatoryParameter) String() string {
 	return e.errorCauseHeader.String()
 }

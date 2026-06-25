@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -31,7 +31,7 @@ type chunkReconfig struct {
 	paramB param
 }
 
-// Reconfigure chunk errors
+// Reconfigure chunk errors.
 var (
 	ErrChunkParseParamTypeFailed        = errors.New("failed to parse param type")
 	ErrChunkMarshalParamAReconfigFailed = errors.New("unable to marshal parameter A for reconfig")
@@ -88,6 +88,7 @@ func (c *chunkReconfig) marshal() ([]byte, error) {
 
 	c.typ = ctReconfig
 	c.raw = out
+
 	return c.chunkHeader.marshal()
 }
 
@@ -98,11 +99,12 @@ func (c *chunkReconfig) check() (abort bool, err error) {
 	return true, nil
 }
 
-// String makes chunkReconfig printable
+// String makes chunkReconfig printable.
 func (c *chunkReconfig) String() string {
 	res := fmt.Sprintf("Param A:\n %s", c.paramA)
 	if c.paramB != nil {
 		res += fmt.Sprintf("Param B:\n %s", c.paramB)
 	}
+
 	return res
 }

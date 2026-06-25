@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -9,9 +9,9 @@ import (
 )
 
 var (
-	// ErrFailedToVerifyAuthTag is returned when decryption fails due to invalid authentication tag
+	// ErrFailedToVerifyAuthTag is returned when decryption fails due to invalid authentication tag.
 	ErrFailedToVerifyAuthTag = errors.New("failed to verify auth tag")
-	// ErrMKINotFound is returned when decryption fails due to unknown MKI value in packet
+	// ErrMKINotFound is returned when decryption fails due to unknown MKI value in packet.
 	ErrMKINotFound = errors.New("MKI not found")
 
 	errDuplicated                    = errors.New("duplicated packet")
@@ -31,11 +31,21 @@ var (
 	errMKIAlreadyInUse               = errors.New("MKI already in use")
 	errMKIIsNotEnabled               = errors.New("MKI is not enabled")
 	errInvalidMKILength              = errors.New("invalid MKI length")
+	errTooLongSRTPAuthTag            = errors.New("SRTP auth tag is too long")
+	errTooShortSRTPAuthTag           = errors.New("SRTP auth tag is too short")
 
 	errStreamNotInited     = errors.New("stream has not been inited, unable to close")
 	errStreamAlreadyClosed = errors.New("stream is already closed")
 	errStreamAlreadyInited = errors.New("stream is already inited")
 	errFailedTypeAssertion = errors.New("failed to cast child")
+
+	errZeroRocTransmitRate = errors.New("ROC transmit rate is zero")
+	errUnsupportedRccMode  = errors.New("unsupported RCC mode")
+
+	errUnsupportedHeaderExtension   = errors.New("unsupported header extension")
+	errHeaderLengthMismatch         = errors.New("header length mismatch")
+	errUnencryptedHeaderExtAndCSRCs = errors.New("unencrypted header extensions and CSRCs are not allowed")
+	errCryptexDisabled              = errors.New("cryptex is disabled")
 )
 
 type duplicatedError struct {

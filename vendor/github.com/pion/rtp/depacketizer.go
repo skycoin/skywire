@@ -1,9 +1,9 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package rtp
 
-// Depacketizer depacketizes a RTP payload, removing any RTP specific data from the payload
+// Depacketizer depacketizes a RTP payload, removing any RTP specific data from the payload.
 type Depacketizer interface {
 	// Unmarshal parses the RTP payload and returns media.
 	// Metadata may be stored on the Depacketizer itself

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -7,6 +7,7 @@
 package webrtc
 
 import (
+	"errors"
 	"fmt"
 	"syscall/js"
 
@@ -26,11 +27,18 @@ type DataChannel struct {
 	// syscall/js API. Initially nil.
 	onOpenHandler       *js.Func
 	onCloseHandler      *js.Func
+	onClosingHandler    *js.Func
 	onMessageHandler    *js.Func
 	onBufferedAmountLow *js.Func
+	onErrorHandler      *js.Func
 
 	// A reference to the associated api object used by this datachannel
 	api *API
+}
+
+// JSValue returns the underlying RTCDataChannel
+func (d *DataChannel) JSValue() js.Value {
+	return d.underlying
 }
 
 // OnOpen sets an event handler which is invoked when
@@ -40,7 +48,7 @@ func (d *DataChannel) OnOpen(f func()) {
 		oldHandler := d.onOpenHandler
 		defer oldHandler.Release()
 	}
-	onOpenHandler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	onOpenHandler := js.FuncOf(func(this js.Value, args []js.Value) any {
 		go f()
 		return js.Undefined()
 	})
@@ -55,12 +63,45 @@ func (d *DataChannel) OnClose(f func()) {
 		oldHandler := d.onCloseHandler
 		defer oldHandler.Release()
 	}
-	onCloseHandler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	onCloseHandler := js.FuncOf(func(this js.Value, args []js.Value) any {
 		go f()
 		return js.Undefined()
 	})
 	d.onCloseHandler = &onCloseHandler
 	d.underlying.Set("onclose", onCloseHandler)
+}
+
+// FYI `OnClosing` is not implemented in the non-JS version of Pion.
+
+func (d *DataChannel) OnClosing(f func()) {
+	if d.onClosingHandler != nil {
+		oldHandler := d.onClosingHandler
+		defer oldHandler.Release()
+	}
+	onClosingHandler := js.FuncOf(func(this js.Value, args []js.Value) any {
+		go f()
+		return js.Undefined()
+	})
+	d.onClosingHandler = &onClosingHandler
+	d.underlying.Set("onclosing", onClosingHandler)
+}
+
+func (d *DataChannel) OnError(f func(err error)) {
+	if d.onErrorHandler != nil {
+		oldHandler := d.onErrorHandler
+		defer oldHandler.Release()
+	}
+	onErrorHandler := js.FuncOf(func(this js.Value, args []js.Value) any {
+		event := args[0]
+		errorObj := event.Get("error")
+		// FYI RTCError has some extra properties, e.g. `errorDetail`:
+		// https://developer.mozilla.org/en-US/docs/Web/API/RTCDataChannel/error_event
+		errorMessage := errorObj.Get("message").String()
+		go f(errors.New(errorMessage))
+		return js.Undefined()
+	})
+	d.onErrorHandler = &onErrorHandler
+	d.underlying.Set("onerror", onErrorHandler)
 }
 
 // OnMessage sets an event handler which is invoked on a binary message arrival
@@ -70,7 +111,7 @@ func (d *DataChannel) OnMessage(f func(msg DataChannelMessage)) {
 		oldHandler := d.onMessageHandler
 		defer oldHandler.Release()
 	}
-	onMessageHandler := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	onMessageHandler := js.FuncOf(func(this js.Value, args []js.Value) any {
 		// pion/webrtc/projects/15
 		data := args[0].Get("data")
 		go func() {
@@ -145,11 +186,17 @@ func (d *DataChannel) Close() (err error) {
 	if d.onCloseHandler != nil {
 		d.onCloseHandler.Release()
 	}
+	if d.onClosingHandler != nil {
+		d.onClosingHandler.Release()
+	}
 	if d.onMessageHandler != nil {
 		d.onMessageHandler.Release()
 	}
 	if d.onBufferedAmountLow != nil {
 		d.onBufferedAmountLow.Release()
+	}
+	if d.onErrorHandler != nil {
+		d.onErrorHandler.Release()
 	}
 
 	return nil
@@ -253,7 +300,11 @@ func (d *DataChannel) OnBufferedAmountLow(f func()) {
 		oldHandler := d.onBufferedAmountLow
 		defer oldHandler.Release()
 	}
-	onBufferedAmountLow := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+	onBufferedAmountLow := js.FuncOf(func(this js.Value, args []js.Value) any {
+		if d.ReadyState() != DataChannelStateOpen {
+			return js.Undefined()
+		}
+
 		go f()
 		return js.Undefined()
 	})
@@ -289,7 +340,7 @@ func valueToDataChannelMessage(val js.Value) DataChannelMessage {
 		// channel to signal when reading is done.
 		reader := js.Global().Get("FileReader").New()
 		doneChan := make(chan struct{})
-		reader.Call("addEventListener", "loadend", js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+		reader.Call("addEventListener", "loadend", js.FuncOf(func(this js.Value, args []js.Value) any {
 			go func() {
 				// Signal that the FileReader is done reading/loading by sending through
 				// the doneChan.

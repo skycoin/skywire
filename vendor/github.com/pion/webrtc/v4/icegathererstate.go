@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -11,7 +11,7 @@ import (
 type ICEGathererState uint32
 
 const (
-	// ICEGathererStateUnknown is the enum's zero-value
+	// ICEGathererStateUnknown is the enum's zero-value.
 	ICEGathererStateUnknown ICEGathererState = iota
 
 	// ICEGathererStateNew indicates object has been created but

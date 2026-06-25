@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package handshake
@@ -13,18 +13,19 @@ type MessageFinished struct {
 	VerifyData []byte
 }
 
-// Type returns the Handshake Type
+// Type returns the Handshake Type.
 func (m MessageFinished) Type() Type {
 	return TypeFinished
 }
 
-// Marshal encodes the Handshake
+// Marshal encodes the Handshake.
 func (m *MessageFinished) Marshal() ([]byte, error) {
 	return append([]byte{}, m.VerifyData...), nil
 }
 
-// Unmarshal populates the message from encoded data
+// Unmarshal populates the message from encoded data.
 func (m *MessageFinished) Unmarshal(data []byte) error {
 	m.VerifyData = append([]byte{}, data...)
+
 	return nil
 }

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -40,6 +40,7 @@ func aesCmKeyDerivation(label byte, masterKey, masterSalt []byte, indexOverKdr i
 		block.Encrypt(out[n:n+nBlockSize], prfIn)
 		i++
 	}
+
 	return out[:outLen], nil
 }
 
@@ -50,20 +51,24 @@ func aesCmKeyDerivation(label byte, masterKey, masterSalt []byte, indexOverKdr i
 // -       times the 16-bit RTP sequence number has been reset to zero after
 // -       passing through 65,535
 // i = 2^16 * ROC + SEQ
-// IV = (salt*2 ^ 16) | (ssrc*2 ^ 64) | (i*2 ^ 16)
-func generateCounter(sequenceNumber uint16, rolloverCounter uint32, ssrc uint32, sessionSalt []byte) (counter [16]byte) {
+// IV = (salt*2 ^ 16) | (ssrc*2 ^ 64) | (i*2 ^ 16).
+func generateCounter(
+	sequenceNumber uint16,
+	rolloverCounter uint32,
+	ssrc uint32, sessionSalt []byte,
+) (counter [16]byte) {
 	copy(counter[:], sessionSalt)
 
 	counter[4] ^= byte(ssrc >> 24)
-	counter[5] ^= byte(ssrc >> 16)
-	counter[6] ^= byte(ssrc >> 8)
-	counter[7] ^= byte(ssrc)
+	counter[5] ^= byte(ssrc >> 16) //nolint:gosec
+	counter[6] ^= byte(ssrc >> 8)  //nolint:gosec
+	counter[7] ^= byte(ssrc)       //nolint:gosec
 	counter[8] ^= byte(rolloverCounter >> 24)
-	counter[9] ^= byte(rolloverCounter >> 16)
-	counter[10] ^= byte(rolloverCounter >> 8)
-	counter[11] ^= byte(rolloverCounter)
+	counter[9] ^= byte(rolloverCounter >> 16) //nolint:gosec
+	counter[10] ^= byte(rolloverCounter >> 8) //nolint:gosec
+	counter[11] ^= byte(rolloverCounter)      //nolint:gosec
 	counter[12] ^= byte(sequenceNumber >> 8)
-	counter[13] ^= byte(sequenceNumber)
+	counter[13] ^= byte(sequenceNumber) //nolint:gosec
 
 	return counter
 }
