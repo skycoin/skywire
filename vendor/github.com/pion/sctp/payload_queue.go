@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -22,6 +22,7 @@ func (q *payloadQueue) pop(tsn uint32) (*chunkPayloadData, bool) {
 	if q.chunks.Len() > 0 && tsn == q.chunks.Front().tsn {
 		c := q.chunks.PopFront()
 		q.nBytes -= len(c.userData)
+
 		return c, true
 	}
 
@@ -38,6 +39,7 @@ func (q *payloadQueue) get(tsn uint32) (*chunkPayloadData, bool) {
 	if tsn < head || int(tsn-head) >= length {
 		return nil, false
 	}
+
 	return q.chunks.At(int(tsn - head)), true
 }
 

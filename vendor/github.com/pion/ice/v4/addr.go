@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -16,6 +16,7 @@ func addrWithOptionalZone(addr netip.Addr, zone string) netip.Addr {
 	if addr.Is6() && (addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast()) {
 		return addr.WithZone(zone)
 	}
+
 	return addr
 }
 
@@ -30,47 +31,43 @@ func parseAddrFromIface(in net.Addr, ifcName string) (netip.Addr, int, NetworkTy
 		// net.IPNet does not have a Zone but we provide it from the interface
 		addr = addrWithOptionalZone(addr, ifcName)
 	}
+
 	return addr, port, nt, nil
 }
 
 func parseAddr(in net.Addr) (netip.Addr, int, NetworkType, error) {
-	switch addr := in.(type) {
+	host := func(ip net.IP, zone string) (netip.Addr, int, NetworkType, error) {
+		a, err := ipAddrToNetIP(ip, zone)
+		if err != nil {
+			return netip.Addr{}, 0, 0, err
+		}
+
+		return a, 0, 0, nil
+	}
+
+	sock := func(ip net.IP, zone string, port int, v4, v6 NetworkType) (netip.Addr, int, NetworkType, error) {
+		a, err := ipAddrToNetIP(ip, zone)
+		if err != nil {
+			return netip.Addr{}, 0, 0, err
+		}
+
+		nt := v6
+		if a.Is4() {
+			nt = v4
+		}
+
+		return a, port, nt, nil
+	}
+
+	switch a := in.(type) {
 	case *net.IPNet:
-		ipAddr, err := ipAddrToNetIP(addr.IP, "")
-		if err != nil {
-			return netip.Addr{}, 0, 0, err
-		}
-		return ipAddr, 0, 0, nil
+		return host(a.IP, "")
 	case *net.IPAddr:
-		ipAddr, err := ipAddrToNetIP(addr.IP, addr.Zone)
-		if err != nil {
-			return netip.Addr{}, 0, 0, err
-		}
-		return ipAddr, 0, 0, nil
+		return host(a.IP, a.Zone)
 	case *net.UDPAddr:
-		ipAddr, err := ipAddrToNetIP(addr.IP, addr.Zone)
-		if err != nil {
-			return netip.Addr{}, 0, 0, err
-		}
-		var nt NetworkType
-		if ipAddr.Is4() {
-			nt = NetworkTypeUDP4
-		} else {
-			nt = NetworkTypeUDP6
-		}
-		return ipAddr, addr.Port, nt, nil
+		return sock(a.IP, a.Zone, a.Port, NetworkTypeUDP4, NetworkTypeUDP6)
 	case *net.TCPAddr:
-		ipAddr, err := ipAddrToNetIP(addr.IP, addr.Zone)
-		if err != nil {
-			return netip.Addr{}, 0, 0, err
-		}
-		var nt NetworkType
-		if ipAddr.Is4() {
-			nt = NetworkTypeTCP4
-		} else {
-			nt = NetworkTypeTCP6
-		}
-		return ipAddr, addr.Port, nt, nil
+		return sock(a.IP, a.Zone, a.Port, NetworkTypeTCP4, NetworkTypeTCP6)
 	default:
 		return netip.Addr{}, 0, 0, addrParseError{in}
 	}
@@ -100,6 +97,7 @@ func ipAddrToNetIP(ip []byte, zone string) (netip.Addr, error) {
 	// we'd rather have an IPv4-mapped IPv6 become IPv4 so that it is usable.
 	netIPAddr = netIPAddr.Unmap()
 	netIPAddr = addrWithOptionalZone(netIPAddr, zone)
+
 	return netIPAddr, nil
 }
 
@@ -134,12 +132,13 @@ func toAddrPort(addr net.Addr) AddrPort {
 	switch addr := addr.(type) {
 	case *net.UDPAddr:
 		copy(ap[:16], addr.IP.To16())
-		ap[16] = uint8(addr.Port >> 8)
-		ap[17] = uint8(addr.Port)
+		ap[16] = uint8(addr.Port >> 8) //nolint:gosec // G115  false positive
+		ap[17] = uint8(addr.Port)      //nolint:gosec // G115  false positive
 	case *net.TCPAddr:
 		copy(ap[:16], addr.IP.To16())
-		ap[16] = uint8(addr.Port >> 8)
-		ap[17] = uint8(addr.Port)
+		ap[16] = uint8(addr.Port >> 8) //nolint:gosec // G115 false positive
+		ap[17] = uint8(addr.Port)      //nolint:gosec // G115 false positive
 	}
+
 	return ap
 }

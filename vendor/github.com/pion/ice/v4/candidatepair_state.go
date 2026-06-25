@@ -1,14 +1,14 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
 
-// CandidatePairState represent the ICE candidate pair state
+// CandidatePairState represent the ICE candidate pair state.
 type CandidatePairState int
 
 const (
 	// CandidatePairStateWaiting means a check has not been performed for
-	// this pair
+	// this pair.
 	CandidatePairStateWaiting CandidatePairState = iota + 1
 
 	// CandidatePairStateInProgress means a check has been sent for this pair,
@@ -36,5 +36,6 @@ func (c CandidatePairState) String() string {
 	case CandidatePairStateSucceeded:
 		return "succeeded"
 	}
+
 	return "Unknown candidate pair state"
 }

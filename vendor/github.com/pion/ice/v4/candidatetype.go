@@ -1,12 +1,14 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
 
-// CandidateType represents the type of candidate
+import "slices"
+
+// CandidateType represents the type of candidate.
 type CandidateType byte
 
-// CandidateType enum
+// CandidateType enum.
 const (
 	CandidateTypeUnspecified CandidateType = iota
 	CandidateTypeHost
@@ -15,7 +17,7 @@ const (
 	CandidateTypeRelay
 )
 
-// String makes CandidateType printable
+// String makes CandidateType printable.
 func (c CandidateType) String() string {
 	switch c {
 	case CandidateTypeHost:
@@ -29,6 +31,7 @@ func (c CandidateType) String() string {
 	case CandidateTypeUnspecified:
 		return "Unknown candidate type"
 	}
+
 	return "Unknown candidate type"
 }
 
@@ -49,6 +52,7 @@ func (c CandidateType) Preference() uint16 {
 	case CandidateTypeRelay, CandidateTypeUnspecified:
 		return 0
 	}
+
 	return 0
 }
 
@@ -56,10 +60,6 @@ func containsCandidateType(candidateType CandidateType, candidateTypeList []Cand
 	if candidateTypeList == nil {
 		return false
 	}
-	for _, ct := range candidateTypeList {
-		if ct == candidateType {
-			return true
-		}
-	}
-	return false
+
+	return slices.Contains(candidateTypeList, candidateType)
 }

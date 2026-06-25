@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package hash provides TLS HashAlgorithm as defined in TLS 1.2
@@ -16,7 +16,7 @@ import ( //nolint:gci
 // https://www.iana.org/assignments/tls-parameters/tls-parameters.xhtml#tls-parameters-18
 type Algorithm uint16
 
-// Supported hash algorithms
+// Supported hash algorithms.
 const (
 	None    Algorithm = 0 // Blacklisted
 	MD5     Algorithm = 1 // Blacklisted
@@ -28,7 +28,7 @@ const (
 	Ed25519 Algorithm = 8
 )
 
-// String makes hashAlgorithm printable
+// String makes hashAlgorithm printable.
 func (a Algorithm) String() string {
 	switch a {
 	case None:
@@ -52,28 +52,34 @@ func (a Algorithm) String() string {
 	}
 }
 
-// Digest performs a digest on the passed value
+// Digest performs a digest on the passed value.
 func (a Algorithm) Digest(b []byte) []byte {
 	switch a {
 	case None:
 		return nil
 	case MD5:
 		hash := md5.Sum(b) // #nosec
+
 		return hash[:]
 	case SHA1:
 		hash := sha1.Sum(b) // #nosec
+
 		return hash[:]
 	case SHA224:
 		hash := sha256.Sum224(b)
+
 		return hash[:]
 	case SHA256:
 		hash := sha256.Sum256(b)
+
 		return hash[:]
 	case SHA384:
 		hash := sha512.Sum384(b)
+
 		return hash[:]
 	case SHA512:
 		hash := sha512.Sum512(b)
+
 		return hash[:]
 	default:
 		return nil
@@ -81,6 +87,7 @@ func (a Algorithm) Digest(b []byte) []byte {
 }
 
 // Insecure returns if the given HashAlgorithm is considered secure in DTLS 1.2
+// .
 func (a Algorithm) Insecure() bool {
 	switch a {
 	case None, MD5, SHA1:
@@ -90,7 +97,7 @@ func (a Algorithm) Insecure() bool {
 	}
 }
 
-// CryptoHash returns the crypto.Hash implementation for the given HashAlgorithm
+// CryptoHash returns the crypto.Hash implementation for the given HashAlgorithm.
 func (a Algorithm) CryptoHash() crypto.Hash {
 	switch a {
 	case None:
@@ -114,7 +121,7 @@ func (a Algorithm) CryptoHash() crypto.Hash {
 	}
 }
 
-// Algorithms returns all the supported Hash Algorithms
+// Algorithms returns all the supported Hash Algorithms.
 func Algorithms() map[Algorithm]struct{} {
 	return map[Algorithm]struct{}{
 		None:    {},
@@ -125,5 +132,26 @@ func Algorithms() map[Algorithm]struct{} {
 		SHA384:  {},
 		SHA512:  {},
 		Ed25519: {},
+	}
+}
+
+// ExtractHashFromPSS extracts the hash algorithm from an RSA-PSS SignatureScheme value.
+// This handles TLS 1.3 PSS schemes.
+// Returns None if the scheme is not a recognized PSS scheme.
+func ExtractHashFromPSS(pssScheme uint16) Algorithm {
+	// Note: We can't import signature package here due to circular dependency,
+	// so we use the raw values. These correspond to:
+	// 0x0804 = RSA_PSS_RSAE_SHA256, 0x0809 = RSA_PSS_PSS_SHA256
+	// 0x0805 = RSA_PSS_RSAE_SHA384, 0x080a = RSA_PSS_PSS_SHA384
+	// 0x0806 = RSA_PSS_RSAE_SHA512, 0x080b = RSA_PSS_PSS_SHA512
+	switch pssScheme {
+	case 0x0804, 0x0809:
+		return SHA256
+	case 0x0805, 0x080a:
+		return SHA384
+	case 0x0806, 0x080b:
+		return SHA512
+	default:
+		return None
 	}
 }

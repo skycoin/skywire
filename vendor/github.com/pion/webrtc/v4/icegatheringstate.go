@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -7,7 +7,7 @@ package webrtc
 type ICEGatheringState int
 
 const (
-	// ICEGatheringStateUnknown is the enum's zero-value
+	// ICEGatheringStateUnknown is the enum's zero-value.
 	ICEGatheringStateUnknown ICEGatheringState = iota
 
 	// ICEGatheringStateNew indicates that any of the ICETransports are
@@ -31,7 +31,7 @@ const (
 	iceGatheringStateCompleteStr  = "complete"
 )
 
-// NewICEGatheringState takes a string and converts it to ICEGatheringState
+// NewICEGatheringState takes a string and converts it to ICEGatheringState.
 func NewICEGatheringState(raw string) ICEGatheringState {
 	switch raw {
 	case iceGatheringStateNewStr:

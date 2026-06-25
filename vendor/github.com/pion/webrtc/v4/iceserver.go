@@ -1,8 +1,7 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build !js
-// +build !js
 
 package webrtc
 
@@ -18,7 +17,7 @@ import (
 type ICEServer struct {
 	URLs           []string          `json:"urls"`
 	Username       string            `json:"username,omitempty"`
-	Credential     interface{}       `json:"credential,omitempty"`
+	Credential     any               `json:"credential,omitempty"`
 	CredentialType ICECredentialType `json:"credentialType,omitempty"`
 }
 
@@ -28,10 +27,11 @@ func (s ICEServer) parseURL(i int) (*stun.URI, error) {
 
 func (s ICEServer) validate() error {
 	_, err := s.urls()
+
 	return err
 }
 
-func (s ICEServer) urls() ([]*stun.URI, error) {
+func (s ICEServer) urls() ([]*stun.URI, error) { //nolint:cyclop
 	urls := []*stun.URI{}
 
 	for i := range s.URLs {
@@ -73,8 +73,8 @@ func (s ICEServer) urls() ([]*stun.URI, error) {
 	return urls, nil
 }
 
-func iceserverUnmarshalUrls(val interface{}) (*[]string, error) {
-	s, ok := val.([]interface{})
+func iceserverUnmarshalUrls(val any) (*[]string, error) {
+	s, ok := val.([]any)
 	if !ok {
 		return nil, errInvalidICEServer
 	}
@@ -85,11 +85,12 @@ func iceserverUnmarshalUrls(val interface{}) (*[]string, error) {
 			return nil, errInvalidICEServer
 		}
 	}
+
 	return &out, nil
 }
 
-func iceserverUnmarshalOauth(val interface{}) (*OAuthCredential, error) {
-	c, ok := val.(map[string]interface{})
+func iceserverUnmarshalOauth(val any) (*OAuthCredential, error) {
+	c, ok := val.(map[string]any)
 	if !ok {
 		return nil, errInvalidICEServer
 	}
@@ -101,14 +102,15 @@ func iceserverUnmarshalOauth(val interface{}) (*OAuthCredential, error) {
 	if !ok {
 		return nil, errInvalidICEServer
 	}
+
 	return &OAuthCredential{
 		MACKey:      MACKey,
 		AccessToken: AccessToken,
 	}, nil
 }
 
-func (s *ICEServer) iceserverUnmarshalFields(m map[string]interface{}) error {
-	if val, ok := m["urls"]; ok {
+func (s *ICEServer) iceserverUnmarshalFields(fields map[string]any) error { //nolint:cyclop
+	if val, ok := fields["urls"]; ok {
 		u, err := iceserverUnmarshalUrls(val)
 		if err != nil {
 			return err
@@ -118,13 +120,13 @@ func (s *ICEServer) iceserverUnmarshalFields(m map[string]interface{}) error {
 		s.URLs = []string{}
 	}
 
-	if val, ok := m["username"]; ok {
+	if val, ok := fields["username"]; ok {
 		s.Username, ok = val.(string)
 		if !ok {
 			return errInvalidICEServer
 		}
 	}
-	if val, ok := m["credentialType"]; ok {
+	if val, ok := fields["credentialType"]; ok {
 		ct, ok := val.(string)
 		if !ok {
 			return errInvalidICEServer
@@ -137,7 +139,7 @@ func (s *ICEServer) iceserverUnmarshalFields(m map[string]interface{}) error {
 	} else {
 		s.CredentialType = ICECredentialTypePassword
 	}
-	if val, ok := m["credential"]; ok {
+	if val, ok := fields["credential"]; ok {
 		switch s.CredentialType {
 		case ICECredentialTypePassword:
 			s.Credential = val
@@ -151,25 +153,27 @@ func (s *ICEServer) iceserverUnmarshalFields(m map[string]interface{}) error {
 			return errInvalidICECredentialTypeString
 		}
 	}
+
 	return nil
 }
 
-// UnmarshalJSON parses the JSON-encoded data and stores the result
+// UnmarshalJSON parses the JSON-encoded data and stores the result.
 func (s *ICEServer) UnmarshalJSON(b []byte) error {
-	var tmp interface{}
+	var tmp any
 	err := json.Unmarshal(b, &tmp)
 	if err != nil {
 		return err
 	}
-	if m, ok := tmp.(map[string]interface{}); ok {
+	if m, ok := tmp.(map[string]any); ok {
 		return s.iceserverUnmarshalFields(m)
 	}
+
 	return errInvalidICEServer
 }
 
-// MarshalJSON returns the JSON encoding
+// MarshalJSON returns the JSON encoding.
 func (s ICEServer) MarshalJSON() ([]byte, error) {
-	m := make(map[string]interface{})
+	m := make(map[string]any)
 	m["urls"] = s.URLs
 	if s.Username != "" {
 		m["username"] = s.Username
@@ -178,5 +182,6 @@ func (s ICEServer) MarshalJSON() ([]byte, error) {
 		m["credential"] = s.Credential
 	}
 	m["credentialType"] = s.CredentialType
+
 	return json.Marshal(m)
 }

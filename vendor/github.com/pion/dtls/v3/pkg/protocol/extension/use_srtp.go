@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package extension
@@ -9,45 +9,57 @@ import (
 
 const (
 	useSRTPHeaderSize = 6
+	maxUint16         = (1 << 16) - 1
 )
 
 // UseSRTP allows a Client/Server to negotiate what SRTPProtectionProfiles
 // they both support
 //
-// https://tools.ietf.org/html/rfc8422
+// https://datatracker.ietf.org/doc/html/rfc5764
 type UseSRTP struct {
 	ProtectionProfiles  []SRTPProtectionProfile
 	MasterKeyIdentifier []byte
 }
 
-// TypeValue returns the extension TypeValue
+// TypeValue returns the extension TypeValue.
 func (u UseSRTP) TypeValue() TypeValue {
 	return UseSRTPTypeValue
 }
 
-// Marshal encodes the extension
+// Marshal encodes the extension.
 func (u *UseSRTP) Marshal() ([]byte, error) {
-	out := make([]byte, useSRTPHeaderSize)
-
-	binary.BigEndian.PutUint16(out, uint16(u.TypeValue()))
-	binary.BigEndian.PutUint16(out[2:], uint16(2+(len(u.ProtectionProfiles)*2)+ /* MKI Length */ 1+len(u.MasterKeyIdentifier)))
-	binary.BigEndian.PutUint16(out[4:], uint16(len(u.ProtectionProfiles)*2))
-
-	for _, v := range u.ProtectionProfiles {
-		out = append(out, []byte{0x00, 0x00}...)
-		binary.BigEndian.PutUint16(out[len(out)-2:], uint16(v))
-	}
 	if len(u.MasterKeyIdentifier) > 255 {
 		return nil, errMasterKeyIdentifierTooLarge
 	}
 
-	out = append(out, byte(len(u.MasterKeyIdentifier)))
-	out = append(out, u.MasterKeyIdentifier...)
+	extensionDataLen := 2 + (len(u.ProtectionProfiles) * 2) + 1 + len(u.MasterKeyIdentifier)
+	if extensionDataLen > maxUint16 {
+		return nil, errUseSRTPDataTooLarge
+	}
+	out := make([]byte, 4+extensionDataLen)
+
+	binary.BigEndian.PutUint16(out, uint16(u.TypeValue()))
+	//nolint:gosec // G115
+	binary.BigEndian.PutUint16(
+		out[2:],
+		uint16(extensionDataLen),
+	)
+	binary.BigEndian.PutUint16(out[4:], uint16(len(u.ProtectionProfiles)*2)) //nolint:gosec // G115
+
+	offset := useSRTPHeaderSize
+	for _, v := range u.ProtectionProfiles {
+		binary.BigEndian.PutUint16(out[offset:], uint16(v))
+		offset += 2
+	}
+
+	//nolint:gosec // G115: MKI length is validated to be <= 255 above.
+	out[offset] = byte(len(u.MasterKeyIdentifier))
+	copy(out[offset+1:], u.MasterKeyIdentifier)
 
 	return out, nil
 }
 
-// Unmarshal populates the extension from encoded data
+// Unmarshal populates the extension from encoded data.
 func (u *UseSRTP) Unmarshal(data []byte) error {
 	if len(data) <= useSRTPHeaderSize {
 		return errBufferTooSmall
@@ -61,19 +73,25 @@ func (u *UseSRTP) Unmarshal(data []byte) error {
 		return errLengthMismatch
 	}
 
-	for i := 0; i < profileCount; i++ {
+	declaredLength := int(binary.BigEndian.Uint16(data[2:4]))
+
+	masterKeyIdentifierLen := int(data[masterKeyIdentifierIndex])
+	end := masterKeyIdentifierIndex + masterKeyIdentifierLen
+	if end >= len(data) || end-4 != declaredLength-1 {
+		return errLengthMismatch
+	}
+
+	for i := range profileCount {
 		supportedProfile := SRTPProtectionProfile(binary.BigEndian.Uint16(data[(useSRTPHeaderSize + (i * 2)):]))
 		if _, ok := srtpProtectionProfiles()[supportedProfile]; ok {
 			u.ProtectionProfiles = append(u.ProtectionProfiles, supportedProfile)
 		}
 	}
 
-	masterKeyIdentifierLen := int(data[masterKeyIdentifierIndex])
-	if masterKeyIdentifierIndex+masterKeyIdentifierLen >= len(data) {
-		return errLengthMismatch
-	}
-
-	u.MasterKeyIdentifier = append([]byte{}, data[masterKeyIdentifierIndex+1:masterKeyIdentifierIndex+1+masterKeyIdentifierLen]...)
+	u.MasterKeyIdentifier = append(
+		[]byte{},
+		data[masterKeyIdentifierIndex+1:end+1]...,
+	)
 
 	return nil
 }

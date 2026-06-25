@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package dtls
@@ -70,7 +70,7 @@ const (
 	flight6
 )
 
-func (f flightVal) String() string {
+func (f flightVal) String() string { //nolint:cyclop
 	switch f {
 	case flight0:
 		return "Flight 0"

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -8,7 +8,7 @@ package webrtc
 type ICEComponent int
 
 const (
-	// ICEComponentUnknown is the enum's zero-value
+	// ICEComponentUnknown is the enum's zero-value.
 	ICEComponentUnknown ICEComponent = iota
 
 	// ICEComponentRTP indicates that the ICE Transport is used for RTP (or
