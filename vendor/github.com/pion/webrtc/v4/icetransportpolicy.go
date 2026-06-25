@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -11,7 +11,7 @@ import (
 // permitted candidates. Only these candidates are used for connectivity checks.
 type ICETransportPolicy int
 
-// ICEGatherPolicy is the ORTC equivalent of ICETransportPolicy
+// ICEGatherPolicy is the ORTC equivalent of ICETransportPolicy.
 type ICEGatherPolicy = ICETransportPolicy
 
 const (
@@ -21,17 +21,23 @@ const (
 	// ICETransportPolicyRelay indicates only media relay candidates such
 	// as candidates passing through a TURN server are used.
 	ICETransportPolicyRelay
+
+	// ICETransportPolicyNoHost indicates only non-host candidates are used.
+	ICETransportPolicyNoHost
 )
 
 // This is done this way because of a linter.
 const (
-	iceTransportPolicyRelayStr = "relay"
-	iceTransportPolicyAllStr   = "all"
+	iceTransportPolicyRelayStr  = "relay"
+	iceTransportPolicyNoHostStr = "nohost"
+	iceTransportPolicyAllStr    = "all"
 )
 
-// NewICETransportPolicy takes a string and converts it to ICETransportPolicy
+// NewICETransportPolicy takes a string and converts it to ICETransportPolicy.
 func NewICETransportPolicy(raw string) ICETransportPolicy {
 	switch raw {
+	case iceTransportPolicyNoHostStr:
+		return ICETransportPolicyNoHost
 	case iceTransportPolicyRelayStr:
 		return ICETransportPolicyRelay
 	default:
@@ -41,6 +47,8 @@ func NewICETransportPolicy(raw string) ICETransportPolicy {
 
 func (t ICETransportPolicy) String() string {
 	switch t {
+	case ICETransportPolicyNoHost:
+		return iceTransportPolicyNoHostStr
 	case ICETransportPolicyRelay:
 		return iceTransportPolicyRelayStr
 	case ICETransportPolicyAll:
@@ -50,17 +58,18 @@ func (t ICETransportPolicy) String() string {
 	}
 }
 
-// UnmarshalJSON parses the JSON-encoded data and stores the result
+// UnmarshalJSON parses the JSON-encoded data and stores the result.
 func (t *ICETransportPolicy) UnmarshalJSON(b []byte) error {
 	var val string
 	if err := json.Unmarshal(b, &val); err != nil {
 		return err
 	}
 	*t = NewICETransportPolicy(val)
+
 	return nil
 }
 
-// MarshalJSON returns the JSON encoding
+// MarshalJSON returns the JSON encoding.
 func (t ICETransportPolicy) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())
 }

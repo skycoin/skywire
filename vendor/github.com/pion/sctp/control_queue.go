@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -24,6 +24,7 @@ func (q *controlQueue) pushAll(packets []*packet) {
 func (q *controlQueue) popAll() []*packet {
 	packets := q.queue
 	q.queue = []*packet{}
+
 	return packets
 }
 

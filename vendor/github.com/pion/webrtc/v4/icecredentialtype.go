@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -50,7 +50,7 @@ func (t ICECredentialType) String() string {
 	}
 }
 
-// UnmarshalJSON parses the JSON-encoded data and stores the result
+// UnmarshalJSON parses the JSON-encoded data and stores the result.
 func (t *ICECredentialType) UnmarshalJSON(b []byte) error {
 	var val string
 	if err := json.Unmarshal(b, &val); err != nil {
@@ -63,10 +63,11 @@ func (t *ICECredentialType) UnmarshalJSON(b []byte) error {
 	}
 
 	*t = tmp
+
 	return nil
 }
 
-// MarshalJSON returns the JSON encoding
+// MarshalJSON returns the JSON encoding.
 func (t ICECredentialType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())
 }

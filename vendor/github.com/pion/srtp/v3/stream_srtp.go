@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -6,17 +6,18 @@ package srtp
 import (
 	"errors"
 	"io"
+	"slices"
 	"sync"
 	"time"
 
 	"github.com/pion/rtp"
-	"github.com/pion/transport/v3/packetio"
+	"github.com/pion/transport/v4/packetio"
 )
 
-// Limit the buffer size to 1MB
+// Limit the buffer size to 1MB.
 const srtpBufferSize = 1000 * 1000
 
-// ReadStreamSRTP handles decryption for a single RTP SSRC
+// ReadStreamSRTP handles decryption for a single RTP SSRC.
 type ReadStreamSRTP struct {
 	mu sync.Mutex
 
@@ -26,10 +27,11 @@ type ReadStreamSRTP struct {
 	ssrc     uint32
 	isInited bool
 
-	buffer io.ReadWriteCloser
+	buffer        io.ReadWriteCloser
+	peekedPackets [][]byte
 }
 
-// Used by getOrCreateReadStream
+// Used by getOrCreateReadStream.
 func newReadStreamSRTP() readStream {
 	return &ReadStreamSRTP{}
 }
@@ -74,12 +76,35 @@ func (r *ReadStreamSRTP) write(buf []byte) (n int, err error) {
 	return n, err
 }
 
-// Read reads and decrypts full RTP packet from the nextConn
+// Peek reads and decrypts full RTP packet from the nextConn.
+// It is then buffered so that a call to `Read` will return it.
+func (r *ReadStreamSRTP) Peek(buf []byte) (n int, err error) {
+	n, err = r.buffer.Read(buf)
+	if err == nil {
+		r.peekedPackets = append(r.peekedPackets, slices.Clone(buf[:n]))
+	}
+
+	return
+}
+
+// Read reads and decrypts full RTP packet from the nextConn.
 func (r *ReadStreamSRTP) Read(buf []byte) (int, error) {
+	if len(r.peekedPackets) != 0 {
+		if len(r.peekedPackets[0]) > len(buf) {
+			return 0, io.ErrShortBuffer
+		}
+
+		n := len(r.peekedPackets[0])
+		copy(buf, r.peekedPackets[0])
+		r.peekedPackets = r.peekedPackets[1:]
+
+		return n, nil
+	}
+
 	return r.buffer.Read(buf)
 }
 
-// ReadRTP reads and decrypts full RTP packet and its header from the nextConn
+// ReadRTP reads and decrypts full RTP packet and its header from the nextConn.
 func (r *ReadStreamSRTP) ReadRTP(buf []byte) (int, *rtp.Header, error) {
 	n, err := r.Read(buf)
 	if err != nil {
@@ -104,10 +129,11 @@ func (r *ReadStreamSRTP) SetReadDeadline(t time.Time) error {
 	}); ok {
 		return b.SetReadDeadline(t)
 	}
+
 	return nil
 }
 
-// Close removes the ReadStream from the session and cleans up any associated state
+// Close removes the ReadStream from the session and cleans up any associated state.
 func (r *ReadStreamSRTP) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -126,26 +152,27 @@ func (r *ReadStreamSRTP) Close() error {
 		}
 
 		r.session.removeReadStream(r.ssrc)
+
 		return nil
 	}
 }
 
-// GetSSRC returns the SSRC we are demuxing for
+// GetSSRC returns the SSRC we are demuxing for.
 func (r *ReadStreamSRTP) GetSSRC() uint32 {
 	return r.ssrc
 }
 
-// WriteStreamSRTP is stream for a single Session that is used to encrypt RTP
+// WriteStreamSRTP is stream for a single Session that is used to encrypt RTP.
 type WriteStreamSRTP struct {
 	session *SessionSRTP
 }
 
-// WriteRTP encrypts a RTP packet and writes to the connection
+// WriteRTP encrypts a RTP packet and writes to the connection.
 func (w *WriteStreamSRTP) WriteRTP(header *rtp.Header, payload []byte) (int, error) {
 	return w.session.writeRTP(header, payload)
 }
 
-// Write encrypts and writes a full RTP packets to the nextConn
+// Write encrypts and writes a full RTP packets to the nextConn.
 func (w *WriteStreamSRTP) Write(b []byte) (int, error) {
 	return w.session.write(b)
 }

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package extension
@@ -20,12 +20,12 @@ type ServerName struct {
 	ServerName string
 }
 
-// TypeValue returns the extension TypeValue
+// TypeValue returns the extension TypeValue.
 func (s ServerName) TypeValue() TypeValue {
 	return ServerNameTypeValue
 }
 
-// Marshal encodes the extension
+// Marshal encodes the extension.
 func (s *ServerName) Marshal() ([]byte, error) {
 	var b cryptobyte.Builder
 	b.AddUint16(uint16(s.TypeValue()))
@@ -37,11 +37,12 @@ func (s *ServerName) Marshal() ([]byte, error) {
 			})
 		})
 	})
+
 	return b.Bytes()
 }
 
-// Unmarshal populates the extension from encoded data
-func (s *ServerName) Unmarshal(data []byte) error {
+// Unmarshal populates the extension from encoded data.
+func (s *ServerName) Unmarshal(data []byte) error { //nolint:cyclop
 	val := cryptobyte.String(data)
 	var extension uint16
 	val.ReadUint16(&extension)
@@ -50,12 +51,19 @@ func (s *ServerName) Unmarshal(data []byte) error {
 	}
 
 	var extData cryptobyte.String
-	val.ReadUint16LengthPrefixed(&extData)
+	if !val.ReadUint16LengthPrefixed(&extData) {
+		return errBufferTooSmall
+	}
 
 	var nameList cryptobyte.String
 	if !extData.ReadUint16LengthPrefixed(&nameList) || nameList.Empty() {
 		return errInvalidSNIFormat
 	}
+
+	if !extData.Empty() {
+		return errLengthMismatch
+	}
+
 	for !nameList.Empty() {
 		var nameType uint8
 		var serverName cryptobyte.String
@@ -77,5 +85,6 @@ func (s *ServerName) Unmarshal(data []byte) error {
 			return errInvalidSNIFormat
 		}
 	}
+
 	return nil
 }

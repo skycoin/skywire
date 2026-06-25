@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -12,4 +12,9 @@ import "syscall/js"
 type RTPSender struct {
 	// Pointer to the underlying JavaScript RTCRTPSender object.
 	underlying js.Value
+}
+
+// JSValue returns the underlying RTCRtpSender
+func (s *RTPSender) JSValue() js.Value {
+	return s.underlying
 }

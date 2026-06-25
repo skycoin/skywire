@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package handshake
@@ -31,42 +31,55 @@ type MessageClientHello struct {
 
 const handshakeMessageClientHelloVariableWidthStart = 34
 
-// Type returns the Handshake Type
+// Type returns the Handshake Type.
 func (m MessageClientHello) Type() Type {
 	return TypeClientHello
 }
 
-// Marshal encodes the Handshake
+// Marshal encodes the Handshake.
 func (m *MessageClientHello) Marshal() ([]byte, error) {
 	if len(m.Cookie) > 255 {
 		return nil, errCookieTooLong
 	}
-
-	out := make([]byte, handshakeMessageClientHelloVariableWidthStart)
-	out[0] = m.Version.Major
-	out[1] = m.Version.Minor
-
-	rand := m.Random.MarshalFixed()
-	copy(out[2:], rand[:])
-
-	out = append(out, byte(len(m.SessionID)))
-	out = append(out, m.SessionID...)
-
-	out = append(out, byte(len(m.Cookie)))
-	out = append(out, m.Cookie...)
-	out = append(out, encodeCipherSuiteIDs(m.CipherSuiteIDs)...)
-	out = append(out, protocol.EncodeCompressionMethods(m.CompressionMethods)...)
+	if len(m.SessionID) > 255 {
+		return nil, errSessionIDTooLong
+	}
+	if len(m.CompressionMethods) > 255 {
+		return nil, errCompressionMethodsTooLong
+	}
 
 	extensions, err := extension.Marshal(m.Extensions)
 	if err != nil {
 		return nil, err
 	}
 
+	encodedCipherSuiteIDs := encodeCipherSuiteIDs(m.CipherSuiteIDs)
+	encodedCompressionMethods := protocol.EncodeCompressionMethods(m.CompressionMethods)
+
+	out := make(
+		[]byte,
+		0,
+		handshakeMessageClientHelloVariableWidthStart+1+len(m.SessionID)+1+
+			len(m.Cookie)+len(encodedCipherSuiteIDs)+len(encodedCompressionMethods)+len(extensions),
+	)
+	out = append(out, m.Version.Major, m.Version.Minor)
+
+	rand := m.Random.MarshalFixed()
+	out = append(out, rand[:]...)
+
+	out = append(out, byte(len(m.SessionID))) //nolint:gosec // G115: session ID length is validated to be <= 255 above.
+	out = append(out, m.SessionID...)
+
+	out = append(out, byte(len(m.Cookie))) //nolint:gosec // G115: cookie length is validated to be <= 255 above.
+	out = append(out, m.Cookie...)
+	out = append(out, encodedCipherSuiteIDs...)
+	out = append(out, encodedCompressionMethods...)
+
 	return append(out, extensions...), nil
 }
 
-// Unmarshal populates the message from encoded data
-func (m *MessageClientHello) Unmarshal(data []byte) error {
+// Unmarshal populates the message from encoded data.
+func (m *MessageClientHello) Unmarshal(data []byte) error { //nolint:cyclop
 	if len(data) < 2+RandomLength {
 		return errBufferTooSmall
 	}
@@ -137,5 +150,6 @@ func (m *MessageClientHello) Unmarshal(data []byte) error {
 		return err
 	}
 	m.Extensions = extensions
+
 	return nil
 }

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -18,8 +18,8 @@ type Stats interface {
 	statsMarker()
 }
 
-// UnmarshalStatsJSON unmarshals a Stats object from JSON
-func UnmarshalStatsJSON(b []byte) (Stats, error) {
+// UnmarshalStatsJSON unmarshals a Stats object from JSON.
+func UnmarshalStatsJSON(b []byte) (Stats, error) { //nolint:cyclop
 	type typeJSON struct {
 		Type StatsType `json:"type"`
 	}
@@ -135,17 +135,17 @@ const (
 	// StatsTypeCertificate is used by CertificateStats.
 	StatsTypeCertificate StatsType = "certificate"
 
-	// StatsTypeSCTPTransport is used by SCTPTransportStats
+	// StatsTypeSCTPTransport is used by SCTPTransportStats.
 	StatsTypeSCTPTransport StatsType = "sctp-transport"
 )
 
-// MediaKind indicates the kind of media (audio or video)
+// MediaKind indicates the kind of media (audio or video).
 type MediaKind string
 
 const (
-	// MediaKindAudio indicates this is audio stats
+	// MediaKindAudio indicates this is audio stats.
 	MediaKindAudio MediaKind = "audio"
-	// MediaKindVideo indicates this is video stats
+	// MediaKindVideo indicates this is video stats.
 	MediaKindVideo MediaKind = "video"
 )
 
@@ -178,6 +178,31 @@ type statsReportCollector struct {
 	mux             sync.Mutex
 }
 
+// SCTPTransportPartialReliabilityMode indicates the negotiated SCTP partial reliability mode.
+type SCTPTransportPartialReliabilityMode string
+
+// SCTPTransportPartialReliabilityMode values.
+const (
+	SCTPTransportPartialReliabilityModeNone        SCTPTransportPartialReliabilityMode = "none"
+	SCTPTransportPartialReliabilityModeForwardTSN  SCTPTransportPartialReliabilityMode = "forward-tsn"
+	SCTPTransportPartialReliabilityModeIForwardTSN SCTPTransportPartialReliabilityMode = "i-forward-tsn"
+)
+
+// SCTPTransportMetadata describes negotiated SCTP transport capabilities.
+type SCTPTransportMetadata struct {
+	// MessageInterleavingEnabled indicates whether RFC 8260 user message interleaving was negotiated.
+	MessageInterleavingEnabled bool `json:"messageInterleavingEnabled"`
+
+	// PartialReliabilityMode indicates which FORWARD-TSN variant is active.
+	PartialReliabilityMode SCTPTransportPartialReliabilityMode `json:"partialReliabilityMode"`
+
+	// ZeroChecksumSendingEnabled indicates whether outgoing packets use zero checksum.
+	ZeroChecksumSendingEnabled bool `json:"zeroChecksumSendingEnabled"`
+
+	// ZeroChecksumReceivingEnabled indicates whether incoming packets may use zero checksum.
+	ZeroChecksumReceivingEnabled bool `json:"zeroChecksumReceivingEnabled"`
+}
+
 func newStatsReportCollector() *statsReportCollector {
 	return &statsReportCollector{report: make(StatsReport)}
 }
@@ -202,11 +227,12 @@ func (src *statsReportCollector) Ready() StatsReport {
 	src.collectingGroup.Wait()
 	src.mux.Lock()
 	defer src.mux.Unlock()
+
 	return src.report
 }
 
 // CodecType specifies whether a CodecStats objects represents a media format
-// that is being encoded or decoded
+// that is being encoded or decoded.
 type CodecType string
 
 const (
@@ -269,6 +295,7 @@ func unmarshalCodecStats(b []byte) (CodecStats, error) {
 	if err != nil {
 		return CodecStats{}, fmt.Errorf("unmarshal codec stats: %w", err)
 	}
+
 	return codecStats, nil
 }
 
@@ -278,6 +305,10 @@ type InboundRTPStreamStats struct {
 	// Mid represents a mid value of RTPTransceiver owning this stream, if that value is not
 	// null. Otherwise, this member is not present.
 	Mid string `json:"mid"`
+
+	// Rid only exists if a rid has been set for this RTP stream.
+	// Must not exist for audio.
+	Rid string `json:"rid,omitempty"`
 
 	// Timestamp is the timestamp associated with this object.
 	Timestamp StatsTimestamp `json:"timestamp"`
@@ -567,6 +598,34 @@ type InboundRTPStreamStats struct {
 	// these numbers are not expected to match the numbers seen on sending. Not all
 	// OSes make this information available.
 	PerDSCPPacketsReceived map[string]uint32 `json:"perDscpPacketsReceived"`
+
+	// Identifies the decoder implementation used. This is useful for diagnosing interoperability issues.
+	// Does not exist for audio.
+	DecoderImplementation string `json:"decoderImplementation"`
+
+	// PauseCount is the total number of video pauses experienced by this receiver.
+	// Video is considered to be paused if time passed since last rendered frame exceeds 5 seconds.
+	// PauseCount is incremented when a frame is rendered after such a pause. Does not exist for audio.
+	PauseCount uint32 `json:"pauseCount"`
+
+	// TotalPausesDuration is the total duration of pauses (for definition of pause see PauseCount), in seconds.
+	// Does not exist for audio.
+	TotalPausesDuration float64 `json:"totalPausesDuration"`
+
+	// FreezeCount is the total number of video freezes experienced by this receiver.
+	// It is a freeze if frame duration, which is time interval between two consecutively rendered frames,
+	// is equal or exceeds Max(3 * avg_frame_duration_ms, avg_frame_duration_ms + 150),
+	// where avg_frame_duration_ms is linear average of durations of last 30 rendered frames.
+	// Does not exist for audio.
+	FreezeCount uint32 `json:"freezeCount"`
+
+	// TotalFreezesDuration is the total duration of rendered frames which are considered as frozen
+	// (for definition of freeze see freezeCount), in seconds. Does not exist for audio.
+	TotalFreezesDuration float64 `json:"totalFreezesDuration"`
+
+	// PowerEfficientDecoder indicates whether the decoder currently used is considered power efficient
+	// by the user agent. Does not exist for audio.
+	PowerEfficientDecoder bool `json:"powerEfficientDecoder"`
 }
 
 func (s InboundRTPStreamStats) statsMarker() {}
@@ -577,6 +636,7 @@ func unmarshalInboundRTPStreamStats(b []byte) (InboundRTPStreamStats, error) {
 	if err != nil {
 		return InboundRTPStreamStats{}, fmt.Errorf("unmarshal inbound rtp stream stats: %w", err)
 	}
+
 	return inboundRTPStreamStats, nil
 }
 
@@ -591,10 +651,14 @@ const (
 	// QualityLimitationReasonCPU means the resolution and/or framerate is primarily limited due to CPU load.
 	QualityLimitationReasonCPU QualityLimitationReason = "cpu"
 
-	// QualityLimitationReasonBandwidth means the resolution and/or framerate is primarily limited due to congestion cues during bandwidth estimation. Typical, congestion control algorithms use inter-arrival time, round-trip time, packet or other congestion cues to perform bandwidth estimation.
+	// QualityLimitationReasonBandwidth means the resolution and/or framerate is primarily limited
+	// due to congestion cues during bandwidth estimation.
+	// Typical, congestion control algorithms use inter-arrival time, round-trip time,
+	//  packet or other congestion cues to perform bandwidth estimation.
 	QualityLimitationReasonBandwidth QualityLimitationReason = "bandwidth"
 
-	// QualityLimitationReasonOther means the resolution and/or framerate is primarily limited for a reason other than the above.
+	// QualityLimitationReasonOther means the resolution and/or framerate is primarily limited
+	//  for a reason other than the above.
 	QualityLimitationReasonOther QualityLimitationReason = "other"
 )
 
@@ -806,6 +870,17 @@ type OutboundRTPStreamStats struct {
 	// Active indicates whether this RTP stream is configured to be sent or disabled. Note that an
 	// active stream can still not be sending, e.g. when being limited by network conditions.
 	Active bool `json:"active"`
+
+	// Identifies the encoder implementation used. This is useful for diagnosing interoperability issues.
+	// Does not exist for audio.
+	EncoderImplementation string `json:"encoderImplementation"`
+
+	// PowerEfficientEncoder indicates whether the encoder currently used is considered power efficient.
+	// by the user agent. Does not exist for audio.
+	PowerEfficientEncoder bool `json:"powerEfficientEncoder"`
+
+	// ScalabilityMode identifies the layering mode used for video encoding. Does not exist for audio.
+	ScalabilityMode string `json:"scalabilityMode"`
 }
 
 func (s OutboundRTPStreamStats) statsMarker() {}
@@ -816,6 +891,7 @@ func unmarshalOutboundRTPStreamStats(b []byte) (OutboundRTPStreamStats, error) {
 	if err != nil {
 		return OutboundRTPStreamStats{}, fmt.Errorf("unmarshal outbound rtp stream stats: %w", err)
 	}
+
 	return outboundRTPStreamStats, nil
 }
 
@@ -947,6 +1023,7 @@ func unmarshalRemoteInboundRTPStreamStats(b []byte) (RemoteInboundRTPStreamStats
 	if err != nil {
 		return RemoteInboundRTPStreamStats{}, fmt.Errorf("unmarshal remote inbound rtp stream stats: %w", err)
 	}
+
 	return remoteInboundRTPStreamStats, nil
 }
 
@@ -1066,6 +1143,7 @@ func unmarshalRemoteOutboundRTPStreamStats(b []byte) (RemoteOutboundRTPStreamSta
 	if err != nil {
 		return RemoteOutboundRTPStreamStats{}, fmt.Errorf("unmarshal remote outbound rtp stream stats: %w", err)
 	}
+
 	return remoteOutboundRTPStreamStats, nil
 }
 
@@ -1113,6 +1191,7 @@ func unmarshalCSRCStats(b []byte) (RTPContributingSourceStats, error) {
 	if err != nil {
 		return RTPContributingSourceStats{}, fmt.Errorf("unmarshal csrc stats: %w", err)
 	}
+
 	return csrcStats, nil
 }
 
@@ -1176,7 +1255,8 @@ type AudioSourceStats struct {
 
 	// TotalCaptureDelay is the total delay, in seconds, for each audio sample between the time the sample was emitted
 	// by the capture device and the sample reaching the source. This can be used together with totalSamplesCaptured to
-	// calculate the average capture delay per sample. Only applicable if the audio source represents an audio capture device.
+	// calculate the average capture delay per sample.
+	// Only applicable if the audio source represents an audio capture device.
 	TotalCaptureDelay float64 `json:"totalCaptureDelay"`
 
 	// TotalSamplesCaptured is the total number of captured samples reaching the audio source, i.e. that were not dropped
@@ -1239,6 +1319,7 @@ func unmarshalMediaSourceStats(b []byte) (Stats, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal audio source stats: %w", err)
 		}
+
 		return mediaSourceStats, nil
 	case MediaKindVideo:
 		var mediaSourceStats VideoSourceStats
@@ -1246,6 +1327,7 @@ func unmarshalMediaSourceStats(b []byte) (Stats, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal video source stats: %w", err)
 		}
+
 		return mediaSourceStats, nil
 	default:
 		return nil, fmt.Errorf("kind: %w", ErrUnknownType)
@@ -1273,7 +1355,7 @@ type AudioPlayoutStats struct {
 	// SynthesizedSamplesDuration is measured in seconds and is incremented each time an audio sample is synthesized by
 	// this playout path. This metric can be used together with totalSamplesDuration to calculate the percentage of played
 	// out media being synthesized. If the playout path is unable to produce audio samples on time for device playout,
-	// samples are synthesized to be playout out instead. Synthesization typically only happens if the pipeline is
+	// samples are synthesized to be played out instead. Synthesization typically only happens if the pipeline is
 	// underperforming. Samples synthesized by the RTCInboundRtpStreamStats are not counted for here, but in
 	// InboundRtpStreamStats.concealedSamples.
 	SynthesizedSamplesDuration float64 `json:"synthesizedSamplesDuration"`
@@ -1307,6 +1389,7 @@ func unmarshalMediaPlayoutStats(b []byte) (Stats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unmarshal audio playout stats: %w", err)
 	}
+
 	return audioPlayoutStats, nil
 }
 
@@ -1352,6 +1435,7 @@ func unmarshalPeerConnectionStats(b []byte) (PeerConnectionStats, error) {
 	if err != nil {
 		return PeerConnectionStats{}, fmt.Errorf("unmarshal pc stats: %w", err)
 	}
+
 	return pcStats, nil
 }
 
@@ -1406,6 +1490,7 @@ func unmarshalDataChannelStats(b []byte) (DataChannelStats, error) {
 	if err != nil {
 		return DataChannelStats{}, fmt.Errorf("unmarshal data channel stats: %w", err)
 	}
+
 	return dataChannelStats, nil
 }
 
@@ -1438,6 +1523,7 @@ func unmarshalStreamStats(b []byte) (MediaStreamStats, error) {
 	if err != nil {
 		return MediaStreamStats{}, fmt.Errorf("unmarshal stream stats: %w", err)
 	}
+
 	return streamStats, nil
 }
 
@@ -1619,6 +1705,7 @@ func unmarshalSenderStats(b []byte) (Stats, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal audio sender stats: %w", err)
 		}
+
 		return senderStats, nil
 	case MediaKindVideo:
 		var senderStats VideoSenderStats
@@ -1626,6 +1713,7 @@ func unmarshalSenderStats(b []byte) (Stats, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal video sender stats: %w", err)
 		}
+
 		return senderStats, nil
 	default:
 		return nil, fmt.Errorf("kind: %w", ErrUnknownType)
@@ -1650,6 +1738,7 @@ func unmarshalTrackStats(b []byte) (Stats, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal audio track stats: %w", err)
 		}
+
 		return trackStats, nil
 	case MediaKindVideo:
 		var trackStats SenderVideoTrackAttachmentStats
@@ -1657,6 +1746,7 @@ func unmarshalTrackStats(b []byte) (Stats, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal video track stats: %w", err)
 		}
+
 		return trackStats, nil
 	default:
 		return nil, fmt.Errorf("kind: %w", ErrUnknownType)
@@ -1685,7 +1775,7 @@ type AudioReceiverStats struct {
 	// 0 represents silence, and 0.5 represents approximately 6 dBSPL change in
 	// the sound pressure level from 0 dBov.
 	//
-	// If the track is sourced from an Receiver, does no audio processing, has a
+	// If the track is sourced from a Receiver, does no audio processing, has a
 	// constant level, and has a volume setting of 1.0, the audio level is expected
 	// to be the same as the audio level of the source SSRC, while if the volume setting
 	// is 0.5, the AudioLevel is expected to be half that value.
@@ -1810,11 +1900,11 @@ type VideoReceiverStats struct {
 	FramesReceived uint32 `json:"framesReceived"`
 
 	// KeyFramesReceived represents the total number of complete key frames received
-	// for this MediaStreamTrack, such as Infra-frames in VP8 [RFC6386] or I-frames
+	// for this MediaStreamTrack, such as Intra-frames in VP8 [RFC6386] or I-frames
 	// in H.264 [RFC6184]. This is a subset of framesReceived. `framesReceived - keyFramesReceived`
 	// gives you the number of delta frames received. This metric is incremented when
 	// the complete key frame is received. It is not incremented if a partial key
-	// frames is received and sent for decoding, i.e., the frame could not be recovered
+	// frame is received and sent for decoding, i.e., the frame could not be recovered
 	// via retransmission or FEC.
 	KeyFramesReceived uint32 `json:"keyFramesReceived"`
 
@@ -1855,6 +1945,7 @@ func unmarshalReceiverStats(b []byte) (Stats, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal audio receiver stats: %w", err)
 		}
+
 		return receiverStats, nil
 	case MediaKindVideo:
 		var receiverStats VideoReceiverStats
@@ -1862,6 +1953,7 @@ func unmarshalReceiverStats(b []byte) (Stats, error) {
 		if err != nil {
 			return nil, fmt.Errorf("unmarshal video receiver stats: %w", err)
 		}
+
 		return receiverStats, nil
 	default:
 		return nil, fmt.Errorf("kind: %w", ErrUnknownType)
@@ -1919,7 +2011,7 @@ type TransportStats struct {
 	// Present only if DTLS is negotiated.
 	LocalCertificateID string `json:"localCertificateId"`
 
-	// LocalCertificateID is the ID of the CertificateStats for the remote certificate.
+	// RemoteCertificateID is the ID of the CertificateStats for the remote certificate.
 	// Present only if DTLS is negotiated.
 	RemoteCertificateID string `json:"remoteCertificateId"`
 
@@ -1941,6 +2033,7 @@ func unmarshalTransportStats(b []byte) (TransportStats, error) {
 	if err != nil {
 		return TransportStats{}, fmt.Errorf("unmarshal transport stats: %w", err)
 	}
+
 	return transportStats, nil
 }
 
@@ -1961,6 +2054,7 @@ func toStatsICECandidatePairState(state ice.CandidatePairState) (StatsICECandida
 	default:
 		// NOTE: this should never happen[tm]
 		err := fmt.Errorf("%w: %s", errStatsICECandidateStateInvalid, state.String())
+
 		return StatsICECandidatePairState("Unknown"), err
 	}
 }
@@ -1976,32 +2070,35 @@ func toICECandidatePairStats(candidatePairStats ice.CandidatePairStats) (ICECand
 		Type:      StatsTypeCandidatePair,
 		ID:        newICECandidatePairStatsID(candidatePairStats.LocalCandidateID, candidatePairStats.RemoteCandidateID),
 		// TransportID:
-		LocalCandidateID:            candidatePairStats.LocalCandidateID,
-		RemoteCandidateID:           candidatePairStats.RemoteCandidateID,
-		State:                       state,
-		Nominated:                   candidatePairStats.Nominated,
-		PacketsSent:                 candidatePairStats.PacketsSent,
-		PacketsReceived:             candidatePairStats.PacketsReceived,
-		BytesSent:                   candidatePairStats.BytesSent,
-		BytesReceived:               candidatePairStats.BytesReceived,
-		LastPacketSentTimestamp:     statsTimestampFrom(candidatePairStats.LastPacketSentTimestamp),
-		LastPacketReceivedTimestamp: statsTimestampFrom(candidatePairStats.LastPacketReceivedTimestamp),
-		FirstRequestTimestamp:       statsTimestampFrom(candidatePairStats.FirstRequestTimestamp),
-		LastRequestTimestamp:        statsTimestampFrom(candidatePairStats.LastRequestTimestamp),
-		LastResponseTimestamp:       statsTimestampFrom(candidatePairStats.LastResponseTimestamp),
-		TotalRoundTripTime:          candidatePairStats.TotalRoundTripTime,
-		CurrentRoundTripTime:        candidatePairStats.CurrentRoundTripTime,
-		AvailableOutgoingBitrate:    candidatePairStats.AvailableOutgoingBitrate,
-		AvailableIncomingBitrate:    candidatePairStats.AvailableIncomingBitrate,
-		CircuitBreakerTriggerCount:  candidatePairStats.CircuitBreakerTriggerCount,
-		RequestsReceived:            candidatePairStats.RequestsReceived,
-		RequestsSent:                candidatePairStats.RequestsSent,
-		ResponsesReceived:           candidatePairStats.ResponsesReceived,
-		ResponsesSent:               candidatePairStats.ResponsesSent,
-		RetransmissionsReceived:     candidatePairStats.RetransmissionsReceived,
-		RetransmissionsSent:         candidatePairStats.RetransmissionsSent,
-		ConsentRequestsSent:         candidatePairStats.ConsentRequestsSent,
-		ConsentExpiredTimestamp:     statsTimestampFrom(candidatePairStats.ConsentExpiredTimestamp),
+		LocalCandidateID:              candidatePairStats.LocalCandidateID,
+		RemoteCandidateID:             candidatePairStats.RemoteCandidateID,
+		State:                         state,
+		Nominated:                     candidatePairStats.Nominated,
+		PacketsSent:                   candidatePairStats.PacketsSent,
+		PacketsReceived:               candidatePairStats.PacketsReceived,
+		BytesSent:                     candidatePairStats.BytesSent,
+		BytesReceived:                 candidatePairStats.BytesReceived,
+		LastPacketSentTimestamp:       statsTimestampFrom(candidatePairStats.LastPacketSentTimestamp),
+		LastPacketReceivedTimestamp:   statsTimestampFrom(candidatePairStats.LastPacketReceivedTimestamp),
+		FirstRequestTimestamp:         statsTimestampFrom(candidatePairStats.FirstRequestTimestamp),
+		LastRequestTimestamp:          statsTimestampFrom(candidatePairStats.LastRequestTimestamp),
+		FirstResponseTimestamp:        statsTimestampFrom(candidatePairStats.FirstResponseTimestamp),
+		LastResponseTimestamp:         statsTimestampFrom(candidatePairStats.LastResponseTimestamp),
+		FirstRequestReceivedTimestamp: statsTimestampFrom(candidatePairStats.FirstRequestReceivedTimestamp),
+		LastRequestReceivedTimestamp:  statsTimestampFrom(candidatePairStats.LastRequestReceivedTimestamp),
+		TotalRoundTripTime:            candidatePairStats.TotalRoundTripTime,
+		CurrentRoundTripTime:          candidatePairStats.CurrentRoundTripTime,
+		AvailableOutgoingBitrate:      candidatePairStats.AvailableOutgoingBitrate,
+		AvailableIncomingBitrate:      candidatePairStats.AvailableIncomingBitrate,
+		CircuitBreakerTriggerCount:    candidatePairStats.CircuitBreakerTriggerCount,
+		RequestsReceived:              candidatePairStats.RequestsReceived,
+		RequestsSent:                  candidatePairStats.RequestsSent,
+		ResponsesReceived:             candidatePairStats.ResponsesReceived,
+		ResponsesSent:                 candidatePairStats.ResponsesSent,
+		RetransmissionsReceived:       candidatePairStats.RetransmissionsReceived,
+		RetransmissionsSent:           candidatePairStats.RetransmissionsSent,
+		ConsentRequestsSent:           candidatePairStats.ConsentRequestsSent,
+		ConsentExpiredTimestamp:       statsTimestampFrom(candidatePairStats.ConsentExpiredTimestamp),
 	}, nil
 }
 
@@ -2098,9 +2195,21 @@ type ICECandidatePairStats struct {
 	// (LastRequestTimestamp - FirstRequestTimestamp) / RequestsSent.
 	LastRequestTimestamp StatsTimestamp `json:"lastRequestTimestamp"`
 
+	// FirstResponseTimestamp represents the timestamp at which the first STUN response
+	// was received on this particular candidate pair.
+	FirstResponseTimestamp StatsTimestamp `json:"firstResponseTimestamp"`
+
 	// LastResponseTimestamp represents the timestamp at which the last STUN response
 	// was received on this particular candidate pair.
 	LastResponseTimestamp StatsTimestamp `json:"lastResponseTimestamp"`
+
+	// FirstRequestReceivedTimestamp represents the timestamp at which the first
+	// connectivity check request was received.
+	FirstRequestReceivedTimestamp StatsTimestamp `json:"firstRequestReceivedTimestamp"`
+
+	// LastRequestReceivedTimestamp represents the timestamp at which the last
+	// connectivity check request was received.
+	LastRequestReceivedTimestamp StatsTimestamp `json:"lastRequestReceivedTimestamp"`
 
 	// TotalRoundTripTime represents the sum of all round trip time measurements
 	// in seconds since the beginning of the session, based on STUN connectivity
@@ -2167,7 +2276,7 @@ type ICECandidatePairStats struct {
 	// STUN binding response expired.
 	ConsentExpiredTimestamp StatsTimestamp `json:"consentExpiredTimestamp"`
 
-	// PacketsDiscardedOnSend retpresents the total number of packets for this candidate pair
+	// PacketsDiscardedOnSend represents the total number of packets for this candidate pair
 	// that have been discarded due to socket errors, i.e. a socket error occurred
 	// when handing the packets to the socket. This might happen due to various reasons,
 	// including full buffer or no available memory.
@@ -2189,6 +2298,7 @@ func unmarshalICECandidatePairStats(b []byte) (ICECandidatePairStats, error) {
 	if err != nil {
 		return ICECandidatePairStats{}, fmt.Errorf("unmarshal ice candidate pair stats: %w", err)
 	}
+
 	return iceCandidatePairStats, nil
 }
 
@@ -2240,8 +2350,8 @@ type ICECandidateStats struct {
 	// Priority is the "Priority" field of the ICECandidate.
 	Priority int32 `json:"priority"`
 
-	// URL is the URL of the TURN or STUN server indicated in the that translated
-	// this IP address. It is the URL address surfaced in an PeerConnectionICEEvent.
+	// URL of the TURN or STUN server that produced this candidate
+	// It is the URL address surfaced in an PeerConnectionICEEvent.
 	URL string `json:"url"`
 
 	// RelayProtocol is the protocol used by the endpoint to communicate with the
@@ -2266,6 +2376,7 @@ func unmarshalICECandidateStats(b []byte) (ICECandidateStats, error) {
 	if err != nil {
 		return ICECandidateStats{}, fmt.Errorf("unmarshal ice candidate stats: %w", err)
 	}
+
 	return iceCandidateStats, nil
 }
 
@@ -2305,6 +2416,7 @@ func unmarshalCertificateStats(b []byte) (CertificateStats, error) {
 	if err != nil {
 		return CertificateStats{}, fmt.Errorf("unmarshal certificate stats: %w", err)
 	}
+
 	return certificateStats, nil
 }
 
@@ -2325,8 +2437,9 @@ type SCTPTransportStats struct {
 	// RTCTransportStats for the DTLSTransport and ICETransport supporting the SCTP transport.
 	TransportID string `json:"transportId"`
 
-	// SmoothedRoundTripTime is the latest smoothed round-trip time value, corresponding to spinfo_srtt defined in [RFC6458]
-	// but converted to seconds. If there has been no round-trip time measurements yet, this value is undefined.
+	// SmoothedRoundTripTime is the latest smoothed round-trip time value,
+	// corresponding to spinfo_srtt defined in [RFC6458] but converted to seconds.
+	// If there has been no round-trip time measurements yet, this value is undefined.
 	SmoothedRoundTripTime float64 `json:"smoothedRoundTripTime"`
 
 	// CongestionWindow is the latest congestion window, corresponding to spinfo_cwnd defined in [RFC6458].
@@ -2340,6 +2453,9 @@ type SCTPTransportStats struct {
 
 	// UNACKData is the number of unacknowledged DATA chunks, corresponding to sstat_unackdata defined in [RFC6458].
 	UNACKData uint32 `json:"unackData"`
+
+	// Metadata contains negotiated SCTP association metadata.
+	Metadata *SCTPTransportMetadata `json:"metadata,omitempty"`
 
 	// BytesSent represents the total number of bytes sent on this SCTPTransport
 	BytesSent uint64 `json:"bytesSent"`
@@ -2355,5 +2471,6 @@ func unmarshalSCTPTransportStats(b []byte) (SCTPTransportStats, error) {
 	if err := json.Unmarshal(b, &sctpTransportStats); err != nil {
 		return SCTPTransportStats{}, fmt.Errorf("unmarshal sctp transport stats: %w", err)
 	}
+
 	return sctpTransportStats, nil
 }

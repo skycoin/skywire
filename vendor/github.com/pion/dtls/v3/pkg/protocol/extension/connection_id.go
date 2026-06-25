@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package extension
@@ -18,12 +18,12 @@ type ConnectionID struct {
 	CID []byte // variable length
 }
 
-// TypeValue returns the extension TypeValue
+// TypeValue returns the extension TypeValue.
 func (c ConnectionID) TypeValue() TypeValue {
 	return ConnectionIDTypeValue
 }
 
-// Marshal encodes the extension
+// Marshal encodes the extension.
 func (c *ConnectionID) Marshal() ([]byte, error) {
 	var b cryptobyte.Builder
 	b.AddUint16(uint16(c.TypeValue()))
@@ -32,10 +32,11 @@ func (c *ConnectionID) Marshal() ([]byte, error) {
 			b.AddBytes(c.CID)
 		})
 	})
+
 	return b.Bytes()
 }
 
-// Unmarshal populates the extension from encoded data
+// Unmarshal populates the extension from encoded data.
 func (c *ConnectionID) Unmarshal(data []byte) error {
 	val := cryptobyte.String(data)
 	var extension uint16
@@ -45,15 +46,23 @@ func (c *ConnectionID) Unmarshal(data []byte) error {
 	}
 
 	var extData cryptobyte.String
-	val.ReadUint16LengthPrefixed(&extData)
+	if !val.ReadUint16LengthPrefixed(&extData) {
+		return errBufferTooSmall
+	}
 
 	var cid cryptobyte.String
 	if !extData.ReadUint8LengthPrefixed(&cid) {
 		return errInvalidCIDFormat
 	}
+
+	if !extData.Empty() {
+		return errLengthMismatch
+	}
+
 	c.CID = make([]byte, len(cid))
 	if !cid.CopyBytes(c.CID) {
 		return errInvalidCIDFormat
 	}
+
 	return nil
 }

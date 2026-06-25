@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -18,7 +18,7 @@ type ICEServer struct {
 	URLs     []string
 	Username string
 	// Note: TURN is not supported in the WASM bindings yet
-	Credential     interface{}
+	Credential     any
 	CredentialType ICECredentialType
 }
 
