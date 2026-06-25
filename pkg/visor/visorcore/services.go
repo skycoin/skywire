@@ -35,6 +35,15 @@ type Services struct {
 	RouteFinderDmsg string
 	RouteSetupNodes []cipher.PubKey
 	MinHops         uint16
+	// service discovery
+	ServiceDiscovery     string
+	ServiceDiscoveryDmsg string
+	// config-bootstrap service
+	Conf     string
+	ConfDmsg string
+	// uptime tracker
+	UptimeTracker     string
+	UptimeTrackerDmsg string
 	// misc
 	StunServers []string
 }
@@ -69,7 +78,14 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 		RouteFinderDmsg:        d.RouteFinderDmsg,
 		RouteSetupNodes:        d.RouteSetupNodes,
 		MinHops:                1,
-		StunServers:            d.StunServers,
+		ServiceDiscovery:       d.ServiceDiscovery,
+		ServiceDiscoveryDmsg:   d.ServiceDiscoveryDmsg,
+		// Conf has no clearnet deployment default (deployment is dmsg-only for the
+		// config-bootstrap service); a v1.ConfService override below still applies.
+		ConfDmsg:          d.ConfDmsg,
+		UptimeTracker:     d.UptimeTracker,
+		UptimeTrackerDmsg: d.UptimeTrackerDmsg,
+		StunServers:       d.StunServers,
 	}
 	if v1 == nil {
 		return s
@@ -95,6 +111,16 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 		if v1.Routing.MinHops > 0 {
 			s.MinHops = v1.Routing.MinHops
 		}
+	}
+	if v1.Launcher != nil {
+		s.ServiceDiscovery = pick(v1.Launcher.ServiceDisc, s.ServiceDiscovery)
+		s.ServiceDiscoveryDmsg = pick(v1.Launcher.ServiceDiscDmsg, s.ServiceDiscoveryDmsg)
+	}
+	s.Conf = pick(v1.ConfService, s.Conf)
+	s.ConfDmsg = pick(v1.ConfServiceDmsg, s.ConfDmsg)
+	if v1.UptimeTracker != nil {
+		s.UptimeTracker = pick(v1.UptimeTracker.Addr, s.UptimeTracker)
+		s.UptimeTrackerDmsg = pick(v1.UptimeTracker.AddrDmsg, s.UptimeTrackerDmsg)
 	}
 	if len(v1.StunServers) > 0 {
 		s.StunServers = v1.StunServers
