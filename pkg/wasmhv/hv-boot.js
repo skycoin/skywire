@@ -30,12 +30,32 @@
     });
   }
 
-  // resolveSK returns the dmsg secret-key hex: plaintext CFG.sk, else a
-  // password-decrypted CFG.encsk (AES-GCM/PBKDF2; format base64 of
-  // [16-byte salt | 12-byte iv | ciphertext]), else '' (ephemeral identity).
+  // PERSISTED IDENTITY: keep the visor's key (and therefore PK) stable across
+  // refreshes by storing it in localStorage (scoped to the served origin).
+  // Ctrl+Shift+R clears the HTTP cache but NOT localStorage, so a refresh keeps
+  // the same visor while picking up freshly-served wasm. On file:// localStorage
+  // is browser-dependent, which is why the SERVED model is the reliable one.
+  var SK_KEY = 'skywire-visor-sk';
+  function loadStoredSK() { try { return localStorage.getItem(SK_KEY) || ''; } catch (e) { return ''; } }
+  function storeSK(hex) { try { localStorage.setItem(SK_KEY, hex); } catch (e) {} }
+  function newSKHex() {
+    var b = crypto.getRandomValues(new Uint8Array(32));
+    return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  }
+
+  // resolveSK returns the dmsg secret-key hex: plaintext CFG.sk (user-supplied),
+  // else a password-decrypted CFG.encsk (AES-GCM/PBKDF2; format base64 of
+  // [16-byte salt | 12-byte iv | ciphertext]), else a localStorage-persisted
+  // ephemeral key (generated + saved on first load, reused after).
   async function resolveSK() {
     if (CFG.sk) return CFG.sk;
-    if (!CFG.encsk) return '';
+    if (!CFG.encsk) {
+      var stored = loadStoredSK();
+      if (stored) return stored;
+      var hex = newSKHex();
+      storeSK(hex);
+      return hex;
+    }
     var pw = window.prompt('Enter password to unlock the visor key:');
     if (pw === null) throw new Error('password entry cancelled');
     var raw = Uint8Array.from(atob(CFG.encsk), function (c) { return c.charCodeAt(0); });
