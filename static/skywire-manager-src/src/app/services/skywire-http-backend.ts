@@ -91,8 +91,19 @@ export class SkywireHttpBackend implements HttpBackend {
   }
 
   /** dispatch routes one /api request to the configured gateway. */
-  private dispatch(req: HttpRequest<any>): Promise<GatewayResponse> {
+  private async dispatch(req: HttpRequest<any>): Promise<GatewayResponse> {
     const w = window as any;
+    // Wait for the in-tab visor/dmsg client to finish booting before the first
+    // /api call. The boot bootstrap exposes its boot promise as
+    // window.__SKYWIRE_HV__.ready; absent it, assume the client is already up.
+    if (this.cfg.ready && typeof this.cfg.ready.then === 'function') {
+      try {
+        await this.cfg.ready;
+      } catch (e) {
+        // boot failed — fall through; the dispatch below surfaces a clear error.
+      }
+    }
+
     const method = req.method;
     const path = this.pathOf(req.urlWithParams);
     const raw = req.serializeBody();
@@ -115,7 +126,7 @@ export class SkywireHttpBackend implements HttpBackend {
       // viewer: /api over dmsg to a remote hypervisor PK.
       return w.skywireDmsg.fetch(this.cfg.pk, method, path, body, this.headersObj(req));
     }
-    return Promise.reject(new Error('SkywireHttpBackend: no in-tab gateway available'));
+    throw new Error('SkywireHttpBackend: no in-tab gateway available');
   }
 
   /** toEvent converts a GatewayResponse into the HttpResponse/HttpErrorResponse Angular expects. */
