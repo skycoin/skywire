@@ -178,6 +178,16 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}
 	selfPK = pk
 
+	// Default the discovery to the deployment's dmsg-discovery when the caller
+	// didn't pass one. Without a discDmsgAddr, StartDmsgSeeded skips the discovery
+	// upgrade, so the client never installs the registering fallback and never
+	// publishes its entry — the tab stays unregistered (and can't be route-set-up,
+	// which dials the source's own @136 over dmsg). A browser edge always wants the
+	// deployment discovery; an explicit arg still overrides (e.g. a test discovery).
+	if discDmsgAddr == "" {
+		discDmsgAddr = deployment.Prod.DmsgDiscoveryDmsg
+	}
+
 	mLog := logging.NewMasterLogger()
 
 	// 1. dmsg client (browser WebSocket carrier). Seed from ALL embedded dmsg
