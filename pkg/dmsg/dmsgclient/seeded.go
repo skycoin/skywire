@@ -4,7 +4,6 @@ package dmsgclient
 import (
 	"context"
 	"errors"
-	"sync"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -96,56 +95,33 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	// discovery it would need to find another server). Capped at the known set.
 	conf.MinSessions = 2
 
-	// Build the dmsg client and install the registering-fallback discovery BEFORE
-	// serving — matching the native visor exactly (dmsgc.New → dmsg.NewClient(disc)
-	// → set transport → Serve, see pkg/visor/init_dmsg.go).
-	//
-	// This used to call direct.StartDmsg (NewClient(dClient) + Serve + wait Ready)
-	// and only THEN upgradeDiscovery. That two-phase ordering was the bug behind
-	// "a browser tab never registers in discovery": the entry-update loop starts
-	// during Serve, so its FIRST iteration ran against the bare direct client — a
-	// PutEntry that no-ops AND records a successful update, resetting the ~5-min
-	// update timer. By the time upgradeDiscovery swapped in the fallback, the loop
-	// was asleep, so the real (HTTP-over-dmsg) registration didn't fire for minutes
-	// and the tab stayed 404 in discovery — which also blocks route setup (it dials
-	// the source's own @136 over dmsg, needing the entry registered). The native
-	// visor never hit this because its fallback is live from the first serve tick.
-	dmsgC := dmsg.NewClient(pk, sk, dClient, conf)
-	dmsgC.SetLogger(log)
-
-	if discDmsgAddr != "" {
+	// Install the registering-fallback discovery BEFORE serving — the shared
+	// register-before-serve invariant (direct.StartDmsgWithSetup). The native visor
+	// wires dmsg the same way (dmsg.NewClient(disc) → set transport → Serve, see
+	// pkg/visor/init_dmsg.go). This path regressed by serving the bare direct client
+	// first and upgrading AFTER (#3277): the entry-update loop's first tick ran
+	// against the no-op direct client, recorded a "successful" update, and reset the
+	// ~5-min timer, so real registration didn't fire for minutes and the tab stayed
+	// 404 — which also blocks route setup (it dials the source's own @136 over dmsg,
+	// needing the entry registered). Funnelling through the shared helper keeps the
+	// two visors from drifting on the ordering again.
+	beforeServe := func(c *dmsg.Client) error {
+		if discDmsgAddr == "" {
+			return nil
+		}
 		// upgradeDiscovery is build-tagged: native backs the registering fallback
 		// with dmsghttp (net/http over the client's own sessions); TinyGo uses the
-		// net/http-free dmsgDiscClient (HTTP/1.1 straight over a dmsg stream). READS
-		// resolve direct-first (seed servers + discovery PK short-circuit, no
-		// HTTP-over-dmsg recursion); unknown peers + WRITES go to the real discovery,
-		// publishing our entry so we become inbound-reachable by PK. It only sets the
-		// disc client + builds the transport over dmsgC (no IO), so calling it before
-		// Serve is safe. On failure we degrade to seed-only rather than failing.
-		if err := upgradeDiscovery(ctx, log, dmsgC, dClient, seedServers, discDmsgAddr); err != nil {
+		// net/http-free dmsgDiscClient (HTTP/1.1 over a dmsg stream). READS resolve
+		// direct-first (seed servers + discovery PK short-circuit, no HTTP-over-dmsg
+		// recursion); unknown peers + WRITES go to the real discovery, publishing our
+		// entry so we become inbound-reachable by PK. On failure we degrade to
+		// seed-only (dialable but can't resolve new peers) — never fatal.
+		if err := upgradeDiscovery(ctx, log, c, dClient, seedServers, discDmsgAddr); err != nil {
 			log.WithError(err).Warn("dmsg: discovery upgrade failed; continuing seed-only (dialable but can't resolve new peers)")
 		}
+		return nil
 	}
-
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		dmsgC.Serve(ctx)
-	}()
-	stop := func() {
-		err := dmsgC.Close()
-		log.WithError(err).Debug("Disconnected from dmsg network.")
-		wg.Wait()
-	}
-
-	select {
-	case <-ctx.Done():
-		stop()
-		return nil, nil, ctx.Err()
-	case <-dmsgC.Ready():
-		return dmsgC, stop, nil
-	}
+	return direct.StartDmsgWithSetup(ctx, log, pk, sk, dClient, conf, beforeServe)
 }
 
 // StartDmsgEmbedded starts a dmsg client seeded from the embedded production
