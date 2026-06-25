@@ -179,14 +179,39 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 
 	mLog := logging.NewMasterLogger()
 
-	// 1. dmsg client (browser WebSocket carrier — see cmd/dmsg-wasm).
-	var seedPK cipher.PubKey
-	if err := seedPK.UnmarshalText([]byte(seedPKHex)); err != nil {
-		return pk, fmt.Errorf("bad seed server pk: %w", err)
+	// 1. dmsg client (browser WebSocket carrier). Seed from ALL embedded dmsg
+	// servers via WebSocket on their advertised port — the unified dmsg-server
+	// serves WS at ws://<Address>/dmsg (#3272). Multi-server connectivity mirrors
+	// the non-wasm visor (its config carries the full servers[] list) and is what
+	// lets a browser tab reach the discovery to register its own entry — the
+	// prerequisite for inbound reachability and route setup. A boot-arg seed
+	// (seedPk/seedWs), when given, is added or overrides (e.g. a server whose WS
+	// is on a SEPARATE port). Servers not yet serving main-port WS just fail to
+	// dial and are skipped (best-effort); the client settles on the reachable set.
+	seedsByPK := map[cipher.PubKey]*disc.Entry{}
+	for _, ds := range deployment.Prod.DmsgServers {
+		var spk cipher.PubKey
+		if ds.Server.Address == "" || spk.UnmarshalText([]byte(ds.Static)) != nil {
+			continue
+		}
+		seedsByPK[spk] = &disc.Entry{Version: "0.0.1", Static: spk, Server: &disc.Server{AddressWS: "ws://" + ds.Server.Address + "/dmsg"}}
 	}
-	seed := &disc.Entry{Version: "0.0.1", Static: seedPK, Server: &disc.Server{AddressWS: seedWSURL}}
-	vlog("dmsg: connecting…")
-	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, []*disc.Entry{seed}, discDmsgAddr, true)
+	if seedPKHex != "" && seedWSURL != "" {
+		var spk cipher.PubKey
+		if err := spk.UnmarshalText([]byte(seedPKHex)); err != nil {
+			return pk, fmt.Errorf("bad seed server pk: %w", err)
+		}
+		seedsByPK[spk] = &disc.Entry{Version: "0.0.1", Static: spk, Server: &disc.Server{AddressWS: seedWSURL}}
+	}
+	seeds := make([]*disc.Entry, 0, len(seedsByPK))
+	for _, e := range seedsByPK {
+		seeds = append(seeds, e)
+	}
+	if len(seeds) == 0 {
+		return pk, errors.New("no dmsg seed servers (embedded set empty and no seedPk/seedWs provided)")
+	}
+	vlog(fmt.Sprintf("dmsg: connecting (%d WS seed servers)…", len(seeds)))
+	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, seeds, discDmsgAddr, true)
 	if err != nil {
 		return pk, fmt.Errorf("dmsg: %w", err)
 	}
