@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 // ServiceHealth checks the health of all configured deployment services.
@@ -171,10 +172,7 @@ func (v *Visor) confServiceHTTP() string {
 }
 
 func (v *Visor) confServiceDmsg() string {
-	if v.conf.ConfServiceDmsg != "" {
-		return v.conf.ConfServiceDmsg
-	}
-	return deployment.Prod.ConfDmsg
+	return visorcore.ResolveServices(v.conf).ConfDmsg
 }
 
 // dmsgServerHealth returns one ServiceHealthEntry per DMSG server the
