@@ -13,6 +13,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 const configRefreshInterval = 1 * time.Hour
@@ -91,10 +92,10 @@ func (v *Visor) refreshKeySets(ctx context.Context, log *logging.Logger) {
 
 func (v *Visor) fetchServicesConfig(ctx context.Context, log *logging.Logger) *visorconfig.Services {
 	// Prefer URLs from visor config; fall back to embedded deployment defaults.
-	confDmsg := v.conf.ConfServiceDmsg
-	if confDmsg == "" {
-		confDmsg = deployment.Prod.ConfDmsg
-	}
+	// confDmsg goes through the shared resolver (same pick); confHTTP keeps its
+	// own deployment.ProdConf.Conf fallback (a separate clearnet-config var not in
+	// the resolver).
+	confDmsg := visorcore.ResolveServices(v.conf).ConfDmsg
 	confHTTP := v.conf.ConfService
 	if confHTTP == "" {
 		confHTTP = deployment.ProdConf.Conf

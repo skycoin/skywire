@@ -14,13 +14,13 @@ import (
 
 	"golang.org/x/net/proxy"
 
-	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 // DialPing implements API.
@@ -658,7 +658,7 @@ func (v *Visor) TestProxy(conf ProxyTestConfig) ([]ProxyTestResult, error) {
 
 	// Set defaults
 	if conf.TestURL == "" {
-		conf.TestURL = deployment.Prod.GeoIP
+		conf.TestURL = visorcore.ResolveServices(v.conf).GeoIP
 	}
 	if conf.Timeout == 0 {
 		conf.Timeout = 30 * time.Second
