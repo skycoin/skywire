@@ -149,6 +149,11 @@
         }
         case "checkRegistered":
           return await skywireVisor.checkRegistered();
+        case "fetchClearnet": {
+          // a = [skysocksServerPK, url] — fetch clearnet via a skysocks exit.
+          const r = await skywireVisor.fetchClearnet(a[0] || "", "GET", a[1] || "", null);
+          return { status: r.status, bytes: r.body.length, preview: new TextDecoder().decode(r.body).slice(0, 400) };
+        }
         case "status":
           return skywireVisor.status();
         case "browse": {

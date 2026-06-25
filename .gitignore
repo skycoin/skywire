@@ -134,3 +134,5 @@ skysocks-client
 /visor.log
 /hist/
 
+
+!cmd/wasm-visor/cacert.pem
