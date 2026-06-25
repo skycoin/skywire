@@ -42,6 +42,7 @@ import (
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
@@ -436,28 +437,21 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 // so DialStream for e.g. TPD hit the HTTP discovery, found no entry (TPD
 // is direct-client by design), and bailed with "entry not found".
 func (v *Visor) dmsgServicePKs() cipher.PubKeys {
-	pick := func(a, b string) string {
-		if a != "" {
-			return a
-		}
-		return b
-	}
+	// Resolve the deployment service endpoints through the SHARED resolver
+	// (pkg/visor/visorcore) — the same one the browser wasm-visor uses — so the two
+	// visors can't drift on the operator-override-else-deployment-default rule. This
+	// replaced six inline pick() calls; ResolveServices applies identical semantics
+	// (and handles the nullable UptimeTracker/Launcher blocks).
+	svc := visorcore.ResolveServices(v.conf)
 	dmsgURLs := []string{
-		pick(v.conf.Dmsg.DiscoveryDmsg, deployment.Prod.DmsgDiscoveryDmsg),
-		pick(v.conf.Transport.DiscoveryDmsg, deployment.Prod.TransportDiscoveryDmsg),
-		pick(v.conf.Transport.AddressResolverDmsg, deployment.Prod.AddressResolverDmsg),
-		pick(v.conf.Routing.RouteFinderDmsg, deployment.Prod.RouteFinderDmsg),
-		pick(v.conf.Launcher.ServiceDiscDmsg, deployment.Prod.ServiceDiscoveryDmsg),
-		pick(v.conf.ConfServiceDmsg, deployment.Prod.ConfDmsg),
+		svc.DmsgDiscoveryDmsg,
+		svc.TransportDiscoveryDmsg,
+		svc.AddressResolverDmsg,
+		svc.RouteFinderDmsg,
+		svc.ServiceDiscoveryDmsg,
+		svc.ConfDmsg,
+		svc.UptimeTrackerDmsg,
 	}
-	// UptimeTracker is the only nullable sub-config; treat a nil block
-	// the same as an empty AddrDmsg field and fall through to the embedded
-	// default so we still seed UT's PK on minimal configs.
-	utDmsg := deployment.Prod.UptimeTrackerDmsg
-	if v.conf.UptimeTracker != nil {
-		utDmsg = pick(v.conf.UptimeTracker.AddrDmsg, utDmsg)
-	}
-	dmsgURLs = append(dmsgURLs, utDmsg)
 	var pks cipher.PubKeys
 	for _, rawURL := range dmsgURLs {
 		if rawURL == "" {
