@@ -212,7 +212,19 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		return pk, errors.New("no dmsg seed servers (embedded set empty and no seedPk/seedWs provided)")
 	}
 	vlog(fmt.Sprintf("dmsg: connecting (%d WS seed servers)…", len(seeds)))
-	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, seeds, discDmsgAddr, true)
+	// Preload the deployment's non-registering SERVICE clients (route-finder, setup
+	// nodes, transport-discovery) delegated to the seed servers — they never publish
+	// to the dmsg-discovery, so without this a multihop DialRoutes (route-finder POST)
+	// 404s. dmsgURLPK errors are non-fatal here (a null PK is skipped downstream).
+	var servicePKs []cipher.PubKey
+	if rfPK, e := dmsgURLPK(deployment.Prod.RouteFinderDmsg); e == nil {
+		servicePKs = append(servicePKs, rfPK)
+	}
+	if tpdSvcPK, e := dmsgURLPK(deployment.Prod.TransportDiscoveryDmsg); e == nil {
+		servicePKs = append(servicePKs, tpdSvcPK)
+	}
+	servicePKs = append(servicePKs, deployment.Prod.RouteSetupNodes...)
+	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, seeds, discDmsgAddr, true, servicePKs...)
 	if err != nil {
 		return pk, fmt.Errorf("dmsg: %w", err)
 	}
