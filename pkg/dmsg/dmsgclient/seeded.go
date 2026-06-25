@@ -4,6 +4,7 @@ package dmsgclient
 import (
 	"context"
 	"errors"
+	"sync"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -95,31 +96,56 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	// discovery it would need to find another server). Capped at the known set.
 	conf.MinSessions = 2
 
-	dmsgC, stop, err := direct.StartDmsg(ctx, log, pk, sk, dClient, conf)
-	if err != nil {
-		return nil, nil, err
-	}
+	// Build the dmsg client and install the registering-fallback discovery BEFORE
+	// serving — matching the native visor exactly (dmsgc.New → dmsg.NewClient(disc)
+	// → set transport → Serve, see pkg/visor/init_dmsg.go).
+	//
+	// This used to call direct.StartDmsg (NewClient(dClient) + Serve + wait Ready)
+	// and only THEN upgradeDiscovery. That two-phase ordering was the bug behind
+	// "a browser tab never registers in discovery": the entry-update loop starts
+	// during Serve, so its FIRST iteration ran against the bare direct client — a
+	// PutEntry that no-ops AND records a successful update, resetting the ~5-min
+	// update timer. By the time upgradeDiscovery swapped in the fallback, the loop
+	// was asleep, so the real (HTTP-over-dmsg) registration didn't fire for minutes
+	// and the tab stayed 404 in discovery — which also blocks route setup (it dials
+	// the source's own @136 over dmsg, needing the entry registered). The native
+	// visor never hit this because its fallback is live from the first serve tick.
+	dmsgC := dmsg.NewClient(pk, sk, dClient, conf)
+	dmsgC.SetLogger(log)
 
 	if discDmsgAddr != "" {
-		// Upgrade discovery to a registering fallback: READS resolve against the
-		// preloaded direct client first (the seed servers + the discovery PK
-		// short-circuit, so resolving the discovery's own location never recurses
-		// into HTTP-over-dmsg), and only unknown peers + WRITES go to the
-		// dmsg-backed discovery client — which publishes our entry to the real
-		// discovery and makes us inbound-reachable by PK. Replacing the disc
-		// outright (instead of falling back) makes teardown recurse resolving the
-		// discovery server's own entry.
-		//
-		// upgradeDiscovery is build-tagged: native uses dmsghttp (net/http) as the
-		// backing disc client; TinyGo uses the net/http-free dmsgDiscClient
-		// (HTTP/1.1 straight over a dmsg stream). On failure we degrade to
-		// seed-only rather than failing the whole client.
+		// upgradeDiscovery is build-tagged: native backs the registering fallback
+		// with dmsghttp (net/http over the client's own sessions); TinyGo uses the
+		// net/http-free dmsgDiscClient (HTTP/1.1 straight over a dmsg stream). READS
+		// resolve direct-first (seed servers + discovery PK short-circuit, no
+		// HTTP-over-dmsg recursion); unknown peers + WRITES go to the real discovery,
+		// publishing our entry so we become inbound-reachable by PK. It only sets the
+		// disc client + builds the transport over dmsgC (no IO), so calling it before
+		// Serve is safe. On failure we degrade to seed-only rather than failing.
 		if err := upgradeDiscovery(ctx, log, dmsgC, dClient, seedServers, discDmsgAddr); err != nil {
 			log.WithError(err).Warn("dmsg: discovery upgrade failed; continuing seed-only (dialable but can't resolve new peers)")
 		}
 	}
 
-	return dmsgC, stop, nil
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		dmsgC.Serve(ctx)
+	}()
+	stop := func() {
+		err := dmsgC.Close()
+		log.WithError(err).Debug("Disconnected from dmsg network.")
+		wg.Wait()
+	}
+
+	select {
+	case <-ctx.Done():
+		stop()
+		return nil, nil, ctx.Err()
+	case <-dmsgC.Ready():
+		return dmsgC, stop, nil
+	}
 }
 
 // StartDmsgEmbedded starts a dmsg client seeded from the embedded production
