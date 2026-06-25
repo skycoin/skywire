@@ -74,6 +74,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
@@ -178,6 +179,12 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}
 	selfPK = pk
 
+	// Resolve the deployment service endpoints through the SHARED resolver
+	// (pkg/visor/visorcore) — the same one the native visor will use — so the two
+	// visors can't drift on config sourcing. nil V1 → pure deployment defaults
+	// (a browser edge has no operator config file).
+	svc := visorcore.ResolveServices(nil)
+
 	// Default the discovery to the deployment's dmsg-discovery when the caller
 	// didn't pass one. Without a discDmsgAddr, StartDmsgSeeded skips the discovery
 	// upgrade, so the client never installs the registering fallback and never
@@ -185,7 +192,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// which dials the source's own @136 over dmsg). A browser edge always wants the
 	// deployment discovery; an explicit arg still overrides (e.g. a test discovery).
 	if discDmsgAddr == "" {
-		discDmsgAddr = deployment.Prod.DmsgDiscoveryDmsg
+		discDmsgAddr = svc.DmsgDiscoveryDmsg
 	}
 
 	mLog := logging.NewMasterLogger()
@@ -200,7 +207,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// is on a SEPARATE port). Servers not yet serving main-port WS just fail to
 	// dial and are skipped (best-effort); the client settles on the reachable set.
 	seedsByPK := map[cipher.PubKey]*disc.Entry{}
-	for _, ds := range deployment.Prod.DmsgServers {
+	for _, ds := range svc.DmsgServers {
 		var spk cipher.PubKey
 		if ds.Server.Address == "" || spk.UnmarshalText([]byte(ds.Static)) != nil {
 			continue
@@ -227,13 +234,13 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// to the dmsg-discovery, so without this a multihop DialRoutes (route-finder POST)
 	// 404s. dmsgURLPK errors are non-fatal here (a null PK is skipped downstream).
 	var servicePKs []cipher.PubKey
-	if rfPK, e := dmsgURLPK(deployment.Prod.RouteFinderDmsg); e == nil {
+	if rfPK, e := dmsgURLPK(svc.RouteFinderDmsg); e == nil {
 		servicePKs = append(servicePKs, rfPK)
 	}
-	if tpdSvcPK, e := dmsgURLPK(deployment.Prod.TransportDiscoveryDmsg); e == nil {
+	if tpdSvcPK, e := dmsgURLPK(svc.TransportDiscoveryDmsg); e == nil {
 		servicePKs = append(servicePKs, tpdSvcPK)
 	}
-	servicePKs = append(servicePKs, deployment.Prod.RouteSetupNodes...)
+	servicePKs = append(servicePKs, svc.RouteSetupNodes...)
 	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, seeds, discDmsgAddr, true, servicePKs...)
 	if err != nil {
 		return pk, fmt.Errorf("dmsg: %w", err)
@@ -245,7 +252,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// the tab's transport edges OVER DMSG (net/http-free), against the deployment's
 	// transport_discovery_dmsg endpoint — so peers' route-finders can find paths to
 	// the tab once it dials a visor↔visor transport.
-	tpdPK, perr := dmsgURLPK(deployment.Prod.TransportDiscoveryDmsg)
+	tpdPK, perr := dmsgURLPK(svc.TransportDiscoveryDmsg)
 	if perr != nil {
 		return pk, fmt.Errorf("tpd dmsg url: %w", perr)
 	}
@@ -259,7 +266,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// WebRTC ICE servers: the deployment's own STUN (reused from sudph). The
 	// bare host:port entries need the stun: URL scheme the WebRTC stack expects.
 	var iceURLs []string
-	for _, s := range deployment.Prod.StunServers {
+	for _, s := range svc.StunServers {
 		iceURLs = append(iceURLs, "stun:"+s)
 	}
 	factory := network.ClientFactory{
@@ -316,9 +323,9 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// (forceLegacy=true); no embedded route-setup node in a browser leaf. The
 	// std-Go build compiles the full route-source (the TinyGo stub does not apply).
 	rfHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
-	rfClient := rfclient.NewHTTP(deployment.Prod.RouteFinderDmsg, 10*time.Second, rfHTTP, mLog)
+	rfClient := rfclient.NewHTTP(svc.RouteFinderDmsg, 10*time.Second, rfHTTP, mLog)
 	rgDialer := router.NewSetupNodeDialerFull(nil, router.NewRSNRelayCache(mLog.PackageLogger("router")), tm, true)
-	vlog(fmt.Sprintf("router: route origination wired (rf=%s, %d setup nodes)", deployment.Prod.RouteFinderDmsg, len(deployment.Prod.RouteSetupNodes)))
+	vlog(fmt.Sprintf("router: route origination wired (rf=%s, %d setup nodes)", svc.RouteFinderDmsg, len(svc.RouteSetupNodes)))
 
 	rConf := &router.Config{
 		Logger:             mLog.PackageLogger("router"),
@@ -329,7 +336,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		AwaitSetupListener: setupLis,
 		RouteFinder:        rfClient,
 		RouteGroupDialer:   rgDialer,
-		SetupNodes:         deployment.Prod.RouteSetupNodes,
+		SetupNodes:         svc.RouteSetupNodes,
 		// MinHops must be >0 or the router treats routing as DISABLED
 		// (router_dial.go: "routing disabled. (minhop=0)"). 1 enables
 		// origination; a direct transport, when one exists, still downgrades to a
