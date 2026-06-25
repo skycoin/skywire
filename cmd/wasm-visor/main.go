@@ -118,6 +118,7 @@ func main() {
 		"serveRPC":        js.FuncOf(jsServeRPC),
 		"dialRoute":       js.FuncOf(jsDialRoute),
 		"checkRegistered": js.FuncOf(jsCheckRegistered),
+		"fetchClearnet":   js.FuncOf(jsFetchClearnet),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
