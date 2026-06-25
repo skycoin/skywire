@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
@@ -278,21 +279,31 @@ func (s *service) Run(ctx context.Context) error {
 		primaryAdvertised = cfg.PublicAddress
 	}
 
+	// dmsg-over-WebSocket on the MAIN port (unified, the default): unless a
+	// SEPARATE ws_address is explicitly configured (e.g. for CDN/wss fronting),
+	// serve WS on the same TCP port as raw-dmsg and advertise ws://<advertised>/dmsg.
+	// One ip:port carries both, so every server becomes reachable by a browser
+	// wasm-visor with no extra port and no discovery topology change. See
+	// docs/design/dmsg-server-protocol-unification.md.
+	mainWSURL := ""
+	if cfg.WSAddress == "" && primaryAdvertised != "" && !strings.HasPrefix(primaryAdvertised, ":") {
+		mainWSURL = "ws://" + primaryAdvertised + "/dmsg"
+		log.WithField("ws_url", mainWSURL).Info("Serving dmsg over WebSocket on the main port (unified).")
+	}
+
 	go srvAPI.RunBackgroundTasks(runCtx)
 	log.WithField("addr", cfg.HTTPAddress).Info("Serving server API...")
 	go func() {
-		if err := srvAPI.ListenAndServe(cfg.LocalAddress, primaryAdvertised, cfg.HTTPAddress); err != nil {
+		if err := srvAPI.ListenAndServe(cfg.LocalAddress, primaryAdvertised, cfg.HTTPAddress, mainWSURL); err != nil {
 			log.Errorf("Serve: %v", err)
 			cancel()
 		}
 	}()
 
-	// dmsg-over-WebSocket (optional, off by default): bind a plaintext WS
-	// listener and advertise its public URL so WS-only clients — chiefly the
-	// js/wasm build, which cannot open a raw TCP/UDP socket — can reach this
-	// server. Best-effort and additive: a bind failure leaves TCP/QUIC serving
-	// normally. Requires both ws_address (bind) and public_address_ws
-	// (advertised URL); without the URL clients learn nothing to dial.
+	// dmsg-over-WebSocket on a SEPARATE port (opt-in, for CDN/wss fronting):
+	// mutually exclusive with the main-port WS above (the entry carries one
+	// AddressWS) — only runs when ws_address is explicitly set. Requires both
+	// ws_address (bind) and public_address_ws (advertised URL).
 	if cfg.WSAddress != "" && cfg.PublicAddressWS != "" {
 		wsLis, werr := net.Listen("tcp", cfg.WSAddress)
 		if werr != nil {

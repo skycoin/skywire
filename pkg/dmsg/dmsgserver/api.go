@@ -83,8 +83,12 @@ func (a *ServerAPI) SetDmsgServer(srv *dmsg.Server) {
 	a.sMu.Unlock()
 }
 
-// ListenAndServe runs dmsg Serve function alongside health endpoint
-func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
+// ListenAndServe runs dmsg Serve function alongside health endpoint. When wsURL
+// is non-empty the main TCP port ALSO serves dmsg-over-WebSocket (demuxed by
+// first bytes — raw Noise vs HTTP/1 upgrade), so one advertised ip:port carries
+// both protocols (see dmsg.Server.ServeWithWS and
+// docs/design/dmsg-server-protocol-unification.md). Empty wsURL = raw-dmsg only.
+func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr, wsURL string) error {
 	errCh := make(chan error, 3)
 
 	dmsgLn, err := net.Listen("tcp", lAddr)
@@ -92,14 +96,20 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr string) error {
 		return err
 	}
 	dmsgLis := &proxyproto.Listener{Listener: dmsgLn}
-	go func(l net.Listener, address string) {
-		serr := a.dmsgServer.Serve(l, address)
+	go func(l net.Listener, address, ws string) {
+		var serr error
+		if ws != "" {
+			// raw-dmsg + WebSocket on the one port
+			serr = a.dmsgServer.ServeWithWS(l, address, ws)
+		} else {
+			serr = a.dmsgServer.Serve(l, address)
+		}
 		l.Close() //nolint:errcheck,gosec
 		// Label so a dead DATA PLANE is identifiable, and use %v so a clean
 		// (nil) stop still yields a non-nil signal — ANY stop of the dmsg
 		// protocol Serve must surface, not be silently absorbed.
 		errCh <- fmt.Errorf("dmsg data-plane server stopped: %v", serr)
-	}(dmsgLis, pAddr)
+	}(dmsgLis, pAddr, wsURL)
 
 	// dmsg-over-QUIC (#2607): also listen on UDP (same port number as TCP) so
 	// QUIC-capable clients get a session with native QUIC stream multiplexing +
