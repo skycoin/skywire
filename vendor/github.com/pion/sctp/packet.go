@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -8,9 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
+	"strings"
 )
 
-// Create the crc32 table we'll use for the checksum
+// Create the crc32 table we'll use for the checksum.
 var castagnoliTable = crc32.MakeTable(crc32.Castagnoli) // nolint:gochecknoglobals
 
 // Allocate and zero this data once.
@@ -57,7 +58,7 @@ const (
 	packetHeaderSize = 12
 )
 
-// SCTP packet errors
+// SCTP packet errors.
 var (
 	ErrPacketRawTooSmall           = errors.New("raw is smaller than the minimum length for a SCTP packet")
 	ErrParseSCTPChunkNotEnoughData = errors.New("unable to parse SCTP chunk, not enough data for complete header")
@@ -65,7 +66,7 @@ var (
 	ErrChecksumMismatch            = errors.New("checksum mismatch theirs")
 )
 
-func (p *packet) unmarshal(doChecksum bool, raw []byte) error {
+func (p *packet) unmarshal(doChecksum bool, raw []byte) error { //nolint:cyclop
 	if len(raw) < packetHeaderSize {
 		return fmt.Errorf("%w: raw only %d bytes, %d is the minimum length", ErrPacketRawTooSmall, len(raw), packetHeaderSize)
 	}
@@ -94,55 +95,77 @@ func (p *packet) unmarshal(doChecksum bool, raw []byte) error {
 	p.destinationPort = binary.BigEndian.Uint16(raw[2:])
 	p.verificationTag = binary.BigEndian.Uint32(raw[4:])
 
-	for {
-		// Exact match, no more chunks
-		if offset == len(raw) {
-			break
-		} else if offset+chunkHeaderSize > len(raw) {
-			return fmt.Errorf("%w: offset %d remaining %d", ErrParseSCTPChunkNotEnoughData, offset, len(raw))
+	for offset < len(raw) {
+		// guaranteed to be safe by loop condition
+		remaining := raw[offset:] // nolint:gosec
+
+		// must have at least a full chunk header to continue.
+		if len(remaining) < chunkHeaderSize {
+			return fmt.Errorf("%w: offset %d remaining %d", ErrParseSCTPChunkNotEnoughData, offset, len(remaining))
 		}
 
-		var c chunk
-		switch chunkType(raw[offset]) {
+		ctype := chunkType(remaining[0])
+
+		var dataChunk chunk
+		switch ctype {
 		case ctInit:
-			c = &chunkInit{}
+			dataChunk = &chunkInit{}
 		case ctInitAck:
-			c = &chunkInitAck{}
+			dataChunk = &chunkInitAck{}
 		case ctAbort:
-			c = &chunkAbort{}
+			dataChunk = &chunkAbort{}
 		case ctCookieEcho:
-			c = &chunkCookieEcho{}
+			dataChunk = &chunkCookieEcho{}
 		case ctCookieAck:
-			c = &chunkCookieAck{}
+			dataChunk = &chunkCookieAck{}
 		case ctHeartbeat:
-			c = &chunkHeartbeat{}
+			dataChunk = &chunkHeartbeat{}
 		case ctPayloadData:
-			c = &chunkPayloadData{}
+			dataChunk = &chunkPayloadData{}
+		case ctIData:
+			dataChunk = &chunkPayloadData{}
 		case ctSack:
-			c = &chunkSelectiveAck{}
+			dataChunk = &chunkSelectiveAck{}
 		case ctReconfig:
-			c = &chunkReconfig{}
+			dataChunk = &chunkReconfig{}
 		case ctForwardTSN:
-			c = &chunkForwardTSN{}
+			dataChunk = &chunkForwardTSN{}
+		case ctIForwardTSN:
+			dataChunk = &chunkIForwardTSN{}
 		case ctError:
-			c = &chunkError{}
+			dataChunk = &chunkError{}
 		case ctShutdown:
-			c = &chunkShutdown{}
+			dataChunk = &chunkShutdown{}
 		case ctShutdownAck:
-			c = &chunkShutdownAck{}
+			dataChunk = &chunkShutdownAck{}
 		case ctShutdownComplete:
-			c = &chunkShutdownComplete{}
+			dataChunk = &chunkShutdownComplete{}
 		default:
-			return fmt.Errorf("%w: %s", ErrUnmarshalUnknownChunkType, chunkType(raw[offset]).String())
+			return fmt.Errorf("%w: %s", ErrUnmarshalUnknownChunkType, ctype.String())
 		}
 
-		if err := c.unmarshal(raw[offset:]); err != nil {
+		if err := dataChunk.unmarshal(remaining); err != nil {
 			return err
 		}
 
-		p.chunks = append(p.chunks, c)
-		chunkValuePadding := getPadding(c.valueLength())
-		offset += chunkHeaderSize + c.valueLength() + chunkValuePadding
+		p.chunks = append(p.chunks, dataChunk)
+		chunkValuePadding := getPadding(dataChunk.valueLength())
+		offset += chunkHeaderSize + dataChunk.valueLength() + chunkValuePadding
+	}
+
+	// if we overshot then should error.
+	if offset != len(raw) {
+		if offset > len(raw) {
+			overshoot := offset - len(raw)
+
+			return fmt.Errorf("%w: parsed past end of buffer by %d bytes (offset %d, length %d)",
+				ErrParseSCTPChunkNotEnoughData, overshoot, offset, len(raw))
+		}
+
+		remaining := len(raw) - offset
+
+		return fmt.Errorf("%w: unparsed data remaining: %d bytes (offset %d, length %d)",
+			ErrParseSCTPChunkNotEnoughData, remaining, offset, len(raw))
 	}
 
 	return nil
@@ -163,11 +186,11 @@ func (p *packet) marshal(doChecksum bool) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		raw = append(raw, chunkRaw...)
+		raw = append(raw, chunkRaw...) //nolint:makezero // todo:fix
 
 		paddingNeeded := getPadding(len(raw))
 		if paddingNeeded != 0 {
-			raw = append(raw, make([]byte, paddingNeeded)...)
+			raw = append(raw, make([]byte, paddingNeeded)...) //nolint:makezero // todo:fix
 		}
 	}
 
@@ -189,25 +212,28 @@ func generatePacketChecksum(raw []byte) (sum uint32) {
 	sum = crc32.Update(sum, castagnoliTable, raw[0:8])
 	sum = crc32.Update(sum, castagnoliTable, fourZeroes[:])
 	sum = crc32.Update(sum, castagnoliTable, raw[12:])
+
 	return sum
 }
 
-// String makes packet printable
+// String makes packet printable.
 func (p *packet) String() string {
 	format := `Packet:
 	sourcePort: %d
 	destinationPort: %d
 	verificationTag: %d
 	`
-	res := fmt.Sprintf(format,
+	var res strings.Builder
+	fmt.Fprintf(&res, format,
 		p.sourcePort,
 		p.destinationPort,
 		p.verificationTag,
 	)
 	for i, chunk := range p.chunks {
-		res += fmt.Sprintf("Chunk %d:\n %s", i, chunk)
+		fmt.Fprintf(&res, "Chunk %d:\n %s", i, chunk)
 	}
-	return res
+
+	return res.String()
 }
 
 // TryMarshalUnmarshal attempts to marshal and unmarshal a message. Added for fuzzing.

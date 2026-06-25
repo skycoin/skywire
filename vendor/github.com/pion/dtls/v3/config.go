@@ -1,9 +1,10 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package dtls
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/pion/dtls/v3/pkg/crypto/elliptic"
+	"github.com/pion/dtls/v3/pkg/protocol"
 	"github.com/pion/dtls/v3/pkg/protocol/handshake"
 	"github.com/pion/logging"
 )
@@ -22,7 +24,10 @@ const keyLogLabelTLS12 = "CLIENT_RANDOM"
 
 // Config is used to configure a DTLS client or server.
 // After a Config is passed to a DTLS function it must not be modified.
-type Config struct {
+//
+// Deprecated: prefer the options-based APIs (`*WithOptions`) to construct immutable configs,
+// This will be removed in the next major version.
+type Config struct { //nolint:dupl
 	// Certificates contains certificate chain to present to the other side of the connection.
 	// Server MUST set this if PSK is non-nil
 	// client SHOULD sets this so CertificateRequests can be handled if PSK is non-nil
@@ -39,6 +44,12 @@ type Config struct {
 
 	// SignatureSchemes contains the signature and hash schemes that the peer requests to verify.
 	SignatureSchemes []tls.SignatureScheme
+
+	// CertificateSignatureSchemes contains the signature and hash schemes that may be used
+	// in digital signatures for X.509 certificates. If not set, the signature_algorithms_cert
+	// extension is not sent, and SignatureSchemes is used for both handshake signatures and
+	// certificate chain validation, as specified in RFC 8446 Section 4.2.3.
+	CertificateSignatureSchemes []tls.SignatureScheme
 
 	// SRTPProtectionProfiles are the supported protection profiles
 	// Clients will send this via use_srtp and assert that the server properly responds
@@ -217,11 +228,19 @@ type Config struct {
 	// message is sent from a server. The returned handshake message replaces the original message.
 	CertificateRequestMessageHook func(handshake.MessageCertificateRequest) handshake.Message
 
-	// OnConnectionAttempt is fired Whenever a connection attempt is made, the server or application can call this callback function.
+	// OnConnectionAttempt is fired Whenever a connection attempt is made,
+	// the server or application can call this callback function.
 	// The callback function can then implement logic to handle the connection attempt, such as logging the attempt,
 	// checking against a list of blocked IPs, or counting the attempts to prevent brute force attacks.
 	// If the callback function returns an error, the connection attempt will be aborted.
 	OnConnectionAttempt func(net.Addr) error
+
+	// ListenConfig used to create the underlying listener socket.
+	listenConfig net.ListenConfig
+
+	minVersion protocol.Version
+
+	maxVersion protocol.Version
 }
 
 func (c *Config) includeCertificateSuites() bool {
@@ -233,14 +252,14 @@ const defaultMTU = 1200 // bytes
 var defaultCurves = []elliptic.Curve{elliptic.X25519, elliptic.P256, elliptic.P384} //nolint:gochecknoglobals
 
 // PSKCallback is called once we have the remote's PSKIdentityHint.
-// If the remote provided none it will be nil
+// If the remote provided none it will be nil.
 type PSKCallback func([]byte) ([]byte, error)
 
 // ClientAuthType declares the policy the server will follow for
 // TLS Client Authentication.
 type ClientAuthType int
 
-// ClientAuthType enums
+// ClientAuthType enums.
 const (
 	NoClientCert ClientAuthType = iota
 	RequestClientCert
@@ -250,17 +269,17 @@ const (
 )
 
 // ExtendedMasterSecretType declares the policy the client and server
-// will follow for the Extended Master Secret extension
+// will follow for the Extended Master Secret extension.
 type ExtendedMasterSecretType int
 
-// ExtendedMasterSecretType enums
+// ExtendedMasterSecretType enums.
 const (
 	RequestExtendedMasterSecret ExtendedMasterSecretType = iota
 	RequireExtendedMasterSecret
 	DisableExtendedMasterSecret
 )
 
-func validateConfig(config *Config) error {
+func validateConfig(config *Config) error { //nolint:cyclop
 	switch {
 	case config == nil:
 		return errNoConfigProvided
@@ -273,16 +292,23 @@ func validateConfig(config *Config) error {
 			return errInvalidCertificate
 		}
 		if cert.PrivateKey != nil {
-			switch cert.PrivateKey.(type) {
-			case ed25519.PrivateKey:
-			case *ecdsa.PrivateKey:
-			case *rsa.PrivateKey:
+			signer, ok := cert.PrivateKey.(crypto.Signer)
+			if !ok {
+				return errInvalidPrivateKey
+			}
+			switch signer.Public().(type) {
+			case ed25519.PublicKey:
+			case *ecdsa.PublicKey:
+			case *rsa.PublicKey:
 			default:
 				return errInvalidPrivateKey
 			}
 		}
 	}
 
-	_, err := parseCipherSuites(config.CipherSuites, config.CustomCipherSuites, config.includeCertificateSuites(), config.PSK != nil)
+	_, err := parseCipherSuites(
+		config.CipherSuites, config.CustomCipherSuites, config.includeCertificateSuites(), config.PSK != nil,
+	)
+
 	return err
 }

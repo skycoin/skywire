@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -30,6 +30,7 @@ type errorCauseUserInitiatedAbort struct {
 func (e *errorCauseUserInitiatedAbort) marshal() ([]byte, error) {
 	e.code = userInitiatedAbort
 	e.errorCauseHeader.raw = e.upperLayerAbortReason
+
 	return e.errorCauseHeader.marshal()
 }
 
@@ -40,10 +41,11 @@ func (e *errorCauseUserInitiatedAbort) unmarshal(raw []byte) error {
 	}
 
 	e.upperLayerAbortReason = e.errorCauseHeader.raw
+
 	return nil
 }
 
-// String makes errorCauseUserInitiatedAbort printable
+// String makes errorCauseUserInitiatedAbort printable.
 func (e *errorCauseUserInitiatedAbort) String() string {
 	return fmt.Sprintf("%s: %s", e.errorCauseHeader.String(), e.upperLayerAbortReason)
 }

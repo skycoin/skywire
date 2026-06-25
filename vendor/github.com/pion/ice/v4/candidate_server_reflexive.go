@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -13,7 +13,7 @@ type CandidateServerReflexive struct {
 	candidateBase
 }
 
-// CandidateServerReflexiveConfig is the config required to create a new CandidateServerReflexive
+// CandidateServerReflexiveConfig is the config required to create a new CandidateServerReflexive.
 type CandidateServerReflexiveConfig struct {
 	CandidateID string
 	Network     string
@@ -26,7 +26,7 @@ type CandidateServerReflexiveConfig struct {
 	RelPort     int
 }
 
-// NewCandidateServerReflexive creates a new server reflective candidate
+// NewCandidateServerReflexive creates a new server reflective candidate.
 func NewCandidateServerReflexive(config *CandidateServerReflexiveConfig) (*CandidateServerReflexive, error) {
 	ipAddr, err := netip.ParseAddr(config.Address)
 	if err != nil {
@@ -62,7 +62,6 @@ func NewCandidateServerReflexive(config *CandidateServerReflexiveConfig) (*Candi
 				Address: config.RelAddr,
 				Port:    config.RelPort,
 			},
-			remoteCandidateCaches: map[AddrPort]Candidate{},
 		},
 	}, nil
 }
