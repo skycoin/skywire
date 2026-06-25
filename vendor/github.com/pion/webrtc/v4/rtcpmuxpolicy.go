@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -12,7 +12,7 @@ import (
 type RTCPMuxPolicy int
 
 const (
-	// RTCPMuxPolicyUnknown is the enum's zero-value
+	// RTCPMuxPolicyUnknown is the enum's zero-value.
 	RTCPMuxPolicyUnknown RTCPMuxPolicy = iota
 
 	// RTCPMuxPolicyNegotiate indicates to gather ICE candidates for both
@@ -55,7 +55,7 @@ func (t RTCPMuxPolicy) String() string {
 	}
 }
 
-// UnmarshalJSON parses the JSON-encoded data and stores the result
+// UnmarshalJSON parses the JSON-encoded data and stores the result.
 func (t *RTCPMuxPolicy) UnmarshalJSON(b []byte) error {
 	var val string
 	if err := json.Unmarshal(b, &val); err != nil {
@@ -63,10 +63,11 @@ func (t *RTCPMuxPolicy) UnmarshalJSON(b []byte) error {
 	}
 
 	*t = newRTCPMuxPolicy(val)
+
 	return nil
 }
 
-// MarshalJSON returns the JSON encoding
+// MarshalJSON returns the JSON encoding.
 func (t RTCPMuxPolicy) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())
 }

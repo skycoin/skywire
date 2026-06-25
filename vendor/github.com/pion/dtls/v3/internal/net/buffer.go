@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package net implements DTLS specific networking primitives.
@@ -20,7 +20,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pion/transport/v3/deadline"
+	"github.com/pion/transport/v4/deadline"
 )
 
 // ErrTimeout indicates that deadline was reached before operation could be
@@ -68,11 +68,12 @@ func NewPacketBuffer() *PacketBuffer {
 
 // WriteTo writes a single packet to the buffer. The supplied address will
 // remain associated with the packet.
-func (b *PacketBuffer) WriteTo(p []byte, addr net.Addr) (int, error) {
+func (b *PacketBuffer) WriteTo(pkt []byte, addr net.Addr) (int, error) {
 	b.mutex.Lock()
 
 	if b.closed {
 		b.mutex.Unlock()
+
 		return 0, io.ErrClosedPipe
 	}
 
@@ -104,8 +105,8 @@ func (b *PacketBuffer) WriteTo(p []byte, addr net.Addr) (int, error) {
 
 		b.packets = newBuf
 
-		// Update write pointer to point to new location and mark buffer as not
-		// full.
+		// Update read/write pointers and mark buffer as not full.
+		b.read = 0
 		b.write = n
 		b.full = false
 	}
@@ -113,9 +114,10 @@ func (b *PacketBuffer) WriteTo(p []byte, addr net.Addr) (int, error) {
 	// Store the packet at the write pointer.
 	packet := &b.packets[b.write]
 	packet.data.Reset()
-	n, err := packet.data.Write(p)
+	n, err := packet.data.Write(pkt)
 	if err != nil {
 		b.mutex.Unlock()
+
 		return n, err
 	}
 	packet.addr = addr
@@ -145,7 +147,7 @@ func (b *PacketBuffer) WriteTo(p []byte, addr net.Addr) (int, error) {
 
 // ReadFrom reads a single packet from the buffer, or blocks until one is
 // available.
-func (b *PacketBuffer) ReadFrom(packet []byte) (n int, addr net.Addr, err error) {
+func (b *PacketBuffer) ReadFrom(packet []byte) (n int, addr net.Addr, err error) { //nolint:cyclop
 	select {
 	case <-b.readDeadline.Done():
 		return 0, nil, ErrTimeout
@@ -159,6 +161,7 @@ func (b *PacketBuffer) ReadFrom(packet []byte) (n int, addr net.Addr, err error)
 			ap := b.packets[b.read]
 			if len(packet) < ap.data.Len() {
 				b.mutex.Unlock()
+
 				return 0, nil, io.ErrShortBuffer
 			}
 
@@ -166,6 +169,7 @@ func (b *PacketBuffer) ReadFrom(packet []byte) (n int, addr net.Addr, err error)
 			n, err := ap.data.Read(packet)
 			if err != nil {
 				b.mutex.Unlock()
+
 				return n, nil, err
 			}
 
@@ -188,6 +192,7 @@ func (b *PacketBuffer) ReadFrom(packet []byte) (n int, addr net.Addr, err error)
 
 		if b.closed {
 			b.mutex.Unlock()
+
 			return 0, nil, io.EOF
 		}
 
@@ -212,6 +217,7 @@ func (b *PacketBuffer) Close() (err error) {
 
 	if b.closed {
 		b.mutex.Unlock()
+
 		return nil
 	}
 
@@ -231,5 +237,6 @@ func (b *PacketBuffer) Close() (err error) {
 // SetReadDeadline sets the read deadline for the buffer.
 func (b *PacketBuffer) SetReadDeadline(t time.Time) error {
 	b.readDeadline.Set(t)
+
 	return nil
 }

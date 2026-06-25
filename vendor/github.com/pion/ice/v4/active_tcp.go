@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -12,16 +12,22 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/v3/packetio"
+	"github.com/pion/transport/v4/packetio"
 )
 
 type activeTCPConn struct {
 	readBuffer, writeBuffer *packetio.Buffer
 	localAddr, remoteAddr   atomic.Value
-	closed                  int32
+	conn                    atomic.Value // stores net.Conn
+	closed                  atomic.Bool
 }
 
-func newActiveTCPConn(ctx context.Context, localAddress string, remoteAddress netip.AddrPort, log logging.LeveledLogger) (a *activeTCPConn) {
+func newActiveTCPConn(
+	ctx context.Context,
+	localAddress string,
+	remoteAddress netip.AddrPort,
+	log logging.LeveledLogger,
+) (a *activeTCPConn) {
 	a = &activeTCPConn{
 		readBuffer:  packetio.NewBuffer(),
 		writeBuffer: packetio.NewBuffer(),
@@ -29,15 +35,16 @@ func newActiveTCPConn(ctx context.Context, localAddress string, remoteAddress ne
 
 	laddr, err := getTCPAddrOnInterface(localAddress)
 	if err != nil {
-		atomic.StoreInt32(&a.closed, 1)
+		a.closed.Store(true)
 		log.Infof("Failed to dial TCP address %s: %v", remoteAddress, err)
-		return
+
+		return a
 	}
 	a.localAddr.Store(laddr)
 
 	go func() {
 		defer func() {
-			atomic.StoreInt32(&a.closed, 1)
+			a.closed.Store(true)
 		}()
 
 		dialer := &net.Dialer{
@@ -46,22 +53,26 @@ func newActiveTCPConn(ctx context.Context, localAddress string, remoteAddress ne
 		conn, err := dialer.DialContext(ctx, "tcp", remoteAddress.String())
 		if err != nil {
 			log.Infof("Failed to dial TCP address %s: %v", remoteAddress, err)
+
 			return
 		}
+		a.conn.Store(conn)
 		a.remoteAddr.Store(conn.RemoteAddr())
 
 		go func() {
 			buff := make([]byte, receiveMTU)
 
-			for atomic.LoadInt32(&a.closed) == 0 {
+			for !a.closed.Load() {
 				n, err := readStreamingPacket(conn, buff)
 				if err != nil {
 					log.Infof("Failed to read streaming packet: %s", err)
+
 					break
 				}
 
 				if _, err := a.readBuffer.Write(buff[:n]); err != nil {
 					log.Infof("Failed to write to buffer: %s", err)
+
 					break
 				}
 			}
@@ -69,15 +80,17 @@ func newActiveTCPConn(ctx context.Context, localAddress string, remoteAddress ne
 
 		buff := make([]byte, receiveMTU)
 
-		for atomic.LoadInt32(&a.closed) == 0 {
+		for !a.closed.Load() {
 			n, err := a.writeBuffer.Read(buff)
 			if err != nil {
 				log.Infof("Failed to read from buffer: %s", err)
+
 				break
 			}
 
 			if _, err = writeStreamingPacket(conn, buff[:n]); err != nil {
 				log.Infof("Failed to write streaming packet: %s", err)
+
 				break
 			}
 		}
@@ -91,18 +104,19 @@ func newActiveTCPConn(ctx context.Context, localAddress string, remoteAddress ne
 }
 
 func (a *activeTCPConn) ReadFrom(buff []byte) (n int, srcAddr net.Addr, err error) {
-	if atomic.LoadInt32(&a.closed) == 1 {
+	if a.closed.Load() {
 		return 0, nil, io.ErrClosedPipe
 	}
 
 	n, err = a.readBuffer.Read(buff)
 	// RemoteAddr is assuredly set *after* we can read from the buffer
 	srcAddr = a.RemoteAddr()
+
 	return
 }
 
 func (a *activeTCPConn) WriteTo(buff []byte, _ net.Addr) (n int, err error) {
-	if atomic.LoadInt32(&a.closed) == 1 {
+	if a.closed.Load() {
 		return 0, io.ErrClosedPipe
 	}
 
@@ -110,9 +124,13 @@ func (a *activeTCPConn) WriteTo(buff []byte, _ net.Addr) (n int, err error) {
 }
 
 func (a *activeTCPConn) Close() error {
-	atomic.StoreInt32(&a.closed, 1)
+	a.closed.Store(true)
 	_ = a.readBuffer.Close()
 	_ = a.writeBuffer.Close()
+	if c, ok := a.conn.Load().(net.Conn); ok {
+		_ = c.Close()
+	}
+
 	return nil
 }
 
@@ -137,9 +155,38 @@ func (a *activeTCPConn) RemoteAddr() net.Addr {
 	return &net.TCPAddr{}
 }
 
-func (a *activeTCPConn) SetDeadline(time.Time) error      { return io.EOF }
-func (a *activeTCPConn) SetReadDeadline(time.Time) error  { return io.EOF }
-func (a *activeTCPConn) SetWriteDeadline(time.Time) error { return io.EOF }
+func (a *activeTCPConn) SetDeadline(t time.Time) error {
+	if a.closed.Load() {
+		return io.EOF
+	}
+	if c, ok := a.conn.Load().(net.Conn); ok {
+		return c.SetDeadline(t)
+	}
+
+	return io.EOF
+}
+
+func (a *activeTCPConn) SetReadDeadline(t time.Time) error {
+	if a.closed.Load() {
+		return io.EOF
+	}
+	if c, ok := a.conn.Load().(net.Conn); ok {
+		return c.SetReadDeadline(t)
+	}
+
+	return io.EOF
+}
+
+func (a *activeTCPConn) SetWriteDeadline(t time.Time) error {
+	if a.closed.Load() {
+		return io.EOF
+	}
+	if c, ok := a.conn.Load().(net.Conn); ok {
+		return c.SetWriteDeadline(t)
+	}
+
+	return io.EOF
+}
 
 func getTCPAddrOnInterface(address string) (*net.TCPAddr, error) {
 	addr, err := net.ResolveTCPAddr("tcp", address)

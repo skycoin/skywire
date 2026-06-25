@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package srtp
@@ -17,7 +17,7 @@ const defaultSessionSRTPReplayProtectionWindow = 64
 // SessionSRTP implements io.ReadWriteCloser and provides a bi-directional SRTP session
 // SRTP itself does not have a design like this, but it is common in most applications
 // for local/remote to each have their own keying material. This provides those patterns
-// instead of making everyone re-implement
+// instead of making everyone re-implement.
 type SessionSRTP struct {
 	session
 	writeStream *WriteStreamSRTP
@@ -48,7 +48,7 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) { //nol
 		config.RemoteOptions...,
 	)
 
-	s := &SessionSRTP{
+	srtpSession := &SessionSRTP{
 		session: session{
 			nextConn:            conn,
 			localOptions:        localOpts,
@@ -56,33 +56,34 @@ func NewSessionSRTP(conn net.Conn, config *Config) (*SessionSRTP, error) { //nol
 			readStreams:         map[uint32]readStream{},
 			newStream:           make(chan readStream),
 			acceptStreamTimeout: config.AcceptStreamTimeout,
-			started:             make(chan interface{}),
-			closed:              make(chan interface{}),
+			started:             make(chan any),
+			closed:              make(chan any),
 			bufferFactory:       config.BufferFactory,
 			log:                 loggerFactory.NewLogger("srtp"),
 		},
 	}
-	s.writeStream = &WriteStreamSRTP{s}
+	srtpSession.writeStream = &WriteStreamSRTP{srtpSession}
 
-	err := s.session.start(
+	err := srtpSession.session.start(
 		config.Keys.LocalMasterKey, config.Keys.LocalMasterSalt,
 		config.Keys.RemoteMasterKey, config.Keys.RemoteMasterSalt,
 		config.Profile,
-		s,
+		srtpSession,
 	)
 	if err != nil {
 		return nil, err
 	}
-	return s, nil
+
+	return srtpSession, nil
 }
 
-// OpenWriteStream returns the global write stream for the Session
+// OpenWriteStream returns the global write stream for the Session.
 func (s *SessionSRTP) OpenWriteStream() (*WriteStreamSRTP, error) {
 	return s.writeStream, nil
 }
 
 // OpenReadStream opens a read stream for the given SSRC, it can be used
-// if you want a certain SSRC, but don't want to wait for AcceptStream
+// if you want a certain SSRC, but don't want to wait for AcceptStream.
 func (s *SessionSRTP) OpenReadStream(ssrc uint32) (*ReadStreamSRTP, error) {
 	r, _ := s.session.getOrCreateReadStream(ssrc, s, newReadStreamSRTP)
 
@@ -93,7 +94,7 @@ func (s *SessionSRTP) OpenReadStream(ssrc uint32) (*ReadStreamSRTP, error) {
 	return nil, errFailedTypeAssertion
 }
 
-// AcceptStream returns a stream to handle RTCP for a single SSRC
+// AcceptStream returns a stream to handle RTCP for a single SSRC.
 func (s *SessionSRTP) AcceptStream() (*ReadStreamSRTP, uint32, error) {
 	stream, ok := <-s.newStream
 	if !ok {
@@ -108,7 +109,7 @@ func (s *SessionSRTP) AcceptStream() (*ReadStreamSRTP, uint32, error) {
 	return readStream, stream.GetSSRC(), nil
 }
 
-// Close ends the session
+// Close ends the session.
 func (s *SessionSRTP) Close() error {
 	return s.session.close()
 }
@@ -132,8 +133,10 @@ func (s *SessionSRTP) write(b []byte) (int, error) {
 // either CTR or GCM.  If the buffer is too small, no harm, it will just
 // get expanded by growBuffer.
 var bufferpool = sync.Pool{ // nolint:gochecknoglobals
-	New: func() interface{} {
-		return make([]byte, 1492)
+	New: func() any {
+		buf := make([]byte, 1492)
+
+		return &buf
 	},
 }
 
@@ -146,11 +149,26 @@ func (s *SessionSRTP) writeRTP(header *rtp.Header, payload []byte) (int, error) 
 	// small, allocate a new buffer itself.  In either case, it is
 	// safe to put the buffer back into the pool, but only after
 	// nextConn.Write has returned.
-	ibuf := bufferpool.Get()
-	defer bufferpool.Put(ibuf)
+	pbuf, ok := bufferpool.Get().(*[]byte)
+	if !ok {
+		return 0, errStartedChannelUsedIncorrectly
+	}
+	defer bufferpool.Put(pbuf)
+
+	buf := *pbuf
+	headerLen, marshalSize := rtp.HeaderAndPacketMarshalSize(header, payload) // nolint:staticcheck
+	if len(buf) < marshalSize+20 {
+		// The buffer is too small, so we need to allocate a new one. Add 20 bytes for auth tag like
+		// for bufferpool above.
+		buf = make([]byte, marshalSize+20)
+	}
+	_, err := rtp.MarshalPacketTo(buf, header, payload) // nolint:staticcheck
+	if err != nil {
+		return 0, err
+	}
 
 	s.session.localContextMutex.Lock()
-	encrypted, err := s.localContext.encryptRTP(ibuf.([]byte), header, payload)
+	encrypted, err := s.localContext.encryptRTP(buf, header, headerLen, buf[:marshalSize])
 	s.session.localContextMutex.Unlock()
 
 	if err != nil {
@@ -165,13 +183,23 @@ func (s *SessionSRTP) setWriteDeadline(t time.Time) error {
 }
 
 func (s *SessionSRTP) decrypt(buf []byte) error {
-	h := &rtp.Header{}
-	headerLen, err := h.Unmarshal(buf)
+	header := &rtp.Header{}
+	headerLen, err := header.Unmarshal(buf)
 	if err != nil {
 		return err
 	}
 
-	r, isNew := s.session.getOrCreateReadStream(h.SSRC, s, newReadStreamSRTP)
+	// Decrypt and authenticate the packet before using the SSRC from the header.
+	// The SSRC field is part of the unauthenticated RTP header, so it must not be
+	// used to allocate per-SSRC state (stream, replay detector, etc.) until after
+	// the auth tag has been verified. Doing so before authentication would allow an
+	// unauthenticated peer to exhaust memory by spoofing arbitrary SSRCs.
+	decrypted, err := s.remoteContext.decryptRTP(buf, buf, header, headerLen)
+	if err != nil {
+		return err
+	}
+
+	r, isNew := s.session.getOrCreateReadStream(header.SSRC, s, newReadStreamSRTP)
 	if r == nil {
 		return nil // Session has been closed
 	} else if isNew {
@@ -184,11 +212,6 @@ func (s *SessionSRTP) decrypt(buf []byte) error {
 	readStream, ok := r.(*ReadStreamSRTP)
 	if !ok {
 		return errFailedTypeAssertion
-	}
-
-	decrypted, err := s.remoteContext.decryptRTP(buf, buf, h, headerLen)
-	if err != nil {
-		return err
 	}
 
 	_, err = readStream.write(decrypted)

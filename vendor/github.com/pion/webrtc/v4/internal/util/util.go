@@ -1,8 +1,8 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package util provides auxiliary functions internally used in webrtc package
-package util
+package util //nolint: revive
 
 import (
 	"errors"
@@ -28,7 +28,7 @@ func RandUint32() uint32 {
 	return globalMathRandomGenerator.Uint32()
 }
 
-// FlattenErrs flattens multiple errors into one
+// FlattenErrs flattens multiple errors into one.
 func FlattenErrs(errs []error) error {
 	errs2 := []error{}
 	for _, e := range errs {
@@ -39,6 +39,7 @@ func FlattenErrs(errs []error) error {
 	if len(errs2) == 0 {
 		return nil
 	}
+
 	return multiError(errs2)
 }
 
@@ -71,5 +72,6 @@ func (me multiError) Is(err error) bool {
 			}
 		}
 	}
+
 	return false
 }

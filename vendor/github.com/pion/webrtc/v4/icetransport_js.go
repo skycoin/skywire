@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -13,6 +13,11 @@ import "syscall/js"
 type ICETransport struct {
 	// Pointer to the underlying JavaScript ICETransport object.
 	underlying js.Value
+}
+
+// JSValue returns the underlying RTCIceTransport
+func (t *ICETransport) JSValue() js.Value {
+	return t.underlying
 }
 
 // GetSelectedCandidatePair returns the selected candidate pair on which packets are sent

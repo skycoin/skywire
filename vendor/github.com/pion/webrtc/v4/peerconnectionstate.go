@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -7,7 +7,7 @@ package webrtc
 type PeerConnectionState int
 
 const (
-	// PeerConnectionStateUnknown is the enum's zero-value
+	// PeerConnectionStateUnknown is the enum's zero-value.
 	PeerConnectionStateUnknown PeerConnectionState = iota
 
 	// PeerConnectionStateNew indicates that any of the ICETransports or
