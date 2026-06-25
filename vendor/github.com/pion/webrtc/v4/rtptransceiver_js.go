@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build js && wasm
@@ -14,6 +14,11 @@ import (
 type RTPTransceiver struct {
 	// Pointer to the underlying JavaScript RTCRTPTransceiver object.
 	underlying js.Value
+}
+
+// JSValue returns the underlying RTCRtpTransceiver
+func (r *RTPTransceiver) JSValue() js.Value {
+	return r.underlying
 }
 
 // Direction returns the RTPTransceiver's current direction

@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -7,7 +7,7 @@ package webrtc
 type DTLSTransportState int
 
 const (
-	// DTLSTransportStateUnknown is the enum's zero-value
+	// DTLSTransportStateUnknown is the enum's zero-value.
 	DTLSTransportStateUnknown DTLSTransportState = iota
 
 	// DTLSTransportStateNew indicates that DTLS has not started negotiating
@@ -76,13 +76,14 @@ func (t DTLSTransportState) String() string {
 	}
 }
 
-// MarshalText implements encoding.TextMarshaler
+// MarshalText implements encoding.TextMarshaler.
 func (t DTLSTransportState) MarshalText() ([]byte, error) {
 	return []byte(t.String()), nil
 }
 
-// UnmarshalText implements encoding.TextUnmarshaler
+// UnmarshalText implements encoding.TextUnmarshaler.
 func (t *DTLSTransportState) UnmarshalText(b []byte) error {
 	*t = newDTLSTransportState(string(b))
+
 	return nil
 }

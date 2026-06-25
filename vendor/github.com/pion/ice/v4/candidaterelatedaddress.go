@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -12,7 +12,7 @@ type CandidateRelatedAddress struct {
 	Port    int
 }
 
-// String makes CandidateRelatedAddress printable
+// String makes CandidateRelatedAddress printable.
 func (c *CandidateRelatedAddress) String() string {
 	if c == nil {
 		return ""
@@ -27,6 +27,7 @@ func (c *CandidateRelatedAddress) Equal(other *CandidateRelatedAddress) bool {
 	if c == nil && other == nil {
 		return true
 	}
+
 	return c != nil && other != nil &&
 		c.Address == other.Address &&
 		c.Port == other.Port

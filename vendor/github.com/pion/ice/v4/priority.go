@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -19,6 +19,7 @@ func (p PriorityAttr) AddTo(m *stun.Message) error {
 	v := make([]byte, prioritySize)
 	binary.BigEndian.PutUint32(v, uint32(p))
 	m.Add(stun.AttrPriority, v)
+
 	return nil
 }
 
@@ -32,5 +33,6 @@ func (p *PriorityAttr) GetFrom(m *stun.Message) error {
 		return err
 	}
 	*p = PriorityAttr(binary.BigEndian.Uint32(v))
+
 	return nil
 }

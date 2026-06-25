@@ -1,11 +1,11 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package prf implements TLS 1.2 Pseudorandom functions
 package prf
 
-import ( //nolint:gci
-	ellipticStdlib "crypto/elliptic"
+import (
+	"crypto/ecdh"
 	"crypto/hmac"
 	"encoding/binary"
 	"errors"
@@ -15,7 +15,6 @@ import ( //nolint:gci
 
 	"github.com/pion/dtls/v3/pkg/crypto/elliptic"
 	"github.com/pion/dtls/v3/pkg/protocol"
-	"golang.org/x/crypto/curve25519"
 )
 
 const (
@@ -26,10 +25,10 @@ const (
 	verifyDataServerLabel     = "server finished"
 )
 
-// HashFunc allows callers to decide what hash is used in PRF
+// HashFunc allows callers to decide what hash is used in PRF.
 type HashFunc func() hash.Hash
 
-// EncryptionKeys is all the state needed for a TLS CipherSuite
+// EncryptionKeys is all the state needed for a TLS CipherSuite.
 type EncryptionKeys struct {
 	MasterSecret   []byte
 	ClientMACKey   []byte
@@ -40,7 +39,7 @@ type EncryptionKeys struct {
 	ServerWriteIV  []byte
 }
 
-var errInvalidNamedCurve = &protocol.FatalError{Err: errors.New("invalid named curve")} //nolint:goerr113
+var errInvalidNamedCurve = &protocol.FatalError{Err: errors.New("invalid named curve")} //nolint:err113
 
 func (e *EncryptionKeys) String() string {
 	return fmt.Sprintf(`encryptionKeys:
@@ -68,7 +67,7 @@ func (e *EncryptionKeys) String() string {
 //
 // https://tools.ietf.org/html/rfc4279#section-2
 func PSKPreMasterSecret(psk []byte) []byte {
-	pskLen := uint16(len(psk))
+	pskLen := uint16(len(psk)) //nolint:gosec // G115
 
 	out := append(make([]byte, 2+pskLen+2), psk...)
 	binary.BigEndian.PutUint16(out, pskLen)
@@ -89,7 +88,7 @@ func EcdhePSKPreMasterSecret(psk, publicKey, privateKey []byte, curve elliptic.C
 
 	// write preMasterSecret length
 	offset := 0
-	binary.BigEndian.PutUint16(out[offset:], uint16(len(preMasterSecret)))
+	binary.BigEndian.PutUint16(out[offset:], uint16(len(preMasterSecret))) //nolint:gosec // G115
 	offset += 2
 
 	// write preMasterSecret
@@ -97,39 +96,41 @@ func EcdhePSKPreMasterSecret(psk, publicKey, privateKey []byte, curve elliptic.C
 	offset += len(preMasterSecret)
 
 	// write psk length
-	binary.BigEndian.PutUint16(out[offset:], uint16(len(psk)))
+	binary.BigEndian.PutUint16(out[offset:], uint16(len(psk))) //nolint:gosec // G115
 	offset += 2
 
 	// write psk
 	copy(out[offset:], psk)
+
 	return out, nil
 }
 
-// PreMasterSecret implements TLS 1.2 Premaster Secret generation given a keypair and a curve
+// PreMasterSecret implements TLS 1.2 Premaster Secret generation given a keypair and a curve.
 func PreMasterSecret(publicKey, privateKey []byte, curve elliptic.Curve) ([]byte, error) {
+	var ec ecdh.Curve
+
 	switch curve {
 	case elliptic.X25519:
-		return curve25519.X25519(privateKey, publicKey)
+		ec = ecdh.X25519()
 	case elliptic.P256:
-		return ellipticCurvePreMasterSecret(publicKey, privateKey, ellipticStdlib.P256(), ellipticStdlib.P256())
+		ec = ecdh.P256()
 	case elliptic.P384:
-		return ellipticCurvePreMasterSecret(publicKey, privateKey, ellipticStdlib.P384(), ellipticStdlib.P384())
+		ec = ecdh.P384()
 	default:
 		return nil, errInvalidNamedCurve
 	}
-}
 
-func ellipticCurvePreMasterSecret(publicKey, privateKey []byte, c1, c2 ellipticStdlib.Curve) ([]byte, error) {
-	x, y := ellipticStdlib.Unmarshal(c1, publicKey)
-	if x == nil || y == nil {
-		return nil, errInvalidNamedCurve
+	sk, err := ec.NewPrivateKey(privateKey)
+	if err != nil {
+		return nil, err
 	}
 
-	result, _ := c2.ScalarMult(x, y, privateKey)
-	preMasterSecret := make([]byte, (c2.Params().BitSize+7)>>3)
-	resultBytes := result.Bytes()
-	copy(preMasterSecret[len(preMasterSecret)-len(resultBytes):], resultBytes)
-	return preMasterSecret, nil
+	pk, err := ec.NewPublicKey(publicKey) // NIST: SEC1 uncompressed; X25519: 32-byte u
+	if err != nil {
+		return nil, err
+	}
+
+	return sk.ECDH(pk)
 }
 
 // PHash is PRF is the SHA-256 hash function is used for all cipher suites
@@ -155,12 +156,13 @@ func ellipticCurvePreMasterSecret(publicKey, privateKey []byte, c1, c2 ellipticS
 // output data.
 //
 // https://tools.ietf.org/html/rfc4346w
-func PHash(secret, seed []byte, requestedLength int, h HashFunc) ([]byte, error) {
+func PHash(secret, seed []byte, requestedLength int, hashFunc HashFunc) ([]byte, error) {
 	hmacSHA256 := func(key, data []byte) ([]byte, error) {
-		mac := hmac.New(h, key)
+		mac := hmac.New(hashFunc, key)
 		if _, err := mac.Write(data); err != nil {
 			return nil, err
 		}
+
 		return mac.Sum(nil), nil
 	}
 
@@ -168,8 +170,8 @@ func PHash(secret, seed []byte, requestedLength int, h HashFunc) ([]byte, error)
 	lastRound := seed
 	out := []byte{}
 
-	iterations := int(math.Ceil(float64(requestedLength) / float64(h().Size())))
-	for i := 0; i < iterations; i++ {
+	iterations := int(math.Ceil(float64(requestedLength) / float64(hashFunc().Size())))
+	for range iterations {
 		lastRound, err = hmacSHA256(secret, lastRound)
 		if err != nil {
 			return nil, err
@@ -188,18 +190,24 @@ func PHash(secret, seed []byte, requestedLength int, h HashFunc) ([]byte, error)
 // https://tools.ietf.org/html/rfc7627
 func ExtendedMasterSecret(preMasterSecret, sessionHash []byte, h HashFunc) ([]byte, error) {
 	seed := append([]byte(extendedMasterSecretLabel), sessionHash...)
+
 	return PHash(preMasterSecret, seed, 48, h)
 }
 
-// MasterSecret generates a TLS 1.2 MasterSecret
+// MasterSecret generates a TLS 1.2 MasterSecret.
 func MasterSecret(preMasterSecret, clientRandom, serverRandom []byte, h HashFunc) ([]byte, error) {
 	seed := append(append([]byte(masterSecretLabel), clientRandom...), serverRandom...)
+
 	return PHash(preMasterSecret, seed, 48, h)
 }
 
 // GenerateEncryptionKeys is the final step TLS 1.2 PRF. Given all state generated so far generates
-// the final keys need for encryption
-func GenerateEncryptionKeys(masterSecret, clientRandom, serverRandom []byte, macLen, keyLen, ivLen int, h HashFunc) (*EncryptionKeys, error) {
+// the final keys need for encryption.
+func GenerateEncryptionKeys(
+	masterSecret, clientRandom, serverRandom []byte,
+	macLen, keyLen, ivLen int,
+	h HashFunc,
+) (*EncryptionKeys, error) {
 	seed := append(append([]byte(keyExpansionLabel), serverRandom...), clientRandom...)
 	keyMaterial, err := PHash(masterSecret, seed, (2*macLen)+(2*keyLen)+(2*ivLen), h)
 	if err != nil {
@@ -241,15 +249,16 @@ func prfVerifyData(masterSecret, handshakeBodies []byte, label string, hashFunc 
 	}
 
 	seed := append([]byte(label), h.Sum(nil)...)
+
 	return PHash(masterSecret, seed, 12, hashFunc)
 }
 
-// VerifyDataClient is caled on the Client Side to either verify or generate the VerifyData message
+// VerifyDataClient is caled on the Client Side to either verify or generate the VerifyData message.
 func VerifyDataClient(masterSecret, handshakeBodies []byte, h HashFunc) ([]byte, error) {
 	return prfVerifyData(masterSecret, handshakeBodies, verifyDataClientLabel, h)
 }
 
-// VerifyDataServer is caled on the Server Side to either verify or generate the VerifyData message
+// VerifyDataServer is caled on the Server Side to either verify or generate the VerifyData message.
 func VerifyDataServer(masterSecret, handshakeBodies []byte, h HashFunc) ([]byte, error) {
 	return prfVerifyData(masterSecret, handshakeBodies, verifyDataServerLabel, h)
 }

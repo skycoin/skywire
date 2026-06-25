@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package fmtp
@@ -37,5 +37,6 @@ func (h *vp9FMTP) Match(b FMTP) bool {
 
 func (h *vp9FMTP) Parameter(key string) (string, bool) {
 	v, ok := h.parameters[key]
+
 	return v, ok
 }

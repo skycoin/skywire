@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -79,20 +79,20 @@ func NewTCPMuxDefault(params TCPMuxParams) *TCPMuxDefault {
 		params.AliveDurationForConnFromStun = 30 * time.Second
 	}
 
-	m := &TCPMuxDefault{
+	mux := &TCPMuxDefault{
 		params: &params,
 
 		connsIPv4: map[string]map[ipAddr]*tcpPacketConn{},
 		connsIPv6: map[string]map[ipAddr]*tcpPacketConn{},
 	}
 
-	m.wg.Add(1)
+	mux.wg.Add(1)
 	go func() {
-		defer m.wg.Done()
-		m.start()
+		defer mux.wg.Done()
+		mux.start()
 	}()
 
-	return m
+	return mux
 }
 
 func (m *TCPMuxDefault) start() {
@@ -101,6 +101,7 @@ func (m *TCPMuxDefault) start() {
 		conn, err := m.params.Listener.Accept()
 		if err != nil {
 			m.params.Logger.Infof("Error accepting connection: %s", err)
+
 			return
 		}
 
@@ -119,7 +120,9 @@ func (m *TCPMuxDefault) LocalAddr() net.Addr {
 	return m.params.Listener.Addr()
 }
 
-// GetConnByUfrag retrieves an existing or creates a new net.PacketConn.
+// GetConnByUfrag retrieves an existing or creates a new net.PacketConn. The returned conn
+// is a refcounted — repeat calls return connection with increased refcount, so
+// the connection's Close method should be called for each GetConn call to avoid leaks.
 func (m *TCPMuxDefault) GetConnByUfrag(ufrag string, isIPv6 bool, local net.IP) (net.PacketConn, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -128,12 +131,18 @@ func (m *TCPMuxDefault) GetConnByUfrag(ufrag string, isIPv6 bool, local net.IP) 
 		return nil, io.ErrClosedPipe
 	}
 
-	if conn, ok := m.getConn(ufrag, isIPv6, local); ok {
+	conn, ok := m.getConn(ufrag, isIPv6, local)
+	if ok {
 		conn.ClearAliveTimer()
-		return conn, nil
+	} else {
+		var err error
+		conn, err = m.createConn(ufrag, isIPv6, local, false)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return m.createConn(ufrag, isIPv6, local, false)
+	return newSharedPacketConn(conn, &conn.refs), nil
 }
 
 func (m *TCPMuxDefault) createConn(ufrag string, isIPv6 bool, local net.IP, fromStun bool) (*tcpPacketConn, error) {
@@ -191,12 +200,17 @@ func (m *TCPMuxDefault) closeAndLogError(closer io.Closer) {
 	}
 }
 
-func (m *TCPMuxDefault) handleConn(conn net.Conn) {
+func (m *TCPMuxDefault) handleConn(conn net.Conn) { //nolint:cyclop
 	buf := make([]byte, 512)
 
 	if m.params.FirstStunBindTimeout > 0 {
 		if err := conn.SetReadDeadline(time.Now().Add(m.params.FirstStunBindTimeout)); err != nil {
-			m.params.Logger.Warnf("Failed to set read deadline for first STUN message: %s to %s , err: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+			m.params.Logger.Warnf(
+				"Failed to set read deadline for first STUN message: %s to %s , err: %s",
+				conn.RemoteAddr(),
+				conn.LocalAddr(),
+				err,
+			)
 		}
 	}
 	n, err := readStreamingPacket(conn, buf)
@@ -207,6 +221,7 @@ func (m *TCPMuxDefault) handleConn(conn net.Conn) {
 			m.params.Logger.Warnf("Error reading first packet from %s: %s", conn.RemoteAddr(), err)
 		}
 		m.closeAndLogError(conn)
+
 		return
 	}
 	if err = conn.SetReadDeadline(time.Time{}); err != nil {
@@ -223,12 +238,14 @@ func (m *TCPMuxDefault) handleConn(conn net.Conn) {
 	if err = msg.Decode(); err != nil {
 		m.closeAndLogError(conn)
 		m.params.Logger.Warnf("Failed to handle decode ICE from %s to %s: %v", conn.RemoteAddr(), conn.LocalAddr(), err)
+
 		return
 	}
 
 	if m == nil || msg.Type.Method != stun.MethodBinding { // Not a STUN
 		m.closeAndLogError(conn)
 		m.params.Logger.Warnf("Not a STUN message from %s to %s", conn.RemoteAddr(), conn.LocalAddr())
+
 		return
 	}
 
@@ -239,7 +256,12 @@ func (m *TCPMuxDefault) handleConn(conn net.Conn) {
 	attr, err := msg.Get(stun.AttrUsername)
 	if err != nil {
 		m.closeAndLogError(conn)
-		m.params.Logger.Warnf("No Username attribute in STUN message from %s to %s", conn.RemoteAddr(), conn.LocalAddr())
+		m.params.Logger.Warnf(
+			"No Username attribute in STUN message from %s to %s",
+			conn.RemoteAddr(),
+			conn.LocalAddr(),
+		)
+
 		return
 	}
 
@@ -249,7 +271,12 @@ func (m *TCPMuxDefault) handleConn(conn net.Conn) {
 	host, _, err := net.SplitHostPort(conn.RemoteAddr().String())
 	if err != nil {
 		m.closeAndLogError(conn)
-		m.params.Logger.Warnf("Failed to get host in STUN message from %s to %s", conn.RemoteAddr(), conn.LocalAddr())
+		m.params.Logger.Warnf(
+			"Failed to get host in STUN message from %s to %s",
+			conn.RemoteAddr(),
+			conn.LocalAddr(),
+		)
+
 		return
 	}
 
@@ -258,7 +285,12 @@ func (m *TCPMuxDefault) handleConn(conn net.Conn) {
 	localAddr, ok := conn.LocalAddr().(*net.TCPAddr)
 	if !ok {
 		m.closeAndLogError(conn)
-		m.params.Logger.Warnf("Failed to get local tcp address in STUN message from %s to %s", conn.RemoteAddr(), conn.LocalAddr())
+		m.params.Logger.Warnf(
+			"Failed to get local tcp address in STUN message from %s to %s",
+			conn.RemoteAddr(),
+			conn.LocalAddr(),
+		)
+
 		return
 	}
 	m.mu.Lock()
@@ -269,7 +301,12 @@ func (m *TCPMuxDefault) handleConn(conn net.Conn) {
 		if err != nil {
 			m.mu.Unlock()
 			m.closeAndLogError(conn)
-			m.params.Logger.Warnf("Failed to create packetConn for STUN message from %s to %s", conn.RemoteAddr(), conn.LocalAddr())
+			m.params.Logger.Warnf(
+				"Failed to create packetConn for STUN message from %s to %s",
+				conn.RemoteAddr(),
+				conn.LocalAddr(),
+			)
+
 			return
 		}
 	}
@@ -277,7 +314,13 @@ func (m *TCPMuxDefault) handleConn(conn net.Conn) {
 
 	if err := packetConn.AddConn(conn, buf); err != nil {
 		m.closeAndLogError(conn)
-		m.params.Logger.Warnf("Error adding conn to tcpPacketConn from %s to %s: %s", conn.RemoteAddr(), conn.LocalAddr(), err)
+		m.params.Logger.Warnf(
+			"Error adding conn to tcpPacketConn from %s to %s: %s",
+			conn.RemoteAddr(),
+			conn.LocalAddr(),
+			err,
+		)
+
 		return
 	}
 }
@@ -428,7 +471,7 @@ func readStreamingPacket(conn net.Conn, buf []byte) (int, error) {
 
 func writeStreamingPacket(conn net.Conn, buf []byte) (int, error) {
 	bufCopy := make([]byte, streamingPacketHeaderLen+len(buf))
-	binary.BigEndian.PutUint16(bufCopy, uint16(len(buf)))
+	binary.BigEndian.PutUint16(bufCopy, uint16(len(buf))) //nolint:gosec // G115
 	copy(bufCopy[2:], buf)
 
 	n, err := conn.Write(bufCopy)

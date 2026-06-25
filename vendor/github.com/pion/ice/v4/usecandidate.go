@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
@@ -11,12 +11,14 @@ type UseCandidateAttr struct{}
 // AddTo adds USE-CANDIDATE attribute to message.
 func (UseCandidateAttr) AddTo(m *stun.Message) error {
 	m.Add(stun.AttrUseCandidate, nil)
+
 	return nil
 }
 
 // IsSet returns true if USE-CANDIDATE attribute is set.
 func (UseCandidateAttr) IsSet(m *stun.Message) bool {
 	_, err := m.Get(stun.AttrUseCandidate)
+
 	return err == nil
 }
 

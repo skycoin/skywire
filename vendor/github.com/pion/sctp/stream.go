@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package sctp
@@ -13,15 +13,15 @@ import (
 	"time"
 
 	"github.com/pion/logging"
-	"github.com/pion/transport/v3/deadline"
+	"github.com/pion/transport/v4/deadline"
 )
 
 const (
-	// ReliabilityTypeReliable is used for reliable transmission
+	// ReliabilityTypeReliable is used for reliable transmission.
 	ReliabilityTypeReliable byte = 0
-	// ReliabilityTypeRexmit is used for partial reliability by retransmission count
+	// ReliabilityTypeRexmit is used for partial reliability by retransmission count.
 	ReliabilityTypeRexmit byte = 1
-	// ReliabilityTypeTimed is used for partial reliability by retransmission duration
+	// ReliabilityTypeTimed is used for partial reliability by retransmission duration.
 	ReliabilityTypeTimed byte = 2
 )
 
@@ -29,7 +29,7 @@ const (
 // This field identifies the state of stream.
 type StreamState int
 
-// StreamState enums
+// StreamState enums.
 const (
 	StreamStateOpen    StreamState = iota // Stream object starts with StreamStateOpen
 	StreamStateClosing                    // Outgoing stream is being reset
@@ -45,17 +45,18 @@ func (ss StreamState) String() string {
 	case StreamStateClosed:
 		return "closed"
 	}
+
 	return "unknown"
 }
 
-// SCTP stream errors
+// SCTP stream errors.
 var (
 	ErrOutboundPacketTooLarge = errors.New("outbound packet larger than maximum message size")
 	ErrStreamClosed           = errors.New("stream closed")
 	ErrReadDeadlineExceeded   = fmt.Errorf("read deadline exceeded: %w", os.ErrDeadlineExceeded)
 )
 
-// Stream represents an SCTP stream
+// Stream represents an SCTP stream.
 type Stream struct {
 	association         *Association
 	lock                sync.RWMutex
@@ -63,6 +64,8 @@ type Stream struct {
 	defaultPayloadType  PayloadProtocolIdentifier
 	reassemblyQueue     *reassemblyQueue
 	sequenceNumber      uint16
+	nextOrderedMID      uint32
+	nextUnorderedMID    uint32
 	readNotifier        *sync.Cond
 	readErr             error
 	readTimeoutCancel   chan struct{}
@@ -83,6 +86,7 @@ type Stream struct {
 func (s *Stream) StreamIdentifier() uint16 {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
+
 	return s.streamIdentifier
 }
 
@@ -114,14 +118,15 @@ func (s *Stream) setReliabilityParams(unordered bool, relType byte, relVal uint3
 // otherwise.
 func (s *Stream) Read(p []byte) (int, error) {
 	n, _, err := s.ReadSCTP(p)
+
 	return n, err
 }
 
-// ReadSCTP reads a packet of len(p) bytes and returns the associated Payload
+// ReadSCTP reads a packet of len(payload) bytes and returns the associated Payload
 // Protocol Identifier.
 // Returns EOF when the stream is reset or an error if the stream is closed
 // otherwise.
-func (s *Stream) ReadSCTP(p []byte) (int, PayloadProtocolIdentifier, error) {
+func (s *Stream) ReadSCTP(payload []byte) (int, PayloadProtocolIdentifier, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -134,23 +139,20 @@ func (s *Stream) ReadSCTP(p []byte) (int, PayloadProtocolIdentifier, error) {
 	}()
 
 	for {
-		n, ppi, err := s.reassemblyQueue.read(p)
-		if err == nil {
-			return n, ppi, nil
-		} else if errors.Is(err, io.ErrShortBuffer) {
-			return 0, PayloadProtocolIdentifier(0), err
+		n, ppi, err := s.reassemblyQueue.read(payload)
+		if err == nil || errors.Is(err, io.ErrShortBuffer) {
+			return n, ppi, err
 		}
 
-		err = s.readErr
-		if err != nil {
-			return 0, PayloadProtocolIdentifier(0), err
+		if s.readErr != nil {
+			return 0, PayloadProtocolIdentifier(0), s.readErr
 		}
 
 		s.readNotifier.Wait()
 	}
 }
 
-// SetReadDeadline sets the read deadline in an identical way to net.Conn
+// SetReadDeadline sets the read deadline in an identical way to net.Conn.
 func (s *Stream) SetReadDeadline(deadline time.Time) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -175,6 +177,7 @@ func (s *Stream) SetReadDeadline(deadline time.Time) error {
 			select {
 			case <-readTimeoutCancel:
 				t.Stop()
+
 				return
 			case <-t.C:
 				select {
@@ -193,15 +196,20 @@ func (s *Stream) SetReadDeadline(deadline time.Time) error {
 			}
 		}(s.readTimeoutCancel)
 	}
+
 	return nil
 }
 
-func (s *Stream) handleData(pd *chunkPayloadData) {
+func (s *Stream) handleData(pd *chunkPayloadData) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	var readable bool
-	if s.reassemblyQueue.push(pd) {
+	complete, err := s.reassemblyQueue.pushWithError(pd)
+	if err != nil {
+		return err
+	}
+	if complete {
 		readable = s.reassemblyQueue.isReadable()
 		s.log.Debugf("[%s] reassemblyQueue readable=%v", s.name, readable)
 		if readable {
@@ -210,6 +218,8 @@ func (s *Stream) handleData(pd *chunkPayloadData) {
 			s.log.Debugf("[%s] readNotifier.signal() done", s.name)
 		}
 	}
+
+	return nil
 }
 
 func (s *Stream) handleForwardTSNForOrdered(ssn uint16) {
@@ -258,16 +268,49 @@ func (s *Stream) handleForwardTSNForUnordered(newCumulativeTSN uint32) {
 	}
 }
 
-// Write writes len(p) bytes from p with the default Payload Protocol Identifier
-func (s *Stream) Write(p []byte) (n int, err error) {
-	ppi := PayloadProtocolIdentifier(atomic.LoadUint32((*uint32)(&s.defaultPayloadType)))
-	return s.WriteSCTP(p, ppi)
+func (s *Stream) handleForwardTSNForOrderedMID(mid uint32) {
+	var readable bool
+
+	func() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+
+		s.reassemblyQueue.forwardTSNForOrderedMID(mid)
+		readable = s.reassemblyQueue.isReadable()
+	}()
+
+	if readable {
+		s.readNotifier.Signal()
+	}
 }
 
-// WriteSCTP writes len(p) bytes from p to the DTLS connection
-func (s *Stream) WriteSCTP(p []byte, ppi PayloadProtocolIdentifier) (int, error) {
+func (s *Stream) handleForwardTSNForUnorderedMID(mid uint32) {
+	var readable bool
+
+	func() {
+		s.lock.Lock()
+		defer s.lock.Unlock()
+
+		s.reassemblyQueue.forwardTSNForUnorderedMID(mid)
+		readable = s.reassemblyQueue.isReadable()
+	}()
+
+	if readable {
+		s.readNotifier.Signal()
+	}
+}
+
+// Write writes len(payload) bytes from payload with the default Payload Protocol Identifier.
+func (s *Stream) Write(payload []byte) (n int, err error) {
+	ppi := PayloadProtocolIdentifier(atomic.LoadUint32((*uint32)(&s.defaultPayloadType)))
+
+	return s.WriteSCTP(payload, ppi)
+}
+
+// WriteSCTP writes len(payload) bytes from payload to the DTLS connection.
+func (s *Stream) WriteSCTP(payload []byte, ppi PayloadProtocolIdentifier) (int, error) {
 	maxMessageSize := s.association.MaxMessageSize()
-	if len(p) > int(maxMessageSize) {
+	if len(payload) > int(maxMessageSize) {
 		return 0, fmt.Errorf("%w: %v", ErrOutboundPacketTooLarge, maxMessageSize)
 	}
 
@@ -281,13 +324,20 @@ func (s *Stream) WriteSCTP(p []byte, ppi PayloadProtocolIdentifier) (int, error)
 	if s.association.isBlockWrite() {
 		s.writeLock.Lock()
 	}
-	chunks, unordered := s.packetize(p, ppi)
-	n := len(p)
+	useInterleaving := s.association.useInterleaving
+	chunks, unordered := s.packetize(payload, ppi)
+	n := len(payload)
 	err := s.association.sendPayloadData(s.writeDeadline, chunks)
-	if err != nil {
+	if err != nil { //nolint:nestif
 		s.lock.Lock()
 		s.bufferedAmount -= uint64(n)
-		if !unordered {
+		if useInterleaving {
+			if unordered {
+				s.nextUnorderedMID--
+			} else {
+				s.nextOrderedMID--
+			}
+		} else if !unordered {
 			s.sequenceNumber--
 		}
 		s.lock.Unlock()
@@ -296,20 +346,24 @@ func (s *Stream) WriteSCTP(p []byte, ppi PayloadProtocolIdentifier) (int, error)
 	if s.association.isBlockWrite() {
 		s.writeLock.Unlock()
 	}
+
 	return n, err
 }
 
-// SetWriteDeadline sets the write deadline in an identical way to net.Conn, it will only work for blocking writes
+// SetWriteDeadline sets the write deadline in an identical way to net.Conn,
+// it will only work for blocking writes.
 func (s *Stream) SetWriteDeadline(deadline time.Time) error {
 	s.writeDeadline.Set(deadline)
+
 	return nil
 }
 
-// SetDeadline sets the read and write deadlines in an identical way to net.Conn
+// SetDeadline sets the read and write deadlines in an identical way to net.Conn.
 func (s *Stream) SetDeadline(t time.Time) error {
 	if err := s.SetReadDeadline(t); err != nil {
 		return err
 	}
+
 	return s.SetWriteDeadline(t)
 }
 
@@ -317,34 +371,54 @@ func (s *Stream) packetize(raw []byte, ppi PayloadProtocolIdentifier) ([]*chunkP
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	i := uint32(0)
-	remaining := uint32(len(raw))
+	offset := uint32(0)
+	remaining := uint32(len(raw)) //nolint:gosec // G115
 
 	// From draft-ietf-rtcweb-data-protocol-09, section 6:
 	//   All Data Channel Establishment Protocol messages MUST be sent using
 	//   ordered delivery and reliable transmission.
 	unordered := ppi != PayloadTypeWebRTCDCEP && s.unordered
 
+	useInterleaving := s.association.useInterleaving
+	var mid uint32
+	if useInterleaving {
+		if unordered {
+			mid = s.nextUnorderedMID
+			s.nextUnorderedMID++
+		} else {
+			mid = s.nextOrderedMID
+			s.nextOrderedMID++
+		}
+	}
+
 	var chunks []*chunkPayloadData
 	var head *chunkPayloadData
+	fsn := uint32(0)
 	for remaining != 0 {
 		fragmentSize := min32(s.association.maxPayloadSize, remaining)
 
 		// Copy the userdata since we'll have to store it until acked
 		// and the caller may re-use the buffer in the mean time
 		userData := make([]byte, fragmentSize)
-		copy(userData, raw[i:i+fragmentSize])
+		copy(userData, raw[offset:offset+fragmentSize])
 
 		chunk := &chunkPayloadData{
-			streamIdentifier:     s.streamIdentifier,
-			userData:             userData,
-			unordered:            unordered,
-			beginningFragment:    i == 0,
-			endingFragment:       remaining-fragmentSize == 0,
-			immediateSack:        false,
-			payloadType:          ppi,
-			streamSequenceNumber: s.sequenceNumber,
-			head:                 head,
+			streamIdentifier:       s.streamIdentifier,
+			userData:               userData,
+			unordered:              unordered,
+			beginningFragment:      offset == 0,
+			endingFragment:         remaining-fragmentSize == 0,
+			immediateSack:          false,
+			payloadType:            ppi,
+			streamSequenceNumber:   s.sequenceNumber,
+			messageIdentifier:      mid,
+			fragmentSequenceNumber: fsn,
+			iData:                  useInterleaving,
+			head:                   head,
+		}
+
+		if useInterleaving {
+			chunk.streamSequenceNumber = uint16(mid) //nolint:gosec
 		}
 
 		if head == nil {
@@ -353,15 +427,16 @@ func (s *Stream) packetize(raw []byte, ppi PayloadProtocolIdentifier) ([]*chunkP
 
 		chunks = append(chunks, chunk)
 
+		fsn++
 		remaining -= fragmentSize
-		i += fragmentSize
+		offset += fragmentSize
 	}
 
 	// RFC 4960 Sec 6.6
 	// Note: When transmitting ordered and unordered data, an endpoint does
 	// not increment its Stream Sequence Number when transmitting a DATA
 	// chunk with U flag set to 1.
-	if !unordered {
+	if !useInterleaving && !unordered {
 		s.sequenceNumber++
 	}
 
@@ -387,8 +462,10 @@ func (s *Stream) Close() error {
 				s.state = StreamStateClosed
 			}
 			s.log.Debugf("[%s] state change: open => %s", s.name, s.state.String())
+
 			return s.streamIdentifier, true
 		}
+
 		return s.streamIdentifier, false
 	}(); resetOutbound {
 		// Reset the outgoing stream
@@ -459,6 +536,7 @@ func (s *Stream) onBufferReleased(nBytesReleased int) {
 		f := s.onBufferedAmountLow
 		s.lock.Unlock()
 		f()
+
 		return
 	}
 
@@ -495,9 +573,21 @@ func (s *Stream) onInboundStreamReset() {
 	}
 }
 
+func (s *Stream) resetOutgoingStreamSequenceNumbers() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	// RFC 8260 extends RFC 6525 stream reset, so when an outgoing stream is
+	// reset, the SSN and both ordered/unordered MID counters restart at zero.
+	s.sequenceNumber = 0
+	s.nextOrderedMID = 0
+	s.nextUnorderedMID = 0
+}
+
 // State return the stream state.
 func (s *Stream) State() StreamState {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
+
 	return s.state
 }

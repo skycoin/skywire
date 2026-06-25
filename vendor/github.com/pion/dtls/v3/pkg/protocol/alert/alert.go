@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package alert implements TLS alert protocol https://tools.ietf.org/html/rfc5246#section-7.2
@@ -11,12 +11,12 @@ import (
 	"github.com/pion/dtls/v3/pkg/protocol"
 )
 
-var errBufferTooSmall = &protocol.TemporaryError{Err: errors.New("buffer is too small")} //nolint:goerr113
+var errBufferTooSmall = &protocol.TemporaryError{Err: errors.New("buffer is too small")} //nolint:err113
 
-// Level is the level of the TLS Alert
+// Level is the level of the TLS Alert.
 type Level byte
 
-// Level enums
+// Level enums.
 const (
 	Warning Level = 1
 	Fatal   Level = 2
@@ -33,10 +33,10 @@ func (l Level) String() string {
 	}
 }
 
-// Description is the extended info of the TLS Alert
+// Description is the extended info of the TLS Alert.
 type Description byte
 
-// Description enums
+// Description enums.
 const (
 	CloseNotify            Description = 0
 	UnexpectedMessage      Description = 10
@@ -66,7 +66,7 @@ const (
 	NoApplicationProtocol  Description = 120
 )
 
-func (d Description) String() string {
+func (d Description) String() string { //nolint:cyclop
 	switch d {
 	case CloseNotify:
 		return "CloseNotify"
@@ -140,17 +140,17 @@ type Alert struct {
 	Description Description
 }
 
-// ContentType returns the ContentType of this Content
+// ContentType returns the ContentType of this Content.
 func (a Alert) ContentType() protocol.ContentType {
 	return protocol.ContentTypeAlert
 }
 
-// Marshal returns the encoded alert
+// Marshal returns the encoded alert.
 func (a *Alert) Marshal() ([]byte, error) {
 	return []byte{byte(a.Level), byte(a.Description)}, nil
 }
 
-// Unmarshal populates the alert from binary data
+// Unmarshal populates the alert from binary data.
 func (a *Alert) Unmarshal(data []byte) error {
 	if len(data) != 2 {
 		return errBufferTooSmall
@@ -158,6 +158,7 @@ func (a *Alert) Unmarshal(data []byte) error {
 
 	a.Level = Level(data[0])
 	a.Description = Description(data[1])
+
 	return nil
 }
 

@@ -1,20 +1,22 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package ice
 
 import "sync"
 
-// OnConnectionStateChange sets a handler that is fired when the connection state changes
+// OnConnectionStateChange sets a handler that is fired when the connection state changes.
 func (a *Agent) OnConnectionStateChange(f func(ConnectionState)) error {
 	a.onConnectionStateChangeHdlr.Store(f)
+
 	return nil
 }
 
-// OnSelectedCandidatePairChange sets a handler that is fired when the final candidate
-// pair is selected
+// OnSelectedCandidatePairChange sets a handler that is fired when the final candidate.
+// pair is selected.
 func (a *Agent) OnSelectedCandidatePairChange(f func(Candidate, Candidate)) error {
 	a.onSelectedCandidatePairChangeHdlr.Store(f)
+
 	return nil
 }
 
@@ -22,31 +24,34 @@ func (a *Agent) OnSelectedCandidatePairChange(f func(Candidate, Candidate)) erro
 // the gathering process complete the last candidate is nil.
 func (a *Agent) OnCandidate(f func(Candidate)) error {
 	a.onCandidateHdlr.Store(f)
+
 	return nil
 }
 
 func (a *Agent) onSelectedCandidatePairChange(p *CandidatePair) {
-	if h, ok := a.onSelectedCandidatePairChangeHdlr.Load().(func(Candidate, Candidate)); ok {
+	if h, ok := a.onSelectedCandidatePairChangeHdlr.Load().(func(Candidate, Candidate)); ok && h != nil {
 		h(p.Local, p.Remote)
 	}
 }
 
 func (a *Agent) onCandidate(c Candidate) {
-	if onCandidateHdlr, ok := a.onCandidateHdlr.Load().(func(Candidate)); ok {
+	if onCandidateHdlr, ok := a.onCandidateHdlr.Load().(func(Candidate)); ok && onCandidateHdlr != nil {
 		onCandidateHdlr(c)
 	}
 }
 
 func (a *Agent) onConnectionStateChange(s ConnectionState) {
-	if hdlr, ok := a.onConnectionStateChangeHdlr.Load().(func(ConnectionState)); ok {
+	if hdlr, ok := a.onConnectionStateChangeHdlr.Load().(func(ConnectionState)); ok && hdlr != nil {
 		hdlr(s)
 	}
 }
 
 type handlerNotifier struct {
 	sync.Mutex
-	running   bool
-	notifiers sync.WaitGroup
+	runningConnectionStates bool
+	runningCandidates       bool
+	runningCandidatePairs   bool
+	notifiers               sync.WaitGroup
 
 	connectionStates    []ConnectionState
 	connectionStateFunc func(ConnectionState)
@@ -73,6 +78,7 @@ func (h *handlerNotifier) Close(graceful bool) {
 	select {
 	case <-h.done:
 		h.Unlock()
+
 		return
 	default:
 	}
@@ -80,7 +86,7 @@ func (h *handlerNotifier) Close(graceful bool) {
 	h.Unlock()
 }
 
-func (h *handlerNotifier) EnqueueConnectionState(s ConnectionState) {
+func (h *handlerNotifier) EnqueueConnectionState(state ConnectionState) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -95,8 +101,9 @@ func (h *handlerNotifier) EnqueueConnectionState(s ConnectionState) {
 		for {
 			h.Lock()
 			if len(h.connectionStates) == 0 {
-				h.running = false
+				h.runningConnectionStates = false
 				h.Unlock()
+
 				return
 			}
 			notification := h.connectionStates[0]
@@ -106,15 +113,15 @@ func (h *handlerNotifier) EnqueueConnectionState(s ConnectionState) {
 		}
 	}
 
-	h.connectionStates = append(h.connectionStates, s)
-	if !h.running {
-		h.running = true
+	h.connectionStates = append(h.connectionStates, state)
+	if !h.runningConnectionStates {
+		h.runningConnectionStates = true
 		h.notifiers.Add(1)
 		go notify()
 	}
 }
 
-func (h *handlerNotifier) EnqueueCandidate(c Candidate) {
+func (h *handlerNotifier) EnqueueCandidate(cand Candidate) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -129,8 +136,9 @@ func (h *handlerNotifier) EnqueueCandidate(c Candidate) {
 		for {
 			h.Lock()
 			if len(h.candidates) == 0 {
-				h.running = false
+				h.runningCandidates = false
 				h.Unlock()
+
 				return
 			}
 			notification := h.candidates[0]
@@ -140,15 +148,15 @@ func (h *handlerNotifier) EnqueueCandidate(c Candidate) {
 		}
 	}
 
-	h.candidates = append(h.candidates, c)
-	if !h.running {
-		h.running = true
+	h.candidates = append(h.candidates, cand)
+	if !h.runningCandidates {
+		h.runningCandidates = true
 		h.notifiers.Add(1)
 		go notify()
 	}
 }
 
-func (h *handlerNotifier) EnqueueSelectedCandidatePair(p *CandidatePair) {
+func (h *handlerNotifier) EnqueueSelectedCandidatePair(pair *CandidatePair) {
 	h.Lock()
 	defer h.Unlock()
 
@@ -163,8 +171,9 @@ func (h *handlerNotifier) EnqueueSelectedCandidatePair(p *CandidatePair) {
 		for {
 			h.Lock()
 			if len(h.selectedCandidatePairs) == 0 {
-				h.running = false
+				h.runningCandidatePairs = false
 				h.Unlock()
+
 				return
 			}
 			notification := h.selectedCandidatePairs[0]
@@ -174,9 +183,9 @@ func (h *handlerNotifier) EnqueueSelectedCandidatePair(p *CandidatePair) {
 		}
 	}
 
-	h.selectedCandidatePairs = append(h.selectedCandidatePairs, p)
-	if !h.running {
-		h.running = true
+	h.selectedCandidatePairs = append(h.selectedCandidatePairs, pair)
+	if !h.runningCandidatePairs {
+		h.runningCandidatePairs = true
 		h.notifiers.Add(1)
 		go notify()
 	}

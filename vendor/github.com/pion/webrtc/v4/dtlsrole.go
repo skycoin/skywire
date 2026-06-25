@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 package webrtc
@@ -11,7 +11,7 @@ import (
 type DTLSRole byte
 
 const (
-	// DTLSRoleUnknown is the enum's zero-value
+	// DTLSRoleUnknown is the enum's zero-value.
 	DTLSRoleUnknown DTLSRole = iota
 
 	// DTLSRoleAuto defines the DTLS role is determined based on
@@ -58,10 +58,9 @@ func (r DTLSRole) String() string {
 	}
 }
 
-// Iterate a SessionDescription from a remote to determine if an explicit
-// role can been determined from it. The decision is made from the first role we we parse.
-// If no role can be found we return DTLSRoleAuto
-func dtlsRoleFromRemoteSDP(sessionDescription *sdp.SessionDescription) DTLSRole {
+// Extract the dtls role from a session description. The decision is made from
+// the first role we we parse. If no role can be found we return DTLSRoleAuto.
+func dtlsRoleFromSDP(sessionDescription *sdp.SessionDescription) DTLSRole {
 	if sessionDescription == nil {
 		return DTLSRoleAuto
 	}

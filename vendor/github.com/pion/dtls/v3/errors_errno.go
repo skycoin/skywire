@@ -1,8 +1,7 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 //go:build aix || darwin || dragonfly || freebsd || linux || nacl || nacljs || netbsd || openbsd || solaris || windows
-// +build aix darwin dragonfly freebsd linux nacl nacljs netbsd openbsd solaris windows
 
 // For systems having syscall.Errno.
 // Update build targets by following command:

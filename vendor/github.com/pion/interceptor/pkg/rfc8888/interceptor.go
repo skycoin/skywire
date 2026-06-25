@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: 2023 The Pion community <https://pion.ly>
+// SPDX-FileCopyrightText: 2026 The Pion community <https://pion.ly>
 // SPDX-License-Identifier: MIT
 
 // Package rfc8888 provides an interceptor that generates congestion control
@@ -14,19 +14,18 @@ import (
 	"github.com/pion/rtcp"
 )
 
-// TickerFactory is a factory to create new tickers
+// TickerFactory is a factory to create new tickers.
 type TickerFactory func(d time.Duration) ticker
 
-// SenderInterceptorFactory is a interceptor.Factory for a SenderInterceptor
+// SenderInterceptorFactory is a interceptor.Factory for a SenderInterceptor.
 type SenderInterceptorFactory struct {
 	opts []Option
 }
 
-// NewInterceptor constructs a new SenderInterceptor
+// NewInterceptor constructs a new SenderInterceptor.
 func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interceptor, error) {
-	i := &SenderInterceptor{
+	senderInterceptor := &SenderInterceptor{
 		NoOp:          interceptor.NoOp{},
-		log:           logging.NewDefaultLoggerFactory().NewLogger("rfc8888_interceptor"),
 		lock:          sync.Mutex{},
 		wg:            sync.WaitGroup{},
 		recorder:      NewRecorder(),
@@ -40,12 +39,20 @@ func (s *SenderInterceptorFactory) NewInterceptor(_ string) (interceptor.Interce
 		close: make(chan struct{}),
 	}
 	for _, opt := range s.opts {
-		err := opt(i)
+		err := opt(senderInterceptor)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return i, nil
+
+	if senderInterceptor.loggerFactory == nil {
+		senderInterceptor.loggerFactory = logging.NewDefaultLoggerFactory()
+	}
+	if senderInterceptor.log == nil {
+		senderInterceptor.log = senderInterceptor.loggerFactory.NewLogger("rfc8888_interceptor")
+	}
+
+	return senderInterceptor, nil
 }
 
 // NewSenderInterceptor returns a new SenderInterceptorFactory configured with the given options.
@@ -57,6 +64,7 @@ func NewSenderInterceptor(opts ...Option) (*SenderInterceptorFactory, error) {
 type SenderInterceptor struct {
 	interceptor.NoOp
 	log           logging.LeveledLogger
+	loggerFactory logging.LoggerFactory
 	lock          sync.Mutex
 	wg            sync.WaitGroup
 	recorder      *Recorder
@@ -91,9 +99,12 @@ func (s *SenderInterceptor) BindRTCPWriter(writer interceptor.RTCPWriter) interc
 	return writer
 }
 
-// BindRemoteStream lets you modify any incoming RTP packets. It is called once for per RemoteStream. The returned method
-// will be called once per rtp packet.
-func (s *SenderInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader interceptor.RTPReader) interceptor.RTPReader {
+// BindRemoteStream lets you modify any incoming RTP packets.
+// It is called once for per RemoteStream. The returned method
+// will be called once per rtp packet..
+func (s *SenderInterceptor) BindRemoteStream(
+	_ *interceptor.StreamInfo, reader interceptor.RTPReader,
+) interceptor.RTPReader {
 	return interceptor.RTPReaderFunc(func(b []byte, a interceptor.Attributes) (int, interceptor.Attributes, error) {
 		i, attr, err := reader.Read(b, a)
 		if err != nil {
@@ -115,6 +126,7 @@ func (s *SenderInterceptor) BindRemoteStream(_ *interceptor.StreamInfo, reader i
 			ecn:            0, // ECN is not supported (yet).
 		}
 		s.packetChan <- p
+
 		return i, attr, nil
 	})
 }
@@ -157,16 +169,19 @@ func (s *SenderInterceptor) loop(writer interceptor.RTCPWriter) {
 		select {
 		case <-s.close:
 			t.Stop()
+
 			return
 
 		case pkt := <-s.packetChan:
 			s.log.Tracef("got packet: %v", pkt)
 			s.recorder.AddPacket(pkt.arrival, pkt.ssrc, pkt.sequenceNumber, pkt.ecn)
 
-		case now := <-t.Ch():
+		case <-t.Ch():
+			now := s.now()
 			s.log.Tracef("report triggered at %v", now)
 			if writer == nil {
 				s.log.Trace("no writer added, continue")
+
 				continue
 			}
 			pkts := s.recorder.BuildReport(now, int(s.maxReportSize))
