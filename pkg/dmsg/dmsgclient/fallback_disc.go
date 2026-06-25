@@ -87,6 +87,22 @@ func (f *fallbackDiscClient) Entry(ctx context.Context, pk cipher.PubKey) (*disc
 // StartDmsgSelfHostedDisc, whose single client works precisely because its
 // PostEntry no-ops and returns instantly so sessions can establish.
 func (f *fallbackDiscClient) PostEntry(ctx context.Context, entry *disc.Entry) error {
+	// EXCEPTION (registering variant): a never-before-registered client publishes its
+	// FRESH entry via PostEntry, not PutEntry — updateClientEntryOnEndpoint does a
+	// read-modify-write and, on "entry not found", registers a sequence-0 entry with
+	// PostEntry; the PutEntry UPDATE path is only reached once an entry already
+	// exists. So if the registering variant no-ops ALL PostEntry, a fresh client
+	// (e.g. every ephemeral-key browser tab) never appears in discovery, loops at
+	// 404 forever, and route setup can't even dial the source's own @136. Route to
+	// HTTP — but ONLY once the entry carries delegated servers, i.e. POST-session.
+	// The pre-session "Initial post entry" (initilizeClientEntry, before any session
+	// is dialed) has an EMPTY server set; keeping that a no-op preserves the
+	// chicken-egg guard (a PostEntry-over-dmsg with no sessions wedges the serve
+	// loop — see the comment below). A real dmsg-disc upserts on this POST, so it
+	// creates the entry that the later PutEntry updates keep alive.
+	if f.register && entry.Client != nil && len(entry.Client.DelegatedServers) > 0 {
+		return f.http.PostEntry(ctx, entry)
+	}
 	return f.direct.PostEntry(ctx, entry)
 }
 
