@@ -33,4 +33,19 @@ func TestResolveServicesNilMatchesDeployment(t *testing.T) {
 	if s.MinHops != 1 {
 		t.Errorf("MinHops = %d, want 1 (origination enabled)", s.MinHops)
 	}
+	// The dmsg service URLs the native visor preloads (dmsgServicePKs) must each
+	// match the deployment default for a nil config.
+	for _, c := range []struct {
+		name, got, want string
+	}{
+		{"TransportDiscoveryDmsg", s.TransportDiscoveryDmsg, d.TransportDiscoveryDmsg},
+		{"AddressResolverDmsg", s.AddressResolverDmsg, d.AddressResolverDmsg},
+		{"ServiceDiscoveryDmsg", s.ServiceDiscoveryDmsg, d.ServiceDiscoveryDmsg},
+		{"ConfDmsg", s.ConfDmsg, d.ConfDmsg},
+		{"UptimeTrackerDmsg", s.UptimeTrackerDmsg, d.UptimeTrackerDmsg},
+	} {
+		if c.got != c.want {
+			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
+		}
+	}
 }
