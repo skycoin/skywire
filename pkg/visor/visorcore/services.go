@@ -46,6 +46,7 @@ type Services struct {
 	UptimeTrackerDmsg string
 	// misc
 	StunServers []string
+	GeoIP       string // HTTP-only (dmsg doesn't preserve client IP); no config override
 }
 
 func pick(override, fallback string) string {
@@ -86,6 +87,7 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 		UptimeTracker:     d.UptimeTracker,
 		UptimeTrackerDmsg: d.UptimeTrackerDmsg,
 		StunServers:       d.StunServers,
+		GeoIP:             d.GeoIP,
 	}
 	if v1 == nil {
 		return s
