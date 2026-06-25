@@ -327,34 +327,29 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	rgDialer := router.NewSetupNodeDialerFull(nil, router.NewRSNRelayCache(mLog.PackageLogger("router")), tm, true)
 	vlog(fmt.Sprintf("router: route origination wired (rf=%s, %d setup nodes)", svc.RouteFinderDmsg, len(svc.RouteSetupNodes)))
 
-	rConf := &router.Config{
-		Logger:             mLog.PackageLogger("router"),
-		MasterLogger:       mLog,
+	// Assemble + serve the router through the shared visorcore.BuildRouter so the
+	// edge and the native visor can't drift on the router.Config field mapping
+	// (e.g. the MinHops==0 ⇒ "routing disabled" gotcha) or the Serve pattern.
+	// svc.MinHops is 1 (origination enabled; a direct transport still downgrades to
+	// a 0-intermediate-hop path).
+	vlog("router: New + serve…")
+	r, err := visorcore.BuildRouter(ctx, visorcore.RouterDeps{
+		DmsgC:              dmsgC,
 		PubKey:             pk,
 		SecKey:             sk,
 		TransportManager:   tm,
-		AwaitSetupListener: setupLis,
 		RouteFinder:        rfClient,
 		RouteGroupDialer:   rgDialer,
 		SetupNodes:         svc.RouteSetupNodes,
-		// MinHops must be >0 or the router treats routing as DISABLED
-		// (router_dial.go: "routing disabled. (minhop=0)"). 1 enables
-		// origination; a direct transport, when one exists, still downgrades to a
-		// 0-intermediate-hop path.
-		MinHops: 1,
-	}
-	vlog("router: New…")
-	r, err := router.New(dmsgC, rConf, nil)
+		MinHops:            svc.MinHops,
+		AwaitSetupListener: setupLis,
+		Logger:             mLog.PackageLogger("router"),
+		MasterLogger:       mLog,
+	})
 	if err != nil {
 		return pk, fmt.Errorf("router: %w", err)
 	}
 	rtr = r
-	vlog("router: New ok; serving…")
-	go func() {
-		if err := r.Serve(ctx); err != nil {
-			mLog.PackageLogger("router").WithError(err).Error("router.Serve returned")
-		}
-	}()
 	vlog("router: serving")
 
 	vlog("router: serving — EDGE up (dmsg + transport + router)")
