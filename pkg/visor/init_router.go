@@ -21,6 +21,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 // getRouteSetupHooks aka autotransport
@@ -158,29 +159,18 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.WithField("order", v.conf.Routing.TransportPreference).Info("Applied configured transport preference order")
 	}
 
-	rConf := router.Config{
-		Logger:             logger,
-		MasterLogger:       v.MasterLogger(),
-		PubKey:             v.conf.PK,
-		SecKey:             v.conf.SK,
-		TransportManager:   v.tpM,
-		RouteFinder:        rfClient,
-		RouteGroupDialer:   rgDialer,
-		SetupNodes:         v.conf.EffectiveRouteSetupNodes(),
-		RulesGCInterval:    0, // 0 = DefaultRulesGCInterval (10s)
-		MinHops:            v.conf.Routing.MinHops,
-		AwaitSetupListener: v.awaitSetupListener,
-		// Tag rg-scoped log entries with the originating app's name so
-		// 'cli proxy start --verbose' can scope to a session. Resolved
-		// lazily via the proc manager — the manager owns the port↔app
-		// mapping and is the only authoritative source.
-		AppLookup: func(p routing.Port) (string, bool) {
-			if v.procM == nil {
-				return "", false
-			}
-			return v.procM.AppByPort(p)
-		},
+	// Tag rg-scoped log entries with the originating app's name so
+	// 'cli proxy start --verbose' can scope to a session. Resolved lazily via
+	// the proc manager — the manager owns the port↔app mapping.
+	appLookup := func(p routing.Port) (string, bool) {
+		if v.procM == nil {
+			return "", false
+		}
+		return v.procM.AppByPort(p)
 	}
+	// dialHook is set by the routing-policy block below (nil = no policy = a
+	// zero-cost dial path). Threaded into visorcore.BuildRouter as Config.DialHook.
+	var dialHook router.DialHook
 
 	// Operator-programmable routing policy (RFC #2882).
 	// When conf.Routing.PolicyPerDial is set, build a Loader,
@@ -251,21 +241,36 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 		}
 
-		rConf.DialHook = hook
+		dialHook = hook
 	}
 
 	routeSetupHooks := getRouteSetupHooks(ctx, v, log)
 
-	r, err := router.New(v.dmsgC, &rConf, routeSetupHooks)
-	if err != nil {
-		err := fmt.Errorf("failed to create router: %w", err)
-		return err
-	}
-
+	// Assemble + serve the router through the shared visorcore.BuildRouter so the
+	// native visor and the wasm edge can't drift on the router.Config field mapping
+	// or the Serve pattern. Native-only inputs (DialHook, AppLookup, SetupHooks) are
+	// threaded through; the edge passes their zero values.
 	serveCtx, cancel := context.WithCancel(context.Background())
-	if err := r.Serve(serveCtx); err != nil {
+	r, err := visorcore.BuildRouter(serveCtx, visorcore.RouterDeps{
+		DmsgC:              v.dmsgC,
+		PubKey:             v.conf.PK,
+		SecKey:             v.conf.SK,
+		TransportManager:   v.tpM,
+		RouteFinder:        rfClient,
+		RouteGroupDialer:   rgDialer,
+		SetupNodes:         v.conf.EffectiveRouteSetupNodes(),
+		MinHops:            v.conf.Routing.MinHops,
+		AwaitSetupListener: v.awaitSetupListener,
+		Logger:             logger,
+		MasterLogger:       v.MasterLogger(),
+		AppLookup:          appLookup,
+		DialHook:           dialHook,
+		RulesGCInterval:    0, // 0 = DefaultRulesGCInterval (10s)
+		SetupHooks:         routeSetupHooks,
+	})
+	if err != nil {
 		cancel()
-		return err
+		return fmt.Errorf("failed to create router: %w", err)
 	}
 
 	v.pushCloseStack("router.serve", func() error {
