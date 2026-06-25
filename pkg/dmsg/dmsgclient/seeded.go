@@ -34,7 +34,7 @@ import (
 //
 // seedServers must carry Server.AddressWS for the WebSocket dial to be chosen;
 // a browser build has no working TCP/QUIC fallback.
-func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, seedServers []*disc.Entry, discDmsgAddr string, preferWS bool) (*dmsg.Client, func(), error) {
+func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, seedServers []*disc.Entry, discDmsgAddr string, preferWS bool, servicePKs ...cipher.PubKey) (*dmsg.Client, func(), error) {
 	if len(seedServers) == 0 {
 		return nil, nil, errors.New("dmsg: no seed servers provided")
 	}
@@ -64,6 +64,23 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 				})
 			}
 		}
+	}
+	// Preload non-registering SERVICE clients (route-finder, setup nodes, transport-
+	// discovery) as direct entries delegated to the seed servers. Services run as
+	// direct clients and never PUBLISH to the dmsg-discovery, so without this a tab's
+	// attempt to resolve e.g. the route-finder 404s ("entry is not found in
+	// discovery") and multihop DialRoutes fails at the route-finder POST. A 1-hop
+	// route to a directly-transported peer skips the route-finder and so works
+	// without this; a multihop route to a distant skysocks exit does not.
+	for _, spk := range servicePKs {
+		if spk.Null() {
+			continue
+		}
+		entries = append(entries, &disc.Entry{
+			Version: "0.0.1",
+			Static:  spk,
+			Client:  &disc.Client{DelegatedServers: seedServerPKs},
+		})
 	}
 	dClient := direct.NewClient(entries, log)
 
