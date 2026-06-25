@@ -44,6 +44,22 @@ Native's config = `visorconfig.V1` (operator overrides) merged with
 `init_*.go`. Browser reads `deployment.Prod.*` directly. Convergence = both go
 through `visorcore.ResolveServices`.
 
+## Status (2026-06-25)
+
+Merged and validated on **both** visors:
+- **#3278** `visorcore.ResolveServices` + wasm adoption — the config resolver.
+- **#3279** `direct.StartDmsgWithSetup` — the register-before-serve invariant, in one place.
+- **#3280** native `dmsgServicePKs` → `ResolveServices` (the shared service-PK field set).
+- **#3281** remaining native service-URL reads → `ResolveServices` (comprehensive config centralization).
+- **#3282** `visorcore.BuildRouter` — router construction (Config field mapping + New + Serve) shared; also fixed the edge's error-discarding `go r.Serve` pattern. Validated by live route origination on the native visor.
+
+**Assessment of what's left (diminishing returns):**
+- **dmsg startup serve/ready** — native has bounded-wait + pinned-server-abort hardening (`init_dmsg.go`) an edge doesn't need, and is already register-before-serve. Forcing the shared helper would regress it. Leave divergent.
+- **transport manager** — native builds it as a module DAG (manager + one module per network client); the wasm is linear. The only genuinely-shared call is `transport.NewManager` (~3 lines); the `ManagerConfig`/`ClientFactory`/`InitClient` set are platform-specific. Thin shared core → not worth extracting.
+- **proc manager** — a single `appserver.NewProcManager(...)` call both make; a wrapper adds nothing.
+
+So the valuable convergence (config + the bug-prone register-before-serve + router construction) is **done**. The original plan, for reference:
+
 ## Incremental plan (each step a separate, independently-validated PR)
 
 1. **`visorcore.ResolveServices`** — a `Services` struct (resolved dmsg servers,
