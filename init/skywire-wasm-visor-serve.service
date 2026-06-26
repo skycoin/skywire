@@ -1,0 +1,18 @@
+[Unit]
+Description=Serve the standalone wasm-visor over HTTP (reverse-proxy with Caddy)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/skywire cli hv serve --addr 127.0.0.1:7999
+Restart=on-failure
+RestartSec=2
+# Stateless static-page server, no secrets — run unprivileged + locked down.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+
+[Install]
+WantedBy=multi-user.target
