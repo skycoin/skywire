@@ -382,6 +382,26 @@ func initStcprClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
+// initWSClient starts the WebSocket transport server. WS has no dedicated
+// listener of its own: it serves over the stcpr+WS TCP cmux — the shared WS
+// virtual listener wired by EnableDefaultTCPDemux / EnableUnifiedTCP in
+// initTransport — so every visor accepts WebSocket transports on its stcpr TCP
+// port with no extra port and no config. This is what lets a browser (wasm)
+// visor — which can only dial WS/WT/WebRTC — reach any public visor over WS.
+//
+// Because WS rides the stcpr socket, the visor's existing stcpr
+// address-resolver registration already advertises the right IP:port for WS
+// dials; no separate WS registration is needed. The wasm autoconnect resolves a
+// peer's IP via the AR's stcpr entry and dials ws://host:<stcpr-port>/, which
+// the cmux peeks and routes to this WS server.
+//
+// Depends on &tr (initTransport), which always enables the TCP demux, so
+// v.tpM and the cmux's WS listener both exist by the time this runs.
+func initWSClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	v.tpM.InitClient(ctx, types.WS, 0)
+	return nil
+}
+
 // initQuicClient starts the experimental QUIC transport when a quic_port is
 // configured (#2607 QUIC follow-on). Opt-in: a zero port leaves it disabled.
 func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {
