@@ -9,7 +9,18 @@
 // wt_tinygo_nows.go (other TinyGo targets) stubs it.
 package network
 
-import "errors"
+import (
+	"context"
+	"errors"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+)
+
+// resolveWTViaAR has no address resolver on a TinyGo target (addrresolver is
+// !tinygo), so WT dials come only from the explicit table. Always ok=false.
+func (c *wtClient) resolveWTViaAR(_ context.Context, _ cipher.PubKey) (string, string, bool) {
+	return "", "", false
+}
 
 // errWTServe is returned by Start on TinyGo (no listening socket / no HTTP/3).
 var errWTServe = errors.New("wt: serving not supported on this build (TinyGo) — a browser/embedded target has no HTTP/3 listener")

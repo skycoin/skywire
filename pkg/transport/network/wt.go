@@ -114,16 +114,25 @@ func (c *wtClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 		return nil, io.ErrClosedPipe
 	}
 
-	if c.table == nil {
-		return nil, ErrWTEntryNotFound
+	// Endpoint resolution order: explicit table entry (browser autoconnect sets
+	// the URL+cert hash), then address-resolver fallback (native) — resolve the
+	// peer's WT record (https://host:port/skywire + pinned cert hash).
+	var url, certHash string
+	var ok bool
+	if c.table != nil {
+		if e, found := c.table.Entry(rPK); found {
+			url, certHash, ok = e.URL, e.CertHash, true
+		}
 	}
-	e, ok := c.table.Entry(rPK)
+	if !ok {
+		url, certHash, ok = c.resolveWTViaAR(ctx, rPK)
+	}
 	if !ok {
 		return nil, ErrWTEntryNotFound
 	}
-	c.log.Debugf("Dialing WT %v @ %s", rPK, e.URL)
+	c.log.Debugf("Dialing WT %v @ %s", rPK, url)
 
-	conn, err := wtDial(ctx, e.URL, e.CertHash)
+	conn, err := wtDial(ctx, url, certHash)
 	if err != nil {
 		return nil, err
 	}
