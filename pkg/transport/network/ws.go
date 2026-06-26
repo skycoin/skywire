@@ -53,6 +53,14 @@ func (c *wsClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 		return nil, io.ErrClosedPipe
 	}
 
+	// A native visor starts the WS client to ACCEPT (the cmux WS branch) but
+	// never populates a WSTable, so c.table is a nil interface here. Calling a
+	// method on it panics and crashes the visor on any `tp add -t ws`. Guard it,
+	// exactly as wtClient.Dial does. WS dials are endpoint-driven (the browser
+	// autoconnect sets the table); a native visor with no table has no WS target.
+	if c.table == nil {
+		return nil, ErrWSEntryNotFound
+	}
 	url, ok := c.table.Addr(rPK)
 	if !ok {
 		return nil, ErrWSEntryNotFound
