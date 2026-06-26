@@ -4,10 +4,14 @@ package network
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // TestWSCarrier_RoundTrip exercises the native WS carrier: the WS-server-as-
@@ -76,4 +80,16 @@ func readFull(c net.Conn, b []byte) error {
 	}
 	_, err := io.ReadFull(c, b)
 	return err
+}
+
+// TestWSDialNilTableNoPanic guards the fleet-wide crash where a native visor —
+// which starts the WS client to ACCEPT but never populates a WSTable — panicked
+// on any `tp add -t ws` because wsClient.Dial called a method on the nil table
+// interface. Dial must return ErrWSEntryNotFound, not panic.
+func TestWSDialNilTableNoPanic(t *testing.T) {
+	c := newWS(&genericClient{netType: types.WS}, nil)
+	_, err := c.Dial(context.Background(), cipher.PubKey{}, 0)
+	if !errors.Is(err, ErrWSEntryNotFound) {
+		t.Fatalf("nil-table WS Dial: want ErrWSEntryNotFound, got %v", err)
+	}
 }
