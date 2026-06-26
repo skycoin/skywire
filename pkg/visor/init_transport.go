@@ -402,6 +402,19 @@ func initWSClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
+// initWTClient starts the WebTransport server. WT is a QUIC/HTTP3 carrier with a
+// self-signed cert (no CA): the server binds its own UDP port, generates a cert,
+// and registers BOTH the endpoint and the cert's SHA-256 hash with the address
+// resolver (BindWT) so a dialing peer — especially a browser, which can only
+// reach a visor over WS/WT/WebRTC — can discover the endpoint and pin the cert.
+// Like quic it binds an ephemeral UDP port (registered with the AR, survives
+// restarts via re-register); a fixed firewall port can be pinned later.
+// Depends on &tr so v.tpM and the AR client both exist.
+func initWTClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	v.tpM.InitClient(ctx, types.WT, 0)
+	return nil
+}
+
 // initQuicClient starts the experimental QUIC transport when a quic_port is
 // configured (#2607 QUIC follow-on). Opt-in: a zero port leaves it disabled.
 func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {

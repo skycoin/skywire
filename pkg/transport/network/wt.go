@@ -77,6 +77,13 @@ type wtClient struct {
 	*genericClient
 	table WTTable
 
+	// ar is the address-resolver client (addrresolver.APIClient), typed `any` to
+	// keep addrresolver out of the TinyGo graph (mirrors wsClient.ar). On native
+	// the WT server registers its UDP port + self-signed cert hash with the AR
+	// (BindWT) so dialing peers can discover the endpoint AND pin the cert; the
+	// dial side resolves the same record. nil on the browser (table-only).
+	ar any
+
 	// advertised holds the WT listener's public dial info once Start has run
 	// (native only); a browser/TinyGo client never serves, so these stay empty.
 	advertisedURL      string
