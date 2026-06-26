@@ -1,0 +1,20 @@
+# Oneshot: regenerate the standalone wasm-visor HTML from the INSTALLED skywire.
+#
+# The skywire binary embeds the wasm-visor blob (pkg/wasmhv/wasmbin/wasm-visor.wasm.gz)
+# AND the hypervisor UI, so `hv gen` with no flags emits a keyless, self-contained
+# HTML built from whatever's in the current binary. Run this once at setup and let
+# the companion .path unit re-run it every time skywire updates.
+#
+# Adjust /usr/bin/skywire if your install path differs (e.g. /usr/local/bin/skywire).
+# Writes to a temp file then renames, so Caddy never serves a half-written 16 MB file.
+
+[Unit]
+Description=Regenerate standalone wasm-visor index.html from the installed skywire
+After=network.target
+
+[Service]
+Type=oneshot
+RuntimeDirectory=skywire-wasm-visor
+ExecStartPre=/bin/mkdir -p /var/www/wasm-visor
+ExecStart=/usr/bin/skywire cli hv gen -o /var/www/wasm-visor/index.html.new
+ExecStartPost=/bin/mv -f /var/www/wasm-visor/index.html.new /var/www/wasm-visor/index.html

@@ -1,0 +1,17 @@
+# Watch the skywire binary; regenerate the standalone wasm-visor when it changes.
+#
+# Every time skywire auto-updates (apt/AUR/module-proxy replaces the binary), the
+# embedded wasm + UI change, so PathChanged fires and the .service re-emits a fresh
+# index.html. That is the whole auto-update mechanism: serve == regenerate-on-update.
+#
+# Adjust the watched path to match your install (/usr/bin/skywire, /usr/local/bin/skywire, …).
+
+[Unit]
+Description=Watch skywire binary; regenerate standalone wasm-visor on update
+
+[Path]
+PathChanged=/usr/bin/skywire
+Unit=skywire-wasm-visor-regen.service
+
+[Install]
+WantedBy=multi-user.target
