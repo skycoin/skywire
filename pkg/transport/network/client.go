@@ -140,7 +140,9 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		}
 		return wc, nil
 	case types.WT:
-		return newWT(generic, f.WTTable), nil
+		wc := newWT(generic, f.WTTable)
+		wc.(*wtClient).ar = f.ARClient // native: register/resolve WT endpoint+cert via AR
+		return wc, nil
 	case types.WEBRTC:
 		return newWebRTC(generic, f.DmsgC, f.ICEURLs), nil
 	case types.DMSG:
