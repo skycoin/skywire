@@ -34,6 +34,12 @@ type wsClient struct {
 	// transport_port socket (see tcpDemux, !tinygo). net.Listener so this stays in
 	// the untagged file; only ws_native.go (the server) consumes it.
 	sharedListener net.Listener
+	// ar is the address-resolver client (addrresolver.APIClient), typed `any` to
+	// keep addrresolver out of the TinyGo graph (mirrors ClientFactory.ARClient).
+	// On native it lets WS dial a peer with no explicit table entry: WS rides the
+	// stcpr cmux port, so resolveWSURLViaAR resolves the peer's stcpr address and
+	// forms ws://host:port/. nil on the browser (which dials from the table only).
+	ar any
 }
 
 func newWS(generic *genericClient, table stcp.PKTable) Client {
@@ -53,15 +59,20 @@ func (c *wsClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 		return nil, io.ErrClosedPipe
 	}
 
-	// A native visor starts the WS client to ACCEPT (the cmux WS branch) but
-	// never populates a WSTable, so c.table is a nil interface here. Calling a
-	// method on it panics and crashes the visor on any `tp add -t ws`. Guard it,
-	// exactly as wtClient.Dial does. WS dials are endpoint-driven (the browser
-	// autoconnect sets the table); a native visor with no table has no WS target.
-	if c.table == nil {
-		return nil, ErrWSEntryNotFound
+	// Endpoint resolution order:
+	//  1. explicit table entry (the browser autoconnect sets the ws:// URL here),
+	//  2. address-resolver fallback (native): WS rides the stcpr cmux port, so we
+	//     resolve the peer's stcpr address and form ws://host:port/.
+	// c.table is a nil interface on a native visor (it starts the WS client only
+	// to ACCEPT), so guard it — calling a method on it would panic the visor.
+	var url string
+	var ok bool
+	if c.table != nil {
+		url, ok = c.table.Addr(rPK)
 	}
-	url, ok := c.table.Addr(rPK)
+	if !ok {
+		url, ok = c.resolveWSURLViaAR(ctx, rPK)
+	}
 	if !ok {
 		return nil, ErrWSEntryNotFound
 	}
