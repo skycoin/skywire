@@ -73,6 +73,7 @@ page never asks anyone to type a secret key.`,
 		serveBytes("/wasm-visor.wasm", "application/wasm", wasm)
 		serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
+		serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
 
 		// Everything else is the built Angular UI (incl. lazy chunks, css, fonts,
 		// assets). Routing is hash-based (#/...), so the server only ever sees "/"
@@ -103,10 +104,14 @@ page never asks anyone to type a secret key.`,
 
 // injectBoot inserts the hv-boot.js bootstrap as a classic <script> right after
 // <head>, so it runs before Angular's deferred module scripts — CFG.visor is set
-// and boot() starts (CFG.ready) before SkywireHttpBackend's first /api call.
+// and boot() starts (CFG.ready) before SkywireHttpBackend's first /api call. It
+// also loads browse.js + the launcher, which mount the dmsg/skynet browse+host
+// overlay (a floating "skynet" button) once the wasm-visor is up.
 func injectBoot(index []byte) []byte {
 	s := string(index)
-	tag := "\n<script src=\"hv-boot.js\"></script>\n"
+	tag := "\n<script src=\"hv-boot.js\"></script>\n" +
+		"<script src=\"browse.js\"></script>\n" +
+		"<script>" + wasmhv.BrowseLauncherJS + "</script>\n"
 	lower := strings.ToLower(s)
 	if i := strings.Index(lower, "<head"); i >= 0 {
 		if j := strings.IndexByte(s[i:], '>'); j >= 0 {
