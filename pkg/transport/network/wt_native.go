@@ -27,9 +27,32 @@ import (
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/webtransport-go"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyquic"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
+
+// resolveWTViaAR resolves a peer's WebTransport endpoint + pinned cert hash from
+// the address resolver when there is no explicit table entry (a native
+// `tp add -t wt`). The WT bind stored both (BindWT), so /resolve/wt returns the
+// UDP endpoint and the SHA-256 cert hash; the URL is https://host:port/skywire.
+// ok=false when there is no AR, no WT record, or no cert hash.
+func (c *wtClient) resolveWTViaAR(ctx context.Context, rPK cipher.PubKey) (url, certHash string, ok bool) {
+	ar, _ := c.ar.(addrresolver.APIClient)
+	if ar == nil {
+		return "", "", false
+	}
+	vd, err := ar.Resolve(ctx, string(types.WT), rPK)
+	if err != nil || vd.CertHash == "" {
+		return "", "", false
+	}
+	addr := canonicalAddr(vd.RemoteAddr, vd.Port)
+	if addr == "" {
+		return "", "", false
+	}
+	return "https://" + addr + wtPath, vd.CertHash, true
+}
 
 // wtPath is the HTTP/3 path the WebTransport endpoint is served on; the
 // advertised URL includes it (e.g. "https://host:port/skywire").
