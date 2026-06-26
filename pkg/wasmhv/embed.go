@@ -19,6 +19,17 @@ var OverrideJS []byte
 //go:embed browse.js
 var BrowseJS []byte
 
+// HvBootJS is pkg/wasmhv/hv-boot.js — the clean boot bootstrap for serving the
+// wasm-VISOR hypervisor UI as separate files (the `hv serve` / dev-harness model,
+// as opposed to the single-file generator's inlined override.js). It sets
+// CFG.visor, loads wasm_exec.js + wasm-visor.wasm, calls skywireVisor.boot(), and
+// exposes the boot promise as CFG.ready — which the UI's SkywireHttpBackend awaits
+// before its first /api call. Routing is owned by the Angular HttpBackend, so no
+// fetch/XHR monkey-patch (unlike override.js).
+//
+//go:embed hv-boot.js
+var HvBootJS []byte
+
 // WasmExecJS is Go's lib/wasm/wasm_exec.js, vendored here so a generated file is
 // self-contained. It MUST match the Go toolchain that built the embedded/passed
 // dmsg.wasm — refresh it with the wasm build (the Makefile bundle target copies
