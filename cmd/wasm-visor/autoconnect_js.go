@@ -29,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/httpauthclient"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
+	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -93,17 +94,18 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 		return
 	}
 
+	// Count DISTINCT visors we already auto-connect to (a visor may hold both a
+	// WS and a WT transport — see below — so count peers, not transports).
 	have := map[cipher.PubKey]bool{}
-	n := 0
 	tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
 		if mt.Entry.Label == transport.LabelAutomatic {
 			have[mt.Remote()] = true
-			n++
 		}
 		return true
 	})
+	n := len(have)
 
-	vlog(fmt.Sprintf("ws-autoconnect: SD returned %d visors (%d existing auto-tps)", len(services), n))
+	vlog(fmt.Sprintf("ws-autoconnect: SD returned %d visors (%d existing auto-peers)", len(services), n))
 
 	added := 0
 	for i := range services {
@@ -116,31 +118,56 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 		}
 		port := services[i].Addr.Port()
 		vlog(fmt.Sprintf("ws-autoconnect: resolving %s:%d", pk.Hex()[:8], port))
-		// 2. resolve the peer's reachable IP via the AR (authenticated).
-		addr, err := ar.resolveStcpr(ctx, pk)
-		if err != nil || addr == "" {
-			vlog(fmt.Sprintf("ws-autoconnect: AR resolve %s: %v", pk.Hex()[:8], err))
-			continue
+
+		// A browser can carry WS (TCP) and WT (QUIC). Dial BOTH to each public
+		// visor for redundancy + path diversity — the browser analog of a native
+		// visor making stcpr+sudph to the same peer (autoconnect.go). Either
+		// succeeding counts the visor as connected.
+		gotAny := false
+
+		// WS: rides the stcpr cmux port. Resolve the peer's stcpr IP, dial
+		// ws://ip:<SD-advertised-port>/.
+		if addr, err := ar.resolveStcpr(ctx, pk); err == nil && addr != "" {
+			host := addr
+			if h, _, e := net.SplitHostPort(addr); e == nil {
+				host = h
+			}
+			url := fmt.Sprintf("ws://%s:%d/", host, port)
+			wsTable.SetAddr(pk, url)
+			dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
+			_, derr := tpM.SaveTransport(dctx, pk, types.WS, transport.LabelAutomatic)
+			dcancel()
+			if derr != nil {
+				vlog(fmt.Sprintf("ws-autoconnect: WS dial %s (%s): %v", pk.Hex()[:8], url, derr))
+			} else {
+				gotAny = true
+				vlog(fmt.Sprintf("ws-autoconnect: +WS transport to %s via %s", pk.Hex()[:8], url))
+			}
+		} else if err != nil {
+			vlog(fmt.Sprintf("ws-autoconnect: AR stcpr resolve %s: %v", pk.Hex()[:8], err))
 		}
-		host := addr
-		if h, _, e := net.SplitHostPort(addr); e == nil {
-			host = h
+
+		// WT: a separate QUIC endpoint with its own UDP port + pinned self-signed
+		// cert, both learned from the AR's WT record (https://host:port/skywire).
+		if url, certHash, err := ar.resolveWT(ctx, pk); err == nil && url != "" {
+			wtTable.SetEntry(pk, network.WTEntry{URL: url, CertHash: certHash})
+			dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
+			_, derr := tpM.SaveTransport(dctx, pk, types.WT, transport.LabelAutomatic)
+			dcancel()
+			if derr != nil {
+				vlog(fmt.Sprintf("ws-autoconnect: WT dial %s (%s): %v", pk.Hex()[:8], url, derr))
+			} else {
+				gotAny = true
+				vlog(fmt.Sprintf("ws-autoconnect: +WT transport to %s via %s", pk.Hex()[:8], url))
+			}
 		}
-		url := fmt.Sprintf("ws://%s:%d/", host, port)
-		// 3. dial WS (register the endpoint, then SaveTransport dials it).
-		wsTable.SetAddr(pk, url)
-		dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
-		_, derr := tpM.SaveTransport(dctx, pk, types.WS, transport.LabelAutomatic)
-		dcancel()
-		if derr != nil {
-			vlog(fmt.Sprintf("ws-autoconnect: WS dial %s (%s): %v", pk.Hex()[:8], url, derr))
-			continue
+
+		if gotAny {
+			added++
 		}
-		added++
-		vlog(fmt.Sprintf("ws-autoconnect: +WS transport to %s via %s", pk.Hex()[:8], url))
 	}
 	if added > 0 {
-		vlog(fmt.Sprintf("ws-autoconnect: established %d WS transport(s) (%d candidates)", added, len(services)))
+		vlog(fmt.Sprintf("ws-autoconnect: connected %d new visor(s) over WS/WT (%d candidates)", added, len(services)))
 	}
 }
 
@@ -171,6 +198,35 @@ func (a *arDmsg) resolveStcpr(ctx context.Context, target cipher.PubKey) (string
 		return "", err
 	}
 	return vd.RemoteAddr, nil
+}
+
+// resolveWT resolves a peer's WebTransport endpoint + pinned cert hash from the
+// AR's WT record (registered via BindWT). Returns the https://host:port/skywire
+// URL and the SHA-256 cert hash to pin, or ("","",nil) when the peer has no WT
+// entry (so the caller just skips WT for that peer).
+func (a *arDmsg) resolveWT(ctx context.Context, target cipher.PubKey) (url, certHash string, err error) {
+	status, body, err := a.authedGet(ctx, "/resolve/wt/"+target.Hex())
+	if err != nil {
+		return "", "", err
+	}
+	if status == 404 {
+		return "", "", nil // no WT entry for this visor
+	}
+	if status != 200 {
+		return "", "", fmt.Errorf("AR wt status %d", status)
+	}
+	var vd addrresolver.VisorData
+	if err := json.Unmarshal(body, &vd); err != nil {
+		return "", "", err
+	}
+	if vd.CertHash == "" || vd.RemoteAddr == "" {
+		return "", "", nil
+	}
+	addr := vd.RemoteAddr
+	if _, _, e := net.SplitHostPort(addr); e != nil && vd.Port != "" {
+		addr = net.JoinHostPort(addr, vd.Port)
+	}
+	return "https://" + addr + "/skywire", vd.CertHash, nil
 }
 
 func (a *arDmsg) authedGet(ctx context.Context, path string) (int, []byte, error) {
