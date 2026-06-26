@@ -186,11 +186,13 @@
       '<button id="sb-x" title="close" style="cursor:pointer">×</button>' +
       '</div>' +
       '<div id="sb-host" style="display:none;gap:.3em;padding:.5em;background:#1a1d22;border-bottom:1px solid #333;flex-direction:column">' +
-      '<div style="display:flex;gap:.4em;align-items:center">path <input id="sb-hpath" value="/" size="8" style="background:#0e0f12;color:#cdd2da;border:1px solid #333;padding:.2em">' +
-      'type <input id="sb-hct" value="text/html" size="10" style="background:#0e0f12;color:#cdd2da;border:1px solid #333;padding:.2em">' +
-      '<button id="sb-host-go" style="cursor:pointer">serve over dmsg</button>' +
-      '<span id="sb-host-msg" style="color:#888;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></span></div>' +
-      '<textarea id="sb-hbody" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt;" style="background:#0e0f12;color:#cdd2da;border:1px solid #333;font:12px monospace"></textarea>' +
+      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">path <input id="sb-hpath" value="/" size="6" style="background:#0e0f12;color:#cdd2da;border:1px solid #333;padding:.2em">' +
+      'port <input id="sb-hport" value="80" size="4" style="background:#0e0f12;color:#cdd2da;border:1px solid #333;padding:.2em">' +
+      'type <input id="sb-hct" value="text/html" size="9" style="background:#0e0f12;color:#cdd2da;border:1px solid #333;padding:.2em">' +
+      '<button id="sb-host-go" style="cursor:pointer">serve over dmsg</button></div>' +
+      '<div style="display:flex;gap:.4em;align-items:center">file <input id="sb-hfile" type="file" style="flex:1;min-width:0;color:#cdd2da;font:11px monospace"></div>' +
+      '<textarea id="sb-hbody" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt; — or upload a file above" style="background:#0e0f12;color:#cdd2da;border:1px solid #333;font:12px monospace"></textarea>' +
+      '<span id="sb-host-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer" title="click to copy"></span>' +
       '</div>' +
       '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
     (doc.body || doc.documentElement).appendChild(wrap);
@@ -207,13 +209,39 @@
     $("sb-path").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
     $("sb-x").onclick = function () { wrap.style.display = "none"; };
     $("sb-host-t").onclick = function () { var h = $("sb-host"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
+
+    // uploaded holds the last picked file as {ct, b64} (base64 so binary — images,
+    // fonts, … — round-trips intact); the textarea is the fallback for typed HTML.
+    var uploaded = null;
+    $("sb-hfile").onchange = function (e) {
+      var f = e.target.files && e.target.files[0];
+      if (!f) { uploaded = null; return; }
+      var rd = new FileReader();
+      rd.onload = function () {
+        var bytes = new Uint8Array(rd.result);
+        uploaded = { ct: f.type || mimeOf(f.name), b64: bytesToB64(bytes) };
+        $("sb-hct").value = uploaded.ct;
+        $("sb-host-msg").textContent = "loaded " + f.name + " (" + bytes.length + " bytes) — set path + port, then serve";
+        $("sb-host-msg").style.color = "#9ece6a";
+      };
+      rd.readAsArrayBuffer(f);
+    };
+
     $("sb-host-go").onclick = function () {
       if (!serveContent) { $("sb-host-msg").textContent = "serveContent unavailable"; return; }
       var p = ($("sb-hpath").value || "/").trim() || "/";
-      var m = {}; m[p] = { ct: ($("sb-hct").value || "text/html").trim(), body: $("sb-hbody").value };
-      serveContent(m);
+      var port = parseInt($("sb-hport").value, 10) || 80;
+      var entry = uploaded
+        ? { ct: uploaded.ct, body: uploaded.b64, b64: true }
+        : { ct: ($("sb-hct").value || "text/html").trim(), body: $("sb-hbody").value };
+      var m = {}; m[p] = entry;
+      serveContent(m, port);
       var pk = ""; try { pk = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
-      $("sb-host-msg").textContent = "hosting " + p + (pk ? " — browse pk " + pk : "");
+      var addr = (pk ? pk : "<this-pk>") + (port === 80 ? "" : ":" + port) + p;
+      var msg = $("sb-host-msg");
+      msg.textContent = "serving at " + addr + "  (click to copy)";
+      msg.style.color = "#9ece6a";
+      msg.onclick = function () { try { navigator.clipboard.writeText(addr); msg.textContent = "copied: " + addr; } catch (e) {} };
     };
 
     function toggle() { wrap.style.display = wrap.style.display === "none" ? "flex" : "none"; }

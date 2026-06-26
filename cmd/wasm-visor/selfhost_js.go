@@ -13,6 +13,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"strings"
@@ -22,8 +23,8 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
-// contentPort is the dmsg port the self-host HTTP server listens on (matches
-// fetchDmsg's default host port).
+// contentPort is the DEFAULT dmsg port the self-host HTTP server listens on
+// (matches fetchDmsg's default host port); serveContent(map, port) overrides it.
 const contentPort uint16 = 80
 
 type contentEntry struct {
@@ -32,60 +33,82 @@ type contentEntry struct {
 }
 
 var (
-	contentMu      sync.RWMutex
-	content        = map[string]contentEntry{}
-	contentServing bool
+	contentMu sync.RWMutex
+	// contentByPort holds per-dmsg-port content maps (path → entry), so a tab can
+	// host different sites on different ports; servingPorts tracks which ports
+	// already have an accept loop running.
+	contentByPort = map[uint16]map[string]contentEntry{}
+	servingPorts  = map[uint16]bool{}
 )
 
-// jsServeContent(map) registers content to self-host over dmsg and starts the
-// dmsg:80 HTTP server once. map is { "/": {ct:"text/html", body:"<html>…"},
-// "/style.css": {ct:"text/css", body:"…"}, … }. Call again to add/replace paths.
+// jsServeContent(map[, port]) registers content to self-host over dmsg on the
+// given port (default 80) and starts that port's HTTP server once. map is
+// { "/": {ct:"text/html", body:"<html>…"}, "/img.png": {ct:"image/png",
+// body:"<base64>", b64:true}, … } — set b64:true when body is base64 (binary /
+// uploaded files). Call again to add/replace paths (same or different port).
 func jsServeContent(_ js.Value, args []js.Value) interface{} {
 	if len(args) == 0 || !args[0].Truthy() {
 		return js.Global().Get("Error").New("serveContent: expected a {path: {ct, body}} map")
 	}
 	m := args[0]
+	port := contentPort
+	if len(args) > 1 && args[1].Truthy() {
+		if p := args[1].Int(); p > 0 && p < 65536 {
+			port = uint16(p)
+		}
+	}
 	keys := js.Global().Get("Object").Call("keys", m)
 	contentMu.Lock()
+	cm := contentByPort[port]
+	if cm == nil {
+		cm = map[string]contentEntry{}
+		contentByPort[port] = cm
+	}
 	for i := 0; i < keys.Length(); i++ {
 		p := keys.Index(i).String()
 		e := m.Get(p)
-		content[p] = contentEntry{ct: e.Get("ct").String(), body: []byte(e.Get("body").String())}
+		body := []byte(e.Get("body").String())
+		if e.Get("b64").Truthy() {
+			if dec, err := base64.StdEncoding.DecodeString(string(body)); err == nil {
+				body = dec
+			}
+		}
+		cm[p] = contentEntry{ct: e.Get("ct").String(), body: body}
 	}
-	start := !contentServing
-	contentServing = true
+	start := !servingPorts[port]
+	servingPorts[port] = true
 	contentMu.Unlock()
 
 	if start {
-		go serveContentOverDmsg()
+		go serveContentOverDmsg(port)
 	}
 	return js.ValueOf(keys.Length())
 }
 
-func serveContentOverDmsg() {
+func serveContentOverDmsg(port uint16) {
 	if dmsgC == nil {
 		vlog("serveContent: not booted")
 		return
 	}
-	lis, err := dmsgC.Listen(contentPort)
+	lis, err := dmsgC.Listen(port)
 	if err != nil {
-		vlog("serveContent: listen dmsg:80: " + err.Error())
+		vlog(fmt.Sprintf("serveContent: listen dmsg:%d: %s", port, err.Error()))
 		return
 	}
-	vlog(fmt.Sprintf("serveContent: hosting on dmsg:%d (reach via fetchDmsg(<this-pk>, ...))", contentPort))
+	vlog(fmt.Sprintf("serveContent: hosting on dmsg:%d (reach via fetchDmsg(<this-pk>:%d, ...))", port, port))
 	for {
 		str, err := lis.AcceptStream()
 		if err != nil {
 			return
 		}
-		go handleContentStream(str)
+		go handleContentStream(str, port)
 	}
 }
 
 // handleContentStream serves one HTTP/1.1 request over a dmsg stream: read the
 // request line + headers, look the path up in the content map, write a minimal
 // response. Static content only — enough to host a page, not a web framework.
-func handleContentStream(s *dmsg.Stream) {
+func handleContentStream(s *dmsg.Stream, port uint16) {
 	defer s.Close() //nolint:errcheck
 	br := bufio.NewReader(s)
 	line, err := br.ReadString('\n') // "GET /path HTTP/1.1\r\n"
@@ -109,7 +132,7 @@ func handleContentStream(s *dmsg.Stream) {
 	}
 
 	contentMu.RLock()
-	e, ok := content[path]
+	e, ok := contentByPort[port][path]
 	contentMu.RUnlock()
 	if !ok {
 		_, _ = io.WriteString(s, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n") //nolint:errcheck
