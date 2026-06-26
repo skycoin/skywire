@@ -43,4 +43,18 @@ func (s *AddressSuite) TestRegister() {
 		require.NoError(t, err)
 		require.Equal(t, visorData, got)
 	})
+
+	// QUIC must bind + resolve like STCPR. The redis store originally switched
+	// only on STCPR/SUDPH and returned ErrUnknownTransportType for QUIC, so the
+	// AR 500'd every /resolve/quic and visors could never register QUIC (0 QUIC
+	// transports fleet-wide). Guard the round-trip for both store backends.
+	t.Run(".BindQUIC", func(t *testing.T) {
+		require.NoError(t, s.Bind(ctx, types.QUIC, pk, visorData))
+	})
+
+	t.Run(".ResolveQUIC", func(t *testing.T) {
+		got, err := s.Resolve(ctx, types.QUIC, pk)
+		require.NoError(t, err)
+		require.Equal(t, visorData, got)
+	})
 }
