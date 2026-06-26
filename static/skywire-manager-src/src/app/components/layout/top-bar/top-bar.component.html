@@ -83,6 +83,14 @@
               <app-copy-to-clipboard-text class="page-header-id" text="{{ pageHeaderIdentifier }}" [short]="false"></app-copy-to-clipboard-text>
             }
           </span>
+        } @else if (appMode.isStartTitle(titleParts)) {
+          <!-- On the home/start pages the bare "Start" title carries no info;
+               replace it with WHICH backend the UI is talking to (native visor,
+               serverless in-browser visor, …) plus the visor version, so the
+               operator can always tell the mode at a glance. -->
+          <span class="title-text" [matTooltip]="appMode.localPk">
+            {{ appMode.badge }}
+          </span>
         } @else {
           <span class="title-text">
             {{ titleParts[titleParts.length - 1] | translate }}

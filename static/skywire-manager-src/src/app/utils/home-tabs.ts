@@ -12,31 +12,38 @@ import { TabButtonData } from '../components/layout/top-bar/top-bar.component';
  *
  * Indices (kept in sync with selectedTabIndex on each page):
  *   0 Visor list
- *   1 Rewards
- *   2 Resources
- *   3 Transports
- *   4 Network
- *   5 Network Visualizer
- *   6 Services Health
- *   7 Uptime
- *   8 Settings
+ *   1 Local Visor (redirects to the hypervisor's own visor detail)
+ *   2 Rewards
+ *   3 Resources
+ *   4 Transports
+ *   5 Network
+ *   6 Network Visualizer
+ *   7 Services Health
+ *   8 Uptime
+ *   9 Settings
  */
 export const HOME_TAB_INDEX = {
   visorList: 0,
-  rewards: 1,
-  resources: 2,
-  transports: 3,
-  network: 4,
-  tpviz: 5,
-  servicesHealth: 6,
-  uptime: 7,
-  settings: 8,
+  localVisor: 1,
+  rewards: 2,
+  resources: 3,
+  transports: 4,
+  network: 5,
+  tpviz: 6,
+  servicesHealth: 7,
+  uptime: 8,
+  settings: 9,
 };
 
 export function homeTabsData(): TabButtonData[] {
   return [
     // --- local: this hypervisor ---
     { icon: 'view_headline', label: 'nodes.title', linkParts: ['/nodes'], group: 'local' },
+    // "Local Visor" — jump straight to THIS hypervisor's own visor detail page
+    // (the /nodes/local route resolves the local PK and redirects). Surfaces the
+    // serving visor's controls without hunting for it in the list; for a
+    // serverless wasm tab this is the in-browser visor itself.
+    { icon: 'router', label: 'nodes.local-visor-title', linkParts: ['/nodes', 'local'], group: 'local' },
     { icon: 'monetization_on', label: 'nodes.rewards-title', linkParts: ['/nodes', 'rewards'], group: 'local' },
     { icon: 'memory', label: 'nodes.resources-title', linkParts: ['/nodes', 'resources'], group: 'local' },
     // --- network-wide ---

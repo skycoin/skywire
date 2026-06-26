@@ -25,6 +25,7 @@ var (
 	noDefaults                 bool
 	stcprPort                  int
 	sudphPort                  int
+	transportPort              int
 	sk                         cipher.SecKey
 	output                     string
 	confPath                   string

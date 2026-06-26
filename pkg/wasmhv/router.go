@@ -54,8 +54,20 @@ func (c *Core) ServeHTTP(method, path string, body []byte) (int, []byte) {
 	case p == "/visors":
 		return jsonResp(c.allOverviews())
 
-	case p == "/visors-summary" || p == "/visors-tree-summary":
+	case p == "/visors-summary":
 		return jsonResp(c.allSummaries())
+
+	// The node-list UI uses /visors-tree-summary (getNodesTree) and expects a
+	// {sections:[{hypervisor_pk, visors:[...]}]} TREE, not a flat array — a flat
+	// array leaves result.sections undefined and the list renders EMPTY. The tab
+	// is a single local hypervisor, so emit one section keyed by its own PK whose
+	// visors are the flat summaries (this tab's visor + any that dialed in).
+	case p == "/visors-tree-summary":
+		return jsonResp(map[string]interface{}{
+			"sections": []map[string]interface{}{
+				{"hypervisor_pk": c.pk.String(), "via_chain": []string{}, "visors": c.allSummaries()},
+			},
+		})
 
 	case strings.HasPrefix(p, "/visors/"):
 		return c.visorRoute(method, strings.TrimPrefix(p, "/visors/"), body)
