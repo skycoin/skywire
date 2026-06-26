@@ -29,6 +29,12 @@ type memoryTable struct {
 
 // NewTable instantiates a memory implementation of PKTable.
 func NewTable(entries map[cipher.PubKey]string) PKTable {
+	if entries == nil {
+		// A nil entries map would panic on the first SetAddr ("assignment to
+		// entry in nil map"); callers pass nil for an empty, dial-time-populated
+		// table (e.g. the wasm-visor's WS table).
+		entries = make(map[cipher.PubKey]string)
+	}
 	reverse := make(map[string]cipher.PubKey, len(entries))
 	for pk, addr := range entries {
 		reverse[addr] = pk

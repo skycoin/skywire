@@ -358,6 +358,10 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// so it resolves the same names as the socks5 resolving proxy.
 	initResolver(svc, pk)
 
+	// public autoconnect: dial WS transports to public visors (which expose WS on
+	// their stcpr port, phase 2) so this browser leaf joins the mesh + routes form.
+	startWSAutoconnect(ctx, svc.ServiceDiscoveryDmsg, svc.AddressResolverDmsg, pk, sk)
+
 	// 4. in-process app server (RunModeInternal). The browser-adapted
 	// appserver.NewProcManager no longer net.Listen("tcp")s under TinyGo (a
 	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP
