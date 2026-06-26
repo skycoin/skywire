@@ -100,6 +100,11 @@ type ClientFactory struct {
 	// WS case in MakeClient (untagged) can read wsSharedListener directly.
 	stcprSharedListener net.Listener
 	wsSharedListener    net.Listener
+	// tcpDefaultDemux is true when the TCP cmux is the DEFAULT one bound on the
+	// stcpr port (EnableDefaultTCPDemux) rather than an explicit transport_port
+	// master. In that case stcpr always rides the cmux (the demux IS its port), so
+	// stcprSharedListenerFor ignores the per-type break-out check.
+	tcpDefaultDemux bool
 }
 
 // MakeClient creates a new client of specified type
