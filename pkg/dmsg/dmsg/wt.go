@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo && !(js && wasm)
 
 // Package dmsg pkg/dmsg/dmsg/wt.go: dmsg-over-WebTransport.
 //
