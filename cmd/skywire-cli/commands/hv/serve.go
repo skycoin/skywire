@@ -2,9 +2,12 @@
 package clihv
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"io/fs"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,7 +61,12 @@ page never asks anyone to type a secret key.`,
 			cmd.PrintErrln("read index.html:", err)
 			os.Exit(1)
 		}
-		index := injectBoot(indexB)
+		// wasmVer fingerprints the embedded wasm so the page can detect a newer
+		// build (after the skywire binary updates) and self-reload — see
+		// autoupdate.js. Short SHA-256 prefix is plenty to spot a content change.
+		sum := sha256.Sum256(wasm)
+		wasmVer := hex.EncodeToString(sum[:])[:16]
+		index := injectBoot(indexB, wasmVer)
 
 		mux := http.NewServeMux()
 		serveBytes := func(path, ct string, body []byte) {
@@ -74,6 +82,14 @@ page never asks anyone to type a secret key.`,
 		serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 		serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
+		serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
+		// /wasm-version is the build fingerprint autoupdate.js polls; no-cache so a
+		// new binary is seen promptly (the wasm itself stays cacheable).
+		mux.HandleFunc("/wasm-version", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write([]byte(wasmVer)) //nolint:errcheck // best-effort
+		})
 
 		// Everything else is the built Angular UI (incl. lazy chunks, css, fonts,
 		// assets). Routing is hash-based (#/...), so the server only ever sees "/"
@@ -107,11 +123,15 @@ page never asks anyone to type a secret key.`,
 // and boot() starts (CFG.ready) before SkywireHttpBackend's first /api call. It
 // also loads browse.js + the launcher, which mount the dmsg/skynet browse+host
 // overlay (a floating "skynet" button) once the wasm-visor is up.
-func injectBoot(index []byte) []byte {
+func injectBoot(index []byte, wasmVer string) []byte {
 	s := string(index)
 	tag := "\n<script src=\"hv-boot.js\"></script>\n" +
 		"<script src=\"browse.js\"></script>\n" +
-		"<script>" + wasmhv.BrowseLauncherJS + "</script>\n"
+		"<script>" + wasmhv.BrowseLauncherJS + "</script>\n" +
+		// Record the build this page loaded, then let autoupdate.js poll for a
+		// newer one and self-reload (it only runs here, never in the native UI).
+		"<script>window.__SKYWIRE_WASM_VERSION__=" + strconv.Quote(wasmVer) + ";</script>\n" +
+		"<script src=\"autoupdate.js\"></script>\n"
 	lower := strings.ToLower(s)
 	if i := strings.Index(lower, "<head"); i >= 0 {
 		if j := strings.IndexByte(s[i:], '>'); j >= 0 {
