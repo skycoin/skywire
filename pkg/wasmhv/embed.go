@@ -19,6 +19,14 @@ var OverrideJS []byte
 //go:embed browse.js
 var BrowseJS []byte
 
+// AutoUpdateJS is pkg/wasmhv/autoupdate.js — the wasm-visor self-update poller for
+// the `hv serve` page: it compares a /wasm-version fingerprint against the version
+// the page booted with and reloads to a newer build (toast + opt-out). Injected
+// ONLY by hv serve, so it never runs for a native-hosted hypervisor UI.
+//
+//go:embed autoupdate.js
+var AutoUpdateJS []byte
+
 // HvBootJS is pkg/wasmhv/hv-boot.js — the clean boot bootstrap for serving the
 // wasm-VISOR hypervisor UI as separate files (the `hv serve` / dev-harness model,
 // as opposed to the single-file generator's inlined override.js). It sets
