@@ -50,18 +50,8 @@ func (ce *Client) dialSessionWS(ctx context.Context, entry *disc.Entry) (ClientS
 	return dSes, nil
 }
 
-// wsAddr is the net.Addr for a browser WebSocket connection.
-type wsAddr string
-
-func (wsAddr) Network() string  { return "ws" }
-func (a wsAddr) String() string { return string(a) }
-
-// wsTimeoutError is the net.Error returned when a read deadline elapses.
-type wsTimeoutError struct{}
-
-func (wsTimeoutError) Error() string   { return "ws: i/o timeout" }
-func (wsTimeoutError) Timeout() bool   { return true }
-func (wsTimeoutError) Temporary() bool { return true }
+// wsAddr / wsTimeoutError moved to jsaddr_js.go (js && wasm) so the WT browser
+// dial (wt_js_tinygo.go, all js/wasm) can share them on std-Go wasm too.
 
 // wsConnJS adapts a browser WebSocket (binaryType=arraybuffer) to a net.Conn.
 // Inbound frames are buffered by the message event handler; Read drains the
