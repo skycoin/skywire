@@ -225,17 +225,19 @@ func writeFrame0(w io.Writer) error {
 func readFrame0(r io.Reader) error {
 	buf := make([]byte, len(Message))
 
-	n, err := r.Read(buf)
-	if err != nil {
+	// io.ReadFull, not a single r.Read: Message can arrive split across reads.
+	// A bare Read only ever returned all len(Message) bytes by luck of TCP
+	// delivering the initiator's single write in one segment. Once stcpr rides the
+	// stcpr+WS cmux (transport-port unification), the demux sniffs the first bytes
+	// to classify the protocol and replays them as a *separate* Read — so the first
+	// Read here yields 8 of 9 bytes and the old single-Read check spuriously failed
+	// ("not enough bytes read"), breaking every inbound stcpr handshake.
+	if _, err := io.ReadFull(r, buf); err != nil {
 		return err
 	}
 
-	if n != len(Message) {
-		return fmt.Errorf("not enough bytes read")
-	}
-
-	if string(buf[:n]) != Message {
-		return fmt.Errorf("bad handshake message: %v", string(buf[:n]))
+	if string(buf) != Message {
+		return fmt.Errorf("bad handshake message: %v", string(buf))
 	}
 
 	return nil
