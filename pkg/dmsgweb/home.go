@@ -93,6 +93,16 @@ func isHomeHost(host, suffix string) bool {
 	return strings.EqualFold(strings.TrimSuffix(host, suffix), HomeAlias)
 }
 
+// IsHomeHost and RenderHomePage export the home-label check + directory renderer
+// so the wasm-visor's in-tab resolving fetch (browse overlay) serves the same
+// home.dmsg page + alias directory as the socks5 resolving proxy.
+func IsHomeHost(host, suffix string) bool { return isHomeHost(host, suffix) }
+
+// RenderHomePage exports renderHomePage (the self-contained alias directory).
+func RenderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cipher.PubKey) []byte {
+	return renderHomePage(aliases, suffix, localPK)
+}
+
 type homeEntry struct {
 	label string
 	pk    cipher.PubKey
