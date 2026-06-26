@@ -1,4 +1,4 @@
-//go:build tinygo && js && wasm
+//go:build js && wasm
 
 // Package dmsg pkg/dmsg/dmsg/wt_js_tinygo.go: dmsg-over-WebTransport CLIENT dial
 // for the TinyGo browser target.
