@@ -354,6 +354,10 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 
 	vlog("router: serving — EDGE up (dmsg + transport + router)")
 
+	// resolver aliases for the in-tab browser (home.dmsg, tpd.dmsg, dmsg0.dmsg, …),
+	// so it resolves the same names as the socks5 resolving proxy.
+	initResolver(svc, pk)
+
 	// 4. in-process app server (RunModeInternal). The browser-adapted
 	// appserver.NewProcManager no longer net.Listen("tcp")s under TinyGo (a
 	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP
@@ -438,9 +442,20 @@ func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 		if dmsgC == nil {
 			return nil, errors.New("not booted; call boot() first")
 		}
-		status, respHeaders, b, err := dmsgclient.FetchOverDmsg(ctx, dmsgC, method, pkHost, path, nil, body)
-		if err != nil {
-			return nil, err
+		// Resolve resolver aliases (home.dmsg, tpd.dmsg, <pk>.dmsg) like the socks5
+		// resolving proxy, so the in-tab browser uses the same names.
+		resolved, homeBody := resolveFetchHost(pkHost)
+		var status int
+		var respHeaders map[string]string
+		var b []byte
+		if homeBody != nil {
+			status, respHeaders, b = 200, map[string]string{"Content-Type": "text/html"}, homeBody
+		} else {
+			var err error
+			status, respHeaders, b, err = dmsgclient.FetchOverDmsg(ctx, dmsgC, method, resolved, path, nil, body)
+			if err != nil {
+				return nil, err
+			}
 		}
 		res := js.Global().Get("Object").New()
 		res.Set("status", status)
