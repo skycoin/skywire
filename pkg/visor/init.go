@@ -58,6 +58,9 @@ var (
 	stcpC vinit.Module
 	// QUIC module (#2607 QUIC follow-on)
 	quicC vinit.Module
+	// WS module: serves the WebSocket transport over the stcpr+WS cmux so
+	// browser (wasm) visors can reach this visor over WebSocket
+	wsC vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	ptyModule vinit.Module
 	// Dmsg module
@@ -162,6 +165,7 @@ func registerModules(logger *logging.MasterLogger) {
 	stcprC = maker("stcpr", initStcprClient, &tr)
 	stcpC = maker("stcp", initStcpClient, &tr)
 	quicC = maker("quic", initQuicClient, &tr)
+	wsC = maker("ws", initWSClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
 	// dmsghttp_logserver mounts /pty on top of dmsgpty's CLI socket
@@ -231,7 +235,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// store. See init_group.go.
 	groupingMod = maker("grouping", initGrouping, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
