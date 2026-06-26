@@ -90,7 +90,15 @@ func newWSListenerOver(tcpLis net.Listener) *wsListener {
 }
 
 func (l *wsListener) handle(w http.ResponseWriter, r *http.Request) {
-	ws, err := websocket.Accept(w, r, nil)
+	// InsecureSkipVerify disables coder/websocket's same-origin (CSRF) check.
+	// A browser (wasm) visor ALWAYS sends an Origin header (its page origin),
+	// which never matches this visor's Host, so the default check 403s every
+	// browser-originated WS dial — the whole point of the WS carrier. The check
+	// is meaningless here anyway: the WS connection carries a skywire transport
+	// authenticated end-to-end by the Noise handshake (remote-PK verification),
+	// and there is no cookie / ambient session to protect against CSRF. A forged
+	// Origin buys nothing without the peer's keys.
+	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 	if err != nil {
 		return
 	}
