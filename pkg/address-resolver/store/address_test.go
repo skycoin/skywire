@@ -57,4 +57,22 @@ func (s *AddressSuite) TestRegister() {
 		require.NoError(t, err)
 		require.Equal(t, visorData, got)
 	})
+
+	// WT carries a self-signed cert hash (no CA) that the dialing peer pins. It
+	// rides VisorData via the embedded LocalAddresses, so a bind→resolve must
+	// preserve it. Guards both store backends + the WT type in the switch.
+	wtData := addrresolver.VisorData{
+		RemoteAddr:     "[::1]:5678",
+		LocalAddresses: addrresolver.LocalAddresses{CertHash: "deadbeefcafe"},
+	}
+	t.Run(".BindWT", func(t *testing.T) {
+		require.NoError(t, s.Bind(ctx, types.WT, pk, wtData))
+	})
+
+	t.Run(".ResolveWT", func(t *testing.T) {
+		got, err := s.Resolve(ctx, types.WT, pk)
+		require.NoError(t, err)
+		require.Equal(t, wtData, got)
+		require.Equal(t, "deadbeefcafe", got.CertHash)
+	})
 }
