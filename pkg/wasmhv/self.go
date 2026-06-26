@@ -50,6 +50,18 @@ func (c *Core) selfRoute(self SelfProvider, sub string) (int, []byte) {
 		// The direct transport types the wasm-visor can create (WebRTC is a
 		// symmetric DataChannel; ws/wt are browser-dial-only).
 		return jsonResp([]string{"dmsg", "ws", "wt", "webrtc"})
+	case "host-stats":
+		// A browser tab has no host to measure (no CPU/RAM/disk/NIC of its own),
+		// so report the shape with zeros + js/wasm identity. This keeps the
+		// multi-visor resources page from 404-erroring on a serverless visor; it
+		// renders the row with empty gauges rather than failing the whole page.
+		return jsonResp(map[string]interface{}{
+			"hostname": "browser", "os": "js", "platform": "wasm", "arch": "wasm",
+			"uptime_seconds": 0, "cpu_percent": 0, "cpu_count": 0, "cpu_logical_count": 0,
+			"mem_total": 0, "mem_used": 0, "mem_available": 0, "mem_percent": 0,
+			"disk_total": 0, "disk_used": 0, "disk_free": 0, "disk_percent": 0,
+			"net_bytes_sent": 0, "net_bytes_recv": 0, "net_packets_sent": 0, "net_packets_recv": 0,
+		})
 	}
 	return 404, []byte(`{"error":"self visor subroute not implemented in wasm core"}`)
 }
