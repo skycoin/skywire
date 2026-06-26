@@ -134,6 +134,7 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		return newStcp(generic, f.PKTable), nil
 	case types.WS:
 		wc := newWS(generic, f.WSTable)
+		wc.(*wsClient).ar = f.ARClient // native: resolve ws:// from the stcpr AR record
 		if f.wsSharedListener != nil { // unified transport port
 			wc.(*wsClient).sharedListener = f.wsSharedListener
 		}
