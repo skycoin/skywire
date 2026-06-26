@@ -3,6 +3,7 @@ package handshake
 
 import (
 	"errors"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -76,5 +77,43 @@ func TestHandshake(t *testing.T) {
 
 		assert.NoError(t, initC.Close())
 		assert.NoError(t, respC.Close())
+	}
+}
+
+// chunkedReader returns its payload in fixed-size chunks, one per Read, to
+// emulate cmux's sniff-replay: the demux peeks the first bytes to classify the
+// protocol, then replays them as a separate Read from the live remainder. This
+// is also just legal io.Reader behavior — a Read may return fewer bytes than
+// asked even when more are available.
+type chunkedReader struct {
+	data  []byte
+	chunk int
+}
+
+func (c *chunkedReader) Read(p []byte) (int, error) {
+	if len(c.data) == 0 {
+		return 0, io.EOF
+	}
+	n := c.chunk
+	if n > len(c.data) {
+		n = len(c.data)
+	}
+	if n > len(p) {
+		n = len(p)
+	}
+	copy(p, c.data[:n])
+	c.data = c.data[n:]
+	return n, nil
+}
+
+// TestReadFrame0Chunked guards the stcpr+WS cmux regression: frame0 (Message)
+// arriving split across reads — e.g. cmux replays the first 8 sniffed bytes,
+// then the 9th comes live — must still parse. The old single-Read check failed
+// with "not enough bytes read", breaking every inbound stcpr handshake on a
+// cmux-equipped (transport-port-unified) visor.
+func TestReadFrame0Chunked(t *testing.T) {
+	for _, chunk := range []int{1, 8, len(Message), len(Message) + 5} {
+		r := &chunkedReader{data: []byte(Message), chunk: chunk}
+		require.NoError(t, readFrame0(r), "chunk size %d", chunk)
 	}
 }
