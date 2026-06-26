@@ -9,7 +9,18 @@
 // (other TinyGo targets) stubs it.
 package network
 
-import "errors"
+import (
+	"context"
+	"errors"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+)
+
+// resolveWSURLViaAR has no address resolver on a TinyGo target (addrresolver is
+// !tinygo), so WS dials come only from the explicit table. Always ok=false.
+func (c *wsClient) resolveWSURLViaAR(_ context.Context, _ cipher.PubKey) (string, bool) {
+	return "", false
+}
 
 // errWSServe is returned by Start on TinyGo (no listening socket).
 var errWSServe = errors.New("ws: serving not supported on this build (TinyGo) — a browser/embedded target has no listening socket")

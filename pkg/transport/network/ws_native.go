@@ -16,7 +16,35 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
+
+// resolveWSURLViaAR resolves a peer's WS endpoint from the address resolver when
+// there is no explicit table entry (a native `tp add -t ws`). WS shares the
+// stcpr cmux TCP port, so the peer's stcpr AR record (host:port) IS its WS
+// endpoint — wrap it as ws://host:port/. ok=false when there is no AR client or
+// no stcpr record for the peer.
+func (c *wsClient) resolveWSURLViaAR(ctx context.Context, rPK cipher.PubKey) (string, bool) {
+	ar, _ := c.ar.(addrresolver.APIClient)
+	if ar == nil {
+		return "", false
+	}
+	vd, err := ar.Resolve(ctx, string(types.STCPR), rPK)
+	if err != nil {
+		return "", false
+	}
+	// RemoteAddr may be a bare host with the port carried separately in
+	// VisorData.Port (same shape the stcpr dialer handles via canonicalAddr) —
+	// "ws://"+RemoteAddr would otherwise drop the port and dial 80/443.
+	addr := canonicalAddr(vd.RemoteAddr, vd.Port)
+	if addr == "" {
+		return "", false
+	}
+	return "ws://" + addr + "/", true
+}
 
 // wsDial opens a direct WebSocket to url and adapts it to a net.Conn.
 func wsDial(ctx context.Context, url string) (net.Conn, error) {
