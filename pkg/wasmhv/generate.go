@@ -150,7 +150,7 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 	// dmsg sites and self-host content over dmsg — no devtools, no extra page.
 	if cfg.Visor {
 		head += "<script>" + jsSafe(BrowseJS) + "</script>\n" +
-			"<script>" + browseLauncherJS + "</script>\n"
+			"<script>" + BrowseLauncherJS + "</script>\n"
 	}
 
 	loc := reHeadOpen.FindStringIndex(html)
@@ -260,11 +260,13 @@ func wasmBootstrap(wasm []byte, tinygo bool) (string, error) {
 })();`, nil
 }
 
-// browseLauncherJS waits for the wasm-visor + browse.js to be ready, mounts the
+// BrowseLauncherJS waits for the wasm-visor + browse.js to be ready, mounts the
 // browse/host overlay panel (SkywireBrowse.mountPanel), and adds a floating
 // "skynet" button to toggle it. Visor-mode only (it uses skywireVisor.fetchDmsg /
-// serveContent, which exist only in the wasm-visor build).
-const browseLauncherJS = `(function(){
+// serveContent, which exist only in the wasm-visor build). Exported so the
+// file-serving `+"`hv serve`"+` path can inject the same overlay as the single-file
+// generator.
+const BrowseLauncherJS = `(function(){
   if(!(window.__SKYWIRE_HV__||{}).visor) return;
   function ready(){
     if(!self.skywireVisor||!self.skywireVisor.fetchDmsg||!self.SkywireBrowse||!document.body){ return setTimeout(ready,200); }
