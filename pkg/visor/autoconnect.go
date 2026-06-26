@@ -3,15 +3,11 @@ package visor
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
-	"math/big"
 	"net"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -21,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 // PublicServiceDelay defines the interval for checking service discovery and adding transports to public visors.
@@ -46,6 +43,12 @@ type autoconnector struct {
 	visorIsPublic  bool
 	clientPublicIP string
 
+	// conn is the platform-neutral connect-to-visors primitive (extracted to
+	// pkg/visor/visorcore so the wasm-visor can share it). The autoconnector
+	// owns the native-coupled loop + public-visor sourcing and delegates the
+	// per-target transport establishment to conn.
+	conn *visorcore.Connector
+
 	sudphVisors        map[cipher.PubKey]struct{}
 	sudphVisorsFetched time.Time
 }
@@ -67,109 +70,13 @@ func MakeConnector(conf servicedisc.Config, maxConns int, tm *transport.Manager,
 	connector.tm = tm
 	connector.dmsgC = dmsgC
 	connector.clientPublicIP = publicIP
-	return connector
-}
-
-// connectPhaseResult tracks the outcome of a connection phase.
-type connectPhaseResult struct {
-	connected []cipher.PubKey
-	count     int
-}
-
-// connectToVisors attempts to establish transports of the given type to the given PKs.
-// Skips self, existing transports, same-LAN visors, and non-SUDPH-capable visors.
-// Returns the list of PKs we attempted (for tracking) and the count of new transports.
-func (a *autoconnector) connectToVisors(
-	ctx context.Context,
-	selfPK cipher.PubKey,
-	targets []cipher.PubKey,
-	tpType tptypes.Type,
-	existingByPK map[cipher.PubKey]map[tptypes.Type]bool,
-	sudphCapable map[cipher.PubKey]struct{},
-	maxCount int,
-	currentCount int,
-	trackAll bool, // if true, add to result even on failure (for phase 1 → phase 2 handoff)
-) (result connectPhaseResult, err error) {
-	for _, pk := range shufflePubKeys(targets) {
-		select {
-		case <-ctx.Done():
-			return result, context.Canceled
-		default:
-		}
-
-		if currentCount+result.count >= maxCount {
-			break
-		}
-
-		if pk == selfPK {
-			continue
-		}
-
-		// Skip if we already have this transport type to this visor
-		if existingByPK[pk][tpType] {
-			if trackAll {
-				result.connected = append(result.connected, pk)
-			}
-			continue
-		}
-
-		// For SUDPH: skip visors not registered in address resolver
-		if tpType == tptypes.SUDPH && sudphCapable != nil {
-			if _, ok := sudphCapable[pk]; !ok {
-				if trackAll {
-					result.connected = append(result.connected, pk)
-				}
-				continue
-			}
-		}
-
-		// Skip visors behind the same NAT
-		if a.clientPublicIP != "" {
-			if sameLAN := a.isSameLAN(ctx, pk, tpType); sameLAN {
-				a.log.WithField("pk", pk).Debugln("Skipping same-LAN visor")
-				continue
-			}
-		}
-
-		logger := a.log.WithField("pk", pk).WithField("type", string(tpType))
-
-		// Probe the candidate on dmsg port 136 before attempting SUDPH
-		// transports (which need DMSG for signaling). Skip the probe for
-		// STCPR — it uses direct TCP and doesn't depend on DMSG. The old
-		// blanket probe was filtering out visors reachable via STCPR but
-		// with broken DMSG paths, reducing public visor transport counts.
-		if tpType != tptypes.STCPR && a.dmsgC != nil {
-			probeCtx, probeCancel := context.WithTimeout(ctx, dmsg.HandshakeTimeout)
-			reachable := a.dmsgC.Probe(probeCtx, pk, skyenv.DmsgAwaitSetupPort)
-			probeCancel()
-			if !reachable {
-				logger.Debug("Skipping visor: dmsg probe failed (unreachable)")
-				if trackAll {
-					result.connected = append(result.connected, pk)
-				}
-				continue
-			}
-		}
-
-		logger.Debugln("Trying to add transport")
-
-		if err := a.tryEstablishTransport(ctx, pk, tpType, logger); err != nil {
-			if isContextError(err) {
-				logger.WithError(err).Debugln("Transport creation canceled (shutdown)")
-			} else {
-				logger.WithError(err).Warnln("Failed to add transport")
-			}
-			if trackAll {
-				result.connected = append(result.connected, pk)
-			}
-			continue
-		}
-
-		result.count++
-		result.connected = append(result.connected, pk)
+	connector.conn = &visorcore.Connector{
+		Tm:             tm,
+		DmsgC:          dmsgC,
+		ClientPublicIP: publicIP,
+		Log:            log,
 	}
-
-	return result, nil
+	return connector
 }
 
 // isContextError returns true if the error is a context cancellation/deadline.
@@ -341,16 +248,16 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Phase 1: SUDPH to public visors (if supported)
 			if localSupportsSUDPH {
 				a.log.Debug("Phase 1: Connecting to public visors via SUDPH")
-				phase1, err := a.connectToVisors(ctx, v.conf.PK, absent1, tptypes.SUDPH,
+				phase1, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent1, tptypes.SUDPH,
 					existingByPK, sudphCapable, maxPublicVisors, 0, true)
 				if err != nil {
 					return err
 				}
-				countSUDPH += phase1.count
-				connectedPublicVisors = phase1.connected
+				countSUDPH += phase1.Count
+				connectedPublicVisors = phase1.Connected
 			} else {
 				// If no SUDPH, just pick public visors for STCPR
-				for _, pk := range shufflePubKeys(absent1) {
+				for _, pk := range visorcore.ShufflePubKeys(absent1) {
 					if len(connectedPublicVisors) >= maxPublicVisors {
 						break
 					}
@@ -363,23 +270,23 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Phase 2: STCPR to the same public visors
 			if localSupportsSTCPR {
 				a.log.Debug("Phase 2: Connecting to public visors via STCPR")
-				phase2, err := a.connectToVisors(ctx, v.conf.PK, connectedPublicVisors, tptypes.STCPR,
+				phase2, err := a.conn.ConnectToVisors(ctx, v.conf.PK, connectedPublicVisors, tptypes.STCPR,
 					existingByPK, nil, maxPublicVisors, 0, false)
 				if err != nil {
 					return err
 				}
-				countSTCPR += phase2.count
+				countSTCPR += phase2.Count
 			}
 
 			// Phase 3: SUDPH to other connected visors
 			if localSupportsSUDPH && countSUDPH < maxSUDPH && len(absent2) > 0 {
 				a.log.Debug("Phase 3: Connecting to other visors via SUDPH")
-				phase3, err := a.connectToVisors(ctx, v.conf.PK, absent2, tptypes.SUDPH,
+				phase3, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent2, tptypes.SUDPH,
 					existingByPK, sudphCapable, maxSUDPH, countSUDPH, false)
 				if err != nil {
 					return err
 				}
-				countSUDPH += phase3.count
+				countSUDPH += phase3.Count
 			}
 
 			a.log.WithField("stcpr", countSTCPR).WithField("sudph", countSUDPH).
@@ -387,29 +294,6 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				Debug("Public autoconnect cycle completed")
 		}
 	}
-}
-
-func shufflePubKeys(keys []cipher.PubKey) []cipher.PubKey {
-	n := len(keys)
-	for i := n - 1; i > 0; i-- {
-		jBig, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
-		if err != nil {
-			panic(err)
-		}
-		j := int(jBig.Int64())
-		keys[i], keys[j] = keys[j], keys[i]
-	}
-	return keys
-}
-
-// tryEstablishTransport attempts to establish a transport of the specified type to the given public key, and return error.
-func (a *autoconnector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, netType tptypes.Type, logger *logrus.Entry) error {
-	if _, err := a.tm.SaveTransport(ctx, pk, netType, transport.LabelAutomatic); err != nil {
-		return err
-	}
-
-	logger.Debugln("Added transport to visor")
-	return nil
 }
 
 func (a *autoconnector) fetchPubAddresses(ctx context.Context, v *Visor) ([]cipher.PubKey, error) {
@@ -509,27 +393,6 @@ func (a *autoconnector) filterDuplicates(pks []cipher.PubKey, trs []*transport.M
 		}
 	}
 	return absent
-}
-
-// isSameLAN checks if the remote visor is behind the same NAT as us by comparing
-// public IPs via the address resolver. Returns false on any error (fail-open).
-func (a *autoconnector) isSameLAN(ctx context.Context, pk cipher.PubKey, netType tptypes.Type) bool {
-	arClient := a.tm.ARClient()
-	if arClient == nil {
-		return false
-	}
-
-	visorData, err := arClient.Resolve(ctx, string(netType), pk)
-	if err != nil {
-		return false
-	}
-
-	remoteIP := visorData.RemoteAddr
-	if host, _, err := net.SplitHostPort(remoteIP); err == nil {
-		remoteIP = host
-	}
-
-	return remoteIP != "" && remoteIP == a.clientPublicIP
 }
 
 // fetchSUDPHVisors returns the set of visors registered for SUDPH in the address resolver,
