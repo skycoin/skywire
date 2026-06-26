@@ -165,7 +165,10 @@ func (h *forwardProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 
 	ctx, cancel := context.WithTimeout(r.Context(), forwardProxyTimeout)
 	defer cancel()
-	out, err := http.NewRequestWithContext(ctx, r.Method, r.URL.String(), r.Body)
+	// G704: a forward proxy fetches caller-specified URLs by design; direct-egress
+	// is gated above by hostIsPublic, and non-direct egress is confined to the
+	// skywire overlay. The "taint" is the proxy's whole purpose.
+	out, err := http.NewRequestWithContext(ctx, r.Method, r.URL.String(), r.Body) //nolint:gosec
 	if err != nil {
 		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
 		return
@@ -173,7 +176,7 @@ func (h *forwardProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	copyHeaders(out.Header, r.Header)
 	out.Header.Del("Host")
 
-	resp, err := h.client.Do(out)
+	resp, err := h.client.Do(out) //nolint:gosec // see G704 note above: caller-specified URL is the proxy's purpose
 	if err != nil {
 		if h.log != nil {
 			h.log.WithError(err).WithField("url", r.URL.String()).Debug("forward-proxy fetch failed")

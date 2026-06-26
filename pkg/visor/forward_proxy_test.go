@@ -37,7 +37,7 @@ func TestForwardProxy_FetchesAndCopies(t *testing.T) {
 		w.Header().Set("X-Origin", "yes")
 		w.Header().Set("Connection", "keep-alive") // hop-by-hop, must be stripped
 		w.WriteHeader(http.StatusTeapot)
-		_, _ = io.WriteString(w, "hello from origin")
+		_, _ = io.WriteString(w, "hello from origin") //nolint:errcheck // test origin handler; write error is not actionable here
 	}))
 	defer origin.Close()
 

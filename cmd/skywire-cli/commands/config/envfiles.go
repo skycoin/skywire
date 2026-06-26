@@ -67,6 +67,11 @@ const envfileLinux = `#
 #- set port for TCP connections / STCPR or STCP transports
 #STCPRPORT=0
 
+#- set ONE shared master port for all transport types (stcpr+WS on <port>/tcp,
+#- quic+sudph+wt+webrtc on <port>/udp). Overrides SUDPHPORT/STCPRPORT unless those
+#- are set to break a type out onto its own port. 0 = per-type ports.
+#TRANSPORTPORT=0
+
 ### Routing #############################################################
 
 #-- Add route setup-node public keys
@@ -349,6 +354,11 @@ const envfileWindows = `#
 
 #- set port for TCP connections / STCPR or STCP transports
 #$STCPRPORT=0
+
+#- set ONE shared master port for all transport types (stcpr+WS on <port>/tcp,
+#- quic+sudph+wt+webrtc on <port>/udp). Overrides SUDPHPORT/STCPRPORT unless those
+#- are set to break a type out onto its own port. 0 = per-type ports.
+#$TRANSPORTPORT=0
 
 ### Routing #############################################################
 

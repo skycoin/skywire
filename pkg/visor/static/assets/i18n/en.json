@@ -303,6 +303,7 @@
 
   "nodes": {
     "title": "Visor list",
+    "local-visor-title": "Local Visor",
     "dmsg-title": "DMSG",
     "rewards-title": "Rewards",
     "services-health-title": "Deployment",
