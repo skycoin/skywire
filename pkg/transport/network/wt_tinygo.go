@@ -1,12 +1,12 @@
-//go:build tinygo
+//go:build tinygo && !(js && wasm)
 
 // Package network pkg/transport/network/wt_tinygo.go
 //
-// TinyGo WT-transport: the SERVE side. A browser (or any TinyGo target) cannot
-// run the HTTP/3 WebTransport server a WT transport listener needs, so Start
-// fails closed on all TinyGo builds. The DIAL side is target-specific:
-// wt_browser.go (tinygo && js && wasm) dials the browser-native WebTransport;
-// wt_tinygo_nows.go (other TinyGo targets) stubs it.
+// TinyGo (non-browser/embedded) WT-transport stubs. A browser is handled by
+// wt_browser.go (js && wasm, either toolchain), which provides its own Start +
+// dial + resolve; this file covers embedded TinyGo targets (no HTTP/3 server, no
+// dial — wt_tinygo_nows.go stubs the dial). Kept disjoint from wt_browser.go so
+// tinygo+js+wasm doesn't get two definitions of Start/resolveWTViaAR.
 package network
 
 import (
