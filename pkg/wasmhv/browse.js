@@ -173,7 +173,10 @@
     var fetchDmsg = opts.fetchDmsg, serveContent = opts.serveContent;
     var wrap = doc.createElement("div");
     wrap.id = "skywire-browse-panel";
-    wrap.style.cssText = "position:fixed;right:12px;bottom:12px;width:520px;max-width:92vw;height:62vh;" +
+    // A large, RESIZABLE window (drag the bottom-right corner). Anchored top-left
+    // so the resize grows into the viewport; the header is a drag handle (below).
+    wrap.style.cssText = "position:fixed;top:5vh;left:5vw;width:74vw;height:82vh;" +
+      "min-width:360px;min-height:260px;max-width:97vw;max-height:94vh;resize:both;" +
       "background:#15171c;color:#cdd2da;font:12px/1.4 monospace;border:1px solid #333;border-radius:8px;" +
       "box-shadow:0 8px 30px rgba(0,0,0,.5);z-index:2147483000;display:none;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
@@ -244,7 +247,36 @@
       msg.onclick = function () { try { navigator.clipboard.writeText(addr); msg.textContent = "copied: " + addr; } catch (e) {} };
     };
 
-    function toggle() { wrap.style.display = wrap.style.display === "none" ? "flex" : "none"; }
+    // Drag-to-move via the "skynet" label (cursor:move); the window is large +
+    // resizable (bottom-right handle), so let it be repositioned too.
+    (function () {
+      var handle = wrap.querySelector("b");
+      if (!handle) return;
+      handle.style.cursor = "move";
+      var sx, sy, ox, oy, dragging = false;
+      handle.addEventListener("mousedown", function (e) {
+        dragging = true; sx = e.clientX; sy = e.clientY;
+        var r = wrap.getBoundingClientRect(); ox = r.left; oy = r.top;
+        e.preventDefault();
+      });
+      doc.addEventListener("mousemove", function (e) {
+        if (!dragging) return;
+        wrap.style.left = Math.max(0, ox + e.clientX - sx) + "px";
+        wrap.style.top = Math.max(0, oy + e.clientY - sy) + "px";
+      });
+      doc.addEventListener("mouseup", function () { dragging = false; });
+    })();
+
+    function toggle() {
+      var showing = wrap.style.display === "none";
+      wrap.style.display = showing ? "flex" : "none";
+      // First open: land on home.dmsg (resolver alias for the deployment landing
+      // page), matching the socks5 resolving proxy's default.
+      if (showing && !wrap.dataset.landed) {
+        wrap.dataset.landed = "1";
+        browser.browseTo("home.dmsg", "/");
+      }
+    }
     return { panel: wrap, browser: browser, toggle: toggle };
   }
 
