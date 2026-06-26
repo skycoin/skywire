@@ -23,9 +23,30 @@ func (f *ClientFactory) EnableUnifiedTCP(port int) error {
 	if port == 0 {
 		return nil
 	}
+	return f.bindTCPDemux(port)
+}
+
+// EnableDefaultTCPDemux binds the DEFAULT TCP cmux (stcpr + WS) on the stcpr port
+// — the phase-2 behavior so EVERY visor accepts WebSocket on its stcpr TCP socket
+// without any config, with no port change (the cmux peeks: HTTP/WS-upgrade → WS,
+// else the raw skywire handshake → stcpr; existing stcpr peers are unaffected).
+// stcprPort 0 binds a random port (exactly as a per-type stcpr listener would).
+// Unlike EnableUnifiedTCP this is NOT gated on transport_port, and stcpr always
+// rides it (the cmux IS the stcpr listener — no break-out).
+func (f *ClientFactory) EnableDefaultTCPDemux(stcprPort int) error {
+	if err := f.bindTCPDemux(stcprPort); err != nil {
+		return err
+	}
+	f.tcpDefaultDemux = true
+	return nil
+}
+
+// bindTCPDemux binds a TCP listener on :port (port 0 → random) and installs the
+// stcpr+WS cmux over it.
+func (f *ClientFactory) bindTCPDemux(port int) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
-		return fmt.Errorf("unified transport port %d (tcp): %w", port, err)
+		return fmt.Errorf("tcp cmux (stcpr+ws) port %d: %w", port, err)
 	}
 	d := newTCPDemux(lis)
 	f.tcpDemux = d
@@ -47,6 +68,13 @@ func (f *ClientFactory) CloseUnifiedTCP() error {
 // non-zero stcpr_port breaks stcpr out onto its own port even when transport_port
 // is set. Returns nil → per-type binding.
 func (f *ClientFactory) stcprSharedListenerFor(perTypePort int) net.Listener {
+	// Default demux (phase 2): the cmux IS bound on the stcpr port, so stcpr
+	// always rides it — there's no master port to break out of.
+	if f.tcpDefaultDemux {
+		return f.stcprSharedListener
+	}
+	// Explicit transport_port master: a non-zero stcpr_port breaks stcpr out onto
+	// its own dedicated socket.
 	if perTypePort != 0 {
 		return nil
 	}

@@ -499,9 +499,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 			}
 		},
 	}
-	// Unified transport port (opt-in): when transport_port is set, QUIC + sudph
-	// share one master UDP socket (demuxed) instead of binding a port each. 0 =
-	// per-type binding (default). See docs/design/transport-port-unification.md.
+	// Transport-port wiring (see docs/design/transport-port-unification.md +
+	// wasm-public-autoconnect.md):
+	//   - transport_port SET   → QUIC+sudph share one master UDP socket AND
+	//     stcpr+WS share that same TCP port (full unification, opt-in).
+	//   - transport_port UNSET → phase 2 default: stcpr+WS still share a TCP cmux,
+	//     bound on the stcpr port (random if unset), so EVERY visor accepts
+	//     WebSocket on its stcpr socket with NO config and NO port change (the
+	//     cmux peeks: WS-upgrade → WS, else raw handshake → stcpr; existing stcpr
+	//     peers unaffected). This is what lets a browser visor reach any visor
+	//     over WS. UDP-side unification stays opt-in (it would shift sudph's port).
 	if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
 		port := v.conf.Transport.TransportPort
 		if err := factory.EnableUnifiedUDP(port); err != nil {
@@ -513,6 +520,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Infof("Unified transport port %d: QUIC+sudph share UDP, stcpr+WS share TCP", port)
 		v.pushCloseStack("transport.unified_udp", factory.CloseUnifiedUDP)
 		v.pushCloseStack("transport.unified_tcp", factory.CloseUnifiedTCP)
+	} else {
+		stcprPort := 0
+		if v.conf.Transport != nil {
+			stcprPort = v.conf.Transport.StcprPort
+		}
+		if err := factory.EnableDefaultTCPDemux(stcprPort); err != nil {
+			return fmt.Errorf("default tcp cmux (stcpr+ws): %w", err)
+		}
+		log.Info("stcpr + WS share the stcpr TCP port (cmux) — this visor is reachable over WebSocket")
+		v.pushCloseStack("transport.tcp_cmux", factory.CloseUnifiedTCP)
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
