@@ -66,17 +66,34 @@ type Overview struct {
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
 	ConnectedHypervisor []cipher.PubKey `json:"connected_hypervisor"`
 	Hostname            string          `json:"hostname,omitempty"`
+
+	// transports holds THIS (self) visor's live transports so MarshalJSON can
+	// emit them in the overview's "transports" array (the node-table count). It
+	// is unexported on purpose: gob skips it, so gob-mirrored REMOTE overviews
+	// leave it nil (their transports arrive over the per-visor /transports RPC
+	// instead) and only the self overview populates it via SetSelfTransports.
+	transports []*TransportSummary
 }
 
-// MarshalJSON emits the Overview fields plus empty apps/transports arrays (the
-// UI indexes them; the real values aren't available in the wasm core yet).
+// SetSelfTransports attaches the self visor's live transports for MarshalJSON.
+// Call on the OWN overview only; remote (gob-mirrored) overviews leave it nil.
+func (o *Overview) SetSelfTransports(ts []*TransportSummary) { o.transports = ts }
+
+// MarshalJSON emits the Overview fields plus apps + transports arrays. Apps stay
+// empty (not surfaced in the wasm core yet); transports carry the self visor's
+// live list when set (see SetSelfTransports), else an empty array so UI
+// templates that index it don't choke.
 func (o Overview) MarshalJSON() ([]byte, error) {
 	type alias Overview
+	tps := o.transports
+	if tps == nil {
+		tps = []*TransportSummary{}
+	}
 	return jsonMarshal(struct {
 		alias
-		Apps       []struct{} `json:"apps"`
-		Transports []struct{} `json:"transports"`
-	}{alias(o), []struct{}{}, []struct{}{}})
+		Apps       []struct{}          `json:"apps"`
+		Transports []*TransportSummary `json:"transports"`
+	}{alias(o), []struct{}{}, tps})
 }
 
 // DmsgClientSummary mirrors visor/dmsgtracker.DmsgClientSummary. The CLI's
