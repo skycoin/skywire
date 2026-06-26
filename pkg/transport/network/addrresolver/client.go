@@ -32,6 +32,7 @@ const (
 	sudphPriority            = 1
 	stcprBindPath            = "/bind/stcpr"
 	quicBindPath             = "/bind/quic"
+	wtBindPath               = "/bind/wt"
 	addrChSize               = 1024
 	udpKeepHeartbeatInterval = 10 * time.Second
 	sudphReRegisterInterval  = 90 * time.Second
@@ -83,6 +84,10 @@ type Error struct {
 type APIClient interface {
 	BindSTCPR(ctx context.Context, port string) error
 	BindQUIC(ctx context.Context, port string) error
+	// BindWT registers this visor's WebTransport UDP port and the SHA-256 hex of
+	// its self-signed cert (the hash dialing peers pin). Mirrors BindQUIC + the
+	// cert hash.
+	BindWT(ctx context.Context, port, certHash string) error
 	BindSUDPH(filter *pfilter.PacketFilter, handshake Handshake) (<-chan RemoteVisor, error)
 	Resolve(ctx context.Context, netType string, pk cipher.PubKey) (VisorData, error)
 	Transports(ctx context.Context) (map[cipher.PubKey][]string, error)
@@ -403,6 +408,11 @@ type LocalAddresses struct {
 	// source isn't v6. Empty when the visor is v4-only — preserves the
 	// pre-Phase-2c single-stack contract.
 	PublicIPv6 string `json:"public_ip_v6,omitempty"`
+	// CertHash is the lowercase SHA-256 hex of the visor's self-signed
+	// WebTransport certificate. WT has no CA; a dialing peer pins this hash. Only
+	// the WT bind sets it (it rides VisorData via the embedded LocalAddresses, so
+	// /resolve/wt returns it); empty for every other transport type.
+	CertHash string `json:"cert_hash,omitempty"`
 }
 
 func (c *httpClient) Addresses(_ context.Context) string {
@@ -515,6 +525,69 @@ func (c *httpClient) BindQUIC(ctx context.Context, port string) error {
 	}
 	log.Debugf("Address resolver binding QUIC with: %v port %s", addresses, port)
 	resp, err := c.Post(ctx, quicBindPath, localAddresses)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.WithError(err).Warn("Failed to close response body")
+		}
+	}()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return fmt.Errorf("rate limited by address resolver (status 429)")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status: %d, error: %w", resp.StatusCode, httpauthclient.ExtractError(resp.Body))
+	}
+	return nil
+}
+
+// BindWT registers this visor's WebTransport UDP port + self-signed cert hash
+// with the address resolver. Mirrors BindQUIC, plus the cert hash (CertHash):
+// WebTransport has no CA, so the dialing peer pins this SHA-256 to trust the
+// server cert. The hash rides VisorData via the embedded LocalAddresses, so
+// /resolve/wt returns it alongside the endpoint.
+func (c *httpClient) BindWT(ctx context.Context, port, certHash string) error {
+	log := c.log.WithField("func", "httpClient.BindWT")
+	if !c.isReady() {
+		log.Debug("Address resolver is not ready yet, waiting...")
+		<-c.ready
+		log.Debug("Address resolver became ready, binding")
+	}
+
+	c.awaitPublicIP(stcprBindPublicIPWait)
+
+	addresses, err := netutil.LocalAddresses()
+	if err != nil {
+		return err
+	}
+	clientPublicIP := c.localPublicIPRaw()
+	if clientPublicIP != "" {
+		publicIP := clientPublicIP
+		if host, _, err := net.SplitHostPort(publicIP); err == nil {
+			publicIP = host
+		}
+		found := false
+		for _, addr := range addresses {
+			if addr == publicIP {
+				found = true
+				break
+			}
+		}
+		if !found {
+			addresses = append(addresses, publicIP)
+		}
+	}
+
+	localAddresses := LocalAddresses{
+		Addresses:  addresses,
+		Port:       port,
+		PublicIP:   c.LocalPublicIP(),
+		PublicIPv6: c.localPublicIPv6Raw(),
+		CertHash:   certHash,
+	}
+	log.Debugf("Address resolver binding WT with: %v port %s cert %s", addresses, port, certHash)
+	resp, err := c.Post(ctx, wtBindPath, localAddresses)
 	if err != nil {
 		return err
 	}

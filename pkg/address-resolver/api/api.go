@@ -232,6 +232,7 @@ func New(log *logging.Logger, s store.Store, nonceStore httpauth.NonceStore,
 		r.Post("/bind/stcpr", api.bind)
 		r.Delete("/bind/stcpr", api.delBind)
 		r.Post("/bind/quic", api.bindQUIC)
+		r.Post("/bind/wt", api.bindWT)
 		r.Get("/resolve/{type}/{pk}", api.resolve)
 	})
 
@@ -346,6 +347,14 @@ func (a *API) bind(w http.ResponseWriter, r *http.Request) {
 // bindQUIC handles POST /bind/quic — registers the visor's QUIC UDP address
 // (#2607 QUIC follow-on). Same validation as STCPR; stored under the QUIC type
 // for peers to Resolve.
+// bindWT handles POST /bind/wt — registers the visor's WebTransport UDP address
+// AND its self-signed cert hash (carried in the bind payload's CertHash, stored
+// via VisorData's embedded LocalAddresses so /resolve/wt returns it). Same
+// validation as STCPR/QUIC; stored under the WT type.
+func (a *API) bindWT(w http.ResponseWriter, r *http.Request) {
+	a.bindForType(w, r, types.WT)
+}
+
 func (a *API) bindQUIC(w http.ResponseWriter, r *http.Request) {
 	a.bindForType(w, r, types.QUIC)
 }
