@@ -28,11 +28,20 @@ import (
 	"github.com/quic-go/webtransport-go"
 
 	"github.com/skycoin/skywire/pkg/skyquic"
+	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 )
 
 // wtPath is the HTTP/3 path the WebTransport endpoint is served on; the
 // advertised URL includes it (e.g. "https://host:port/skywire").
 const wtPath = "/skywire"
+
+const (
+	// wtReRegisterInterval keeps the WT AR entry alive (< the AR's 2-min TTL),
+	// mirroring stcpr/quic.
+	wtReRegisterInterval = 90 * time.Second
+	wtBindRetryDelay     = 5 * time.Second
+	wtBindMaxRetryDelay  = 60 * time.Second
+)
 
 // wtAcceptTimeout bounds how long a freshly-upgraded WebTransport session may
 // take to open its first (yamux-carrying) bidirectional stream.
@@ -114,7 +123,52 @@ func (c *wtClient) serve() {
 	c.advertisedURL = fmt.Sprintf("https://%s%s", lis.Addr().String(), wtPath)
 	c.advertisedCertHash = hex.EncodeToString(lis.certHash[:])
 	c.log.Infof("Serving WT transport at %s (cert %s)", c.advertisedURL, c.advertisedCertHash)
+
+	// Register the WT endpoint + cert hash with the address resolver so peers can
+	// discover it and pin the self-signed cert (WT has no CA). Like stcpr/quic,
+	// keep the entry alive with a periodic re-register.
+	if ar, _ := c.ar.(addrresolver.APIClient); ar != nil {
+		if _, port, err := net.SplitHostPort(lis.Addr().String()); err == nil {
+			go c.registerWT(ar, port, c.advertisedCertHash)
+		} else {
+			c.log.WithError(err).Warn("WT: cannot extract port for AR registration")
+		}
+	}
+
 	c.acceptTransports(lis)
+}
+
+// registerWT binds the WT UDP port + cert hash to the address resolver, retrying
+// with backoff, then re-registers periodically to keep the entry alive.
+func (c *wtClient) registerWT(ar addrresolver.APIClient, port, certHash string) {
+	delay := wtBindRetryDelay
+	for {
+		if err := ar.BindWT(context.Background(), port, certHash); err == nil {
+			c.log.Debugf("Successfully bound WT to AR (port %s)", port)
+			break
+		} else {
+			c.log.WithError(err).Warnf("Failed to bind WT, retrying in %v", delay)
+		}
+		if c.isClosed() {
+			return
+		}
+		time.Sleep(delay)
+		if delay *= 2; delay > wtBindMaxRetryDelay {
+			delay = wtBindMaxRetryDelay
+		}
+	}
+	ticker := time.NewTicker(wtReRegisterInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-ticker.C:
+			if err := ar.BindWT(context.Background(), port, certHash); err != nil {
+				c.log.WithError(err).Warn("Failed to re-register WT")
+			}
+		}
+	}
 }
 
 // wtListener fronts a WebTransport (HTTP/3) server as a net.Listener: the first
