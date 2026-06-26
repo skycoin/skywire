@@ -49,6 +49,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"syscall/js"
 	"time"
 
@@ -94,6 +95,14 @@ var (
 	// JS hook can add a target just before SaveTransport dials it.
 	wsTable stcp.PKTable
 	wtTable network.WTTable
+
+	// selfPublicIP caches this visor's own public IP as observed by the dmsg
+	// servers (ClientSession.LookupIP — the server reports the source address of
+	// the connection). A browser tab can't STUN (no UDP), so the dmsg-server view
+	// is how it learns its public IP, exactly as the native visor's dmsg client
+	// does for AR bind payloads. Refreshed by refreshSelfPublicIP; read by
+	// SelfOverview. Holds a string ("" until first learned).
+	selfPublicIP atomic.Value
 )
 
 // vlog emits a step message to the browser console AND, when present, the
@@ -247,6 +256,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}
 	dmsgC = c
 	vlog("dmsg: ok")
+	go refreshSelfPublicIP(ctx)
 
 	// 2. transport manager (dmsg-only). The transport-discovery client registers
 	// the tab's transport edges OVER DMSG (net/http-free), against the deployment's
@@ -552,12 +562,57 @@ type visorSelf struct{}
 
 func (visorSelf) SelfPK() cipher.PubKey { return selfPK }
 
-func (visorSelf) SelfOverview() wasmhv.Overview {
+func (s visorSelf) SelfOverview() wasmhv.Overview {
 	ov := wasmhv.Overview{PubKey: selfPK, BuildInfo: buildinfo.Get()}
 	if rtr != nil {
 		ov.RoutesCount = rtr.RoutesCount()
 	}
+	// Surface our live transports in the overview so the hypervisor node table's
+	// "Transports" count reflects reality (the autoconnect WS transports). The
+	// transports tab reads SelfTransports() directly; the summary reads this.
+	ov.SetSelfTransports(s.SelfTransports())
+	if ip, ok := selfPublicIP.Load().(string); ok {
+		ov.PublicIP = ip
+	}
 	return ov
+}
+
+// refreshSelfPublicIP learns this tab's public IP from the dmsg servers
+// (ClientSession.LookupIP: the server replies with the source address of our
+// connection) and caches it for SelfOverview. A browser can't STUN, so this is
+// how a wasm visor learns its public IP — the same dmsg-observed source the
+// native client feeds into AR bind payloads. Retries until learned, then
+// refreshes periodically (a browser's IP can change across network moves).
+func refreshSelfPublicIP(ctx context.Context) {
+	for {
+		delay := 10 * time.Second
+		if _, ok := selfPublicIP.Load().(string); !ok {
+			delay = 3 * time.Second // not learned yet — poll faster
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		if dmsgC == nil {
+			continue
+		}
+		v4, v6 := dmsgC.LookupIPsByFamily(ctx)
+		ip := ""
+		switch {
+		case v4 != nil:
+			ip = v4.String()
+		case v6 != nil:
+			ip = v6.String()
+		}
+		if ip == "" {
+			continue
+		}
+		if prev, _ := selfPublicIP.Load().(string); prev != ip {
+			selfPublicIP.Store(ip)
+			vlog("self public IP (via dmsg server): " + ip)
+		}
+	}
 }
 
 func (s visorSelf) SelfSummary() wasmhv.Summary {
