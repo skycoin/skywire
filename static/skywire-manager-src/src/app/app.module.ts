@@ -1,7 +1,8 @@
 import { BrowserModule} from '@angular/platform-browser';
 import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
+import { HttpBackend, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
+import { SkywireHttpBackend } from './services/skywire-http-backend';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
 import { StartComponent } from './components/pages/start/start.component';
@@ -232,6 +233,10 @@ const globalRippleConfig: RippleGlobalOptions = {
         { provide: RouteReuseStrategy, useClass: AppReuseStrategy },
         { provide: MAT_RIPPLE_GLOBAL_OPTIONS, useValue: globalRippleConfig },
         provideHttpClient(withInterceptorsFromDi()),
+        // Swap the bottom of the HttpClient pipeline so the SAME UI build talks to
+        // either the native REST API (transparent pass-through) or the in-tab
+        // wasm-visor gateway. Dormant unless window.__SKYWIRE_HV__ activates it.
+        { provide: HttpBackend, useClass: SkywireHttpBackend },
     ] })
 export class AppModule {
   // Angular Material 19+ defaults <mat-icon> to the

@@ -103,7 +103,7 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	// against the no-op direct client, recorded a "successful" update, and reset the
 	// ~5-min timer, so real registration didn't fire for minutes and the tab stayed
 	// 404 — which also blocks route setup (it dials the source's own @136 over dmsg,
-	// needing the entry registered). Funnelling through the shared helper keeps the
+	// needing the entry registered). Funneling through the shared helper keeps the
 	// two visors from drifting on the ordering again.
 	beforeServe := func(c *dmsg.Client) error {
 		if discDmsgAddr == "" {

@@ -9,6 +9,7 @@ import { SelectLanguageComponent } from '../select-language/select-language.comp
 import { AppState, VpnClientService } from 'src/app/services/vpn-client.service';
 import { VpnHelpers } from '../../vpn/vpn-helpers';
 import { DataUnits, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
+import { AppModeService } from 'src/app/services/app-mode.service';
 
 /**
  * Properties of a tab shown in TopBarComponent.
@@ -216,6 +217,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
     private router: Router,
     private vpnClientService: VpnClientService,
     private vpnSavedDataService: VpnSavedDataService,
+    public appMode: AppModeService,
   ) { }
 
   ngOnInit() {

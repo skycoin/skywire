@@ -190,10 +190,15 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isPublic, "public", "z", scriptExecBool("${VISORISPUBLIC:-false}"), "publicize visor in service discovery")
 	gHiddenFlags = append(gHiddenFlags, "public")
-	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "tcp transport listening port (0 = random)")
+	genConfigCmd.Flags().IntVar(&stcprPort, "stcpr", scriptExecInt("${STCPRPORT:-0}"), "tcp transport listening port (0 = random / shared master port)")
 	gHiddenFlags = append(gHiddenFlags, "stcpr")
-	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "udp transport listening port (0 = random)")
+	genConfigCmd.Flags().IntVar(&sudphPort, "sudph", scriptExecInt("${SUDPHPORT:-0}"), "udp transport listening port (0 = random / shared master port)")
 	gHiddenFlags = append(gHiddenFlags, "sudph")
+	// Unified master transport port: one number carrying every transport type
+	// (stcpr+WS on <port>/tcp, quic+sudph+wt+webrtc on <port>/udp, demuxed by
+	// protocol). Per-type ports above override it. Visible because this is the
+	// recommended way to expose a public visor behind a single firewall rule.
+	genConfigCmd.Flags().IntVar(&transportPort, "transport-port", scriptExecInt("${TRANSPORTPORT:-0}"), "shared master transport port for all transport types (0 = per-type ports)")
 
 	// Routing flags
 	msg = "add route setup node PKs"
@@ -1092,8 +1097,9 @@ func configureTransports() {
 			Location:         tpLogPath,
 			RotationInterval: visorconfig.DefaultLogRotationInterval,
 		},
-		SudphPort: sudphPort,
-		StcprPort: stcprPort,
+		SudphPort:     sudphPort,
+		StcprPort:     stcprPort,
+		TransportPort: transportPort,
 	}
 }
 
@@ -2025,6 +2031,15 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 		"reward":  "REWARDSKYADDR",
 	}
 
+	// Integer/port flags map to bare KEY=N env lines (e.g. #TRANSPORTPORT=0).
+	// When the flag is explicitly set, uncomment + replace with the value so
+	// `config gen --transport-port 7777 -q` reflects it in the template.
+	intFlagToEnv := map[string]string{
+		"transport-port": "TRANSPORTPORT",
+		"stcpr":          "STCPRPORT",
+		"sudph":          "SUDPHPORT",
+	}
+
 	// Array-shaped flags map to bash-array env vars of the form
 	// KEY=('a' 'b' 'c'). Values come in comma-separated form from the
 	// CLI (`--hvpks PK1,PK2`); we split on comma, trim each entry,
@@ -2063,6 +2078,19 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 				if val != "" && strings.Contains(trimmed, envKey) && strings.HasPrefix(trimmed, "#") {
 					lines[i] = envKey + "='" + val + "'"
 				}
+			}
+		}
+		// Check integer/port flags (bare KEY=N lines, e.g. #TRANSPORTPORT=0)
+		for flagName, envKey := range intFlagToEnv {
+			if !cmd.Flags().Changed(flagName) {
+				continue
+			}
+			val, _ := cmd.Flags().GetInt(flagName) //nolint:errcheck
+			// Match the bash (#KEY=) or PowerShell (#$KEY=) template form.
+			if strings.HasPrefix(trimmed, "#"+envKey+"=") {
+				lines[i] = envKey + "=" + strconv.Itoa(val)
+			} else if strings.HasPrefix(trimmed, "#$"+envKey+"=") {
+				lines[i] = "$" + envKey + "=" + strconv.Itoa(val)
 			}
 		}
 		// Check array flags (bash-array form: KEY=('a' 'b' 'c'))

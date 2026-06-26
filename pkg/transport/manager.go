@@ -55,9 +55,9 @@ type RouteChecker func(tpID uuid.UUID) bool
 
 // Manager manages Transports.
 type Manager struct {
-	Logger   *logging.Logger
-	Conf     *ManagerConfig
-	tps map[uuid.UUID]*ManagedTransport
+	Logger *logging.Logger
+	Conf   *ManagerConfig
+	tps    map[uuid.UUID]*ManagedTransport
 	// arClient is the address-resolver client (addrresolver.APIClient on native
 	// builds). Typed `any` so addrresolver — which pulls net/http — stays out of
 	// the TinyGo graph; recover it via the build-tagged ARClient() getter.

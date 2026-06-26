@@ -6,6 +6,7 @@ import { LoginComponent } from './components/pages/login/login.component';
 import { NodeListComponent } from './components/pages/node-list/node-list.component';
 import { NodeComponent } from './components/pages/node/node.component';
 import { AuthGuardService } from './services/auth-guard.service';
+import { localVisorGuard } from './services/local-visor.guard';
 import { SettingsComponent } from './components/pages/settings/settings.component';
 import { RoutingComponent } from './components/pages/node/routing/routing.component';
 import { AppsComponent } from './components/pages/node/apps/apps.component';
@@ -110,6 +111,13 @@ const routes: Routes = [
       {
         path: 'dmsg-settings',
         redirectTo: 'list/1'
+      },
+      {
+        // "Local Visor" tab: resolve the hypervisor's own visor PK and bounce to
+        // its detail page. Must precede ':key' so 'local' isn't read as a PK.
+        path: 'local',
+        canActivate: [localVisorGuard],
+        children: [],
       },
       {
         path: ':key',
