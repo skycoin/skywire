@@ -64,8 +64,8 @@ func (c *Core) selfRoute(self SelfProvider, sub string) (int, []byte) {
 		return jsonResp([]struct{}{})
 	case "transport-types":
 		// The direct transport types the wasm-visor can create (WebRTC is a
-		// symmetric DataChannel; ws/wt are browser-dial-only).
-		return jsonResp([]string{"dmsg", "ws", "wt", "webrtc"})
+		// symmetric DataChannel; swsr/swtr are browser-dial-only).
+		return jsonResp([]string{"dmsg", "swsr", "swtr", "webrtc"})
 	case "host-stats":
 		// A browser tab has no host to measure (no CPU/RAM/disk/NIC of its own),
 		// so report the shape with zeros + js/wasm identity. This keeps the
