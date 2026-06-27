@@ -464,6 +464,13 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}()
 	vlog("hypervisor: serving")
 
+	// peer-interface parity: open the dmsg listeners a native visor serves so
+	// other visors / hypervisors / the CLI can reach, health-check, latency-probe,
+	// and (with authorization) command transports on this browser visor:
+	//   :80 health/landing/ping · :7 dmsgctrl · :8 dmsg ping · :47 transport-setup.
+	startPeerServices(mLog, svc.TransportSetupNodes)
+	vlog("peer services: health(:80)/ctrl(:7)/ping(:8)/transport-setup(:47) up")
+
 	vlog("EDGE + app-host + hypervisor booted")
 	fmt.Printf("wasm-visor: booted pk=%s\n", pk.Hex())
 	return pk, nil
