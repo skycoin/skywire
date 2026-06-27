@@ -62,8 +62,10 @@ func ParsePreferenceOrder(s []string) []Type {
 		string(SUDPH):       SUDPH,
 		string(STCP):        STCP,
 		string(WEBRTC):      WEBRTC,
-		string(WS):          WS,
-		string(WT):          WT,
+		string(WS):          WS, // "swsr"
+		string(WSLegacy):    WS, // "ws"    — back-compat alias
+		string(WT):          WT, // "swtr"
+		string(WTLegacy):    WT, // "wt"    — back-compat alias
 		string(DMSG):        DMSG,
 	}
 	out := make([]Type, 0, len(s))

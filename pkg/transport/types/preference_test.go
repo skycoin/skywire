@@ -69,6 +69,34 @@ func TestQUICLegacyAlias(t *testing.T) {
 	}
 }
 
+// TestWSWTLegacyAlias confirms the canonical WS/WT wire names are "swsr"/"swtr"
+// and the pre-rename names "ws"/"wt" still parse + normalize for back-compat.
+func TestWSWTLegacyAlias(t *testing.T) {
+	if WS != "swsr" {
+		t.Fatalf("WS canonical wire name = %q, want swsr", WS)
+	}
+	if WT != "swtr" {
+		t.Fatalf("WT canonical wire name = %q, want swtr", WT)
+	}
+	if NormalizeType(WSLegacy) != WS {
+		t.Fatalf(`NormalizeType("ws") = %q, want swsr`, NormalizeType(WSLegacy))
+	}
+	if NormalizeType(WTLegacy) != WT {
+		t.Fatalf(`NormalizeType("wt") = %q, want swtr`, NormalizeType(WTLegacy))
+	}
+	if NormalizeType(WS) != WS || NormalizeType(WT) != WT {
+		t.Fatal("NormalizeType is not idempotent on the canonical WS/WT names")
+	}
+	for _, c := range []struct {
+		name string
+		want Type
+	}{{"ws", WS}, {"swsr", WS}, {"wt", WT}, {"swtr", WT}} {
+		if got := ParsePreferenceOrder([]string{c.name}); len(got) != 1 || got[0] != c.want {
+			t.Fatalf(`ParsePreferenceOrder([%q]) = %v, want [%s]`, c.name, got, c.want)
+		}
+	}
+}
+
 // TestSetPreferenceOrderSortsTransports verifies a configured override actually
 // reorders a slice the way the router's dial logic relies on.
 func TestSetPreferenceOrderSortsTransports(t *testing.T) {
