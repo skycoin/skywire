@@ -4,6 +4,7 @@ package network
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -141,7 +142,13 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		return wc, nil
 	case types.WT:
 		wc := newWT(generic, f.WTTable)
-		wc.(*wtClient).ar = f.ARClient // native: register/resolve WT endpoint+cert via AR
+		wtc := wc.(*wtClient)
+		wtc.ar = f.ARClient // native: register/resolve WT endpoint+cert via AR
+		// WT binds its OWN UDP socket (HTTP/3-over-QUIC) — NOT f.ListenAddr, which
+		// is the STCP TCP address (:7777). Using f.ListenAddr made WT register the
+		// STCP port in the AR (a wrong, often-unforwarded port). Bind the wt_port
+		// passed via InitClient (":0" = ephemeral, registered with the AR either way).
+		wtc.listenAddr = fmt.Sprintf(":%d", port)
 		return wc, nil
 	case types.WEBRTC:
 		return newWebRTC(generic, f.DmsgC, f.ICEURLs), nil
