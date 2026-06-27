@@ -2,12 +2,22 @@
 package clihv
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/pem"
 	"io/fs"
 	"log"
+	"math/big"
+	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -23,11 +33,13 @@ import (
 var (
 	serveAddr    string
 	serveHarness bool
+	serveTLS     bool
 )
 
 func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":7999", "HTTP listen address")
 	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
+	serveCmd.Flags().BoolVar(&serveTLS, "tls", false, "serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -123,17 +135,83 @@ page never asks anyone to type a secret key.`,
 			fileServer.ServeHTTP(w, r)
 		})
 
-		cmd.Printf("serving standalone wasm-visor (ui + %d-byte wasm + hv-boot) on %s — reverse-proxy this with Caddy\n", len(wasm), serveAddr)
 		srv := &http.Server{
 			Addr:              serveAddr,
 			Handler:           mux,
 			ReadHeaderTimeout: 10 * time.Second,
 		}
+		if serveTLS {
+			cert, err := localhostTLSCert()
+			if err != nil {
+				cmd.PrintErrln("tls cert:", err)
+				os.Exit(1)
+			}
+			srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+			cmd.Printf("serving standalone wasm-visor over HTTPS (self-signed localhost cert) on %s — open https://localhost%s and accept the cert warning once\n", serveAddr, serveAddr)
+			if err := srv.ListenAndServeTLS("", ""); err != nil {
+				cmd.PrintErrln("serve:", err)
+				os.Exit(1)
+			}
+			return
+		}
+		cmd.Printf("serving standalone wasm-visor (ui + %d-byte wasm + hv-boot) on %s — reverse-proxy this with Caddy\n", len(wasm), serveAddr)
 		if err := srv.ListenAndServe(); err != nil {
 			cmd.PrintErrln("serve:", err)
 			os.Exit(1)
 		}
 	},
+}
+
+// localhostTLSCert returns a self-signed cert for localhost / 127.0.0.1 / ::1,
+// used by `hv serve --tls` to present a real https:// origin for local testing.
+// It is persisted under the temp dir and reused across restarts (so the browser
+// only has to accept it once) and regenerated when missing or expired. NOT for
+// production — a real deployment terminates TLS at a CA-fronted reverse proxy.
+func localhostTLSCert() (tls.Certificate, error) {
+	dir := filepath.Join(os.TempDir(), "skywire-hv-serve-tls")
+	certPath, keyPath := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
+
+	if c, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
+		if leaf, e := x509.ParseCertificate(c.Certificate[0]); e == nil && time.Now().Before(leaf.NotAfter) {
+			return c, nil
+		}
+	}
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	tmpl := x509.Certificate{
+		SerialNumber:          serial,
+		Subject:               pkix.Name{CommonName: "localhost"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().AddDate(1, 0, 0),
+		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
+
+	if err := os.MkdirAll(dir, 0o700); err == nil {
+		_ = os.WriteFile(certPath, certPEM, 0o600) //nolint:errcheck // cache best-effort; in-memory cert is returned regardless
+		_ = os.WriteFile(keyPath, keyPEM, 0o600)   //nolint:errcheck
+	}
+	return tls.X509KeyPair(certPEM, keyPEM)
 }
 
 // injectBoot inserts the hv-boot.js bootstrap as a classic <script> right after
