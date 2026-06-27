@@ -288,7 +288,22 @@ func (s *service) Run(ctx context.Context) error {
 	mainWSURL := ""
 	if cfg.WSAddress == "" && primaryAdvertised != "" && !strings.HasPrefix(primaryAdvertised, ":") {
 		mainWSURL = "ws://" + primaryAdvertised + "/dmsg"
-		log.WithField("ws_url", mainWSURL).Info("Serving dmsg over WebSocket on the main port (unified).")
+		// wss_domain_suffix: advertise a TLS-fronted wss:// URL self-derived from
+		// this server's PK instead of the bare ws://IP, so an HTTPS-served browser
+		// wasm-visor can reach it without mixed content. The listener stays plain
+		// ws on the main port; a front proxy (Caddy) terminates TLS. We log the
+		// exact Caddy line so the operator just pastes it (no label to compute).
+		if suffix := strings.TrimPrefix(cfg.WSSDomainSuffix, "."); suffix != "" {
+			host := cfg.PubKey.DNSLabel() + "." + suffix
+			mainWSURL = "wss://" + host + "/dmsg"
+			proxyTarget := primaryAdvertised
+			if _, port, perr := net.SplitHostPort(primaryAdvertised); perr == nil {
+				proxyTarget = "127.0.0.1:" + port
+			}
+			log.WithField("ws_url", mainWSURL).Infof("dmsg-ws: advertising wss (front with TLS) — Caddy: %s { reverse_proxy %s }", host, proxyTarget)
+		} else {
+			log.WithField("ws_url", mainWSURL).Info("Serving dmsg over WebSocket on the main port (unified).")
+		}
 	}
 
 	go srvAPI.RunBackgroundTasks(runCtx)

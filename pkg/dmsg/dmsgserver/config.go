@@ -132,6 +132,16 @@ type Config struct {
 	// (Server.AddressWS), e.g. "wss://dmsg1.skywire.skycoin.com/dmsg". Required
 	// when WSAddress is set, otherwise clients learn no URL to dial.
 	PublicAddressWS string `json:"public_address_ws,omitempty"`
+	// WSSDomainSuffix, when set, makes the server SELF-DERIVE its advertised
+	// wss:// WS URL from its own PK: "wss://<base32(PK)>.<suffix>/dmsg" (the
+	// base32 PK is the 53-char cipher.PubKey.DNSLabel — a DNS-safe identity
+	// label). It overrides the bare ws://IP advertised on the unified main port,
+	// so an HTTPS-served browser wasm-visor can reach the server with no mixed
+	// content. The WS listener stays plain on the main port; a front proxy
+	// (Caddy) terminates TLS for <label>.<suffix> and reverse-proxies to it (the
+	// server logs the exact Caddy line on startup). One uniform suffix across all
+	// servers is enough — each self-labels — so no per-server URL to hand-match.
+	WSSDomainSuffix string `json:"wss_domain_suffix,omitempty"`
 	// WTAddress is the local "host:port" the server binds a UDP socket on for
 	// the WebTransport (HTTP/3-over-QUIC) listener (dmsg-over-WebTransport).
 	// Empty disables WT — the default, so no extra port opens unless the
