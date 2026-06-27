@@ -890,20 +890,24 @@ func initHypervisors(_ context.Context, v *Visor, _ *logging.Logger) error {
 		wg := new(sync.WaitGroup)
 		wg.Add(1)
 
-		go func(hvErrs chan error) {
+		go func(hvPK cipher.PubKey, cancel context.CancelFunc, hvErrs chan error) {
 			defer wg.Done()
-			//			var autoPeerIP string
-			//			if v.autoPeer {
-			//				autoPeerIP = v.autoPeerIP
-			//			} else {
-			//				autoPeerIP = ""
-			//			}
-			defer delete(v.connectedHypervisors, hvPK)
+			// Register the cancel so RemoveHypervisor can tear down this
+			// config-loaded connection at runtime (previously only
+			// AddHypervisor-added connections were removable). Deferred cleanup
+			// clears both maps, mirroring AddHypervisor.
+			defer func() {
+				v.initLock.Lock()
+				delete(v.connectedHypervisors, hvPK)
+				delete(v.hypervisorCancels, hvPK)
+				v.initLock.Unlock()
+			}()
+			v.initLock.Lock()
 			v.connectedHypervisors[hvPK] = true
+			v.hypervisorCancels[hvPK] = cancel
+			v.initLock.Unlock()
 			ServeRPCClient(ctx, log, v.tpM, v.dmsgC, rpcS, addr, hvErrs)
-			//			ServeRPCClient(ctx, log, autoPeerIP, v.dmsgC, rpcS, addr, hvErrs)
-
-		}(hvErrs)
+		}(hvPK, cancel, hvErrs)
 
 		// Background goroutine: probe the hypervisor via dmsg, then
 		// attempt stcpr / sudph transport creation so subsequent RPC
