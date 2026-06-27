@@ -43,6 +43,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -684,6 +685,38 @@ func (visorSelf) SelfTransports() []*wasmhv.TransportSummary {
 		return true
 	})
 	return out
+}
+
+// routeResp mirrors pkg/visor's routingRuleResp so the hypervisor Routing tab
+// gets the same JSON shape from a wasm-visor as from a native one.
+type routeResp struct {
+	Key     routing.RouteID      `json:"key"`
+	Rule    string               `json:"rule"`
+	Summary *routing.RuleSummary `json:"rule_summary,omitempty"`
+}
+
+// SelfRoutes returns this tab's own routing rules as JSON matching the native
+// /visors/{pk}/routes shape. rule.Summary() is the panic-safe converter (it
+// switches on the rule type — unlike the Next*ID accessors, which panic on
+// Consume/Reverse rules), and rule bytes hex-encode directly.
+func (visorSelf) SelfRoutes() []byte {
+	if rtr == nil {
+		return nil
+	}
+	rules := rtr.Rules()
+	resp := make([]routeResp, 0, len(rules))
+	for _, rule := range rules {
+		resp = append(resp, routeResp{
+			Key:     rule.KeyRouteID(),
+			Rule:    hex.EncodeToString(rule),
+			Summary: rule.Summary(),
+		})
+	}
+	b, err := json.Marshal(resp)
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // jsDialTransport(pkHex, netType, url, certHash) creates a direct visor↔visor

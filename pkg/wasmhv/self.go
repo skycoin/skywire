@@ -15,6 +15,11 @@ type SelfProvider interface {
 	SelfOverview() Overview
 	SelfSummary() Summary
 	SelfTransports() []*TransportSummary
+	// SelfRoutes returns the tab's own routing rules as pre-marshaled JSON
+	// matching the native /visors/{pk}/routes shape ([]{key, rule, rule_summary}).
+	// Pre-marshaled so pkg/wasmhv needn't import pkg/routing; nil/empty JSON when
+	// the edge holds no rules.
+	SelfRoutes() []byte
 }
 
 // SetSelf attaches the local visor's hypervisor view. Pass nil to detach.
@@ -46,6 +51,17 @@ func (c *Core) selfRoute(self SelfProvider, sub string) (int, []byte) {
 		return jsonResp(HealthInfo{ServicesHealth: "healthy"})
 	case "transports":
 		return jsonResp(self.SelfTransports())
+	case "routes":
+		// The wasm-visor is an edge router; serve its own rules (panic-safe
+		// rule.Summary() on the cmd side), so the Routing tab works instead of 404.
+		if body := self.SelfRoutes(); body != nil {
+			return 200, body
+		}
+		return jsonResp([]struct{}{})
+	case "routegroups":
+		// A browser-edge visor doesn't relay route groups; empty (not 404) so the
+		// Routing tab renders cleanly rather than erroring.
+		return jsonResp([]struct{}{})
 	case "transport-types":
 		// The direct transport types the wasm-visor can create (WebRTC is a
 		// symmetric DataChannel; ws/wt are browser-dial-only).
