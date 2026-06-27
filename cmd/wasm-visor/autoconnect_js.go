@@ -159,7 +159,13 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 
 		// WT: a separate QUIC endpoint with its own UDP port + pinned self-signed
 		// cert, both learned from the AR's WT record (https://host:port/skywire).
-		if url, certHash, err := ar.resolveWT(ctx, pk); err == nil && url != "" {
+		url, certHash, werr := ar.resolveWT(ctx, pk)
+		switch {
+		case werr != nil:
+			vlog(fmt.Sprintf("ws-autoconnect: AR wt resolve %s: %v", pk.Hex()[:8], werr))
+		case url == "":
+			vlog(fmt.Sprintf("ws-autoconnect: %s has no WT entry in AR (404) — skip", pk.Hex()[:8]))
+		default:
 			wtTable.SetEntry(pk, network.WTEntry{URL: url, CertHash: certHash})
 			dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
 			_, derr := tpM.SaveTransport(dctx, pk, types.WT, transport.LabelAutomatic)
