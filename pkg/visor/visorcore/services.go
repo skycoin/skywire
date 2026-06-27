@@ -34,7 +34,11 @@ type Services struct {
 	RouteFinder     string
 	RouteFinderDmsg string
 	RouteSetupNodes []cipher.PubKey
-	MinHops         uint16
+	// TransportSetupNodes is the trust list for the transport-setup accept side
+	// (dmsg port 47): only these PKs may command this visor to add/remove
+	// transports. Mirrors the native visor's EffectiveTransportSetupPKs.
+	TransportSetupNodes []cipher.PubKey
+	MinHops             uint16
 	// service discovery
 	ServiceDiscovery     string
 	ServiceDiscoveryDmsg string
@@ -78,6 +82,7 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 		RouteFinder:            d.RouteFinder,
 		RouteFinderDmsg:        d.RouteFinderDmsg,
 		RouteSetupNodes:        d.RouteSetupNodes,
+		TransportSetupNodes:    d.TransportSetupPKs,
 		MinHops:                1,
 		ServiceDiscovery:       d.ServiceDiscovery,
 		ServiceDiscoveryDmsg:   d.ServiceDiscoveryDmsg,
@@ -103,6 +108,9 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 		s.TransportDiscoveryDmsg = pick(v1.Transport.DiscoveryDmsg, s.TransportDiscoveryDmsg)
 		s.AddressResolver = pick(v1.Transport.AddressResolver, s.AddressResolver)
 		s.AddressResolverDmsg = pick(v1.Transport.AddressResolverDmsg, s.AddressResolverDmsg)
+		if pks := v1.EffectiveTransportSetupPKs(); len(pks) > 0 {
+			s.TransportSetupNodes = pks
+		}
 	}
 	if v1.Routing != nil {
 		s.RouteFinder = pick(v1.Routing.RouteFinder, s.RouteFinder)
