@@ -97,6 +97,15 @@ const (
 	// subscribe to one TPD feed without dragging in the others.
 	DmsgTPDAllTransportsCXOPort uint16 = 55
 
+	// DmsgWebRTCSignalPort is the dmsg port the WebRTC carrier exchanges its SDP
+	// offer/answer + ICE candidates on (a visor dials a peer here to open a
+	// signaling stream; the answerer listens). It MUST live in this registry: it
+	// previously hardcoded 47 in pkg/transport/network, colliding with
+	// DmsgTransportSetupPort (47) — so the webrtc listener lost the bind and
+	// offers reached the transport-setup listener instead, leaving webrtc dead
+	// fleet-wide.
+	DmsgWebRTCSignalPort uint16 = 56
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 
