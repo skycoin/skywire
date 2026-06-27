@@ -412,6 +412,26 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// their stcpr port, phase 2) so this browser leaf joins the mesh + routes form.
 	startWSAutoconnect(ctx, svc.ServiceDiscoveryDmsg, svc.AddressResolverDmsg, pk, sk)
 
+	// wss → WebTransport convergence: the browser bootstraps its dmsg session over
+	// wss (the only carrier reachable before discovery), then prefers WT for
+	// further sessions (Carriers=[wt,ws]). Once a WT session is live, drop the
+	// lingering wss one so we shed its redundant TLS-over-Noise. Safe + idempotent
+	// (never strands the client); a no-op until a dmsg server actually serves WT.
+	go func() {
+		t := time.NewTicker(20 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if n := dmsgC.UpgradeBrowserSessions(); n > 0 {
+					vlog(fmt.Sprintf("dmsg: converged %d wss session(s) to WebTransport", n))
+				}
+			}
+		}
+	}()
+
 	// 4. in-process app server (RunModeInternal). The browser-adapted
 	// appserver.NewProcManager no longer net.Listen("tcp")s under TinyGo (a
 	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP

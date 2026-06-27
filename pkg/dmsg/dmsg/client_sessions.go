@@ -117,6 +117,73 @@ func hasCarrier(carriers []string, c string) bool {
 	return false
 }
 
+// prefersWTOverWS reports whether the carrier preference lists WebTransport
+// ahead of WebSocket — the browser-bootstrap case where a wss session should
+// be dropped once a WT session exists. Native clients (no WT, or WS-less) → false.
+func prefersWTOverWS(carriers []string) bool {
+	wt, ws := -1, -1
+	for i, c := range carriers {
+		switch c {
+		case CarrierWT:
+			if wt < 0 {
+				wt = i
+			}
+		case CarrierWS:
+			if ws < 0 {
+				ws = i
+			}
+		}
+	}
+	return wt >= 0 && ws >= 0 && wt < ws
+}
+
+// UpgradeBrowserSessions closes WebSocket (wss) sessions once at least one
+// WebTransport session is live, so a browser that BOOTSTRAPPED over wss (the
+// only carrier a browser can use before discovery is reachable) converges to
+// WebTransport — dropping the redundant TLS-over-Noise of wss. It is safe to
+// call repeatedly (e.g. on a timer): when a wss session is closed, the Serve
+// loop re-dials to MinSessions, preferring WT (Carriers=[wt,ws]).
+//
+// Conservative by construction so it can never strand the client:
+//   - a no-op unless the client prefers WT over WS (native clients skip it);
+//   - only acts when a WT session already exists;
+//   - never drops the session count below one.
+//
+// Returns the number of wss sessions closed.
+func (ce *Client) UpgradeBrowserSessions() int {
+	if !prefersWTOverWS(ce.conf.Carriers) {
+		return 0
+	}
+	ce.sessionsMx.Lock()
+	var hasWT bool
+	var wsSessions []*SessionCommon
+	for _, s := range ce.sessions {
+		switch s.carrier {
+		case CarrierWT:
+			hasWT = true
+		case CarrierWS:
+			wsSessions = append(wsSessions, s)
+		}
+	}
+	remaining := len(ce.sessions)
+	ce.sessionsMx.Unlock()
+
+	if !hasWT {
+		return 0
+	}
+	closed := 0
+	for _, s := range wsSessions {
+		if remaining <= 1 {
+			break // never strand the client
+		}
+		ce.log.WithField("remote_pk", s.RemotePK()).Debug("Dropping wss session — WebTransport is up; converging off the redundant TLS layer.")
+		_ = s.Close() //nolint:errcheck // serve loop unwinds → delSession → Serve re-dials WT-preferred
+		remaining--
+		closed++
+	}
+	return closed
+}
+
 func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
 	for _, c := range carriers {
 		switch c {
@@ -286,6 +353,10 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	// setup starved on "dmsg error 202". Replace the predecessor and close
 	// it; its serve goroutine then unwinds and calls delSession, which is
 	// identity-checked so it cannot evict this live replacement.
+	// Record the carrier actually used (after any WT→WS / *→TCP fallback above)
+	// so Client.UpgradeBrowserSessions can later converge wss → WebTransport.
+	dSes.carrier = network
+
 	ce.sessionsMx.Lock()
 	if ce.closed {
 		ce.sessionsMx.Unlock()
