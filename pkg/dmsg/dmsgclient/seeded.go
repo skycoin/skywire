@@ -85,8 +85,15 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	dClient := direct.NewClient(entries, log)
 
 	conf := dmsg.DefaultConfig()
-	if preferWS { // browser (wasm) seeds over WebSocket; native uses TCP (empty)
-		conf.Carriers = []string{dmsg.CarrierWS}
+	if preferWS {
+		// Browser (wasm): prefer WebTransport, fall back to WebSocket. The seed
+		// entry carries only AddressWS (a wss:// bootstrap endpoint) — there's no
+		// WT cert hash to pin before discovery is reachable — so the FIRST session
+		// is WS (wss, when served over HTTPS). Once discovery is up, server entries
+		// carry AddressWT + CertHashWT, so subsequent sessions prefer WebTransport
+		// (HTTP/3, CA-free, no redundant TLS-over-Noise) and WS is used only when
+		// it must be: the bootstrap hop, or a server with no WT / a failed WT dial.
+		conf.Carriers = []string{dmsg.CarrierWT, dmsg.CarrierWS}
 	}
 	// MinSessions 2 (not 1): once bootstrapped via the seed and registered in
 	// discovery, the client learns the live server list from discovery
