@@ -24,6 +24,7 @@ func (f fakeSelf) SelfSummary() Summary {
 	return Summary{Overview: &ov, Online: true, IsHypervisor: true}
 }
 func (f fakeSelf) SelfTransports() []*TransportSummary { return f.tps }
+func (f fakeSelf) SelfRoutes() []byte                  { return []byte("[]") }
 
 func newSelfPK(t *testing.T) cipher.PubKey {
 	t.Helper()
