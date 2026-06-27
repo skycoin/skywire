@@ -61,28 +61,36 @@ var prodData = Services{
 	ConfDmsg: "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
 	DmsgServers: []DmsgServerEntry{
 		{Static: "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "139.162.160.227:30086"}},
 		{Static: "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "45.79.213.251:30087"}},
 		{Static: "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "172.105.179.5:30085"}},
 		{Static: "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "172.104.166.8:30084"}},
 		{Static: "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "172.235.168.146:30081"}},
 		{Static: "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "70.121.13.123:9083"}},
 		{Static: "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "139.162.173.101:30082"}},
 		{Static: "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "139.162.173.101:30083"}},
 	},
 	DmsgDiscoveryDmsg:      "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
@@ -136,28 +144,36 @@ var testData = Services{
 	ConfDmsg: "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
 	DmsgServers: []DmsgServerEntry{
 		{Static: "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "139.162.160.227:30086"}},
 		{Static: "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "45.79.213.251:30087"}},
 		{Static: "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "172.105.179.5:30085"}},
 		{Static: "02c483938539bd7820f72e48ed6056bab68e221e1108d23965a2903221495e4af7", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "172.104.166.8:30084"}},
 		{Static: "03f57e7cf26c0764c5ab659a606add056ddf8bfad4f5bc7e8613cad05e5f228adf", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "172.235.168.146:30081"}},
 		{Static: "0326978f5a53aff537dbb47fed58b1f123af3b00132d365f1309a14db4168dcff7", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "70.121.13.123:9083"}},
 		{Static: "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "139.162.173.101:30082"}},
 		{Static: "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4", Server: struct {
-			Address string `json:"address"`
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "139.162.173.101:30083"}},
 	},
 	DmsgDiscoveryDmsg:      "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",

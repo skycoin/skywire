@@ -116,6 +116,17 @@ func vlog(msg string) {
 	}
 }
 
+// pageHTTPS reports whether this wasm-visor was served over HTTPS. From an HTTPS
+// origin the browser blocks plain ws:// (mixed content), so only wss:// WS seeds
+// and WebTransport endpoints are dialable.
+func pageHTTPS() bool {
+	loc := js.Global().Get("location")
+	if !loc.Truthy() {
+		return false
+	}
+	return loc.Get("protocol").String() == "https:"
+}
+
 func main() {
 	ctx = context.Background()
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
@@ -216,13 +227,38 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// (seedPk/seedWs), when given, is added or overrides (e.g. a server whose WS
 	// is on a SEPARATE port). Servers not yet serving main-port WS just fail to
 	// dial and are skipped (best-effort); the client settles on the reachable set.
+	// Carrier choice is page-scheme-aware. An HTTPS page may ONLY open wss://
+	// (the browser blocks plain ws:// as mixed content), so it seeds exclusively
+	// from servers that advertise a wss:// AddressWS (a TLS-fronted domain) and
+	// skips the rest. An http:// / file:// page derives plain ws://<Address>/dmsg
+	// from the stable IP:port — no domain needed for plain ws. AddressWS is a
+	// SEPARATE field from Address, so native visors are unaffected either way.
+	https := pageHTTPS()
 	seedsByPK := map[cipher.PubKey]*disc.Entry{}
+	skipped := 0
 	for _, ds := range svc.DmsgServers {
 		var spk cipher.PubKey
-		if ds.Server.Address == "" || spk.UnmarshalText([]byte(ds.Static)) != nil {
+		if spk.UnmarshalText([]byte(ds.Static)) != nil {
 			continue
 		}
-		seedsByPK[spk] = &disc.Entry{Version: "0.0.1", Static: spk, Server: &disc.Server{AddressWS: "ws://" + ds.Server.Address + "/dmsg"}}
+		var wsURL string
+		if https {
+			if !strings.HasPrefix(strings.ToLower(ds.Server.AddressWS), "wss://") {
+				skipped++ // no wss endpoint → unreachable from an HTTPS page
+				continue
+			}
+			wsURL = ds.Server.AddressWS
+		} else if ds.Server.Address != "" {
+			wsURL = "ws://" + ds.Server.Address + "/dmsg"
+		} else if ds.Server.AddressWS != "" {
+			wsURL = ds.Server.AddressWS
+		} else {
+			continue
+		}
+		seedsByPK[spk] = &disc.Entry{Version: "0.0.1", Static: spk, Server: &disc.Server{AddressWS: wsURL}}
+	}
+	if https && skipped > 0 {
+		vlog(fmt.Sprintf("dmsg: HTTPS page — skipped %d dmsg server(s) with no wss:// endpoint (browser blocks plain ws://)", skipped))
 	}
 	if seedPKHex != "" && seedWSURL != "" {
 		var spk cipher.PubKey
@@ -236,6 +272,9 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		seeds = append(seeds, e)
 	}
 	if len(seeds) == 0 {
+		if https {
+			return pk, errors.New("no usable dmsg seed servers on an HTTPS page: no embedded server advertises a wss:// endpoint (the browser blocks plain ws://). Give the dmsg servers a TLS-fronted wss:// AddressWS (e.g. a Caddy reverse_proxy on a subdomain)")
+		}
 		return pk, errors.New("no dmsg seed servers (embedded set empty and no seedPk/seedWs provided)")
 	}
 	vlog(fmt.Sprintf("dmsg: connecting (%d WS seed servers)…", len(seeds)))
