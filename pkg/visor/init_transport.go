@@ -411,7 +411,13 @@ func initWSClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 // restarts via re-register); a fixed firewall port can be pinned later.
 // Depends on &tr so v.tpM and the AR client both exist.
 func initWTClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	v.tpM.InitClient(ctx, types.WT, 0)
+	// WT binds its OWN UDP port (it's HTTP/3-over-QUIC and can't share squic's
+	// socket). wt_port PINS it for NAT-forwarding; 0 binds an ephemeral port.
+	port := 0
+	if v.conf.Transport != nil {
+		port = v.conf.Transport.WTPort
+	}
+	v.tpM.InitClient(ctx, types.WT, port)
 	return nil
 }
 
