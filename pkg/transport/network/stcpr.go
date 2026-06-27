@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package network pkg/transport/network/stcpr.go
 package network
 
@@ -24,6 +26,10 @@ const (
 type stcprClient struct {
 	*resolvedClient
 	port int
+	// sharedListener, when set, is the TCP listener stcpr accepts over instead of
+	// binding its own — the raw (non-HTTP) virtual listener of a unified
+	// transport_port socket (see tcpDemux). nil = bind a dedicated listener.
+	sharedListener net.Listener
 }
 
 func newStcpr(resolved *resolvedClient, port int) Client {
@@ -85,21 +91,28 @@ func (c *stcprClient) Start() error {
 
 func (c *stcprClient) serve() {
 	var lis net.Listener
-	var err error
-	var confPort string
-	if c.port != 0 {
-		confPort = fmt.Sprintf(":%d", c.port)
-	}
-	for {
-		lis, err = net.Listen("tcp", confPort)
-		if err != nil {
-			c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
-			c.port++
+	if c.sharedListener != nil {
+		// Unified transport port: accept over the shared TCP listener's raw
+		// (non-HTTP) virtual listener. The master listener lifecycle stays with the
+		// demux. The AR is still bound to the actual (shared) port below.
+		lis = c.sharedListener
+	} else {
+		var err error
+		var confPort string
+		if c.port != 0 {
 			confPort = fmt.Sprintf(":%d", c.port)
-			c.log.Warnf("Trying port %d", c.port)
-			continue
 		}
-		break
+		for {
+			lis, err = net.Listen("tcp", confPort)
+			if err != nil {
+				c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
+				c.port++
+				confPort = fmt.Sprintf(":%d", c.port)
+				c.log.Warnf("Trying port %d", c.port)
+				continue
+			}
+			break
+		}
 	}
 
 	localAddr := lis.Addr().String()

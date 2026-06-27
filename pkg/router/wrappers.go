@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/wrappers.go
 package router
 
@@ -6,27 +8,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/rpc"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/transport"
 )
-
-//go:generate mockery --name RouteGroupDialer --case underscore --inpackage
-
-// RouteGroupDialer is an interface for RouteGroup dialers
-type RouteGroupDialer interface {
-	Dial(
-		ctx context.Context,
-		log *logging.Logger,
-		dmsgC *dmsg.Client,
-		setupNodes []cipher.PubKey,
-		req routing.BidirectionalRoute,
-	) (routing.EdgeRules, cipher.PubKey, error) // Returns rules and the connected setup node PK
-}
 
 // EmbeddedSetupNode is an interface for embedded route setup-nodes that can
 // create route groups locally without dialing a remote setup-node.
@@ -55,12 +44,6 @@ type setupNodeDialer struct {
 	// relays the inner payload to the first hop. Set by the router at Serve time
 	// (the visor's CascadeHandler implements it). nil until then.
 	cascadeOrigin cascadeOriginProcessor
-}
-
-// cascadeOriginProcessor consumes the source-addressed outermost layer of a
-// cascade and returns the collected ACK. Implemented by *CascadeHandler.
-type cascadeOriginProcessor interface {
-	ProcessLocalOrigin(payload []byte) (*routing.CascadeAck, error)
 }
 
 // SetCascadeOrigin wires the visor's CascadeHandler in as the source-origin

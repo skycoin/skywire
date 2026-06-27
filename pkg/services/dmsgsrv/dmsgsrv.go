@@ -23,6 +23,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
@@ -45,6 +46,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/setupmetrics"
 	"github.com/skycoin/skywire/pkg/services"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
 // Type is the registry key used in services.json blocks.
@@ -277,21 +279,31 @@ func (s *service) Run(ctx context.Context) error {
 		primaryAdvertised = cfg.PublicAddress
 	}
 
+	// dmsg-over-WebSocket on the MAIN port (unified, the default): unless a
+	// SEPARATE ws_address is explicitly configured (e.g. for CDN/wss fronting),
+	// serve WS on the same TCP port as raw-dmsg and advertise ws://<advertised>/dmsg.
+	// One ip:port carries both, so every server becomes reachable by a browser
+	// wasm-visor with no extra port and no discovery topology change. See
+	// docs/design/dmsg-server-protocol-unification.md.
+	mainWSURL := ""
+	if cfg.WSAddress == "" && primaryAdvertised != "" && !strings.HasPrefix(primaryAdvertised, ":") {
+		mainWSURL = "ws://" + primaryAdvertised + "/dmsg"
+		log.WithField("ws_url", mainWSURL).Info("Serving dmsg over WebSocket on the main port (unified).")
+	}
+
 	go srvAPI.RunBackgroundTasks(runCtx)
 	log.WithField("addr", cfg.HTTPAddress).Info("Serving server API...")
 	go func() {
-		if err := srvAPI.ListenAndServe(cfg.LocalAddress, primaryAdvertised, cfg.HTTPAddress); err != nil {
+		if err := srvAPI.ListenAndServe(cfg.LocalAddress, primaryAdvertised, cfg.HTTPAddress, mainWSURL); err != nil {
 			log.Errorf("Serve: %v", err)
 			cancel()
 		}
 	}()
 
-	// dmsg-over-WebSocket (optional, off by default): bind a plaintext WS
-	// listener and advertise its public URL so WS-only clients — chiefly the
-	// js/wasm build, which cannot open a raw TCP/UDP socket — can reach this
-	// server. Best-effort and additive: a bind failure leaves TCP/QUIC serving
-	// normally. Requires both ws_address (bind) and public_address_ws
-	// (advertised URL); without the URL clients learn nothing to dial.
+	// dmsg-over-WebSocket on a SEPARATE port (opt-in, for CDN/wss fronting):
+	// mutually exclusive with the main-port WS above (the entry carries one
+	// AddressWS) — only runs when ws_address is explicitly set. Requires both
+	// ws_address (bind) and public_address_ws (advertised URL).
 	if cfg.WSAddress != "" && cfg.PublicAddressWS != "" {
 		wsLis, werr := net.Listen("tcp", cfg.WSAddress)
 		if werr != nil {
@@ -307,6 +319,32 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	} else if cfg.WSAddress != "" {
 		log.Warn("dmsg-ws: ws_address set without public_address_ws; WebSocket disabled (no URL to advertise)")
+	}
+
+	// dmsg-over-WebTransport (optional, off by default): bind a UDP socket for
+	// the HTTP/3 listener and advertise its public URL + cert hash so a browser
+	// can reach this server by bare IP with NO CA-issued certificate (it pins
+	// the advertised SHA-256 via serverCertificateHashes). Best-effort and
+	// additive: a bind/cert failure leaves TCP/QUIC/WS serving normally.
+	// Requires both wt_address (bind) and public_address_wt (advertised URL).
+	if cfg.WTAddress != "" && cfg.PublicAddressWT != "" {
+		wtConn, werr := net.ListenPacket("udp", cfg.WTAddress)
+		if werr != nil {
+			log.WithError(werr).Warnf("dmsg-wt: failed to bind UDP listener on %s; serving without WebTransport", cfg.WTAddress)
+		} else if cert, certHash, cerr := skyquic.NewWebTransportCertificate(); cerr != nil {
+			wtConn.Close() //nolint:errcheck,gosec
+			log.WithError(cerr).Warn("dmsg-wt: failed to generate WebTransport certificate; serving without WebTransport")
+		} else {
+			log.WithField("wt_addr", cfg.WTAddress).WithField("wt_url", cfg.PublicAddressWT).Info("Serving dmsg over WebTransport...")
+			go func() {
+				if err := srv.ServeWebTransport(wtConn, cfg.PublicAddressWT, cert, certHash); err != nil {
+					log.Errorf("ServeWebTransport: %v", err)
+					cancel()
+				}
+			}()
+		}
+	} else if cfg.WTAddress != "" {
+		log.Warn("dmsg-wt: wt_address set without public_address_wt; WebTransport disabled (no URL to advertise)")
 	}
 
 	go s.serveDmsgSurfaces(runCtx, cancel, dmsgC, dClient)

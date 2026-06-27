@@ -44,6 +44,11 @@ type V1 struct {
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
 	CLIAddr             string          `json:"cli_addr"`
 
+	// KeyRing is a small wallet-like set of deterministically-derived keys (from
+	// the visor secret key). Currently mints standalone-hypervisor identities
+	// (cli hv gen). Optional; absent on visors that never derived one.
+	KeyRing *KeyRing `json:"keyring,omitempty"`
+
 	LogLevel             string                       `json:"log_level"`
 	LocalPath            string                       `json:"local_path"`
 	StunServers          []string                     `json:"stun_servers"`
@@ -271,6 +276,19 @@ type DmsgWebConfig struct {
 	// through one's own proxy is inherently authorized. Set false to render the
 	// self-loopback landing page as an anonymous (unauthenticated) caller.
 	SelfLoopbackAuthenticated *bool `json:"self_loopback_authenticated,omitempty"`
+	// ForwardProxy, when true, makes the visor serve a CLEARNET HTTP forward-
+	// proxy over dmsg on ForwardPort: a whitelisted peer (e.g. a browser
+	// wasm-visor that cannot itself do TLS) sends an absolute-URL HTTP request
+	// over dmsg and this visor fetches it from the clearnet and returns the
+	// response. Default off. Access is restricted to the same whitelist that
+	// gates the visor's other privileged dmsg surfaces (own PK + hypervisors +
+	// survey/pty whitelist) — it is NOT an open relay. Egress prefers
+	// UpstreamSOCKS when set (so the exit IP is the skysocks node, not this
+	// visor); only if UpstreamSOCKS is empty does this visor connect directly
+	// (its own IP becomes the exit). See docs/design/dmsg-forward-proxy.md.
+	ForwardProxy bool `json:"forward_proxy,omitempty"`
+	// ForwardPort is the dmsg port the forward-proxy listens on. Default 84.
+	ForwardPort uint16 `json:"forward_port,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the
@@ -395,10 +413,20 @@ type Transport struct {
 	LogStore              *LogStore       `json:"log_store"`
 	StcprPort             int             `json:"stcpr_port"`
 	SudphPort             int             `json:"sudph_port"`
-	// QUICPort enables the experimental QUIC transport on the given UDP port
-	// (#2607 QUIC follow-on). 0 (default/omitted) disables it — QUIC is opt-in
-	// until proven on the fleet. A fixed port is preferable to ephemeral so the
-	// address-resolver registration + any firewall rule are stable.
+	// TransportPort, when non-zero, is the single port number the transport types
+	// share: QUIC + sudph on <port>/udp and stcpr + WS on <port>/tcp, each socket
+	// demultiplexed by protocol (see docs/design/transport-port-unification.md),
+	// instead of binding a port each. 0 (default/omitted) keeps per-type binding.
+	// Per-type ports remain an override: a type whose own port (stcpr_port /
+	// sudph_port / quic_port) is non-zero breaks OUT onto that dedicated port even
+	// when transport_port is set; left 0 it rides the shared port. Opt-in while the
+	// unified-port path proves out.
+	TransportPort int `json:"transport_port,omitempty"`
+	// QUICPort optionally PINS the UDP port for the QUIC transport (#2607). QUIC
+	// is on by default (like stcpr/sudph); 0 (default/omitted) binds an ephemeral
+	// port — exactly as sudph_port does. Set a fixed port when a stable firewall
+	// rule is wanted; the bound port is registered with the address resolver
+	// either way, so a random port works and survives restarts.
 	QUICPort int `json:"quic_port,omitempty"`
 	// ARTransportLimit controls address resolver registration for privacy:
 	//   0 (default): stay registered indefinitely
@@ -544,6 +572,19 @@ func (v1 *V1) UpdateMinHops(hops uint16) error {
 func (v1 *V1) UpdatePersistentTransports(pTps []tspec.PersistentTransports) error {
 	v1.mu.Lock()
 	v1.PersistentTransports = pTps
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
+// UpdateHypervisors persists the visor's configured hypervisor PKs so a runtime
+// add/remove survives a restart. Same lock+flush shape as UpdateMinHops /
+// UpdatePersistentTransports. A no-op flush on a non-file-backed config (STDIN /
+// in-memory) returns its error to the caller, which may ignore it (the runtime
+// connection change still took effect).
+func (v1 *V1) UpdateHypervisors(pks []cipher.PubKey) error {
+	v1.mu.Lock()
+	v1.Hypervisors = pks
 	v1.mu.Unlock()
 
 	return v1.flush(v1)

@@ -5,7 +5,7 @@
       <app-top-bar
         [titleParts]="['start.title']"
         [tabsData]="tabsData"
-        [selectedTabIndex]="showRewardsInfo ? 1 : 0"
+        [selectedTabIndex]="showRewardsInfo ? 2 : 0"
         [showUpdateButton]="false"
       ></app-top-bar>
     </div>
@@ -20,7 +20,7 @@
       <app-top-bar
         [titleParts]="['start.title']"
         [tabsData]="tabsData"
-        [selectedTabIndex]="showRewardsInfo ? 1 : 0"
+        [selectedTabIndex]="showRewardsInfo ? 2 : 0"
         [secondsSinceLastUpdate]="secondsSinceLastUpdate"
         [showLoading]="updating"
         [showAlert]="errorsUpdating"
@@ -152,7 +152,7 @@
               <!-- Values. -->
               @for (node of dataSource; track node) {
                 <a
-                  [ngClass]="{'click-effect': true}"
+                  [ngClass]="{'click-effect': true, 'wasm-visor-row': node.arch === 'wasm'}"
                   class="selectable link-row"
                   [routerLink]="['/nodes', node.localPk, 'rewards']"
                   >
@@ -312,7 +312,7 @@
                    click-to-navigate behavior. -->
               @for (node of dataSource; track node) {
                 <a
-                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale}"
+                  [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}"
                   class="selectable link-row"
                   [routerLink]="node.online ? ['/nodes', node.localPk] : null"
                   cdkDrag
@@ -465,7 +465,7 @@
               </td></tr>
               <!-- Values. -->
               @for (node of dataSource; track node) {
-                <a class="link-row" [ngClass]="{'selectable click-effect': node.online, 'stale-row': node.isStale}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
+                <a class="link-row" [ngClass]="{'selectable click-effect': node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}" [routerLink]="node.online ? ['/nodes', node.localPk] : null"><tr class="d-block"><td class="d-block">
                   <div class="list-item-container">
                     <div class="left-part">
                       @if (node.isHypervisor) {
@@ -635,7 +635,7 @@
                     </tr>
                     @for (node of section.nodes; track node.localPk) {
                       <a
-                        [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale}"
+                        [ngClass]="{'click-effect': node.online, 'non-selectable': !node.online, 'stale-row': node.isStale, 'wasm-visor-row': node.arch === 'wasm'}"
                         class="selectable link-row"
                         [routerLink]="node.online ? ['/nodes', node.localPk] : null"
                         >

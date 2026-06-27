@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router pkg/router/setupclient.go
 package router
 
@@ -5,11 +7,11 @@ import (
 	"context"
 	"errors"
 	"net"
-	"net/rpc"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"

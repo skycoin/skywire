@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
-	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -59,6 +58,12 @@ var (
 	stcpC vinit.Module
 	// QUIC module (#2607 QUIC follow-on)
 	quicC vinit.Module
+	// WS module: serves the WebSocket transport over the stcpr+WS cmux so
+	// browser (wasm) visors can reach this visor over WebSocket
+	wsC vinit.Module
+	// WT module: serves the WebTransport (QUIC/HTTP3) transport + registers its
+	// cert hash with the AR so browser (wasm) visors can dial it
+	wtC vinit.Module
 	// dmsg pty: a remote terminal to the visor working over dmsg protocol
 	ptyModule vinit.Module
 	// Dmsg module
@@ -113,6 +118,8 @@ var (
 	embRouteSetup vinit.Module
 	// Embedded dmsgweb resolver (localhost SOCKS5 for .dmsg browsing)
 	embDmsgWeb vinit.Module
+	// Clearnet HTTP forward-proxy over dmsg (opt-in, whitelist-gated)
+	embFwdProxy vinit.Module
 	// Embedded skynetweb resolver (localhost SOCKS5 for .skynet browsing)
 	embSkynetWeb vinit.Module
 	// Embedded SMTP→skywire bridge (localhost SMTP listener for *.skynet recipients)
@@ -161,6 +168,8 @@ func registerModules(logger *logging.MasterLogger) {
 	stcprC = maker("stcpr", initStcprClient, &tr)
 	stcpC = maker("stcp", initStcpClient, &tr)
 	quicC = maker("quic", initQuicClient, &tr)
+	wsC = maker("ws", initWSClient, &tr)
+	wtC = maker("wt", initWTClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
 	// dmsghttp_logserver mounts /pty on top of dmsgpty's CLI socket
@@ -173,6 +182,7 @@ func registerModules(logger *logging.MasterLogger) {
 	ptyModule = maker("dmsg_pty", initDmsgpty, &dmsgC)
 	embRouteSetup = maker("embedded_route_setup", initEmbeddedRouteSetup, &dmsgC)
 	embDmsgWeb = maker("embedded_dmsgweb", initEmbeddedDmsgWeb, &dmsgC)
+	embFwdProxy = maker("dmsg_forward_proxy", initDmsgForwardProxy, &dmsgC)
 	embSkymailBridge = maker("embedded_skymail_bridge", initEmbeddedSkymailBridge, &dmsgC)
 	// routerListener pre-opens DmsgAwaitSetupPort the moment dmsgC is
 	// ready so peers dialing it during the rt-init window (held up by
@@ -229,7 +239,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// store. See init_group.go.
 	groupingMod = maker("grouping", initGrouping, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
@@ -331,10 +341,8 @@ func getHTTPClient(ctx context.Context, v *Visor, service string) (*http.Client,
 		}
 		return v.dmsgHTTP, nil
 	}
-	return &http.Client{
-		Transport: &http.Transport{
-			DisableKeepAlives: true,
-			IdleConnTimeout:   time.Second * 5,
-		},
-	}, nil
+	// Deployment services are dmsg-only: plain HTTP to a deployment service is no
+	// longer supported. A non-dmsg URL here is a misconfiguration (a clearnet
+	// service URL) — fail loud instead of silently building a clearnet client.
+	return nil, fmt.Errorf("deployment service %q is not a dmsg:// URL — plain HTTP to deployment services is no longer supported", service)
 }

@@ -6,6 +6,12 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
+// RPCName is the RPC gateway object name (the net/rpc / gobrpc service name the
+// route-setup client dials as "RPCGateway.<Method>"). It lives in this untagged
+// file so both the native client (routerclient.go, !tinygo) and the TinyGo
+// HandleFunc registration (router_setup_rpc_tinygo.go) can reference it.
+const RPCName = "RPCGateway"
+
 // RPCGateway is a RPC interface for router.
 type RPCGateway struct {
 	logger *logging.Logger

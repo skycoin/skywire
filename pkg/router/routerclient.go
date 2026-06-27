@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package router routerclient.go
 package router
 
@@ -6,20 +8,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/rpc"
 	"time"
 
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport/network"
 )
-
-// RPCName is the RPC gateway object name.
-const RPCName = "RPCGateway"
 
 // Client is used to interact with the router's API remotely. The setup node uses this.
 type Client struct {

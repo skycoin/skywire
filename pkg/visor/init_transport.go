@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -36,20 +35,16 @@ import (
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf := v.conf.Transport
 
-	// Try DMSG-HTTP first for address resolver if configured
-	arURL := conf.AddressResolver
-	if conf.AddressResolverDmsg != "" && v.dmsgC != nil {
-		if dmsgC, err := getHTTPClient(ctx, v, conf.AddressResolverDmsg); err == nil {
-			arURL = conf.AddressResolverDmsg
-			_ = dmsgC // URL is enough, getHTTPClient sets up DMSG routing
-			log.Info("Using DMSG-HTTP for address resolver")
-		} else if arURL != "" {
-			log.WithError(err).Warn("DMSG-HTTP address resolver failed, using plain HTTP")
-		} else {
-			return fmt.Errorf("address resolver: DMSG-only but unreachable: %w", err)
-		}
-	} else if arURL == "" && conf.AddressResolverDmsg != "" {
-		arURL = conf.AddressResolverDmsg
+	// Address resolver is dmsg-only — plain HTTP to the AR is no longer
+	// supported. The dmsg URL lives in AddressResolverDmsg (legacy dual configs)
+	// or AddressResolver (dmsg-only default, which stores the dmsg:// URL there).
+	// getHTTPClient rejects a non-dmsg URL, so a clearnet AR fails loud.
+	arURL := conf.AddressResolverDmsg
+	if arURL == "" {
+		arURL = conf.AddressResolver
+	}
+	if arURL == "" {
+		return fmt.Errorf("address resolver URL not configured")
 	}
 
 	httpC, err := getHTTPClient(ctx, v, arURL)
@@ -65,20 +60,8 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 		}
 	}
 
-	// #1525 Phase 2b: when the AR URL is plain HTTP (not dmsg://),
-	// build a SECOND http.Client whose Transport.DialContext forces
-	// "tcp6". The AR client uses it to fire a secondary BindSTCPR
-	// POST so the AR server captures the visor's v6 source family
-	// (via splitFamilyAddr) and stores RemoteAddrV6 alongside
-	// RemoteAddr. nil for dmsg://-routed AR — v6 forcing is
-	// meaningless when the transport is a dmsg stream rather than
-	// raw TCP. Also nil if the operator builds a custom httpC that
-	// already specifies its own Transport, since we don't want to
-	// silently override their dial choice.
-	var httpCV6 *http.Client
-	if arURL := arURL; strings.HasPrefix(arURL, "http://") || strings.HasPrefix(arURL, "https://") {
-		httpCV6 = newV6ForcedHTTPClient()
-	}
+	// AR is dmsg://-routed, so the v6-forced clearnet client (#1525 Phase 2b,
+	// only meaningful for a plain-HTTP AR over raw TCP) is gone — pass nil.
 
 	// Construct the AR client immediately with an EMPTY public IP. Determining
 	// the visor's public IP needs a dmsg LookupIPGeo and/or a STUN probe that
@@ -89,7 +72,7 @@ func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) err
 	// in asynchronously via SetPublicIP (see resolvePublicIPForAR); BindSTCPR
 	// waits for it (bounded, off the RPC critical path), so registrations still
 	// carry the public IP while the RPC binds promptly.
-	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, httpCV6, "", "", log, v.MasterLogger())
+	arClient, err := addrresolver.NewHTTP(arURL, v.conf.PK, v.conf.SK, httpC, nil, "", "", log, v.MasterLogger())
 	if err != nil {
 		err = fmt.Errorf("failed to create address resolver client: %w", err)
 		return err
@@ -399,14 +382,59 @@ func initStcprClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	return nil
 }
 
+// initWSClient starts the WebSocket transport server. WS has no dedicated
+// listener of its own: it serves over the stcpr+WS TCP cmux — the shared WS
+// virtual listener wired by EnableDefaultTCPDemux / EnableUnifiedTCP in
+// initTransport — so every visor accepts WebSocket transports on its stcpr TCP
+// port with no extra port and no config. This is what lets a browser (wasm)
+// visor — which can only dial WS/WT/WebRTC — reach any public visor over WS.
+//
+// Because WS rides the stcpr socket, the visor's existing stcpr
+// address-resolver registration already advertises the right IP:port for WS
+// dials; no separate WS registration is needed. The wasm autoconnect resolves a
+// peer's IP via the AR's stcpr entry and dials ws://host:<stcpr-port>/, which
+// the cmux peeks and routes to this WS server.
+//
+// Depends on &tr (initTransport), which always enables the TCP demux, so
+// v.tpM and the cmux's WS listener both exist by the time this runs.
+func initWSClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	v.tpM.InitClient(ctx, types.WS, 0)
+	return nil
+}
+
+// initWTClient starts the WebTransport server. WT is a QUIC/HTTP3 carrier with a
+// self-signed cert (no CA): the server binds its own UDP port, generates a cert,
+// and registers BOTH the endpoint and the cert's SHA-256 hash with the address
+// resolver (BindWT) so a dialing peer — especially a browser, which can only
+// reach a visor over WS/WT/WebRTC — can discover the endpoint and pin the cert.
+// Like quic it binds an ephemeral UDP port (registered with the AR, survives
+// restarts via re-register); a fixed firewall port can be pinned later.
+// Depends on &tr so v.tpM and the AR client both exist.
+func initWTClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
+	v.tpM.InitClient(ctx, types.WT, 0)
+	return nil
+}
+
 // initQuicClient starts the experimental QUIC transport when a quic_port is
 // configured (#2607 QUIC follow-on). Opt-in: a zero port leaves it disabled.
 func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	if v.conf.Transport == nil || v.conf.Transport.QUICPort == 0 {
-		return nil
+	// QUIC is on by default, like stcpr/sudph — a visor accepts every transport
+	// type it can. quic_port (if set) PINS the UDP port for a stable firewall
+	// rule / AR registration; left 0 it binds an ephemeral port, exactly as
+	// sudph_port does. The QUIC client registers whatever port it actually bound
+	// with the address resolver (BindQUIC), so a random port works and survives
+	// restarts via re-registration. QUIC doesn't hole-punch (it dials AR-resolved
+	// addresses), so unlike sudph it needs no STUN gate and starts immediately.
+	port := 0
+	if v.conf.Transport != nil {
+		port = v.conf.Transport.QUICPort
 	}
-	log.Infof("Initializing QUIC transport on UDP port %d", v.conf.Transport.QUICPort)
-	v.tpM.InitClient(ctx, types.QUIC, v.conf.Transport.QUICPort)
+	if port == 0 {
+		log.Info("Initializing QUIC transport on an ephemeral UDP port")
+	} else {
+		log.Infof("Initializing QUIC transport on UDP port %d", port)
+	}
+	v.tpM.InitClient(ctx, types.QUIC, port)
 	return nil
 }
 
@@ -474,6 +502,16 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		listenAddr = v.conf.STCP.ListeningAddress
 	}
 	v.stcpTable = table
+	// WebRTC ICE servers: the configured STUN servers, prefixed with the stun:
+	// scheme the WebRTC stack wants. Set on the factory now; the WEBRTC client is
+	// started after dmsg comes up (init_dmsg → InitClient), since its signaling
+	// rides the dmsg client. WebRTC is on by default, like stcpr/sudph — a visor
+	// accepts every transport type it can, so browser visors (which can't do
+	// stcpr/sudph/quic) can always reach it.
+	var iceURLs []string
+	for _, s := range v.conf.StunServers {
+		iceURLs = append(iceURLs, "stun:"+s)
+	}
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
 		SK:         v.conf.SK,
@@ -482,6 +520,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		ARClient:   v.arClient,
 		EB:         v.ebc,
 		MLogger:    v.MasterLogger(),
+		ICEURLs:    iceURLs,
 		// OnExternalSTCPR notifies the public visor updater when an external
 		// connection is received, validating that the visor is internet-reachable
 		OnExternalSTCPR: func() {
@@ -492,6 +531,38 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 				updater.OnExternalSTCPR()
 			}
 		},
+	}
+	// Transport-port wiring (see docs/design/transport-port-unification.md +
+	// wasm-public-autoconnect.md):
+	//   - transport_port SET   → QUIC+sudph share one master UDP socket AND
+	//     stcpr+WS share that same TCP port (full unification, opt-in).
+	//   - transport_port UNSET → phase 2 default: stcpr+WS still share a TCP cmux,
+	//     bound on the stcpr port (random if unset), so EVERY visor accepts
+	//     WebSocket on its stcpr socket with NO config and NO port change (the
+	//     cmux peeks: WS-upgrade → WS, else raw handshake → stcpr; existing stcpr
+	//     peers unaffected). This is what lets a browser visor reach any visor
+	//     over WS. UDP-side unification stays opt-in (it would shift sudph's port).
+	if v.conf.Transport != nil && v.conf.Transport.TransportPort != 0 {
+		port := v.conf.Transport.TransportPort
+		if err := factory.EnableUnifiedUDP(port); err != nil {
+			return fmt.Errorf("unified transport port (udp): %w", err)
+		}
+		if err := factory.EnableUnifiedTCP(port); err != nil {
+			return fmt.Errorf("unified transport port (tcp): %w", err)
+		}
+		log.Infof("Unified transport port %d: QUIC+sudph share UDP, stcpr+WS share TCP", port)
+		v.pushCloseStack("transport.unified_udp", factory.CloseUnifiedUDP)
+		v.pushCloseStack("transport.unified_tcp", factory.CloseUnifiedTCP)
+	} else {
+		stcprPort := 0
+		if v.conf.Transport != nil {
+			stcprPort = v.conf.Transport.StcprPort
+		}
+		if err := factory.EnableDefaultTCPDemux(stcprPort); err != nil {
+			return fmt.Errorf("default tcp cmux (stcpr+ws): %w", err)
+		}
+		log.Info("stcpr + WS share the stcpr TCP port (cmux) — this visor is reachable over WebSocket")
+		v.pushCloseStack("transport.tcp_cmux", factory.CloseUnifiedTCP)
 	}
 	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
 	if err != nil {
@@ -615,7 +686,7 @@ func initEmbeddedTPS(ctx context.Context, v *Visor, log *logging.Logger) error {
 	v.initLock.Lock()
 	primary := v.dmsgDC
 	v.initLock.Unlock()
-	upgradeDmsgDiscToDmsgfirst(tpsDmsgC, primary, v.conf.Dmsg, log)
+	upgradeDmsgDiscToDmsgOnly(tpsDmsgC, primary, v.conf.Dmsg, log)
 
 	v.initLock.Lock()
 	v.embeddedTPS = &embeddedTPS{
@@ -657,18 +728,20 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 		return nil // already running
 	}
 
-	// Prefer the HTTP service-discovery URL; fall back to the dmsg URL when the
-	// operator dropped the HTTP one (dmsg-only). Never silently substitute the
-	// hardcoded prod HTTP discovery: a dropped field is intentional, and pairing
-	// sd.skycoin.com with the dmsg-http client (v.serviceDisc.Client, built from
-	// the dmsg URL in initDiscovery) makes the connector dial sd.skycoin.com over
-	// dmsg → "invalid host address: Invalid public key". Mirror initDiscovery.
-	serviceDisc := v.conf.Launcher.ServiceDisc
+	// Prefer the dmsg SD URL. The autoconnect's discovery client is the
+	// dmsg-HTTP transport (v.serviceDisc.Client, built from the dmsg URL in
+	// initDiscovery), so a clearnet HTTP SD URL can't work here anyway — pairing
+	// e.g. sd.skycoin.com with the dmsg-http client makes the connector dial it
+	// over dmsg → "invalid host address: Invalid public key". The default config
+	// is dmsg-only (the dmsg URL lives in ServiceDisc); legacy dual configs put
+	// it in ServiceDiscDmsg. Take whichever holds the dmsg URL, never a clearnet
+	// one — no plain-HTTP service-discovery fallback.
+	serviceDisc := v.conf.Launcher.ServiceDiscDmsg
 	if serviceDisc == "" {
-		serviceDisc = v.conf.Launcher.ServiceDiscDmsg
+		serviceDisc = v.conf.Launcher.ServiceDisc
 	}
 	if serviceDisc == "" {
-		log.Debug("service discovery not configured (neither http nor dmsg URL); skipping public autoconnect")
+		log.Debug("service discovery not configured (no dmsg URL); skipping public autoconnect")
 		return nil
 	}
 
@@ -690,7 +763,10 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 	if err != nil {
 		return err
 	}
-	connector := MakeConnector(conf, 3, v.tpM, v.dmsgC, v.serviceDisc.Client, pIP, log, v.MasterLogger())
+	// serviceDisc.Client is typed `any` (it is net/http-free on the appdisc
+	// struct so appdisc compiles under TinyGo); recover the *http.Client here.
+	httpClient, _ := v.serviceDisc.Client.(*http.Client)
+	connector := MakeConnector(conf, 3, v.tpM, v.dmsgC, httpClient, pIP, log, v.MasterLogger())
 
 	cctx, cancel := context.WithCancel(ctx) //nolint:gosec // cancel stored in v.autoconnect.cancel, called in pushCloseStack
 	v.autoconnect.cancel = cancel

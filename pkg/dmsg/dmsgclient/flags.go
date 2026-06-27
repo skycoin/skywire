@@ -1,4 +1,9 @@
+//go:build !tinygo
+
 // Package dmsgclient pkg/dmsgclient/flags.go
+//
+// CLI flag wiring (cobra) — excluded from TinyGo builds. The TinyGo wasm HV
+// drives dmsg programmatically (StartDmsgSeeded), not via cobra flags.
 package dmsgclient
 
 import (
@@ -26,9 +31,6 @@ var (
 	// DmsgHTTPPath is the path to the dmsghttp-config.json which overrides embedded defaults
 	DmsgHTTPPath string
 
-	// UseHTTP connect to the dmsg discoverey over plain http or dmsghttp
-	UseHTTP = false
-
 	// UseDC use dmsg direct client with embedded dmsg server configuration and don't connect to discovery server
 	UseDC = false
 
@@ -37,11 +39,15 @@ var (
 	DmsgServerAddr string
 )
 
-// InitFlags is used to set command flags for the above variables
+// InitFlags is used to set command flags for the above variables.
+//
+// The plain-HTTP discovery flags (-Z/--http, -U/--disc-url) were removed: the
+// deployment is dmsg-only and the clearnet dmsg-discovery HTTP frontend is gone
+// (404), so connecting to discovery over http no longer works. Discovery is
+// reached over dmsg via -A/--disc-addr (dmsg://<pk>:<port>), which is the
+// default; -B/--direct uses the embedded server set with no discovery at all.
 func InitFlags(cmd *cobra.Command) {
-	cmd.Flags().BoolVarP(&UseHTTP, "http", "Z", UseHTTP, "use regular http to connect to DMSG Discovery")
 	cmd.Flags().BoolVarP(&UseDC, "direct", "B", UseDC, "use dmsg-direct client & don't connect to DMSG Discovery")
-	cmd.Flags().StringVarP(&DmsgDiscURL, "disc-url", "U", DmsgDiscURL, "DMSG Discovery URL")
 	cmd.Flags().StringVarP(&DmsgDiscAddr, "disc-addr", "A", DmsgDiscAddr, "DMSG Discovery dmsg address")
 	cmd.Flags().StringVarP(&DmsgHTTPPath, "dmsgconf", "D", "", "dmsghttp-config path")
 	cmd.Flags().IntVarP(&DmsgSessions, "sess", "e", DmsgSessions, "number of DMSG Servers to connect to")

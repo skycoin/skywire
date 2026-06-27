@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/rpc"
 	"sync"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	rpc "github.com/skycoin/skywire/pkg/gobrpc"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -536,8 +536,12 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 
 	go r.rulesGCLoop()
 
-	if err := r.rpcSrv.Register(NewRPCGateway(r, config.MasterLogger)); err != nil {
-		return nil, fmt.Errorf("failed to register RPC server")
+	// Register the setup RPC gateway on r.rpcSrv. Build-tagged: native uses
+	// reflection (net/rpc-style Register); TinyGo uses explicit HandleFunc
+	// handlers, because TinyGo's runtime reflect can't enumerate/invoke methods
+	// (reflect.Type.Method hangs) — see router_setup_rpc_{native,tinygo}.go.
+	if err := r.registerSetupRPC(config.MasterLogger); err != nil {
+		return nil, fmt.Errorf("failed to register RPC server: %w", err)
 	}
 
 	return r, nil

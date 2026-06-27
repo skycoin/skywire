@@ -1,5 +1,3 @@
-//go:build !js
-
 // Package logging pkg/logging/ringbuffer.go
 package logging
 

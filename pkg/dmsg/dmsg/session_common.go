@@ -14,7 +14,6 @@ import (
 
 	"github.com/chen3feng/safecast"
 	"github.com/hashicorp/yamux"
-	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
@@ -55,7 +54,7 @@ type SessionManager struct {
 	mutx  sync.RWMutex
 	yamux *yamux.Session
 	smux  *smux.Session
-	quic  *quic.Conn
+	quic  quicConn
 	addr  net.Addr
 }
 
@@ -132,21 +131,6 @@ func (sc *SessionCommon) initServer(entity *EntityCommon, conn net.Conn) error {
 	return nil
 }
 
-// quicAddrConn adapts a *quic.Conn to net.Conn for the addr-only accessors
-// (LocalTCPAddr/RemoteTCPAddr/SrcConn) on a QUIC session. The session never
-// reads/writes it directly — QUIC data flows over QUIC streams — so Read/Write
-// are inert stubs.
-type quicAddrConn struct{ qc *quic.Conn }
-
-func (c quicAddrConn) Read([]byte) (int, error)         { return 0, io.EOF }
-func (c quicAddrConn) Write([]byte) (int, error)        { return 0, io.ErrClosedPipe }
-func (c quicAddrConn) Close() error                     { return c.qc.CloseWithError(0, "") }
-func (c quicAddrConn) LocalAddr() net.Addr              { return c.qc.LocalAddr() }
-func (c quicAddrConn) RemoteAddr() net.Addr             { return c.qc.RemoteAddr() }
-func (c quicAddrConn) SetDeadline(time.Time) error      { return nil }
-func (c quicAddrConn) SetReadDeadline(time.Time) error  { return nil }
-func (c quicAddrConn) SetWriteDeadline(time.Time) error { return nil }
-
 // ErrDatagramsUnsupported is returned by the session datagram API for non-QUIC
 // sessions (TCP+yamux/smux carries reliable streams only).
 var ErrDatagramsUnsupported = errors.New("dmsg: session does not support datagrams (not a QUIC session)")
@@ -186,21 +170,8 @@ func (sc *SessionCommon) ReadDatagram(ctx context.Context) ([]byte, error) {
 	return qc.ReceiveDatagram(ctx)
 }
 
-// initQUIC sets up a session (client or server) over a QUIC connection — no
-// Noise handshake. The PK-bound QUIC TLS (pkg/skyquic, option A) already
-// authenticated the peer's skywire PK and encrypts the client↔server hop;
-// dmsg streams ARE QUIC streams. rPK is the peer PK: the dialer knows it up
-// front; the server learns it from the verified QUIC TLS certificate.
-func (sc *SessionCommon) initQUIC(entity *EntityCommon, qc *quic.Conn, rPK cipher.PubKey) {
-	sc.entity = entity
-	sc.rPK = rPK
-	sc.netConn = quicAddrConn{qc: qc}
-	sc.sm.quic = qc
-	sc.sm.addr = qc.RemoteAddr()
-	sc.ns = nil
-	sc.nw = nil
-	sc.log = entity.log.WithField("session", rPK)
-}
+// initQUIC (the QUIC session setup) lives in quic_native.go (//go:build
+// !tinygo) — it constructs the quic-go-typed quicAddrConn / quicConnWrap.
 
 // writeEncryptedGob encrypts with noise and prefixed with uint16 (2 additional bytes).
 func (sc *SessionCommon) writeObject(w io.Writer, obj SignedObject) error {

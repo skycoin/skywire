@@ -17,6 +17,7 @@ package deployment
 
 import (
 	_ "embed"
+	"encoding/json"
 	"net/url"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -42,6 +43,18 @@ custom deployment configuration (e.g., for private networks or testing).
 //go:embed services-config.json
 var ServicesJSON []byte
 
+// EnvServices is the wrapper struct for the outer JSON — i.e. the 'prod' or
+// 'test' deployment config. It lives in this untagged file (importing
+// encoding/json, which compiles under TinyGo 0.41) so consumers like
+// pkg/dmsg/dmsg's InitConfig can unmarshal the embedded config on every target,
+// including a TinyGo dmsg client. The native init() in config_native.go and the
+// static-literal init() in config_js.go both populate Prod/Test; this type is
+// just the shared shape they (and dmsg) decode into.
+type EnvServices struct {
+	Test json.RawMessage `json:"test"`
+	Prod json.RawMessage `json:"prod"`
+}
+
 // EnvServices is defined in config_native.go (lives there because
 // its json.RawMessage fields need encoding/json, which is
 // build-tag-gated off the WASM path). The type is still exported
@@ -55,6 +68,14 @@ type DmsgServerEntry struct {
 	Static string `json:"static"`
 	Server struct {
 		Address string `json:"address"`
+		// AddressWS is the optional full ws:// or wss:// WebSocket URL (including
+		// the /dmsg path, e.g. "wss://dmsg1.example.net/dmsg") a browser client
+		// seeds from. It is SEPARATE from Address (IP:port, TCP): native visors
+		// dial Address and never look at AddressWS, so advertising a wss:// domain
+		// here adds no DNS/TLS dependency for them. Required for a wasm-visor
+		// served over HTTPS, whose browser blocks plain ws:// (mixed content); a
+		// wss domain's CA cert is stable, so it lives safely in the embedded config.
+		AddressWS string `json:"address_ws,omitempty"`
 	} `json:"server"`
 }
 

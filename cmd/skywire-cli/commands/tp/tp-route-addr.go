@@ -46,10 +46,8 @@ Valid transport types: dmsg, stcp, stcpr, sudph (default: sudph — dmsg transpo
 are not used for multi-hop routes).`,
 	Args: cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
-		switch routeAddrType {
-		case "dmsg", "stcp", "stcpr", "sudph":
-		default:
-			internal.Catch(cmd.Flags(), fmt.Errorf("invalid transport type %q (valid: dmsg, stcp, stcpr, sudph)", routeAddrType))
+		if !tptypes.Valid(tptypes.Type(routeAddrType)) {
+			internal.Catch(cmd.Flags(), fmt.Errorf("invalid transport type %q (valid: %v)", routeAddrType, tptypes.Known()))
 		}
 
 		path := make([]cipher.PubKey, len(args))

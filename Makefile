@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy
+.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
@@ -212,6 +212,62 @@ tpviz-wasm-standalone: ## Build transport visualizer WASM binary to build/tpviz 
 tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo (smaller, ~750KB)
 	tinygo build -o ./pkg/tpviz/dist/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/dist/
+
+tinygo-dmsg: ## Build-check the dmsg client under TinyGo (IoT target wasip1); ~2.2MB -opt=z
+	tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
+	@echo "built ./build/dmsg-tinygo.wasm — the dmsg client compiles under TinyGo (see docs/design/tinygo-dmsg-client.md)"
+
+dmsg-wasm: ## Build the browser WASM dmsg client + dev harness into build/dmsg-wasm
+	mkdir -p ./build/dmsg-wasm
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/dmsg-wasm/
+	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
+	@echo "built ./build/dmsg-wasm — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
+
+tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~21MB) into build/dmsg-wasm
+	mkdir -p ./build/dmsg-wasm
+	tinygo build -target wasm -o ./build/dmsg-wasm/dmsg.wasm ./cmd/dmsg-wasm
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/dmsg-wasm/
+	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
+	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
+
+tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+appserver) + dev harness into build/wasm-visor — TinyGo (~2.2MB, NO crypto/tls → no https clearnet)
+	mkdir -p ./build/wasm-visor
+	tinygo build -target wasm -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
+	cp ./cmd/wasm-visor/index.html ./build/wasm-visor/
+	cp ./pkg/wasmhv/browse.js ./build/wasm-visor/
+	@echo "built ./build/wasm-visor (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
+
+wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
+	mkdir -p ./build/wasm-visor-go
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
+	cp ./cmd/wasm-visor/index.html ./build/wasm-visor-go/
+	cp ./pkg/wasmhv/browse.js ./build/wasm-visor-go/
+	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"
+
+embed-wasm-visor: wasm-visor ## Update the COMMITTED embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasm-visor.wasm.gz) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
+	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasm-visor.wasm.gz
+	@echo "updated pkg/wasmhv/wasmbin/wasm-visor.wasm.gz — review with 'git status', commit intentionally (it's a ~8MB blob)."
+
+dmsg-wasm-hv: ## Build the browser hypervisor-over-dmsg bundle (Service Worker proxy) into build/dmsg-wasm-hv
+	mkdir -p ./build/dmsg-wasm-hv
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/dmsg-wasm-hv/dmsg.wasm ./cmd/dmsg-wasm
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/dmsg-wasm-hv/
+	cp ./cmd/dmsg-wasm/sw.js ./cmd/dmsg-wasm/hv.html ./build/dmsg-wasm-hv/
+	@echo "built ./build/dmsg-wasm-hv — serve over http (cd build/dmsg-wasm-hv && python -m http.server 8080) and open http://localhost:8080/hv.html"
+
+dmsg-wasm-inline: dmsg-wasm ## Emit a single self-contained dmsg-client.html (wasm_exec.js + base64 wasm inlined, no static host needed)
+	@cd ./build/dmsg-wasm && { \
+	  printf '<!DOCTYPE html><html><head><meta charset="utf-8"><title>skywire dmsg</title></head><body><script>'; \
+	  cat wasm_exec.js; \
+	  printf '</script><script>const _b="'; base64 -w0 dmsg.wasm; printf '";'; \
+	  printf 'const _go=new Go();const _u8=Uint8Array.from(atob(_b),c=>c.charCodeAt(0));'; \
+	  printf 'WebAssembly.instantiate(_u8,_go.importObject).then(r=>{_go.run(r.instance);console.log("skywireDmsg ready");});'; \
+	  printf '</script></body></html>'; \
+	} > dmsg-client.html
+	@echo "built ./build/dmsg-wasm/dmsg-client.html (single self-contained file, base64-inlined wasm)"
 
 tpviz-ui: ## Build transport visualizer TypeScript UI into pkg/tpviz/legacy for embedding
 	cd ./pkg/tpviz/ui && npm install && npm run build

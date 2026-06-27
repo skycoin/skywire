@@ -29,7 +29,6 @@ import (
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/direct"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/dmsg/disc/dmsgfirst"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgctrl"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
@@ -38,10 +37,12 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 func initDmsgHTTP(ctx context.Context, v *Visor, _ *logging.Logger) error {
@@ -302,18 +303,18 @@ func initDmsg(ctx context.Context, v *Visor, log *logging.Logger) (err error) {
 	}
 
 	// Seed the DMSG client's entry cache with deployment service PKs
-	// FIRST, before swapping in the dmsgfirst disc client below. The
-	// dmsg-discovery's own PK is in this list, and dmsgfirst's
-	// primary path needs to DialStream to that PK — without the
-	// seed already in place, the moment dmsgC.SetDiscoveryClients
-	// installs dmsgfirst, any background AvailableServers /
-	// PutEntry refresh that dmsgC kicks off recurses (DialStream →
-	// cache miss → disc → dmsgfirst.primary → DialStream(dmsgdiscPK)
-	// → cache miss → ...) until the goroutine stack overflows.
+	// FIRST, before swapping in the dmsg-only disc client below. The
+	// dmsg-discovery's own PK is in this list, and the dmsg-only disc
+	// client's dmsg-HTTP transport needs to DialStream to that PK —
+	// without the seed already in place, the moment dmsgC.SetDiscoveryClients
+	// installs it, any background AvailableServers / PutEntry refresh that
+	// dmsgC kicks off recurses (DialStream → cache miss → disc →
+	// dmsg-HTTP → DialStream(dmsgdiscPK) → cache miss → ...) until the
+	// goroutine stack overflows.
 	v.seedDmsgServiceEntries(dmsgC, log)
 
-	// No dmsgfirst upgrade needed: dmsgc.New already wired dmsgC's disc to a
-	// registering fallback whose HTTP half rides this single client's own
+	// No disc upgrade needed here: dmsgc.New already wired dmsgC's disc to a
+	// registering client whose HTTP half rides this single client's own
 	// dmsg-HTTP transport (httpC, set above). The one client both registers
 	// itself over dmsg and resolves seeded static entries direct-first.
 
@@ -348,31 +349,39 @@ const dmsgServersCacheRefreshInterval = 5 * time.Minute
 // fixed interval. Empty refreshes (dmsgd unreachable, no entries) are
 // skipped — DmsgServersCache.Replace treats empty input as a no-op so
 // a transient outage doesn't wipe the cache.
-// upgradeDmsgDiscToDmsgfirst swaps each of dmsgC's per-deployment
-// disc.APIClient instances for a dmsgfirst-wrapped one so the dmsg
-// client's own discovery refresh tries DMSG first and only falls back
-// to plain HTTP when the dmsg dial fails. The dmsg-discovery's PK is
-// extracted from each deployment's `discovery_dmsg` URL — when that's
-// absent, the entry stays on plain HTTP because dmsgfirst.New needs a
-// PK to dial. A no-op if no deployments yield a non-zero PK.
+// upgradeDmsgDiscToDmsgOnly swaps each of dmsgC's per-deployment disc.APIClient
+// instances for one that registers + resolves the discovery STRICTLY over dmsg
+// (dmsg-HTTP through primaryDmsgC), with NO plain-HTTP fallback. The
+// dmsg-discovery's PK is extracted from each deployment's `discovery_dmsg` URL;
+// when that's absent the entry is left on the explicit plain-HTTP Discovery URL
+// (a legacy / non-dmsg config with no dmsg-disc PK to dial). A no-op if no
+// deployment yields a non-zero PK, or if primaryDmsgC is nil.
 //
-// primaryDmsgC is the dmsg client dmsgfirst will use for its DMSG-
-// primary path. It must be the direct.Client-backed dmsgDC, not the
-// main dmsgC — the main dmsgC's own discovery is what we're
-// upgrading here, so using it for the primary path would recurse on
-// every Entry() lookup. dmsgDC carries the dmsg-disc PK as a synthetic
-// direct.Client entry with all known server PKs as delegated, so its
-// DialStream(dmsg-disc) resolves locally and goes through a session
-// dmsg-disc actually has (it preloads the same server set via
-// direct.StartDmsg in dmsgdisc.go).
-func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
-	if conf == nil {
+// The plain-HTTP RUNTIME fallback was removed here (was: dmsgfirst, which tried
+// dmsg first and retried on plain HTTP when the dmsg dial failed). The
+// deployment discovery services are no longer served over clear HTTP, so a
+// fallback on a transient dmsg failure only added a doomed roundtrip + a WARN
+// per refresh. A transient dmsg error now simply lets the caller retry over
+// dmsg on its next periodic discovery refresh / re-registration, which
+// self-heals once sessions realign. (The pk-absent branch above is NOT that
+// fallback: it is the explicit "operator configured no dmsg discovery" path.)
+//
+// primaryDmsgC is the dmsg client used for the dmsg-HTTP transport. It must be
+// the direct.Client-backed dmsgDC, not the main dmsgC — the main dmsgC's own
+// discovery is what we're upgrading here, so using it would recurse on every
+// Entry() lookup. dmsgDC carries the dmsg-disc PK as a synthetic direct.Client
+// entry with all known server PKs as delegated, so its DialStream(dmsg-disc)
+// resolves locally and goes through a session dmsg-disc actually has (it
+// preloads the same server set via direct.StartDmsg in dmsgdisc.go).
+func upgradeDmsgDiscToDmsgOnly(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, conf *dmsgc.DmsgConfig, log *logging.Logger) {
+	if conf == nil || primaryDmsgC == nil {
 		return
 	}
 	deployments := conf.AllDeployments()
 	if len(deployments) == 0 {
 		return
 	}
+	dmsgHTTPClient := &http.Client{Transport: dmsghttp.MakeHTTPTransport(context.Background(), primaryDmsgC)}
 	upgraded := make([]dmsgdisc.APIClient, len(deployments))
 	anyUpgraded := false
 	for i, d := range deployments {
@@ -381,9 +390,10 @@ func upgradeDmsgDiscToDmsgfirst(dmsgC *dmsg.Client, primaryDmsgC *dmsg.Client, c
 			upgraded[i] = dmsgdisc.NewHTTP(d.Discovery, &http.Client{}, log)
 			continue
 		}
-		upgraded[i] = dmsgfirst.New(primaryDmsgC, pk, d.Discovery, &http.Client{}, log)
+		dmsgURL := fmt.Sprintf("http://%s:%d", pk.Hex(), dmsg.DefaultDmsgHTTPPort)
+		upgraded[i] = dmsgdisc.NewHTTP(dmsgURL, dmsgHTTPClient, log)
 		anyUpgraded = true
-		log.WithField("url", d.Discovery).WithField("pk", pk).Info("dmsg discovery client upgraded to dmsgfirst (primary via direct-client dmsgDC)")
+		log.WithField("pk", pk).Info("dmsg discovery client upgraded to dmsg-only (no HTTP fallback)")
 	}
 	if !anyUpgraded {
 		return
@@ -427,28 +437,21 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 // so DialStream for e.g. TPD hit the HTTP discovery, found no entry (TPD
 // is direct-client by design), and bailed with "entry not found".
 func (v *Visor) dmsgServicePKs() cipher.PubKeys {
-	pick := func(a, b string) string {
-		if a != "" {
-			return a
-		}
-		return b
-	}
+	// Resolve the deployment service endpoints through the SHARED resolver
+	// (pkg/visor/visorcore) — the same one the browser wasm-visor uses — so the two
+	// visors can't drift on the operator-override-else-deployment-default rule. This
+	// replaced six inline pick() calls; ResolveServices applies identical semantics
+	// (and handles the nullable UptimeTracker/Launcher blocks).
+	svc := visorcore.ResolveServices(v.conf)
 	dmsgURLs := []string{
-		pick(v.conf.Dmsg.DiscoveryDmsg, deployment.Prod.DmsgDiscoveryDmsg),
-		pick(v.conf.Transport.DiscoveryDmsg, deployment.Prod.TransportDiscoveryDmsg),
-		pick(v.conf.Transport.AddressResolverDmsg, deployment.Prod.AddressResolverDmsg),
-		pick(v.conf.Routing.RouteFinderDmsg, deployment.Prod.RouteFinderDmsg),
-		pick(v.conf.Launcher.ServiceDiscDmsg, deployment.Prod.ServiceDiscoveryDmsg),
-		pick(v.conf.ConfServiceDmsg, deployment.Prod.ConfDmsg),
+		svc.DmsgDiscoveryDmsg,
+		svc.TransportDiscoveryDmsg,
+		svc.AddressResolverDmsg,
+		svc.RouteFinderDmsg,
+		svc.ServiceDiscoveryDmsg,
+		svc.ConfDmsg,
+		svc.UptimeTrackerDmsg,
 	}
-	// UptimeTracker is the only nullable sub-config; treat a nil block
-	// the same as an empty AddrDmsg field and fall through to the embedded
-	// default so we still seed UT's PK on minimal configs.
-	utDmsg := deployment.Prod.UptimeTrackerDmsg
-	if v.conf.UptimeTracker != nil {
-		utDmsg = pick(v.conf.UptimeTracker.AddrDmsg, utDmsg)
-	}
-	dmsgURLs = append(dmsgURLs, utDmsg)
 	var pks cipher.PubKeys
 	for _, rawURL := range dmsgURLs {
 		if rawURL == "" {
@@ -519,6 +522,13 @@ func initDmsgCtrl(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	logger := dmsgC.Logger()
 	logger.Debug("Initializing DMSG transport client...")
 	v.tpM.InitDmsgClient(ctx, dmsgC)
+
+	// WebRTC signals over dmsg, so its client is started only now that the manager
+	// has the dmsg client. InitClient also starts the dmsg signaling listener, so
+	// the visor ACCEPTS WebRTC dials (e.g. from browser visors). On by default,
+	// like stcpr/sudph — a visor accepts every transport type it can.
+	logger.Info("Initializing WebRTC transport client...")
+	v.tpM.InitClient(ctx, tptypes.WEBRTC, 0)
 
 	// dmsgctrl setup — listen for incoming control streams (ping/pong).
 	// Each accepted Control is self-serving (handles ping/pong in its own goroutine).

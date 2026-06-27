@@ -10,6 +10,14 @@
   z-index: -1;
 }
 
+// When the hypervisor UI is served BY a browser/wasm visor (AppModeService adds
+// `wasm-visor-ui` to <body>), tint the background a slightly more violet hue —
+// an honest, glanceable signal that you're in the in-browser visor.
+body.wasm-visor-ui .app-background {
+  background: linear-gradient($violet-dark-Background1, $violet-dark-Background2) no-repeat fixed !important;
+  box-shadow: inset 0 0 200px 0 rgba(140, 110, 205, 0.25);
+}
+
 .no-gradient-for-elevated-box {
   box-shadow: 5px 5px 7px 0 rgba(0, 0, 0, 0.35) ! important;
 }

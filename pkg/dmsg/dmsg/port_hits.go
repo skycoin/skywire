@@ -23,6 +23,13 @@ type PortHit struct {
 	Count     uint64        `json:"count"`
 	FirstSeen time.Time     `json:"first_seen"`
 	LastSeen  time.Time     `json:"last_seen"`
+
+	// seq is a monotonic recency counter, bumped on every record. It gives a
+	// deterministic most-recent-first ordering (and eviction) independent of
+	// the wall clock — two hits recorded within the same coarse-clock tick
+	// (common on Windows' ~15ms timer) would otherwise share a LastSeen and
+	// sort arbitrarily. Unexported so it stays out of the JSON.
+	seq uint64
 }
 
 type portHitKey struct {
@@ -36,6 +43,7 @@ type portHitTracker struct {
 	mu   sync.Mutex
 	hits map[portHitKey]*PortHit
 	cap  int
+	seq  uint64 // monotonic recency counter (see PortHit.seq)
 }
 
 func newPortHitTracker(capN int) *portHitTracker {
@@ -53,26 +61,28 @@ func (t *portHitTracker) record(srcPK cipher.PubKey, dstPort uint16) {
 	now := time.Now()
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.seq++
 	k := portHitKey{pk: srcPK, port: dstPort}
 	if h, ok := t.hits[k]; ok {
 		h.Count++
 		h.LastSeen = now
+		h.seq = t.seq
 		return
 	}
 	if len(t.hits) >= t.cap {
 		t.evictOldestLocked()
 	}
-	t.hits[k] = &PortHit{SrcPK: srcPK, DstPort: dstPort, Count: 1, FirstSeen: now, LastSeen: now}
+	t.hits[k] = &PortHit{SrcPK: srcPK, DstPort: dstPort, Count: 1, FirstSeen: now, LastSeen: now, seq: t.seq}
 }
 
 // evictOldestLocked removes the least-recently-seen entry. Caller holds mu.
 func (t *portHitTracker) evictOldestLocked() {
 	var oldestK portHitKey
-	var oldest time.Time
+	var oldestSeq uint64
 	first := true
 	for k, h := range t.hits {
-		if first || h.LastSeen.Before(oldest) {
-			oldestK, oldest, first = k, h.LastSeen, false
+		if first || h.seq < oldestSeq {
+			oldestK, oldestSeq, first = k, h.seq, false
 		}
 	}
 	if !first {
@@ -80,8 +90,9 @@ func (t *portHitTracker) evictOldestLocked() {
 	}
 }
 
-// snapshot returns the current hits sorted by LastSeen (most recent first).
-// Nil-safe.
+// snapshot returns the current hits most-recent-first. Ordering is by the
+// monotonic seq counter (not LastSeen) so it's deterministic even when several
+// hits share a coarse-clock LastSeen. Nil-safe.
 func (t *portHitTracker) snapshot() []PortHit {
 	if t == nil {
 		return nil
@@ -92,6 +103,6 @@ func (t *portHitTracker) snapshot() []PortHit {
 		out = append(out, *h)
 	}
 	t.mu.Unlock()
-	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
+	sort.Slice(out, func(i, j int) bool { return out[i].seq > out[j].seq })
 	return out
 }

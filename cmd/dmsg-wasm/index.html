@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<!--
+  Dev harness for the WASM browser dmsg client (cmd/dmsg-wasm).
+
+  Loads wasm_exec.js + dmsg.wasm, then exercises the globalThis.skywireDmsg
+  API: connect by (optional) secret key to a discovery URL, then dial a remote
+  public key + port and exchange messages.
+
+  This is a non-inlined DEV harness (separate dmsg.wasm + wasm_exec.js). For
+  distribution the same page can be shipped as a single self-contained .html
+  with wasm_exec.js inline and dmsg.wasm base64-inlined + WebAssembly.instantiate
+  (no fetch, no static host) — see the build target.
+
+  Requires a dmsg server that advertises a WebSocket endpoint (Server.AddressWS,
+  i.e. ws_address + public_address_ws set, reachable as wss://). The browser can
+  only reach dmsg over WebSocket.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>skywire dmsg — WASM client</title>
+<style>
+  body { font: 14px/1.5 monospace; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+  input { font: inherit; width: 100%; box-sizing: border-box; margin: 2px 0; }
+  button { font: inherit; margin: 4px 0; cursor: pointer; }
+  #log { white-space: pre-wrap; background: #111; color: #0f0; padding: .5rem; height: 240px; overflow: auto; }
+  fieldset { margin: .5rem 0; }
+</style>
+</head>
+<body>
+<h2>skywire dmsg — browser WASM client</h2>
+
+<fieldset>
+  <legend>1. connect (seed a WebSocket dmsg server, then discovery runs over dmsg)</legend>
+  <input id="sk" placeholder="secret key hex (blank = ephemeral identity)">
+  <input id="seedpk" placeholder="seed server PK" value="0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13">
+  <input id="seedws" placeholder="seed server ws:// URL" value="ws://45.79.213.251:30088/dmsg">
+  <input id="disc" placeholder="dmsg-discovery dmsg:// addr" value="dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80">
+  <button id="connect">connect</button>
+  <div>my PK: <span id="pk">—</span></div>
+</fieldset>
+
+<fieldset>
+  <legend>2. dial a peer</legend>
+  <input id="rpk" placeholder="remote public key hex">
+  <input id="port" value="80" placeholder="port">
+  <button id="dial">dial</button>
+  <button id="listen">listen on port</button>
+</fieldset>
+
+<fieldset>
+  <legend>3. message</legend>
+  <input id="msg" placeholder="message">
+  <button id="send">send</button>
+</fieldset>
+
+<fieldset>
+  <legend>4. HTTP-over-dmsg (the hypervisor-UI transport — reach a visor/service by PK)</legend>
+  <input id="fpk" placeholder="target PK (e.g. a dmsg service / visor)" value="022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa">
+  <input id="fpath" placeholder="path" value="/health">
+  <button id="fetch">GET over dmsg</button>
+</fieldset>
+
+<fieldset>
+  <legend>5. in-wasm hypervisor (serve the standalone HV core from this tab)</legend>
+  <button id="servehv">serveHypervisor</button>
+  <input id="hvpath" placeholder="hvApi path" value="/api/visors">
+  <button id="hvapi">hvApi GET</button>
+</fieldset>
+
+<fieldset>
+  <legend>6. WebRTC p2p (direct datachannel; signaling rides dmsg :47)</legend>
+  <button id="rtclisten">webrtcListen</button>
+  <input id="rtcpk" placeholder="remote PK to webrtcDial">
+  <button id="rtcdial">webrtcDial</button>
+  <input id="rtcmsg" placeholder="message over the datachannel">
+  <button id="rtcsend">rtc send</button>
+</fieldset>
+
+<div id="log"></div>
+
+<script src="wasm_exec.js"></script>
+<script>
+  const log = (...a) => {
+    const el = document.getElementById("log");
+    el.textContent += a.join(" ") + "\n";
+    el.scrollTop = el.scrollHeight;
+  };
+  let stream = null;
+
+  const go = new Go();
+  // TinyGo's wasm_exec.js omits the gojs `runtime.getRandomData` import the Go
+  // runtime needs to seed itself (the crypto path) — so a crypto-using TinyGo
+  // wasm fails to instantiate ("function import requires a callable"). Inject it
+  // ONLY when absent, leaving the standard-Go build untouched (its wasm_exec.js
+  // already provides getRandomData, via a different sp-based ABI). TinyGo passes
+  // a []byte as (ptr, len, cap) and exposes linear memory as `memory`.
+  if (go.importObject.gojs && !go.importObject.gojs["runtime.getRandomData"]) {
+    go.importObject.gojs["runtime.getRandomData"] = (ptr, len) =>
+      crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
+  }
+  // Use fetch+arrayBuffer (not instantiateStreaming) so it works regardless of
+  // the server's wasm MIME type.
+  fetch("dmsg.wasm").then(r => r.arrayBuffer())
+    .then(buf => WebAssembly.instantiate(buf, go.importObject))
+    .then(r => {
+      go.run(r.instance);
+      log("wasm loaded; skywireDmsg ready: " + Object.keys(globalThis.skywireDmsg || {}).join(", "));
+    })
+    .catch(e => log("WASM LOAD FAILED: " + e));
+
+  const wire = s => {
+    stream = s;
+    s.onMessage(m => log("« " + m));
+    log("stream open");
+  };
+
+  document.getElementById("connect").onclick = async () => {
+    try {
+      log("connecting over WebSocket…");
+      const pk = await skywireDmsg.connect(
+        document.getElementById("sk").value.trim(),
+        document.getElementById("seedpk").value.trim(),
+        document.getElementById("seedws").value.trim(),
+        document.getElementById("disc").value.trim());
+      document.getElementById("pk").textContent = pk;
+      log("connected as " + pk);
+    } catch (e) { log("connect error: " + e); }
+  };
+
+  document.getElementById("dial").onclick = async () => {
+    try {
+      wire(await skywireDmsg.dial(
+        document.getElementById("rpk").value.trim(),
+        parseInt(document.getElementById("port").value, 10)));
+    } catch (e) { log("dial error: " + e); }
+  };
+
+  document.getElementById("listen").onclick = () => {
+    const r = skywireDmsg.listen(parseInt(document.getElementById("port").value, 10), wire);
+    if (r instanceof Error) log("listen error: " + r);
+    else log("listening on port " + document.getElementById("port").value);
+  };
+
+  document.getElementById("send").onclick = () => {
+    if (!stream) { log("no stream — dial or accept first"); return; }
+    const m = document.getElementById("msg").value;
+    stream.send(m);
+    log("» " + m);
+  };
+
+  const td = new TextDecoder();
+
+  document.getElementById("fetch").onclick = async () => {
+    try {
+      const r = await skywireDmsg.fetch(
+        document.getElementById("fpk").value.trim(), "GET",
+        document.getElementById("fpath").value.trim(), null);
+      // body is a Uint8Array (binary-safe); decode for display.
+      log("HTTP " + r.status + " over dmsg:\n" + td.decode(r.body));
+    } catch (e) { log("fetch error: " + e); }
+  };
+
+  document.getElementById("servehv").onclick = () => {
+    const r = skywireDmsg.serveHypervisor();
+    log(r instanceof Error ? "serveHypervisor error: " + r : "hypervisor core serving");
+  };
+
+  document.getElementById("hvapi").onclick = async () => {
+    try {
+      const r = await skywireDmsg.hvApi("GET", document.getElementById("hvpath").value.trim(), null);
+      log("hvApi " + r.status + ":\n" + td.decode(r.body));
+    } catch (e) { log("hvApi error: " + e); }
+  };
+
+  let rtc = null;
+  const wireRTC = c => { rtc = c; c.onMessage(m => log("rtc « " + m)); log("webrtc datachannel open"); };
+
+  document.getElementById("rtclisten").onclick = () => {
+    const r = skywireDmsg.webrtcListen(wireRTC);
+    log(r instanceof Error ? "webrtcListen error: " + r : "webrtcListen armed (dmsg :47)");
+  };
+
+  document.getElementById("rtcdial").onclick = async () => {
+    try { wireRTC(await skywireDmsg.webrtcDial(document.getElementById("rtcpk").value.trim())); }
+    catch (e) { log("webrtcDial error: " + e); }
+  };
+
+  document.getElementById("rtcsend").onclick = () => {
+    if (!rtc) { log("no datachannel — webrtcDial/Listen first"); return; }
+    const m = document.getElementById("rtcmsg").value;
+    rtc.send(m); log("rtc » " + m);
+  };
+
+  // ---- control bridge -------------------------------------------------------
+  // Lets an external operator (curl against the serving server) drive THIS tab,
+  // so two tabs can be orchestrated headlessly. No-ops if the server has no
+  // /ctl endpoints (plain static host) — the manual buttons above still work.
+  (function () {
+    // Stable per-tab id across reloads (sessionStorage is per-tab + survives
+    // reload), so the operator keeps the same control id when driving reloads.
+    let tabId = sessionStorage.getItem("ctlTabId");
+    if (!tabId) { tabId = "tab-" + Math.random().toString(36).slice(2, 8); sessionStorage.setItem("ctlTabId", tabId); }
+    const banner = document.createElement("div");
+    banner.style.cssText = "margin:.3rem 0;color:#06c";
+    banner.textContent = "control id: " + tabId;
+    document.body.insertBefore(banner, document.getElementById("log"));
+
+    const post = (path, body) =>
+      fetch(path, { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) }).catch(() => {});
+    const clog = (...a) => { log(...a); post("/ctl/log?tab=" + tabId, a.join(" ")); };
+    // WebRTC (Go/wasm) signaling+ICE progress is routed here via window.__wrtclog.
+    window.__wrtclog = m => clog("[rtc] " + m);
+    // dmsg-disc-over-dmsg (Go/wasm) internals routed here via window.__skylog.
+    window.__skylog = m => clog("[disc] " + m);
+
+    const H = {};      // named stream/conn handles
+    let myPK = "";
+    // ICE servers for WebRTC: the deployment's OWN STUN servers (exposed by the
+    // wasm from deployment.Prod.StunServers — the same ones the visor uses for
+    // sudph NAT detection), so a server-reflexive candidate is gathered without a
+    // third-party STUN dependency. Needed because mDNS .local host candidates
+    // don't resolve reliably between localhost tabs.
+    const iceServers = () => (skywireDmsg.stunServers || []).map(u => ({ urls: u }));
+
+    async function exec(c) {
+      const a = c.args || [];
+      switch (c.action) {
+        case "connect":
+          myPK = await skywireDmsg.connect(a[0] || "", a[1], a[2], a[3] || "");
+          document.getElementById("pk").textContent = myPK;
+          return myPK;
+        case "pk": return myPK;
+        case "fetch": {
+          const r = await skywireDmsg.fetch(a[0], a[1] || "GET", a[2] || "/", null);
+          return { status: r.status, body: td.decode(r.body) };
+        }
+        case "serveHypervisor":
+          return skywireDmsg.serveHypervisor() instanceof Error ? "error" : "serving";
+        case "hvApi": {
+          const r = await skywireDmsg.hvApi(a[1] || "GET", a[0] || "/api/visors", null);
+          return { status: r.status, body: td.decode(r.body) };
+        }
+        case "listen":
+          skywireDmsg.listen(a[0] || 80, s => {
+            H.inbound = s; clog("inbound stream on :" + (a[0] || 80));
+            s.onMessage(m => clog("inbound recv: " + m));
+          });
+          return "listening on :" + (a[0] || 80);
+        case "dial": {
+          const s = await skywireDmsg.dial(a[0], a[1] || 80);
+          H.dialed = s; s.onMessage(m => clog("dialed recv: " + m));
+          return "dialed";
+        }
+        case "send": {
+          const h = H[a[0] || "dialed"];
+          if (!h) throw new Error("no handle: " + (a[0] || "dialed"));
+          h.send(a[1] || "ping"); return "sent";
+        }
+        case "webrtcListen":
+          skywireDmsg.webrtcListen(conn => {
+            H.rtc = conn; clog("rtc datachannel accepted");
+            conn.onMessage(m => clog("rtc recv: " + m));
+          }, iceServers());
+          return "webrtc listening (dmsg :47)";
+        case "webrtcDial": {
+          const conn = await skywireDmsg.webrtcDial(a[0], iceServers());
+          H.rtc = conn; conn.onMessage(m => clog("rtc recv: " + m));
+          return "webrtc datachannel open";
+        }
+        case "rtcsend": {
+          if (!H.rtc) throw new Error("no datachannel");
+          H.rtc.send(a[0] || "ping"); return "rtc sent";
+        }
+        case "reload":
+          // Defer so the result POST goes out before the page unloads.
+          setTimeout(() => location.reload(), 150);
+          return "reloading";
+        default: throw new Error("unknown action: " + c.action);
+      }
+    }
+
+    // Signal true readiness (wasm loaded + API present) so an operator driving
+    // reloads knows when commands will actually work, not just when SSE connected.
+    const readyPoll = setInterval(() => {
+      if (window.skywireDmsg && skywireDmsg.connect) { clearInterval(readyPoll); clog("skywireDmsg READY " + tabId); }
+    }, 100);
+
+    const es = new EventSource("/ctl/events?tab=" + tabId);
+    es.onopen = () => clog("control bridge connected as " + tabId);
+    es.onerror = () => { /* no control server present; stay a manual harness */ };
+    es.onmessage = async ev => {
+      let c; try { c = JSON.parse(ev.data); } catch { return; }
+      try { const v = await exec(c); post("/ctl/result", { id: c.id, ok: true, value: v }); }
+      catch (e) { post("/ctl/result", { id: c.id, ok: false, error: e.message || String(e) }); }
+    };
+  })();
+</script>
+</body>
+</html>

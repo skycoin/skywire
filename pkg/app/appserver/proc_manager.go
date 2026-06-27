@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"sync"
 	"time"
 
@@ -101,7 +100,10 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 		eb = appevent.NewBroadcaster(mLog.PackageLogger("event_broadcaster"), time.Second)
 	}
 
-	lis, err := net.Listen("tcp", addr)
+	// listenIngress is the TCP app-ingress listener on native builds, and nil on
+	// TinyGo (a browser can't net.Listen; in-process apps use net.Pipe). serve(),
+	// Addr() and Close() guard a nil listener.
+	lis, err := listenIngress(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +132,12 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 }
 
 func (m *procManager) serve() {
+	// No TCP ingress listener (TinyGo/browser): in-process apps connect over
+	// net.Pipe via InjectConn, not this accept loop.
+	if m.lis == nil {
+		return
+	}
+
 	defer func() {
 		m.connsMx.Lock()
 		for _, conn := range m.conns {
@@ -249,10 +257,8 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 		return 0, err
 	}
 
-	if proc.cmd == nil {
-		return 0, nil
-	}
-	return appcommon.ProcID(proc.cmd.Process.Pid), nil //nolint: gosec
+	// 0 for in-process apps (and on TinyGo); the external PID otherwise.
+	return appcommon.ProcID(proc.pid()), nil //nolint: gosec
 }
 
 // Register registers a proc for an external app.
@@ -371,7 +377,7 @@ func (m *procManager) Wait(name string) error {
 	// While waiting for p.Wait() call, we need app to present in the processes list,
 	// so we cannot pop it before p.Wait().
 	if err := p.Wait(); err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
+		if !isExitError(err) {
 			err = fmt.Errorf("failed to run app executable %s: %w", name, err)
 		}
 
@@ -499,8 +505,12 @@ func (m *procManager) stopAll() {
 	m.procs = make(map[string]*Proc)
 }
 
-// Addr returns the underlying listener's listening address.
+// Addr returns the underlying listener's listening address (nil on TinyGo,
+// where there is no TCP ingress listener — in-process apps use net.Pipe).
 func (m *procManager) Addr() net.Addr {
+	if m.lis == nil {
+		return nil
+	}
 	return m.lis.Addr()
 }
 
@@ -515,7 +525,10 @@ func (m *procManager) Close() error {
 	close(m.done)
 
 	m.stopAll()
-	err := m.lis.Close()
+	var err error
+	if m.lis != nil {
+		err = m.lis.Close()
+	}
 	m.connsWG.Wait()
 	return err
 }

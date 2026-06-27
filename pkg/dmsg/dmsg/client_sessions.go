@@ -6,16 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/quic-go/quic-go"
 	"github.com/xtaci/smux"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
-	"github.com/skycoin/skywire/pkg/skyquic"
 )
 
 // EnsureAndObtainSession attempts to obtain a session.
@@ -105,23 +102,44 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 // It is expected that the session is created and served before the context cancels, otherwise an error will be returned.
 // NOTE: This should not be called directly as it may lead to session duplicates.
 // Only `ensureSession` or `EnsureAndObtainSession` should call this function.
+// pickCarrier chooses the dmsg carrier (network + dial address) for a server
+// entry from an ordered carrier preference. The first listed carrier the server
+// advertises wins. Empty list or no match falls back to the default: QUIC when
+// the server advertises a QUIC endpoint (Protocol "quic" + AddressUDP), else the
+// legacy TCP path. Unknown carrier names are skipped. Pure — unit-tested.
+func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
+	for _, c := range carriers {
+		switch c {
+		case CarrierWT:
+			if entry.Server.AddressWT != "" {
+				return CarrierWT, entry.Server.AddressWT
+			}
+		case CarrierWS:
+			if entry.Server.AddressWS != "" {
+				return CarrierWS, entry.Server.AddressWS
+			}
+		case CarrierQUIC:
+			if entry.Protocol == "quic" && entry.Server.AddressUDP != "" {
+				return CarrierQUIC, entry.Server.AddressUDP
+			}
+		case CarrierTCP:
+			return CarrierTCP, entry.Server.Address
+		}
+	}
+	if entry.Protocol == "quic" && entry.Server.AddressUDP != "" {
+		return CarrierQUIC, entry.Server.AddressUDP
+	}
+	return CarrierTCP, entry.Server.Address
+}
+
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
 	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
-	// Pick transport. WS when the client prefers it and the server advertises
-	// one (forced in the js/wasm build, which has no raw socket); else QUIC when
-	// the server advertises a QUIC endpoint + Protocol "quic" (#2607 dmsg-over-
-	// QUIC); else the legacy TCP path.
-	network := "tcp"
-	dialAddr := entry.Server.Address
-	switch {
-	case ce.conf.PreferWS && entry.Server.AddressWS != "":
-		network = "ws"
-		dialAddr = entry.Server.AddressWS
-	case entry.Protocol == "quic" && entry.Server.AddressUDP != "":
-		network = "quic"
-		dialAddr = entry.Server.AddressUDP
-	}
+	// Pick the carrier from the client's ordered Carriers preference: the first
+	// listed carrier the server advertises wins; empty/no-match falls back to the
+	// default (QUIC when advertised, else TCP). The chosen carrier is dialed below
+	// with a TCP fallback on failure.
+	network, dialAddr := pickCarrier(ce.conf.Carriers, entry)
 	var dSes ClientSession
 
 	// Trigger dial callback.
@@ -135,6 +153,21 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		}
 	}()
 
+	if network == "wt" {
+		if dSes, err = ce.dialSessionWT(ctx, entry); err != nil {
+			// WT dial failed. Fall back to the server's TCP endpoint when there is
+			// one (native tooling on a network that also permits TCP). A browser
+			// WT client has no TCP fallback, but it doesn't take this native path.
+			if entry.Server.Address == "" {
+				return ClientSession{}, err
+			}
+			ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to TCP", entry.Static)
+			network = "tcp"
+			dialAddr = entry.Server.Address
+		} else {
+			ce.log.Infof("wt stream session initial for %s", dSes.RemotePK().String())
+		}
+	}
 	if network == "ws" {
 		if dSes, err = ce.dialSessionWS(ctx, entry); err != nil {
 			// WS dial failed. Fall back to the server's TCP endpoint when there
@@ -194,7 +227,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		// gains of Nagle aren't material for skywire's mix, and the
 		// interactive-latency loss is severe.
 		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			_ = tcpConn.SetNoDelay(true) //nolint:errcheck
+			setTCPNoDelay(tcpConn)
 		}
 
 		if dSes, err = makeClientSession(&ce.EntityCommon, ce.porter, conn, entry.Static); err != nil {
@@ -297,38 +330,9 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	return dSes, nil
 }
 
-// dialSessionQUIC dials a dmsg server's QUIC endpoint and builds a QUIC-backed
-// client session (#2607 dmsg-over-QUIC). The PK-bound QUIC TLS (pkg/skyquic,
-// option A) authenticates the server's skywire PK and encrypts the hop; the
-// session runs over native QUIC streams with no Noise handshake. EnableDatagrams
-// so the session can later expose an unreliable datagram channel.
-func (ce *Client) dialSessionQUIC(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", entry.Server.AddressUDP)
-	if err != nil {
-		return ClientSession{}, fmt.Errorf("quic: resolve %q: %w", entry.Server.AddressUDP, err)
-	}
-	udpConn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: 0})
-	if err != nil {
-		return ClientSession{}, fmt.Errorf("quic: bind dial socket: %w", err)
-	}
-	cert, err := skyquic.NewCertificate(ce.pk, ce.sk)
-	if err != nil {
-		udpConn.Close() //nolint:errcheck,gosec
-		return ClientSession{}, fmt.Errorf("quic: identity cert: %w", err)
-	}
-	rPK := entry.Static
-	tlsConf := skyquic.TLSConfig(cert, &rPK, nil) // pin the server PK
-	qc, err := quic.Dial(ctx, udpConn, udpAddr, tlsConf, &quic.Config{
-		EnableDatagrams: true,
-		KeepAlivePeriod: 25 * time.Second,
-		MaxIdleTimeout:  60 * time.Second,
-	})
-	if err != nil {
-		udpConn.Close() //nolint:errcheck,gosec
-		return ClientSession{}, fmt.Errorf("quic: dial %s: %w", entry.Server.AddressUDP, err)
-	}
-	return makeClientSessionQUIC(&ce.EntityCommon, ce.porter, qc, rPK), nil
-}
+// dialSessionQUIC (the QUIC client dial) lives in quic_native.go (//go:build
+// !tinygo); the TinyGo build has a stub in quic_stub.go that errors so the dial
+// falls back to TCP/WS.
 
 // Session obtains an established session.
 func (ce *Client) Session(pk cipher.PubKey) (ClientSession, bool) {

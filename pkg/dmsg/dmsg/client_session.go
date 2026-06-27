@@ -4,13 +4,9 @@ package dmsg
 import (
 	"context"
 	"errors"
-	"io"
 	"net"
 	"sync"
 	"time"
-
-	"github.com/hashicorp/yamux"
-	"github.com/quic-go/quic-go"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/netutil"
@@ -32,16 +28,8 @@ func makeClientSession(entity *EntityCommon, porter *netutil.Porter, conn net.Co
 	return cSes, nil
 }
 
-// makeClientSessionQUIC builds a client session over an already-handshaked QUIC
-// connection (#2607). No Noise handshake — initQUIC just records the conn; the
-// QUIC TLS already authenticated rPK and encrypts the hop.
-func makeClientSessionQUIC(entity *EntityCommon, porter *netutil.Porter, qc *quic.Conn, rPK cipher.PubKey) ClientSession {
-	var cSes ClientSession
-	cSes.SessionCommon = new(SessionCommon)
-	cSes.SessionCommon.initQUIC(entity, qc, rPK)
-	cSes.porter = porter
-	return cSes
-}
+// makeClientSessionQUIC (the QUIC client-session constructor) lives in
+// quic_native.go (//go:build !tinygo).
 
 // Close closes the client session and reaps any porter entries for streams
 // belonging to this session. Without this reaping, ephemeral ports stay
@@ -289,36 +277,22 @@ func (cs *ClientSession) serve() error {
 	for {
 		dStr, err := cs.acceptYamuxStream()
 		if err != nil {
-			// Stream-mux-level failure. Shutdown / closed / EOF are
-			// terminal — the underlying session is dead. Everything
-			// else is treated as potentially-transient and retried
-			// with a short backoff, mirroring the server-side loop
-			// in ServerSession.Serve (streamErrorBackoff = 50ms).
+			// Stream-mux-level failure on Accept. yamux, smux, AND quic
+			// AcceptStream all have NO transient errors: each blocks until a
+			// stream arrives or the session is done, then returns the session's
+			// terminal error. So ANY error here is terminal — stop the accept
+			// loop and let the session be torn down / re-dialed.
 			//
-			// `cs.sm` carries either a yamux session or an smux
-			// session — never both. Pre-fix this branch dereferenced
-			// `cs.sm.yamux.IsClosed()` unconditionally, which nil-
-			// deref'd whenever the session was negotiated as smux
-			// (`entry.Protocol == "smux"` in client_sessions.go and
-			// the matching server-side path) and any non-EOF /
-			// non-yamux-shutdown error reached this branch.
-			// Recovered by the goroutine's defer/recover but logged
-			// only as "recovered panic in session serve goroutine: …"
-			// with no clue about the cause.
-			sessionClosed := errors.Is(err, io.EOF)
-			switch {
-			case cs.sm.yamux != nil:
-				sessionClosed = sessionClosed || errors.Is(err, yamux.ErrSessionShutdown) || cs.sm.yamux.IsClosed()
-			case cs.sm.smux != nil:
-				sessionClosed = sessionClosed || cs.sm.smux.IsClosed()
-			}
-			if sessionClosed {
-				cs.log.WithError(err).Debug("Session shut down, stopping accept loop.")
-				return err
-			}
-			cs.log.WithError(err).Warn("Failed to accept yamux stream, continuing...")
-			time.Sleep(streamErrorBackoff)
-			continue
+			// In particular, for a carrier that rides QUIC (WebTransport: yamux
+			// over a WT bidi stream), the error is the underlying quic-go
+			// "Application error 0x0 (remote): session closed" — which is NOT
+			// yamux.ErrSessionShutdown / io.EOF and can arrive BEFORE
+			// yamux.IsClosed() flips. The previous narrow shutdown check let such
+			// errors fall through to a Warn+continue that spun forever (a wall of
+			// "Failed to accept yamux stream, continuing"). The quic-native case
+			// was already handled this way (#2607); yamux/smux share the property.
+			cs.log.WithError(err).Debug("Session shut down, stopping accept loop.")
+			return err
 		}
 
 		if err := cs.handshakeResponder(dStr); err != nil {

@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package network pkg/transport/network/sudph.go
 package network
 
@@ -34,6 +36,18 @@ type sudphClient struct {
 	packetListener  net.PacketConn
 	sudphVisorsConn net.PacketConn
 	port            int
+	// sharedConn, when set, is the UDP socket sudph listens over instead of
+	// binding its own — the sudph virtual conn of a unified transport_port socket
+	// (see udpDemux). nil = bind a dedicated socket (default / per-type-port).
+	// sudph's internal pfilter still wraps it exactly as it wraps a real socket.
+	sharedConn net.PacketConn
+}
+
+// makeSudphClient is the build-tagged SUDPH constructor used by MakeClient. The
+// TinyGo build (sudph_tinygo.go) returns an unsupported error so the browser
+// graph never pulls kcp-go/pfilter (which transitively import quic-go).
+func makeSudphClient(resolved *resolvedClient, port int) (Client, error) { //nolint:unparam // error is for build-tag parity with the tinygo stub
+	return newSudph(resolved, port), nil
 }
 
 func newSudph(resolved *resolvedClient, port int) Client {
@@ -63,21 +77,28 @@ func (c *sudphClient) serve() {
 // listen
 func (c *sudphClient) listen() (net.Listener, error) {
 	var packetListener net.PacketConn
-	var err error
-	var confPort string
-	if c.port != 0 {
-		confPort = fmt.Sprintf(":%d", c.port)
-	}
-	for {
-		packetListener, err = net.ListenPacket("udp", confPort)
-		if err != nil {
-			c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
-			c.port++
+	if c.sharedConn != nil {
+		// Unified transport port: filter over the shared socket's sudph demux conn
+		// instead of binding our own. The master socket lifecycle stays with the
+		// demux; pfilter wraps the virtual conn exactly as it would a real socket.
+		packetListener = c.sharedConn
+	} else {
+		var err error
+		var confPort string
+		if c.port != 0 {
 			confPort = fmt.Sprintf(":%d", c.port)
-			c.log.Warnf("Trying port %d", c.port)
-			continue
 		}
-		break
+		for {
+			packetListener, err = net.ListenPacket("udp", confPort)
+			if err != nil {
+				c.log.WithError(err).Warnf("Failed to listen on port: %d", c.port)
+				c.port++
+				confPort = fmt.Sprintf(":%d", c.port)
+				c.log.Warnf("Trying port %d", c.port)
+				continue
+			}
+			break
+		}
 	}
 	c.packetListener = packetListener
 	c.filter = pfilter.NewPacketFilter(packetListener)

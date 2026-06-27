@@ -1,0 +1,182 @@
+//go:build js && wasm
+
+// Package main — in-tab skysocks CLIENT: fetch CLEARNET content through a remote
+// skysocks-server over a skywire route, so a browser tab can browse the clearnet
+// IP-anonymously (the exit does the egress).
+//
+// The tab is NOT an app-framework client (no app procs in a browser); it calls
+// the ROUTER directly — rtr.DialRoutes(serverPK, port 3) originates the route group
+// (the routing layer, proven working), then yamux + SOCKS5 ride it exactly as a
+// normal skysocks-client does. http.Transport terminates TLS in-tab for https
+// (the std-Go js/wasm build has crypto/tls), so the exit only sees encrypted
+// bytes to the origin.
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	_ "embed"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"sync"
+	"syscall/js"
+	"time"
+
+	"github.com/hashicorp/yamux"
+	"golang.org/x/net/proxy"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/router"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
+)
+
+// caBundle is a Mozilla CA root bundle, embedded because Go's js/wasm runtime has
+// NO system cert pool (crypto/x509.SystemCertPool fails), so https verification
+// would otherwise fail. We MUST verify — the tab does TLS end-to-end to the origin
+// so the skysocks exit can't read or MITM the https stream; skipping verification
+// would hand the exit exactly that power.
+//
+//go:embed cacert.pem
+var caBundle []byte
+
+var caPool = func() *x509.CertPool {
+	p := x509.NewCertPool()
+	p.AppendCertsFromPEM(caBundle)
+	return p
+}()
+
+// skysocksPort is the skywire app port a skysocks-server listens on.
+const skysocksPort = routing.Port(skyenv.SkysocksPort)
+
+var (
+	skysocksMu       sync.Mutex
+	skysocksSessions = map[cipher.PubKey]*yamux.Session{} // one yamux session per exit
+)
+
+// skysocksSession returns a yamux session to the skysocks-server at serverPK,
+// lazily establishing it over a fresh route group (rtr.DialRoutes — the routing
+// layer). Cached per exit; a closed session is re-dialed.
+func skysocksSession(serverPK cipher.PubKey) (*yamux.Session, error) {
+	skysocksMu.Lock()
+	defer skysocksMu.Unlock()
+	if s, ok := skysocksSessions[serverPK]; ok && !s.IsClosed() {
+		return s, nil
+	}
+	if rtr == nil {
+		return nil, errors.New("not booted; call boot() first")
+	}
+	dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
+	if err != nil {
+		return nil, fmt.Errorf("dial skysocks route: %w", err)
+	}
+	sess, err := yamux.Client(conn, yamux.DefaultConfig())
+	if err != nil {
+		_ = conn.Close() //nolint:errcheck
+		return nil, fmt.Errorf("yamux client: %w", err)
+	}
+	skysocksSessions[serverPK] = sess
+	return sess, nil
+}
+
+// streamDialer opens a fresh yamux stream per Dial. proxy.SOCKS5 runs the SOCKS5
+// handshake + CONNECT over it — the skysocks-server runs a SOCKS5 server on each
+// accepted stream, so this is exactly the client half.
+type streamDialer struct{ sess *yamux.Session }
+
+func (d streamDialer) Dial(_, _ string) (net.Conn, error) { return d.sess.Open() }
+
+// skysocksHTTPClient builds an http.Client whose every connection is SOCKS5-
+// tunneled through the skysocks session. http.Transport terminates TLS for https
+// URLs in-tab, so https works end-to-end (the exit relays ciphertext).
+func skysocksHTTPClient(sess *yamux.Session) (*http.Client, error) {
+	sd, err := proxy.SOCKS5("tcp", "skysocks", nil, streamDialer{sess: sess})
+	if err != nil {
+		return nil, err
+	}
+	dialCtx := func(_ context.Context, network, addr string) (net.Conn, error) {
+		return sd.Dial(network, addr) // a yamux stream + SOCKS5 CONNECT to addr
+	}
+	if cd, ok := sd.(proxy.ContextDialer); ok {
+		dialCtx = cd.DialContext
+	}
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext:         dialCtx,
+			TLSClientConfig:     &tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS12},
+			TLSHandshakeTimeout: 20 * time.Second,
+			MaxIdleConns:        8,
+		},
+		Timeout: 45 * time.Second,
+	}, nil
+}
+
+// jsFetchClearnet(serverPKHex, method, url, bodyOrNull) → Promise<{status, body,
+// headers}>. Fetches a CLEARNET url through the skysocks-server serverPKHex over a
+// skywire route: DialRoutes → yamux → SOCKS5 CONNECT → (https) TLS-in-tab → HTTP.
+// IP-anonymous: the exit does the egress; the origin sees the exit's IP.
+func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
+	if len(args) < 3 {
+		return js.Global().Get("Error").New("fetchClearnet(serverPK, method, url[, body])")
+	}
+	serverPKHex := args[0].String()
+	method := "GET"
+	if args[1].String() != "" {
+		method = args[1].String()
+	}
+	rawURL := args[2].String()
+	var body []byte
+	if len(args) > 3 && !args[3].IsNull() && !args[3].IsUndefined() {
+		body = []byte(args[3].String())
+	}
+	return promise(func() (interface{}, error) {
+		var spk cipher.PubKey
+		if err := spk.UnmarshalText([]byte(serverPKHex)); err != nil {
+			return nil, fmt.Errorf("bad skysocks server pk: %w", err)
+		}
+		if _, err := url.ParseRequestURI(rawURL); err != nil {
+			return nil, fmt.Errorf("bad url: %w", err)
+		}
+		sess, err := skysocksSession(spk)
+		if err != nil {
+			return nil, err
+		}
+		client, err := skysocksHTTPClient(sess)
+		if err != nil {
+			return nil, err
+		}
+		var rdr io.Reader
+		if body != nil {
+			rdr = bytes.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(ctx, method, rawURL, rdr)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("fetch via skysocks: %w", err)
+		}
+		defer resp.Body.Close()                               //nolint:errcheck
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20)) // 16MB cap
+		res := js.Global().Get("Object").New()
+		res.Set("status", resp.StatusCode)
+		buf := js.Global().Get("Uint8Array").New(len(b))
+		js.CopyBytesToJS(buf, b)
+		res.Set("body", buf)
+		hdrs := js.Global().Get("Object").New()
+		for k := range resp.Header {
+			hdrs.Set(k, resp.Header.Get(k))
+		}
+		res.Set("headers", hdrs)
+		return res, nil
+	})
+}

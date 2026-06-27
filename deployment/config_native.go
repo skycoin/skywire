@@ -1,4 +1,4 @@
-//go:build !js
+//go:build !tinygo
 
 // Package deployment pkg/deployment/config_native.go
 //
@@ -15,13 +15,8 @@ import (
 	"os"
 )
 
-// EnvServices is the wrapper struct for the outer JSON — i.e. 'prod'
-// or 'test' deployment config. Lives in the !js file because its
-// json.RawMessage fields require the encoding/json import.
-type EnvServices struct {
-	Test json.RawMessage `json:"test"`
-	Prod json.RawMessage `json:"prod"`
-}
+// EnvServices now lives in config.go (untagged) so it builds on all targets,
+// including TinyGo (encoding/json compiles under TinyGo 0.41).
 
 func init() {
 	// SKYDEPLOY overrides the embedded deployment config with a

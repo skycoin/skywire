@@ -10,11 +10,9 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"github.com/quic-go/quic-go"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg/metrics"
 	"github.com/skycoin/skywire/pkg/netutil"
 )
@@ -46,16 +44,8 @@ func makeServerSession(m metrics.Metrics, entity *EntityCommon, conn net.Conn) (
 	return sSes, nil
 }
 
-// makeServerSessionQUIC builds a server session over an already-handshaked QUIC
-// connection (#2607). No Noise handshake — the QUIC TLS authenticated rPK
-// (learned from the peer's certificate) and encrypts the hop.
-func makeServerSessionQUIC(m metrics.Metrics, entity *EntityCommon, qc *quic.Conn, rPK cipher.PubKey) *ServerSession {
-	var sSes ServerSession
-	sSes.SessionCommon = new(SessionCommon)
-	sSes.SessionCommon.initQUIC(entity, qc, rPK)
-	sSes.m = m
-	return &sSes
-}
+// makeServerSessionQUIC (the QUIC server-session constructor) lives in
+// quic_native.go (//go:build !tinygo).
 
 // Close implements io.Closer
 func (ss *ServerSession) Close() error {
@@ -116,7 +106,7 @@ func (ss *ServerSession) Serve() {
 				ss.log.WithError(err).Info("Stopping session...")
 				return
 			}
-			log := ss.log.WithField("quic_id", uint32(qStr.StreamID())) //nolint:gosec // logging only
+			log := ss.log.WithField("quic_id", qStr.quicStreamID())
 
 			select {
 			case sem <- struct{}{}:
@@ -127,7 +117,7 @@ func (ss *ServerSession) Serve() {
 			}
 
 			log.Debug("Initiating stream.")
-			go func(qStr *quic.Stream) {
+			go func(qStr quicStream) {
 				defer func() { <-sem }()
 				defer func() {
 					if r := recover(); r != nil {
@@ -142,13 +132,15 @@ func (ss *ServerSession) Serve() {
 		for {
 			yStr, err := ss.sm.yamux.AcceptStream()
 			if err != nil {
-				if err == yamux.ErrSessionShutdown || err == io.EOF || ss.sm.yamux.IsClosed() {
-					ss.log.WithError(err).Info("Stopping session...")
-					return
-				}
-				ss.log.WithError(err).Warn("Failed to accept yamux stream, continuing...")
-				time.Sleep(streamErrorBackoff)
-				continue
+				// yamux.AcceptStream has no transient errors — any error is the
+				// session's terminal shutdown error. For a QUIC-backed carrier
+				// (WebTransport) that is the underlying quic-go "Application error
+				// 0x0 (remote): session closed", NOT yamux.ErrSessionShutdown, and
+				// it can arrive before yamux.IsClosed() flips — so the old narrow
+				// check spun this loop forever ("Failed to accept yamux stream,
+				// continuing"). Stop the session on any accept error.
+				ss.log.WithError(err).Info("Stopping session...")
+				return
 			}
 
 			log := ss.log.WithField("yamux_id", yStr.StreamID())
@@ -464,11 +456,23 @@ func (ss *ServerSession) forwardRequest(req StreamRequest) (mStr io.ReadWriteClo
 				Debugf("After forwardRequest failed, the yamux stream is closed.")
 		}
 	}()
-	if ss.sm.smux != nil {
+	switch {
+	case ss.sm.smux != nil:
 		if mStr, err = ss.sm.smux.OpenStream(); err != nil {
 			return nil, nil, err
 		}
-	} else {
+	case ss.sm.quic != nil:
+		// Destination is a dmsg-over-QUIC session (#2607): open a native QUIC
+		// stream to forward over. Previously this fell into the yamux branch and
+		// dereferenced a nil *yamux.Session, panicking serveStream — server-side
+		// forwarding to a QUIC destination was never exercised (no QUIC roundtrip
+		// test). The quicStream satisfies io.ReadWriteCloser.
+		var qStr quicStream
+		if qStr, err = ss.sm.quic.OpenStreamSync(context.Background()); err != nil {
+			return nil, nil, err
+		}
+		mStr = qStr
+	default:
 		if mStr, err = ss.sm.yamux.OpenStream(); err != nil {
 			return nil, nil, err
 		}

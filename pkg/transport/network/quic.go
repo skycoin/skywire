@@ -1,3 +1,5 @@
+//go:build !tinygo
+
 // Package network pkg/transport/network/quic.go: a QUIC-based skywire
 // transport. Mirrors the sudph/stcpr structure (AR-resolved, UDP-based)
 // but rides quic-go instead of KCP: the connection is secured by the
@@ -40,11 +42,23 @@ const quicErrNoStream quic.ApplicationErrorCode = 1
 
 type quicClient struct {
 	*resolvedClient
-	port     int
-	udpConn  net.PacketConn
-	listener *quic.Listener
-	tlsCert  tls.Certificate
-	qconf    *quic.Config
+	port int
+	// sharedConn, when set, is the UDP socket QUIC listens over instead of
+	// binding its own — the QUIC demux conn of a unified transport_port socket
+	// (see udpDemux). nil = bind a dedicated socket (the default / per-type-port
+	// behavior). The master socket's lifecycle is owned by the demux, not here.
+	sharedConn net.PacketConn
+	udpConn    net.PacketConn
+	listener   *quic.Listener
+	tlsCert    tls.Certificate
+	qconf      *quic.Config
+}
+
+// makeQuicClient is the build-tagged QUIC constructor used by MakeClient. On
+// non-TinyGo it builds a real quicClient; the TinyGo build (quic_tinygo.go)
+// returns an unsupported error so the browser graph never pulls quic-go.
+func makeQuicClient(resolved *resolvedClient, port int) (Client, error) { //nolint:unparam // error is for build-tag parity with the tinygo stub
+	return newQuic(resolved, port), nil
 }
 
 func newQuic(resolved *resolvedClient, port int) Client {
@@ -229,20 +243,27 @@ func (c *quicClient) serve() {
 
 func (c *quicClient) listen() (net.Listener, error) {
 	var udpConn net.PacketConn
-	var err error
-	confPort := ""
-	if c.port != 0 {
-		confPort = fmt.Sprintf(":%d", c.port)
-	}
-	for {
-		udpConn, err = net.ListenPacket("udp", confPort)
-		if err != nil {
-			c.log.WithError(err).Warnf("Failed to listen on UDP port %d", c.port)
-			c.port++
+	if c.sharedConn != nil {
+		// Unified transport port: listen over the shared socket's QUIC demux conn.
+		// quic.Listen does not own the PacketConn, so the master socket lifecycle
+		// stays with the demux.
+		udpConn = c.sharedConn
+	} else {
+		var err error
+		confPort := ""
+		if c.port != 0 {
 			confPort = fmt.Sprintf(":%d", c.port)
-			continue
 		}
-		break
+		for {
+			udpConn, err = net.ListenPacket("udp", confPort)
+			if err != nil {
+				c.log.WithError(err).Warnf("Failed to listen on UDP port %d", c.port)
+				c.port++
+				confPort = fmt.Sprintf(":%d", c.port)
+				continue
+			}
+			break
+		}
 	}
 	c.udpConn = udpConn
 

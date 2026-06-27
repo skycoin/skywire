@@ -1033,6 +1033,13 @@ func (v *Visor) FetchAllTransportEntries(ctx context.Context) ([]*transport.Entr
 //go:embed static
 var ui embed.FS
 
+// HypervisorUIFS returns the embedded Angular hypervisor UI filesystem (the
+// built static/ assets). Exposed for consumers like the standalone-html
+// generator (cli hv gen) that need to read index.html + the chunk JS/CSS.
+func HypervisorUIFS() (fs.FS, error) {
+	return fs.Sub(ui, "static")
+}
+
 func initUI() *fs.FS {
 	//initialize the ui
 	uiFS, err := fs.Sub(ui, "static")

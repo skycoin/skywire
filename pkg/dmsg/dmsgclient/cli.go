@@ -1,10 +1,11 @@
+//go:build !tinygo
+
 // Package dmsgclient pkg/dmsgclient/cli.go
 package dmsgclient
 
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -19,7 +20,6 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
-	"github.com/skycoin/skywire/pkg/dmsg/ioutil"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -51,11 +51,6 @@ Default mode of operation is dmsghttp:
 * Start dmsghttp client
 * Connect to dmsg client address (if specified)
 
-'-Z' flag: use plain http to connect to dmsg-discovery
-* HTTP client is used to make HTTP GET request to '/health' of dmsg discovery URL
-* Start dmsg client
-* Connect to dmsg client address (if specified)
-
 '-B' flag: use dmsg direct client
 * Start dmsg-direct client
 * Connect to dmsg client address (if specified)
@@ -72,24 +67,6 @@ func InitDmsgWithFlags(ctx context.Context, dlog *logging.Logger, pk cipher.PubK
 	}
 	if UseDC {
 		return StartDmsgDirect(ctx, dlog, pk, sk, "", DmsgSessions, dmsg.ExtractPKFromDmsgAddr(destination))
-	}
-	if UseHTTP {
-		resp, err := httpClient.Get(DmsgDiscURL + "/health")
-		if err != nil {
-			dlog.WithError(err).Fatal("Error connecting to dmsg-discovery with http client")
-		}
-		defer ioutil.CloseQuietly(resp.Body, dlog)
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			dlog.WithError(err).Error("Failed to read response body from discovery")
-		} else {
-			dlog.Infof("Received response from dmsg-discovery server %s/health:\n%s", DmsgDiscURL, string(body))
-		}
-
-		// Use direct client with synthetic entries for discovery server and all dmsg servers
-		// This allows dialing the discovery server which doesn't register itself
-		return StartDmsgWithDirectClient(ctx, dlog, pk, sk, DmsgSessions)
 	}
 
 	// Default mode: a SINGLE dmsg client that reaches the dmsg-only discovery
