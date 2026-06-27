@@ -58,7 +58,56 @@ func (v *Visor) AddHypervisor(hvPK cipher.PubKey) error {
 		return nil
 	})
 
+	// Persist so the change survives a restart (the operator is configuring this
+	// hypervisor, not just connecting once). Best-effort — see persistHypervisors.
+	v.persistHypervisors(addPK(v.configuredHypervisors(), hvPK))
+
 	return nil
+}
+
+// configuredHypervisors returns a copy of the visor's configured hypervisor PKs.
+// Unlocked read of v.conf.Hypervisors, matching the codebase's config-update
+// convention (UpdateMinHops etc. mutate under v1.mu; readers don't lock — the
+// writes are rare operator actions).
+func (v *Visor) configuredHypervisors() []cipher.PubKey {
+	if v.conf == nil {
+		return nil
+	}
+	return append([]cipher.PubKey(nil), v.conf.Hypervisors...)
+}
+
+// addPK returns pks with pk appended if not already present.
+func addPK(pks []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
+	for _, p := range pks {
+		if p == pk {
+			return pks
+		}
+	}
+	return append(pks, pk)
+}
+
+// removePK returns pks without pk.
+func removePK(pks []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
+	out := pks[:0:0]
+	for _, p := range pks {
+		if p != pk {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// persistHypervisors writes want to the config so a runtime add/remove survives
+// a restart. Best-effort: a non-file-backed config (wasm tab / STDIN) can't write
+// — the runtime connection change already took effect, so a write error is only
+// logged, never fatal.
+func (v *Visor) persistHypervisors(want []cipher.PubKey) {
+	if v.conf == nil || v.conf.Path() == "" {
+		return // not file-backed; runtime change stands without persistence
+	}
+	if err := v.conf.UpdateHypervisors(want); err != nil {
+		v.log.WithError(err).Warn("failed to persist hypervisors to config")
+	}
 }
 
 // RemoveHypervisor tears down a runtime-added hypervisor connection by
@@ -75,12 +124,16 @@ func (v *Visor) RemoveHypervisor(hvPK cipher.PubKey) error {
 	v.initLock.Lock()
 	cancel, ok := v.hypervisorCancels[hvPK]
 	v.initLock.Unlock()
-	if !ok {
-		// Not a runtime-added hypervisor (or already removed). Don't
-		// error — operator's intent is satisfied either way.
-		return nil
+	if ok {
+		// Tear down the live connection; its goroutine's deferred cleanup removes
+		// hvPK from connectedHypervisors + hypervisorCancels. Config-loaded
+		// hypervisors are tracked here too (initHypervisors registers them), so
+		// this now works for them, not only AddHypervisor-added ones.
+		cancel()
 	}
-	cancel()
+	// Persist the removal regardless (even if the connection was already gone or
+	// never tracked) so the visor doesn't reconnect to it on the next restart.
+	v.persistHypervisors(removePK(v.configuredHypervisors(), hvPK))
 	return nil
 }
 
@@ -97,6 +150,9 @@ func (v *Visor) RemoveAllHypervisors() (int, error) {
 	for _, c := range cancels {
 		c()
 	}
+	// Persist an empty configured set so none reconnect on restart (now that
+	// config-loaded hypervisors are tracked + cancelled here too).
+	v.persistHypervisors(nil)
 	return len(cancels), nil
 }
 
