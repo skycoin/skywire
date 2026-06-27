@@ -23,6 +23,7 @@ func newMemoryStore() *memStore {
 func (s *memStore) Bind(_ context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	netType = types.NormalizeType(netType)
 
 	if _, ok := s.visorData[netType]; !ok {
 		s.visorData[netType] = make(map[string]addrresolver.VisorData)
@@ -52,6 +53,7 @@ func (s *memStore) Bind(_ context.Context, netType types.Type, pk cipher.PubKey,
 func (s *memStore) DelBind(_ context.Context, netType types.Type, pk cipher.PubKey) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	netType = types.NormalizeType(netType)
 	delete(s.visorData[netType], pk.String())
 	return nil
 }
@@ -59,6 +61,7 @@ func (s *memStore) DelBind(_ context.Context, netType types.Type, pk cipher.PubK
 func (s *memStore) Resolve(_ context.Context, netType types.Type, pk cipher.PubKey) (addrresolver.VisorData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	netType = types.NormalizeType(netType)
 
 	tpTypeData, ok := s.visorData[netType]
 	if !ok {
@@ -76,6 +79,7 @@ func (s *memStore) Resolve(_ context.Context, netType types.Type, pk cipher.PubK
 func (s *memStore) GetAll(_ context.Context, netType types.Type) (pks []string, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	netType = types.NormalizeType(netType)
 
 	for pk := range s.visorData[netType] {
 		pks = append(pks, pk)
