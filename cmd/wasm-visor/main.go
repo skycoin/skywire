@@ -58,7 +58,9 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
 
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -141,6 +143,8 @@ func main() {
 		"dialRoute":       js.FuncOf(jsDialRoute),
 		"checkRegistered": js.FuncOf(jsCheckRegistered),
 		"fetchClearnet":   js.FuncOf(jsFetchClearnet),
+		"skychatSend":     js.FuncOf(jsSkychatSend),
+		"skychatMessages": js.FuncOf(jsSkychatMessages),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -179,8 +183,8 @@ func jsStatus(js.Value, []js.Value) interface{} {
 	st["procManager"] = procM != nil
 	st["hypervisor"] = hvCore != nil
 	// booted = the edge (dmsg + transport + router: rule reception + packet
-	// forwarding) plus the in-process app host (procManager). No app is running
-	// yet — that's the in-process-skychat step.
+	// forwarding) plus the in-process app host (procManager), which runs the
+	// in-process skychat app (dmsg:1).
 	st["booted"] = dmsgC != nil && tpM != nil && rtr != nil && procM != nil
 	if tpM != nil {
 		st["transports"] = tpM.TransportCount()
@@ -435,8 +439,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// 4. in-process app server (RunModeInternal). The browser-adapted
 	// appserver.NewProcManager no longer net.Listen("tcp")s under TinyGo (a
 	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP
-	// ingress. No app registered yet — in-process skychat (an appcommon.AppFunc)
-	// is the next step.
+	// ingress.
 	vlog("proc_manager: New…")
 	pm, err := appserver.NewProcManager(mLog, &appdisc.Factory{}, eb, "", "")
 	if err != nil {
@@ -444,6 +447,26 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}
 	procM = pm
 	vlog("proc_manager: ok")
+
+	// 4a. in-process skychat (the browser visor's first app). Register the dmsg
+	// app-networker so app.Client routes over dmsg, then start skychat as an
+	// internal app — it listens on dmsg:1 and is wire-compatible with native
+	// skychat, so a wasm↔native chat doubles as a transport/reachability test.
+	if aerr := appnet.AddNetworker(appnet.TypeDmsg, appnet.NewDMSGNetworker(dmsgC)); aerr != nil {
+		vlog("skychat: add dmsg networker: " + aerr.Error())
+	}
+	if _, serr := pm.Start(appcommon.ProcConfig{
+		AppName:     "skychat",
+		ProcKey:     appcommon.RandProcKey(),
+		VisorPK:     pk,
+		RoutingPort: skychatPort,
+		RunFunc:     runBrowserSkychat,
+		RunMode:     appcommon.RunModeInternal,
+	}); serr != nil {
+		vlog("skychat: start: " + serr.Error())
+	} else {
+		vlog("skychat: in-process app started (dmsg:1)")
+	}
 
 	// 5. hypervisor core: the tab also acts as a hypervisor — visors dial INTO it
 	// on the dmsg hypervisor port and it RPC-controls them (gobrpc CLIENT, which
