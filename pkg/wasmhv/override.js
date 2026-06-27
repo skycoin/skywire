@@ -51,6 +51,66 @@
     return new TextDecoder().decode(pt);
   }
 
+  // --- single-instance guard (Web Locks leader election) ---
+  //
+  // A persistent identity (CFG.sk / CFG.encsk) must run in exactly ONE tab per
+  // origin. Two tabs booting the same key = two dmsg clients claiming one PK,
+  // fighting over server sessions (dmsg is newest-session-wins, so they evict
+  // each other and flap) and colliding on AR / transport / route state. Web Locks
+  // elects a single leader tab; other tabs show a notice and WAIT on the lock, so
+  // if the leader tab closes one of them acquires it and boots automatically
+  // (failover). An ephemeral identity (no key) gets a fresh PK per tab, so there
+  // is nothing to collide and the guard is skipped.
+  //
+  // This is the minimal fix. The fuller architecture (one visor in a SharedWorker
+  // with tabs as MessagePort clients) keeps the visor alive across tab churn
+  // without a re-boot/re-register on every leadership handoff — a follow-up.
+  function showSingletonNotice() {
+    function add() {
+      if (document.getElementById('skywire-singleton-notice')) return;
+      var d = document.createElement('div');
+      d.id = 'skywire-singleton-notice';
+      d.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#15151f;color:#cdd6e0;' +
+        'font:14px/1.6 system-ui,sans-serif;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem';
+      d.innerHTML = '<div style="max-width:34rem"><h2 style="margin:0 0 .5rem;font-weight:600">' +
+        'Skywire is already running in another tab</h2><p style="opacity:.8">This visor identity can ' +
+        'run in only one tab at a time. Close the other tab to use it here — this tab takes over ' +
+        'automatically if that one closes.</p></div>';
+      document.body.appendChild(d);
+    }
+    if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+  }
+  function hideSingletonNotice() {
+    var d = document.getElementById('skywire-singleton-notice');
+    if (d && d.parentNode) d.parentNode.removeChild(d);
+  }
+
+  // becomeLeader resolves when THIS tab holds the named exclusive lock (now if
+  // free, or later when the current holder's tab closes), and keeps the lock held
+  // for the tab's lifetime. Resolves immediately (best-effort) where Web Locks is
+  // unsupported. Shows/hides the "running in another tab" notice around the wait.
+  function becomeLeader(name) {
+    if (!(navigator.locks && navigator.locks.request)) {
+      log('Web Locks unsupported; single-instance guard disabled (best-effort)');
+      return Promise.resolve();
+    }
+    return new Promise(function (resolveLeader) {
+      // Non-blocking probe: if the lock is already held, surface the notice now.
+      navigator.locks.request(name, { mode: 'exclusive', ifAvailable: true }, function (probe) {
+        if (!probe) { log('another tab holds the visor lock; waiting'); showSingletonNotice(); }
+        // returning undefined releases the probe's hold immediately
+      });
+      // Queued acquisition: granted now (free) or after the holder's tab closes.
+      // The unresolved returned promise holds the lock until THIS tab is unloaded.
+      navigator.locks.request(name, { mode: 'exclusive' }, function () {
+        hideSingletonNotice();
+        log('acquired single-instance visor lock; this tab is the leader');
+        resolveLeader();
+        return new Promise(function () {});
+      });
+    });
+  }
+
   // ensure boots the wasm client + connects (once). The first shimmed request
   // awaits this, so the app's initial /api call blocks until dmsg is up.
   //
@@ -67,6 +127,11 @@
     if (readyP) return readyP;
     readyP = (async function () {
       var sk = await resolveSK();
+      // Persistent identity → enforce one-tab-per-origin before booting any dmsg
+      // client. Ephemeral (no key) tabs each get a unique PK, so they may all run.
+      if (CFG.sk || CFG.encsk) {
+        await becomeLeader('skywire-wasm-visor');
+      }
       if (CFG.visor) {
         while (!self.skywireVisor) { await new Promise(function (r) { setTimeout(r, 10); }); }
         var vpk = await self.skywireVisor.boot(sk, CFG.seedpk, CFG.seedws, CFG.disc);
