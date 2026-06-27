@@ -500,8 +500,8 @@ return {
               localPk: transport.local_pk,
               remotePk: transport.remote_pk,
               type: transport.type,
-              recv: transport.log.recv,
-              sent: transport.log.sent,
+              recv: transport.log ? transport.log.recv : 0,
+              sent: transport.log ? transport.log.sent : 0,
               latencyMs: transport.latency_ms || 0,
             });
           });
