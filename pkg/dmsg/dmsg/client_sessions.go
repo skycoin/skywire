@@ -107,6 +107,16 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 // advertises wins. Empty list or no match falls back to the default: QUIC when
 // the server advertises a QUIC endpoint (Protocol "quic" + AddressUDP), else the
 // legacy TCP path. Unknown carrier names are skipped. Pure — unit-tested.
+// hasCarrier reports whether c is in the client's ordered carrier preference.
+func hasCarrier(carriers []string, c string) bool {
+	for _, x := range carriers {
+		if x == c {
+			return true
+		}
+	}
+	return false
+}
+
 func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
 	for _, c := range carriers {
 		switch c {
@@ -155,15 +165,23 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 
 	if network == "wt" {
 		if dSes, err = ce.dialSessionWT(ctx, entry); err != nil {
-			// WT dial failed. Fall back to the server's TCP endpoint when there is
-			// one (native tooling on a network that also permits TCP). A browser
-			// WT client has no TCP fallback, but it doesn't take this native path.
-			if entry.Server.Address == "" {
+			// WT dial failed. Prefer a WS fallback when this client allows WS and
+			// the server advertises it — a browser (which prefers WT) has no TCP
+			// fallback, so without this a single broken WT listener would strand it
+			// even though the server also offers WS. Else fall back to TCP (native
+			// tooling on a network that permits it). The ws/tcp blocks below run
+			// when network is reassigned here.
+			switch {
+			case hasCarrier(ce.conf.Carriers, CarrierWS) && entry.Server.AddressWS != "":
+				ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to WS", entry.Static)
+				network = CarrierWS
+			case entry.Server.Address != "":
+				ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to TCP", entry.Static)
+				network = "tcp"
+				dialAddr = entry.Server.Address
+			default:
 				return ClientSession{}, err
 			}
-			ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to TCP", entry.Static)
-			network = "tcp"
-			dialAddr = entry.Server.Address
 		} else {
 			ce.log.Infof("wt stream session initial for %s", dSes.RemotePK().String())
 		}
