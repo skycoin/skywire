@@ -334,54 +334,39 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
         },
       ];
 
-      // Check the URL to find out which tab should be shown as selected.
-      // Info is the default landing tab now (was Routing). Sub-paths
-      // under /apps (chat, vpn, skysocks) all keep the Apps tab
-      // highlighted since they're sub-tabs inside it; the legacy
-      // top-level /chat /vpn-tab /skysocks routes redirect there.
-      this.selectedTabIndex = 0;
-      if (this.lastUrl.includes('/routing')) {
-        this.selectedTabIndex = 1;
+      // A browser/wasm visor has no data source for some tabs — bandwidth,
+      // uptime, rewards and web-proxy all 404 (no host bandwidth, uptime
+      // tracker, rewards, or skysocks proxy in a tab). Drop them so the tab row
+      // shows only what works. selectedTabIndex is computed by route below, so a
+      // shorter array stays correct.
+      if (this.node && (this.node as any).arch === 'wasm') {
+        const wasmHiddenTabs = new Set(['bandwidth', 'uptime', 'rewards', 'web-proxy']);
+        this.tabsData = this.tabsData.filter(t => {
+          const seg = t.linkParts ? t.linkParts[t.linkParts.length - 1] : '';
+          return !wasmHiddenTabs.has(seg);
+        });
       }
-      if (this.lastUrl.includes('/transports')) {
-        this.selectedTabIndex = 2;
+
+      // Pick the selected tab by matching the URL to a tab's route (its last
+      // linkParts segment), last match wins — robust to tabs being filtered out
+      // (wasm visors) since it no longer assumes fixed indices. Info (the default
+      // landing tab) is the fallback; /apps must exclude /apps-list, and /dmsg +
+      // /reachability redirect to /info so they fall through to the default.
+      let matchedSeg = 'info';
+      const routeOrder = ['routing', 'transports', 'bandwidth', 'uptime', 'apps',
+        'rewards', 'skynet', 'web-proxy', 'resources', 'terminal', 'wallet', 'logs'];
+      for (const seg of routeOrder) {
+        if (seg === 'apps') {
+          if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
+            matchedSeg = 'apps';
+          }
+        } else if (this.lastUrl.includes('/' + seg)) {
+          matchedSeg = seg;
+        }
       }
-      if (this.lastUrl.includes('/bandwidth')) {
-        this.selectedTabIndex = 3;
-      }
-      // /dmsg and /reachability resolve to redirects (→ /info), so
-      // they don't get their own selectedTabIndex anymore. The
-      // info-tab default (index 0) is correct for both.
-      if (this.lastUrl.includes('/uptime')) {
-        this.selectedTabIndex = 4;
-      }
-      if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
-        this.selectedTabIndex = 5;
-      }
-      if (this.lastUrl.includes('/rewards')) {
-        this.selectedTabIndex = 6;
-      }
-      // /skynet matches BOTH the skynet tab and would otherwise also
-      // match a hypothetical /skynet-foo path; check after web-proxy
-      // since /web-proxy must take precedence on its own URL.
-      if (this.lastUrl.includes('/skynet')) {
-        this.selectedTabIndex = 7;
-      }
-      if (this.lastUrl.includes('/web-proxy')) {
-        this.selectedTabIndex = 8;
-      }
-      if (this.lastUrl.includes('/resources')) {
-        this.selectedTabIndex = 9;
-      }
-      if (this.lastUrl.includes('/terminal')) {
-        this.selectedTabIndex = 10;
-      }
-      if (this.lastUrl.includes('/wallet')) {
-        this.selectedTabIndex = 11;
-      }
-      if (this.lastUrl.includes('/logs')) {
-        this.selectedTabIndex = 12;
-      }
+      const selIdx = this.tabsData.findIndex(
+        t => t.linkParts && t.linkParts[t.linkParts.length - 1] === matchedSeg);
+      this.selectedTabIndex = selIdx >= 0 ? selIdx : 0;
 
       // Inform that the current subpage is not for showing a full list.
       this.showingFullList = false;
