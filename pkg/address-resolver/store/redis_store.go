@@ -65,6 +65,7 @@ func newRedisStore(ctx context.Context, addr, password string, poolSize int, ttl
 }
 
 func (s *redisStore) Bind(ctx context.Context, netType types.Type, pk cipher.PubKey, visorData addrresolver.VisorData) error {
+	netType = types.NormalizeType(netType)
 	switch netType {
 	case types.STCPR, types.SUDPH, types.QUIC, types.WT:
 		return s.bindWithIndex(ctx, netType, pk, visorData)
@@ -74,6 +75,7 @@ func (s *redisStore) Bind(ctx context.Context, netType types.Type, pk cipher.Pub
 }
 
 func (s *redisStore) DelBind(ctx context.Context, netType types.Type, pk cipher.PubKey) error {
+	netType = types.NormalizeType(netType)
 	switch netType {
 	case types.STCPR, types.SUDPH, types.QUIC, types.WT:
 		return s.delBindWithIndex(ctx, netType, pk)
@@ -83,6 +85,7 @@ func (s *redisStore) DelBind(ctx context.Context, netType types.Type, pk cipher.
 }
 
 func (s *redisStore) Resolve(ctx context.Context, netType types.Type, pk cipher.PubKey) (addrresolver.VisorData, error) {
+	netType = types.NormalizeType(netType)
 	switch netType {
 	case types.STCPR, types.SUDPH, types.QUIC, types.WT:
 		key := getKey(string(netType), pk)
@@ -93,6 +96,7 @@ func (s *redisStore) Resolve(ctx context.Context, netType types.Type, pk cipher.
 }
 
 func (s *redisStore) GetAll(ctx context.Context, netType types.Type) ([]string, error) {
+	netType = types.NormalizeType(netType)
 	switch netType {
 	case types.STCPR, types.SUDPH, types.QUIC, types.WT:
 		if pks, ok := s.getAllCache.Get(netType); ok {
