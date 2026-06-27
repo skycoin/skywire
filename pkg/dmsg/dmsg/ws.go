@@ -37,6 +37,9 @@ import (
 // the rest. Used when the client prefers WS (Config.PreferWS) — always the case
 // for the js/wasm build, which cannot dial TCP/QUIC.
 func (ce *Client) dialSessionWS(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+	if insecureWSBlocked(entry.Server.AddressWS) {
+		return ClientSession{}, fmt.Errorf("ws: refusing insecure %q from an https page (browser blocks mixed content) — use a wss:// dmsg server", entry.Server.AddressWS)
+	}
 	c, _, err := websocket.Dial(ctx, entry.Server.AddressWS, nil)
 	if err != nil {
 		return ClientSession{}, fmt.Errorf("ws: dial %q: %w", entry.Server.AddressWS, err)
