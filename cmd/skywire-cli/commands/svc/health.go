@@ -44,7 +44,7 @@ var RootCmd = &cobra.Command{
 func init() {
 	healthCmd.Flags().BoolVar(&directQuery, "direct", false, "query services directly instead of via visor RPC")
 	healthCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
-	healthCmd.Flags().StringVar(&healthService, "service", "", "check ONE service by its dmsg PK (e.g. the dmsg-discovery), routed over dmsg; required with --dmsg-server")
+	healthCmd.Flags().StringVar(&healthService, "service", "", "narrow to ONE deployment service by its dmsg PK; only effective with --dmsg-server or --direct (ignored by the default all-services RPC query). For an arbitrary visor use: dmsg curl dmsg://<pk>:80/health")
 	healthCmd.Flags().StringVar(&healthViaServer, "dmsg-server", "", "route the /health check through ONE specific dmsg server (PK or PK@host:port) using a standalone direct dmsg client — tests per-server reachability of --service, even for direct-client services not in discovery")
 	healthCmd.Flags().Uint16Var(&healthPort, "port", 80, "service dmsg port for the /health endpoint (default: 80, the dmsghttp log-server port)")
 	healthCmd.Flags().Bool(internal.JSONString, false, "print output as JSON")
@@ -53,11 +53,20 @@ func init() {
 
 var healthCmd = &cobra.Command{
 	Use:   "health",
-	Short: "Check health of all deployment services",
-	Long: `    Check the /health endpoint of all skywire deployment services.
+	Short: "Check health of the skywire deployment services",
+	Long: `    Check the /health endpoint of the skywire DEPLOYMENT services
+    (dmsg-discovery, transport-discovery, address-resolver, route-finder,
+    service-discovery, config-bootstrap, and the dmsg servers).
 
-    By default queries via the local visor RPC (uses visor's configured URLs).
-    Use --direct to query services directly from the CLI.`,
+    By default queries via the local visor RPC (uses the visor's configured
+    URLs). Use --direct to query the services directly from the CLI.
+
+    This is for the deployment's own services — NOT arbitrary visors. To check
+    one specific visor's /health over dmsg, use:
+        skywire cli dmsg curl dmsg://<visor-pk>:80/health
+
+    --service / --dmsg-server narrow the check to ONE deployment service,
+    optionally pinned through ONE dmsg server (per-server reachability).`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		var results []skyvisor.ServiceHealthEntry
 
@@ -69,6 +78,13 @@ var healthCmd = &cobra.Command{
 		if healthViaServer != "" {
 			printHealthResults(cmd, []skyvisor.ServiceHealthEntry{queryServiceViaServer(cmd)})
 			return
+		}
+
+		// --service only narrows the --dmsg-server / --direct paths. In the default
+		// (all-services RPC) path it has no effect, so say so instead of silently
+		// printing the full table — that mismatch is surprising.
+		if healthService != "" && !directQuery {
+			fmt.Fprintln(cmd.ErrOrStderr(), "(note: --service is ignored without --dmsg-server or --direct; showing all deployment services. For one visor use: skywire cli dmsg curl dmsg://<pk>:80/health)") //nolint:errcheck
 		}
 
 		if !directQuery {
