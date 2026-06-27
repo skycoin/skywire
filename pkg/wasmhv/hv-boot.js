@@ -68,6 +68,52 @@
     return new TextDecoder().decode(pt);
   }
 
+  // --- single-instance guard (Web Locks leader election) ---
+  //
+  // The key above is persisted in localStorage, so EVERY tab of this origin boots
+  // the SAME identity. Two tabs running one PK = two dmsg clients fighting over
+  // server sessions (dmsg is newest-session-wins → they evict each other and flap)
+  // and colliding on AR / transport / route state. Web Locks elects one leader
+  // tab; others show a notice and WAIT on the lock, so closing the leader hands
+  // off automatically (a waiting tab acquires it and boots). Where Web Locks is
+  // unsupported we proceed best-effort. (Fuller fix: one visor in a SharedWorker
+  // with tabs as MessagePort clients — survives tab churn with no re-boot.)
+  function showSingletonNotice() {
+    function add() {
+      if (document.getElementById('skywire-singleton-notice')) return;
+      var d = document.createElement('div');
+      d.id = 'skywire-singleton-notice';
+      d.style.cssText = 'position:fixed;inset:0;z-index:2147483647;background:#15151f;color:#cdd6e0;' +
+        'font:14px/1.6 system-ui,sans-serif;display:flex;align-items:center;justify-content:center;text-align:center;padding:2rem';
+      d.innerHTML = '<div style="max-width:34rem"><h2 style="margin:0 0 .5rem;font-weight:600">' +
+        'Skywire is already running in another tab</h2><p style="opacity:.8">This visor identity can ' +
+        'run in only one tab at a time. Close the other tab to use it here — this tab takes over ' +
+        'automatically if that one closes.</p></div>';
+      document.body.appendChild(d);
+    }
+    if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+  }
+  function hideSingletonNotice() {
+    var d = document.getElementById('skywire-singleton-notice');
+    if (d && d.parentNode) d.parentNode.removeChild(d);
+  }
+  function becomeLeader(name) {
+    if (!(navigator.locks && navigator.locks.request)) {
+      try { console.log('[hv-boot] Web Locks unsupported; single-instance guard disabled'); } catch (e) {}
+      return Promise.resolve();
+    }
+    return new Promise(function (resolveLeader) {
+      navigator.locks.request(name, { mode: 'exclusive', ifAvailable: true }, function (probe) {
+        if (!probe) { showSingletonNotice(); }
+      });
+      navigator.locks.request(name, { mode: 'exclusive' }, function () {
+        hideSingletonNotice();
+        resolveLeader();
+        return new Promise(function () {}); // hold the lock for this tab's lifetime
+      });
+    });
+  }
+
   CFG.ready = (async function () {
     await loadScript('wasm_exec.js');
     var go = new Go();
@@ -85,6 +131,9 @@
       await new Promise(function (r) { setTimeout(r, 10); });
     }
     var sk = await resolveSK();
+    // One tab per origin may run this (localStorage-shared) identity; wait here
+    // until this tab is the leader before booting any dmsg client.
+    await becomeLeader('skywire-wasm-visor');
     var pk = await self.skywireVisor.boot(sk, CFG.seedpk || '', CFG.seedws || '', CFG.disc || '');
     try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (edge + hypervisor; /api → in-wasm core)'); } catch (e) {}
     return pk;
