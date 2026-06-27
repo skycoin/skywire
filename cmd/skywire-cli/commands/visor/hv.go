@@ -238,10 +238,13 @@ var hvStatusCmd = &cobra.Command{
 
 var hvAddCmd = &cobra.Command{
 	Use:   "add <public-key>",
-	Short: "Connect to a remote hypervisor at runtime",
+	Short: "Connect to a remote hypervisor at runtime (persisted)",
 	Long: `Add a remote hypervisor connection at runtime without editing
-the config file. The visor connects to the hypervisor immediately
-via DMSG. Not persisted — use SKYENV HYPERVISORPKS for persistence.`,
+the config file by hand. The visor connects to the hypervisor
+immediately via DMSG AND persists the PK to the config's
+hypervisors list, so the connection survives a restart. (On a
+non-file-backed config — wasm tab / STDIN — the connection is made
+but cannot be persisted.)`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var pk cipher.PubKey
@@ -261,15 +264,16 @@ via DMSG. Not persisted — use SKYENV HYPERVISORPKS for persistence.`,
 
 var hvRmCmd = &cobra.Command{
 	Use:   "rm [public-key]",
-	Short: "Disconnect from a remote hypervisor at runtime",
-	Long: `Tear down a runtime-added hypervisor connection. Mirrors hv add
-— only affects connections created via AddHypervisor (this RPC or
-the corresponding CLI). Config-loaded hypervisors aren't affected;
-edit SKYENV HYPERVISORPKS and restart the visor to remove those.
+	Short: "Disconnect from a remote hypervisor at runtime (persisted)",
+	Long: `Tear down a hypervisor connection at runtime AND remove its PK
+from the config's hypervisors list, so it stays removed across a
+restart. Works for both runtime-added (hv add) and config-loaded
+hypervisors. (On a non-file-backed config — wasm tab / STDIN — the
+disconnect happens but cannot be persisted.)
 
-Pass --all to disconnect every runtime-added hypervisor in one
-call. Without --all, exactly one <public-key> argument is
-required.`,
+Pass --all to disconnect every hypervisor and clear the configured
+list in one call. Without --all, exactly one <public-key> argument
+is required.`,
 	Args: func(cmd *cobra.Command, args []string) error {
 		if hvRmAll {
 			if len(args) > 0 {
