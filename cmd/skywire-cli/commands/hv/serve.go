@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io/fs"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -15,13 +16,18 @@ import (
 
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/wasmhv"
+	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
 	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
 )
 
-var serveAddr string
+var (
+	serveAddr    string
+	serveHarness bool
+)
 
 func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":7999", "HTTP listen address")
+	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -66,7 +72,7 @@ page never asks anyone to type a secret key.`,
 		// autoupdate.js. Short SHA-256 prefix is plenty to spot a content change.
 		sum := sha256.Sum256(wasm)
 		wasmVer := hex.EncodeToString(sum[:])[:16]
-		index := injectBoot(indexB, wasmVer)
+		index := injectBoot(indexB, wasmVer, serveHarness)
 
 		mux := http.NewServeMux()
 		serveBytes := func(path, ct string, body []byte) {
@@ -90,6 +96,18 @@ page never asks anyone to type a secret key.`,
 			w.Header().Set("Cache-Control", "no-store")
 			_, _ = w.Write([]byte(wasmVer)) //nolint:errcheck // best-effort
 		})
+
+		// --harness mounts the same /ctl/* operator control bridge the dev harness
+		// (cmd/dmsg-wasm/serve.go) exposes, plus the ctl-bridge.js the page loads to
+		// connect to it. This lets a shell drive the in-tab visor (status, hvApi,
+		// RPC bridge) against the embedded wasm + current UI. DEV ONLY: it opens an
+		// unauthenticated control + eval surface — never enable it behind a public
+		// reverse proxy.
+		if serveHarness {
+			ctlbridge.New(log.Printf).Register(mux)
+			serveBytes("/ctl-bridge.js", "text/javascript", wasmhv.CtlBridgeJS)
+			cmd.Println("harness: /ctl/* control bridge mounted (DEV ONLY — do not expose publicly)")
+		}
 
 		// Everything else is the built Angular UI (incl. lazy chunks, css, fonts,
 		// assets). Routing is hash-based (#/...), so the server only ever sees "/"
@@ -123,7 +141,7 @@ page never asks anyone to type a secret key.`,
 // and boot() starts (CFG.ready) before SkywireHttpBackend's first /api call. It
 // also loads browse.js + the launcher, which mount the dmsg/skynet browse+host
 // overlay (a floating "skynet" button) once the wasm-visor is up.
-func injectBoot(index []byte, wasmVer string) []byte {
+func injectBoot(index []byte, wasmVer string, harness bool) []byte {
 	s := string(index)
 	tag := "\n<script src=\"hv-boot.js\"></script>\n" +
 		"<script src=\"browse.js\"></script>\n" +
@@ -132,6 +150,11 @@ func injectBoot(index []byte, wasmVer string) []byte {
 		// newer one and self-reload (it only runs here, never in the native UI).
 		"<script>window.__SKYWIRE_WASM_VERSION__=" + strconv.Quote(wasmVer) + ";</script>\n" +
 		"<script src=\"autoupdate.js\"></script>\n"
+	// --harness only: connect the tab to the /ctl/* control bridge so a shell can
+	// drive it. Never injected on the public serving path.
+	if harness {
+		tag += "<script src=\"ctl-bridge.js\"></script>\n"
+	}
 	lower := strings.ToLower(s)
 	if i := strings.Index(lower, "<head"); i >= 0 {
 		if j := strings.IndexByte(s[i:], '>'); j >= 0 {

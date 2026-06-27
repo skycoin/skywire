@@ -38,6 +38,15 @@ var AutoUpdateJS []byte
 //go:embed hv-boot.js
 var HvBootJS []byte
 
+// CtlBridgeJS is pkg/wasmhv/ctl-bridge.js — the browser side of the ctlbridge
+// control surface (pkg/wasmhv/ctlbridge). It connects the tab to /ctl/events
+// over SSE so a shell can drive the in-tab wasm-visor. Injected ONLY when the
+// harness control surface is enabled (the dev harness, or `hv serve --harness`),
+// never on the public serving path.
+//
+//go:embed ctl-bridge.js
+var CtlBridgeJS []byte
+
 // WasmExecJS is Go's lib/wasm/wasm_exec.js, vendored here so a generated file is
 // self-contained. It MUST match the Go toolchain that built the embedded/passed
 // dmsg.wasm — refresh it with the wasm build (the Makefile bundle target copies
