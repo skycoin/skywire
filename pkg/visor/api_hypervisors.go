@@ -151,7 +151,7 @@ func (v *Visor) RemoveAllHypervisors() (int, error) {
 		c()
 	}
 	// Persist an empty configured set so none reconnect on restart (now that
-	// config-loaded hypervisors are tracked + cancelled here too).
+	// config-loaded hypervisors are tracked + canceled here too).
 	v.persistHypervisors(nil)
 	return len(cancels), nil
 }

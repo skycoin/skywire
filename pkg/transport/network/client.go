@@ -68,6 +68,10 @@ type ClientFactory struct {
 	// WTTable maps a peer PK to its direct WebTransport endpoint + pinned cert
 	// hash for the WT transport type. A nil/absent table disables WT dialing.
 	WTTable WTTable
+	// QUICTable statically pins a peer PK → UDP address ("host:port") for the QUIC
+	// transport type (the QUIC analog of PKTable/stcp). Consulted before the
+	// address resolver; nil/absent = AR-only.
+	QUICTable stcp.PKTable
 	// ICEURLs are the STUN/TURN URLs used for ICE by the WEBRTC transport type
 	// (skywire's own STUN, reused from sudph). Empty = host candidates only.
 	ICEURLs []string

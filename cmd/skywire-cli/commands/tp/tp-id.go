@@ -29,7 +29,7 @@ discovery query — and mirrors transport.MakeTransportID().
 
 The returned ID is independent of PK order: id(T, A, B) == id(T, B, A).
 
-Valid transport types: stcpr, squic, sudph, stcp, webrtc, ws, wt, dmsg (default: dmsg)`,
+Valid transport types: stcpr, squicr, sudph, stcp, webrtc, swsr, swtr, dmsg (default: dmsg)`,
 	Args: cobra.ExactArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		if !tptypes.Valid(tptypes.Type(idTpType)) {

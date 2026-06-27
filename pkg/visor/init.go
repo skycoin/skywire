@@ -168,8 +168,8 @@ func registerModules(logger *logging.MasterLogger) {
 	stcprC = maker("stcpr", initStcprClient, &tr)
 	stcpC = maker("stcp", initStcpClient, &tr)
 	quicC = maker("quic", initQuicClient, &tr)
-	wsC = maker("ws", initWSClient, &tr)
-	wtC = maker("wt", initWTClient, &tr)
+	wsC = maker("swsr", initWSClient, &tr)
+	wtC = maker("swtr", initWTClient, &tr)
 	dmsgC = maker("dmsg", initDmsg, &ebc, &dmsgHTTP)
 	dmsgCtrl = maker("dmsg_ctrl", initDmsgCtrl, &dmsgC, &tr)
 	// dmsghttp_logserver mounts /pty on top of dmsgpty's CLI socket
