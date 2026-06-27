@@ -689,9 +689,15 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 		Health:   &wasmhv.HealthInfo{ServicesHealth: "healthy"},
 		// Non-nil: the CLI's `visor info` dereferences DmsgStats.RoundTrip
 		// unconditionally. The tab has no dmsg-tracker, so RoundTrip stays 0.
-		DmsgStats:    &wasmhv.DmsgClientSummary{PK: selfPK},
-		Online:       true,
-		IsHypervisor: true,
+		DmsgStats: &wasmhv.DmsgClientSummary{PK: selfPK},
+		// A browser visor has no on-disk config file, so there is no separate
+		// "config version" — its config IS its build. Report the build version so
+		// the HV UI shows it (and treats version == config_version as up-to-date)
+		// instead of rendering "Unknown".
+		ConfigVersion: buildinfo.Version(),
+		BuildTag:      "wasm",
+		Online:        true,
+		IsHypervisor:  true,
 	}
 }
 
