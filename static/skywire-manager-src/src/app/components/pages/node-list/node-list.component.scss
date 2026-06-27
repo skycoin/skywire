@@ -173,3 +173,12 @@
 .red-text.dimmed {
   opacity: 0.6;
 }
+
+// Rows for browser/wasm visors (node.arch === 'wasm') get a subtle violet tint,
+// matching the violet UI signal for the in-browser visor; native rows keep the
+// default. Applied to every node-list layout (table, mobile, sectioned).
+.wasm-visor-row,
+.wasm-visor-row tr,
+.wasm-visor-row td {
+  background-color: rgba(140, 110, 205, 0.13) !important;
+}
