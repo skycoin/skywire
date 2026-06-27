@@ -10,6 +10,10 @@ import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 
+// skywireAutoUpdate is exposed by autoupdate.js (injected only by `cli hv serve`
+// for the in-browser wasm-visor); absent for a native-hosted UI.
+declare const window: any;
+
 /**
  * Page with the general settings of the app.
  */
@@ -128,6 +132,34 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
   performAction(actionName: string) {
     if (actionName === 'logout') {
       this.logout();
+    }
+  }
+
+  // --- wasm-visor auto-update (autoupdate.js / `cli hv serve`) ---------------
+
+  /** True only when served as an in-browser wasm-visor with auto-update wired. */
+  get autoUpdateAvailable(): boolean {
+    return typeof window !== 'undefined' && !!window.skywireAutoUpdate;
+  }
+
+  get autoUpdateEnabled(): boolean {
+    try {
+      return !!window.skywireAutoUpdate && window.skywireAutoUpdate.isEnabled();
+    } catch (e) {
+      return false;
+    }
+  }
+
+  setAutoUpdate(enabled: boolean) {
+    if (!this.autoUpdateAvailable) {
+      return;
+    }
+    if (enabled) {
+      window.skywireAutoUpdate.enable();
+      // Re-enabling: check immediately so a pending update isn't missed for a poll cycle.
+      try { window.skywireAutoUpdate.checkNow(); } catch (e) {}
+    } else {
+      window.skywireAutoUpdate.disable();
     }
   }
 

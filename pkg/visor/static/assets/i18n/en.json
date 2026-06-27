@@ -764,6 +764,10 @@
   "settings": {
     "title": "Settings",
     "checking-auth": "Checking authentication settings.",
+    "auto-update": {
+      "label": "Auto-update this in-browser visor",
+      "info": "When the server publishes a newer wasm-visor build, reload to it automatically (with a short countdown you can cancel). Turn off to stay on the current build until you reload manually."
+    },
     "password" : {
       "initial-config-help": "Use this option for setting the initial password. After a password has been set, it is not possible to use this option to modify it.",
       "help": "Options for changing your password.",
