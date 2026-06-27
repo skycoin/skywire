@@ -28,6 +28,12 @@ type SessionCommon struct {
 	rPK    cipher.PubKey // remote pk
 	isPeer bool          // true if this session is with a peer server
 
+	// carrier records how this session's byte pipe was dialed — one of
+	// CarrierTCP / CarrierWS / CarrierWT / CarrierQUIC (empty for accepted
+	// server-side sessions). It lets a browser client that bootstrapped over
+	// wss converge to WebTransport: see Client.UpgradeBrowserSessions.
+	carrier string
+
 	netConn net.Conn // underlying net.Conn (TCP connection to the dmsg server)
 	// ys      *yamux.Session
 	// ss      *smux.Session
