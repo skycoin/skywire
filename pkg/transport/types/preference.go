@@ -55,15 +55,16 @@ func SetPreferenceOrder(order []Type) {
 // detect this by comparing input/output lengths.
 func ParsePreferenceOrder(s []string) []Type {
 	known := map[string]Type{
-		string(STCPR):      STCPR,
-		string(QUIC):       QUIC, // "squic"
-		string(QUICLegacy): QUIC, // "quic" — back-compat alias
-		string(SUDPH):      SUDPH,
-		string(STCP):       STCP,
-		string(WEBRTC):     WEBRTC,
-		string(WS):         WS,
-		string(WT):         WT,
-		string(DMSG):       DMSG,
+		string(STCPR):       STCPR,
+		string(QUIC):        QUIC, // "squicr"
+		string(QUICLegacy):  QUIC, // "quic"  — back-compat alias
+		string(QUICLegacy2): QUIC, // "squic" — back-compat alias
+		string(SUDPH):       SUDPH,
+		string(STCP):        STCP,
+		string(WEBRTC):      WEBRTC,
+		string(WS):          WS,
+		string(WT):          WT,
+		string(DMSG):        DMSG,
 	}
 	out := make([]Type, 0, len(s))
 	for _, name := range s {
