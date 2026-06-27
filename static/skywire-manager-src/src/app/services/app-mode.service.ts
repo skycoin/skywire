@@ -33,6 +33,13 @@ export class AppModeService {
     }
     this.serverless = !!(cfg.visor || cfg.standalone || cfg.pk);
 
+    // Tint the UI violet when it is provided BY a browser/wasm visor (the
+    // serverless modes). _backgrounds.scss keys the violet gradient on this
+    // class; native visor-served UIs keep the blue.
+    if (this.serverless && typeof document !== 'undefined' && document.body) {
+      document.body.classList.add('wasm-visor-ui');
+    }
+
     api.get('about').subscribe({
       next: (a: any) => {
         this.version = (a && a.build && a.build.version) || a?.version || '';
