@@ -1283,6 +1283,39 @@ func (env *TestEnv) WaitForVisorDmsgReady(visor string, timeout time.Duration) e
 	return fmt.Errorf("visor %s did not connect to any DMSG servers within %v", visor, timeout)
 }
 
+// FirstDmsgServerPK returns the PK of a DMSG server the visor is connected to.
+// We ask the visor (via RPC) rather than curling /dmsg-discovery/available_servers
+// because that endpoint is remote-filtered and returns a 404 object to an
+// anonymous HTTP client with no dmsg identity.
+func (env *TestEnv) FirstDmsgServerPK(visor string, timeout time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %s:3435 visor dmsg-servers --json", visor)
+	type dmsgServer struct {
+		PK string `json:"pk"`
+	}
+	for time.Now().Before(deadline) {
+		var servers []dmsgServer
+		if err := env.ExecJSON(cmd, &servers); err == nil && len(servers) > 0 && servers[0].PK != "" {
+			return servers[0].PK, nil
+		}
+		time.Sleep(3 * time.Second)
+	}
+	return "", fmt.Errorf("visor %s reported no DMSG servers within %v", visor, timeout)
+}
+
+// SetVisorMinHops sets routing.min_hops on a running visor at runtime via the
+// route CLI (no restart, not persisted). Forcing min_hops >= 2 makes route
+// calculation skip a direct 1-hop transport even when one exists (e.g. one
+// created by public_autoconnect), so a multi-hop path is used.
+func (env *TestEnv) SetVisorMinHops(visor string, n int) error {
+	cmd := fmt.Sprintf("/release/skywire cli route minhops %d --rpc %s:3435", n, visor)
+	out, err := env.Exec(cmd)
+	if err != nil {
+		return fmt.Errorf("set min_hops=%d on %s: %w (out: %s)", n, visor, err, out)
+	}
+	return nil
+}
+
 // WaitForServiceDmsgReachable verifies a service is reachable via DMSG by issuing
 // `dmsg curl` through visor-a's RPC (i.e. its already-connected dmsg client). A
 // standalone client spawned in the test runner can't bootstrap discovery over

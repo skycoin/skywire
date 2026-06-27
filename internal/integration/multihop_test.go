@@ -19,10 +19,12 @@ import (
 
 // TestMultiHopRoute exercises multi-hop routing end to end. skysocks traffic
 // from visor-c to a server on visor-a is forced through intermediary visor-b:
-// the only transports are c↔b and b↔a (there is NO direct c↔a), and the client
-// is started with --existing-tp so it cannot create a direct shortcut. A
-// proxied HTTP request must succeed AND both legs (c↔b and b↔a) must carry
-// bytes — proving the data actually transited visor-b rather than a 1-hop path.
+// the c↔b and b↔a legs are added, and visor-c's min_hops is set to 2 so route
+// calculation skips any direct c↔a transport (public_autoconnect may create
+// one) and must use the c→b→a path. The client is started with --existing-tp so
+// it cannot create a direct shortcut. A proxied HTTP request must succeed AND
+// both legs (c↔b and b↔a) must carry bytes — proving the data actually transited
+// visor-b rather than a 1-hop path.
 //
 // This replaces the old commented-out TestEnv_Route, which only poked the
 // add-rule CLI with fabricated transport UUIDs and never routed real traffic.
@@ -32,7 +34,7 @@ import (
 // repeatedly, breaking the routing rules), and SUDPH is unavailable in Docker
 // E2E. mux stays disabled (mux=1) — this is a single 2-hop route.
 //
-// Topology (no direct c↔a):
+// Topology (min_hops=2 on visor-c forces the route via b even if a direct c↔a exists):
 //
 //	visor-c (skysocks-client) ──STCPR──► visor-b ──STCPR──► visor-a (skysocks server) ──► transport-discovery
 func TestMultiHopRoute(t *testing.T) {
@@ -74,25 +76,27 @@ func testMultiHopRouteViaB(t *testing.T, env *TestEnv) {
 	serverPK := env.visorPKs[visorA]
 	bridgePK := env.visorPKs[visorB]
 
-	// Sanity-check the topology: c↔b STCPR exists and there is NO direct c↔a
-	// transport (otherwise the route could be 1-hop and the test would not
-	// prove multi-hop routing).
+	// Force multi-hop routing: set min_hops=2 on visor-c at runtime so route
+	// calculation rejects any direct 1-hop c→a transport (public_autoconnect may
+	// create one) and must use the c→b→a path. Reset to 1 afterwards. This is
+	// more robust than asserting the direct transport is absent — that assertion
+	// races autoconnect, which recreates the direct link.
+	require.NoError(t, env.SetVisorMinHops(visorC, 2), "failed to set min_hops=2 on visor-c")
+	defer func() { _ = env.SetVisorMinHops(visorC, 1) }() //nolint:errcheck
+
+	// Sanity-check the bridge leg exists (c↔b STCPR). A direct c↔a transport may
+	// also exist, but min_hops=2 makes the router ignore it; the multi-hop proof
+	// below (both legs carry bytes) is what actually confirms traffic transited b.
 	ctps, err := env.VisorTpLs(visorC)
 	require.NoError(t, err, "Failed to list transports on visor-c")
-	var cbTP, directTP string
+	var cbTP string
 	for _, tp := range ctps {
-		if tp.Type != types.STCPR {
-			continue
-		}
-		switch tp.Remote.String() {
-		case bridgePK:
+		if tp.Type == types.STCPR && tp.Remote.String() == bridgePK {
 			cbTP = tp.ID.String()
-		case serverPK:
-			directTP = tp.ID.String()
+			break
 		}
 	}
 	require.NotEmpty(t, cbTP, "visor-c → visor-b STCPR transport not found")
-	require.Empty(t, directTP, "unexpected direct visor-c → visor-a transport; route would not be multi-hop")
 	t.Logf("c↔b transport: %s", cbTP)
 
 	// Start skysocks-client restricted to existing transports (--existing-tp),
