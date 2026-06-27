@@ -428,6 +428,13 @@ type Transport struct {
 	// rule is wanted; the bound port is registered with the address resolver
 	// either way, so a random port works and survives restarts.
 	QUICPort int `json:"quic_port,omitempty"`
+	// WTPort optionally PINS the UDP port for the WebTransport (WT) listener,
+	// mirroring quic_port. WT is HTTP/3-over-QUIC, so it needs its OWN UDP socket
+	// — it cannot share the unified transport_port with the raw-QUIC (squic)
+	// transport (two QUIC listeners can't bind one UDP port). 0 (default/omitted)
+	// binds an ephemeral port; the bound port + cert hash are registered with the
+	// address resolver either way. Set a fixed port to forward it through a NAT.
+	WTPort int `json:"wt_port,omitempty"`
 	// ARTransportLimit controls address resolver registration for privacy:
 	//   0 (default): stay registered indefinitely
 	//   N > 0: deregister from AR after N transports are established
