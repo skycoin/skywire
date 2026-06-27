@@ -568,6 +568,7 @@ func TestPureParseHelpers(t *testing.T) {
 	require.Len(t, filterByPKs(summaries, testPubKey.Hex()), 1)
 	require.Empty(t, filterByPKs(summaries, ""))
 }
+
 // --- CXO register + pure helpers (no CXO node needed) ------------------------
 
 func TestRegisterDeregisterFromCXO(t *testing.T) {
@@ -636,9 +637,9 @@ func TestCXOPublisherErrorTracking(t *testing.T) {
 
 type fakeDHTMirror struct{ mirrored, deleted int }
 
-func (m *fakeDHTMirror) Mirror(cipher.PubKey, interface{}, uint64)         { m.mirrored++ }
-func (m *fakeDHTMirror) MirrorMany([]cipher.PubKey, interface{}, uint64)   { m.mirrored++ }
-func (m *fakeDHTMirror) Delete(cipher.PubKey)                              { m.deleted++ }
+func (m *fakeDHTMirror) Mirror(cipher.PubKey, interface{}, uint64)       { m.mirrored++ }
+func (m *fakeDHTMirror) MirrorMany([]cipher.PubKey, interface{}, uint64) { m.mirrored++ }
+func (m *fakeDHTMirror) Delete(cipher.PubKey)                            { m.deleted++ }
 
 func TestDHTMirror(t *testing.T) {
 	api := newTestAPI(t)

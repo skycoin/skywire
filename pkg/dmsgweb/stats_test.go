@@ -72,7 +72,7 @@ func TestStatsErrorTruncation(t *testing.T) {
 	done(errors.New(longMsg))
 
 	snap := s.Snapshot()
-	require.Len(t, snap.LastError, 512)               // 509 + "..."
+	require.Len(t, snap.LastError, 512) // 509 + "..."
 	require.True(t, strings.HasSuffix(snap.LastError, "..."))
 }
 

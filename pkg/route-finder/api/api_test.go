@@ -314,7 +314,7 @@ func (f *failingWriter) Header() http.Header {
 	return f.header
 }
 func (f *failingWriter) Write([]byte) (int, error) { return 0, errors.New("write boom") }
-func (f *failingWriter) WriteHeader(code int)       { f.code = code }
+func (f *failingWriter) WriteHeader(code int)      { f.code = code }
 
 func TestWriteJSON_WriteError(t *testing.T) {
 	api := newTestAPI(newFakeStore())

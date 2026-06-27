@@ -97,9 +97,9 @@ func TestGinHandlerAndLoggingMiddleware(t *testing.T) {
 // --- pure color/format helpers ---------------------------------------
 
 func TestGetBackgroundColor(t *testing.T) {
-	require.Equal(t, green, getBackgroundColor(http.StatusOK))           // 2xx
-	require.Equal(t, white, getBackgroundColor(http.StatusMovedPermanently)) // 3xx
-	require.Equal(t, yellow, getBackgroundColor(http.StatusBadRequest))  // 4xx
+	require.Equal(t, green, getBackgroundColor(http.StatusOK))                // 2xx
+	require.Equal(t, white, getBackgroundColor(http.StatusMovedPermanently))  // 3xx
+	require.Equal(t, yellow, getBackgroundColor(http.StatusBadRequest))       // 4xx
 	require.Equal(t, red, getBackgroundColor(http.StatusInternalServerError)) // 5xx
 }
 

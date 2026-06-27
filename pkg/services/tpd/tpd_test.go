@@ -22,9 +22,9 @@ import (
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/storeconfig"
+	tpapi "github.com/skycoin/skywire/pkg/transport-discovery/api"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
 	"github.com/skycoin/skywire/pkg/transport-discovery/store"
-	tpapi "github.com/skycoin/skywire/pkg/transport-discovery/api"
 )
 
 func testLog() *logging.Logger { return logging.MustGetLogger("tpd_test") }

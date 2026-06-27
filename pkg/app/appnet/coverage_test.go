@@ -119,8 +119,8 @@ func TestSkywireConnNoRouteGroup(t *testing.T) {
 	require.NoError(t, c.GetError())
 	require.Nil(t, c.RouteHops())
 	require.Nil(t, c.RouteHopDetails())
-	c.SetError(nil)            // no-op when nrg == nil
-	c.SetForwardHops(nil)      // no-op when nrg == nil
+	c.SetError(nil)       // no-op when nrg == nil
+	c.SetForwardHops(nil) // no-op when nrg == nil
 
 	require.NoError(t, c.Close())
 	require.True(t, freed, "freePort should run on Close")

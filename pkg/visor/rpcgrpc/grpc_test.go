@@ -65,10 +65,12 @@ func newFakeVisor() *fakeVisor {
 	srvPK, _ := cipher.GenerateKeyPair()
 	hop := RouteHopInfo{TpID: "tp-1", From: localPK.String(), To: srvPK.String(), TpType: "stcpr"}
 	return &fakeVisor{
-		localPK:               localPK,
-		dialPing:              func(PingConf) error { return nil },
-		pingOnce:              func(PingConf) (time.Duration, error) { return 5 * time.Millisecond, nil },
-		pingOnceWithEcho:      func(PingConf, bool) (uint64, uint64, time.Duration, error) { return 1024, 1024, 5 * time.Millisecond, nil },
+		localPK:  localPK,
+		dialPing: func(PingConf) error { return nil },
+		pingOnce: func(PingConf) (time.Duration, error) { return 5 * time.Millisecond, nil },
+		pingOnceWithEcho: func(PingConf, bool) (uint64, uint64, time.Duration, error) {
+			return 1024, 1024, 5 * time.Millisecond, nil
+		},
 		stopPing:              func(cipher.PubKey) error { return nil },
 		stopPingRoute:         func(PingRouteRef) error { return nil },
 		getPingRoute:          func(cipher.PubKey) []cipher.PubKey { return []cipher.PubKey{srvPK} },
@@ -78,12 +80,16 @@ func newFakeVisor() *fakeVisor {
 		dialDmsgPing:          func(cipher.PubKey) error { return nil },
 		dialDmsgPingViaServer: func(cipher.PubKey, cipher.PubKey) error { return nil },
 		dmsgPingOnce:          func(PingConf) (time.Duration, error) { return 5 * time.Millisecond, nil },
-		dmsgPingOnceWithEcho:  func(PingConf, bool) (uint64, uint64, time.Duration, error) { return 1024, 1024, 5 * time.Millisecond, nil },
-		stopDmsgPing:          func(cipher.PubKey) error { return nil },
-		getDmsgPingServerPK:   func(cipher.PubKey) (cipher.PubKey, error) { return srvPK, nil },
-		getRemoteDmsgServers:  func(cipher.PubKey) ([]cipher.PubKey, error) { return []cipher.PubKey{srvPK}, nil },
-		dialDmsgRPC:           func(cipher.PubKey) (net.Conn, error) { return nil, errors.New("dmsg rpc not available") },
-		subscribeLogs:         func(logging.Filter, int) (<-chan *logrus.Entry, func() uint64) { return nil, func() uint64 { return 0 } },
+		dmsgPingOnceWithEcho: func(PingConf, bool) (uint64, uint64, time.Duration, error) {
+			return 1024, 1024, 5 * time.Millisecond, nil
+		},
+		stopDmsgPing:         func(cipher.PubKey) error { return nil },
+		getDmsgPingServerPK:  func(cipher.PubKey) (cipher.PubKey, error) { return srvPK, nil },
+		getRemoteDmsgServers: func(cipher.PubKey) ([]cipher.PubKey, error) { return []cipher.PubKey{srvPK}, nil },
+		dialDmsgRPC:          func(cipher.PubKey) (net.Conn, error) { return nil, errors.New("dmsg rpc not available") },
+		subscribeLogs: func(logging.Filter, int) (<-chan *logrus.Entry, func() uint64) {
+			return nil, func() uint64 { return 0 }
+		},
 		subscribeGroupMessages: func(int) (<-chan GroupMessageData, func() uint64) {
 			return nil, func() uint64 { return 0 }
 		},
@@ -99,8 +105,8 @@ func (f *fakeVisor) PingOnce(c PingConf) (time.Duration, error) { return f.pingO
 func (f *fakeVisor) PingOnceWithEcho(c PingConf, full bool) (uint64, uint64, time.Duration, error) {
 	return f.pingOnceWithEcho(c, full)
 }
-func (f *fakeVisor) StopPing(pk cipher.PubKey) error              { return f.stopPing(pk) }
-func (f *fakeVisor) StopPingRoute(ref PingRouteRef) error         { return f.stopPingRoute(ref) }
+func (f *fakeVisor) StopPing(pk cipher.PubKey) error               { return f.stopPing(pk) }
+func (f *fakeVisor) StopPingRoute(ref PingRouteRef) error          { return f.stopPingRoute(ref) }
 func (f *fakeVisor) GetPingRoute(pk cipher.PubKey) []cipher.PubKey { return f.getPingRoute(pk) }
 func (f *fakeVisor) GetPingRouteDetails(pk cipher.PubKey) []RouteHopInfo {
 	return f.getPingRouteDetails(pk)

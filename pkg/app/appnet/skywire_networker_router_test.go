@@ -10,12 +10,12 @@ import (
 	"net"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
-
-	"github.com/stretchr/testify/require"
 )
 
 // stubRouter embeds router.Router (nil) so it satisfies the whole interface;

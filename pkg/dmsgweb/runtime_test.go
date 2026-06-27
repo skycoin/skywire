@@ -348,7 +348,9 @@ func TestSOCKS5Upstream(t *testing.T) {
 	// Upstream proxy in plain passthrough mode.
 	upPort := freePort(t)
 	upAddr := fmt.Sprintf("127.0.0.1:%d", upPort)
-	go func() { _ = serveSOCKS5Direct(ctx, log, &dmsg.Client{}, Config{DomainSuffix: ".dmsg", ProxyPort: uint(upPort)}) }()
+	go func() {
+		_ = serveSOCKS5Direct(ctx, log, &dmsg.Client{}, Config{DomainSuffix: ".dmsg", ProxyPort: uint(upPort)})
+	}()
 	waitForListen(t, upAddr)
 
 	// Front proxy forwards non-.dmsg to the upstream.

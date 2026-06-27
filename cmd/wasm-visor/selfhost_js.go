@@ -139,5 +139,5 @@ func handleContentStream(s *dmsg.Stream, port uint16) {
 		return
 	}
 	_, _ = fmt.Fprintf(s, "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n", e.ct, len(e.body)) //nolint:errcheck
-	_, _ = s.Write(e.body) //nolint:errcheck
+	_, _ = s.Write(e.body)                                                                                                             //nolint:errcheck
 }

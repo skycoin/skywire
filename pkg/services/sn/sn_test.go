@@ -20,9 +20,9 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	discmetrics "github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	discapi "github.com/skycoin/skywire/pkg/dmsg/discovery/api"
 	discstore "github.com/skycoin/skywire/pkg/dmsg/discovery/store"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/router"
 )

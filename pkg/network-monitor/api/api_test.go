@@ -221,7 +221,9 @@ func TestFetchUTData(t *testing.T) {
 // cancelled-context paths.
 func TestFetchServiceData(t *testing.T) {
 	data := &mockData{
-		sd:    []struct{ Address string `json:"address"` }{{Address: "pk1:44"}, {Address: "pk2:44"}},
+		sd: []struct {
+			Address string `json:"address"`
+		}{{Address: "pk1:44"}, {Address: "pk2:44"}},
 		ar:    visorTransports{Sudph: []string{"s1"}, Stcpr: []string{"r1", "r2"}},
 		dmsgd: []string{"d1", "d2", "d3"},
 	}
@@ -333,7 +335,7 @@ func TestCleaningServiceWithDeregister(t *testing.T) {
 	srv := newMockServer(t, data)
 	api, _ := newTestAPI(t, srv.URL)
 	api.initCleaning()
-	api.utData = map[string]bool{}             // deadpk is offline
+	api.utData = map[string]bool{}              // deadpk is offline
 	api.pendingDeaths["dmsgd"]["deadpk"] = true // already pending → dies this pass
 
 	require.NoError(t, api.cleaningService(context.Background(), "dmsgd", ""))
@@ -370,7 +372,9 @@ func TestCleanNetwork(t *testing.T) {
 		transports: []*transport.Entry{{ID: uuid.New(), Edges: [2]cipher.PubKey{pk1, pk2}}},
 		dmsgd:      []string{pk1.Hex()},
 		ar:         visorTransports{Sudph: []string{pk1.Hex()}, Stcpr: []string{pk1.Hex()}},
-		sd:         []struct{ Address string `json:"address"` }{{Address: pk1.Hex() + ":44"}},
+		sd: []struct {
+			Address string `json:"address"`
+		}{{Address: pk1.Hex() + ":44"}},
 	}
 	srv := newMockServer(t, data)
 	api, _ := newTestAPI(t, srv.URL)

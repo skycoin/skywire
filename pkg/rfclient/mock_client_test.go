@@ -5,10 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-
-	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/routing"
 )

@@ -12,12 +12,12 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
-
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/require"
 )
 
 func testLog() *logging.Logger { return logging.MustGetLogger("dmsgclient_test") }

@@ -53,7 +53,7 @@ func TestHTTPErrorTimeoutTemporary(t *testing.T) {
 	assert.True(t, (&HTTPError{Status: http.StatusRequestTimeout}).Timeout())
 	assert.False(t, (&HTTPError{Status: http.StatusInternalServerError}).Timeout())
 
-	assert.True(t, (&HTTPError{Status: http.StatusGatewayTimeout}).Temporary())  // via Timeout
+	assert.True(t, (&HTTPError{Status: http.StatusGatewayTimeout}).Temporary()) // via Timeout
 	assert.True(t, (&HTTPError{Status: http.StatusServiceUnavailable}).Temporary())
 	assert.True(t, (&HTTPError{Status: http.StatusTooManyRequests}).Temporary())
 	assert.False(t, (&HTTPError{Status: http.StatusBadRequest}).Temporary())

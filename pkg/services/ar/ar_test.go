@@ -160,7 +160,7 @@ func TestNew(t *testing.T) {
 // --- Run happy path (in-memory, http-only) ---------------------------
 
 func TestRunInMemoryHTTPLifecycle(t *testing.T) {
-	pk, _ := cipher.GenerateKeyPair()  // PubKey set (no SecKey) → dmsgAddr computed, http-only mode
+	pk, _ := cipher.GenerateKeyPair()   // PubKey set (no SecKey) → dmsgAddr computed, http-only mode
 	wlPK, _ := cipher.GenerateKeyPair() // whitelist entry
 
 	cfg := &Config{

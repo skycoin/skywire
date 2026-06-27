@@ -38,13 +38,15 @@ type fakeClient struct {
 func (c *fakeClient) Dial(context.Context, cipher.PubKey, uint16) (network.Transport, error) {
 	return nil, errors.New("fakeClient: dial not implemented")
 }
-func (c *fakeClient) Start() error                            { return nil }
-func (c *fakeClient) Listen(uint16) (network.Listener, error) { return nil, errors.New("not implemented") }
-func (c *fakeClient) LocalAddr() (net.Addr, error)            { return &net.TCPAddr{}, nil }
-func (c *fakeClient) PK() cipher.PubKey                       { return c.pk }
-func (c *fakeClient) SK() cipher.SecKey                       { return c.sk }
-func (c *fakeClient) Close() error                            { return nil }
-func (c *fakeClient) Type() types.Type                        { return c.typ }
+func (c *fakeClient) Start() error { return nil }
+func (c *fakeClient) Listen(uint16) (network.Listener, error) {
+	return nil, errors.New("not implemented")
+}
+func (c *fakeClient) LocalAddr() (net.Addr, error) { return &net.TCPAddr{}, nil }
+func (c *fakeClient) PK() cipher.PubKey            { return c.pk }
+func (c *fakeClient) SK() cipher.SecKey            { return c.sk }
+func (c *fakeClient) Close() error                 { return nil }
+func (c *fakeClient) Type() types.Type             { return c.typ }
 
 // --- fake transports -------------------------------------------------
 
@@ -72,19 +74,21 @@ func (t *memTransport) Write(p []byte) (int, error) {
 	t.written = append(t.written, p...)
 	return len(p), nil
 }
-func (t *memTransport) Close() error                       { t.closed = true; return nil }
-func (t *memTransport) LocalAddr() net.Addr                { return &net.TCPAddr{} }
-func (t *memTransport) RemoteAddr() net.Addr               { return &net.TCPAddr{} }
-func (t *memTransport) SetDeadline(time.Time) error        { return nil }
-func (t *memTransport) SetReadDeadline(time.Time) error    { return nil }
-func (t *memTransport) SetWriteDeadline(time.Time) error   { return nil }
-func (t *memTransport) LocalPK() cipher.PubKey             { return t.lpk }
-func (t *memTransport) RemotePK() cipher.PubKey            { return t.rpk }
-func (t *memTransport) LocalPort() uint16                  { return 0 }
-func (t *memTransport) RemotePort() uint16                 { return 0 }
-func (t *memTransport) LocalRawAddr() net.Addr             { return &net.TCPAddr{} }
-func (t *memTransport) RemoteRawAddr() net.Addr            { return &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5000} }
-func (t *memTransport) Network() types.Type                { return t.nw }
+func (t *memTransport) Close() error                     { t.closed = true; return nil }
+func (t *memTransport) LocalAddr() net.Addr              { return &net.TCPAddr{} }
+func (t *memTransport) RemoteAddr() net.Addr             { return &net.TCPAddr{} }
+func (t *memTransport) SetDeadline(time.Time) error      { return nil }
+func (t *memTransport) SetReadDeadline(time.Time) error  { return nil }
+func (t *memTransport) SetWriteDeadline(time.Time) error { return nil }
+func (t *memTransport) LocalPK() cipher.PubKey           { return t.lpk }
+func (t *memTransport) RemotePK() cipher.PubKey          { return t.rpk }
+func (t *memTransport) LocalPort() uint16                { return 0 }
+func (t *memTransport) RemotePort() uint16               { return 0 }
+func (t *memTransport) LocalRawAddr() net.Addr           { return &net.TCPAddr{} }
+func (t *memTransport) RemoteRawAddr() net.Addr {
+	return &net.TCPAddr{IP: net.IPv4(1, 2, 3, 4), Port: 5000}
+}
+func (t *memTransport) Network() types.Type { return t.nw }
 
 // pipeTransport wraps a net.Pipe end as a network.Transport so two of
 // them form a connected pair for the settlement handshake.
@@ -94,13 +98,13 @@ type pipeTransport struct {
 	nw       types.Type
 }
 
-func (t *pipeTransport) LocalPK() cipher.PubKey   { return t.lpk }
-func (t *pipeTransport) RemotePK() cipher.PubKey  { return t.rpk }
-func (t *pipeTransport) LocalPort() uint16        { return 0 }
-func (t *pipeTransport) RemotePort() uint16       { return 0 }
-func (t *pipeTransport) LocalRawAddr() net.Addr   { return &net.TCPAddr{} }
-func (t *pipeTransport) RemoteRawAddr() net.Addr  { return &net.TCPAddr{} }
-func (t *pipeTransport) Network() types.Type      { return t.nw }
+func (t *pipeTransport) LocalPK() cipher.PubKey  { return t.lpk }
+func (t *pipeTransport) RemotePK() cipher.PubKey { return t.rpk }
+func (t *pipeTransport) LocalPort() uint16       { return 0 }
+func (t *pipeTransport) RemotePort() uint16      { return 0 }
+func (t *pipeTransport) LocalRawAddr() net.Addr  { return &net.TCPAddr{} }
+func (t *pipeTransport) RemoteRawAddr() net.Addr { return &net.TCPAddr{} }
+func (t *pipeTransport) Network() types.Type     { return t.nw }
 
 // --- discovery: noop + remaining mock methods ------------------------
 

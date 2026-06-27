@@ -108,7 +108,7 @@ func TestBuildConfig_ConfigFileOverrides(t *gotesting.T) {
 
 	cfg, err := buildConfig()
 	require.NoError(t, err)
-	require.Equal(t, ":FILE", cfg.Addr)  // file wins
+	require.Equal(t, ":FILE", cfg.Addr)   // file wins
 	require.Equal(t, "file_tag", cfg.Tag) // file wins
 	require.Equal(t, "dmsg", cfg.Mode)
 }
