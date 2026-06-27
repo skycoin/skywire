@@ -577,6 +577,19 @@ func (v1 *V1) UpdatePersistentTransports(pTps []tspec.PersistentTransports) erro
 	return v1.flush(v1)
 }
 
+// UpdateHypervisors persists the visor's configured hypervisor PKs so a runtime
+// add/remove survives a restart. Same lock+flush shape as UpdateMinHops /
+// UpdatePersistentTransports. A no-op flush on a non-file-backed config (STDIN /
+// in-memory) returns its error to the caller, which may ignore it (the runtime
+// connection change still took effect).
+func (v1 *V1) UpdateHypervisors(pks []cipher.PubKey) error {
+	v1.mu.Lock()
+	v1.Hypervisors = pks
+	v1.mu.Unlock()
+
+	return v1.flush(v1)
+}
+
 // GetPersistentTransports gets persistent_transports from config
 func (v1 *V1) GetPersistentTransports() ([]tspec.PersistentTransports, error) {
 	v1.mu.Lock()
