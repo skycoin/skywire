@@ -448,6 +448,11 @@ type Transport struct {
 	// visor DIAL a WT transport to a configured peer with no address-resolver
 	// lookup. Runtime entries are added on top; empty/omitted = no static WT peers.
 	WTTable map[cipher.PubKey]WTPeer `json:"wt_table,omitempty"`
+	// QUICTable statically pins QUIC transport peers by PK → UDP address
+	// ("host:port") — the QUIC analog of skywire-tcp's pk_table (and of ws_table /
+	// wt_table). Lets a visor DIAL a QUIC transport to a configured peer with no
+	// address-resolver lookup. Consulted before the AR; empty/omitted = AR-only.
+	QUICTable map[cipher.PubKey]string `json:"quic_table,omitempty"`
 	// ARTransportLimit controls address resolver registration for privacy:
 	//   0 (default): stay registered indefinitely
 	//   N > 0: deregister from AR after N transports are established

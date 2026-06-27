@@ -54,6 +54,7 @@ func (f *ClientFactory) makeResolvedClient(netType types.Type, generic *genericC
 		if err != nil {
 			return nil, err
 		}
+		c.(*quicClient).table = f.QUICTable // static PK→addr pins (AR-free dial)
 		if sc := f.sharedUDPConnFor(protoQUIC, port); sc != nil {
 			c.(*quicClient).sharedConn = sc
 		}

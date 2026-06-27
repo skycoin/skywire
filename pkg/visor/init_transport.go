@@ -527,6 +527,12 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 		wtTable = network.NewWTTable(entries)
 	}
+	// Static QUIC peers (transport.quic_table): pin PK → UDP "host:port" so a QUIC
+	// transport dials with no AR lookup (the QUIC analog of skywire-tcp's pk_table).
+	var quicTable stcp.PKTable
+	if v.conf.Transport != nil && len(v.conf.Transport.QUICTable) > 0 {
+		quicTable = stcp.NewTable(v.conf.Transport.QUICTable)
+	}
 	// WebRTC ICE servers: the configured STUN servers, prefixed with the stun:
 	// scheme the WebRTC stack wants. Set on the factory now; the WEBRTC client is
 	// started after dmsg comes up (init_dmsg → InitClient), since its signaling
@@ -544,6 +550,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PKTable:    table,
 		WSTable:    wsTable,
 		WTTable:    wtTable,
+		QUICTable:  quicTable,
 		ARClient:   v.arClient,
 		EB:         v.ebc,
 		MLogger:    v.MasterLogger(),
