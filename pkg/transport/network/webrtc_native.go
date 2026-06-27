@@ -19,7 +19,16 @@ import (
 
 	"github.com/pion/datachannel"
 	"github.com/pion/webrtc/v4"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// wrtcLog carries WebRTC signaling diagnostics. WebRTC negotiation is opaque
+// otherwise — a failed dial just times out — so log the signaling milestones +
+// the gathered/received ICE candidates. (Pion's On*StateChange callbacks have
+// different signatures on native vs the js/wasm build, so deeper ICE-state
+// logging can't live in this shared file.)
+var wrtcLog = logging.MustGetLogger("webrtc")
 
 // dcLabel is the DataChannel label both peers agree on (matches the browser).
 const dcLabel = "skywire"
@@ -61,6 +70,7 @@ func wireLocalCandidates(pc *webrtc.PeerConnection, sc *signalConn) {
 		if init.SDPMLineIndex != nil {
 			line = int(*init.SDPMLineIndex)
 		}
+		wrtcLog.Debugf("webrtc: gathered local candidate: %s", init.Candidate)
 		_ = sc.send(signalMsg{Type: "candidate", Candidate: init.Candidate, SDPMid: mid, SDPMLine: line}) //nolint:errcheck
 	})
 }
@@ -94,16 +104,23 @@ func pumpRemoteSignals(ctx context.Context, pc *webrtc.PeerConnection, sc *signa
 		}
 		switch m.Type {
 		case "offer":
+			wrtcLog.Info("webrtc[answerer]: received offer")
 			if onOffer != nil {
-				if err := onOffer(m.SDP); err == nil {
+				if err := onOffer(m.SDP); err != nil {
+					wrtcLog.WithError(err).Warn("webrtc[answerer]: onOffer failed")
+				} else {
 					flush()
 				}
 			}
 		case "answer":
-			if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: m.SDP}); err == nil {
+			wrtcLog.Info("webrtc[offerer]: received answer")
+			if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeAnswer, SDP: m.SDP}); err != nil {
+				wrtcLog.WithError(err).Warn("webrtc[offerer]: set remote (answer) failed")
+			} else {
 				flush()
 			}
 		case "candidate":
+			wrtcLog.Debugf("webrtc: received remote candidate (remoteSet=%t): %s", remoteSet, m.Candidate)
 			if remoteSet {
 				addCand(m)
 			} else {

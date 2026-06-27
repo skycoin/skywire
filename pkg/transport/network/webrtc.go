@@ -32,12 +32,16 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// webrtcSignalPort is the dmsg port the WebRTC signaling listener accepts on
-// (mirror of the browser carrier's port 47, so native and browser interoperate).
-const webrtcSignalPort uint16 = 47
+// webrtcSignalPort is the dmsg port the WebRTC signaling listener accepts on.
+// Sourced from the central skyenv registry — it used to hardcode 47 here, which
+// collided with DmsgTransportSetupPort (47) and left webrtc dead fleet-wide
+// (the listener couldn't bind; offers hit the transport-setup listener). Native
+// and browser carriers share this constant so they interoperate.
+const webrtcSignalPort = skyenv.DmsgWebRTCSignalPort
 
 // signalMsg is one signaling message exchanged over the dmsg signaling stream.
 // The JSON field set + names match the browser carrier exactly (interop).
@@ -130,6 +134,7 @@ func (c *webrtcClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16
 	if err != nil {
 		return nil, fmt.Errorf("webrtc: dial signaling: %w", err)
 	}
+	c.log.Debugf("WebRTC signaling stream to %v established; starting offerer", rPK)
 	conn, err := webrtcDial(ctx, str, c.iceURLs)
 	if err != nil {
 		str.Close() //nolint:errcheck,gosec
