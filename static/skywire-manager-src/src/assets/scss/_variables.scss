@@ -10,6 +10,11 @@ $blue-medium: #215f9e;
 $blue-dark: #154B6C;
 $blue-dark-Background1: #060a10;
 $blue-dark-Background2: #0a1421;
+// Violet-shifted variants of the dark-blue background, used to tint the UI when
+// it is provided BY a browser/wasm visor (a subtle, honest "you're in the
+// in-browser visor" signal). Same lightness, hue rotated blue → violet.
+$violet-dark-Background1: #0a0610;
+$violet-dark-Background2: #160a21;
 
 $red: #DA3439;
 $red-clear: #ff393f;
