@@ -63,11 +63,11 @@ var prodData = Services{
 		{Static: "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb", Server: struct {
 			Address   string `json:"address"`
 			AddressWS string `json:"address_ws,omitempty"`
-		}{Address: "139.162.160.227:30086"}},
+		}{Address: "139.162.160.227:30086", AddressWS: "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg"}},
 		{Static: "0371ab4bcff7b121f4b91f6856d6740c6f9dc1fe716977850aeb5d84378b300a13", Server: struct {
 			Address   string `json:"address"`
 			AddressWS string `json:"address_ws,omitempty"`
-		}{Address: "45.79.213.251:30087"}},
+		}{Address: "45.79.213.251:30087", AddressWS: "wss://any2ws6p66ysd5fzd5ufnvtubrxz3qp6ofuxpbik5noyin4lgafbg.theskywirenetwork.net/dmsg"}},
 		{Static: "0255117bf8d4687dacd5f7ac4c241f008060f1972911552a5b67b76f0e7922f5c7", Server: struct {
 			Address   string `json:"address"`
 			AddressWS string `json:"address_ws,omitempty"`
