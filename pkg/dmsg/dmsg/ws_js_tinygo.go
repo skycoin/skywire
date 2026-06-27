@@ -31,6 +31,9 @@ import (
 // using the browser WebSocket API and builds a yamux+Noise client session over
 // it — the TinyGo-browser analog of ws.go's coder/websocket dial path.
 func (ce *Client) dialSessionWS(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+	if insecureWSBlocked(entry.Server.AddressWS) {
+		return ClientSession{}, fmt.Errorf("ws(js): refusing insecure %q from an https page (browser blocks mixed content) — use a wss:// dmsg server", entry.Server.AddressWS)
+	}
 	conn, err := dialWebSocketJS(ctx, entry.Server.AddressWS)
 	if err != nil {
 		return ClientSession{}, fmt.Errorf("ws(js): dial %q: %w", entry.Server.AddressWS, err)
