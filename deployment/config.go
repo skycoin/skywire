@@ -68,6 +68,14 @@ type DmsgServerEntry struct {
 	Static string `json:"static"`
 	Server struct {
 		Address string `json:"address"`
+		// AddressWS is the optional full ws:// or wss:// WebSocket URL (including
+		// the /dmsg path, e.g. "wss://dmsg1.example.net/dmsg") a browser client
+		// seeds from. It is SEPARATE from Address (IP:port, TCP): native visors
+		// dial Address and never look at AddressWS, so advertising a wss:// domain
+		// here adds no DNS/TLS dependency for them. Required for a wasm-visor
+		// served over HTTPS, whose browser blocks plain ws:// (mixed content); a
+		// wss domain's CA cert is stable, so it lives safely in the embedded config.
+		AddressWS string `json:"address_ws,omitempty"`
 	} `json:"server"`
 }
 
