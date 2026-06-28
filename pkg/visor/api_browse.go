@@ -67,7 +67,9 @@ func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, u
 	// bare hex PK, optionally with :port (a hex PK never contains a colon).
 	hp := host
 	if i := strings.LastIndexByte(host, ':'); i > 0 {
-		if p, err := strconv.Atoi(host[i+1:]); err == nil {
+		// ParseUint with bitSize 16 bounds the value to a valid port, so the
+		// uint16 conversion can't overflow.
+		if p, err := strconv.ParseUint(host[i+1:], 10, 16); err == nil {
 			hp = host[:i]
 			if reqPort == 0 {
 				port = uint16(p)
