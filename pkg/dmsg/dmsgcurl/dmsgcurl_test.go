@@ -4,6 +4,7 @@ package dmsgcurl
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,13 +60,33 @@ func TestDownload(t *testing.T) {
 		errs[i] = make(chan error, 1)
 	}
 
-	// Act: Download
+	// Act: Download. A freshly-started dmsg mesh uses ping-based session
+	// liveness, so a shared session can transiently drop and the first dial
+	// may fail with "dmsg error 202 - cannot connect to delegated server".
+	// Retry a few times (resetting the destination file each attempt) before
+	// giving up — the test asserts end-to-end download correctness, not
+	// first-attempt dial reliability.
 	for i := 0; i < dlClients; i++ {
 		func(i int) {
 			log := logging.MustGetLogger(fmt.Sprintf("dl_client_%d", i))
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			err := Download(ctx, log, newHTTPClient(t, dc), dsts[i], hsAddr, fileSize)
+			httpC := newHTTPClient(t, dc)
+
+			var err error
+			for attempt := 0; attempt < 5; attempt++ {
+				if _, err = dsts[i].Seek(0, io.SeekStart); err != nil {
+					break
+				}
+				if err = dsts[i].Truncate(0); err != nil {
+					break
+				}
+				if err = Download(ctx, log, httpC, dsts[i], hsAddr, fileSize); err == nil {
+					break
+				}
+				log.WithError(err).Warnf("download attempt %d failed, retrying", attempt)
+				time.Sleep(100 * time.Millisecond)
+			}
 
 			errs[i] <- err
 			close(errs[i])
