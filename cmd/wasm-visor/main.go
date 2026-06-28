@@ -451,12 +451,17 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	procM = pm
 	vlog("proc_manager: ok")
 
-	// 4a. in-process skychat (the browser visor's first app). Register the dmsg
-	// app-networker so app.Client routes over dmsg, then start skychat as an
-	// internal app — it listens on dmsg:1 and is wire-compatible with native
-	// skychat, so a wasm↔native chat doubles as a transport/reachability test.
+	// 4a. in-process skychat (the browser visor's first app). Register BOTH app
+	// networkers so app.Client can listen/dial over dmsg (direct) AND skynet (over
+	// a route): the dmsg networker rides dmsgC, the skynet networker rides the edge
+	// router. skychat listens on both — wire-compatible with native skychat
+	// (useDmsg+useSkynet), so a peer dialing skychat over a ROUTE (the host's
+	// default `--net skynet`) reaches the tab, not just dmsg-direct.
 	if aerr := appnet.AddNetworker(appnet.TypeDmsg, appnet.NewDMSGNetworker(dmsgC)); aerr != nil {
 		vlog("skychat: add dmsg networker: " + aerr.Error())
+	}
+	if aerr := appnet.AddNetworker(appnet.TypeSkynet, appnet.NewSkywireNetworker(mLog.PackageLogger("skynet"), rtr)); aerr != nil {
+		vlog("skychat: add skynet networker: " + aerr.Error())
 	}
 	if _, serr := pm.Start(appcommon.ProcConfig{
 		AppName:     "skychat",
@@ -468,7 +473,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}); serr != nil {
 		vlog("skychat: start: " + serr.Error())
 	} else {
-		vlog("skychat: in-process app started (dmsg:1)")
+		vlog("skychat: in-process app started (dmsg:1 + skynet:1)")
 	}
 
 	// 5. hypervisor core: the tab also acts as a hypervisor — visors dial INTO it
