@@ -43,15 +43,19 @@ Regional saturation scaling is applied to the presence pool to promote geographi
 
 The bandwidth pool reward for a day is distributed based on the amount of transport bandwidth each visor **sent** during the previous day — sender-pays. A visor accrues bandwidth credit for the bytes it transmitted on each transport, with its per-edge sent counter capped by the counterparty's reported recv so a one-sided inflation cannot pump credit. Only visors whose sender-side total exceeds a minimum threshold are eligible for the bandwidth pool.
 
-The pool is divided using a square-root scaling of sent bytes — analogous to how regional saturation scales the presence pool, but applied to bandwidth amount instead of country IP count:
+The pool is divided using a **per-IP** scaling of sent bytes. Each IP's total sent bandwidth is first aggregated across all visors at that IP; the IP then contributes `ip_total ^ exponent` to the network weight; each visor at the IP receives a slice of that contribution proportional to its share of the IP's bytes:
 
 ```
-visor_weight    = sent_bytes ^ bandwidth_exponent     (default 0.5)
+ip_total        = sum(sent_bytes_of_each_visor_at_ip)
+visor_weight    = (visor.sent_bytes / ip_total) * (ip_total ^ bandwidth_exponent)
+                = visor.sent_bytes * (ip_total ^ (bandwidth_exponent - 1))
 visor_share     = visor_weight / sum(all visor_weights)
 visor_reward    = visor_share * pool_2_budget
 ```
 
-With the default exponent of `0.5`, a 100× bandwidth lead over another sender produces only a ~10× share advantage. This prevents any single high-throughput visor from dominating the pool while still rewarding heavier senders more than lighter ones. Setting the exponent to `1.0` reverts to strict bytes-proportional distribution; `0` weights every qualifying sender equally.
+With the default exponent of `0.5`, a 100× bandwidth lead by one IP over another produces only a ~10× share advantage — preventing any single high-throughput IP from dominating the pool while still rewarding heavier senders more than lighter ones. Setting the exponent to `1.0` reverts to strict bytes-proportional distribution; `0` gives every contributing IP equal total weight (divided proportionally among its senders).
+
+**Why per-IP?** Splitting one visor's traffic across many PKs at the same IP — or pointing those PKs at different skycoin addresses — does not change the IP's `ip_total`, so it does not change the IP's contribution to the pool. PK / address multiplication at a single IP is therefore neutral; the only way to earn more pool 2 is to actually send more bandwidth, or to send from more distinct IPs.
 
 Each transport edge is evaluated independently: a visor earns bandwidth credit for what it sent regardless of whether the counterparty is also reward-eligible. Credit only flows to the sender, so an ineligible peer was never going to receive a share — its eligibility is not checked.
 
