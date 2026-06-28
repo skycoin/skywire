@@ -12,6 +12,17 @@
   <div class="content col-12 mt-4.5">
     <app-refresh-rate class="d-block mb-4"></app-refresh-rate>
 
+    @if (autoUpdateAvailable) {
+      <div class="d-flex align-items-center mb-4">
+        <mat-slide-toggle
+          color="primary"
+          [checked]="autoUpdateEnabled"
+          (change)="setAutoUpdate($event.checked)"
+        >{{ 'settings.auto-update.label' | translate }}</mat-slide-toggle>
+        <mat-icon [inline]="true" class="info-tip ml-2" [matTooltip]="'settings.auto-update.info' | translate">info</mat-icon>
+      </div>
+    }
+
     @if (authChecked && authActive) {
       <app-password></app-password>
     }

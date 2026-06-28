@@ -4,6 +4,7 @@ package network
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -67,6 +68,10 @@ type ClientFactory struct {
 	// WTTable maps a peer PK to its direct WebTransport endpoint + pinned cert
 	// hash for the WT transport type. A nil/absent table disables WT dialing.
 	WTTable WTTable
+	// QUICTable statically pins a peer PK → UDP address ("host:port") for the QUIC
+	// transport type (the QUIC analog of PKTable/stcp). Consulted before the
+	// address resolver; nil/absent = AR-only.
+	QUICTable stcp.PKTable
 	// ICEURLs are the STUN/TURN URLs used for ICE by the WEBRTC transport type
 	// (skywire's own STUN, reused from sudph). Empty = host candidates only.
 	ICEURLs []string
@@ -141,7 +146,13 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		return wc, nil
 	case types.WT:
 		wc := newWT(generic, f.WTTable)
-		wc.(*wtClient).ar = f.ARClient // native: register/resolve WT endpoint+cert via AR
+		wtc := wc.(*wtClient)
+		wtc.ar = f.ARClient // native: register/resolve WT endpoint+cert via AR
+		// WT binds its OWN UDP socket (HTTP/3-over-QUIC) — NOT f.ListenAddr, which
+		// is the STCP TCP address (:7777). Using f.ListenAddr made WT register the
+		// STCP port in the AR (a wrong, often-unforwarded port). Bind the wt_port
+		// passed via InitClient (":0" = ephemeral, registered with the AR either way).
+		wtc.listenAddr = fmt.Sprintf(":%d", port)
 		return wc, nil
 	case types.WEBRTC:
 		return newWebRTC(generic, f.DmsgC, f.ICEURLs), nil

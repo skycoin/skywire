@@ -131,6 +131,17 @@ func handleContentStream(s *dmsg.Stream, port uint16) {
 		}
 	}
 
+	// Dynamic endpoints (e.g. /health, /ping on port 80) take priority over the
+	// static map, so peer parity endpoints can't be shadowed by uploaded content.
+	// dynamicHandler is nil until startPeerServices installs it (peerserve_js.go).
+	if dynamicHandler != nil {
+		if ct, body, handled := dynamicHandler(port, path); handled {
+			_, _ = fmt.Fprintf(s, "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n", ct, len(body)) //nolint:errcheck
+			_, _ = s.Write(body)                                                                                                           //nolint:errcheck
+			return
+		}
+	}
+
 	contentMu.RLock()
 	e, ok := contentByPort[port][path]
 	contentMu.RUnlock()
@@ -141,3 +152,10 @@ func handleContentStream(s *dmsg.Stream, port uint16) {
 	_, _ = fmt.Fprintf(s, "HTTP/1.1 200 OK\r\nContent-Type: %s\r\nContent-Length: %d\r\nConnection: close\r\n\r\n", e.ct, len(e.body)) //nolint:errcheck
 	_, _ = s.Write(e.body)                                                                                                             //nolint:errcheck
 }
+
+// dynamicHandler, when set, is consulted before the static content map in
+// handleContentStream. It returns (contentType, body, handled=true) to serve a
+// computed response (e.g. /health JSON, /ping pong). Installed by
+// startPeerServices; nil otherwise. Read on the accept goroutine, set once at
+// boot before the port-80 server starts, so no lock is needed.
+var dynamicHandler func(port uint16, path string) (string, []byte, bool)

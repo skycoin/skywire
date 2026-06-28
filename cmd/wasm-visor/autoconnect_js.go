@@ -105,6 +105,13 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 	})
 	n := len(have)
 
+	// On an HTTPS page the browser blocks plain ws:// (mixed content), and a
+	// public visor has no wss endpoint (no domain/CA) — so a WS transport to it
+	// can never form. WebTransport (QUIC, cert-hash pinned) is the only
+	// HTTPS-viable DIRECT carrier, so dial WT only there; an http:// page still
+	// dials both for redundancy.
+	https := pageHTTPS()
+
 	vlog(fmt.Sprintf("ws-autoconnect: SD returned %d visors (%d existing auto-peers)", len(services), n))
 
 	added := 0
@@ -119,37 +126,46 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 		port := services[i].Addr.Port()
 		vlog(fmt.Sprintf("ws-autoconnect: resolving %s:%d", pk.Hex()[:8], port))
 
-		// A browser can carry WS (TCP) and WT (QUIC). Dial BOTH to each public
-		// visor for redundancy + path diversity — the browser analog of a native
-		// visor making stcpr+sudph to the same peer (autoconnect.go). Either
-		// succeeding counts the visor as connected.
+		// A browser can carry WS (TCP) and WT (QUIC). On an http page dial BOTH to
+		// each public visor for redundancy + path diversity (the browser analog of
+		// a native visor making stcpr+sudph to the same peer); on an HTTPS page
+		// only WT is reachable (ws:// is mixed-content-blocked). Either succeeding
+		// counts the visor as connected.
 		gotAny := false
 
 		// WS: rides the stcpr cmux port. Resolve the peer's stcpr IP, dial
-		// ws://ip:<SD-advertised-port>/.
-		if addr, err := ar.resolveStcpr(ctx, pk); err == nil && addr != "" {
-			host := addr
-			if h, _, e := net.SplitHostPort(addr); e == nil {
-				host = h
+		// ws://ip:<SD-advertised-port>/. Skipped on HTTPS (mixed content).
+		if !https {
+			if addr, err := ar.resolveStcpr(ctx, pk); err == nil && addr != "" {
+				host := addr
+				if h, _, e := net.SplitHostPort(addr); e == nil {
+					host = h
+				}
+				url := fmt.Sprintf("ws://%s:%d/", host, port)
+				wsTable.SetAddr(pk, url)
+				dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
+				_, derr := tpM.SaveTransport(dctx, pk, types.WS, transport.LabelAutomatic)
+				dcancel()
+				if derr != nil {
+					vlog(fmt.Sprintf("ws-autoconnect: WS dial %s (%s): %v", pk.Hex()[:8], url, derr))
+				} else {
+					gotAny = true
+					vlog(fmt.Sprintf("ws-autoconnect: +WS transport to %s via %s", pk.Hex()[:8], url))
+				}
+			} else if err != nil {
+				vlog(fmt.Sprintf("ws-autoconnect: AR stcpr resolve %s: %v", pk.Hex()[:8], err))
 			}
-			url := fmt.Sprintf("ws://%s:%d/", host, port)
-			wsTable.SetAddr(pk, url)
-			dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
-			_, derr := tpM.SaveTransport(dctx, pk, types.WS, transport.LabelAutomatic)
-			dcancel()
-			if derr != nil {
-				vlog(fmt.Sprintf("ws-autoconnect: WS dial %s (%s): %v", pk.Hex()[:8], url, derr))
-			} else {
-				gotAny = true
-				vlog(fmt.Sprintf("ws-autoconnect: +WS transport to %s via %s", pk.Hex()[:8], url))
-			}
-		} else if err != nil {
-			vlog(fmt.Sprintf("ws-autoconnect: AR stcpr resolve %s: %v", pk.Hex()[:8], err))
 		}
 
 		// WT: a separate QUIC endpoint with its own UDP port + pinned self-signed
 		// cert, both learned from the AR's WT record (https://host:port/skywire).
-		if url, certHash, err := ar.resolveWT(ctx, pk); err == nil && url != "" {
+		url, certHash, werr := ar.resolveWT(ctx, pk)
+		switch {
+		case werr != nil:
+			vlog(fmt.Sprintf("ws-autoconnect: AR wt resolve %s: %v", pk.Hex()[:8], werr))
+		case url == "":
+			vlog(fmt.Sprintf("ws-autoconnect: %s has no WT entry in AR (404) — skip", pk.Hex()[:8]))
+		default:
 			wtTable.SetEntry(pk, network.WTEntry{URL: url, CertHash: certHash})
 			dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
 			_, derr := tpM.SaveTransport(dctx, pk, types.WT, transport.LabelAutomatic)

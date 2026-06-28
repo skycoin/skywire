@@ -5,12 +5,15 @@
 // in-process app server), bypassing the 45k-LOC pkg/visor daemon (which serves
 // an HTTP API surface a browser leaf does not need).
 //
-// This is the EDGE assembly: the tab dials ONE outbound dmsg transport, runs a
-// transport.Manager + an edge router (it RECEIVES route rules and forwards/
-// consumes packets — "reachability != listening"), and hosts a ProcManager for
-// future in-process apps (skychat). It boots but does not yet register its edge
-// in TPD (that path is HTTP/native; a dmsg-based registration is the next step)
-// nor run an app — see the TODOs.
+// This is the EDGE assembly: the tab dials outbound transports (dmsg + the
+// browser-dialable WS/WT/WebRTC), runs a transport.Manager + an edge router (it
+// RECEIVES route rules and forwards/consumes packets — "reachability !=
+// listening"), and hosts a ProcManager running in-process skychat (dmsg:1). Its
+// transport edges ARE registered in TPD over dmsg (net/http-free tpdclient.NewDmsg
+// → transport_discovery_dmsg), so a peer's route-finder can compute a route to the
+// tab — verified: `cli route calc <host> <tab-pk>` returns a forward/reverse pair
+// over the tab's transport. (Route SETUP/forwarding over a transport to a browser
+// leaf is a separate matter; skychat to a tab is reliably reached over dmsg:1.)
 //
 // JS API on globalThis.skywireVisor:
 //
@@ -58,7 +61,9 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appevent"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -141,6 +146,8 @@ func main() {
 		"dialRoute":       js.FuncOf(jsDialRoute),
 		"checkRegistered": js.FuncOf(jsCheckRegistered),
 		"fetchClearnet":   js.FuncOf(jsFetchClearnet),
+		"skychatSend":     js.FuncOf(jsSkychatSend),
+		"skychatMessages": js.FuncOf(jsSkychatMessages),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -179,8 +186,8 @@ func jsStatus(js.Value, []js.Value) interface{} {
 	st["procManager"] = procM != nil
 	st["hypervisor"] = hvCore != nil
 	// booted = the edge (dmsg + transport + router: rule reception + packet
-	// forwarding) plus the in-process app host (procManager). No app is running
-	// yet — that's the in-process-skychat step.
+	// forwarding) plus the in-process app host (procManager), which runs the
+	// in-process skychat app (dmsg:1).
 	st["booted"] = dmsgC != nil && tpM != nil && rtr != nil && procM != nil
 	if tpM != nil {
 		st["transports"] = tpM.TransportCount()
@@ -412,11 +419,30 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// their stcpr port, phase 2) so this browser leaf joins the mesh + routes form.
 	startWSAutoconnect(ctx, svc.ServiceDiscoveryDmsg, svc.AddressResolverDmsg, pk, sk)
 
+	// wss → WebTransport convergence: the browser bootstraps its dmsg session over
+	// wss (the only carrier reachable before discovery), then prefers WT for
+	// further sessions (Carriers=[wt,ws]). Once a WT session is live, drop the
+	// lingering wss one so we shed its redundant TLS-over-Noise. Safe + idempotent
+	// (never strands the client); a no-op until a dmsg server actually serves WT.
+	go func() {
+		t := time.NewTicker(20 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if n := dmsgC.UpgradeBrowserSessions(); n > 0 {
+					vlog(fmt.Sprintf("dmsg: converged %d wss session(s) to WebTransport", n))
+				}
+			}
+		}
+	}()
+
 	// 4. in-process app server (RunModeInternal). The browser-adapted
 	// appserver.NewProcManager no longer net.Listen("tcp")s under TinyGo (a
 	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP
-	// ingress. No app registered yet — in-process skychat (an appcommon.AppFunc)
-	// is the next step.
+	// ingress.
 	vlog("proc_manager: New…")
 	pm, err := appserver.NewProcManager(mLog, &appdisc.Factory{}, eb, "", "")
 	if err != nil {
@@ -424,6 +450,31 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}
 	procM = pm
 	vlog("proc_manager: ok")
+
+	// 4a. in-process skychat (the browser visor's first app). Register BOTH app
+	// networkers so app.Client can listen/dial over dmsg (direct) AND skynet (over
+	// a route): the dmsg networker rides dmsgC, the skynet networker rides the edge
+	// router. skychat listens on both — wire-compatible with native skychat
+	// (useDmsg+useSkynet), so a peer dialing skychat over a ROUTE (the host's
+	// default `--net skynet`) reaches the tab, not just dmsg-direct.
+	if aerr := appnet.AddNetworker(appnet.TypeDmsg, appnet.NewDMSGNetworker(dmsgC)); aerr != nil {
+		vlog("skychat: add dmsg networker: " + aerr.Error())
+	}
+	if aerr := appnet.AddNetworker(appnet.TypeSkynet, appnet.NewSkywireNetworker(mLog.PackageLogger("skynet"), rtr)); aerr != nil {
+		vlog("skychat: add skynet networker: " + aerr.Error())
+	}
+	if _, serr := pm.Start(appcommon.ProcConfig{
+		AppName:     "skychat",
+		ProcKey:     appcommon.RandProcKey(),
+		VisorPK:     pk,
+		RoutingPort: skychatPort,
+		RunFunc:     runBrowserSkychat,
+		RunMode:     appcommon.RunModeInternal,
+	}); serr != nil {
+		vlog("skychat: start: " + serr.Error())
+	} else {
+		vlog("skychat: in-process app started (dmsg:1 + skynet:1)")
+	}
 
 	// 5. hypervisor core: the tab also acts as a hypervisor — visors dial INTO it
 	// on the dmsg hypervisor port and it RPC-controls them (gobrpc CLIENT, which
@@ -443,6 +494,13 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		}
 	}()
 	vlog("hypervisor: serving")
+
+	// peer-interface parity: open the dmsg listeners a native visor serves so
+	// other visors / hypervisors / the CLI can reach, health-check, latency-probe,
+	// and (with authorization) command transports on this browser visor:
+	//   :80 health/landing/ping · :7 dmsgctrl · :8 dmsg ping · :47 transport-setup.
+	startPeerServices(mLog, svc.TransportSetupNodes)
+	vlog("peer services: health(:80)/ctrl(:7)/ping(:8)/transport-setup(:47) up")
 
 	vlog("EDGE + app-host + hypervisor booted")
 	fmt.Printf("wasm-visor: booted pk=%s\n", pk.Hex())
@@ -662,9 +720,15 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 		Health:   &wasmhv.HealthInfo{ServicesHealth: "healthy"},
 		// Non-nil: the CLI's `visor info` dereferences DmsgStats.RoundTrip
 		// unconditionally. The tab has no dmsg-tracker, so RoundTrip stays 0.
-		DmsgStats:    &wasmhv.DmsgClientSummary{PK: selfPK},
-		Online:       true,
-		IsHypervisor: true,
+		DmsgStats: &wasmhv.DmsgClientSummary{PK: selfPK},
+		// A browser visor has no on-disk config file, so there is no separate
+		// "config version" — its config IS its build. Report the build version so
+		// the HV UI shows it (and treats version == config_version as up-to-date)
+		// instead of rendering "Unknown".
+		ConfigVersion: buildinfo.Version(),
+		BuildTag:      "wasm",
+		Online:        true,
+		IsHypervisor:  true,
 	}
 }
 

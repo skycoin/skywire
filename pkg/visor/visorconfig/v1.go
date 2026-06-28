@@ -428,6 +428,31 @@ type Transport struct {
 	// rule is wanted; the bound port is registered with the address resolver
 	// either way, so a random port works and survives restarts.
 	QUICPort int `json:"quic_port,omitempty"`
+	// WTPort optionally PINS the UDP port for the WebTransport (WT) listener,
+	// mirroring quic_port. WT is HTTP/3-over-QUIC, so it needs its OWN UDP socket
+	// — it cannot share the unified transport_port with the raw-QUIC (squic)
+	// transport (two QUIC listeners can't bind one UDP port). 0 (default/omitted)
+	// binds an ephemeral port; the bound port + cert hash are registered with the
+	// address resolver either way. Set a fixed port to forward it through a NAT.
+	WTPort int `json:"wt_port,omitempty"`
+	// WSTable statically pins WebSocket (WS) transport peers by PK → wss:// URL —
+	// the WS analog of skywire-tcp's pk_table (STCP). It lets a visor DIAL a WS
+	// transport to a configured peer with NO address-resolver lookup (e.g. a peer
+	// on a LAN, or any visor whose wss endpoint you know), exactly as STCP pins
+	// TCP peers. Entries learned at runtime (autoconnect / a browser hook) are
+	// added on top; empty/omitted = no static WS peers.
+	WSTable map[cipher.PubKey]string `json:"ws_table,omitempty"`
+	// WTTable statically pins WebTransport (WT) peers by PK → {url, cert_hash} —
+	// the WT analog of ws_table. WT has no CA, so the dialer pins the peer's
+	// self-signed cert SHA-256 (cert_hash); url is the https:// endpoint. Lets a
+	// visor DIAL a WT transport to a configured peer with no address-resolver
+	// lookup. Runtime entries are added on top; empty/omitted = no static WT peers.
+	WTTable map[cipher.PubKey]WTPeer `json:"wt_table,omitempty"`
+	// QUICTable statically pins QUIC transport peers by PK → UDP address
+	// ("host:port") — the QUIC analog of skywire-tcp's pk_table (and of ws_table /
+	// wt_table). Lets a visor DIAL a QUIC transport to a configured peer with no
+	// address-resolver lookup. Consulted before the AR; empty/omitted = AR-only.
+	QUICTable map[cipher.PubKey]string `json:"quic_table,omitempty"`
 	// ARTransportLimit controls address resolver registration for privacy:
 	//   0 (default): stay registered indefinitely
 	//   N > 0: deregister from AR after N transports are established
@@ -435,6 +460,14 @@ type Transport struct {
 	// When deregistered, the visor cannot receive new inbound transports
 	// but can still initiate outbound connections.
 	ARTransportLimit int `json:"ar_transport_limit,omitempty"`
+}
+
+// WTPeer is a statically-configured WebTransport peer (transport.wt_table): the
+// peer's https:// WebTransport endpoint and the lowercase-hex SHA-256 of its
+// self-signed cert, which the dialer pins (WT has no CA).
+type WTPeer struct {
+	URL      string `json:"url"`
+	CertHash string `json:"cert_hash"`
 }
 
 // TPSDmsgConfig configures the embedded Transport Setup Node's dmsg client.

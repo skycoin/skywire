@@ -24,6 +24,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -42,7 +43,12 @@ const quicErrNoStream quic.ApplicationErrorCode = 1
 
 type quicClient struct {
 	*resolvedClient
-	port int
+	// table statically pins peer PK → UDP address ("host:port"), the QUIC analog
+	// of stcp's pk_table (transport.quic_table). Dial consults it before the
+	// address resolver, so a configured peer dials with no AR lookup — exactly
+	// like the WS/WT clients. nil/empty = AR-only (the default).
+	table stcp.PKTable
+	port  int
 	// sharedConn, when set, is the UDP socket QUIC listens over instead of
 	// binding its own — the QUIC demux conn of a unified transport_port socket
 	// (see udpDemux). nil = bind a dedicated socket (the default / per-type-port
@@ -65,6 +71,16 @@ func newQuic(resolved *resolvedClient, port int) Client {
 	client := &quicClient{resolvedClient: resolved, port: port}
 	client.netType = types.QUIC
 	return client
+}
+
+// tableAddr looks up a statically-configured UDP address for rPK. The table is
+// a nil interface when unconfigured (AR-only), so guard it — calling a method on
+// a nil interface would panic the visor (same guard as the WS client).
+func (c *quicClient) tableAddr(rPK cipher.PubKey) (string, bool) {
+	if c.table == nil {
+		return "", false
+	}
+	return c.table.Addr(rPK)
 }
 
 // quicStreamConn adapts a single QUIC stream (+ its connection) to net.Conn.
@@ -171,9 +187,19 @@ func (c *quicClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) 
 		return nil, io.ErrClosedPipe
 	}
 	c.log.Debugf("Dialing PK %v over QUIC", rPK)
-	conn, err := c.dialVisor(ctx, rPK, func(ctx context.Context, addr string) (net.Conn, error) {
-		return c.dial(ctx, addr, rPK)
-	})
+	// Endpoint resolution order: static PK table first (a manually-configured
+	// peer — the QUIC analog of stcp's pk_table), then the address resolver.
+	// Mirrors the WS/WT clients; a nil/empty table just falls through to the AR.
+	var conn net.Conn
+	var err error
+	if addr, ok := c.tableAddr(rPK); ok {
+		c.log.Debugf("Resolved PK %v to %s via static QUIC table", rPK, addr)
+		conn, err = c.dial(ctx, addr, rPK)
+	} else {
+		conn, err = c.dialVisor(ctx, rPK, func(ctx context.Context, addr string) (net.Conn, error) {
+			return c.dial(ctx, addr, rPK)
+		})
+	}
 	if err != nil {
 		return nil, err
 	}

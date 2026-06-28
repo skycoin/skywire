@@ -411,7 +411,13 @@ func initWSClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 // restarts via re-register); a fixed firewall port can be pinned later.
 // Depends on &tr so v.tpM and the AR client both exist.
 func initWTClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
-	v.tpM.InitClient(ctx, types.WT, 0)
+	// WT binds its OWN UDP port (it's HTTP/3-over-QUIC and can't share squic's
+	// socket). wt_port PINS it for NAT-forwarding; 0 binds an ephemeral port.
+	port := 0
+	if v.conf.Transport != nil {
+		port = v.conf.Transport.WTPort
+	}
+	v.tpM.InitClient(ctx, types.WT, port)
 	return nil
 }
 
@@ -502,6 +508,31 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		listenAddr = v.conf.STCP.ListeningAddress
 	}
 	v.stcpTable = table
+	// Static WS peers (transport.ws_table): pin PK → wss:// URL so a WS transport
+	// can be dialed with no address-resolver lookup, the WS analog of skywire-tcp.
+	// nil when unconfigured (runtime/autoconnect entries still work — the WS
+	// client tolerates a nil table).
+	var wsTable stcp.PKTable
+	if v.conf.Transport != nil && len(v.conf.Transport.WSTable) > 0 {
+		wsTable = stcp.NewTable(v.conf.Transport.WSTable)
+	}
+	// Static WT peers (transport.wt_table): pin PK → {url, cert_hash} so a WT
+	// transport dials with no AR lookup. nil when unconfigured (the WT client
+	// tolerates it; runtime/autoconnect entries still work).
+	var wtTable network.WTTable
+	if v.conf.Transport != nil && len(v.conf.Transport.WTTable) > 0 {
+		entries := make(map[cipher.PubKey]network.WTEntry, len(v.conf.Transport.WTTable))
+		for pk, p := range v.conf.Transport.WTTable {
+			entries[pk] = network.WTEntry{URL: p.URL, CertHash: p.CertHash}
+		}
+		wtTable = network.NewWTTable(entries)
+	}
+	// Static QUIC peers (transport.quic_table): pin PK → UDP "host:port" so a QUIC
+	// transport dials with no AR lookup (the QUIC analog of skywire-tcp's pk_table).
+	var quicTable stcp.PKTable
+	if v.conf.Transport != nil && len(v.conf.Transport.QUICTable) > 0 {
+		quicTable = stcp.NewTable(v.conf.Transport.QUICTable)
+	}
 	// WebRTC ICE servers: the configured STUN servers, prefixed with the stun:
 	// scheme the WebRTC stack wants. Set on the factory now; the WEBRTC client is
 	// started after dmsg comes up (init_dmsg → InitClient), since its signaling
@@ -517,6 +548,9 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		SK:         v.conf.SK,
 		ListenAddr: listenAddr,
 		PKTable:    table,
+		WSTable:    wsTable,
+		WTTable:    wtTable,
+		QUICTable:  quicTable,
 		ARClient:   v.arClient,
 		EB:         v.ebc,
 		MLogger:    v.MasterLogger(),
