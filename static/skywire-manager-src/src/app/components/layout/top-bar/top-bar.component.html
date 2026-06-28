@@ -84,13 +84,10 @@
             }
           </span>
         } @else if (appMode.isStartTitle(titleParts)) {
-          <!-- On the home/start pages the bare "Start" title carries no info;
-               replace it with WHICH backend the UI is talking to (native visor,
-               serverless in-browser visor, …) plus the visor version, so the
-               operator can always tell the mode at a glance. -->
-          <span class="title-text" [matTooltip]="appMode.localPk">
-            {{ appMode.badge }}
-          </span>
+          <!-- On the home/start pages the bare "Start" title carries no info.
+               The mode badge (WHICH backend the UI is talking to + the visor
+               version) is shown top-RIGHT instead — see right-container below —
+               so the left title stays empty here. -->
         } @else {
           <span class="title-text">
             {{ titleParts[titleParts.length - 1] | translate }}
@@ -158,6 +155,11 @@
       <!-- Right buttons area. -->
       @if (!showVpnInfo) {
         <div class="right-container">
+          <!-- Mode badge (which backend + visor version), moved here from the
+               left title so it sits top-RIGHT. Only on the home/start pages. -->
+          @if (appMode.isStartTitle(titleParts)) {
+            <span class="mode-badge" [matTooltip]="appMode.localPk">{{ appMode.badge }}</span>
+          }
           @if (showUpdateButton) {
             <app-refresh-button
               [secondsSinceLastUpdate]="secondsSinceLastUpdate"
