@@ -1,6 +1,10 @@
 package wasmhv
 
-import _ "embed"
+import (
+	_ "embed"
+
+	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
+)
 
 // OverrideJS is pkg/wasmhv/override.js — the classic <script> that, in a
 // generated standalone file, boots the WASM dmsg client and routes the UI's
@@ -16,8 +20,10 @@ var OverrideJS []byte
 // rendered + self-hosting over dmsg, via globalThis.skywireVisor). Unused in
 // viewer/standalone-hypervisor modes (no skywireVisor).
 //
-//go:embed browse.js
-var BrowseJS []byte
+// Re-exported from the dependency-free browseui leaf package so pkg/visor can
+// serve the SAME engine in the native hypervisor UI without an import cycle
+// (pkg/wasmhv's gob-mirror test imports pkg/visor).
+var BrowseJS = browseui.BrowseJS
 
 // AutoUpdateJS is pkg/wasmhv/autoupdate.js — the wasm-visor self-update poller for
 // the `hv serve` page: it compares a /wasm-version fingerprint against the version

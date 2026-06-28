@@ -11,6 +11,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hashicorp/yamux"
@@ -19,30 +21,91 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 const browseFetchTimeout = 60 * time.Second
 const browseMaxBody = 16 << 20 // 16 MiB
 
-// BrowseFetchRequest fetches a dmsg/skynet site for the HV-UI browser.
+// BrowseFetchRequest fetches a dmsg/skynet site for the HV-UI browser. Host is
+// the resolving-proxy form (NOT dmsg://): a bare PK, "<pk>:<port>", "<pk>.dmsg",
+// a friendly alias like "home.dmsg"/"tpd.dmsg", or "name.skynet" — resolved the
+// same way the visor's resolving SOCKS5 proxy resolves http://name.dmsg.
 type BrowseFetchRequest struct {
-	PK     cipher.PubKey `json:"pk"`
-	Port   uint16        `json:"port"`
-	Method string        `json:"method"`
-	Path   string        `json:"path"`
-	Body   []byte        `json:"body,omitempty"`
+	Host   string `json:"host"`
+	Port   uint16 `json:"port"`
+	Method string `json:"method"`
+	Path   string `json:"path"`
+	Body   []byte `json:"body,omitempty"`
 	// Scheme: "" / "auto" (skynet route first, dmsg-HTTP fallback), "skynet", or
 	// "dmsg". A visor serves port 80 over BOTH a skynet mirror and dmsg (see
 	// goServeSkynetMirror), so "auto" reaches the same content either way.
 	Scheme string `json:"scheme,omitempty"`
 }
 
+// resolveBrowseHost turns a resolving-proxy host into a (PK, port). Accepts a
+// bare hex PK (optionally :port), "home.dmsg"/"home.skynet" (this visor's landing
+// page), "<pk>.dmsg", or an "alias.dmsg"/"alias.skynet" resolved via the same
+// alias map the dmsgweb/skynetweb resolving proxy uses.
+func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, uint16, error) {
+	host = strings.TrimSpace(host)
+	host = strings.TrimPrefix(strings.TrimPrefix(host, "http://"), "https://")
+	if i := strings.IndexByte(host, '/'); i >= 0 {
+		host = host[:i]
+	}
+	if host == "" {
+		return cipher.PubKey{}, 0, fmt.Errorf("empty host")
+	}
+	port := uint16(80)
+	if reqPort != 0 {
+		port = reqPort
+	}
+	lower := strings.ToLower(host)
+	if lower == "home.dmsg" || lower == "home.skynet" {
+		return v.conf.PK, port, nil
+	}
+	// bare hex PK, optionally with :port (a hex PK never contains a colon).
+	hp := host
+	if i := strings.LastIndexByte(host, ':'); i > 0 {
+		if p, err := strconv.Atoi(host[i+1:]); err == nil {
+			hp = host[:i]
+			if reqPort == 0 {
+				port = uint16(p)
+			}
+		}
+	}
+	var pk cipher.PubKey
+	if err := pk.Set(hp); err == nil {
+		return pk, port, nil
+	}
+	// alias.dmsg / <pk>.dmsg / alias.skynet
+	aliases, _ := resolverAliasesAndDmsgServers(v)
+	for label, lpk := range resolverAliasMap("", v.conf.PK) {
+		if _, ok := aliases[label]; !ok {
+			aliases[label] = lpk
+		}
+	}
+	for _, suffix := range []string{".dmsg", ".skynet"} {
+		if strings.HasSuffix(lower, suffix) {
+			_, _, dest, p, err := skynetweb.ParseResolverHost(host, suffix, aliases)
+			if err != nil {
+				return cipher.PubKey{}, 0, err
+			}
+			if reqPort == 0 && p != 0 {
+				port = p
+			}
+			return dest, port, nil
+		}
+	}
+	return cipher.PubKey{}, 0, fmt.Errorf("cannot resolve %q (use a pk, <pk>.dmsg, or alias.dmsg)", host)
+}
+
 // BrowseFetch performs the request over skynet and/or dmsg per Scheme, returning
 // the response in the shared SkynetHTTPResponse shape.
 func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*SkynetHTTPResponse, error) {
-	port := req.Port
-	if port == 0 {
-		port = 80
+	pk, port, err := v.resolveBrowseHost(req.Host, req.Port)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %q: %w", req.Host, err)
 	}
 	method := req.Method
 	if method == "" {
@@ -59,16 +122,16 @@ func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*SkynetHTTPResponse, error)
 
 	switch scheme {
 	case "skynet":
-		return v.SkynetHTTP(SkynetHTTPRequest{PK: req.PK, Port: port, Method: method, Path: path, Body: req.Body})
+		return v.SkynetHTTP(SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
 	case "dmsg":
-		return v.dmsgHTTPFetch(req.PK, port, method, path, req.Body)
+		return v.dmsgHTTPFetch(pk, port, method, path, req.Body)
 	case "auto":
-		resp, err := v.SkynetHTTP(SkynetHTTPRequest{PK: req.PK, Port: port, Method: method, Path: path, Body: req.Body})
+		resp, err := v.SkynetHTTP(SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
 		if err == nil {
 			return resp, nil
 		}
 		// skynet route miss / no skynet web server on that port → dmsg-HTTP.
-		return v.dmsgHTTPFetch(req.PK, port, method, path, req.Body)
+		return v.dmsgHTTPFetch(pk, port, method, path, req.Body)
 	default:
 		return nil, fmt.Errorf("invalid scheme %q (use auto|skynet|dmsg)", scheme)
 	}

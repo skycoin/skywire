@@ -10,7 +10,7 @@ import (
 	"strconv"
 
 	"github.com/skycoin/skywire/pkg/httputil"
-	"github.com/skycoin/skywire/pkg/wasmhv"
+	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
 
 // postBrowseFetch fetches a dmsg/skynet site for the in-UI browser (local visor).
@@ -56,7 +56,7 @@ func (hv *Hypervisor) uiHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/browse.js":
-			serveJS(w, wasmhv.BrowseJS)
+			serveJS(w, browseui.BrowseJS)
 			return
 		case "/skywire-browse-launcher.js":
 			serveJS(w, []byte(nativeBrowseLauncherJS))
@@ -119,10 +119,10 @@ const nativeBrowseLauncherJS = `(function () {
       return fetch(path, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(obj) })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { if (!r.ok) { throw new Error((j && j.error) || ("HTTP " + r.status)); } return j; }); });
     }
-    function fetchDmsg(pkHost, method, path, body) {
-      var h = String(pkHost || "").replace(/\.(dmsg|skynet)$/i, ""), pk = h, port = 80, i = h.lastIndexOf(":");
-      if (i > 0 && /^[0-9]+$/.test(h.slice(i + 1))) { pk = h.slice(0, i); port = parseInt(h.slice(i + 1), 10); }
-      return apiPost("/api/browse/fetch", { pk: pk, port: port, method: method || "GET", path: path || "/", body: body != null ? b64e(String(body)) : null, scheme: "auto" }).then(adapt);
+    function fetchDmsg(host, method, path, body) {
+      // host is the resolving-proxy form (pk, pk:port, pk.dmsg, home.dmsg, an
+      // alias.dmsg, …); the visor resolves it the same way its SOCKS5 proxy does.
+      return apiPost("/api/browse/fetch", { host: String(host || ""), method: method || "GET", path: path || "/", body: body != null ? b64e(String(body)) : null, scheme: "auto" }).then(adapt);
     }
     function fetchClearnet(exitPK, method, url, body) {
       return apiPost("/api/browse/clearnet", { exit_pk: exitPK, method: method || "GET", url: url, body: body != null ? b64e(String(body)) : null }).then(adapt);
@@ -130,7 +130,7 @@ const nativeBrowseLauncherJS = `(function () {
     var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; } });
     var btn = document.createElement("button");
     btn.textContent = "skynet"; btn.title = "browse skynet/dmsg sites + clearnet (via proxy)";
-    btn.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483001;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
+    btn.style.cssText = "position:fixed;left:12px;top:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
     btn.onclick = function () { p.toggle(); };
     document.body.appendChild(btn);
   }
