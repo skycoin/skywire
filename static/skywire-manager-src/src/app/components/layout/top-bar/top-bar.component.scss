@@ -129,6 +129,19 @@ $top-bar-height: 56px;
       align-items: center;
       margin-left: auto;
 
+      // Mode badge (backend + visor version) shown top-right on home pages.
+      // Truncates with an ellipsis on narrow viewports so it never pushes the
+      // refresh/menu buttons off-screen on mobile.
+      .mode-badge {
+        font-size: $font-size-sm;
+        opacity: 0.75;
+        margin-right: 10px;
+        max-width: 45vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       app-refresh-button {
         align-self: flex-end;
       }
