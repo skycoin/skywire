@@ -92,6 +92,9 @@
   function createBrowser(opts) {
     var frame = opts.frame;
     var fetchDmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    // fetchClearnet(exitPK, method, url, body) → {status, body, headers}: a CLEARNET
+    // fetch tunneled through a skysocks exit over a skywire route (IP-anonymous).
+    var fetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
     var log = opts.log || function () {};
     var currentSitePK = "";
 
@@ -151,18 +154,129 @@
       frame.srcdoc = docHtml;
     }
 
+    // --- navigation history (back / forward / reload / cancel) ---
+    // hist is a stack of entries: {kind:'dmsg', pk, path} | {kind:'clearnet', url}.
+    // histIdx points at the current entry. loadGen is bumped on every navigation
+    // and on cancel, so a slow fetch that resolves after the user navigated away
+    // (or cancelled) is discarded instead of clobbering the view ("cancel load").
+    var hist = [], histIdx = -1, loadGen = 0;
+    function setLoading(on) { if (opts.onLoading) try { opts.onLoading(on); } catch (e) {} }
+    function setNavState() { if (opts.onNavState) try { opts.onNavState(histIdx > 0, histIdx < hist.length - 1); } catch (e) {} }
+
+    // render performs the fetch + render for one history entry, tagged with the
+    // current loadGen; a stale result (gen advanced) is dropped.
+    async function render(entry) {
+      var gen = ++loadGen;
+      setLoading(true);
+      try {
+        if (entry.kind === "clearnet") {
+          var rc = await fetchClearnetEntry(entry.url, gen);
+          return rc;
+        }
+        var r = await fetchDmsg(entry.pk, "GET", entry.path, null);
+        if (gen !== loadGen) return { status: 0, cancelled: true };
+        var html = new TextDecoder().decode(r.body);
+        await renderSite(entry.pk, entry.path, html);
+        if (gen !== loadGen) return { status: 0, cancelled: true };
+        log("browsed dmsg://" + entry.pk + entry.path + " → " + r.status + " (" + r.body.length + " bytes)");
+        return { status: r.status, bytes: r.body.length, html: html };
+      } catch (e) {
+        if (gen !== loadGen) return { status: 0, cancelled: true };
+        log("browse error: " + (e.message || e));
+        return { status: 0, error: String(e.message || e) };
+      } finally {
+        if (gen === loadGen) setLoading(false);
+      }
+    }
+
+    async function fetchClearnetEntry(url, gen) {
+      var exit = clearnetExit();
+      if (!exit) { log("clearnet: no skysocks exit set"); return { status: 0 }; }
+      var r = await fetchClearnet(exit, "GET", url, null);
+      if (gen !== loadGen) return { status: 0, cancelled: true };
+      var html = new TextDecoder().decode(r.body);
+      await renderClearnet(exit, url, html);
+      if (gen !== loadGen) return { status: 0, cancelled: true };
+      log("browsed " + url + " via skysocks " + exit.slice(0, 8) + " → " + r.status + " (" + r.body.length + " bytes)");
+      return { status: r.status, bytes: r.body.length };
+    }
+
+    // navigate pushes a new entry (truncating any forward history) and renders it.
+    function navigate(entry) {
+      hist = hist.slice(0, histIdx + 1);
+      hist.push(entry);
+      histIdx = hist.length - 1;
+      setNavState();
+      return render(entry);
+    }
+    function back() { if (histIdx > 0) { histIdx--; setNavState(); return render(hist[histIdx]); } }
+    function forward() { if (histIdx < hist.length - 1) { histIdx++; setNavState(); return render(hist[histIdx]); } }
+    function reload() { if (histIdx >= 0) return render(hist[histIdx]); }
+    // cancel: advance loadGen so the in-flight render is discarded, and clear the
+    // loading state. The underlying fetch may still complete but its result is
+    // dropped (skywireVisor fetches aren't AbortController-wired).
+    function cancel() { loadGen++; setLoading(false); }
+
     async function browseTo(pk, path) {
       pk = (pk || "").trim();
       path = path || "/";
       if (!pk) { log("browse: enter a site PK"); return { status: 0 }; }
-      try {
-        var r = await fetchDmsg(pk, "GET", path, null);
-        var html = new TextDecoder().decode(r.body);
-        await renderSite(pk, path, html);
-        log("browsed dmsg://" + pk + path + " → " + r.status + " (" + r.body.length + " bytes)");
-        return { status: r.status, bytes: r.body.length, html: html };
-      } catch (e) { log("browse error: " + (e.message || e)); return { status: 0, error: String(e.message || e) }; }
+      return navigate({ kind: "dmsg", pk: pk, path: path });
     }
+
+    // --- CLEARNET browsing through a skysocks exit ---
+    //
+    // clearnetExit returns the skysocks exit server PK to tunnel clearnet through
+    // (localStorage-persisted, prompted once). The exit does the egress, so the
+    // origin sees the exit's IP, not the user's.
+    function clearnetExit() {
+      var e = "";
+      try { e = localStorage.getItem("skywire-clearnet-exit") || ""; } catch (_) {}
+      if (!e) {
+        e = (window.prompt("skysocks exit server public key (for clearnet browsing):") || "").trim();
+        if (e) { try { localStorage.setItem("skywire-clearnet-exit", e); } catch (_) {} }
+      }
+      return e;
+    }
+
+    // renderClearnet renders a fetched clearnet page into the iframe. Same-origin
+    // stylesheets + images are re-fetched through the SAME skysocks exit and inlined
+    // as data: URIs, so the sandboxed iframe never reaches clearnet directly (no IP
+    // leak). Scripts are stripped — they'd try to fetch cross-origin from the
+    // sandbox and either fail or leak; this is a static, read-mostly render.
+    async function renderClearnet(exit, url, html) {
+      currentSitePK = "";
+      if (opts.setPK) opts.setPK(url);
+      if (opts.setPath) opts.setPath("");
+      function abs(href) { try { return new URL(href, url).href; } catch (e) { return null; } }
+      function cfetch(u) { return fetchClearnet(exit, "GET", u, null); }
+      var docHtml;
+      try {
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var head = doc.head || doc.documentElement;
+        var base = doc.createElement("base"); base.setAttribute("href", url); base.setAttribute("target", "_self");
+        head.insertBefore(base, head.firstChild);
+        var jobs = [];
+        doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(function (el) {
+          var a = abs(el.getAttribute("href")); if (!a) return;
+          jobs.push(cfetch(a).then(function (r) {
+            var style = doc.createElement("style"); style.textContent = new TextDecoder().decode(r.body); el.replaceWith(style);
+          }).catch(function () {}));
+        });
+        doc.querySelectorAll("img[src],source[src]").forEach(function (el) {
+          var a = abs(el.getAttribute("src")); if (!a) return;
+          jobs.push(cfetch(a).then(function (r) {
+            el.setAttribute("src", "data:" + ctOf(r.headers, a) + ";base64," + bytesToB64(r.body));
+          }).catch(function () {}));
+        });
+        doc.querySelectorAll("script").forEach(function (el) { el.remove(); });
+        await Promise.all(jobs);
+        docHtml = "<!doctype html>" + doc.documentElement.outerHTML;
+      } catch (e) { docHtml = html; }
+      frame.srcdoc = docHtml;
+    }
+
+    function browseToClearnet(url) { return navigate({ kind: "clearnet", url: url }); }
 
     // Relayed from inside the browsed iframe: link clicks (dmsgnav) re-fetch a
     // page; the site's own fetch (dmsgreq) is served over dmsg, bytes posted back.
@@ -179,7 +293,11 @@
       }
     });
 
-    return { renderSite: renderSite, browseTo: browseTo, currentPK: function () { return currentSitePK; } };
+    return {
+      renderSite: renderSite, browseTo: browseTo, browseToClearnet: browseToClearnet,
+      back: back, forward: forward, reload: reload, cancel: cancel,
+      currentPK: function () { return currentSitePK; }
+    };
   }
 
   // createWindow builds ONE draggable / resizable / minimizable / maximizable
@@ -202,7 +320,10 @@
     wrap.innerHTML =
       '<div class="sbw-bar" style="display:flex;gap:.4em;align-items:center;padding:.5em;background:#1b1726;border-bottom:1px solid #2a2342">' +
       '<b style="color:#9d7cff;cursor:move">skynet</b>' +
-      '<input id="sb-pk" placeholder="site pk or pk:port" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      '<button id="sb-back" title="back" disabled style="cursor:pointer">◀</button>' +
+      '<button id="sb-fwd" title="forward" disabled style="cursor:pointer">▶</button>' +
+      '<button id="sb-reload" title="reload" style="cursor:pointer">⟳</button>' +
+      '<input id="sb-pk" placeholder="site pk, pk:port, or https://clearnet (via skysocks)" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<input id="sb-path" value="/" size="6" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-go" style="cursor:pointer">go</button>' +
       '<button id="sb-host-t" title="host a page" style="cursor:pointer">host</button>' +
@@ -224,15 +345,30 @@
 
     function $(id) { return wrap.querySelector("#" + id); }
     var win = { el: wrap, minimized: false, maximized: false };
+    var loading = false;
     var browser = createBrowser({
       frame: $("sb-frame"), fetchDmsg: fetchDmsg,
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
       setPK: function (pk) { $("sb-pk").value = pk; if (hooks.onTitle) hooks.onTitle((pk || "").slice(0, 10) || "site"); },
-      setPath: function (p) { $("sb-path").value = p; }
+      setPath: function (p) { $("sb-path").value = p; },
+      // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
+      onLoading: function (on) { loading = on; var b = $("sb-reload"); b.textContent = on ? "✕" : "⟳"; b.title = on ? "cancel load" : "reload"; },
+      // enable/disable back/forward to match history position
+      onNavState: function (canBack, canFwd) { $("sb-back").disabled = !canBack; $("sb-fwd").disabled = !canFwd; }
     });
     win.browser = browser;
-    function go() { browser.browseTo($("sb-pk").value, ($("sb-path").value || "/").trim() || "/"); }
+    // A clearnet http(s):// URL routes through a skysocks exit (IP-anonymous); a
+    // bare PK / pk:port is a dmsg/skynet site fetched over dmsg.
+    function go() {
+      var v = ($("sb-pk").value || "").trim();
+      if (/^https?:\/\//i.test(v)) { browser.browseToClearnet(v); return; }
+      browser.browseTo(v, ($("sb-path").value || "/").trim() || "/");
+    }
     $("sb-go").onclick = go;
+    $("sb-back").onclick = function () { browser.back(); };
+    $("sb-fwd").onclick = function () { browser.forward(); };
+    // ⟳ reloads the current page; while a load is in flight it becomes ✕ (cancel).
+    $("sb-reload").onclick = function () { if (loading) browser.cancel(); else browser.reload(); };
     $("sb-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
     $("sb-path").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
     $("sb-host-t").onclick = function () { var h = $("sb-host"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
