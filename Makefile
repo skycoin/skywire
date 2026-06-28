@@ -149,6 +149,11 @@ check-help: ## Cursory check of the help menus
 	go run . --help
 	@echo "compilation successful"
 
+vet: ## Run go vet (the non-golangci-lint half of 'lint')
+	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
+
+check-ci: vet check-cg check-help test ## CI check: like 'check' but skips golangci-lint (CI runs it as a separate pinned, cached step). Keeps go vet + config-gen smoke + tests.
+
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
 build: clean build-merged ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
@@ -314,7 +319,6 @@ lint-shell:
 	find ./docker -type f -iname '*.sh' -print0 | xargs -0 -I {} bash -c "$$(command -v ./shellcheck || command -v shellcheck) -e SC2086 \"{}\""
 
 test: ## Run tests
-	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
 

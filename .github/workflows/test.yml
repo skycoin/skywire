@@ -33,8 +33,27 @@ jobs:
       - name: Lint Shell Scripts
         run: make lint-shell
 
+      # golangci-lint already ran above (pinned, cached). check-ci skips the
+      # redundant second golangci-lint run but keeps go vet + config-gen smoke
+      # + the test suite.
       - name: Check Format and Run Tests
-        run: make check
+        run: make check-ci
+
+  # e2e runs as its own job so it executes in parallel with the linux check
+  # job above instead of serially after it — cutting overall wall-clock.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.1'
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Setup SSH Key, Build and Run E2E
         shell: bash
