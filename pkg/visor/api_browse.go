@@ -120,6 +120,13 @@ func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*SkynetHTTPResponse, error)
 		scheme = "auto"
 	}
 
+	// Self-fetch (home.dmsg and friends) has no skynet route to itself — a
+	// DialRoutes to our own PK blocks for the whole timeout. The self landing
+	// page is served on the dmsg:80 peer interface, so go straight to dmsg.
+	if pk == v.conf.PK && (scheme == "auto" || scheme == "skynet") {
+		scheme = "dmsg"
+	}
+
 	switch scheme {
 	case "skynet":
 		return v.SkynetHTTP(SkynetHTTPRequest{PK: pk, Port: port, Method: method, Path: path, Body: req.Body})
