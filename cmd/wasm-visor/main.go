@@ -5,12 +5,15 @@
 // in-process app server), bypassing the 45k-LOC pkg/visor daemon (which serves
 // an HTTP API surface a browser leaf does not need).
 //
-// This is the EDGE assembly: the tab dials ONE outbound dmsg transport, runs a
-// transport.Manager + an edge router (it RECEIVES route rules and forwards/
-// consumes packets — "reachability != listening"), and hosts a ProcManager for
-// future in-process apps (skychat). It boots but does not yet register its edge
-// in TPD (that path is HTTP/native; a dmsg-based registration is the next step)
-// nor run an app — see the TODOs.
+// This is the EDGE assembly: the tab dials outbound transports (dmsg + the
+// browser-dialable WS/WT/WebRTC), runs a transport.Manager + an edge router (it
+// RECEIVES route rules and forwards/consumes packets — "reachability !=
+// listening"), and hosts a ProcManager running in-process skychat (dmsg:1). Its
+// transport edges ARE registered in TPD over dmsg (net/http-free tpdclient.NewDmsg
+// → transport_discovery_dmsg), so a peer's route-finder can compute a route to the
+// tab — verified: `cli route calc <host> <tab-pk>` returns a forward/reverse pair
+// over the tab's transport. (Route SETUP/forwarding over a transport to a browser
+// leaf is a separate matter; skychat to a tab is reliably reached over dmsg:1.)
 //
 // JS API on globalThis.skywireVisor:
 //
