@@ -198,7 +198,12 @@ func TestRootRun(t *testing.T) {
 	}
 	require.True(t, up, "listener did not come up")
 
-	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGTERM))
+	// os.Process.Signal is portable — it compiles on Windows (where this svc
+	// package is lint-typechecked but not run), and on Unix delivers SIGTERM
+	// exactly like syscall.Kill.
+	proc, err := os.FindProcess(os.Getpid())
+	require.NoError(t, err)
+	require.NoError(t, proc.Signal(syscall.SIGTERM))
 	select {
 	case <-done:
 	case <-time.After(15 * time.Second):

@@ -157,8 +157,12 @@ func TestStartAPIServer(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode) // 127.0.0.1 resolves without error
 	})
 
-	// Graceful shutdown.
-	require.NoError(t, syscall.Kill(syscall.Getpid(), syscall.SIGTERM))
+	// Graceful shutdown. os.Process.Signal is portable — it compiles on Windows
+	// (where this svc package is lint-typechecked but not run), and on Unix it
+	// delivers SIGTERM exactly like syscall.Kill.
+	proc, err := os.FindProcess(os.Getpid())
+	require.NoError(t, err)
+	require.NoError(t, proc.Signal(syscall.SIGTERM))
 	select {
 	case <-done:
 	case <-time.After(15 * time.Second):
