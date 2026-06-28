@@ -11,9 +11,14 @@
 //     network-first: fresh when online, falls back to the last cached copy only
 //     when the network is unavailable (offline launch).
 //
-// The cache name is bumped by editing CACHE_VERSION; activate() purges old caches.
+// The cache name embeds the build fingerprint (the placeholder below is
+// substituted by hv serve with the same /wasm-version hash the page boots with).
+// So every new
+// skywire build ships a byte-different sw.js → the browser detects a new worker →
+// install() re-precaches the fresh shell and activate() purges the prior build's
+// cache. Routine deploys need no manual edit here.
 
-const CACHE_VERSION = 'skywire-wasm-visor-v1';
+const CACHE_VERSION = 'skywire-wasm-visor-__BUILD__';
 const PRECACHE = [
   './',
   'manifest.webmanifest',
@@ -49,6 +54,11 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') { return; }
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) { return; } // never touch cross-origin
+
+  // The auto-updater's build-version poll MUST always reach the real server — a
+  // cached value would mask a new build forever. Don't intercept it at all
+  // (return without respondWith() → the browser does its normal network fetch).
+  if (url.pathname === '/wasm-version') { return; }
 
   if (IMMUTABLE.test(url.pathname)) {
     // cache-first: hashed bundles can't change under a fixed URL.

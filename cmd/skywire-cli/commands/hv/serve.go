@@ -2,6 +2,7 @@
 package clihv
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -108,10 +109,15 @@ page never asks anyone to type a secret key.`,
 		serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 		serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
 		serveBytes("/icon-512.png", "image/png", wasmhv.PWAIcon512)
+		// Stamp the build fingerprint into the worker so every new binary ships a
+		// byte-different sw.js → the browser detects a new worker and re-precaches
+		// the fresh shell (CACHE_VERSION embeds __BUILD__). no-store so the worker
+		// update is checked promptly.
+		swJS := bytes.ReplaceAll(wasmhv.ServiceWorkerJS, []byte("__BUILD__"), []byte(wasmVer))
 		mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "text/javascript")
 			w.Header().Set("Cache-Control", "no-store")
-			_, _ = w.Write(wasmhv.ServiceWorkerJS) //nolint:errcheck // best-effort
+			_, _ = w.Write(swJS) //nolint:errcheck // best-effort
 		})
 		// /wasm-version is the build fingerprint autoupdate.js polls; no-cache so a
 		// new binary is seen promptly (the wasm itself stays cacheable).
