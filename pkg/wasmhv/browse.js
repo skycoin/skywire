@@ -459,6 +459,10 @@
     var loading = false;
     var browser = createBrowser({
       frame: $("sb-frame"), fetchDmsg: fetchDmsg,
+      // Thread the clearnet + self-PK providers from the panel opts so the engine
+      // is host-agnostic: the wasm visor passes none (they fall back to the
+      // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
+      fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK,
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
       setPK: function (pk) { $("sb-pk").value = pk; if (hooks.onTitle) hooks.onTitle((pk || "").slice(0, 10) || "site"); },
       setPath: function (p) { $("sb-path").value = p; },
