@@ -124,6 +124,9 @@
         var sc = doc.createElement("script"); sc.textContent = navShimSrc(path);
         head.insertBefore(sc, head.firstChild);
         head.insertBefore(base, head.firstChild);
+        // Strict CSP catch-all unless the window is in DIRECT clearnet mode (where
+        // loading clearnet resources directly is the explicit intent).
+        if (clearnetPolicy().mode !== "direct") applyCSP(doc);
 
         var jobs = [];
         doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(function (el) {
@@ -179,6 +182,12 @@
         }
         var r = await fetchDmsg(entry.pk, "GET", entry.path, null);
         if (gen !== loadGen) return { status: 0, cancelled: true };
+        // HTTP error with no body → a browser-style status page (with a body, the
+        // site's own error page renders, exactly like a normal browser).
+        if (r.status >= 400 && (!r.body || r.body.length === 0)) {
+          showError("HTTP " + r.status, "dmsg://" + entry.pk + entry.path, "");
+          return { status: r.status };
+        }
         var html = new TextDecoder().decode(r.body);
         await renderSite(entry.pk, entry.path, html);
         if (gen !== loadGen) return { status: 0, cancelled: true };
@@ -186,8 +195,11 @@
         return { status: r.status, bytes: r.body.length, html: html };
       } catch (e) {
         if (gen !== loadGen) return { status: 0, cancelled: true };
-        log("browse error: " + (e.message || e));
-        return { status: 0, error: String(e.message || e) };
+        var msg = String((e && e.message) || e);
+        log("browse error: " + msg);
+        // network error / timeout / no response → a browser-style error page.
+        showError("Couldn't reach this site", entry.kind === "clearnet" ? entry.url : ("dmsg://" + entry.pk + (entry.path || "")), msg);
+        return { status: 0, error: msg };
       } finally {
         if (gen === loadGen) setLoading(false);
       }
@@ -212,6 +224,10 @@
       }
       var r = await fetchClearnet(pol.exit, "GET", url, null);
       if (gen !== loadGen) return { status: 0, cancelled: true };
+      if (r.status >= 400 && (!r.body || r.body.length === 0)) {
+        showError("HTTP " + r.status, url, "via skysocks " + pol.exit.slice(0, 8));
+        return { status: r.status };
+      }
       var html = new TextDecoder().decode(r.body);
       await renderClearnet(pol.exit, url, html);
       if (gen !== loadGen) return { status: 0, cancelled: true };
@@ -316,10 +332,42 @@
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("href", url); base.setAttribute("target", "_self");
         head.insertBefore(base, head.firstChild);
+        applyCSP(doc); // proxy mode: everything is inlined; block any direct egress
         await Promise.all(gateAllClearnet(doc, url, { mode: "proxy", exit: exit }, true));
         docHtml = "<!doctype html>" + doc.documentElement.outerHTML;
       } catch (e) { docHtml = html; }
       frame.srcdoc = docHtml;
+    }
+
+    function esc(s) { return String(s == null ? "" : s).replace(/[<>&"]/g, function (c) { return { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]; }); }
+
+    // applyCSP injects a strict Content-Security-Policy that BLOCKS every external
+    // (http/https) resource load — only inlined data: URIs (and inline style/script)
+    // are allowed, and connect-src 'none' kills fetch/XHR/WebSocket. This is the
+    // catch-all behind the per-element gating: even CSS url(...)/@import, inline
+    // background-image, <link rel=preload>, beacons, etc. that the element walk
+    // doesn't rewrite simply cannot reach clearnet. NOT applied in DIRECT mode
+    // (where loading clearnet directly is the explicit intent).
+    function applyCSP(doc) {
+      var head = doc.head || doc.documentElement;
+      var m = doc.createElement("meta");
+      m.setAttribute("http-equiv", "Content-Security-Policy");
+      m.setAttribute("content",
+        "default-src 'none'; img-src data:; media-src data:; font-src data:; " +
+        "style-src data: 'unsafe-inline'; script-src data: 'unsafe-inline'; " +
+        "connect-src 'none'; frame-src 'none'; form-action 'none'");
+      head.insertBefore(m, head.firstChild);
+    }
+
+    // errorPage renders a browser-style failure page into the iframe (network
+    // error / timeout / no response / HTTP error with no body), with a retry hint.
+    function showError(title, where, detail) {
+      frame.removeAttribute("src");
+      frame.srcdoc = '<!doctype html><meta charset=utf-8><body style="font:14px/1.6 system-ui,sans-serif;background:#1b1b22;color:#cdd2da;padding:2rem">' +
+        '<h2 style="color:#ff8f8f">' + esc(title) + '</h2>' +
+        '<p style="opacity:.75;word-break:break-all">' + esc(where) + '</p>' +
+        (detail ? '<pre style="color:#e0af68;white-space:pre-wrap;margin:.5em 0">' + esc(detail) + '</pre>' : '') +
+        '<p style="opacity:.55">Press ⟳ to retry.</p></body>';
     }
 
     function blockedPage(url) {
