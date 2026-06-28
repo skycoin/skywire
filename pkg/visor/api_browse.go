@@ -19,6 +19,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsgweb"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
@@ -43,16 +44,59 @@ type BrowseFetchRequest struct {
 	Scheme string `json:"scheme,omitempty"`
 }
 
-// resolveBrowseHost turns a resolving-proxy host into a (PK, port). Accepts a
-// bare hex PK (optionally :port), "home.dmsg"/"home.skynet" (this visor's landing
-// page), "<pk>.dmsg", or an "alias.dmsg"/"alias.skynet" resolved via the same
-// alias map the dmsgweb/skynetweb resolving proxy uses.
-func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, uint16, error) {
+// browseStripHost normalizes a resolving-proxy host: drops any http(s):// scheme
+// and trailing path, leaving just the host[:port] the resolver keys on.
+func browseStripHost(host string) string {
 	host = strings.TrimSpace(host)
 	host = strings.TrimPrefix(strings.TrimPrefix(host, "http://"), "https://")
 	if i := strings.IndexByte(host, '/'); i >= 0 {
 		host = host[:i]
 	}
+	return host
+}
+
+// browseAliases returns the full resolver alias map (deployment services, setup
+// nodes, dmsg servers) plus this visor's own "self" alias — the same set the
+// embedded dmsgweb resolving proxy resolves names against.
+func (v *Visor) browseAliases() map[string]cipher.PubKey {
+	aliases, _ := resolverAliasesAndDmsgServers(v)
+	for label, lpk := range resolverAliasMap("", v.conf.PK) {
+		if _, ok := aliases[label]; !ok {
+			aliases[label] = lpk
+		}
+	}
+	return aliases
+}
+
+// browseHomePage renders the resolver's synthetic "home" alias directory if host
+// is the reserved home label (home.dmsg / home.skynet), else returns nil. The
+// home page is generated in-process and reachable ONLY through the resolver — it
+// is NOT a real endpoint, so resolve+fetch would reach nothing. This mirrors the
+// SOCKS5 resolving proxy's isHomeHost → serveHomeInProcess path (dmsgweb.runtime)
+// so the native browser's home.dmsg matches `curl -x socks5h://… http://home.dmsg/`.
+func (v *Visor) browseHomePage(host string) *SkynetHTTPResponse {
+	host = browseStripHost(host)
+	for _, suffix := range []string{".dmsg", ".skynet"} {
+		if dmsgweb.IsHomeHost(host, suffix) {
+			body := dmsgweb.RenderHomePage(v.browseAliases(), suffix, v.conf.PK)
+			return &SkynetHTTPResponse{
+				StatusCode: 200,
+				Status:     "200 OK",
+				Header:     map[string]string{"Content-Type": "text/html; charset=utf-8"},
+				Body:       body,
+			}
+		}
+	}
+	return nil
+}
+
+// resolveBrowseHost turns a resolving-proxy host into a (PK, port). Accepts a
+// bare hex PK (optionally :port), "<pk>.dmsg", or an "alias.dmsg"/"alias.skynet"
+// resolved via the same alias map the dmsgweb/skynetweb resolving proxy uses.
+// The reserved "home" label is handled earlier by browseHomePage (synthetic
+// directory), not here.
+func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, uint16, error) {
+	host = browseStripHost(host)
 	if host == "" {
 		return cipher.PubKey{}, 0, fmt.Errorf("empty host")
 	}
@@ -61,9 +105,6 @@ func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, u
 		port = reqPort
 	}
 	lower := strings.ToLower(host)
-	if lower == "home.dmsg" || lower == "home.skynet" {
-		return v.conf.PK, port, nil
-	}
 	// bare hex PK, optionally with :port (a hex PK never contains a colon).
 	hp := host
 	if i := strings.LastIndexByte(host, ':'); i > 0 {
@@ -81,12 +122,7 @@ func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, u
 		return pk, port, nil
 	}
 	// alias.dmsg / <pk>.dmsg / alias.skynet
-	aliases, _ := resolverAliasesAndDmsgServers(v)
-	for label, lpk := range resolverAliasMap("", v.conf.PK) {
-		if _, ok := aliases[label]; !ok {
-			aliases[label] = lpk
-		}
-	}
+	aliases := v.browseAliases()
 	for _, suffix := range []string{".dmsg", ".skynet"} {
 		if strings.HasSuffix(lower, suffix) {
 			_, _, dest, p, err := skynetweb.ParseResolverHost(host, suffix, aliases)
@@ -105,6 +141,11 @@ func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, u
 // BrowseFetch performs the request over skynet and/or dmsg per Scheme, returning
 // the response in the shared SkynetHTTPResponse shape.
 func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*SkynetHTTPResponse, error) {
+	// home.dmsg / home.skynet is the resolver's synthetic alias directory, served
+	// in-process (it has no real endpoint) — handle it before resolve+fetch.
+	if resp := v.browseHomePage(req.Host); resp != nil {
+		return resp, nil
+	}
 	pk, port, err := v.resolveBrowseHost(req.Host, req.Port)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %q: %w", req.Host, err)
