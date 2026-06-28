@@ -114,8 +114,7 @@
 
     async function renderSite(pk, path, html) {
       currentSitePK = pk;
-      if (opts.setPK) opts.setPK(pk);
-      if (opts.setPath) opts.setPath(path);
+      if (opts.setAddr) opts.setAddr("http://" + pk + (path || "/"));
       var docHtml;
       try {
         var doc = new DOMParser().parseFromString(html, "text/html");
@@ -209,14 +208,14 @@
       var pol = clearnetPolicy();
       if (pol.mode === "block") {
         if (gen !== loadGen) return { status: 0, cancelled: true };
-        currentSitePK = ""; if (opts.setPK) opts.setPK(url);
+        currentSitePK = ""; if (opts.setAddr) opts.setAddr(url);
         frame.srcdoc = blockedPage(url);
         log("clearnet BLOCKED (no upstream proxy): " + url);
         return { status: 0, blocked: true };
       }
       if (pol.mode === "direct") {
         if (gen !== loadGen) return { status: 0, cancelled: true };
-        currentSitePK = ""; if (opts.setPK) opts.setPK(url);
+        currentSitePK = ""; if (opts.setAddr) opts.setAddr(url);
         frame.removeAttribute("srcdoc");
         frame.src = url; // browser/visor loads it directly (non-anonymous, no skysocks hop)
         log("clearnet DIRECT (upstream = local visor): " + url);
@@ -324,8 +323,7 @@
     // never reaches clearnet directly — a static, read-mostly, IP-anonymous render.
     async function renderClearnet(exit, url, html) {
       currentSitePK = "";
-      if (opts.setPK) opts.setPK(url);
-      if (opts.setPath) opts.setPath("");
+      if (opts.setAddr) opts.setAddr(url);
       var docHtml;
       try {
         var doc = new DOMParser().parseFromString(html, "text/html");
@@ -414,10 +412,10 @@
     var fetchDmsg = opts.fetchDmsg, serveContent = opts.serveContent;
     var wrap = doc.createElement("div");
     wrap.className = "skywire-browse-window";
-    // Anchored top-left; RESIZABLE via the bottom-right corner (resize:both needs
-    // overflow:hidden). The title bar is the drag handle; _ / ▢ minimize+maximize.
-    wrap.style.cssText = "position:fixed;top:40px;left:40px;width:74vw;height:80vh;" +
-      "min-width:340px;min-height:220px;max-width:99vw;max-height:96vh;resize:both;" +
+    // Anchored below the top taskbar. Drag via the title bar; resize via the
+    // bottom-right grip (both pointer-event based, so they work with touch too).
+    wrap.style.cssText = "position:fixed;top:44px;left:40px;width:74vw;height:80vh;" +
+      "min-width:280px;min-height:200px;max-width:100vw;max-height:96vh;" +
       "background:#15131c;color:#cdd2da;font:12px/1.4 monospace;border:1px solid #2a2342;border-radius:8px;" +
       "box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483000;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
@@ -426,8 +424,7 @@
       '<button id="sb-back" title="back" disabled style="cursor:pointer">◀</button>' +
       '<button id="sb-fwd" title="forward" disabled style="cursor:pointer">▶</button>' +
       '<button id="sb-reload" title="reload" style="cursor:pointer">⟳</button>' +
-      '<input id="sb-pk" placeholder="site pk, pk:port, or https://clearnet (via skysocks)" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
-      '<input id="sb-path" value="/" size="6" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      '<input id="sb-addr" placeholder="pk · pk.dmsg · home.dmsg · alias.dmsg · https://site (clearnet via proxy)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.4em">' +
       '<button id="sb-go" style="cursor:pointer">go</button>' +
       '<button id="sb-host-t" title="host a page" style="cursor:pointer">host</button>' +
       '<button id="sb-proxy-t" title="clearnet upstream proxy" style="cursor:pointer">⚙</button>' +
@@ -451,7 +448,9 @@
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
       '<span id="sb-proxy-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></span>' +
       '</div>' +
-      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
+      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>' +
+      // Touch-friendly resize grip (bigger than the native resize corner).
+      '<div id="sb-grip" title="drag to resize" style="position:absolute;right:0;bottom:0;width:26px;height:26px;cursor:nwse-resize;touch-action:none;z-index:6;background:linear-gradient(135deg,transparent 45%,#9d7cff 45%,#9d7cff 55%,transparent 55%,transparent 70%,#9d7cff 70%,#9d7cff 80%,transparent 80%)"></div>';
     (doc.body || doc.documentElement).appendChild(wrap);
 
     function $(id) { return wrap.querySelector("#" + id); }
@@ -464,8 +463,7 @@
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
       fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK,
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
-      setPK: function (pk) { $("sb-pk").value = pk; if (hooks.onTitle) hooks.onTitle((pk || "").slice(0, 10) || "site"); },
-      setPath: function (p) { $("sb-path").value = p; },
+      setAddr: function (u) { $("sb-addr").value = u; if (hooks.onTitle) { var t = u.replace(/^https?:\/\//, "").slice(0, 16); hooks.onTitle(t || "site"); } },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
       onLoading: function (on) { loading = on; var b = $("sb-reload"); b.textContent = on ? "✕" : "⟳"; b.title = on ? "cancel load" : "reload"; },
       // enable/disable back/forward to match history position
@@ -475,17 +473,24 @@
     // A clearnet http(s):// URL routes through a skysocks exit (IP-anonymous); a
     // bare PK / pk:port is a dmsg/skynet site fetched over dmsg.
     function go() {
-      var v = ($("sb-pk").value || "").trim();
-      if (/^https?:\/\//i.test(v)) { browser.browseToClearnet(v); return; }
-      browser.browseTo(v, ($("sb-path").value || "/").trim() || "/");
+      var v = ($("sb-addr").value || "").trim();
+      if (!v) return;
+      var hadScheme = /^https?:\/\//i.test(v), u;
+      try { u = new URL(hadScheme ? v : "http://" + v); } catch (e) { browser.browseTo(v, "/"); return; }
+      var host = u.hostname, path = (u.pathname || "/") + (u.search || "");
+      // .dmsg/.skynet host, or a bare 66-hex PK → dmsg/skynet site; else clearnet.
+      if (/\.(dmsg|skynet)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
+        browser.browseTo(host + (u.port ? ":" + u.port : ""), path);
+      } else {
+        browser.browseToClearnet(hadScheme ? v : "https://" + v);
+      }
     }
     $("sb-go").onclick = go;
     $("sb-back").onclick = function () { browser.back(); };
     $("sb-fwd").onclick = function () { browser.forward(); };
     // ⟳ reloads the current page; while a load is in flight it becomes ✕ (cancel).
     $("sb-reload").onclick = function () { if (loading) browser.cancel(); else browser.reload(); };
-    $("sb-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
-    $("sb-path").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
+    $("sb-addr").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
     $("sb-host-t").onclick = function () { var h = $("sb-host"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
     // clearnet upstream-proxy settings (per window; persists as the global default).
     $("sb-proxy-pk").value = browser.upstream();
@@ -500,7 +505,7 @@
     $("sb-proxy-save").onclick = saveProxy;
     $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
     // Raise this window above the others on any interaction.
-    wrap.addEventListener("mousedown", function () { if (hooks.onFocus) hooks.onFocus(); }, true);
+    wrap.addEventListener("pointerdown", function () { if (hooks.onFocus) hooks.onFocus(); }, true);
 
     // uploaded holds the last picked file as {ct, b64} (base64 so binary — images,
     // fonts, … — round-trips intact); the textarea is the fallback for typed HTML.
@@ -543,11 +548,12 @@
     win.maximize = function () {
       if (win.maximized) {
         if (prevRect) { wrap.style.left = prevRect.left; wrap.style.top = prevRect.top; wrap.style.width = prevRect.width; wrap.style.height = prevRect.height; }
-        wrap.style.resize = "both"; win.maximized = false; return;
+        win.maximized = false; return;
       }
       prevRect = { left: wrap.style.left, top: wrap.style.top, width: wrap.style.width, height: wrap.style.height };
-      wrap.style.left = "0"; wrap.style.top = "0"; wrap.style.width = "100vw"; wrap.style.height = "calc(100vh - 2.8em)";
-      wrap.style.resize = "none"; win.maximized = true;
+      // Sit below the top taskbar (~2.8em).
+      wrap.style.left = "0"; wrap.style.top = "2.8em"; wrap.style.width = "100vw"; wrap.style.height = "calc(100vh - 2.8em)";
+      win.maximized = true;
     };
     win.show = function () { win.minimized = false; wrap.style.display = "flex"; };
     win.restore = win.show;
@@ -561,20 +567,39 @@
     $("sb-min").onclick = win.minimize;
     $("sb-x").onclick = function () { if (hooks.onClose) hooks.onClose(); };
 
-    // Drag-to-move via the title bar (the "skynet" label). Listeners are attached
-    // only while dragging, so windows don't accumulate global handlers.
-    (function () {
-      var handle = wrap.querySelector(".sbw-bar b");
+    // Drag-to-move (title bar) and resize (grip), both via Pointer Events so they
+    // work with mouse AND touch. touch-action:none on the handles keeps the page
+    // from scrolling under the finger mid-drag. Listeners attach only while active.
+    function dragMove(handle, onMove) {
       if (!handle) return;
-      var sx, sy, ox, oy;
-      function mm(e) { wrap.style.left = Math.max(0, ox + e.clientX - sx) + "px"; wrap.style.top = Math.max(0, oy + e.clientY - sy) + "px"; }
-      function mu() { doc.removeEventListener("mousemove", mm); doc.removeEventListener("mouseup", mu); }
-      handle.addEventListener("mousedown", function (e) {
+      handle.style.touchAction = "none";
+      function pm(e) { onMove(e.clientX, e.clientY); }
+      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
+      handle.addEventListener("pointerdown", function (e) {
         if (win.maximized) return;
-        sx = e.clientX; sy = e.clientY; var r = wrap.getBoundingClientRect(); ox = r.left; oy = r.top;
-        doc.addEventListener("mousemove", mm); doc.addEventListener("mouseup", mu); e.preventDefault();
+        if (hooks.onFocus) hooks.onFocus();
+        onMove.start(e.clientX, e.clientY);
+        doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu);
+        e.preventDefault(); e.stopPropagation();
       });
+    }
+    (function () {
+      var ox, oy, sx, sy;
+      var mv = function (px, py) { wrap.style.left = Math.max(0, ox + px - sx) + "px"; wrap.style.top = Math.max(0, oy + py - sy) + "px"; };
+      mv.start = function (px, py) { sx = px; sy = py; var r = wrap.getBoundingClientRect(); ox = r.left; oy = r.top; };
+      dragMove(wrap.querySelector(".sbw-bar b"), mv);
     })();
+    (function () {
+      var ow, oh, sx, sy;
+      var rs = function (px, py) { wrap.style.width = Math.max(280, ow + px - sx) + "px"; wrap.style.height = Math.max(200, oh + py - sy) + "px"; };
+      rs.start = function (px, py) { sx = px; sy = py; var r = wrap.getBoundingClientRect(); ow = r.width; oh = r.height; };
+      dragMove($("sb-grip"), rs);
+    })();
+
+    // On a narrow (mobile) viewport, open maximized — a 74vw floating window is
+    // fiddly to move/resize on a phone; full-screen is the usable default.
+    if (((doc.defaultView || window).innerWidth || 9999) < 640) { setTimeout(function () { if (!win.maximized) win.maximize(); }, 0); }
+
     return win;
   }
 
@@ -661,9 +686,9 @@
 
     var bar = doc.createElement("div");
     bar.id = "skywire-skynet-taskbar";
-    bar.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:2147483646;" +
+    bar.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;" +
       "display:none;gap:.5em;align-items:center;padding:.4em .6em;background:#0e0b16;" +
-      "border-top:1px solid #2a2342;font:12px/1.3 monospace;color:#cdd2da";
+      "border-bottom:1px solid #2a2342;font:12px/1.3 monospace;color:#cdd2da";
     bar.innerHTML =
       '<b style="color:#9d7cff">skynet</b>' +
       '<button id="tb-new" title="new browse window" style="cursor:pointer">+ window</button>' +
