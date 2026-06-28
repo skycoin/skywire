@@ -109,7 +109,9 @@ func TestParseServerAddr(t *testing.T) {
 func TestInitFlags(t *testing.T) {
 	cmd := &cobra.Command{Use: "x"}
 	InitFlags(cmd)
-	for _, name := range []string{"http", "direct", "disc-url", "disc-addr", "dmsgconf", "sess", "srv"} {
+	// The plain-HTTP discovery flags (--http, --disc-url) were intentionally
+	// removed: the deployment is dmsg-only and discovery is reached over dmsg.
+	for _, name := range []string{"direct", "disc-addr", "dmsgconf", "sess", "srv"} {
 		require.NotNil(t, cmd.Flags().Lookup(name), "flag %q should be registered", name)
 	}
 }
