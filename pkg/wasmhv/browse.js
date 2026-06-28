@@ -92,6 +92,9 @@
   function createBrowser(opts) {
     var frame = opts.frame;
     var fetchDmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    // fetchClearnet(exitPK, method, url, body) → {status, body, headers}: a CLEARNET
+    // fetch tunneled through a skysocks exit over a skywire route (IP-anonymous).
+    var fetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
     var log = opts.log || function () {};
     var currentSitePK = "";
 
@@ -164,6 +167,70 @@
       } catch (e) { log("browse error: " + (e.message || e)); return { status: 0, error: String(e.message || e) }; }
     }
 
+    // --- CLEARNET browsing through a skysocks exit ---
+    //
+    // clearnetExit returns the skysocks exit server PK to tunnel clearnet through
+    // (localStorage-persisted, prompted once). The exit does the egress, so the
+    // origin sees the exit's IP, not the user's.
+    function clearnetExit() {
+      var e = "";
+      try { e = localStorage.getItem("skywire-clearnet-exit") || ""; } catch (_) {}
+      if (!e) {
+        e = (window.prompt("skysocks exit server public key (for clearnet browsing):") || "").trim();
+        if (e) { try { localStorage.setItem("skywire-clearnet-exit", e); } catch (_) {} }
+      }
+      return e;
+    }
+
+    // renderClearnet renders a fetched clearnet page into the iframe. Same-origin
+    // stylesheets + images are re-fetched through the SAME skysocks exit and inlined
+    // as data: URIs, so the sandboxed iframe never reaches clearnet directly (no IP
+    // leak). Scripts are stripped — they'd try to fetch cross-origin from the
+    // sandbox and either fail or leak; this is a static, read-mostly render.
+    async function renderClearnet(exit, url, html) {
+      currentSitePK = "";
+      if (opts.setPK) opts.setPK(url);
+      if (opts.setPath) opts.setPath("");
+      function abs(href) { try { return new URL(href, url).href; } catch (e) { return null; } }
+      function cfetch(u) { return fetchClearnet(exit, "GET", u, null); }
+      var docHtml;
+      try {
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var head = doc.head || doc.documentElement;
+        var base = doc.createElement("base"); base.setAttribute("href", url); base.setAttribute("target", "_self");
+        head.insertBefore(base, head.firstChild);
+        var jobs = [];
+        doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(function (el) {
+          var a = abs(el.getAttribute("href")); if (!a) return;
+          jobs.push(cfetch(a).then(function (r) {
+            var style = doc.createElement("style"); style.textContent = new TextDecoder().decode(r.body); el.replaceWith(style);
+          }).catch(function () {}));
+        });
+        doc.querySelectorAll("img[src],source[src]").forEach(function (el) {
+          var a = abs(el.getAttribute("src")); if (!a) return;
+          jobs.push(cfetch(a).then(function (r) {
+            el.setAttribute("src", "data:" + ctOf(r.headers, a) + ";base64," + bytesToB64(r.body));
+          }).catch(function () {}));
+        });
+        doc.querySelectorAll("script").forEach(function (el) { el.remove(); });
+        await Promise.all(jobs);
+        docHtml = "<!doctype html>" + doc.documentElement.outerHTML;
+      } catch (e) { docHtml = html; }
+      frame.srcdoc = docHtml;
+    }
+
+    async function browseToClearnet(url) {
+      var exit = clearnetExit();
+      if (!exit) { log("clearnet: no skysocks exit set"); return { status: 0 }; }
+      try {
+        var r = await fetchClearnet(exit, "GET", url, null);
+        var html = new TextDecoder().decode(r.body);
+        await renderClearnet(exit, url, html);
+        log("browsed " + url + " via skysocks " + exit.slice(0, 8) + " → " + r.status + " (" + r.body.length + " bytes)");
+        return { status: r.status, bytes: r.body.length };
+      } catch (e) { log("clearnet error: " + (e.message || e)); return { status: 0, error: String(e.message || e) }; }
+    }
+
     // Relayed from inside the browsed iframe: link clicks (dmsgnav) re-fetch a
     // page; the site's own fetch (dmsgreq) is served over dmsg, bytes posted back.
     window.addEventListener("message", async function (e) {
@@ -179,7 +246,7 @@
       }
     });
 
-    return { renderSite: renderSite, browseTo: browseTo, currentPK: function () { return currentSitePK; } };
+    return { renderSite: renderSite, browseTo: browseTo, browseToClearnet: browseToClearnet, currentPK: function () { return currentSitePK; } };
   }
 
   // createWindow builds ONE draggable / resizable / minimizable / maximizable
@@ -202,7 +269,7 @@
     wrap.innerHTML =
       '<div class="sbw-bar" style="display:flex;gap:.4em;align-items:center;padding:.5em;background:#1b1726;border-bottom:1px solid #2a2342">' +
       '<b style="color:#9d7cff;cursor:move">skynet</b>' +
-      '<input id="sb-pk" placeholder="site pk or pk:port" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      '<input id="sb-pk" placeholder="site pk, pk:port, or https://clearnet (via skysocks)" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<input id="sb-path" value="/" size="6" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-go" style="cursor:pointer">go</button>' +
       '<button id="sb-host-t" title="host a page" style="cursor:pointer">host</button>' +
@@ -231,7 +298,13 @@
       setPath: function (p) { $("sb-path").value = p; }
     });
     win.browser = browser;
-    function go() { browser.browseTo($("sb-pk").value, ($("sb-path").value || "/").trim() || "/"); }
+    // A clearnet http(s):// URL routes through a skysocks exit (IP-anonymous); a
+    // bare PK / pk:port is a dmsg/skynet site fetched over dmsg.
+    function go() {
+      var v = ($("sb-pk").value || "").trim();
+      if (/^https?:\/\//i.test(v)) { browser.browseToClearnet(v); return; }
+      browser.browseTo(v, ($("sb-path").value || "/").trim() || "/");
+    }
     $("sb-go").onclick = go;
     $("sb-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
     $("sb-path").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
