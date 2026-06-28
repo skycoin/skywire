@@ -31,7 +31,7 @@ const wsPath = "/dmsg"
 // layer providing the actual end-to-end PK authentication regardless. Blocks
 // until the listener errors or the server closes.
 func (s *Server) ServeWS(lis net.Listener, advertisedWSURL string) error {
-	s.advertisedWSAddr = advertisedWSURL
+	s.setAdvertisedWSAddr(advertisedWSURL)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(wsPath, s.handleWS)
