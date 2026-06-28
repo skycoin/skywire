@@ -249,6 +249,50 @@ func calcPresenceShare(ni nodeinfo, ipCounts, macCounts map[string]int) float64 
 	return share
 }
 
+// bytesPerIP returns the total bandwidth bytes per IP, considering
+// only visors whose Bandwidth meets the minBW threshold. Used by the
+// per-IP saturation step in pool 2: a visor's effective weight is
+// visor.Bandwidth × ipTotal[ip]^(exp-1), which makes the total weight
+// contributed by any IP scale as ipTotal^exp regardless of how the
+// bandwidth is distributed across visors at that IP. This prevents
+// an operator from multiplying their pool 2 share by splitting traffic
+// across many PKs at the same IP — and is address-agnostic, so the
+// same trick using multiple skycoin addresses fails identically.
+func bytesPerIP(nodes []nodeinfo, minBW uint64) map[string]uint64 {
+	out := make(map[string]uint64)
+	for _, ni := range nodes {
+		if ni.Bandwidth > 0 && ni.Bandwidth >= minBW {
+			out[ni.IPAddr] += ni.Bandwidth
+		}
+	}
+	return out
+}
+
+// pool2Weight returns the effective pool-2 weight of a visor under
+// per-IP saturation:
+//
+//	weight = bytes × ip.total ^ (exp - 1)
+//
+// Equivalent forms by exponent:
+//
+//	exp = 1.0 → bytes (strict bytes-proportional; per-IP form
+//	            collapses since ip.total^0 = 1)
+//	exp = 0.5 → bytes / sqrt(ip.total)   (default; per-IP sqrt)
+//	exp = 0.0 → bytes / ip.total         (each IP contributes equal
+//	            total weight, divided proportionally by byte share)
+//
+// The per-IP form means an IP sending N bytes always contributes N^exp
+// to the network total weight, regardless of how N is partitioned
+// across visors at that IP. Splitting a single big-bandwidth visor
+// into many small ones at the same IP no longer multiplies the
+// operator's pool 2 share. See bytesPerIP for the rationale.
+func pool2Weight(bytes, ipTotal uint64, exp float64) float64 {
+	if bytes == 0 || ipTotal == 0 {
+		return 0
+	}
+	return float64(bytes) * math.Pow(float64(ipTotal), exp-1.0)
+}
+
 // applyRegionalSaturation scales each visor's share by a per-country
 // density factor unique_ips_country^(exponent - 1). This is a per-visor
 // multiplier, not a country-pot allocation: a country's total reward
@@ -365,8 +409,9 @@ func aggregateBy(nodes []nodeinfo, field func(nodeinfo) float64) []rewardData {
 //	{wdate}_pool1_shares.csv     — every qualifying visor with its
 //	                               presence share + Pool 1 SKY.
 //	{wdate}_pool2_shares.csv     — only visors whose bandwidth cleared
-//	                               minBW, with bytes, weight (bytes^exp),
-//	                               and Pool 2 SKY.
+//	                               minBW, with bytes, effective weight
+//	                               (bytes × ip.total^(exp-1)), and
+//	                               Pool 2 SKY.
 //	{wdate}_pool1_rewardtxn0.csv — Pool 1 amounts aggregated by skycoin
 //	                               address (sorted descending).
 //	{wdate}_pool2_rewardtxn0.csv — Pool 2 amounts aggregated by skycoin
@@ -411,6 +456,13 @@ func writePerPoolFiles(histDir, wdate string, nodes []nodeinfo, bwExp float64, m
 	// set this file will be header-only; intentional so consumers
 	// can rely on the file's presence rather than condition on the
 	// mode flag.
+	//
+	// The Pool 2 Weight column is the visor's *effective* weight
+	// under per-IP saturation: bytes × ip.total^(exp-1). It collapses
+	// to the historical bytes^exp at exp=1.0, and at exp=0.5 becomes
+	// bytes / sqrt(ip.total). Auditors can verify Pool 2 SKY = Weight
+	// × rate, where rate is reported in stats.txt.
+	ipBytesFile := bytesPerIP(nodes, minBW)
 	if err := write("pool2_shares.csv", func(w io.Writer) error {
 		if _, err := fmt.Fprintln(w, "Skycoin Address, Skywire Public Key, Bandwidth (bytes), Pool 2 Weight, Pool 2 SKY, IP, Architecture, UUID, Interfaces, Country, XPub"); err != nil {
 			return err
@@ -424,7 +476,7 @@ func writePerPoolFiles(histDir, wdate string, nodes []nodeinfo, bwExp float64, m
 			if strings.HasPrefix(ni.SkyAddr, "xpub") {
 				xpub = ni.SkyAddr
 			}
-			weight := math.Pow(float64(ni.Bandwidth), bwExp)
+			weight := pool2Weight(ni.Bandwidth, ipBytesFile[ni.IPAddr], bwExp)
 			if _, err := fmt.Fprintf(w, "%s, %s, %d, %.6f, %.6f, %s, %s, %s, %s, %s, %s \n",
 				resolved, ni.PK, ni.Bandwidth, weight, ni.BandwidthReward,
 				ni.IPAddr, ni.Arch, ni.UUID, ni.Interfaces, ni.Country, xpub); err != nil {
@@ -1081,28 +1133,38 @@ Architectures:
 			}
 
 			// Bandwidth pool: add proportional bandwidth reward on top,
-			// dampened by --bw-sat-exp. At exponent 1.0 each visor's
-			// share is strictly bytes/total — the most concentrated
-			// outcome, where a single heavy sender can take a dominant
-			// fraction of the pool. At 0.5 (default) the weight is
-			// sqrt(bytes), flattening the distribution so a 100×
-			// bandwidth lead produces only a 10× share advantage.
-			// At 0 every sender that clears the threshold is weighted
-			// equally — effectively turning pool 2 into a presence
-			// pool for senders.
+			// dampened by --bw-sat-exp under per-IP saturation. A
+			// visor's effective weight is bytes × ip.total^(exp-1):
+			//
+			//   exp = 1.0 → bytes (strict bytes-proportional)
+			//   exp = 0.5 → bytes / sqrt(ip.total) (default; per-IP sqrt)
+			//   exp = 0.0 → bytes / ip.total (each IP contributes equal
+			//               total weight, divided proportionally by
+			//               byte share)
+			//
+			// The per-IP grouping closes the splitting bonus that the
+			// previous sum-of-sqrt-per-visor formula opened: under the
+			// old form an operator could 5× their pool 2 share by
+			// re-pointing one fat visor's traffic onto 37 PKs at the
+			// same IP, since sqrt is concave. With per-IP saturation
+			// the IP contributes ip.total^exp regardless of partition,
+			// so PK multiplication at one IP no longer pays. The same
+			// invariant holds across skycoin addresses — the per-IP
+			// total is address-agnostic.
+			ipBytes := bytesPerIP(nodesInfos1, minBWThreshold)
 			var totalBWShares float64
 			var bwPoolCount int
 			if !noBWPool {
 				for _, ni := range nodesInfos1 {
 					if ni.Bandwidth >= minBWThreshold {
-						totalBWShares += math.Pow(float64(ni.Bandwidth), bwSaturationExponent)
+						totalBWShares += pool2Weight(ni.Bandwidth, ipBytes[ni.IPAddr], bwSaturationExponent)
 						bwPoolCount++
 					}
 				}
 				if totalBWShares > 0 {
 					for i := range nodesInfos1 {
 						if nodesInfos1[i].Bandwidth >= minBWThreshold {
-							weight := math.Pow(float64(nodesInfos1[i].Bandwidth), bwSaturationExponent)
+							weight := pool2Weight(nodesInfos1[i].Bandwidth, ipBytes[nodesInfos1[i].IPAddr], bwSaturationExponent)
 							bw := weight * dayReward / totalBWShares
 							nodesInfos1[i].BandwidthReward = bw
 							nodesInfos1[i].Reward += bw
@@ -1144,7 +1206,7 @@ Architectures:
 				if noBWPool {
 					fmt.Printf("\n--- Bandwidth Pool: DISABLED (budget folded into presence) ---\n")
 				} else {
-					fmt.Printf("\n--- Bandwidth Pool (sender-pays, weighted bytes^%.2f) ---\n", bwSaturationExponent)
+					fmt.Printf("\n--- Bandwidth Pool (sender-pays, per-IP weighted bytes^%.2f) ---\n", bwSaturationExponent)
 					fmt.Printf("bandwidth pool budget: %.6f\n", dayReward)
 					fmt.Printf("Pool 2 Total: %.6f\n", pool2Sum)
 					fmt.Printf("minimum bandwidth threshold: %d bytes\n", minBWThreshold)
@@ -1156,17 +1218,20 @@ Architectures:
 						}
 					}
 					fmt.Printf("total network bandwidth: %s\n", formatBytes(totalBW))
+					fmt.Printf("contributing IPs: %d\n", len(ipBytes))
 					fmt.Printf("bandwidth saturation exponent: %.2f\n", bwSaturationExponent)
 					if totalBWShares > 0 {
-						// "Per √byte" is the actual linear coefficient
-						// in sqrt-share space: reward = bytes^exp * rate
-						// where rate = dayReward / Σ(bytes^exp). At
-						// exponent 1.0 this collapses to the per-byte
-						// rate; at 0.5 it's the per-√byte rate. Print
-						// it unconditionally so operators can derive
-						// any specific-bandwidth example without
-						// reaching into the shares CSV math.
-						fmt.Printf("Skycoin Per (bytes^%.2f) (Pool 2): %.12f\n", bwSaturationExponent, dayReward/totalBWShares)
+						// Pool 2 rate is SKY per unit of effective
+						// pool-2 weight, where weight = bytes ×
+						// ip.total^(exp-1). At exp=1.0 this collapses
+						// to the per-byte rate (and Skycoin Per GB is
+						// emitted explicitly below). At exp=0.5 each
+						// visor's weight is bytes/sqrt(ip.total) — a
+						// visor's reward is its share of its IP's
+						// sqrt-weighted slice of the pool. Print the
+						// rate unconditionally so operators can
+						// reproduce any visor's reward as Weight×rate.
+						fmt.Printf("Skycoin Per Pool 2 Weight Unit: %.12f\n", dayReward/totalBWShares)
 						if bwSaturationExponent == 1.0 {
 							fmt.Printf("Skycoin Per GB (Pool 2): %.6f\n", dayReward/totalBWShares*1024*1024*1024)
 						}
