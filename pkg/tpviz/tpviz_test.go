@@ -853,6 +853,9 @@ func TestRefreshCache(t *testing.T) {
 
 	s := testServer(t)
 	s.config.NoCache = false
+	// No dmsg client / visor API here, so allow the legacy clearnet fetch
+	// path against the httptest servers below.
+	s.config.AllowClearnetDisc = true
 	dir := t.TempDir()
 	s.config.CacheDirTPD = filepath.Join(dir, "tpd")
 	s.config.CacheDirUT = filepath.Join(dir, "ut")
@@ -878,6 +881,7 @@ func TestRefreshSDCache(t *testing.T) {
 
 	s := testServer(t)
 	s.config.NoCache = false
+	s.config.AllowClearnetDisc = true
 	s.config.CacheDirSD = t.TempDir()
 	s.config.SDURL = sd.URL
 
@@ -895,6 +899,7 @@ func TestRefreshDMSGCache(t *testing.T) {
 
 	s := testServer(t)
 	s.config.NoCache = false
+	s.config.AllowClearnetDisc = true
 	s.config.CacheDirDMSG = t.TempDir()
 	s.config.DMSGURL = dmsgURL
 	s.config.GeoIPURL = geoURL

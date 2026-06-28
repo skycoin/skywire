@@ -59,8 +59,9 @@ type Download struct {
 	// Header contains additional HTTP headers for the request.
 	Header []Header
 
-	// StopProgress signals the progress goroutine to stop.
-	StopProgress bool
+	// StopProgress signals the progress goroutine to stop. It is read by the
+	// progress goroutine while another goroutine sets it, so access is atomic.
+	StopProgress atomic.Bool
 
 	path       string
 	unsafeName string
@@ -70,6 +71,9 @@ type Download struct {
 	info       *Info
 	chunks     []*Chunk
 	startedAt  time.Time
+	// stateMu guards concurrent chunk-completion writes and saveState's marshal
+	// of d.chunks, which run from multiple chunk-download goroutines at once.
+	stateMu sync.Mutex
 }
 
 // resumeState stores chunk progress for resume support.
@@ -239,7 +243,7 @@ func (d *Download) RunProgress(fn ProgressFunc) {
 
 	sleepd := time.Duration(d.Interval) * time.Millisecond //nolint:gosec
 
-	for !d.StopProgress {
+	for !d.StopProgress.Load() {
 		select {
 		case <-d.ctx.Done():
 			return
@@ -342,8 +346,10 @@ func (d *Download) dl(dest io.WriterAt, errC chan error) {
 				return
 			}
 
+			d.stateMu.Lock()
 			chunk.Done = true
 			d.saveState() //nolint:errcheck,gosec
+			d.stateMu.Unlock()
 
 			<-max
 		}(i)
@@ -410,6 +416,8 @@ func (d *Download) statePath() string {
 }
 
 // saveState writes chunk progress to a state file for resume support.
+// Callers invoking it from concurrent chunk goroutines must hold d.stateMu, as
+// it marshals d.chunks while other goroutines may be marking chunks done.
 func (d *Download) saveState() error {
 	state := resumeState{
 		URL:    d.URL,

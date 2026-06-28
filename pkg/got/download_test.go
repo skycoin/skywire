@@ -289,7 +289,7 @@ func TestRunProgress(t *testing.T) {
 	go func() {
 		d.RunProgress(func(_ *Download) {
 			if atomic.AddInt32(&calls, 1) >= 3 {
-				d.StopProgress = true
+				d.StopProgress.Store(true)
 			}
 		})
 		close(done)
