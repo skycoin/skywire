@@ -66,26 +66,45 @@ func appendChat(m chatMsg) {
 }
 
 // runBrowserSkychat is the in-process skychat AppFunc. It connects an app.Client
-// (over the proc-manager net.Pipe), listens on dmsg:1, and serves each incoming
-// connection's framed messages into the buffer. Returns when ctx is canceled.
+// (over the proc-manager net.Pipe) and listens on BOTH dmsg:1 (direct) and
+// skynet:1 (over a route), serving each incoming connection's framed messages
+// into the buffer. Mirrors native skychat (useDmsg+useSkynet) so a peer can reach
+// it either way. Returns when ctx is canceled.
 func runBrowserSkychat(ctx context.Context, _ []string) error {
 	cl := app.NewClient(nil)
 	defer cl.Close()
 	chatClient = cl
 
-	lis, err := cl.Listen(appnet.TypeDmsg, skychatPort)
-	if err != nil {
-		return fmt.Errorf("skychat: listen dmsg:%d: %w", skychatPort, err)
+	started := 0
+	for _, n := range []appnet.Type{appnet.TypeDmsg, appnet.TypeSkynet} {
+		lis, err := cl.Listen(n, skychatPort)
+		if err != nil {
+			// A missing networker (e.g. skynet before the router is up) shouldn't
+			// kill the app — keep whatever listener(s) we got.
+			vlog(fmt.Sprintf("skychat: listen %s:%d: %s", n, skychatPort, err.Error()))
+			continue
+		}
+		started++
+		vlog(fmt.Sprintf("skychat: listening on %s:%d", n, skychatPort))
+		go func(l net.Listener) {
+			<-ctx.Done()
+			l.Close() //nolint:errcheck,gosec
+		}(lis)
+		go acceptChatLoop(lis)
 	}
-	vlog(fmt.Sprintf("skychat: in-process app listening on dmsg:%d", skychatPort))
-	go func() {
-		<-ctx.Done()
-		lis.Close() //nolint:errcheck,gosec
-	}()
+	if started == 0 {
+		return fmt.Errorf("skychat: no listeners started")
+	}
+	<-ctx.Done()
+	return nil
+}
+
+// acceptChatLoop accepts connections on one listener until it closes.
+func acceptChatLoop(lis net.Listener) {
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
-			return nil // listener closed (ctx done) — clean shutdown
+			return
 		}
 		go readChatConn(conn)
 	}
