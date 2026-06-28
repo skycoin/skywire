@@ -1,6 +1,10 @@
 package wasmhv
 
-import _ "embed"
+import (
+	_ "embed"
+
+	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
+)
 
 // OverrideJS is pkg/wasmhv/override.js — the classic <script> that, in a
 // generated standalone file, boots the WASM dmsg client and routes the UI's
@@ -16,8 +20,10 @@ var OverrideJS []byte
 // rendered + self-hosting over dmsg, via globalThis.skywireVisor). Unused in
 // viewer/standalone-hypervisor modes (no skywireVisor).
 //
-//go:embed browse.js
-var BrowseJS []byte
+// Re-exported from the dependency-free browseui leaf package so pkg/visor can
+// serve the SAME engine in the native hypervisor UI without an import cycle
+// (pkg/wasmhv's gob-mirror test imports pkg/visor).
+var BrowseJS = browseui.BrowseJS
 
 // AutoUpdateJS is pkg/wasmhv/autoupdate.js — the wasm-visor self-update poller for
 // the `hv serve` page: it compares a /wasm-version fingerprint against the version
@@ -46,6 +52,31 @@ var HvBootJS []byte
 //
 //go:embed ctl-bridge.js
 var CtlBridgeJS []byte
+
+// PWAManifest is pkg/wasmhv/manifest.webmanifest — the Web App Manifest that
+// makes the `hv serve` page installable (name, icons, standalone display). Served
+// at /manifest.webmanifest and linked from the injected <head>. Only meaningful
+// for the served standalone (a service worker needs a real same-origin URL), so
+// it is NOT used by the single-file generator.
+//
+//go:embed manifest.webmanifest
+var PWAManifest []byte
+
+// ServiceWorkerJS is pkg/wasmhv/sw.js — the PWA service worker: precaches the app
+// shell and serves cache-first for content-hashed bundles / network-first for
+// everything else (so autoupdate.js stays correct online, offline still launches).
+//
+//go:embed sw.js
+var ServiceWorkerJS []byte
+
+// PWAIcon192 / PWAIcon512 are the maskable install icons referenced by the
+// manifest, served at /icon-192.png and /icon-512.png.
+//
+//go:embed icon-192.png
+var PWAIcon192 []byte
+
+//go:embed icon-512.png
+var PWAIcon512 []byte
 
 // WasmExecJS is Go's lib/wasm/wasm_exec.js, vendored here so a generated file is
 // self-contained. It MUST match the Go toolchain that built the embedded/passed

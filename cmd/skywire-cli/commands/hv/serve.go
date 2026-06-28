@@ -2,6 +2,7 @@
 package clihv
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -101,6 +102,23 @@ page never asks anyone to type a secret key.`,
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 		serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
 		serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
+		// PWA: manifest + icons make the served page installable; sw.js gives it
+		// offline launch. Harmless to always serve these (they're only ACTIVATED
+		// when injectBoot links them, which it skips under --harness). The service
+		// worker must be no-store so a worker update is seen promptly.
+		serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
+		serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
+		serveBytes("/icon-512.png", "image/png", wasmhv.PWAIcon512)
+		// Stamp the build fingerprint into the worker so every new binary ships a
+		// byte-different sw.js → the browser detects a new worker and re-precaches
+		// the fresh shell (CACHE_VERSION embeds __BUILD__). no-store so the worker
+		// update is checked promptly.
+		swJS := bytes.ReplaceAll(wasmhv.ServiceWorkerJS, []byte("__BUILD__"), []byte(wasmVer))
+		mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/javascript")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(swJS) //nolint:errcheck // best-effort
+		})
 		// /wasm-version is the build fingerprint autoupdate.js polls; no-cache so a
 		// new binary is seen promptly (the wasm itself stays cacheable).
 		mux.HandleFunc("/wasm-version", func(w http.ResponseWriter, _ *http.Request) {
@@ -232,6 +250,14 @@ func injectBoot(index []byte, wasmVer string, harness bool) []byte {
 	// drive it. Never injected on the public serving path.
 	if harness {
 		tag += "<script src=\"ctl-bridge.js\"></script>\n"
+	} else {
+		// PWA: link the manifest + theme color and register the service worker so
+		// the served page is installable + offline-capable. Skipped under --harness
+		// so a dev's browser never caches the wasm/UI across rebuilds.
+		tag += "<link rel=\"manifest\" href=\"manifest.webmanifest\">\n" +
+			"<meta name=\"theme-color\" content=\"#0e0c14\">\n" +
+			"<link rel=\"apple-touch-icon\" href=\"icon-192.png\">\n" +
+			"<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(e){console.warn('sw register failed',e)})})}</script>\n"
 	}
 	lower := strings.ToLower(s)
 	if i := strings.Index(lower, "<head"); i >= 0 {
