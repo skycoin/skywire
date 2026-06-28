@@ -146,6 +146,10 @@
             .then(function (r) { el.setAttribute("src", "data:" + ctOf(r.headers, src) + ";base64," + bytesToB64(r.body)); })
             .catch(function () {}));
         });
+        // A dmsg site may reference CLEARNET (http/https) sub-resources — gate them
+        // by the upstream-proxy policy so they can't silently leak the user's IP
+        // (block: stripped; direct: left for the iframe; proxy: fetched + inlined).
+        jobs = jobs.concat(gateAllClearnet(doc, "http://dmsg" + path, clearnetPolicy(), false));
         await Promise.all(jobs);
         docHtml = "<!doctype html>" + doc.documentElement.outerHTML;
       } catch (e) {
@@ -190,14 +194,28 @@
     }
 
     async function fetchClearnetEntry(url, gen) {
-      var exit = clearnetExit();
-      if (!exit) { log("clearnet: no skysocks exit set"); return { status: 0 }; }
-      var r = await fetchClearnet(exit, "GET", url, null);
+      var pol = clearnetPolicy();
+      if (pol.mode === "block") {
+        if (gen !== loadGen) return { status: 0, cancelled: true };
+        currentSitePK = ""; if (opts.setPK) opts.setPK(url);
+        frame.srcdoc = blockedPage(url);
+        log("clearnet BLOCKED (no upstream proxy): " + url);
+        return { status: 0, blocked: true };
+      }
+      if (pol.mode === "direct") {
+        if (gen !== loadGen) return { status: 0, cancelled: true };
+        currentSitePK = ""; if (opts.setPK) opts.setPK(url);
+        frame.removeAttribute("srcdoc");
+        frame.src = url; // browser/visor loads it directly (non-anonymous, no skysocks hop)
+        log("clearnet DIRECT (upstream = local visor): " + url);
+        return { status: 0, direct: true };
+      }
+      var r = await fetchClearnet(pol.exit, "GET", url, null);
       if (gen !== loadGen) return { status: 0, cancelled: true };
       var html = new TextDecoder().decode(r.body);
-      await renderClearnet(exit, url, html);
+      await renderClearnet(pol.exit, url, html);
       if (gen !== loadGen) return { status: 0, cancelled: true };
-      log("browsed " + url + " via skysocks " + exit.slice(0, 8) + " → " + r.status + " (" + r.body.length + " bytes)");
+      log("browsed " + url + " via skysocks " + pol.exit.slice(0, 8) + " → " + r.status + " (" + r.body.length + " bytes)");
       return { status: r.status, bytes: r.body.length };
     }
 
@@ -224,56 +242,92 @@
       return navigate({ kind: "dmsg", pk: pk, path: path });
     }
 
-    // --- CLEARNET browsing through a skysocks exit ---
+    // --- CLEARNET upstream-proxy policy ---
     //
-    // clearnetExit returns the skysocks exit server PK to tunnel clearnet through
-    // (localStorage-persisted, prompted once). The exit does the egress, so the
-    // origin sees the exit's IP, not the user's.
-    function clearnetExit() {
-      var e = "";
-      try { e = localStorage.getItem("skywire-clearnet-exit") || ""; } catch (_) {}
-      if (!e) {
-        e = (window.prompt("skysocks exit server public key (for clearnet browsing):") || "").trim();
-        if (e) { try { localStorage.setItem("skywire-clearnet-exit", e); } catch (_) {} }
-      }
-      return e;
+    // Clearnet egress is GATED behind an explicit upstream proxy, so a dmsg/skynet
+    // site (or a clearnet page) can never silently pull a clearnet resource and
+    // leak the user's IP. The upstream is a visor PK (per-window, defaulting to a
+    // persisted global), interpreted as:
+    //   ""            → BLOCK: no clearnet egress at all (the safe default).
+    //   <local-PK>    → DIRECT: short-circuit straight to clearnet (no skysocks/
+    //                    self-transport hop) — the browser/visor does the egress.
+    //   <other-PK>    → PROXY: tunnel through that visor's skysocks exit
+    //                    (fetchClearnet), IP-anonymous.
+    var winUpstream = null; // per-window override; null → fall back to the global
+    function globalUpstream() { try { return localStorage.getItem("skywire-upstream-proxy") || ""; } catch (_) { return ""; } }
+    function upstream() { return (winUpstream !== null ? winUpstream : globalUpstream()).trim(); }
+    function setUpstream(pk) { winUpstream = (pk || "").trim(); try { localStorage.setItem("skywire-upstream-proxy", winUpstream); } catch (_) {} }
+    function localPK() { try { return ((opts.selfPK && opts.selfPK()) || "").trim(); } catch (_) { return ""; } }
+    // clearnetPolicy: {mode:'block'} | {mode:'direct'} | {mode:'proxy', exit}.
+    function clearnetPolicy() {
+      var up = upstream();
+      if (!up) return { mode: "block" };
+      if (up === localPK()) return { mode: "direct" };
+      return { mode: "proxy", exit: up };
     }
 
-    // renderClearnet renders a fetched clearnet page into the iframe. Same-origin
-    // stylesheets + images are re-fetched through the SAME skysocks exit and inlined
-    // as data: URIs, so the sandboxed iframe never reaches clearnet directly (no IP
-    // leak). Scripts are stripped — they'd try to fetch cross-origin from the
-    // sandbox and either fail or leak; this is a static, read-mostly render.
+    // gateClearnetResource applies the policy to ONE element referencing a clearnet
+    // (http/https) URL inside a rendered doc. block → strip it (so the iframe can't
+    // load it); direct → leave it (the iframe loads it directly); proxy → re-fetch
+    // through the exit and inline as a data: URI. Returns a job promise (or null).
+    function gateClearnetResource(doc, el, attr, absURL, policy) {
+      if (policy.mode === "direct") return null; // leave for the iframe to load
+      if (policy.mode === "block") {
+        if (el.tagName === "SCRIPT" || el.tagName === "LINK") el.remove(); else el.removeAttribute(attr);
+        return null;
+      }
+      // proxy: clearnet scripts are dropped (static render); css/img/media inlined.
+      if (el.tagName === "SCRIPT") { el.remove(); return null; }
+      return fetchClearnet(policy.exit, "GET", absURL, null).then(function (r) {
+        if (el.tagName === "LINK") { var s = doc.createElement("style"); s.textContent = new TextDecoder().decode(r.body); el.replaceWith(s); }
+        else el.setAttribute(attr, "data:" + ctOf(r.headers, absURL) + ";base64," + bytesToB64(r.body));
+      }).catch(function () { if (el.tagName === "LINK") el.remove(); else el.removeAttribute(attr); });
+    }
+
+    // gateAllClearnet walks every resource element and applies the policy to those
+    // whose URL is clearnet (http/https). resolveRelative=true (a clearnet page)
+    // resolves relative URLs against baseURL; false (a dmsg site) gates ONLY hrefs
+    // that are themselves absolute http(s):// — relative URLs there are same-site
+    // dmsg, left to the caller's own inliner. Returns the jobs to await.
+    function gateAllClearnet(doc, baseURL, policy, resolveRelative) {
+      function absC(href) {
+        if (!href) return null; href = href.trim();
+        if (resolveRelative) { try { var u = new URL(href, baseURL); return /^https?:$/i.test(u.protocol) ? u.href : null; } catch (e) { return null; } }
+        if (!/^https?:\/\//i.test(href)) return null;
+        try { return new URL(href).href; } catch (e) { return null; }
+      }
+      var jobs = [];
+      doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(function (el) { var a = absC(el.getAttribute("href")); if (a) { var j = gateClearnetResource(doc, el, "href", a, policy); if (j) jobs.push(j); } });
+      doc.querySelectorAll("img[src],source[src],script[src],audio[src],video[src]").forEach(function (el) { var a = absC(el.getAttribute("src")); if (a) { var j = gateClearnetResource(doc, el, "src", a, policy); if (j) jobs.push(j); } });
+      return jobs;
+    }
+
+    // renderClearnet renders a clearnet page fetched in PROXY mode. Every clearnet
+    // resource (relative or absolute) is re-fetched through the SAME exit and
+    // inlined as a data: URI; scripts are stripped. The sandboxed iframe therefore
+    // never reaches clearnet directly — a static, read-mostly, IP-anonymous render.
     async function renderClearnet(exit, url, html) {
       currentSitePK = "";
       if (opts.setPK) opts.setPK(url);
       if (opts.setPath) opts.setPath("");
-      function abs(href) { try { return new URL(href, url).href; } catch (e) { return null; } }
-      function cfetch(u) { return fetchClearnet(exit, "GET", u, null); }
       var docHtml;
       try {
         var doc = new DOMParser().parseFromString(html, "text/html");
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("href", url); base.setAttribute("target", "_self");
         head.insertBefore(base, head.firstChild);
-        var jobs = [];
-        doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(function (el) {
-          var a = abs(el.getAttribute("href")); if (!a) return;
-          jobs.push(cfetch(a).then(function (r) {
-            var style = doc.createElement("style"); style.textContent = new TextDecoder().decode(r.body); el.replaceWith(style);
-          }).catch(function () {}));
-        });
-        doc.querySelectorAll("img[src],source[src]").forEach(function (el) {
-          var a = abs(el.getAttribute("src")); if (!a) return;
-          jobs.push(cfetch(a).then(function (r) {
-            el.setAttribute("src", "data:" + ctOf(r.headers, a) + ";base64," + bytesToB64(r.body));
-          }).catch(function () {}));
-        });
-        doc.querySelectorAll("script").forEach(function (el) { el.remove(); });
-        await Promise.all(jobs);
+        await Promise.all(gateAllClearnet(doc, url, { mode: "proxy", exit: exit }, true));
         docHtml = "<!doctype html>" + doc.documentElement.outerHTML;
       } catch (e) { docHtml = html; }
       frame.srcdoc = docHtml;
+    }
+
+    function blockedPage(url) {
+      return '<!doctype html><meta charset=utf-8><body style="font:14px/1.6 system-ui,sans-serif;background:#15131c;color:#cdd2da;padding:2rem">' +
+        '<h2 style="color:#ff8f8f">Clearnet blocked</h2>' +
+        '<p>No upstream proxy is set, so this window makes no clearnet requests (prevents IP leaks).</p>' +
+        '<p style="opacity:.7;word-break:break-all">' + String(url).replace(/[<>&"]/g, "") + '</p>' +
+        '<p>Open <b>⚙ proxy</b> and set an upstream: a skysocks server PK (anonymous), or your own visor PK (direct, non-anonymous).</p></body>';
     }
 
     function browseToClearnet(url) { return navigate({ kind: "clearnet", url: url }); }
@@ -296,6 +350,7 @@
     return {
       renderSite: renderSite, browseTo: browseTo, browseToClearnet: browseToClearnet,
       back: back, forward: forward, reload: reload, cancel: cancel,
+      upstream: upstream, setUpstream: setUpstream,
       currentPK: function () { return currentSitePK; }
     };
   }
@@ -327,6 +382,7 @@
       '<input id="sb-path" value="/" size="6" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-go" style="cursor:pointer">go</button>' +
       '<button id="sb-host-t" title="host a page" style="cursor:pointer">host</button>' +
+      '<button id="sb-proxy-t" title="clearnet upstream proxy" style="cursor:pointer">⚙</button>' +
       '<button id="sb-min" title="minimize" style="cursor:pointer">_</button>' +
       '<button id="sb-max" title="maximize / restore" style="cursor:pointer">▢</button>' +
       '<button id="sb-x" title="close" style="cursor:pointer">×</button>' +
@@ -339,6 +395,13 @@
       '<div style="display:flex;gap:.4em;align-items:center">file <input id="sb-hfile" type="file" style="flex:1;min-width:0;color:#cdd2da;font:11px monospace"></div>' +
       '<textarea id="sb-hbody" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt; — or upload a file above" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace"></textarea>' +
       '<span id="sb-host-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer" title="click to copy"></span>' +
+      '</div>' +
+      '<div id="sb-proxy" style="display:none;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342;align-items:center;flex-wrap:wrap">' +
+      '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks (anonymous)">clearnet upstream proxy:</span>' +
+      '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
+      '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
+      '<span id="sb-proxy-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></span>' +
       '</div>' +
       '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
     (doc.body || doc.documentElement).appendChild(wrap);
@@ -372,6 +435,18 @@
     $("sb-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
     $("sb-path").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
     $("sb-host-t").onclick = function () { var h = $("sb-host"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
+    // clearnet upstream-proxy settings (per window; persists as the global default).
+    $("sb-proxy-pk").value = browser.upstream();
+    $("sb-proxy-t").onclick = function () { var h = $("sb-proxy"); h.style.display = h.style.display === "none" ? "flex" : "none"; $("sb-proxy-pk").value = browser.upstream(); };
+    $("sb-proxy-self").onclick = function () { var pk = ""; try { pk = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {} $("sb-proxy-pk").value = pk; };
+    function saveProxy() {
+      browser.setUpstream($("sb-proxy-pk").value);
+      var up = browser.upstream(), self = ""; try { self = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
+      var mode = !up ? "blocked" : (up === self ? "direct (non-anonymous)" : "via skysocks " + up.slice(0, 8) + " (anonymous)");
+      var m = $("sb-proxy-msg"); m.textContent = "clearnet: " + mode; m.style.color = up ? "#9ece6a" : "#e0af68";
+    }
+    $("sb-proxy-save").onclick = saveProxy;
+    $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
     // Raise this window above the others on any interaction.
     wrap.addEventListener("mousedown", function () { if (hooks.onFocus) hooks.onFocus(); }, true);
 
